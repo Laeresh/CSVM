@@ -429,9 +429,12 @@ template, no `clutter` key, degenerate ranges).
     1864 × 641, 854 × 294), the same twelve shapes cut into `fvol9`'s own top face as coplanar
     polygons; `fvol10` is 854 × 294 m at its 1091.28 m base and ~464 × 160 m at its 1688.05 m top.
     They are the chapter's only sloped scatter surface, 1,242 sprites of 11,452.
-  - **C5's seventeen strips are polygonal prisms**, three of them with a ramped top; volume
-    fractions 0.558–1.000, and only `fvol1`/`fvol3` are boxes. The ramps carry 2,102 sprites of
-    19,197, the flat tops the other 17,095.
+  - **C5's seventeen strips are polygonal prisms**, each with a flat top at 183 m over a floor at
+    −463 m; volume fractions 0.558–1.000, and only `fvol1`/`fvol3` are boxes. The other fifteen
+    carry one to five sloped rim faces each, 29 in all, climbing from 37 m to that top at about 37°
+    off the horizontal; they hold 2,102 sprites of 19,197, the flat tops the other 17,095. What the
+    fade law makes of that shape, measured per altitude, is in
+    [`../org/cloudCards.md`](../org/cloudCards.md).
   - Because the lattice sits on the polygon it belongs to, a taper needs no vertical rule taught
     about it: the sloped face is simply a face, and its sprites carry its own normal.
 
@@ -536,8 +539,10 @@ volume, 112× the 16 m ramp (predicted before the run, pinned in
 - **A volume's interior is empty; the field is its skin.** C1C's build-ups and C5's street prisms
   read as a shell around a hollow shape rather than as a filled mass, because their walls and
   floors carry `no_clutter` and only the upward faces scatter. Anywhere a camera can get inside a
-  C5 prism, the cards are overhead in one sheet and the air below them is clear. Do not read a
-  thin-looking interior as a missing population.
+  C5 prism, the cards are overhead in one sheet and the air below them is clear, and the view-angle
+  term then drops that sheet outright rather than showing it from below
+  ([`../org/cloudCards.md`](../org/cloudCards.md)). Do not read a thin-looking interior, or an empty
+  street-level frame, as a missing population.
 - **Volume walls are not sprite clips.** `perturb_dist_range` is applied after containment, so a
   card's centre can sit up to `perturb_dist_range.y` outside its own volume's wall. That is what a
   perturbation means; the volume bounds where the field is placed, not where each sprite may hang.

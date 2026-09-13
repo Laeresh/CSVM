@@ -145,6 +145,40 @@ the sprite's own position spread it further. That is what makes the field's far 
 statistical ramp rather than an edge: at a grazing pose the population thins out over hundreds of
 metres, and past it the surface the frame shows is the fogged deck sheet and the dome.
 
+### The same term over C5's street prisms
+
+C5 authors no slab, so the closed form above lands somewhere else. Its seventeen volumes are 646 m
+prisms with their floor at −463 m and a flat top at 183 m, and the upward skin the scatter sees is
+that one top face plus, on fifteen of the seventeen, one to five sloped rim faces (29 in all)
+climbing from 37 m to the 183 m top at about 37° off the horizontal. 17,095 of the chapter's 19,197
+sprites sit on the tops and 2,102 on the rims. With `perp_dist_range` −5 to 10 m and up to 10 m of
+perturbation the field is one sheet at about 185 m over the streets, fringed down the rims to about
+40 m, and the authored band `[[1000, 1500], [1200, 1800]]` gives each sprite a `far` of 1,500 to
+1,800 m. Three readings follow, each measured by painting `cloud1.tif`/`cloud2.tif` flat red under
+`--no-fog` and counting the strongly reddened pixels of a 1,280 × 720 freecam frame, which is a
+lower bound on what the field covers:
+
+- **Under the sheet a flat top never draws at all.** The eye is below the cards' own plane there, so
+  `c` is 0 and the sprite is dropped before its band is consulted. Over the middle of a prism at
+  20 m, 100 m and 180 m, looking up as well as down, the field paints 0 pixels, and it stays 0 with
+  the city clutter off and with the zone gate off, so neither occlusion nor the gate is what removes
+  it.
+- **A rim face is what a street-level eye can see.** Its plane tilts about 37°, so a camera outboard
+  of the rim's foot stands above that plane and its cards pass the test: 250 m out over the water at
+  20 m altitude, one `fvol9` rim paints 339,489 pixels of 921,600, the same count with the clutter
+  off.
+- **Above the sheet the field is a disc** of radius `sqrt((eye − 185) × far)`, which grows with
+  altitude and then closes: once the eye is more than `far` above the cards, no sprite can satisfy
+  `d < sqrt(dy × far)`, since `d` is never less than `dy`. Straight down over a prism the field
+  thins from 872,278 pixels at 400 m to 112,289 at 1,700 m, 41,775 at 1,800 m, 9,882 at 1,900 m and
+  0 from 2,000 m up, against the 183 + 1,800 m ceiling the band predicts.
+
+A C5 pose that shows no cards is therefore the law working rather than a fault: a street-level camera
+away from a rim, and any camera further from the nearest prism than that altitude's disc radius, both
+read zero. C5's `fvol` nodes author `zone_id` 1, so the field also rides the zone-1 visual layer and a
+camera inside a prism (weather state 3) loses it, which costs nothing measurable because the angle
+term has already dropped every card such an eye could reach.
+
 ### The distance factor, and the one setting that moves it
 
 `DAT_0062d170` multiplies the squared distance, so it divides the field's radius by its square root:

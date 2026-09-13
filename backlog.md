@@ -999,27 +999,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Playtest after fix:* any chapter under Enhanced Graphics, still and moving, over water and over
   ground. *Cross-refs:* `docs/architecture/Utils.md` (`GraphicsMode`).
 
-- `BL-899` `[Bug]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: data]` `[C5]` **C5 builds
-  19,197 `fvol` cloud sprites that drew no pixels at either probed pose, before and after the fade
-  law landed.** C5's `fvol` geometry is seventeen polygonal street prisms rather than a deck slab,
-  and the field it scatters over their tops and ramps is the chapter's second largest by count.
-  *Evidence:* two freecam poses, street level (`--chapter=C5 --pos=-9256,178,-3155
-  --direction=-0.588,-0.1,-0.809`) and above (the same bearing at `y=600`), render byte-identical
-  with and without the view-angle fade (0 px changed at both), where the same comparison at C1
-  moves 40 to 47 % of the frame. A `--tex-override` on `cloud1.tif`/`cloud2.tif` at both poses
-  paints **0** pixels, against 92,520 at the C1 1,700 m pose. So the sprites are built and their
-  normals are right (the `cloud-field-fade` suite reads 17,095 up and 2,102 sloped of 19,197, none
-  on a wall), and nothing of them reaches the frame. ⚠ **The face scatter did not change this
-  reading**: the street-level pose is still byte-identical across it and `--tex-override` still
-  paints 0, though the same override at `--pos=-7392,400,200 --direction=0,-0.604,-0.797 --no-fog`
-  paints most of the frame, so the field does draw from some poses. *Where to look:* whether the
-  prisms' authored 1000-1500..1200-1800 m band plus the view angle can ever admit a card from
-  inside the street canyon, whether the cards sit inside solid geometry, and whether a per-view
-  cull (`GameSession`/`WorldBuilder`/`WeatherRig`) drops the field in that chapter.
-  ⚠ Two poses are not the chapter: sweep C5 from several altitudes and bearings before concluding
-  the field never draws. ⚠ Not caused by the fade law, which is why this is its own item: the same
-  two poses read 0 on the build before it. *Cross-refs:* `docs/formats/fogvol.md`,
-  `docs/org/cloudCards.md`.
 - `BL-905` `[Fidelity]` `[M]` `[Next: decide]` `[Impact: high]` `[Evidence: feel]` **Aircraft read
   too glossy under sunlight beside the original's screenshots.** *Evidence:* every aircraft
   surface (skin, canopy, props, cockpit interior) takes one procedural shader from
