@@ -16,6 +16,8 @@ internal sealed class AiFlightAssembler
     private readonly FlightWorldBindings _world;
     private readonly int _humanCount;
     private readonly CrashRigQueue? _crashRigs;
+    private readonly System.Collections.Generic.HashSet<string> _liveryDefsLogged =
+        new(StringComparer.OrdinalIgnoreCase);
     private AiSkills? _aiSkills;
     private System.Collections.Generic.List<Maneuver>? _maneuvers;
     private bool _noAssistLogged;
@@ -92,6 +94,8 @@ internal sealed class AiFlightAssembler
         Node3D planeModel;
         using (PerfSample.Scope(PerfSite.AiSpawn))
         {
+            // The decoded order: the caller's own scheme, then the militia def's authored one, then
+            // the default-pattern rule. ShippedSkins reaches only the last step.
             var scheme = spawn.Scheme ?? MilitiaScheme(stats, spawn) ?? _liveries.SchemeFor(
                     _humanCount + index, _aircraft.ZrdrPath,
                     _aircraft.PaintRng, _liveries.PatternsForPlane(_aircraft.PlanesGamez, spawn.PlaneName),
@@ -332,13 +336,32 @@ internal sealed class AiFlightAssembler
     }
 
     // The scheme the AI def authors for itself, which is what the original's spawn resolves against
-    // (docs/org/paint.md). Yields to --paint= and to a caller asking for the bare shipped skins,
-    // both of which are about this run rather than about who the plane is.
+    // (docs/org/paint.md). Yields to --paint=, which is about this run, not about who the plane is.
+    // ⚠ A NAMED militia def does not yield to ShippedSkins: that reading withholds only the player
+    // militia's default pattern from another team, and gating the def's own livery on it left every
+    // campaign enemy and every generator launch in bare skins. A spawn naming no def keeps yielding,
+    // PlaneStats falling back to the base def and an Instant Action wave to the setup screen.
     private PaintScheme? MilitiaScheme(PlaneStats stats, AiSpawn spawn)
     {
-        if (spawn.ShippedSkins || _liveries.PaintRequested || stats.AiDefName is not { } def)
+        if (_liveries.PaintRequested || stats.AiDefName is not { } def
+            || (spawn.ShippedSkins && spawn.AiDef == null))
             return null;
-        return _liveries.DefScheme(_aircraft.ZrdrPath, def);
+        var scheme = _liveries.DefScheme(_aircraft.ZrdrPath, def);
+        if (_liveryDefsLogged.Add(def))
+        {
+            // Once per def, not per spawn: a mission fields fourteen of one militia variant.
+            // A def authoring none is the Balmoral and the Broadway Bomber's masks, which ship
+            // under no def at all, so there are no colours to fill them with and none are invented.
+            if (scheme != null)
+            {
+                Log.Info("world", $"[paint] ai def '{def}' wears its authored '{scheme.Pattern}'");
+            }
+            else
+            {
+                Log.Info("world", $"[paint] ai def '{def}' authors no paint_pattern, so its aircraft fly the shipped skins");
+            }
+        }
+        return scheme;
     }
 
     // A marker label as the readout prints it. An unresolved key would be printed verbatim by a

@@ -398,9 +398,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ([`docs/formats/instant-action.md`](docs/formats/instant-action.md)).
   *⚠ One militia stays unpainted:* Broadway Bomber. `BROADWAY` ships six `PEA_*` masks and no def
   anywhere authors `paint_pattern broadway`, so there are no colours to fill them with; they have to
-  be read off the original as `player_fortune`'s were.
-  *What still routes nothing:* a campaign mission's own enemy set, which is where the militia defs
-  belong, and the `--generators` waves.
+  be read off the original as `player_fortune`'s were. The same holds for the three base defs a
+  campaign mission fields directly (`bloodhawk`, `autogyro`, `balmoral`); each is logged once as
+  `[paint] ai def '<def>' authors no paint_pattern` and flies its shipped skins.
+  *The campaign half routes now.* A mission's own enemy set and its generator waves both resolve
+  their militia def from the `aiv` roster block's NAME (`VehicleDefs.DefForBlock` strips trailing
+  `_N` ordinals until a def matches, so `medkestrel_1` is `medkestrel` and `blakepeace_2_1` is
+  `blakepeace_2`), and `CampaignRosterPlan.SpawnFor` carries it into `PlaneStats.LoadForAi`. The
+  resolution is a function of the mission and the block alone, never of a running spawn count, so an
+  aeroplane built before the flight starts already knows its livery. CM01 fields Medusa Kestrels;
+  the British defs are CM02's (`britbalmoral`, `britpeace`) and CM04's (`britpeace`).
   *Owed at the controls:* fly a Black Hat flight
   (`--ai=player_warhawk:def=bhatwarhawk --ai-attack`, or a wizard wave set to Black Hat Warhawk) and
   confirm the militia paint, the eight torpedoes, and that they stay on the rail against aircraft.
@@ -441,8 +448,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *⚠ Trap, handled:* `stock_loadouts.json` holds the eleven `p*` defs alone, so an AI def name run
   through it disarms the plane. `FlightRoster` binds the def's own fit first, falls back to the
   table, and says so in the log when neither arms the plane.
-  *Size:* what remains is localized, the same resolution wired into a campaign mission's enemy set
-  and into `--generators`, plus the cockpit confirmation.
+  *Size:* what remains is the cockpit confirmation plus the two loose ends above (`dare_devil`, the
+  one-pylon-per-entry reading).
   *Cross-refs:* `BL-386` (the damage half, landed and closed 2026-08-16,
   `git log --grep=BL-386`; this builds on the `PlaneStats.AiDefName` seam it left),
   `docs/formats/vehicle.md` (the def-family census), `docs/formats/instant-action.md` (the militia

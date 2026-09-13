@@ -359,10 +359,10 @@ public sealed class CampaignRosterPlan
         machine.ActivationRange = Mathf.Max(machine.ActivationRange, DedgActivationRangeM);
     }
 
-    /// <summary>The spawn record a planned block launches as, a generator launch included: its
-    /// representative rating arms the gunner and machine, its authored slots outrank the def's,
-    /// and its objective-marker slots ride onto the aeroplane. A campaign enemy keeps its militia's
-    /// skins; the player's side takes the default pattern. ⚠ Leave <paramref name="nodeName"/> unset
+    /// <summary>The spawn record a planned block launches as: its representative rating arms the
+    /// gunner and machine, its authored slots outrank the def's, its objective-marker slots ride
+    /// onto the aeroplane, and it wears the livery its <see cref="RosterSpawnPlan.AiDef"/>
+    /// authors whatever <c>ShippedSkins</c> says. ⚠ Leave <paramref name="nodeName"/> unset
     /// outside a generator launch: <c>primary_target</c> and <c>rating_biases</c> are authored
     /// against the block's own name. ⚠ Refuses a Surface plan: a hull has no airframe.</summary>
     public static AiSpawn SpawnFor(RosterSpawnPlan plan, Vector3 pos, Vector3 lookAt, AiPilot pilot,

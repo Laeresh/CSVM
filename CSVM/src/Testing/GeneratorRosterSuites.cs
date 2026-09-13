@@ -17,6 +17,7 @@ internal static class GeneratorRosterSuites
     private const string Chapter = "C5";
     private const string Mission = "M04";
     private const string NitroBlock = "stihellhound_5_7";
+    private const string NitroPattern = "sactrust";
 
     private const string TypoChapter = "C1";
     private const string TypoMission = "M04";
@@ -31,9 +32,10 @@ internal static class GeneratorRosterSuites
         "the mission spawner's roster read (BL-453) over C5/M04: the dantezep generator's "
         + "vehicle.params label 'Miles' resolves to the disabled block stihellhound_5_7 with "
         + "no campaign profile in the run, the aircraft it launches carries that block's "
-        + "nitro slot and its own authored name, its volumes reach the machine under the "
-        + "min_ai_active_dist floor, the CLI-airframe fallback a parameterless generator "
-        + "takes installs no injector, and over C1/M04 eairg32's misspelt 'Eairg32_params' "
+        + "nitro slot, its own authored name and that block's militia livery, its volumes reach "
+        + "the machine under the min_ai_active_dist floor, the CLI-airframe fallback a "
+        + "parameterless generator takes installs no injector and stays unpainted, and over "
+        + "C1/M04 eairg32's misspelt 'Eairg32_params' "
         + "resolves the decoded empty launch (nothing built, no airframe) while eairg31's "
         + "label resolves its block, and over C2/M01 eshipg31's 'Eshipg31_params' resolves a "
         + "surface launch of the patrolboat hull")]
@@ -111,6 +113,10 @@ internal static class GeneratorRosterSuites
                 $"the generated aircraft carries the block's nitro injector");
             ctx.Check(launched.Name == NitroBlock,
                 $"the generated aircraft wears the block's own name");
+            // The template's militia def decides the livery as much as the fit and the skills do,
+            // and the launch is built under the shipped-skins reading, which the def outranks.
+            ctx.Check(launched.ShippedSkins && launched.Scheme?.Pattern == NitroPattern,
+                $"…and its militia def's authored '{NitroPattern}' livery ('{launched.Scheme?.Pattern ?? "-"}')");
             ctx.Check(pilot.Machine == null
                       || pilot.Machine.ActivationRange >= skills.MinAiActiveDist,
                 $"the plan's volumes reach the machine under the min_ai_active_dist floor");
@@ -122,6 +128,8 @@ internal static class GeneratorRosterSuites
                 AiPilot.HoldingCourse(spare, spare + Vector3.Forward), ShippedSkins: true));
             ctx.Check(!fallback.Nitro.Installed,
                 $"a spawn with no roster block installs no injector");
+            ctx.Check(fallback.Scheme == null,
+                $"…and names no militia def, so it keeps the shipped skins ('{fallback.Scheme?.Pattern ?? "-"}')");
 
             roster.ClearMembership();
         }
