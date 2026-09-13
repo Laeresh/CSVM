@@ -1,6 +1,7 @@
 using System;
 using CSVM.Bindings;
 using CSVM.Flight;
+using CSVM.Session;
 using Godot;
 
 namespace CSVM.Testing;
@@ -77,6 +78,51 @@ internal static class MouseFlightSuites
         }
 
         ctx.Note($"the mouse flies the aeroplane through the seat's own stick reader, free-look and all");
+    }
+
+    [Suite("flight-mouse-capture",
+        "the desktop mouse a flight seat takes, and the guard that keeps it off this harness: a "
+        + "session assembled from this launch's own command line resolves the capture OFF because "
+        + "the launch is scripted, while the same resolution from an interactive command line on "
+        + "this very display says yes, a human seat carrying the harness's own answer holds no "
+        + "mouse and leaves Input.MouseMode exactly where the harness left it over a run of frames, "
+        + "and the decision goes false for a halted frame, a photo-mode pane, the pause options "
+        + "leaf and a watcher's seat, which is what hands the pointer back to every board that "
+        + "draws one")]
+    internal static void FlightMouseCapture(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        var scripted = FlightRosterPolicy.From(SessionSpec.Parse(new[] { "--run-tests" }));
+        var interactive = FlightRosterPolicy.From(SessionSpec.Parse(new[] { "--fly" }));
+        bool realDisplay = DisplayServer.GetName() != "headless";
+        ctx.Check(!scripted.MouseCaptureAllowed,
+            $"a session assembled from this launch's command line takes no mouse ({scripted.MouseCaptureAllowed})");
+        ctx.Check(interactive.MouseCaptureAllowed == realDisplay,
+            $"ABLE-TO-FAIL CONTROL: the same resolution from an interactive command line answers the display alone (allowed {interactive.MouseCaptureAllowed}, real display {realDisplay})");
+
+        var before = Godot.Input.MouseMode;
+        var seat = Rig(ctx, PlaneStats.Load(ctx.ZrdrPath, "player_bhawk"), "MouseCaptureSeat",
+            human: true);
+        try
+        {
+            seat.MouseFlying = true;
+            seat.MouseCaptureAllowed = scripted.MouseCaptureAllowed;
+            for (int frame = 0; frame < 30; frame++)
+            {
+                seat.StepMouseCaptureForTest(halted: false);
+            }
+
+            ctx.Check(!seat.HoldsMouseForTest() && Godot.Input.MouseMode == before,
+                $"and thirty frames of a mouse-flying seat leave the harness's mouse mode alone (holding {seat.HoldsMouseForTest()}, mode {Godot.Input.MouseMode}, was {before})");
+            BoardsGetThePointerBack(ctx, seat);
+        }
+        finally
+        {
+            Godot.Input.MouseMode = before;
+            seat.QueueFree();
+        }
+
+        ctx.Note($"the capture is guarded off on this harness and the mouse mode is left at {before}");
     }
 
     // Hold-to-look, the posture under both mouse schemes: while the free-look control is down the
@@ -190,16 +236,46 @@ internal static class MouseFlightSuites
         return Mathf.RadToDeg(Mathf.Atan2(-nose.X, -nose.Z));
     }
 
+    // The hand-back rule, read off the decision rather than off a capture this harness may not
+    // take: every state that stands a board or a free camera over the flight answers false, which
+    // is what gives the pause sheet, the preferences leaf, photo mode and a watcher their pointer.
+    private static void BoardsGetThePointerBack(TestContext ctx, FlightController seat)
+    {
+        seat.MouseCaptureAllowed = true;
+        ctx.Check(seat.WantsMouseCaptureForTest(halted: false),
+            $"an allowed seat flying with nothing over it wants the mouse ({seat.WantsMouseCaptureForTest(false)})");
+        ctx.Check(!seat.WantsMouseCaptureForTest(halted: true),
+            $"a halted frame hands it back, which is every pause sheet and every wrap-up board ({seat.WantsMouseCaptureForTest(true)})");
+
+        seat.BeginPhotoMode();
+        ctx.Check(!seat.WantsMouseCaptureForTest(halted: false),
+            $"photo mode hands it back to the free camera's own right-button look ({seat.WantsMouseCaptureForTest(false)})");
+        seat.EndPhotoMode();
+
+        seat.BeginPauseLeaf();
+        ctx.Check(!seat.WantsMouseCaptureForTest(halted: false),
+            $"the pause options leaf hands it back to the preferences page ({seat.WantsMouseCaptureForTest(false)})");
+        seat.EndPauseLeaf();
+
+        seat.Spectating = true;
+        ctx.Check(!seat.WantsMouseCaptureForTest(halted: false),
+            $"and a watcher's seat never takes it, its pane being the spectator camera's ({seat.WantsMouseCaptureForTest(false)})");
+        seat.Spectating = false;
+        seat.MouseCaptureAllowed = false;
+    }
+
     // One flying seat over a plant and nothing else: no model to draw, no camera and no HUD, since
-    // every reading here comes out of the stick reader rather than off the screen.
-    private static FlightController Rig(TestContext ctx, PlaneStats stats, string name)
+    // every reading here comes out of the stick reader rather than off the screen. The capture suite
+    // asks for a human seat instead, the mouse being one of the things only a person is handed.
+    private static FlightController Rig(TestContext ctx, PlaneStats stats, string name,
+        bool human = false)
     {
         var model = new Node3D { Name = name + "Model" };
         var rig = new FlightController
         {
             PlaneModel = model,
             PlayerIndex = 0,
-            IsHumanPiloted = false,
+            IsHumanPiloted = human,
             UseKeyboard = true,
             PadDevices = Array.Empty<int>(),
             AllowPause = false,

@@ -908,6 +908,16 @@ axis and takes that travel's own 0.1, a port rule and not a decoded one. Pure an
 suite drives it with no window; `FlightController` sums what it returns into the keyboard and pad
 deflections. Decode: [../org/flightModel.md](../org/flightModel.md); the scheme: [../controls.md](../controls.md).
 
+## src/Flight/MouseCapture.cs
+The mouse a flight seat takes from the desktop while it flies, under either mouse scheme. A captured
+pointer reports one frozen position, so this accumulates relative motion into a virtual cursor
+confined to the pane, which `MouseFlight.Offset` then reads exactly as it read the real one, and
+banks the same travel separately for head-look's relative law. `Allowed` is the guard: a real display
+with somebody at the controls, which is what keeps the hidden test desktop and every `--det` run on
+the mouse mode their harness set. Pure arithmetic, no device and no display, so a unit drives the
+whole law; `FlightController` owns the mode write, the per-frame decision and the release, and
+`Session/FlightRosterInputs.cs` resolves the guard once per session. Read `MouseFlight.cs` next.
+
 ## src/Flight/NitroSystem.cs
 The original's nitro boost lifecycle, engine-free: a 30-unit tank burned at 4/s while boosting and
 refilled at 1/s always, so a burn nets 3/s and runs 9.5 s from full to the 5 % cutoff.

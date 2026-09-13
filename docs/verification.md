@@ -641,6 +641,13 @@ member, and it does not go here.
   render draws as well: the open-sea control rises from 7,361 texels at roughness 0.1 to 12,149 at
   0.25 and 48,347 at 0.4. A bigger control masks more of the on-pass movement, so a high-roughness
   flicker count is biased optimistically and no value can be picked on that count alone.
+- **INSTR-79**, **A session-wide device mode a run can change is state the harness owns, so guard
+  the write on nobody being at the controls and then assert the mode is untouched, never assert the
+  capture itself.** The hidden test desktop is a real display, so a display check alone does not
+  spare it; `SessionSpec.IsScripted` and `Det` are what do. Exercising the positive arm in a suite
+  would have the engine warp the pointer from a window on another desktop, which reaches the user's
+  own cursor, so a capture on a real display stays a judgement at the controls and the suite reads
+  the decision instead.
 
 ## SRC, sources and documents
 

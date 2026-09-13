@@ -418,6 +418,12 @@ public partial class FlightController : Node3D
     /// default, reads this seat's real pane.</summary>
     public Vector2? MouseStickForTest;
 
+    /// <summary>Whether this seat may take the desktop mouse while it flies, under either mouse
+    /// scheme. Resolved once per session by <see cref="MouseCapture.Allowed"/>, whose ⚠ says why the
+    /// answer is no on the hidden test desktop and in every <c>--det</c> run. False, the default,
+    /// leaves <c>Input.MouseMode</c> untouched by this node from first frame to last.</summary>
+    public bool MouseCaptureAllowed;
+
     /// <summary>Out of lives: this pilot stays crashed for the rest of
     /// the mission, neither R nor <see cref="AutoRespawnAfter"/>'s timer brings it back, while
     /// the session hands its pane to a <see cref="SpectatorCamera"/> and the others fly on. Set by
@@ -477,6 +483,9 @@ public partial class FlightController : Node3D
     // Every transition below reports what it did and this node performs it (Decision 7).
     private readonly AircraftLifecycle _lifecycle = new();
     private readonly SweepCadence _sweep = new();    // the original's alternate-step sweep and its carried motion
+    // The desktop mouse this seat holds while it flies, and the virtual cursor standing in for the
+    // OS one for as long as it does. Idle on every seat that never takes it (MouseCaptureAllowed).
+    private readonly MouseCapture _mouse = new();
     private readonly AimCandidateSet _aimCandidates = new(); // rebuilt once per fire call (B4/B5)
     private readonly AimCandidateSet _gunnerScan = new();    // the AI gunner's acquisition scan (D14)
     private readonly AimCandidateSet _rescoreScan = new();   // the aircraft-only walk the re-score's withdrawal reads
@@ -993,6 +1002,9 @@ public partial class FlightController : Node3D
 
     public override void _Ready()
     {
+        // Only a seat that may take the mouse is handed input events at all, so the AI rigs sharing
+        // this node (and every seat in a scripted run) cost nothing per motion event.
+        SetProcessInput(MouseCaptureAllowed);
         // No HUD on an AI rig: a CanvasLayer draws over the whole window wherever its Node3D
         // parent sits, so an AI plane building one would paint its telemetry over the player's view.
         if (IsHumanPiloted)
@@ -1965,6 +1977,20 @@ public partial class FlightController : Node3D
         }
     }
 
+    /// <summary>Relative mouse travel, the only reading a captured pointer still gives. Banked for
+    /// the stick's virtual cursor and for head-look alike, and only while this seat holds the mouse,
+    /// so a session that never takes it reads not one event differently than before.</summary>
+    public override void _Input(InputEvent @event)
+    {
+        if (_mouse.Holding && @event is InputEventMouseMotion motion)
+            _mouse.Moved(motion.Relative);
+    }
+
+    /// <summary>Gives the desktop mouse back on the way out. ⚠ Do not drop this: a session left
+    /// through the pause board's EXIT tears the seat down without a halt of its own, and the menu
+    /// behind it would come up with a pointer nothing hands back.</summary>
+    public override void _ExitTree() => ReleaseMouseCapture();
+
     public override void _Process(double delta)
     {
         using var _ = ProcessSiteCost.Enter(ProcessSite.Flight);
@@ -1978,6 +2004,9 @@ public partial class FlightController : Node3D
         bool halted = false;
         if (AllowPause || !Inert)
             halted = PollPauseAndHalt(clock);
+        // ⚠ Ahead of the inert return as well: a seat flagged inert mid-session must give the
+        // pointer back, and this is the only frame that would notice.
+        StepMouseCapture(halted);
         // Nothing left to draw, animate, interpolate or point a camera at while inert.
         if (Inert)
             return;
@@ -4072,6 +4101,17 @@ public partial class FlightController : Node3D
     // the posture through the free-look control instead of asserting on the camera behind it.
     internal bool FreeLookActiveForTest() => FreeLookHeld();
 
+    // Whether this seat would take the mouse on this frame, for a suite that reads the decision on
+    // a desktop no session is allowed to capture on.
+    internal bool WantsMouseCaptureForTest(bool halted) => WantsMouseCapture(halted);
+
+    // Whether this seat holds the mouse right now, the other half of that reading.
+    internal bool HoldsMouseForTest() => _mouse.Holding;
+
+    // One frame of the capture decision, for a suite that reads what the mouse mode is left at
+    // without rendering a frame for _Process to run on.
+    internal void StepMouseCaptureForTest(bool halted) => StepMouseCapture(halted);
+
     // Where the cursor stands in this seat's pane, or the suite's stand-in while one is set. A seat
     // outside the tree has no pane to measure, and reads centred rather than guessing one.
     private Vector2 MouseStick()
@@ -4081,8 +4121,56 @@ public partial class FlightController : Node3D
         if (!IsInsideTree() || GetViewport() is not { } viewport)
             return Vector2.Zero;
         var half = viewport.GetVisibleRect().Size * 0.5f;
-        return MouseFlight.Offset(viewport.GetMousePosition(), half, half);
+        // A captured pointer reports one frozen position, so the virtual cursor the frame's relative
+        // travel was folded into stands in for it; off capture this is the pane's own cursor.
+        var cursor = _mouse.Holding ? _mouse.Cursor : viewport.GetMousePosition();
+        return MouseFlight.Offset(cursor, half, half);
     }
+
+    // The seat's hold on the desktop mouse, re-decided every frame. A board that draws its own
+    // pointer halts the session, so the halt is what hands the pointer back to the pause sheet, the
+    // preferences page and the wrap-up boards alike, and the resume takes it again.
+    private void StepMouseCapture(bool halted)
+    {
+        bool wanted = WantsMouseCapture(halted);
+        if (wanted && !_mouse.Holding)
+        {
+            _mouse.Take(PaneCursor());
+            Input.MouseMode = Input.MouseModeEnum.Captured;
+        }
+        else if (!wanted)
+        {
+            ReleaseMouseCapture();
+        }
+
+        if (_mouse.Holding)
+            _mouse.StepCursor(PaneSize());
+    }
+
+    // Whether this seat should be holding the mouse. One physical mouse, so only the seat the
+    // keyboard flies asks for it; a watcher's pane belongs to its SpectatorCamera, which reads the
+    // right button itself, and a halt belongs to whichever board went up.
+    private bool WantsMouseCapture(bool halted) =>
+        MouseCaptureAllowed && IsHumanPiloted && UseKeyboard && IsInsideTree()
+        && !Inert && !Spectating && !halted && !InPhotoMode && !InPauseLeaf;
+
+    // Puts back only what this seat took. A board that has already swapped the mode for its own
+    // drawn cursor is left alone, so the release cannot show the OS pointer over a pause sheet.
+    private void ReleaseMouseCapture()
+    {
+        if (!_mouse.Holding)
+            return;
+        _mouse.Release();
+        if (Input.MouseMode == Input.MouseModeEnum.Captured)
+            Input.MouseMode = Input.MouseModeEnum.Visible;
+    }
+
+    // This seat's pane and the real cursor in it, both zero outside the tree.
+    private Vector2 PaneSize() =>
+        IsInsideTree() && GetViewport() is { } viewport ? viewport.GetVisibleRect().Size : Vector2.Zero;
+
+    private Vector2 PaneCursor() =>
+        IsInsideTree() && GetViewport() is { } viewport ? viewport.GetMousePosition() : Vector2.Zero;
 
     // Whether the free-look control is down, this port's reading of DAT_00654120: it decides which
     // of two consumers gets the mouse, and it is a HOLD under both mouse schemes. ⚠ Do not make it
@@ -4448,8 +4536,11 @@ public partial class FlightController : Node3D
     private Vector2 MouseLookDelta()
     {
         var pos = (Vector2)DisplayServer.MouseGetPosition();
-        var delta = pos - _mouseLookPrev;
+        var absolute = pos - _mouseLookPrev;
+        // Refreshed whether or not it is the reading used, so the frame capture ends does not hand
+        // head-look the whole span the pointer stood still for as one delta.
         _mouseLookPrev = pos;
+        var delta = _mouse.Holding ? _mouse.TakeLook() : absolute;
         return FreeLookHeld() && delta.LengthSquared() > 1f ? delta : Vector2.Zero;
     }
 

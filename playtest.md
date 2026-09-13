@@ -775,6 +775,34 @@ is a judgement on our own remake.
   *Blocks:* nothing tracks the outcome; a fail mints a new `BL`. The reasoning behind the fallback
   and the apply order is in the landing commits (`git log --grep=BL-768`).
 
+### Any flight, on a two-monitor rig · the captured mouse
+
+```powershell
+./RunGame.ps1 --chapter=C1
+```
+
+- `PT-149` `[Own]` **The pointer is gone and confined while flying, and every board that draws one
+  gets it back.** The capture is guarded off on a headless host, in a `--det` run and in a scripted
+  one, so no suite and no golden can exercise it: the units settle the virtual cursor's arithmetic
+  and the engine suite settles that the harness's own mouse mode is left alone, and nothing here has
+  ever been seen on a real display. ⚠ Launch without `--screenshot`, `--det` or `--run-tests`, each
+  of which turns the capture off outright. Fly both mouse schemes, the Controls page's Mouse row
+  reading **Look** on one pass and **Fly** on the other. *Look for:*
+  - (a) the pointer disappears the moment the flight takes input and never reappears over the
+    cockpit, and moving the mouse hard towards the second screen neither shows a cursor there nor
+    takes the focus off the game;
+  - (b) under **Fly**, the stick still reads where the cursor is: sideways banks, down pulls the
+    nose up, the middle of the pane flies nothing, and pushing to an edge saturates and comes back
+    at once rather than after a run of travel in the other direction;
+  - (c) holding the free-look button still pans the head at the same rate it did with a visible
+    pointer, under both schemes, and letting go hands the stick back;
+  - (d) `Esc` shows the pointer again on the pause sheet and it clicks the strips, PREFERENCES and
+    PHOTO MODE keep it, and resuming takes it away again with no jump in the stick;
+  - (e) a mission's wrap-up board and a dogfight or race results board show it too, and leaving to
+    the menu leaves the pointer working there.
+  *Blocks:* nothing tracks the outcome; a fail mints a new `BL`. The guard and the virtual cursor
+  are in the landing commit (`git log --grep=BL-916`) and `docs/verification.md` INSTR-79.
+
 ### Any campaign mission · enemy skill under the difficulty offset
 
 ```powershell

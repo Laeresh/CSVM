@@ -48,6 +48,11 @@ internal sealed class FlightRosterPolicy
     public bool NoAssist { get; init; }
     public bool WeaponLab { get; init; }
 
+    /// <summary>Whether a human seat may take the desktop mouse while it flies
+    /// (<see cref="MouseCapture.Allowed"/>, whose ⚠ carries the reason for each half of the
+    /// answer).</summary>
+    public bool MouseCaptureAllowed { get; init; }
+
     public static FlightRosterPolicy From(SessionSpec spec) => new()
     {
         HoldSets = spec.HoldSets,
@@ -81,6 +86,11 @@ internal sealed class FlightRosterPolicy
         InfiniteAmmo = spec.InfiniteAmmo,
         NoAssist = spec.NoAssist,
         WeaponLab = spec.WeaponLab,
+        // The display is read here because it is a property of the launch, not of the seat. It
+        // answers for a headless host alone; the hidden test desktop is a real one, and the
+        // scripted arm is what keeps a suite's mouse mode its own.
+        MouseCaptureAllowed = MouseCapture.Allowed(
+            DisplayServer.GetName() != "headless", spec.Det, spec.IsScripted),
     };
 }
 

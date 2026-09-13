@@ -726,19 +726,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   lost steps. The per-sim-step query objects those ray casts build are now reused rather than made
   fresh (`GodotWorldQuery`), so a re-measurement of the tick meets a different allocator than C22's.
   *Cross-refs:* `PLAN-M5-polish-6` C22, `docs/verification.md` PERF-1, PERF-20 and PERF-23.
-- `BL-916` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **The mouse pointer
-  stays visible and free while flying; it should be hidden and captured by the window.**
-  *Evidence:* nothing in flight sets `Input.MouseMode`; the only writers are the pause boards, the
-  preferences page and the spectator camera, so `FlightController.MouseLookDelta` reads a visible
-  OS cursor that walks off the window on a second monitor. *Fix shape:* capture and hide the mouse
-  when a flight session takes input (both Look and Fly schemes), release it on every board that
-  needs a pointer (pause, wrap-up, the Original UI dialogs) and re-capture on resume; the delta
-  read moves to relative motion under capture. *⚠ Traps:* the hidden test desktop and `--det`
-  runs must not depend on the mouse mode; guard the capture on a real display. *Playtest after
-  fix:* fly on a two-monitor rig, the pointer never appears and never leaves the game window;
-  pause shows it again. *Cross-refs:* `BL-447`'s closing commit,
-  `CSVM/src/Flight/FlightController.cs` (the mouse read).
-
 
 ## Environment & world
 

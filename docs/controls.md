@@ -144,6 +144,20 @@ read the same way, which is what it always was, so the keyboard and pad schemes
 are untouched. A still mouse under a held control holds the look rather than
 recentring, the free-look row above.
 
+**A flight session holds the mouse, under both schemes.** Player 1's seat takes
+the pointer while it flies and hides it, so the cursor cannot be left behind on a
+second monitor or clicked onto another window mid-sortie. Under capture the OS
+pointer stops moving, so the stick and head-look read relative motion instead:
+the travel is accumulated into a cursor confined to the pane, which reads the
+same deflection, the same dead bands and the same hold-to-look as the visible
+cursor did. Every board that draws its own pointer gets it back, since each of
+them halts the session: the pause sheet, the preferences page behind its
+PREFERENCES row, photo mode's free camera and the wrap-up boards. The resume
+takes it again, from where it stood. A pilot out of lives keeps the pointer, its
+pane being the spectator camera's. Nothing is taken on a headless host, in a
+`--det` run or in a scripted one, so the test desktop and the pinned shots read
+the mouse mode their launch set.
+
 ## Any mode
 
 | Input | Pad | Does |

@@ -47,6 +47,11 @@ internal sealed class FlightControllerBuild
     public int[]? PadDevices = Array.Empty<int>();
     public bool UseKeyboard;
 
+    /// <summary>Whether this seat may take the desktop mouse while it flies
+    /// (<see cref="FlightController.MouseCaptureAllowed"/>). The session resolves it once from its
+    /// own spec and the display it is on; an assembler that says nothing takes nothing.</summary>
+    public bool MouseCaptureAllowed;
+
     /// <summary>The message table the pilot HUD words its auto-land prompt from. Null on a rig
     /// built without one, which leaves the prompt at its data-less stand-in.</summary>
     public Messages? Strings;
@@ -119,6 +124,7 @@ public partial class FlightController
         Projectiles = build.Projectiles;
         HumanPositions = build.HumanPositions;
         UseKeyboard = build.UseKeyboard;
+        MouseCaptureAllowed = build.MouseCaptureAllowed;
         PadDevices = build.PadDevices;
         AllowPause = build.AllowPause;
         Inert = build.Inert;
