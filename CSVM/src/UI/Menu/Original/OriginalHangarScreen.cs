@@ -1592,11 +1592,12 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
         return null;
     }
 
-    // The hangar screens as drawn.
+    // The hangar screens as drawn. No strokes: the blueprint pages draw their outlines as fills and
+    // pictures, the pen being the campaign scrapbook's alone.
     public void Compose(
         IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> backdrop, List<BoardPicture> pictures,
-        List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardNote> notes,
-        List<BoardPanel> overlays)
+        List<BoardFill> fills, List<BoardStroke> strokes, List<BoardLine> lines, List<BoardPlaque> plaques,
+        List<BoardNote> notes, List<BoardPanel> overlays)
     {
         if (_hangar == null)
         {

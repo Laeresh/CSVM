@@ -332,8 +332,8 @@ public sealed class OriginalPresentation : IMenuPresentation
         {
             // The two flight returns reopen the campaign on the user's store and seat the profile
             // the mission wrote; a profile that cannot be read leaves the profile screen showing.
-            _shell.OpenCampaign();
-            if (!_shell.ShowCabin(cabin.Profile))
+            _shell.Campaign.OpenCampaign();
+            if (!_shell.Campaign.ShowCabin(cabin.Profile))
             {
                 Log.Warn("ui", $"original presentation: cabin return could not seat '{cabin.Profile}'; the profile screen shows instead");
             }
@@ -346,8 +346,8 @@ public sealed class OriginalPresentation : IMenuPresentation
         }
         else if (destination is DebriefReturn debrief)
         {
-            _shell.OpenCampaign();
-            if (!_shell.ShowScrapbook(debrief.Profile, debrief.MissionSeq, debrief.MissionWon))
+            _shell.Campaign.OpenCampaign();
+            if (!_shell.Campaign.ShowScrapbook(debrief.Profile, debrief.MissionSeq, debrief.MissionWon))
             {
                 Log.Warn("ui", $"original presentation: debrief return could not seat '{debrief.Profile}'; the profile screen shows instead");
             }
@@ -362,7 +362,7 @@ public sealed class OriginalPresentation : IMenuPresentation
             {
                 case CampaignAidProfiles.PlayerDoor:
                     // The player's own door, over the presentation's store and never the scratch one.
-                    _shell.OpenCampaign();
+                    _shell.Campaign.OpenCampaign();
                     break;
                 case FreeFlightAid:
                     _shell.Open(OriginalScreen.FreeFlight);
@@ -752,12 +752,12 @@ public sealed class OriginalPresentation : IMenuPresentation
             return false;
         }
 
-        bool running = _shell.AdvanceBriefing(dt);
-        int starts = _shell.NarrationStarts;
+        bool running = _shell.Campaign.AdvanceBriefing(dt);
+        int starts = _shell.Campaign.NarrationStarts;
         if (starts != _narrationStarts && starts > 0)
         {
             _narrationStarts = starts;
-            _host.Audio.BeginNarration(_shell.NarrationWav);
+            _host.Audio.BeginNarration(_shell.Campaign.NarrationWav);
         }
 
         bool repaint = running || _revealRunning;
@@ -797,61 +797,61 @@ public sealed class OriginalPresentation : IMenuPresentation
         }
 
         bool seeded = value != "campaign-empty";
-        _shell.OpenCampaignOver(
+        _shell.Campaign.OpenCampaignOver(
             CampaignAidProfiles.Store(seeded, progressed: value != "campaign-roster"), CampaignAidProfiles.Planes());
         switch (value)
         {
             case CampaignDeleteAid:
-                _shell.ShowDeleteConfirm(CampaignAidProfiles.Pilot);
+                _shell.Campaign.ShowDeleteConfirm(CampaignAidProfiles.Pilot);
                 break;
             case "campaign-cabin":
-                _shell.ShowCabin(CampaignAidProfiles.Pilot);
+                _shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
                 break;
             case "campaign-previous":
-                _shell.ShowCabin(CampaignAidProfiles.Pilot);
-                _shell.ShowMissionScreen(OriginalScreen.CampaignPreviousMissions);
+                _shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
+                _shell.Campaign.ShowMissionScreen(OriginalScreen.CampaignPreviousMissions);
                 break;
             case "campaign-scrapbook":
                 // The book as a finished mission leaves it: opened on the last mission this
                 // profile flew. No win is reported, so the shot is the book and never the film.
-                _shell.ShowScrapbook(
+                _shell.Campaign.ShowScrapbook(
                     CampaignAidProfiles.Pilot, Math.Max(0, CampaignAidProfiles.MissionsFlown - 1), missionWon: false);
                 break;
             case "campaign-briefing":
-                _shell.ShowCabin(CampaignAidProfiles.Pilot);
-                _shell.ShowMissionScreen(OriginalScreen.CampaignBriefing);
+                _shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
+                _shell.Campaign.ShowMissionScreen(OriginalScreen.CampaignBriefing);
                 double.TryParse(argument, System.Globalization.NumberStyles.Float,
                     System.Globalization.CultureInfo.InvariantCulture, out double seconds);
 
                 for (double t = 0; t < seconds; t += AidSlice)
                 {
-                    _shell.AdvanceBriefing(AidSlice);
+                    _shell.Campaign.AdvanceBriefing(AidSlice);
                 }
 
                 break;
             case "campaign-flightcheck":
-                _shell.ShowCabin(CampaignAidProfiles.Pilot);
-                _shell.ShowMissionScreen(OriginalScreen.CampaignFlightCheck);
+                _shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
+                _shell.Campaign.ShowMissionScreen(OriginalScreen.CampaignFlightCheck);
                 break;
             case "campaign-ammo":
-                _shell.ShowCabin(CampaignAidProfiles.Pilot);
-                _shell.ShowMissionScreen(OriginalScreen.CampaignAmmo);
+                _shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
+                _shell.Campaign.ShowMissionScreen(OriginalScreen.CampaignAmmo);
                 break;
             case "campaign-planeselection":
-                _shell.ShowCabin(CampaignAidProfiles.Pilot);
-                _shell.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
+                _shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
+                _shell.Campaign.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
                 break;
             case "campaign-hangar":
                 // The cabin's own PLANE CONSTRUCTION press, so the shot carries the cash note: the
                 // name screen bare, or the named tab on the aid's build.
-                _shell.ShowCabin(CampaignAidProfiles.Pilot);
+                _shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
                 if (colon >= 0 && CampaignHangarTabs.TryGetValue(aid[(colon + 1)..], out var tab))
                 {
-                    _shell.OpenHangarTab(tab, AidPlaneName, _shell.CampaignWallet);
+                    _shell.OpenHangarTab(tab, AidPlaneName, _shell.Campaign.Wallet);
                 }
                 else
                 {
-                    _shell.OpenHangar(_shell.CampaignWallet);
+                    _shell.OpenHangar(_shell.Campaign.Wallet);
                 }
 
                 break;
@@ -860,7 +860,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         // The briefing spends its colon on the reveal's seconds and the hangar's names a tab, both
         // taken above; every other screen's is the script CampaignAidScript reads, the same words
         // Built-in's aids take, with export still that button's own press.
-        if (value is not ("campaign-briefing" or "campaign-hangar") && !_shell.RunAidScript(argument))
+        if (value is not ("campaign-briefing" or "campaign-hangar") && !_shell.Campaign.RunAidScript(argument))
         {
             // A script this presentation cannot press leaves nothing worth shooting, so the run
             // ends before the capture takes a screen that looks like it simply did not respond.

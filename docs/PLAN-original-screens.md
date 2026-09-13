@@ -89,7 +89,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C, campaign
 
-21. ☐ Campaign module (`OriginalCampaignScreen`) over the seam; `OriginalCampaignTests` retargeted
+21. ☑ Campaign module (`OriginalCampaignScreen`) over the seam; `OriginalCampaignTests` retargeted
 
 ## Dependency and parallelism notes
 
@@ -333,11 +333,41 @@ scroll window like the hangar `_descWindow`; copy that shape.
 
 # Wave C, campaign
 
-## C21 ☐ Campaign module over the seam
+## C21 ☑ Campaign module over the seam
 
-**Goal.** `OriginalCampaignScreen` is a sealed module owning the ten campaign screens
-(`CampaignRoster`..`CampaignScrapbookZoom`) and their state, constructed without the shell;
-`OriginalCampaignTests` are retargeted onto it with a thin wiring set left in `OriginalShellTests`.
+**Landed.** `CSVM/src/UI/Menu/Original/OriginalCampaignScreen.cs` (993 non-blank lines) is the
+sealed module over the ten campaign screens, owning `_campaign`, `_profiles`, `_dataRoot`,
+`_flow`, `_briefingReturn`, `_bookReturn`, `OpenCabin`, `ShowScrapbook` and `CheckSeat`;
+`OriginalCampaign.cs` is deleted, `IsCampaignScreen` and every campaign arm are gone into
+`ModuleFor`, and the shell has one `Campaign` get-only accessor. `_campaignLayout` and `_stock`
+stay shell fields (the seat walk and the Instant Action module read them) and are handed in.
+`IOriginalScreenModule.Compose` takes a `strokes` list: the campaign is the only module drawing
+strokes and `BoardPanel` has no stroke channel, so the other three modules take the parameter
+unused. `PlaqueSizeOf` went to `OriginalWidgets` (inputs are a `BoardArt` and the measurer), so
+`DialogRows` reaches into no module; `OriginalWidgets` also took `Highlight`, `PageRows`,
+`StripSize`, `Entry` and `HoverOnly`, the readings the module and the seat screens share.
+`IOriginalScreenHost` grew `FocusBeforeDialog`, `CloseDialog`, `Frame(MenuCommands)` and
+`PlayFilm`, and `OpenHangar` takes the wallet; `CampaignPlanes`, `ResumeCampaign`, `MenuStrings`
+and `SeatPanel` stay on the host, the shell delegating to `Campaign`, so the hangar never learns
+the campaign module's type. The seat walk stays on the shell and reads the module through the
+accessor only. `OriginalCampaignTests` is 17 module facts over a `CampaignHost`;
+`OriginalShellTests` gained six wiring facts (door, column walk, the hangar's cabin return, and
+the dialog geometry and ink facts, since the box is drawn shell-side). One incidental path went:
+a SeatPlane frame no longer moves an open campaign combo's cursor (`CampaignLists` split into the
+module's `Lists` and the shell's `SeatPlaneLists`); no test asserted it.
+
+**Verified.** Full `.\RunTests.ps1` on the plan tree with C21 squash-merged: PASS, exit 0 (4420
+units passed, 2 skipped for missing media; 332 engine suites, errors clean; 19 goldens
+hash-identical, which includes the campaign shots, so every stroke the scrapbook pen draws is
+still drawn). `CheckDocEntries.ps1`, `CheckCommentCaps.ps1` and `CheckEncoding.ps1` clean.
+`OriginalCampaignTests` constructs no `OriginalShell`; `Grep IsCampaignScreen` finds nothing;
+`OriginalShell.cs` is 1473 non-blank lines against 1493 before the hangar extraction, with four
+families and 5063 non-blank lines of partials gone out of it.
+
+**Original approach (kept for reference).** `OriginalCampaignScreen` is a sealed module owning
+the ten campaign screens (`CampaignRoster`..`CampaignScrapbookZoom`) and their state,
+constructed without the shell; `OriginalCampaignTests` are retargeted onto it with a thin wiring
+set left in `OriginalShellTests`.
 
 **Evidence (confidence: traced).** `OriginalCampaign.cs` is 1233 lines; after A2 its state is
 `_campaign`, `_profiles`, `_stock`, `_dataRoot`, `_campaignLayout`, `_flow`, `_briefingReturn`,

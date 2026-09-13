@@ -459,13 +459,14 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         return false;
     }
 
-    /// <summary>The showing screen as drawn. Neither of these two pages writes a note, the prose
-    /// layer being the hangar's description box alone, so <paramref name="notes"/> stands unused;
-    /// it is here because one signature serves every module's dispatch.</summary>
+    /// <summary>The showing screen as drawn. Neither of these two pages writes a note or a stroke,
+    /// the prose layer being the hangar's description box alone and the pen the campaign scrapbook's,
+    /// so <paramref name="notes"/> and <paramref name="strokes"/> stand unused; both are here
+    /// because one signature serves every module's dispatch.</summary>
     public void Compose(
         IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> backdrop, List<BoardPicture> pictures,
-        List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardNote> notes,
-        List<BoardPanel> overlays)
+        List<BoardFill> fills, List<BoardStroke> strokes, List<BoardLine> lines, List<BoardPlaque> plaques,
+        List<BoardNote> notes, List<BoardPanel> overlays)
     {
         if (_host.Screen == OriginalScreen.InstantActionLoadout)
         {
@@ -952,7 +953,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
                 _iaRadio = 1;
                 return null;
             case BuildKey:
-                _host.OpenHangar();
+                _host.OpenHangar(null);
                 return null;
             case WeaponLoadoutKey:
                 OpenLoadout();

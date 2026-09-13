@@ -709,20 +709,21 @@ public class OriginalInstantActionTests
     }
 
     // The screen as the module draws it, assembled the way the shell assembles its own board. The
-    // shell's own layers (the pointer overlay and the strokes) are not the module's, and neither of
-    // these two pages writes a note, so the note layer is handed over and comes back empty.
+    // pointer overlay is the shell's, the pen the seam offers is the campaign scrapbook's alone, and
+    // neither of these two pages writes a note, so both of those layers come back empty.
     private static ComposedBoard Compose(InstantActionHost host)
     {
         var rows = host.Rows;
         var backdrop = new List<BoardPicture>();
         var pictures = new List<BoardPicture>();
         var fills = new List<BoardFill>();
+        var strokes = new List<BoardStroke>();
         var lines = new List<BoardLine>();
         var plaques = new List<BoardPlaque>();
         var notes = new List<BoardNote>();
         var overlays = new List<BoardPanel>();
-        host.Module.Compose(rows, host.Focus, backdrop, pictures, fills, lines, plaques, notes, overlays);
-        return new ComposedBoard(pictures, Array.Empty<BoardStroke>(), lines, plaques, notes,
+        host.Module.Compose(rows, host.Focus, backdrop, pictures, fills, strokes, lines, plaques, notes, overlays);
+        return new ComposedBoard(pictures, strokes, lines, plaques, notes,
             backdrop: backdrop, fills: fills, overlays: overlays);
     }
 
@@ -774,6 +775,8 @@ public class OriginalInstantActionTests
         public int PressedRow => _pressed;
 
         public int HoveredRow => _hover;
+
+        public int FocusBeforeDialog => -1;
 
         public (float X, float Y)? Pointer => _pointer;
 
@@ -846,6 +849,17 @@ public class OriginalInstantActionTests
         {
         }
 
+        public void CloseDialog()
+        {
+        }
+
+        // No frame loop behind this fake, so a module's own re-entrant press has nothing to run.
+        public void Frame(MenuCommands commands)
+        {
+        }
+
+        public void PlayFilm(Action<Action> play, Action then) => OriginalTestHost.PlayFilm(play, then);
+
         public (int Width, int Height)? Measure(string art) => OriginalInstantActionTests.Measure(art);
 
         public void ResumeCampaign()
@@ -858,7 +872,7 @@ public class OriginalInstantActionTests
         {
         }
 
-        public void OpenHangar() => HangarOpens++;
+        public void OpenHangar(IHangarWallet? wallet) => HangarOpens++;
 
         public MenuExit? BeginSeatWalk()
         {

@@ -827,7 +827,7 @@ missions with every objective bit set, plus the scratch build store the export a
 The Original presentation's screen graph (`CSVM.UI.Menu.Original`), engine-free over `MenuLayout` and the shared Free Flight, player-setup,
 Instant Action, hangar and campaign features, with the art measurer and the flight-devices answer injected. It owns the top level composed
 from `[MainMenu]`'s own rows, the two remake-only sortie screens, the Options hub over the decoded Preferences chrome, and the messagebox
-idiom every refusal and confirm goes through, whose box, `RaiseDialog` and answer keys are its own `OriginalShellDialog.cs` partial; the sortie, credits and campaign screens are its own partials, below, while the hangar, Instant Action and option families stand outside them as `OriginalHangarScreen.cs`, `OriginalInstantActionScreen.cs` and `OriginalOptionsScreen.cs`. Each is held as one `IOriginalScreenModule` in a list and reaches back through `IOriginalScreenHost` (`OriginalScreenHost.cs`); `ModuleFor` answers which module owns the screen showing, so `BuildRows`, `Lists`, the sideways step, the dropdown close, `Activate`, `Back` and `Compose` name a module through that one lookup rather than a field and a screen-range check per family, and `Hangar`, `InstantAction` and `Options` are the typed accessors the presentation and the suites read module-specific state through. `Step` applies one seat's frame, `Compose` is
+idiom every refusal and confirm goes through, whose box, `RaiseDialog` and answer keys are its own `OriginalShellDialog.cs` partial; the sortie and credits screens are its own partials, below, while the campaign, hangar, Instant Action and option families stand outside them as `OriginalCampaignScreen.cs`, `OriginalHangarScreen.cs`, `OriginalInstantActionScreen.cs` and `OriginalOptionsScreen.cs`. Each is held as one `IOriginalScreenModule` in a list and reaches back through `IOriginalScreenHost` (`OriginalScreenHost.cs`); `ModuleFor` answers which module owns the screen showing, so `BuildRows`, `Lists`, the sideways step, the dropdown close, `Activate`, `Back` and `Compose` name a module through that one lookup rather than a field and a screen-range check per family, and `Campaign`, `Hangar`, `InstantAction` and `Options` are the typed accessors the presentation and the suites read module-specific state through, the seat walk and the shell's own hangar and seat-strip members reaching campaign state through the first of them. `Step` applies one seat's frame, `Compose` is
 the screen as a `ComposedBoard` whose backdrop takes a section's `movie` row at its bottom, and every page's row kinds live here,
 `OriginalSlider` among them. A pointer press arms a row and only the release still on it activates (`ArmedKey`), on an edit box taking the
 caret alone where Accept in one reaches the screen's own commit; the pointer's bitmap answers an enter or leave (`PointerLive`); and a film
@@ -841,13 +841,13 @@ takes, `DialogRows`, `AnswerDialog` and `ComposeDialog`. The shell owns it becau
 for it: while a box stands its answers are the only rows, `Compose` draws it over the screen's own
 picture, and Back takes the declining answer. The rollover frame is the pointer's alone, the cursor's
 answer marked with an outline three pixels clear of the strip instead, and the focus a raise took is
-put back when it is answered. The campaign screens and the hangar module only raise. [../org/campaign-board.md](../org/campaign-board.md).
+put back when it is answered, which is the `FocusBeforeDialog` a screen under the box draws itself from. `DialogRows` sizes an answer plaque through `OriginalWidgets.PlaqueSizeOf`, so the box reaches into no module; every module only raises, and a door onto a new screen closes the box it left behind. [../org/campaign-board.md](../org/campaign-board.md).
 
 ## src/UI/Menu/Original/OriginalScreenHost.cs
 The two sides of the seam between `OriginalShell` and a standalone screen module. `IOriginalScreenHost` is what a module reads off the shell and
 calls back into it for: the screen showing, the per-screen focus cursor every family shares, the pointer's row and position, whether a dialog stands,
-the string table and the art measurer, the seat strip and the shell's own plate-row rule, and the crossings into another family (the hangar a Build
-door opens, the walk FLY MISSION begins, a campaign resume, a roster re-read). The shell implements it explicitly, so the narrower vocabulary stays
+the string table and the art measurer, the seat strip and the shell's own plate-row rule, the film a cinema plays in front of the board and the one
+frame a screenshot aid replays, and the crossings into another family (the hangar a Build door opens, the walk FLY MISSION begins, a campaign resume, a roster re-read). The shell implements it explicitly, so the narrower vocabulary stays
 the modules' own, and each module's tests implement it as a fake and build the module with no shell at all. `IOriginalScreenModule` is the other
 side, what the shell calls on a module: `Owns` plus the seven dispatch members (`BuildRows`, `Lists`, `StepSideways`, `CloseDropdown`, `Activate`,
 `Back`, `Compose`). The shell holds its modules as these alone, so a further family is one more entry in its list and no new dispatch arm.
@@ -855,8 +855,10 @@ side, what the shell calls on a module: `Owns` plus the seven dispatch members (
 ## src/UI/Menu/Original/OriginalWidgets.cs
 The layout-widget readings more than one Original screen module needs, a file-level static because a module is a sealed class of its own and a rule
 two of them follow can live in neither: the slot number a numbered widget key carries (`AR_D_POINT2`, `OL_D_AMMO1`, and the same key behind a
-`<key>:<index>` list row), and where a section's background pane lands on the board, which for art smaller than the board is the centre its own
-script sets rather than the corner it is authored at. A pane that fills the board centres onto its own corner, and one authored away from the corner
+`<key>:<index>` list row), where a section's background pane lands on the board, which for art smaller than the board is the centre its own
+script sets rather than the corner it is authored at, a strip art's one-frame size, and the plaque size the shell's own messagebox measures an answer at.
+The rows a screen drawn by the shared board component carries are here too, read off an `ICampaignPage`, because the campaign module and the shell's
+per-seat aircraft screen build them the same way, with `ENTRY:` naming a scrapbook row the pointer only highlights. A pane that fills the board centres onto its own corner, and one authored away from the corner
 keeps it. Each module binds its own measurer to the pane rule once, so no call site carries one. The open-dropdown window rule is the other such
 reading, on `OriginalDropList.cs`.
 
@@ -932,14 +934,13 @@ the blueprint panes; the hub's figures, which `HubBill` prices on the row an ope
 the tab bar with the standing tab latched and its labels on the strips' own baseline; the tab pages' description box, which `HangarDescriptions` fills and whose prose flows as a note inside it; every list under its box bar the decal picker, the page's own five-across grid of tiles carrying its chrome inside its right edge; the two name boxes with their
 caret, the airframe swap's own three-answer question as the shared messagebox (its answer keys mirroring `OriginalShellDialog.cs`'s `DialogOkKey`/`DialogYesKey`/`DialogNoKey`/`DialogCancelKey`), and the export door's own Export, Delete and delete confirm; the shared pane rule (`OriginalWidgets.cs`) centres a small pane and this module places its rows on it. [../org/hangar.md](../org/hangar.md), [../org/menu-inventory.md](../org/menu-inventory.md).
 
-## src/UI/Menu/Original/OriginalCampaign.cs
-The Original campaign, the shell's partial over the shared `CampaignFeature`: the profile screen,
+## src/UI/Menu/Original/OriginalCampaignScreen.cs
+The Original campaign, one standalone module over the shared `CampaignFeature`: the profile screen,
 the cabin, the table of contents, the flight check, ammo and plane selection, the book, a scrap's
-zoom and the briefing dialog. What each screen draws is the shared board component, so the shell
-hosts the Built-in campaign pages in a `CampaignFlow` of its own and copies every composed layer
-into its own board; that flow is never walked, its screen and cursor mirroring this file's. The
-screen graph, the rows at the rectangles the board draws them at, the pointer hit-testing, the
-cues and every dialog raise are this file's, as are `OpenCabin` (every door onto the cabin, which is why RETURN TO CABIN is taken here rather than mirrored off a page), `ShowScrapbook`, where the feature's two cinemas play, and `CheckSeat`: the check and the two screens it opens stand for one player at a time, that seat's own device driving them while seat 0 keeps its pointer alone. Read `src/UI/CampaignFlow.cs` for the pages; the screens and
+zoom and the briefing. What each screen draws is the shared board component, so the module hosts
+the Built-in campaign pages in a `CampaignFlow` of its own and copies every composed layer into the
+board it hands back; that flow is never walked, its screen and cursor mirroring this module's. The
+screen graph, the rows at the rectangles the board draws them at, the pointer hit-testing, the cues and every dialog raise are this file's, as are `OpenCabin` (every door onto the cabin, which is why RETURN TO CABIN is taken here rather than mirrored off a page), `ShowScrapbook`, where the feature's two cinemas play, and `CheckSeat`: the check and the two screens it opens stand for one player at a time, that seat's own device driving them while seat 0 keeps its pointer alone. It is one `IOriginalScreenModule` and reaches `OriginalShell` only through `IOriginalScreenHost` (`OriginalScreenHost.cs`), which raises its messageboxes, runs a script's frames and plays its films, so `OriginalCampaignTests` drives it over a hand-written host with no shell at all; the shell dispatches through `ModuleFor` and exposes it whole as `Campaign`, which is also how the seat walk and the hangar door's wallet reach campaign state. The scrapbook's pen is the only stroke any module draws, which is why `Compose` carries a strokes layer. Read `src/UI/CampaignFlow.cs` for the pages; the screens and
 their strings: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalPresentation.cs

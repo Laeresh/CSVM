@@ -1,5 +1,6 @@
 using System.Linq;
 using CSVM.Mech3;
+using CSVM.Session;
 using CSVM.UI;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.Original;
@@ -678,6 +679,206 @@ public class OriginalShellTests
         });
     }
 
+    /// <summary>The seam to the campaign module (<see cref="OriginalCampaignTests"/> drives the
+    /// module alone): the top level's own door opens its profile screen, the box there takes seat 0's
+    /// typed characters through the shell's one text seam, and the rows are the module's own.</summary>
+    [Fact]
+    public void TheCampaignDoorOpensTheModulesProfileScreen()
+    {
+        WithCampaignShell((shell, campaign, _, _, _) =>
+        {
+            var door = Row(shell, OriginalShell.CampaignKey);
+            Assert.True(door.Enabled);
+
+            var step = Click(shell, door.X + 2f, door.Y + 2f);
+
+            Assert.Equal(OriginalScreen.CampaignRoster, shell.Screen);
+            Assert.True(campaign.IsOpen && shell.Campaign.IsOpen);
+            Assert.Contains(OriginalCues.Click, step.Cues);
+            Assert.True(shell.CapturingText);
+            Assert.Equal(
+                new[] { "ROW:0", "Continue", "DeletePlayer", "CancelProfile" }, shell.Rows.Select(r => r.Key));
+            Assert.Equal(0, shell.Focus);
+            shell.Step(new MenuCommands { Typed = "Zac" });
+            Assert.Equal("Zac", shell.Campaign.RosterName);
+        });
+    }
+
+    [Fact]
+    public void TheKeyboardsColumnWalkLandsOnTheCampaignModulesOwnRows()
+    {
+        WithCampaignShell((shell, campaign, _, _, _) =>
+        {
+            Seat(shell, "Zachary");
+
+            // Down is the shell's own column walk over the cabin's plaques, and the door it ends on
+            // is the module's own way out of the campaign.
+            Assert.Equal("NextMission", shell.FocusedKey);
+            shell.Step(Down);
+            Assert.Equal("PreviousMissions", shell.FocusedKey);
+            shell.Step(Down);
+            shell.Step(Down);
+            Assert.Equal("ReturnToMainMenu", shell.FocusedKey);
+            shell.Step(Accept);
+            Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
+            Assert.False(campaign.IsOpen);
+            Assert.False(shell.Campaign.IsOpen);
+        });
+    }
+
+    /// <summary>The two-answer box as the campaign raises it: the box is the shell's, so its answers
+    /// are the rows the pointer and the cursor see, at the messagebox pane's own places, with the mark
+    /// on the one Accept would take and the rollover frame on whichever the pointer rests on.</summary>
+    [Fact]
+    public void TheCampaignsTwoAnswerBoxIsTheShellsOwnMessagebox()
+    {
+        WithCampaignShell((shell, _, _, _, store) =>
+        {
+            store.Save(CampaignProfileDef.NewProfile("Zachary"));
+            store.RecordLastPlayed("Zachary");
+            shell.Campaign.OpenCampaignOver(store);
+            Click(shell, "DeletePlayer");
+
+            Assert.NotNull(shell.Dialog);
+            Assert.Equal(
+                new[] { OriginalShell.DialogYesKey, OriginalShell.DialogNoKey }, shell.Rows.Select(r => r.Key));
+            Assert.Equal(OriginalShell.DialogYesKey, shell.FocusedKey);
+            Assert.False(shell.CapturingText);
+            // The messagebox buttons at their own rows inside the centred pane.
+            var yes = shell.Rows[0];
+            var no = shell.Rows[1];
+            Assert.Equal((195f + 70f, 150f + 250f), (yes.X, yes.Y));
+            var box = Box(shell);
+            Assert.Contains(box.Lines, l => l.Text == shell.Dialog!.Message);
+            Assert.Equal((int)DialogIcon.Query, DialogIconTests.IconFrame(box));
+
+            // Raised from a click, the pointer resting where DELETE PLAYER was: neither answer is
+            // lit, so both keep the normal frame and the mark alone says which Accept would take.
+            Assert.Equal(new[] { 1, 1 }, box.Pictures.Skip(2).Select(p => p.Frame));
+            var mark = Assert.Single(Marks(shell));
+            Assert.True(mark.Border);
+            Assert.Equal((yes.X - 3f, yes.Y - 3f), (mark.X, mark.Y));
+
+            // The pointer carries the rollover frame and the cursor with it, so a hovered answer is
+            // the lit one and wears no mark, and the answer left behind is back on its normal frame.
+            shell.Step(Pointer(no.X + 4f, no.Y + 4f));
+            Assert.Equal(new[] { 1, 2 }, Box(shell).Pictures.Skip(2).Select(p => p.Frame));
+            Assert.Empty(Marks(shell));
+            Assert.Equal(OriginalShell.DialogNoKey, shell.FocusedKey);
+        });
+    }
+
+    /// <summary>A box raised over a campaign screen keeps the messagebox's own inks and strip frames
+    /// rather than taking the paper palette the page under it is drawn in.</summary>
+    [Fact]
+    public void TheBoxOverAPaperCampaignScreenKeepsTheMessageboxsOwnInk()
+    {
+        WithCampaignShell((shell, _, _, _, store) =>
+        {
+            store.Save(CampaignProfileDef.NewProfile("Zachary"));
+            shell.Campaign.OpenCampaignOver(store);
+            Assert.True(shell.Campaign.ShowCabin("Zachary"));
+            shell.Campaign.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
+
+            shell.Campaign.PressExport();
+
+            Assert.NotNull(shell.Dialog);
+            var ok = Assert.Single(shell.Rows);
+            Assert.Equal(OriginalShell.DialogOkKey, ok.Key);
+            // With no pointer on it OK stands on its normal frame under the focus mark, in the box's
+            // white rather than the paper palette.
+            var panel = Box(shell);
+            Assert.Equal(BoardInk.Dialog, Assert.Single(panel.Lines, l => l.Text == ok.Label).Ink);
+            Assert.Contains(panel.Pictures, p => p.Art.Name == "PM_B_Small.png" && p.Frame == 1);
+            Assert.True(Assert.Single(Marks(shell)).Border);
+
+            // Held under the pointer it takes the depressed frame and the black that reads on it.
+            shell.Step(Pointer(ok.X + 2f, ok.Y + 2f, pressed: true, clicked: true));
+            panel = Box(shell);
+            Assert.Equal(BoardInk.DialogPressed, Assert.Single(panel.Lines, l => l.Text == ok.Label).Ink);
+            Assert.Contains(panel.Pictures, p => p.Art.Name == "PM_B_Small.png" && p.Frame == 3);
+        });
+    }
+
+    /// <summary>The cabin's own crossing into the hangar module: the door opens it over the seated
+    /// profile's purse, and the way back out of the hangar comes through the host onto the cabin
+    /// with its profile re-read.</summary>
+    [Fact]
+    public void PlaneConstructionOpensTheHangarOverTheWalletWithTheCabinAsItsReturn()
+    {
+        WithCampaignShell((shell, campaign, hangar, _, _) =>
+        {
+            Seat(shell, "Zachary");
+            var door = Row(shell, "PlaneConstruction");
+
+            Click(shell, door.X + 2f, door.Y + 2f);
+            Assert.Equal(OriginalScreen.PlaneName, shell.Screen);
+            Assert.True(hangar.IsOpen);
+            Assert.NotNull(hangar.Wallet);
+            Assert.Equal(campaign.Profile!.Funds, hangar.Wallet!.Funds);
+
+            shell.Step(Back);
+            Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
+            Assert.False(hangar.IsOpen);
+            Assert.True(campaign.IsOpen);
+            Assert.Equal("PlaneConstruction", shell.FocusedKey);
+        });
+    }
+
+    /// <summary>The check standing on a guest belongs to that guest's device and to the mouse riding
+    /// seat 0's source, nothing else of seat 0's: its cursor, Accept and Back would otherwise change
+    /// a pilot's ammunition, aircraft and readiness from another chair. Seat 0 keeps the whole frame
+    /// on its own check, which is what the field's index answers. The per-seat walk is the shell's,
+    /// so the fact stands here rather than over the module alone.</summary>
+    [Fact]
+    public void SeatZeroDrivesItsOwnCheckAndOnlyItsPointerReachesAGuests()
+    {
+        WithCampaignShell((shell, campaign, _, setup, _) =>
+        {
+            Seat(shell, "Zachary");
+            setup.Join(new ScriptedMenuSeat());
+            shell.Step(Accept);
+            var go = Row(shell, "GoToFlightCheck");
+            Click(shell, go.X + 2f, go.Y + 2f);
+            Assert.Equal(OriginalScreen.CampaignFlightCheck, shell.Screen);
+
+            // Seat 0's own check takes its whole frame, into ammo selection and back out.
+            Assert.Equal("ChangeAmmo", shell.FocusedKey);
+            shell.Step(Accept);
+            Assert.Equal(OriginalScreen.CampaignAmmo, shell.Screen);
+            shell.Step(Back);
+            Assert.Equal(OriginalScreen.CampaignFlightCheck, shell.Screen);
+
+            // FLY MISSION hands the screen to the guest, and seat 0's cursor, Accept and Back then
+            // move nothing: no row, no ammo screen, no retreat off the guest's check.
+            var fly = Row(shell, "FlyMission");
+            Assert.Null(Click(shell, fly.X + 2f, fly.Y + 2f).Exit);
+            Assert.Equal((1, 2), (campaign.Field.Current, campaign.Field.Players));
+            Assert.Equal("ChangeAmmo", shell.FocusedKey);
+            Assert.False(shell.Step(Down).Changed);
+            Assert.False(shell.Step(Accept).Changed);
+            Assert.False(shell.Step(Back).Changed);
+            Assert.Equal(OriginalScreen.CampaignFlightCheck, shell.Screen);
+            Assert.Equal(1, campaign.Field.Current);
+            Assert.Equal("ChangeAmmo", shell.FocusedKey);
+
+            // The guest's own device drives it, and the ammo screen its row opens is the guest's too.
+            Assert.True(shell.StepSeat(1, Accept).Changed);
+            Assert.Equal(OriginalScreen.CampaignAmmo, shell.Screen);
+            Assert.False(shell.Step(Back).Changed);
+            Assert.Equal(OriginalScreen.CampaignAmmo, shell.Screen);
+            shell.StepSeat(1, Back);
+            Assert.Equal(OriginalScreen.CampaignFlightCheck, shell.Screen);
+            Assert.Equal(1, campaign.Field.Current);
+
+            // Seat 0's pointer still reaches the guest's check, the one device a pilot with no pad of
+            // their own has, so the last check's FLY MISSION is the launch for both seats.
+            fly = Row(shell, "FlyMission");
+            var exit = Assert.IsType<CampaignMissionExit>(Click(shell, fly.X + 2f, fly.Y + 2f).Exit);
+            Assert.Equal(2, exit.Seats.Count);
+        });
+    }
+
     [Fact]
     public void AShellWithoutAHangarFeatureHasNoModuleAndNoHangarDoor()
     {
@@ -740,6 +941,45 @@ public class OriginalShellTests
                 System.IO.Directory.Delete(dir, true);
             }
         }
+    }
+
+    // A shell with the campaign behind its own door, over a scratch profile store and build store in
+    // a temp directory that goes with the test, and a hangar behind the cabin's PLANE CONSTRUCTION.
+    private static void WithCampaignShell(
+        System.Action<OriginalShell, CampaignFeature, HangarFeature, PlayerSetupFeature, CampaignProfileStore> test)
+    {
+        string dir = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "csvm-original-shell-campaign-" + System.Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new CampaignProfileStore(System.IO.Path.Combine(dir, "Profiles"));
+            var planes = new CSVM.Flight.CustomPlaneStore(System.IO.Path.Combine(dir, "Planes"));
+            var setup = new PlayerSetupFeature();
+            setup.SetRoster(OriginalPresentation.Roster(System.Array.Empty<CSVM.Flight.CustomPlaneDef>()));
+            setup.Join(new ScriptedMenuSeat());
+            var hangar = new HangarFeature(UiStrings.Empty, PlanePickerRoster.AirframeNode);
+            var campaign = new CampaignFeature(UiStrings.Empty, airframe => $"node{airframe}");
+            var shell = new OriginalShell(
+                MenuLayoutReaderTests.OriginalLayout(), new FreeFlightFeature(), setup, Measure,
+                hangar: hangar, planes: planes, campaign: campaign, profiles: () => store);
+            test(shell, campaign, hangar, setup, store);
+        }
+        finally
+        {
+            if (System.IO.Directory.Exists(dir))
+            {
+                System.IO.Directory.Delete(dir, true);
+            }
+        }
+    }
+
+    // A player typed into the campaign's name box and started, landing on the cabin.
+    private static void Seat(OriginalShell shell, string name)
+    {
+        Click(shell, OriginalShell.CampaignKey);
+        shell.Step(new MenuCommands { Typed = name });
+        shell.Step(Accept);
+        Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
     }
 
     // Seat 0 is a scripted source; the roster is the eleven stock airframes with no customs. No

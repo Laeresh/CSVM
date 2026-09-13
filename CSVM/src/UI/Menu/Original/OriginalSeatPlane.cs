@@ -71,7 +71,7 @@ public sealed partial class OriginalShell
     // rides seat 0's source, so dropping the whole frame would take the one device a pilot without
     // a pad of their own can pick with; the seat's identity, never the device kind, decides here.
     private MenuCommands SeatZeroFrame(MenuCommands commands) =>
-        (OnSeatWalk && _pickingSeat != null && !ReferenceEquals(_pickingSeat, Seat0)) || CheckSeat > 0
+        (OnSeatWalk && _pickingSeat != null && !ReferenceEquals(_pickingSeat, Seat0)) || Campaign.CheckSeat > 0
             ? new MenuCommands { Pointer = commands.Pointer }
             : commands;
 
@@ -212,7 +212,7 @@ public sealed partial class OriginalShell
             return null;
         }
 
-        if (Entry(row.Key) is { } entry)
+        if (OriginalWidgets.Entry(row.Key) is { } entry)
         {
             page.List.Move(entry - page.List.Highlight);
             TakeSeatPick(page, seat);
@@ -512,7 +512,7 @@ public sealed partial class OriginalShell
             }
         }
 
-        private UiStrings Strings => _shell._campaign?.Strings ?? _shell.Hangar?.Strings ?? UiStrings.Empty;
+        private UiStrings Strings => _shell.MenuStrings;
 
         private BoardButton[] Plaques => _seat.Locked ? SelectedPlaques : BrowsingPlaques;
 

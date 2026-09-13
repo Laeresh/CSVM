@@ -1069,8 +1069,10 @@ internal static class MenuHangarSuites
     // the totals page, an over-priced engine row marked in the open list and still picked.
     private static void OriginalWallet(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, HangarFeature hangar, MenuLayout layout)
     {
-        shell.OpenCampaignOver(CampaignAidProfiles.Store(seeded: true, progressed: true));
-        ctx.Check(shell.ShowCabin(CampaignAidProfiles.Pilot), $"the aid profile seats on the cabin ({shell.Screen})");
+        shell.Campaign.OpenCampaignOver(CampaignAidProfiles.Store(seeded: true, progressed: true));
+        ctx.Check(
+            shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot),
+            $"the aid profile seats on the cabin ({shell.Screen})");
         var door = Row(shell, "PlaneConstruction");
         if (door == null)
         {

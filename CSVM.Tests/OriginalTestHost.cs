@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using CSVM.UI;
 using CSVM.UI.Menu;
@@ -5,10 +6,11 @@ using CSVM.UI.Menu.Original;
 
 namespace CSVM.Tests;
 
-/// <summary>The three sectionless-page seams of <see cref="IOriginalScreenHost"/> as every module's
-/// test fake answers them. They are here rather than in each fake because they carry no state and
-/// no per-family behaviour: a fake that lets a module run its no-section path wants the same plaque
-/// column, the same heading line and the same focus outline the shell gives it.</summary>
+/// <summary>The stateless seams of <see cref="IOriginalScreenHost"/> as every module's test fake
+/// answers them: the three sectionless-page readings and the film a cinema is played through. They
+/// are here rather than in each fake because they carry no per-family behaviour: a fake that lets a
+/// module run its no-section path wants the same plaque column, the same heading line and the same
+/// focus outline the shell gives it.</summary>
 internal static class OriginalTestHost
 {
     // The shell's own sectionless column and row pitch, and a plaque's fallback size, so a row
@@ -36,4 +38,10 @@ internal static class OriginalTestHost
 
     internal static BoardFill FocusMark(OriginalRow row) =>
         new(row.X, row.Y, row.Width, row.Height, 188, 188, 188, 0.75f, Border: true);
+
+    // A cinema played in front of a fake's screen. The film is per call rather than per fake because
+    // no fake runs a frame loop, so nothing ever reads whether one still stands; what the flow needs
+    // is that a play whose cinema hands back at once opens its screen at once, and a deferred one
+    // opens it on the callback, which one film does either way.
+    internal static void PlayFilm(Action<Action> play, Action then) => new CinemaFilm().Play(play, then);
 }

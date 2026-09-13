@@ -159,8 +159,8 @@ internal static class MenuOriginalCampaignSuites
         RefusedCharacters(ctx, host, seat, shell, audio);
         audio.Cues.Clear();
         Press(host, seat, new MenuCommands { Typed = Pilot });
-        ctx.Check(shell.RosterName == Pilot && audio.Cues.Count == Pilot.Length && audio.Cues[0] == OriginalCues.Text,
-            $"typed frames fill the box and cue the keystroke sound per character ({shell.RosterName}, {audio.Cues.Count})");
+        ctx.Check(shell.Campaign.RosterName == Pilot && audio.Cues.Count == Pilot.Length && audio.Cues[0] == OriginalCues.Text,
+            $"typed frames fill the box and cue the keystroke sound per character ({shell.Campaign.RosterName}, {audio.Cues.Count})");
         ctx.Check(store.Load(Pilot) == null, $"nothing is written before the commit");
         var box = Row(shell, "ROW:0");
         ctx.Check(box is { Kind: OriginalRowKind.TextField }, $"the box's row is the screen's edit box ({box?.Kind})");
@@ -172,8 +172,8 @@ internal static class MenuOriginalCampaignSuites
             Click(host, seat, Pointer(fit, box.X + 4f, box.Y + 4f, pressed: true, clicked: true));
             ctx.Check(
                 shell.Screen == OriginalScreen.CampaignRoster && shell.FocusedKey == "ROW:0"
-                && shell.RosterName == Pilot && campaign.Profile == null,
-                $"a click in the name box takes the caret and starts nothing ({shell.Screen}, {shell.FocusedKey}, {shell.RosterName})");
+                && shell.Campaign.RosterName == Pilot && campaign.Profile == null,
+                $"a click in the name box takes the caret and starts nothing ({shell.Screen}, {shell.FocusedKey}, {shell.Campaign.RosterName})");
         }
 
         Press(host, seat, Accept);
@@ -247,22 +247,22 @@ internal static class MenuOriginalCampaignSuites
     {
         audio.Cues.Clear();
         Press(host, seat, new MenuCommands { Typed = "/" });
-        ctx.Check(shell.RosterName.Length == 0 && audio.Cues.Count == 1 && audio.Cues[0] == OriginalCues.TextError,
-            $"a character the name rule refuses types nothing and cues the reject sound ({shell.RosterName}, {string.Join(",", audio.Cues)})");
+        ctx.Check(shell.Campaign.RosterName.Length == 0 && audio.Cues.Count == 1 && audio.Cues[0] == OriginalCues.TextError,
+            $"a character the name rule refuses types nothing and cues the reject sound ({shell.Campaign.RosterName}, {string.Join(",", audio.Cues)})");
 
         audio.Cues.Clear();
         Press(host, seat, new MenuCommands { Typed = new string('A', CampaignFeature.MaxNameLength + 1) });
-        ctx.Check(shell.RosterName.Length == CampaignFeature.MaxNameLength
+        ctx.Check(shell.Campaign.RosterName.Length == CampaignFeature.MaxNameLength
             && audio.Cues.Count == CampaignFeature.MaxNameLength + 1
             && audio.Cues[audio.Cues.Count - 1] == OriginalCues.TextError,
-            $"an accepted character at the cap cues the same reject ({shell.RosterName.Length}, {audio.Cues.Count})");
+            $"an accepted character at the cap cues the same reject ({shell.Campaign.RosterName.Length}, {audio.Cues.Count})");
 
         for (int i = 0; i < CampaignFeature.MaxNameLength; i++)
         {
             Press(host, seat, new MenuCommands { Erase = true });
         }
 
-        ctx.Check(shell.RosterName.Length == 0, $"and Backspace empties the box again ({shell.RosterName})");
+        ctx.Check(shell.Campaign.RosterName.Length == 0, $"and Backspace empties the box again ({shell.Campaign.RosterName})");
     }
 
     // The briefing: the reveal on the presentation's clock, the narration through the host's audio.
@@ -585,7 +585,7 @@ internal static class MenuOriginalCampaignSuites
 
         store.Save(profile);
         host.Show(new CabinReturn(Pilot));
-        shell.ShowMissionScreen(OriginalScreen.CampaignPreviousMissions);
+        shell.Campaign.ShowMissionScreen(OriginalScreen.CampaignPreviousMissions);
         ctx.Check(shell.Screen == OriginalScreen.CampaignPreviousMissions,
             $"PREVIOUS MISSIONS opens the contents page over six flown missions ({shell.Screen})");
         WheelAndDrag(ctx, host, seat, shell, fit, "CONTENTS", "the scrapbook's contents page");
@@ -675,11 +675,11 @@ internal static class MenuOriginalCampaignSuites
         const string Built = "Export Bird";
         var profiles = new CampaignProfileStore(Path.Combine(root, "GateProfiles"));
         var planes = new CustomPlaneStore(Path.Combine(root, "GatePlanes"));
-        shell.OpenCampaignOver(profiles, planes);
+        shell.Campaign.OpenCampaignOver(profiles, planes);
         Press(host, seat, new MenuCommands { Typed = Pilot });
         Press(host, seat, Accept);
         var door = Row(shell, "PlaneConstruction");
-        if (campaign.Profile is not { } seated || shell.CampaignWallet is not { } seatedWallet || door == null)
+        if (campaign.Profile is not { } seated || shell.Campaign.Wallet is not { } seatedWallet || door == null)
         {
             ctx.Check(false, $"the gate walk seats a player over its own stores ({campaign.Profile?.Name})");
             return;
@@ -698,7 +698,7 @@ internal static class MenuOriginalCampaignSuites
 
         // Back through the cabin re-reads the profile, so the wallet the build is funded by has to
         // be taken after it or the purchase would land on an object nothing else is looking at.
-        if (campaign.Profile is not { } profile || shell.CampaignWallet is not { } wallet)
+        if (campaign.Profile is not { } profile || shell.Campaign.Wallet is not { } wallet)
         {
             ctx.Check(false, $"the cabin resumes with the profile seated");
             return;
@@ -717,10 +717,10 @@ internal static class MenuOriginalCampaignSuites
 
         profile.SelectedPlane = profile.Planes.Count - 1;
         profiles.Save(profile);
-        shell.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
+        shell.Campaign.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
         ctx.Check(shell.Screen == OriginalScreen.CampaignPlaneSelection && shell.Rows[0].Label.Contains(Built, StringComparison.Ordinal),
             $"plane selection puts the pilot's combo on the built aeroplane ({shell.Screen}, {shell.Rows[0].Label})");
-        shell.PressExport();
+        shell.Campaign.PressExport();
         ctx.Check(planes.Load(Built) is { AwaitingExport: false },
             $"the FIRST EXPORT press clears the marker in the stored record ({planes.Load(Built)?.AwaitingExport})");
         var roster = OriginalRosters.Roster(planes.List());
@@ -739,10 +739,10 @@ internal static class MenuOriginalCampaignSuites
         const string OneMore = "One Too Many";
         var profiles = new CampaignProfileStore(Path.Combine(root, "CapProfiles"));
         var planes = new CustomPlaneStore(Path.Combine(root, "CapPlanes"));
-        shell.OpenCampaignOver(profiles, planes);
+        shell.Campaign.OpenCampaignOver(profiles, planes);
         Press(host, seat, new MenuCommands { Typed = Pilot });
         Press(host, seat, Accept);
-        if (campaign.Profile is not { } profile || shell.CampaignWallet is not { } wallet)
+        if (campaign.Profile is not { } profile || shell.Campaign.Wallet is not { } wallet)
         {
             ctx.Check(false, $"the slot-cap walk seats a player over its own stores ({campaign.Profile?.Name})");
             return;
@@ -781,12 +781,12 @@ internal static class MenuOriginalCampaignSuites
     // on the ammo and plane-selection screens over the aid's own scratch store.
     private static void AidScript(TestContext ctx, OriginalShell shell)
     {
-        shell.OpenCampaignOver(CampaignAidProfiles.Store(seeded: true, progressed: true), CampaignAidProfiles.Planes());
-        shell.ShowCabin(CampaignAidProfiles.Pilot);
-        shell.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
+        shell.Campaign.OpenCampaignOver(CampaignAidProfiles.Store(seeded: true, progressed: true), CampaignAidProfiles.Planes());
+        shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
+        shell.Campaign.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
         int closed = shell.Rows.Count;
         var shut = shell.Compose();
-        shell.RunAidScript("a");
+        shell.Campaign.RunAidScript("a");
         var open = shell.Compose();
         ctx.Check(shell.Rows.Count > closed && shell.FocusedKey == "FIELD:0",
             $"a stands the pilot's plane list open ({closed} -> {shell.Rows.Count} rows, focus {shell.FocusedKey})");
@@ -800,9 +800,9 @@ internal static class MenuOriginalCampaignSuites
         ctx.Check(shell.Compose().Overlays.Count > shut.Overlays.Count,
             $"and idle frames keep it standing ({shell.Compose().Overlays.Count} overlays, focus {shell.FocusedKey})");
 
-        shell.ShowMissionScreen(OriginalScreen.CampaignAmmo);
+        shell.Campaign.ShowMissionScreen(OriginalScreen.CampaignAmmo);
         closed = shell.Rows.Count;
-        shell.RunAidScript("4da");
+        shell.Campaign.RunAidScript("4da");
         ctx.Check(shell.Rows.Count > closed && shell.FocusedKey == "FIELD:4",
             $"4da steps four rows down the ammo screen and stands that rocket list open ({closed} -> {shell.Rows.Count} rows, focus {shell.FocusedKey})");
 
@@ -810,15 +810,15 @@ internal static class MenuOriginalCampaignSuites
         // not even the two downs before it move the cursor and the run ends without a shot.
         string focus = shell.FocusedKey;
         int rows = shell.Rows.Count;
-        bool ran = shell.RunAidScript("2d-x");
+        bool ran = shell.Campaign.RunAidScript("2d-x");
         ctx.Check(!ran && shell.Rows.Count == rows && shell.FocusedKey == focus,
             $"2d-x is refused whole rather than replayed as far as x ({ran}, {rows} -> {shell.Rows.Count} rows, focus {shell.FocusedKey})");
 
-        shell.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
-        shell.RunAidScript(CampaignAidProfiles.ExportArgument);
+        shell.Campaign.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
+        shell.Campaign.RunAidScript(CampaignAidProfiles.ExportArgument);
         ctx.Check(shell.Dialog != null, $"and export is still the EXPORT press, its box standing ({shell.Dialog?.Message})");
         DialogFrames(ctx, shell);
-        shell.CloseCampaign();
+        shell.Campaign.CloseCampaign();
     }
 
     // The messagebox's answer strip through the three states it can stand in, over the install's own

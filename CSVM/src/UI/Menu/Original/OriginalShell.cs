@@ -201,6 +201,9 @@ public sealed record OriginalPreferencesInks(MenuLayoutColor Text, MenuLayoutCol
 /// </summary>
 public sealed partial class OriginalShell : IOriginalScreenHost
 {
+    /// <summary>The Campaign row's key on the top level.</summary>
+    public const string CampaignKey = "MM_B_CAMPAIGN";
+
     /// <summary>The Free Flight door's key on the top level.</summary>
     public const string FreeFlightKey = "FREEFLIGHT";
 
@@ -299,6 +302,10 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     private readonly BoardArt _passivePointer;
     private readonly ControlsFeature? _controls;
     private readonly CSVM.Flight.CustomPlaneStore? _planes;
+    // The stock loadouts reader, shared: the campaign opens over it, the Instant Action module holds
+    // it, and the per-seat aircraft screen reads a stock fit's ratings off it.
+    private readonly Func<CSVM.Flight.StockLoadouts?>? _stock;
+    private readonly CampaignLayout _campaignLayout;
     private readonly InstantActionFeature _instantAction;
     // The screen modules this shell stands over, each asked which screens it owns. One dispatch
     // lookup (ModuleFor) instead of a field and a screen-range check per family, so a further
@@ -366,18 +373,17 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         _chapters = chapters ?? OriginalRosters.Chapters;
         _instantAction = instantAction ?? new InstantActionFeature(_ => Mech3.InstantAction.Defaults());
         _planes = planes;
-        _campaign = campaign;
-        _profiles = profiles;
         _stock = stock;
-        _dataRoot = dataRoot;
         _controls = controls;
+        _campaignLayout = CampaignLayout.Over(layout);
         InstantAction = new OriginalInstantActionScreen(_instantAction, _setup, planes, layout, measure, this, _stock);
         Options = new OriginalOptionsScreen(layout, this, options, screenSizes, screens, controls);
+        Campaign = new OriginalCampaignScreen(
+            campaign, _setup, planes, _campaignLayout, this, profiles, _stock, _flightDevices, dataRoot);
         Hangar = hangar != null ? new OriginalHangarScreen(hangar, planes, layout, measure, this) : null;
         _modules = Hangar != null
-            ? new IOriginalScreenModule[] { InstantAction, Options, Hangar }
-            : new IOriginalScreenModule[] { InstantAction, Options };
-        _campaignLayout = CampaignLayout.Over(layout);
+            ? new IOriginalScreenModule[] { InstantAction, Options, Campaign, Hangar }
+            : new IOriginalScreenModule[] { InstantAction, Options, Campaign };
         var plaqueRow = layout.Screen("FlightCheck")?.Widget("FC_B_CHANGEPLANE");
         _plaque = plaqueRow is { Art.Count: > 0 } ? new BoardArt(BoardArtLibrary.Ui, plaqueRow.Art[0], plaqueRow.Frames) : null;
         Inks = ReadInks(layout, plaqueRow);
@@ -451,8 +457,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
                     module.Lists(lists);
                     break;
                 case OriginalScreen.SeatPlane:
-                case var _ when IsCampaignScreen:
-                    CampaignLists(lists);
+                    SeatPlaneLists(lists);
                     break;
             }
 
@@ -486,6 +491,17 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     /// itself is the shell's, being a column of doors and nothing else.</summary>
     public OriginalOptionsScreen Options { get; }
 
+    /// <summary>The module behind the campaign's ten screens, holding the open campaign and the
+    /// pages it composes. It stands on a shell built without a campaign feature too, with its
+    /// Campaign row disabled and every door inside it shut.</summary>
+    public OriginalCampaignScreen Campaign { get; }
+
+    /// <summary>Which campaign board the screen showing wears, or null when it wears none; what
+    /// the presentation picks the board's palette by. The campaign's own screens answer for
+    /// themselves and the remake-only per-seat aircraft screen wears the plane-selection board.</summary>
+    public CampaignScreen? CampaignPage =>
+        Campaign.Board ?? (_screen == OriginalScreen.SeatPlane ? CampaignScreen.PlaneSelection : null);
+
     /// <summary>The list whose thumb the pointer is dragging, or null.</summary>
     public string? Dragging => _drag?.Key;
 
@@ -498,6 +514,18 @@ public sealed partial class OriginalShell : IOriginalScreenHost
 
     /// <summary>The pointer's last authored position, or null when the seat has none.</summary>
     public (float X, float Y)? Pointer => _pointer;
+
+    // The campaign's table where one is open, the hangar's otherwise, empty with neither: the words
+    // the messagebox answers and the per-seat screen's ratings take. Either family may have loaded one.
+    private CSVM.Mech3.UiStrings MenuStrings =>
+        Campaign.Strings ?? Hangar?.Strings ?? CSVM.Mech3.UiStrings.Empty;
+
+    // The open drop-down list on the screen showing, campaign or per-seat, or null: the axis walks
+    // its entries and the pointer takes its rows as one of the screen's lists.
+    private CampaignCombo? CurrentCombo =>
+        _screen == OriginalScreen.SeatPlane
+            ? (_seatPage?.List is { Open: true } list ? list : null)
+            : Campaign.OpenCombo;
 
     /// <summary>Opens the hangar from the screen showing, wallet-free from Instant Action's Build
     /// Custom Plane and over <paramref name="wallet"/> from the cabin's PLANE CONSTRUCTION. Nothing
@@ -516,7 +544,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     public void ReturnToTopLevel()
     {
         _setup.ResetPicks(fits: true);
-        CloseCampaign();
+        Campaign.CloseCampaign();
         Open(OriginalScreen.TopLevel);
     }
 
@@ -574,7 +602,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             return _instantAction.PlayerPlaneIndex;
         }
 
-        return _campaign?.Field.Plane(0)?.Airframe ?? HangarFeature.DefaultAirframe;
+        return Campaign.SeatedAirframe ?? HangarFeature.DefaultAirframe;
     }
 
     // Typed characters and Backspace into whichever edit box is showing: the campaign roster's own
@@ -582,8 +610,25 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     // character set and cap).
     private bool TypeName(MenuCommands commands, List<string> cues) =>
         _screen == OriginalScreen.CampaignRoster
-            ? TypeRosterName(commands, cues)
+            ? Campaign.TypeName(commands, cues)
             : Hangar?.TypeName(commands, cues) ?? false;
+
+    // The per-seat screen's one list for the pointer: its open drop-down, which hangs over the screen.
+    private void SeatPlaneLists(List<OriginalList> lists)
+    {
+        if (_seatPage?.List is { Open: true } list && CampaignBoards.ComboWindow(list) is { } window)
+        {
+            lists.Add(new OriginalList(OriginalWidgets.EntryKeyPrefix + "LIST", window, top => list.ScrollTo(top)));
+        }
+    }
+
+    // A click off an open per-seat list closes it and picks nothing, the rule the campaign module
+    // applies to its own.
+    private bool CloseSeatCombo() =>
+        _screen == OriginalScreen.SeatPlane && _seatPage?.List is { Open: true } list && list.Collapse();
+
+    // Inside an open list the axis walks its entries rather than the screen's rows.
+    private bool MoveCombo(int direction) => CurrentCombo is { } combo && combo.Move(direction);
 
     private void RefreshRosterFromStore()
     {
@@ -627,7 +672,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
 
         var cues = new List<string>();
         MenuExit? exit = null;
-        SyncCampaignField();
+        Campaign.SyncField();
         bool changed = TypeName(commands, cues);
         if (OnSeatWalk && _pickingSeat is not { Joined: true })
         {
@@ -686,9 +731,9 @@ public sealed partial class OriginalShell : IOriginalScreenHost
                 {
                     // An open campaign list's entry takes the highlight, not the focus, which
                     // stays on the field the list hangs from.
-                    if (HoverOnly(rows[over]))
+                    if (OriginalWidgets.HoverOnly(rows[over]))
                     {
-                        HighlightComboEntry(rows[over]);
+                        OriginalWidgets.Highlight(CurrentCombo, rows[over].Key);
                     }
                     else
                     {
@@ -724,7 +769,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             }
             else if (fires)
             {
-                if (!HoverOnly(rows[over]))
+                if (!OriginalWidgets.HoverOnly(rows[over]))
                 {
                     focus = over;
                     _focus[(int)_screen] = focus;
@@ -736,7 +781,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
                 focus = EnsureFocus(rows);
             }
             else if (pointer.Clicked && over < 0
-                && ((ModuleFor(_screen)?.CloseDropdown() ?? false) || CloseCampaignCombo()))
+                && ((ModuleFor(_screen)?.CloseDropdown() ?? false) || CloseSeatCombo()))
             {
                 // A click off an open list closes it and picks nothing.
                 changed = true;
@@ -748,7 +793,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         if (commands.MoveY != 0)
         {
             // Inside an open campaign list the axis walks the list's entries.
-            if (!MoveCampaignCombo(rows, focus, commands.MoveY))
+            if (!MoveCombo(commands.MoveY))
             {
                 focus = StepWithinColumn(rows, focus, commands.MoveY);
             }
@@ -759,19 +804,14 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         if (commands.MoveX != 0)
         {
             // A sideways step changes a value where the cursor stands on one (a slider, first
-            // because it belongs to no one screen, then the screen's own module where one owns it,
-            // then a campaign field); else it crosses columns.
+            // because it belongs to no one screen, then the screen's own module where one owns it);
+            // else it crosses columns.
             if (SliderControl.StepValue(rows, focus, commands.MoveX))
             {
                 rows = Rows;
                 focus = EnsureFocus(rows);
             }
             else if (ModuleFor(_screen) is { } module && module.StepSideways(rows, focus, commands.MoveX))
-            {
-                rows = Rows;
-                focus = EnsureFocus(rows);
-            }
-            else if (IsCampaignScreen && StepCampaignSideways(rows, focus, commands.MoveX))
             {
                 rows = Rows;
                 focus = EnsureFocus(rows);
@@ -829,7 +869,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         var main = _layout.Screen(OriginalAvailability.MainMenuSection);
         var screenModule = ModuleFor(_screen);
         bool ownPage = _screen is OriginalScreen.Options or OriginalScreen.SeatPlane or OriginalScreen.Credits
-            || screenModule != null || IsCampaignScreen;
+            || screenModule != null;
         if (!ownPage && main?.Widget("MM_LOGO") is { Art.Count: > 0 } logo)
         {
             pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, logo.Art[0], logo.Frames), logo.Int("X"), logo.Int("Y")));
@@ -843,10 +883,8 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         switch (_screen)
         {
             case var _ when screenModule != null:
-                screenModule.Compose(screenRows, screenFocus, backdrop, pictures, fills, lines, plaques, notes, overlays);
-                break;
-            case var _ when IsCampaignScreen:
-                ComposeCampaign(rows, focus, backdrop, pictures, fills, strokes, lines, plaques, notes, overlays);
+                screenModule.Compose(
+                    screenRows, screenFocus, backdrop, pictures, fills, strokes, lines, plaques, notes, overlays);
                 break;
             case OriginalScreen.SeatPlane:
                 ComposeSeatPlane(focus, backdrop, pictures, fills, lines, plaques, overlays);
@@ -868,7 +906,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             ComposeRows(screenRows, screenFocus, fills, lines, plaques);
         }
 
-        if (_dialog != null && !IsCampaignScreen)
+        if (_dialog != null)
         {
             ComposeDialog(rows, focus, overlays);
         }
@@ -1019,16 +1057,9 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         return ordinal;
     }
 
-    // A strip's one-frame size from the measurer, or the fallback when the file is not there.
-    private (float Width, float Height) StripSize(BoardArt? art, float fallbackWidth, float fallbackHeight)
-    {
-        if (art == null || Measure(art.Name) is not { } size)
-        {
-            return (fallbackWidth, fallbackHeight);
-        }
-
-        return (size.Width, (float)Math.Floor(size.Height / (float)Math.Max(1, art.Frames)));
-    }
+    // A strip's one-frame size from this shell's own measurer, the shared reading.
+    private (float Width, float Height) StripSize(BoardArt? art, float fallbackWidth, float fallbackHeight) =>
+        OriginalWidgets.StripSize(art, Measure, fallbackWidth, fallbackHeight);
 
     // One of a section's own button strips as a row, at its authored corner in its measured size.
     private void AddStrip(MenuLayoutScreen screen, List<OriginalRow> rows, string key, OriginalRowKind kind, bool enabled, int column)
@@ -1303,7 +1334,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
                         Open(OriginalScreen.Dogfight);
                         break;
                     case CampaignKey:
-                        OpenCampaign();
+                        Campaign.OpenCampaign();
                         break;
                     case "MM_B_INSTANTACTION":
                         InstantAction.OpenInstantAction();
@@ -1328,8 +1359,6 @@ public sealed partial class OriginalShell : IOriginalScreenHost
                 return module.Activate(row);
             case OriginalScreen.SeatPlane:
                 return ActivateSeatPlane(row);
-            case var _ when IsCampaignScreen:
-                return ActivateCampaign(row);
             case OriginalScreen.Options:
                 switch (row.Key)
                 {
@@ -1392,12 +1421,6 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             return null;
         }
 
-        if (IsCampaignScreen)
-        {
-            BackCampaign();
-            return null;
-        }
-
         Open(OriginalScreen.TopLevel);
         return null;
     }
@@ -1416,7 +1439,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
                     if (main?.Widget(key) is { } widget)
                     {
                         bool enabled = key is "MM_B_QUIT" or "MM_B_PREFERENCES" or "MM_B_INSTANTACTION" or CreditsDoorKey
-                            || (key == CampaignKey && _campaign != null && _profiles != null);
+                            || (key == CampaignKey && Campaign.CanOpen);
                         rows.Add(Button(widget, enabled));
                     }
                 }
@@ -1431,12 +1454,10 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             case OriginalScreen.SeatPlane:
                 if (_seatPage is { } seatPage)
                 {
-                    BuildPageRows(seatPage, rows);
+                    OriginalWidgets.PageRows(
+                        seatPage, CurrentCombo, _ => true, _campaignLayout, Measure, rows);
                 }
 
-                break;
-            case var _ when IsCampaignScreen:
-                BuildCampaignRows(rows);
                 break;
             case OriginalScreen.FreeFlight:
             case OriginalScreen.Dogfight:
@@ -1639,14 +1660,13 @@ public sealed partial class OriginalShell : IOriginalScreenHost
 
     int IOriginalScreenHost.HoveredRow => _hover;
 
+    int IOriginalScreenHost.FocusBeforeDialog => _focusBeforeDialog;
+
     (float X, float Y)? IOriginalScreenHost.Pointer => _pointer;
 
-    CSVM.Flight.CustomPlaneStore? IOriginalScreenHost.CampaignPlanes => _campaign?.Planes;
+    CSVM.Flight.CustomPlaneStore? IOriginalScreenHost.CampaignPlanes => Campaign.Planes;
 
-    // The campaign's table where one is open, the hangar's otherwise: the loadout screen's own
-    // words come from the campaign's ammo page, which either family may have loaded.
-    CSVM.Mech3.UiStrings IOriginalScreenHost.MenuStrings =>
-        _campaign?.Strings ?? Hangar?.Strings ?? CSVM.Mech3.UiStrings.Empty;
+    CSVM.Mech3.UiStrings IOriginalScreenHost.MenuStrings => MenuStrings;
 
     bool IOriginalScreenHost.CanBuildPlane => Hangar != null && _planes != null;
 
@@ -1658,15 +1678,21 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         RaiseDialog(message, icon, answers);
 #pragma warning restore SA1201
 
+    void IOriginalScreenHost.CloseDialog() => _dialog = null;
+
+    void IOriginalScreenHost.Frame(MenuCommands commands) => Step(commands);
+
+    void IOriginalScreenHost.PlayFilm(Action<Action> play, Action then) => _film.Play(play, then);
+
     (int Width, int Height)? IOriginalScreenHost.Measure(string art) => Measure(art);
 
-    void IOriginalScreenHost.ResumeCampaign() => ResumeCampaign();
+    void IOriginalScreenHost.ResumeCampaign() => Campaign.ResumeCampaign();
 
     void IOriginalScreenHost.RefreshInstantActionRoster() => InstantAction.RefreshRoster();
 
     void IOriginalScreenHost.RefreshRosterFromStore() => RefreshRosterFromStore();
 
-    void IOriginalScreenHost.OpenHangar() => OpenHangar();
+    void IOriginalScreenHost.OpenHangar(IHangarWallet? wallet) => OpenHangar(wallet);
 
     MenuExit? IOriginalScreenHost.BeginSeatWalk() => BeginInstantActionSeatWalk();
 

@@ -531,7 +531,7 @@ internal static class MenuLaunchReturnSuites
         run.Click(Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.CampaignRoster && ReferenceEquals(campaign.Store, store),
             $"the Campaign door opens the profile screen over the scratch store ({shell.Screen})");
-        if (shell.RosterName != Pilot)
+        if (shell.Campaign.RosterName != Pilot)
         {
             run.Press(new MenuCommands { Typed = Pilot });
         }

@@ -357,9 +357,9 @@ internal static class MenuOriginalSuites
             $"and stays seated while seat 0 keeps steering the screen ({host.Seats.Count}, {shell.Screen})");
 
         host.Show(MenuReturnDestination.TopLevel);
-        shell.OpenCampaignOver(CampaignAidProfiles.Store(seeded: true), CampaignAidProfiles.Planes());
-        ctx.Check(shell.ShowCabin(CampaignAidProfiles.Pilot), $"the scratch campaign seats its pilot");
-        shell.ShowMissionScreen(OriginalScreen.CampaignFlightCheck);
+        shell.Campaign.OpenCampaignOver(CampaignAidProfiles.Store(seeded: true), CampaignAidProfiles.Planes());
+        ctx.Check(shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot), $"the scratch campaign seats its pilot");
+        shell.Campaign.ShowMissionScreen(OriginalScreen.CampaignFlightCheck);
         ctx.Check(shell.Screen == OriginalScreen.CampaignFlightCheck && shell.JoiningOpen,
             $"the flight check opens joining too ({shell.Screen}, open={shell.JoiningOpen})");
         ctx.Check(StripSeats(shell) == 2, $"its board carries the seat strip naming both seats ({StripSeats(shell)} lines)");

@@ -1320,8 +1320,10 @@ public class OriginalOptionsTests
         var plaques = new List<BoardPlaque>();
         var notes = new List<BoardNote>();
         var overlays = new List<BoardPanel>();
-        host.Module.Compose(rows, host.Focus, backdrop, pictures, fills, lines, plaques, notes, overlays);
-        return new ComposedBoard(pictures, Array.Empty<BoardStroke>(), lines, plaques, notes,
+        // The pen the seam offers is the campaign scrapbook's alone, so no option page writes a stroke.
+        var strokes = new List<BoardStroke>();
+        host.Module.Compose(rows, host.Focus, backdrop, pictures, fills, strokes, lines, plaques, notes, overlays);
+        return new ComposedBoard(pictures, strokes, lines, plaques, notes,
             backdrop: backdrop, fills: fills, overlays: overlays);
     }
 
@@ -1380,6 +1382,8 @@ public class OriginalOptionsTests
         public int PressedRow => _pressed;
 
         public int HoveredRow => _hover;
+
+        public int FocusBeforeDialog => -1;
 
         public (float X, float Y)? Pointer => _pointer;
 
@@ -1466,6 +1470,17 @@ public class OriginalOptionsTests
         {
         }
 
+        public void CloseDialog()
+        {
+        }
+
+        // No frame loop behind this fake, so a module's own re-entrant press has nothing to run.
+        public void Frame(MenuCommands commands)
+        {
+        }
+
+        public void PlayFilm(Action<Action> play, Action then) => OriginalTestHost.PlayFilm(play, then);
+
         public (int Width, int Height)? Measure(string art) => art.Length > 0 ? _measure(art) : null;
 
         public void ResumeCampaign()
@@ -1480,7 +1495,7 @@ public class OriginalOptionsTests
         {
         }
 
-        public void OpenHangar()
+        public void OpenHangar(IHangarWallet? wallet)
         {
         }
 

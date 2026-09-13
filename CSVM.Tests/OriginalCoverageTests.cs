@@ -360,7 +360,7 @@ public class OriginalCoverageTests : IDisposable
     private static void AssertHome(OriginalShell shell, CampaignFeature campaign, HangarFeature hangar, string way)
     {
         Assert.True(shell.Screen == OriginalScreen.TopLevel, $"{way} stops on {shell.Screen}");
-        Assert.True(shell.Dialog == null && !shell.CampaignOpen && !campaign.IsOpen && !hangar.IsOpen,
+        Assert.True(shell.Dialog == null && !shell.Campaign.IsOpen && !campaign.IsOpen && !hangar.IsOpen,
             $"{way} leaves residue: dialog={shell.Dialog != null} campaign={campaign.IsOpen} hangar={hangar.IsOpen}");
     }
 
@@ -468,7 +468,7 @@ public class OriginalCoverageTests : IDisposable
             }
             else if (step == EraseStep)
             {
-                for (int i = 0; i < CampaignFeature.MaxNameLength && shell.RosterName.Length > 0; i++)
+                for (int i = 0; i < CampaignFeature.MaxNameLength && shell.Campaign.RosterName.Length > 0; i++)
                 {
                     shell.Step(Erase);
                 }

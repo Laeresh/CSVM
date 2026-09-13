@@ -125,9 +125,9 @@ public class ClosingCinemaWiringTests : IDisposable
         _store.Save(Flown("Zachary", CampaignSequence.MissionCount));
         var closing = new Recorder();
         var shell = Shell(closing, out _);
-        shell.OpenCampaignOver(_store);
+        shell.Campaign.OpenCampaignOver(_store);
 
-        Assert.True(shell.ShowScrapbook("Zachary", LastSeq, missionWon: true));
+        Assert.True(shell.Campaign.ShowScrapbook("Zachary", LastSeq, missionWon: true));
 
         Assert.Equal(ClosingCinema.Name, closing.Name);
         Assert.Equal(OriginalScreen.CampaignRoster, shell.Screen);
@@ -141,9 +141,9 @@ public class ClosingCinemaWiringTests : IDisposable
         _store.Save(Flown("Zachary", 3));
         var closing = new Recorder();
         var shell = Shell(closing, out _);
-        shell.OpenCampaignOver(_store);
+        shell.Campaign.OpenCampaignOver(_store);
 
-        Assert.True(shell.ShowScrapbook("Zachary", 2, missionWon: true));
+        Assert.True(shell.Campaign.ShowScrapbook("Zachary", 2, missionWon: true));
 
         Assert.Equal(0, closing.Plays);
         Assert.Equal(OriginalScreen.CampaignScrapbook, shell.Screen);
@@ -157,8 +157,8 @@ public class ClosingCinemaWiringTests : IDisposable
         _store.Save(Flown("Zachary", CampaignSequence.MissionCount));
         var closing = new Recorder();
         var shell = Shell(closing, out _);
-        shell.OpenCampaignOver(_store);
-        Assert.True(shell.ShowScrapbook("Zachary", LastSeq, missionWon: true));
+        shell.Campaign.OpenCampaignOver(_store);
+        Assert.True(shell.Campaign.ShowScrapbook("Zachary", LastSeq, missionWon: true));
 
         closing.Stop();
         Assert.Equal(OriginalScreen.CampaignScrapbook, shell.Screen);
@@ -186,14 +186,14 @@ public class ClosingCinemaWiringTests : IDisposable
         var shell = new OriginalShell(MenuLayoutReaderTests.OriginalLayout(), new FreeFlightFeature(), Setup(), Measure,
             planes: _planes, campaign: feature, profiles: () => _store);
         _store.Save(Flown("Zachary", CampaignSequence.MissionCount));
-        shell.OpenCampaignOver(_store);
-        Assert.True(shell.ShowScrapbook("Zachary", LastSeq, missionWon: false));
+        shell.Campaign.OpenCampaignOver(_store);
+        Assert.True(shell.Campaign.ShowScrapbook("Zachary", LastSeq, missionWon: false));
 
         Assert.Equal(1, closing.Plays);
         Assert.Equal(OriginalScreen.CampaignScrapbook, shell.Screen);
 
         // And the same instance plays again for a won replay, in either presentation.
-        Assert.True(shell.ShowScrapbook("Zachary", LastSeq, missionWon: true));
+        Assert.True(shell.Campaign.ShowScrapbook("Zachary", LastSeq, missionWon: true));
         Assert.Equal(2, closing.Plays);
         closing.Stop();
         Assert.Equal(OriginalScreen.CampaignScrapbook, shell.Screen);

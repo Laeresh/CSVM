@@ -842,8 +842,10 @@ public class OriginalHangarTests : IDisposable
         var plaques = new List<BoardPlaque>();
         var notes = new List<BoardNote>();
         var overlays = new List<BoardPanel>();
-        host.Module.Compose(rows, host.Focus, backdrop, pictures, fills, lines, plaques, notes, overlays);
-        return new ComposedBoard(pictures, Array.Empty<BoardStroke>(), lines, plaques, notes,
+        // The pen the seam offers is the campaign scrapbook's alone, so the hangar writes no stroke.
+        var strokes = new List<BoardStroke>();
+        host.Module.Compose(rows, host.Focus, backdrop, pictures, fills, strokes, lines, plaques, notes, overlays);
+        return new ComposedBoard(pictures, strokes, lines, plaques, notes,
             backdrop: backdrop, fills: fills, overlays: overlays);
     }
 
@@ -944,6 +946,8 @@ public class OriginalHangarTests : IDisposable
 
         public int HoveredRow => -1;
 
+        public int FocusBeforeDialog => _focusBeforeDialog;
+
         public (float X, float Y)? Pointer => null;
 
         public CustomPlaneStore? CampaignPlanes => null;
@@ -1023,6 +1027,15 @@ public class OriginalHangarTests : IDisposable
             _dialogFocus = 0;
         }
 
+        public void CloseDialog() => Dialog = null;
+
+        // No frame loop behind this fake, so a module's own re-entrant press has nothing to run.
+        public void Frame(MenuCommands commands)
+        {
+        }
+
+        public void PlayFilm(Action<Action> play, Action then) => OriginalTestHost.PlayFilm(play, then);
+
         // One answer taken, the way the shell takes one: the box goes first, the focus behind it
         // comes back, then the answer runs over the bare screen.
         public void Answer(string key)
@@ -1042,7 +1055,7 @@ public class OriginalHangarTests : IDisposable
 
         public void RefreshRosterFromStore() => RosterRefreshes++;
 
-        public void OpenHangar() => HangarOpens++;
+        public void OpenHangar(IHangarWallet? wallet) => HangarOpens++;
 
         public MenuExit? BeginSeatWalk() => null;
 

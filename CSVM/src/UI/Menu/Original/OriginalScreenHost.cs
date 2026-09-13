@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using CSVM.Flight;
 using CSVM.Mech3;
@@ -30,6 +31,10 @@ public interface IOriginalScreenHost
     /// <summary>The row index the pointer stands on, or -1.</summary>
     int HoveredRow { get; }
 
+    /// <summary>The focus the raise of the standing dialog took, which the screen under the box
+    /// still draws itself from, or -1. Meaningless while no dialog stands.</summary>
+    int FocusBeforeDialog { get; }
+
     /// <summary>The pointer's last authored position, or null when the seat has none.</summary>
     (float X, float Y)? Pointer { get; }
 
@@ -51,6 +56,20 @@ public interface IOriginalScreenHost
     /// <summary>Raises a messagebox over whatever screen is showing.</summary>
     void RaiseDialog(string message, DialogIcon icon, params OriginalDialogAnswer[] answers);
 
+    /// <summary>Drops a standing messagebox without answering it, which every door onto a new
+    /// screen does: the box belonged to the screen being left.</summary>
+    void CloseDialog();
+
+    /// <summary>Applies one frame of the driving seat's commands through the shell's own input
+    /// loop, so a press made for the player lands with their focus, cues and doors. What a
+    /// screenshot aid's script replays.</summary>
+    void Frame(MenuCommands commands);
+
+    /// <summary>Puts a cinema in front of the screen: <paramref name="play"/> starts it with the
+    /// callback that ends it, and <paramref name="then"/> runs on the frame it stops. Without a
+    /// player behind the shell the film never starts, so the arrival is immediate.</summary>
+    void PlayFilm(Action<Action> play, Action then);
+
     /// <summary>An art name's strip pixel size, or null when the file is not there.</summary>
     (int Width, int Height)? Measure(string art);
 
@@ -63,8 +82,9 @@ public interface IOriginalScreenHost
     /// <summary>Re-reads the sortie roster off the build store after it changes.</summary>
     void RefreshRosterFromStore();
 
-    /// <summary>Opens the hangar wallet-free, Instant Action's Build Custom Plane.</summary>
-    void OpenHangar();
+    /// <summary>Opens the hangar, wallet-free from Instant Action's Build Custom Plane and over
+    /// <paramref name="wallet"/> from the cabin's PLANE CONSTRUCTION.</summary>
+    void OpenHangar(IHangarWallet? wallet);
 
     /// <summary>Starts the per-seat aircraft walk from Instant Action, the launch itself where
     /// nobody is left to pick.</summary>
@@ -126,9 +146,11 @@ public interface IOriginalScreenModule
     /// screen's own way back to the shell.</summary>
     bool Back();
 
-    /// <summary>The showing screen as drawn, into the board's own layers.</summary>
+    /// <summary>The showing screen as drawn, into the board's own layers. <paramref name="rows"/>
+    /// and <paramref name="focus"/> are the screen's own even while a box stands over it, the box
+    /// being the shell's to draw last and nothing under it focused.</summary>
     void Compose(
         IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> backdrop, List<BoardPicture> pictures,
-        List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardNote> notes,
-        List<BoardPanel> overlays);
+        List<BoardFill> fills, List<BoardStroke> strokes, List<BoardLine> lines, List<BoardPlaque> plaques,
+        List<BoardNote> notes, List<BoardPanel> overlays);
 }

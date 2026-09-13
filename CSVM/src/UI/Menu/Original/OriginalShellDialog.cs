@@ -17,9 +17,9 @@ public sealed record OriginalDialog(
 
 /// <summary>
 /// The standing dialog, the shell's own partial rather than any screen family's: the original's
-/// <c>messagebox.script</c> over whatever screen is showing, raised by the campaign's screens, by
-/// the hangar module through <see cref="IOriginalScreenHost.RaiseDialog"/> and by the credits
-/// screen's About box in its own widget set. The shell owns it because the shell answers for it:
+/// <c>messagebox.script</c> over whatever screen is showing, raised by the campaign and hangar
+/// modules through <see cref="IOriginalScreenHost.RaiseDialog"/> and by the credits screen's About
+/// box in its own widget set. The shell owns it because the shell answers for it:
 /// while a box stands its answers are the only rows, <c>Compose</c> draws it over the screen's own
 /// picture, an Activate on one of its rows is the answer and Back takes the declining one. The
 /// answers' words come from the string table whichever feature carries one (langui 100 to 103),
@@ -72,8 +72,7 @@ public sealed partial class OriginalShell
 
     private string DialogWord(int id, string fallback)
     {
-        var strings = _campaign?.Strings ?? Hangar?.Strings;
-        string word = strings?.Text(id, fallback) ?? fallback;
+        string word = MenuStrings.Text(id, fallback);
         return word.Length > 0 ? word : fallback;
     }
 
@@ -89,7 +88,7 @@ public sealed partial class OriginalShell
         foreach (var answer in dialog.Answers)
         {
             var (art, x, y) = CampaignBoards.DialogSlot(answer.LayoutKey, _campaignLayout, dialog.Chrome);
-            var size = PlaqueSizeOf(art);
+            var size = OriginalWidgets.PlaqueSizeOf(art, Measure);
             rows.Add(new OriginalRow(answer.Key, answer.Label, OriginalRowKind.Button, x, y, size.Width, size.Height, true, 0, art));
         }
 

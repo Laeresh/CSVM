@@ -268,9 +268,9 @@ public class ChapterCinemaWiringTests : IDisposable
         _store.Save(Progressed("Zachary", 10));
         var cinema = new Recorder();
         var shell = Shell(cinema, out _);
-        shell.OpenCampaignOver(_store);
+        shell.Campaign.OpenCampaignOver(_store);
 
-        Assert.True(shell.ShowCabin("Zachary"));
+        Assert.True(shell.Campaign.ShowCabin("Zachary"));
 
         Assert.Equal("chap3", cinema.Name);
         Assert.Equal(OriginalScreen.CampaignRoster, shell.Screen);
@@ -284,8 +284,8 @@ public class ChapterCinemaWiringTests : IDisposable
         _store.Save(Progressed("Zachary", 5));
         var cinema = new Recorder();
         var shell = Shell(cinema, out _);
-        shell.OpenCampaignOver(_store);
-        Assert.True(shell.ShowScrapbook("Zachary", 4, missionWon: true));
+        shell.Campaign.OpenCampaignOver(_store);
+        Assert.True(shell.Campaign.ShowScrapbook("Zachary", 4, missionWon: true));
         Assert.Equal(0, cinema.Plays);
 
         Assert.Equal(nameof(BoardButton.ReturnToCabin), shell.FocusedKey);
@@ -303,8 +303,8 @@ public class ChapterCinemaWiringTests : IDisposable
         _store.Save(Progressed("Zachary", 5));
         var cinema = new Recorder();
         var shell = Shell(cinema, out _);
-        shell.OpenCampaignOver(_store);
-        Assert.True(shell.ShowScrapbook("Zachary", 4, missionWon: true));
+        shell.Campaign.OpenCampaignOver(_store);
+        Assert.True(shell.Campaign.ShowScrapbook("Zachary", 4, missionWon: true));
 
         shell.Step(new MenuCommands { Back = true });
 
@@ -322,8 +322,8 @@ public class ChapterCinemaWiringTests : IDisposable
         _store.Save(Progressed("Zachary", 3));
         var cinema = new Recorder();
         var shell = Shell(cinema, out _);
-        shell.OpenCampaignOver(_store);
-        Assert.True(shell.ShowScrapbook("Zachary", 2, missionWon: true));
+        shell.Campaign.OpenCampaignOver(_store);
+        Assert.True(shell.Campaign.ShowScrapbook("Zachary", 2, missionWon: true));
 
         shell.Step(Accept);
 
@@ -337,9 +337,9 @@ public class ChapterCinemaWiringTests : IDisposable
         _store.Save(Progressed("Zachary", 3));
         var cinema = new Recorder();
         var shell = Shell(cinema, out _);
-        shell.OpenCampaignOver(_store);
+        shell.Campaign.OpenCampaignOver(_store);
 
-        Assert.True(shell.ShowCabin("Zachary"));
+        Assert.True(shell.Campaign.ShowCabin("Zachary"));
 
         Assert.Equal(0, cinema.Plays);
         Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
@@ -363,8 +363,8 @@ public class ChapterCinemaWiringTests : IDisposable
         var shell = new OriginalShell(MenuLayoutReaderTests.OriginalLayout(), new FreeFlightFeature(), Setup(), Measure,
             planes: _planes, campaign: feature, profiles: () => _store);
         _store.Save(Progressed("Zachary", 0));
-        shell.OpenCampaignOver(_store);
-        Assert.True(shell.ShowCabin("Zachary"));
+        shell.Campaign.OpenCampaignOver(_store);
+        Assert.True(shell.Campaign.ShowCabin("Zachary"));
 
         Assert.Equal(1, cinema.Plays);
         Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
@@ -456,8 +456,8 @@ public class ChapterCinemaWiringTests : IDisposable
         _store.Save(Progressed("Zachary", 3));
         var cinema = new Recorder();
         var shell = Shell(cinema, out _);
-        shell.OpenCampaignOver(_store);
-        Assert.True(shell.ShowCabin("Zachary"));
+        shell.Campaign.OpenCampaignOver(_store);
+        Assert.True(shell.Campaign.ShowCabin("Zachary"));
         Assert.Equal(0, cinema.Plays);
 
         shell.Step(Accept);
