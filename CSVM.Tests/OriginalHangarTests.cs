@@ -942,7 +942,17 @@ public class OriginalHangarTests : IDisposable
 
         public int PressedRow => -1;
 
+        public int HoveredRow => -1;
+
+        public (float X, float Y)? Pointer => null;
+
         public CustomPlaneStore? CampaignPlanes => null;
+
+        public UiStrings MenuStrings => UiStrings.Empty;
+
+        public bool CanBuildPlane => true;
+
+        public int HangarOpens { get; private set; }
 
         public IReadOnlyList<OriginalRow> Rows
         {
@@ -1031,6 +1041,12 @@ public class OriginalHangarTests : IDisposable
         public void RefreshInstantActionRoster() => InstantActionRefreshes++;
 
         public void RefreshRosterFromStore() => RosterRefreshes++;
+
+        public void OpenHangar() => HangarOpens++;
+
+        public MenuExit? BeginSeatWalk() => null;
+
+        public BoardPanel? SeatPanel(bool onPaper) => null;
 
         public void ComposeGenericRow(
             OriginalRow row, bool focused, bool pressed, int index,

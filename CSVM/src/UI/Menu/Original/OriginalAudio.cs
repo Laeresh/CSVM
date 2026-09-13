@@ -303,7 +303,7 @@ public sealed partial class OriginalShell
 
         for (int i = 0; i < rows.Count; i++)
         {
-            ComposeInstantActionRow(rows[i], i == focus, i == _pressed, i, fills, lines, plaques, pictures);
+            ComposePlateRow(rows[i], i == focus, i == _pressed, i, fills, lines, plaques, pictures);
         }
     }
 

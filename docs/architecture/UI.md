@@ -827,7 +827,7 @@ missions with every objective bit set, plus the scratch build store the export a
 The Original presentation's screen graph (`CSVM.UI.Menu.Original`), engine-free over `MenuLayout` and the shared Free Flight, player-setup,
 Instant Action, hangar and campaign features, with the art measurer and the flight-devices answer injected. It owns the top level composed
 from `[MainMenu]`'s own rows, the two remake-only sortie screens, the Options screen over the decoded Preferences chrome, and the messagebox
-idiom every refusal and confirm goes through, whose box, `RaiseDialog` and answer keys are its own `OriginalShellDialog.cs` partial; most other screens are its own partials, below, the hangar family the one screen group standing outside the partial as `OriginalHangarScreen.cs`, reached through `IOriginalHangarHost` and read through the one `Hangar` accessor. `Step` applies one seat's frame, `Compose` is
+idiom every refusal and confirm goes through, whose box, `RaiseDialog` and answer keys are its own `OriginalShellDialog.cs` partial; most other screens are its own partials, below, the hangar and Instant Action families the screen groups standing outside the partials as `OriginalHangarScreen.cs` and `OriginalInstantActionScreen.cs`, both reached through `IOriginalHangarHost` and read through the one `Hangar` and `InstantAction` accessor each. `Step` applies one seat's frame, `Compose` is
 the screen as a `ComposedBoard` whose backdrop takes a section's `movie` row at its bottom, and every page's row kinds live here,
 `OriginalSlider` among them. A pointer press arms a row and only the release still on it activates (`ArmedKey`), on an edit box taking the
 caret alone where Accept in one reaches the screen's own commit; the pointer's bitmap answers an enter or leave (`PointerLive`); and a film
@@ -844,13 +844,13 @@ answer marked with an outline three pixels clear of the strip instead, and the f
 put back when it is answered. The campaign screens and the hangar module only raise. [../org/campaign-board.md](../org/campaign-board.md).
 
 ## src/UI/Menu/Original/OriginalDropList.cs
-The one rule every open dropdown of the Original shell follows, a partial of it: a page hands over its key, its items,
-the box the list hangs under and the layout widget behind it, and takes back the windowed rows, the `ListWindow` for the
-pointer and the write that scrolls it. The window is the widget's authored `TotalDisplayed` clamped to the item count,
-so a short list is exactly as tall as its items and carries no chrome. Every item is a row keyed `<key>:<index>`, the
-ones outside the window built but hidden, since the rows are the hit-test surface and a dropped row would let a pointer
-hit what it cannot see; a scrolling list adds `<key>:up` and `<key>:down` in an arrow's width of its own right edge and
-hangs the thumb between them. The Instant Action screen, the loadout screen and the two option pages come through here;
+The one rule every open dropdown of the Original shell follows, held as the file-level `OriginalDropLists` so a standalone screen module stands on
+it too, with a thin `OriginalShell` partial wrapping it for the shell's own pages: a page hands over its key, its items, the box the list hangs
+under and the layout widget behind it, and takes back the windowed rows, the `ListWindow` for the pointer and the write that scrolls it. The
+window is the widget's authored `TotalDisplayed` clamped to the item count, so a short list is exactly as tall as its items and carries no
+chrome. Every item is a row keyed `<key>:<index>`, the ones outside the window built but hidden, since the rows are the hit-test surface and a
+dropped row would let a pointer hit what it cannot see; a scrolling list adds `<key>:up` and `<key>:down` in an arrow's width of its own right
+edge and hangs the thumb between them. The Instant Action module's two screens and the two option pages come through here;
 `OriginalHangarScreen.cs`'s list does not, its arrows being the closed box's `DropUp`/`DropDown` art. [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/SliderControl.cs
@@ -932,25 +932,15 @@ device drives it, and the mouse riding seat 0's source. Accept selects, a second
 Back and CANCEL SELECTIONS drop a selection then leave the walk with every seat kept and nothing
 unjoined, and the last seat's confirm is the launch: [../menu-presentations.md](../menu-presentations.md).
 
-## src/UI/Menu/Original/OriginalInstantAction.cs
-The Original Instant Action screen, the shell's partial over the decoded `[@InstantAction@]`
-section and the shared `InstantActionFeature`. Its rows are the section's own widgets keyed by their
-layout keys: the contents list in its authored window with its arrows and thumb, the dropdowns at
-their authored boxes, the enemy rows on two pages under both paging buttons, the radio pair and the
-buttons. A box no setting can fill stands blank with a pale arrow rather than leaving the page; an
-open list is windowed by `OriginalDropList.cs`, bands its picked row and the row under the pointer, and a closed box redraws its outline
-in cream under one. The Pilot Plane list is `OriginalRosters.Roster` (stock, then the saved builds, rows named `Stock <airframe>` and `<build name> <airframe>`), re-read on every entry and on the hangar's return; a picked build flies its airframe's stock node with its def on the seat.
-Build opens the wallet-free hangar (`OriginalHangarScreen.cs`), Weapon Loadout the loadout screen (`OriginalLoadout.cs`). Option sets: [../formats/instant-action.md](../formats/instant-action.md).
-
-## src/UI/Menu/Original/OriginalLoadout.cs
-The Weapon Loadout screen, the shell's partial over the decoded `[@OrdinanceLayout@]` section (the
-campaign's ammo chrome) and one aeroplane's `LoadoutChoice`: the Instant Action strip's seat (seat
-0's fit or the `InstantActionFeature`'s wingman fit, by the radio pair) or the per-seat picker's own
-`PlayerSeat.Fit`, `_loadoutSeat` deciding which screen the exit returns to. It owns the mapping of
-the section's four ammunition and eight rocket fields onto the airframe's gun slots and pylons over
-the stock table's option lists, the snapshot CANCEL and Back restore, the airframe's diagram frames
-and the description pane; rows and open lists reuse the Instant Action partial's dropdown machinery.
-What the fit means at launch: `src/Flight/LoadoutChoice.cs`.
+## src/UI/Menu/Original/OriginalInstantActionScreen.cs
+The Original Instant Action screen and its Weapon Loadout, one standalone module over the shared `InstantActionFeature` and the decoded `[@InstantAction@]` and `[@OrdinanceLayout@]` sections. Its rows are
+the sections' own widgets keyed by their layout keys: the contents list in its authored window with its arrows and thumb, the dropdowns at their authored boxes, the enemy rows on two pages under both
+paging buttons, the radio pair and the buttons. A box no setting can fill stands blank with a pale arrow rather than leaving the page; an open list is windowed by `OriginalDropList.cs`, bands its picked
+row and the row under the pointer, and a closed box redraws its outline in cream under one. The Pilot Plane list is `OriginalRosters.Roster` (stock, then the saved builds, rows named `Stock <airframe>`
+and `<build name> <airframe>`), re-read on every entry and on the hangar's return; a picked build flies its airframe's stock node with its def on the seat. Build opens the wallet-free hangar
+(`OriginalHangarScreen.cs`); Weapon Loadout maps the section's four ammunition and eight rocket fields onto the airframe's gun slots and pylons over the stock table's option lists, with the airframe's
+diagram frames, the description pane and the snapshot CANCEL and Back restore, over seat 0's fit or the wingmen's shared one by the radio pair, or the per-seat picker's own `PlayerSeat.Fit`, which is what
+decides the screen its exit returns to. It reaches `OriginalShell` only through the shared `IOriginalHangarHost` seam, so `OriginalInstantActionTests` drives it over a hand-written host with no shell at all; the shell still owns `Rows`/`Compose`/`ApplyFrame` dispatch and exposes the module whole as `InstantAction`. Option sets: [../formats/instant-action.md](../formats/instant-action.md); what the fit means at launch: `src/Flight/LoadoutChoice.cs`.
 
 ## src/UI/Menu/Original/OriginalHangarScreen.cs
 The Original hangar, a standalone module over the shared `HangarFeature` and the decoded hangar

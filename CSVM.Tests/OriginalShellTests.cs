@@ -1298,6 +1298,47 @@ public class OriginalShellTests
         Assert.DoesNotContain(shell.Compose().Lines, l => l.Ink == BoardInk.Secret);
     }
 
+    /// <summary>The seam to the Instant Action module (<see cref="OriginalInstantActionTests"/>
+    /// drives the module alone): the top level's own door opens the module's first screen with the
+    /// environment confirmed, and its rows are the ones the shell composes and walks.</summary>
+    [Fact]
+    public void TheInstantActionDoorOpensTheModulesScreenOnItsFirstRow()
+    {
+        var shell = Shell(out _);
+        Assert.True(Row(shell, "MM_B_INSTANTACTION").Enabled);
+
+        var step = Click(shell, "MM_B_INSTANTACTION");
+
+        Assert.Equal(OriginalScreen.InstantAction, shell.Screen);
+        Assert.Contains(OriginalCues.Click, step.Cues);
+        Assert.Equal($"{OriginalInstantActionScreen.ContentsKey}:0", shell.FocusedKey);
+        Assert.Contains(shell.Rows, r => r.Key == OriginalInstantActionScreen.FlyMissionKey);
+    }
+
+    [Fact]
+    public void TheKeyboardsColumnWalkLandsOnTheInstantActionModulesOwnRows()
+    {
+        var shell = Shell(out _);
+        Click(shell, "MM_B_INSTANTACTION");
+
+        // Down is the shell's own column walk down the contents window and Right its crossing into
+        // the module's second column, landing on the dropdown level with the row it left. A further
+        // Right is the module's own sideways step, changing that value and keeping the focus.
+        shell.Step(Down);
+        Assert.Equal($"{OriginalInstantActionScreen.ContentsKey}:1", shell.FocusedKey);
+        shell.Step(Right);
+        Assert.Equal(OriginalInstantActionScreen.WingmenKey, shell.FocusedKey);
+        shell.Step(Up);
+        Assert.Equal(OriginalInstantActionScreen.PlayerPlaneKey, shell.FocusedKey);
+        shell.Step(Right);
+        Assert.Equal(OriginalInstantActionScreen.PlayerPlaneKey, shell.FocusedKey);
+        Assert.Equal("Stock Hellhound", Row(shell, OriginalInstantActionScreen.PlayerPlaneKey).Label);
+
+        // Back on the screen is the shell's own return, the module declining it.
+        Assert.Null(shell.Step(Back).Exit);
+        Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
+    }
+
     /// <summary>The seam to the hangar module (<see cref="OriginalHangarTests"/> drives the module
     /// alone): the Build door opens it on the screen the door stands on, a dialog it raises is the
     /// shell's messagebox, its typing goes through the shell's one text seam, and a commit comes
@@ -1309,7 +1350,7 @@ public class OriginalShellTests
         {
             Assert.DoesNotContain(shell.Rows, r => r.Key == "HANGAR");
             Click(shell, "MM_B_INSTANTACTION");
-            var door = Row(shell, OriginalShell.BuildKey);
+            var door = Row(shell, OriginalInstantActionScreen.BuildKey);
             Assert.True(door.Enabled);
             Click(shell, door.X + 2f, door.Y + 2f);
 
@@ -1340,11 +1381,11 @@ public class OriginalShellTests
             Click(shell, OriginalHangarScreen.PurchaseNowKey);
             Assert.Equal(OriginalScreen.InstantAction, shell.Screen);
             Assert.False(shell.IsHangarScreen);
-            Assert.Equal(OriginalShell.BuildKey, shell.FocusedKey);
+            Assert.Equal(OriginalInstantActionScreen.BuildKey, shell.FocusedKey);
             Assert.Equal("Ace", shell.Hangar!.LastBuiltPlane);
             Assert.NotNull(store.Load("Ace"));
             Assert.Contains(setup.Roster, a => a.Name == "Ace" && a.IsCustom);
-            Assert.Contains(shell.PilotRoster, a => a.Name == "Ace" && a.IsCustom);
+            Assert.Contains(shell.InstantAction.PilotRoster, a => a.Name == "Ace" && a.IsCustom);
         });
     }
 

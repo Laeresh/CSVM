@@ -299,7 +299,7 @@ public sealed class OriginalPresentation : IMenuPresentation
             _controlsSeats = host.Features.TryGet<ControlsFeature>(out var rebinds) ? new MenuControlsSeats(rebinds) : null;
             _palette = PaletteFor(_shell.Inks);
             _preferencesPalette = PaletteFor(_shell.PreferencesInks, _shell.Inks);
-            _paperPalette = PaletteFor(_shell.InstantActionInks);
+            _paperPalette = PaletteFor(_shell.InstantAction.Inks);
             if (_shell.Hangar != null)
             {
                 _hangarPalette = PaletteFor(_shell.Hangar.Inks);
@@ -342,7 +342,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         {
             // The sortie's settings are the feature's, which outlives the flight, so the screen
             // stands on them again; the roster re-read is the door's own.
-            _shell.OpenInstantAction();
+            _shell.InstantAction.OpenInstantAction();
         }
         else if (destination is DebriefReturn debrief)
         {
@@ -427,15 +427,15 @@ public sealed class OriginalPresentation : IMenuPresentation
                     _shell.Step(new MenuCommands { Accept = true });
                     break;
                 case InstantActionAid:
-                    _shell.OpenInstantAction();
+                    _shell.InstantAction.OpenInstantAction();
                     break;
                 case InstantActionAid + ":" + InstantActionPilotPlaneAid:
-                    _shell.OpenInstantAction();
-                    _shell.OpenInstantActionDropdown(OriginalShell.PlayerPlaneKey);
+                    _shell.InstantAction.OpenInstantAction();
+                    _shell.InstantAction.OpenDropdownOn(OriginalInstantActionScreen.PlayerPlaneKey);
                     break;
                 case InstantActionAid + ":" + InstantActionLoadoutAid:
-                    _shell.OpenInstantAction();
-                    _shell.OpenLoadout();
+                    _shell.InstantAction.OpenInstantAction();
+                    _shell.InstantAction.OpenLoadout();
                     break;
                 case PlaneNameAid:
                     _shell.OpenHangar();

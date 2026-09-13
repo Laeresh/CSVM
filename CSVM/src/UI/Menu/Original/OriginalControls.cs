@@ -757,8 +757,7 @@ public sealed partial class OriginalShell
                 continue;
             }
 
-            ComposeInstantActionRow(row, i == focus, i == _pressed, i, fills, lines, plaques, pictures,
-                boxOnFocus: true);
+            ComposePlateRow(row, i == focus, i == _pressed, i, fills, lines, plaques, pictures);
         }
     }
 

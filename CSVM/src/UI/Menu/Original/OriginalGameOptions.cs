@@ -443,8 +443,7 @@ public sealed partial class OriginalShell
                 continue;
             }
 
-            ComposeInstantActionRow(control, i == controlFocus, i == controlPressed, i, fills, lines, plaques, pictures,
-                boxOnFocus: true);
+            ComposePlateRow(control, i == controlFocus, i == controlPressed, i, fills, lines, plaques, pictures);
         }
 
         if (OpenGameOptionDrop() is { } drop && rows.Count > 0)

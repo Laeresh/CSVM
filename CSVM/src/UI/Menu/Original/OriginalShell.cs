@@ -288,6 +288,12 @@ public sealed partial class OriginalShell : IOriginalHangarHost
     private const float FallbackButtonWidth = 220f;
     private const float FallbackButtonHeight = 42f;
 
+    // A dropdown's arrow size where its own art cannot be measured, and the font its value is
+    // written in: the Instant Action screen's own numbers, which the plate pages borrow with the row.
+    private const float FallbackArrowWidth = 15f;
+    private const float FallbackArrowHeight = 14f;
+    private const float PlateItemFont = 13f;
+
     // The slider's two art files, and their shipped pixel sizes as the fallback when neither can
     // be measured. Neither row carries a frame count, so each is one image with no state to draw.
     // docs/formats/menu-layout.md holds the Z row's decode.
@@ -346,6 +352,8 @@ public sealed partial class OriginalShell : IOriginalHangarHost
     private readonly Func<CSVM.Utils.ScreenList>? _screens;
     private readonly ControlsFeature? _controls;
     private readonly CSVM.Flight.CustomPlaneStore? _planes;
+    private readonly InstantActionFeature _instantAction;
+    private readonly OriginalInstantActionScreen _instantActionModule;
     private readonly OriginalHangarScreen? _hangarModule;
     private readonly SliderControl _slider = new();
     private readonly CinemaFilm _film = new();
@@ -437,13 +445,13 @@ public sealed partial class OriginalShell : IOriginalHangarHost
         _screenSizes = screenSizes;
         _screens = screens;
         _controls = controls;
+        _instantActionModule = new OriginalInstantActionScreen(_instantAction, _setup, planes, layout, measure, this, _stock);
         _hangarModule = hangar != null ? new OriginalHangarScreen(hangar, planes, layout, measure, this) : null;
         _campaignLayout = CampaignLayout.Over(layout);
         var plaqueRow = layout.Screen("FlightCheck")?.Widget("FC_B_CHANGEPLANE");
         _plaque = plaqueRow is { Art.Count: > 0 } ? new BoardArt(BoardArtLibrary.Ui, plaqueRow.Art[0], plaqueRow.Frames) : null;
         Inks = ReadInks(layout, plaqueRow);
         PreferencesInks = ReadPreferencesInks(layout, Inks);
-        InstantActionInks = ReadInstantActionInks(layout);
         _activePointer = new BoardArt(BoardArtLibrary.Ui, PointerArt(layout, "activepointerz.png"));
         _passivePointer = new BoardArt(BoardArtLibrary.Ui, PointerArt(layout, "passivepointerz.png"));
         for (int i = 0; i < _focus.Length; i++)
@@ -511,7 +519,7 @@ public sealed partial class OriginalShell : IOriginalHangarHost
                     break;
                 case OriginalScreen.InstantAction:
                 case OriginalScreen.InstantActionLoadout:
-                    InstantActionLists(lists);
+                    _instantActionModule.Lists(lists);
                     break;
                 case OriginalScreen.Keys:
                     KeysLists(lists);
@@ -548,6 +556,11 @@ public sealed partial class OriginalShell : IOriginalHangarHost
     /// <summary>The hangar module behind the hangar screens, with its own state and inks, or null
     /// on a shell built without a hangar feature.</summary>
     public OriginalHangarScreen? Hangar => _hangarModule;
+
+    /// <summary>The module behind the Instant Action screen and its Weapon Loadout, with its own
+    /// state and inks. A shell without an Instant Action feature keeps a private one, so this
+    /// module always stands.</summary>
+    public OriginalInstantActionScreen InstantAction => _instantActionModule;
 
     /// <summary>The list whose thumb the pointer is dragging, or null.</summary>
     public string? Dragging => _drag?.Key;
@@ -608,6 +621,8 @@ public sealed partial class OriginalShell : IOriginalHangarHost
     /// <summary>The pointer's last authored position, or null when the seat has none.</summary>
     public (float X, float Y)? Pointer => _pointer;
 
+    private bool IsInstantActionFamily => _instantActionModule.Owns(_screen);
+
     /// <summary>Opens the hangar from the screen showing, wallet-free from Instant Action's Build
     /// Custom Plane and over <paramref name="wallet"/> from the cabin's PLANE CONSTRUCTION. Nothing
     /// happens when the shell has no hangar feature or no store.</summary>
@@ -641,7 +656,7 @@ public sealed partial class OriginalShell : IOriginalHangarHost
         {
             _pickingSeat = null;
             _seatPage = null;
-            _loadoutSeat = null;
+            _instantActionModule.ClearLoadoutSeat();
         }
 
         _drag = null;
@@ -729,7 +744,7 @@ public sealed partial class OriginalShell : IOriginalHangarHost
         {
             // The seat this screen was picking for has gone: the walk moves on or ends, and a
             // Weapon Loadout it had open on that seat's own fit goes with it.
-            DropLoadout();
+            _instantActionModule.DropLoadout();
             exit = AdvanceSeatWalk();
             changed = true;
         }
@@ -832,7 +847,7 @@ public sealed partial class OriginalShell : IOriginalHangarHost
                 focus = EnsureFocus(rows);
             }
             else if (pointer.Clicked && over < 0
-                && (CloseInstantActionDropdown() || (_hangarModule?.CloseHangarDropdown() ?? false) || CloseCampaignCombo()
+                && (_instantActionModule.CloseDropdown() || (_hangarModule?.CloseHangarDropdown() ?? false) || CloseCampaignCombo()
                     || CloseGameOptionsDropdown() || CloseVideoDropdown()))
             {
                 // A click off an open list closes it and picks nothing.
@@ -863,7 +878,7 @@ public sealed partial class OriginalShell : IOriginalHangarHost
                 rows = Rows;
                 focus = EnsureFocus(rows);
             }
-            else if (IsInstantActionFamily && StepInstantActionValue(rows, focus, commands.MoveX))
+            else if (IsInstantActionFamily && _instantActionModule.StepSideways(rows, focus, commands.MoveX))
             {
                 rows = Rows;
                 focus = EnsureFocus(rows);
@@ -966,10 +981,8 @@ public sealed partial class OriginalShell : IOriginalHangarHost
         switch (_screen)
         {
             case OriginalScreen.InstantAction:
-                ComposeInstantAction(screenRows, screenFocus, backdrop, pictures, fills, lines, plaques, overlays);
-                break;
             case OriginalScreen.InstantActionLoadout:
-                ComposeLoadout(screenRows, screenFocus, backdrop, pictures, fills, lines, plaques, overlays);
+                _instantActionModule.Compose(screenRows, screenFocus, backdrop, pictures, fills, lines, plaques, overlays);
                 break;
             case var _ when IsCampaignScreen:
                 ComposeCampaign(rows, focus, backdrop, pictures, fills, strokes, lines, plaques, notes, overlays);
@@ -1052,18 +1065,10 @@ public sealed partial class OriginalShell : IOriginalHangarHost
         return new OriginalInks(disabled, active, rollover, depressed, labelNormal, labelRollover, labelDepressed);
     }
 
-    // A slot number a keyed widget carries after a shared prefix, or null for a key from another
-    // family or a plain key with none. Shared by the loadout screen's ammo and pylon fields and the
-    // hangar's own numbered rows.
-    private static int? Indexed(string key, string prefix)
-    {
-        if (!key.StartsWith(prefix, StringComparison.Ordinal))
-        {
-            return null;
-        }
-
-        return int.TryParse(key.AsSpan(prefix.Length), NumberStyles.Integer, CultureInfo.InvariantCulture, out int i) ? i : null;
-    }
+    // The n-th art a row names as a strip, the shared drop-list rule's own reading: the option
+    // pages and the Keys page name their arrows, bars and checkbox strips this way.
+    private static BoardArt? StripArt(IReadOnlyList<string> art, int index, int frames = 4) =>
+        OriginalDropLists.StripArt(art, index, frames);
 
     // The pointer bitmaps are named by the globals script, not by any layout row, so they are
     // read off the script-named asset list; the bare file name is the fallback.
@@ -1180,37 +1185,42 @@ public sealed partial class OriginalShell : IOriginalHangarHost
         return ordinal;
     }
 
-    // Where a section's pane lands on the board, which for art smaller than the board is centred
-    // rather than left at the corner it is authored at. PLANENAME.SCRIPT initializes
-    // pn_p_background with relative = 1 and then sets the screen's own location to
-    // ((getresx() - its width) / 2, (getresy() - its height) / 2); the messagebox does the same,
-    // its 410x300 pane landing on the 195,150 the reference shots measure. A pane that fills the
-    // board centres onto its own corner, and one authored away from the corner keeps it.
-    private (float X, float Y) PaneOrigin(MenuLayoutScreen screen, string key)
+    // A strip's one-frame size from the measurer, or the fallback when the file is not there.
+    private (float Width, float Height) StripSize(BoardArt? art, float fallbackWidth, float fallbackHeight)
     {
-        if (screen.Widget(key) is not { Art.Count: > 0 } pane)
+        if (art == null || Measure(art.Name) is not { } size)
         {
-            return (0f, 0f);
+            return (fallbackWidth, fallbackHeight);
         }
 
-        float x = pane.Int("X");
-        float y = pane.Int("Y");
-        if (x != 0f || y != 0f || _measure(pane.Art[0]) is not { } size)
-        {
-            return (x, y);
-        }
-
-        return (
-            Math.Max(0f, (float)Math.Floor((BoardFit.AuthoredWidth - size.Width) / 2f)),
-            Math.Max(0f, (float)Math.Floor((BoardFit.AuthoredHeight - size.Height) / 2f)));
+        return (size.Width, (float)Math.Floor(size.Height / (float)Math.Max(1, art.Frames)));
     }
 
-    private void AddPane(MenuLayoutScreen screen, List<BoardPicture> pictures, string key)
+    // One of a section's own button strips as a row, at its authored corner in its measured size.
+    private void AddStrip(MenuLayoutScreen screen, List<OriginalRow> rows, string key, OriginalRowKind kind, bool enabled, int column)
     {
-        if (screen.Widget(key) is { Art.Count: > 0 } pane)
+        if (screen.Widget(key) is not { } widget)
         {
-            var at = PaneOrigin(screen, key);
-            pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, pane.Art[0], Math.Max(1, pane.Frames)), at.X, at.Y));
+            return;
+        }
+
+        var art = StripArt(widget.Art, 0, widget.Frames);
+        var size = StripSize(art, FallbackButtonWidth, FallbackButtonHeight);
+        rows.Add(new OriginalRow(key, widget.Text ?? string.Empty, kind, widget.Int("X"), widget.Int("Y"),
+            size.Width, size.Height, enabled, column, art));
+    }
+
+    // Puts the focus on the row carrying a key, when the current rows have it.
+    private void FocusKey(string key)
+    {
+        var rows = Rows;
+        for (int i = 0; i < rows.Count; i++)
+        {
+            if (rows[i].Key == key)
+            {
+                _focus[(int)_screen] = i;
+                return;
+            }
         }
     }
 
@@ -1462,7 +1472,7 @@ public sealed partial class OriginalShell : IOriginalHangarHost
                         OpenCampaign();
                         break;
                     case "MM_B_INSTANTACTION":
-                        OpenInstantAction();
+                        _instantActionModule.OpenInstantAction();
                         break;
                     case "MM_B_PREFERENCES":
                         Open(OriginalScreen.Options);
@@ -1481,9 +1491,8 @@ public sealed partial class OriginalShell : IOriginalHangarHost
             case OriginalScreen.Credits:
                 return ActivateCredits(row);
             case OriginalScreen.InstantAction:
-                return ActivateInstantAction(row);
             case OriginalScreen.InstantActionLoadout:
-                return ActivateLoadout(row);
+                return _instantActionModule.Activate(row);
             case OriginalScreen.SeatPlane:
                 return ActivateSeatPlane(row);
             case var _ when IsCampaignScreen:
@@ -1556,14 +1565,8 @@ public sealed partial class OriginalShell : IOriginalHangarHost
             return null;
         }
 
-        if (IsInstantActionFamily && CloseInstantActionDropdown())
+        if (IsInstantActionFamily && _instantActionModule.Back())
         {
-            return null;
-        }
-
-        if (_screen == OriginalScreen.InstantActionLoadout)
-        {
-            CloseLoadout(keep: false);
             return null;
         }
 
@@ -1631,10 +1634,8 @@ public sealed partial class OriginalShell : IOriginalHangarHost
                 BuildCreditsRows(rows);
                 break;
             case OriginalScreen.InstantAction:
-                BuildInstantActionRows(rows);
-                break;
             case OriginalScreen.InstantActionLoadout:
-                BuildLoadoutRows(rows);
+                _instantActionModule.BuildRows(rows);
                 break;
             case OriginalScreen.SeatPlane:
                 if (_seatPage is { } seatPage)
@@ -1790,6 +1791,54 @@ public sealed partial class OriginalShell : IOriginalHangarHost
         fills.Add(new BoardFill(thumbX, track.ThumbY, track.ThumbWidth, track.ThumbHeight, 255, 255, 255, 0.6f));
     }
 
+    // One row of a page composed over a painted plate as drawn: a dropdown's value in its box, a
+    // slider, and the two plaque kinds. ⚠ The dropdown's box is the focus mark here, not standing
+    // chrome. On a plate a permanent black rectangle over paint, around boxes the layout authors at
+    // differing widths, reads as chrome nobody chose; as a mark it is the one the slider row already
+    // uses, so one vocabulary covers every marked row here. The paper pages print the box on every
+    // frame instead (OriginalInstantActionScreen.ComposeRow); the hangar's rows fall through to here.
+    private void ComposePlateRow(
+        OriginalRow row, bool focused, bool pressed, int index,
+        List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPicture> pictures)
+    {
+        switch (row.Kind)
+        {
+            case OriginalRowKind.Dropdown:
+                // No wash under this one. The dropdown's box encloses the plate's own recessed
+                // groove and the value written in it, so it already has a region; the slider's
+                // encloses flat paint and needs one. A wash that changes nothing is noise.
+                if (focused)
+                {
+                    fills.Add(FocusBox(row));
+                }
+
+                float arrowWidth = 0f;
+                if (row.Art != null)
+                {
+                    var size = StripSize(row.Art, FallbackArrowWidth, FallbackArrowHeight);
+                    arrowWidth = size.Width;
+                    int frame = row.Enabled ? ComposedBoard.PlaqueFrame(row.Art.Frames, focused, pressed) : 0;
+                    pictures.Add(new BoardPicture(row.Art, row.X + row.Width - size.Width, row.Y + ((row.Height - size.Height) / 2f), frame));
+                }
+
+                lines.Add(new BoardLine(row.Label, row.X + 4f, row.Y + 2f, Math.Max(1f, row.Width - arrowWidth - 6f), PlateItemFont,
+                    focused ? BoardInk.RowFocused : BoardInk.Row, index));
+                break;
+            case OriginalRowKind.Slider:
+                ComposeSlider(row, focused, fills, pictures);
+                break;
+            case OriginalRowKind.TextButton when row.Art != null:
+                int labelFrame = row.Enabled ? ComposedBoard.PlaqueFrame(row.Art.Frames, focused, pressed) : 0;
+                var ink = row.Enabled ? ComposedBoard.PlaqueInk(focused, pressed) : BoardInk.Detail;
+                plaques.Add(new BoardPlaque(row.Art, row.X, row.Y, index, labelFrame, row.Label, ink));
+                break;
+            case OriginalRowKind.Button when row.Art != null:
+                int stripFrame = row.Enabled ? ComposedBoard.PlaqueFrame(row.Art.Frames, focused, pressed) : 0;
+                plaques.Add(new BoardPlaque(row.Art, row.X, row.Y, index, stripFrame, string.Empty, BoardInk.LabelNormal));
+                break;
+        }
+    }
+
     private OriginalRow TextButton(string key, string label, float x, float y, bool enabled, int column)
     {
         var size = PlaqueSize();
@@ -1839,7 +1888,18 @@ public sealed partial class OriginalShell : IOriginalHangarHost
 
     int IOriginalHangarHost.PressedRow => _pressed;
 
+    int IOriginalHangarHost.HoveredRow => _hover;
+
+    (float X, float Y)? IOriginalHangarHost.Pointer => _pointer;
+
     CSVM.Flight.CustomPlaneStore? IOriginalHangarHost.CampaignPlanes => _campaign?.Planes;
+
+    // The campaign's table where one is open, the hangar's otherwise: the loadout screen's own
+    // words come from the campaign's ammo page, which either family may have loaded.
+    CSVM.Mech3.UiStrings IOriginalHangarHost.MenuStrings =>
+        _campaign?.Strings ?? _hangarModule?.Strings ?? CSVM.Mech3.UiStrings.Empty;
+
+    bool IOriginalHangarHost.CanBuildPlane => _hangarModule != null && _planes != null;
 
     void IOriginalHangarHost.Open(OriginalScreen screen) => Open(screen);
 
@@ -1853,12 +1913,18 @@ public sealed partial class OriginalShell : IOriginalHangarHost
 
     void IOriginalHangarHost.ResumeCampaign() => ResumeCampaign();
 
-    void IOriginalHangarHost.RefreshInstantActionRoster() => RefreshInstantActionRoster();
+    void IOriginalHangarHost.RefreshInstantActionRoster() => _instantActionModule.RefreshRoster();
 
     void IOriginalHangarHost.RefreshRosterFromStore() => RefreshRosterFromStore();
+
+    void IOriginalHangarHost.OpenHangar() => OpenHangar();
+
+    MenuExit? IOriginalHangarHost.BeginSeatWalk() => BeginInstantActionSeatWalk();
+
+    BoardPanel? IOriginalHangarHost.SeatPanel(bool onPaper) => CampaignSeatPanel(onPaper);
 
     void IOriginalHangarHost.ComposeGenericRow(
         OriginalRow row, bool focused, bool pressed, int index,
         List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPicture> pictures) =>
-        ComposeInstantActionRow(row, focused, pressed, index, fills, lines, plaques, pictures);
+        ComposePlateRow(row, focused, pressed, index, fills, lines, plaques, pictures);
 }

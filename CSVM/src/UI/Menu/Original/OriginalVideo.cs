@@ -479,8 +479,7 @@ public sealed partial class OriginalShell
                 continue;
             }
 
-            ComposeInstantActionRow(row, i == controlFocus, i == controlPressed, i, fills, lines, plaques, pictures,
-                boxOnFocus: true);
+            ComposePlateRow(row, i == controlFocus, i == controlPressed, i, fills, lines, plaques, pictures);
         }
 
         if (OpenVideoDrop() is { } drop && rows.Count > 0)

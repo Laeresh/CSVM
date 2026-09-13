@@ -1783,7 +1783,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   value; mark it remake-only in the census, pin it with a menu-original-instant-action suite arm
   and a still. *⚠ Traps:* the ace duel blanks every enemy control in place, the lives control is
   not an enemy control and stays; a contents row applies its preset and the presets carry no lives,
-  so the row must not reset them. *Cross-refs:* `CSVM/src/UI/Menu/Original/OriginalInstantAction.cs`,
+  so the row must not reset them. *Cross-refs:* `CSVM/src/UI/Menu/Original/OriginalInstantActionScreen.cs`,
   `CSVM/src/UI/Menu/InstantActionFeature.cs`, `docs/org/menu-inventory.md` (Decision 11).
 
 ## Splitscreen

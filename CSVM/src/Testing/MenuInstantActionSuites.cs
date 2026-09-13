@@ -540,7 +540,7 @@ internal static class MenuInstantActionSuites
         int contents = 0;
         foreach (var row in shell.Rows)
         {
-            if (row.Kind == OriginalRowKind.ListRow && row.Key.StartsWith(OriginalShell.ContentsKey + ":", StringComparison.Ordinal))
+            if (row.Kind == OriginalRowKind.ListRow && row.Key.StartsWith(OriginalInstantActionScreen.ContentsKey + ":", StringComparison.Ordinal))
             {
                 contents++;
             }
@@ -550,34 +550,34 @@ internal static class MenuInstantActionSuites
 
         // The authored list is X 76 Width 277 and the scroll art 16 wide, so the chrome stands at
         // 337, inside the gutter the page's own background paints, and the rows stop at 261.
-        var upArrow = Row(shell, OriginalShell.ContentsUpKey);
-        var downArrow = Row(shell, OriginalShell.ContentsDownKey);
+        var upArrow = Row(shell, OriginalInstantActionScreen.ContentsUpKey);
+        var downArrow = Row(shell, OriginalInstantActionScreen.ContentsDownKey);
         ctx.Check(upArrow is { X: 337f, Y: 175f, Width: 16f } && downArrow is { X: 337f, Width: 16f },
             $"the contents arrows stand inside the list's right edge ({upArrow?.X}, {downArrow?.X})");
-        ctx.Check(Row(shell, OriginalShell.ContentsKey + ":0") is { X: 76f, Width: 261f },
-            $"and its rows give that column up rather than the authored box growing ({Row(shell, OriginalShell.ContentsKey + ":0")?.Width})");
-        ctx.Check(List(shell, OriginalShell.ContentsKey) is { Window: { X: 76f, Width: 277f, ThumbX: 337f } },
-            $"the thumb rides the same column over the authored window ({List(shell, OriginalShell.ContentsKey)?.Window.ThumbX})");
+        ctx.Check(Row(shell, OriginalInstantActionScreen.ContentsKey + ":0") is { X: 76f, Width: 261f },
+            $"and its rows give that column up rather than the authored box growing ({Row(shell, OriginalInstantActionScreen.ContentsKey + ":0")?.Width})");
+        ctx.Check(List(shell, OriginalInstantActionScreen.ContentsKey) is { Window: { X: 76f, Width: 277f, ThumbX: 337f } },
+            $"the thumb rides the same column over the authored window ({List(shell, OriginalInstantActionScreen.ContentsKey)?.Window.ThumbX})");
 
         // The reference frame draws the unscrolled thumb's foot at board y 356 on a track running
         // 186 to 416, so 170 of its 230 pixels, which is the 14-row window's share of the 19
         // presets rather than the scroll tile's own 11.
-        var contentsWindow = List(shell, OriginalShell.ContentsKey)?.Window;
+        var contentsWindow = List(shell, OriginalInstantActionScreen.ContentsKey)?.Window;
         float share = 230f * 14f / InstantActionFeature.Presets.Count;
         ctx.Check(contentsWindow is { TrackTop: 186f, TrackHeight: 230f, Top: 0 }
             && Math.Abs(contentsWindow.Value.ThumbHeight - share) < 0.5f
             && Math.Abs(contentsWindow.Value.ThumbY + contentsWindow.Value.ThumbHeight - 356f) < 1f,
             $"and its length is the share of the list the window shows ({contentsWindow?.ThumbHeight} of {contentsWindow?.TrackHeight}, wanting {share})");
-        ctx.Check(Row(shell, OriginalShell.PlayerPlaneKey) is { Label: "Stock Autogyro", X: 511f, Y: 210f, Width: 224f, Height: 18f },
-            $"the player plane dropdown stands at its authored line with the first airframe as its stock row ({Row(shell, OriginalShell.PlayerPlaneKey)?.Label})");
-        ctx.Check(Row(shell, OriginalShell.MissionKey)?.Label == "Dogfighting an Ace"
+        ctx.Check(Row(shell, OriginalInstantActionScreen.PlayerPlaneKey) is { Label: "Stock Autogyro", X: 511f, Y: 210f, Width: 224f, Height: 18f },
+            $"the player plane dropdown stands at its authored line with the first airframe as its stock row ({Row(shell, OriginalInstantActionScreen.PlayerPlaneKey)?.Label})");
+        ctx.Check(Row(shell, OriginalInstantActionScreen.MissionKey)?.Label == "Dogfighting an Ace"
             && Row(shell, "IA_D_NENEMY0") is { Enabled: false, Label: "" } && Row(shell, "IA_D_PLANEE0") is { Enabled: false, Label: "" },
-            $"the ace duel opens with its enemy boxes drawn blank and inert ({Row(shell, OriginalShell.MissionKey)?.Label}, {Row(shell, "IA_D_NENEMY0")?.Enabled}, {Row(shell, "IA_D_PLANEE0")?.Enabled})");
-        ctx.Check(Row(shell, OriginalShell.PageUpKey) is { Enabled: false } && Row(shell, OriginalShell.PageDownKey) is { Enabled: true },
-            $"with both paging buttons drawn and only the down one live ({Row(shell, OriginalShell.PageUpKey)?.Enabled}, {Row(shell, OriginalShell.PageDownKey)?.Enabled})");
-        ctx.Check(Row(shell, OriginalShell.ExitKey) is { Enabled: true, Width: 200f, Height: 32f },
-            $"Exit is the measured four-frame strip ({Row(shell, OriginalShell.ExitKey)?.Width}x{Row(shell, OriginalShell.ExitKey)?.Height})");
-        ctx.Check(Row(shell, OriginalShell.BuildKey) is { Enabled: true } && Row(shell, OriginalShell.WeaponLoadoutKey) is { Enabled: true },
+            $"the ace duel opens with its enemy boxes drawn blank and inert ({Row(shell, OriginalInstantActionScreen.MissionKey)?.Label}, {Row(shell, "IA_D_NENEMY0")?.Enabled}, {Row(shell, "IA_D_PLANEE0")?.Enabled})");
+        ctx.Check(Row(shell, OriginalInstantActionScreen.PageUpKey) is { Enabled: false } && Row(shell, OriginalInstantActionScreen.PageDownKey) is { Enabled: true },
+            $"with both paging buttons drawn and only the down one live ({Row(shell, OriginalInstantActionScreen.PageUpKey)?.Enabled}, {Row(shell, OriginalInstantActionScreen.PageDownKey)?.Enabled})");
+        ctx.Check(Row(shell, OriginalInstantActionScreen.ExitKey) is { Enabled: true, Width: 200f, Height: 32f },
+            $"Exit is the measured four-frame strip ({Row(shell, OriginalInstantActionScreen.ExitKey)?.Width}x{Row(shell, OriginalInstantActionScreen.ExitKey)?.Height})");
+        ctx.Check(Row(shell, OriginalInstantActionScreen.BuildKey) is { Enabled: true } && Row(shell, OriginalInstantActionScreen.WeaponLoadoutKey) is { Enabled: true },
             $"Build Custom Plane and Weapon Loadout are live");
         var board = shell.Compose();
         ctx.Check(board.Backdrop.Count == 1 && board.Backdrop[0].Art.Name == "IA_BackGround.jpg",
@@ -586,36 +586,36 @@ internal static class MenuInstantActionSuites
 
     private static void OriginalKeyboard(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, InstantActionFeature ia)
     {
-        ctx.Check(shell.FocusedKey == OriginalShell.ContentsKey + ":0", $"the focus opens on the first contents row ({shell.FocusedKey})");
+        ctx.Check(shell.FocusedKey == OriginalInstantActionScreen.ContentsKey + ":0", $"the focus opens on the first contents row ({shell.FocusedKey})");
         Press(host, seat, Right);
-        ctx.Check(shell.FocusedKey == OriginalShell.PlayerPlaneKey, $"Right crosses to the right page's first dropdown ({shell.FocusedKey})");
+        ctx.Check(shell.FocusedKey == OriginalInstantActionScreen.PlayerPlaneKey, $"Right crosses to the right page's first dropdown ({shell.FocusedKey})");
         Press(host, seat, Right);
         ctx.Check(ia.PlayerPlane.Name == "Hellhound", $"Right on a dropdown steps its value ({ia.PlayerPlane.Name})");
         Press(host, seat, Accept);
         // The list is the eleven stock rows and then whatever the user's store holds, so the
         // count is a floor and the stock prefix is what the first rows are checked for.
-        ctx.Check(shell.OpenDropdown == OriginalShell.PlayerPlaneKey && shell.Rows.Count >= 11 && StockRows(shell) == 11,
-            $"Accept opens its list with the eleven stock rows first ({shell.OpenDropdown}, {shell.Rows.Count}, {StockRows(shell)} stock)");
-        ctx.Check(shell.Rows[0].Label == "Stock Autogyro" && shell.Rows[1].Label == "Stock Hellhound" && shell.FocusedKey == OriginalShell.PlayerPlaneKey + ":1",
+        ctx.Check(shell.InstantAction.OpenDropdown == OriginalInstantActionScreen.PlayerPlaneKey && shell.Rows.Count >= 11 && StockRows(shell) == 11,
+            $"Accept opens its list with the eleven stock rows first ({shell.InstantAction.OpenDropdown}, {shell.Rows.Count}, {StockRows(shell)} stock)");
+        ctx.Check(shell.Rows[0].Label == "Stock Autogyro" && shell.Rows[1].Label == "Stock Hellhound" && shell.FocusedKey == OriginalInstantActionScreen.PlayerPlaneKey + ":1",
             $"named Stock <airframe> with the focus on the current row ({shell.Rows[0].Label}, {shell.Rows[1].Label}, {shell.FocusedKey})");
 
         // The store's length decides whether the list outruns its authored window of twenty, so
         // the row width is read against both readings of the same rule rather than one count.
-        bool scrolls = List(shell, OriginalShell.PlayerPlaneKey) is { Window.Scrolls: true };
+        bool scrolls = List(shell, OriginalInstantActionScreen.PlayerPlaneKey) is { Window.Scrolls: true };
         ctx.Check(shell.Rows[0] is { X: 511f } && Math.Abs(shell.Rows[0].Width - (scrolls ? 208f : 224f)) < 0.5f,
             $"its rows keep off the scroll column only where there is one ({shell.Rows[0].Width}, scrolling={scrolls})");
         Press(host, seat, Down);
         Press(host, seat, Accept);
-        ctx.Check(shell.OpenDropdown == null && ia.PlayerPlane.Name == "Balmoral" && Row(shell, OriginalShell.PlayerPlaneKey)?.Label == "Stock Balmoral",
-            $"Down and Accept pick the next row and close the list ({ia.PlayerPlane.Name}, {Row(shell, OriginalShell.PlayerPlaneKey)?.Label})");
+        ctx.Check(shell.InstantAction.OpenDropdown == null && ia.PlayerPlane.Name == "Balmoral" && Row(shell, OriginalInstantActionScreen.PlayerPlaneKey)?.Label == "Stock Balmoral",
+            $"Down and Accept pick the next row and close the list ({ia.PlayerPlane.Name}, {Row(shell, OriginalInstantActionScreen.PlayerPlaneKey)?.Label})");
         Press(host, seat, Down);
-        ctx.Check(shell.FocusedKey == OriginalShell.WingmenKey, $"Down walks the right page ({shell.FocusedKey})");
+        ctx.Check(shell.FocusedKey == OriginalInstantActionScreen.WingmenKey, $"Down walks the right page ({shell.FocusedKey})");
         Press(host, seat, Right);
-        ctx.Check(ia.NumWingmen == 1 && Row(shell, OriginalShell.WingmanPlaneKey) is { Enabled: true },
+        ctx.Check(ia.NumWingmen == 1 && Row(shell, OriginalInstantActionScreen.WingmanPlaneKey) is { Enabled: true },
             $"one wingman fills the wingman plane dropdown ({ia.NumWingmen})");
         Press(host, seat, Left);
-        ctx.Check(ia.NumWingmen == 0 && Row(shell, OriginalShell.WingmanPlaneKey) is { Enabled: false, Label: "" },
-            $"and zero leaves its box standing blank and inert ({ia.NumWingmen}, {Row(shell, OriginalShell.WingmanPlaneKey)?.Enabled})");
+        ctx.Check(ia.NumWingmen == 0 && Row(shell, OriginalInstantActionScreen.WingmanPlaneKey) is { Enabled: false, Label: "" },
+            $"and zero leaves its box standing blank and inert ({ia.NumWingmen}, {Row(shell, OriginalInstantActionScreen.WingmanPlaneKey)?.Enabled})");
     }
 
     // Four presets, one per mission type, each flown through Fly Mission: the exit is the
@@ -644,8 +644,8 @@ internal static class MenuInstantActionSuites
                 Click(host, seat, Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
             }
 
-            var row = Row(shell, $"{OriginalShell.ContentsKey}:{c.Preset}");
-            var fly = Row(shell, OriginalShell.FlyMissionKey);
+            var row = Row(shell, $"{OriginalInstantActionScreen.ContentsKey}:{c.Preset}");
+            var fly = Row(shell, OriginalInstantActionScreen.FlyMissionKey);
             ctx.Check(row != null && fly != null, $"preset {c.Preset} and Fly Mission are on screen");
             if (row == null || fly == null)
             {
@@ -656,7 +656,7 @@ internal static class MenuInstantActionSuites
             Click(host, seat, Pointer(fit, row.X + 5f, row.Y + 5f, pressed: true, clicked: true));
             ctx.Check(ia.PresetIndex == c.Preset && ia.Environment.Code == c.Chapter && ia.MissionType.Key == c.Mission,
                 $"clicking contents row {c.Preset} applies it ({ia.PresetIndex}, {ia.Environment.Code}, {ia.MissionType.Key})");
-            fly = Row(shell, OriginalShell.FlyMissionKey)!;
+            fly = Row(shell, OriginalInstantActionScreen.FlyMissionKey)!;
             Click(host, seat, Pointer(fit, fly.X + 5f, fly.Y + 5f, pressed: true, clicked: true));
             ctx.Check(exits.Count == before + 1 && exits[^1] is LaunchExit, $"Fly Mission leaves as one LaunchExit ({exits.Count - before})");
             if (exits[^1] is not LaunchExit launch)
@@ -704,7 +704,7 @@ internal static class MenuInstantActionSuites
         }
 
         int row = PilotRowOf(shell, scratch);
-        ctx.Check(row >= 11 && shell.PilotRoster[row].Node == "player_fury",
+        ctx.Check(row >= 11 && shell.InstantAction.PilotRoster[row].Node == "player_fury",
             $"entering the screen reads the store: the build sits after the eleven stock rows flying the Fury's node (row {row})");
 
         // The wingman list, opened beside it, is the stock table alone.
@@ -713,18 +713,18 @@ internal static class MenuInstantActionSuites
             ia.SetWingmen(1);
         }
 
-        var wingmanDrop = Row(shell, OriginalShell.WingmanPlaneKey);
+        var wingmanDrop = Row(shell, OriginalInstantActionScreen.WingmanPlaneKey);
         ctx.Check(wingmanDrop != null, $"the Wingman Plane dropdown shows with a wingman ({ia.NumWingmen})");
         if (wingmanDrop != null)
         {
             Click(host, seat, Pointer(fit, wingmanDrop.X + 5f, wingmanDrop.Y + 5f, pressed: true, clicked: true));
-            ctx.Check(shell.OpenDropdown == OriginalShell.WingmanPlaneKey && shell.Rows.Count == 11 && LabelRow(shell, rowText) < 0 && shell.Rows[7].Label == "Fury",
+            ctx.Check(shell.InstantAction.OpenDropdown == OriginalInstantActionScreen.WingmanPlaneKey && shell.Rows.Count == 11 && LabelRow(shell, rowText) < 0 && shell.Rows[7].Label == "Fury",
                 $"the wingman list is the eleven stock names alone ({shell.Rows.Count}, {shell.Rows[7].Label})");
             Press(host, seat, Accept);
-            ctx.Check(shell.OpenDropdown == null, $"Accept on its current row closes it");
+            ctx.Check(shell.InstantAction.OpenDropdown == null, $"Accept on its current row closes it");
         }
 
-        var drop = Row(shell, OriginalShell.PlayerPlaneKey);
+        var drop = Row(shell, OriginalInstantActionScreen.PlayerPlaneKey);
         ctx.Check(drop != null, $"the Pilot Plane dropdown is on screen");
         if (drop == null || row < 0)
         {
@@ -732,8 +732,8 @@ internal static class MenuInstantActionSuites
         }
 
         Click(host, seat, Pointer(fit, drop.X + 5f, drop.Y + 5f, pressed: true, clicked: true));
-        var item = Row(shell, $"{OriginalShell.PlayerPlaneKey}:{row}");
-        ctx.Check(shell.OpenDropdown == OriginalShell.PlayerPlaneKey && item != null && item.Label == rowText && StockRows(shell) == 11,
+        var item = Row(shell, $"{OriginalInstantActionScreen.PlayerPlaneKey}:{row}");
+        ctx.Check(shell.InstantAction.OpenDropdown == OriginalInstantActionScreen.PlayerPlaneKey && item != null && item.Label == rowText && StockRows(shell) == 11,
             $"a click opens the list with the build's row named for it after the stock rows ({item?.Label})");
         if (item == null)
         {
@@ -741,11 +741,11 @@ internal static class MenuInstantActionSuites
         }
 
         Click(host, seat, Pointer(fit, item.X + 5f, item.Y + 5f, pressed: true, clicked: true));
-        ctx.Check(shell.OpenDropdown == null && shell.PilotRow == row && Row(shell, OriginalShell.PlayerPlaneKey)?.Label == rowText,
-            $"a click on it picks the build and closes the list ({shell.PilotRow}, {Row(shell, OriginalShell.PlayerPlaneKey)?.Label})");
+        ctx.Check(shell.InstantAction.OpenDropdown == null && shell.InstantAction.PilotRow == row && Row(shell, OriginalInstantActionScreen.PlayerPlaneKey)?.Label == rowText,
+            $"a click on it picks the build and closes the list ({shell.InstantAction.PilotRow}, {Row(shell, OriginalInstantActionScreen.PlayerPlaneKey)?.Label})");
         ctx.Check(ia.PlayerPlane.Name == "Fury", $"the feature's own pick moves onto the build's airframe ({ia.PlayerPlane.Name})");
 
-        var fly = Row(shell, OriginalShell.FlyMissionKey)!;
+        var fly = Row(shell, OriginalInstantActionScreen.FlyMissionKey)!;
         int before = exits.Count;
         Click(host, seat, Pointer(fit, fly.X + 5f, fly.Y + 5f, pressed: true, clicked: true));
         ctx.Check(exits.Count == before + 1 && exits[^1] is LaunchExit, $"Fly Mission leaves as one LaunchExit ({exits.Count - before})");
@@ -769,8 +769,8 @@ internal static class MenuInstantActionSuites
             return;
         }
 
-        ctx.Check(shell.PilotRow == PilotRowOf(shell, scratch) && Row(shell, OriginalShell.PlayerPlaneKey)?.Label == rowText,
-            $"the pick survives the return ({Row(shell, OriginalShell.PlayerPlaneKey)?.Label})");
+        ctx.Check(shell.InstantAction.PilotRow == PilotRowOf(shell, scratch) && Row(shell, OriginalInstantActionScreen.PlayerPlaneKey)?.Label == rowText,
+            $"the pick survives the return ({Row(shell, OriginalInstantActionScreen.PlayerPlaneKey)?.Label})");
 
         // The re-read the hangar's return calls: a build saved while the screen shows is offered
         // without leaving it, and a deleted file drops both its row and the pick.
@@ -779,11 +779,11 @@ internal static class MenuInstantActionSuites
         try
         {
             ctx.Check(PilotRowOf(shell, second) < 0, $"a build saved while the screen shows is not offered until the roster is re-read");
-            shell.RefreshInstantActionRoster();
+            shell.InstantAction.RefreshRoster();
             int secondRow = PilotRowOf(shell, second);
-            ctx.Check(secondRow >= 11 && shell.PilotRoster[secondRow].Node == "player_bhawk",
+            ctx.Check(secondRow >= 11 && shell.InstantAction.PilotRoster[secondRow].Node == "player_bhawk",
                 $"RefreshInstantActionRoster offers it on the Bloodhawk's node (row {secondRow})");
-            ctx.Check(Row(shell, OriginalShell.PlayerPlaneKey)?.Label == rowText, $"and the standing pick is kept ({Row(shell, OriginalShell.PlayerPlaneKey)?.Label})");
+            ctx.Check(Row(shell, OriginalInstantActionScreen.PlayerPlaneKey)?.Label == rowText, $"and the standing pick is kept ({Row(shell, OriginalInstantActionScreen.PlayerPlaneKey)?.Label})");
         }
         finally
         {
@@ -791,12 +791,12 @@ internal static class MenuInstantActionSuites
         }
 
         store.Delete(scratch);
-        shell.RefreshInstantActionRoster();
-        ctx.Check(PilotRowOf(shell, scratch) < 0 && PilotRowOf(shell, second) < 0 && shell.PilotRoster.Count >= 11,
-            $"deleting the files drops their rows ({shell.PilotRoster.Count} rows)");
-        ctx.Check(Row(shell, OriginalShell.PlayerPlaneKey)?.Label == "Stock Fury" && ia.PlayerPlane.Name == "Fury",
-            $"and the pick falls back onto the airframe's stock row ({Row(shell, OriginalShell.PlayerPlaneKey)?.Label})");
-        var exit = Row(shell, OriginalShell.ExitKey)!;
+        shell.InstantAction.RefreshRoster();
+        ctx.Check(PilotRowOf(shell, scratch) < 0 && PilotRowOf(shell, second) < 0 && shell.InstantAction.PilotRoster.Count >= 11,
+            $"deleting the files drops their rows ({shell.InstantAction.PilotRoster.Count} rows)");
+        ctx.Check(Row(shell, OriginalInstantActionScreen.PlayerPlaneKey)?.Label == "Stock Fury" && ia.PlayerPlane.Name == "Fury",
+            $"and the pick falls back onto the airframe's stock row ({Row(shell, OriginalInstantActionScreen.PlayerPlaneKey)?.Label})");
+        var exit = Row(shell, OriginalInstantActionScreen.ExitKey)!;
         Click(host, seat, Pointer(fit, exit.X + 5f, exit.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.TopLevel, $"Exit returns to the top level ({shell.Screen})");
     }
@@ -812,18 +812,18 @@ internal static class MenuInstantActionSuites
             return;
         }
 
-        var radio = Row(shell, OriginalShell.WingmanRadioKey)!;
+        var radio = Row(shell, OriginalInstantActionScreen.WingmanRadioKey)!;
         Click(host, seat, Pointer(fit, radio.X + 5f, radio.Y + 5f, pressed: true, clicked: true));
-        var loadout = Row(shell, OriginalShell.WeaponLoadoutKey);
-        ctx.Check(shell.LoadoutTarget == 1 && loadout is { Enabled: true }, $"the Wingman radio takes the target and Weapon Loadout is live ({shell.LoadoutTarget})");
+        var loadout = Row(shell, OriginalInstantActionScreen.WeaponLoadoutKey);
+        ctx.Check(shell.InstantAction.LoadoutTarget == 1 && loadout is { Enabled: true }, $"the Wingman radio takes the target and Weapon Loadout is live ({shell.InstantAction.LoadoutTarget})");
         if (loadout == null)
         {
             return;
         }
 
         Click(host, seat, Pointer(fit, loadout.X + 5f, loadout.Y + 5f, pressed: true, clicked: true));
-        ctx.Check(shell.Screen == OriginalScreen.InstantActionLoadout && ReferenceEquals(shell.LoadoutFit, ia.WingmanFit) && shell.LoadoutNode == ia.WingmanPlane.Node,
-            $"a click opens the loadout screen on the wingmen's shared fit over their airframe ({shell.Screen}, {shell.LoadoutNode})");
+        ctx.Check(shell.Screen == OriginalScreen.InstantActionLoadout && ReferenceEquals(shell.InstantAction.LoadoutFit, ia.WingmanFit) && shell.InstantAction.LoadoutNode == ia.WingmanPlane.Node,
+            $"a click opens the loadout screen on the wingmen's shared fit over their airframe ({shell.Screen}, {shell.InstantAction.LoadoutNode})");
         var def = StockLoadouts.Load().ForModel(ia.WingmanPlane.Node);
         int guns = 0;
         foreach (var gun in def?.Guns ?? new List<GunSpec>())
@@ -833,9 +833,9 @@ internal static class MenuInstantActionSuites
 
         int pylons = def?.Hardpoints?.Count ?? 0;
         ctx.Check(shell.Rows.Count == guns + pylons + 2, $"one field per firable gun slot and per pylon of the {ia.WingmanPlane.Name}, then ACCEPT and CANCEL ({shell.Rows.Count} rows, {guns} guns, {pylons} pylons)");
-        ctx.Check(Row(shell, OriginalShell.LoadoutAmmoPrefix + "0") is { X: 136f, Y: 120f, Width: 148f, Height: 15f },
-            $"the first ammunition field stands at its authored box ({Row(shell, OriginalShell.LoadoutAmmoPrefix + "0")?.X})");
-        ctx.Check(Row(shell, OriginalShell.LoadoutAcceptKey) is { X: 341f, Y: 553f, Enabled: true } && Row(shell, OriginalShell.LoadoutCancelKey) is { X: 551f, Y: 553f, Enabled: true },
+        ctx.Check(Row(shell, OriginalInstantActionScreen.LoadoutAmmoPrefix + "0") is { X: 136f, Y: 120f, Width: 148f, Height: 15f },
+            $"the first ammunition field stands at its authored box ({Row(shell, OriginalInstantActionScreen.LoadoutAmmoPrefix + "0")?.X})");
+        ctx.Check(Row(shell, OriginalInstantActionScreen.LoadoutAcceptKey) is { X: 341f, Y: 553f, Enabled: true } && Row(shell, OriginalInstantActionScreen.LoadoutCancelKey) is { X: 551f, Y: 553f, Enabled: true },
             $"ACCEPT and CANCEL LOADOUT stand at their authored places");
         var board = shell.Compose();
         ctx.Check(board.Backdrop.Count == 1 && board.Backdrop[0].Art.Name == "OL_BackGround.jpg", $"the screen's background is the section's own ({board.Backdrop.Count})");
@@ -844,7 +844,7 @@ internal static class MenuInstantActionSuites
         OriginalRow? rocket = null;
         foreach (var row in shell.Rows)
         {
-            if (row.Key.StartsWith(OriginalShell.LoadoutRocketPrefix, StringComparison.Ordinal))
+            if (row.Key.StartsWith(OriginalInstantActionScreen.LoadoutRocketPrefix, StringComparison.Ordinal))
             {
                 rocket = row;
                 break;
@@ -857,25 +857,25 @@ internal static class MenuInstantActionSuites
             return;
         }
 
-        int pylon = int.Parse(rocket.Key[OriginalShell.LoadoutRocketPrefix.Length..], System.Globalization.CultureInfo.InvariantCulture) + 1;
+        int pylon = int.Parse(rocket.Key[OriginalInstantActionScreen.LoadoutRocketPrefix.Length..], System.Globalization.CultureInfo.InvariantCulture) + 1;
         Press(host, seat, Pointer(fit, rocket.X + 5f, rocket.Y + 5f));
         Press(host, seat, Right);
         ctx.Check(!ia.WingmanFit.IsStock && ia.WingmanFit.PylonFor(pylon) != null && Row(shell, rocket.Key)?.Label != rocket.Label,
             $"Right on the pylon field steps its ordnance into the shared fit ({ia.WingmanFit.PylonFor(pylon)}, {Row(shell, rocket.Key)?.Label})");
-        var cancel = Row(shell, OriginalShell.LoadoutCancelKey)!;
+        var cancel = Row(shell, OriginalInstantActionScreen.LoadoutCancelKey)!;
         Click(host, seat, Pointer(fit, cancel.X + 5f, cancel.Y + 5f, pressed: true, clicked: true));
-        ctx.Check(shell.Screen == OriginalScreen.InstantAction && ia.WingmanFit.IsStock && shell.FocusedKey == OriginalShell.WeaponLoadoutKey,
+        ctx.Check(shell.Screen == OriginalScreen.InstantAction && ia.WingmanFit.IsStock && shell.FocusedKey == OriginalInstantActionScreen.WeaponLoadoutKey,
             $"CANCEL restores the stock fit and lands back on Weapon Loadout ({shell.Screen}, {shell.FocusedKey})");
 
         Click(host, seat, Pointer(fit, loadout.X + 5f, loadout.Y + 5f, pressed: true, clicked: true));
         Click(host, seat, Pointer(fit, rocket.X + 5f, rocket.Y + 5f, pressed: true, clicked: true));
-        ctx.Check(shell.OpenDropdown == rocket.Key && shell.Rows.Count == StockLoadouts.Load().Options.PylonOrdnance.Count,
-            $"a click on the field opens its list over the ordnance roster ({shell.OpenDropdown}, {shell.Rows.Count})");
+        ctx.Check(shell.InstantAction.OpenDropdown == rocket.Key && shell.Rows.Count == StockLoadouts.Load().Options.PylonOrdnance.Count,
+            $"a click on the field opens its list over the ordnance roster ({shell.InstantAction.OpenDropdown}, {shell.Rows.Count})");
         Press(host, seat, Down);
         Press(host, seat, Accept);
         string? picked = ia.WingmanFit.PylonFor(pylon);
-        ctx.Check(shell.OpenDropdown == null && picked != null, $"Down and Accept pick the next row and close the list ({picked})");
-        var accept = Row(shell, OriginalShell.LoadoutAcceptKey)!;
+        ctx.Check(shell.InstantAction.OpenDropdown == null && picked != null, $"Down and Accept pick the next row and close the list ({picked})");
+        var accept = Row(shell, OriginalInstantActionScreen.LoadoutAcceptKey)!;
         Click(host, seat, Pointer(fit, accept.X + 5f, accept.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.InstantAction && ia.WingmanFit.PylonFor(pylon) == picked,
             $"ACCEPT keeps the pick and returns to the screen ({shell.Screen}, {ia.WingmanFit.PylonFor(pylon)})");
@@ -898,7 +898,7 @@ internal static class MenuInstantActionSuites
     // screen, and a purchase returns to it with the new build in the Pilot Plane list.
     private static void OriginalBuild(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, HangarFeature hangar, CustomPlaneStore store, string built)
     {
-        var build = Row(shell, OriginalShell.BuildKey);
+        var build = Row(shell, OriginalInstantActionScreen.BuildKey);
         ctx.Check(shell.Screen == OriginalScreen.InstantAction && build is { Enabled: true }, $"Build Custom Plane is live on the screen ({shell.Screen})");
         if (build == null)
         {
@@ -912,7 +912,7 @@ internal static class MenuInstantActionSuites
         ctx.Check(shell.Screen == OriginalScreen.PlaneName && hangar.IsOpen && hangar.Wallet == null,
             $"a click opens the decoded name screen over a wallet-free build ({shell.Screen})");
         Press(host, seat, Back);
-        ctx.Check(shell.Screen == OriginalScreen.InstantAction && !hangar.IsOpen && shell.FocusedKey == OriginalShell.BuildKey,
+        ctx.Check(shell.Screen == OriginalScreen.InstantAction && !hangar.IsOpen && shell.FocusedKey == OriginalInstantActionScreen.BuildKey,
             $"Back drops the build and returns to the screen on its Build button ({shell.Screen}, {shell.FocusedKey})");
 
         Click(host, seat, Pointer(fit, build.X + 5f, build.Y + 5f, pressed: true, clicked: true));
@@ -945,28 +945,28 @@ internal static class MenuInstantActionSuites
         ctx.Check(shell.Screen == OriginalScreen.InstantAction && !hangar.IsOpen && store.Load(built) != null,
             $"Purchase Now saves the plane and returns to the screen ({shell.Screen})");
         ctx.Check(row >= 11 && store.Load(built) is { } saved && saved.Airframe == door
-            && shell.PilotRoster[row].Node == PlanePickerRoster.AirframeNode(door),
+            && shell.InstantAction.PilotRoster[row].Node == PlanePickerRoster.AirframeNode(door),
             $"whose Pilot Plane list offers the build after the stock rows on the door's airframe node (row {row}, airframe {door})");
-        var drop = Row(shell, OriginalShell.PlayerPlaneKey);
+        var drop = Row(shell, OriginalInstantActionScreen.PlayerPlaneKey);
         if (drop != null && row >= 0)
         {
             // The row's airframe word is the Instant Action table's, the stock rows' own vocabulary.
             string airframe = string.Empty;
             foreach (var stock in InstantActionFeature.Airframes)
             {
-                if (stock.Node == shell.PilotRoster[row].Node)
+                if (stock.Node == shell.InstantAction.PilotRoster[row].Node)
                 {
                     airframe = stock.Name;
                 }
             }
 
             Click(host, seat, Pointer(fit, drop.X + 5f, drop.Y + 5f, pressed: true, clicked: true));
-            ctx.Check(Row(shell, $"{OriginalShell.PlayerPlaneKey}:{row}")?.Label == built + " " + airframe,
-                $"named for the build in the open list ({Row(shell, $"{OriginalShell.PlayerPlaneKey}:{row}")?.Label})");
+            ctx.Check(Row(shell, $"{OriginalInstantActionScreen.PlayerPlaneKey}:{row}")?.Label == built + " " + airframe,
+                $"named for the build in the open list ({Row(shell, $"{OriginalInstantActionScreen.PlayerPlaneKey}:{row}")?.Label})");
             Press(host, seat, Back);
         }
 
-        var exit = Row(shell, OriginalShell.ExitKey)!;
+        var exit = Row(shell, OriginalInstantActionScreen.ExitKey)!;
         Click(host, seat, Pointer(fit, exit.X + 5f, exit.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.TopLevel, $"Exit returns to the top level ({shell.Screen})");
     }
@@ -987,7 +987,7 @@ internal static class MenuInstantActionSuites
         ctx.Check(setup.Join(guest) != null && host.Seats.Count == 2, $"a second pilot joins on the screen ({host.Seats.Count})");
         ctx.Check(StripLines(shell) == 2, $"and the strip names both seats ({StripLines(shell)})");
 
-        var fly = Row(shell, OriginalShell.FlyMissionKey);
+        var fly = Row(shell, OriginalInstantActionScreen.FlyMissionKey);
         ctx.Check(fly != null, $"Fly Mission is on screen");
         if (fly == null)
         {
@@ -998,16 +998,16 @@ internal static class MenuInstantActionSuites
         Click(host, seat, Pointer(fit, fly.X + 5f, fly.Y + 5f, pressed: true, clicked: true));
         ctx.Check(exits.Count == before && shell.Screen == OriginalScreen.SeatPlane && shell.PickingSeat == 1,
             $"Fly Mission opens the guest's own aircraft screen instead of launching ({shell.Screen}, picking {shell.PickingSeat})");
-        ctx.Check(shell.SeatReturn == OriginalScreen.InstantAction && ReferenceEquals(setup.Roster, shell.PilotRoster),
+        ctx.Check(shell.SeatReturn == OriginalScreen.InstantAction && ReferenceEquals(setup.Roster, shell.InstantAction.PilotRoster),
             $"over the Pilot Plane roster, the walk returning to Instant Action ({shell.SeatReturn})");
         Press(host, guest, Down);
         Press(host, guest, Accept);
         Press(host, guest, Accept);
         ctx.Check(exits.Count == before + 1 && exits[^1] is LaunchExit { Seats.Count: 2 },
             $"the guest's second Accept ends the walk as one LaunchExit for both seats ({exits.Count - before})");
-        if (exits[^1] is LaunchExit both && both.Seats.Count == 2 && shell.PilotRoster.Count > 1)
+        if (exits[^1] is LaunchExit both && both.Seats.Count == 2 && shell.InstantAction.PilotRoster.Count > 1)
         {
-            ctx.Check(both.Seats[1].PlaneNode == shell.PilotRoster[1].Node && both.InstantAction != null,
+            ctx.Check(both.Seats[1].PlaneNode == shell.InstantAction.PilotRoster[1].Node && both.InstantAction != null,
                 $"the guest flying the row it picked, the def still the screen's ({both.Seats[1].PlaneNode})");
         }
     }
@@ -1063,9 +1063,9 @@ internal static class MenuInstantActionSuites
     // rows, never by the airframe it flies.
     private static int PilotRowOf(OriginalShell shell, string build)
     {
-        for (int i = 0; i < shell.PilotRoster.Count; i++)
+        for (int i = 0; i < shell.InstantAction.PilotRoster.Count; i++)
         {
-            if (shell.PilotRoster[i].IsCustom && shell.PilotRoster[i].Name == build)
+            if (shell.InstantAction.PilotRoster[i].IsCustom && shell.InstantAction.PilotRoster[i].Name == build)
             {
                 return i;
             }

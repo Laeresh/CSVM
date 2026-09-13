@@ -974,11 +974,11 @@ internal static class MenuHangarSuites
         Click(host, seat, Pointer(fit, purchase.X + 5f, purchase.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.InstantAction && shell.Hangar!.LastBuiltPlane == scratch && !hangar.IsOpen,
             $"Purchase Now saves, drops the build and returns to the Instant Action screen ({shell.Screen}, {shell.Hangar!.LastBuiltPlane})");
-        ctx.Check(shell.FocusedKey == OriginalShell.BuildKey, $"with the focus back on Build Custom Plane ({shell.FocusedKey})");
+        ctx.Check(shell.FocusedKey == OriginalInstantActionScreen.BuildKey, $"with the focus back on Build Custom Plane ({shell.FocusedKey})");
         int built = host.Features.Get<InstantActionFeature>().PlayerPlaneIndex;
         ctx.Check(store.Load(scratch) is { Engine: 1 } saved && saved.Airframe == built, $"the store holds the plane as built ({built})");
         ctx.Check(setup.Roster is var roster && Contains(roster, scratch), $"and the shared roster lists it without a return to the top level");
-        ctx.Check(Contains(shell.PilotRoster, scratch), $"and the Pilot Plane list offers it, re-read on the way back");
+        ctx.Check(Contains(shell.InstantAction.PilotRoster, scratch), $"and the Pilot Plane list offers it, re-read on the way back");
     }
 
     private static void OriginalInventory(
@@ -1062,7 +1062,7 @@ internal static class MenuHangarSuites
         Click(host, seat, Pointer(fit, cancel.X + 5f, cancel.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.InstantAction && !hangar.IsOpen && store.Load("Other") == null,
             $"CANCEL drops the build, returns to the Instant Action screen and leaves no residue ({shell.Screen})");
-        ctx.Check(!Contains(shell.PilotRoster, scratch), $"whose Pilot Plane list no longer offers the sold plane");
+        ctx.Check(!Contains(shell.InstantAction.PilotRoster, scratch), $"whose Pilot Plane list no longer offers the sold plane");
     }
 
     // The cabin's PLANE CONSTRUCTION over the aid profile's wallet: the cash note on a tab and on
@@ -1370,7 +1370,7 @@ internal static class MenuHangarSuites
             Click(host, seat, Pointer(fit, instantAction.X + 5f, instantAction.Y + 5f, pressed: true, clicked: true));
         }
 
-        return Row(shell, OriginalShell.BuildKey);
+        return Row(shell, OriginalInstantActionScreen.BuildKey);
     }
 
     // Walks the cursor onto the row carrying a text, at most one lap; the cursor stays put when no

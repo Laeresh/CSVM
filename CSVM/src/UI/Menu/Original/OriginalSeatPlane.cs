@@ -38,7 +38,7 @@ public sealed partial class OriginalShell
     // picker as the walk's screen made the picking seat's Back unjoin it from the loadout screen.
     private bool OnSeatWalk =>
         _screen == OriginalScreen.SeatPlane
-        || (_screen == OriginalScreen.InstantActionLoadout && _loadoutSeat != null);
+        || (_screen == OriginalScreen.InstantActionLoadout && _instantActionModule.OnSeatLoadout);
 
     /// <summary>Picks the first chapter and the first aircraft for seat 0 on the sortie screen
     /// showing, the screenshot aid's pose; with a joined seat still to confirm, the per-seat
@@ -127,8 +127,9 @@ public sealed partial class OriginalShell
             return null;
         }
 
-        _setup.SetRoster(_iaPilotRoster);
-        int last = Math.Max(0, _iaPilotRoster.Count - 1);
+        var roster = _instantActionModule.PilotRoster;
+        _setup.SetRoster(roster);
+        int last = Math.Max(0, roster.Count - 1);
         foreach (var joined in _setup.Seats)
         {
             joined.Cursor = Math.Clamp(joined.Cursor, 0, last);
@@ -138,7 +139,7 @@ public sealed partial class OriginalShell
         {
         }
 
-        _setup.Browse(seat, Math.Clamp(PilotRow, 0, last));
+        _setup.Browse(seat, Math.Clamp(_instantActionModule.PilotRow, 0, last));
         _setup.Select(seat);
         _seatReturn = OriginalScreen.InstantAction;
         return AdvanceSeatWalk();
@@ -237,7 +238,7 @@ public sealed partial class OriginalShell
 
                 return null;
             case nameof(BoardButton.ChangeAmmo):
-                OpenSeatLoadout(seat);
+                _instantActionModule.OpenSeatLoadout(seat);
                 return null;
             case nameof(BoardButton.AcceptSelections):
                 if (seat.Locked)

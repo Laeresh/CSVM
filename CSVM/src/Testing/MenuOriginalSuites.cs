@@ -276,18 +276,18 @@ internal static class MenuOriginalSuites
         WalkTo(host, seat, shell, "MM_B_INSTANTACTION");
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.InstantAction, $"Instant Action opens its contents window ({shell.Screen})");
-        WheelAndDrag(ctx, host, seat, shell, fit, OriginalShell.ContentsKey, "Instant Action's contents window");
-        var down = Row(shell, OriginalShell.ContentsDownKey);
+        WheelAndDrag(ctx, host, seat, shell, fit, OriginalInstantActionScreen.ContentsKey, "Instant Action's contents window");
+        var down = Row(shell, OriginalInstantActionScreen.ContentsDownKey);
         ctx.Check(down != null, $"the contents window carries its authored down arrow");
         if (down != null)
         {
-            int top = shell.ContentsTop;
+            int top = shell.InstantAction.ContentsTop;
             Click(host, seat, Pointer(fit, down.X + 2f, down.Y + 2f, pressed: true, clicked: true));
-            ctx.Check(shell.ContentsTop == top + 1,
-                $"and the arrow still steps the window one row, the wheel having changed nothing about it ({top} -> {shell.ContentsTop})");
-            var up = Row(shell, OriginalShell.ContentsUpKey)!;
+            ctx.Check(shell.InstantAction.ContentsTop == top + 1,
+                $"and the arrow still steps the window one row, the wheel having changed nothing about it ({top} -> {shell.InstantAction.ContentsTop})");
+            var up = Row(shell, OriginalInstantActionScreen.ContentsUpKey)!;
             Click(host, seat, Pointer(fit, up.X + 2f, up.Y + 2f, pressed: true, clicked: true));
-            ctx.Check(shell.ContentsTop == top, $"and the up arrow steps it back ({shell.ContentsTop})");
+            ctx.Check(shell.InstantAction.ContentsTop == top, $"and the up arrow steps it back ({shell.InstantAction.ContentsTop})");
         }
 
         Press(host, seat, Back);

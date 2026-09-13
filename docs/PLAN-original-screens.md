@@ -79,7 +79,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A, second module and the dialog
 
-1. ☐ Instant Action + Loadout module (`OriginalInstantActionScreen`) over the hangar host seam
+1. ☑ Instant Action + Loadout module (`OriginalInstantActionScreen`) over the hangar host seam
 2. ☑ The standing dialog and `RaiseDialog` move from the campaign partial into the shell proper
 
 ### Wave B, general seam and the options leaves
@@ -108,11 +108,34 @@ C21 needs A2, B11 and B12; it runs alone. Every item edits `OriginalShell.cs` an
 
 # Wave A, second module and the dialog
 
-## A1 ☐ Instant Action + Loadout module over the hangar host seam
+## A1 ☑ Instant Action + Loadout module over the hangar host seam
 
-**Goal.** `OriginalInstantActionScreen` is a sealed class owning the Instant Action and Loadout
-screens' state and rows, constructed without `OriginalShell`; `OriginalInstantActionTests` (new)
-exercise pilot roster, spare fit, page, dropdown and loadout node walks over a hand-written host.
+**Landed.** `CSVM/src/UI/Menu/Original/OriginalInstantActionScreen.cs` is the sealed module over
+both screens (`Owns`, `OpenInstantAction`, `RefreshRoster`, `OpenDropdownOn`, `OpenLoadout`,
+`OpenSeatLoadout`, `DropLoadout`, `ClearLoadoutSeat`, `BuildRows`, `Lists`, `StepSideways`,
+`CloseDropdown`, `Activate`, `Back`, `Compose`, its own `OriginalInstantActionInks`), constructed
+over `InstantActionFeature`, `PlayerSetupFeature`, the store, the layout, the measurer and the
+host. `OriginalInstantAction.cs` and `OriginalLoadout.cs` are deleted. The shell holds one
+`_instantActionModule` field and one `InstantAction` accessor; `IsInstantActionFamily` is
+`Owns`. `IOriginalHangarHost` grew `HoveredRow`, `Pointer`, `MenuStrings`, `CanBuildPlane`,
+`OpenHangar`, `BeginSeatWalk` and `SeatPanel`. `OriginalInstantActionTests` is rewritten over a
+hand-written `InstantActionHost` (20 facts, no shell); `OriginalShellTests` keeps the door and
+column-walk wiring facts. Deviations B11 picks up: `Indexed`, `PaneOrigin` and `AddPane` were
+deleted from the shell and both modules hold private copies (hoist into one shared static
+helper); `OriginalDropList.cs` now exposes the window rule as `OriginalDropLists` for non-partial
+modules; the shared plate-row composer is `ComposePlateRow` on the shell.
+
+**Verified.** Full `.\RunTests.ps1` on the plan tree with A1 squash-merged over A2: PASS, exit 0
+(4414 units passed, 2 skipped for missing media; 332 engine suites, errors clean; 19 goldens
+hash-identical, so no Original board composes differently). `CheckDocEntries.ps1`,
+`CheckCommentCaps.ps1` and `CheckEncoding.ps1` clean on the merged tree. `OriginalInstantActionTests`
+names no `OriginalShell`; the module file is 1695 lines against the two partials' 1590, the
+difference the module's own inks, key constants and helper copies.
+
+**Original approach (kept for reference).** `OriginalInstantActionScreen` is a sealed class
+owning the Instant Action and Loadout screens' state and rows, constructed without
+`OriginalShell`; `OriginalInstantActionTests` exercise pilot roster, spare fit, page, dropdown and
+loadout node walks over a hand-written host.
 
 **Evidence (confidence: traced).** `OriginalInstantAction.cs:104-113` holds `_instantAction`,
 `_iaPilotRoster`, `_iaPilotBuild`, `_iaSpareFit`, `_iaPage`, `_iaOpen`, `_iaListTop`,
@@ -212,9 +235,12 @@ check. Each dispatch site (`Rows`, `Lists`, `ApplyFrame` MoveX cascade, `Compose
 **Approach.** Introduce a small module interface (`IOriginalScreenModule`: `Owns`, `BuildRows`,
 `Lists`, `StepSideways`, `CloseDropdown`, `Compose`, `Activate`, `Back`) that both sealed modules
 implement, an array or list of modules on the shell, and `ModuleFor(OriginalScreen)` returning the
-owner or null. Rename the host interface and the tests' fake in the same commit. Keep the per-module
+owner or null. Rename the host interface and the tests' fakes in the same commit. Keep the per-module
 accessors (`Hangar`, `InstantAction`) since `OriginalPresentation.cs` and the suites read
-module-specific members through them.
+module-specific members through them. Also from A1: hoist the `Indexed`/`PaneOrigin`/`AddPane`
+copies both modules carry into one shared static helper (a small `OriginalPanes` class or a
+static on `OriginalDropLists`), and review whether `HoveredRow` and `Pointer` belong on the seam or
+whether the module should take the pointer state as a parameter of the calls that need it.
 
 **Model recommendation.** high. A rename across three test files, two modules and the suites, with
 a dispatch rewrite in the shell's widest switches; the blast radius is the whole Original

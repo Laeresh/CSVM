@@ -7,11 +7,12 @@ using CSVM.Mech3;
 
 namespace CSVM.UI.Menu.Original;
 
-/// <summary>What the hangar module reads off the shell and calls back into it for: the focus and
-/// dialog state tied to whatever screen is showing, the shared dialog-raising and focus-setting
-/// seams, and the three points where a hangar flow crosses into the campaign or Instant Action
-/// families (the door a build opens on, a return that resumes one of them, and a row kind neither
-/// tab nor a dropdown that composes like an Instant Action row).</summary>
+/// <summary>What a standalone screen module reads off the shell and calls back into it for: the
+/// focus, pointer and dialog state tied to whatever screen is showing, the shared dialog-raising
+/// and focus-setting seams, the shell-wide chrome a module draws over (the seat strip, the plate
+/// pages' row rule), and the points where one family's flow crosses into another (the door a build
+/// opens on, a return that resumes one of them, the hangar the Build button opens and the per-seat
+/// walk FLY MISSION begins). The hangar and Instant Action modules both stand on it.</summary>
 public interface IOriginalHangarHost
 {
     /// <summary>The screen showing.</summary>
@@ -29,8 +30,20 @@ public interface IOriginalHangarHost
     /// <summary>The row index a pointer press is holding, or -1.</summary>
     int PressedRow { get; }
 
+    /// <summary>The row index the pointer stands on, or -1.</summary>
+    int HoveredRow { get; }
+
+    /// <summary>The pointer's last authored position, or null when the seat has none.</summary>
+    (float X, float Y)? Pointer { get; }
+
     /// <summary>The campaign's own build store, where a purchase over the cabin's wallet writes.</summary>
     CustomPlaneStore? CampaignPlanes { get; }
+
+    /// <summary>The string table the menu reads its words from, empty where none is loaded.</summary>
+    UiStrings MenuStrings { get; }
+
+    /// <summary>Whether a build can be made at all: a hangar feature and a build store together.</summary>
+    bool CanBuildPlane { get; }
 
     /// <summary>Opens a screen directly, the shell's own graph switch.</summary>
     void Open(OriginalScreen screen);
@@ -53,7 +66,19 @@ public interface IOriginalHangarHost
     /// <summary>Re-reads the sortie roster off the build store after it changes.</summary>
     void RefreshRosterFromStore();
 
-    /// <summary>Composes a row kind the hangar has no special drawing for, the Instant Action rule.</summary>
+    /// <summary>Opens the hangar wallet-free, Instant Action's Build Custom Plane.</summary>
+    void OpenHangar();
+
+    /// <summary>Starts the per-seat aircraft walk from Instant Action, the launch itself where
+    /// nobody is left to pick.</summary>
+    MenuExit? BeginSeatWalk();
+
+    /// <summary>The seat strip drawn over a board once a second seat has joined, or null;
+    /// <paramref name="onPaper"/> puts it on a light ground for a paper page.</summary>
+    BoardPanel? SeatPanel(bool onPaper);
+
+    /// <summary>Composes a row kind the hangar has no special drawing for, on the shell's own
+    /// plate-page rule.</summary>
     void ComposeGenericRow(
         OriginalRow row, bool focused, bool pressed, int index,
         List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPicture> pictures);
