@@ -78,7 +78,7 @@
     {
       "name": "c1-flight-kill",
       "frame": 280,
-      "hash": "d38d6e061f2dc3d39854b7bbf84f9c8c",
+      "hash": "042aa330c3ead27ce84035ca50cd2cd8",
       "exercises": "Chase-camera flight firing at two AIs then banking: one shot down 3 s earlier, its fireball and its top-centre kill line both up, the live one bracketed and labelled, --debug-markers text, gauges, exhaust, shadow, C1; frame-sensitive 78.07 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_kestrel,player_fury", "--ai-damage=0.02", "--target=ai2_player_fury", "--debug-markers", "--fire", "--hold=0,0,0,1@2.5;0.05,0.1,0,1", "--det", "--mute"]
     },
@@ -113,14 +113,14 @@
     {
       "name": "c1-stunt-marker",
       "frame": 90,
-      "hash": "132a947b98f789067ce7f2537fc5c645",
-      "exercises": "A stunt run's Danger Zone off screen on the pilot's own target cycle: the spyglass disc at the marker anchor over the shared world, the shaft leaving its rim under the 20-by-10 head, the label under the disc in the objective's blue, the run clock.",
+      "hash": "f5d7e3ea7f73a750b77e66e69117dc1f",
+      "exercises": "A stunt run's Danger Zone off screen on the pilot's own target cycle: the spyglass disc at the marker anchor, the shaft leaving its rim under the 20-by-10 head, the label in the objective's blue, the run clock, the plane's ground shadow below.",
       "args": ["--chapter=C1", "--stunt", "--plane=player_fury", "--pos=-5300,300,-6300", "--direction=0,0,-1", "--det", "--mute"]
     },
     {
       "name": "campaign-4p-grid",
       "frame": 120,
-      "hash": "fda194e816a4d2e4a01c81345adb1dd8",
+      "hash": "bab432fbde96321db6ca8b2dc50d3391",
       "exercises": "Four humans launch a co-op campaign mission on StartGrid: four render targets, HUDs and cockpit gauges, no cutscene collapsing the panes, the C1 world under its light, a point light on its fade band and ground shadows; frame-sensitive 73.79%.",
       "args": ["--campaign=csvm-golden:6", "--players=4", "--plane=player_bhawk,player_bhawk,player_bhawk,player_bhawk", "--det", "--mute"]
     },

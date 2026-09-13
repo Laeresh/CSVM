@@ -44,6 +44,17 @@ internal static class GroundShadowSuites
     private const float TipU = 0.10f;
     private const float WingV = 0.73f;
 
+    // The Hoplite, the one airframe with an overhead rotor, and the seconds of propeller time
+    // between the two rasters the turning check compares. A quarter second turns the rotor about
+    // 41 degrees, well inside the 120 the three-blade blur repeats at.
+    private const string RotorPlane = "player_autogyro";
+    private const float PropStep = 0.25f;
+
+    // How many texels must move for a rotor to read as turning, and the most a full circular
+    // propeller disc is allowed to move on its own.
+    private const int TurnedTexels = 20;
+    private const int StillTexels = 4;
+
     [Suite("ground-shadow",
         "The projected aircraft ground shadow: under the aircraft on the flat stage and on C1's " +
         "own terrain height, running 1.5 times its altitude ahead of the player while an AI " +
@@ -67,6 +78,7 @@ internal static class GroundShadowSuites
             // than inheriting whatever the run was launched in; the run's own mode is restored.
             GraphicsMode.Resolve(GraphicsMode.Default);
             FlatStage(ctx, planesGamez, textures, report);
+            Turning(ctx, planesGamez, textures, report);
             Terrain(ctx, planesGamez, textures, report);
             Gate(ctx, report);
         }
@@ -83,10 +95,11 @@ internal static class GroundShadowSuites
     // One aircraft, parked at a pose rather than flown: the pass reads the pose the model is
     // drawn at, so moving the rig between passes is the same input a flown frame gives it.
     private static FlightController Rig(TestContext ctx, GameZ planesGamez, TextureArchive textures,
-        bool human, Vector3 at)
+        bool human, Vector3 at, string? plane = null, bool spinning = false)
     {
-        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
-        var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+        string name = plane ?? ctx.PlaneName;
+        var stats = PlaneStats.Load(ctx.ZrdrPath, name);
+        var model = new PlaneBuilder(planesGamez, textures, spinningProps: spinning).Build(name);
         var nose = at + Vector3.Forward;
         var rig = new FlightController
         {
@@ -100,10 +113,11 @@ internal static class GroundShadowSuites
             PadDevices = Array.Empty<int>(),
             AllowPause = false,
             Team = AimAssist.PlayerTeam,
+            Props = spinning ? PropAnimator.Build(model) : null,
         };
         rig.AddChild(model);
         rig.Setup(new FlightModel(stats, aiForcePath: !human), null, new CamParams(), at, nose);
-        rig.Name = human ? "shadow_player" : "shadow_ai";
+        rig.Name = $"shadow_{name}_{(human ? "player" : "ai")}";
         ctx.Host.AddChild(rig);
         return rig;
     }
@@ -216,7 +230,7 @@ internal static class GroundShadowSuites
     // What one pass costs per aircraft, wall clock, over the stage. Reported and never checked: a
     // wall-clock number on a shared machine is awareness, not a threshold (docs/verification.md
     // PERF-5). It is here because the texture's area sets it, so a size change is read off it.
-    private static void Cost(GroundShadowPass pass, int aircraft, StringBuilder report)
+    private static void Cost(GroundShadowPass pass, int aircraft, string who, StringBuilder report)
     {
         for (int i = 0; i < CostWarmups; i++)
             pass.Tick();
@@ -226,7 +240,7 @@ internal static class GroundShadowSuites
         clock.Stop();
         int size = GroundShadowLaw.TextureSize;
         double each = clock.Elapsed.TotalMilliseconds / (CostPasses * (double)aircraft);
-        report.AppendLine($"cost: {each:0.0000} ms per aircraft per frame over {CostPasses} passes at {aircraft} aircraft, texture {size}x{size} = {size * size} bytes rebuilt and uploaded per aircraft per frame");
+        report.AppendLine($"cost ({who}): {each:0.0000} ms per aircraft per frame over {CostPasses} passes at {aircraft} aircraft, texture {size}x{size} = {size * size} bytes rebuilt and uploaded per aircraft per frame");
     }
 
     // The flat stage: known ground at y=0 under every pose, so a reading that disagrees is the
@@ -290,7 +304,7 @@ internal static class GroundShadowSuites
 
             Silhouette(ctx, pass, ai, report);
             Mask(pass, player, "player", report);
-            Cost(pass, rigs.Count, report);
+            Cost(pass, rigs.Count, "still airframes", report);
 
             // Climb both. The player's footprint grows with the altitude ramp and the AI's does
             // not, which is the size law's whole content.
@@ -322,6 +336,113 @@ internal static class GroundShadowSuites
             pass?.Free();
             player?.Free();
             ai?.Free();
+            stage?.Free();
+        }
+    }
+
+    // How many texels of one aircraft's mask move when only its blur discs turn. The aircraft is
+    // not touched between the two rasters, so the difference can have come from nothing else.
+    private static int Turned(GroundShadowPass pass, FlightController rig, float seconds)
+    {
+        if (pass.ShapeFor(rig) is not { } shape)
+            return -1;
+        int size = GroundShadowLaw.TextureSize;
+        var before = new bool[size * size];
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+                before[(y * size) + x] = shape.CoveredAt((x + 0.5f) / size, (y + 0.5f) / size);
+        }
+
+        rig.Props?.Advance(seconds, 1f);
+        pass.Tick();
+        int moved = 0;
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size; x++)
+            {
+                if (before[(y * size) + x] != shape.CoveredAt((x + 0.5f) / size, (y + 0.5f) / size))
+                    moved++;
+            }
+        }
+
+        return moved;
+    }
+
+    // What one aircraft's own pass costs, with the roster narrowed to it. A roster the pass has
+    // not seen before rebuilds its caster, which the cost reading's own warmups absorb.
+    private static void Alone(GroundShadowPass pass, List<FlightController> rigs,
+        FlightController? only, string who, StringBuilder report)
+    {
+        if (only == null)
+            return;
+        rigs.Clear();
+        rigs.Add(only);
+        Cost(pass, 1, who, report);
+    }
+
+    // The turning blur discs, which the original carries into its shadow by rasterising the live
+    // node tree every frame. The Hoplite's rotor is three blades of a disc, so its shadow turns
+    // with it; the fixed-wing propeller beside it is the control, a full circle about its own axis
+    // whose turn changes no outline at all.
+    private static void Turning(TestContext ctx, GameZ planesGamez, TextureArchive textures,
+        StringBuilder report)
+    {
+        Node3D? stage = null;
+        FlightController? rotor = null;
+        FlightController? propeller = null;
+        FlightController? parked = null;
+        GroundShadowPass? pass = null;
+        var players = new List<Vector3> { new(0f, LowAltitude, 0f) };
+        try
+        {
+            stage = EmptyStage.Build(collision: true).Root;
+            ctx.Host.AddChild(stage);
+            rotor = Rig(ctx, planesGamez, textures, human: false, new Vector3(0f, LowAltitude, 0f),
+                RotorPlane, spinning: true);
+            propeller = Rig(ctx, planesGamez, textures, human: false,
+                new Vector3(40f, LowAltitude, 0f), ctx.PlaneName, spinning: true);
+            parked = Rig(ctx, planesGamez, textures, human: false,
+                new Vector3(80f, LowAltitude, 0f), RotorPlane);
+            var rigs = new List<FlightController> { rotor, propeller };
+            pass = GroundShadowPass.Build(ctx.Host, () => rigs, () => players,
+                () => WeatherRig.DefaultSunlightRgb);
+            if (pass == null)
+                return;
+            pass.Tick();
+
+            var shape = pass.ShapeFor(rotor);
+            ctx.Check(shape != null, $"the Hoplite casts a shadow with a silhouette of its own");
+            if (shape is not { } rotorShape)
+                return;
+            report.AppendLine($"{RotorPlane}: {rotorShape.TurningCount} turning groups of the shape, {rotorShape.TriangleCount} triangles in all");
+            ctx.Check(rotorShape.TurningCount > 0,
+                $"its blur discs are held apart from the still airframe n={rotorShape.TurningCount}");
+
+            // Nothing turned, nothing moves: the raster itself is steady, so the reading below is
+            // the rotor and not the instrument.
+            ctx.Same(0, Turned(pass, rotor, 0f), $"a pass that turns nothing rebuilds the same mask");
+
+            int turned = Turned(pass, rotor, PropStep);
+            int still = pass.ShapeFor(propeller) != null ? Turned(pass, propeller, PropStep) : -1;
+            report.AppendLine($"after {PropStep:0.00} s of rotor: {turned} texels of the Hoplite's mask move, {still} of the fixed-wing propeller's");
+            ctx.Check(turned >= TurnedTexels,
+                $"the rotor's shadow turns with the rotor n={turned} texels against {TurnedTexels}");
+            ctx.Check(still >= 0 && still <= StillTexels,
+                $"and a full circular propeller disc moves no outline n={still} texels against {StillTexels}");
+
+            // One aircraft at a time, so each reading is that airframe's own: the same Hoplite
+            // with its discs turning and with the still disc the exterior build keeps.
+            Alone(pass, rigs, rotor, $"{RotorPlane}, blur discs turning", report);
+            Alone(pass, rigs, parked, $"{RotorPlane}, still disc", report);
+            Alone(pass, rigs, propeller, $"{ctx.PlaneName}, blur discs turning", report);
+        }
+        finally
+        {
+            pass?.Free();
+            rotor?.Free();
+            propeller?.Free();
+            parked?.Free();
             stage?.Free();
         }
     }

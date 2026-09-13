@@ -1274,9 +1274,11 @@ overload writes into a caller's buffer, for the per-frame raster.
 
 ## src/Flight/GroundShadowSilhouette.cs
 One caster's shape: the triangles of the node the original rasterises, taken once, and the 64x64
-coverage texture rebuilt from them each frame. Pose, flattening onto the ground and the footprint
-collapse into one affine map, so a vertex costs two dot products, and the fill is an incremental
-edge walk with its bounds hand-inlined, which is what holds a debug-build raster near a third of a
+coverage texture rebuilt from them each frame. The airframe's triangles are held still in the
+aircraft's frame; each propeller or rotor blur disc is its own group, re-posed from its live node so
+it turns in the shadow without re-reading the model. Pose, flattening and the footprint collapse
+into one affine map per group, so a vertex costs two dot products, and the fill is an incremental
+edge walk with its bounds hand-inlined, which holds a debug-build raster near a third of a
 millisecond per aircraft at that size. The mask is readable as data (`CoveredAt`), which is how the
 suites pin a shape no ellipse can satisfy. Decode: [../org/shadows.md](../org/shadows.md).
 
