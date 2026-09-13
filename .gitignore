@@ -36,6 +36,8 @@ CopyToOneDrive.ps1
 
 # Claude Code scratch/probe artifacts
 .scratch/
+# Scratch material kept across cleanups (CleanScratch.ps1 does not sweep it): prototype .blend files
+.scratchKeep/
 # Claude Code agent worktrees/workspaces — transient checkouts created by
 # `isolation: worktree` subagents. They are real git worktrees of THIS repo;
 # committing them would embed repos inside the repo. Added 2026-07-22 after
