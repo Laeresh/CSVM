@@ -199,31 +199,6 @@ draws its authored 800x600 space one-to-one.
   Dolly Out rather than stacking a third reading (`ActionMap.SameControl` ignores the deadzone on
   purpose): that is not a fault of these three numbers and must not be tuned against.
 
-### C1 · Instant Action, the mission end
-
-```powershell
-./RunGame.ps1
-```
-
-- `PT-145` `[Own]` **The 3 s the world keeps running between an Instant Action ending and the
-  wrap-up board, judged at the controls.** The length is decoded, not tuned: the original seeds
-  3.0 s of live world on the frame the goal is reached, and CSVM spends the same 3 s on both the
-  win and the last death, since the original holds nothing on a death and what it waits out there
-  is the crash animation (`docs/formats/instant-action/wrap-up.md`, "The hold after the ending").
-  From the menu, set up an Instant Action ace duel with 1 life and fly it twice, once shooting the
-  ace down and once flying into the ground. *Look for:*
-  - (a) on the win, the world carries on for about three seconds with the camera still tracking and
-    the kill's own wreck visible all the way down, and the board arrives after it rather than
-    cutting in on the kill;
-  - (b) on the death, the crash reads as a crash: the wreck falls, hits and burns before the board
-    takes the screen, instead of the screen changing at the moment of the hit;
-  - (c) through the hold the stick is dead and the aeroplane flies on as trimmed rather than
-    snapping level or dropping to idle, and the board's own Restart row answers the first press
-    after it appears (no swallowed press, no press left over from the hold firing it by itself).
-  *Blocks:* nothing; a verdict that three seconds is too long or too short on the death path is a
-  new item against the death case alone, since the win path's 3 s is what the original does. ⚠ The
-  campaign's own 2 s hold is a different number over a frozen world and is not what this judges.
-
 ### C1 · Bloodhawk, the overcast sky, ground to above the deck
 
 ```powershell

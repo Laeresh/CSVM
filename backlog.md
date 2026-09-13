@@ -467,7 +467,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   hit rule; do not build a hangar-only rule from it. If the data shows one pool on the hull, the
   voice line is flavour and this closes. A second report from the controls: three flak rockets
   on the hull killed it, which reads too easy if the hull takes hits at all and right if only
-  the hangar does, so the count is the same question and not a second item. *Cross-refs:*
+  the hangar does, so the count is the same question and not a second item. A third report from the
+  controls, the CM04 sortie behind `BL-910`: the Barracuda died to about six to eight flak hits on
+  the hull. *Cross-refs:*
   `CAP-57` (the original filmed taking three flak rockets on the hull).
 
 - `BL-561` `[Research]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: decoded]` **Aircraft projectile hit volumes are tuned convex decompositions, and the
@@ -668,6 +670,50 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   The original's own Hoplite special-plane template is 1/1, which says nothing about a stock fit.
   *Cross-refs:* `docs/formats/saved-games.md` ("A cell names a pylon only against the fit"),
   `CSVM/src/UI/Menu/HangarFeature.cs`.
+- `BL-910` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` **Allied AI on CM04
+  take the camp buildings at mission start and never leave them for the enemy aircraft; the
+  original's allies attack aircraft only.** Flown in the original: on CM04 the allies never attack
+  an engine or a building, they attack enemies, and several enemies go down without the player
+  firing. In CSVM the same sortie has every wingman and Devastator on `u_camp1..3` and two AA guns
+  for the whole mission. *Evidence:* the session log on the run branch: at the mission start the
+  three wingmen and both Devastators acquire `u_camp1..3` and `aagun30/32` at 0.85 to 1.3 km with
+  183 structures in the scan, while the nearest enemy aircraft stands at 4.9 km, beyond the 2000 m
+  activation range, so no aircraft ranks and the structures are admitted. `BL-866`'s aircraft-first
+  preference is consulted only at that first pick: `FlightController.DriveAiGunner` keeps a
+  standing target while it is alive and never re-ranks. *Fix shape:* three parts. (1) Decode which
+  structures reach an AI pilot's pool in the original (the `+0x8d` mission structure list in
+  `docs/org/aiPilot.md` "Target acquisition", against `AimCandidateSet.AddStructures` in
+  `CSVM/src/Flight/AimAssist.cs`, which admits every hostile destructible), and whether a
+  `wingman` scorer admits structures at all; match that admission. (2) Port the 20 s re-score as
+  decoded (`docs/org/aiPilot.md` "A standing target is sticky for 20 seconds"): the standing
+  target is re-scored once the hold runs out and kept while it still scores valid, replacing "keep
+  while alive". (3) Keep the aircraft-first preference and apply it at each re-score too, as
+  CSVM's own layer over the decode, so a wingman leaves a building the moment an enemy aircraft is
+  in reach even where the decode alone would hold it; say so in the code. *⚠ Traps:* the re-score
+  alone does not sweep the pool in the original, a camp that still scores valid is kept, so (2) by
+  itself would not have changed the CM04 sortie; the divergence is the first pick, which is (1).
+  `--ai-targeting=decoded` restores the original's arithmetic with no class priority and is the
+  control for (1). *Playtest after fix:* CM04 from the campaign, watch the wingmen through the
+  first two minutes: they turn onto the British aircraft as those arrive and never strafe the
+  camp. *Cross-refs:* `BL-866`'s closing commit (the preference and the picker), `BL-515` (the
+  Barracuda's flak count from the same sortie), `docs/org/aiPilot.md`, `docs/org/targeting.md`.
+- `BL-918` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **The original's
+  Non-Aircraft target cycle offers only the mission's curated entries and never a turret.**
+  Compared at the controls: in the original's CM01 the Non-Aircraft class selects the Pandora and
+  nothing else, in CM06 it selects a "[Destroy] Cargo Train" marker the player had not noticed,
+  and in neither mission can a turret be selected with it. *Evidence:* the user's comparison
+  sortie in the original; `BL-400` closed the list as the mission's own `targets.zrd`, which
+  agrees with the two observations, but whether CSVM admits anything beyond that list (a turret,
+  a destructible with an authored team) has not been checked mission by mission. *Fix shape:*
+  cycle Non-Aircraft in every campaign mission in CSVM and record the list per mission; any turret
+  or structure outside the mission's `targets.zrd` is a wrong admission, find the path that adds
+  it (`AimCandidateSet`, the turret pool, `TargetPool`) and close it. Where the lists agree the
+  item closes as an answer with the per-mission table in the commit. *⚠ Traps:* the AI pilot's own
+  acquisition (`BL-910`) admits turrets by design and shares candidate code with the player's
+  cycle; do not narrow the AI's pool while fixing the player's. *Cross-refs:* `BL-400`'s closing
+  commit, `BL-839`'s closing commit (the profile-less campaign launch binds the same table),
+  `docs/org/targeting.md`.
+
 
 ## Flight model & collision physics
 
@@ -699,6 +745,37 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   lost steps. The per-sim-step query objects those ray casts build are now reused rather than made
   fresh (`GodotWorldQuery`), so a re-measurement of the tick meets a different allocator than C22's.
   *Cross-refs:* `PLAN-M5-polish-6` C22, `docs/verification.md` PERF-1, PERF-20 and PERF-23.
+- `BL-914` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **An autogyro takes no
+  input from the mouse under mouse flying.** Reported at the controls after `BL-447` landed: with
+  Mouse set to Fly, the autogyro does not respond to the mouse at all and the mouse keeps driving
+  the head look. *Evidence:* `MouseFlight.Read` implements the decoded roll/yaw exchange but the
+  port reads two mouse axes and hard-codes the third to zero, so the exchange leaves the
+  autogyro's roll at zero; that explains a missing roll, not a missing yaw and pitch. A second
+  candidate: with mouse flying on, the right button is a free-look toggle
+  (`FlightController.StepFreeLookFlag`) and `MouseFlightRead` returns nothing while free look is
+  set, so one earlier tap leaves the mouse on the head for the rest of the sortie. Neither is
+  confirmed as the cause. *Fix shape:* find why the autogyro gets nothing (a headless probe that
+  logs the mouse deflection reaching `_model` per tick, on an autogyro and on a Fury), fix that,
+  and make the autogyro's mapping the decoded exchange with two axes: mouse left and right yaws,
+  up and down pitches, roll stays on the keys. *⚠ Traps:* `BL-915` changes the right button from a
+  toggle to a hold; land that first or together, since it removes the second candidate.
+  *Playtest after fix:* Instant Action in an autogyro with Mouse on Fly: the nose follows the
+  mouse in yaw and pitch from the first frame, no button pressed. *Cross-refs:* `BL-447`'s
+  closing commit (the exchange and its honest limit), `BL-915`, `BL-916`, `BL-917`,
+  `CSVM/src/Flight/MouseFlight.cs`.
+- `BL-916` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **The mouse pointer
+  stays visible and free while flying; it should be hidden and captured by the window.**
+  *Evidence:* nothing in flight sets `Input.MouseMode`; the only writers are the pause boards, the
+  preferences page and the spectator camera, so `FlightController.MouseLookDelta` reads a visible
+  OS cursor that walks off the window on a second monitor. *Fix shape:* capture and hide the mouse
+  when a flight session takes input (both Look and Fly schemes), release it on every board that
+  needs a pointer (pause, wrap-up, the Original UI dialogs) and re-capture on resume; the delta
+  read moves to relative motion under capture. *⚠ Traps:* the hidden test desktop and `--det`
+  runs must not depend on the mouse mode; guard the capture on a real display. *Playtest after
+  fix:* fly on a two-monitor rig, the pointer never appears and never leaves the game window;
+  pause shows it again. *Cross-refs:* `BL-447`'s closing commit, `BL-914`, `BL-915`,
+  `CSVM/src/Flight/FlightController.cs` (the mouse read).
+
 
 ## Environment & world
 
@@ -962,6 +1039,24 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the field never draws. ⚠ Not caused by the fade law, which is why this is its own item: the same
   two poses read 0 on the build before it. *Cross-refs:* `docs/formats/fogvol.md`,
   `docs/org/cloudCards.md`.
+- `BL-905` `[Fidelity]` `[M]` `[Next: decide]` `[Impact: high]` `[Evidence: feel]` **Aircraft read
+  too glossy under sunlight beside the original's screenshots.** *Evidence:* every aircraft
+  surface (skin, canopy, props, cockpit interior) takes one procedural shader from
+  `SceneBuilder.GetBiasShader`'s shaded branch with roughness 0.85, metallic 0.0, specular 0.5,
+  the same in Original and Enhanced mode; terrain deliberately sets specular 0.0 with a comment
+  that any sheen there is invented. No decode says how the original lights an aircraft (no
+  material specular power is recorded in `docs/org`), so the 0.5 is a remake default, not a
+  reading. *Fix shape:* a specular sweep on the viewer lab, the same plane at specular 0.5, 0.25,
+  0.1 and 0.0 at roughness 0.85 plus one at roughness 1.0, rendered beside an original screenshot
+  of that plane in sun, for the user to pick by eye; then a decode of the original's aircraft
+  material (the D3D material the plane draw sets, and whether it is lit with a specular term at
+  all) so the picked value has a reading behind it. *⚠ Traps:* do not settle it on a luminance
+  distance; the pick is the user's. Water's roughness and specular are `BL-804`'s and stay. The
+  change moves `viewer-bhawk`, `c1-flight-kill`, `c1-cockpit`, `c1-destroy-effects` and
+  `empty-stage`; re-pin them with the picked value only. *Cross-refs:*
+  `CSVM/src/Mech3/SceneBuilder.cs` (the shaded branch), `BL-804` (the water terms beside it),
+  `docs/org/textures.md` (`SHADEMODE`).
+
 
 ## Effects & animation runtime
 
@@ -1501,6 +1596,38 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-150` (its measured "level" rows are level only up to this angle),
   `docs/formats/camparam.md` (`thirdp_pitch`, and the Known limits paragraph this corrects),
   `docs/org/cameraViews.md` (head-look controller, the chase placement's own elevation).
+- `BL-906` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **The spyglass picture
+  jitters and shows the pilot's own aircraft; the original's disc shows neither.** *Evidence:*
+  `SpyglassView.Aim` copies the pane camera's cull mask verbatim, so nothing keeps the own mesh
+  out of the disc; the user knows from the original that parts of the player's plane are not
+  drawn in it. The jitter: `TargetHud.StepSpyglass` runs in `_Process`, but the eye it hands
+  `Spyglass.Pose` is the raw last physics pose (`FlightController.BuildHudState` and `Attitude`
+  read `_model`), while the chase camera and the plane's visual follow the interpolated
+  `_renderPose`; the target point is already interpolated through `TryRenderPosition`, so the disc
+  frames a smooth target from a tick-quantised eye, the same shake `TryRenderPosition` was written
+  to remove from markers. *Fix shape:* feed the interpolated render pose (origin and basis) into
+  the spyglass eye; give the pilot's own aircraft mesh a render layer the spyglass camera masks
+  out (per pane in splitscreen, the layer band `SplitScreen.PlayerCullMask` reserves is the
+  place). *⚠ Traps:* `docs/org/spyglass.md` says the camera stands at the plane's own position
+  and does not mention own-mesh culling either way; the exclusion rests on the user's recall, say
+  so in the code. `c1-stunt-marker` pins the disc's layout and should not move. *Playtest after
+  fix:* Instant Action, select a target and hold a turn: the disc holds steady and no wing or tail
+  of the own plane crosses it. *Cross-refs:* `CSVM/src/Flight/SpyglassView.cs`,
+  `CSVM/src/Flight/TargetHud.cs`, `FlightController.TryRenderPosition`, `docs/org/spyglass.md`.
+- `BL-915` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Mouse look snaps back
+  to centre the moment the mouse stops moving, with the right button still held.** *Evidence:*
+  `FlightController.MouseLookDelta` returns a direction only on frames where the cursor moved, and
+  `HeadLook.Step` reads "no free-look input" as the idle case and chases the centre, so a held but
+  stationary mouse is indistinguishable from a released button. Under mouse flying the right
+  button is a toggle rather than a hold (`StepFreeLookFlag`), which is the other half of the
+  complaint. *Fix shape:* the head-look input carries a "looking" flag set while the right button
+  is held, independent of this frame's motion; while it is set and the mouse is still the head
+  holds its pose, and the return to centre starts on release. The right button becomes hold-to-look
+  under both mouse schemes. *⚠ Traps:* the pad's aim stick and the centre key keep their arms
+  above the free-look arm in `HeadLook.Step`. *Playtest after fix:* hold the right button, look
+  over a shoulder, stop moving the mouse: the view stays; release: it returns. *Cross-refs:*
+  `CSVM/src/Flight/HeadLook.cs`, `BL-447`'s closing commit, `BL-914`, `BL-916`.
+
 
 ## HUD & UI
 
@@ -1721,6 +1848,73 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   set is this port's own and its look is the user's call at the controls, not a luminance distance.
   *Cross-refs:* `CSVM/src/Flight/PromptLine.cs`, `CSVM/src/Bindings/BindingLabels.cs`,
   `docs/controls.md`.
+- `BL-907` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Instant Action's
+  kill line names the pilot with the last used campaign profile's name, as the original's does;
+  CSVM prints "Wingman was shot down" for the player's own death.** *Evidence:* tested in the
+  original with two profiles: an Instant Action sortie carries the last used profile's name and
+  the line on the player's death reads "<name> was shot down". In CSVM `GameSession` hands
+  `HudMessages.PostKill` `_campaign?.PilotName`, null outside a campaign, so the named arm fails
+  and the team arm prints the wingman line (`HudMessages.KillLine`, the fall-through
+  `HudKillLineSuites` pins). *Fix shape:* an Instant Action session reads the pilot name from the
+  profile store's last used profile, the same field the campaign feeds the kill line, and passes
+  it to `PostKill`; with no profile on disk the fall-through stays. *⚠ Traps:* the decode's
+  "PlayerName is only set by a campaign profile" reading described the setter, not its lifetime;
+  the global survives the campaign screen, do not re-litigate it. Keep the suite's unset case.
+  *Playtest after fix:* Instant Action after a campaign session, get shot down: the line carries
+  the profile's name. *Cross-refs:* `CSVM/src/Flight/HudMessages.cs`,
+  `CSVM/src/Session/CampaignDirector.cs` (the name's comment), `docs/org/vehicleDamage.md`.
+- `BL-908` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: data]` **The Original UI
+  ends an Instant Action on the `IA_WRAPUP` notepad page, not on the in-flight board.** After the
+  3 s hold the original leaves the world for the menu shell's wrap-up page: the Air Spicy Tales
+  magazine art, a notepad titled with the mission name, the four decoded rows and a Continue
+  button (`Z:\CSVM\OriginalScreenshots\Instant Action End Screen Stunt Flight.png` and
+  `... End Screen Fail.png`). CSVM draws the four rows as `IaWrapupBoard` over the world in both
+  presentations. *Evidence:* `docs/formats/instant-action/wrap-up.md` (the `LAYOUT.CSV` panes and
+  the four value texts), the two stills. *Fix shape:* in the Original UI the ending goes from the
+  hold to a shell page built from `LAYOUT.CSV`'s `IAWU_*` rows, in the shape of the other Original
+  screen modules; it carries the built-in board's extra lines (the complete or failed title, the
+  context line and the stunt splits) as further lines on the same pad, and Continue returns to the
+  Instant Action screen. The built-in UI keeps its board. *⚠ Traps:* the four values are the
+  frozen snapshot `InstantActionRuntime.MissionEnded` takes, never re-read live. *Playtest after
+  fix:* Original UI, fly an Instant Action to its end: the notepad page, then Continue back to the
+  screen. *Cross-refs:* `CSVM/src/Flight/IaWrapupBoard.cs`,
+  `CSVM/src/UI/Menu/Original/OriginalInstantActionScreen.cs`, `BL-892`'s closing commit,
+  `BL-911`.
+- `BL-912` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **At 4:3 the HUD gauge
+  columns sit too far in from the screen edges.** *Evidence:* `HudMetrics.ReadingBox` is the whole
+  pane at or under 16:9, and `GaugeCluster` places each dial at a fixed pixel offset from the box
+  edges scaled by height only, so a 4:3 frame, narrower at the same height, gives the same offset a
+  larger share of the width and the columns read as pulled inward. `OriginalScreenshots` holds no
+  4:3 reference (the captures run through dgVoodoo at 16:9). *Fix shape:* at 4:3 place both
+  columns at a minimal offset from the left and right borders, no measurement owed; wider panes
+  keep their placement. *⚠ Traps:* the 16:9 goldens must not move; add a 4:3 shot if the
+  placement gets a golden. *Playtest after fix:* 1024x768, the gauges hug the borders.
+  *Cross-refs:* `CSVM/src/Flight/GaugeCluster.cs`, `CSVM/src/Flight/HudMetrics.cs`, `BL-913`.
+- `BL-913` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **The resolution
+  picker offers one 4:3 size and snaps a hand-written size back to its list.** *Evidence:*
+  `ResolutionSetting.Standard` carries 1024x768 as the only 4:3 entry, filtered by what the screen
+  holds; `options.json` stores the size as a width-by-height word. *Fix shape:* add 800x600,
+  1280x960 and 1600x1200 to the table, and let a size written by hand into `options.json` survive
+  as its own entry in the picker (shown where it sorts, kept on save) instead of being replaced by
+  the nearest listed one. No custom-size dialog. *⚠ Traps:* the display mode decides what the
+  saved size means (`BL-896`'s closing commit); a custom size follows the same rule.
+  *Cross-refs:* `CSVM/src/Utils/ResolutionSetting.cs`, `BL-896`'s closing commit, `BL-912`.
+- `BL-917` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **The Mouse switch on
+  the Original Controls page draws misaligned against its neighbours.** *Evidence:* the row takes
+  its position from the mouse widget's own layout entry but its size from the Controller Type box
+  (the Original options screen builds it with `ControlsPlayerBox(screen)`'s width and height), so where the
+  original's Mouse Sensitivity slot differs in size the row sits off its neighbours. *Fix shape:*
+  size the row from its own layout entry. *Cross-refs:*
+  `CSVM/src/UI/Menu/Original/OriginalOptionsScreen.cs` (the controls page), `BL-447`'s closing commit, `BL-914`.
+- `BL-919` `[Fidelity]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: feel]` **The Ammo
+  Selection screen offers a rocket row for a pylon the build never bought; the original hides
+  it.** *Evidence:* the rows come from the airframe's stock fit, and since `BL-841` a pick on an
+  unbought pylon's row is dropped silently rather than the row greyed or hidden. The user recalls
+  the original hiding such a row; not decoded. *Fix shape:* decode what the original's screen does
+  with an unbought pylon's row (`docs/formats/campaign-screens.md`'s ammo screen, the row's
+  visibility against the build's fit), expected hidden, and do the same. *Cross-refs:* `BL-841`'s
+  closing commit, `CSVM/src/UI/Menu/HangarFeature.cs`, `docs/formats/saved-games.md`.
+
 
 ## Splitscreen
 
@@ -2100,6 +2294,39 @@ usual.
   from the store's history) or accepting the loss; the converter is one reader plus the existing
   v3 writer. *⚠ Traps:* not a path fault, and a worktree shares the main checkout's `user://`.
   *Cross-refs:* `BL-662` (the v3 store), `BL-675`'s closing commit.
+- `BL-909` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **The frames between
+  the load screen and the cutscene or the flight show the world assembling and the chase view;
+  the original cuts straight in and fades up from dark.** *Evidence:* `Launcher.RunOwedLaunch`
+  tears the load screen down in the tick the build returns and the next rendered frame is the
+  world, with no overlay bridging the two; the first frames show the world still building and the
+  player plane in the chase view before the cutscene takes over. In the original the load screen
+  goes directly into the cutscene's first frame (or the Instant Action flight) with a short fade
+  from dark, not black. No fade exists at any session start (the only fades are the campaign's
+  mission-end blackout and the cutscene's leaving fade). *Fix shape:* keep an opaque cover up
+  until the session's first real frame is ready (the cutscene camera bound, or the plane placed
+  and the HUD live), then fade that cover up from dark over about 1 s, in the shape of
+  `MissionEndFade`; every session start, cutscene or not. *⚠ Traps:* the cover must not delay the
+  `--det` frame count or move the goldens (`--frames=N` counts from the first world frame); gate
+  it off under `--det`, and say so. *Playtest after fix:* start a campaign mission and an Instant
+  Action: no assembling frame, no chase view before the cutscene, a fade up from dark.
+  *Cross-refs:* `CSVM/src/Session/Launcher.cs`, `CSVM/src/UI/MissionEndFade.cs`,
+  `CSVM/src/Session/CutsceneController.cs`, `BL-812`'s closing commit (the load screen's own
+  motion).
+- `BL-911` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **During the 3 s after
+  an Instant Action win the stick is live in the original; CSVM holds the controls.** Flown in the
+  original: the player keeps flying through the hold. *Evidence:* `BL-892` landed the hold with
+  `FlightController.ControlsHeld`, which synthesises a throttle-only input and swallows every
+  discrete command, filed as the change's one judgement with the evidence owed as `PT-145`, which
+  this verdict settles. *Fix shape:* through the win's hold the stick and throttle read the real
+  input; fire, selectors and respawn stay swallowed; a crash inside the hold does not turn the win
+  into a loss (the result is frozen at the ending, the wreck falls, the board still reports the
+  win). The death path keeps its hold as it is. *⚠ Traps:* the board's Restart row must still
+  answer the first press after it appears, no press left over from the hold. *Playtest after
+  fix:* Instant Action ace duel with 1 life, win it and roll during the 3 s, then win again and
+  fly into the ground during the 3 s: the board reports the win both times. *Cross-refs:*
+  `BL-892`'s closing commit, `CSVM/src/Session/InstantActionDirector.cs`,
+  `docs/formats/instant-action/wrap-up.md` ("The hold after the ending"), `BL-908`.
+
 
 
 ## Tooling, platform & docs
