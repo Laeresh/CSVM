@@ -10,9 +10,9 @@ namespace CSVM.UI;
 /// elements, crops a sheet to its authored window, and places an icon by world position through
 /// that window.
 ///
-/// <para>The original reaches all of this through one control class from two dialog constructors
+/// The original reaches all of this through one control class from two dialog constructors
 /// (docs/org/pause-screen.md), so there is one drawer here rather than one per screen. Engine-free,
-/// like everything else a composed board is made of.</para>
+/// like everything else a composed board is made of.
 /// </summary>
 public static class MissionMap
 {

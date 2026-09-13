@@ -134,7 +134,7 @@ internal static class MenuLaunchReturnSuites
 
     // The switch as the launcher performs it, with the background read at every step: ShowMenu
     // blacks and shows, the apply exit arrives at the end of one frame, and ApplyOptions runs at
-    // the top of the next, which is the frame that used to draw the procedural sky.
+    // the top of the next, which is the one frame that could show the procedural sky.
     private static void Switch(TestContext ctx, Run run, Godot.Environment env, Godot.Sky? sky)
     {
         var host = run.Host;

@@ -9,9 +9,9 @@ namespace CSVM.UI;
 /// <summary>
 /// The cabin hub (<c>Campaign Cabin.png</c>, <c>PASSENGERCABIN.SCRIPT</c>): NEXT MISSION,
 /// PREVIOUS MISSIONS, PLANE CONSTRUCTION, RETURN TO MAIN MENU and CHANGE MEMENTO. SAVE GAME is the
-/// button the original creates and deactivates, and is never drawn. <c>CAP-44</c> settled the
-/// ambience question at the controls: the screen has no idle behaviour, only background music over
-/// static art, so this page draws once and does nothing between presses.
+/// button the original creates and deactivates, and is never drawn. Judged at the controls, the
+/// screen has no idle behaviour, only background music over static art, so this page draws once
+/// and does nothing between presses.
 /// </summary>
 public sealed class CampaignCabinPage : CampaignPage
 {

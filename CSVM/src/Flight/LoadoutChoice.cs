@@ -30,10 +30,10 @@ public sealed class LoadoutOptions
 /// base it was not built against, a custom plane's saved fit as much as a stock one, with a
 /// pick for a slot the base lacks simply dropped.
 ///
-/// <para>Ordnance rides two keyings: a physical pylon (<see cref="SetPylon"/>), and a saved
-/// record's wing cell (<see cref="SetWingCell"/>), which names a pylon only against a fit.</para>
-/// <para>A null entry means "as the base authored it", which is what makes reset-to-stock a clear
-/// rather than a rebuild. <see cref="None"/> is a different thing: an explicit empty mount.</para>
+/// Ordnance rides two keyings: a physical pylon (<see cref="SetPylon"/>), and a saved
+/// record's wing cell (<see cref="SetWingCell"/>), which names a pylon only against a fit.
+/// A null entry means "as the base authored it", which is what makes reset-to-stock a clear
+/// rather than a rebuild. <see cref="None"/> is a different thing: an explicit empty mount.
 /// </summary>
 public sealed class LoadoutChoice
 {

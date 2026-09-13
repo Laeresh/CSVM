@@ -129,8 +129,8 @@ public sealed record PauseReadout(
 /// profile's memento and the four button strips. Composed the way the load and briefing screens
 /// are, through <see cref="ComposedBoard"/>, and sharing <see cref="MissionMap"/> with both.
 ///
-/// <para>An Instant Action sortie pauses on the same screen over a dialog that carries none of
-/// that: the load screen's blackboard, its three photographs, its four texts and the strips.</para>
+/// An Instant Action sortie pauses on the same screen over a dialog that carries none of
+/// that: the load screen's blackboard, its three photographs, its four texts and the strips.
 /// </summary>
 public static class PauseScreens
 {

@@ -1883,8 +1883,8 @@ public partial class Launcher : Node3D
     }
 
     // The boards' Exit item, the pause sheet's among them: back to the screen this flight was
-    // launched from when the process launched into the menu, out of the game otherwise. The
-    // routing Esc used to do, now reachable from a pad. Every way a session ends without a result
+    // launched from when the process launched into the menu, out of the game otherwise, and
+    // reachable from a pad as much as from Esc. Every way a session ends without a result
     // (the sheet, the wrap-up board, the scoreboard) arrives here, so one destination serves them.
     private void ExitSession()
     {

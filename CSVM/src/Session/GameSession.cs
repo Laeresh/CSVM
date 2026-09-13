@@ -3901,9 +3901,9 @@ public partial class GameSession : Node3D
             MenuInputFor(rig.Index).Prime();
     }
 
-    /// <summary>PREFERENCES on either pause board: the sheet steps aside and the options leaf stands
-    /// over the held world in its place. The halt is never dropped, so the mission stays the still
-    /// frame the pause made of it, and every rig's pause key goes silent for the duration.</summary>
+    // PREFERENCES on either pause board: the sheet steps aside and the options leaf stands over the
+    // held world in its place. The halt is never dropped, so the mission stays the still frame the
+    // pause made of it, and every rig's pause key goes silent for the duration.
     private void OpenPauseOptions(int owner)
     {
         if (_pauseOptions is not { Visible: false } leaf || _pauseBoard == null)
@@ -3930,9 +3930,8 @@ public partial class GameSession : Node3D
         leaf.Open(pollers, owner);
     }
 
-    /// <summary>The leaf's own door out, by RETURN TO MAIN MENU, Back or an accepted page: the sheet
-    /// comes back over the world it never resumed, with its pointer and every board reader
-    /// re-primed.</summary>
+    // The leaf's own door out, by RETURN TO MAIN MENU, Back or an accepted page: the sheet comes
+    // back over the world it never resumed, with its pointer and every board reader re-primed.
     private void ClosePauseOptions()
     {
         if (_pauseBoard == null)

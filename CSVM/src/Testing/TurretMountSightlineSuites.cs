@@ -12,7 +12,7 @@ namespace CSVM.Testing;
 /// A ground emplacement's sight line against its own rig and against a stranger's, for a site
 /// standing on the world root and for one hanging off a grouping node, on bodies this suite builds
 /// and stamps into the physics space itself, so the verdict does not depend on what a chapter
-/// world's colliders happen to be doing inside one harness frame (BL-831).
+/// world's colliders happen to be doing inside one harness frame.
 /// </summary>
 internal static class TurretMountSightlineSuites
 {

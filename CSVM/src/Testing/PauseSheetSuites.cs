@@ -14,7 +14,7 @@ namespace CSVM.Testing;
 /// Decode: docs/org/pause-screen.md.</summary>
 internal static class PauseSheetSuites
 {
-    // The filmed mission, whose composition the four CAP-45 stills pin exactly.
+    // The filmed mission, whose composition the four pause-screen stills pin exactly.
     private const string FilmedChapter = "C3";
     private const string FilmedMission = "M01";
 
@@ -434,7 +434,7 @@ internal static class PauseSheetSuites
         }
     }
 
-    // BL-883's hit test over this dialog's own strips: the pointer moves the shared cursor onto each
+    // The hit test over this dialog's own strips: the pointer moves the shared cursor onto each
     // of the four in turn, and a press released on PREFERENCES fires that strip and leaves the sheet
     // standing, which is the one action of the four that does.
     private static void WalkStrips(
