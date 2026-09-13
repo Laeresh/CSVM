@@ -203,7 +203,7 @@ public sealed record SessionSpec
     public string ModeName =>
         Mode == SessionMode.AnimLab ? "anim-lab"
         : DamageTest || EffectsTest || WeaponTest || RunTests ? "test"
-        : DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid ? "dump"
+        : DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid || DumpDebris ? "dump"
         : MovieName != null ? "movie"
         : Mode == SessionMode.Freecam ? "freecam"
         : Mode == SessionMode.Viewer ? "viewer"
@@ -218,7 +218,7 @@ public sealed record SessionSpec
     /// <c>--dump-flight</c> run turns the bundle on yet still asks for focus.</summary>
     public bool IsScripted =>
         NoFocus || ScreenshotPath != null || ExportGltfPath != null || RunTests
-        || DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid
+        || DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid || DumpDebris
         || DamageTest || EffectsTest || WeaponTest;
 
     /// <summary><b>Resolved.</b> The chapter world is built instead of a single parked plane.</summary>
@@ -491,6 +491,7 @@ public sealed record SessionSpec
         : DumpMips ? "--dump-mips"
         : DumpAi ? "--dump-ai"
         : DumpTileGrid ? "--dump-tilegrid"
+        : DumpDebris ? "--dump-debris"
         : DamageTest ? "--damage-test"
         : EffectsTest ? "--effects-test"
         : WeaponTest ? "--weapon-test"
@@ -613,6 +614,16 @@ public sealed record SessionSpec
     /// <summary>Where <c>--dump-tilegrid=</c> writes; empty means <c>./.scratch/</c> under a
     /// per-chapter name.</summary>
     public string DumpTileGridPath { get; private set; } = "";
+
+    /// <summary><c>--dump-debris=&lt;name&gt;</c>: build the chapter world, kill every destructible
+    /// the name matches, and report what shades each mesh under it, the model's <c>lighting</c>
+    /// flag, its sheets and their mean texel, the baked vertex colours, and the colour the
+    /// fullbright world shader lands on, marking which nodes flew. Needs a <c>--chapter</c>.</summary>
+    public bool DumpDebris { get; private set; }
+
+    /// <summary>Which destructible <c>--dump-debris=</c> kills, matched exactly as
+    /// <c>--destroy=</c> matches (def, animation or anchor <c>cs_name</c> substring).</summary>
+    public string DumpDebrisName { get; private set; } = "";
     public bool DamageTest { get; private set; }
     public string DamageTestFilter { get; private set; } = "";
     public float DamageHd { get; private set; }
@@ -1246,6 +1257,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--dump-mips=")) { s.DumpMips = true; s.DumpMipsFilter = arg["--dump-mips=".Length..]; }
             else if (arg == "--dump-ai") { s.DumpAi = true; }
             else if (arg.StartsWith("--dump-ai=")) { s.DumpAi = true; s.DumpAiChapter = arg["--dump-ai=".Length..]; }
+            else if (arg.StartsWith("--dump-debris=")) { s.DumpDebris = true; s.DumpDebrisName = arg["--dump-debris=".Length..]; s.HasContentArg = true; }
             else if (arg == "--dump-tilegrid") { s.DumpTileGrid = true; s.HasContentArg = true; }
             else if (arg.StartsWith("--dump-tilegrid=")) { s.DumpTileGrid = true; s.DumpTileGridPath = arg["--dump-tilegrid=".Length..]; s.HasContentArg = true; }
             else if (arg.StartsWith("--tex-override=")) { texOverrides.Add(arg["--tex-override=".Length..]); }
@@ -1651,7 +1663,7 @@ public sealed record SessionSpec
         // --dump-tilegrid votes freecam for one reason: the map-edge extender is only built in the
         // freecam/fly/sky-zone arm, and the census is a report ABOUT that extender. A dump that
         // resolved to the viewer would build a world with no continuation and report nothing.
-        bool freecam = _freecamArg || DamageTest || EffectsTest || DumpTileGrid;
+        bool freecam = _freecamArg || DamageTest || EffectsTest || DumpTileGrid || DumpDebris;
         bool animLab = _animLabArg || PlayAnim != null || DebugAnimUi;
 
         // --vs and --stunt are both flight modifiers, but not composable, one match mode has to

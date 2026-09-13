@@ -614,6 +614,11 @@ public partial class GameSession : Node3D
             LoadProgress.Report(LoadStep.PlayerRigs);
             ApplyDestroyOverride(state);
             ApplyObjectiveOverride(state);
+            if (!ApplyDebrisShadingDump(state))
+            {
+                return false;
+            }
+
             LogBuildSummary(state, sw);
         }
         catch (Exception e)
@@ -3264,6 +3269,37 @@ public partial class GameSession : Node3D
         {
             Log.Info("world", $"--destroy='{_spec.DestroyName}' ignored: no chapter world (pair it with --freecam/--fly + --chapter=)");
         }
+    }
+
+    // --dump-debris=<name>: kill the named destructibles, then report what shades every mesh under
+    // them and which of those the death flung. Runs after the build so the pieces read the same
+    // materials a screenshot draws, and ends the session, nothing is rendered.
+    // Returns false when the session is over.
+    private bool ApplyDebrisShadingDump(BuildState state)
+    {
+        if (!_spec.DumpDebris)
+        {
+            return true;
+        }
+
+        if (state.WorldRuntime == null || state.WorldScene == null)
+        {
+            Log.Error("world", $"--dump-debris='{_spec.DumpDebrisName}': no chapter world (pair it with --chapter=)");
+            GetTree().Quit(1);
+            return false;
+        }
+
+        _worldEffectsFactory.EnsureWorldEffects(state.Gamez, state.WorldScene, state.Textures, state.CrashProgram!, state.WorldRuntime);
+        // The scalar as the rig applied it, not recomputed here, so the report cannot disagree with
+        // what the same frame would draw. 1 when no rig ran, which is what an unwritten global is.
+        float worldLight = _weatherRig?.WorldLightLinear ?? 1f;
+        var report = Testing.Probes.DebrisShading(state.WorldRuntime, state.Gamez, state.Textures,
+            _spec.Chapter, _spec.DumpDebrisName, worldLight);
+        Log.Raw(report.Text);
+        _probeRunner.WriteScratch($"debris_shading_{_spec.Chapter}.txt", report.Text);
+        Log.Info("world", $"--dump-debris: {report.Summary}");
+        GetTree().Quit(report.Ok ? 0 : 1);
+        return false;
     }
 
     // The "loaded ..." summary line and the per-pane/texture-census follow-ups, printed once the

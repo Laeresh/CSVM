@@ -412,6 +412,15 @@ member, and it does not go here.
   left the collider at 147 faces and laid the bowl under ground that was still solid. Subtracting
   the region from each face and re-emitting the remainder is what makes the hole the carve's own
   size; the same subtraction serves the skin and the trimesh.
+- **WORLD-47**, **A dark world surface is usually authored dark, so read the mesh's own baked vertex
+  colour and its sheet's mean texel before suspecting a light.** The fullbright world draws vertex
+  colour times texel times `csky_world_light`, and all three are data. C1's refuel-tank debris reads
+  near-black because its pieces carry vertex colour 119 where the rest of the same object carries
+  254, on a sheet whose mean texel is (63, 61, 64); at C1's 0.802 that is 0.375 of the sheet, which
+  is the whole of the "37 % of its own colour" a texture census had measured. A census over textures
+  cannot name the sheet a surface uses, because several sit inside its chromaticity tolerance; the
+  mesh's own material names it outright, and `--dump-debris=<name>` prints both halves of the
+  product per mesh under a destructible.
 
 ## SHELL, Windows, PowerShell, and processes
 

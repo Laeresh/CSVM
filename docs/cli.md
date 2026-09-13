@@ -49,7 +49,7 @@ exactly how `PROJECT_CONTEXT.md`'s day-to-day table drifted from this page. One 
 `--debug-livery` · `--debug-mesh` · `--debug-select` · `--debug-nodelab` · `--debug-damage` · `--debug-names` · `--debug-fps` · `--debug-join` · `--debug-waves` · `--debug-wingmen` · `--debug-preset` · `--debug-pointer` · `--debug-scoreboard` · `--debug-wash` · `--debug-anim-ui` · `--debug-collision` · `--debug-dzpaths` · `--debug-ainets` · `--debug-targets` · `--debug-markers` · `--debug-spectate` · `--debug-pause` · `--debug-objective` · `--collision` · `--debug-colliders` · `--debug-classoverlay` · `--debug-tilegrid` · `--debug-clutterflag` · `--markers`
 
 **Dumps and the test harness, report text plus a verdict, then quit**
-`--dump-markers` · `--dump-weapons` · `--dump-loadout` · `--dump-flight` · `--dump-config` · `--dump-mips` · `--dump-ai` · `--dump-tilegrid` · `--run-tests` · `--damage-test` · `--effects-test` · `--hud-font-test`
+`--dump-markers` · `--dump-weapons` · `--dump-loadout` · `--dump-flight` · `--dump-config` · `--dump-mips` · `--dump-ai` · `--dump-tilegrid` · `--dump-debris` · `--run-tests` · `--damage-test` · `--effects-test` · `--hud-font-test`
 
 **Logging and profiling**
 `--log` · `--perf` · `--debug-anim` · `--anim-lod` · `--hitch-inject`
@@ -121,6 +121,13 @@ lines**.
   cell and its surface class, plus a per-cell roll-up carrying `coverX`/`coverZ` and a `suspect`
   flag for a border cell short of ground. Implies `--freecam`, where the extender it reports on is
   built)
+- `--dump-debris=<name>` (kill every destructible `<name>` matches the way `--destroy=` does and
+  report **what shades each mesh under them**: the model's `lighting`/`fog`, per material the
+  sheet and its mean texel, the area-weighted mean baked vertex colour, and the sRGB the fullbright
+  world shader lands on. Rows carry surface counts, visibility across the kill, and `FLEW` when a
+  ballistic motion drove it, so a flung piece is read against the intact mesh beside it. Text to
+  `./.scratch/debris_shading_<chapter>.txt`; needs `--chapter`, implies `--freecam` + `--det`.
+  See WORLD-47)
 - `--map-edge-block=N` (how many border cells deep the repeated block past the map edge is.
   **Default is per chapter** (`MapEdgeExtender.DefaultBlockCells`): **2** on C1/C2/C4, **1** on C5
   and on C1B/C1C/C2B/C3, whose borders carry only water tiles, which fixes them at 1 and makes the

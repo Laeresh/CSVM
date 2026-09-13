@@ -511,25 +511,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   reference to compare against; `CAP-47` is that clip.
   *Cross-refs:* `BL-640` (the same zeppelin's cannons); the other prerequisite form, node state, is
   parsed on both paths and enforced at `Start` (`git log --grep=BL-575`).
-- `BL-873` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: trace]` **C1's refuel-tank debris draws near-black and reads as a
-  hole punched through the flame.** *Evidence:* `--freecam --chapter=C1 --destroy=refuel
-  --frames=120` and `=240` put faceted shards over the left tank's fire column, each a flat dark
-  grey to black polygon set with straight edges and a notch, moving and re-orienting between the two
-  frames, so they are launched debris rather than the tank's own swapped mesh. They are opaque
-  geometry in front of a bright particle plume, so the DRAW is right and the shade is what is wrong:
-  at that brightness the shard subtracts the flame behind it instead of being lit by it. A texture
-  census cannot name the sheet, four candidates (`frieght_tr01`, `exp_yel01`, `zep_cable01`,
-  `damage2`) sitting inside the chromaticity tolerance at a third of the reference brightness, which
-  is itself the finding: whatever it is, it draws at about 37 % of its own colour. *Fix shape:* find
-  what lights a debris piece launched by a `DAMAGE_SEQUENCE` death (the debris path through
-  `AnimRuntime` and `WorldEffectsFactory`) and compare it against the same mesh before the kill; the
-  candidates are a lost vertex-colour pass, an ambient that never reaches world debris (`BL-683` is
-  the aircraft-side version of that), or a genuinely dark authored sheet drawn unlit. *⚠ Traps:* do
-  not chase this as a transparency-ordering question. The particle depth sort is landed and does not
-  touch these: the shards keep their exact pixels across it, and they are hard-edged opaque facets
-  rather than sprites. Judge it against footage of a tank kill in the original before changing a
-  light, since a dark shard may be what the original draws. *Cross-refs:* the crops in the
-  particle-order closing commit (`git log -S BehindEyeSortDepth`); `BL-683`.
 
 ## Weapons & combat
 
@@ -2120,7 +2101,7 @@ usual.
   position; `Pads.LogPads` records the roster so the next one reads off the log rather than being
   inferred. Dropping the var also closes that divergence.
 
-- `BL-843` `[Cleanup]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Three `GD.Print` calls remain under `CSVM/src`, all in the effects files another item is holding open.** *Evidence:* `Effects/Precipitation.cs:227` (the `precipitation:` line, which a headless C4/M03 probe prints as `fall 5,0 m/s ... alpha 0,50` on a German machine), and `Session/WorldEffectsFactory.cs:529` and `:820` (`world-effects runtime:` and `data-crash:`). All three reach stdout and neither the file sink nor the `--log=` filter, so the same probe's sink log is missing them while every other session line is in it. `Utils/Log.cs`'s own four calls are the console tier the rest of the tree logs through and stay. *Fix shape:* the conversion the rest of `CSVM/src` took, `Log.Info` under the file's category (the shipped console threshold, so nothing leaves stdout), one interpolated string per call since `Log` takes a `FormattableString`, and each pre-built piece rechecked for culture. *⚠ Traps:* `BL-873` is editing the debris and effects files, so this waits for that item or moves inside it; a unit test that reaches a `GD.Print` kills the xUnit host outright; a pre-formatted summary string keeps its culture (`docs/verification.md` LOG-23). *Cross-refs:* `BL-873`, PLAN-code-review-orch A3 (the before/after log diff method).
+- `BL-843` `[Cleanup]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Three `GD.Print` calls remain under `CSVM/src`, all in the effects files another item is holding open.** *Evidence:* `Effects/Precipitation.cs:227` (the `precipitation:` line, which a headless C4/M03 probe prints as `fall 5,0 m/s ... alpha 0,50` on a German machine), and `Session/WorldEffectsFactory.cs:529` and `:820` (`world-effects runtime:` and `data-crash:`). All three reach stdout and neither the file sink nor the `--log=` filter, so the same probe's sink log is missing them while every other session line is in it. `Utils/Log.cs`'s own four calls are the console tier the rest of the tree logs through and stay. *Fix shape:* the conversion the rest of `CSVM/src` took, `Log.Info` under the file's category (the shipped console threshold, so nothing leaves stdout), one interpolated string per call since `Log` takes a `FormattableString`, and each pre-built piece rechecked for culture. *⚠ Traps:* a unit test that reaches a `GD.Print` kills the xUnit host outright; a pre-formatted summary string keeps its culture (`docs/verification.md` LOG-23). *Cross-refs:* PLAN-code-review-orch A3 (the before/after log diff method).
 
 - `BL-844` `[Cleanup]` `[S]` `[Next: decide]` `[Impact: none]` `[Evidence: trace]` **654 em dashes remain inside string literals under `CSVM/src` and `CSVM.Tests`: log messages, CLI notes and HUD text.** *Evidence:* the repo-wide sweep rewrote comments and docs and skipped literals, since suites match log lines and a HUD string is a display choice (`VersusHud` draws the glyph for a tie). The writing rule speaks of prose; whether a log message is prose is the decision. *Fix shape:* if yes, a second pass over literals only, with every suite that matches a rewritten line moved in the same change and the goldens re-pinned where a HUD string changes; if no, record the exemption on the writing rule. *Cross-refs:* PLAN-code-review-orch A7.
 

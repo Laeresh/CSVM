@@ -17,13 +17,13 @@ instead; read `TestHarness.cs` for that half.
 
 ## src/Testing/Probes.cs
 The assertion cores behind the `--dump-markers` / `--dump-weapons` / `--dump-loadout` /
-`--dump-flight` / `--dump-mips` / `--damage-test` / `--effects-test` inspection reports. Each probe
-does the work once and returns both halves: the report text a flag prints and writes, and the
-structured verdict (counts, per-row booleans, failure strings) a `--run-tests` suite asserts on, so
-a dump and the suite reading it cannot disagree. The envelope, effects and damage sweeps each carry
-their thresholds, row order and sources at their own members. The reachability half of a flight row
-is `EnvelopeMargins.cs`, the suites asserting on these verdicts are the `*Suites.cs` modules, and
-the branch vocabulary is [../org/flightModel.md](../org/flightModel.md).
+`--dump-flight` / `--dump-mips` / `--dump-debris` / `--damage-test` / `--effects-test` reports. Each
+probe does the work once and returns both halves: the report text a flag prints and writes, and the
+structured verdict a `--run-tests` suite asserts on, so a dump and the suite reading it cannot
+disagree. The envelope, effects, damage and debris-shading sweeps each carry their thresholds, row
+order and sources at their own members. The reachability half of a flight row is
+`EnvelopeMargins.cs`, the suites asserting on these verdicts are the `*Suites.cs` modules, and the
+branch vocabulary is [../org/flightModel.md](../org/flightModel.md).
 
 ## src/Testing/EnvelopeMargins.cs
 The reachability half of the flight-envelope report. `Sample` reads one completed `FlightModel`
