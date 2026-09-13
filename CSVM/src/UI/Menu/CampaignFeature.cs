@@ -69,6 +69,10 @@ public sealed class CampaignFeature : IMenuFeature
     /// <summary>The langui table every label here is read from.</summary>
     public UiStrings Strings { get; }
 
+    /// <summary>What the original's four menu cheats have switched on. One store for both
+    /// presentations, and the only place any of them is read from.</summary>
+    public CampaignCheats Cheats { get; } = new();
+
     /// <summary>The chapter cinema every cabin door runs its handoff through, or null when the
     /// caller has none and a cabin door simply opens the cabin. One instance serves both
     /// presentations, and its latch is what stops a film replaying (<c>Session/Launcher.cs</c>).
@@ -521,7 +525,7 @@ public sealed class CampaignFeature : IMenuFeature
     /// null with nobody seated or no build store to own planes in.</summary>
     public CampaignWallet? Wallet() =>
         Profile is { } profile && Store is { } store && Planes is { } planes
-            ? new CampaignWallet(store, profile, planes)
+            ? new CampaignWallet(store, profile, planes, Strings, Cheats)
             : null;
 
     /// <summary>FLY MISSION: saves the profile as it stands and builds the launch for the seated
@@ -570,6 +574,7 @@ public sealed class CampaignFeature : IMenuFeature
         PlaneSlot = 0;
         ScrapbookEntry = 0;
         ZoomTarget = null;
+        Cheats.CloseCampaign();
         _mission = null;
         _missionSeq = -2;
         _briefing = null;

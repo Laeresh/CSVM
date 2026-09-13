@@ -621,6 +621,7 @@ public sealed partial class OriginalShell
         _drag = null;
         _slider.LetGo();
         ResetCreditsSecret();
+        ResetCheats();
         if (screen is OriginalScreen.GameOptions or OriginalScreen.Audio or OriginalScreen.Video)
         {
             ReadSavedOptions();
@@ -662,7 +663,9 @@ public sealed partial class OriginalShell
         var cues = new List<string>();
         MenuExit? exit = null;
         SyncCampaignField();
-        bool changed = TypeName(commands, cues);
+        // A typed cheat holding the keyboard swallows the frame's characters: the script's own
+        // focus moved the caret off whatever edit box the screen carries.
+        bool changed = TypingCheat ? TypeCheat(commands) : TypeName(commands, cues);
         if (OnSeatWalk && _pickingSeat is not { Joined: true })
         {
             // The seat this screen was picking for has gone: the walk moves on or ends, and a
@@ -686,6 +689,10 @@ public sealed partial class OriginalShell
             {
                 changed |= HoldCreditsSecret(pointer);
             }
+
+            // The three typed cheats read the primary button the same way, their regions holding
+            // no row either.
+            changed |= ArmCheat(pointer);
 
             // The thumb, the slider and the wheel come before the rows: a held one owns the
             // pointer until it is let go, and a wheel step moves the rows the hit test then reads.

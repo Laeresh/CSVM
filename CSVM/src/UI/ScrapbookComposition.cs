@@ -129,9 +129,9 @@ public static class ScrapbookComposition
     /// item the cursor is on, which draws last and two percent bigger.</summary>
     public static IReadOnlyList<BoardPicture> Pictures(
         string? dataRoot, int mission, int spread, int bestMask,
-        Func<ScrapbookScrap, string?> capturePath, int focusedItem = -1)
+        Func<ScrapbookScrap, string?> capturePath, int focusedItem = -1, bool revealAll = false)
     {
-        var visible = Filtered(dataRoot, mission, spread, bestMask, capturePath);
+        var visible = Filtered(dataRoot, mission, spread, bestMask, capturePath, revealAll);
         visible.Sort((a, b) => a.DrawOrder.CompareTo(b.DrawOrder));
 
         var grime = new ScrapbookGrime(mission, spread);
@@ -167,9 +167,10 @@ public static class ScrapbookComposition
     /// <summary>The spread's scraps a player can open into detail, in item order: the same gate
     /// <see cref="Pictures"/> applies, narrowed to <see cref="ScrapbookScrap.Opens"/>.</summary>
     public static IReadOnlyList<ScrapbookScrap> Openable(
-        string? dataRoot, int mission, int spread, int bestMask, Func<ScrapbookScrap, string?> capturePath)
+        string? dataRoot, int mission, int spread, int bestMask,
+        Func<ScrapbookScrap, string?> capturePath, bool revealAll = false)
     {
-        var visible = Filtered(dataRoot, mission, spread, bestMask, capturePath);
+        var visible = Filtered(dataRoot, mission, spread, bestMask, capturePath, revealAll);
         visible.RemoveAll(s => !s.Opens);
         return visible;
     }
@@ -177,11 +178,12 @@ public static class ScrapbookComposition
     /// <summary>The <c>Objective</c> column's own gate: 0 always draws; any other value first
     /// requires bit 0 of <paramref name="bestMask"/> (the mission won at least once), then requires
     /// its own bit set for a positive value or clear for a negative one
-    /// (<c>docs/formats/campaign-screens.md#the-objective-gate</c>). CSVM carries no unlock-flag
-    /// analogue, so unlike the original this cannot be bypassed.</summary>
-    public static bool Visible(int objective, int bestMask)
+    /// (<c>docs/formats/campaign-screens.md#the-objective-gate</c>). The whole test is skipped
+    /// while <paramref name="revealAll"/> stands, which is how the original's <c>fViewAll</c>
+    /// guards it in <c>FUN_004061d0</c>.</summary>
+    public static bool Visible(int objective, int bestMask, bool revealAll = false)
     {
-        if (objective == 0)
+        if (objective == 0 || revealAll)
         {
             return true;
         }
@@ -267,12 +269,13 @@ public static class ScrapbookComposition
     }
 
     private static List<ScrapbookScrap> Filtered(
-        string? dataRoot, int mission, int spread, int bestMask, Func<ScrapbookScrap, string?> capturePath)
+        string? dataRoot, int mission, int spread, int bestMask,
+        Func<ScrapbookScrap, string?> capturePath, bool revealAll)
     {
         var visible = new List<ScrapbookScrap>();
         foreach (var scrap in Items(dataRoot, mission, spread))
         {
-            if (!Visible(scrap.Objective, bestMask))
+            if (!Visible(scrap.Objective, bestMask, revealAll))
             {
                 continue;
             }

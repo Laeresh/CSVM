@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using CSVM.Mech3;
 using CSVM.Session;
+using CSVM.UI.Menu;
 
 namespace CSVM.UI;
 
@@ -603,11 +604,21 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     }
 
     // How many rows the list offers: the career page, then one per story position the profile has
-    // completed, which is uiData 2409's own count of the campaign position plus one. Read fresh
-    // every call rather than cached: a replay recorded through the briefing/flight-check screens
-    // must show up here the next time this page draws.
-    private int Slots() =>
-        Flow.Profile is { } profile ? CampaignProgression.CompletedSeqs(profile).Count + 1 : 0;
+    // completed, which is uiData 2409's own count of the campaign position plus one. The typed
+    // gallery word puts every mission in the list instead, the 24 that callback answers whenever
+    // fViewAll is set. Read fresh every call rather than cached: a replay recorded through the
+    // briefing or flight-check screens must show up here the next time this page draws.
+    private int Slots()
+    {
+        if (Flow.Profile is not { } profile)
+        {
+            return 0;
+        }
+
+        return Flow.Cheats.RevealAll
+            ? CampaignCheats.RevealedMissions + 1
+            : CampaignProgression.CompletedSeqs(profile).Count + 1;
+    }
 
     // The buttons under the list, in the order they take rows, the arrow among them where the book
     // itself carries it. REPLAY MISSION is offered only where uiData 2411 offers it, on a picked

@@ -214,11 +214,12 @@ public sealed partial class OriginalShell
     public bool IsHangarScreen => _screen >= OriginalScreen.PlaneName;
 
     /// <summary>Whether seat 0's typed characters feed a text field right now: the name screen's
-    /// edit box, the hub's own box while the focus stands in it, and the campaign roster's name
-    /// box. None of the three while a dialog stands over the screen.</summary>
+    /// edit box, the hub's own box while the focus stands in it, the campaign roster's name box,
+    /// and an armed typed cheat. None of them while a dialog stands over the screen.</summary>
     public bool CapturingText =>
         _dialog == null
-        && (_screen == OriginalScreen.PlaneName
+        && (TypingCheat
+            || _screen == OriginalScreen.PlaneName
             || _screen == OriginalScreen.CampaignRoster
             || (IsHub && FocusedKey == HubNameFieldKey));
 

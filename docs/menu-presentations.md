@@ -598,7 +598,8 @@ In order. Each step names the file it touches and the test that proves it.
 10. **Add the driven suites.** One in-engine suite per journey family in `CSVM/src/Testing/`, over
     a real `MenuHost` through `MenuSuiteHost`, standing for the presentation what
     `menu-original-tracer`, `menu-original-instant-action`, `menu-original-hangar`,
-    `menu-original-campaign` and the Original half of `menu-player-setup-seats` stand for Original;
+    `menu-original-campaign`, `menu-original-cheats` and the Original half of
+    `menu-player-setup-seats` stand for Original;
     add the presentation's cases to `menu-launch-return`, which drives every exit and every
     destination at the host's sink. Register each suite in `SuiteCatalog`.
 11. **Prove Built-in unchanged.** Shoot Built-in's aids before and after and compare decoded pixels;

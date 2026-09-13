@@ -9,7 +9,8 @@ namespace CSVM.UI;
 /// types into it and a pad drives the same buffer through an alphabet stepper, so the field needs
 /// no keyboard at all. What it accepts is the campaign's own name rule
 /// (<see cref="CampaignFeature.AcceptsNameChar"/>, <see cref="CampaignFeature.MaxNameLength"/>),
-/// so a stepped or typed name is always one the feature would seat.
+/// so a stepped or typed name is always one the feature would seat. The one exception is
+/// <see cref="AcceptsNext"/>'s, which lets the unlocking pilot name be typed and nothing else.
 /// </summary>
 public sealed class CampaignTextEntry
 {
@@ -36,6 +37,14 @@ public sealed class CampaignTextEntry
 
     /// <summary>Whether a whole name is one the field would hold, empty names excluded.</summary>
     public static bool Valid(string text) => CampaignFeature.ValidName(text);
+
+    /// <summary>Whether <paramref name="c"/> may follow <paramref name="text"/>. The name rule,
+    /// widened by the one character the unlocking pilot name ends in and only where what stands in
+    /// the box is that name's own prefix. Refusing it outright would make that cheat untypable,
+    /// and admitting it anywhere would let a profile be created carrying one.</summary>
+    public static bool AcceptsNext(string text, char c) =>
+        Accepts(c)
+        || CampaignCheats.UnlockName.StartsWith(text + c, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Arms the field for typing.</summary>
     public void Arm() => Active = true;
@@ -67,7 +76,7 @@ public sealed class CampaignTextEntry
         var text = new StringBuilder(Text);
         foreach (char c in chars)
         {
-            if (Accepts(c) && text.Length < MaxLength)
+            if (AcceptsNext(text.ToString(), c) && text.Length < MaxLength)
             {
                 text.Append(c);
             }

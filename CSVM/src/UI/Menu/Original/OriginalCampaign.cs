@@ -1023,7 +1023,7 @@ public sealed partial class OriginalShell
                 ActivateRoster(row, pageRow);
                 return null;
             case OriginalScreen.CampaignCabin:
-                ActivateCabin(row);
+                ActivateCabin(row, pageRow);
                 return null;
             case OriginalScreen.CampaignBriefing:
                 ActivateBriefing(row);
@@ -1085,6 +1085,15 @@ public sealed partial class OriginalShell
     {
         if (_campaign == null || RosterEntry is not { } entry)
         {
+            return;
+        }
+
+        // The hidden pilot name is not a name at all, so it is read before the rule the feature
+        // applies would refuse its punctuation. What it switches on is the page's, since both
+        // presentations commit this screen onto the same store.
+        if (_flow?.Page is CampaignRosterPage roster && CampaignCheats.IsUnlockName(entry.Text))
+        {
+            roster.Unlock();
             return;
         }
 
@@ -1167,7 +1176,7 @@ public sealed partial class OriginalShell
             No());
     }
 
-    private void ActivateCabin(OriginalRow row)
+    private void ActivateCabin(OriginalRow row, int pageRow)
     {
         if (_campaign?.Profile is not { } profile)
         {
@@ -1175,10 +1184,17 @@ public sealed partial class OriginalShell
             return;
         }
 
+        // The cheat's mission pull-down is a row of the page, so its press is the page's own.
+        if (row.Kind == OriginalRowKind.Dropdown)
+        {
+            PagePress(pageRow);
+            return;
+        }
+
         switch (row.Key)
         {
             case nameof(BoardButton.NextMission):
-                _campaign.SetMission(CampaignProgression.NextMissionSeq(profile));
+                _campaign.SetMission(CheatedMission(CampaignProgression.NextMissionSeq(profile)));
                 EnterBriefing(OriginalScreen.CampaignCabin);
                 break;
             case nameof(BoardButton.PreviousMissions):

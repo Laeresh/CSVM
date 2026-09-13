@@ -815,6 +815,25 @@ writes that move the funds, the ownership record and the build together. Off-eng
 `CSVM.Tests/CampaignWalletTests.cs`. The thresholds, prices and decoded comparisons:
 [../org/hangar.md](../org/hangar.md).
 
+## src/UI/Menu/TypedCheat.cs
+One screen's typed-word latch, the rule the cabin, the scrapbook contents and the plane
+construction hub share in the original: a left click inside the script's authored region gives it
+the keyboard, each character that follows extends a buffer, and the first character that leaves the
+target word's prefix empties the buffer outright so a mistyped word starts again from its first
+letter. The compare is case-sensitive, arming and disarming leave the buffer alone (the script's
+`focus` moves only the caret), and reopening the screen resets both. Off-engine coverage:
+`CSVM.Tests/CampaignCheatTests.cs`. The words, the regions and the script lines:
+[../formats/campaign-screens.md](../formats/campaign-screens.md).
+
+## src/UI/Menu/CampaignCheats.cs
+What the original's four menu cheats leave switched on, carried by `CampaignFeature` so both
+presentations read one answer: the cabin's mission pull-down and the mission it stands on, the
+gallery reveal (the engine's `fViewAll`, 24 spreads whatever the campaign position), the
+unlock-everything flag (`fAllowAll`) that the hidden pilot name sets, and the words and money
+constants themselves. Closing a campaign drops the pull-down and its pick; the two engine globals
+stay, because the original clears neither short of leaving the game. Off-engine coverage:
+`CSVM.Tests/CampaignCheatTests.cs`.
+
 ## src/UI/Menu/CampaignAidProfiles.cs
 The scratch profile store the campaign screenshot aids read, in the shared namespace so both
 presentations' aids seat one player: `%TEMP%\CSVM\menu-aid-profiles`, emptied on every open,
@@ -832,6 +851,16 @@ the screen as a `ComposedBoard` whose backdrop takes a section's `movie` row at 
 `OriginalSlider` among them. A pointer press arms a row and only the release still on it activates (`ArmedKey`), on an edit box taking the
 caret alone where Accept in one reaches the screen's own commit; the pointer's bitmap answers an enter or leave (`PointerLive`); and a film
 in front of the board takes every frame, the tail of the press that ended it included (`CinemaFilm`). Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
+
+## src/UI/Menu/Original/OriginalCheats.cs
+The three typed cheats of the Original presentation, a partial of the shell over the `gui_char`
+bodies of `PASSENGERCABIN.SCRIPT`, `SCRAPBOOK_TOC.SCRIPT` and `PLANECONSTRUCTION.SCRIPT`: the
+authored region of each screen, its own `TypedCheat`, the primary-button arm read off the pointer
+before the row hit test (the secondary button belongs to the credits line alone), the typed
+characters routed here instead of to a screen's edit box while a latch holds the keyboard, and what
+a completed word fires through `CampaignCheats` and `CampaignWallet`. The cabin's NEXT MISSION
+reads and empties the buffer, so the press after a cheated launch is the ordinary one, and every
+screen change resets all three. Engine coverage: `menu-original-cheats`.
 
 ## src/UI/Menu/Original/OriginalDropList.cs
 The one rule every open dropdown of the Original shell follows, a partial of it: a page hands over its key, its items,

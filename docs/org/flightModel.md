@@ -905,6 +905,14 @@ object the console's `fd` command resolves. The `fd` argument goes through `FUN_
 returns 1 for `on` (`0x00639928`) or `true` (`0x0063992c`) and 0 for anything else, so `fd off` is
 the only writer that can clear the flag after construction.
 
+⚠ **No typed cheat reaches either byte.** The walkthroughs' in-flight invincibility word
+`I AM THE ACE!!` is in the image in no encoding (ASCII, UTF-16 and the obfuscations the menu
+strings use), no instruction compares a character against `'I'` as the first of a word, and every
+writer of `+0x920` is a command-line flag or a debug console line, the pair named above among them.
+The menu cheats the scripts
+do carry are typed into a `gui_char` body and named in
+[../formats/campaign-screens.md](../formats/campaign-screens.md); none of them is this one.
+
 What the switch does is consistent across its readers: the aircraft holds `fd_speed · throttle`
 along its nose with no aerodynamics (`0x48c4ba`), keeps no weathervane (`0x48cd52`), takes no ground
 blow (`0x48cf8e`), no stall torque (`0x48d168`), no contact placement or impulse (`0x48dfc8`), no

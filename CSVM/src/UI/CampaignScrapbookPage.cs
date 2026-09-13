@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using CSVM.Mech3;
 using CSVM.Session;
 
@@ -36,6 +37,13 @@ public sealed class CampaignScrapbookPage : CampaignPage
     private const float TabWidth = 128f;
     private const float TabLabelY = 7f;
     private const float TabLabelFont = 13f;
+
+    // The gallery word's position readout: the script's own print3d_position and the margins it
+    // wraps in. The face is gfont3d, the same one the contents list is measured at.
+    private const float RevealX = 10f;
+    private const float RevealY = 570f;
+    private const float RevealWidth = 490f;
+    private const float RevealFont = 17f;
 
     private static readonly BoardArt StatCard = new(BoardArtLibrary.Ui, "SB_P_Card.png", CardFrames);
 
@@ -95,6 +103,11 @@ public sealed class CampaignScrapbookPage : CampaignPage
         get
         {
             var lines = new List<BoardLine> { PageTitle() };
+            if (Flow.Cheats.RevealAll)
+            {
+                lines.Add(RevealLine());
+            }
+
             if (!ResultsPage)
             {
                 return lines;
@@ -138,7 +151,7 @@ public sealed class CampaignScrapbookPage : CampaignPage
             var result = Result();
             var pictures = new List<BoardPicture>(ScrapbookComposition.Pictures(
                 Flow.DataRoot, mission, spread, result?.Best.CompletedMask ?? 0, Flow.CapturePath,
-                ScrapAt(Flow.Row)?.Item ?? -1));
+                ScrapAt(Flow.Row)?.Item ?? -1, Flow.Cheats.RevealAll));
             if (!ResultsPage)
             {
                 return pictures;
@@ -408,6 +421,17 @@ public sealed class CampaignScrapbookPage : CampaignPage
         ? Flow.Strings.Text(1159, CampaignScrapbookResults.TabTitle(bestToDate: true))
         : Flow.Strings.Text(1160, CampaignScrapbookResults.TabTitle(bestToDate: false));
 
+    // The book's own position readout, which SCRAPBOOK.SCRIPT's gui_draw prints at 10,570 in
+    // gfont3d and 0xffffffff for as long as the gallery stands open. BoardInk.Dialog is the ink
+    // that is white whatever screen it stands over, which is what that colour asks for.
+    private BoardLine RevealLine()
+    {
+        var (mission, spread) = Position();
+        string text = string.Format(
+            CultureInfo.InvariantCulture, "mission: {0} spread: {1}", mission, spread);
+        return new BoardLine(text, RevealX, RevealY, RevealWidth, RevealFont, BoardInk.Dialog);
+    }
+
     // SB_T_NAMEANDAREA's own text, langui 1215 over the player's name and the mission's short
     // name: "Zachary - The Lost Treasure". The career page has no mission to name, so it takes
     // langui 1216 over the name alone, which is why 3479 is in no string table.
@@ -517,7 +541,8 @@ public sealed class CampaignScrapbookPage : CampaignPage
 
         var (mission, spread) = Position();
         int bestMask = Result()?.Best.CompletedMask ?? 0;
-        return ScrapbookComposition.Openable(Flow.DataRoot, mission, spread, bestMask, Flow.CapturePath);
+        return ScrapbookComposition.Openable(
+            Flow.DataRoot, mission, spread, bestMask, Flow.CapturePath, Flow.Cheats.RevealAll);
     }
 
     private ScrapbookScrap? ScrapAt(int row)

@@ -185,7 +185,11 @@ branch on a binder flag is `fAllowAll` (`0x00647b5c`), which has no writer in co
 script global is that flag: with it set the profile starts with `nPlayerCash = 250000` and plane
 slots 2 to 12 filled with the eleven stock airframes, and the airframe thresholds in
 `FUN_0040ff00` / `FUN_0040ff50` / `FUN_0040ffa0` are bypassed. The flag is never cleared by a
-script, so it holds for the session. Reproducing it is `BL-819`.
+script, so it holds for the session. The remake builds it on both presentations: the name is read
+on the profile screen's own commit path before the validator would refuse its punctuation, so the
+wallet fills to 250000, the eleven stock airframes land in slots 2 to 12, every airframe threshold
+is bypassed for the rest of the session, and the box goes back to the previous player with the
+screen still standing.
 
 ## The cabin: `PASSENGERCABIN.SCRIPT`
 
@@ -221,7 +225,10 @@ when the campaign is finished.
 script keyboard focus, and typing `idaho` activates the otherwise-deactivated dropdown
 `pc_d_missions` (24 rows, filled from `uiData` 2038 with langui `3450 + row`, the long mission
 names). With the dropdown used, Next Mission passes `QG + 1` to 2104 instead of -2. The dropdown is
-pre-selected to the campaign position, with 24 clamped to row 23.
+pre-selected to the campaign position, with 24 clamped to row 23. The remake builds it, and builds
+the same matcher on the table of contents (`ispy`) and the construction hub (`gimme`): the click
+arms the screen's own buffer, each typed character extends it, a character that leaves the word's
+prefix empties it so a partial retype starts over, and the comparison is case-sensitive.
 
 **Chapter intro.** `@globals@XQ` is set by `CAMPAIGN.SCRIPT` and means "the cabin was entered from
 the profile screen". Only then does the cabin ask `uiData` 2151 for a chapter number and, if it is

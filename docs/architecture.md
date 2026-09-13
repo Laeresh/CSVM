@@ -288,13 +288,16 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/Menu/CampaignFeature.cs`, the campaign as a shared feature: the profile roster, the seated player, the mission, and every write.
 - `src/UI/Menu/CampaignBriefing.cs`, one mission's briefing as the feature holds it: the state, the narration, the note, the reveal's progress.
 - `src/UI/Menu/CampaignWallet.cs`, the seated profile as the hangar's wallet: funds, affordability, availability, the builds, purchase and sale.
+- `src/UI/Menu/TypedCheat.cs`, one screen's typed-word latch: the click that arms it, the buffer, the reset on a character off the prefix, the case-sensitive fire.
+- `src/UI/Menu/CampaignCheats.cs`, what the original's four menu cheats leave switched on: the mission pull-down and its pick, the gallery reveal, the unlock-everything flag.
 - `src/UI/Menu/CampaignAidProfiles.cs`, the scratch profile store the campaign screenshot aids seat a player over, unable to reach the real one.
 - `src/UI/Menu/MenuIdleSource.cs`, a seat's input source with no device behind it, idle every frame; the screenshot aid's extra players.
 - `src/UI/MenuSeatDevices.cs`, the pad side of the shared player setup: seat 0's claimed pad, the join gesture, hotplug, the flight binding.
 - `src/UI/MenuControlsSeats.cs`, the rebinding screen's seat bookkeeping for any presentation: which seats it offers, their pad identities and staged keymaps.
 - `src/UI/Menu/FreeFlightFeature.cs`, Free Flight as a shared feature: the chapter roster, the pick, the launch gate and the typed exit.
 - `src/UI/Menu/InstantActionFeature.cs`, Instant Action as a shared feature: the decoded option sets, the typed setup state, the built def.
-- `src/UI/Menu/Original/OriginalShell.cs`, the Original presentation's screen graph over the decoded layout, and its eleven partials below.
+- `src/UI/Menu/Original/OriginalShell.cs`, the Original presentation's screen graph over the decoded layout, and its per-screen partials below.
+- `src/UI/Menu/Original/OriginalCheats.cs`, the shell's three typed cheats (a `partial`): each screen's authored region, its latch, the arming click and what a word fires.
 - `src/UI/Menu/Original/OriginalDropList.cs`, the shell's one open-dropdown window rule (a `partial`): the authored window, the hidden rows outside it, the arrows and the thumb.
 - `src/UI/Menu/Original/SliderControl.cs`, the shell's continuous control: a slider row's hold-and-move under the pointer, and the clamped sideways step.
 - `src/UI/Menu/Original/OriginalGameOptions.cs`, the shell's Game Options page (a `partial`): the shared options as a table of authored rows.
