@@ -38,9 +38,11 @@ Four findings will not be guessed from the footage:
 - **The range gate is the world's own fog range, not a tuned constant.**
   `fogNear + (fogFar - fogNear) * 0.8`, capped at 2000, with a 0.875 hysteresis factor while the
   picture is not already open.
-- **The arrow is a line plus a head, and its length is not fixed.** The shaft runs from the marker
-  anchor (clamped into a 5%-inset rectangle) out to the target's point clamped to the *full*
-  viewport; only the 20-pixel head on the end is a constant.
+- **The arrow is a line plus a head, and its two ends clamp into two different rectangles.** The
+  shaft runs from the marker anchor (clamped into a 5%-inset rectangle) out to the target's point
+  clamped to the *full* viewport; only the 20-pixel head on the end is a constant. That full
+  viewport is also what the off-screen flag itself is tested against, so a target inside the inset
+  band is on screen and draws no marker at all.
 
 ## Function map
 
@@ -322,7 +324,8 @@ and do not read the footage as evidence that it works.**
 | Range | `fogNear + (fogFar - fogNear) * 0.8`, capped 2000, engaging at 0.875 of that | the same, `Spyglass.RangeGate` over `WeatherRig.FogGlobals.Range`; a band whose far is no further than its near takes the 2000 m cap alone, which is the empty stage and the suite rigs |
 | Field of view | `2 * atan(1.1 * R / d)` clamped to 1.5-90 degrees, radius kept as a high-water mark | the same clamp, `Spyglass.FovDeg`; the radius is the merged mesh box's half diagonal, measured once per hold, and a subject with no mesh takes the 3-degree no-target value |
 | Camera pose | at the player's aircraft, aimed at the target, roll kept only for an aircraft | the same, `Spyglass.Pose` off `TargetHud.Attitude` |
-| Edge inset | 5% of the viewport per axis, plus half the disc when shown | the same, `EdgeMarker.InsetFraction` plus the `anchorInset` the disc passes; the on-screen test stays on the bare 5% rect, since the original's off-screen flag is the whole viewport |
+| Edge inset | 5% of the viewport per axis, plus half the disc when shown | the same, `EdgeMarker.InsetFraction` plus the `anchorInset` the disc passes; it places the anchor and nothing else |
+| Off screen | the whole viewport, `+0x208`, nothing narrower | the same, `EdgeMarker.Resolve`'s `OnScreen` against the bare pane, which is what gates the arrow, the tag and the disc alike. `VersusHud`'s opponent markers read this one rule too; the original has no splitscreen, so the remake gives its second marker surface the decoded clamp rather than a second one |
 | Arrow | a shaft from the anchor (or the disc's rim) out to the point clamped to the full viewport, plus a 20 x 10 pixel head at the tip | the same, `TargetHud.ShaftTail` and `ArrowHead` over `EdgeMarker`'s anchor and tip |
 | Label placement | anchor x unchanged, y offset `+3` in the screen's upper half and `-45` in the lower, `windowBottom + 3` / `windowTop - 45` when the disc is up | the same both ways, `TargetHud.EdgeLabelAnchor`'s `disc` variant |
 | Colour | `Target::GetColor` into all three primitives | the same rule, `TargetHud`'s `color`, the disc's rim included |
@@ -353,9 +356,12 @@ loudly if the decode is wrong.
    horizon inside the disc stays flat; do the same with an aircraft selected and it rolls.
 7. **The label jumps 48 pixels when the marker crosses the screen's horizontal centre line**, from
    3 pixels below the marker to 45 above.
-8. **The arrow's visible length changes with how far off screen the target is**, because only the
-   20-pixel head is fixed; a target just past the inset boundary shows an almost headless arrow and
-   one far behind shows a long shaft.
+8. **The arrow's visible length does not change with how far off screen the target is.** Both of
+   its ends are clamped, the tail into the inset rectangle and the tip into the viewport, so the
+   shaft is a ninth of the distance from the centre out to the tail (the inset rectangle is 90% of
+   each axis) and depends on the bearing alone: longest toward a corner, shortest straight out of
+   the nearer edge. A target one degree outside the viewport and one dead astern draw the same
+   arrow.
 9. **Everything in this page stops together.** There is no state in which the arrow and the tag are
    drawn but the whole subsystem is not running, because `+0xc` gates both.
 

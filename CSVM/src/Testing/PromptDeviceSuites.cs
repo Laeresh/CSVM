@@ -92,7 +92,7 @@ internal static class PromptDeviceSuites
             rig.UseMessages(strings);
             // The shipping attach path, off the tree the pane's canvas would give it.
             var hud = rig.PilotHud;
-            hud.Attach(canvas, null, null);
+            hud.Attach(canvas, canvas, null, null);
             ctx.Check(hud.AutoDock != null, $"the pane's HUD carries a prompt control of its own");
             if (hud.AutoDock is { } prompt)
             {

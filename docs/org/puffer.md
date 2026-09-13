@@ -388,8 +388,9 @@ flares, the impact rings and the HUD hilites.
 behind it, so full fog leaves it at `csky_fog_color`, the value the hill behind it reaches. An
 additive quad only brightens a background that already carries that colour, so mixing it toward the
 fog colour would leave a distant fire brighter than the hill instead of sunk into it; full fog
-leaves it contributing nothing. Since no sprite in this install takes the additive path, that half
-is a property of the shader and not of anything drawn here.
+leaves it contributing nothing. Since no puffer sprite in this install takes the additive path, that
+half is a property of the shader and not of anything drawn here; the flagged textures the census
+does list belong to other draw paths.
 
 ⚠ **The sprite-darkness measurement survives, and it decides the soft-particle fade alone.**
 `Puffer.SmokeLuminance` thresholds the alpha-weighted luminance of the frame a particle dies on at

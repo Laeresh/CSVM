@@ -64,9 +64,9 @@ public sealed partial class VersusHud : Control
     }
 
     /// <summary>The line a Downed report anywhere in the match posts to the message stack: killer
-    /// named when it was a weapon kill, a plain "DOWN" otherwise (terrain/mid-air, no killer to
-    /// name). Static, since the stack it lands in belongs to the reading pane, not to this
-    /// one.</summary>
+    /// named when it was a weapon kill, a plain "DOWN" otherwise, which is a hull spent by a ram or
+    /// by anything else with no seat to credit. Static, since the stack it lands in belongs to the
+    /// reading pane, not to this one.</summary>
     public static string KillLine(int? killer, int victim) =>
         killer is int k
             ? $"{SplitScreen.PlayerTag(k)} DOWNED {SplitScreen.PlayerTag(victim)}"

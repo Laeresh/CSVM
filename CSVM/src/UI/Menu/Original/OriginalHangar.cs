@@ -42,6 +42,10 @@ public sealed partial class OriginalShell
     /// <summary>The layout section the inventory is composed from.</summary>
     public const string InventorySection = "Hangar";
 
+    /// <summary>The tab page's description box as a scrolled list, which the authored widget keys
+    /// per tab and the pointer needs one name for.</summary>
+    public const string DescriptionListKey = "PX_DESCRIPTION";
+
     /// <summary>The name screen's edit box.</summary>
     public const string NameFieldKey = "PN_E_NAME";
 
@@ -194,6 +198,11 @@ public sealed partial class OriginalShell
     private int _hangarListTop;
     private int _inventoryIndex;
     private string? _builtPlane;
+    private int _descTop;
+    private int _descLines;
+    private int _descFits;
+    private string _descBody = string.Empty;
+    private ListWindow? _descWindow;
 
     /// <summary>The colours the plane-construction screens write in.</summary>
     public OriginalHangarInks HangarInks { get; private set; } = new(
@@ -428,52 +437,6 @@ public sealed partial class OriginalShell
         }
     }
 
-    // The scroll-text box as a panel: its authored back and border colours, the component's
-    // figures on their own lines, the shipped heading a line under them and the prose flowed in
-    // the room that is left. The prose is a note because how many lines it wraps to is a font
-    // measurement, and it is cut rather than dropped where the box is too short for all of it,
-    // the original scrolling its own box past that point.
-    private static void ComposeDescription(
-        MenuLayoutWidget widget, HangarInfo info, List<BoardFill> fills, List<BoardLine> lines, List<BoardNote> notes)
-    {
-        float x = widget.Int("X");
-        float y = widget.Int("Y");
-        float width = widget.Int("Width", 300);
-        float height = widget.Int("Height", 150);
-        if (widget.TryColor("BackColor", out var back))
-        {
-            fills.Add(new BoardFill(x, y, width, height, back.R, back.G, back.B));
-        }
-
-        if (widget.TryColor("BorderColor", out var border))
-        {
-            fills.Add(new BoardFill(x, y, width, height, border.R, border.G, border.B, Border: true));
-        }
-
-        int row = 0;
-        foreach (string figure in info.Figures)
-        {
-            lines.Add(new BoardLine(figure, x + DescInset, y + DescTop + (row++ * DescLine), width - (2f * DescInset), DescFont, BoardInk.Row, -1, true));
-        }
-
-        if (info.Heading.Length > 0)
-        {
-            // The shipped string's own blank line stands between the figures and the heading.
-            row++;
-            lines.Add(new BoardLine(info.Heading, x + DescInset, y + DescTop + (row++ * DescLine), width - (2f * DescInset), DescFont, BoardInk.Row, -1, true));
-        }
-
-        if (info.Prose.Length == 0)
-        {
-            return;
-        }
-
-        float top = y + DescTop + (row * DescLine);
-        notes.Add(new BoardNote(
-            new[] { info.Prose }, x + DescInset, top, width - (2f * DescInset),
-            Math.Max(0f, y + height - DescTop - top), 0f, DescFont, BoardInk.Row, Italic: true, Cut: true));
-    }
-
     private static void PurchaseLine(MenuLayoutScreen page, List<BoardLine> lines, string key, string name, CostWeight line)
     {
         if (page.Widget(key) is { } item)
@@ -627,6 +590,123 @@ public sealed partial class OriginalShell
         return (
             Math.Max(0f, (float)Math.Floor((BoardFit.AuthoredWidth - size.Width) / 2f)),
             Math.Max(0f, (float)Math.Floor((BoardFit.AuthoredHeight - size.Height) / 2f)));
+    }
+
+    // The scroll-text box as a panel: its authored back and border colours, the component's
+    // figures on their own lines, the shipped heading a line under them and the prose flowed in
+    // the room that is left. The prose is a note because how many lines it wraps to is a font
+    // measurement, and a body longer than the room scrolls inside the box the way the authored
+    // widget's own slider and arrows say it does, the note handing back the two line counts the
+    // window is drawn and clamped from.
+    private void ComposeDescription(
+        MenuLayoutWidget widget, HangarInfo info, List<BoardFill> fills, List<BoardLine> lines,
+        List<BoardNote> notes, List<BoardPicture> pictures)
+    {
+        float x = widget.Int("X");
+        float y = widget.Int("Y");
+        float width = widget.Int("Width", 300);
+        float height = widget.Int("Height", 150);
+        if (widget.TryColor("BackColor", out var back))
+        {
+            fills.Add(new BoardFill(x, y, width, height, back.R, back.G, back.B));
+        }
+
+        if (widget.TryColor("BorderColor", out var border))
+        {
+            fills.Add(new BoardFill(x, y, width, height, border.R, border.G, border.B, Border: true));
+        }
+
+        int row = 0;
+        foreach (string figure in info.Figures)
+        {
+            lines.Add(new BoardLine(figure, x + DescInset, y + DescTop + (row++ * DescLine), width - (2f * DescInset), DescFont, BoardInk.Row, -1, true));
+        }
+
+        if (info.Heading.Length > 0)
+        {
+            // The shipped string's own blank line stands between the figures and the heading.
+            row++;
+            lines.Add(new BoardLine(info.Heading, x + DescInset, y + DescTop + (row++ * DescLine), width - (2f * DescInset), DescFont, BoardInk.Row, -1, true));
+        }
+
+        _descWindow = null;
+        if (info.Prose.Length == 0)
+        {
+            _descBody = string.Empty;
+            _descLines = 0;
+            _descTop = 0;
+            return;
+        }
+
+        if (_descBody != info.Prose)
+        {
+            // A new body is a new box: the window goes back to the head, which is where the
+            // original's own box stands every time a tab or a picked component changes it.
+            _descBody = info.Prose;
+            _descLines = 0;
+            _descTop = 0;
+        }
+
+        float top = y + DescTop + (row * DescLine);
+        float room = Math.Max(0f, y + height - DescTop - top);
+        _descTop = Math.Clamp(_descTop, 0, Math.Max(0, _descLines - _descFits));
+        notes.Add(new BoardNote(
+            new[] { info.Prose }, x + DescInset, top, width - (2f * DescInset),
+            room, 0f, DescFont, BoardInk.Row, Italic: true, Cut: true, Skip: _descTop,
+            Counted: (total, fits) => (_descLines, _descFits) = (total, fits)));
+        _descWindow = DescriptionWindow(widget, x + width, top, room);
+        ComposeDescriptionBar(widget, fills, pictures);
+    }
+
+    // The prose window as the pointer sees it, counted in wrapped lines rather than in list rows:
+    // the box's own text area, and the thumb column inside its right edge between the arrows. Null
+    // while the body fits, which is when the original's box carries no slider either.
+    private ListWindow? DescriptionWindow(MenuLayoutWidget widget, float right, float top, float room)
+    {
+        if (_descFits <= 0 || _descLines <= _descFits)
+        {
+            return null;
+        }
+
+        var arrow = StripSize(StripArt(widget.Art, 1), FallbackArrowWidth, FallbackArrowHeight);
+        var thumb = StripSize(StripArt(widget.Art, 0, 1), arrow.Width, FallbackThumbHeight);
+        float track = Math.Max(1f, room - (2f * arrow.Height));
+        float tall = Math.Min(track, Math.Max(thumb.Height, track * _descFits / _descLines));
+        return new ListWindow(
+            widget.Int("X"), top, widget.Int("Width", 300), room,
+            right - arrow.Width, ListWindow.ThumbYFor(top + arrow.Height, track, tall, _descTop, _descLines - _descFits),
+            thumb.Width, tall, top + arrow.Height, track, _descLines, _descFits, _descTop);
+    }
+
+    // Puts the description box's window at that line, clamped to the body it holds.
+    private void ScrollDescription(int top) => _descTop = Math.Clamp(top, 0, Math.Max(0, _descLines - _descFits));
+
+    // The box's own slider column, at its right edge between the two authored arrows, drawn only
+    // while the body is longer than the box. The arrows are pictures rather than rows for the
+    // reason the keys list's are: the wheel and the thumb move this window, and the hub's focus
+    // order is the one the original's tab key walks.
+    private void ComposeDescriptionBar(MenuLayoutWidget widget, List<BoardFill> fills, List<BoardPicture> pictures)
+    {
+        if (_descWindow is not { } window)
+        {
+            return;
+        }
+
+        var up = StripArt(widget.Art, 1);
+        var down = StripArt(widget.Art, 2);
+        var bar = StripArt(widget.Art, 0, 1);
+        float arrow = window.TrackTop - window.Y;
+        if (up != null && down != null && bar != null
+            && Measure(up.Name) != null && Measure(down.Name) != null && Measure(bar.Name) != null)
+        {
+            pictures.Add(new BoardPicture(up, window.ThumbX, window.Y));
+            pictures.Add(new BoardPicture(down, window.ThumbX, window.Y + window.Height - arrow));
+            pictures.Add(new BoardPicture(bar, window.ThumbX, window.ThumbY));
+            return;
+        }
+
+        fills.Add(new BoardFill(window.ThumbX, window.Y, window.ThumbWidth, window.Height, 255, 255, 255, 0.3f, Border: true));
+        fills.Add(new BoardFill(window.ThumbX, window.ThumbY, window.ThumbWidth, window.ThumbHeight, 255, 255, 255, 0.6f));
     }
 
     private void AddPane(MenuLayoutScreen screen, List<BoardPicture> pictures, string key)
@@ -1146,12 +1226,18 @@ public sealed partial class OriginalShell
         return new DecalGrid(DecalGridX, DecalGridY, tile.Height, list.Columns, rows, arrow);
     }
 
-    // The hangar's lists for the pointer: an open dropdown's list alone while one stands.
+    // The hangar's lists for the pointer: an open dropdown's list alone while one stands, and the
+    // tab page's description box otherwise, which is the only other thing on these screens a wheel
+    // or a dragged thumb moves.
     private void HangarLists(List<OriginalList> lists)
     {
         if (_hangarOpen != null && OpenHangarListWindow() is { } window)
         {
             lists.Add(new OriginalList(_hangarOpen, window, ScrollHangarList));
+        }
+        else if (_descWindow is { } box)
+        {
+            lists.Add(new OriginalList(DescriptionListKey, box, ScrollDescription));
         }
     }
 
@@ -1823,7 +1909,7 @@ public sealed partial class OriginalShell
             }
             else if (widget.TypeCode == "S")
             {
-                ComposeDescription(widget, info, fills, lines, notes);
+                ComposeDescription(widget, info, fills, lines, notes, pictures);
             }
         }
     }
@@ -1940,8 +2026,15 @@ public sealed partial class OriginalShell
             InventoryLine(screen, lines, "HA_T_PILOTPLANE", plane.Name + "   " + hangar.AirframeName(plane.Airframe), HubLabelFont);
             InventoryLine(screen, lines, "HA_T_AGILITYP", "AGILITY: " + Rating(bill.AgilityStars), HubTextFont);
             InventoryLine(screen, lines, "HA_T_ARMORP", "ARMOR: " + Rating(bill.ArmourStars), HubTextFont);
-            string value = hangar.Strings.Format(1258, bill.Total.Cost);
-            InventoryLine(screen, lines, "HA_T_VALUEP", value.Length > 0 ? value : $"Value: ${bill.Total.Cost}", HubTextFont);
+            // ⚠ Draw no Value row without a wallet: 1258 prices a sale, and a plane built on the
+            // export door was never bought and is deleted rather than sold. What the cabin path
+            // supplies and this one cannot is left out, never invented (docs/org/menu-inventory.md).
+            if (hangar.Wallet != null)
+            {
+                string value = hangar.Strings.Format(1258, bill.Total.Cost);
+                InventoryLine(screen, lines, "HA_T_VALUEP", value.Length > 0 ? value : $"Value: ${bill.Total.Cost}", HubTextFont);
+            }
+
             if (screen.Widget("HA_A_PLANEWEAPONSP") is { } weapons)
             {
                 float pitch = weapons.Int("Height", 16) + weapons.Int("ItemSpacing", 1);

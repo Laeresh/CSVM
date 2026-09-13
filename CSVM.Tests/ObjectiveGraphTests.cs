@@ -315,6 +315,42 @@ public class ObjectiveGraphTests
     }
 
     [Fact]
+    public void The_countdown_running_out_raises_one_expiry_notice_before_the_wrap_up()
+    {
+        // The HUD's "Time Expired" / "Mission LOST!" pair hangs off this, so it fires once, as the
+        // clock stops, and never on a NOLOSS clock, which pins at zero instead of expiring.
+        var (graph, _) = Build(
+            "\"MISSION_TIMER\",[10.0],\"OBJECTIVE1\",[\"BEGIN_DORMANT\",[0.1],"
+            + "\"RESET_TIMER\",[1.0],\"INACTIVE1\",[\"never\"]]");
+        int expired = 0;
+        graph.TimerExpired += () => expired++;
+        Run(graph, 0.5f);
+        Assert.True(graph.TimerRunning);
+        Assert.Equal(0, expired);
+        Run(graph, 2f);
+        Assert.False(graph.TimerRunning);
+        Assert.Equal(1, expired);
+        Assert.True(graph.Ending);
+        Run(graph, 5f);
+        Assert.Equal(1, expired);
+        Assert.Equal(MissionOutcome.Lost, graph.Outcome);
+    }
+
+    [Fact]
+    public void A_NOLOSS_countdown_pins_at_zero_and_raises_no_expiry_notice()
+    {
+        var (graph, _) = Build(
+            "\"MISSION_TIMER\",[10.0,\"NOLOSS\"],\"OBJECTIVE1\",[\"BEGIN_DORMANT\",[0.1],"
+            + "\"RESET_TIMER\",[1.0],\"INACTIVE1\",[\"never\"]]");
+        int expired = 0;
+        graph.TimerExpired += () => expired++;
+        Run(graph, 5f);
+        Assert.Equal(0, expired);
+        Assert.Equal(0f, graph.TimerRemaining);
+        Assert.False(graph.Ended);
+    }
+
+    [Fact]
     public void The_lost_players_wreck_landing_ends_the_mission_lost_and_only_once()
     {
         var (graph, _) = Build("\"OBJECTIVE1\",[\"INACTIVE1\",[\"never\"]]");

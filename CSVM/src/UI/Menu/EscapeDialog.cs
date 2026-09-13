@@ -21,10 +21,10 @@ public readonly record struct EscapeRect(int X0, int Y0, int X1, int Y1)
 /// One dialog's <c>MAP</c> primitive: which chart sheet it draws, where the sheet's cropped region
 /// lands, and the world window that region stands for.
 ///
-/// <para>⚠ <see cref="Clip"/> is a rectangle in the bitmap, not on the screen. The crop's top left
+/// ⚠ <see cref="Clip"/> is a rectangle in the bitmap, not on the screen. The crop's top left
 /// lands on <see cref="Position"/>, so the map occupies <see cref="Position"/> to
 /// <see cref="Position"/> plus the crop's size, and that is the rectangle
-/// <see cref="TryProject"/> maps the world window onto.</para>
+/// <see cref="TryProject"/> maps the world window onto.
 /// </summary>
 public sealed record EscapeMap(string Bitmap, BriefingPoint Position, EscapeRect Clip, EscapeRect World)
 {

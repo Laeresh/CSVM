@@ -100,14 +100,14 @@
       "name": "c1-destroy-effects",
       "frame": 120,
       "hash": "57b457a7f72886972f2a2aff731c271a",
-      "exercises": "Neutral-control player flight beside a killed ap_radiotwr: great_balls_of_fire on the world-effects stage riding its death site, flight-state-dependent SpeedCue, seeded puffers, world-lit alpha scenery, the player's ground shadow; frame-sensitive.",
+      "exercises": "Neutral-control player flight beside a killed ap_radiotwr: great_balls_of_fire on the world-effects stage riding its death site, flight-state-dependent SpeedCue, seeded puffers, world-lit alpha scenery over water; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "50b782785c5a9c52ecb57866532020d4",
-      "exercises": "player_crash_default after five flight steps: corrected pre-crash attitude, crash rig and airframe, distance puffers on the texture-flag blend, ranged tumble, vector-form pieces, flydirt delta, pooled repeat calls, over world-lit C1 scenery.",
+      "hash": "b61e7b874f1fb235c1a29cab5b2bf1ab",
+      "exercises": "player_crash_default five steps in: corrected pre-crash attitude, crash rig and airframe, texture-flag distance puffers, ranged tumble, vector-form pieces, flydirt delta, pooled repeats, the crash notice over the hidden HUD, on world-lit C1 scenery.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
     {

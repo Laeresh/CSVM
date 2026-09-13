@@ -318,6 +318,14 @@ public partial class Launcher : Node3D
     // players, so there is nothing here to toggle.
     private bool _focusMuted;
 
+    // The screen ExitSession takes a flight back to, as the last launch settled it. The setter is
+    // the launch-return suite's way of putting the live node's own destination back afterwards.
+    internal MenuReturnDestination ExitDestination
+    {
+        get => _exitDestination;
+        set => _exitDestination = value;
+    }
+
     // The session clock as this frame sees it: the suites' own under
     // `--run-tests`, the live session's (published as GameClock.Current by its
     // build, nulled by its teardown) otherwise, null at the launchscreen.
@@ -988,6 +996,12 @@ public partial class Launcher : Node3D
         cinema.Ended = then;
         AddChild(cinema);
     }
+
+    // Where a flight left early lands, taken from the launch that starts it. Every menu launch path
+    // writes it here and ExitSession reads it back, so the rule stands in one place.
+    // ⚠ Keep it internal rather than private: nothing instantiates a Launcher headlessly, so the
+    // launch-return suite pins this round trip on the live node or not at all.
+    internal void LaunchedFrom(MenuExit exit) => ExitDestination = MenuReturnDestination.ForLaunch(exit);
 
     // The boot sequence in fmv.zrd's own order, its card and waits and fade included: the reader's
     // eight actions live in BootSequence and not one of them is written down here. A press ends the
@@ -1776,7 +1790,7 @@ public partial class Launcher : Node3D
     private void StartSessionFromMenu(LaunchExit launch)
     {
         var (planes, pads, fits, customs) = Unpack(launch.Seats);
-        _exitDestination = MenuReturnDestination.ForLaunch(launch);
+        LaunchedFrom(launch);
         _spec = SessionSpec.FromMenu(_cli, launch.Chapter, planes, launch.Mode, launch.InstantAction, fits, customs);
         // Step the master so flying again is a new mission rather than a replay: without this every
         // relaunch re-derives the same spawn, opposition and liveries. ⚠ A pinned run must hold
@@ -1853,7 +1867,7 @@ public partial class Launcher : Node3D
     private void StartCampaignFromMenu(CampaignMissionExit mission)
     {
         var (planes, pads, fits, customs) = Unpack(mission.Seats);
-        _exitDestination = MenuReturnDestination.ForLaunch(mission);
+        LaunchedFrom(mission);
         _spec = SessionSpec.FromCampaign(_cli, mission.Profile, mission.MissionSeq, planes,
             pads.Count, fits, customs);
         StepSortieSeed();
@@ -1900,8 +1914,8 @@ public partial class Launcher : Node3D
     }
 
     // The boards' Exit item, the pause sheet's among them: back to the screen this flight was
-    // launched from when the process launched into the menu, out of the game otherwise. The
-    // routing Esc used to do, now reachable from a pad. Every way a session ends without a result
+    // launched from when the process launched into the menu, out of the game otherwise, and
+    // reachable from a pad as much as from Esc. Every way a session ends without a result
     // (the sheet, the wrap-up board, the scoreboard) arrives here, so one destination serves them.
     private void ExitSession()
     {

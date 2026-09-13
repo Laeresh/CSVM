@@ -185,7 +185,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/HangarEconomy.cs`, the hangar's decoded economy over a built plane: the component tables, per-line costs and weights, the totals and the verdict.
 - `src/Flight/VersusMatch.cs`, Dogfight deathmatch bookkeeping: kills and deaths per player, the host-fed clock, threshold and time-out completion, standings.
 - `src/Flight/VersusHud.cs`, per-pane Dogfight status line: remaining time, this player's kills, the leader, and the hostile marker.
-- `src/Flight/HudMessages.cs`, the centred HUD message stack a death posts its kill line into: four slots, one colour and five seconds each.
+- `src/Flight/HudMessages.cs`, the centred HUD message stack a kill, a crash and the mission clock post into: four slots, one colour and five seconds each.
 - `src/Flight/AutoDockLine.cs`, the auto-dock prompt's own centred line, three tenths of the way down the pane in the landings rig's pale yellow.
 - `src/Flight/VersusBoard.cs`, the Dogfight results overlay, one whole-window CanvasLayer above the splitscreen panes.
 - `src/Flight/IaWrapupBoard.cs`, Instant Action's wrap-up board: outcome headline and the per-counter score rows, summed across every seat.

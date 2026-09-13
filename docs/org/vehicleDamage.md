@@ -524,9 +524,24 @@ jumps past the shift, not past the write). `FUN_004588e0` splits a line longer t
 (`0x31` at `0x004588f9`) at its last space, posting the tail first (`0x00458984`) and the head
 second (`0x00458995`) so the pair reads top to bottom.
 
+The same stack carries two notices that are not a death. `FUN_0048b920`, the ground impact above,
+posts row 162 `MSG_CRASH` "Fatal Crash!" for the local player alone (`param_1 == DAT_0071c298`,
+`FUN_0059ce40(0xa2, 0x40a00000, DAT_006eba64, DAT_006eba64)` into `FUN_004588e0`): in that player's
+own colour, for the same 5.0 s, and on every impact its aircraft performs, since the post stands
+ahead of the wreck-landing test at `+0x91f`. The mission clock's expiry posts rows 6002
+`MSG_TIME_EXPIRED` and then 137 `MSG_MISSION_LOST` through `FUN_004587d0`, so both take the default
+colour and "Mission LOST!" reads above "Time Expired"; the second is skipped on a mission already
+won, and the whole arm is single-player only. That site is
+[../formats/objectives.md](../formats/objectives.md), `MISSION_TIMER`.
+
 `Flight/HudMessages.cs` carries all of this, with the 18 px pitch and the font's own 10 px cell
 taken onto `HudMetrics`' 1440p reference by the factor of three between 480 and 1440 lines. Its
 three colours are the remake's HUD palette standing in for the undecodable globals, marked TUNE.
+
+⚠ **A live aircraft flown into the ground reaches `FUN_0048b920` alone**, which posts no kill line:
+only the health-zero routine `FUN_004b82d0` words one, and `FUN_0048b920` calls neither it nor
+anything that reaches it. CSVM reports both deaths through one `Downed` seam, so the kill line is
+gated on the hull having been spent rather than on the report itself.
 
 ### What happens to the wreck
 

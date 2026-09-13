@@ -510,6 +510,8 @@ public partial class FlightController : Node3D
     private CanvasLayer? _hudCanvas;             // the whole HUD layer; hidden while crashed (the
                                                  // original's crash camera shows no HUD, footage);
                                                  // never built on an AI rig
+    private CanvasLayer? _messageCanvas;         // the message stack's own layer, which the crash
+                                                 // hide above deliberately leaves up
     private Vector3 _spawnPos;
     private Basis _spawnAttitude;
     private float _spawnThrottle = FallbackSpawnThrottle;
@@ -619,6 +621,11 @@ public partial class FlightController : Node3D
     /// fact report, not a score, this node knows no match rules; the session subscribes and scores
     /// when a match exists. Respawn emits nothing.</summary>
     public event Action<int, int?>? Downed;
+
+    /// <summary>Raised on every ground impact this aircraft performs, the fresh crash and a
+    /// shot-down wreck's own landing alike, which is what the original's crash notice is posted
+    /// off. <see cref="Downed"/> is the death report and fires once; this fires per impact.</summary>
+    public event Action<FlightController>? GroundImpact;
 
     /// <summary>Raised whenever <see cref="Inert"/> flips, with this aircraft, the seam a
     /// session-level roster (the E16 voice dispatch's speaker list) mirrors the state into, since
@@ -970,12 +977,18 @@ public partial class FlightController : Node3D
             var canvas = new CanvasLayer { Layer = UI.HudLayers.Hud };
             _hudCanvas = canvas;
             canvas.Name = "hud";
+            // ⚠ The message stack takes a layer of its own, never the HUD's: the crash camera hides
+            // the HUD outright, and the original's stack is up over that cut, showing the crash
+            // notice the impact posted.
+            var messages = new CanvasLayer { Layer = UI.HudLayers.Hud, Name = "hud_messages" };
+            _messageCanvas = messages;
             // The two board-adjacent readouts this node still owns take their z-order slots inside
             // the pilot HUD's own order, so they are handed to it rather than added around it.
-            _pilotHud.Attach(canvas, VersusHud, Scoreboard);
+            _pilotHud.Attach(canvas, messages, VersusHud, Scoreboard);
             // Splitscreen parents the HUD into this player's SubViewport so it draws in that pane
             // only (and scales off the pane's height); single player keeps it on this node.
             (HudParent ?? this).AddChild(canvas);
+            (HudParent ?? this).AddChild(messages);
         }
         if (DebugCollision)
         {
@@ -2004,8 +2017,8 @@ public partial class FlightController : Node3D
             else if (_cam.FirstPerson)
             {
                 // Rigid at cockpit_camera (wobble inherited), the mode's own FOV, aimed by the
-                // head. Look-back stays IN the cockpit, head to dead astern while held, as the
-                // original does, which is why this arm sits above the look-behind branch below.
+                // head. Look-back stays IN the cockpit, the head snapped to dead astern while held,
+                // as the original does, so this arm sits above the look-behind cut below.
                 _cam.StepHead(simDt, _cam.BackActive(_padActions.Held(InputAction.LookBack))
                     ? new HeadLookInput(0f, -1f, 0f, 0f, false)
                     : HeadLookRead(), HeadLook.FirstPersonElevationFloor);
@@ -2126,6 +2139,12 @@ public partial class FlightController : Node3D
             _hudCanvas.GetParent()?.RemoveChild(_hudCanvas);
             _hudCanvas.QueueFree();
             _hudCanvas = null;
+        }
+        if (_messageCanvas != null && GodotObject.IsInstanceValid(_messageCanvas))
+        {
+            _messageCanvas.GetParent()?.RemoveChild(_messageCanvas);
+            _messageCanvas.QueueFree();
+            _messageCanvas = null;
         }
         SpeedCue?.Dispose();
         SpeedCue = null;
@@ -2994,6 +3013,9 @@ public partial class FlightController : Node3D
             $"CRASH into {hitName} ({part}) surface={surface} def={crashDef ?? "-"} wreck={landing.WreckLanding} impact=({impact.X:0},{impact.Y:0},{impact.Z:0}) pos=({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) spd={_model.Speed:0} m/s — waiting for respawn");
         if (landing.Downed)
             Downed?.Invoke(PlayerIndex, landing.Killer);
+        // After the death report, so the crash notice reads above the kill line that death posted,
+        // which is the order the original's two routines run in.
+        GroundImpact?.Invoke(this);
     }
 
     // Resolves this seat's named actions, at most once per rendered frame. Godot's input state does
@@ -3078,7 +3100,7 @@ public partial class FlightController : Node3D
     // leaving the flight; the board's Exit item is what leaves, and a pad can reach it.
     // ⚠ Silent in photo mode and under the pause's options leaf: Escape is what LEAVES both, and
     // this reads Escape too, so one press would both close the screen and unpause the session
-    // behind it (BL-429).
+    // behind it.
     private bool PauseTogglePressed() =>
         AllowPause && !InPhotoMode && !InPauseLeaf && _actions.Held(InputAction.Pause);
 

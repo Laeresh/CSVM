@@ -7,8 +7,9 @@ using Godot;
 namespace CSVM.Testing;
 
 /// <summary>The HUD message stack the original posts a death into, asserted on a real aircraft
-/// killed in C1: the four wording rules, the three colour arms, the slot geometry, and the five
-/// seconds a line lives. Decode: docs/org/vehicleDamage.md "Death".</summary>
+/// killed in C1: the four wording rules, the three colour arms, the slot geometry, the five
+/// seconds a line lives, and the two notices that are not a death (the local player's crash and
+/// the mission clock's expiry pair). Decode: docs/org/vehicleDamage.md "The kill message".</summary>
 internal static class HudKillLineSuites
 {
     // A 1440p pane, so the reference geometry reads back unscaled.
@@ -20,7 +21,10 @@ internal static class HudKillLineSuites
         "three wording rules (the viewer's own name, a wingman with no name, a non-aeroplane " +
         "destroyed) read as decoded, the stack keeps four lines a fifth of the way down with an " +
         "18 px pitch, a newer line pushes the older ones down carrying their own remaining time, " +
-        "a repeat refreshes rather than duplicates, and every line clears after five seconds")]
+        "a repeat refreshes rather than duplicates, every line clears after five seconds, and the " +
+        "same stack takes the crash notice in the player's own colour and the mission clock's " +
+        "'Mission LOST!' over 'Time Expired' in the default one, and a hull flown into the world " +
+        "posts that notice alone with no kill line behind it")]
     internal static void HudKillLine(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -77,11 +81,18 @@ internal static class HudKillLineSuites
             stack = new HudMessages();
             ctx.Host.AddChild(stack);
             Stack(ctx, stack);
+            Notices(ctx, stack, strings);
 
-            // The session's own seam: the roster reports a death, the reading pane's stack takes
-            // the line composed for that pane.
-            roster.VehicleDowned += (victim, _) => HudMessages.PostKill(stack!, strings, victim,
-                AimAssist.PlayerTeam, victimIsViewer: false, viewerName: "Nathan Zachary");
+            // The session's own seam: the roster reports a death, and a death the hull was spent in
+            // puts the line composed for that pane into the reading pane's stack.
+            roster.VehicleDowned += (victim, _) =>
+            {
+                if (HudMessages.WordsKillLine(victim))
+                {
+                    HudMessages.PostKill(stack!, strings, victim, AimAssist.PlayerTeam,
+                        victimIsViewer: false, viewerName: "Nathan Zachary");
+                }
+            };
 
             var at = new Vector3(0f, 500f, 0f);
             ai = roster.SpawnAi(new AiSpawn("player_kestrel", at, at + Vector3.Forward,
@@ -93,9 +104,22 @@ internal static class HudKillLineSuites
             ctx.Check(HudMessages.IsAeroplane(ai.Stats) && ai.Team == InstantActionRuntime.EnemyTeam,
                 $"…as an aeroplane on an enemy team mode={ai.Stats?.VehicleMode ?? "<none>"} team={ai.Team}");
 
+            bool impact = false;
+            ai.GroundImpact += _ => impact = true;
+            ctx.Check(HudMessages.WordsKillLine(ai),
+                $"a hull still in the fight is one a death would word a line for");
+
             stack.Clear();
             ai.DebugForceCrash(0);
             ctx.Check(ai.Crashed, $"the aircraft is down crashed={ai.Crashed}");
+            ctx.Check(impact,
+                $"…and raised the ground impact the crash notice hangs off impact={impact}");
+            ctx.Check(!HudMessages.WordsKillLine(ai) && stack.LineAt(0) == null,
+                $"…flown into the world, so it posts the notice alone: '{stack.LineAt(0) ?? "<none>"}'");
+
+            // The same real aircraft as the death that does word a line: a hull spent in the air.
+            HudMessages.PostKill(stack, strings, ai, AimAssist.PlayerTeam, victimIsViewer: false,
+                viewerName: "Nathan Zachary");
             ctx.Check(stack.LineAt(0) == $"Medusa Kestrel {shotDown}",
                 $"its death posts the decoded line: '{stack.LineAt(0) ?? "<none>"}'");
             ctx.Check(stack.SideAt(0) == HudMessages.Side.Enemy,
@@ -147,6 +171,34 @@ internal static class HudKillLineSuites
             victimIsViewer: true, viewerName: null, victimOnViewerTeam: true);
         ctx.Check(nameless == wingman,
             $"an unset pilot name falls through to the team rule as the original's does: '{nameless}'");
+    }
+
+    // The two lines that are not a death: the local player's crash notice and the mission clock's
+    // pair, plus the Dogfight wording for a death no killer owns.
+    private static void Notices(TestContext ctx, HudMessages stack, Messages strings)
+    {
+        string crash = strings.Get(HudMessages.CrashKey);
+        string expired = strings.Get(HudMessages.TimeExpiredKey);
+        string lost = strings.Get(HudMessages.MissionLostKey);
+        ctx.Check(crash == "Fatal Crash!" && expired == "Time Expired" && lost == "Mission LOST!",
+            $"the three notice rows read out of the string table: '{crash}' / '{expired}' / '{lost}'");
+
+        HudMessages.PostCrash(stack, strings);
+        ctx.Check(stack.LineAt(0) == crash && stack.SideAt(0) == HudMessages.Side.Friendly,
+            $"the crash notice posts in the player's own colour: '{stack.LineAt(0) ?? "<none>"}' side={stack.SideAt(0)}");
+        stack.Clear();
+
+        HudMessages.PostTimeExpired(stack, strings);
+        ctx.Check(stack.LineAt(0) == lost && stack.LineAt(1) == expired,
+            $"the clock's expiry reads lost over expired: '{stack.LineAt(0) ?? "<none>"}' / '{stack.LineAt(1) ?? "<none>"}'");
+        ctx.Check(stack.SideAt(0) == HudMessages.Side.Neutral
+                  && stack.SideAt(1) == HudMessages.Side.Neutral,
+            $"…both in the stack's default colour side={stack.SideAt(0)}/{stack.SideAt(1)}");
+        stack.Clear();
+
+        string unowned = VersusHud.KillLine(null, 1);
+        ctx.Check(unowned == "P2 DOWN",
+            $"a Dogfight death no killer owns still words itself, with no killer named: '{unowned}'");
     }
 
     // The three colour arms, tested in the decoded order: the enemy test runs first, so a pane on

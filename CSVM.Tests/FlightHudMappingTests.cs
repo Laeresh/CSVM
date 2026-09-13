@@ -359,10 +359,10 @@ public class FlightHudMappingTests
         var halted = new FlightHudState { Halted = true, Crashed = true }; // halted wins when both are set
         var haltedLines = hud.ComposeTextLines(in halted, mph: 0f, ft: 0f, wide: false);
         Assert.Contains("⏸ PAUSED — . steps one frame", haltedLines);
-        Assert.DoesNotContain("⚠ CRASHED — PRESS R (GAMEPAD Y/A) TO RESPAWN", haltedLines);
+        Assert.DoesNotContain("PRESS R (GAMEPAD Y/A) TO RESPAWN", haltedLines);
 
         var crashed = new FlightHudState { Crashed = true };
-        Assert.Contains("⚠ CRASHED — PRESS R (GAMEPAD Y/A) TO RESPAWN",
+        Assert.Contains("PRESS R (GAMEPAD Y/A) TO RESPAWN",
             hud.ComposeTextLines(in crashed, mph: 0f, ft: 0f, wide: false));
     }
 

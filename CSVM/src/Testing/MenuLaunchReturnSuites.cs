@@ -40,7 +40,8 @@ internal static class MenuLaunchReturnSuites
         + "exit with the host hiding the screen, each launch names the screen it came from as its "
         + "return, the Instant Action one landing back on the wizard over the setup that flew, "
         + "every top-level return lands on Mode with the "
-        + "cursors kept, the debrief and cabin returns land on the book and the cabin, Back on Mode "
+        + "cursors kept, the live launcher holds each launch's own destination for the exit press "
+        + "to read, the debrief and cabin returns land on the book and the cabin, Back on Mode "
         + "quits and Options' apply switches; an Original process started on --menu=free-flight "
         + "opens on Free Flight once and does the same over the decoded layout; and Original "
         + "refused at selection falls back to Built-in's top level with the request kept, a return "
@@ -134,7 +135,7 @@ internal static class MenuLaunchReturnSuites
 
     // The switch as the launcher performs it, with the background read at every step: ShowMenu
     // blacks and shows, the apply exit arrives at the end of one frame, and ApplyOptions runs at
-    // the top of the next, which is the frame that used to draw the procedural sky.
+    // the top of the next, which is the one frame that could show the procedural sky.
     private static void Switch(TestContext ctx, Run run, Godot.Environment env, Godot.Sky? sky)
     {
         var host = run.Host;
@@ -261,6 +262,7 @@ internal static class MenuLaunchReturnSuites
             run.Press(Accept);
             ctx.Check(run.Expect<OptionsApplyExit>() != null, $"Options' apply row leaves as one OptionsApplyExit");
             ctx.Check(run.HiddenAtEveryExit, $"the host had hidden the presentation before every one of the {run.Exits.Count} exits reached the sink");
+            CheckLauncherHolds(ctx, run.Exits);
         }
         finally
         {
@@ -625,6 +627,43 @@ internal static class MenuLaunchReturnSuites
         run.Show(MenuReturnDestination.TopLevel);
         ctx.Check(ReferenceEquals(before, host.Active) && menu.ShownScreen == "Mode" && host.Requested == PresentationId.Original,
             $"the return re-shows the same Built-in instance on Mode with the request still Original ({menu.ShownScreen}, {host.Requested})");
+    }
+
+    // The launcher's own half of the return: a launch writes the destination it came from and the
+    // exit press reads that field back, which no exit and no presentation can show. Driven on the
+    // live node the suites are hosted under, since nothing instantiates a Launcher headlessly, over
+    // the exits this process really produced, with its own destination put back afterwards.
+    private static void CheckLauncherHolds(TestContext ctx, IReadOnlyList<MenuExit> exits)
+    {
+        if (ctx.Host.GetParent() is not Launcher launcher)
+        {
+            ctx.Check(false, $"the live Launcher is the node the suites are hosted under");
+            return;
+        }
+
+        var restore = launcher.ExitDestination;
+        try
+        {
+            int held = 0;
+            foreach (var exit in exits)
+            {
+                if (exit is not LaunchExit and not CampaignMissionExit)
+                {
+                    continue;
+                }
+
+                launcher.LaunchedFrom(exit);
+                held++;
+                ctx.Check(launcher.ExitDestination == MenuReturnDestination.ForLaunch(exit),
+                    $"the launcher holds {Origin(exit)} from the launch that wrote it ({launcher.ExitDestination.GetType().Name})");
+            }
+
+            ctx.Check(held >= 4, $"over every launch this process made ({held})");
+        }
+        finally
+        {
+            launcher.ExitDestination = restore;
+        }
     }
 
     // The destination a launch's own exit names, for a check's message; "no exit" where the leg

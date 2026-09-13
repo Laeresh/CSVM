@@ -226,6 +226,11 @@ public sealed class ObjectiveGraph
     /// <summary>Fired once, when the wrap-up delay after a win or loss has run out.</summary>
     public event Action<MissionOutcome>? MissionEnded;
 
+    /// <summary>Fired as the mission clock runs out on a mission no other ending has claimed, at
+    /// the head of the tick and ahead of the wrap-up. The HUD's expiry notice hangs off it; a
+    /// <c>NOLOSS</c> clock pins at zero and raises nothing.</summary>
+    public event Action? TimerExpired;
+
     /// <summary>Fired whenever a target-list edit or a help-label write changes the display
     /// state.</summary>
     public event Action? TargetsChanged;
@@ -452,6 +457,13 @@ public sealed class ObjectiveGraph
         }
 
         TimerRunning = false;
+        // Only on a mission no other ending has claimed, which is the guard the notice and End
+        // share; raised first, so the notice is up while the wrap-up runs.
+        if (_pending == MissionOutcome.None)
+        {
+            TimerExpired?.Invoke();
+        }
+
         // The countdown expiring is the mission's third ending, with the ordinary 3 s wrap-up. Which
         // flag it sets is untraced; CSVM ends it lost, since a run whose primary is unfinished
         // records nothing either way.

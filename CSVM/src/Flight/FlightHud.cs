@@ -309,8 +309,10 @@ public sealed class FlightHud
     /// <summary>Builds the text block and parents every readout onto <paramref name="canvas"/> in
     /// the shipped draw order. <paramref name="versusHud"/> and <paramref name="scoreboard"/> are
     /// the two board-adjacent readouts the flight node still owns; they are threaded through
-    /// because their z-order slots sit INSIDE this order, not after it.</summary>
-    public void Attach(CanvasLayer canvas, Node? versusHud, Node? scoreboard)
+    /// because their z-order slots sit INSIDE this order, not after it.
+    /// ⚠ <paramref name="messages"/> takes the message stack and must be a layer of its own: the
+    /// crash camera hides the HUD layer, and the stack is up over that cut in the original.</summary>
+    public void Attach(CanvasLayer canvas, CanvasLayer messages, Node? versusHud, Node? scoreboard)
     {
         var text = new Label { Position = TextMargin };
         text.AddThemeFontSizeOverride("font_size", TextFontSize);
@@ -332,7 +334,7 @@ public sealed class FlightHud
             MouseFilter = Control.MouseFilterEnum.Ignore,
             FocusMode = Control.FocusModeEnum.None,
         };
-        canvas.AddChild(MessageStack); // the kill/mission message stack, top centre over the dials
+        messages.AddChild(MessageStack); // the kill/mission message stack, top centre over the dials
         AutoDock = new AutoDockLine
         {
             MouseFilter = Control.MouseFilterEnum.Ignore,
@@ -520,7 +522,9 @@ public sealed class FlightHud
         if (state.Halted)
             _textLines.Add("⏸ PAUSED — . steps one frame");   // the board's own menu says the rest
         else if (state.Crashed)
-            _textLines.Add("⚠ CRASHED — PRESS R (GAMEPAD Y/A) TO RESPAWN");
+            // Notice half dropped: the message stack carries the decoded "Fatal Crash!", and this
+            // line is the respawn control, which the original has no equivalent of.
+            _textLines.Add("PRESS R (GAMEPAD Y/A) TO RESPAWN");
         return _textLines;
     }
 

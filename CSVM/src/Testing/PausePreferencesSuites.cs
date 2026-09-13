@@ -279,7 +279,7 @@ internal static class PausePreferencesSuites
         report.AppendLine($"reopened page: {leaf.Shell.DisplayModeChoice ?? "-"}");
     }
 
-    // The trap: a display change mid-flight resizes the viewport the flight draws into, and the leaf
+    // A display change mid-flight resizes the viewport the flight draws into, and the leaf
     // and the sheet are both standing in it. Both must re-fit, and the pointer must go on hitting
     // the rows it is drawn over, which is a hit test against a fit read afresh every frame.
     private static void Resized(

@@ -828,8 +828,9 @@ internal static class TargetingSuites
         "gate's gun reach (inside RANGE brackets, past it does not, a target outrunning the " +
         "round never does, and the hysteresis holds the boundary case), the label lines " +
         "an aircraft, an off-screen target and a named objective each compose, and the " +
-        "off-screen geometry: the 5 % anchor inset, the tip on the pane edge with the shaft " +
-        "between them, the 20-by-10 head, and the label 3 below or 45 above the anchor")]
+        "off-screen geometry: off screen is the whole pane, then the 5 % anchor inset, the tip " +
+        "on the pane edge with the shaft between them, the 20-by-10 head, and the label 3 " +
+        "below or 45 above the anchor")]
     internal static void HostileMarkerHud(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -961,8 +962,8 @@ internal static class TargetingSuites
             $"a named objective composes both lines, C1 M04 Zeppelin.png's case, with no wrap width to port ({string.Join(" / ", lines)})");
 
         // --- The off-screen marker's geometry, the decode's own (docs/org/spyglass.md) -----------
-        // The anchor clamps into a 5 % inset, the arrow's tip clamps to the pane itself, and the
-        // shaft between them is what makes the arrow longer the further out the target is.
+        // Off screen is the whole pane; only then does the anchor clamp into the 5 % inset and the
+        // arrow's tip to the pane itself, the shaft spanning the band between them.
         var pane = new Vector2(2560f, 1440f);
         var offRight = EdgeMarker.Resolve(new Vector2(9000f, 720f), behind: false, pane);
         ctx.Check(!offRight.OnScreen
@@ -970,10 +971,10 @@ internal static class TargetingSuites
                   && Mathf.IsEqualApprox(offRight.Tip.X, pane.X - 1.001f)
                   && Mathf.IsEqualApprox(offRight.Anchor.Y, 720f),
             $"a target far off the right sits its anchor on the 5 % inset ({offRight.Anchor}) and its arrow tip on the pane's own edge ({offRight.Tip}), the two ends of the shaft");
-        var justOut = EdgeMarker.Resolve(new Vector2(2500f, 720f), behind: false, pane);
-        ctx.Check(!justOut.OnScreen && justOut.Tip == new Vector2(2500f, 720f)
-                  && justOut.Tip.DistanceTo(justOut.Anchor) < offRight.Tip.DistanceTo(offRight.Anchor),
-            $"a target only just past the inset keeps its own point as the tip, so the shaft is short ({justOut.Tip.DistanceTo(justOut.Anchor):0} px) where a far one's is long ({offRight.Tip.DistanceTo(offRight.Anchor):0} px)");
+        var inBand = EdgeMarker.Resolve(new Vector2(2500f, 720f), behind: false, pane);
+        ctx.Check(inBand.OnScreen && inBand.Anchor == new Vector2(2500f, 720f)
+                  && !EdgeMarker.Resolve(new Vector2(2561f, 720f), behind: false, pane).OnScreen,
+            $"CONTROL: a target inside the 5 % band but still on the pane reads ON screen ({inBand.Anchor}), since the original's off-screen flag is the viewport, and the first point past the pane's edge does not");
 
         var (headPoint, headLeft, headRight) = TargetHud.ArrowHead(offRight.Tip, offRight.Dir, 1f);
         ctx.Check(headPoint == offRight.Tip
