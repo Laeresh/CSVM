@@ -218,8 +218,9 @@ public sealed class LensFlareRig
             if (onScreen)
             {
                 var space = cam.GetWorld3D().DirectSpaceState;
-                var query = PhysicsRayQueryParameters3D.Create(cam.GlobalPosition, sunGlobal);
-                losClear = space.IntersectRay(query).Count == 0;
+                using var query = PhysicsRayQueryParameters3D.Create(cam.GlobalPosition, sunGlobal);
+                using var hit = space.IntersectRay(query);
+                losClear = hit.Count == 0;
             }
 
             inst.SpriteFade = Step(inst.SpriteFade, onScreen && losClear, delta);

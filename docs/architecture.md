@@ -430,6 +430,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/MonitorSetting.cs`, the screen the window sits on: the machine's screens labelled, the saved index dropped where no screen answers to it, and the one place the window's screen is set.
 - `src/Utils/OptionsStore.cs`, version-tolerant JSON persistence of the process-wide options (words, display settings, volume levels) in `user://options.json`, written atomically.
 - `src/Utils/PerfSample.cs`, ambient timed leaf scopes: `PerfSample.Scope(site)` accumulates per site per frame, and a hitch record carries the frame's named work.
+- `src/Utils/PhaseCost.cs`, a row of named cost slots behind `--perf`'s `sim_ms=` (the physics tick split by session-simulation phase) and `proc_sites_ms=` (the process pass split by its heaviest consumers).
 - `src/Utils/PhysicsTickCost.cs`, the wall cost of one whole physics tick and the tick count a wall second got, measured by a bracket pair spanning the tick.
 - `src/Utils/GcTrace.cs`, the `--perf` GC readout: pause per wall second, collections, and the finalizable-object count that sets the pause, per ten-second window.
 - `src/Utils/PresentationResolution.cs`, the requested-versus-active menu presentation resolver, availability checked separately from the saved request.

@@ -720,6 +720,7 @@ public partial class GameSession : Node3D
 
     public override void _Process(double delta)
     {
+        using var _ = ProcessSiteCost.Enter(ProcessSite.Session);
         // First thing in the frame (ProcessPriority): decide how much sim time this rendered frame
         // is worth, then, when the clock is not realtime, step the physics-driven consumers
         // ourselves, in the tree order Godot's physics tick would have used.

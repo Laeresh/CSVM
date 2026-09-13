@@ -809,6 +809,7 @@ public sealed record SessionSpec
 
     public bool NoVsync { get; private set; }
     public bool Perf { get; private set; }
+    public bool GcTypes { get; private set; }
     public bool NoFocus { get; private set; }
 
     /// <summary><c>--zip-assets</c>: read the <c>.zip</c> archives even where an unpacked sibling
@@ -897,6 +898,7 @@ public sealed record SessionSpec
             else if (arg == "--det") { s._detArg = true; }
             else if (arg == "--no-det") { s.NoDet = true; }
             else if (arg == "--perf") { s.Perf = true; }
+            else if (arg == "--gc-types") { s.Perf = true; s.GcTypes = true; }
             else if (arg.StartsWith("--log=")) { logSpecs.Add(arg["--log=".Length..]); }
             else if (arg.StartsWith("--anim-lod=")) { s.AnimLod = int.Parse(arg["--anim-lod=".Length..]); }
             else if (arg.StartsWith("--movie=")) { s.MovieName = arg["--movie=".Length..]; s.HasContentArg = true; }

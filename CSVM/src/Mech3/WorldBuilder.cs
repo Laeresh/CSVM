@@ -32,7 +32,7 @@ public sealed class WorldBuilder
     /// <see cref="CloudDeck"/> as the rim extension rather than one of the 144 authored deck tiles.
     /// ⚠ Any census of deck tiles must skip a node carrying it; the extension has no undimmed twin
     /// and is not an authored tile. <c>WeatherRig.CollectDeckTiles</c> is the other reader.</summary>
-    internal const string DeckExtensionMeta = "deck_extension";
+    internal static readonly StringName DeckExtensionMeta = "deck_extension";
 
     // Share of the World node's own `area` rect a co-altitude bucket of flat quads must cover to
     // be the overcast deck. Per-chapter tile census: docs/formats/weather.md.

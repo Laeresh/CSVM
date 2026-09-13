@@ -21,24 +21,26 @@ namespace CSVM.Mech3;
 /// </summary>
 public sealed partial class AnimRuntime : Node, ISequenceHost
 {
+    /// <summary>The reader's <c>ANIMATION_LOD HIGH</c>, see <see cref="QualityLod"/>.</summary>
+    public const int HighLod = 2;
 
-    /// <summary>Original-name metadata key SceneBuilder stamps on every built Node3D.</summary>
-    public const string NameMeta = "cs_name";
+    /// <summary>Original-name metadata key SceneBuilder stamps on every built Node3D.
+    /// ⚠ Every meta key is a <see cref="StringName"/>, never a <c>const string</c>: a string handed
+    /// to HasMeta/GetMeta converts to a fresh finalizable StringName per call, and these keys are
+    /// read on the frame path (PERF-20).</summary>
+    public static readonly StringName NameMeta = "cs_name";
 
     /// <summary>Flat gamez node-index metadata key SceneBuilder stamps on every built
     /// Node3D, the exact binding compiled definitions reference (see
     /// <see cref="AnimDefinition.NodeRefs"/>).</summary>
-    public const string IndexMeta = "cs_index";
+    public static readonly StringName IndexMeta = "cs_index";
 
     /// <summary>Pool-slot metadata key the effect-template pool stamps on each slot container
     /// (<c>WorldEffectsFactory.BuildWorldEffectsRuntime</c>): every staged template copy lives
     /// under exactly one of them, and the slot is what keeps one call's copy of a template apart
     /// from another call's (see <see cref="TemplateStage{TNode}.Pooled"/>). Never on a template node itself,
     /// so name resolution is blind to it.</summary>
-    public const string PoolSlotMeta = "cs_pool_slot";
-
-    /// <summary>The reader's <c>ANIMATION_LOD HIGH</c>, see <see cref="QualityLod"/>.</summary>
-    public const int HighLod = 2;
+    public static readonly StringName PoolSlotMeta = "cs_pool_slot";
 
     /// <summary>Event kinds <c>Dispatch</c> acts on. Keep in step with its cases: a kind absent
     /// here is one the runtime counts as unhandled and does nothing for, which is what the node
@@ -1368,6 +1370,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     public override void _Process(double delta)
     {
+        using var _ = ProcessSiteCost.Enter(ProcessSite.Anim);
         if (ManualAdvance)
         {
             return;
@@ -1413,7 +1416,16 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         float dt = clock.PhysicsDt(delta);
         if (dt > 0f)
         {
-            Advance(dt);
+            // The tick's other consumer beside the session simulation, on the same --perf row.
+            SimPhaseCost.Enter(SimPhase.AnimAdvance);
+            try
+            {
+                Advance(dt);
+            }
+            finally
+            {
+                SimPhaseCost.Leave();
+            }
         }
     }
 
@@ -2510,8 +2522,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             var srcName = n.HasMeta(NameMeta) ? n.GetMeta(NameMeta).AsString() : n.Name.ToString();
             int? gamezIndex = n.HasMeta(IndexMeta) ? (int)n.GetMeta(IndexMeta) + indexOffset : null;
             _resolver.Add(n, srcName, parent, gamezIndex, indexByPointer);
-            foreach (var child in n.GetChildren())
-                if (child is Node3D c)
+            for (int i = 0, count = n.GetChildCount(); i < count; i++)
+                if (n.GetChild(i) is Node3D c)
                     Walk(c, n);
         }
         Walk(worldRoot, worldRoot.GetParent() as Node3D);
@@ -3568,11 +3580,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // holds its vertices in world space under an identity transform, so its origin is the map
         // corner; VisualOriginOf is that same point corrected, and needs the node in the tree.
         var from = node.IsInsideTree() ? VisualOriginOf(node) : WorldPos(node);
-        var query = PhysicsRayQueryParameters3D.Create(
+        using var query = PhysicsRayQueryParameters3D.Create(
             from, from + new Vector3(0f, reach, 0f), ContactMask);
         query.Exclude = UndercoverExclusion(
             anchor != null && IsInstanceValid(anchor) ? anchor : node);
-        return space.IntersectRay(query).Count > 0;
+        using var hit = space.IntersectRay(query);
+        return hit.Count > 0;
     }
 
     // The original clears the probed node's own collidable bit for the duration of the cast, so a
@@ -3593,8 +3606,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             var n = stack.Pop();
             if (n is CollisionObject3D body)
                 rids.Add(body.GetRid());
-            foreach (var child in n.GetChildren())
-                stack.Push(child);
+            for (int i = 0, count = n.GetChildCount(); i < count; i++)
+                stack.Push(n.GetChild(i));
         }
         return _undercoverExclude[key] = rids;
     }
@@ -3606,8 +3619,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         if (!_rest.ContainsKey(node))
             _rest[node] = node.Transform;
-        foreach (var child in node.GetChildren())
-            if (child is Node3D c)
+        for (int i = 0, count = node.GetChildCount(); i < count; i++)
+            if (node.GetChild(i) is Node3D c)
                 PrimeRest(c);
     }
 
@@ -4277,8 +4290,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // build puts on each node, since Godot's own Name is sanitized and de-duplicated.
     private void CollectNamed(Node node, Dictionary<string, Node3D> into)
     {
-        foreach (var child in node.GetChildren())
+        for (int i = 0, count = node.GetChildCount(); i < count; i++)
         {
+            var child = node.GetChild(i);
             if (child is Node3D n3d && n3d.HasMeta(NameMeta))
             {
                 into.TryAdd(n3d.GetMeta(NameMeta).AsString(), n3d);

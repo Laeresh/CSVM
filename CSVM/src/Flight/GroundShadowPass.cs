@@ -131,8 +131,9 @@ public sealed partial class GroundShadowPass : Node3D
         groundY = 0f;
         if (GetWorld3D()?.DirectSpaceState is not { } space)
             return false;
-        var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
-            at, at - (Vector3.Up * GroundShadowLaw.CutoffAltitude), CollisionLayers.World));
+        using var query = PhysicsRayQueryParameters3D.Create(
+            at, at - (Vector3.Up * GroundShadowLaw.CutoffAltitude), CollisionLayers.World);
+        using var hit = space.IntersectRay(query);
         if (hit.Count == 0)
             return false;
         groundY = ((Vector3)hit["position"]).Y;

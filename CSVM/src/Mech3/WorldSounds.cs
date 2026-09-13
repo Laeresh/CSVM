@@ -41,6 +41,8 @@ public sealed partial class WorldSounds : Node3D
     public MissionRadio? Radio;
 
     private const float OneShotGrace = 0.5f; // s before a non-playing one-shot is swept
+    // A StringName, read every frame per emitter: a string literal here would convert per call.
+    private static readonly StringName PlayedMeta = "csky_played";
 
     private readonly Dictionary<string, SoundDef> _defs;
     private readonly IReadOnlyDictionary<string, SoundGroup> _groups;
@@ -347,9 +349,9 @@ public sealed partial class WorldSounds : Node3D
             // A LOOPED stream is marked as a forward loop by SoundArchive, so one Play() runs
             // forever; the one non-looping SOUND_NODE name in the data (snd_freighter) fires once
             // and is deliberately not restarted here.
-            if (!e.Player.Playing && (e.Looped || !e.Player.HasMeta("csky_played")))
+            if (!e.Player.Playing && (e.Looped || !e.Player.HasMeta(PlayedMeta)))
             {
-                e.Player.SetMeta("csky_played", true);
+                e.Player.SetMeta(PlayedMeta, true);
                 e.Player.Play();
             }
         }

@@ -362,6 +362,8 @@ public sealed partial class ProjectilePool : Node3D
     // our hulls live on their own query layer, so a plane between a burst and its victim shields
     // nothing here.
     private readonly PhysicsRayQueryParameters3D _coverRay = new() { CollisionMask = CollisionLayers.World };
+    // The cover ray's one-entry exclusion, reused across casts rather than built per candidate.
+    private readonly Godot.Collections.Array<Rid> _coverExclude = new();
     private readonly List<BlastCandidate> _blastCandidates = new();
     // The world objects one burst has already dealt a share to, by instance id (Godot object
     // identity is a native pointer, so the id is the safe key). Reset per burst.
@@ -1166,7 +1168,10 @@ public sealed partial class ProjectilePool : Node3D
                     // Per-shot owner exclusion on the SHARED query object: set for this round's
                     // shooter, reset right after, a leaked Exclude shields the next round's target.
                     _ray.Exclude = ExcludeFor(p.Shooter, p.Owner);
-                    var hit = space.IntersectRay(_ray);
+                    // Disposed, never dropped: a hit dictionary left to the finalizer is one more
+                    // finalizable object per round per tick, and that count sets the collection
+                    // pause (PERF-20). The same rule holds for every engine array or dictionary below.
+                    using var hit = space.IntersectRay(_ray);
                     _ray.Exclude = NoExclude;
                     if (hit.Count > 0)
                     {
@@ -1241,6 +1246,7 @@ public sealed partial class ProjectilePool : Node3D
 
     public override void _Process(double delta)
     {
+        using var _ = ProcessSiteCost.Enter(ProcessSite.Projectiles);
         RenderTracers();
         for (int i = 0; i < _muzzle.Length; i++)
             RenderSprites(_muzzleMm[i], _muzzle[i]);
@@ -1294,8 +1300,10 @@ public sealed partial class ProjectilePool : Node3D
             return false;
         _coverRay.From = from;
         _coverRay.To = centre;
-        _coverRay.Exclude = new Godot.Collections.Array<Rid> { candidate };
-        var hit = space.IntersectRay(_coverRay);
+        _coverExclude.Clear();
+        _coverExclude.Add(candidate);
+        _coverRay.Exclude = _coverExclude;
+        using var hit = space.IntersectRay(_coverRay);
         _coverRay.Exclude = NoExclude;
         if (hit.Count == 0)
             return false;
@@ -1326,8 +1334,8 @@ public sealed partial class ProjectilePool : Node3D
     private static int CountMeshes(Node n)
     {
         int c = n is MeshInstance3D ? 1 : 0;
-        foreach (var child in n.GetChildren())
-            c += CountMeshes(child);
+        for (int i = 0, count = n.GetChildCount(); i < count; i++)
+            c += CountMeshes(n.GetChild(i));
         return c;
     }
 
@@ -1378,9 +1386,9 @@ public sealed partial class ProjectilePool : Node3D
         if (node is Node3D n3d && node.HasMeta(AnimRuntime.NameMeta)
             && node.GetMeta(AnimRuntime.NameMeta).AsString().EndsWith(suffix, System.StringComparison.OrdinalIgnoreCase))
             return n3d;
-        foreach (var child in node.GetChildren())
+        for (int i = 0, count = node.GetChildCount(); i < count; i++)
         {
-            if (FindChildByMetaSuffix(child, suffix) is { } found)
+            if (FindChildByMetaSuffix(node.GetChild(i), suffix) is { } found)
                 return found;
         }
         return null;
@@ -2522,6 +2530,8 @@ public sealed partial class ProjectilePool : Node3D
     {
         ConfigureSphereQuery(radius, point);
         var hits = space.IntersectShape(_proximityQuery, MaxBlastBodies);
+        // The typed array is not disposable itself; its untyped core is the finalizable wrapper.
+        using var hitsCore = (Godot.Collections.Array)hits;
         if (hits.Count == MaxBlastBodies)
             GD.PushWarning($"blast query reached {MaxBlastBodies} bodies at radius {radius:0.##} m");
         foreach (var hit in hits)

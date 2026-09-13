@@ -25,7 +25,12 @@ public sealed class ClutterBuilder
     /// holds the shared <see cref="ConcavePolygonShape3D"/>s its bodies reference by RID.
     /// The physics server holds RIDs, not Refs, without this anchor the shapes would be
     /// collected while bodies still point at them.</summary>
-    public const string SharedShapeMeta = "csvm_clutter_shapes";
+    public static readonly StringName SharedShapeMeta = "csvm_clutter_shapes";
+
+    /// <summary>Meta on each collision region body: the <see cref="Rect2"/> of world x/z its
+    /// placements' origins lie in, so a crater cull skips the regions it cannot reach without
+    /// reading a single shape.</summary>
+    public static readonly StringName CollisionCellMeta = "csvm_clutter_cell";
 
     // The sprite shader's distance-fog block, emitted only into the fogged variant.
     private const string FogLines =
@@ -641,6 +646,7 @@ public sealed class ClutterBuilder
             mm.SetInstanceTransform(i, kind.Instances[i]);
             mm.SetInstanceCustomData(i, kind.Fades[i]);
         }
+        ClutterCull.Index(mm, kind.Instances);
         return mm;
     }
 
@@ -1131,6 +1137,8 @@ public sealed class ClutterBuilder
                 {
                     // Named to locate the cell in a crash log.
                     regions[key] = body = new StaticBody3D { Name = $"clutter_bld_{key.Item1}_{key.Item2}" };
+                    body.SetMeta(CollisionCellMeta, new Rect2(
+                        key.Item1 * CollisionRegion, key.Item2 * CollisionRegion, CollisionRegion, CollisionRegion));
                     root.AddChild(body);
                 }
                 PhysicsServer3D.BodyAddShape(body.GetRid(), shapeRid, xf);
