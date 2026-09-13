@@ -190,6 +190,12 @@ public sealed class CampaignFlow
 
     private readonly Dictionary<CampaignScreen, ICampaignPage> _pages = new();
 
+    // The film in front of the screens, which the two cinema doors below play through. ⚠ Do not
+    // call a cinema around it: the screen a film opens is live the moment the film stops, and the
+    // presentation polls its seats after the stop, so the press that ended the film would arrive
+    // on that screen as an edge of its own.
+    private readonly CinemaFilm _film = new();
+
     // The screens entered, innermost last. Never empty: popping the last one ends the flow.
     private readonly List<CampaignScreen> _stack = new() { CampaignScreen.Roster };
 
@@ -298,6 +304,12 @@ public sealed class CampaignFlow
 
     /// <summary>Whether this mission flies a wingman, its <c>cm_sequence</c> flag.</summary>
     public bool MissionHasWingman => Feature.MissionHasWingman;
+
+    /// <summary>The film standing in front of these screens, as the presentation driving them reads
+    /// the span: the frames the film owns, and the tail of the press that ended it. A presentation
+    /// that polls its input reads this before it applies a frame, or the press that skipped a film
+    /// fires a row on the screen the film opened.</summary>
+    public CinemaFilm Film => _film;
 
     /// <summary>The screen showing.</summary>
     public CampaignScreen Screen => _stack[^1];
@@ -568,7 +580,7 @@ public sealed class CampaignFlow
     {
         if (Feature.ClosingCinema is { } cinema)
         {
-            cinema.OpenScrapbook(seq, missionWon, () => OpenScrapbook(seq));
+            _film.Play(then => cinema.OpenScrapbook(seq, missionWon, then), () => OpenScrapbook(seq));
             return;
         }
 
@@ -598,7 +610,7 @@ public sealed class CampaignFlow
     {
         if (Feature.ChapterCinema is { } cinema && Feature.Profile is { } seated)
         {
-            cinema.OpenCabin(seated, () => GoTo(CampaignScreen.Cabin));
+            _film.Play(then => cinema.OpenCabin(seated, then), () => GoTo(CampaignScreen.Cabin));
             return;
         }
 

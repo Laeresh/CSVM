@@ -1203,11 +1203,39 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     // --- navigation ---
 
+    // Whether a campaign film owns this frame rather than the screen behind it: one standing in
+    // front of that screen does, and so does the tail of the press that ended one, which the screen
+    // never saw go down and would read as an edge of its own. swallowed says that frame still asks
+    // for a redraw, the screen having changed unread behind the film. The pointer's tail lasts
+    // until its button comes up, where every other press is spent on the frame it lands on.
+    private bool CampaignFilmOwnsFrame(out bool swallowed)
+    {
+        swallowed = false;
+        if (_campaign?.Film is not { } film)
+        {
+            return false;
+        }
+
+        if (film.Up)
+        {
+            return true;
+        }
+
+        swallowed = film.Swallows(Input.IsMouseButtonPressed(MouseButton.Left));
+        return swallowed;
+    }
+
     // Reads this frame's polled intents and applies them. Mode/Chapter are player 1's
     // alone (the others can only leave); the Plane screen runs every player's cursor at once and
     // fires Launch when they are all locked. Returns true if the view changed.
     private bool HandleInput()
     {
+        // Before any screen reads the frame: a campaign film may own it.
+        if (CampaignFilmOwnsFrame(out bool swallowed))
+        {
+            return swallowed;
+        }
+
         bool dirty = false;
         if (_screen != Screen.Plane)
         {

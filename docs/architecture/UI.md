@@ -14,7 +14,7 @@ graph. It owns the drawing, the per-seat `MenuInput` polling, the join scan, the
 the mouse (player 1's rows take Godot's hit test through `gui_input`, folded into the next frame's
 step, Accept and Back), and nothing else: rosters, seats, picks, gates and the typed exit are
 the host's features (`Menu/MenuHost.cs`), the layout is `MenuZones`, and the hangar and campaign
-screens are `HangarFlow` and `CampaignFlow` drawn through `ComposedBoardView`. Contract: [../menu-presentations.md](../menu-presentations.md).
+screens are `HangarFlow` and `CampaignFlow` drawn through `ComposedBoardView`, whose `Film` owns a frame before any screen reads it. Contract: [../menu-presentations.md](../menu-presentations.md).
 
 ## src/UI/MenuZones.cs
 How the launchscreen's three bands divide a window: a header and a footer held at the heights their
@@ -96,7 +96,7 @@ navigation; the launchscreen owns every Godot control. Screens are a stack rathe
 order, since the campaign's navigation is a graph, and `Registry` maps a `CampaignScreen` to its
 page factory. A page contributes pictures, strokes and captions and names which authored button
 each row presses; `CampaignBoards` supplies the geometry through `Layout`, which is Built-in's
-alone. `Modal` and `Message` are the dialog and the refusal band every screen shares; `OpenCabin` is every door onto the cabin, RETURN TO CABIN and the back press included, and `OpenScrapbookAfterMission` the mission end's door onto the book, each where one of the feature's two cinemas plays.
+alone. `Modal` and `Message` are the dialog and the refusal band every screen shares; `OpenCabin` is every door onto the cabin, RETURN TO CABIN and the back press included, and `OpenScrapbookAfterMission` the mission end's door onto the book, each playing one of the feature's two cinemas through `Film`, the span (`CinemaHandoff.cs`) a polling presentation reads before it applies a frame.
 
 ## src/UI/Menu/CampaignFlightField.cs
 Owns a campaign sortie's humans as part of the shared `CampaignFeature` (`Feature.Field`, in

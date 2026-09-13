@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using CSVM.Mech3;
 using CSVM.Session;
 using CSVM.UI;
 using CSVM.UI.Menu;
@@ -22,6 +23,8 @@ internal static class MenuCampaignSuites
 {
     private const string Pilot = "Zachary";
     private const string Guest = "Nathan";
+    private const string Filmed = "Maria";
+    private const string Finished = "Paladin";
     private const int FlownBefore = 3;
 
     private static readonly MenuCommands Accept = new() { Accept = true };
@@ -44,7 +47,8 @@ internal static class MenuCampaignSuites
         + "CANCEL, PLANE CONSTRUCTION opens the hangar over the profile's wallet and Back resumes the "
         + "cabin, FLY MISSION leaves as one CampaignMissionExit with the profile saved, the debrief "
         + "return opens the scrapbook on the flown mission and turns back to the cabin, the guest "
-        + "check walks a debug-joined field, and every scratch-profile aid opens its screen")]
+        + "check walks a debug-joined field, every scratch-profile aid opens its screen, and the two "
+        + "campaign films own the frames they play and the press that ended them")]
     internal static void MenuCampaignJourney(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -78,6 +82,7 @@ internal static class MenuCampaignSuites
             DebriefReturn(ctx, menu, store);
             GuestCheck(ctx, menu);
             Aids(ctx, menu);
+            FilmHandBack(ctx);
         }
         finally
         {
@@ -627,6 +632,112 @@ internal static class MenuCampaignSuites
             $"--menu=campaign-hangar opens the hangar over the scratch profile's wallet with the cabin behind it ({menu.ShownScreen})");
     }
 
+    // Built-in's two campaign films and the press that ends one, in the order the engine runs them:
+    // the cinema's own handler stops a film and hands off inside the input flush, and the seat poll
+    // that reads the press runs after it in the same frame. The Stop calls below stand for that
+    // flush and the Drive that follows each for that poll, so one press spans the hand-back. Its own
+    // host: a film on the journey's would stand in front of every cabin door that journey takes.
+    private static void FilmHandBack(TestContext ctx)
+    {
+        var chapter = new FilmRecorder();
+        var closing = new FilmRecorder();
+        var host = MenuSuiteHost.Bare(new List<MenuExit>(), ctx.DataRoot, out var seat,
+            chapterCinema: new ChapterCinema(chapter.Play), closingCinema: new ClosingCinema(closing.Play));
+        var menu = LaunchMenu.Build(ctx.ZrdrPath, ctx.DataRoot, host, seat.Input);
+        ctx.Host.AddChild(menu);
+        menu.SetProcess(false);
+        string root = Path.Combine(ctx.ScratchDir, "menu-campaign-film");
+        if (Directory.Exists(root))
+        {
+            Directory.Delete(root, recursive: true);
+        }
+
+        var store = new CampaignProfileStore(Path.Combine(root, "Profiles"));
+        menu.CampaignProfiles = store;
+        try
+        {
+            ChapterFilm(ctx, menu, store, chapter);
+            ClosingFilm(ctx, menu, store, closing);
+        }
+        finally
+        {
+            ctx.Host.RemoveChild(menu);
+            menu.QueueFree();
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
+    // The chapter film the flight-return door plays in front of the cabin.
+    private static void ChapterFilm(
+        TestContext ctx, LaunchMenu menu, CampaignProfileStore store, FilmRecorder film)
+    {
+        store.Save(Flown(Filmed, ChapterCinema.MissionsPerChapter));
+        menu.ShowMenu();
+        menu.OpenCampaignCabin(Filmed);
+        var flow = menu.Campaign!;
+        ctx.Check(film.Plays == 1 && film.Name == ChapterCinema.NameOf(2),
+            $"the cabin door plays the film of the chapter the profile has reached ({film.Name})");
+        ctx.Check(flow.Screen == CampaignScreen.Roster, $"and the cabin waits behind it ({flow.Screen})");
+        menu.Drive(Down);
+        menu.Drive(Accept);
+        ctx.Check(flow.Screen == CampaignScreen.Roster && film.Plays == 1,
+            $"a press under the film walks and fires nothing on the screen behind it ({flow.Screen})");
+        film.Stop();
+        ctx.Check(flow.Screen == CampaignScreen.Cabin,
+            $"the hand-off opens the cabin on the frame the film stops ({flow.Screen})");
+        bool redrawn = menu.Drive(Accept);
+        ctx.Check(flow.Screen == CampaignScreen.Cabin,
+            $"the poll on that frame reads the press that ended the film as nothing ({flow.Screen})");
+        ctx.Check(redrawn, $"and that frame still redraws, the screen having changed unread behind the film");
+        Is(ctx, "the cabin standing on its first plaque", "Next Mission", menu.ShownRowText);
+        menu.Drive(Accept);
+        ctx.Check(flow.Screen == CampaignScreen.Briefing, $"the next press is the player's own ({flow.Screen})");
+    }
+
+    // The closing film the mission-end door plays in front of the book, the second of the two.
+    private static void ClosingFilm(
+        TestContext ctx, LaunchMenu menu, CampaignProfileStore store, FilmRecorder film)
+    {
+        int last = CampaignSequence.MissionCount - 1;
+        store.Save(Flown(Finished, CampaignSequence.MissionCount));
+        menu.ShowMenu();
+        menu.OpenCampaignScrapbook(Finished, last, missionWon: true);
+        var flow = menu.Campaign!;
+        ctx.Check(film.Plays == 1 && film.Name == ClosingCinema.Name,
+            $"the mission-end door plays the closing film ({film.Name})");
+        ctx.Check(flow.Screen == CampaignScreen.Cabin, $"and the book waits behind it ({flow.Screen})");
+        menu.Drive(Accept);
+        ctx.Check(flow.Screen == CampaignScreen.Cabin,
+            $"a press under the film fires nothing on the cabin behind it ({flow.Screen})");
+        film.Stop();
+        ctx.Check(flow.Screen == CampaignScreen.Scrapbook,
+            $"the hand-off opens the book on the frame the film stops ({flow.Screen})");
+        menu.Drive(Accept);
+        ctx.Check(flow.Screen == CampaignScreen.Scrapbook,
+            $"the poll on that frame reads the press that ended it as nothing ({flow.Screen})");
+        Is(ctx, "the book standing on its way out", "RETURN TO CABIN", menu.ShownRowText);
+        menu.Drive(Accept);
+        ctx.Check(flow.Screen == CampaignScreen.Cabin, $"and the next press is the book's own ({flow.Screen})");
+    }
+
+    // A profile that has completed its first flown missions, written through the progression rules
+    // the way a mission director writes one.
+    private static CampaignProfileDef Flown(string name, int flown)
+    {
+        var profile = CampaignProfileDef.NewProfile(name);
+        for (int seq = 0; seq < flown; seq++)
+        {
+            CampaignProgression.Record(profile, new MissionAttempt(
+                seq, CampaignProgression.PrimaryObjectiveMask, 300_000, 400, 120,
+                profile.Planes[0].Airframe, profile.Planes[0].Name));
+        }
+
+        return profile;
+    }
+
     // What one of the ammo screen's two description panes carries, found by the pane's own authored
     // position: the composer writes each pane's words into its own column.
     private static string PaneText(ComposedBoard? board, BoardDetailPane pane, CampaignLayout layout)
@@ -703,4 +814,24 @@ internal static class MenuCampaignSuites
     private static void Has(TestContext ctx, string what, string expected, string actual) =>
         ctx.Check(actual.Contains(expected, StringComparison.Ordinal),
             $"{what}: expected '{expected}' in '{actual}'");
+
+    // The stand-in for Launcher.PlayCinema: it records what it was asked for and hands the film's
+    // end back, so the arm decides which frame the film stops on.
+    private sealed class FilmRecorder
+    {
+        private Action? _then;
+
+        public string? Name { get; private set; }
+
+        public int Plays { get; private set; }
+
+        public void Play(string name, Action then, CinemaSkip skip)
+        {
+            Name = name;
+            Plays++;
+            _then = then;
+        }
+
+        public void Stop() => _then?.Invoke();
+    }
 }

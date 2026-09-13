@@ -1916,20 +1916,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   session. *Cross-refs:* `docs/org/shadows.md`, `git log --grep=BL-331` (the shadow's landed
   placement and silhouette, and the halves dropped with it), `docs/verification.md` SRC-12.
 
-- `BL-875` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Built-in's campaign
-  screens take the key or pad press that skipped a chapter or closing film.** *Evidence:* a read of
-  CSVM's own code, the twin of the leak the Original shell no longer has. `LaunchMenu` polls its
-  seats every frame (`_slots[i].Seat.Source.Poll`) and reads `Accept` as an edge, while a film's
-  stop and its hand-off both run in the input flush ahead of that poll, so the press that ended the
-  film arrives on the frame the screen it opened is first live. The mouse half is probably clear:
-  the launchscreen reads the button as an `InputEvent` in `_UnhandledInput`, which the cinema's own
-  handler takes first. *Fix shape:* the Original shell's `CinemaFilm` (`UI/CinemaHandoff.cs`) holds
-  a film's span and the tail of the press that ended it; play Built-in's two films through one of
-  those from `CampaignFlow`'s doors, and pin it with a press spanning the hand-back. *⚠ Traps:*
-  nobody has seen this at the controls, the report behind the Original fix was Original's; confirm
-  the poll order against the film's stop before writing the fix. *Cross-refs:*
-  `UI/CinemaHandoff.cs`, `docs/verification.md`'s `METHOD-30`.
-
 - `BL-878` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **The prompts the
   auto-dock line does not cover still name fixed controls, and every prompt names its control in
   words where a glyph would read better on a pad.** *Evidence:* the seat remembers which device
