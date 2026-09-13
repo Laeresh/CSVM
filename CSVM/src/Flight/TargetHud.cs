@@ -10,7 +10,7 @@ namespace CSVM.Flight;
 /// The per-pane targeting HUD, built on every human pane in every flight session (a <c>--vs</c>
 /// pane gets one alongside <see cref="VersusHud"/>). It draws the pilot's own sticky selection
 /// (<see cref="Selected"/>) in the original's shape: a bracket box gated on the SELECTED GUN's
-/// reach (<see cref="GunReaches"/>), the label below it, and off screen an edge arrow with the name
+/// reach (<see cref="GunReaches"/>), the label below it, and off screen the edge marker with a name
 /// and clock bearing. Colour is the decoded <c>Target::GetColor</c> (<see cref="MarkerColor"/>).
 /// <see cref="TrackedHostile"/> is the fallback where no selection exists at all, and
 /// <c>--debug-markers</c> (<see cref="MarkAll"/>) widens the marker to every live aircraft with a
@@ -583,7 +583,7 @@ public sealed partial class TargetHud : Control
     }
 
     // The selected target's marker: on screen, the bracket box (when the gun reaches it) over the
-    // label block; off screen, the edge arrow with that block plus the clock bearing and no box.
+    // label block; off screen, the edge marker with that block plus the clock bearing and no box.
     // The FUN_004574d0 label anchor is computed from the box whether or not the box is drawn, so an
     // out-of-range target's label does not move. False = nothing drawn, so the caller falls back.
     // ⚠ The clock line is the OFF-SCREEN case only: the Kestrel shot shows an on-screen target
@@ -623,7 +623,7 @@ public sealed partial class TargetHud : Control
             return true;
         }
 
-        // Off screen: the edge arrow from the anchor out to the tip, and the label block above or
+        // Off screen: the edge marker's arrow from the anchor out to the tip, and the block above or
         // below it, the tag broken onto its own lines the way HUD.png shows. With the picture up
         // all three measure against the disc instead, which is half a window further in.
         bool disc = DiscShown;
@@ -641,10 +641,10 @@ public sealed partial class TargetHud : Control
         return true;
     }
 
-    /// <summary>The picture itself: the viewport's texture masked to a circle of
-    /// <paramref name="radius"/> at <paramref name="center"/>, ringed in the marker's own colour.
-    /// The mask is a polygon rather than a shader, so it costs one draw call and needs no material
-    /// on the HUD control (the original blits a pre-cut round sprite).</summary>
+    // The picture itself: the viewport's texture masked to a circle of that radius at that centre,
+    // ringed in the marker's own colour. The mask is a polygon rather than a shader, so it costs
+    // one draw call and needs no material on the HUD control (the original blits a pre-cut round
+    // sprite).
     private void DrawDisc(Vector2 center, float radius, Color color, float s)
     {
         for (int i = 0; i < DiscSegments; i++)
@@ -712,7 +712,7 @@ public sealed partial class TargetHud : Control
     }
 
     /// <summary>One tracked hostile's marker: on screen, its tag floats just above the projected
-    /// point; off screen (or behind), an edge arrow + "N o'clock" bearing,
+    /// point; off screen (or behind), the edge marker's arrow + "N o'clock" bearing,
     /// <see cref="EdgeMarker"/>'s placement, plus the <paramref name="stagger"/> step
     /// <c>--debug-markers</c> needs when several planes share one bearing.</summary>
     private void DrawOpponent(Font font, Vector3 pos, Color color, string tag, float s, int fontSize,

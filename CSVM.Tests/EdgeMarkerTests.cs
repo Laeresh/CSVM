@@ -6,11 +6,11 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The off-screen edge marker's placement rules (<see cref="EdgeMarker"/>), shared by
-/// VersusHud and TargetHud: the 5-percent-inset on-screen test, the behind-the-camera mirror, the
-/// degenerate-direction fallback, the anchor's clamp to the inset boundary, the tip's clamp to the
-/// pane, and the clock-hour bearing. These pin the semantics the HUD goldens witness end-to-end,
-/// including <c>Rect2.HasPoint</c>'s inclusive-at-position / exclusive-at-end asymmetry, which is
-/// today's behaviour and not a bug to fix here.
+/// VersusHud and TargetHud: the whole-pane on-screen test, the behind-the-camera mirror, the
+/// degenerate-direction fallback, the anchor's clamp to the 5 percent inset boundary, the tip's
+/// clamp to the pane, and the clock-hour bearing. These pin the semantics the HUD goldens witness
+/// end-to-end, including <c>Rect2.HasPoint</c>'s inclusive-at-position / exclusive-at-end
+/// asymmetry, which is today's behaviour and not a bug to fix here.
 /// </summary>
 public class EdgeMarkerTests
 {
@@ -21,7 +21,7 @@ public class EdgeMarkerTests
     private static readonly Vector2 Pane = new(1000f, 800f);
 
     [Fact]
-    public void APointInsideTheInsetRectStaysOnScreenUntouched()
+    public void APointOnThePaneStaysOnScreenUntouched()
     {
         var placed = EdgeMarker.Resolve(new Vector2(300f, 500f), behind: false, Pane);
         Assert.True(placed.OnScreen);
@@ -31,28 +31,37 @@ public class EdgeMarkerTests
     }
 
     [Fact]
-    public void TheInsetIsFivePercentOfEachAxisAndNotAFlatMargin()
+    public void APointInsideTheInsetBandIsStillOnScreen()
     {
-        // 4 % of the width is outside the inset and 6 % is inside, and the taller axis insets by
-        // its own 5 %, which a single margin figure could not do.
-        Assert.False(EdgeMarker.Resolve(new Vector2(0.04f * Pane.X, 400f), false, Pane).OnScreen);
-        Assert.True(EdgeMarker.Resolve(new Vector2(0.06f * Pane.X, 400f), false, Pane).OnScreen);
-        Assert.False(EdgeMarker.Resolve(new Vector2(500f, 0.04f * Pane.Y), false, Pane).OnScreen);
-        Assert.True(EdgeMarker.Resolve(new Vector2(500f, 0.06f * Pane.Y), false, Pane).OnScreen);
+        // The band between the inset boundary and the pane edge: the original's off-screen flag is
+        // the whole viewport, so a target in there is on screen and gets no arrow, tag or disc.
+        // Both axes, both ends, including the pixel inside each far edge.
+        foreach (var band in new[]
+        {
+            new Vector2(InsetX - 1f, 400f), new Vector2(Pane.X - InsetX + 1f, 400f),
+            new Vector2(500f, InsetY - 1f), new Vector2(500f, Pane.Y - InsetY + 1f),
+            new Vector2(0f, 0f), new Vector2(Pane.X - 1f, Pane.Y - 1f),
+        })
+        {
+            var placed = EdgeMarker.Resolve(band, behind: false, Pane);
+            Assert.True(placed.OnScreen, $"{band} is inside the pane and must read on screen");
+            Assert.Equal(band, placed.Anchor);
+        }
     }
 
     [Fact]
-    public void TheInsetBoundaryIsInclusiveAtTopLeftAndExclusiveAtBottomRight()
+    public void ThePaneBoundaryIsInclusiveAtTopLeftAndExclusiveAtBottomRight()
     {
-        Assert.True(EdgeMarker.Resolve(new Vector2(InsetX, InsetY), false, Pane).OnScreen);
-        Assert.False(EdgeMarker.Resolve(new Vector2(Pane.X - InsetX, 400f), false, Pane).OnScreen);
-        Assert.False(EdgeMarker.Resolve(new Vector2(500f, Pane.Y - InsetY), false, Pane).OnScreen);
+        Assert.True(EdgeMarker.Resolve(Vector2.Zero, false, Pane).OnScreen);
+        Assert.False(EdgeMarker.Resolve(new Vector2(Pane.X, 400f), false, Pane).OnScreen);
+        Assert.False(EdgeMarker.Resolve(new Vector2(500f, Pane.Y), false, Pane).OnScreen);
+        Assert.False(EdgeMarker.Resolve(new Vector2(-1f, 400f), false, Pane).OnScreen);
     }
 
     [Fact]
     public void BehindForcesOffScreenAndMirrorsTheDirectionThroughCentre()
     {
-        // (700, 400) is comfortably inside the inset rect, but a point behind the camera
+        // (700, 400) is comfortably on the pane, but a point behind the camera
         // unprojects mirrored, so the marker goes to the edge and the direction flips back:
         // the target reads as LEFT of centre, not right.
         var placed = EdgeMarker.Resolve(new Vector2(700f, 400f), behind: true, Pane);
@@ -97,14 +106,19 @@ public class EdgeMarkerTests
     }
 
     [Fact]
-    public void ATargetStillInsideThePaneKeepsItsOwnPointAsTheTip()
+    public void ATargetJustPastTheEdgeAlreadySpansTheWholeInsetBand()
     {
-        // Between the inset boundary and the pane edge the arrow is almost all head: the tip is
-        // the projected point itself, so the shaft is only as long as the overshoot.
-        var placed = EdgeMarker.Resolve(new Vector2(970f, 400f), false, Pane);
-        Assert.False(placed.OnScreen);
-        Assert.Equal(new Vector2(Pane.X - InsetX, 400f), placed.Anchor);
-        Assert.Equal(new Vector2(970f, 400f), placed.Tip);
+        // The first pixel outside the pane is off screen, and its shaft already spans the band,
+        // anchor on the inset boundary and tip on the pane's own edge. A target further out moves
+        // neither end, so the shaft's length is the bearing's and not the range's.
+        var justOut = EdgeMarker.Resolve(new Vector2(Pane.X, 400f), false, Pane);
+        var farOut = EdgeMarker.Resolve(new Vector2(5000f, 400f), false, Pane);
+        Assert.False(justOut.OnScreen);
+        Assert.Equal(new Vector2(Pane.X - InsetX, 400f), justOut.Anchor);
+        Assert.True(justOut.Tip.IsEqualApprox(new Vector2(Pane.X - 1.001f, 400f)),
+            $"tip {justOut.Tip} is not on the pane's own right edge");
+        Assert.Equal(farOut.Anchor, justOut.Anchor);
+        Assert.Equal(farOut.Tip, justOut.Tip);
     }
 
     [Fact]
@@ -112,7 +126,7 @@ public class EdgeMarkerTests
     {
         // The spyglass's half window: the anchor comes in by that much on the bearing, while the
         // tip and the direction are untouched, and a point the bare rule calls on screen is still
-        // on screen (the original's off-screen flag is the full viewport, not the disc's inset).
+        // on screen (the off-screen flag is the viewport, neither inset rectangle).
         var bare = EdgeMarker.Resolve(new Vector2(5000f, 400f), false, Pane);
         var inset = EdgeMarker.Resolve(new Vector2(5000f, 400f), false, Pane, 48f);
         Assert.Equal(new Vector2(bare.Anchor.X - 48f, 400f), inset.Anchor);

@@ -577,11 +577,11 @@ aim assist's line, is decoded in [../org/aim-assist.md](../org/aim-assist.md).
 
 ## src/Flight/EdgeMarker.cs
 The off-screen edge marker's placement rules, engine-free and pure: `Resolve(projected, behind,
-paneSize, anchorInset)` answers on-screen against edge-clamped as a `Placement` (the inset rect
+paneSize, anchorInset)` answers on-screen against edge-clamped as a `Placement` (the whole-pane
 test, the behind-the-camera mirror, the degenerate-direction fallback, the anchor's clamp to the
 inset boundary and the `Tip`'s to the pane itself, which are the arrow's two ends), and `ClockHour`
-is the bearing in hours. Owns `InsetFraction`, the original's 5 percent per pane axis;
-`anchorInset` (the spyglass disc's half window) moves the ANCHOR alone, never the on-screen test.
+is the bearing in hours. Owns `InsetFraction`, the original's 5 percent per pane axis; it and
+`anchorInset` (the spyglass disc's half window) place the ANCHOR alone, never the on-screen test.
 The camera stays with the callers, each keeping its own arrow, tag and label styling. `MarkerDraw`
 draws what this places; coverage is `CSVM.Tests/EdgeMarkerTests.cs`.
 
