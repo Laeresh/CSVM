@@ -353,6 +353,12 @@ member, and it does not go here.
   and `chapter-census` fails any mip-mapped sampler outside it. Count the arms from the shader
   generators, not from the one the setting was first wired into.
 
+- **WORLD-43**, **A census that walks a built world only covers the arms the world build itself
+  makes; one a game session adds afterwards is invisible to it and passes vacuously.**
+  `chapter-census` sees no cloud-field shader in any of the eight chapters, because
+  `FogVolumeClutter` is built by `GameSession` and not by the world build, so its sampler is
+  asserted in `cloud-field-fade`, which builds the field.
+
 ## SHELL, Windows, PowerShell, and processes
 
 - **SHELL-2**, **Identify stray Godot processes by worktree and probe flag.**

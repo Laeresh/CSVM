@@ -261,6 +261,9 @@ public sealed partial class FogVolumeClutter : Node3D
             #include "res://shaders/csky_atmosphere.gdshaderinc"
             #include "res://shaders/csky_srgb.gdshaderinc"
             #include "res://shaders/csky_clutter_fade.gdshaderinc"
+            // The chapter's mip LOD bias is one device render state in the original, so a card
+            // picks its level exactly as every other mip-mapped arm does.
+            #include "res://shaders/csky_mip_bias.gdshaderinc"
 
             varying flat float v_alpha;
 
@@ -282,7 +285,7 @@ public sealed partial class FogVolumeClutter : Node3D
             }
 
             void fragment() {
-                vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * texture(albedo_tex, UV);
+                vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * csky_sample_albedo(albedo_tex, UV);
             {{albedo}}
                 ALPHA = col.a * v_alpha;
             }

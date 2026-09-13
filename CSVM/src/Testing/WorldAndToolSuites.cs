@@ -14,8 +14,8 @@ namespace CSVM.Testing;
 /// censuses, world lighting and viewers, and the lab surfaces.</summary>
 internal static class WorldAndToolSuites
 {
-    // The ambient cloud field's sprite arm, the one mip-mapped sampler the chapter's LOD bias does
-    // not reach yet, so the mip-bias census reports it instead of failing on it.
+    // The ambient cloud field's sprite arm, named so the mip-bias census tallies it apart from the
+    // camera-facing billboards it would otherwise fall in with.
     private const string CloudFieldArm = "cloud-field";
 
     private static readonly string[] AlphaClassChapters =
@@ -880,9 +880,6 @@ internal static class WorldAndToolSuites
             into[arm] = had + 1;
         }
 
-        // The ambient cloud field is the one mip-mapped arm still sampling unbiased, so it is
-        // reported rather than asserted on; everything else must take the chapter's bias.
-        unbiased.Remove(CloudFieldArm);
         int total = biased.Values.Sum();
 
         // The control: a world that resolved to no mip-mapped shader at all would satisfy the

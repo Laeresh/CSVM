@@ -30,7 +30,8 @@ internal static class CloudFieldSuites
         "every fvol cloud sprite carries the polygon normal its draw distance is scaled against "
         + "and one draw of its own fade band: C1's deck slab and its map-edge ring are +Y "
         + "throughout, C5's street prisms take their own walls, the band spans both authored "
-        + "far_fade_range pairs, and neither chapter's pinned placement counts move")]
+        + "far_fade_range pairs, the card sampler fetches through the chapter's mip LOD bias, and "
+        + "neither chapter's pinned placement counts move")]
     internal static void CloudFieldFade(TestContext ctx)
     {
         foreach (var (chapter, expectBase, expectExtension, maxUp) in Fields)
@@ -60,6 +61,7 @@ internal static class CloudFieldSuites
                     ctx.Same(expectExtension, field.ExtensionCount, $"{chapter} cloud sprites past the map edge");
                     ctx.Note($"{chapter} cloud field: {field.Summary}");
                     CheckBands(ctx, chapter, field, spec!, maxUp);
+                    CheckCardSampler(ctx, chapter, field);
                 }
                 finally
                 {
@@ -130,5 +132,27 @@ internal static class CloudFieldSuites
             ctx.Check(block.FarFadeNear.Y > 0f && block.FarFade.Y > block.FarFadeNear.Y,
                 $"{chapter} block bands {block.FarFadeNear} then {block.FarFade}");
         }
+    }
+
+    // The card declares mip levels, so it must fetch through the one function carrying the
+    // chapter's authored LOD bias, like every other mip-mapped arm. Asserted here rather than in
+    // chapter-census: only a game session builds this field, so a census world carries none of it.
+    private static void CheckCardSampler(TestContext ctx, string chapter, FogVolumeClutter field)
+    {
+        int examined = 0;
+        foreach (var child in field.GetChildren())
+        {
+            if (child is not MultiMeshInstance3D { MaterialOverride: ShaderMaterial { Shader: { } shader } })
+            {
+                continue;
+            }
+            string code = shader.Code;
+            ctx.Check(code.Contains("filter_linear_mipmap", System.StringComparison.Ordinal)
+                      && code.Contains("csky_sample_albedo(albedo_tex", System.StringComparison.Ordinal)
+                      && !code.Contains("texture(albedo_tex", System.StringComparison.Ordinal),
+                $"{chapter} {child.Name} card sampler fetches through the chapter mip bias");
+            examined++;
+        }
+        ctx.Check(examined > 0, $"{chapter} cloud card materials examined count={examined}");
     }
 }

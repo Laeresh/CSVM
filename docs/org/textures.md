@@ -428,9 +428,9 @@ leaves alone.
 
 The original's is one device render state, so every mip-mapped arm here reads that global through
 the one `csky_sample_albedo` in `shaders/csky_mip_bias.gdshaderinc`: the world mesh, the
-camera-facing billboards, the cylindrical facades, the templates clutter and the mesh lab's
-diagnostic twin. The `chapter-census` suite fails any arm that samples around it. The ambient cloud
-field (`Effects/FogVolumeClutter.cs`) is the one sampler still outside that routing.
+camera-facing billboards, the cylindrical facades, the templates clutter, the ambient cloud field
+(`Effects/FogVolumeClutter.cs`) and the mesh lab's diagnostic twin. The `chapter-census` suite fails
+any mip-mapped sampler outside that routing, with no arm exempted.
 
 Three divergences remain on the selection itself, and the first two widen the band the authored
 level 1 draws. The world sampler is `filter_linear_mipmap_anisotropic`, which the original's D3D7
@@ -439,4 +439,6 @@ crosses into level 1 as a ring rather than a gradient. The camera far plane is t
 not the zone's `CLIP_RANGES` far ([weather.md](weather.md)), so the ring has room to sit past
 where the original's world ends. And the sprite arms sit at level 0 over most of a C5 framing, so
 the bias moves no pixel on them there; forcing the global to +4 leaves the pinned C5 shot
-byte-identical while it moves 63% of the frame through the world arm.
+byte-identical while it moves 63% of the frame through the world arm. The cloud field is the same
+case in C5 and not in C1: forcing +4 on that arm alone moves 24.4 % of `c1-cloud-field` at a
+channel delta of 11 and leaves all 18 other pinned shots byte-identical.

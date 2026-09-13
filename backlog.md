@@ -1043,21 +1043,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   over C1's lake and the open sea under Enhanced Graphics, chase view, banking so the aircraft
   crosses the water. *Cross-refs:* `BL-803` (the same sitting's dithering), `Launcher.cs`'s
   `EnableWaterReflections`.
-- `BL-900` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The ambient
-  cloud field is the one mip-mapped sampler the chapter's authored LOD bias does not reach.**
-  *Evidence:* the original applies `MipBias` as `D3DRENDERSTATE_MIPMAPLODBIAS`, one device render
-  state every texture sample takes. Every other mip-mapped arm now fetches through
-  `csky_sample_albedo` in `CSVM/shaders/csky_mip_bias.gdshaderinc`, and the `chapter-census` suite
-  fails any sampler outside it; `CSVM/src/Effects/FogVolumeClutter.cs` declares
-  `filter_linear_mipmap` on its card sampler and samples it unbiased, and the suite carries it as a
-  named exemption rather than a failure. *Fix shape:* include the same header in the cloud-card
-  shader, sample through the shared function, and drop the exemption from the census so the arm is
-  covered like the rest. *⚠ Traps:* `BL-327` and `BL-874` are both rewriting that file's scatter and
-  fade, so land this after them or expect a conflict over the same shader text; C1B, C1C and C5 are
-  the chapters whose cloud goldens can move, and only C5 authors a bias at all, so the other two
-  must stay byte-identical. *Cross-refs:* `BL-327`, `BL-874`, `docs/org/cloudCards.md`,
-  `docs/org/textures.md`, `docs/verification.md` WORLD-42.
-
 - `BL-874` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The original
   scatters the cloud field over each `fvol` polygon's FACE on a staggered lattice; we fill a
   volume's interior with square cells anchored on the world origin.** *Evidence:* decoded in
