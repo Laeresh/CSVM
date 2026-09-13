@@ -731,18 +731,17 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   Mouse set to Fly, the autogyro does not respond to the mouse at all and the mouse keeps driving
   the head look. *Evidence:* `MouseFlight.Read` implements the decoded roll/yaw exchange but the
   port reads two mouse axes and hard-codes the third to zero, so the exchange leaves the
-  autogyro's roll at zero; that explains a missing roll, not a missing yaw and pitch. A second
-  candidate: with mouse flying on, the right button is a free-look toggle
-  (`FlightController.StepFreeLookFlag`) and `MouseFlightRead` returns nothing while free look is
-  set, so one earlier tap leaves the mouse on the head for the rest of the sortie. Neither is
-  confirmed as the cause. *Fix shape:* find why the autogyro gets nothing (a headless probe that
+  autogyro's roll at zero; that explains a missing roll, not a missing yaw and pitch. The second
+  candidate is gone: the right button is hold-to-look, so `MouseFlightRead` returns nothing only
+  while that button is down and no earlier tap can leave the mouse on the head for the sortie. The
+  cause is not confirmed. *Fix shape:* find why the autogyro gets nothing (a headless probe that
   logs the mouse deflection reaching `_model` per tick, on an autogyro and on a Fury), fix that,
   and make the autogyro's mapping the decoded exchange with two axes: mouse left and right yaws,
-  up and down pitches, roll stays on the keys. *⚠ Traps:* `BL-915` changes the right button from a
-  toggle to a hold; land that first or together, since it removes the second candidate.
+  up and down pitches, roll stays on the keys. *⚠ Traps:* the right button is hold-to-look under
+  both mouse schemes, so no free-look toggle stands between a reading and the stick.
   *Playtest after fix:* Instant Action in an autogyro with Mouse on Fly: the nose follows the
   mouse in yaw and pitch from the first frame, no button pressed. *Cross-refs:* `BL-447`'s
-  closing commit (the exchange and its honest limit), `BL-915`, `BL-916`, `BL-917`,
+  closing commit (the exchange and its honest limit), `BL-916`, `BL-917`,
   `CSVM/src/Flight/MouseFlight.cs`.
 - `BL-916` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **The mouse pointer
   stays visible and free while flying; it should be hidden and captured by the window.**
@@ -754,7 +753,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   read moves to relative motion under capture. *⚠ Traps:* the hidden test desktop and `--det`
   runs must not depend on the mouse mode; guard the capture on a real display. *Playtest after
   fix:* fly on a two-monitor rig, the pointer never appears and never leaves the game window;
-  pause shows it again. *Cross-refs:* `BL-447`'s closing commit, `BL-914`, `BL-915`,
+  pause shows it again. *Cross-refs:* `BL-447`'s closing commit, `BL-914`,
   `CSVM/src/Flight/FlightController.cs` (the mouse read).
 
 
@@ -1574,19 +1573,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   fix:* Instant Action, select a target and hold a turn: the disc holds steady and no wing or tail
   of the own plane crosses it. *Cross-refs:* `CSVM/src/Flight/SpyglassView.cs`,
   `CSVM/src/Flight/TargetHud.cs`, `FlightController.TryRenderPosition`, `docs/org/spyglass.md`.
-- `BL-915` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Mouse look snaps back
-  to centre the moment the mouse stops moving, with the right button still held.** *Evidence:*
-  `FlightController.MouseLookDelta` returns a direction only on frames where the cursor moved, and
-  `HeadLook.Step` reads "no free-look input" as the idle case and chases the centre, so a held but
-  stationary mouse is indistinguishable from a released button. Under mouse flying the right
-  button is a toggle rather than a hold (`StepFreeLookFlag`), which is the other half of the
-  complaint. *Fix shape:* the head-look input carries a "looking" flag set while the right button
-  is held, independent of this frame's motion; while it is set and the mouse is still the head
-  holds its pose, and the return to centre starts on release. The right button becomes hold-to-look
-  under both mouse schemes. *⚠ Traps:* the pad's aim stick and the centre key keep their arms
-  above the free-look arm in `HeadLook.Step`. *Playtest after fix:* hold the right button, look
-  over a shoulder, stop moving the mouse: the view stays; release: it returns. *Cross-refs:*
-  `CSVM/src/Flight/HeadLook.cs`, `BL-447`'s closing commit, `BL-914`, `BL-916`.
 
 
 ## HUD & UI

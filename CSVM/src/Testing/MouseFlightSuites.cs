@@ -7,8 +7,9 @@ namespace CSVM.Testing;
 
 /// <summary>
 /// The mouse flight-control scheme through the seat's own stick reader: the decoded deadzone, the
-/// autogyro exchange over the shipped defs' own flag, the free-look flag that hands the mouse back
-/// to head-look, and the keyboard scheme underneath, which the mouse must leave exactly as it is.
+/// autogyro exchange over the shipped defs' own flag, the held free-look control that hands the
+/// mouse to head-look for as long as it is down, and the keyboard scheme underneath, which the
+/// mouse must leave exactly as it is.
 /// </summary>
 internal static class MouseFlightSuites
 {
@@ -21,10 +22,10 @@ internal static class MouseFlightSuites
         "the mouse flight-control scheme over the shipped defs: the Hoplite authors is_autogyro and "
         + "the Bloodhawk does not, sideways mouse motion banks the aeroplane where it yaws the "
         + "autogyro, both off the same reader and both past the decoded deadzone that leaves a "
-        + "cursor near the middle flying nothing, the free-look control toggles a flag that takes "
-        + "the stick off the mouse and a second press gives it back, the keys sum into the mouse's "
-        + "own deflections rather than being replaced by them, and a seat on the keyboard scheme "
-        + "reads no stick from the mouse and leaves the flag down for head-look")]
+        + "cursor near the middle flying nothing, holding the free-look control takes the stick off "
+        + "the mouse for exactly as long as it is held and releasing it hands the mouse straight "
+        + "back, the keys sum into the mouse's own deflections rather than being replaced by them, "
+        + "and a seat on the keyboard scheme reads no stick from the mouse at all")]
     internal static void FlightMouseScheme(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -61,7 +62,7 @@ internal static class MouseFlightSuites
             ctx.Check(pull.Pitch > 0.5f && pull.Roll == 0f,
                 $"a cursor below the middle pulls the nose up on either airframe (pitch {pull.Pitch:0.###})");
 
-            FreeLookFlag(ctx, plane);
+            FreeLookHold(ctx, plane);
             KeysSum(ctx, gyro);
             KeyboardScheme(ctx, plane);
         }
@@ -74,26 +75,28 @@ internal static class MouseFlightSuites
         ctx.Note($"the mouse flies the aeroplane through the seat's own stick reader, free-look and all");
     }
 
-    // The flag the free-look control toggles: while the mouse flies, one press takes the stick off
-    // it and the next gives it back. A toggle rather than a hold, since a player looking around
-    // would otherwise have to hold a button through the whole look.
-    private static void FreeLookFlag(TestContext ctx, FlightController plane)
+    // Hold-to-look, the posture under both mouse schemes: while the free-look control is down the
+    // mouse is the head's and the stick reads nothing from it, and the frame it comes up the stick
+    // has it back. A hold rather than a toggle, so one tap cannot strand the mouse on the head.
+    private static void FreeLookHold(TestContext ctx, FlightController plane)
     {
         plane.MouseStickForTest = new Vector2(0.8f, 0f);
         plane.HoldActionForTest(InputAction.FreeLook, true);
         var looking = plane.ReadKeyboard(Dt);
         ctx.Check(plane.FreeLookActiveForTest() && looking.Roll == 0f,
-            $"a press on free-look takes the stick off the mouse (flag {plane.FreeLookActiveForTest()}, roll {looking.Roll:0.###})");
+            $"a held free-look control takes the stick off the mouse (held {plane.FreeLookActiveForTest()}, roll {looking.Roll:0.###})");
 
         plane.HoldActionForTest(InputAction.FreeLook, false);
         var released = plane.ReadKeyboard(Dt);
-        ctx.Check(plane.FreeLookActiveForTest() && released.Roll == 0f,
-            $"the release leaves it there, the flag being a toggle and not a hold (flag {plane.FreeLookActiveForTest()})");
+        ctx.Check(!plane.FreeLookActiveForTest() && released.Roll < -0.7f,
+            $"the release hands the mouse straight back to the stick (held {plane.FreeLookActiveForTest()}, roll {released.Roll:0.###})");
 
+        // The reading a toggle could not give: a second press takes the mouse off the stick AGAIN
+        // rather than handing it back, which is what the toggle did on its own second press.
         plane.HoldActionForTest(InputAction.FreeLook, true);
-        var back = plane.ReadKeyboard(Dt);
-        ctx.Check(!plane.FreeLookActiveForTest() && back.Roll < -0.7f,
-            $"and the next press hands the mouse back to the stick (flag {plane.FreeLookActiveForTest()}, roll {back.Roll:0.###})");
+        var again = plane.ReadKeyboard(Dt);
+        ctx.Check(plane.FreeLookActiveForTest() && again.Roll == 0f,
+            $"and a second hold takes it off once more, no toggle underneath (held {plane.FreeLookActiveForTest()}, roll {again.Roll:0.###})");
         plane.HoldActionForTest(InputAction.FreeLook, false);
     }
 
@@ -115,8 +118,8 @@ internal static class MouseFlightSuites
     }
 
     // The control the whole feature has to leave alone: a seat that did not choose the scheme reads
-    // no stick from the mouse, and its free-look control never raises the flag, so head-look keeps
-    // reading the control itself exactly as it did.
+    // no stick from the mouse at all, whether the free-look control is down or up, and that control
+    // is the same hold head-look has always read.
     private static void KeyboardScheme(TestContext ctx, FlightController plane)
     {
         plane.MouseFlying = false;
@@ -125,9 +128,13 @@ internal static class MouseFlightSuites
         var off = plane.ReadKeyboard(Dt);
         ctx.Check(off.Roll == 0f && off.Pitch == 0f && off.Yaw == 0f,
             $"the keyboard scheme takes no stick from the mouse (roll {off.Roll:0.###}, pitch {off.Pitch:0.###}, yaw {off.Yaw:0.###})");
-        ctx.Check(!plane.FreeLookActiveForTest(),
-            $"and its free-look control leaves the flag down, head-look reading the control itself ({plane.FreeLookActiveForTest()})");
+        ctx.Check(plane.FreeLookActiveForTest(),
+            $"and reads the same held free-look posture head-look has always read ({plane.FreeLookActiveForTest()})");
+
         plane.HoldActionForTest(InputAction.FreeLook, false);
+        var up = plane.ReadKeyboard(Dt);
+        ctx.Check(!plane.FreeLookActiveForTest() && up.Roll == 0f && up.Pitch == 0f,
+            $"and releasing it leaves the stick on the keys, not on the cursor (roll {up.Roll:0.###}, pitch {up.Pitch:0.###})");
     }
 
     // One flying seat over a plant and nothing else: no model to draw, no camera and no HUD, since

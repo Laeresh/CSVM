@@ -5,15 +5,17 @@ namespace CSVM.Flight;
 
 /// <summary>One frame of look input, in the head's own conventions: a snap direction as a
 /// composed (x, y) with +x right and +y forward, a free-look direction with +right and +up, the
-/// center key, and the pad's absolute aim with the same +right/+up signs.
-/// The snap and free-look directions are read for DIRECTION only, so a half-deflected input
-/// pans exactly as fast as a full one, which is what the original's hat-switch input does. That
-/// rule does NOT bind <paramref name="PadRight"/>/<paramref name="PadUp"/>: those carry a
-/// MAGNITUDE, because the pad aims absolutely (docs/controls.md). Defaulted, so a caller forcing
-/// one of the other paths cannot leave a stale deflection on the frame.</summary>
+/// center key, the pad's absolute aim with the same +right/+up signs, and whether the free-look
+/// control is held. The snap and free-look directions are read for DIRECTION only, so a
+/// half-deflected input pans exactly as fast as a full one, which is what the original's
+/// hat-switch input does. That rule does NOT bind <paramref name="PadRight"/>/<paramref
+/// name="PadUp"/>: those carry a MAGNITUDE, because the pad aims absolutely (docs/controls.md).
+/// <paramref name="Looking"/> claims the free-look arm on its own, so a held control over a still
+/// mouse holds the pose rather than reading as idle. Defaulted, so a caller forcing one of the
+/// other paths cannot leave a stale deflection on the frame.</summary>
 public readonly record struct HeadLookInput(
     float SnapX, float SnapY, float FreeRight, float FreeUp, bool Center,
-    float PadRight = 0f, float PadUp = 0f);
+    float PadRight = 0f, float PadUp = 0f, bool Looking = false);
 
 /// <summary>
 /// The pilot's head, in the two first-person views and on the chase camera alike: where it is
@@ -189,10 +191,10 @@ public sealed class HeadLook
 
     /// <summary>One frame: pick this frame's target from the input, then chase it. The center key
     /// beats a snap, a snap beats the pad's absolute aim, that beats free-look, and a frame with
-    /// none of them is the idle frame <see cref="IdleAim"/> owns. A centred pad claims no frame,
-    /// so a plugged-in stick blocks neither the mouse nor autohead. The chase runs whatever the
-    /// input was, so every path (snap, pad, free-look, center, autohead) reaches the eye through
-    /// the same law.</summary>
+    /// none of them is the idle frame <see cref="IdleAim"/> owns; a held free-look control counts
+    /// as free-look with no motion on it. A centred pad claims no frame, so a plugged-in stick
+    /// blocks neither the mouse nor autohead. The chase runs whatever the input was, so every path
+    /// (snap, pad, free-look, center, autohead) reaches the eye through the same law.</summary>
     public void Step(float dt, in HeadLookInput input)
     {
         var snap = SnapTargets(input.SnapX, input.SnapY);
@@ -213,8 +215,10 @@ public sealed class HeadLook
             TargetElevation = elevation;
             TargetAzimuth = azimuth;
         }
-        else if (input.FreeRight != 0f || input.FreeUp != 0f)
+        else if (input.Looking || input.FreeRight != 0f || input.FreeUp != 0f)
         {
+            // A held control claims this arm with no motion on it, so a still mouse holds the pose
+            // instead of falling through to the idle arm and its return to centre.
             FreeLook(input.FreeRight, input.FreeUp, dt);
         }
         else

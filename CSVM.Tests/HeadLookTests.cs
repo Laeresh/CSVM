@@ -283,6 +283,73 @@ public class HeadLookTests
         Assert.Equal(0f, head.TargetAzimuth, Tol);
     }
 
+    // The held control is its own claim on the free-look arm: a mouse that has stopped moving is
+    // not a released button, so the head stays where the mouse put it and the shown angles settle
+    // onto that pose rather than chasing the centre.
+    [Fact]
+    public void AHeldControlOverAStillMouseHoldsTheLook()
+    {
+        var head = new HeadLook();
+        for (int i = 0; i < 10; i++)
+        {
+            head.Step(0.1f, Looking(-1f, 1f));
+        }
+        float elevation = head.TargetElevation, azimuth = head.TargetAzimuth;
+        Assert.NotEqual(0f, azimuth);
+        for (int i = 0; i < 30; i++)
+        {
+            head.Step(0.1f, Looking());
+        }
+        Assert.Equal(elevation, head.TargetElevation, Tol);
+        Assert.Equal(azimuth, head.TargetAzimuth, Tol);
+        Assert.Equal(azimuth, head.Azimuth, 1e-3f);
+        Assert.Equal(elevation, head.Elevation, 1e-3f);
+    }
+
+    // ABLE-TO-FAIL CONTROL for the hold above: the same still mouse with the control RELEASED is
+    // the idle frame, and the head returns to straight ahead.
+    [Fact]
+    public void ReleasingTheHeldControlReturnsTheHeadToStraightAhead()
+    {
+        var head = new HeadLook();
+        for (int i = 0; i < 10; i++)
+        {
+            head.Step(0.1f, Looking(-1f, 1f));
+        }
+        Assert.NotEqual(0f, head.TargetAzimuth);
+        head.Step(0.1f, Idle);
+        Assert.Equal(0f, head.TargetElevation, Tol);
+        Assert.Equal(0f, head.TargetAzimuth, Tol);
+    }
+
+    // The head still takes the delta while the control is held: the flag decides who owns the
+    // frame, not how far the pan goes, so a held pan reads exactly as the motion-only path did.
+    [Fact]
+    public void AHeldControlStillPansAtTheDecodedRate()
+    {
+        var held = new HeadLook();
+        var motionOnly = new HeadLook();
+        held.Step(0.5f, Looking(0f, 1f));
+        motionOnly.Step(0.5f, Free(0f, 1f));
+        Assert.Equal(HeadLook.FreeLookRate * 0.5f, held.TargetElevation, Tol);
+        Assert.Equal(motionOnly.TargetElevation, held.TargetElevation, Tol);
+    }
+
+    // The arms above free-look keep their place: the centre key and the pad's absolute aim both
+    // claim the frame off a held control, so neither is stranded while the button is down.
+    [Fact]
+    public void TheCentreKeyAndThePadStillBeatAHeldControl()
+    {
+        var centred = new HeadLook();
+        centred.Step(0.5f, Looking(-1f, 1f));
+        centred.Step(0.1f, new HeadLookInput(0f, 0f, 0f, 0f, true, 0f, 0f, true));
+        Assert.Equal(0f, centred.TargetAzimuth, Tol);
+
+        var aimed = new HeadLook();
+        aimed.Step(0.1f, new HeadLookInput(0f, 0f, 0f, 0f, false, 1f, 0f, true));
+        Assert.Equal(-Mathf.DegToRad(HeadLook.PadLookYawMaxDeg), aimed.TargetAzimuth, Tol);
+    }
+
     [Fact]
     public void TheIdleHookOwnsAFrameWithNoLookInputAndBypassesTheInputFloor()
     {
@@ -414,4 +481,9 @@ public class HeadLookTests
     private static HeadLookInput Free(float right, float up) => new(0f, 0f, right, up, false);
 
     private static HeadLookInput Pad(float right, float up) => new(0f, 0f, 0f, 0f, false, right, up);
+
+    // The free-look control held, carrying whatever the mouse moved this frame: zero is the still
+    // mouse a held button cannot otherwise be told apart from a released one.
+    private static HeadLookInput Looking(float right = 0f, float up = 0f) =>
+        new(0f, 0f, right, up, false, 0f, 0f, true);
 }

@@ -408,8 +408,9 @@ public partial class FlightController : Node3D
 
     /// <summary>Whether this seat flies with the mouse, the third scheme beside the keyboard and the
     /// pad. It arrives from the seat's saved keymap (<see cref="Bindings.BindingProfile.MouseFlying"/>)
-    /// and the Controls door is where a player turns it on. False, the default, leaves the mouse to
-    /// head-look and every other reader byte for byte as it is.</summary>
+    /// and the Controls door is where a player turns it on. Holding the free-look control routes the
+    /// mouse to the head for as long as it is held, under this scheme and the other two alike.
+    /// False, the default, leaves the mouse to head-look and every other reader byte for byte.</summary>
     public bool MouseFlying;
 
     /// <summary>The cursor offset the mouse-flying stick reads while set, +x right and +y down over
@@ -603,8 +604,6 @@ public partial class FlightController : Node3D
     private Vector3 _heldPos;                    // the pinned position, re-applied through the model every held step
     private Basis _heldAttitude;                 // the pinned attitude, ditto
     private Vector2 _mouseLookPrev;              // last frame's screen mouse position (head-look motion)
-    private bool _freeLook;                      // the free-look flag: the mouse is head-look's, not the stick's
-    private bool _freeLookPrev;                  // last tick's free-look control, for the flag's press edge
 
     // The sim advances on the 60 Hz physics tick while rendering runs at the display rate, so
     // drawing the raw sim pose stutters the plane against the smoothly-moving chase camera at
@@ -4043,7 +4042,6 @@ public partial class FlightController : Node3D
         _keyYaw = StickRamp.Step(
             _keyYaw, _keyActions.Axis(InputAction.YawLeft, InputAction.YawRight), dt);
 
-        StepFreeLookFlag();
         var mouse = MouseFlightRead();
         return new FlightInput
         {
@@ -4055,13 +4053,13 @@ public partial class FlightController : Node3D
     }
 
     // What the mouse adds to this tick's stick: nothing at all unless this seat flies with the
-    // mouse and the free-look flag is down, which is the original's own guard (the mouse control
+    // mouse and the free-look control is up, which is the original's own guard (the mouse control
     // bit of DAT_0071c2a0 set and DAT_00654120 clear). The contribution SUMS into the keyboard and
     // pad deflections rather than replacing them, as the original's arm sums into the same slots,
     // so an autogyro pilot still banks with the roll keys while the mouse yaws.
     internal FlightInput MouseFlightRead()
     {
-        if (!MouseFlying || _freeLook)
+        if (!MouseFlying || FreeLookHeld())
             return default;
         var stick = MouseStick();
         // The wheel is the original's third mouse axis and this port reads two, so it passes zero:
@@ -4070,8 +4068,8 @@ public partial class FlightController : Node3D
     }
 
     // Whether the mouse is head-look's this frame rather than the stick's, for a suite that drives
-    // the flag through the free-look control instead of asserting on the camera behind it.
-    internal bool FreeLookActiveForTest() => _freeLook;
+    // the posture through the free-look control instead of asserting on the camera behind it.
+    internal bool FreeLookActiveForTest() => FreeLookHeld();
 
     // Where the cursor stands in this seat's pane, or the suite's stand-in while one is set. A seat
     // outside the tree has no pane to measure, and reads centred rather than guessing one.
@@ -4085,20 +4083,11 @@ public partial class FlightController : Node3D
         return MouseFlight.Offset(viewport.GetMousePosition(), half, half);
     }
 
-    // The free-look flag, this port's reading of DAT_00654120: it decides which of two consumers
-    // gets the mouse, and the free-look control toggles it while the mouse flies. Off the mouse
-    // scheme the flag stays down and head-look keeps reading the control directly, so the keyboard
-    // and pad schemes are untouched.
-    private void StepFreeLookFlag()
-    {
-        bool down = _actions.Held(InputAction.FreeLook);
-        bool pressed = down && !_freeLookPrev;
-        _freeLookPrev = down;
-        if (MouseFlying)
-            _freeLook ^= pressed;
-        else
-            _freeLook = false;
-    }
+    // Whether the free-look control is down, this port's reading of DAT_00654120: it decides which
+    // of two consumers gets the mouse, and it is a HOLD under both mouse schemes. ⚠ Do not make it
+    // a toggle again; one tap then leaves the mouse on the head for the rest of the sortie, and the
+    // original holds the look only while the button is down.
+    private bool FreeLookHeld() => _actions.Held(InputAction.FreeLook);
 
     // Which eighth the digit row is asking for, or null while none of the nine is held. The highest
     // held wins, so two digits at once open the lever rather than fighting over it.
@@ -4401,9 +4390,10 @@ public partial class FlightController : Node3D
         var (freeRight, freeUp) = FreeLookRead();
         var (lookX, lookY) = includePad ? PadLookInput() : (0f, 0f);
         // The pad aims absolutely in first person, matching the chase view's own stick; the mouse
-        // stays on the decoded relative path. `lookY` is the stick's +down, HeadLook wants +up.
+        // stays on the decoded relative path. `lookY` is the stick's +down, HeadLook wants +up. The
+        // held control rides along so a still mouse holds the look instead of reading as idle.
         return new HeadLookInput(snapX, snapY, freeRight, freeUp, _actions.Held(InputAction.LookCenter),
-            lookX, -lookY);
+            lookX, -lookY, FreeLookHeld());
     }
 
     // C22's IdleAim delegate: HeadLook.Step calls this only on a frame with no look input at all.
@@ -4452,17 +4442,14 @@ public partial class FlightController : Node3D
 
     // How far the mouse moved since the last read, or zero unless free-look has the mouse. Polled
     // rather than event-driven, like every other control here; the previous position is refreshed on
-    // every call, so an idle mouse reads exactly zero.
-    // ⚠ The free-look control is read two ways because the mouse has two consumers and only one of
-    // them may hold it: while the mouse flies, the flag the control TOGGLES says which, and while it
-    // does not, the control itself is the posture head-look has always read.
+    // every call, so an idle mouse reads exactly zero. A still mouse under a held control is NOT the
+    // released case: HeadLookInput.Looking is what tells the head those apart.
     private Vector2 MouseLookDelta()
     {
         var pos = (Vector2)DisplayServer.MouseGetPosition();
         var delta = pos - _mouseLookPrev;
         _mouseLookPrev = pos;
-        bool looking = MouseFlying ? _freeLook : _actions.Held(InputAction.FreeLook);
-        return looking && delta.LengthSquared() > 1f ? delta : Vector2.Zero;
+        return FreeLookHeld() && delta.LengthSquared() > 1f ? delta : Vector2.Zero;
     }
 
     // The two supplied sides of a suite's tick as ONE reading, for the seat's whole-seat reader.

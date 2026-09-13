@@ -238,8 +238,8 @@ the frame (level in first person, straight down on the chase camera, the origina
 the snap, free-look, the centre key and autohead all reach the eye through one law. The three input
 paths are the original's: a snap direction mapped through `SnapTargets`, free-look integrating the
 targets at a fixed 2 rad/s along the normalised input direction, and the centre key zeroing both.
-`IdleAim` is the no-input hook `AutoheadTarget` fills. Engine-free apart from `Mathf`; owned by
-`CameraController` as `Head`, and stepped by `FlightController` on the sim clock.
+`HeadLookInput.Looking` claims the free-look arm with no motion on it, so a held control over a still mouse holds the pose; `IdleAim` is the no-input hook `AutoheadTarget` fills.
+Engine-free apart from `Mathf`; owned by `CameraController` as `Head`, stepped by `FlightController` on the sim clock.
 
 ## src/Flight/CockpitVisibility.cs
 The per-mode node hiding the original applies to the pilot's OWN aircraft while a first-person view
