@@ -2133,31 +2133,41 @@ usual.
   [`docs/formats/mission-entities.md`](docs/formats/mission-entities.md) "A gasbag section owns its
   bays and its engines".
 
-- `BL-699` `[Perf]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Every AI wave spawn hitches at the controls, and no test measures the
-  launch frame.** *Evidence (at the controls, and measured on one mission):* the author feels a
-  hitch on every wave spawn in every mission, not only CM18's generator launches. The measured
-  case is `BL-641`'s remainder (`PLAN-M5-polish-8` B14): with the crash rig
-  deferred behind the launch, a CM18 generator launch still costs 68 to 141 ms against a 40 ms
-  threshold, paired A/B under `--det` at 1P and 4P. Flown since inside the docking film itself
-  (`PT-118` (d), closed), the five credited launches read with no stall at all, so five spawns
-  4 s apart behind a film camera do not show what ten from load do. What is left on the launch frame is the model
-  build and `FlightController.Bind`, 50 to 90 ms together, and neither moves behind the frame that
-  puts the aeroplane in the world without the aeroplane arriving late. The deferred frames carry one
-  `AnimRuntime.PrewarmEmitters` call over about 194 emitters at 15 to 103 ms, whose
-  `material_create` term (194 `ShaderMaterial` and `MultiMesh` builds in `Effects/EmitterRenderer.cs`)
-  is the PERF-22-shaped follow-up.
-  *Fix shape:* two halves. (1) A test first: a suite that spawns an AI aircraft mid-flight through
-  the roster's own wave path and asserts the launch frame against the hitch threshold, so the
-  hitch is a red bar and not a feel report; `ai-crash-rig-deferral` spawns through the assembler
-  and measures nothing. (2) Then build the assembly AHEAD of the launch, off the generator's and
-  the roster wave's own authored cycle, which is a change to `AiGeneratorRuntime`'s launch
-  declaration and to spawn-index allocation rather than to the assembler. The crash-rig queue
-  (`CrashRigQueue`, `FlightRoster.PumpDeferredCrashRigs`) is the pattern for work that can trail
-  the launch; the model and bind cannot trail it.
+- `BL-699` `[Perf]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Every AI wave spawn hitches at the controls; the launch frame
+  is now measured, and the cost still has to come off it.** *Evidence:* the author feels a
+  hitch on every wave spawn in every mission, not only CM18's generator launches. The launch frame
+  is measured by `ai-wave-launch-hitch` (`CSVM/src/Testing/AiWaveLaunchHitchSuites.cs`), which
+  drives C4/M03's `cargozep1` through `FlightRoster.SpawnAi` over the mission's own built world and
+  times each sim step on the wall clock `HitchMonitor` reads: median launch frame 65.2 ms at 1P and
+  65.1 ms at 4P against that monitor's own 40 ms floor, the cold first launch 110 to 303 ms,
+  the worst frame carrying no launch 55 to 112 ms about fifteen steps behind the first launch,
+  which is the deferred crash rig's `AnimRuntime.PrewarmEmitters` phase. The suite holds regression
+  bars at the measured level (median 130 ms, worst warm launch 190 ms, worst idle frame 160 ms,
+  each about 1.4x the worst reading over repeated runs) and names the 40 ms floor in its note as
+  the target this entry owes; the bars drop to the floor when the removals below land, and until
+  then a suite failing on the cost it exposes would block every later change instead of this one.
+  The cost does not grow with the human
+  field, so it is all in the arriving aeroplane. Inside the warm launch frame, the model build is
+  18 to 29 ms and `FlightController.Bind` 24 to 40 ms, and the bind is `PlaneCollider.Build` almost
+  entirely (35.9 ms of a 39.5 ms bind in the sampled launch); props, wing lights, control surfaces
+  and damage together stay under 1.5 ms, and the loadout, the turrets, the tree insert and the
+  crash-rig arm under 6 ms.
+  *Fix shape:* three removals, in the order their size argues for. (1) `PlaneCollider.Build` is a
+  pure function of the built model's triangles, so the hulls and their `ConvexPolygonShape3D`s
+  belong to the process keyed by airframe rather than to each aeroplane, which is PERF-22's shape
+  and takes the term off every launch after an airframe's first. Check `AircraftBody`'s struck
+  shape index to part name mapping before sharing a shape resource between two bodies. (2) The
+  model build is what is left; building it AHEAD of the launch off the generator's authored cycle
+  only moves it onto a quieter frame (PERF-25, PERF-31), so the removal there is sharing the
+  airframe's immutable parts or splitting the build along its own mesh grain. (3) The
+  `material_create` term of `PrewarmEmitters` on the deferred frames (194 `ShaderMaterial` and
+  `MultiMesh` builds in `Effects/EmitterRenderer.cs`) is the separate PERF-22-shaped follow-up.
   *⚠ Traps:* the aeroplanes a session builds BEFORE its first frame keep their rigs built in
-  place, and deferring them moved the two `--ai=` goldens; keep that rule. The sim clock lags wall
+  place, and deferring them moved the goldens that fly AI aircraft; keep that rule. The spawn index
+  feeds both the livery stream and the spawn jitter (`Rng.NewSystemRandom(Rng.Spawn, index, 0)`),
+  so allocating indices ahead of the launch moves `c1-flight-kill`. The sim clock lags wall
   time on physics-bound late missions, so compare a hitch in sim frames under `--det` and read the
-  hitch lines before blaming a spawn (`docs/verification.md` PERF-12/13/21). `--det`'s numbers are
+  hitch lines before blaming a spawn (`docs/verification.md` PERF-12/13). `--det`'s numbers are
   with nobody at the controls; the author's feel report is the acceptance.
   *Cross-refs:* `BL-434` (the per-viewport splitscreen cost the same pass profiled), `BL-657`
   (CM18's generator launching at the wrong time, which is where the measured case is flown).

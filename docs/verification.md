@@ -273,6 +273,16 @@ member, and it does not go here.
   machine, so raising it moves the threshold rather than removing the flake.** A six-walk mean
   required under 20 ms read 29.9, 34.9 and 51.3 ms in three of 55 unit runs made beside three
   concurrent builds.
+- **PERF-31**, **A threshold on one named frame is satisfiable by moving the block onto a
+  neighbouring frame, so report the worst frame of the whole window beside the frame under test.**
+  An AI wave launch measured only on its own frame reads as fixed once the assembly runs a second
+  early, while the player feels the same stall one second sooner. The window's worst frame, and its
+  worst frame carrying no launch, are what separate a removal from a relocation (PERF-25). Measure
+  both player counts in the same window: a launch cost that does not grow with the human field says
+  the work is in the arriving aeroplane, not in the rigs already flying. Where the target is still
+  owed, assert a regression bar at the measured level and name the target in the same note: a suite
+  that fails on the cost it was written to expose blocks every later change instead of the one that
+  owes it, and the bar drops to the target when the removal lands.
 
 ## LOG, logs, error censuses, and exit codes
 
