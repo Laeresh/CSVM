@@ -208,6 +208,11 @@ public sealed class CampaignDirector
     /// none, which is the unset case that line already handles.</summary>
     public string? PilotName => _profile.Name;
 
+    /// <summary>The picture the flying profile hangs, as the bitmap name a sheet draws: what the
+    /// pause screen's memento slot takes, and the same one the cabin wall carries. A profile that
+    /// has chosen none draws the seeded pin-up (<c>docs/org/pause-screen.md</c>).</summary>
+    public string Memento => CampaignMementos.BitmapFor(_profile);
+
     /// <summary>The mission's storage address, the ZBD world folder number and its <c>M0n</c>
     /// number. ⚠ Not the act and its position; it is the pair every per-mission dialog key is built
     /// from (docs/formats/campaign-missions.md).</summary>

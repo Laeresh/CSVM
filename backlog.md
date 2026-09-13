@@ -2098,26 +2098,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the poll order against the film's stop before writing the fix. *Cross-refs:*
   `UI/CinemaHandoff.cs`, `docs/verification.md`'s `METHOD-30`.
 
-- `BL-854` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The pause and
-  load screens always draw the opening pin-up, where the original draws whichever picture the
-  profile holds.** *Evidence:* both sheets take the seeded constant rather than the profile's own
-  slot, so every one of them shows `ms_p_initialpinup1`; the reference clips under
-  `OriginalScreenshots/Videos/` show a dog photograph on one mission and the pin-up on another.
-  The slot now exists and is written: `CampaignProfileDef.Memento`, filled by the cabin's chooser
-  through `CampaignFeature.CommitMemento`, over the award table and its admission rule in
-  `CSVM/src/Session/CampaignMementos.cs`. Nothing awards a picture behind the player's back: a row
-  is admitted to the chooser once that mission's merged mask carries the won bit and the row's own
-  objective bit, and only ACCEPT writes (`uiData` 2150 mode 1). *Fix shape:* hand the two sheets
-  `CampaignMementos.Bitmap(CampaignMementos.Current(profile))` in place of the seeded constant; the
-  drawing side needs nothing, since both screens already draw whatever name they are given.
-  *⚠ Traps:* the name is stored with its extension and drawn without it, so a profile field holding
-  `MS_P_DoggiePhoto.jpg` and a bitmap lookup of `ms_p_doggiephoto` are the same value at two
-  stages; do not add a second constant beside `Launcher.SeededMemento` for a new default, since a
-  profile that has chosen nothing is exactly the seeded case. *Playtest after fix:* choose a
-  picture in the cabin, then pause and relaunch to see it on both sheets.
-  *Cross-refs:* `docs/org/pause-screen.md` (the table, the admission rule and the name rule),
-  `docs/org/loading-screen.md`, `CSVM/src/Session/CampaignMementos.cs`.
-
 - `BL-878` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **The prompts the
   auto-dock line does not cover still name fixed controls, and every prompt names its control in
   words where a glyph would read better on a pad.** *Evidence:* the seat remembers which device
@@ -2138,8 +2118,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `CSVM/src/Bindings/ActiveDevice.cs`, `CSVM/src/Bindings/BindingLabels.cs`.
 
 - `BL-898` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **CM15's fifth objective is drawn on neither the pause sheet nor the campaign load screen: its five rows outrun the parchment's authored box.** *Evidence:* the `pause-sheet` suite measures every campaign parchment with the face the screen writes it in; C2/M05's five rows take twelve lines and the fifth does not fit the authored `WORDWRAP [190, 255]` box, so `BoardNote.Placed` stops at the fourth and the fifth row is composed away in silence. The other 23 missions fit. The suite pins the count as `OverrunRows`, so the state is visible rather than merely present. *Fix shape:* decide what the original does with a list longer than its box, since `FUN_00470c40`'s control is the one the executable scrolls or clips, then either follow that or set `BoardNote.Cut` so the last row shows the words that do fit rather than nothing. *⚠ Traps:* the line count is a font metric, so it moves with the window scale; measure at the authored 1:1 fit the suite uses, not at a capture's resolution. The box height is authored data and is not the place to depart. *Cross-refs:* `CSVM/src/UI/ComposedBoard.cs` (`BoardNote.Placed`), `CSVM/src/UI/Menu/EscapeDialog.cs`, `docs/org/pause-screen.md`, `git log --grep=BL-889`.
-
-- `BL-890` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **The pause sheet and the campaign load screen hang the seeded memento, not the one the profile chose.** *Evidence:* user at the controls after choosing another memento in the cabin: the pause sheet and the loading screen still show the first pin-up. `GameSession.cs:58` (`PauseMemento = "ms_p_initialpinup1"`) feeds `PauseReadout` at `GameSession.cs:3632`, and `Launcher.cs:67` (`SeededMemento`) feeds `LoadSheet.Load` at `Launcher.cs:1129` and the `--menu=pauseboard` door at `Launcher.cs:1254`; the cabin wall reads `CampaignMementos.Current(profile)` (`CampaignCabinPage.cs:93`), which neither screen asks. *Fix shape:* hand both screens `CampaignMementos.Bitmap(CampaignMementos.Current(profile))` for the seated profile and keep the seeded name only for a session with no profile; pin in `pause-sheet` and `load-sheet` over a profile whose memento is not the seeded one. *⚠ Traps:* the door's readout and a real pause must agree, or the screenshot door proves nothing. *Cross-refs:* `git log --grep=BL-463` (the chooser), `git log --grep=BL-814`, `git log --grep=BL-821`.
 
 - `BL-895` `[Bug]` `[S]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **The player plane's icon on the pause chart is turned 45 degrees counter-clockwise from the heading the compass shows.** *Evidence:* user at the controls on a campaign pause sheet: the icon does not agree with the compass. `MissionMap.Heading` (`MissionMap.cs:83`) takes `Atan2(forwardX, -forwardZ)` in revolutions clockwise and `PauseReadout.Icon` (`PauseScreens.cs:102`) hands it to `BoardPicture` as its turn; the `--menu=pauseboard` door turns the same icon by `HeadingDeg / 360` (`Launcher.cs:1245`), the opposite sign for the same pose, so at least one of the two is wrong, and the live one is the one the user saw. A constant 45 degree offset also fits an icon bitmap drawn pointing up-right rather than up, or a compass whose zero differs from the chart's. *Fix shape:* read the icon art's own nose direction from the extraction, compare the live turn with the compass reading on one pinned pose (a headless campaign pause with a known `PLAYER_INIT` heading), settle the sign between `MissionMap.Heading` and the door, and pin the agreement between the icon's turn and the compass in `pause-world-icons`. *⚠ Traps:* the zeppelin icon takes the same conversion (`GameSession.cs:3611`), so a fix that turns only the player plane leaves the hull wrong. *Cross-refs:* `git log --grep=BL-882`, `docs/org/pause-screen.md`.
 

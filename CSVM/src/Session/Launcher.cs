@@ -62,10 +62,6 @@ public partial class Launcher : Node3D
     // than cutting at a hard edge.
     private const float EnhancedShadowFadeStart = 0.8f;
 
-    // The memento the pause and load screens draw. Awarding one over the campaign is not built, so
-    // it is the opening keepsake the original's own profile reset seeds (docs/org/pause-screen.md).
-    private const string SeededMemento = "ms_p_initialpinup1";
-
     // TUNE, judged at the controls, and the pair trades against each other: lower values put
     // dithered acne over every terrain triangle at C1's 25° sun, higher ones dissolve a hangar's
     // shadow along with it. These keep the building and aircraft silhouettes with no acne left.
@@ -1131,7 +1127,7 @@ public partial class Launcher : Node3D
         var sheet = UI.LoadSheet.Load(
             _zrdrPath, _messagesPath,
             SessionPaths.MissionZrdr(_dataRoot, named.ChapterFolder, named.MissionFolder),
-            key, SeededMemento);
+            key, SeatedMemento());
         if (sheet == null)
         {
             Log.Warn("ui",
@@ -1256,8 +1252,17 @@ public partial class Launcher : Node3D
             }
         }
 
-        return new UI.PauseReadout(rows, SeededMemento, icons);
+        return new UI.PauseReadout(rows, SeatedMemento(), icons);
     }
+
+    // The picture the seated profile hangs, read back off the store the cabin's chooser writes, so
+    // this screen, a real pause and the cabin wall all draw the one name. A launch or a door with
+    // no profile behind it draws the seeded keepsake (docs/org/pause-screen.md).
+    private string SeatedMemento() =>
+        CampaignMementos.BitmapFor(
+            _spec.CampaignProfile is { } name
+                ? CampaignProfileStore.UserProfiles().Load(name)
+                : null);
 
     // What the load screen calls this flight: an Instant Action mission by the wizard's own name
     // for it ("Attacking a Zeppelin"), anything else by its mode. ⚠ Not ModeName, that is the log

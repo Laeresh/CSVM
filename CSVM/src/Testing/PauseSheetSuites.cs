@@ -24,6 +24,11 @@ internal static class PauseSheetSuites
     private const string NumberedChapter = "C3";
     private const string NumberedMission = "M04";
 
+    // The picture the profile this suite seats has chosen: a mission 0 award, so every profile
+    // holds it, and not the seeded pin-up, so a sheet that read no profile would draw a different
+    // name here rather than the right one by accident.
+    private const string ChosenMemento = "MS_P_Mom.jpg";
+
     // The sortie the Instant Action pause still films, as its chapter code and mission type.
     private const string FilmedEnvironment = "C1";
     private const string FilmedType = "stunt_flying";
@@ -52,6 +57,10 @@ internal static class PauseSheetSuites
     // it omits, so ia_escape.zrd carries no loading_i3 dialog at all
     // (docs/formats/instant-action.md).
     private static readonly int[] Environments = { 1, 2, 4, 5, 6, 7, 8 };
+
+    // The profile a campaign pause is taken over here: a seated one that chose a picture, which is
+    // what the flown session's own director hands the readout.
+    private static readonly Session.CampaignProfileDef Seated = SeatProfile();
 
     // The four mission types, in the order the exe's jump table letters them.
     private static readonly string[] MissionTypes =
@@ -88,7 +97,10 @@ internal static class PauseSheetSuites
     /// bitmap it draws is extracted, and the board follows the pause state it was given.</summary>
     [Suite("pause-sheet",
         "the Original presentation's pause screen against the chapter's own escape.zrd dialogs: "
-        + "each campaign mission's sheet resolves its map, memento, parchment and authored strips, "
+        + "each campaign mission's sheet resolves its map, parchment and authored strips, the "
+        + "memento slot takes the picture the seated profile chose, which the flown mission's own "
+        + "director reports, at the slot's authored point, while a pause with no profile behind it "
+        + "takes the seeded pin-up, "
         + "every bitmap the composition names exists in the extraction (a lowercasing or naming "
         + "slip draws nothing and is otherwise silent), a real OriginalPauseBoard follows "
         + "PauseState.Changed with its cursor resting on RESUME, the five strips stand at the "
@@ -143,6 +155,7 @@ internal static class PauseSheetSuites
         ctx.Check(filmed >= 0, $"{FilmedChapter}/{FilmedMission}, the filmed mission, is in the sequence");
         DriveBoard(ctx, sheets[filmed < 0 ? 0 : filmed], report);
         CheckFilmedPoses(ctx, sheets, filmed, report);
+        CheckSeatedMemento(ctx, sheets, filmed, report);
         CheckNumberedMarks(ctx, sheets, report);
         CheckRowWrap(ctx, sheets, report);
 
@@ -1103,7 +1116,58 @@ internal static class PauseSheetSuites
             rows.Add(new PauseObjective(objectives[i].Text, i < completed));
         }
 
-        return new PauseReadout(rows, "ms_p_initialpinup1", System.Array.Empty<PauseWorldIcon>());
+        return new PauseReadout(
+            rows, Session.CampaignMementos.BitmapFor(Seated), System.Array.Empty<PauseWorldIcon>());
+    }
+
+    private static Session.CampaignProfileDef SeatProfile()
+    {
+        var def = Session.CampaignProfileDef.NewProfile("Pause Sheet");
+        def.Memento = ChosenMemento;
+        return def;
+    }
+
+    // The memento slot takes the seated profile's own picture, and a session with nobody seated
+    // still takes the seeded pin-up. A sheet that asked no profile would draw the seeded name in
+    // both cases and pass every other check here.
+    private static void CheckSeatedMemento(
+        TestContext ctx, List<(CampaignMission Mission, PauseSheet Sheet)> sheets, int at,
+        StringBuilder report)
+    {
+        string chosen = Session.CampaignMementos.BitmapFor(Seated);
+        string seeded = Session.CampaignMementos.BitmapFor(null);
+        ctx.Check(
+            chosen == Session.CampaignMementos.Bitmap(ChosenMemento) && chosen != seeded,
+            $"the seated profile hangs {chosen} where a session with no profile hangs {seeded}");
+        if (at < 0)
+        {
+            return;
+        }
+
+        var entry = sheets[at];
+        string missionZrdr = SessionPaths.MissionZrdr(
+            ctx.DataRoot, entry.Mission.ChapterFolder, entry.Mission.MissionFolder);
+        var director = Session.CampaignDirector.Create(
+            Session.ObjectiveScript.Load(missionZrdr), entry.Mission, Seated, null);
+        ctx.Check(
+            director.Memento == chosen,
+            $"the flown mission's own director hands that picture to the readout ({director.Memento})");
+        var board = PauseScreens.For(entry.Sheet, Readout(ctx, entry.Mission, entry.Sheet, 0), 0, false);
+        var photo = FindArt(board, chosen);
+        ctx.Check(
+            photo != null && photo.X == entry.Sheet.State.MementoAt.X
+            && photo.Y == entry.Sheet.State.MementoAt.Y,
+            $"the sheet hangs the chosen picture at the slot's authored point ({photo?.X}, {photo?.Y})");
+        var bare = PauseScreens.For(
+            entry.Sheet,
+            new PauseReadout(
+                System.Array.Empty<PauseObjective>(), seeded, System.Array.Empty<PauseWorldIcon>()),
+            0,
+            false);
+        ctx.Check(
+            FindArt(bare, seeded) != null && FindArt(bare, chosen) == null,
+            $"and a pause with no profile behind it hangs the seeded pin-up alone");
+        report.AppendLine($"memento: seated {chosen} at ({photo?.X}, {photo?.Y}), no profile {seeded}");
     }
 
     private static int Filmed(List<(CampaignMission Mission, PauseSheet Sheet)> sheets) =>

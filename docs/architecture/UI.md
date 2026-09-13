@@ -298,7 +298,7 @@ tests off engine; a campaign launch hands it the `LoadSheet` its story position 
 
 ## src/UI/LoadScreens.cs
 What the load screen is made of, engine-free. `LoadSheet` is the campaign screen's authored half,
-one `Loading.zrd` dialog with its mission's objectives and the profile's memento; `LoadScreens`
+one `Loading.zrd` dialog with its mission's objectives and the seated profile's own memento; `LoadScreens`
 composes either that chart sheet, through `MissionMap` the way `PauseScreens` does, or the Instant
 Action blackboard with the four texts its own `loading_i` dialog places; `DialogTexts` takes that composition by file and key, so an Instant Action pause writes its `ia_escape.zrd` dialog's texts through it. The mission type picks the
 blackboard's dialog by the exe's own letter; free flight and dogfight are ours, so they write the
@@ -311,7 +311,7 @@ What the Original presentation's pause screen is made of, engine-free: the frame
 mission's chart at its authored source crop, the pins and icons its dialog's script places, the
 objectives parchment, the memento, and the labelled button strips, the block's four plus the remake's own PHOTO MODE at the place that block leaves free. An Instant Action sortie's dialog carries none of that and draws the load screen's blackboard instead, its four texts composed through `LoadScreens` and its parchment left off by the dialog's own script.
 `PauseSheet` is the authored half, read once per sortie, and `PauseReadout` the live half, read afresh on every
-pause: `Rows` marks a note line by the runtime's answer for that line's own objective number, and
+pause: its memento is the seated profile's own picture, `Rows` marks a note line by the runtime's answer for that line's own objective number, and
 `Icon` turns one world pose into the chart icon a session and a suite place alike, through the
 shared `MissionMap`, which draws nothing for a pose off the window. `RowAt` is the pointer's hit
 test over the five 132x28 plates, and a pointer draws the dialog's own cursor; an unreadable extraction leaves the pause to the Built-in board. Decode: [../org/pause-screen.md](../org/pause-screen.md).

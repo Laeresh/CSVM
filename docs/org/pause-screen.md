@@ -262,6 +262,13 @@ pin-up, for a name it does not find. This screen draws whatever the profile hold
 in every campaign dialog) is authored while the picture is not. The script then places the shadow
 `momento_shad` centred on `[661, 454]` as an ordinary `Pict`.
 
+The remake draws the same picture the cabin wall does. `CampaignMementos.BitmapFor` is the one
+resolution the three screens share: the flown mission's `CampaignDirector.Memento` hands it to the
+pause readout, `Launcher` reads the seated profile off its store for the campaign load screen and
+for the `--menu=pauseboard` screenshot door, and `CampaignCabinPage` hangs it on the wall. A
+session with nobody seated draws the seeded pin-up, which is what the `--menu=pauseboard` door
+shows when no `--campaign=` names a profile.
+
 ## An Instant Action pause draws the blackboard, not a map
 
 This is the unfilmed case, and the data settles it. `ia_escape.zrd` opens for an Instant Action

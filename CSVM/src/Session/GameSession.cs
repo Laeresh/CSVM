@@ -52,11 +52,6 @@ public partial class GameSession : Node3D
     // the name the original looks up before deciding whether to draw it at all.
     private const string PirateZepNode = "piratezep";
 
-    // The memento the pause sheet draws. The original keeps the image name per profile and the
-    // campaign awards new ones; neither picking nor awarding one is shipped here, so it is the
-    // opening keepsake the cabin also draws. Decode: docs/org/pause-screen.md.
-    private const string PauseMemento = "ms_p_initialpinup1";
-
     private static readonly string[] InstanceShaderParams =
         { "node_bias", "csky_fog_on", "csky_light_fade", Mech3.SceneBuilder.OpacityParam };
 
@@ -3632,7 +3627,7 @@ public partial class GameSession : Node3D
             Log.Info("ui", $"pause icon {icon.Bitmap} at ({icon.WorldX:0}, {icon.WorldZ:0}) {where} the chart");
         }
 
-        return new UI.PauseReadout(rows, PauseMemento, icons);
+        return new UI.PauseReadout(rows, campaign.Memento, icons);
     }
 
     private Flight.PlayerRig? RigOf(int playerIndex)

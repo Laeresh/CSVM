@@ -190,7 +190,7 @@ the `aiv` blocks through `CampaignRoster.cs`; `Attach` arms the graph once every
 directive can touch is up; `BindCallbackHost` takes the `CALLBACK` slot ahead of the generator
 runtime's, where 801 to 803 reactivate the lowest-numbered still-deactivated Black Hat of their
 family, CM19's only launch path, and 968 takes C4/M03's escorting wingman out of the world as that mission's docking film says her name; `Step` runs the graph, the escort repair and the music. The
-nested `World` is the `IObjectiveWorld`, a directive with no seam here a named no-op, and `WidenGroupEngagement` is where an awake `DEDG` reaches its group's live members; mission end records the attempt, folds the persist log into the profile and holds before the cabin behind `LeavingFade`, the ramp `UI.MissionEndFade` paints. Debrief: [../org/debrief.md](../org/debrief.md).
+nested `World` is the `IObjectiveWorld`, a directive with no seam here a named no-op, and `WidenGroupEngagement` is where an awake `DEDG` reaches its group's live members; `Memento` is the picture the flying profile hangs, which the pause sheet's own slot takes; mission end records the attempt, folds the persist log into the profile and holds before the cabin behind `LeavingFade`, the ramp `UI.MissionEndFade` paints. Debrief: [../org/debrief.md](../org/debrief.md).
 
 ## src/Session/CampaignProgression.cs
 The campaign's progression rules over a profile: recording one mission attempt with the original's
@@ -207,8 +207,9 @@ The pictures a campaign profile may hang on its cabin wall: the executable's own
 the mission that awards it and which bit of that mission's merged objective mask admits it) and the
 rule that reads a profile's records to say which rows it holds. Seven rows carry no mission and are
 held from the first frame, so a chooser is never empty; `Current` answers what an absent or unknown
-stored name draws as, and `Bitmap` is the truncation the drawn file name takes. The table, its
-addresses and the row the original ships but can never admit:
+stored name draws as, and `Bitmap` is the truncation the drawn file name takes. `BitmapFor` is the
+one name the cabin wall, the pause sheet and the campaign load screen all draw, so a chosen picture
+cannot reach one and miss another. The table, its addresses and the row it can never admit:
 [../org/pause-screen.md](../org/pause-screen.md).
 
 ## src/Session/CampaignProfileStore.cs

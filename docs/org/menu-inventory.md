@@ -296,8 +296,8 @@ named in it; `WaveEdit` is the twelfth and has no aid, which is the warning unde
 | `campaign-hangar` | the hangar over the profile's wallet | `Campaign` → `Hangar` |
 | `campaign-fly` | walks a real profile to Fly Mission and launches | `Campaign` |
 | `loadboard[:mission_type]` | the load screen's blackboard, over the menu, writing that mission type's own dialog | out of scope |
-| `loadboard-campaign[:CM]` | the load screen's chart sheet for that campaign mission, `CM01` by default, over the menu | out of scope |
-| `pauseboard[:CM[:done]]` | the Original presentation's pause sheet for that campaign mission, `CM01` by default, with that many of its objectives marked | out of scope |
+| `loadboard-campaign[:CM]` | the load screen's chart sheet for that campaign mission, `CM01` by default, over the menu; it reads the memento off a `--campaign=` profile the same way | out of scope |
+| `pauseboard[:CM[:done]]` | the Original presentation's pause sheet for that campaign mission, `CM01` by default, with that many of its objectives marked. A `--campaign=<profile>:<seq>` beside it hangs that profile's own memento, the way a real pause does; without one the sheet hangs the seeded pin-up | out of scope |
 | `pauseboard-ia[:chapter[:mission_type]]` | the Original presentation's Instant Action pause blackboard for that chapter's environment and mission type, `C1` and `stunt_flying` by default | out of scope |
 
 ⚠ **`Screen.WaveEdit` has no aid.** It is the only screen enum member with no `--menu=` value, so
