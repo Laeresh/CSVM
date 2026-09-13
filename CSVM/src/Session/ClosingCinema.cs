@@ -1,16 +1,18 @@
 using System;
+using CSVM.Mech3;
 using CSVM.UI;
 
 namespace CSVM.Session;
 
 /// <summary>
-/// Whether the closing cinema plays before the scrapbook a finished mission opens, and the one
-/// handoff to that scrapbook. The gate is the profile's own campaign position, through
-/// <see cref="CampaignProgression.Complete"/>, rather than the original's <c>callback 3104</c>,
-/// which nothing here decodes; an unfinished campaign reaches the book with no film, which is what
-/// <c>FINALCINEMA.SCRIPT</c>'s own false branch does (docs/formats/cinemas.md). Playing is a
-/// delegate the caller supplies, which keeps the whole decision testable with no engine present and
-/// leaves the film itself to <c>Launcher.PlayCinema</c>.
+/// Whether the closing cinema plays before the scrapbook a flown mission opens, and the one handoff
+/// to that scrapbook. The gate is the mission just flown, its result and its story position: a win
+/// on the campaign's last mission plays the film, the first flight and every replay alike, and any
+/// other ending reaches the book with no film, which is what <c>FINALCINEMA.SCRIPT</c>'s own false
+/// branch does (docs/formats/cinemas.md). The profile's completion state decides nothing, so a
+/// failed mission on a finished campaign opens the book silently. Playing is a delegate the caller
+/// supplies, which keeps the whole decision testable with no engine present and leaves the film
+/// itself to <c>Launcher.PlayCinema</c>.
 /// </summary>
 public sealed class ClosingCinema
 {
@@ -23,32 +25,26 @@ public sealed class ClosingCinema
 
     private readonly CinemaPlay _play;
 
-    private bool _played;
-
     /// <summary>Builds a closing cinema over the call that puts one on screen.</summary>
     public ClosingCinema(CinemaPlay play) => _play = play;
 
-    /// <summary>Whether the film has been handed to <see cref="CinemaPlay"/>. It is what keeps a
-    /// second finished mission, or a second visit to the book, from replaying it.</summary>
-    public bool Played => _played;
+    /// <summary>Whether a mission that ended this way earns the film: it was won, and it was the
+    /// campaign's last story position. A replay of that mission earns it again, since the flown
+    /// result is the whole gate and nothing here is latched.</summary>
+    public static bool PlaysAfter(int seq, bool missionWon) =>
+        missionWon && seq == CampaignSequence.MissionCount - 1;
 
-    /// <summary>Opens the scrapbook for a profile, playing the closing film first when that profile
-    /// has finished the campaign and this instance has not played it yet. Answers whether a cinema
-    /// was played, so the caller can tell a handoff that already happened from one still to
-    /// come.</summary>
-    public bool OpenScrapbook(CampaignProfileDef profile, Action showScrapbook) =>
-        OpenScrapbook(CampaignProgression.Complete(profile), showScrapbook);
-
-    /// <summary>The same, over the completion answer directly.</summary>
-    public bool OpenScrapbook(bool campaignComplete, Action showScrapbook)
+    /// <summary>Opens the scrapbook the mission just flown from <paramref name="seq"/> earned,
+    /// playing the closing film first where <see cref="PlaysAfter"/> says one is due. Answers
+    /// whether a cinema was played, so the caller can tell a handoff that already happened from one
+    /// still to come.</summary>
+    public bool OpenScrapbook(int seq, bool missionWon, Action showScrapbook)
     {
-        if (!campaignComplete || _played)
+        if (!PlaysAfter(seq, missionWon))
         {
             showScrapbook();
             return false;
         }
-
-        _played = true;
 
         // ⚠ Do not unify these presses with the chapter cinema's. Space and Return skip a chapter
         // cinema and do nothing here, which the two scripts author separately.

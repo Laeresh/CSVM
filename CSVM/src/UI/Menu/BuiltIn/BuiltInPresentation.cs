@@ -62,7 +62,7 @@ public sealed class BuiltInPresentation : IMenuPresentation
                 _menu.OpenCampaignCabin(cabin.Profile);
                 break;
             case DebriefReturn debrief:
-                _menu.OpenCampaignScrapbook(debrief.Profile, debrief.MissionSeq);
+                _menu.OpenCampaignScrapbook(debrief.Profile, debrief.MissionSeq, debrief.MissionWon);
                 break;
         }
     }

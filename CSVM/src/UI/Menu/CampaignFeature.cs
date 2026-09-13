@@ -75,10 +75,10 @@ public sealed class CampaignFeature : IMenuFeature
     /// </summary>
     public ChapterCinema? ChapterCinema { get; }
 
-    /// <summary>The closing cinema the scrapbook door a finished mission takes runs its handoff
+    /// <summary>The closing cinema the scrapbook door a flown mission takes runs its handoff
     /// through, or null when the caller has none and that door simply opens the book. One instance
-    /// serves both presentations, and its latch is what stops the film replaying
-    /// (<c>Session/Launcher.cs</c>).</summary>
+    /// serves both presentations (<c>Session/Launcher.cs</c>), and the flown mission's own result
+    /// is what decides whether it plays.</summary>
     public ClosingCinema? ClosingCinema { get; }
 
     /// <summary>Whether a campaign is open: a store was handed in by <see cref="Open"/> and

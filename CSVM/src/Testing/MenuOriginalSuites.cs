@@ -247,7 +247,7 @@ internal static class MenuOriginalSuites
         ctx.Check(exits.Count == 1, $"and nothing relaunched on the way back in ({exits.Count})");
         // The scratch store holds no such profile, so the return opens the campaign on its
         // profile screen rather than the book; menu-original-campaign drives the seated case.
-        host.Show(new DebriefReturn("Nathan", 2));
+        host.Show(new DebriefReturn("Nathan", 2, MissionWon: true));
         ctx.Check(shell.Screen == OriginalScreen.CampaignRoster && host.Features.Get<CampaignFeature>().Profile == null,
             $"a debrief return for a profile the store lacks lands on the profile screen with nobody seated ({shell.Screen})");
         host.Show(MenuReturnDestination.TopLevel);

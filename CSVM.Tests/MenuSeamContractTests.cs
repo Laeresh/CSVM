@@ -55,7 +55,7 @@ public class MenuSeamContractTests
     [Fact]
     public void AReturnDestinationLandsOnEachPresentationsOwnScreen()
     {
-        var debrief = new DebriefReturn("Nathan", 3);
+        var debrief = new DebriefReturn("Nathan", 3, MissionWon: true);
 
         var wizardHost = HostWithFeature(out _);
         var wizard = new FakeWizardPresentation();

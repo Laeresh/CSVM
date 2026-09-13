@@ -551,24 +551,24 @@ public sealed class CampaignFlow
     /// ⚠ The feature's seat and a plain <see cref="GoTo"/>, never <see cref="SelectProfile"/> or
     /// <see cref="OpenCabin"/>: this cabin is stacked and not entered, and a chapter film in front
     /// of it would land the player on the cabin instead of the book they just earned.</summary>
-    public void OpenScrapbookAfterMission(CampaignProfileDef profile, int seq)
+    public void OpenScrapbookAfterMission(CampaignProfileDef profile, int seq, bool missionWon)
     {
         Feature.SelectProfile(profile);
         GoTo(CampaignScreen.Cabin);
-        OpenScrapbookAfterMission(seq);
+        OpenScrapbookAfterMission(seq, missionWon);
     }
 
-    /// <summary>Opens the book the way a finished mission does, playing the closing film first for
-    /// a profile that has finished the campaign (<see cref="CampaignFeature.ClosingCinema"/>); the
-    /// book then opens on the frame the film stops. The mission-end return and the book's own
-    /// screenshot aid take this door.
+    /// <summary>Opens the book the way a finished mission does, playing the closing film first when
+    /// the mission just flown earns it (<see cref="ClosingCinema.PlaysAfter"/>, a win on the
+    /// campaign's last mission); the book then opens on the frame the film stops. The mission-end
+    /// return and the book's own screenshot aid take this door, the aid with no win to report.
     /// ⚠ Not the door the table of contents and the two bookmarks take: those run inside the
     /// campaign, where the original reaches <c>scrapbook.script</c> without <c>FINALCINEMA</c>.</summary>
-    public void OpenScrapbookAfterMission(int seq)
+    public void OpenScrapbookAfterMission(int seq, bool missionWon)
     {
-        if (Feature.ClosingCinema is { } cinema && Feature.Profile is { } seated)
+        if (Feature.ClosingCinema is { } cinema)
         {
-            cinema.OpenScrapbook(seated, () => OpenScrapbook(seq));
+            cinema.OpenScrapbook(seq, missionWon, () => OpenScrapbook(seq));
             return;
         }
 

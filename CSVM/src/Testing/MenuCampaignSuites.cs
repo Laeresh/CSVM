@@ -474,7 +474,7 @@ internal static class MenuCampaignSuites
             FlownBefore, CampaignProgression.PrimaryObjectiveMask, 420_000, 200, 90, 3, "Test Bird"));
         store.Save(profile);
         menu.ShowMenu();
-        menu.OpenCampaignScrapbook(Pilot, FlownBefore);
+        menu.OpenCampaignScrapbook(Pilot, FlownBefore, missionWon: true);
         var flow = menu.Campaign!;
         ctx.Check(menu.ShownScreen == "Campaign" && flow.Screen == CampaignScreen.Scrapbook && flow.MissionSeq == FlownBefore,
             $"the debrief return opens the book on the flown mission ({flow.Screen}, seq {flow.MissionSeq})");

@@ -417,7 +417,7 @@ internal static class MenuOriginalCampaignSuites
             0, CampaignProgression.PrimaryObjectiveMask, 420_000, 200, 90, profile.Planes[0].Airframe, profile.Planes[0].Name));
         store.Save(profile);
         int begins = audio.Begins;
-        host.Show(new DebriefReturn(Pilot, 0));
+        host.Show(new DebriefReturn(Pilot, 0, MissionWon: true));
         host.Tick(Dt);
         ctx.Check(shell.Screen == OriginalScreen.CampaignScrapbook && campaign.MissionSeq == 0 && campaign.ScrapbookEntry == 1,
             $"the debrief return opens the book on the flown mission ({shell.Screen}, seq {campaign.MissionSeq})");

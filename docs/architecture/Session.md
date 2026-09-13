@@ -233,13 +233,13 @@ testable with no engine present; the cabin opens through that file's `Once`. `La
 
 ## src/Session/ClosingCinema.cs
 Whether the campaign's closing film plays before the scrapbook a flown mission opens, and the one
-handoff to that book. The gate is `CampaignProgression.Complete` over the seated profile, so an
-unfinished campaign reaches the book with no film, which is what the original's own script does when
-its completion callback answers false. The film is the `FinalCinema` screen's layout row's name, and
-the skip set is Escape and the left mouse alone, narrower than `ChapterCinema.cs`'s on purpose.
-Playing is a `UI/CinemaHandoff.cs` `CinemaPlay` (`Launcher.PlayCinema`), and the book opens through
-that file's `Once`. `Launcher` holds the process's one instance and hands it to
-`Menu/CampaignFeature.cs`, so both presentations' mission-end doors reach it. Films: [../formats/cinemas.md](../formats/cinemas.md).
+handoff to that book. The gate is the mission just flown, its result and its story position: a win
+on the campaign's last mission plays the film, first flight and replay alike, and any other ending
+reaches the book with no film, which is what the original's own script does when its gate callback
+answers false. Nothing is latched and completion state decides nothing, so the flown result travels
+with the menu return (`Menu/MenuReturnDestination.cs`). The film is the `FinalCinema` layout row's
+name and the skip set is Escape and the left mouse alone, narrower than `ChapterCinema.cs`'s on
+purpose; playing is a `UI/CinemaHandoff.cs` `CinemaPlay` (`Launcher.PlayCinema`) whose `Once` opens the book, and `Launcher` holds the one instance and hands it to `Menu/CampaignFeature.cs`. Films: [../formats/cinemas.md](../formats/cinemas.md).
 
 ## src/Session/CampaignPersistLog.cs
 The cross-mission state log: what a campaign mission left destroyed, carried into later missions

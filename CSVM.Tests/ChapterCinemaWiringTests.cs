@@ -86,7 +86,7 @@ public class ChapterCinemaWiringTests : IDisposable
         var cinema = new Recorder();
         var flow = Flow(cinema);
 
-        flow.OpenScrapbookAfterMission(Progressed("Zachary", 5), 4);
+        flow.OpenScrapbookAfterMission(Progressed("Zachary", 5), 4, missionWon: true);
         Assert.Equal(0, cinema.Plays);
         PressReturnToCabin(flow);
 
@@ -104,7 +104,7 @@ public class ChapterCinemaWiringTests : IDisposable
         var cinema = new Recorder();
         var flow = Flow(cinema);
 
-        flow.OpenScrapbookAfterMission(Progressed("Zachary", 5), 4);
+        flow.OpenScrapbookAfterMission(Progressed("Zachary", 5), 4, missionWon: true);
         flow.Back();
 
         Assert.Equal("chap2", cinema.Name);
@@ -121,7 +121,7 @@ public class ChapterCinemaWiringTests : IDisposable
         var cinema = new Recorder();
         var flow = Flow(cinema);
 
-        flow.OpenScrapbookAfterMission(Progressed("Zachary", 3), 2);
+        flow.OpenScrapbookAfterMission(Progressed("Zachary", 3), 2, missionWon: true);
         PressReturnToCabin(flow);
 
         Assert.Equal(0, cinema.Plays);
@@ -215,7 +215,7 @@ public class ChapterCinemaWiringTests : IDisposable
         var cinema = new Recorder();
         var shell = Shell(cinema, out _);
         shell.OpenCampaignOver(_store);
-        Assert.True(shell.ShowScrapbook("Zachary", 4));
+        Assert.True(shell.ShowScrapbook("Zachary", 4, missionWon: true));
         Assert.Equal(0, cinema.Plays);
 
         Assert.Equal(nameof(BoardButton.ReturnToCabin), shell.FocusedKey);
@@ -234,7 +234,7 @@ public class ChapterCinemaWiringTests : IDisposable
         var cinema = new Recorder();
         var shell = Shell(cinema, out _);
         shell.OpenCampaignOver(_store);
-        Assert.True(shell.ShowScrapbook("Zachary", 4));
+        Assert.True(shell.ShowScrapbook("Zachary", 4, missionWon: true));
 
         shell.Step(new MenuCommands { Back = true });
 
@@ -253,7 +253,7 @@ public class ChapterCinemaWiringTests : IDisposable
         var cinema = new Recorder();
         var shell = Shell(cinema, out _);
         shell.OpenCampaignOver(_store);
-        Assert.True(shell.ShowScrapbook("Zachary", 2));
+        Assert.True(shell.ShowScrapbook("Zachary", 2, missionWon: true));
 
         shell.Step(Accept);
 

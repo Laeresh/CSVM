@@ -753,15 +753,15 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// <summary>Opens the campaign on the named profile's scrapbook, at the mission a finished
     /// mission just flew, cabin on its far side after <see cref="Session.Launcher"/>'s deferred
     /// hop. The profile is re-read from the store, the same discipline as
-    /// <see cref="OpenCampaignCabin"/>, so the shown record is what the mission just wrote. A
-    /// profile that has just finished the campaign watches the closing film first
-    /// (<see cref="CampaignFlow.OpenScrapbookAfterMission(Session.CampaignProfileDef, int)"/>).</summary>
-    public void OpenCampaignScrapbook(string profileName, int seq)
+    /// <see cref="OpenCampaignCabin"/>, so the shown record is what the mission just wrote. A win on
+    /// the campaign's last mission watches the closing film first
+    /// (<see cref="CampaignFlow.OpenScrapbookAfterMission(Session.CampaignProfileDef, int, bool)"/>).</summary>
+    public void OpenCampaignScrapbook(string profileName, int seq, bool missionWon)
     {
         OpenCampaign();
         if (_campaign is { } flow && flow.Store.Load(profileName) is { } profile)
         {
-            flow.OpenScrapbookAfterMission(profile, seq);
+            flow.OpenScrapbookAfterMission(profile, seq, missionWon);
         }
 
         Rebuild();
@@ -1956,9 +1956,11 @@ public sealed partial class LaunchMenu : CanvasLayer
                 return;
             case "campaign-scrapbook":
                 // The book as a finished mission leaves it: opened on the last mission this
-                // profile flew, which is the one door the mission end itself takes.
+                // profile flew, which is the one door the mission end itself takes. No win is
+                // reported, so the shot is the book and never the closing film.
                 flow.GoTo(CampaignScreen.PreviousMissions);
-                flow.OpenScrapbookAfterMission(Math.Max(0, CampaignProgression.NextMissionSeq(profile) - 1));
+                flow.OpenScrapbookAfterMission(
+                    Math.Max(0, CampaignProgression.NextMissionSeq(profile) - 1), missionWon: false);
                 return;
             case "campaign-briefing":
                 flow.SetMission(CampaignProgression.NextMissionSeq(profile));

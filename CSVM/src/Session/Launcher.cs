@@ -1868,7 +1868,7 @@ public partial class Launcher : Node3D
     private void OpenDebrief(string profile, CampaignMissionResult result)
     {
         GD.Print($"campaign: {result.Outcome} — arrived at the debrief with '{profile}'");
-        ReturnToMenu(new DebriefReturn(profile, result.Attempt.Seq));
+        ReturnToMenu(new DebriefReturn(profile, result.Attempt.Seq, result.Outcome == MissionOutcome.Won));
     }
 
     // The mission boards' Restart (Instant Action and campaign): free this session and build a

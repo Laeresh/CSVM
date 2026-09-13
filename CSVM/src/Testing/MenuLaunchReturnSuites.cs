@@ -383,7 +383,7 @@ internal static class MenuLaunchReturnSuites
         CampaignProgression.Record(profile, new MissionAttempt(
             seq, CampaignProgression.PrimaryObjectiveMask, 420_000, 200, 90, profile.Planes[0].Airframe, profile.Planes[0].Name));
         store.Save(profile);
-        run.Show(new DebriefReturn(Pilot, seq));
+        run.Show(new DebriefReturn(Pilot, seq, MissionWon: true));
         ctx.Check(menu.Campaign is { Screen: CampaignScreen.Scrapbook } book && book.MissionSeq == seq && book.Profile?.MissionsCompleted == seq + 1,
             $"the debrief return opens the book on the flown mission over the saved profile ({menu.Campaign?.Screen}, seq {menu.Campaign?.MissionSeq})");
         ctx.Check(menu.ShownRowText == "RETURN TO CABIN", $"with the cursor on the way out ({menu.ShownRowText})");
@@ -550,7 +550,7 @@ internal static class MenuLaunchReturnSuites
         CampaignProgression.Record(profile, new MissionAttempt(
             seq, CampaignProgression.PrimaryObjectiveMask, 420_000, 200, 90, profile.Planes[0].Airframe, profile.Planes[0].Name));
         store.Save(profile);
-        run.Show(new DebriefReturn(Pilot, seq));
+        run.Show(new DebriefReturn(Pilot, seq, MissionWon: true));
         ctx.Check(shell.Screen == OriginalScreen.CampaignScrapbook && campaign.MissionSeq == seq && campaign.Profile?.MissionsCompleted == seq + 1,
             $"the debrief return opens the book on the flown mission over the saved profile ({shell.Screen}, seq {campaign.MissionSeq})");
         ctx.Check(shell.FocusedKey == "ReturnToCabin", $"with the focus on the way out ({shell.FocusedKey})");

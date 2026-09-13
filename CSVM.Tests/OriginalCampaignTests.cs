@@ -469,7 +469,7 @@ public class OriginalCampaignTests : IDisposable
         Assert.Equal("Zachary", _store.LastPlayed);
 
         shell.OpenCampaignOver(_store);
-        Assert.True(shell.ShowScrapbook("Zachary", 0));
+        Assert.True(shell.ShowScrapbook("Zachary", 0, missionWon: true));
         Assert.Equal(OriginalScreen.CampaignScrapbook, shell.Screen);
         Assert.Equal(0, campaign.MissionSeq);
         Assert.Equal(1, campaign.ScrapbookEntry);
@@ -540,7 +540,7 @@ public class OriginalCampaignTests : IDisposable
         var shell = Shell(out _, out _);
 
         shell.OpenCampaignOver(_store);
-        Assert.True(shell.ShowScrapbook("Zachary", 0));
+        Assert.True(shell.ShowScrapbook("Zachary", 0, missionWon: true));
 
         // Most Recent is the plaque the card shows, Best to Date the picture beside it, at the
         // slot's authored 432,283 and the fixture's unmeasured-strip fallback size.

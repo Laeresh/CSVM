@@ -13,15 +13,17 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The closing cinema as both presentations' campaigns actually reach it: the mission-end door onto
-/// the scrapbook in each, the book arriving on the frame the film stops, an unfinished campaign
-/// reaching the book with no film, and one instance serving both so the film plays once. A campaign
-/// whose feature carries no closing cinema opens the book exactly as it always did, which is what
-/// every suite and every golden gets. The click that skips the film is spanned across the hand-back,
-/// so the book it opens fires nothing on the release.
+/// the scrapbook in each, the book arriving on the frame the film stops, a win short of the last
+/// mission and a loss on it reaching the book with no film, and one instance serving both doors. A
+/// campaign whose feature carries no closing cinema opens the book exactly as it always did, which
+/// is what every suite and every golden gets. The click that skips the film is spanned across the
+/// hand-back, so the book it opens fires nothing on the release.
 /// </summary>
 [Trait("Tier", "Quick")]
 public class ClosingCinemaWiringTests : IDisposable
 {
+    private const int LastSeq = CampaignSequence.MissionCount - 1;
+
     private readonly string _dir;
     private readonly CampaignProfileStore _store;
     private readonly CustomPlaneStore _planes;
@@ -49,13 +51,27 @@ public class ClosingCinemaWiringTests : IDisposable
         var closing = new Recorder();
         var flow = Flow(closing, out _);
 
-        flow.OpenScrapbookAfterMission(Flown("Zachary", CampaignSequence.MissionCount), 23);
+        flow.OpenScrapbookAfterMission(Flown("Zachary", CampaignSequence.MissionCount), LastSeq, missionWon: true);
 
         Assert.Equal(ClosingCinema.Name, closing.Name);
         Assert.Equal(CampaignScreen.Cabin, flow.Screen);
         closing.Stop();
         Assert.Equal(CampaignScreen.Scrapbook, flow.Screen);
         Assert.Equal(23, flow.MissionSeq);
+    }
+
+    // The reported fault, at the door it came through: a mission lost on a profile that has
+    // finished the campaign opens the book and plays nothing.
+    [Fact]
+    public void ALostReplayOfTheLastMissionOpensBuiltInsBookWithNoFilm()
+    {
+        var closing = new Recorder();
+        var flow = Flow(closing, out _);
+
+        flow.OpenScrapbookAfterMission(Flown("Zachary", CampaignSequence.MissionCount), LastSeq, missionWon: false);
+
+        Assert.Equal(0, closing.Plays);
+        Assert.Equal(CampaignScreen.Scrapbook, flow.Screen);
     }
 
     // The negative control: the same door after any other mission plays nothing at all, which is
@@ -66,7 +82,7 @@ public class ClosingCinemaWiringTests : IDisposable
         var closing = new Recorder();
         var flow = Flow(closing, out _);
 
-        flow.OpenScrapbookAfterMission(Flown("Zachary", 3), 2);
+        flow.OpenScrapbookAfterMission(Flown("Zachary", 3), 2, missionWon: true);
 
         Assert.Equal(0, closing.Plays);
         Assert.Equal(CampaignScreen.Scrapbook, flow.Screen);
@@ -81,7 +97,7 @@ public class ClosingCinemaWiringTests : IDisposable
         var closing = new Recorder();
         var flow = Flow(closing, out Recorder chapters);
 
-        flow.OpenScrapbookAfterMission(Flown("Zachary", 5), 4);
+        flow.OpenScrapbookAfterMission(Flown("Zachary", 5), 4, missionWon: true);
 
         Assert.Equal(0, chapters.Plays);
         Assert.Equal(0, closing.Plays);
@@ -97,7 +113,7 @@ public class ClosingCinemaWiringTests : IDisposable
         feature.Open(_store, _planes, null, null);
         var flow = new CampaignFlow(feature);
 
-        flow.OpenScrapbookAfterMission(Flown("Zachary", CampaignSequence.MissionCount), 23);
+        flow.OpenScrapbookAfterMission(Flown("Zachary", CampaignSequence.MissionCount), LastSeq, missionWon: true);
 
         Assert.Null(feature.ClosingCinema);
         Assert.Equal(CampaignScreen.Scrapbook, flow.Screen);
@@ -111,7 +127,7 @@ public class ClosingCinemaWiringTests : IDisposable
         var shell = Shell(closing, out _);
         shell.OpenCampaignOver(_store);
 
-        Assert.True(shell.ShowScrapbook("Zachary", 23));
+        Assert.True(shell.ShowScrapbook("Zachary", LastSeq, missionWon: true));
 
         Assert.Equal(ClosingCinema.Name, closing.Name);
         Assert.Equal(OriginalScreen.CampaignRoster, shell.Screen);
@@ -127,7 +143,7 @@ public class ClosingCinemaWiringTests : IDisposable
         var shell = Shell(closing, out _);
         shell.OpenCampaignOver(_store);
 
-        Assert.True(shell.ShowScrapbook("Zachary", 2));
+        Assert.True(shell.ShowScrapbook("Zachary", 2, missionWon: true));
 
         Assert.Equal(0, closing.Plays);
         Assert.Equal(OriginalScreen.CampaignScrapbook, shell.Screen);
@@ -142,7 +158,7 @@ public class ClosingCinemaWiringTests : IDisposable
         var closing = new Recorder();
         var shell = Shell(closing, out _);
         shell.OpenCampaignOver(_store);
-        Assert.True(shell.ShowScrapbook("Zachary", 23));
+        Assert.True(shell.ShowScrapbook("Zachary", LastSeq, missionWon: true));
 
         closing.Stop();
         Assert.Equal(OriginalScreen.CampaignScrapbook, shell.Screen);
@@ -153,17 +169,17 @@ public class ClosingCinemaWiringTests : IDisposable
         Assert.Equal(OriginalScreen.CampaignScrapbook, shell.Screen);
     }
 
-    // The decision the wiring owns: one instance for the process, so the film a player has already
-    // watched does not play again when they reopen the book, whichever presentation they open it in.
+    // The decision the wiring owns: one instance for the process, reached by both presentations'
+    // mission-end doors, and each door asking it about the mission that was just flown.
     [Fact]
-    public void OneInstanceServesBothPresentationsAndTheFilmPlaysOnce()
+    public void OneInstanceServesBothPresentationsAndEachDoorAsksAboutItsOwnMission()
     {
         var closing = new Recorder();
         var feature = new CampaignFeature(
             UiStrings.Empty, Airframe, new ChapterCinema(new Recorder().Play), new ClosingCinema(closing.Play));
         feature.Open(_store, _planes, null, null);
         var flow = new CampaignFlow(feature);
-        flow.OpenScrapbookAfterMission(Flown("Zachary", CampaignSequence.MissionCount), 23);
+        flow.OpenScrapbookAfterMission(Flown("Zachary", CampaignSequence.MissionCount), LastSeq, missionWon: true);
         closing.Stop();
         Assert.Equal(1, closing.Plays);
 
@@ -171,9 +187,15 @@ public class ClosingCinemaWiringTests : IDisposable
             planes: _planes, campaign: feature, profiles: () => _store);
         _store.Save(Flown("Zachary", CampaignSequence.MissionCount));
         shell.OpenCampaignOver(_store);
-        Assert.True(shell.ShowScrapbook("Zachary", 23));
+        Assert.True(shell.ShowScrapbook("Zachary", LastSeq, missionWon: false));
 
         Assert.Equal(1, closing.Plays);
+        Assert.Equal(OriginalScreen.CampaignScrapbook, shell.Screen);
+
+        // And the same instance plays again for a won replay, in either presentation.
+        Assert.True(shell.ShowScrapbook("Zachary", LastSeq, missionWon: true));
+        Assert.Equal(2, closing.Plays);
+        closing.Stop();
         Assert.Equal(OriginalScreen.CampaignScrapbook, shell.Screen);
     }
 

@@ -6,6 +6,7 @@ using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
 using CSVM.UI;
+using CSVM.UI.Menu;
 using Godot;
 
 namespace CSVM.Testing;
@@ -94,6 +95,7 @@ internal static class CampaignLoopSuites
 
         FlyTheMission(ctx, mission, chapter, missionFolder, missionZrdr, profile, store, fit, stock, report);
         ReturnToTheCabin(ctx, store, strings, stock, report);
+        CheckTheClosingFilm(ctx, strings, report);
 
         ctx.WriteArtifact("test-campaign-loop.txt", report.ToString());
         ctx.Note($"walked the whole loop on {chapter}/{missionFolder}; state carried in from an earlier process: {carried}");
@@ -662,6 +664,65 @@ internal static class CampaignLoopSuites
             $"results={reread.MissionResults.Count}");
     }
 
+    // The closing film's gate at the door a mission end takes: the film plays after a win on the
+    // campaign's last mission, whether that win finishes the campaign or replays it, and after
+    // nothing else. Its own store, never the loop's, so no arm can write the persisted profile.
+    private static void CheckTheClosingFilm(TestContext ctx, UiStrings strings, StringBuilder report)
+    {
+        int last = CampaignSequence.MissionCount - 1;
+        string dir = Path.Combine(ctx.ScratchDir, "campaign-loop-film", "Profiles");
+        FilmArm(ctx, strings, dir, last, last, won: true, film: true, report,
+            $"a won last mission with the profile not yet showing the campaign complete");
+        FilmArm(ctx, strings, dir, CampaignSequence.MissionCount, last, won: true, film: true, report,
+            $"a won replay of the last mission on a complete profile");
+        FilmArm(ctx, strings, dir, CampaignSequence.MissionCount, last, won: false, film: false, report,
+            $"a lost replay of the last mission on a complete profile");
+        FilmArm(ctx, strings, dir, CampaignSequence.MissionCount, FirstSeq, won: true, film: false, report,
+            $"a won replay of an earlier mission on a complete profile");
+    }
+
+    // One arm of that gate, over the door itself: a profile that has finished missions, the story
+    // position just flown and how it ended, against whether the film was handed over and whether
+    // the book arrived on the frame it stopped.
+    private static void FilmArm(
+        TestContext ctx, UiStrings strings, string dir, int missionsDone, int seq, bool won, bool film,
+        StringBuilder report, string what)
+    {
+        var recorder = new FilmRecorder();
+        var feature = new CampaignFeature(
+            strings, PlanePickerRoster.AirframeNode, closingCinema: new ClosingCinema(recorder.Play));
+        feature.Open(new CampaignProfileStore(dir), null, null, ctx.DataRoot);
+        var flow = new CampaignFlow(feature);
+
+        flow.OpenScrapbookAfterMission(FilmProfile(missionsDone), seq, won);
+
+        ctx.Same(film ? 1 : 0, recorder.Plays, $"{what}: films played");
+        if (film)
+        {
+            ctx.Check(recorder.Name == ClosingCinema.Name, $"{what}: the film is {recorder.Name}");
+            ctx.Check(flow.Screen == CampaignScreen.Cabin, $"{what}: the book waits behind it ({flow.Screen})");
+            recorder.Stop();
+        }
+
+        ctx.Check(flow.Screen == CampaignScreen.Scrapbook && flow.MissionSeq == seq,
+            $"{what}: the book is open on the flown mission ({flow.Screen}, seq {flow.MissionSeq})");
+        report.AppendLine($"closing film: {what} -> plays={recorder.Plays}, screen={flow.Screen}");
+    }
+
+    // A profile that has completed its first missionsDone missions, which is the state the store
+    // holds when the mission-end door opens.
+    private static CampaignProfileDef FilmProfile(int missionsDone)
+    {
+        var profile = CampaignProfileDef.NewProfile("Film");
+        for (int seq = 0; seq < missionsDone; seq++)
+        {
+            CampaignProgression.Record(profile, new MissionAttempt(
+                seq, CampaignProgression.PrimaryObjectiveMask, 300_000, 400, 120, 5, "Gypsy Magic"));
+        }
+
+        return profile;
+    }
+
     // How many lines the reveal has written onto the parchment, which is what the row count used to
     // stand in for before an objective stopped being a row.
     private static int NoteEntries(ICampaignPage page)
@@ -699,5 +760,25 @@ internal static class CampaignLoopSuites
         }
 
         return null;
+    }
+
+    // The stand-in for Launcher.PlayCinema: it records what it was asked for and hands the film's
+    // end back, so the arm decides when the cinema stops.
+    private sealed class FilmRecorder
+    {
+        private Action? _then;
+
+        public string? Name { get; private set; }
+
+        public int Plays { get; private set; }
+
+        public void Play(string name, Action then, CinemaSkip skip)
+        {
+            Name = name;
+            Plays++;
+            _then = then;
+        }
+
+        public void Stop() => _then?.Invoke();
     }
 }

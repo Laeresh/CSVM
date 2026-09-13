@@ -91,7 +91,7 @@ public class MenuHostTests
         host.Tick(1f / 60f);
         Assert.Single(exits);
 
-        host.Show(new DebriefReturn("Nathan", 3));
+        host.Show(new DebriefReturn("Nathan", 3, MissionWon: true));
         Assert.Same(first, host.Active);
         Assert.True(host.Shown);
         Assert.Equal("wizard-debrief", first.Screen);
