@@ -1839,16 +1839,6 @@ usual.
   cross-pane body-hide visually at the controls with 2+ cockpit-view pilots in the same session.
   *Cross-refs:* `PLAN-cockpit-view` B11 ("Splitscreen posture"), `BL-391` (base engine level,
   the audio half of (b)), `BL-389` (splitscreen weapon mix, same playtest family).
-- `BL-832` `[Fidelity]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **The original's forced AI
-  park runs at every mission start, but CSVM parks only off an intro episode's hold, so a mission
-  that opens without a story intro takes no park.** *Evidence:* `BL-736`'s close
-  (`git log --grep=BL-736`) found the four park calls in the start path of every mission and
-  none hosted by `player_setup`; the entry's own fix shape, extending the park to the
-  `player_setup` bootstrap with a suite over an Instant Action wave, was not done, and what lifts
-  the park (`FUN_0041f2e0`, code 914) is unread. *Fix shape:* decode the lift, then park from the
-  mission-start path rather than the intro hold, with a suite over an Instant Action wave.
-  *⚠ Traps:* `BL-736` closed on "CSVM already matches" for the story intro alone; do not re-close
-  on that reading. *Cross-refs:* `BL-736`'s closing commit, `docs/formats/anim-definitions/cutscenes.md`.
 
 ## Missions, modes & campaign
 

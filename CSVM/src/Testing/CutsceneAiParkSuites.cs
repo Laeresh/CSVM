@@ -16,13 +16,22 @@ namespace CSVM.Testing;
 /// aircraft is parked the instant code 20 opens the episode though 913 never appears in the
 /// intro's own codes, the Gemini bay generator behind CM14's fighters (C2B/M04's
 /// <c>geminizep</c>) launches nothing while the world is held, and both come back with the
-/// handoff.</summary>
+/// handoff. The second suite takes the other half of that rule: the park belongs to every mission
+/// start, so an Instant Action wave, which bootstraps no movie at all, is parked by the mission
+/// start itself and lifted on its first step.</summary>
 internal static class CutsceneAiParkSuites
 {
     private const string Chapter = "C2B";
     private const string Mission = "M04";
     private const string IntroAnim = "generic_intro";
     private const string Generator = "geminizep";
+
+    // The Instant Action half: a wave opens with no movie, so its bootstrap is the shared
+    // no-movie definition and the start park has nothing to hold it.
+    private const string IaChapter = "C1";
+    private const string IaMission = "IA1";
+    private const string Bootstrap = "player_setup";
+    private const int WaveSize = 2;
     private const float StepDt = 1f / 60f;
     private const float HoldWindowS = 3f;
 
@@ -80,6 +89,38 @@ internal static class CutsceneAiParkSuites
 
         ctx.WriteArtifact($"test-cutscene-ai-park-intro-{Chapter}-{Mission}.txt", report.ToString());
         ctx.Note($"{Chapter}/{Mission}: the intro parks the AI with no authored 913, and the Gemini bay stays silent through the hold");
+    }
+
+    [Suite("cutscene-ai-park-mission-start",
+        "an Instant Action mission (C1/IA1) bootstraps no story intro, yet the original's mission "
+        + "start parks every AI vehicle before any start list of any mission type runs: the wave's "
+        + "aircraft are parked (Inert and Parked) by the session's mission-start park with nothing "
+        + "playing and no callback code raised, and the first step lifts them, which is where the "
+        + "bootstrap definition's own 914 lands")]
+    internal static void MissionStartParksAiWithNoIntro(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, IaChapter);
+        ctx.RequireData(SessionPaths.MissionZrdr(ctx.DataRoot, IaChapter, IaMission),
+            $"{IaChapter}/{IaMission} zrdr");
+        ctx.RequireData(texturesPath, $"{IaChapter} textures");
+
+        var textures = new TextureArchive(texturesPath);
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var report = new StringBuilder();
+        try
+        {
+            ctx.WithWorld(IaChapter, collision: false, IaMission, world =>
+                DriveMissionStart(ctx, world, planesGamez, textures, report));
+        }
+        finally
+        {
+            textures.Dispose();
+        }
+
+        ctx.WriteArtifact($"test-cutscene-ai-park-start-{IaChapter}-{IaMission}.txt", report.ToString());
+        ctx.Note($"{IaChapter}/{IaMission}: the mission start parks the wave with no intro to hold it, and the first step lifts it");
     }
 
     private static void Drive(TestContext ctx, TestWorld world, EnemyGeneratorDef gemini,
@@ -181,9 +222,77 @@ internal static class CutsceneAiParkSuites
         }
     }
 
+    private static void DriveMissionStart(TestContext ctx, TestWorld world, GameZ planesGamez,
+        TextureArchive textures, StringBuilder report)
+    {
+        var startDefs = world.Session.Program.Subset(world.Session.Program.StartAnims).Defs;
+        var startNames = new List<string>();
+        foreach (var def in startDefs)
+        {
+            if (def.AnimName is { } n && !startNames.Contains(n))
+            {
+                startNames.Add(n);
+            }
+        }
+
+        report.AppendLine($"{IaChapter}/{IaMission} start list closure: {string.Join(", ", startNames)}");
+        ctx.Check(startNames.Contains(Bootstrap),
+            $"the wave bootstraps '{Bootstrap}', the definition of a mission opening without a movie");
+        ctx.Check(!startNames.Any(n => CutsceneController.IsIntro(n)),
+            $"and bootstraps no story intro, so nothing raises a hold code over it");
+
+        var pool = new ProjectilePool(textures, null, null);
+        ctx.Host.AddChild(pool);
+        var cutscene = new CutsceneController();
+        ctx.Host.AddChild(cutscene);
+        var runtime = new AnimRuntime { AutoStart = false, ManualAdvance = true, SoundHandledElsewhere = true };
+        ctx.Host.AddChild(runtime);
+        var wave = new List<FlightController>();
+        try
+        {
+            for (int i = 0; i < WaveSize; i++)
+            {
+                wave.Add(BuildAiRig(ctx, planesGamez, textures, pool, $"ia1_wave1_{i + 1}"));
+            }
+
+            cutscene.BindWorld(runtime);
+            cutscene.BindRigs(Array.Empty<PlayerRig>(), () => wave);
+            ctx.Check(wave.All(ai => !ai.Inert && !ai.Parked) && !cutscene.AiParked,
+                $"the wave's {wave.Count} aircraft fly before the mission start parks them");
+
+            cutscene.ParkAtMissionStart();
+            report.AppendLine($"after the mission-start park: AiParked={cutscene.AiParked}, codes=[{string.Join(",", cutscene.Codes)}]");
+            ctx.Check(cutscene.AiParked && wave.All(ai => ai.Inert && ai.Parked),
+                $"the mission start parks the whole wave, with no intro and no episode to hold it");
+            ctx.Check(!cutscene.Playing && !cutscene.HoldsWorld,
+                $"and parks without opening an episode: the original's park is imperative, not a code");
+            ctx.Same(0, cutscene.Codes.Count,
+                $"no callback code was raised to park it (codes: [{string.Join(",", cutscene.Codes)}])");
+
+            cutscene.Tick();
+            report.AppendLine($"after the first step: AiParked={cutscene.AiParked}");
+            ctx.Check(!cutscene.AiParked && wave.All(ai => !ai.Inert && !ai.Parked),
+                $"the first step lifts the park, where the bootstrap definition's own reset raises 914");
+            cutscene.Tick();
+            ctx.Check(!cutscene.AiParked && wave.All(ai => !ai.Inert),
+                $"and the lift is once: a later step neither re-parks the wave nor revives it again");
+        }
+        finally
+        {
+            foreach (var ai in wave)
+            {
+                ai.Free();
+            }
+
+            runtime.Free();
+            cutscene.Free();
+            pool.Free();
+        }
+    }
+
     // A minimal AI actor for the park/reveal check: no roster wiring, just an aircraft that flies.
     private static FlightController BuildAiRig(TestContext ctx, GameZ planesGamez,
-        TextureArchive textures, ProjectilePool pool)
+        TextureArchive textures, ProjectilePool pool, string name = "cm14_gemini_fighter")
     {
         var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
         var model = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
@@ -201,7 +310,7 @@ internal static class CutsceneAiParkSuites
         };
         rig.AddChild(model);
         rig.Setup(new FlightModel(stats), null, new CamParams(), new Vector3(0f, 800f, 0f), Vector3.Forward);
-        rig.Name = "cm14_gemini_fighter";
+        rig.Name = name;
         ctx.Host.AddChild(rig);
         return rig;
     }

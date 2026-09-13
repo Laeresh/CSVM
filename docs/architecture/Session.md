@@ -324,8 +324,7 @@ The host a story mission's intro or landings definition raises its `CALLBACK` co
 session state those codes describe: the world and objectives held, the chrome off and the view off
 the aircraft, the humans out of flight with the episode owner posed on the staged `player` marker
 and the runtime's range gates reading where they last flew rather than where the film puts them,
-the AI parked (before any intro plays, whether or not its own data authors 913), the mid-mission
-airframe swap, the re-placement, the clearing of every round still in flight, and one restore at the definition's end or at a skip, refused once the mission has ended under the episode so the leaving fade keeps the film's shot. It also owns the held-input fast-forward (`Mech3/Anim/CutsceneFastForward.cs`), scoped to the episode's call closure and offered only where no skip is armed. A `Node`
+the AI parked (at the start of a mission of any type, and again before any intro plays whether or not its own data authors 913, lifted by code 914 from whichever definition the mission bootstraps), the mid-mission airframe swap, the re-placement, the clearing of every round still in flight, and one restore at the definition's end or at a skip, refused once the mission has ended under the episode so the leaving fade keeps the film's shot. It also owns the held-input fast-forward (`Mech3/Anim/CutsceneFastForward.cs`), scoped to the episode's call closure and offered only where no skip is armed. A `Node`
 only so it can tick last in the frame, after the animation advance that poses `camera1`. Which
 definition and which human an episode belongs to is the slot `Own` claims, not the raiser of the first code. Decode: [../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md).
 

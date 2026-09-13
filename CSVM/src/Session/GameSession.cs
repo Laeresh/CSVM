@@ -588,6 +588,14 @@ public partial class GameSession : Node3D
                 _cutscene?.BindRigs(_rigs, () => AiPlanes);
                 if (_cutscene != null)
                 {
+                    // The original parks the AI at the start of a mission of every type, before its
+                    // start list runs, and lifts it from the bootstrap definition. Missions only:
+                    // free flight has no counterpart there, so nothing outside a mission is held.
+                    if (_iaDirector != null || _campaign != null)
+                    {
+                        _cutscene.ParkAtMissionStart();
+                    }
+
                     _cutscene.SwapAirframe = SwapPlayerAirframe;
                     // The docking's own ending. Instant Action has no objectives graph to complete,
                     // and its rows never raise the code, so an unbound seam is the right answer

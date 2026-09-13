@@ -47,9 +47,9 @@ public sealed partial class CutsceneController : Node
     /// <summary>The definitions a story mission's start list plays as its opening movie: the
     /// bespoke C1/M04 intro, the one the other twelve share, and C3/M03's cargo zeppelin camera,
     /// which no list names (its start anim <c>calldestroy_the_cargozep</c> calls it). ⚠ The
-    /// authored codes do NOT identify a cutscene on their own: <c>player_setup</c>, which every
-    /// mission opening without a movie bootstraps, raises the same nine and the original hosts
-    /// none of them (docs/formats/anim-definitions/cutscenes.md).</summary>
+    /// authored codes do NOT identify a cutscene: <c>player_setup</c>, which every mission opening
+    /// without a movie bootstraps, raises the same nine, so a code test would give every mission a
+    /// letterbox and a held world (docs/formats/anim-definitions/cutscenes.md).</summary>
     public static readonly string[] IntroAnims =
         { "mission_intro_animation", "generic_intro", "cgzep_camera" };
 
@@ -137,6 +137,9 @@ public sealed partial class CutsceneController : Node
     private readonly HashSet<Key> _keysDown = new();
     private readonly HashSet<(int Device, JoyButton Button)> _padsDown = new();
     private bool _scriptedHold;
+    // Is the AI held by the mission start's own park rather than by a playing definition? The lift
+    // is the bootstrap definition's reset, so this says which of the two owns the release.
+    private bool _startParked;
     private bool _fastForwardLogged;
     private AnimRuntime? _runtime;
     private IReadOnlyList<PlayerRig> _rigs = Array.Empty<PlayerRig>();
@@ -497,6 +500,25 @@ public sealed partial class CutsceneController : Node
         return true;
     }
 
+    /// <summary>The mission start's own AI park, which belongs to every mission of every type and
+    /// not to a story intro: the original parks imperatively before any start list runs, reading no
+    /// mission type, and the bootstrap definition's reset lifts it with code 914. An intro has
+    /// already parked by the time a session reaches this and holds it to that film's end; a mission
+    /// opening without one, an Instant Action wave among them, is lifted on its first step. Decode:
+    /// docs/formats/anim-definitions/cutscenes.md.</summary>
+    public void ParkAtMissionStart()
+    {
+        if (AiParked)
+        {
+            return;
+        }
+
+        AiParked = true;
+        _startParked = true;
+        ParkAi();
+        Log.Info("anim", $"cutscene: the mission start parks {_parked.Count} AI aircraft, lifted by the bootstrap definition's own 914");
+    }
+
     /// <inheritdoc/>
     public override void _Process(double delta) => Tick();
 
@@ -505,6 +527,7 @@ public sealed partial class CutsceneController : Node
     /// cutscene is playing.</summary>
     public void Tick()
     {
+        LiftMissionStartPark();
         if (!Playing)
         {
             return;
@@ -1068,10 +1091,25 @@ public sealed partial class CutsceneController : Node
         }
     }
 
+    // Code 914 out of the bootstrap definition's reset. The definition a mission without a movie
+    // bootstraps carries no timed event and resets at once, so the mission-start park lasts that
+    // mission's first step; an intro is still playing here and keeps the park to its own end.
+    private void LiftMissionStartPark()
+    {
+        if (!_startParked || Playing)
+        {
+            return;
+        }
+
+        AiParked = false;
+        RevealAi();
+    }
+
     // Only what this controller parked comes back: an aircraft built inert for a later wave is not
     // this cutscene's to activate.
     private void RevealAi()
     {
+        _startParked = false;
         foreach (var ai in _parked)
         {
             ai.Inert = false;
