@@ -1949,6 +1949,38 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   footing follows it rather than `ComposeTextLines`. *Cross-refs:* `CSVM/src/Flight/FlightHud.cs`,
   `CSVM/src/Bindings/ActiveDevice.cs`, `CSVM/src/Bindings/BindingLabels.cs`.
 
+- `BL-901` `[Fidelity]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **The keyboard
+  defaults are CSVM's own WASD layout, and the original's shipped table is the one the user wants
+  under the hand: digits are throttle, Shift and Ctrl are modifiers, targeting sits on E, W, R,
+  Q and T.** *Evidence:* the user at the controls, on seeing the Targeting tab the six new
+  targeting rows landed on the digit row: "use the strings from the original, look at the
+  screenshot Keybinds Targeting; in the Targeting binding screen with Targeting as header not
+  every line needs a Target prefix; use the default keybinds too, the numbers are reserved for
+  throttling", and on the choice of scope: the whole original layout. The table is decoded in
+  `docs/org/input.md` (`FUN_004936c0`, 64 defaults): arrows for attitude, `,` and `.` yaw,
+  Shift+L level off, `=` and `-` throttle up and down with `1`..`9` the eighths, Space and X fire,
+  F3..F6 the selector cycles, E / Shift+E / Ctrl+E, W / Shift+W / Ctrl+W, R / Shift+R / Ctrl+R,
+  Q and T targeting, Shift+S spyglass, F7 chase, F8 cockpit views, K, L, J the look modes, numpad
+  looks, N nitro, Ctrl+X bail out, Esc pause, A auto-dock. A `BindingControl.Key` carries no
+  modifier today, so Shift+E cannot be expressed. *Fix shape:* (1) a keyboard binding gains the
+  original's three modifier bits (Shift, Ctrl, Alt) as part of its identity, captured on the
+  Controls door and printed by `BindingLabels` as `Shift+E`; a bare key binding does not fire
+  while a modifier it does not name is held, so E and Shift+E are distinct. (2) The flight
+  context's defaults become the original's table, action by action, with the throttle eighths as
+  nine new actions; pad defaults stay as they are. (3) The Controls door's row labels take the
+  original's strings from `OriginalScreenshots/Keybinds Targeting.png` and its sibling pages
+  (`Next Enemy/Objective`, `Previous Ally`, `Select Target Nearest Crosshairs`, `Target Nothing`,
+  no `Target` prefix under the Targeting header), on every tab. *⚠ Traps:* a stored keymap keeps
+  its rows (the store does not bump its version for a default change), so the new defaults reach
+  only a profile that never saved those rows; say so in `docs/controls.md`. The camera and menu
+  contexts keep their keys. `docs/controls.md`'s flight table is rewritten, not patched. *Playtest
+  after fix:* any sortie on a fresh profile, throttle by digits, targeting by E/W/R with Shift and
+  Ctrl, and the Controls door's Targeting tab against the screenshot. *Cross-refs:* `BL-897`
+  (F3..F6, lands first), `BL-447` and `BL-870` (both edit the same table, land after),
+  `docs/org/input.md`'s shipped-defaults table, `CSVM/src/Bindings/DefaultBindings.cs`,
+  `CSVM/src/Bindings/ControlCapture.cs`, `CSVM/src/Bindings/BindingLabels.cs`,
+  `CSVM/src/UI/Menu/Original/OriginalControls.cs`.
+
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
