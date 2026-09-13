@@ -4067,13 +4067,13 @@ public partial class GameSession : Node3D
                 string where;
                 if (spec.WherePoint is { } pt)
                 {
-                    where = $"POINT ({pt[0]:0},{pt[1]:0},{pt[2]:0})";
+                    where = Log.Format($"POINT ({pt[0]:0},{pt[1]:0},{pt[2]:0})");
                 }
                 else
                 {
                     var found = _diagRuntime?.FindNodes(spec.WhereNode ?? "");
                     where = found is { Count: > 0 }
-                        ? $"NODE '{spec.WhereNode}' x{found.Count} -> ({found[0].GlobalPosition.X:0},{found[0].GlobalPosition.Y:0},{found[0].GlobalPosition.Z:0}) inTree={found[0].IsInsideTree()} vis={found[0].Visible}"
+                        ? Log.Format($"NODE '{spec.WhereNode}' x{found.Count} -> ({found[0].GlobalPosition.X:0},{found[0].GlobalPosition.Y:0},{found[0].GlobalPosition.Z:0}) inTree={found[0].IsInsideTree()} vis={found[0].Visible}")
                         : $"NODE '{spec.WhereNode}' UNRESOLVED";
                 }
 
@@ -4091,7 +4091,7 @@ public partial class GameSession : Node3D
         sb.Append($"DIAG t={_diagTick / 60}s ");
         if (p != null)
         {
-            sb.Append($"player=({p.WorldPosition.X:0},{p.WorldPosition.Y:0},{p.WorldPosition.Z:0}) ");
+            sb.Append(Log.Format($"player=({p.WorldPosition.X:0},{p.WorldPosition.Y:0},{p.WorldPosition.Z:0}) "));
         }
 
         foreach (var def in _campaign.Script.Objectives)
@@ -4106,8 +4106,8 @@ public partial class GameSession : Node3D
                 : _diagRuntime?.FindNodes(spec.WhereNode ?? "") is { Count: > 0 } f
                     ? f[0].GlobalPosition
                     : null;
-            string d = refPos is { } r && p != null ? $"{p.WorldPosition.DistanceTo(r):0}" : "?";
-            sb.Append($"| O{def.Number} {graph.StateOf(def.Number)}{(graph.CompletedOf(def.Number) ? "*" : "")} d={d}/r{spec.Radius:0} ");
+            string d = refPos is { } r && p != null ? Log.Format($"{p.WorldPosition.DistanceTo(r):0}") : "?";
+            sb.Append(Log.Format($"| O{def.Number} {graph.StateOf(def.Number)}{(graph.CompletedOf(def.Number) ? "*" : "")} d={d}/r{spec.Radius:0} "));
         }
 
         Log.Info("core", $"{sb}");

@@ -835,11 +835,11 @@ public sealed partial class MapEdgeExtender : Node3D
                 {
                     rejected[key] = list = new List<string>();
                 }
-                list.Add($"{row.Verdict} {row.Name} {row.CoverX:F3}x{row.CoverZ:F3} [{row.Surfaces}]");
+                list.Add(Log.Format($"{row.Verdict} {row.Name} {row.CoverX:F3}x{row.CoverZ:F3} [{row.Surfaces}]"));
             }
             if (_adopted.Contains(row.Node))
             {
-                adoptions.Add($"({row.Cx},{row.Cz}) {row.Name} {row.CoverX:F3}x{row.CoverZ:F3} [{row.Surfaces}]");
+                adoptions.Add(Log.Format($"({row.Cx},{row.Cz}) {row.Name} {row.CoverX:F3}x{row.CoverZ:F3} [{row.Surfaces}]"));
             }
         }
         var cells = new List<object>();

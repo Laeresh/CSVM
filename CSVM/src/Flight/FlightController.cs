@@ -1906,7 +1906,9 @@ public partial class FlightController : Node3D
                 float path = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(_model.VelocityDir.Y, -1f, 1f)));
                 float nose = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(-_model.Attitude.Z.Y, -1f, 1f)));
                 float wv = Mathf.Abs(_model.Attitude.Y.Dot(Vector3.Up));
-                string agl = _pilotHud.AglMeters < float.MaxValue ? $" agl={_pilotHud.AglMeters:0}" : "";
+                string agl = _pilotHud.AglMeters < float.MaxValue
+                    ? Log.Format($" agl={_pilotHud.AglMeters:0}")
+                    : "";
                 Log.Debug("flight", $"telemetry pos=({p.X:0},{p.Y:0},{p.Z:0}) spd={_model.Speed:0.0} m/s thr={_model.Throttle:0.00} rates=({rates.X:0.00},{rates.Y:0.00},{rates.Z:0.00}) path={path:0}° nose={nose:0}° wv={wv:0.00}{agl}");
             }
         }

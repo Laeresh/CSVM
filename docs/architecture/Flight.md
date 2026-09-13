@@ -988,7 +988,7 @@ bilateral pairs such as twin fins), then one `ConvexHull` per refined piece. The
 part order are judged on the pieces' boxes, so a hull is only the emitted shape and never moves a
 cut or a name. Single-sourced: the terrain sweep casts these hulls and `AircraftBody` mounts the
 same `ConvexPolygonShape3D` resources as the plane's hittable body. `Layout` is the engine-free half
-the `airframe-hull-coverage` suite measures; `Build` wraps it in shapes.
+the `airframe-hull-coverage` suite measures, `Build` wraps it in shapes, `PartLine` its census line.
 
 ## src/Flight/ConvexHull.cs
 A convex hull over a point cloud with no engine dependency: vertices, outward faces, edges, bounds

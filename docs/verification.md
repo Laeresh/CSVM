@@ -436,6 +436,14 @@ one sentence of measured evidence; everything else belongs in the commit that la
   battery launch played a cinema" reported 24 of 72 logs carrying one; the same sweep over CSVM's
   own `fly-*.log` reported 0 of 48, the earlier hits all being one deliberate probe replayed by
   every later mirror.
+- **LOG-23**, **`Log` renders only the holes the log call itself interpolates, so a string built
+  before the call reaches the file in the machine's own culture.** The plane collider census read
+  `3,8×3,0×5,6 m` on a German machine although its `Log.Info` line was invariant, because the
+  summary property had already formatted the numbers. A suite never catches this: the test harness
+  pins the thread to the invariant culture, so the fault appears only in a real run. Grep for a
+  numeric format (`:0.0`, `ToString("0.#")`) OUTSIDE a `Log.*` call, in a summary property, a
+  `reason` argument, a list entry or a `StringBuilder.Append`, and give each one `Log.Format` or
+  `FormattableString.Invariant`.
 
 ## WORLD, world data and runtime traps
 

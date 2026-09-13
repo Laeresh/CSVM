@@ -201,7 +201,8 @@ public sealed class AiRocketeer
             float sep2 = p.MountPos.DistanceSquaredTo(targetPos);
             if (sep2 < minRange * minRange || sep2 > maxRange * maxRange)
             {
-                passedOver = $"pylon{p.Index} out of its {minRange:0}-{maxRange:0} m band at {Mathf.Sqrt(sep2):0} m";
+                passedOver = FormattableString.Invariant(
+                    $"pylon{p.Index} out of its {minRange:0}-{maxRange:0} m band at {Mathf.Sqrt(sep2):0} m");
                 passedOverKey = $"band:{p.Index}";
                 continue;
             }
@@ -228,7 +229,8 @@ public sealed class AiRocketeer
             if (clamped.Dot(local) < AimQualityCos)
             {
                 // the mount cannot be brought close enough: keep maneuvering
-                passedOver = $"pylon{p.Index} lead {yawDeg:0}° yaw {pitchDeg:0}° pitch off the mount";
+                passedOver = FormattableString.Invariant(
+                    $"pylon{p.Index} lead {yawDeg:0}° yaw {pitchDeg:0}° pitch off the mount");
                 passedOverKey = $"aim:{p.Index}";
                 continue;
             }
@@ -239,7 +241,8 @@ public sealed class AiRocketeer
             _slotLockouts[p.Index] = refire;
             // The dice, last and only here. Inclusive, as the original's compare is.
             WantsFire = _roll() <= QuickDrawChance;
-            LastVerdict = $"pylon{p.Index} taken, dice {(WantsFire ? "pass" : "fail")}, next in {refire:0} s";
+            LastVerdict = FormattableString.Invariant(
+                $"pylon{p.Index} taken, dice {(WantsFire ? "pass" : "fail")}, next in {refire:0} s");
             LastVerdictKey = $"taken:{p.Index}:{WantsFire}";
             return;
         }

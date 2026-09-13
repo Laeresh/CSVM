@@ -338,7 +338,7 @@ public sealed class AiModeMachine
                     && pos.DistanceTo(t) <= Mathf.Min(ActivationRange, AttackRange))
                 {
                     _pursuitAnchor = pos;
-                    Transition(AiMode.Pursue, $"target at {pos.DistanceTo(t):0} m");
+                    Transition(AiMode.Pursue, FormattableString.Invariant($"target at {pos.DistanceTo(t):0} m"));
                 }
                 break;
 
@@ -616,7 +616,7 @@ public sealed class AiModeMachine
         }
         else if (Mode != AiMode.AvoidCrash)
         {
-            EnterAvoidCrash(pos, $"obstacle inside {reach:0} m ({struck})");
+            EnterAvoidCrash(pos, FormattableString.Invariant($"obstacle inside {reach:0} m ({struck})"));
         }
     }
 

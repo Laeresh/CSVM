@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Flight;
@@ -39,8 +40,13 @@ public sealed class PlaneCollider
     public IReadOnlyList<Part> Parts { get; }
 
     /// <summary>One-line description of the hulls for the load log.</summary>
-    public string Summary => string.Join(", ",
-        Parts.Select(p => $"{p.Name} {p.Hull.Bounds.Size.X:0.0}×{p.Hull.Bounds.Size.Y:0.0}×{p.Hull.Bounds.Size.Z:0.0} m/{p.Hull.Points.Length}v"));
+    public string Summary => string.Join(", ", Parts.Select(p => PartLine(p.Name, p.Hull)));
+
+    /// <summary>One hull's census text. Invariant, because the string is built here and the log
+    /// call only interpolates it: a comma-decimal machine would otherwise log 3,8×3,0×5,6 m.
+    /// Engine-free, so a test pins the text without a physics shape.</summary>
+    public static string PartLine(string name, ConvexHull hull) =>
+        Log.Format($"{name} {hull.Bounds.Size.X:0.0}×{hull.Bounds.Size.Y:0.0}×{hull.Bounds.Size.Z:0.0} m/{hull.Points.Length}v");
 
     /// <summary>Derives the collision hulls from the built plane model; null if it has no usable
     /// geometry. Classification is geometric (extents only, no per-plane data): wing/tail/fuselage

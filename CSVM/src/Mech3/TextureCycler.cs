@@ -40,7 +40,7 @@ public sealed partial class TextureCycler : Node
         if (frames.Count < 2 || fps <= 0f)
             return;
         if (label.Length > 0)
-            Summary.Add($"{label}×{frames.Count}@{fps:0.#}");
+            Summary.Add(Log.Format($"{label}×{frames.Count}@{fps:0.#}"));
         var arr = new ImageTexture[frames.Count];
         for (int i = 0; i < frames.Count; i++)
             arr[i] = frames[i];

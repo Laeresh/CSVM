@@ -551,7 +551,8 @@ public sealed class AiPilot
         {
             _rail = new DangerZoneRail(run, model.Position, model.Attitude,
                 model.VelocityDir * model.Speed, model.Speed);
-            machine.Enter(AiMode.NavigatingDangerZone, $"'{run.Ribbon.Name}' locked at {range:0} m");
+            machine.Enter(AiMode.NavigatingDangerZone,
+                FormattableString.Invariant($"'{run.Ribbon.Name}' locked at {range:0} m"));
         }
         return input;
     }
