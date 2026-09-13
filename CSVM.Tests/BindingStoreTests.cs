@@ -46,6 +46,36 @@ public class BindingStoreTests
         AssertSameMaps(profile, loaded);
     }
 
+    /// <summary>The seat's flying scheme rides in the same file as the rows it competes with, so a
+    /// player who chose the mouse flies with it the next time they launch.</summary>
+    [Fact]
+    public void RoundTrip_PreservesTheFlyingScheme()
+    {
+        var profile = BindingProfile.Defaults(Pad, readsKeyboard: true);
+        profile.MouseFlying = true;
+
+        var json = BindingStore.Serialize(1, profile);
+        var loaded = BindingStore.Deserialize(json, Pad, readsKeyboard: true);
+
+        Assert.Contains("\"mouseFlying\": true", json);
+        Assert.True(loaded.MouseFlying);
+        AssertSameMaps(profile, loaded);
+    }
+
+    /// <summary>A file written before the field existed names no scheme and reads as the shipped
+    /// one, which is why the field costs no version bump.</summary>
+    [Fact]
+    public void AFileNamingNoSchemeLeavesTheSeatOnTheKeyboardAndPad()
+    {
+        var json = BindingStore.Serialize(1, BindingProfile.Defaults(Pad, readsKeyboard: true));
+        var stripped = json.Replace("\"mouseFlying\": false,", string.Empty, StringComparison.Ordinal);
+
+        var loaded = BindingStore.Deserialize(stripped, Pad, readsKeyboard: true);
+
+        Assert.DoesNotContain("mouseFlying", stripped, StringComparison.Ordinal);
+        Assert.False(loaded.MouseFlying);
+    }
+
     /// <summary>The snap-look diagonals are one key on two actions, so the file has to carry a
     /// control twice inside one context and read it back that way.</summary>
     [Fact]

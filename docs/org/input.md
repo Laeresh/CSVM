@@ -256,6 +256,7 @@ default, so adding one needs no bump.
 {
   "version": 2,
   "player": 1,
+  "mouseFlying": false,
   "contexts": {
     "flight": {
       "FireGuns": ["keyboard/key:Space", "pad:*/button:B"],
@@ -286,6 +287,11 @@ row by hand.
 Every action of every context is written, the ones bound to nothing included, so a deliberate unbind
 survives a reload rather than coming back at its default. Whether a seat reads the keyboard is not
 written: a saved file could otherwise hand a pad-only splitscreen seat the keyboard back.
+
+`mouseFlying` is the seat's flying scheme, the CONTROLS page's own row (`docs/controls.md`): true
+gives the stick the mouse, false leaves it to head-look. It is a scheme rather than a binding, so it
+sits beside the contexts instead of in one, and a file that does not name it reads false, which is
+why it costs no version bump.
 
 Nothing costs the file. A row the reader cannot read costs that action its saved bindings and
 nothing more, leaving it on the shipped default while the rest of the file loads. That covers an

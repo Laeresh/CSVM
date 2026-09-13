@@ -534,6 +534,14 @@ member, and it does not go here.
   game does not have, so re-read every verdict the sync changes rather than only the red one.**
   The armed zeppelin leg had been parking its bait 200 m from a ring, which is inside a 657 m by
   136 m hull, and it engaged only while the hull's own shapes were absent.
+- **INSTR-69**, **An input read off a device the test host does not have needs a pinned seam beside
+  the live read, or the mechanism is only reachable by hand.** The mouse flight scheme reads an
+  absolute cursor offset inside the viewport, which is zero in every headless suite, so
+  `FlightController.MouseStickForTest` supplies that offset and the live path stays the only reader
+  of the real pointer.
+- **INSTR-70**, **A new in-engine suite is not finished when it passes: `analysis/engine-suite-weights.json`
+  must name it too, and a unit test fails until it does.** The balancer weighs every registered
+  suite, so an unweighted one leaves a shard's plan guessing at its cost.
 
 ## SRC, sources and documents
 

@@ -885,6 +885,16 @@ far less deflection than a slow one, and the analogue axes bypass it entirely. P
 engine-free; `FlightController` steps one per keyboard axis. Decode:
 [../org/flightModel.md](../org/flightModel.md).
 
+## src/Flight/MouseFlight.cs
+The mouse as a stick, decoded from the mouse arm of `FUN_00487460`: a cursor offset over the pane in
+`[-1, 1]` per axis, each source dead inside its own deadzone (0.1 bank and pitch, 0.3 yaw) and
+rescaled so the pane's edge is full deflection, plus the `is_autogyro` exchange that takes an
+autogyro's bank off the third axis and its yaw off the sideways travel, both negated. Pure and
+engine-free, so a suite drives it with no window; `FlightController` sums what it returns into the
+keyboard and pad deflections, as the original's arm sums into the same slots. The third mouse axis
+has no counterpart here and is always passed zero. Decode:
+[../org/flightModel.md](../org/flightModel.md); the scheme: [../controls.md](../controls.md).
+
 ## src/Flight/NitroSystem.cs
 The original's nitro boost lifecycle, engine-free: a 30-unit tank burned at 4/s while boosting and
 refilled at 1/s always, so a burn nets 3/s and runs 9.5 s from full to the 5 % cutoff.

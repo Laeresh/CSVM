@@ -711,22 +711,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Flight model & collision physics
 
-- `BL-447` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The mouse-flying arm's `is_autogyro` roll/yaw exchange has
-  nowhere to land: CSVM has no mouse flight-control mode.** `0x4876f4` sits inside
-  `FUN_00487460`'s mouse arm, reached only with the mouse control bit of `DAT_0071c2a0` set and the
-  free-look flag `DAT_00654120` clear, and there it exchanges and negates the roll and yaw sources,
-  so an autogyro yaws with sideways mouse motion where an aeroplane rolls
-  ([`docs/org/flightModel.md`](docs/org/flightModel.md), "`is_autogyro` reaches no flight-plant
-  term"). CSVM's mouse is head-look, so porting the exchange means first adding a mouse
-  flight-control scheme and a way to select it, which is a product decision rather than a parity
-  gap. *Decided:* CSVM offers mouse flying. *Fix shape:* a mouse flight-control scheme selectable
-  beside the keyboard and pad ones (the original's mouse control bit of `DAT_0071c2a0` is the
-  model: mouse motion drives roll and pitch, and free-look is a separate flag that hands the mouse
-  back to head-look), with the `is_autogyro` exchange inside its arm so an autogyro yaws with
-  sideways mouse motion; then the ledger row "the mouse-flying arm's `is_autogyro` roll/yaw
-  exchange" in the same page's "Parity ledger" moves to supported. *⚠ Traps:* the free-look flag
-  decides which of two consumers the mouse feeds, so the scheme needs a way to toggle it that the
-  Controls door exposes; do not take the mouse away from head-look on the keyboard and pad schemes.
 - `BL-774` `[Fidelity]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **The sustained climb plateaus at 204 mph against the original's
   filmed 163, and every term that could move a steady climb is now ruled out by arithmetic.**
   `--dump-flight`'s sustained climb settles at 204.03 mph on a 56.3° path where the footage reads

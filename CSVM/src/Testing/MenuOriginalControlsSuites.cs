@@ -22,7 +22,8 @@ internal static class MenuOriginalControlsSuites
     [Suite("menu-original-controls",
         "Original's rebinding pages through the presentation boundary over the install's decoded "
         + "layout: PREFERENCES opens the Options screen with its CONTROLS door live over the shared "
-        + "feature, the door opens the decoded CONTROLS page whose seat row names player 1 and whose "
+        + "feature, the door opens the decoded CONTROLS page whose seat row names player 1, whose "
+        + "mouse row hands the mouse between the stick and head-look a press at a time, and whose "
         + "KEYS AND BUTTONS button opens the decoded KEYS page on its Movement tab with the seven "
         + "category strips, the three column heads and CANCEL CHANGES authored left of ACCEPT "
         + "CHANGES, a click on a control cell arms a capture on that row's own action and slot, "
@@ -108,7 +109,14 @@ internal static class MenuOriginalControlsSuites
             $"with one seat registered on it ({controls.Players.Count} seats, player {controls.Player})");
         ctx.Check(Row(shell, OriginalShell.ControlsPlayerKey)?.Label == "Player 1",
             $"and the seat row naming player 1 ({Row(shell, OriginalShell.ControlsPlayerKey)?.Label})");
-        ctx.Check(Row(shell, "CP_S_MOUSE") == null, $"the Mouse Sensitivity row is not drawn, this port having no cursor speed");
+        var mouse = Row(shell, OriginalShell.ControlsMouseKey);
+        ctx.Check(mouse is { Enabled: true, Label: "Look" },
+            $"the Mouse Sensitivity row carries the flying scheme, on head-look ({mouse?.Label}, live {mouse?.Enabled})");
+        Click(host, seat, shell, fit, OriginalShell.ControlsMouseKey);
+        ctx.Check(controls.MouseFlying && Row(shell, OriginalShell.ControlsMouseKey)?.Label == "Fly",
+            $"a press hands the mouse to the stick ({controls.MouseFlying}, {Row(shell, OriginalShell.ControlsMouseKey)?.Label})");
+        Click(host, seat, shell, fit, OriginalShell.ControlsMouseKey);
+        ctx.Check(!controls.MouseFlying, $"and the next press hands it back ({controls.MouseFlying})");
 
         Click(host, seat, shell, fit, OriginalShell.KeysDoorKey);
         ctx.Check(shell.Screen == OriginalScreen.Keys, $"KEYS AND BUTTONS opens the KEYS page ({shell.Screen})");

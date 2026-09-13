@@ -706,7 +706,9 @@ roll and yaw sources, so an autogyro yaws with sideways mouse motion where an ae
 pitch write at `0x4876e1` has already happened and is untouched. At `0x420205`, in the AI maneuver
 chooser `FUN_004201a0`, it gates each row of the 17-entry `maneuvers.zrd` table (base `0x71b210`,
 stride `0x1c`) on that row's byte `+0x06`, dropping maneuvers an autogyro may not fly from the
-candidate list. Neither reaches a torque, an authority curve or the stall. The class dispatch does
+candidate list. CSVM carries the first of those two in `MouseFlight.Read`, which the mouse
+flight-control scheme reads through (`docs/controls.md`). Neither reaches a torque, an authority
+curve or the stall. The class dispatch does
 not single it out either: `pautogyro` authors no `mode` and inherits `basic_airplane`'s `mode jet`,
 so the Hoplite flies the class-0 aeroplane arm like the other ten and the class-1 arm
 `FUN_0048ffe0` never sees it.
@@ -3736,6 +3738,7 @@ which are findings rather than code.
 | the far-field speed-hold plant | decoded | `0x48c4e9`–`0x48c603` |
 | ground blow as a control bias | decoded | `FUN_0048c220`, called at `0x48cf95` |
 | the keyboard stick accumulator | decoded | `FUN_00487460` |
+| the mouse-flying arm's `is_autogyro` roll/yaw exchange | decoded | `0x4876f4`, inside `FUN_00487460`'s mouse arm; `MouseFlight.Read` exchanges and negates the same two sources |
 | the six-slot control-surface mix and its 2/s exponential | decoded | `FUN_004b27e0` / `FUN_004b2a40` / `FUN_004b2ca0`, smoothing `FUN_00460490` |
 | contact placement, normal impulse and angular deposit | decoded | `FUN_0048d7f0`, `0x48e4bc` |
 | collision damage, armour before health | decoded | `FUN_0048d2c0` |
@@ -3756,7 +3759,6 @@ which are findings rather than code.
 | control surfaces, shake and nitro edges run for EVERY human pilot | exception | plan Decision 3; the original's guard is the single player |
 | the Fury's rudder animates | exception | CSVM also matches `l_rudder_rotate` and a digitless `l_elevator`, which the `%d` lookups miss |
 | a live producer for an AI's nitro injector | unsupported | `AiSpawn.Nitro` reads roster slot 34; the mission spawner does not read roster blocks yet |
-| the mouse-flying arm's `is_autogyro` roll/yaw exchange | unsupported | `0x4876f4`; CSVM has no mouse flight-control mode at all, so there is no arm to exchange in |
 
 ### Envelope rows
 

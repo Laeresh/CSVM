@@ -99,6 +99,40 @@ reset (INSTR-64).
 | `L` | | **reserved** for Track Target (the original's `Views 1 → Track Target`), bound to nothing yet; the camera behaviour is its own item, `BL-399` |
 | - | | the original's commands this port has no action for leave their keys free: Shift+`L` level off, Ctrl+`X` bail out, `F9` the first of its four external cameras, and `K` / `J`, which select its snap and smooth look modes (this port picks the look mode by which device moved, `BL-399` and the free-look row above). The other three external-camera keys, `F10` through `F12`, are the one place this port sits on an original command's key: they carry the gltf export, the placement print and the screenshot, which are instruments rather than flight actions and are not in the shipped table a Controls door can rebind |
 
+## Flying with the mouse
+
+A seat can fly with the mouse instead of leaving it to head-look. The choice is
+per seat and per player, and it lives on the launchscreen's CONTROLS page, in the
+box the original's Mouse Sensitivity slider stands in: the row reads **Look** for
+the scheme above and **Fly** for this one. It is staged like every other edit
+there, so ACCEPT CHANGES is what keeps it and CANCEL CHANGES puts it back, and it
+is saved in that player's own keymap file (`bindings_p<n>.json`) beside the rows
+the KEYS AND BUTTONS page writes. A pad-only splitscreen seat cannot take it,
+having no mouse of its own. The Controls page is where the other two schemes are
+chosen, so the third one is chosen there too, rather than in a preferences row
+that no seat owns.
+
+While the scheme is on, where the cursor stands in that seat's pane is a stick
+position: across the pane banks, down the pane pulls the nose up, and the middle
+is a centred stick. The reading is the original's own mouse arm
+(`FUN_00487460`, `docs/org/flightModel.md`): each axis is dead inside its own
+deadzone (0.1 of the travel for bank and pitch, 0.3 for yaw) and the travel left
+over is rescaled so the pane's edge is full deflection. An autogyro exchanges the
+two lateral sources, so sideways motion yaws it where it banks an aeroplane. The
+mouse's deflections are SUMMED with the keys and the pad rather than replacing
+them, which is what the original's arm does to the same slots, so an autogyro's
+pilot still banks with the roll keys while the mouse yaws.
+
+The original's third mouse axis has no counterpart here, so that source is always
+zero: an aeroplane takes no yaw from the mouse, and an autogyro no bank.
+
+**Free look** is a separate flag rather than a held posture while the scheme is
+on. The free-look control (right mouse button by default, rebindable on the KEYS
+AND BUTTONS page's Views 1 tab) toggles it: one press takes the stick off the
+mouse and hands it to head-look, the next gives it back. Off the scheme, that
+control is read exactly as it always was, held to look around, so the keyboard
+and pad schemes are untouched.
+
 ## Any mode
 
 | Input | Pad | Does |

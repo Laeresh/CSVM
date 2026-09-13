@@ -26,6 +26,7 @@ public sealed class BindingStore
     /// names no modifier and still loads whole, which is why the reader checks no version.</summary>
     public const int Version = 2;
 
+    private const string MouseFlyingField = "mouseFlying";
     private const string KeyboardToken = "keyboard";
     private const string MouseToken = "mouse";
     private const string PadPrefix = "pad:";
@@ -67,7 +68,8 @@ public sealed class BindingStore
 
     /// <summary>The canonical JSON text for that profile. Every action of every context is written,
     /// including the ones bound to nothing, so a player who unbinds an action gets it back unbound
-    /// rather than back at its default.</summary>
+    /// rather than back at its default. The seat's mouse-flying flag rides alongside them, since the
+    /// scheme a player chose is part of the keymap they chose it in.</summary>
     public static string Serialize(int player, BindingProfile profile)
     {
         using var stream = new MemoryStream();
@@ -76,6 +78,9 @@ public sealed class BindingStore
             w.WriteStartObject();
             w.WriteNumber("version", Version);
             w.WriteNumber("player", player);
+            // No version bump: a file written before this field reads false, which is the shipped
+            // scheme, so an older keymap still describes the seat it was saved from.
+            w.WriteBoolean(MouseFlyingField, profile.MouseFlying);
             w.WriteStartObject("contexts");
             foreach (var context in Enum.GetValues<InputContext>())
             {
@@ -105,7 +110,8 @@ public sealed class BindingStore
     /// <summary>The profile a JSON text describes, starting from the shipped defaults for
     /// <paramref name="pad"/> and replacing every action the text gives a readable row for. Text
     /// that is not valid JSON, an unknown context or action name, and a binding token this build
-    /// cannot read all leave the action at its default.</summary>
+    /// cannot read all leave the action at its default. A file naming no mouse-flying flag leaves the
+    /// seat on the keyboard and pad schemes.</summary>
     public static BindingProfile Deserialize(string json, DeviceId pad, bool readsKeyboard)
     {
         var profile = BindingProfile.Defaults(pad, readsKeyboard);
@@ -113,6 +119,13 @@ public sealed class BindingStore
         {
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
+            if (root.ValueKind == JsonValueKind.Object
+                && root.TryGetProperty(MouseFlyingField, out var flying)
+                && flying.ValueKind is JsonValueKind.True or JsonValueKind.False)
+            {
+                profile.MouseFlying = flying.GetBoolean();
+            }
+
             if (root.ValueKind != JsonValueKind.Object
                 || !root.TryGetProperty("contexts", out var contexts)
                 || contexts.ValueKind != JsonValueKind.Object)

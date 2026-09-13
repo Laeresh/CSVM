@@ -166,7 +166,8 @@ applies to all of them at once. This is what a polling site is handed and what a
 edits. `Poll` resolves every context on the tick rather than only the mode in front of the player,
 because a pause board and the aeroplane behind it are both live on one tick. It also holds the
 seat's `ActiveDevice`, fed the tick's two halves by whoever polls them, so every prompt on the seat
-names one device. Where a seat's profile comes from is `LaunchBindings.cs`.
+names one device, and the seat's flying scheme (`MouseFlying`), which two players at one machine
+choose separately. Where a seat's profile comes from is `LaunchBindings.cs`.
 
 ## src/Bindings/ActiveDevice.cs
 Which side of a seat's hardware produced its last real input, keyboard and mouse against the pads,

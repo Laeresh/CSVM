@@ -198,6 +198,12 @@ public sealed class PlaneStats
     // error on the rudder even dead ahead. Only `balmoral` reaches this law (the autogyro is class 1).
     public float RudderTol = 0.2f;
 
+    // is_autogyro: the authored bare flag, the vehicle record's byte +0x21c. It reaches no torque,
+    // authority curve or stall (docs/org/flightModel.md). Two arms read it: the AI maneuver chooser,
+    // and the mouse-flying stick, where it exchanges the roll and yaw sources so an autogyro yaws
+    // with sideways mouse motion where an aeroplane banks.
+    public bool IsAutogyro;
+
     // player.json globals
     public float Gravity = PhysicsConstants.NomGravity; // nom_gravity, the game's arcade gravity, m/s²
     public float StallMag = 1.25f;
@@ -571,6 +577,13 @@ public sealed class PlaneStats
                     return f;
             return fallback;
         }
+        bool Flag(string key)
+        {
+            foreach (var d in chain)
+                if (d.Has(key))
+                    return true;
+            return false;
+        }
         string PropStr(string key, string fallback)
         {
             foreach (var d in chain)
@@ -624,6 +637,7 @@ public sealed class PlaneStats
             AiInputLimitPitch = Prop("ai_input_limit_pitch", 1f),
             AiInputLimitYaw = Prop("ai_input_limit_yaw", 1f),
             RudderTol = Prop("rudder_tol", 0.2f),
+            IsAutogyro = Flag("is_autogyro"),
             FuelCapacity = Prop("fuel", 0f),
         };
         stats.EngineSound = PropStr("engine_sound", stats.EngineSound);

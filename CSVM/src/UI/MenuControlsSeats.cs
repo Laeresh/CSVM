@@ -79,12 +79,14 @@ public sealed class MenuControlsSeats
     // instead would show the player rows they never chose and Accept would write those back.
     private static BindingProfile Profile(int player, MenuInput input)
     {
+        var saved = LaunchBindings.Profile(player, PadOf(InputContext.Flight), input.Keyboard);
         var maps = new Dictionary<InputContext, ActionMap>
         {
-            [InputContext.Flight] = LaunchBindings.Map(player, InputContext.Flight, PadOf(InputContext.Flight), input.Keyboard),
+            [InputContext.Flight] = saved.Map(InputContext.Flight),
             [InputContext.Menu] = input.Map,
             [InputContext.Camera] = LaunchBindings.Map(player, InputContext.Camera, PadOf(InputContext.Camera), input.Keyboard),
         };
-        return new BindingProfile(maps, input.Keyboard);
+        // The flying scheme rides with the flight rows it competes with, off the same read.
+        return new BindingProfile(maps, input.Keyboard) { MouseFlying = saved.MouseFlying };
     }
 }

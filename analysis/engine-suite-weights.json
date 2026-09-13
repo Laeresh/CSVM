@@ -156,6 +156,7 @@
     "first-person-condition": 0.008,
     "flight-input-handback": 0.04,
     "flight-live-respawn-gate": 0.86,
+    "flight-mouse-scheme": 0.01,
     "flight-roster-transaction": 0.722,
     "flight-telemetry-gate": 0.518,
     "fog-state": 1.161,

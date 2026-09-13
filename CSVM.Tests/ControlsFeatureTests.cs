@@ -652,6 +652,65 @@ public class ControlsFeatureTests
         Assert.Contains(Key(Godot.Key.Shift), feature.Bindings(InputAction.CameraBoost));
     }
 
+    /// <summary>The flying scheme is staged like a rebind: the seat's own profile keeps the scheme
+    /// it had until Accept, and the save the host supplied is what carries it out.</summary>
+    [Fact]
+    public void TheFlyingSchemeIsStagedUntilAccept()
+    {
+        var written = new List<BindingProfile>();
+        var feature = new ControlsFeature((_, profile) => written.Add(profile));
+        var seat = BindingProfile.Defaults(Pad, readsKeyboard: true);
+        feature.AddSeat(1, seat, OnePad(), true);
+
+        feature.MouseFlying = true;
+
+        Assert.True(feature.MouseFlying);
+        Assert.False(seat.MouseFlying);
+        Assert.True(feature.Dirty);
+        Assert.Empty(written);
+
+        feature.Accept();
+
+        Assert.True(seat.MouseFlying);
+        Assert.Single(written);
+        Assert.True(written[0].MouseFlying);
+    }
+
+    /// <summary>Cancel abandons the scheme with everything else it staged, so a player who tried it
+    /// and changed their mind flies what they flew before.</summary>
+    [Fact]
+    public void ACancelledSchemeLeavesTheSeatOnTheOneItHad()
+    {
+        var feature = new ControlsFeature();
+        var seat = BindingProfile.Defaults(Pad, readsKeyboard: true);
+        feature.AddSeat(1, seat, OnePad(), true);
+        feature.MouseFlying = true;
+
+        feature.Cancel();
+
+        Assert.False(feature.MouseFlying);
+        Assert.False(seat.MouseFlying);
+        Assert.False(feature.Dirty);
+    }
+
+    /// <summary>A pad-only splitscreen seat has no mouse to give the stick, so the row cannot put it
+    /// on one and a saved file cannot either.</summary>
+    [Fact]
+    public void APadOnlySeatCannotTakeTheMouseScheme()
+    {
+        var feature = new ControlsFeature();
+        var seat = BindingProfile.Defaults(Pad, readsKeyboard: false);
+        seat.MouseFlying = true;
+        feature.AddSeat(2, seat, OnePad(), readsKeyboard: false);
+
+        Assert.False(feature.MouseFlying);
+
+        feature.MouseFlying = true;
+
+        Assert.False(feature.MouseFlying);
+        Assert.False(feature.Dirty);
+    }
+
     private static (ControlsFeature Feature, ActionMap Map) Flight()
     {
         var (feature, profile, _) = FlightSeat();

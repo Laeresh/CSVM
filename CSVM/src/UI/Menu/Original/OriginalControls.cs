@@ -28,6 +28,10 @@ public sealed partial class OriginalShell
     /// <summary>The CONTROLS page's seat chooser, which takes the Controller Type row.</summary>
     public const string ControlsPlayerKey = "CP_D_Fly";
 
+    /// <summary>The CONTROLS page's flying-scheme chooser, which takes the Mouse Sensitivity row.
+    /// </summary>
+    public const string ControlsMouseKey = "CP_S_MOUSE";
+
     /// <summary>The CONTROLS page's door onto the KEYS AND BUTTONS page.</summary>
     public const string KeysDoorKey = "CP_B_KEYS";
 
@@ -91,6 +95,10 @@ public sealed partial class OriginalShell
     private const float ControlsItemHeight = 17f;
     private const float ControlsDescX = 349f;
     private const float ControlsDescWidth = 310f;
+    private const float ControlsMouseX = 142f;
+    private const float ControlsMouseY = 391f;
+    private const float ControlsMouseTitleY = 364f;
+    private const float ControlsMouseDescY = 373f;
 
     // The six named tabs are the original's own action categories, over this port's flight actions,
     // each in that page's own row order (`OriginalScreenshots/Keybinds *.png`). The seventh, Other,
@@ -166,6 +174,10 @@ public sealed partial class OriginalShell
     // Whether a seat is registered at all. Without one the feature holds no keymap to read, so the
     // cells and the two whole-keymap buttons stand disabled rather than drawing somebody's blanks.
     private bool ControlsSeated => _controls is { } controls && controls.Players.Count > 0;
+
+    // Whether the flying-scheme row can be pressed at all: a seat has to be registered, and it has
+    // to read the keyboard, since a pad-only splitscreen seat holds no mouse to hand the stick.
+    private bool MouseSchemeLive => ControlsSeated && _controls!.ReadsKeyboard;
 
     /// <summary>The n-th tab's own button key, which is how the layout spells the strip.</summary>
     public static string KeysTabKey(int tab) =>
@@ -317,24 +329,34 @@ public sealed partial class OriginalShell
             : null;
     }
 
-    // The CONTROLS page: the seat chooser on the Controller Type row, the KEYS AND BUTTONS door and
-    // the exit pair, all one column. Without the section the three stand as text buttons so the
-    // page is still walkable.
+    // The CONTROLS page: the seat chooser on the Controller Type row, the flying scheme on the Mouse
+    // Sensitivity row, the KEYS AND BUTTONS door and the exit pair, all one column. Without the
+    // section they stand as text buttons so the page is still walkable.
     private void BuildControlsPrefsRows(List<OriginalRow> rows)
     {
         var screen = _layout.Screen(ControlsPrefsSection);
         if (screen == null)
         {
             rows.Add(TextButton(ControlsPlayerKey, PlayerWord(), OptionsX, OptionsTop, ControlsSeated, 0));
-            rows.Add(TextButton(KeysDoorKey, "KEYS AND BUTTONS", OptionsX, OptionsTop + OptionsPitch, true, 0));
-            rows.Add(TextButton(ControlsAcceptKey, "ACCEPT CHANGES", OptionsX, OptionsTop + (2f * OptionsPitch), true, 0));
-            rows.Add(TextButton(ControlsCancelKey, "CANCEL CHANGES", OptionsX, OptionsTop + (3f * OptionsPitch), true, 0));
+            rows.Add(TextButton(ControlsMouseKey, MouseWord(), OptionsX, OptionsTop + OptionsPitch, MouseSchemeLive, 0));
+            rows.Add(TextButton(KeysDoorKey, "KEYS AND BUTTONS", OptionsX, OptionsTop + (2f * OptionsPitch), true, 0));
+            rows.Add(TextButton(ControlsAcceptKey, "ACCEPT CHANGES", OptionsX, OptionsTop + (3f * OptionsPitch), true, 0));
+            rows.Add(TextButton(ControlsCancelKey, "CANCEL CHANGES", OptionsX, OptionsTop + (4f * OptionsPitch), true, 0));
             return;
         }
 
         var box = ControlsPlayerBox(screen);
         rows.Add(new OriginalRow(ControlsPlayerKey, PlayerWord(), OriginalRowKind.Dropdown,
             box.X, box.Y, box.Width, box.Height, ControlsSeated, 0,
+            StripArt(screen.Widget(ControlsPlayerKey)?.Art ?? Array.Empty<string>(), 4)));
+        // The scheme sits in the Mouse Sensitivity slider's own box, as a chooser rather than a
+        // track: the setting behind that row is what mouse motion does, and this port has two
+        // answers to that rather than a cursor speed.
+        var mouse = screen.Widget(ControlsMouseKey);
+        rows.Add(new OriginalRow(ControlsMouseKey, MouseWord(), OriginalRowKind.Dropdown,
+            mouse?.Int("X", (int)ControlsMouseX) ?? ControlsMouseX,
+            mouse?.Int("Y", (int)ControlsMouseY) ?? ControlsMouseY,
+            box.Width, box.Height, MouseSchemeLive, 0,
             StripArt(screen.Widget(ControlsPlayerKey)?.Art ?? Array.Empty<string>(), 4)));
         AddStrip(screen, rows, KeysDoorKey, OriginalRowKind.Button, true, 0);
         AddStrip(screen, rows, ControlsAcceptKey, OriginalRowKind.Button, true, 0);
@@ -441,12 +463,18 @@ public sealed partial class OriginalShell
         ? "Player " + controls.Player.ToString(CultureInfo.InvariantCulture)
         : string.Empty;
 
+    private string MouseWord() => !MouseSchemeLive ? string.Empty
+        : _controls!.MouseFlying ? "Fly" : "Look";
+
     private MenuExit? ActivateControlsPrefs(OriginalRow row)
     {
         switch (row.Key)
         {
             case ControlsPlayerKey:
                 StepControlsPlayer(1);
+                break;
+            case ControlsMouseKey:
+                StepMouseScheme();
                 break;
             case KeysDoorKey:
                 OpenKeys();
@@ -561,10 +589,36 @@ public sealed partial class OriginalShell
         return true;
     }
 
-    // A sideways step on the seat chooser picks the next player; anything else crosses columns.
-    private bool StepControlsValue(IReadOnlyList<OriginalRow> rows, int focus, int direction) =>
-        focus >= 0 && focus < rows.Count && rows[focus].Key == ControlsPlayerKey
-        && StepControlsPlayer(direction);
+    // The scheme has two values, so a step either way is the other one. Staged like every other edit
+    // on this page: ACCEPT CHANGES is what reaches the seat, and CANCEL CHANGES puts it back.
+    private bool StepMouseScheme()
+    {
+        if (_controls is not { } controls || !MouseSchemeLive)
+        {
+            return false;
+        }
+
+        controls.MouseFlying = !controls.MouseFlying;
+        FocusKey(ControlsMouseKey);
+        return true;
+    }
+
+    // A sideways step on the seat chooser picks the next player and one on the scheme row flips it;
+    // anything else crosses columns.
+    private bool StepControlsValue(IReadOnlyList<OriginalRow> rows, int focus, int direction)
+    {
+        if (focus < 0 || focus >= rows.Count)
+        {
+            return false;
+        }
+
+        return rows[focus].Key switch
+        {
+            ControlsPlayerKey => StepControlsPlayer(direction),
+            ControlsMouseKey => StepMouseScheme(),
+            _ => false,
+        };
+    }
 
     // Back from either page: a pending steal is dropped first, then the page leaves the way its own
     // CANCEL CHANGES does, since that is the declining answer the layout gives each of them.
@@ -637,9 +691,9 @@ public sealed partial class OriginalShell
     }
 
     // The CONTROLS page as drawn: the Preferences page's logo and this section's plate as backdrop,
-    // the page title, the seat row's own title and description, the KEYS AND BUTTONS description as
-    // authored, then the rows. The Mouse Sensitivity row is not drawn, this port having no cursor
-    // speed of its own; its title and description go with it.
+    // the page title, the seat and mouse rows' own titles and descriptions, the KEYS AND BUTTONS
+    // description as authored, then the rows. The Mouse Sensitivity row's slot and thumb are not
+    // drawn: the row behind that box is a two-value chooser here, not a track.
     private void ComposeControlsPrefs(
         IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> backdrop, List<BoardPicture> pictures,
         List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques)
@@ -667,6 +721,23 @@ public sealed partial class OriginalShell
                 "Whose keymap KEYS AND BUTTONS edits. Each seat holds its own.",
                 description.Int("X", (int)ControlsDescX), description.Int("Y"),
                 description.Int("Width", (int)ControlsDescWidth), KeysDescFont, BoardInk.Row));
+        }
+
+        if (screen.Widget("CP_T_MouseTitle") is { } mouseTitle)
+        {
+            lines.Add(new BoardLine("Mouse", mouseTitle.Int("X", (int)ControlsTitleX),
+                mouseTitle.Int("Y", (int)ControlsMouseTitleY),
+                mouseTitle.Int("Width", (int)ControlsTitleWidth), GameOptionTitleFont, BoardInk.Row));
+        }
+
+        if (screen.Widget("CP_T_MouseDesc") is { } mouseDescription)
+        {
+            lines.Add(new BoardLine(
+                "What mouse motion does: fly the aeroplane, or look around. Free look hands a flying "
+                + "mouse back to the head.",
+                mouseDescription.Int("X", (int)ControlsDescX),
+                mouseDescription.Int("Y", (int)ControlsMouseDescY),
+                mouseDescription.Int("Width", (int)ControlsDescWidth), KeysDescFont, BoardInk.Row));
         }
 
         if (screen.Widget("CP_T_KeysDesc") is { } keys)
