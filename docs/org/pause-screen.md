@@ -323,6 +323,20 @@ dialog describes, so they keep the Built-in board, the same split the load scree
 inks rather than three faces, which is the same mapping every other composed board takes
 ([`campaign-board.md`](campaign-board.md)).
 
+**The parchment's rows lean, and wrap in a wider measure than the data authors.** `ObjList` is
+Andy Bold 14 italic, so both screens set the rows through `UI/ComposedBoardView.cs`'s synthetic
+oblique, a 0.25-em x-shear of the board's own face; the `ObjListTitle` line above them stays
+upright, which is how the original sets it. The shear is a transform on the glyph outlines and
+leaves their advances alone, so it changes no line break. What does is the substitute face itself,
+which is wider per character than Andy Bold: inside the authored `WORDWRAP` of 190 the filmed
+mission's first objective takes two lines where the reference crop shows one. `EscapeObjectivesList`
+therefore wraps the rows at `RowWrap`, the authored 190 widened by 20, which is what the 240-wide
+parchment holds with the list inset 25 from its left edge. At that measure CM01's four rows break
+1/2/2/1, the crop's own pattern, and 15 of the sequence's 78 rows still run to three lines or more
+because the face is wider than the one the text was written for. The face size is left at the
+authored 14: a step down to 13 reaches the same break pattern at the authored measure, but only at
+the 1:1 fit, and the rows then read visibly smaller than the original's.
+
 **One cursor serves all three devices.** The authored pointer is drawn, the glove over the sheet and
 the finger over a strip, and the OS pointer is hidden while the sheet stands; but a hover moves the
 shared cursor onto the strip it lands on rather than lighting a rollover the keyboard cannot see, so

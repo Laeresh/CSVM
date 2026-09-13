@@ -30,7 +30,8 @@ internal static class LoadSheetSuites
         + "reaches the chart it belongs to past the waits 19 of the dialogs place theirs behind, "
         + "every bitmap the composition names exists in the extraction, the map is drawn at its "
         + "authored source crop rather than scaled, the parchment lists that mission's objectives "
-        + "unmarked, the memento sits over the shadow at their authored points, every picture comes "
+        + "unmarked and slanted in the widened measure the pause sheet's rows take, the memento "
+        + "sits over the shadow at their authored points, every picture comes "
         + "from the dialog so no world icon is placed, an unreadable sheet "
         + "still leaves the frame and the bar standing, and C3/M01's own sheet matches the "
         + "reference still flag for flag")]
@@ -164,8 +165,8 @@ internal static class LoadSheetSuites
             {
                 parchments += note.Entries.Count == ObjectiveBeats(sheet)
                     && note.X == list.ListAt.X && note.Y == list.ListAt.Y
-                    && note.Width == list.WrapWidth && note.Height == list.WrapHeight
-                    && Lists(note.Entries, sheet.Objectives) ? 1 : 0;
+                    && note.Width == list.RowWrap && note.Height == list.WrapHeight
+                    && note.Italic && Lists(note.Entries, sheet.Objectives) ? 1 : 0;
                 marks += note.Marked == null && note.Mark == null ? 0 : 1;
             }
 

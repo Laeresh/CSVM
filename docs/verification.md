@@ -192,6 +192,11 @@ one sentence of measured evidence; everything else belongs in the commit that la
   ending arms `InstantActionRuntime.WrapupHoldS` (3 s) of running world before the board is
   presented, so a `--screenshot` run whose `--frames` stops inside that hold photographs aeroplanes
   and a falling wreck, and reading the missing board as the board being broken is the error.
+- **SHOT-36**, **How many lines a wrapped block takes is a font metric, and it moves with the
+  window the shot was taken at: pin it at the authored 1:1 fit, not at a capture's resolution.** A
+  board's text is rasterised at `round(size x fit.Scale)` points in a box of `width x fit.Scale`, so
+  the same objective row wrapped to one line at 800x600 and two at 1280x720 in the same build, and a
+  departure chosen from the shot alone was wrong at the fit the suite measures.
 
 ## GOLD, golden images
 

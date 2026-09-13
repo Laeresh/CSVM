@@ -34,6 +34,20 @@ internal static class PauseSheetSuites
     private const float OddAceHeadX = 325f;
     private const float AceHeadX = 365f;
 
+    // How many objectives across the whole sequence still run past the parchment's authored box and
+    // so are not drawn at all. C2/M05's five rows take twelve lines, one more than the box holds;
+    // the other 23 missions fit. A fix lowers this, and the tripwire is that nothing raises it.
+    private const int OverrunRows = 1;
+
+    // How many lines each of the filmed mission's four objectives takes on the parchment, read off
+    // the reference crop of the original's own sheet. The face is ours, so the count is what a row
+    // can be held to rather than the glyphs.
+    private static readonly int[] FilmedRowLines = { 1, 2, 2, 1 };
+
+    // And the numbered mission's two, both shorter than the filmed sheet's longest single line, so
+    // the original fits each on one line in the same box. No still films this one.
+    private static readonly int[] NumberedRowLines = { 1, 1 };
+
     // The world-folder digits Instant Action's own environment list offers. C1C (3) is the chapter
     // it omits, so ia_escape.zrd carries no loading_i3 dialog at all
     // (docs/formats/instant-action.md).
@@ -86,7 +100,10 @@ internal static class PauseSheetSuites
         + "marks follow the completed rows across the four filmed poses, a mark follows the row's "
         + "own OBJECTIVEn number rather than its briefing priority (C3/M04's priority 1 row is "
         + "OBJECTIVE15, and its two-second wake objective must not check it), C3/M01's own "
-        + "sheet matches the reference stills flag for flag, and a pointer over a strip moves the "
+        + "sheet matches the reference stills flag for flag, every parchment sets its rows in the "
+        + "slanted face the original's ObjList authors and breaks C3/M01's four where the reference "
+        + "crop breaks them, with C2/M05 the one mission whose rows still outrun the parchment's "
+        + "255 px box, and a pointer over a strip moves the "
         + "shared cursor onto it and fires it on the release while a press let go elsewhere fires "
         + "nothing")]
     internal static void PauseSheetScreen(TestContext ctx)
@@ -127,6 +144,7 @@ internal static class PauseSheetSuites
         DriveBoard(ctx, sheets[filmed < 0 ? 0 : filmed], report);
         CheckFilmedPoses(ctx, sheets, filmed, report);
         CheckNumberedMarks(ctx, sheets, report);
+        CheckRowWrap(ctx, sheets, report);
 
         ctx.WriteArtifact($"test-pause-sheet.txt", report.ToString());
         ctx.Note($"composed {sheets.Count} pause sheets and drove one over a live pause state");
@@ -950,6 +968,105 @@ internal static class PauseSheetSuites
             + $"at {wakeAt:0.0} s O1 alone is done and the parchment marks {Marks(entry.Sheet, open)}, "
             + $"with O15 done it marks {Marks(entry.Sheet, done)}");
     }
+
+    // The parchment's rows in the face the original sets them in, and how many lines each takes in
+    // the measure the widget authors. Only the renderer's font knows how tall a wrapped entry drew,
+    // so the count is measured with the face the screen writes it in rather than composed.
+    private static void CheckRowWrap(
+        TestContext ctx, List<(CampaignMission Mission, PauseSheet Sheet)> sheets, StringBuilder report)
+    {
+        var probe = new Godot.Control();
+        ctx.Host.AddChild(probe);
+        try
+        {
+            if (probe.GetThemeDefaultFont() is not { } font)
+            {
+                throw new SuiteSkippedException("the default theme carries no font to measure with");
+            }
+
+            SweepRowWrap(ctx, sheets, font, report);
+        }
+        finally
+        {
+            ctx.Host.RemoveChild(probe);
+            probe.QueueFree();
+        }
+    }
+
+    private static void SweepRowWrap(
+        TestContext ctx, List<(CampaignMission Mission, PauseSheet Sheet)> sheets, Godot.Font font,
+        StringBuilder report)
+    {
+        var fit = BoardFit.For(BoardFit.AuthoredWidth, BoardFit.AuthoredHeight);
+        int slanted = 0, tall = 0, rows = 0, dropped = 0;
+        var filmed = System.Array.Empty<int>();
+        var numbered = System.Array.Empty<int>();
+        foreach (var (mission, sheet) in sheets)
+        {
+            var board = PauseScreens.For(sheet, Readout(ctx, mission, sheet, 0), 0, false);
+            if (board.Notes.Count == 0)
+            {
+                continue;
+            }
+
+            var note = board.Notes[0];
+            slanted += note.Italic ? 1 : 0;
+            var counts = RowLines(fit, font, note);
+            rows += counts.Length;
+            int lost = note.Entries.Count
+                - note.Flow(ComposedBoardView.Measure(fit, font, note)).Count;
+            dropped += lost;
+            foreach (int lines in counts)
+            {
+                tall += lines > 2 ? 1 : 0;
+            }
+
+            if (Named(mission, FilmedChapter, FilmedMission))
+            {
+                filmed = counts;
+            }
+            else if (Named(mission, NumberedChapter, NumberedMission))
+            {
+                numbered = counts;
+            }
+
+            report.AppendLine(
+                $"{mission.ChapterFolder}/{mission.MissionFolder} rows {string.Join("/", counts)} dropped {lost}");
+        }
+
+        ctx.Same(sheets.Count, slanted, $"every campaign parchment sets its rows in the slanted face");
+        string drew = string.Join("/", filmed), want = string.Join("/", FilmedRowLines);
+        string second = string.Join("/", numbered), wantSecond = string.Join("/", NumberedRowLines);
+        ctx.Check(
+            System.Linq.Enumerable.SequenceEqual(FilmedRowLines, filmed),
+            $"{FilmedChapter}/{FilmedMission}'s rows take {drew} lines, the crop's {want}");
+        ctx.Check(
+            System.Linq.Enumerable.SequenceEqual(NumberedRowLines, numbered),
+            $"{NumberedChapter}/{NumberedMission}'s take {second}, the crop's {wantSecond}");
+        ctx.Same(
+            OverrunRows, dropped,
+            $"and {OverrunRows} objective in the sequence still outruns the parchment's 255 px box");
+        report.AppendLine($"wrap: {rows} rows, {tall} of them on three lines or more, {dropped} dropped");
+    }
+
+    // One note's entries as line counts: a short word measured in the same box is one line's worth,
+    // so an entry's own measured height divided by it is how many lines it wrapped to.
+    private static int[] RowLines(BoardFit fit, Godot.Font font, BoardNote note)
+    {
+        var height = ComposedBoardView.Measure(fit, font, note);
+        float one = height("X", note.Width);
+        var counts = new int[note.Entries.Count];
+        for (int i = 0; i < counts.Length; i++)
+        {
+            counts[i] = one > 0f ? Godot.Mathf.RoundToInt(height(note.Entries[i], note.Width) / one) : 0;
+        }
+
+        return counts;
+    }
+
+    private static bool Named(CampaignMission mission, string chapter, string folder) =>
+        mission.ChapterFolder.Equals(chapter, System.StringComparison.OrdinalIgnoreCase)
+        && mission.MissionFolder.Equals(folder, System.StringComparison.OrdinalIgnoreCase);
 
     private static int Marks(PauseSheet sheet, IReadOnlyList<PauseObjective> rows)
     {

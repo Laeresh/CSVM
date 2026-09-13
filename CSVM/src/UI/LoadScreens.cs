@@ -273,8 +273,8 @@ public static class LoadScreens
         return new[]
         {
             new BoardNote(
-                entries, list.ListAt.X, list.ListAt.Y, list.WrapWidth, list.WrapHeight,
-                list.Spacing, EscapeObjectivesList.RowFont, BoardInk.Row),
+                entries, list.ListAt.X, list.ListAt.Y, list.RowWrap, list.WrapHeight,
+                list.Spacing, EscapeObjectivesList.RowFont, BoardInk.Row, Italic: true),
         };
     }
 

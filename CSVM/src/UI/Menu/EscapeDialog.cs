@@ -85,6 +85,16 @@ public sealed record EscapeObjectivesList(
     /// <summary>A row's face size, <c>ObjList</c>, which <c>fonts.zrd</c> gives as Andy Bold at
     /// 14.</summary>
     public const float RowFont = 14f;
+
+    // How much wider than the authored WORDWRAP a row is allowed to run, in authored pixels.
+    private const float RowWrapGain = 20f;
+
+    /// <summary>The measure a row wraps in: the authored <c>WORDWRAP</c> of 190 widened to the room
+    /// the 240-wide parchment still holds. Andy Bold is narrower per character than the face the
+    /// extraction leaves us, so rows the original breaks once break twice inside the authored box,
+    /// and the wider measure buys those characters back without touching the face size.
+    /// Decode: docs/org/pause-screen.md.</summary>
+    public float RowWrap => WrapWidth + RowWrapGain;
 }
 
 /// <summary>One button strip: the three bitmaps its three states draw and the label centred over
