@@ -151,8 +151,8 @@ lines**.
   than last-flag-wins, dropping stunt mode with a warning when both are given.
   `--vs-kills=`/`--vs-time=` set the match rules. The menu requires two joined pilots before it
   starts a match and this flag does not, so `--vs --players=1` parses and runs with a warning. The
-  match bookkeeping, HUD and win/lose flow are not built, so the session flies the `dogfight_ace`
-  spawns with nothing scoring)
+  opening spawn is the list walk; a downed seat respawns on a rotated list point clear of the
+  living field and its killer)
 - `--vs-kills=N` (with `--vs`, the kill target that ends a match early once a player reaches it.
   Default 5; `0` disables the kill limit, so the match runs to `--vs-time=` alone)
 - `--vs-time=N` (with `--vs`, the match time limit **in minutes**. Default 5; `0` disables the time

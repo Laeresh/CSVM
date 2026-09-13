@@ -1919,23 +1919,25 @@ usual.
   the shipped `sticky_bullet_*` constants (decoded in
   [`docs/org/aim-assist.md`](docs/org/aim-assist.md), built by `BL-342`) read right at the
   controls, damage balance plane-vs-plane felt good and guns are now a practical kill weapon
-  without rockets, a marked improvement over firing with no assist at all. No retune. Still open:
-  spawn camping / spawn protection (none in v1), **confirmed a real problem, not speculation, by
-  `PT-43`(c) 2026-08-13**: every player has a fixed spawn point and camping one is very much
-  viable; the fix is spawn rotation, likely alongside whatever `--vs`'s existing spawn-spacing
-  logic already tracks per-pane; suicide penalty and last-damager credit (0 / none in
-  v1), sudden-death overtime on a drawn time-out (draw declared in v1; `PT-43`(f) found draw
-  frequency fine at the 5-kills/5-min defaults, so this stays low priority), menu-side match
+  without rockets, a marked improvement over firing with no assist at all. No retune.
+  **Spawn camping is settled**, which `PT-43`(c) had confirmed a real problem: spawn rotation is
+  in, so the opening spawn is still the scenario list walk (one seat per point) and a downed seat
+  then comes back on a point drawn between the roomiest entries against the living field, never
+  the one it was downed at and never one a living seat holds, with the killer weighed heaviest
+  (`CSVM/src/Flight/VersusSpawnRotation.cs`, fed the live field by `GameSession` through
+  `FlightController.RespawnPlacement`). Still open: suicide penalty and last-damager credit (0 /
+  none in v1), sudden-death overtime on a drawn time-out (draw declared in v1; `PT-43`(f) found
+  draw frequency fine at the 5-kills/5-min defaults, so this stays low priority), menu-side match
   options (kill target and time limit are CLI-only), `dogfight_ace` vs `zeppelin_run` spawn
   spacing, the self-blast exemption (own rockets can't hurt you, the guns invariant applied
   consistently, not a balance call), VS HUD line/arrow sizing at 4-player panes (`PT-43`(d):
   confirmed readable and correctly edge-flipping at both 2 and 4 players, `BL-126` chrome playtest
   2026-08-15, no retune owed; the general HUD text-scale config covers the separate font-size preference). Related,
   not absorbed: `BL-126` (splitscreen chrome, closed 2026-08-15). ⚠ The stunt race's
-  abreast starting grid landed 2026-08-08 and deliberately did **not** touch `--vs`, it is
-  selected only when a race exists, so Dogfight still walks the scattered `dogfight_ace` list.
-  Spawn spacing here stays this item's call from `PT-43`, and copying the grid over is the wrong
-  reflex: four dogfighters 60 m apart on one heading is an instant head-on merge every round.
+  abreast starting grid deliberately does **not** touch `--vs`, it is selected only when a race
+  exists, so Dogfight walks the scattered `dogfight_ace` list and the rotation keeps it that way.
+  Copying the grid over is the wrong reflex: four dogfighters 60 m apart on one heading is an
+  instant head-on merge every round.
 
 - `BL-256` `[Feature]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: feel]` **Stunt screenshot feature, triggered off `DzRadius`, much later, by user decision
   (2026-08-04).** `DzRadius` (15 m, user-hand-tuned) is settled

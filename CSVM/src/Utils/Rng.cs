@@ -59,6 +59,10 @@ public static class Rng
     // is placed on the same frame the crash rig scatters a wreck, and sharing Rng.Crash would make
     // every piece of that wreck a function of where the camera happened to land.
     public const string Camera = "camera";
+    // The Dogfight respawn rotation's draws (Flight.VersusSpawnRotation). Its own stream, and read
+    // through IntSeedFor rather than Stream, so a match's respawn picks take nothing out of
+    // Rng.Spawn: a draw there would shift the launch spawn index every pinned golden stands on.
+    public const string VersusSpawn = "versusspawn";
 
     private static readonly Dictionary<string, RandomNumberGenerator> Streams = new(StringComparer.Ordinal);
 

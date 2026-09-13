@@ -258,6 +258,7 @@ public partial class GameSession : Node3D
     // advanced on the sim dt (never wall time). Null outside Versus, the Downed events then
     // simply have no subscriber. Freed with this node; flight holds no match state.
     private VersusMatch? _versus;
+    private VersusSpawnRotation? _versusSpawns;
     // The stunt race (--stunt with several pilots), for the same reason: a rerun resets it rather
     // than each pilot's own run. Null outside a race.
     private StuntRace? _race;
@@ -2457,14 +2458,27 @@ public partial class GameSession : Node3D
         if (versus is { } match)
         {
             _versus = match;
+            // Spawn rotation: a downed seat comes back on a point picked against the living field
+            // rather than on the fixed one it can be camped at. Its Rng is seeded from the master
+            // alone, so no pick here draws from Rng.Spawn and shifts the launch spawn index.
+            _versusSpawns = VersusSpawnRotation.For(spawnList, spawnBase, _rigs.Count,
+                new Random(Rng.IntSeedFor(Rng.VersusSpawn)));
+            // Who downed each seat last, which the rotation weighs heaviest: the Downed report
+            // carries it, and the respawn that reads it happens seconds later.
+            var lastKiller = new int?[_rigs.Count];
             foreach (var rig in _rigs)
                 if (rig.Controller is { } pilot)
                 {
+                    int seat = rig.Index;
                     pilot.AutoRespawnAfter = VersusRespawnDelay; // crash cam, then back in, R skips
                     pilot.Match = match;                  // R-ownership gate: board-up ⇒ rematch
                     pilot.RestartMatch = () => RestartMatch(match);
+                    if (_versusSpawns != null)
+                        pilot.RespawnPlacement = () => VersusRespawn(seat, lastKiller[seat]);
                     pilot.Downed += (victim, killer) =>
                     {
+                        if (victim >= 0 && victim < lastKiller.Length)
+                            lastKiller[victim] = killer;
                         if (killer is int k && k >= 0 && k < match.PlayerCount)
                             match.RegisterKill(k, victim);
                         else
@@ -3769,8 +3783,28 @@ public partial class GameSession : Node3D
     {
         Log.Info("flight", $"dogfight: rematch — scores and clock reset for every pilot");
         match.Restart();
+        // A rematch is a fresh round, so it opens on the opening spawns rather than on wherever
+        // the last round's rotation had left each seat.
+        _versusSpawns?.Restart();
         foreach (var rig in _rigs)
             rig.Controller?.Respawn();
+    }
+
+    // Where a downed dogfight seat comes back: the rotation's pick against the field as it stands
+    // at the respawn, so a seat still on its own crash camera neither holds a point nor pulls one
+    // away. Null with no rotation built, which leaves the seat on the pose it was given.
+    private (Vector3 Pos, Vector3 LookAt)? VersusRespawn(int seat, int? killer)
+    {
+        if (_versusSpawns is not { } rotation)
+            return null;
+        var field = new Vector3?[_rigs.Count];
+        for (int i = 0; i < _rigs.Count; i++)
+            field[i] = _rigs[i].Controller is { Crashed: false, Inert: false } flying
+                ? flying.GlobalPosition : null;
+        var point = rotation.Choose(seat, field, killer);
+        string list = _spawnPicker.ScenarioOverride ?? _spec.Scenario;
+        Log.Info("flight", $"dogfight: P{seat + 1} respawns on {list} #{rotation.IndexOf(seat)} of {rotation.PointCount}{(killer is { } k ? $", downed by P{k + 1}" : "")}");
+        return (point.Position, point.Position + point.Forward);
     }
 
     // Frames the parked plane in the orbit view. ⚠ --lookat is a POINT and is used verbatim;

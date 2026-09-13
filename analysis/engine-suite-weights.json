@@ -301,6 +301,7 @@
     "turret-self-fire": 2.826,
     "turret-structure-targets": 1.065,
     "turret-vessel-targets": 1.171,
+    "versus-spawn-rotation": 0.9,
     "voice-runtime": 0.681,
     "wait-for-completion": 0.015,
     "warhawk-torpedo-run": 0.419,

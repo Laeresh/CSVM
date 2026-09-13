@@ -258,6 +258,13 @@ public partial class FlightController : Node3D
     /// dogfight results board.</summary>
     public Action? RestartMatch;
 
+    /// <summary>Where this seat comes back, asked once per <see cref="Respawn"/>: a world position
+    /// and a point to aim the nose at, or null to keep the pose it has. Null itself, the default,
+    /// leaves every respawn on the spawn <see cref="Setup"/> fixed, which is what every mode but
+    /// the dogfight wants. Set by the session, which owns the field the choice is made
+    /// against.</summary>
+    public Func<(Vector3 Pos, Vector3 LookAt)?>? RespawnPlacement;
+
     /// <summary>Splitscreen pause bookkeeping, the SAME instance on every rig
     /// (assigned by <c>GameSession</c>, the same way <see cref="Match"/> is), so any player's
     /// Start/P here can pause everyone but only <see cref="PauseState.OwnerPlayerIndex"/> can
@@ -1113,6 +1120,15 @@ public partial class FlightController : Node3D
     /// stunt run alone, a mid-run crash deliberately keeps its zones and clock.</summary>
     public void Respawn()
     {
+        // Asked before anything reads the spawn pose, so the whole reset below lands on the new
+        // point: the dogfight rotates a downed seat away from the one it was camped at.
+        if (RespawnPlacement?.Invoke() is { } placement)
+        {
+            _spawnPos = placement.Pos;
+            var aim = placement.LookAt - placement.Pos;
+            if (aim.LengthSquared() > 1e-6f)
+                _spawnAttitude = Basis.LookingAt(aim.Normalized(), Vector3.Up);
+        }
         _lifecycle.Respawn();
         (_inputSource as ScriptedInputSource)?.Reset(); // scripted hold sequences restart from the spawn
         _lastInput = default;

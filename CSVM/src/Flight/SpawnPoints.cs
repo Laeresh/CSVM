@@ -6,7 +6,12 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>One instant-action spawn: a world position + a heading (yaw, degrees).</summary>
-public readonly record struct SpawnPoint(Vector3 Position, float HeadingDeg);
+public readonly record struct SpawnPoint(Vector3 Position, float HeadingDeg)
+{
+    /// <summary>The nose axis the heading yaws to, so a placement reads
+    /// <c>Position + Forward</c> as its look-at point rather than restating the conversion.</summary>
+    public Vector3 Forward => new Basis(Vector3.Up, Mathf.DegToRad(HeadingDeg)) * Vector3.Forward;
+}
 
 /// <summary>A mission's whole <c>PLAYER_INIT</c> record: where the player starts, and the
 /// throttle and speed it starts on. ⚠ <paramref name="SpeedMps"/> is already the parsed

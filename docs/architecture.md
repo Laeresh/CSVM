@@ -188,6 +188,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/CustomPlaneBuild.cs`, the join from a saved plane onto what a spawn consumes: the loadout over the stock fit, the paint, the armoured zones.
 - `src/Flight/HangarEconomy.cs`, the hangar's decoded economy over a built plane: the component tables, per-line costs and weights, the totals and the verdict.
 - `src/Flight/VersusMatch.cs`, Dogfight deathmatch bookkeeping: kills and deaths per player, the host-fed clock, threshold and time-out completion, standings.
+- `src/Flight/VersusSpawnRotation.cs`, Dogfight respawn placement: the per-seat spawn-list ledger and the roomy point a downed seat rotates onto.
 - `src/Flight/VersusHud.cs`, per-pane Dogfight status line: remaining time, this player's kills, the leader, and the hostile marker.
 - `src/Flight/HudMessages.cs`, the centred HUD message stack a kill, a crash and the mission clock post into: four slots, one colour and five seconds each.
 - `src/Flight/PromptLine.cs`, a control prompt's own centred line, three tenths of the way down the pane in the landings rig's pale yellow: the auto-dock offer and the respawn prompt.

@@ -1115,9 +1115,6 @@ Anything A2 or a later wave closes comes off this list.
 - **A two-pilot Free Flight ends its plane-selection walk back on the Free Flight screen instead of
   launching.** Press FLY again on the first player's screen, which launches. (`BL-749`; no landing
   commit, and `FinishSeatWalk` still launches only on the Instant Action return.)
-- **Dogfight spawn points are fixed per player, so a spawn can be camped.** Agree not to, since
-  nothing in the mode prevents it. (`BL-301`; no landing commit, and there is no spawn rotation in
-  the tree.)
 - **A splitscreen stunt race starts its clock the moment the world appears, so whoever finishes
   loading first flies first.** Start the run together by agreement rather than trusting the clock.
   (`BL-314`; no landing commit, and there is no countdown of any kind in the tree.)
