@@ -654,10 +654,13 @@ public sealed class ClutterBuilder
 
         uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, {{(clampUv ? "repeat_disable" : "repeat_enable")}};
 
-        // Single-sourced with SceneBuilder so the fog and the gamma-space modulate cannot drift.
+        // Single-sourced with SceneBuilder so the fog, the gamma-space modulate and the chapter's
+        // mip LOD bias cannot drift. The original's bias is one device render state, so a stamped
+        // card picks its level exactly as the ground it is planted on does.
         #include "res://shaders/csky_atmosphere.gdshaderinc"
         #include "res://shaders/csky_srgb.gdshaderinc"
         #include "res://shaders/csky_clutter_fade.gdshaderinc"
+        #include "res://shaders/csky_mip_bias.gdshaderinc"
 
         // ⚠ Never declare an instance uniform below this include. Godot indexes them by declaration
         // order and merges the mapping across one GeometryInstance3D's materials, so two shaders
@@ -686,7 +689,7 @@ public sealed class ClutterBuilder
             if (!csky_clutter_dither_keep(FRAGCOORD.xy, v_alpha)) {
                 discard;
             }
-            vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * texture(albedo_tex, UV);
+            vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * {{SceneBuilder.SampleAlbedo("UV")}};
             ALBEDO = col.rgb{{(lit ? " * csky_world_light" : "")}};
         {{(fogged ? FogLines : "")}}{{SceneBuilder.TintLine}}
             ALPHA = col.a;

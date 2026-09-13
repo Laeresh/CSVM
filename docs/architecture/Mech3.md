@@ -28,17 +28,17 @@ bias for `Launcher`. [../org/textures.md](../org/textures.md), [../org/vertexLig
 
 ## src/Mech3/SceneBuilder.cs
 Shared GameZ-subtree to MeshInstance3D builder: triangulation, material and mesh caches,
-nearest-LOD only, a skip predicate. It replicates the original's draw order as depth bias
-(priority, then subface, then overlay pass, then within-mesh surface rank, with the cross-node
-tie-break from `NodeBiasOf`: the world's `ConflictRank` map where the caller set one, the flat node
-index otherwise), applies CLAMP sampling per surface off `UvsWithinUnitSquare` rather than blanket,
-and colours a surface `vertex colour x material` except where a polygon's vertex colours restate
-that material's own value. `BuildSubtree`'s `zoneGate` flag moves each instance onto its `zone_id`
-visual layer (`ZoneGate.cs`); it stays off for the camera-anchored deck and dome. `CollidersForMesh`
-splits a mesh into one trimesh per surface class and then by sidedness, both halves on one body,
-each registering with `WorldCollision`. `MissionStructureTeamMeta` is the channel
-`DestructibleRegistry` reads a pool's team through. A textured surface takes `csky_world_light` on
-its model's `lighting` flag alone. Shader selection and the enhanced-mode arms: [Root.md](Root.md), [../formats/gotchas.md](../formats/gotchas.md), [../org/vertexLighting.md](../org/vertexLighting.md).
+nearest-LOD only, a skip predicate. It replicates the original's draw order as depth bias (priority,
+subface, overlay pass, within-mesh surface rank, then `NodeBiasOf`'s cross-node tie-break off the
+world's `ConflictRank` map), applies CLAMP per surface off `UvsWithinUnitSquare` rather than blanket,
+and colours a surface `vertex colour x material` except where the two restate each other.
+`BuildSubtree`'s `zoneGate` flag moves each instance onto its `zone_id` visual layer
+(`ZoneGate.cs`), off for the camera-anchored deck and dome. `CollidersForMesh` splits a mesh into one
+trimesh per surface class and by sidedness, both halves on one body registering with
+`WorldCollision`; `MissionStructureTeamMeta` is the channel `DestructibleRegistry` reads a pool's
+team through. A textured surface takes `csky_world_light` on its `lighting` flag alone, and every
+mip-mapped arm fetches through `SampleAlbedo`, the one `csky_sample_albedo` carrying the chapter's
+LOD bias, reused by `Clutter` and `MeshLab`. Arms and selection: [Root.md](Root.md), [../formats/gotchas.md](../formats/gotchas.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../org/textures.md](../org/textures.md).
 
 ## src/Mech3/ZoneGate.cs
 The original's per-node visibility gate (`FUN_0056c430`). `FUN_004d62d0` arms the camera each frame
@@ -151,12 +151,12 @@ measurements: [../formats/world-structure.md](../formats/world-structure.md). Re
 
 ## src/Mech3/Clutter.cs
 Stamps the boot-script clutter templates across placed polygons carrying the template's ground
-texture, at the polygon's own texture-UV lattice, one stamp per integer UV repeat across each
-triangle: sprites become one fullbright Y-billboard MultiMesh per kind, solids go through
-`SceneBuilder.SharedMesh`, and `SceneBuilder.ClassifyBillboard` is the split. Every stamp carries
-its authored far fade as MultiMesh custom data under the `EffectsLevel` global. `TemplateNames`
-reads `AddClutterTemplates` unfiltered, the per-polygon `no_clutter` gate deciding which patch a
-district dresses; `OverrideTemplateNames` is `--clutter-templates=`'s replacement for that list.
+texture, one stamp per integer UV repeat of the polygon's UV lattice: sprites become one fullbright
+Y-billboard MultiMesh per kind, solids go through `SceneBuilder.SharedMesh`, `ClassifyBillboard` the
+split. Every stamp carries its far fade as MultiMesh custom data under `EffectsLevel`, and samples
+through `SceneBuilder.SampleAlbedo` for the chapter's mip bias. `TemplateNames` reads
+`AddClutterTemplates` unfiltered, the per-polygon `no_clutter` gate deciding which patch a district
+dresses; `OverrideTemplateNames` is `--clutter-templates=`'s replacement.
 Placement runtime: [../org/clutter.md](../org/clutter.md); authored side: [../formats/clutter.md](../formats/clutter.md), [../formats/templates.md](../formats/templates.md).
 
 ## src/Mech3/ClutterTemplates.cs

@@ -471,7 +471,9 @@ here: `Session/ExtractionStamp.cs` owns whether an extraction is stale and stays
 The geometry and shading lab (key M): normal lines, the smoothing-seam wireframe, collider boxes,
 light sliders with a headlight, and cull by normal-source override cyclers, all scripted by
 `--debug-mesh`. Two shapes: the `--viewer` lab owns the parked plane, and the scoped lab over a
-`SelectionService` attaches to the current selection and restores on a change or a deselect.
+`SelectionService` attaches to the current selection and restores on a change or a deselect. Its
+override shader samples through `SceneBuilder.SampleAlbedo`, so a surface under the cull override
+keeps the chapter's mip LOD bias and the lab stays a diagnostic twin of the real arm.
 
 ## src/UI/WeaponLab.cs
 The weapon lab's panel (`--weapon-lab`, key B): a configurator for the held aircraft's live loadout,

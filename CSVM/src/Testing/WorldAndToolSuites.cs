@@ -14,6 +14,10 @@ namespace CSVM.Testing;
 /// censuses, world lighting and viewers, and the lab surfaces.</summary>
 internal static class WorldAndToolSuites
 {
+    // The ambient cloud field's sprite arm, the one mip-mapped sampler the chapter's LOD bias does
+    // not reach yet, so the mip-bias census reports it instead of failing on it.
+    private const string CloudFieldArm = "cloud-field";
+
     private static readonly string[] AlphaClassChapters =
         { "C1", "C1B", "C1C", "C2", "C2B", "C3", "C4", "C5" };
 
@@ -741,14 +745,15 @@ internal static class WorldAndToolSuites
 
     // ---- needs a chapter world ------------------------------------------------------------------
 
-    // The three every-chapter censuses in one pass, because the world build is nearly the whole
-    // cost of each and three suites building the same eight chapters paid it three times over.
+    // The four every-chapter censuses in one pass, because the world build is nearly the whole
+    // cost of each and four suites building the same eight chapters paid it four times over.
     [Suite("chapter-census",
         "every chapter's built world, once each with collision: nothing a chapter hides is left "
         + "solid (no enabled collider under an invisible node), the ground answers a ray from "
         + "above at each partition-cell centre and its one-sided part answers nothing from below, "
-        + "and the destructible registry holds the pinned instance and node-group totals with the "
-        + "two 8-inch cannons booting standing")]
+        + "the destructible registry holds the pinned instance and node-group totals with the "
+        + "two 8-inch cannons booting standing, and every mip-mapped albedo sampler in the world "
+        + "fetches through the one function carrying the chapter's authored mip LOD bias")]
     internal static void ChapterCensus(TestContext ctx)
     {
         var report = new System.Text.StringBuilder();
@@ -760,6 +765,7 @@ internal static class WorldAndToolSuites
                 CheckNothingHiddenIsSolid(ctx, chapter, world);
                 CheckGroundSidedness(ctx, chapter, world, expectAbove, expectBelow, report);
                 CheckDestructibleTotals(ctx, chapter, world, instances, anchors);
+                CheckMipBiasReachesEveryArm(ctx, chapter, world, report);
             });
         }
 
@@ -846,6 +852,49 @@ internal static class WorldAndToolSuites
                       && gun.Health == gun.MaxHealth,
                 $"{chapter} {AnimRuntime.NameOf(gun.Anchor)} boots standing hp={gun.Health}/{gun.MaxHealth} state={gun.Status}");
         }
+    }
+
+    // The original applies the chapter's authored mip LOD bias as one device render state, so every
+    // texture sample on the device takes it. Here that is one global read by one function, and an
+    // arm sampling around it draws its chapter at a level the original never chose. Able to fail:
+    // any arm reverted to a bare texture(albedo_tex, ...) shows up as an unbiased sampler.
+    internal static void CheckMipBiasReachesEveryArm(TestContext ctx, string chapter, TestWorld world,
+        System.Text.StringBuilder report)
+    {
+        var shaders = new HashSet<Shader>();
+        CollectShaders(world.Session.Root, shaders);
+        var biased = new Dictionary<string, int>(System.StringComparer.Ordinal);
+        var unbiased = new Dictionary<string, int>(System.StringComparer.Ordinal);
+        foreach (var shader in shaders)
+        {
+            string code = shader.Code;
+            if (!code.Contains("filter_linear_mipmap", System.StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var into = code.Contains("csky_sample_albedo", System.StringComparison.Ordinal)
+                ? biased : unbiased;
+            string arm = ArmOf(code);
+            into.TryGetValue(arm, out int had);
+            into[arm] = had + 1;
+        }
+
+        // The ambient cloud field is the one mip-mapped arm still sampling unbiased, so it is
+        // reported rather than asserted on; everything else must take the chapter's bias.
+        unbiased.Remove(CloudFieldArm);
+        int total = biased.Values.Sum();
+
+        // The control: a world that resolved to no mip-mapped shader at all would satisfy the
+        // count below vacuously.
+        ctx.Check(total > 0, $"{chapter} builds mip-mapped world shaders count={total}");
+        ctx.Same(0, unbiased.Values.Sum(), $"{chapter} mip-mapped samplers taking no chapter bias");
+        foreach (var (arm, count) in unbiased)
+        {
+            ctx.Note($"{chapter} unbiased arm: {arm} shaders={count}");
+        }
+
+        report.AppendLine($"{chapter}: biased {Tally(biased)}; unbiased {Tally(unbiased)}");
     }
 
     // ---- needs Godot's Image, nothing else -------------------------------------------------------
@@ -1867,4 +1916,66 @@ internal static class WorldAndToolSuites
         return (beam, beam.AngleTo(-sun.GlobalBasis.Z), rigs[0].CameraWeatherState);
     }
 
+
+    // Every distinct Shader a subtree draws through, over all four seats a built world uses: a
+    // GeometryInstance3D's override and overlay, a MeshInstance3D's per-surface materials, and a
+    // MultiMeshInstance3D's shared mesh surfaces.
+    private static void CollectShaders(Node node, HashSet<Shader> found)
+    {
+        if (node is GeometryInstance3D geo)
+        {
+            if (geo.MaterialOverride is ShaderMaterial { Shader: { } over })
+            {
+                found.Add(over);
+            }
+
+            if (geo.MaterialOverlay is ShaderMaterial { Shader: { } overlay })
+            {
+                found.Add(overlay);
+            }
+        }
+
+        if (node is MeshInstance3D mesh)
+        {
+            for (int i = 0; i < mesh.GetSurfaceOverrideMaterialCount(); i++)
+            {
+                if (mesh.GetActiveMaterial(i) is ShaderMaterial { Shader: { } surface })
+                {
+                    found.Add(surface);
+                }
+            }
+        }
+
+        if (node is MultiMeshInstance3D multi && multi.Multimesh?.Mesh is { } shared)
+        {
+            for (int i = 0; i < shared.GetSurfaceCount(); i++)
+            {
+                if (shared.SurfaceGetMaterial(i) is ShaderMaterial { Shader: { } instanced })
+                {
+                    found.Add(instanced);
+                }
+            }
+        }
+
+        foreach (var child in node.GetChildren())
+        {
+            CollectShaders(child, found);
+        }
+    }
+
+    // Which generator emitted a shader, by a token only that generator writes: the world mesh alone
+    // carries a depth bias, the templates clutter alone dithers its far fade, of the two remaining
+    // spinning arms only the cylindrical facade builds a spin basis, and the ambient cloud field
+    // alone declares far_fade. Anything else is the camera-facing billboard.
+    private static string ArmOf(string code) =>
+        code.Contains("uniform float depth_bias", System.StringComparison.Ordinal) ? "world"
+        : code.Contains("csky_clutter_dither_keep", System.StringComparison.Ordinal) ? "clutter"
+        : code.Contains("mat3 spin", System.StringComparison.Ordinal) ? "facade"
+        : code.Contains("uniform vec2 far_fade", System.StringComparison.Ordinal) ? CloudFieldArm
+        : "billboard";
+
+    private static string Tally(Dictionary<string, int> byArm) =>
+        byArm.Count == 0 ? "none"
+        : string.Join(" ", byArm.OrderBy(p => p.Key, System.StringComparer.Ordinal)
+            .Select(p => $"{p.Key}={p.Value}"));
 }

@@ -1043,18 +1043,20 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   over C1's lake and the open sea under Enhanced Graphics, chase view, banking so the aircraft
   crosses the water. *Cross-refs:* `BL-803` (the same sitting's dithering), `Launcher.cs`'s
   `EnableWaterReflections`.
-- `BL-835` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` `[C5]` **The authored mip LOD
-  bias reaches only the world-mesh shader arm, where the original sets it as one device-wide
-  render state.** *Evidence:* `BL-538`'s close read `MipBias` off `adjust.gw` as
-  `D3DRENDERSTATE_MIPMAPLODBIAS`, which every texture sample on the device takes;
-  `CSVM/src/Mech3/SceneBuilder.cs:1614` (at `7d2e9881`) feeds it to the world-mesh material
-  only, while the billboard arm (`:1729`), the facade arm (`:1816`) and
-  `CSVM/src/Mech3/Clutter.cs:655` sample unbiased. *Fix shape:* route the same shader global
-  through every sampling arm; `c5-city-night` re-pins with the cause named. *⚠ Traps:* the bias
-  moves C5's dark band out by 1.74x and does not remove it; with the bias applied the band no
-  longer reads wrong at the controls (`git log --grep=BL-538`), so this item is about the other
-  sampling arms, not the band. *Cross-refs:* `git log --grep=BL-538`, `docs/verification.md`
-  WORLD-38, `docs/org/textures.md`.
+- `BL-900` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The ambient
+  cloud field is the one mip-mapped sampler the chapter's authored LOD bias does not reach.**
+  *Evidence:* the original applies `MipBias` as `D3DRENDERSTATE_MIPMAPLODBIAS`, one device render
+  state every texture sample takes. Every other mip-mapped arm now fetches through
+  `csky_sample_albedo` in `CSVM/shaders/csky_mip_bias.gdshaderinc`, and the `chapter-census` suite
+  fails any sampler outside it; `CSVM/src/Effects/FogVolumeClutter.cs` declares
+  `filter_linear_mipmap` on its card sampler and samples it unbiased, and the suite carries it as a
+  named exemption rather than a failure. *Fix shape:* include the same header in the cloud-card
+  shader, sample through the shared function, and drop the exemption from the census so the arm is
+  covered like the rest. *⚠ Traps:* `BL-327` and `BL-874` are both rewriting that file's scatter and
+  fade, so land this after them or expect a conflict over the same shader text; C1B, C1C and C5 are
+  the chapters whose cloud goldens can move, and only C5 authors a bias at all, so the other two
+  must stay byte-identical. *Cross-refs:* `BL-327`, `BL-874`, `docs/org/cloudCards.md`,
+  `docs/org/textures.md`, `docs/verification.md` WORLD-42.
 
 - `BL-874` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The original
   scatters the cloud field over each `fvol` polygon's FACE on a staggered lattice; we fill a

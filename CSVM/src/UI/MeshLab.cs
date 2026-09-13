@@ -1051,7 +1051,8 @@ uniform float depth_bias = 0.0;
 #include ""res://shaders/csky_instance_uniforms.gdshaderinc""
 uniform int normal_mode = 0;
 {(textured
-    ? "uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;"
+    ? "uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;\n"
+      + Mech3.SceneBuilder.MipBiasInclude
     : "uniform vec4 albedo_color : source_color = vec4(1.0);")}
 
 void vertex() {{
@@ -1063,7 +1064,7 @@ void vertex() {{
 }}
 
 void fragment() {{
-    vec4 col = COLOR * {(textured ? "texture(albedo_tex, UV)" : "albedo_color")};
+    vec4 col = COLOR * {(textured ? Mech3.SceneBuilder.SampleAlbedo("UV") : "albedo_color")};
     ALBEDO = col.rgb;
     ROUGHNESS = 0.85;
     METALLIC = 0.0;

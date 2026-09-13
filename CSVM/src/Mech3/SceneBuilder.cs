@@ -145,6 +145,8 @@ public sealed class SceneBuilder
         "#include \"res://shaders/csky_lights.gdshaderinc\"";
     internal const string TimeInclude =
         "#include \"res://shaders/csky_time.gdshaderinc\"";
+    internal const string MipBiasInclude =
+        "#include \"res://shaders/csky_mip_bias.gdshaderinc\"";
 
     /// <summary>The animation runtime's <c>OBJECT_OPACITY_STATE</c> translucency, a per-instance
     /// multiplier on ALPHA, because materials are cached and this changes at runtime. Declared in
@@ -507,6 +509,13 @@ void fragment() {
             if (Resolve(texName) is { } tex)
                 mat.SetShaderParameter("albedo_tex", tex);
     }
+
+    /// <summary>The one biased albedo fetch every mip-mapped arm emits, defined in
+    /// <c>csky_mip_bias.gdshaderinc</c> beside the global it reads.
+    /// ⚠ Never emit a bare <c>texture(albedo_tex, ...)</c> beside it. The original applies the
+    /// chapter's bias as one device render state, so an arm sampling unbiased draws that chapter
+    /// at a mip level the original never chose (docs/org/textures.md).</summary>
+    internal static string SampleAlbedo(string uv) => $"csky_sample_albedo(albedo_tex, {uv})";
 
     internal static bool UvsWithinUnitSquare(List<GameZPolygon> polys, int pass) =>
         UvAxesWithinUnitSquare(polys, pass) == UvClampAxes.Both;
@@ -1553,7 +1562,7 @@ void fragment() {
                 + (clampUv ? "repeat_disable;" : "repeat_enable;"));
             // The chapter's own mip LOD bias, one global because the original's is one device
             // render state a chapter sets once (docs/org/textures.md).
-            sb.AppendLine("global uniform float csky_mip_bias = 0.0;");
+            sb.AppendLine(MipBiasInclude);
         }
         // UV animation (the model's texture_scroll / the boot script's Object3DSetScroll). Emitted
         // only for surfaces that actually scroll, so every other shader's text is unchanged.
@@ -1611,13 +1620,13 @@ void fragment() {{");
                 sb.AppendLine("    suv.x = clamp(suv.x, uv_edge_inset.x, 1.0 - uv_edge_inset.x);");
             if (edgeClamp.HasFlag(UvClampAxes.V))
                 sb.AppendLine("    suv.y = clamp(suv.y, uv_edge_inset.y, 1.0 - uv_edge_inset.y);");
-            sb.AppendLine("    vec4 base_col = texture(albedo_tex, suv, csky_mip_bias);");
+            sb.AppendLine($"    vec4 base_col = {SampleAlbedo("suv")};");
         }
         else
         {
             sb.AppendLine(!textured ? "    vec4 base_col = albedo_color;"
-                : scroll ? "    vec4 base_col = texture(albedo_tex, UV + scroll_rate * csky_time, csky_mip_bias);"
-                : "    vec4 base_col = texture(albedo_tex, UV, csky_mip_bias);");
+                : scroll ? $"    vec4 base_col = {SampleAlbedo("UV + scroll_rate * csky_time")};"
+                : $"    vec4 base_col = {SampleAlbedo("UV")};");
         }
         sb.AppendLine($"    vec4 col = {vcol} * base_col;");
         sb.AppendLine("    ALBEDO = col.rgb;");
@@ -1728,6 +1737,9 @@ void fragment() {{");
         // hairline artifact UvsWithinUnitSquare exists for.
         sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, "
             + (clampUv ? "repeat_disable;" : "repeat_enable;"));
+        // The same chapter mip bias the world mesh takes: the original's is one device render
+        // state, so a billboard samples at the level the terrain under it does.
+        sb.AppendLine(MipBiasInclude);
         // Same global distance-fog params as the world shader. Clouds always fog, so this shader
         // never reads csky_fog_on, and an OPAQUE cloud sprite therefore declares no instance
         // uniform at all, deliberately keeping it off the instance-uniform buffer.
@@ -1738,8 +1750,8 @@ void fragment() {{");
         if (blend || scissor)
             sb.AppendLine(InstanceUniformsInclude);
         sb.AppendLine(SrgbInclude); // DX7 gamma-space vertex modulate (world/cloud pass)
-        sb.AppendLine(@"
-void vertex() {
+        sb.AppendLine($@"
+void vertex() {{
     // Camera-facing billboard keeping the instance scale (Godot's billboard_keep_scale, by
     // hand, the bias shader can't billboard, like FogVolumeClutter). The mesh was recentered on its
     // quad centre and the instance placed there, so the quad pivots at its centre.
@@ -1748,10 +1760,10 @@ void vertex() {
     MODELVIEW_MATRIX[0] *= length(MODEL_MATRIX[0].xyz);
     MODELVIEW_MATRIX[1] *= length(MODEL_MATRIX[1].xyz);
     MODELVIEW_MATRIX[2] *= length(MODEL_MATRIX[2].xyz);
-}
+}}
 
-void fragment() {
-    vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * texture(albedo_tex, UV);");
+void fragment() {{
+    vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * {SampleAlbedo("UV")};");
         // Cylindrical distance fog, identical to the world shader: VERTEX is the view-space
         // position in fragment; INV_VIEW_MATRIX lifts it back to world for the horizontal camera
         // distance + the fragment-altitude fade. A model authored `fog: false` skips it.
@@ -1815,6 +1827,9 @@ void fragment() {
         // Clamp when the facade's UVs never leave the unit square, see GetBillboardShader.
         sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, "
             + (clampUv ? "repeat_disable;" : "repeat_enable;"));
+        // The chapter mip bias, as in GetBillboardShader: a facade stands in the same street as
+        // the walls beside it and must choose its level the same way.
+        sb.AppendLine(MipBiasInclude);
         // csky_world_light arrives with the atmosphere include and is READ only when !glow
         // (a light source does not dim with the mission's SUNLIGHT); declaring it either way
         // costs nothing, since a global uniform is project-wide rather than per-instance.
@@ -1843,7 +1858,7 @@ void vertex() {{
 }}
 
 void fragment() {{
-    vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * texture(albedo_tex, UV);");
+    vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * {SampleAlbedo("UV")};");
         if (fogged)
             sb.AppendLine(@"    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
     float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);");

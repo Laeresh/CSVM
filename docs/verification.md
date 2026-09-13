@@ -282,6 +282,13 @@ one sentence of measured evidence; everything else belongs in the commit that la
   `campaign-4p-grid` launches `--campaign=csvm-golden:6`, a `CampaignProfileStore` name under
   `user://Profiles/` that no checkout carries, so the frame it pins is a campaign launch flying
   with no director, and a machine holding that profile renders a different one.
+- **GOLD-18**, **A golden that moves after a shader SOURCE change is not evidence the change had a
+  visual effect; force the value to an extreme and see whether the arm owns pixels in that framing.**
+  Routing the chapter mip bias through a shared include moved `c5-city-night` by 1 pixel at a channel
+  delta of 1. Forcing that bias to +4 through the same function moved 62.6 % of the frame, while
+  forcing +4 on the three newly routed arms alone, with the world arm held at its old call, left the
+  shot byte-identical. So the 1 pixel is a shader-recompile artifact and the pinned framing
+  photographs none of the sprite arms' mip levels, which the re-pin's reason has to say.
 
 ## DET, determinism and randomness
 
@@ -543,6 +550,14 @@ one sentence of measured evidence; everything else belongs in the commit that la
   ordering sensitivity is why a suite that builds two chapters' fields calls `Rng.Rewind()` before
   each one: a session builds exactly one field, so the second field in a process is off the pin
   unless the stream is reset.
+
+- **WORLD-42**, **A D3D render state the original sets once covers every draw on the device, so its
+  remake twin is ONE global that every arm reads, and an arm sampling around it draws that chapter
+  at a level the original never chose.** `MipBias` is `D3DRENDERSTATE_MIPMAPLODBIAS`, one state over
+  the world mesh, the camera-facing billboards, the cylindrical facades and the clutter alike; here
+  it is `csky_mip_bias` behind the single `csky_sample_albedo` in `shaders/csky_mip_bias.gdshaderinc`,
+  and `chapter-census` fails any mip-mapped sampler outside it. Count the arms from the shader
+  generators, not from the one the setting was first wired into.
 
 ## SHELL, Windows, PowerShell, and processes
 

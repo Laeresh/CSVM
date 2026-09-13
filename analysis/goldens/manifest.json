@@ -57,8 +57,8 @@
     {
       "name": "c5-city-night",
       "frame": 120,
-      "hash": "99514a866b2e92fde7aa6a1c92e054c8",
-      "exercises": "the night city: LIGHT_STATE point lights in csky_light_data, 51 beacons on their authored periods, lit window skins, moon and stars, the -0.8 mip LOD bias, and torch puffs culled past their authored far band; a beacon toggle is the only motion.",
+      "hash": "00e47aab6a231a4b112c7a157e8f2d93",
+      "exercises": "the night city: LIGHT_STATE point lights in csky_light_data, 51 beacons on their authored periods, lit window skins, moon and stars, the -0.8 mip LOD bias on every sampling arm, and torch puffs culled past their far band; one beacon toggles.",
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute"]
     },
     {
