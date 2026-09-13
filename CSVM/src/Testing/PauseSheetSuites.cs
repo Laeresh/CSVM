@@ -24,6 +24,12 @@ internal static class PauseSheetSuites
     private const string NumberedChapter = "C3";
     private const string NumberedMission = "M04";
 
+    // The mission whose objective block authors two IDENTITY entries, one keyed and one not. It is
+    // the only block in the shipped data that does, and the note keeps the keyed entry alone.
+    private const string DoubledChapter = "C4";
+    private const string DoubledMission = "M05";
+    private const int DoubledBlock = 23;
+
     // The sortie the Instant Action pause still films, as its chapter code and mission type.
     private const string FilmedEnvironment = "C1";
     private const string FilmedType = "stunt_flying";
@@ -73,7 +79,8 @@ internal static class PauseSheetSuites
         + "the map's own screen rectangle and one off the window draws nothing, the parchment's "
         + "marks follow the completed rows across the four filmed poses, a mark follows the row's "
         + "own OBJECTIVEn number rather than its briefing priority (C3/M04's priority 1 row is "
-        + "OBJECTIVE15, and its two-second wake objective must not check it), C3/M01's own "
+        + "OBJECTIVE15, and its two-second wake objective must not check it), the one block that "
+        + "authors two IDENTITY entries gives C4/M05's note one row and one mark, C3/M01's own "
         + "sheet matches the reference stills flag for flag, and a pointer over a strip moves the "
         + "shared cursor onto it and fires it on the release while a press let go elsewhere fires "
         + "nothing")]
@@ -115,6 +122,7 @@ internal static class PauseSheetSuites
         DriveBoard(ctx, sheets[filmed < 0 ? 0 : filmed], report);
         CheckFilmedPoses(ctx, sheets, filmed, report);
         CheckNumberedMarks(ctx, sheets, report);
+        CheckDoubledIdentity(ctx, sheets, report);
 
         ctx.WriteArtifact($"test-pause-sheet.txt", report.ToString());
         ctx.Note($"composed {sheets.Count} pause sheets and drove one over a live pause state");
@@ -862,6 +870,58 @@ internal static class PauseSheetSuites
             + $"O{note[0].Number}/p{note[0].Priority}, O{note[1].Number}/p{note[1].Priority}; "
             + $"at {wakeAt:0.0} s O1 alone is done and the parchment marks {Marks(entry.Sheet, open)}, "
             + $"with O15 done it marks {Marks(entry.Sheet, done)}");
+    }
+
+    // The one mission whose objective block carries two IDENTITY entries. Only the keyed one is a
+    // note line, so the block owns a single row and a single mark; a reader that took every entry
+    // as a line would put an empty row on the parchment and mark two rows on one completion.
+    private static void CheckDoubledIdentity(
+        TestContext ctx, List<(CampaignMission Mission, PauseSheet Sheet)> sheets, StringBuilder report)
+    {
+        int at = sheets.FindIndex(s =>
+            s.Mission.ChapterFolder.Equals(DoubledChapter, System.StringComparison.OrdinalIgnoreCase)
+            && s.Mission.MissionFolder.Equals(DoubledMission, System.StringComparison.OrdinalIgnoreCase));
+        if (at < 0)
+        {
+            ctx.Check(false, $"{DoubledChapter}/{DoubledMission} is in the sequence");
+            return;
+        }
+
+        var entry = sheets[at];
+        var note = BriefingObjectives.Load(
+            Zrdr.LoadFile(
+                SessionPaths.MissionZrdr(
+                    ctx.DataRoot, entry.Mission.ChapterFolder, entry.Mission.MissionFolder),
+                "objectives.json"),
+            Messages.Load(ctx.MessagesPath));
+        int fromBlock = 0;
+        int priority = 0;
+        foreach (var line in note)
+        {
+            if (line.Number == DoubledBlock)
+            {
+                fromBlock++;
+                priority = line.Priority;
+            }
+        }
+
+        ctx.Same(4, note.Count, $"{DoubledChapter}/{DoubledMission}'s note has four rows, none of them empty");
+        ctx.Same(1, fromBlock, $"OBJECTIVE{DoubledBlock} gives it one row, its keyless SECONDARY entry none");
+        ctx.Same(3, priority, $"and that row is the keyed PRIMARY entry's own priority");
+
+        var rows = PauseReadout.Rows(note, number => number == DoubledBlock);
+        int done = 0;
+        foreach (var row in rows)
+        {
+            done += row.Completed ? 1 : 0;
+        }
+
+        ctx.Same(1, done, $"so OBJECTIVE{DoubledBlock}'s completion reads done on one row");
+        ctx.Same(1, Marks(entry.Sheet, rows), $"and the composed parchment carries one mark");
+        report.AppendLine(
+            $"{DoubledChapter}/{DoubledMission} rows: {note.Count}, "
+            + $"{fromBlock} from OBJECTIVE{DoubledBlock} at priority {priority}, "
+            + $"marks on its completion: {Marks(entry.Sheet, rows)}");
     }
 
     private static int Marks(PauseSheet sheet, IReadOnlyList<PauseObjective> rows)

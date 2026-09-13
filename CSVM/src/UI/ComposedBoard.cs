@@ -268,18 +268,19 @@ public sealed record BoardLine(
 /// <summary>
 /// A list widget's entries and the box they flow inside, in authored pixels: the briefing
 /// parchment's own <c>LIST</c> is <c>POSITION [35, 335]</c>, <c>WORDWRAP [185, 240]</c>,
-/// <c>SPACING [5]</c> (<c>docs/formats/briefing.md</c>). It is a layer of its own rather than one
-/// <see cref="BoardLine"/> per entry because how tall an entry draws is a font metric, which the
-/// engine-free half does not hold, so where the next entry starts cannot be composed here.
-/// <paramref name="Italic"/> slants every entry, the way a langui row's own <c>[FONTID]</c> tag
-/// slants a line, and <paramref name="Cut"/> keeps as many words of an entry too tall for the room
-/// left as do fit instead of dropping it whole, which is how a box the original gives a scrollbar
-/// shows its opening lines.
+/// <c>SPACING [5]</c> (<c>docs/formats/briefing.md</c>). It is a layer of its own because how tall
+/// an entry draws is a font metric the engine-free half does not hold, so where the next entry
+/// starts cannot be composed here. <paramref name="Italic"/> slants every entry the way a langui
+/// row's <c>[FONTID]</c> tag does, <paramref name="Cut"/> keeps as many words of an over-tall entry
+/// as fit rather than dropping it, and <paramref name="Skip"/> drops that many wrapped lines off
+/// the first entry's head, which is how a box the original gives a scrollbar shows a body longer
+/// than itself. <paramref name="Counted"/> hands back the lines the body wraps to and the lines the
+/// box holds, both font measurements, which is what that scrollbar is drawn and clamped from.
 /// </summary>
 public sealed record BoardNote(
     IReadOnlyList<string> Entries, float X, float Y, float Width, float Height, float Spacing,
     float Size, BoardInk Ink, BoardArt? Mark = null, IReadOnlyList<bool>? Marked = null,
-    bool Italic = false, bool Cut = false)
+    bool Italic = false, bool Cut = false, int Skip = 0, Action<int, int>? Counted = null)
 {
     /// <summary>The entries as placed lines, stacked from the widget's top-left and stopped at its
     /// authored height. <paramref name="height"/> measures one entry wrapped to a width, in
@@ -319,12 +320,24 @@ public sealed record BoardNote(
         return marks;
     }
 
+    /// <summary>The lines the first entry wraps to at this width, and the lines the box holds: what
+    /// a scrolled box's window is counted in. Both are zero where there is nothing to measure.
+    /// </summary>
+    public (int Total, int Fits) Rows(Func<string, float, float> height)
+    {
+        ArgumentNullException.ThrowIfNull(height);
+        float line = Entries.Count > 0 ? height("A", Width) : 0f;
+        return line <= 0f
+            ? (0, 0)
+            : ((int)Math.Round(height(Entries[0], Width) / line, MidpointRounding.AwayFromZero), (int)(Height / line));
+    }
+
     private IEnumerable<(int Index, BoardLine Line)> Placed(Func<string, float, float> height)
     {
         float top = Y;
         for (int i = 0; i < Entries.Count; i++)
         {
-            string entry = Entries[i];
+            string entry = i == 0 ? Scrolled(Entries[0], height) : Entries[i];
             float room = Y + Height - top;
             float tall = height(entry, Width);
             string text = tall <= room ? entry : Cut ? Fit(entry, room, height) : string.Empty;
@@ -340,6 +353,22 @@ public sealed record BoardNote(
                 break;
             }
         }
+    }
+
+    // The body past the lines the window has scrolled off, cut at the same word boundary the wrap
+    // would have used: the head filling Skip lines is the longest one that fits their room, so the
+    // rest begins where the drawn box begins. An over-run skip keeps the whole body, the owner of
+    // the window being the one that clamps it.
+    private string Scrolled(string entry, Func<string, float, float> height)
+    {
+        float line = Skip > 0 ? height("A", Width) : 0f;
+        if (line <= 0f)
+        {
+            return entry;
+        }
+
+        string head = Fit(entry, (Skip * line) + 1f, height);
+        return head.Length == 0 || head.Length >= entry.Length ? entry : entry[head.Length..].TrimStart();
     }
 
     // The longest head of an entry that fits the room left, cut at a word: the last word that

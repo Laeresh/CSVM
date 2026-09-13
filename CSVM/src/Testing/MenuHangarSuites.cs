@@ -30,6 +30,12 @@ internal static class MenuHangarSuites
     // the one this suite reads back off the hub (docs/org/hangar.md, "The two red figures").
     private const int PendingWeightString = 1032;
 
+    // The stand-in metric the description box's lines are counted with here: the box's own authored
+    // pitch, and a character width close enough to the shipped face to wrap a body the same number
+    // of times. Nothing on the screen is measured from these, only this suite's own arithmetic.
+    private const float FlowedLine = 14f;
+    private const float FlowedGlyph = 6f;
+
     private static readonly MenuCommands Accept = new() { Accept = true };
     private static readonly MenuCommands Back = new() { Back = true };
     private static readonly MenuCommands Down = new() { MoveY = 1 };
@@ -96,12 +102,13 @@ internal static class MenuHangarSuites
         + "(reading Export on this door, centred on its paper plaque) save the scratch plane into the "
         + "user's store and the shared roster and return to the "
         + "Instant Action screen with it in the Pilot Plane list, SELL PLANES opens the inventory, which "
-        + "wallet-free builds no Export row and deletes instead of selling, asking the unpriced delete "
+        + "wallet-free builds no Export row and deletes instead of selling, leaving the picked plane's "
+        + "Value row unwritten and asking the unpriced delete "
         + "question in the query box, CANCEL and Back return to the Instant Action screen with "
         + "no residue, the cabin's PLANE CONSTRUCTION draws the cash note on every tab and the totals "
         + "page with every combo row bare and an over-priced one still pickable while the wallet-free "
         + "door draws the same note over its export funds, that door's own inventory keeps Export live "
-        + "beside the shipped Sell and asks the priced sale question, an airframe swap asks nothing over "
+        + "beside the shipped Sell, writes that Value row and asks the priced sale question, an airframe swap asks nothing over "
         + "an unedited build and raises the three-button query box over an edited one, whose Cancel puts "
         + "the airframe back and whose Yes takes the stock build, the hub's PLANE COST is red past "
         + "the wallet and its CURRENT WEIGHT red past the airframe's capacity and both plain otherwise, "
@@ -109,7 +116,9 @@ internal static class MenuHangarSuites
         + "airframe row instead leaving that weight line on the shipped Pending word in the page's ink "
         + "where a hardpoint row over the same capacity keeps the figure and the red, a tab page's "
         + "description box follows the shipped figures with the heading that string ends with and the "
-        + "component's own prose flowed inside the authored box, a decal list opens as the page's "
+        + "component's own prose flowed inside the authored box, a body longer than that box standing "
+        + "as a window the wheel takes to the stretch the unscrolled box cut and a changed body putting "
+        + "it back at its head, a decal list opens as the page's "
         + "five-across two-down grid of the sheet's own tiles with its scrollbar counting rows of "
         + "five, and a switch discards an open build")]
     internal static void MenuOriginalHangar(TestContext ctx)
@@ -156,7 +165,7 @@ internal static class MenuHangarSuites
             OriginalTabPageBoxes(ctx, host, seat, shell, fit, hangar);
             OriginalDefaultsAsk(ctx, host, seat, shell, fit, hangar);
             OriginalPurchase(ctx, host, seat, shell, fit, hangar, setup, store, scratch);
-            OriginalInventory(ctx, host, seat, shell, fit, hangar, setup, store, scratch);
+            OriginalInventory(ctx, host, seat, shell, fit, hangar, setup, store, scratch, layout);
             OriginalWallet(ctx, host, seat, shell, fit, hangar, layout);
             OriginalSwitch(ctx, host, seat, shell, fit, hangar, store);
         }
@@ -746,6 +755,7 @@ internal static class MenuHangarSuites
             $"and the engine's own prose row flowed under it ({note?.Entries.Count}, {prose.Length} chars)");
         ctx.Check(note != null && note.Y + note.Height <= 334f + 165f && note.Cut,
             $"inside the authored box, cut where it runs out of room rather than growing it ({note?.Y}, {note?.Height})");
+        OriginalDescriptionScroll(ctx, host, seat, shell, fit);
 
         // The decal picker: fifty tiles as a five-across, two-down grid on the page, wider than
         // the 87-pixel box it hangs from, its arrows and thumb inside its own right edge.
@@ -781,6 +791,54 @@ internal static class MenuHangarSuites
         Click(host, seat, Pointer(fit, tab.X + 5f, tab.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == here, $"and the hub is left on the tab this page found ({shell.Screen})");
     }
+
+    // The armour tab's body runs past its box, which is what the authored S widget's slider and
+    // arrows are for: the box becomes a window the wheel moves, and the stretch the unscrolled box
+    // cut is drawn once it stands at the foot. Leaves the hub on the armour tab.
+    private static void OriginalDescriptionScroll(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit)
+    {
+        var armourTab = Row(shell, "PX_B_ARMOR")!;
+        Click(host, seat, Pointer(fit, armourTab.X + 5f, armourTab.Y + 5f, pressed: true, clicked: true));
+        var body = shell.Compose().Notes.FirstOrDefault();
+        ctx.Check(body?.Counted != null && body.Entries.Count == 1,
+            $"the armour tab's box hands its own line counts back to the shell ({body?.Entries.Count})");
+        if (body?.Counted is not { } counted)
+        {
+            return;
+        }
+
+        var rows = body.Rows(Flowed);
+        ctx.Check(rows.Total > rows.Fits && rows.Fits > 0,
+            $"whose body runs past the room the box holds ({rows.Total} lines for {rows.Fits})");
+        string shown = body.Flow(Flowed).Count > 0 ? body.Flow(Flowed)[0].Text : string.Empty;
+        ctx.Check(shown.Length > 0 && shown.Length < body.Entries[0].Length,
+            $"so the unscrolled box draws a head and cuts the rest ({shown.Length} of {body.Entries[0].Length} chars)");
+        // The counts reach the shell the way the renderer sends them, and the frame after is what
+        // builds the window from them, which is the compose standing here.
+        counted(rows.Total, rows.Fits);
+        shell.Compose();
+        var bar = GridWindow(shell, OriginalShell.DescriptionListKey);
+        ctx.Check(bar.Scrolls && bar.Count == rows.Total && bar.Rows == rows.Fits,
+            $"and the box stands as a window the pointer can move ({bar.Count} lines, {bar.Rows} showing)");
+        Press(host, seat, new MenuCommands { Pointer = new MenuPointer(fit.X(bar.X + 10f), fit.Y(bar.Y + 10f), false, false, bar.LastTop) });
+        var scrolled = shell.Compose().Notes.FirstOrDefault();
+        ctx.Check(scrolled?.Skip == bar.LastTop && GridWindow(shell, OriginalShell.DescriptionListKey).Top == bar.LastTop,
+            $"a wheel over it takes the window to its last line ({scrolled?.Skip} of {bar.LastTop})");
+        string later = scrolled != null && scrolled.Flow(Flowed).Count > 0 ? scrolled.Flow(Flowed)[0].Text : string.Empty;
+        int reached = later.Length > 0 ? body.Entries[0].IndexOf(later, StringComparison.Ordinal) + later.Length : 0;
+        ctx.Check(reached > shown.Length, $"drawing a stretch the unscrolled box could not reach ({reached} past {shown.Length})");
+        Press(host, seat, new MenuCommands { Pointer = new MenuPointer(fit.X(bar.X + 10f), fit.Y(bar.Y + 10f), false, false, -bar.LastTop) });
+        var engineTab = Row(shell, "PX_B_ENGINE")!;
+        Click(host, seat, Pointer(fit, engineTab.X + 5f, engineTab.Y + 5f, pressed: true, clicked: true));
+        Click(host, seat, Pointer(fit, armourTab.X + 5f, armourTab.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(shell.Compose().Notes.FirstOrDefault()?.Skip == 0,
+            $"and a changed body puts the window back at its head ({shell.Compose().Notes.FirstOrDefault()?.Skip})");
+    }
+
+    // The renderer's font measurement stood in for at a fixed six pixels a character, since a suite
+    // that composes a board draws no frame and so has no face to measure against.
+    private static float Flowed(string text, float width) =>
+        FlowedLine * (float)Math.Ceiling(text.Length * FlowedGlyph / Math.Max(1f, width));
 
     // The airframe swap's own question on the shipped layout: the open list's rows draw bare, a
     // swap over an unedited build raises nothing, and one over an edited build raises the
@@ -923,7 +981,8 @@ internal static class MenuHangarSuites
         ctx.Check(Contains(shell.PilotRoster, scratch), $"and the Pilot Plane list offers it, re-read on the way back");
     }
 
-    private static void OriginalInventory(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, HangarFeature hangar, PlayerSetupFeature setup, CustomPlaneStore store, string scratch)
+    private static void OriginalInventory(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, HangarFeature hangar, PlayerSetupFeature setup, CustomPlaneStore store, string scratch, MenuLayout layout)
     {
         var door = BuildDoor(host, seat, shell, fit)!;
         Click(host, seat, Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
@@ -974,6 +1033,9 @@ internal static class MenuHangarSuites
 
         ctx.Check(shell.InventoryIndex == index && Row(shell, OriginalShell.InventoryPlanesKey)?.Label == scratch,
             $"picking it puts it in the box ({Row(shell, OriginalShell.InventoryPlanesKey)?.Label})");
+        var picked = shell.Compose();
+        ctx.Check(InventoryFigure(layout, picked, "HA_T_AGILITYP") != null && InventoryFigure(layout, picked, "HA_T_VALUEP") == null,
+            $"whose figures stand without the Value row, this door pricing nothing ({InventoryFigure(layout, picked, "HA_T_VALUEP")?.Text})");
         var sellButton = Row(shell, OriginalShell.InventorySellKey)!;
         Click(host, seat, Pointer(fit, sellButton.X + 5f, sellButton.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Dialog != null && shell.FocusedKey == OriginalShell.DialogYesKey && store.Load(scratch) != null,
@@ -1085,7 +1147,7 @@ internal static class MenuHangarSuites
         Press(host, seat, Back);
         ctx.Check(shell.Screen == OriginalScreen.HangarEngine, $"Back returns to the tab the hub last showed ({shell.Screen})");
         OriginalOverweight(ctx, host, seat, shell, fit, hangar, layout);
-        WalletInventory(ctx, host, seat, shell, fit, hangar);
+        WalletInventory(ctx, host, seat, shell, fit, hangar, layout);
         Press(host, seat, Back);
         ctx.Check(shell.Screen == OriginalScreen.CampaignCabin && !hangar.IsOpen, $"Back then cancels the build and resumes the cabin ({shell.Screen})");
         var leave = Row(shell, "ReturnToMainMenu")!;
@@ -1166,8 +1228,16 @@ internal static class MenuHangarSuites
     // A hub figure by the authored box it stands in, which is what tells the cost line from the
     // cash note without this suite restating the shipped words.
     private static BoardLine? HubFigure(MenuLayout layout, ComposedBoard board, string key)
+        => Figure(layout, OriginalShell.PlaneConstructionSection, board, key);
+
+    // The same reading on the inventory page, where a row's absence is the claim being made and
+    // matching English text would only find the row that was not drawn.
+    private static BoardLine? InventoryFigure(MenuLayout layout, ComposedBoard board, string key)
+        => Figure(layout, OriginalShell.InventorySection, board, key);
+
+    private static BoardLine? Figure(MenuLayout layout, string section, ComposedBoard board, string key)
     {
-        if (layout.Screen(OriginalShell.PlaneConstructionSection)?.Widget(key) is not { } widget)
+        if (layout.Screen(section)?.Widget(key) is not { } widget)
         {
             return null;
         }
@@ -1180,7 +1250,8 @@ internal static class MenuHangarSuites
     // The wallet's own inventory: both shipped verbs on their buttons, the shipped prompt naming
     // both, and the sale question with the plane's value on it. Answered No, since the profile's
     // aircraft is not this suite's to remove.
-    private static void WalletInventory(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, HangarFeature hangar)
+    private static void WalletInventory(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, HangarFeature hangar, MenuLayout layout)
     {
         var sell = Row(shell, OriginalShell.SellPlanesKey)!;
         Click(host, seat, Pointer(fit, sell.X + 5f, sell.Y + 5f, pressed: true, clicked: true));
@@ -1191,6 +1262,8 @@ internal static class MenuHangarSuites
             $"the wallet's inventory keeps Export live beside the shipped Sell ({shell.Screen}, {hangar.Saved.Count} owned)");
         ctx.Check(board.Lines.Any(l => l.Text == hangar.Strings.Text(1256, "Sell or Export a Plane")),
             $"and the shipped prompt naming both verbs");
+        ctx.Check(InventoryFigure(layout, board, "HA_T_VALUEP") is { } worth && worth.Text.Contains('$'),
+            $"and the Value row the wallet can price ({InventoryFigure(layout, board, "HA_T_VALUEP")?.Text})");
         var sellButton = Row(shell, OriginalShell.InventorySellKey)!;
         Click(host, seat, Pointer(fit, sellButton.X + 5f, sellButton.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Dialog is { Icon: DialogIcon.Query, Answers.Count: 2 } ask && ask.Message.Contains("sell it?", StringComparison.Ordinal)

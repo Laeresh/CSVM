@@ -678,7 +678,9 @@ Each of these is a divergence a reader could mistake for a decode, so each is na
   export to, both presentations picking out of the one build store) and calls the removal Delete
   on the button, over the page and in the confirm, which no shipped string carries for a plane:
   700 and 1256 both price and name a sale. The confirm keeps the sale confirm's shape, the `0x4`
-  two-button query box with Yes and No.
+  two-button query box with Yes and No. It also leaves the picked plane's Value row (1258) unwritten,
+  that row being a sale's worth: what the cabin path supplies and this door cannot is left out
+  rather than invented, which is the same rule that checks no price against the $50000 note.
 - **Original's wallet-free hub entry and its Instant Action loadout screen have no original screen
   behind them.** The original reaches plane construction from the cabin (`PC_B_PLANEX`, to
   `PlaneName`) and from the Instant Action screen's `IA_B_BUILD`, whose edge no layout row states,

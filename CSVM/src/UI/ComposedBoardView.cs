@@ -545,6 +545,14 @@ public sealed partial class ComposedBoardView : Control
         }
 
         var height = Measure(fit, font, note);
+        if (note.Counted is { } counted)
+        {
+            // The measurement the composer could not make, handed back for the frame after this
+            // one: a scrolled box's window is counted in lines, and lines are a font metric.
+            var rows = note.Rows(height);
+            counted(rows.Total, rows.Fits);
+        }
+
         foreach (var line in note.Flow(height))
         {
             DrawText(fit, Face(font, line), line);

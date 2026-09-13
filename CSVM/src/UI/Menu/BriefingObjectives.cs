@@ -81,7 +81,7 @@ public static class BriefingObjectives
 
     // ⚠ Every IDENTITY in the block, not the block's IDENTITY: C4/M05's OBJECTIVE23 authors two,
     // and a keyed view of the block keeps only the last, losing that mission's third note line.
-    // Both lines carry the block's number, since one completion marks both.
+    // A keyless entry is no line, so a block authoring two still gives the note one row.
     private static void Collect(
         int number,
         List<object?> body,
