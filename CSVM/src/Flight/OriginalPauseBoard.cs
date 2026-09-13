@@ -6,15 +6,14 @@ namespace CSVM.Flight;
 
 /// <summary>
 /// The Original presentation's pause screen: the mission's chart filling the window with its flags
-/// and icons, the objectives parchment, the profile's memento and the four authored button strips,
-/// composed from <c>escape.zrd</c> the way the load and briefing screens are composed from their
-/// own dialogs. An Instant Action sortie hands it an <c>ia_escape.zrd</c> sheet instead, which is
-/// the load screen's blackboard under the same four strips, and it writes that in chalk.
-/// Follows <see cref="PauseState.Changed"/> and drives its cursor from the pausing
-/// player's reader alone, which is <see cref="PauseBoard"/>'s contract unchanged; that seat's
-/// pointer shares the cursor, hovering a strip to move it and clicking to fire, the rule every
-/// Original page keeps. The Built-in presentation keeps <see cref="PauseBoard"/>.
-/// Decode: docs/org/pause-screen.md.
+/// and icons, the objectives parchment, the profile's memento and the button strips, the authored
+/// four and the remake's photo strip among them, composed from <c>escape.zrd</c> the way the load
+/// and briefing screens are. An Instant Action sortie hands it an <c>ia_escape.zrd</c> sheet
+/// instead, the load screen's blackboard under the same strips, written in chalk. Follows
+/// <see cref="PauseState.Changed"/> and drives its cursor from the pausing player's reader alone,
+/// which is <see cref="PauseBoard"/>'s contract unchanged; that seat's pointer shares the cursor,
+/// hovering a strip to move it and clicking to fire, the rule every Original page keeps. The
+/// Built-in presentation keeps <see cref="PauseBoard"/>. Decode: docs/org/pause-screen.md.
 /// </summary>
 public sealed partial class OriginalPauseBoard : Control
 {
@@ -44,6 +43,12 @@ public sealed partial class OriginalPauseBoard : Control
 
     /// <summary>Leave the session, chosen from QUIT.</summary>
     public Action? Exit { get; set; }
+
+    /// <summary>Hand the pausing player's pane to a free camera over the frozen world, chosen from
+    /// PHOTO MODE, the one strip the original does not author. The session suspends this sheet for
+    /// the duration and brings it back on Escape; the halt is never dropped, so the world stays the
+    /// still frame it already is.</summary>
+    public Action? PhotoMode { get; set; }
 
     /// <summary>Open the options over the pause, chosen from PREFERENCES: the session hides this
     /// sheet, stands <see cref="PausePreferences"/> over the held world and calls
@@ -171,6 +176,9 @@ public sealed partial class OriginalPauseBoard : Control
             case BoardMenuItem.Resume:
                 _state.ForceResume();
                 break;
+            case BoardMenuItem.Photo:
+                PhotoMode?.Invoke();    // the halt stays: photo mode is a still frame, not a resume
+                break;
             case BoardMenuItem.Restart:
                 _state.ForceResume();   // the rerun runs against a live clock, not a held one
                 Restart?.Invoke();
@@ -192,6 +200,7 @@ public sealed partial class OriginalPauseBoard : Control
         var menu = new BoardMenu(
             dismissable: true,
             (BoardMenuItem.Resume, _sheet.ButtonLabels[PauseScreens.ResumeRow]),
+            (BoardMenuItem.Photo, _sheet.ButtonLabels[PauseScreens.PhotoRow]),
             (BoardMenuItem.Restart, _sheet.ButtonLabels[PauseScreens.RestartRow]),
             (BoardMenuItem.Preferences, _sheet.ButtonLabels[PauseScreens.PreferencesRow]),
             (BoardMenuItem.Exit, _sheet.ButtonLabels[PauseScreens.QuitRow]));
@@ -207,7 +216,7 @@ public sealed partial class OriginalPauseBoard : Control
         Compose();
     }
 
-    // One frame of the pointer over the four strips: standing on one moves the shared cursor there,
+    // One frame of the pointer over the strips: standing on one moves the shared cursor there,
     // a press takes hold of the strip it lands on, and that strip fires when the button comes up
     // still on it, so a press released anywhere else fires nothing. Answers whether to repaint.
     private bool StepPointer()

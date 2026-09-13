@@ -27,6 +27,9 @@ this page does not repeat. How the 800x600 source artwork meets a modern window 
 | `FUN_0041a820` | The profile's memento image name, with its extension stripped |
 | `FUN_005c4b30` / `FUN_005c4a70` | Bind a named `PRIMITIVES` entry / a named `BUTTONS` entry into a dialog member |
 | `FUN_00470c40` / `FUN_00429280` | The objectives-list control's constructor and its name binding |
+| `FUN_00470df0` / `FUN_00470f10` | The objectives-list control's reader and its draw, vtable `PTR_FUN_00607f90` slots `+0x78` and `+0x24` |
+| `FUN_004710c0` / `FUN_00471230` | Appends one row to the list, and turns a row on or off |
+| `FUN_005c8280` / `FUN_00455ac0` | A text control's reader, and the `WORDWRAP` rectangle it sets |
 | `FUN_0042ab40` | The script interpreter the screen's `ESC_SCRIPT` runs through |
 | `FUN_004a15d0` / `FUN_004a1630` / `FUN_004a1620` / `FUN_004a15f0` | RESUME, RESTART, PREFERENCES and QUIT |
 | `FUN_004a1650` / `FUN_004a1660` | LOAD GAME and SAVE GAME, which the shipped data never draws |
@@ -158,12 +161,56 @@ the same value the memento takes.
 - **`OWNSHIP`** (`singledev`, `CENTER [1]`) is the player. Its world position is read from
   `DAT_0071c298 + 0x204` and its rotation from
   `atan2(-*(float *)(DAT_0071c298 + 0x1e0), -*(float *)(DAT_0071c298 + 0x1e8))`, which is the
-  player transform's own forward vector, so the icon turns with the nose.
+  player transform's own forward vector, so the icon turns with the nose. That angle is the
+  mission data's own yaw, which runs opposite a compass heading, and nothing is added to it.
 - **`MYZEP`** (`NW-m1wv_icon`, `CENTER [1]`) is the zeppelin named `piratezep`. `FUN_004bd3e0`
   looks that object up by name and takes its transform's translation and its own stored angle;
   failing that, `FUN_004d0280(7, "piratezep")` is tried and the object's position is taken with a
   zero angle; failing both, the icon is turned off. A mission with no `piratezep` therefore draws
   no zeppelin icon.
+
+## The objectives list stops nowhere, and its authored box is one row's, not the list's
+
+`FUN_00470df0`, the list control's reader, takes five named entries out of `OBJECTIVESLIST`:
+`BACKGROUND` into `+0x38`, `TITLE` into `+0x12c`, `SPACING` into `+0x22d8` as an integer, `LIST`
+into the text control at `+0x22dc`, and `CHECKMARK` into `+0x21e4`. The lookup `FUN_00579ff0`
+recurses into nested blocks, which is why `SPACING [5]`, authored inside `LIST`, is found from the
+`OBJECTIVESLIST` block. The rows themselves are a vector of `0x20bc`-byte entries at `+0x4398`,
+`+0x439c` and `+0x43a0`, each a copy of the `LIST` control with the row's completed byte in front
+of it.
+
+**`WORDWRAP`'s height is the box one row wraps in, and it is never a limit.** `FUN_005c8280` reads
+the pair at `0x005c82c2` into the rectangle `{0, 0, 190, 255}` and hands it to the text control's
+vtable slot `+0x70`, `FUN_00455ac0`, which stores it at `+0x2080`..`+0x208c` and raises the flag at
+`+0x207c`. The layout then takes the larger of the two in each axis: at `0x005c76a1` the laid-out
+bottom becomes `max(bottom, 255)` and at `0x005c76b3` the right becomes `max(right, 190)`, so the
+rectangle is a **minimum** extent on the control's reported box, never a clip on its text. The
+height the list advances by, `+0x20b0`, is taken at `0x005c7692`, before that clamp, and is the
+text's own measured height. Because every row is a copy of the one `LIST` control, the 255 belongs
+to each row separately, and no single objective is anywhere near that tall.
+
+**So the original neither scrolls, clips nor shrinks a list longer than its artwork.** The draw
+`FUN_00470f10` walks the row vector from `0x00470f7c` to `0x00471013`, and the only condition
+inside the loop is each row's own hidden flag and whether its checkmark is set; the y accumulator
+grows at `0x00470fe7`..`0x00470ffb` by the row's measured height plus `SPACING`, and the loop ends
+only when the row pointer reaches `+0x439c`. Nothing is compared against a box. `FUN_004710c0`,
+which appends a row, is called only from the script's `Objective` opcode at `0x00429590` and is
+guarded by the display row count alone (`FUN_004ad180`), so it refuses nothing either. A list
+taller than the 240x312 `parchment` bitmap would simply run down off it and keep drawing.
+
+**The remake keeps every row but holds them on the paper.** Stacking rows off the artwork is what
+the executable does, and on the parchment it reads as ink spilled over the torn edge, so the remake
+takes the box from the bitmap instead. The largest fully opaque rectangle in the 240x312 `parchment`
+art (alpha at least 250) runs from x 15 to x 214 and y 21 to y 283, which off its `POSITION
+[555, 6]` puts the paper's right edge at x 770 and its bottom at y 290. `EscapeObjectivesList`
+carries those two and gives the list `RowWrap` 190 (the authored `WORDWRAP` width exactly) and
+`RowBox` 240 from its `[580, 50]` corner. `BoardNote.Shrink` then asks the renderer for a fit:
+`UI/ComposedBoardView.cs`'s `Fitted` steps the face down a point at a time until every entry fits
+that box in both axes, and never cuts a row or a word. `RowFont` is 13 rather than the authored 14
+because the substitute face is wider and taller per character; at 13 all 24 campaign lists keep the
+original's own line breaks and stand inside the paper, the deepest, `CM15` (`C2/M05`), ending at
+y 286 and the widest, `C4/M05`, reaching x 770. The `pause-sheet` and `load-sheet` suites measure
+the paper off the bitmap again and hold every row of every sheet inside it.
 
 ## The flags are authored art, not a runtime reveal
 
@@ -262,6 +309,13 @@ pin-up, for a name it does not find. This screen draws whatever the profile hold
 in every campaign dialog) is authored while the picture is not. The script then places the shadow
 `momento_shad` centred on `[661, 454]` as an ordinary `Pict`.
 
+The remake draws the same picture the cabin wall does. `CampaignMementos.BitmapFor` is the one
+resolution the three screens share: the flown mission's `CampaignDirector.Memento` hands it to the
+pause readout, `Launcher` reads the seated profile off its store for the campaign load screen and
+for the `--menu=pauseboard` screenshot door, and `CampaignCabinPage` hangs it on the wall. A
+session with nobody seated draws the seeded pin-up, which is what the `--menu=pauseboard` door
+shows when no `--campaign=` names a profile.
+
 ## An Instant Action pause draws the blackboard, not a map
 
 This is the unfilmed case, and the data settles it. `ia_escape.zrd` opens for an Instant Action
@@ -323,6 +377,21 @@ dialog describes, so they keep the Built-in board, the same split the load scree
 inks rather than three faces, which is the same mapping every other composed board takes
 ([`campaign-board.md`](campaign-board.md)).
 
+**The parchment's rows lean, and are set a point smaller than the data authors.** `ObjList` is
+Andy Bold 14 italic, so both screens set the rows through `UI/ComposedBoardView.cs`'s synthetic
+oblique, a 0.25-em x-shear of the board's own face; the `ObjListTitle` line above them stays
+upright, which is how the original sets it. The shear is a transform on the glyph outlines and
+leaves their advances alone, so it changes no line break. What does is the substitute face itself,
+which is wider per character than Andy Bold: at the authored 14 inside the authored `WORDWRAP` of
+190 the filmed mission's first objective takes two lines where the reference crop shows one. The
+measure stays at 190, since that is the paper the parchment bitmap holds under the list, and the
+face comes down to 13 instead. At 13 CM01's four rows break 1/2/2/1, the crop's own pattern, and 15
+of the sequence's 78 rows still run to three lines or more because the face is wider than the one
+the text was written for. A wider measure would buy those lines back only by writing over the
+bitmap's torn right edge. Line breaks are a font metric and move with the window scale, so a list
+that leaves the paper at some other scale is caught by `BoardNote.Shrink` rather than by these
+numbers.
+
 **One cursor serves all three devices.** The authored pointer is drawn, the glove over the sheet and
 the finger over a strip, and the OS pointer is hidden while the sheet stands; but a hover moves the
 shared cursor onto the strip it lands on rather than lighting a rollover the keyboard cannot see, so
@@ -344,8 +413,16 @@ does, since the flight is what the leaf returns to. The rebinding pages hold the
 leaf through its PREFERENCES row. Where the install carries no decoded layout there is nothing to
 compose, so the Original strip is drawn and unbound and Built-in's row is left off.
 
-**Photo mode is not on this screen.** It is this port's own feature and the original authors no
-fifth strip, so it stays on the Built-in board rather than being added to the original's four.
+**Photo mode is a fifth strip the original does not author.** It is this port's own feature, so the
+sheet stands it in the authored plates and label offset the block's own RESUME carries, between
+RESUME and PREFERENCES in the order a cursor walks, and the four authored strips keep their own
+points. Where it stands is read off the block rather than fixed: the campaign block's two columns
+of two leave a 128-pixel channel between them on RESUME's row, which the 132-pixel plate takes with
+two columns of overlap at each neighbour's rounded end, while `ia_escape.zrd`'s three across leave
+no channel (their midpoint is RESTART's own point) and the strip takes the free cell under RESTART
+instead, level with MAINMENU. The rule is which of the two candidate points covers less authored
+plate. The hit test answers the earlier row in walk order for a column two strips share. Built-in's
+board keeps its own Photo Mode row.
 
 **The progress bar in a campaign dialog is not drawn.** Every campaign `escape.zrd` dialog carries a
 `PROGRESS` entry at `[90, 548]` copied from its `Loading.zrd` sibling, and `FUN_004a0d20` binds no
@@ -355,6 +432,19 @@ fifth strip, so it stays on the Built-in board rather than being added to the or
 no tween is live, so a `Wait` releases and a `Spin` lands at its end revolutions. The screen is a
 still and the original's pump reaches the same state within a frame or two, so nothing here animates
 what the original animates once.
+
+**The ownship art is drawn off the top of the sheet, and this port takes that back off.** The
+`singledev` bitmap is a 32x32 plan view whose own mirror axis lies at exactly 45 degrees: rotating
+it 225 degrees clockwise is what stands it upright, the propeller disc at the top and the tailplane
+at the end of the rear fuselage, so its drawn nose points up and to the left, an eighth of a turn
+counter-clockwise of the chart's north. `nw-m1wv_icon`, the zeppelin, is drawn nose up, as is every
+other icon the chart places. The original turns that art by the heading alone, so its own sheet
+draws the player leaning by that eighth; `UI/MissionMap.cs` takes the art's own nose off the turn
+instead (`ArtRevs`, keyed by bitmap name), so the drawn nose lands on the heading the compass tape
+reads. A chart whose icon and compass disagree is the one thing a pilot reads the sheet for, which
+is why the departure is taken rather than reproduced. The chart is north up: its projection puts
+world -Z at the top, which is the compass's own zero, and the sheet's own printed compass rose
+agrees.
 
 **The ownship icon needs a position inside the window.** Nothing draws it where the flown position
 falls off the chart, which is the original's own answer and is what a mission's authored spawn hits:

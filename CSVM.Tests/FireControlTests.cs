@@ -692,7 +692,92 @@ public class FireControlTests
         Assert.Equal(2, fc.SelectedPylon); // one step back despite 10 held ticks
     }
 
+    [Fact]
+    public void APadTapStepsTheGunSelectorForwardOnRelease()
+    {
+        var fc = Make(FourGuns(), new List<FakePylon>());
+
+        var duringPress = new List<int>();
+        for (int frame = 0; frame < 6; frame++)   // 0.1 s, well inside the hold threshold
+        {
+            Step(fc, gunSelPad: true);
+            duringPress.Add(fc.GunSel);
+        }
+        Step(fc);
+
+        Assert.Equal(new[] { 0, 0, 0, 0, 0, 0 }, duringPress); // the tap resolves on release, not on press
+        Assert.Equal(1, fc.GunSel);
+    }
+
+    [Fact]
+    public void APadHoldStepsTheGunSelectorBackOnceAndDoesNotAlsoTap()
+    {
+        var fc = Make(FourGuns(), new List<FakePylon>());
+
+        // Two seconds down: the hold fires once, on the frame it crosses the threshold, and the
+        // release after it is spent.
+        for (int frame = 0; frame < 120; frame++)
+        {
+            Step(fc, gunSelPad: true);
+        }
+        int afterHold = fc.GunSel;
+        Step(fc);
+
+        Assert.Equal(3, afterHold);          // one step BACK from slot 0, wrapping onto the tail
+        Assert.Equal(3, fc.GunSel);          // and the release adds no forward step of its own
+    }
+
+    [Fact]
+    public void ThePadsRocketButtonSplitsTheSameWay()
+    {
+        var pylons = new List<FakePylon>
+        {
+            Pylon(1f, 3, 3, "wep_p0"), Pylon(1f, 3, 3, "wep_p1"),
+            Pylon(1f, 3, 3, "wep_p2"), Pylon(1f, 3, 3, "wep_p3"),
+        };
+        var fc = Make(new List<FakeGun>(), pylons);
+
+        for (int frame = 0; frame < 6; frame++)
+        {
+            Step(fc, rocketSelPad: true);
+        }
+        Step(fc);
+        int afterTap = fc.SelectedPylon;
+
+        for (int frame = 0; frame < 120; frame++)
+        {
+            Step(fc, rocketSelPad: true);
+        }
+        Step(fc);
+
+        Assert.Equal(1, afterTap);
+        Assert.Equal(0, fc.SelectedPylon);   // the hold walks back off it again
+    }
+
+    /// <summary>The keyboard keeps a key per direction, so a held key is still one step: a pilot
+    /// leaning on F3 must not have it read as the counterclockwise cycle.</summary>
+    [Fact]
+    public void AHeldKeyStepsOnceHoweverLongItIsDown()
+    {
+        var fc = Make(FourGuns(), new List<FakePylon>());
+
+        for (int frame = 0; frame < 120; frame++)
+        {
+            Step(fc, gunSel: true);
+        }
+        Step(fc);
+
+        Assert.Equal(1, fc.GunSel);
+    }
+
     // ==== Fakes and builders ====================================================================
+
+    // Four armed gun slots, the shape the selector walks in both directions.
+    private static List<FakeGun> FourGuns() => new()
+    {
+        Gun(10f, 3, 3, id: "wep_g0"), Gun(10f, 3, 3, id: "wep_g1"),
+        Gun(10f, 3, 3, id: "wep_g2"), Gun(10f, 3, 3, id: "wep_g3"),
+    };
 
     private static FakeGun Gun(float fireRate, int ammo, int capacity, int muzzleCount = 1, string? loopSound = null, string id = "wep_gun") =>
         new()
@@ -720,7 +805,8 @@ public class FireControlTests
     // detection), dt fixed at 60 Hz throughout. The returned FireOutcome is the SAME
     // reused instance every call, callers must read what they need before the next Step.
     private static FireOutcome Step(FireControl fc, bool fire = false, bool rocket = false,
-        bool gunSel = false, bool rocketSel = false, bool gunSelBack = false, bool rocketSelBack = false) =>
+        bool gunSel = false, bool rocketSel = false, bool gunSelBack = false, bool rocketSelBack = false,
+        bool gunSelPad = false, bool rocketSelPad = false) =>
         fc.Step(Dt, new FireInputs
         {
             FireHeld = fire,
@@ -729,6 +815,8 @@ public class FireControlTests
             RocketSelectHeld = rocketSel,
             GunSelectBackHeld = gunSelBack,
             RocketSelectBackHeld = rocketSelBack,
+            GunSelectPadHeld = gunSelPad,
+            RocketSelectPadHeld = rocketSelPad,
         });
 
     // One press of a selector direction and the release after it, which is what the rising-edge

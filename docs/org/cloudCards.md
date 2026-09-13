@@ -183,28 +183,44 @@ field is scattered **over the volume mesh's faces**, not through its interior. P
 Every `rand()` above runs inside the fixed-seed window `FUN_0044e010` opens, so the whole field is
 the same every launch.
 
+⚠ **The `0x800` skip is what shapes the field, not a detail of the walk.** Every shipped `fvol`
+mesh is a CLOSED box or prism, and its walls and floor carry that bit, so the polygons the scatter
+actually sees are the upward skin alone: one flat top quad per deck slab piece, the four sloping
+sides of a C1C build-up, the tops and ramps of a C5 street prism. The per-chapter census is in
+[`../formats/fogvol.md`](../formats/fogvol.md). A walk that ignored the bit would scatter the
+underside and the walls too and place several times the field.
+
 ## Where CSVM stands
 
-`FogVolumeClutter` and its generated card shader reproduce the colour path exactly and the alpha
-path only in part.
+`FogVolumeClutter` and its generated card shader carry the colour path and the alpha path above.
 
-- **The colour is right in kind and wrong in value.** We render the card at vertex colour 225
-  rather than the authored 240 (`CardVertexColorTune`), a constant calibrated to the original's
-  measured 209 plateau. The decode says no colour term exists, and the constant-RGB texture says a
-  cloud pixel's brightness is coverage. So the constant stands in for the missing alpha terms below,
-  and the mechanism that replaces it is those terms, not another colour.
-- **The fade band is one fixed pair for every sprite.** We take the farther authored pair (3,100 to
-  3,500 m) for all of them and ramp it with a smoothstep; the original draws a band per sprite by
-  interpolating the two pairs, and ramps linearly in squared distance.
-- **The view-angle term is absent entirely.** We fade on the true 3D distance alone, so our field
-  keeps full opacity to 3,100 m and ends at a flat 3,500 m from any pose, where the original's ends
-  at the geometric mean above. At a grazing pose above the deck that is the difference between a
-  600 m disc and a 3,500 m one.
+- **The colour is the authored 240, unscaled.** There is no colour term left in the cloud path:
+  the card's own vertex colour reaches the shader as the data authors it, and a brightness gap on
+  this population is read as coverage rather than corrected as a colour.
+- **The fade band is drawn per sprite.** The scatter draws one `t` per placement and hands it to
+  the shader as instance custom data; the shader interpolates both authored `far_fade_range` pairs
+  with it and ramps linearly in squared distance, not as a smoothstep.
+- **The scatter runs over the authored faces**, the walk above: the `fvol` mesh's polygons, the
+  `0x800`-flagged ones skipped and triangle strips split, each carrying the staggered lattice in
+  its own plane on `U = unit(v1 − v0)`, `V = cross(U, n)`, with every point tested against that
+  polygon's outline. So a placement sits ON a face and the normal it carries is that face's own,
+  for every volume shape, not only for a slab.
+- **The view-angle term is applied.** Each placement also carries the outward normal it is scaled
+  against, packed into the same custom-data slot, and the shader evaluates `c = max(0, dot(n,
+  unit(eye − p)))` and the `c²·near²` / `c²·far²` tests above. `DAT_0062d170` is the same global
+  the templates clutter already takes from the graphics `EffectsLevel`, so `HIGH` leaves the
+  authored metres literal and the two clutter populations cannot drift apart.
 - **The card takes no fog in either build**, which is the one place the two agree by construction.
 
-⚠ **Applying the view-angle term needs the sprite's own polygon normal, which our scatter does not
-produce.** We fill a volume's interior by cells rather than scattering over its faces, so a
-placement has no face to inherit a normal from. For the four deck chapters' map-spanning slabs the
-answer is `+Y` by inspection, which is the same population the top-anchored placement rule already
-classifies, but C1C's build-up frusta and C5's street prisms have sloped and vertical faces and
-would need the normal carried per instance.
+⚠ **Two quantities are still inferred.** The per-volume reference point the perpendicular offset
+runs away from is taken as the volume's own bounds centre, which gives the direction the decode
+describes on a slab's top face (up in the middle, tilting outward at the rim) but is not traced to
+the record field. And a face's outward sense is decided by the volume's vertex centroid rather than
+by the polygon's winding, because a mesh's winding convention is not guaranteed here.
+
+⚠ **The field is culled, not merely faded, wherever the angle closes.** A sprite whose face points
+away from the eye is dropped outright, which is the original's own rule and is why a slab's field
+disappears from below rather than fading out. No shipped `fvol` polygon faces downward or
+sideways, so this is a property of the whole install and not of the deck chapters alone. The
+map-edge continuation's ring is still bounded at the largest authored `far`, which stays
+conservative: the disc's horizontal reach `sqrt(dy·far − dy²)` peaks at `far/2`.

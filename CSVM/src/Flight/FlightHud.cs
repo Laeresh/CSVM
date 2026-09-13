@@ -49,6 +49,12 @@ public struct FlightHudState
     /// does something right now.</summary>
     public bool AutoLandOffered;
 
+    /// <summary>Whether the respawn button would actually bring this pilot back right now: false
+    /// for a pilot out of lives and for a seat whose controls the session is holding, both of which
+    /// swallow the press. A prompt naming a control that does nothing is the same defect as a
+    /// prompt naming the wrong control.</summary>
+    public bool RespawnOffered;
+
     /// <summary>Wall seconds this frame: the damage flash counts down on wall time, so a halted
     /// session does not burn the flash off while nothing is drawn.</summary>
     public float WallDt;
@@ -138,13 +144,25 @@ public sealed class FlightHud
     /// <summary>The original's auto-dock prompt, the centred line of its own the offer stands on.
     /// Built and parented by <see cref="Attach"/>, so every human pane has one; this feeds it the
     /// wording each frame.</summary>
-    public AutoDockLine? AutoDock;
+    public PromptLine? AutoDock;
+
+    /// <summary>The respawn prompt a crashed pilot reads, on the same centred footing.
+    /// ⚠ Parented to the MESSAGE layer by <see cref="Attach"/>, never the HUD layer: the crash
+    /// camera hides the HUD outright, and this is the one prompt whose whole audience is sitting in
+    /// that hidden state.</summary>
+    public PromptLine? CrashPrompt;
 
     /// <summary>The auto-land line this pane draws while the approach table's <c>auto</c> row
     /// passes, from <see cref="ComposeAutoLandPrompt"/> over the seat's own bindings, recomposed
     /// whenever the seat's active device moves. Empty draws no line, which is what an unbound
     /// auto-land reads as. <see cref="AutoDock"/> is where it lands, never the text block.</summary>
     public string AutoLandPrompt = AutoLandFallback;
+
+    /// <summary>The respawn line this pane draws while its pilot sits at the crash, from
+    /// <see cref="ComposeRespawnPrompt"/> over the seat's own bindings, recomposed on the same
+    /// handover. Empty until a seat composes it, and for a seat whose active device has no
+    /// <c>Respawn</c> binding at all. <see cref="CrashPrompt"/> is where it lands.</summary>
+    public string RespawnPrompt = string.Empty;
 
     // The pipper's placement and smoothing are decoded (docs/org/aim-assist.md "What the pipper
     // follows"); no TUNE left in them.
@@ -159,6 +177,11 @@ public sealed class FlightHud
     private const string AutoLandFallback = "AUTO-LAND AVAILABLE";
     private const string AutoLandPressKey = "MSG_PRESS_AUTOLAND";  // "Press %1 to autodock"
     private const string AutoLandClickKey = "MSG_CLICK_AUTOLAND";  // the mouse-button wording
+    // The respawn prompt's own wording. Respawn is this port's action, so the install's table
+    // carries no row for it and no language but ours; the shape is the table's all the same, a %1
+    // the control name fills today and a control glyph can fill instead.
+    private const string RespawnPressTemplate = "Press %1 to respawn";
+    private const string RespawnClickTemplate = "Click %1 to respawn";
     private const float DamageFlashTime = 2.5f;        // s the text block shows the impact line
     private const int TextFontSize = 22;               // text block, full-screen (shrunk per pane)
     private const float AglRayLength = 1000f;          // m the altimeter's down ray reaches
@@ -230,6 +253,13 @@ public sealed class FlightHud
     public static bool ShowsAutoLandPrompt(in FlightHudState state) =>
         !state.Held && !state.Crashed && !state.Halted && state.AutoLandOffered;
 
+    /// <summary>Whether the respawn prompt should stand this frame: a crashed pilot the button can
+    /// still bring back, with no board up over the wreck. The two prompts are exclusive by these
+    /// gates, which is why they share a footing. Whether there is WORDING to draw is
+    /// <see cref="RespawnPrompt"/>'s. Static so CSVM.Tests can assert the gate directly.</summary>
+    public static bool ShowsRespawnPrompt(in FlightHudState state) =>
+        state.Crashed && !state.Halted && state.RespawnOffered;
+
     /// <summary>The speedometer's mph conversion. Static so CSVM.Tests can assert it as a number
     /// rather than through a formatted string.</summary>
     public static float MphFromSpeedMps(float speedMps) => speedMps * 2.23694f;
@@ -255,6 +285,25 @@ public sealed class FlightHud
         string key = binding.Control.Kind == ControlKind.Mouse ? AutoLandClickKey : AutoLandPressKey;
         string template = strings?.Get(key) ?? key;
         return template == key ? AutoLandFallback + " - " + control : Messages.Fill(template, control);
+    }
+
+    /// <summary>The respawn prompt for a seat holding <paramref name="bindings"/>: the port's own
+    /// wording with the control of the seat's active <paramref name="side"/> in the <c>%1</c> slot,
+    /// "Click" for a mouse button and "Press" otherwise, and empty when nothing that side can reach
+    /// is bound. Which binding a side names, and the fallback to the other side, belong to
+    /// <see cref="ActiveDevice.PromptBinding"/>.</summary>
+    public static string ComposeRespawnPrompt(IReadOnlyList<Binding> bindings, bool readsKeyboard,
+        DeviceSide side)
+    {
+        if (ActiveDevice.PromptBinding(bindings, side, readsKeyboard) is not { } binding)
+        {
+            return string.Empty;
+        }
+
+        string template = binding.Control.Kind == ControlKind.Mouse
+            ? RespawnClickTemplate
+            : RespawnPressTemplate;
+        return Messages.Fill(template, BindingLabels.Describe(binding));
     }
 
     /// <summary>The gun gauge's selected-slot readout: the SELECTED firable group's ammo and short
@@ -335,7 +384,13 @@ public sealed class FlightHud
             FocusMode = Control.FocusModeEnum.None,
         };
         messages.AddChild(MessageStack); // the kill/mission message stack, top centre over the dials
-        AutoDock = new AutoDockLine
+        CrashPrompt = new PromptLine
+        {
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+            FocusMode = Control.FocusModeEnum.None,
+        };
+        messages.AddChild(CrashPrompt); // the respawn prompt, under the crash notice it answers
+        AutoDock = new PromptLine
         {
             MouseFilter = Control.MouseFilterEnum.Ignore,
             FocusMode = Control.FocusModeEnum.None,
@@ -404,6 +459,10 @@ public sealed class FlightHud
         if (AutoDock != null)
         {
             AutoDock.Line = ShowsAutoLandPrompt(in state) ? AutoLandPrompt : string.Empty;
+        }
+        if (CrashPrompt != null)
+        {
+            CrashPrompt.Line = ShowsRespawnPrompt(in state) ? RespawnPrompt : string.Empty;
         }
         UpdateTextBlock(in state, mph, ft);
     }
@@ -491,9 +550,9 @@ public sealed class FlightHud
     }
 
     /// <summary>The flight text block's lines in the shipped order: speed/altitude/throttle, then
-    /// whichever of the stall, damage flash, damage summary, stunt status and paused/crashed lines
-    /// apply. The auto-dock prompt is NOT one of them; it is its own centred line
-    /// (<see cref="AutoDock"/>). Returns the reused instance list, valid until the next call.
+    /// whichever of the stall, damage flash, damage summary, stunt status and paused lines apply.
+    /// Neither prompt is one of them; each is its own centred line (<see cref="AutoDock"/>,
+    /// <see cref="CrashPrompt"/>). Returns the reused instance list, valid until the next call.
     /// Public so CSVM.Tests can assert the ordering with no text Control in the process, off the
     /// numbers <see cref="MphFromSpeedMps"/> and <see cref="FeetFromWorldY"/> already expose.</summary>
     public List<string> ComposeTextLines(in FlightHudState state, float mph, float ft, bool wide)
@@ -521,10 +580,6 @@ public sealed class FlightHud
             _textLines.Add(stuntStatus);
         if (state.Halted)
             _textLines.Add("⏸ PAUSED — . steps one frame");   // the board's own menu says the rest
-        else if (state.Crashed)
-            // Notice half dropped: the message stack carries the decoded "Fatal Crash!", and this
-            // line is the respawn control, which the original has no equivalent of.
-            _textLines.Add("PRESS R (GAMEPAD Y/A) TO RESPAWN");
         return _textLines;
     }
 
@@ -570,6 +625,8 @@ public sealed class FlightHud
             MessageStack.Visible = _shown; // screen-space, so the cockpit panel does not replace it
         if (AutoDock != null)
             AutoDock.Visible = _shown;     // a message, not an instrument: the panel carries no twin
+        if (CrashPrompt != null)
+            CrashPrompt.Visible = _shown;  // a cutscene and photo mode take it; the crash cut cannot
     }
 
     // Feeds the two cockpit weapon gauges from the same live ammo the firing code draws down. With

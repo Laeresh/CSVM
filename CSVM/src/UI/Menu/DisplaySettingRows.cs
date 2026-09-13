@@ -8,7 +8,8 @@ namespace CSVM.UI.Menu;
 /// disagree about a saved value. The labels are one per <see cref="CSVM.Utils.DisplayWords"/> entry
 /// and in that order, since a row reads and writes the store word by index; the two index rules are
 /// the forgiving reads the resolvers already make (a never-set row shows the setting's own default,
-/// an unoffered size the screen's own), restated where a row needs an index rather than a plan. The screens and the sizes are enumerated per machine by
+/// an unoffered size the screen's own, and a size row the display mode pins the screen's own
+/// whatever is saved), restated where a row needs an index rather than a plan. The screens and the sizes are enumerated per machine by
 /// <see cref="CSVM.Utils.MonitorSetting"/> and <see cref="CSVM.Utils.ResolutionSetting"/>, which is
 /// why neither of those is a list here. Engine-free, so the rules test without a screen.
 /// </summary>
@@ -32,13 +33,14 @@ public static class DisplaySettingRows
         return at >= 0 ? at : Math.Max(0, IndexOf(words, fallback));
     }
 
-    /// <summary>Where a saved size sits among the ones a screen offers. These words are the screen's
-    /// own sizes rather than a vocabulary, so a size this screen does not offer, or none saved at
-    /// all, shows as the list's own fallback, the screen's size. That is
-    /// <see cref="CSVM.Utils.ResolutionSetting.Resolve"/>'s fallback rule, and a row has to agree
-    /// with it or it would name a size the window is not standing at.</summary>
-    public static int ResolutionIndex(CSVM.Utils.SizeList sizes, string? saved) =>
-        WordIndex(sizes.Words, saved, sizes.Fallback);
+    /// <summary>Where the size row stands among the sizes a screen offers. These words are the
+    /// screen's own sizes rather than a vocabulary, so a size this screen does not offer, or none
+    /// saved at all, shows as the list's own fallback, the screen's size; a
+    /// <paramref name="displayModeWord"/> that pins the row reads the same way whatever is saved.
+    /// That is <see cref="CSVM.Utils.ResolutionSetting.Resolve"/>'s own rule, and a row has to
+    /// agree with it or it would name a size the window is not standing at.</summary>
+    public static int ResolutionIndex(CSVM.Utils.SizeList sizes, string? saved, string? displayModeWord) =>
+        WordIndex(sizes.Words, CSVM.Utils.ResolutionSetting.Pinned(displayModeWord) ? null : saved, sizes.Fallback);
 
     /// <summary>The value a sideways step lands on, wrapping in both directions, which is what every
     /// display row on either screen steps by. An empty list steps to 0, so a row with nothing to

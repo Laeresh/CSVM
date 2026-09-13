@@ -199,6 +199,31 @@ draws its authored 800x600 space one-to-one.
   Dolly Out rather than stacking a third reading (`ActionMap.SameControl` ignores the deadzone on
   purpose): that is not a fault of these three numbers and must not be tuned against.
 
+### C1 · Instant Action, the mission end
+
+```powershell
+./RunGame.ps1
+```
+
+- `PT-145` `[Own]` **The 3 s the world keeps running between an Instant Action ending and the
+  wrap-up board, judged at the controls.** The length is decoded, not tuned: the original seeds
+  3.0 s of live world on the frame the goal is reached, and CSVM spends the same 3 s on both the
+  win and the last death, since the original holds nothing on a death and what it waits out there
+  is the crash animation (`docs/formats/instant-action/wrap-up.md`, "The hold after the ending").
+  From the menu, set up an Instant Action ace duel with 1 life and fly it twice, once shooting the
+  ace down and once flying into the ground. *Look for:*
+  - (a) on the win, the world carries on for about three seconds with the camera still tracking and
+    the kill's own wreck visible all the way down, and the board arrives after it rather than
+    cutting in on the kill;
+  - (b) on the death, the crash reads as a crash: the wreck falls, hits and burns before the board
+    takes the screen, instead of the screen changing at the moment of the hit;
+  - (c) through the hold the stick is dead and the aeroplane flies on as trimmed rather than
+    snapping level or dropping to idle, and the board's own Restart row answers the first press
+    after it appears (no swallowed press, no press left over from the hold firing it by itself).
+  *Blocks:* nothing; a verdict that three seconds is too long or too short on the death path is a
+  new item against the death case alone, since the win path's 3 s is what the original does. ⚠ The
+  campaign's own 2 s hold is a different number over a frozen world and is not what this judges.
+
 ### C1 · Bloodhawk, the overcast sky, ground to above the deck
 
 ```powershell
@@ -214,6 +239,21 @@ draws its authored 800x600 space one-to-one.
   - (c) the nearest tick under the pointer: picked and drawn the way the original's is, holding
     steady through a slow turn instead of stepping or flickering between neighbours.
   *Blocks:* `BL-113`.
+
+- `PT-147` `[A/B: playtest/CAP-12/]` **The cloud field's view-angle fade, flown through the deck
+  and above it.** Each `fvol` sprite's draw distance is now scaled by the cosine of the viewing
+  angle against its polygon's normal, so the field is a disc around the camera rather than a flat
+  3,500 m wall, and the cards render the authored colour with nothing scaling it. The instruments
+  settle the arithmetic (the fade matches the decoded law, and no pinned shot moved); what they
+  cannot settle is whether the thinned field reads like the original at the controls.
+  *Look for:*
+  - (a) climbing from the ground through the deck, the cards thin out ahead of you rather than
+    ending at a rim, and the deck sheet and horizon behind them read the way CAP-12's takes do;
+  - (b) at the grazing pose just above the band (around 1,200 m), the field is a small disc and
+    the fogged deck shows through beyond it, the near-saturated wall of white being gone;
+  - (c) at the 1,700 m rung the cloud tops sit at the original's brightness rather than above it;
+  - (d) flying level inside the band, no popping as a sprite's own band swings across the cull.
+  *Blocks:* nothing tracks the outcome; a fail mints a new `BL` naming which of (a)-(d) failed.
 
 ### C1 · Bloodhawk vs AI, the kill sequence, sound on
 
@@ -257,13 +297,13 @@ reasons that have nothing to do with any of these checks.
   *Blocks:* nothing; a fail on (a) says the gate reads the wrong pool, a fail on (b) says something
   is re-evaluating the swap per frame.
 
-- `PT-81` `[Own]` **A repair retracts the stage it lifted back over (F5 damage lab).** Staging used
+- `PT-81` `[Own]` **A repair retracts the stage it lifted back over (F19 damage lab).** Staging used
   to latch one way; the original stops an entry's anim and clears its handle on the upward crossing.
   This one needs no AI, so it flies on the bare command:
   ```powershell
   ./RunGame.ps1 --chapter=C1 --plane=player_bhawk
   ```
-  *Look for:* open the F5 damage lab, drag a zone down past a threshold to start its stage, then
+  *Look for:* open the F19 damage lab, drag a zone down past a threshold to start its stage, then
   repair back above it and watch the stage stop. Un-staging on repair is faithful, not a regression.
   *Look for also:* it must fire ONCE per downward crossing. A stage that re-fires while the fraction
   merely stays below its threshold is a different bug, not this fix working.
@@ -763,6 +803,23 @@ is a judgement on our own remake.
   block, where one exists, unchanged either way. Enemies that feel wrong at the default tier, or an
   ace that feels no different from the rest, mean the offset or the exemption is mis-wired, since
   the ratings themselves are the roster's own. *Blocks:* nothing; a fail mints a new `BL`.
+
+### Any campaign mission · the pause chart's icons against the compass
+
+```powershell
+./RunGame.ps1 --campaign=<profile>
+```
+
+- `PT-146` `[Own]` **The pause chart's plane icon points where the compass tape says, on every
+  heading.** The chart's turn is the compass reading, and the player's own icon art is drawn an
+  eighth of a turn counter-clockwise of the top of the sheet, which the sheet now takes back off
+  (`git log --grep=BL-895`); a suite pins the agreement on seven headings, but only an eye at the
+  controls says the drawn nose looks right on the drawn chart. Fly a mission whose chart shows the
+  plane (CM05's window holds its own spawn), note the compass, then pause. *Look for:* (a) the
+  plane icon's nose along the heading the tape read, the chart being north up; (b) the same after
+  turning onto two or three other headings, so a sign error cannot hide at one pose; (c) the
+  zeppelin icon, where the mission draws one, lying along the hull's own course. *Blocks:* nothing;
+  a fail mints a new `BL`.
 
 ### CM24 (C5/M04) · the Dante's engine bank, external view
 

@@ -143,14 +143,15 @@ public class PauseScreensTests
     }
 
     /// <summary>The whole sheet for the filmed mission: the frame behind it, the map at its crop,
-    /// the parchment, the four pins, the memento and the four strips, each label resolved.</summary>
+    /// the parchment, the four pins, the memento and the five strips, each label resolved.</summary>
     [ExtractedDataFact]
-    public void TheFilmedMissionsSheetComposesTheChartTheParchmentAndTheFourStrips()
+    public void TheFilmedMissionsSheetComposesTheChartTheParchmentAndTheFiveStrips()
     {
         var sheet = Sheet();
         var board = PauseScreens.For(sheet, Readout(sheet, marked: 0), PauseScreens.ResumeRow, false);
 
-        Assert.Equal(new[] { "Resume", "Restart", "Preferences", "Quit" }, sheet.ButtonLabels);
+        Assert.Equal(
+            new[] { "Resume", "Photo Mode", "Restart", "Preferences", "Quit" }, sheet.ButtonLabels);
         Assert.Equal("Objectives", sheet.ObjectivesTitle);
         var frame = Assert.Single(board.Backdrop);
         Assert.Equal("loadframe", frame.Art.Name);
@@ -166,9 +167,12 @@ public class PauseScreensTests
             new[] { "pin6", "pin6", "pin6", "pin4" },
             board.Pictures.Where(p => p.Art.Name.StartsWith("pin")).Select(p => p.Art.Name));
 
-        Assert.Equal(4, board.Plaques.Count);
-        Assert.Equal(new[] { "Resume", "Restart", "Preferences", "Quit" },
+        Assert.Equal(5, board.Plaques.Count);
+        Assert.Equal(new[] { "Resume", "Photo Mode", "Restart", "Preferences", "Quit" },
             board.Plaques.Select(p => p.Label));
+        Assert.Equal(
+            new[] { (107f, 528f), (237f, 528f), (127f, 559f), (367f, 528f), (347f, 559f) },
+            board.Plaques.Select(p => (p.X, p.Y)));
         Assert.Equal("escape_button2", board.Plaques[PauseScreens.ResumeRow].Art.Name);
         Assert.Equal("escape_button1", board.Plaques[PauseScreens.QuitRow].Art.Name);
         Assert.Equal(BoardInk.LabelRollover, board.Plaques[PauseScreens.ResumeRow].Ink);
@@ -187,23 +191,55 @@ public class PauseScreensTests
         Assert.Equal(BoardInk.LabelActivate, board.Plaques[PauseScreens.RestartRow].Ink);
     }
 
-    /// <summary>The four strips are the screen's only widgets, each a 132x28 plate on its authored
+    /// <summary>The five strips are the screen's only widgets, each a 132x28 plate on its own
     /// corner, and a point on none of them answers -1 rather than the nearest row.</summary>
     [ExtractedDataFact]
-    public void EachStripIsHitOnItsOwnAuthoredPlate()
+    public void EachStripIsHitOnItsOwnPlate()
     {
         var sheet = Sheet();
 
         Assert.Equal(PauseScreens.ResumeRow, PauseScreens.RowAt(sheet, 107f, 528f));
-        Assert.Equal(PauseScreens.ResumeRow, PauseScreens.RowAt(sheet, 238f, 555f));
+        Assert.Equal(PauseScreens.PhotoRow, PauseScreens.RowAt(sheet, 303f, 542f));
         Assert.Equal(PauseScreens.RestartRow, PauseScreens.RowAt(sheet, 193f, 573f));
         Assert.Equal(PauseScreens.PreferencesRow, PauseScreens.RowAt(sheet, 433f, 542f));
         Assert.Equal(PauseScreens.QuitRow, PauseScreens.RowAt(sheet, 413f, 573f));
 
-        // Just off each far edge, and the clear board above the strips.
-        Assert.Equal(-1, PauseScreens.RowAt(sheet, 239f, 528f));
+        // The channel is four pixels narrower than the plate it holds, so two columns belong to
+        // both the photo strip and a neighbour, and the earlier row in walk order owns them.
+        Assert.Equal(PauseScreens.ResumeRow, PauseScreens.RowAt(sheet, 238f, 555f));
+        Assert.Equal(PauseScreens.PhotoRow, PauseScreens.RowAt(sheet, 366f, 528f));
+
+        // Off the group's far edges, and the clear board above the strips.
+        Assert.Equal(-1, PauseScreens.RowAt(sheet, 106f, 528f));
+        Assert.Equal(-1, PauseScreens.RowAt(sheet, 499f, 528f));
         Assert.Equal(-1, PauseScreens.RowAt(sheet, 107f, 556f));
         Assert.Equal(-1, PauseScreens.RowAt(sheet, 400f, 300f));
+    }
+
+    /// <summary>The remake's own strip has no authored point, so it takes the one the block leaves:
+    /// the campaign block's two columns leave the channel between them, while the Instant Action
+    /// block stands three across and leaves the cell under RESTART. Both wear RESUME's own plates
+    /// and label offset, which is what makes the fifth strip read as one of the four.</summary>
+    [ExtractedDataFact]
+    public void ThePhotoStripTakesThePlaceItsOwnBlockLeavesFree()
+    {
+        var campaign = Sheet();
+        var instantAction = PauseSheet.Load(
+            Zrdr(), MessagesPath(), EscapeDialog.InstantActionKey(1, 'a'), instantAction: true)!;
+
+        var onChart = campaign.Strips[PauseScreens.PhotoRow]!;
+        var onBoard = instantAction.Strips[PauseScreens.PhotoRow]!;
+        Assert.Equal(new BriefingPoint(237f, 528f), onChart.At);
+        Assert.Equal(new BriefingPoint(497f, 550f), onBoard.At);
+        Assert.Equal(
+            ("escape_button1", "escape_button2", "escape_button3"),
+            (onChart.Normal, onChart.Rollover, onChart.Activate));
+        Assert.Equal(new BriefingPoint(66f, 7f), onChart.LabelOffset);
+        Assert.Equal(PauseScreens.PhotoLabel, campaign.ButtonLabels[PauseScreens.PhotoRow]);
+
+        // The authored block is untouched: the fifth strip is the sheet's, not the file's.
+        Assert.Equal(4, campaign.Shared.Buttons.Count);
+        Assert.Equal(5, campaign.Strips.Count);
     }
 
     /// <summary>Every campaign dialog authors the pointer the screen is driven with, and the
@@ -236,7 +272,13 @@ public class PauseScreensTests
         var note = Assert.Single(board.Notes);
         Assert.Equal(4, note.Entries.Count);
         Assert.StartsWith("1)", note.Entries[0]);
-        Assert.Equal((580f, 50f, 190f, 255f, 5f), (note.X, note.Y, note.Width, note.Height, note.Spacing));
+
+        // The box is the parchment's own solid paper from the list's corner, across and down, rather
+        // than the authored WORDWRAP: the original stacks rows off the artwork, and a remake that
+        // did would spill words over the bitmap's torn edges. A deeper list shrinks its face.
+        Assert.Equal((580f, 50f, 190f, 240f, 5f), (note.X, note.Y, note.Width, note.Height, note.Spacing));
+        Assert.True(note.Italic);
+        Assert.True(note.Shrink);
         Assert.Equal("obj_check1", note.Mark!.Name);
         Assert.Equal(new[] { true, false, false, false }, note.Marked);
 
@@ -282,7 +324,7 @@ public class PauseScreensTests
         Assert.Contains(board.Pictures, p => p.Art.Name == "MP-shotdown");
         Assert.DoesNotContain(board.Pictures, p => p.Art.Name.EndsWith("MAP"));
         Assert.Empty(board.Notes);
-        Assert.Equal(4, board.Plaques.Count);
+        Assert.Equal(5, board.Plaques.Count);
     }
 
     /// <summary>A sheet is run out rather than played: `CM02`'s script places its four pins past an

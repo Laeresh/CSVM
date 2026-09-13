@@ -62,6 +62,14 @@ public sealed class InstantActionRuntime
     /// never returns.</summary>
     public const float ActorVolumeRadiusM = 10000f;
 
+    /// <summary>How long the live world runs on after the ending before the wrap-up board takes
+    /// the screen. Decoded: the original's Instant Action tick seeds this countdown on the frame
+    /// the goal is reached and ticks it down on frame dt while the world runs in full
+    /// (docs/formats/instant-action/wrap-up.md, "The hold after the ending"). ⚠ The original holds
+    /// nothing on a death; what it waits out there is the crash animation, which this same hold
+    /// stands in for.</summary>
+    public const float WrapupHoldS = 3f;
+
     // The five hand-authored pilot personalities a wave member's nine-stat vector is rolled
     // from, `row = draw % 5` per aircraft (docs/formats/instant-action.md "A wave enemy's nine
     // pilot stats are drawn at random from a table of five, not from its skill").
@@ -80,6 +88,10 @@ public sealed class InstantActionRuntime
     private readonly Dictionary<int, int> _lives = new();
     private readonly HashSet<int> _spectators = new();
 
+    // What is left of the hold between the ending and the wrap-up board, counted down by Advance
+    // on sim dt. Zero before the ending and again once the board is due.
+    private float _wrapupHold;
+
     public InstantActionRuntime(InstantActionDef def)
     {
         Def = def;
@@ -89,6 +101,12 @@ public sealed class InstantActionRuntime
     /// is the subscriber this exists for; G13's own subscriber is the session's log line.
     /// </summary>
     public event Action<InstantActionOutcome>? MissionEnded;
+
+    /// <summary>Raised once, <see cref="WrapupHoldS"/> of sim time after <see cref="MissionEnded"/>:
+    /// the cue to present the wrap-up board. The two are separate because the outcome is decided at
+    /// the ending and the screen is not, which is the whole of the hold the world runs on
+    /// through.</summary>
+    public event Action<InstantActionOutcome>? WrapupDue;
 
     public InstantActionDef Def { get; }
 
@@ -104,6 +122,11 @@ public sealed class InstantActionRuntime
     public InstantActionOutcome Outcome { get; private set; }
 
     public bool Ended => Outcome != InstantActionOutcome.Running;
+
+    /// <summary>Whether the mission has ended and the hold before the wrap-up board is still
+    /// running. The outcome already stands; what has not happened yet is the screen, and the world
+    /// keeps flying meanwhile.</summary>
+    public bool HoldingWrapup => _wrapupHold > 0f;
 
     /// <summary>Mission time in seconds, advanced by <see cref="Advance"/> on SIM dt alone (never
     /// wall time, a halt freezes it with the simulation, the rule the match clock already
@@ -322,13 +345,26 @@ public sealed class InstantActionRuntime
     /// reads 0 instead.</summary>
     public static int ShotPercent(int hits, int fired) => fired > 0 ? (int)(100f * hits / fired) : 0;
 
-    /// <summary>One sim step of the mission clock. A no-op once the mission has ended, which is
-    /// what freezes <see cref="Elapsed"/> at the outcome.</summary>
+    /// <summary>One sim step of the mission clock, and of the hold after it. <see cref="Elapsed"/>
+    /// stops at the outcome, so the wrap-up's time row is the mission's and never the hold's; the
+    /// hold counts down from there and raises <see cref="WrapupDue"/> once, on the step that spends
+    /// it.</summary>
     public void Advance(float dt)
     {
         if (!Ended)
         {
             Elapsed += dt;
+            return;
+        }
+        if (_wrapupHold <= 0f)
+        {
+            return;
+        }
+        _wrapupHold -= dt;
+        if (_wrapupHold <= 0f)
+        {
+            _wrapupHold = 0f;
+            WrapupDue?.Invoke(Outcome);
         }
     }
 
@@ -390,6 +426,9 @@ public sealed class InstantActionRuntime
             return;
         }
         Outcome = outcome;
+        // Armed before the signal, so a subscriber that asks whether the board is still coming
+        // gets the answer the ending already settled.
+        _wrapupHold = WrapupHoldS;
         MissionEnded?.Invoke(outcome);
     }
 

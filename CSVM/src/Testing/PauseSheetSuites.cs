@@ -24,6 +24,10 @@ internal static class PauseSheetSuites
     private const string NumberedChapter = "C3";
     private const string NumberedMission = "M04";
 
+    // The picture the profile this suite seats has chosen: a mission 0 award, so every profile
+    // holds it, and not the seeded pin-up, so a sheet that read no profile would draw a different
+    // name here rather than the right one by accident.
+    private const string ChosenMemento = "MS_P_Mom.jpg";
     // The mission whose objective block authors two IDENTITY entries, one keyed and one not. It is
     // the only block in the shipped data that does, and the note keeps the keyed entry alone.
     private const string DoubledChapter = "C4";
@@ -40,10 +44,43 @@ internal static class PauseSheetSuites
     private const float OddAceHeadX = 325f;
     private const float AceHeadX = 365f;
 
+    // How many objectives across the whole sequence are composed away rather than drawn. The
+    // executable's list walks its whole row vector and stops at no height, so every row reaches
+    // both screens, and a list too deep for the paper shrinks its face instead of losing a row.
+    private const int OverrunRows = 0;
+
+    // Where the parchment's solid paper ends in authored pixels, off the art's own position. No
+    // row may cross either edge: the bitmap's torn band is not paper, and words drawn over it read
+    // as ink spilled off the sheet. The sweep measures the band again rather than trusting these.
+    private const float PaperRight = 770f;
+    private const float PaperBottom = 290f;
+
+    // How many points over its own face the deepest list is put at to exercise the fit. Every
+    // campaign list fits the paper at the size the screen writes it in, so nothing on the disc
+    // drives the shrink, and a rule no data reaches is a rule nothing checks.
+    private const float Swollen = 6f;
+
+    // The alpha a pixel counts as paper at. The torn edge fades out over a few pixels rather than
+    // ending, so the solid rectangle is read at very nearly opaque rather than at any coverage.
+    private const float SolidAlpha = 250f / 255f;
+
+    // How many lines each of the filmed mission's four objectives takes on the parchment, read off
+    // the reference crop of the original's own sheet. The face is ours, so the count is what a row
+    // can be held to rather than the glyphs.
+    private static readonly int[] FilmedRowLines = { 1, 2, 2, 1 };
+
+    // And the numbered mission's two, both shorter than the filmed sheet's longest single line, so
+    // the original fits each on one line in the same box. No still films this one.
+    private static readonly int[] NumberedRowLines = { 1, 1 };
+
     // The world-folder digits Instant Action's own environment list offers. C1C (3) is the chapter
     // it omits, so ia_escape.zrd carries no loading_i3 dialog at all
     // (docs/formats/instant-action.md).
     private static readonly int[] Environments = { 1, 2, 4, 5, 6, 7, 8 };
+
+    // The profile a campaign pause is taken over here: a seated one that chose a picture, which is
+    // what the flown session's own director hands the readout.
+    private static readonly Session.CampaignProfileDef Seated = SeatProfile();
 
     // The four mission types, in the order the exe's jump table letters them.
     private static readonly string[] MissionTypes =
@@ -61,27 +98,47 @@ internal static class PauseSheetSuites
         ("mp-dangerzone2", 197f, 457f),
     };
 
-    // Where the shared block puts the four strips, in the order a cursor walks them.
+    // Where the Instant Action sheet's strips stand, in the order a cursor walks them. The block
+    // authors three across and one below the third, so the remake's photo strip takes the free cell
+    // under RESTART rather than a channel between columns, which this block has none of.
     private static readonly (float X, float Y)[] Strips =
     {
-        (352f, 510f), (497f, 510f), (642f, 510f), (642f, 550f),
+        (352f, 510f), (497f, 550f), (497f, 510f), (642f, 510f), (642f, 550f),
+    };
+
+    // And where the campaign sheet's stand: two columns of two, whose own channel is where the
+    // photo strip goes, four pixels narrower than the plate it takes.
+    private static readonly (float X, float Y)[] CampaignStrips =
+    {
+        (107f, 528f), (237f, 528f), (127f, 559f), (367f, 528f), (347f, 559f),
     };
 
     /// <summary>The chapter's campaign pause sheets end to end: every dialog resolves, every
     /// bitmap it draws is extracted, and the board follows the pause state it was given.</summary>
     [Suite("pause-sheet",
         "the Original presentation's pause screen against the chapter's own escape.zrd dialogs: "
-        + "each campaign mission's sheet resolves its map, memento, parchment and four strips, "
+        + "each campaign mission's sheet resolves its map, parchment and authored strips, the "
+        + "memento slot takes the picture the seated profile chose, which the flown mission's own "
+        + "director reports, at the slot's authored point, while a pause with no profile behind it "
+        + "takes the seeded pin-up, "
         + "every bitmap the composition names exists in the extraction (a lowercasing or naming "
         + "slip draws nothing and is otherwise silent), a real OriginalPauseBoard follows "
-        + "PauseState.Changed with its cursor resting on RESUME, the map is drawn at its authored "
+        + "PauseState.Changed with its cursor resting on RESUME, the five strips stand at the "
+        + "points the block's own geometry gives them with PHOTO MODE in the channel between the "
+        + "two columns, that strip opens photo mode and leaves the halt and the sheet standing, "
+        + "the map is drawn at its authored "
         + "source crop rather than scaled, an OWNSHIP icon placed by world position lands inside "
         + "the map's own screen rectangle and one off the window draws nothing, the parchment's "
         + "marks follow the completed rows across the four filmed poses, a mark follows the row's "
         + "own OBJECTIVEn number rather than its briefing priority (C3/M04's priority 1 row is "
         + "OBJECTIVE15, and its two-second wake objective must not check it), the one block that "
         + "authors two IDENTITY entries gives C4/M05's note one row and one mark, C3/M01's own "
-        + "sheet matches the reference stills flag for flag, and a pointer over a strip moves the "
+        + "sheet matches the reference stills flag for flag, every parchment sets its rows in the "
+        + "slanted face the original's ObjList authors and breaks C3/M01's four where the reference "
+        + "crop breaks them, every objective is drawn rather than composed away at a height the "
+        + "original's own list stops at nowhere, with the whole sequence's rows held inside the "
+        + "parchment's solid paper (measured off the bitmap's own torn-edge band) by a face that "
+        + "shrinks where a list would leave it, and a pointer over a strip moves the "
         + "shared cursor onto it and fires it on the release while a press let go elsewhere fires "
         + "nothing")]
     internal static void PauseSheetScreen(TestContext ctx)
@@ -121,7 +178,9 @@ internal static class PauseSheetSuites
         ctx.Check(filmed >= 0, $"{FilmedChapter}/{FilmedMission}, the filmed mission, is in the sequence");
         DriveBoard(ctx, sheets[filmed < 0 ? 0 : filmed], report);
         CheckFilmedPoses(ctx, sheets, filmed, report);
+        CheckSeatedMemento(ctx, sheets, filmed, report);
         CheckNumberedMarks(ctx, sheets, report);
+        CheckRowWrap(ctx, sheets, report);
         CheckDoubledIdentity(ctx, sheets, report);
 
         ctx.WriteArtifact($"test-pause-sheet.txt", report.ToString());
@@ -138,10 +197,11 @@ internal static class PauseSheetSuites
         + "composition is the load screen's blackboard with its three centred photographs and the "
         + "dialog's own four texts, no chart, parchment, memento or world icon reaches it, every "
         + "bitmap it names exists in the extraction, C1's stunt sheet matches the reference still "
-        + "word for word at its authored points, the environment digit is read rather than assumed "
+        + "word for word at its authored points, the remake's photo strip takes the free cell under "
+        + "RESTART on a block that stands three across, the environment digit is read rather than assumed "
         + "(loading_i6a puts its second head 40 px left of every other ace dialog's) and "
         + "CampaignSequence.ChapterNumber inverts every campaign chapter's own folder, and a real "
-        + "OriginalPauseBoard follows PauseState.Changed with a pointer that walks all four strips "
+        + "OriginalPauseBoard follows PauseState.Changed with a pointer that walks all five strips "
         + "and fires the one it was pressed and released on")]
     internal static void InstantActionPauseSheet(TestContext ctx)
     {
@@ -188,6 +248,46 @@ internal static class PauseSheetSuites
         ctx.Note($"composed {sheets.Count} Instant Action pause sheets and drove one over a live pause state");
     }
 
+    // The parchment's solid paper in authored pixels, measured off the extraction rather than
+    // assumed: the largest fully opaque rectangle in the art, which is the paper inside the torn
+    // edges, at the point the sheet hangs the art. An empty rectangle where the bitmap is missing.
+    internal static Godot.Rect2 Paper(TestContext ctx, EscapeObjectivesList? list)
+    {
+        if (list == null)
+        {
+            return default;
+        }
+
+        string path = Path.Combine(
+            ctx.DataRoot, "extracted", "rimage", list.Background.ToLowerInvariant() + ".png");
+        if (!File.Exists(path) || Godot.Image.LoadFromFile(path) is not { } art || art.IsEmpty())
+        {
+            return default;
+        }
+
+        var solid = Solid(art);
+        return new Godot.Rect2(
+            list.BackgroundAt.X + solid.Position.X, list.BackgroundAt.Y + solid.Position.Y,
+            solid.Size.X, solid.Size.Y);
+    }
+
+    // The far corner of a flowed block in authored pixels: the widest line's own right edge and the
+    // last line's bottom. A word too long to break pushes a line's box past the measure it wrapped
+    // to, so the drawn width is asked for rather than taken from the note.
+    internal static Godot.Vector2 Corner(
+        System.Func<string, float, Godot.Vector2> box, IReadOnlyList<BoardLine> placed)
+    {
+        var corner = Godot.Vector2.Zero;
+        foreach (var line in placed)
+        {
+            var drawn = box(line.Text, line.Width);
+            corner = new Godot.Vector2(
+                Godot.Mathf.Max(corner.X, line.X + drawn.X), Godot.Mathf.Max(corner.Y, line.Y + drawn.Y));
+        }
+
+        return corner;
+    }
+
     // The lookup falls back on the file's own default dialog, which resolves for any key at all, so
     // a sheet that came back is not yet evidence its environment and letter were understood.
     private static void CheckOwnDialog(TestContext ctx, List<(string Key, PauseSheet Sheet)> sheets)
@@ -226,7 +326,7 @@ internal static class PauseSheetSuites
         ctx.Same(all, frames, $"every sheet stands on the blackboard the dialog names");
         ctx.Same(all, photographs, $"every sheet centres the load screen's three photographs on their own points");
         ctx.Same(all, texts, $"every sheet writes the four texts its dialog authors and no more");
-        ctx.Same(all, strips, $"every sheet carries the four shared strips at their authored points");
+        ctx.Same(all, strips, $"every sheet carries the five strips at the points its block gives them");
         ctx.Same(all, bare, $"no sheet draws a chart, a parchment, a connector or a memento");
         ctx.Same(all, cursors, $"every sheet authors the glove pointer and its pointing-finger rollover");
     }
@@ -352,11 +452,12 @@ internal static class PauseSheetSuites
             && win.Size == 13f,
             $"the win line stands under the blurb at its own point ({win.X}, {win.Y})");
         ctx.Check(
-            sheet.ButtonLabels.Count == 4 && sheet.ButtonLabels[PauseScreens.ResumeRow] == "Resume"
+            sheet.ButtonLabels.Count == 5 && sheet.ButtonLabels[PauseScreens.ResumeRow] == "Resume"
+            && sheet.ButtonLabels[PauseScreens.PhotoRow] == PauseScreens.PhotoLabel
             && sheet.ButtonLabels[PauseScreens.RestartRow] == "Restart"
             && sheet.ButtonLabels[PauseScreens.PreferencesRow] == "Preferences"
             && sheet.ButtonLabels[PauseScreens.QuitRow] == "Quit",
-            $"the four strips read {string.Join("/", sheet.ButtonLabels)}");
+            $"the five strips read {string.Join("/", sheet.ButtonLabels)}");
         ctx.Check(
             board.Notes.Count == 0 && board.Lines.Count == sheet.Texts.Count,
             $"and the sheet writes no objectives title over a parchment it does not draw");
@@ -431,7 +532,7 @@ internal static class PauseSheetSuites
             pause.TryToggle(0);
             ctx.Check(board.Visible, $"the pause raises the blackboard");
             ctx.Same(PauseScreens.ResumeRow, board.FocusedRow, $"the cursor rests on RESUME");
-            ctx.Same(4, board.Shown?.Plaques.Count ?? 0, $"the raised sheet carries the four strips");
+            ctx.Same(5, board.Shown?.Plaques.Count ?? 0, $"the raised sheet carries the five strips");
             WalkStrips(ctx, board, sheet, pause, report);
         }
         finally
@@ -442,9 +543,9 @@ internal static class PauseSheetSuites
         }
     }
 
-    // The hit test over this dialog's own strips: the pointer moves the shared cursor onto each
-    // of the four in turn, and a press released on PREFERENCES fires that strip and leaves the sheet
-    // standing, which is the one action of the four that does.
+    // The hit test over this dialog's own strips: the pointer moves the shared cursor onto each of
+    // the five in turn, and a press released on PREFERENCES fires that strip and leaves the sheet
+    // standing, which it and the photo strip are the only two rows to do.
     private static void WalkStrips(
         TestContext ctx,
         Flight.OriginalPauseBoard board,
@@ -465,9 +566,10 @@ internal static class PauseSheetSuites
             walked += board.FocusedRow == row ? 1 : 0;
         }
 
-        ctx.Same(Strips.Length, hit, $"the hit test answers each of the four strips for its own middle");
+        ctx.Same(Strips.Length, hit, $"the hit test answers each of the five strips for its own middle");
         ctx.Same(Strips.Length, walked, $"and the pointer moves the shared cursor onto each in turn");
         ctx.Same(-1, PauseScreens.RowAt(sheet, 400f, 300f), $"a point on the blackboard itself is on no strip");
+        FirePhotoStrip(ctx, board, sheet, pause, at => pointer = at, report);
 
         int fired = 0;
         board.Preferences = () => fired++;
@@ -481,8 +583,7 @@ internal static class PauseSheetSuites
         board._Process(0.0);
         ctx.Check(
             StripArt(board, PauseScreens.PreferencesRow)
-            == sheet.Shared.Button(PauseScreens.ButtonKeys[PauseScreens.PreferencesRow])?.Activate
-            && fired == 0,
+            == sheet.Strips[PauseScreens.PreferencesRow]?.Activate && fired == 0,
             $"the press holds PREFERENCES on its activate bitmap and fires nothing while it is down");
         pointer = (atX, atY, false);
         board._Process(0.0);
@@ -492,6 +593,44 @@ internal static class PauseSheetSuites
         pause.ForceResume();
         ctx.Check(!board.Visible, $"the resume takes the blackboard away");
         report.AppendLine($"pointer: walked {walked} strips, fired PREFERENCES {fired} time(s)");
+    }
+
+    // The remake's own strip on either sheet: pressed and released on its own plate it opens photo
+    // mode and leaves the halt and the sheet exactly as they were, the mode being a still frame over
+    // the frozen world rather than a resume, which is what returns a player to the sheet.
+    private static void FirePhotoStrip(
+        TestContext ctx,
+        Flight.OriginalPauseBoard board,
+        PauseSheet sheet,
+        Flight.PauseState pause,
+        System.Action<(float X, float Y, bool Pressed)?> point,
+        StringBuilder report)
+    {
+        if (sheet.Strips[PauseScreens.PhotoRow] is not { } strip)
+        {
+            ctx.Check(false, $"the sheet carries the remake's own photo strip");
+            return;
+        }
+
+        int photos = 0;
+        board.PhotoMode = () => photos++;
+        float onX = strip.At.X + (PauseScreens.StripWidth / 2f);
+        float onY = strip.At.Y + (PauseScreens.StripHeight / 2f);
+        point((onX, onY, false));
+        board._Process(0.0);
+        ctx.Same(
+            PauseScreens.PhotoRow, board.FocusedRow,
+            $"the pointer reaches PHOTO MODE on its own plate ({onX}, {onY})");
+        point((onX, onY, true));
+        board._Process(0.0);
+        ctx.Same(0, photos, $"and fires nothing while the button is down");
+        point((onX, onY, false));
+        board._Process(0.0);
+        ctx.Same(1, photos, $"the release on it opens photo mode");
+        ctx.Check(
+            board.Visible && pause.Paused,
+            $"and the halt and the sheet both stand, so the mode returns to this screen");
+        report.AppendLine($"photo strip at ({strip.At.X}, {strip.At.Y}), fired {photos} time(s)");
     }
 
     // One Instant Action pause sheet by chapter code and mission type, keyed the way a session keys
@@ -615,12 +754,12 @@ internal static class PauseSheetSuites
                     $"the chart is drawn at its authored source crop ({chart.Crop}) and position");
                 ctx.Check(chart.Width == 0f && chart.Height == 0f,
                     $"the chart is cropped rather than stretched to a size of its own");
-                ctx.Same(4, shown.Plaques.Count, $"the sheet carries the four authored strips");
                 CheckWorldIcons(ctx, entry.Sheet, map, report);
             }
 
+            CheckStripPlaces(ctx, entry.Sheet, shown, report);
             board._Process(0.0);
-            DrivePointer(ctx, board, entry.Sheet, report);
+            DrivePointer(ctx, board, entry.Sheet, pause, report);
             pause.ForceResume();
             ctx.Check(!board.Visible, $"the resume takes the board away");
         }
@@ -632,15 +771,48 @@ internal static class PauseSheetSuites
         }
     }
 
-    // The pointer over the raised board: the third strip, which is PREFERENCES and so leaves the
-    // board standing when it fires, driven through the same frame the pad's own step runs in.
-    private static void DrivePointer(
-        TestContext ctx, Flight.OriginalPauseBoard board, PauseSheet sheet, StringBuilder report)
+    // The five strips on the campaign sheet: the four the block authors at their own points and the
+    // photo strip in the channel between the two columns, each drawn in walk order. A plate that
+    // moved would land on its neighbour rather than beside it, which no other check would see.
+    private static void CheckStripPlaces(
+        TestContext ctx, PauseSheet sheet, ComposedBoard? shown, StringBuilder report)
     {
-        var strip = sheet.Shared.Button(PauseScreens.ButtonKeys[PauseScreens.PreferencesRow]);
+        if (shown == null)
+        {
+            return;
+        }
+
+        ctx.Same(CampaignStrips.Length, shown.Plaques.Count, $"the sheet carries the five strips");
+        int placed = 0;
+        var places = new List<string>();
+        for (int row = 0; row < CampaignStrips.Length && row < shown.Plaques.Count; row++)
+        {
+            var plaque = shown.Plaques[row];
+            placed += plaque.X == CampaignStrips[row].X && plaque.Y == CampaignStrips[row].Y ? 1 : 0;
+            places.Add($"{sheet.ButtonLabels[row]}({plaque.X}, {plaque.Y})");
+        }
+
+        ctx.Same(CampaignStrips.Length, placed, $"each stands at its own point: {string.Join(" ", places)}");
+        ctx.Same(
+            PauseScreens.PhotoRow,
+            PauseScreens.RowAt(
+                sheet, CampaignStrips[PauseScreens.PhotoRow].X + (PauseScreens.StripWidth / 2f),
+                CampaignStrips[PauseScreens.PhotoRow].Y + (PauseScreens.StripHeight / 2f)),
+            $"and the hit test answers PHOTO MODE for the middle of its own plate");
+        report.AppendLine($"strips: {string.Join(" ", places)}");
+    }
+
+    // The pointer over the raised board: PREFERENCES, which leaves the board standing when it fires,
+    // and the photo strip, which is the other row that does, driven through the same frame the pad's
+    // own step runs in.
+    private static void DrivePointer(
+        TestContext ctx, Flight.OriginalPauseBoard board, PauseSheet sheet, Flight.PauseState pause,
+        StringBuilder report)
+    {
+        var strip = sheet.Strips[PauseScreens.PreferencesRow];
         if (strip == null)
         {
-            ctx.Check(false, $"the shared block authors the third strip");
+            ctx.Check(false, $"the shared block authors the PREFERENCES strip");
             return;
         }
 
@@ -692,6 +864,8 @@ internal static class PauseSheetSuites
             $"the cursor survives the pointer leaving the screen");
         ctx.Check(StripArt(board, PauseScreens.PreferencesRow) == strip.Rollover,
             $"and the focused strip is back on its rollover bitmap with none held");
+
+        FirePhotoStrip(ctx, board, sheet, pause, at => pointer = at, report);
         report.AppendLine(
             $"pointer: strip {PauseScreens.PreferencesRow} at ({onX}, {onY}) focused, "
             + $"fired {fired} time(s), cursor {sheet.State.Cursor?.Bitmap ?? "-"}/"
@@ -872,6 +1046,194 @@ internal static class PauseSheetSuites
             + $"with O15 done it marks {Marks(entry.Sheet, done)}");
     }
 
+    // The parchment's rows in the face the original sets them in, and how many lines each takes in
+    // the measure the widget authors. Only the renderer's font knows how tall a wrapped entry drew,
+    // so the count is measured with the face the screen writes it in rather than composed.
+    private static void CheckRowWrap(
+        TestContext ctx, List<(CampaignMission Mission, PauseSheet Sheet)> sheets, StringBuilder report)
+    {
+        var probe = new Godot.Control();
+        ctx.Host.AddChild(probe);
+        try
+        {
+            if (probe.GetThemeDefaultFont() is not { } font)
+            {
+                throw new SuiteSkippedException("the default theme carries no font to measure with");
+            }
+
+            SweepRowWrap(ctx, sheets, font, report);
+        }
+        finally
+        {
+            ctx.Host.RemoveChild(probe);
+            probe.QueueFree();
+        }
+    }
+
+    private static void SweepRowWrap(
+        TestContext ctx, List<(CampaignMission Mission, PauseSheet Sheet)> sheets, Godot.Font font,
+        StringBuilder report)
+    {
+        var fit = BoardFit.For(BoardFit.AuthoredWidth, BoardFit.AuthoredHeight);
+        var paper = Paper(ctx, sheets[0].Sheet.Shared.Objectives);
+        int slanted = 0, tall = 0, rows = 0, dropped = 0, shrunk = 0;
+        float past = float.NegativeInfinity, over = float.NegativeInfinity;
+        string deepest = "-", widest = "-";
+        BoardNote? deep = null;
+        var filmed = System.Array.Empty<int>();
+        var numbered = System.Array.Empty<int>();
+        foreach (var (mission, sheet) in sheets)
+        {
+            var board = PauseScreens.For(sheet, Readout(ctx, mission, sheet, 0), 0, false);
+            if (board.Notes.Count == 0)
+            {
+                continue;
+            }
+
+            var written = board.Notes[0];
+            var note = ComposedBoardView.Fitted(fit, font, written);
+            slanted += note.Italic ? 1 : 0;
+            shrunk += note.Size < written.Size ? 1 : 0;
+            var counts = RowLines(fit, font, note);
+            rows += counts.Length;
+            var height = ComposedBoardView.Measure(fit, font, note);
+            var placed = note.Flow(height);
+            int lost = note.Entries.Count - placed.Count;
+            dropped += lost;
+            foreach (int lines in counts)
+            {
+                tall += lines > 2 ? 1 : 0;
+            }
+
+            var corner = Corner(ComposedBoardView.MeasureBox(fit, font, note.Size), placed);
+            string named = $"{mission.ChapterFolder}/{mission.MissionFolder}";
+            if (corner.Y - paper.End.Y > past)
+            {
+                past = corner.Y - paper.End.Y;
+                deepest = named;
+                deep = written;
+            }
+
+            if (corner.X - paper.End.X > over)
+            {
+                over = corner.X - paper.End.X;
+                widest = named;
+            }
+
+            if (Named(mission, FilmedChapter, FilmedMission))
+            {
+                filmed = counts;
+            }
+            else if (Named(mission, NumberedChapter, NumberedMission))
+            {
+                numbered = counts;
+            }
+
+            report.AppendLine(
+                $"{named} rows {string.Join("/", counts)} at {note.Size:0} pt, dropped {lost}, "
+                + $"corner {corner.X:0.0}/{corner.Y:0.0}");
+        }
+
+        ctx.Same(sheets.Count, slanted, $"every campaign parchment sets its rows in the slanted face");
+        string drew = string.Join("/", filmed), want = string.Join("/", FilmedRowLines);
+        string second = string.Join("/", numbered), wantSecond = string.Join("/", NumberedRowLines);
+        ctx.Check(
+            System.Linq.Enumerable.SequenceEqual(FilmedRowLines, filmed),
+            $"{FilmedChapter}/{FilmedMission}'s rows take {drew} lines, the crop's {want}");
+        ctx.Check(
+            System.Linq.Enumerable.SequenceEqual(NumberedRowLines, numbered),
+            $"{NumberedChapter}/{NumberedMission}'s take {second}, the crop's {wantSecond}");
+        ctx.Same(
+            OverrunRows, dropped,
+            $"every objective in the sequence is drawn rather than composed away ({dropped} lost)");
+        ctx.Check(
+            paper.End.X == PaperRight && paper.End.Y == PaperBottom,
+            $"the bitmap's own paper ends at {paper.End.X:0}/{paper.End.Y:0}, where the rows are held");
+        ctx.Check(
+            over <= 0f,
+            $"no row reaches the torn right edge, {widest}'s widest stopping {-over:0.0} px inside it");
+        ctx.Check(
+            past <= 0f,
+            $"and none the torn bottom, {deepest}'s last ending {-past:0.0} px above it");
+        CheckSwollenListShrinks(ctx, fit, font, deep, paper, report);
+        report.AppendLine(
+            $"wrap: {rows} rows, {tall} of them on three lines or more, {dropped} dropped, "
+            + $"{shrunk} sheets shrunk; paper ends at {paper.End.X:0.0}/{paper.End.Y:0.0}, "
+            + $"deepest {deepest}, widest {widest}");
+    }
+
+    // The largest rectangle of paper pixels in a bitmap, by the histogram walk: each row carries
+    // how far the solid run above every column reaches, and the widest bar-chart rectangle standing
+    // on that row is a candidate. A profile of per-row runs cannot do this, since a few rows of the
+    // torn edge are almost all fringe and would shrink the answer to a sliver.
+    private static Godot.Rect2I Solid(Godot.Image art)
+    {
+        int wide = art.GetWidth(), high = art.GetHeight();
+        var run = new int[wide];
+        var best = default(Godot.Rect2I);
+        for (int y = 0; y < high; y++)
+        {
+            for (int x = 0; x < wide; x++)
+            {
+                run[x] = art.GetPixel(x, y).A >= SolidAlpha ? run[x] + 1 : 0;
+            }
+
+            for (int x = 0; x < wide; x++)
+            {
+                int deep = run[x];
+                for (int span = x; span < wide && deep > 0; span++)
+                {
+                    deep = Godot.Mathf.Min(deep, run[span]);
+                    if (deep * (span - x + 1) > best.Size.X * best.Size.Y)
+                    {
+                        best = new Godot.Rect2I(x, y - deep + 1, span - x + 1, deep);
+                    }
+                }
+            }
+        }
+
+        return best;
+    }
+
+    // The deepest list in a face too large for the paper, which the fit has to bring back onto it
+    // without losing a row. This is the shrink's only exercise: every campaign list as written fits.
+    private static void CheckSwollenListShrinks(
+        TestContext ctx, BoardFit fit, Godot.Font font, BoardNote? deep, Godot.Rect2 paper,
+        StringBuilder report)
+    {
+        if (deep == null)
+        {
+            return;
+        }
+
+        var swollen = ComposedBoardView.Fitted(fit, font, deep with { Size = deep.Size + Swollen });
+        var placed = swollen.Flow(ComposedBoardView.Measure(fit, font, swollen));
+        var corner = Corner(ComposedBoardView.MeasureBox(fit, font, swollen.Size), placed);
+        ctx.Check(
+            placed.Count == deep.Entries.Count && corner.X <= paper.End.X && corner.Y <= paper.End.Y,
+            $"a list {Swollen:0} pt too large is fitted onto the paper at {swollen.Size:0} pt, {placed.Count} rows kept");
+        report.AppendLine($"fit: the deepest list at {deep.Size + Swollen:0} pt comes back at {swollen.Size:0} pt");
+    }
+
+    // One note's entries as line counts: a short word measured in the same box is one line's worth,
+    // so an entry's own measured height divided by it is how many lines it wrapped to.
+    private static int[] RowLines(BoardFit fit, Godot.Font font, BoardNote note)
+    {
+        var height = ComposedBoardView.Measure(fit, font, note);
+        float one = height("X", note.Width);
+        var counts = new int[note.Entries.Count];
+        for (int i = 0; i < counts.Length; i++)
+        {
+            counts[i] = one > 0f ? Godot.Mathf.RoundToInt(height(note.Entries[i], note.Width) / one) : 0;
+        }
+
+        return counts;
+    }
+
+    private static bool Named(CampaignMission mission, string chapter, string folder) =>
+        mission.ChapterFolder.Equals(chapter, System.StringComparison.OrdinalIgnoreCase)
+        && mission.MissionFolder.Equals(folder, System.StringComparison.OrdinalIgnoreCase);
+
     // The one mission whose objective block carries two IDENTITY entries. Only the keyed one is a
     // note line, so the block owns a single row and a single mark; a reader that took every entry
     // as a line would put an empty row on the parchment and mark two rows on one completion.
@@ -959,7 +1321,58 @@ internal static class PauseSheetSuites
             rows.Add(new PauseObjective(objectives[i].Text, i < completed));
         }
 
-        return new PauseReadout(rows, "ms_p_initialpinup1", System.Array.Empty<PauseWorldIcon>());
+        return new PauseReadout(
+            rows, Session.CampaignMementos.BitmapFor(Seated), System.Array.Empty<PauseWorldIcon>());
+    }
+
+    private static Session.CampaignProfileDef SeatProfile()
+    {
+        var def = Session.CampaignProfileDef.NewProfile("Pause Sheet");
+        def.Memento = ChosenMemento;
+        return def;
+    }
+
+    // The memento slot takes the seated profile's own picture, and a session with nobody seated
+    // still takes the seeded pin-up. A sheet that asked no profile would draw the seeded name in
+    // both cases and pass every other check here.
+    private static void CheckSeatedMemento(
+        TestContext ctx, List<(CampaignMission Mission, PauseSheet Sheet)> sheets, int at,
+        StringBuilder report)
+    {
+        string chosen = Session.CampaignMementos.BitmapFor(Seated);
+        string seeded = Session.CampaignMementos.BitmapFor(null);
+        ctx.Check(
+            chosen == Session.CampaignMementos.Bitmap(ChosenMemento) && chosen != seeded,
+            $"the seated profile hangs {chosen} where a session with no profile hangs {seeded}");
+        if (at < 0)
+        {
+            return;
+        }
+
+        var entry = sheets[at];
+        string missionZrdr = SessionPaths.MissionZrdr(
+            ctx.DataRoot, entry.Mission.ChapterFolder, entry.Mission.MissionFolder);
+        var director = Session.CampaignDirector.Create(
+            Session.ObjectiveScript.Load(missionZrdr), entry.Mission, Seated, null);
+        ctx.Check(
+            director.Memento == chosen,
+            $"the flown mission's own director hands that picture to the readout ({director.Memento})");
+        var board = PauseScreens.For(entry.Sheet, Readout(ctx, entry.Mission, entry.Sheet, 0), 0, false);
+        var photo = FindArt(board, chosen);
+        ctx.Check(
+            photo != null && photo.X == entry.Sheet.State.MementoAt.X
+            && photo.Y == entry.Sheet.State.MementoAt.Y,
+            $"the sheet hangs the chosen picture at the slot's authored point ({photo?.X}, {photo?.Y})");
+        var bare = PauseScreens.For(
+            entry.Sheet,
+            new PauseReadout(
+                System.Array.Empty<PauseObjective>(), seeded, System.Array.Empty<PauseWorldIcon>()),
+            0,
+            false);
+        ctx.Check(
+            FindArt(bare, seeded) != null && FindArt(bare, chosen) == null,
+            $"and a pause with no profile behind it hangs the seeded pin-up alone");
+        report.AppendLine($"memento: seated {chosen} at ({photo?.X}, {photo?.Y}), no profile {seeded}");
     }
 
     private static int Filmed(List<(CampaignMission Mission, PauseSheet Sheet)> sheets) =>

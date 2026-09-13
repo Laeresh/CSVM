@@ -421,14 +421,24 @@ Two divergences remain, both of granularity rather than direction:
   single-player session. A per-pane order would take one `MultiMesh` per pane.
 
 `TextureArchive.MipBias` reads the chapter's `adjust.gw` line and `Launcher` writes it to the
-`csky_mip_bias` global that `SceneBuilder`'s `texture()` calls pass as their LOD bias, so C5
-samples at -0.8 and every other chapter at 0, which is why only the C5 golden moves when the
-reader is wired up. ⚠ Read `adjust.gw` and not `load.gw`: the compile-path -1.0 above never
-runs at retail, and taking it would bias four chapters the original leaves alone.
+`csky_mip_bias` global, so C5 samples at -0.8 and every other chapter at 0, which is why only the
+C5 golden moves when the reader is wired up. ⚠ Read `adjust.gw` and not `load.gw`: the
+compile-path -1.0 above never runs at retail, and taking it would bias four chapters the original
+leaves alone.
 
-Two divergences remain on the selection itself, and both widen the band the authored level 1
-draws. The world sampler is `filter_linear_mipmap_anisotropic`, which the original's D3D7
+The original's is one device render state, so every mip-mapped arm here reads that global through
+the one `csky_sample_albedo` in `shaders/csky_mip_bias.gdshaderinc`: the world mesh, the
+camera-facing billboards, the cylindrical facades, the templates clutter, the ambient cloud field
+(`Effects/FogVolumeClutter.cs`) and the mesh lab's diagnostic twin. The `chapter-census` suite fails
+any mip-mapped sampler outside that routing, with no arm exempted.
+
+Three divergences remain on the selection itself, and the first two widen the band the authored
+level 1 draws. The world sampler is `filter_linear_mipmap_anisotropic`, which the original's D3D7
 hardware had no equivalent of, so a grazing ground surface holds level 0 much further out here and
-crosses into level 1 as a ring rather than a gradient. And the camera far plane is the remake's,
+crosses into level 1 as a ring rather than a gradient. The camera far plane is the remake's,
 not the zone's `CLIP_RANGES` far ([weather.md](weather.md)), so the ring has room to sit past
-where the original's world ends.
+where the original's world ends. And the sprite arms sit at level 0 over most of a C5 framing, so
+the bias moves no pixel on them there; forcing the global to +4 leaves the pinned C5 shot
+byte-identical while it moves 63% of the frame through the world arm. The cloud field is the same
+case in C5 and not in C1: forcing +4 on that arm alone moves 24.4 % of `c1-cloud-field` at a
+channel delta of 11 and leaves all 18 other pinned shots byte-identical.

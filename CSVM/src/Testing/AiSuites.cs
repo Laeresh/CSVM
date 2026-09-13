@@ -13,6 +13,11 @@ namespace CSVM.Testing;
 /// combat voice, and the inert state they wait in.</summary>
 internal static class AiSuites
 {
+    // The margin the sound manager leaves over a definition's audible distance before it silences
+    // the voice (docs/formats/sounds.md). Held here as the decode's own figure rather than read off
+    // WeaponSoundCue, so a build that culls an aircraft's gun loop at the RANGE pair itself fails.
+    private const float VoiceCullMargin = 1.1f;
+
     [Suite("flight-roster-transaction",
         "FlightRoster owns human and AI assembly as atomic transactions: a late second-human " +
         "failure removes external bindings, a retry commits both humans in order with complete " +
@@ -675,6 +680,49 @@ internal static class AiSuites
                 world.Runtime.SetTargetActive(aagun.Site, true);
                 ctx.Check(aagun.Alive, $"…and alive once its site is switched on");
 
+                // ⚠ Sync the space before anything here casts. The site stood hidden when the
+                // world joined the tree, so its colliders were disabled, and re-enabling one only
+                // QUEUES the broadphase rebuild the next physics step would run.
+                ctx.SyncPhysics();
+                var mountSpace = ctx.Host.GetWorld3D().DirectSpaceState;
+                var mountShapes = aagun.Site.FindChildren("*", "StaticBody3D", true, false)
+                    .OfType<StaticBody3D>()
+                    .Where(b => (b.GetParent() as Node3D)?.IsVisibleInTree() == true)
+                    .SelectMany(b => b.GetChildren().OfType<CollisionShape3D>()
+                        .Where(cs => !cs.Disabled).Select(cs => (Body: b, Shape: cs)))
+                    .ToList();
+                static int Faces(CollisionShape3D shape) =>
+                    shape.Shape is ConcavePolygonShape3D mesh ? mesh.GetFaces().Length / 3 : -1;
+                bool Answers((StaticBody3D Body, CollisionShape3D Shape) part)
+                {
+                    var box = new Aabb();
+                    if (part.Shape.Shape is ConcavePolygonShape3D mesh && mesh.GetFaces() is { Length: > 0 } points)
+                    {
+                        box = new Aabb(points[0], Vector3.Zero);
+                        foreach (var point in points)
+                        {
+                            box = box.Expand(point);
+                        }
+                    }
+                    var at = part.Body.GlobalTransform * part.Shape.Transform * box.GetCenter();
+                    var query = new PhysicsShapeQueryParameters3D
+                    {
+                        Shape = new SphereShape3D { Radius = 4f },
+                        Transform = new Transform3D(Basis.Identity, at),
+                        CollisionMask = CollisionLayers.World,
+                    };
+                    return mountSpace.IntersectShape(query, 64)
+                        .Any(hit => hit["rid"].AsRid() == part.Body.GetRid());
+                }
+                ctx.Note($"aagun32's woken mount: {string.Join(", ", mountShapes.Select(p => $"{p.Body.Name}[{Faces(p.Shape)}]"))}");
+                ctx.Same(mountShapes.Count, mountShapes.Count(Answers),
+                    $"every enabled shape of the woken mount answers a query");
+                var pad = mountShapes.FirstOrDefault(p => p.Body.Name.ToString() == "col_buildings");
+                var pyramid = mountShapes.FirstOrDefault(
+                    p => p.Body.Name.ToString() == "col" && Faces(p.Shape) == 12);
+                ctx.Check(pad.Shape != null && Answers(pad) && pyramid.Shape != null && Answers(pyramid),
+                    $"…the site's col_buildings pad and its 12-face col pyramid among them");
+
                 FlightController BuildRig(string plane, int playerIndex, Vector3 pos, Vector3 look)
                 {
                     var st = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
@@ -772,17 +820,29 @@ internal static class AiSuites
                     // touch the aagun figures. ⚠ Show the hull first, exactly as the Instant Action builder does:
                     // C1/IA1 hides multiplayer1zep, and a hidden hull has no live colliders to block a turret.
                     mp1[0].Visible = true;
+                    ctx.SyncPhysics();
                     int ZepShots() => mp1Rings.Sum(t => t.ShotsFired);
-                    var ringPos = mp1Rings.Count > 0 ? mp1Rings[0].WorldPosition : Vector3.Zero;
-                    zepBait = BuildRig(ctx.PlaneName, 0, ringPos + new Vector3(0f, -80f, 200f), ringPos);
+                    // ⚠ Park the bait OUTSIDE the hull's own envelope, which is 657 m long and 136 m
+                    // deep: a plane placed a couple of hundred metres off one ring is inside it, and
+                    // every ring then reads its own hull as cover and holds fire.
+                    var envelope = new Aabb(mp1[0].GlobalPosition, Vector3.Zero);
+                    foreach (var mesh in mp1[0].FindChildren("*", "MeshInstance3D", true, false).OfType<MeshInstance3D>())
+                    {
+                        envelope = envelope.Merge(mesh.GlobalTransform * mesh.GetAabb());
+                    }
+                    // Offset along the hull as well as under it: a rig looking straight up has no
+                    // heading, and the look basis refuses a target colinear with up.
+                    var baitAt = envelope.GetCenter()
+                        + new Vector3(0f, -((envelope.Size.Y * 0.5f) + 100f), 150f);
+                    zepBait = BuildRig(ctx.PlaneName, 0, baitAt, envelope.GetCenter());
                     float baitBefore = Combined(zepBait);
                     Step(300);
                     ctx.Check(ZepShots() > 0,
-                        $"the armed zeppelin engages a hostile plane alongside shots={ZepShots()}");
+                        $"the armed zeppelin engages a hostile plane below it shots={ZepShots()}");
                     ctx.Check(Combined(zepBait) < baitBefore,
                         $"…with rounds striking it moved={baitBefore - Combined(zepBait):0.##}");
 
-                    zepBait.PlaceHeld(ringPos + new Vector3(0f, -80f, 20000f), ringPos);
+                    zepBait.PlaceHeld(baitAt + new Vector3(0f, 0f, 20000f), baitAt);
 
                     ctx.Same(14, runtime.SetActivatedUnder(mp1[0], false),
                         $"the same call with the flag cleared stows them again (the b=0 arm)");
@@ -793,13 +853,13 @@ internal static class AiSuites
                 // a 1.0-1.8 s fire rate can hold one shot before a 3-5 s bored window outlasts the leg.
                 aagun.Def.BoredMin = 0f;
                 aagun.Def.BoredMax = 0f;
-                // The harness's physics space does not always hold the mount's shapes inside one
-                // frame (BL-831), so whether this leg exercised the own-rig exclusion is recorded,
-                // not asserted; turret-own-mount-sightline proves the rule on bodies it builds.
+                // The leg below only exercises the own-rig exclusion while the mount is solid, so
+                // the UNEXCLUDED cast has to read blocked first: that is the gun's own rig in the
+                // way, the thing the exclusion removes and nothing else does.
                 var sightSpace = ctx.Host.GetWorld3D().DirectSpaceState;
-                bool mountAnswers = TurretController.WorldBlocksEmplacementLine(
-                    sightSpace, aagun.WorldPosition, targetPos + Vector3.Up * 0.2f);
-                ctx.Note($"aagun32's own mount answers the unexcluded sight-line ray: {mountAnswers}");
+                ctx.Check(TurretController.WorldBlocksEmplacementLine(
+                        sightSpace, aagun.WorldPosition, targetPos + Vector3.Up * 0.2f),
+                    $"aagun32's own mount blocks the unexcluded sight-line ray");
                 int woken = runtime.WakeAll();
                 ctx.Same(runtime.Count - 15, woken, $"--wake-turrets stand-in wakes every dormant emplacement");
                 float before = Combined(target);
@@ -823,6 +883,7 @@ internal static class AiSuites
                 {
                     world.Runtime.SetTargetActive(hull, true);
                 }
+                ctx.SyncPhysics();
                 ctx.Check(allied.All(t => t.Alive),
                     $"the piratezep's rings are alive once the hull is switched on alive={allied.Count(t => t.Alive)} of {allied.Count}");
                 if (allied.Count > 0)
@@ -1979,7 +2040,8 @@ internal static class AiSuites
         "the shipped 2000 m radius, a scripted failed steady-hand roll on a real projectile " +
         "hit sets the evade flag and enters an evasive maneuver, a pursuer pointed elsewhere " +
         "clears the flag and releases the reaction while a nose-on one holds it and chains a " +
-        "second program, a failed " +
+        "second program, an ordered evade carries no flag and leaves the next hit its roll " +
+        "while a hit with nothing eligible sets and holds one, a failed " +
         "sixth-sense roll stuns (gunner silent) and recovers after stun_recovery_interval, " +
         "the avoid-crash override climbs out on a blocked probe and releases, and the D15 " +
         "rubber-band assist: a chasing human fallen behind puts the machine in lay off " +
@@ -2163,6 +2225,58 @@ internal static class AiSuites
                 Step(1);
             ctx.Check(!machine.Evading && machine.Executor == null,
                 $"the pursuer turning away ends the chain mode={AiModeMachine.NameOf(machine.Mode)}");
+
+            // --- an ORDERED evade, no damage: the flag belongs to the damage routine alone, so a
+            // scripted entry into the mode leaves it clear and the next hit still gets its roll.
+            machine.Enter(AiMode.Evade, "test: ordered, no damage");
+            ctx.Check(machine.Mode == AiMode.Evade && !machine.Evading,
+                $"an ordered evade sets no flag evading={machine.Evading}");
+            lastRoll = null;
+            machine.SteadyHandChance = 1f;
+            ai.TakeProjectileHit(gun, ai.WorldPosition + new Vector3(2f, 0f, 0f), "fuselage", 0);
+            machine.SteadyHandChance = 0f;
+            ctx.Check(lastRoll != null && lastRoll.Contains("steady hand test failed. Evading."),
+                $"…so a hit taken there still rolls steady hand roll={lastRoll}");
+            ctx.Check(machine.Evading,
+                $"…and the roll is what sets the flag evading={machine.Evading}");
+            budget = 60 * 60;
+            while (machine.Mode == AiMode.EvasiveManeuver && budget-- > 0)
+                Step(1);
+            ctx.Check(!machine.Evading,
+                $"…which the turned-away pursuer then clears mode={AiModeMachine.NameOf(machine.Mode)}");
+
+            // --- the damage arm's own entry into the marked engagement: with nothing in the
+            // library eligible the hit sets flag and mode together, and a nose-on pursuer holds
+            // both while the pilot flies its engagement, taking no second roll.
+            var savedLibrary = machine.Library;
+            machine.Library = null;
+            target.PlaceHeld(targetPos, ai.WorldPosition);
+            lastRoll = null;
+            machine.SteadyHandChance = 1f;
+            ai.TakeProjectileHit(gun, ai.WorldPosition + new Vector3(2f, 0f, 0f), "fuselage", 0);
+            ctx.Check(machine.Mode == AiMode.Evade && machine.Evading,
+                $"a hit with nothing eligible enters evade with the flag set mode={AiModeMachine.NameOf(machine.Mode)}");
+            for (int i = 0; i < 60; i++)
+            {
+                target.PlaceHeld(targetPos, ai.WorldPosition); // the pursuer's nose held on
+                Step(1);
+            }
+            ctx.Check(machine.Mode == AiMode.Evade && machine.Evading,
+                $"…held over a second of nose-on engagement mode={AiModeMachine.NameOf(machine.Mode)}");
+            lastRoll = null;
+            ai.TakeProjectileHit(gun, ai.WorldPosition + new Vector3(2f, 0f, 0f), "fuselage", 0);
+            machine.SteadyHandChance = 0f;
+            ctx.Check(lastRoll == null, $"…and takes no second steady-hand roll roll={lastRoll}");
+            target.PlaceHeld(targetPos, targetPos + Vector3.Forward);
+            Step(1);
+            ctx.Check(!machine.Evading && machine.Mode != AiMode.Evade,
+                $"the pursuer turning away releases it mode={AiModeMachine.NameOf(machine.Mode)}");
+            machine.Library = savedLibrary;
+
+            // Fly the engagement out before the phases that read the aeroplane's own flight: a
+            // program ends in whatever attitude its last step left, and a descending entry is not
+            // what the climb-out below means to measure.
+            Step(180);
 
             // --- a scripted FAILED sixth-sense roll stuns: gunner silent, then recovery after
             // stun_recovery_interval (the shipped value at rating 5).
@@ -2710,8 +2824,9 @@ internal static class AiSuites
         + "other, both taking the definition's own RANGE pair as their distance model rather than "
         + "the reader default, neither rig carrying the own-ship FlightAudio, every emitter on the "
         + "Effects bus at its source asset's own pitch with Doppler tracking off (CAP-09 measured "
-        + "none in the original), and the loop silencing past the cue's own authored audible "
-        + "distance and sounding again inside it, with a `sound` log transition either way")]
+        + "none in the original), and the loop silencing past 1.1 times the cue's own authored "
+        + "audible distance, the margin the sound manager leaves over the RANGE pair, while a burst "
+        + "just outside that distance is still heard, with a `sound` log transition either way")]
     internal static void AiWeaponEmitters(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -2820,18 +2935,23 @@ internal static class AiSuites
                 ctx.Check(culls.Count(l => l.Contains(" audible ")) == 2,
                     $"both voices logged the transition into earshot (got {culls.Count(l => l.Contains(" audible "))})");
 
-                // The cull, driven from the listener rather than by moving the aeroplane: past the
-                // cue's own audible distance the loop stops, and inside it starts again.
-                var abeam = ears[0];
-                float cull = here.Count > 0 ? here[0].RangeMax : 0f;
-                ears[0] = abeam + new Vector3(cull * 4f, 0f, 0f);
+                // The cull, driven from the listener rather than by moving the aeroplane: the two
+                // ears below straddle the 1.1x, which is what separates this cull from one taken at
+                // the RANGE pair itself. Each ratio is measured after its step, the aeroplane flies.
+                float audible = here.Count > 0 ? here[0].RangeMax : 0f;
+                ctx.Check(audible > 0f
+                    && Mathf.IsEqualApprox(weaponA.LoopCull, audible * VoiceCullMargin),
+                    $"the loop culls at {weaponA.LoopCull:0} m, the {VoiceCullMargin:0.0}x of the {audible:0} m its definition calls audible");
+                ears[0] = a.GlobalPosition + new Vector3(audible * 1.15f, 0f, 0f);
                 a.SimStep(dt);
-                ctx.Check(!weaponA.LoopSounding,
-                    $"a burst {a.GlobalPosition.DistanceTo(ears[0]):0} m off, past the {cull:0} m the definition calls audible, is silent");
-                ears[0] = abeam;
+                float wellOut = a.GlobalPosition.DistanceTo(ears[0]) / Mathf.Max(audible, 1f);
+                ctx.Check(!weaponA.LoopSounding && wellOut > VoiceCullMargin,
+                    $"a burst {wellOut:0.00}x the {audible:0} m the definition calls audible is silent, past the {weaponA.LoopCull:0} m cull");
+                ears[0] = a.GlobalPosition + new Vector3(audible * 1.05f, 0f, 0f);
                 a.SimStep(dt);
-                ctx.Check(weaponA.LoopSounding,
-                    $"…and sounds again from {a.GlobalPosition.DistanceTo(abeam):0} m, inside it");
+                float justOut = a.GlobalPosition.DistanceTo(ears[0]) / Mathf.Max(audible, 1f);
+                ctx.Check(weaponA.LoopSounding && justOut > 1f && justOut < VoiceCullMargin,
+                    $"…and {justOut:0.00}x it is heard again, inside that cull");
                 ctx.Check(culls.Count(l => l.Contains(" culled ")) >= 1,
                     $"the `sound` log carries the cull transition, the pairing INSTR-45 asks for (lines={culls.Count})");
                 // ⚠ Snapshot before noting: ctx.Note echoes each line to the console, which the sink
@@ -3367,7 +3487,7 @@ internal static class AiSuites
                 $"…on the {AudioBuses.Effects} bus, not Master (got {player.Bus})");
         }
         ctx.Check(players == emitters.Count, $"{name}'s emitter roll-call matches the live players ({players})");
-        ctx.Note($"{name}: {emitters.Count} emitter(s) at ({at.X:0},{at.Y:0},{at.Z:0}) — {string.Join(", ", emitters.Select(e => $"{e.Name} cull {e.RangeMax:0} m"))}");
+        ctx.Note($"{name}: {emitters.Count} emitter(s) at ({at.X:0},{at.Y:0},{at.Z:0}), {string.Join(", ", emitters.Select(e => $"{e.Name} audible {e.RangeMax:0} m"))}, loop cull {audio.LoopCull:0} m");
         // The dry cue is named by weapons.json's own NO_AMMO_WARNING read, not by a literal of the
         // audio path's: an install that renamed it must still reach this emitter.
         ctx.Check(emitters.Any(e => e.Name == weapons.EmptyClipSound),

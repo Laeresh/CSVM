@@ -176,7 +176,7 @@ public sealed class CampaignPersistLog
         string through = throughSeq is { } s
             ? s.ToString(CultureInfo.InvariantCulture)
             : "none, this chapter's first mission";
-        Log.Info("campaign", $"persist log: {applied} of {carried.Count} carried object(s) restored silently in chapter {chapter} (through seq {through}, {For(chapter).Count} held)");
+        Log.Info("core", $"persist log: {applied} of {carried.Count} carried object(s) restored silently in chapter {chapter} (through seq {through}, {For(chapter).Count} held)");
         return applied;
     }
 

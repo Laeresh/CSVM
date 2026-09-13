@@ -821,7 +821,9 @@ internal static class TargetingSuites
         "the targeting HUD (TargetHud, every flight session): the tracker picks the " +
         "pane's nearest LIVE AI hostile off the pool's own aircraft roster (a closer human, " +
         "dead plane or neutral is never picked), switches to a closer hostile, drops a " +
-        "crashed one, and a hud built without a pool never tracks; plus --debug-markers' " +
+        "crashed one, and a hud built without a pool never tracks; plus the F16 toggle, which " +
+        "writes one answer to every pane at once and takes the press on a session with no pane " +
+        "at all; plus --debug-markers' " +
         "own selection, which takes EVERY live aircraft instead of the nearest, flags each " +
         "by team against the pane's own, skips a crashed one and skips the pane's own " +
         "aircraft; plus the shipped marker's rules — the three decoded colours, the bracket " +
@@ -891,6 +893,27 @@ internal static class TargetingSuites
                     pureNear),
                 $"CONTROL: the old derivation tracks the WINGMAN instead, and skips the enemy as own-team");
             p2.Free();
+
+            // F16, the markers HUD's own key: the flag sets MarkAll once at build, the key flips it
+            // mid-flight. Two panes, because the toggle is session-level precisely so a splitscreen
+            // pane, whose own nodes never see a key, is not left behind.
+            var pane1 = new TargetHud { PlayerIndex = 0 };
+            var pane2 = new TargetHud { PlayerIndex = 1, MarkAll = true };
+            var both = new List<TargetHud> { pane1, pane2 };
+            var f16 = new UI.DebugMarkerToggle(() => both);
+            f16.Toggle();
+            ctx.Check(pane1.MarkAll && pane2.MarkAll,
+                $"F16 switches the all-aircraft markers on across every pane p1={pane1.MarkAll} p2={pane2.MarkAll}");
+            f16.Toggle();
+            ctx.Check(!pane1.MarkAll && !pane2.MarkAll,
+                $"and a second press switches them off again p1={pane1.MarkAll} p2={pane2.MarkAll}");
+            var noPanes = new UI.DebugMarkerToggle(() => new List<TargetHud>());
+            noPanes.Toggle();
+            ctx.Check(true, $"CONTROL: a session with no flight pane takes the press without throwing");
+            f16.Free();
+            noPanes.Free();
+            pane1.Free();
+            pane2.Free();
         }
         finally
         {

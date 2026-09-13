@@ -450,9 +450,10 @@ icon, `rand() % 11` at `0x0040a595`.
 
 CSVM keeps the original's two screens apart, one class each.
 `CampaignPreviousMissionsPage` is the table of contents: `SBTOC_L_TOCList`'s own four-row window
-over the missions below the campaign's position, with VIEW SELECTED, REPLAY MISSION, the CURRENT
-MISSION bookmark and RETURN TO CABIN under it. It omits the original's ordinal-0 career row, which
-is `BL-822`. `CampaignScrapbookPage` is the book, reached exactly the
+over the career row and the missions below the campaign's position, with VIEW SELECTED, REPLAY
+MISSION, the CURRENT MISSION bookmark and RETURN TO CABIN under it. The career row is the
+ordinal-0 row above, carrying no mission, so REPLAY MISSION is never offered on it and its second
+confirm opens the book at slot 0 instead. `CampaignScrapbookPage` is the book, reached exactly the
 three ways the original reaches it: a mission ending, a row picked in the table of contents, and
 either bookmark, all through `CampaignFlow.OpenScrapbook`, which is `uiData` 2405 mode 1. The cabin's
 PREVIOUS MISSIONS button still opens the table of contents alone, never the book.

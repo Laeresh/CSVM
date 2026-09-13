@@ -6,11 +6,13 @@ namespace CSVM.Flight;
 
 /// <summary>
 /// One aircraft's own shape, as the ground shadow needs it: the triangles the original rasterises
-/// top down into the 32x32 modulate texture every frame, the bounding box the footprint comes
+/// top down into the modulate texture every frame, the bounding box the footprint comes
 /// from, and the texture that raster, the spread and the ramp write. The node both are taken from
 /// is the original's own choice, the whole model root for an AI aircraft and the <c>geometry</c>
-/// child for the player's own. <see cref="GroundShadowPass"/> is the only caller and
-/// <see cref="GroundShadowLaw"/> holds the spread and the ramp. Decode: docs/org/shadows.md.
+/// child for the player's own. A propeller or rotor blur disc is held apart as its own group and
+/// re-posed each frame, so it turns in the shadow as it turns on the model.
+/// <see cref="GroundShadowPass"/> is the only caller and <see cref="GroundShadowLaw"/> holds the
+/// spread and the ramp. Decode: docs/org/shadows.md.
 /// </summary>
 public sealed class GroundShadowSilhouette
 {
@@ -19,26 +21,25 @@ public sealed class GroundShadowSilhouette
     /// without one falls back to the model root, as the original does.</summary>
     public const string PlayerNode = "geometry";
 
-    // Where the footprint's own extremes land in the texture, in texels from either edge. It
-    // keeps the silhouette off the border ring, which the spread writes into but never scans.
+    // Where the footprint's own extremes land in the texture, in texels of the original's own 32
+    // from either edge. It keeps the silhouette off the border band, which the spread writes into
+    // but never scans, and it is scaled with the step so the margin is the same ground either way.
     private const float RasterInset = 0.6f;
 
-    private readonly Vector3[] _vertices;
-    private readonly int[] _indices;
-    private readonly Vector2[] _projected;
+    private readonly Node3D _model;
+    private readonly Part[] _parts;
     private readonly bool[] _covered;
     private readonly int[] _ramp;
     private readonly byte[] _texels;
     private readonly Image _image;
     private readonly ImageTexture _texture;
 
-    private GroundShadowSilhouette(string node, Vector3[] vertices, int[] indices, Aabb box)
+    private GroundShadowSilhouette(Node3D model, string node, Part[] parts, Aabb box)
     {
         int size = GroundShadowLaw.TextureSize;
         Node = node;
-        _vertices = vertices;
-        _indices = indices;
-        _projected = new Vector2[vertices.Length];
+        _model = model;
+        _parts = parts;
         _covered = new bool[size * size];
         _ramp = new int[size * size];
         _texels = new byte[size * size];
@@ -60,11 +61,49 @@ public sealed class GroundShadowSilhouette
 
     /// <summary>How many triangles the raster walks per frame, for the suites and a perf read.
     /// </summary>
-    public int TriangleCount => _indices.Length / 3;
+    public int TriangleCount
+    {
+        get
+        {
+            int triangles = 0;
+            foreach (var part in _parts)
+                triangles += part.Indices.Length / 3;
+
+            return triangles;
+        }
+    }
 
     /// <summary>How many vertices it projects per frame, which the shared index buffer keeps well
     /// below three per triangle.</summary>
-    public int VertexCount => _vertices.Length;
+    public int VertexCount
+    {
+        get
+        {
+            int vertices = 0;
+            foreach (var part in _parts)
+                vertices += part.Vertices.Length;
+
+            return vertices;
+        }
+    }
+
+    /// <summary>How many of this shape's groups are re-posed each frame rather than held at the
+    /// pose they were read at: one per propeller or rotor blur disc that draws. For the
+    /// suites.</summary>
+    public int TurningCount
+    {
+        get
+        {
+            int turning = 0;
+            foreach (var part in _parts)
+            {
+                if (part.Pivot != null)
+                    turning++;
+            }
+
+            return turning;
+        }
+    }
 
     /// <summary>What fraction of the texture the last raster covered, before the spread widens it.
     /// An aircraft silhouette covers far less of its own footprint than any inscribed ellipse.
@@ -91,14 +130,21 @@ public sealed class GroundShadowSilhouette
     public static GroundShadowSilhouette For(Node3D model, bool isPlayer)
     {
         var node = (isPlayer ? FindByName(model, PlayerNode) : null) ?? model;
-        var shared = new Dictionary<Vector3, int>();
-        var vertices = new List<Vector3>();
-        var indices = new List<int>();
+        var at = RelativeTo(node, model);
+        var still = new Group(null);
+        var groups = new List<Group> { still };
         Aabb box = default;
         bool any = false;
-        Collect(node, RelativeTo(node, model), true, shared, vertices, indices, ref box, ref any);
+        Collect(node, at, at, true, still, groups, ref box, ref any);
+        var parts = new List<Part>();
+        foreach (var group in groups)
+        {
+            if (group.Pivot == null || group.Indices.Count > 0)
+                parts.Add(new Part(group.Pivot, group.Vertices.ToArray(), group.Indices.ToArray()));
+        }
+
         return new GroundShadowSilhouette(
-            node.Name.ToString(), vertices.ToArray(), indices.ToArray(), box);
+            model, node.Name.ToString(), parts.ToArray(), box);
     }
 
     /// <summary>Is the texel at a normalized position inside the footprint covered? For the
@@ -119,39 +165,13 @@ public sealed class GroundShadowSilhouette
     {
         int size = GroundShadowLaw.TextureSize;
         Array.Clear(_covered, 0, _covered.Length);
-        float width = footprint.Size.X;
-        float depth = footprint.Size.Z;
-        if (width > 0f && depth > 0f)
+        if (footprint.Size.X > 0f && footprint.Size.Z > 0f)
         {
-            // Pose, flattening and footprint collapse into one affine map per frame, so a vertex
-            // costs two dot products rather than a transform, a projection and a division.
-            float perX = (size - (2f * RasterInset)) / width;
-            float perZ = (size - (2f * RasterInset)) / depth;
-            float alongX = direction.X / direction.Y;
-            float alongZ = direction.Z / direction.Y;
-            var basis = pose.Basis;
-            var rowX = new Vector3(basis.X.X, basis.Y.X, basis.Z.X);
-            var rowY = new Vector3(basis.X.Y, basis.Y.Y, basis.Z.Y);
-            var rowZ = new Vector3(basis.X.Z, basis.Y.Z, basis.Z.Z);
-            var perVertexX = (rowX - (rowY * alongX)) * perX;
-            var perVertexZ = (rowZ - (rowY * alongZ)) * perZ;
-            float atX = RasterInset + (perX
-                * (pose.Origin.X + ((groundY - pose.Origin.Y) * alongX) - footprint.Position.X));
-            float atZ = RasterInset + (perZ
-                * (pose.Origin.Z + ((groundY - pose.Origin.Y) * alongZ) - footprint.Position.Z));
-            for (int i = 0; i < _vertices.Length; i++)
-            {
-                var vertex = _vertices[i];
-                _projected[i] = new Vector2(
-                    (perVertexX.X * vertex.X) + (perVertexX.Y * vertex.Y) + (perVertexX.Z * vertex.Z) + atX,
-                    (perVertexZ.X * vertex.X) + (perVertexZ.Y * vertex.Y) + (perVertexZ.Z * vertex.Z) + atZ);
-            }
-
-            for (int i = 0; i + 2 < _indices.Length; i += 3)
-                Fill(_projected[_indices[i]], _projected[_indices[i + 1]], _projected[_indices[i + 2]]);
+            foreach (var part in _parts)
+                RasterPart(part, pose * Posed(part), groundY, direction, footprint);
         }
 
-        GroundShadowLaw.Spread(_covered, size, size, _ramp);
+        GroundShadowLaw.Spread(_covered, size, size, _ramp, GroundShadowLaw.TexelScale);
         for (int i = 0; i < _ramp.Length; i++)
             _texels[i] = (byte)Mathf.RoundToInt(GroundShadowLaw.Coverage(_ramp[i]) * 255f);
         _image.SetData(size, size, false, Image.Format.L8, _texels);
@@ -190,15 +210,24 @@ public sealed class GroundShadowSilhouette
         return null;
     }
 
-    // The subtree's own bounding box, and the triangles of the part of it that draws.
-    // ⚠ The two differ, and deliberately: the box is the node's, which the original reads off the
-    // model whatever is shown, while a hidden node rasterises nothing, so a torn damage panel
-    // widens no footprint and casts no silhouette until it is shown.
-    private static void Collect(Node node, Transform3D at, bool drawn,
-        Dictionary<Vector3, int> shared, List<Vector3> vertices, List<int> indices,
-        ref Aabb box, ref bool any)
+    // The subtree's own bounding box, and the triangles of the part of it that draws, split into
+    // the still airframe and one group per propeller or rotor blur disc.
+    // ⚠ The box and the triangles differ, and deliberately: the box is the node's, which the
+    // original reads off the model whatever is shown and whatever angle a disc is turned to, while
+    // a hidden node rasterises nothing, so a torn damage panel widens no footprint and casts no
+    // silhouette until it is shown.
+    private static void Collect(Node node, Transform3D at, Transform3D within, bool drawn,
+        Group group, List<Group> groups, ref Aabb box, ref bool any)
     {
         drawn = drawn && node is not Node3D { Visible: false };
+        if (node is Node3D turning
+            && Mech3.PropParts.IsDynamic(Mech3.PropParts.Classify(turning.Name.ToString())))
+        {
+            group = new Group(turning);
+            groups.Add(group);
+            within = Transform3D.Identity;
+        }
+
         if (node is MeshInstance3D instance && instance.Mesh is { } mesh)
         {
             var local = instance.GetAabb();
@@ -208,13 +237,13 @@ public sealed class GroundShadowSilhouette
             box = any ? box.Merge(here) : here;
             any = true;
             if (drawn)
-                Surfaces(mesh, at, shared, vertices, indices);
+                Surfaces(mesh, within, group);
         }
 
         foreach (var child in node.GetChildren())
         {
-            Collect(child, child is Node3D spatial ? at * spatial.Transform : at, drawn,
-                shared, vertices, indices, ref box, ref any);
+            var step = child is Node3D spatial ? spatial.Transform : Transform3D.Identity;
+            Collect(child, at * step, within * step, drawn, group, groups, ref box, ref any);
         }
     }
 
@@ -222,9 +251,11 @@ public sealed class GroundShadowSilhouette
     // surfaces are plain triangle lists, so a corner shared by six polygons would otherwise be
     // projected six times a frame. A surface of anything else (the light-point clouds a model can
     // carry) draws no polygon and casts no silhouette.
-    private static void Surfaces(Mesh mesh, Transform3D at, Dictionary<Vector3, int> shared,
-        List<Vector3> vertices, List<int> indices)
+    private static void Surfaces(Mesh mesh, Transform3D at, Group group)
     {
+        var shared = group.Shared;
+        var vertices = group.Vertices;
+        var indices = group.Indices;
         var built = mesh as ArrayMesh;
         for (int surface = 0; surface < mesh.GetSurfaceCount(); surface++)
         {
@@ -249,6 +280,51 @@ public sealed class GroundShadowSilhouette
                 indices.Add(index);
             }
         }
+    }
+
+    // Where one group sits in the model root's frame this frame. The still airframe was read in
+    // that frame already; a blur disc is read in its own, so its live chain is what carries the
+    // angle it is turned to now into the raster.
+    private Transform3D Posed(Part part) =>
+        part.Pivot is { } pivot && GodotObject.IsInstanceValid(pivot)
+            ? RelativeTo(pivot, _model)
+            : Transform3D.Identity;
+
+    // One group's triangles into the coverage mask. Pose, flattening and footprint collapse into
+    // one affine map per group per frame, so a vertex costs two dot products rather than a
+    // transform, a projection and a division.
+    private void RasterPart(Part part, Transform3D pose, float groundY, Vector3 direction,
+        Aabb footprint)
+    {
+        int size = GroundShadowLaw.TextureSize;
+        float inset = RasterInset * GroundShadowLaw.TexelScale;
+        float perX = (size - (2f * inset)) / footprint.Size.X;
+        float perZ = (size - (2f * inset)) / footprint.Size.Z;
+        float alongX = direction.X / direction.Y;
+        float alongZ = direction.Z / direction.Y;
+        var basis = pose.Basis;
+        var rowX = new Vector3(basis.X.X, basis.Y.X, basis.Z.X);
+        var rowY = new Vector3(basis.X.Y, basis.Y.Y, basis.Z.Y);
+        var rowZ = new Vector3(basis.X.Z, basis.Y.Z, basis.Z.Z);
+        var perVertexX = (rowX - (rowY * alongX)) * perX;
+        var perVertexZ = (rowZ - (rowY * alongZ)) * perZ;
+        float atX = inset + (perX
+            * (pose.Origin.X + ((groundY - pose.Origin.Y) * alongX) - footprint.Position.X));
+        float atZ = inset + (perZ
+            * (pose.Origin.Z + ((groundY - pose.Origin.Y) * alongZ) - footprint.Position.Z));
+        var vertices = part.Vertices;
+        var projected = part.Projected;
+        for (int i = 0; i < vertices.Length; i++)
+        {
+            var vertex = vertices[i];
+            projected[i] = new Vector2(
+                (perVertexX.X * vertex.X) + (perVertexX.Y * vertex.Y) + (perVertexX.Z * vertex.Z) + atX,
+                (perVertexZ.X * vertex.X) + (perVertexZ.Y * vertex.Y) + (perVertexZ.Z * vertex.Z) + atZ);
+        }
+
+        var indices = part.Indices;
+        for (int i = 0; i + 2 < indices.Length; i += 3)
+            Fill(projected[indices[i]], projected[indices[i + 1]], projected[indices[i + 2]]);
     }
 
     // One flattened triangle into the coverage mask: a texel is covered when its own centre lies
@@ -331,5 +407,42 @@ public sealed class GroundShadowSilhouette
             edge1 += alongY1;
             edge2 += alongY2;
         }
+    }
+
+    // One group of the shape as the raster walks it: the triangles in the frame of the node they
+    // hang off, that node when it turns and null for the still airframe, and the projection
+    // scratch the raster reuses rather than allocating one per frame.
+    private sealed class Part
+    {
+        public Part(Node3D? pivot, Vector3[] vertices, int[] indices)
+        {
+            Pivot = pivot;
+            Vertices = vertices;
+            Indices = indices;
+            Projected = new Vector2[vertices.Length];
+        }
+
+        public Node3D? Pivot { get; }
+
+        public Vector3[] Vertices { get; }
+
+        public int[] Indices { get; }
+
+        public Vector2[] Projected { get; }
+    }
+
+    // One group under construction, with the corner dedup that keeps a vertex shared by six
+    // polygons projected once. The dedup is per group, since two groups no longer share a frame.
+    private sealed class Group
+    {
+        public Group(Node3D? pivot) => Pivot = pivot;
+
+        public Node3D? Pivot { get; }
+
+        public Dictionary<Vector3, int> Shared { get; } = new();
+
+        public List<Vector3> Vertices { get; } = new();
+
+        public List<int> Indices { get; } = new();
     }
 }

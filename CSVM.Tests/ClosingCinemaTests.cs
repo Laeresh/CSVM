@@ -6,14 +6,16 @@ using Xunit;
 
 namespace CSVM.Tests;
 
-/// <summary>Pins the closing cinema's flow: that a finished campaign plays the film before the
-/// scrapbook and an unfinished one reaches the book with no film, that it plays once, that the book
-/// opens exactly once however many times the cinema reports stopping, and that the skip set is the
-/// closing one's own.
+/// <summary>Pins the closing cinema's flow: that a win on the campaign's last mission plays the film
+/// before the scrapbook and every other ending reaches the book with no film, that a replayed win
+/// plays it again, that the book opens exactly once however many times the cinema reports stopping,
+/// and that the skip set is the closing one's own.
 /// </summary>
 [Trait("Tier", "Quick")]
 public class ClosingCinemaTests
 {
+    private const int LastSeq = CampaignSequence.MissionCount - 1;
+
     [Fact]
     public void TheFilmIsTheOneTheFinalCinemaLayoutRowNames()
     {
@@ -21,12 +23,12 @@ public class ClosingCinemaTests
     }
 
     [Fact]
-    public void AFinishedCampaignPlaysTheFilmBeforeTheBook()
+    public void AWinOnTheLastMissionPlaysTheFilmBeforeTheBook()
     {
         var cinema = new Recorder();
         var flow = new ClosingCinema(cinema.Play);
 
-        Assert.True(flow.OpenScrapbook(campaignComplete: true, cinema.OpenedBook));
+        Assert.True(flow.OpenScrapbook(LastSeq, missionWon: true, cinema.OpenedBook));
 
         Assert.Equal("Final.MPG", cinema.Name);
         Assert.Equal(0, cinema.Books);
@@ -34,32 +36,48 @@ public class ClosingCinemaTests
         Assert.Equal(1, cinema.Books);
     }
 
-    // FINALCINEMA.SCRIPT's own false branch: the book runs directly and nothing is played.
+    // The reported fault: a mission lost on a profile that has finished the campaign started the
+    // film. The result is half the gate, so it opens the book and plays nothing.
     [Fact]
-    public void AnUnfinishedCampaignGoesStraightToTheBook()
+    public void ALossOnTheLastMissionGoesStraightToTheBook()
     {
         var cinema = new Recorder();
 
-        Assert.False(new ClosingCinema(cinema.Play).OpenScrapbook(campaignComplete: false, cinema.OpenedBook));
+        Assert.False(new ClosingCinema(cinema.Play).OpenScrapbook(LastSeq, missionWon: false, cinema.OpenedBook));
 
         Assert.Null(cinema.Name);
         Assert.Equal(0, cinema.Plays);
         Assert.Equal(1, cinema.Books);
     }
 
+    // FINALCINEMA.SCRIPT's own false branch, and what a player sees 23 times out of 24: the story
+    // position is the other half of the gate, so a won mission short of the last one plays nothing.
     [Fact]
-    public void TheFilmDoesNotPlayASecondTime()
+    public void AWinOnAnEarlierMissionGoesStraightToTheBook()
+    {
+        var cinema = new Recorder();
+
+        Assert.False(new ClosingCinema(cinema.Play).OpenScrapbook(LastSeq - 1, missionWon: true, cinema.OpenedBook));
+
+        Assert.Equal(0, cinema.Plays);
+        Assert.Equal(1, cinema.Books);
+    }
+
+    // A replay of the last mission is a win on the last mission, so it earns the film again. Nothing
+    // is latched: the flown result is the whole gate.
+    [Fact]
+    public void AReplayedWinOnTheLastMissionPlaysTheFilmAgain()
     {
         var cinema = new Recorder();
         var flow = new ClosingCinema(cinema.Play);
 
-        flow.OpenScrapbook(campaignComplete: true, cinema.OpenedBook);
+        flow.OpenScrapbook(LastSeq, missionWon: true, cinema.OpenedBook);
         cinema.Stop();
 
-        Assert.False(flow.OpenScrapbook(campaignComplete: true, cinema.OpenedBook));
-        Assert.Equal(1, cinema.Plays);
+        Assert.True(flow.OpenScrapbook(LastSeq, missionWon: true, cinema.OpenedBook));
+        cinema.Stop();
+        Assert.Equal(2, cinema.Plays);
         Assert.Equal(2, cinema.Books);
-        Assert.True(flow.Played);
     }
 
     // The EC latch the original's own script holds: a skip landing on the frame the cinema plays
@@ -70,7 +88,7 @@ public class ClosingCinemaTests
         var cinema = new Recorder();
         var flow = new ClosingCinema(cinema.Play);
 
-        flow.OpenScrapbook(campaignComplete: true, cinema.OpenedBook);
+        flow.OpenScrapbook(LastSeq, missionWon: true, cinema.OpenedBook);
         cinema.Stop();
         cinema.Stop();
 
@@ -83,7 +101,7 @@ public class ClosingCinemaTests
     public void TheClosingCinemaTakesNeitherSpaceNorReturnWhereTheChapterOneDoes()
     {
         var cinema = new Recorder();
-        new ClosingCinema(cinema.Play).OpenScrapbook(campaignComplete: true, cinema.OpenedBook);
+        new ClosingCinema(cinema.Play).OpenScrapbook(LastSeq, missionWon: true, cinema.OpenedBook);
 
         Assert.Equal(CinemaScreen.ClosingKeys, cinema.Skip);
         Assert.True(cinema.Skip.HasFlag(CinemaSkip.Escape) && cinema.Skip.HasFlag(CinemaSkip.LeftMouse));
@@ -92,22 +110,15 @@ public class ClosingCinemaTests
         Assert.True(CinemaScreen.ChapterKeys.HasFlag(CinemaSkip.Return));
     }
 
-    // The gate is the profile's own position and nothing else, so the last mission is what turns
-    // the film on: 23 of 24 flown is still an unfinished campaign.
-    [Fact]
-    public void TheGateComesFromTheProfilesOwnPosition()
+    // The whole gate as a table: one corner of the four plays the film.
+    [Theory]
+    [InlineData(CampaignSequence.MissionCount - 1, true, true)]
+    [InlineData(CampaignSequence.MissionCount - 1, false, false)]
+    [InlineData(0, true, false)]
+    [InlineData(0, false, false)]
+    public void OnlyAWinOnTheLastMissionEarnsTheFilm(int seq, bool won, bool plays)
     {
-        var cinema = new Recorder();
-        var profile = CampaignProfileDef.NewProfile("Zachary");
-        profile.MissionsCompleted = CampaignSequence.MissionCount - 1;
-
-        Assert.False(new ClosingCinema(cinema.Play).OpenScrapbook(profile, cinema.OpenedBook));
-        Assert.Equal(0, cinema.Plays);
-
-        var finished = new Recorder();
-        profile.MissionsCompleted = CampaignSequence.MissionCount;
-        Assert.True(new ClosingCinema(finished.Play).OpenScrapbook(profile, finished.OpenedBook));
-        Assert.Equal("Final.MPG", finished.Name);
+        Assert.Equal(plays, ClosingCinema.PlaysAfter(seq, won));
     }
 
     // The stand-in for Launcher.PlayCinema: it records what it was asked for and hands the film's

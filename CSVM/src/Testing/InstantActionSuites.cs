@@ -612,8 +612,12 @@ internal static class InstantActionSuites
         "another type subscribed to the same " +
         "signal and staying Running, plus a hull that is not the objective leaving it running; " +
         "and the lives ledger on a real aircraft: with a life left the armed 3 s crash cam " +
-        "respawns it, out of lives the wreck is still there 10 s later and the solo mission " +
-        "is LOST")]
+        "respawns it and NO wrap-up hold is armed, out of lives the wreck is still there 10 s " +
+        "later and the solo mission is LOST; plus the hold between the ending and the board: a " +
+        "win presents nothing, nothing is due a fifth of a second short of the decoded hold, the " +
+        "whole hold spent presents it exactly once and never again, the mission clock stays at " +
+        "the ending throughout, and a held seat flying a full-deflection scripted stick commands " +
+        "nothing over the lever it was left on until the hold is released")]
     internal static void InstantActionEnd(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -676,6 +680,36 @@ internal static class InstantActionSuites
             ctx.Check(!notAceMission.Ended,
                 $"…and the same report leaves a dogfight_squadron mission running: {notAceMission.Outcome}");
 
+            // ---- the hold between the ending and the wrap-up board ---------------------------
+            // Its own ace and its own runtime, so the win still arrives through a real Downed
+            // report and the mission clock has run before it does.
+            const float HoldDt = 1f / 60f;
+            var holdMission = new InstantActionRuntime(EndDef(ctx, "hold", "dogfight_ace"));
+            var heldAce = SpawnAt(new Vector3(600f, 500f, 0f), InstantActionRuntime.EnemyTeam);
+            heldAce.Downed += (_, _) => holdMission.ReportObjective(InstantActionObjective.AceDown);
+            var boardsDue = new List<InstantActionOutcome>();
+            holdMission.WrapupDue += outcome => boardsDue.Add(outcome);
+            holdMission.Advance(12.5f);
+            heldAce.DebugForceCrash();
+            float clockAtEnd = holdMission.Elapsed;
+            ctx.Check(holdMission.Outcome == InstantActionOutcome.Won && holdMission.HoldingWrapup
+                    && boardsDue.Count == 0,
+                $"the win decides the mission and the board is NOT presented with it: {boardsDue.Count} board(s)");
+            for (float t = 0f; t < InstantActionRuntime.WrapupHoldS - 0.2f; t += HoldDt)
+            {
+                holdMission.Advance(HoldDt);
+            }
+            ctx.Check(boardsDue.Count == 0 && holdMission.HoldingWrapup,
+                $"…still none 0.2 s short of the {InstantActionRuntime.WrapupHoldS:0.#} s hold (the able-to-fail control)");
+            holdMission.Advance(0.25f);
+            ctx.Check(boardsDue.Count == 1 && boardsDue[0] == InstantActionOutcome.Won
+                    && !holdMission.HoldingWrapup,
+                $"…and the whole hold spent presents it once, won: {boardsDue.Count} board(s)");
+            holdMission.Advance(5f);
+            ctx.Check(boardsDue.Count == 1, $"…once only, however long the world runs on: {boardsDue.Count}");
+            ctx.Check(Mathf.Abs(holdMission.Elapsed - clockAtEnd) < 1e-4f,
+                $"and the mission clock the board reads stayed at the ending: {holdMission.Elapsed:0.000} s vs {clockAtEnd:0.000} s");
+
             // ---- dogfight_squadron: the sequencer's exhausted counter ------------------------
             var squadron = new InstantActionRuntime(EndDef(ctx, "squadron2", "dogfight_squadron"));
             var notSquadron = new InstantActionRuntime(EndDef(ctx, "zeppelin0", "zeppelin_run"));
@@ -727,6 +761,8 @@ internal static class InstantActionSuites
             var lifeLedger = new InstantActionRuntime(EndDef(ctx, "lives3", "dogfight_squadron", lives: 3));
             var probe = SpawnAt(new Vector3(-400f, 500f, 0f), AimAssist.PlayerTeam);
             lifeLedger.RegisterPilot(probe.PlayerIndex);
+            var respawnBoards = new List<InstantActionOutcome>();
+            lifeLedger.WrapupDue += outcome => respawnBoards.Add(outcome);
             probe.AutoRespawnAfter = 3f;
             probe.DebugForceCrash();
             ctx.Check(probe.Crashed && lifeLedger.NotifyPilotDown(probe.PlayerIndex),
@@ -737,6 +773,11 @@ internal static class InstantActionSuites
             }
             ctx.Check(!probe.Crashed,
                 $"…and 5 s later the armed 3 s crash cam has respawned it — the able-to-fail control");
+            // ⚠ The respawn path must stay clear of the ending's hold: a death with a life left
+            // ends nothing, so nothing is armed and no board is ever due.
+            lifeLedger.Advance(InstantActionRuntime.WrapupHoldS + 1f);
+            ctx.Check(!lifeLedger.Ended && !lifeLedger.HoldingWrapup && respawnBoards.Count == 0,
+                $"…and that death armed NO wrap-up hold: {lifeLedger.Outcome}, {respawnBoards.Count} board(s) due");
 
             var lastLife = new InstantActionRuntime(EndDef(ctx, "lives1", "dogfight_squadron"));
             lastLife.RegisterPilot(probe.PlayerIndex);
@@ -753,6 +794,46 @@ internal static class InstantActionSuites
             }
             ctx.Check(probe.Crashed,
                 $"…and 10 s later the wreck is still there: Spectating outranks the armed timer");
+
+            // ---- the hold's input half, on a real seat flying a scripted stick ---------------
+            // ⚠ Not a freeze: the seat still steps and still carries the lever it was left on.
+            // What the hold takes away is the command, which is why the stick is full deflection.
+            var seatStats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+            var seatModel = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+            var seat = new FlightController();
+            seat.Bind(new FlightControllerBuild
+            {
+                PlaneModel = seatModel,
+                Collider = PlaneCollider.Build(seatModel),
+                Damage = new PlaneDamage(seatStats.DestroyableParts),
+                PlayerIndex = 0,
+                IsHumanPiloted = true,
+                HoldSegments = new[] { (new FlightInput { Pitch = 1f, Roll = 1f, Throttle = 1f }, 0f) },
+                UseKeyboard = false,
+                PadDevices = System.Array.Empty<int>(),
+                AllowPause = false,
+            });
+            const float SeatLever = 0.6f;
+            seat.Setup(new FlightModel(seatStats), null, new CamParams(),
+                new Vector3(0f, 2000f, 2000f), new Vector3(0f, 2000f, 1900f), SeatLever, 80f);
+            ctx.Host.AddChild(seat);
+            spawned.Add(seat);
+            seat.ControlsHeld = true;
+            for (int i = 0; i < 60; i++)
+            {
+                seat.SimStep(1f / 60f);
+            }
+            var held = seat.LastCommand;
+            ctx.Check(held.Pitch == 0f && held.Roll == 0f && held.Yaw == 0f
+                    && Mathf.Abs(held.Throttle - SeatLever) < 0.01f,
+                $"a held seat commands nothing over the lever it was left on: pitch={held.Pitch:0.00} roll={held.Roll:0.00} throttle={held.Throttle:0.00}");
+            seat.ControlsHeld = false;
+            for (int i = 0; i < 60; i++)
+            {
+                seat.SimStep(1f / 60f);
+            }
+            ctx.Check(seat.LastCommand.Pitch > 0.5f && seat.LastCommand.Roll > 0.5f,
+                $"…and the SAME stick flies it the moment the hold ends, the able-to-fail control: pitch={seat.LastCommand.Pitch:0.00} roll={seat.LastCommand.Roll:0.00}");
         }
         finally
         {

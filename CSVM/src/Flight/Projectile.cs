@@ -48,6 +48,12 @@ public sealed partial class ProjectilePool : Node3D
     /// hurt a gasbag); null gates nothing.</summary>
     public System.Func<Node?, WeaponDef, bool>? WorldDamageGate;
 
+    /// <summary>Where a <c>CRATER</c> weapon's ground strike goes: given the impact point and the
+    /// struck collider, carve the bowl and flatten the decorations in it, returning whether the
+    /// carve landed. Wired to <c>CraterField.TryCarve</c> in a collidable flight; null in a build
+    /// with no world colliders, where a ground-attack round leaves the terrain alone.</summary>
+    public System.Func<Vector3, Node?, bool>? CraterSink;
+
     /// <summary>Plays a named IMPACT effect (its puffer half) at a hit point through the world-effects
     /// runtime: the gun/rocket smoke and fireballs whose <c>ANIMATION</c> is an ON_CALL effect
     /// def rather than a gamez model. Null in views with no anim runtime. The basis is the
@@ -1948,16 +1954,22 @@ public sealed partial class ProjectilePool : Node3D
         // The weapon's own hook runs before anything else (FUN_005ac7a0's first act) and its mask
         // feeds the resolve, so Apply performs a row already stripped of what the hook silenced.
         var suppression = RunImpactHook(weapon, point);
+        // The terrain carve runs between the hook and the row's own bindings, under the hook's
+        // Effects bit, and only on a direct strike: a fused burst carries no hit record, so the
+        // original's carve sites are never reached from one (docs/org/craters.md).
+        bool cratered = weapon.Crater && shapeIdx >= 0 && collider is not AircraftBody
+            && (suppression & ImpactSuppression.Effects) == 0
+            && (CraterSink?.Invoke(point, collider) ?? false);
         // The decision, taken once and read twice. `modelResolved` cannot be known before the
         // attempt, so the first resolve is only for the effect NAME to attempt; the second carries
         // the answer. Everything after this line obeys `outcome`, Impact itself decides nothing.
-        var outcome = ImpactOutcome.Resolve(weapon, surface, modelResolved: false, hasEffectsRuntime, suppression);
+        var outcome = ImpactOutcome.Resolve(weapon, surface, modelResolved: false, hasEffectsRuntime, suppression, cratered);
         // A chapter gamez node name instances at the hit point and skips the spark; a reader-def
         // or unresolved name leaves the spark to stand in. A name the effects runtime binds plays
         // there instead (Apply's sink), even when a same-named gamez template exists (ballflare.flt).
         if (outcome.EffectName is { } fxName && !(EffectHandles?.Invoke(fxName) ?? false)
             && SpawnImpactModel(fxName, point, EffectOrient(outcome, normal)))
-            outcome = ImpactOutcome.Resolve(weapon, surface, modelResolved: true, hasEffectsRuntime, suppression);
+            outcome = ImpactOutcome.Resolve(weapon, surface, modelResolved: true, hasEffectsRuntime, suppression, cratered);
 
         // Verification breadcrumb: the first few impacts confirm hit detection and surface
         // classification without needing a lucky screenshot; then it goes quiet.

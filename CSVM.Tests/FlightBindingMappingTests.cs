@@ -19,25 +19,41 @@ public class FlightBindingMappingTests
     public static TheoryData<Key, InputAction> KeyboardSites => new()
     {
         { Key.Space, InputAction.FireGuns },
-        { Key.F, InputAction.FireRockets },
-        { Key.G, InputAction.SelectGunGroup },
-        { Key.H, InputAction.SelectOrdnance },
-        { Key.F3, InputAction.SelectGunGroupPrev },
-        { Key.F4, InputAction.SelectOrdnancePrev },
+        { Key.X, InputAction.FireRockets },
+        { Key.F3, InputAction.SelectGunGroup },
+        { Key.F4, InputAction.SelectGunGroupPrev },
+        { Key.F5, InputAction.SelectOrdnance },
+        { Key.F6, InputAction.SelectOrdnancePrev },
         { Key.N, InputAction.Nitro },
-        { Key.R, InputAction.Respawn },
-        { Key.F9, InputAction.AutoLand },
-        { Key.P, InputAction.Pause },
+        { Key.Backspace, InputAction.Respawn },
+        { Key.A, InputAction.AutoLand },
         { Key.Escape, InputAction.Pause },
-        { Key.T, InputAction.TargetNextEnemy },
-        { Key.Y, InputAction.TargetNextAlly },
-        { Key.U, InputAction.TargetNextNonAircraft },
-        { Key.I, InputAction.TargetNearest },
-        { Key.O, InputAction.TargetClear },
+        { Key.E, InputAction.TargetNextEnemy },
+        { Key.W, InputAction.TargetNextAlly },
+        { Key.R, InputAction.TargetNextNonAircraft },
+        { Key.Q, InputAction.TargetNearest },
+        { Key.T, InputAction.TargetClear },
+        { Key.Key1, InputAction.ThrottleSet0 },
+        { Key.Key5, InputAction.ThrottleSet4 },
+        { Key.Key9, InputAction.ThrottleSet8 },
         { Key.F8, InputAction.CycleCockpitViews },
-        { Key.F6, InputAction.SelectChaseView },
+        { Key.F7, InputAction.FlybyView },
+        { Key.F2, InputAction.SelectChaseView },
         { Key.Kp0, InputAction.LookBack },
         { Key.Kp5, InputAction.LookCenter },
+    };
+
+    /// <summary>The keyboard rows that carry a modifier, which are a control of their own rather
+    /// than the bare key plus a held qualifier.</summary>
+    public static TheoryData<Key, KeyModifiers, InputAction> ModifiedKeyboardSites => new()
+    {
+        { Key.E, KeyModifiers.Shift, InputAction.TargetPreviousEnemy },
+        { Key.E, KeyModifiers.Ctrl, InputAction.TargetNearestEnemy },
+        { Key.W, KeyModifiers.Shift, InputAction.TargetPreviousAlly },
+        { Key.W, KeyModifiers.Ctrl, InputAction.TargetNearestAlly },
+        { Key.R, KeyModifiers.Shift, InputAction.TargetPreviousNonAircraft },
+        { Key.R, KeyModifiers.Ctrl, InputAction.TargetNearestNonAircraft },
+        { Key.S, KeyModifiers.Shift, InputAction.ToggleSpyglass },
     };
 
     /// <summary>Every migrated pad button, against the action the call site now names.</summary>
@@ -71,6 +87,26 @@ public class FlightBindingMappingTests
         Assert.True(actions.Held(action));
     }
 
+    /// <summary>A modified row fires only with its own modifier down, and the bare key on the same
+    /// letter stands down while it is, so one press is one action.</summary>
+    [Theory]
+    [MemberData(nameof(ModifiedKeyboardSites))]
+    public void EachModifiedKey_DrivesItsOwnActionAndSilencesTheBareOne(
+        Key key, KeyModifiers modifiers, InputAction action)
+    {
+        var (state, actions) = Seat();
+        state.Keys.Add((int)key);
+        actions.Poll(state);
+        Assert.False(actions.Held(action));
+
+        state.Keys.Add(BindingControl.KeyCodeOf(modifiers));
+        actions.Poll(state);
+        Assert.True(actions.Held(action));
+        Assert.False(actions.Held(InputAction.TargetNextEnemy));
+        Assert.False(actions.Held(InputAction.TargetNextAlly));
+        Assert.False(actions.Held(InputAction.TargetNextNonAircraft));
+    }
+
     [Theory]
     [MemberData(nameof(PadSites))]
     public void EachMigratedPadButton_DrivesTheActionItsCallSiteNames(JoyButton button, InputAction action)
@@ -86,9 +122,7 @@ public class FlightBindingMappingTests
     /// <summary>The three attitude axes and the throttle, keyboard half: the pairs the old
     /// `KeyAxis` calls named, in the sign the flight model reads.</summary>
     [Theory]
-    [InlineData(Key.S, 1f)]
     [InlineData(Key.Down, 1f)]
-    [InlineData(Key.W, -1f)]
     [InlineData(Key.Up, -1f)]
     public void ThePitchKeyPairs_ReadAsTheirOldSignedAxis(Key key, float expected)
     {
@@ -100,9 +134,7 @@ public class FlightBindingMappingTests
     }
 
     [Theory]
-    [InlineData(Key.A, 1f)]
     [InlineData(Key.Left, 1f)]
-    [InlineData(Key.D, -1f)]
     [InlineData(Key.Right, -1f)]
     public void TheRollKeyPairs_ReadAsTheirOldSignedAxis(Key key, float expected)
     {
@@ -114,8 +146,8 @@ public class FlightBindingMappingTests
     }
 
     [Theory]
-    [InlineData(Key.Q, 1f)]
-    [InlineData(Key.E, -1f)]
+    [InlineData(Key.Comma, 1f)]
+    [InlineData(Key.Period, -1f)]
     public void TheYawKeyPair_ReadsAsItsOldSignedAxis(Key key, float expected)
     {
         var (state, actions) = Seat();
@@ -126,8 +158,8 @@ public class FlightBindingMappingTests
     }
 
     [Theory]
-    [InlineData(Key.Shift, 1f)]
-    [InlineData(Key.Ctrl, -1f)]
+    [InlineData(Key.Equal, 1f)]
+    [InlineData(Key.Minus, -1f)]
     public void TheThrottleKeyPair_ReadsAsItsOldSignedAxis(Key key, float expected)
     {
         var (state, actions) = Seat();
@@ -230,12 +262,10 @@ public class FlightBindingMappingTests
     /// implements, rather than one end taking priority over the other. Holding both ends read zero
     /// before the migration and reads zero after it, pair by pair.</summary>
     [Theory]
-    [InlineData(Key.S, Key.W, InputAction.PitchUp, InputAction.PitchDown)]
     [InlineData(Key.Down, Key.Up, InputAction.PitchUp, InputAction.PitchDown)]
-    [InlineData(Key.A, Key.D, InputAction.RollLeft, InputAction.RollRight)]
     [InlineData(Key.Left, Key.Right, InputAction.RollLeft, InputAction.RollRight)]
-    [InlineData(Key.Q, Key.E, InputAction.YawLeft, InputAction.YawRight)]
-    [InlineData(Key.Shift, Key.Ctrl, InputAction.ThrottleUp, InputAction.ThrottleDown)]
+    [InlineData(Key.Comma, Key.Period, InputAction.YawLeft, InputAction.YawRight)]
+    [InlineData(Key.Equal, Key.Minus, InputAction.ThrottleUp, InputAction.ThrottleDown)]
     [InlineData(Key.Kp8, Key.Kp2, InputAction.LookUp, InputAction.LookDown)]
     [InlineData(Key.Kp6, Key.Kp4, InputAction.LookRight, InputAction.LookLeft)]
     public void BothEndsOfAKeyPairHeld_ReadsZeroRatherThanFavouringOneEnd(
@@ -260,14 +290,14 @@ public class FlightBindingMappingTests
         Assert.True(actions.Held(InputAction.FreeLook));
     }
 
-    /// <summary>The tap/hold splitter reads the pad half alone. Sharing the action with the `T` key
+    /// <summary>The tap/hold splitter reads the pad half alone. Sharing the action with the `E` key
     /// is deliberate, and a full read would let a keypress feed the splitter as well as its own
     /// edge-detected slot.</summary>
     [Fact]
     public void TheTapHoldSplitter_ReadsTheDpadWithoutTheTargetingKey()
     {
         var (state, padActions) = PadOnlySeat();
-        state.Keys.Add((int)Key.T);
+        state.Keys.Add((int)Key.E);
         padActions.Poll(state);
         Assert.False(padActions.Held(InputAction.TargetNextEnemy));
 
@@ -287,7 +317,7 @@ public class FlightBindingMappingTests
         keyActions.Poll(new PadMuted(state));
         Assert.False(keyActions.Held(InputAction.TargetNextEnemy));
 
-        state.Keys.Add((int)Key.T);
+        state.Keys.Add((int)Key.E);
         keyActions.Poll(new PadMuted(state));
         Assert.True(keyActions.Held(InputAction.TargetNextEnemy));
     }
@@ -374,7 +404,7 @@ public class FlightBindingMappingTests
     {
         var (state, padActions) = PadOnlySeat();
         state.Keys.Add((int)Key.Space);
-        state.Keys.Add((int)Key.S);
+        state.Keys.Add((int)Key.Down);
         state.MouseButtons.Add((int)MouseButton.Right);
         padActions.Poll(state);
 

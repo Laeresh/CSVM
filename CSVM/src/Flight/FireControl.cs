@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Utils;
 
 namespace CSVM.Flight;
 
@@ -36,10 +37,17 @@ public struct FireInputs
 {
     public bool FireHeld;          // gun trigger (Space / pad B; --fire ORs in adapter-side)
     public bool RocketHeld;        // rocket trigger (F / pad A)
-    public bool GunSelectHeld;         // gun-group selector, forward (G / D-pad Right)
-    public bool RocketSelectHeld;      // hardpoint selector, forward (H / D-pad Left)
-    public bool GunSelectBackHeld;     // gun-group selector, backward (F3)
-    public bool RocketSelectBackHeld;  // hardpoint selector, backward (F4)
+    public bool GunSelectHeld;         // gun-group selector, forward (F3), key half only
+    public bool RocketSelectHeld;      // hardpoint selector, forward (F5), key half only
+    public bool GunSelectBackHeld;     // gun-group selector, backward (F4)
+    public bool RocketSelectBackHeld;  // hardpoint selector, backward (F6)
+
+    // The pad half of the two forward selectors (D-pad Right and Left), kept apart from the key
+    // half because it carries BOTH directions: a tap steps forward and a hold steps back. A pad
+    // has no free control for a second pair, and the original gives its joystick one direction per
+    // class too (docs/org/input.md).
+    public bool GunSelectPadHeld;
+    public bool RocketSelectPadHeld;
 }
 
 /// <summary>The one spelling of "is this weapon slot armed?".</summary>
@@ -112,6 +120,10 @@ public sealed class FireControl
     private readonly Func<int, int> _stepAmmo; // step place -> that pylon's ammo, for WeaponCursor
     private readonly Func<int, int> _gunAmmo;  // gun slot -> its ammo, for WeaponCursor
     private readonly FireOutcome _outcome = new();
+    // The pad's two selector buttons, each carrying both directions of its class: tap forward,
+    // hold back. The threshold is the one every dual-purpose pad control here splits on.
+    private readonly TapHoldButton _gunSelPad = new(TapHoldButton.PadHoldSeconds);
+    private readonly TapHoldButton _rocketSelPad = new(TapHoldButton.PadHoldSeconds);
 
     private bool _firePrev;          // previous tick's gun trigger (immediate first shot on press)
     private bool _gunSelPrev;        // edge detection for the forward gun-selector button
@@ -122,7 +134,7 @@ public sealed class FireControl
     private bool _rocketDryWarned;   // the all-pylons-empty cue has already sounded
     private float _rocketCooldown;   // s until the next rocket may launch (FIRE_RATE gate)
     private int _gunSel;             // gun selector: 0-based slot that fires (only ONE at a time)
-    private int _selectedPylon;      // the pylon H selects and rockets fire from
+    private int _selectedPylon;      // the pylon the hardpoint selector points at, and rockets fire from
 
     /// <param name="pylonStepOrder">Pylon list positions in the order the hardpoint cursor walks
     /// them, or null for the list's own order. The caller supplies it because the pylon list is
@@ -172,7 +184,7 @@ public sealed class FireControl
     public bool InfiniteAmmo { get; set; }
 
     /// <summary>Point the gun selector at a slot (0-based, clamped), the weapon lab's programmatic
-    /// twin of G, which only cycles.</summary>
+    /// twin of F3, which only cycles.</summary>
     public void SelectGunGroup(int index) =>
         _gunSel = _guns.Count > 0 ? Math.Clamp(index, 0, _guns.Count - 1) : 0;
 
@@ -188,7 +200,7 @@ public sealed class FireControl
     public FireOutcome Step(float dt, in FireInputs input)
     {
         _outcome.Clear();
-        StepSelectors(input);
+        StepSelectors(dt, input);
         StepGuns(dt, input.FireHeld);
         StepRockets(dt, input.RocketHeld);
         return _outcome;
@@ -255,45 +267,85 @@ public sealed class FireControl
         return step;
     }
 
-    // Moves each weapon selector on the rising edge of one of its two buttons to the adjacent armed
+    // Moves each weapon selector on the rising edge of one of its two keys to the adjacent armed
     // slot in that direction (one active at a time, skipping empties). Each direction has its own
-    // edge, so holding both steps one way and straight back and the cursor stays put. Both cursors
-    // also auto-advance on their own when the selected slot empties (in the gun/rocket steps).
-    private void StepSelectors(in FireInputs input)
+    // edge, so holding both steps one way and straight back and the cursor stays put. The pad's
+    // single button per class carries both directions instead, split by how long it is held. Both
+    // cursors also auto-advance on their own when the selected slot empties (in the gun/rocket
+    // steps).
+    private void StepSelectors(float dt, in FireInputs input)
     {
         bool gunSel = input.GunSelectHeld;
         bool gunSelBack = input.GunSelectBackHeld;
-        if (_guns.Count > 1)
+        if (gunSel && !_gunSelPrev)
         {
-            if (gunSel && !_gunSelPrev)
-            {
-                _gunSel = WeaponCursor.NextSelectable(_guns.Count, _gunAmmo, _gunSel, InfiniteAmmo);
-            }
-            if (gunSelBack && !_gunSelBackPrev)
-            {
-                _gunSel = WeaponCursor.PrevSelectable(_guns.Count, _gunAmmo, _gunSel, InfiniteAmmo);
-            }
+            MoveGunSelector(true);
+        }
+        if (gunSelBack && !_gunSelBackPrev)
+        {
+            MoveGunSelector(false);
         }
         _gunSelPrev = gunSel;
         _gunSelBackPrev = gunSelBack;
 
         bool rocketSel = input.RocketSelectHeld;
         bool rocketSelBack = input.RocketSelectBackHeld;
-        if (_pylons.Count > 1)
+        if (rocketSel && !_rocketSelPrev)
         {
-            if (rocketSel && !_rocketSelPrev)
-            {
-                _selectedPylon = _pylonStep[WeaponCursor.NextSelectable(
-                    _pylonStep.Length, _stepAmmo, _pylonRank[_selectedPylon], InfiniteAmmo)];
-            }
-            if (rocketSelBack && !_rocketSelBackPrev)
-            {
-                _selectedPylon = _pylonStep[WeaponCursor.PrevSelectable(
-                    _pylonStep.Length, _stepAmmo, _pylonRank[_selectedPylon], InfiniteAmmo)];
-            }
+            MovePylonSelector(true);
+        }
+        if (rocketSelBack && !_rocketSelBackPrev)
+        {
+            MovePylonSelector(false);
         }
         _rocketSelPrev = rocketSel;
         _rocketSelBackPrev = rocketSelBack;
+
+        // The pad last, so a frame carrying a key edge as well reads in the order a key pair
+        // would. A hold is spent on the frame it fires and does not also tap on release
+        // (TapHoldButton), which is what keeps one long press from stepping forward and back.
+        switch (_gunSelPad.Step(input.GunSelectPadHeld, dt))
+        {
+            case TapHold.Tap:
+                MoveGunSelector(true);
+                break;
+            case TapHold.Hold:
+                MoveGunSelector(false);
+                break;
+        }
+        switch (_rocketSelPad.Step(input.RocketSelectPadHeld, dt))
+        {
+            case TapHold.Tap:
+                MovePylonSelector(true);
+                break;
+            case TapHold.Hold:
+                MovePylonSelector(false);
+                break;
+        }
+    }
+
+    // One step of the gun selector, forward or back, over the armed slots. Fewer than two slots
+    // means there is nothing to step to, which is the gate every caller shares.
+    private void MoveGunSelector(bool forward)
+    {
+        if (_guns.Count > 1)
+        {
+            _gunSel = forward
+                ? WeaponCursor.NextSelectable(_guns.Count, _gunAmmo, _gunSel, InfiniteAmmo)
+                : WeaponCursor.PrevSelectable(_guns.Count, _gunAmmo, _gunSel, InfiniteAmmo);
+        }
+    }
+
+    // The same for the hardpoint cursor, over the step order rather than the list order.
+    private void MovePylonSelector(bool forward)
+    {
+        if (_pylons.Count > 1)
+        {
+            int rank = _pylonRank[_selectedPylon];
+            _selectedPylon = _pylonStep[forward
+                ? WeaponCursor.NextSelectable(_pylonStep.Length, _stepAmmo, rank, InfiniteAmmo)
+                : WeaponCursor.PrevSelectable(_pylonStep.Length, _stepAmmo, rank, InfiniteAmmo)];
+        }
     }
 
     // Advances every gun slot's fire clock: while the trigger is held, the selected slot

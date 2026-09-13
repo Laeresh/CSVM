@@ -9,7 +9,7 @@ namespace CSVM.Flight;
 /// <summary>
 /// One AI aircraft's weapon audio, positional: the sustained-fire gun loop and the dry-trigger cue
 /// the pilot's own <see cref="FlightAudio"/> plays flat, on <see cref="AudioStreamPlayer3D"/>s riding
-/// this node, plus the cull that silences an aircraft firing further off than its cue is audible.
+/// this node, plus the cull that silences an aircraft firing further off than its cue reaches.
 /// Both definitions are selected through <see cref="WeaponAudioCues"/>, which the own-ship path reads
 /// too. The sibling of <see cref="AiEngineAudio"/>, and separate from it because that component's
 /// contract is the two engine slots and nothing else.
@@ -31,7 +31,8 @@ public sealed partial class AiWeaponAudio : Node3D
     private AudioStreamPlayer3D? _gunLoop;
     private string? _gunLoopName;
     private float _gunLoopVol = 1f;
-    private float _gunLoopCullSq;             // the live loop's own RANGE audible distance, squared
+    private float _gunLoopCull;               // the live loop's cue distance, its RANGE audible one grown by the margin
+    private float _gunLoopCullSq;
     private AudioStreamPlayer3D? _emptyClip;
     private string? _emptyClipName;
     private float _emptyClipVol = 1f;
@@ -44,6 +45,12 @@ public sealed partial class AiWeaponAudio : Node3D
     /// this component keeps, which could agree with itself while the voice is stopped. Internal for
     /// the emitter suite's cull half.</summary>
     internal bool LoopSounding => _gunLoop is { Playing: true };
+
+    /// <summary>Where the live gun loop goes silent, the caliber's own
+    /// <see cref="WeaponSoundCue.CullDistance"/>, and zero until a caliber has fired. Internal so
+    /// the emitter suite reads the distance the cull actually uses rather than the attenuation
+    /// curve's end, which is the shorter of the two.</summary>
+    internal float LoopCull => _gunLoopCull;
 
     /// <summary>Builds this aircraft's weapon audio and hangs it under <paramref name="controller"/>,
     /// or returns null when the session found no sound archive. The spawner's whole share of the job;
@@ -201,6 +208,8 @@ public sealed partial class AiWeaponAudio : Node3D
             _gunLoop = null;
         }
         _gunLoopName = null;
+        _gunLoopCull = 0f;
+        _gunLoopCullSq = 0f;
         _gunLoop = MakePlayer(cue);
         if (_gunLoop == null || cue is not { } resolved)
         {
@@ -208,12 +217,13 @@ public sealed partial class AiWeaponAudio : Node3D
         }
         _gunLoopName = sndName;
         _gunLoopVol = resolved.Volume;
-        // The cull is the cue's OWN audible distance, not EngineAudioCurves.CullDistance: a gun loop
-        // is authored audible to 150-550 m, far inside the engine routine's 2000, so that number
-        // could never bite first and reading it here would be a borrowed constant.
-        _gunLoopCullSq = resolved.RangeMax * resolved.RangeMax;
+        // The cull is the cue's OWN WeaponSoundCue.CullDistance, not EngineAudioCurves.CullDistance:
+        // a gun loop is authored audible to 150-550 m, far inside the engine routine's 2000, so that
+        // number could never bite first and reading it here would be a borrowed constant.
+        _gunLoopCull = resolved.CullDistance;
+        _gunLoopCullSq = _gunLoopCull * _gunLoopCull;
         _culled = null;   // re-armed with the slot, so the first frame of this caliber logs its verdict
-        Log.Info("sound", $"ai weapons {Aircraft()}: loop={SlotState(sndName, cue)} cull={resolved.RangeMax:0} m");
+        Log.Info("sound", $"ai weapons {Aircraft()}: loop={SlotState(sndName, cue)} audible={resolved.RangeMax:0} m cull={_gunLoopCull:0} m");
     }
 
     // The first frame and every transition after it, always logged: audio cannot be
@@ -226,7 +236,7 @@ public sealed partial class AiWeaponAudio : Node3D
             return;
         }
         _culled = culled;
-        Log.Debug("sound", $"ai weapons {Aircraft()} {(culled ? "culled" : "audible")} at {Mathf.Sqrt(distSq):0} m (cull {Mathf.Sqrt(_gunLoopCullSq):0} m)");
+        Log.Debug("sound", $"ai weapons {Aircraft()} {(culled ? "culled" : "audible")} at {Mathf.Sqrt(distSq):0} m (cull {_gunLoopCull:0} m)");
     }
 
     // Which aircraft every line here is about: the controller this component hangs under, whose name

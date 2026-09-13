@@ -125,6 +125,59 @@ would print a large negative number. That is read from the instructions, not obs
 original, and it should be handled deliberately. And **both counters are incremented as 32-bit
 dwords but snapshotted as 16-bit words**, so past 65535 the row wraps.
 
+### The hold after the ending
+
+**The original flies on for 3.0 s after the goal is reached, then freezes for 1.0 s, then fades
+for 2.0 s, and only then shows this screen.** Six seconds pass between the win and the wrap-up, and
+the first three of them are a live world.
+
+All four Instant Action modes share one mission object at `0x0071b480` and one per-frame end
+machine. The countdown is the float at `mission+0xc40`, in seconds.
+
+| Stage | Length | Read from |
+|---|---|---|
+| The live world runs on | **3.0 s** | `PUSH 0x40400000` at `0x0045be4c`, handed to `FUN_00463c30` at `0x0045be58`, which seeds `+0xc40` |
+| The frozen frame | **1000 ms** | the `Sleep` in `FUN_004a0af0` (`this = 0x0071d540`), called from `0x0046ba6b` |
+| The fade to this screen | **2.0 s** | `_DAT_006272b8` (`0x40000000`), passed by `FUN_00419700` at `0x0041971c` |
+
+- **The win arms it.** `FUN_0045b9d0` is the Instant Action mode tick, dispatched on the mode id in
+  `DAT_00718cd8`. Every arm leaves through `LAB_0045be40`, which calls `FUN_00463c10(1)` (the won
+  flag, `+0xc58`) and then `FUN_00463c30(1, 3.0f)`, setting the over flag `+0xc54` and seeding the
+  countdown. `FUN_004696f0` seeds the same 3.0 s at mission init (`0x004696ff`).
+- **The world is not held while it runs.** `FUN_004a0220`, the flying state's world tick, decrements
+  `+0xc40` by the frame dt `DAT_009ad744` at `0x004a02a7`, and `FUN_004a0a80` ticks the whole world
+  *before* testing the countdown at `0x004a0ad2`. Only three sites read the over flag
+  (`FUN_0046a490`, `FUN_004a0220`, `FUN_004a0a80`) and none of them is in the physics or input path,
+  so the aeroplanes fly, the wreck falls and the camera moves for the whole 3.0 s.
+- **What the countdown reaching zero does.** `FUN_0046ba10` fires when `+0xc40 <= 0.0` and no
+  cutscene is running (`+0x6ec == 0`): the 1.0 s `Sleep` and framebuffer capture, then, absent a
+  `WIN_ANIM` / `LOSS_ANIM` (`+0x6e4` / `+0x6e8`), `FUN_00443090` at `0x0046bac0`. Game type 3 there
+  takes `FUN_00419700`, which writes `DAT_0064b348 = 6`, the wrap-up variant of the shared results
+  state that `FUN_00416ad0` branches on at `0x00416b14`, and arms the 2.0 s fade.
+- **The countdown's other seeds, which are not this hold.** `FUN_0046a490` re-seeds 3.0 s at
+  `0x0046af91` and `0x0046afc4`, and 0.1 s (`0x3dcccccd`) at `0x0046af8a` and `0x0046afbd` when an
+  objective carrying the `INSTANTWIN` / `INSTANTLOSS` keyword completed on that very frame. It also
+  seeds 3.0 s at `0x0046a524` when the mission's time limit expires, with neither flag set.
+  ⚠ `INSTANT` there means an instant mission end, not Instant Action.
+
+⚠ **A death is not held at all.** The player's own end path never touches `+0xc40`:
+`FUN_0047e080` case `0xc`, guarded at `0x0047e1fa`/`0x0047e208` on the player's `+0x91d` set and
+`+0x91f` clear, calls `FUN_004a0af0(0)` and goes straight to `FUN_00443090`, since the death-cutscene
+global `DAT_0071bb68` read at `0x0047e263` is never written anywhere in the image. What delays the
+screen there is the crash animation itself, whose RESET is what reaches this case
+([objectives.md](../objectives.md), "The mission-end path").
+
+⚠ **The respawn path is a separate arm and must not be confused with the hold.** The
+`player_destruction_reset` effect (`FUN_00480480`) calls `FUN_00463c30(0, 0x40400000)` at
+`0x004804d0`, which CLEARS the over flag and re-arms the countdown for a later ending. It carries no
+delay of its own.
+
+**What CSVM does with this.** `InstantActionRuntime.WrapupHoldS` is the decoded 3.0 s and the world
+runs through it, with the pilots' controls held (`FlightController.ControlsHeld`) so the ending is
+watched rather than flown. The 1.0 s freeze and the 2.0 s fade are not reproduced: the board simply
+takes the screen when the hold ends. The same hold is taken on a death, where it stands in for the
+crash animation the original waits out.
+
 ### What the launcher maps
 
 `FUN_004174d0` is the Instant Action launcher and carries two dropdown-to-internal maps worth

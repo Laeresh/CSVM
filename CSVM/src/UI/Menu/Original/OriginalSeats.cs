@@ -241,7 +241,7 @@ public sealed partial class OriginalShell
         int lastTop = count - AirframeWindow;
         int top = Math.Clamp(_airframeTop, 0, lastTop);
         float height = AirframeWindow * RowPitch;
-        float thumbHeight = Math.Max(AirframeThumbMin, height * AirframeWindow / count);
+        float thumbHeight = ListWindow.ThumbHeightFor(height, AirframeWindow, count, AirframeThumbMin);
         float thumbY = ListWindow.ThumbYFor(ListTop, height, thumbHeight, top, lastTop);
         return new ListWindow(
             RightColumnX, ListTop, ListWidth, height,

@@ -55,6 +55,23 @@ public class FogVolumeTests
         { "C5", "17|2" },
     };
 
+    /// <summary>Per chapter: "volumes|mesh polygons|polygons flagged <c>no_clutter</c>|scatter
+    /// faces|faces straight up|straight down|vertical". The scatter faces are what the cloud
+    /// lattice is laid over, so these are the surfaces the field's counts come from. Two facts the
+    /// row pins: every <c>fvol</c> mesh is a CLOSED box or prism whose walls and floor are flagged,
+    /// so only the upward skin scatters, and no shipped face points down or sideways.</summary>
+    public static TheoryData<string, string> ChapterFogVolumeFaces => new()
+    {
+        { "C1", "9|54|45|9|9|0|0" },
+        { "C1B", "0|0|0|0|0|0|0" },
+        { "C1C", "21|175|71|104|56|0|0" },
+        { "C2", "0|0|0|0|0|0|0" },
+        { "C2B", "9|54|45|9|9|0|0" },
+        { "C3", "0|0|0|0|0|0|0" },
+        { "C4", "9|74|49|25|25|0|0" },
+        { "C5", "17|148|102|46|17|0|0" },
+    };
+
     /// <summary>Per chapter: the map-spanning slab the map-edge continuation would extend, or
     /// "none". Real per-chapter numbers, not a synthetic fixture, see
     /// <c>docs/formats/fogvol.md</c> for <c>cardHeight</c> and the exact <c>fvol1</c>
@@ -315,6 +332,77 @@ public class FogVolumeTests
         Assert.True(volume.Contains(new Vector3(0.9f, 0.9f, 0f)));
         Assert.False(volume.Contains(new Vector3(0.9f, 0f, 0.9f)));   // a bounding-box corner
         Assert.False(volume.Contains(new Vector3(0f, 1.5f, 0f)));     // above the top face
+    }
+
+    [Fact]
+    public void AFaceAcceptsOnlyThePointsInsideItsOwnOutline()
+    {
+        // The lattice covers a face's bounding extent in its own plane, so the outline test is
+        // what keeps a triangle's points inside the triangle. Winding is not assumed: a strip's
+        // triangles alternate it, so the reversed loop must answer identically.
+        var corners = new[]
+        {
+            new Vector3(0f, 10f, 0f), new Vector3(10f, 10f, 0f), new Vector3(0f, 10f, 10f),
+        };
+        var face = new FogVolumeFace(corners, Vector3.Up);
+        var reversed = new FogVolumeFace(new[] { corners[2], corners[1], corners[0] }, Vector3.Up);
+
+        Assert.True(face.Contains(new Vector3(1f, 10f, 1f)));
+        Assert.True(face.Contains(new Vector3(4.9f, 10f, 4.9f)));    // just inside the hypotenuse
+        Assert.False(face.Contains(new Vector3(6f, 10f, 6f)));       // past it
+        Assert.False(face.Contains(new Vector3(9f, 10f, 9f)));       // the extent's far corner
+        Assert.True(reversed.Contains(new Vector3(1f, 10f, 1f)));
+        Assert.False(reversed.Contains(new Vector3(6f, 10f, 6f)));
+    }
+
+    [ExtractedDataTheory]
+    [MemberData(nameof(ChapterFogVolumeFaces))]
+    public void EveryChapterScattersOverTheFacesItsFvolMeshesAuthor(string chapter, string expected)
+    {
+        var gamez = GameZ.Load(SessionPaths.ChapterGamez(TestData.DataRoot!, chapter));
+        var volumes = FogVolumeSpec.VolumesOf(gamez);
+
+        int faces = 0, up = 0, down = 0, wall = 0;
+        foreach (var volume in volumes)
+        {
+            foreach (var face in volume.Polygons ?? Array.Empty<FogVolumeFace>())
+            {
+                faces++;
+                if (face.Normal.Y > 0.99f)
+                {
+                    up++;
+                }
+                else if (face.Normal.Y < -0.99f)
+                {
+                    down++;
+                }
+                else if (Mathf.Abs(face.Normal.Y) < 0.1f)
+                {
+                    wall++;
+                }
+            }
+        }
+
+        // Read off the meshes rather than off the census, so the row states what the scatter
+        // DECLINED as well as what it took.
+        int polygons = 0, flagged = 0;
+        foreach (var node in gamez.Nodes)
+        {
+            if (!WorldBuilder.IsFogVolumeNode(node) || node.MeshIndex < 0)
+            {
+                continue;
+            }
+            foreach (var poly in gamez.Meshes[node.MeshIndex].Polygons)
+            {
+                polygons++;
+                if (poly.NoClutter)
+                {
+                    flagged++;
+                }
+            }
+        }
+
+        Assert.Equal(expected, $"{volumes.Count}|{polygons}|{flagged}|{faces}|{up}|{down}|{wall}");
     }
 
     // A hand-built axis-aligned FogVolumeBox: the 6 outward-facing unit-normal planes of [min,

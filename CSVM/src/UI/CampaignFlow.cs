@@ -190,6 +190,12 @@ public sealed class CampaignFlow
 
     private readonly Dictionary<CampaignScreen, ICampaignPage> _pages = new();
 
+    // The film in front of the screens, which the two cinema doors below play through. ⚠ Do not
+    // call a cinema around it: the screen a film opens is live the moment the film stops, and the
+    // presentation polls its seats after the stop, so the press that ended the film would arrive
+    // on that screen as an edge of its own.
+    private readonly CinemaFilm _film = new();
+
     // The screens entered, innermost last. Never empty: popping the last one ends the flow.
     private readonly List<CampaignScreen> _stack = new() { CampaignScreen.Roster };
 
@@ -298,6 +304,12 @@ public sealed class CampaignFlow
 
     /// <summary>Whether this mission flies a wingman, its <c>cm_sequence</c> flag.</summary>
     public bool MissionHasWingman => Feature.MissionHasWingman;
+
+    /// <summary>The film standing in front of these screens, as the presentation driving them reads
+    /// the span: the frames the film owns, and the tail of the press that ended it. A presentation
+    /// that polls its input reads this before it applies a frame, or the press that skipped a film
+    /// fires a row on the screen the film opened.</summary>
+    public CinemaFilm Film => _film;
 
     /// <summary>The screen showing.</summary>
     public CampaignScreen Screen => _stack[^1];
@@ -551,24 +563,24 @@ public sealed class CampaignFlow
     /// ⚠ The feature's seat and a plain <see cref="GoTo"/>, never <see cref="SelectProfile"/> or
     /// <see cref="OpenCabin"/>: this cabin is stacked and not entered, and a chapter film in front
     /// of it would land the player on the cabin instead of the book they just earned.</summary>
-    public void OpenScrapbookAfterMission(CampaignProfileDef profile, int seq)
+    public void OpenScrapbookAfterMission(CampaignProfileDef profile, int seq, bool missionWon)
     {
         Feature.SelectProfile(profile);
         GoTo(CampaignScreen.Cabin);
-        OpenScrapbookAfterMission(seq);
+        OpenScrapbookAfterMission(seq, missionWon);
     }
 
-    /// <summary>Opens the book the way a finished mission does, playing the closing film first for
-    /// a profile that has finished the campaign (<see cref="CampaignFeature.ClosingCinema"/>); the
-    /// book then opens on the frame the film stops. The mission-end return and the book's own
-    /// screenshot aid take this door.
+    /// <summary>Opens the book the way a finished mission does, playing the closing film first when
+    /// the mission just flown earns it (<see cref="ClosingCinema.PlaysAfter"/>, a win on the
+    /// campaign's last mission); the book then opens on the frame the film stops. The mission-end
+    /// return and the book's own screenshot aid take this door, the aid with no win to report.
     /// ⚠ Not the door the table of contents and the two bookmarks take: those run inside the
     /// campaign, where the original reaches <c>scrapbook.script</c> without <c>FINALCINEMA</c>.</summary>
-    public void OpenScrapbookAfterMission(int seq)
+    public void OpenScrapbookAfterMission(int seq, bool missionWon)
     {
-        if (Feature.ClosingCinema is { } cinema && Feature.Profile is { } seated)
+        if (Feature.ClosingCinema is { } cinema)
         {
-            cinema.OpenScrapbook(seated, () => OpenScrapbook(seq));
+            _film.Play(then => cinema.OpenScrapbook(seq, missionWon, then), () => OpenScrapbook(seq));
             return;
         }
 
@@ -598,7 +610,7 @@ public sealed class CampaignFlow
     {
         if (Feature.ChapterCinema is { } cinema && Feature.Profile is { } seated)
         {
-            cinema.OpenCabin(seated, () => GoTo(CampaignScreen.Cabin));
+            _film.Play(then => cinema.OpenCabin(seated, then), () => GoTo(CampaignScreen.Cabin));
             return;
         }
 

@@ -6,11 +6,11 @@ using Xunit;
 
 namespace CSVM.Tests;
 
-/// <summary>The scrapbook's table of contents: one 80-pixel row per completed mission in <c>seq</c>
-/// order with its icon and three lines, a four-row window with a scrollbar past that, VIEW SELECTED
-/// and the secondary press both opening the book, the forward tab turning into it, REPLAY MISSION
-/// opening the briefing without advancing the campaign, and RETURN TO CABIN never stacking a second
-/// cabin.</summary>
+/// <summary>The scrapbook's table of contents: the career row, then one 80-pixel row per completed
+/// mission in <c>seq</c> order with its icon and three lines, a four-row window with a scrollbar
+/// past that, VIEW SELECTED and the secondary press both opening the book, the forward tab turning
+/// into it, REPLAY MISSION opening the briefing without advancing the campaign, and RETURN TO CABIN
+/// never stacking a second cabin.</summary>
 public class CampaignPreviousMissionsPageTests
 {
     /// <summary>The list is the campaign's own position: <c>uiData</c> 2409 counts its rows off
@@ -25,14 +25,57 @@ public class CampaignPreviousMissionsPageTests
         CampaignProgression.Record(profile, Attempt(2, mask: 4)); // no primary: the position holds
         var flow = OpenedOnPreviousMissions(profile);
 
-        // Two missions below the position, then VIEW SELECTED, REPLAY MISSION, the forward page
-        // tab, the CURRENT MISSION bookmark and RETURN TO CABIN.
+        // The career row and two missions below the position, then VIEW SELECTED, REPLAY MISSION,
+        // the forward page tab, the CURRENT MISSION bookmark and RETURN TO CABIN.
         Assert.Equal(2, profile.MissionsCompleted);
-        Assert.Equal(7, flow.Page.RowCount);
-        Assert.Equal(string.Empty, flow.Page.RowText(0)); // a mission row draws its own three lines
-        Assert.Equal("VIEW SELECTED", flow.Page.RowText(2));
-        Assert.Equal("Mission 1", flow.Page.Detail(0)); // seq 0 (1-based ordinal 1) comes first
-        Assert.Equal("Mission 2", flow.Page.Detail(1)); // seq 1 comes second
+        Assert.Equal(8, flow.Page.RowCount);
+        Assert.Equal(string.Empty, flow.Page.RowText(0)); // a list row draws its own three lines
+        Assert.Equal("VIEW SELECTED", flow.Page.RowText(3));
+        Assert.Equal("Starting My Career", flow.Page.Detail(0)); // langui 1217, the career row
+        Assert.Equal("Mission 1", flow.Page.Detail(1)); // seq 0 (1-based ordinal 1) comes first
+        Assert.Equal("Mission 2", flow.Page.Detail(2)); // seq 1 comes second
+    }
+
+    /// <summary>The original's ordinal 0 is <c>SCRAPBOOK.CSV</c> slot 0, the not-yet-started
+    /// career: it stands above the missions from a brand-new profile onwards, carries the card fan
+    /// past the eleven airframes and names no mission, so REPLAY MISSION is not offered on it and a
+    /// second confirm opens the book there instead.</summary>
+    [Fact]
+    public void AFreshProfileListsTheCareerRowAlone()
+    {
+        var flow = OpenedOnPreviousMissions(CampaignProfileDef.NewProfile("Zachary"));
+
+        // The career row, then VIEW SELECTED, the forward tab, the bookmark and RETURN TO CABIN.
+        Assert.Equal(5, flow.Page.RowCount);
+        Assert.Equal(-1, RowOf(flow.Page, BoardButton.ReplayMission));
+        Assert.Equal(11, flow.Page.Pictures[0].Frame); // the card fan, past the eleven airframes
+        Assert.Equal(
+            new[] { "Starting My Career", "Above the clouds", "Gypsy Magic" },
+            new[] { flow.Page.Captions[2].Text, flow.Page.Captions[3].Text, flow.Page.Captions[4].Text });
+
+        flow.Accept(); // picks it
+        Assert.Equal("Selected. Confirm again to open it", flow.Page.Detail(0));
+        Assert.Equal(-1, RowOf(flow.Page, BoardButton.ReplayMission)); // never on the career row
+
+        flow.Accept(); // and a second confirm opens the book there rather than replaying anything
+        Assert.Equal(CampaignScreen.Scrapbook, flow.Screen);
+        Assert.Equal(-1, flow.MissionSeq); // slot 0, the page with no mission behind it
+    }
+
+    /// <summary>The career row is picked like any other, and picking it takes REPLAY MISSION away
+    /// even on a profile whose missions offer it.</summary>
+    [Fact]
+    public void PickingTheCareerRowWithdrawsReplayMission()
+    {
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, Attempt(0));
+        var flow = OpenedOnPreviousMissions(profile);
+
+        Assert.NotEqual(-1, RowOf(flow.Page, BoardButton.ReplayMission)); // the flown mission's
+
+        flow.FocusRow(0);
+        flow.Accept();
+        Assert.Equal(-1, RowOf(flow.Page, BoardButton.ReplayMission));
     }
 
     /// <summary>A position reached without flying still lists its missions, which is what the
@@ -45,13 +88,15 @@ public class CampaignPreviousMissionsPageTests
         profile.MissionsCompleted = 3;
         var flow = OpenedOnPreviousMissions(profile);
 
-        // Three mission rows, and the four buttons a profile with no timed record carries.
-        Assert.Equal(7, flow.Page.RowCount);
+        // The career row, three mission rows, and the four buttons a profile with no timed record
+        // carries.
+        Assert.Equal(8, flow.Page.RowCount);
         Assert.Equal(-1, RowOf(flow.Page, BoardButton.ReplayMission));
-        Assert.Equal("Mission 3", flow.Page.Detail(2));
-        Assert.Equal(string.Empty, flow.Page.Captions[4].Text); // the plane line of a mission never flown
-        Assert.Equal(0, flow.Page.Pictures[0].Frame); // and its icon, the record's zeroed airframe
+        Assert.Equal("Mission 3", flow.Page.Detail(3));
+        Assert.Equal(string.Empty, flow.Page.Captions[7].Text); // the plane line of a mission never flown
+        Assert.Equal(0, flow.Page.Pictures[1].Frame); // and its icon, the record's zeroed airframe
 
+        flow.FocusRow(1);
         Assert.True(flow.Secondary());
         Assert.Equal(CampaignScreen.Scrapbook, flow.Screen);
     }
@@ -67,20 +112,20 @@ public class CampaignPreviousMissionsPageTests
         var flow = OpenedOnPreviousMissions(profile);
 
         var icons = flow.Page.Pictures;
-        Assert.Equal(2, icons.Count);
-        Assert.EndsWith("FC_PlaneIcons.png", icons[0].Art.Name);
-        Assert.Equal(5, icons[0].Frame); // the airframe the recorded run flew
-        Assert.Equal(422f, icons[0].X);
-        Assert.Equal(140f, icons[0].Y);
-        Assert.Equal(220f, icons[1].Y); // one 80-pixel row down
+        Assert.Equal(3, icons.Count); // the career row and the two missions
+        Assert.EndsWith("FC_PlaneIcons.png", icons[1].Art.Name);
+        Assert.Equal(5, icons[1].Frame); // the airframe the recorded run flew
+        Assert.Equal(422f, icons[1].X);
+        Assert.Equal(220f, icons[1].Y); // one 80-pixel row below the career row's own 140
+        Assert.Equal(300f, icons[2].Y);
 
         // The two header widgets, then three lines per row.
         var rows = flow.Page.Captions;
-        Assert.Equal(8, rows.Count);
-        Assert.Equal(520f, rows[2].X);
-        Assert.Equal(new[] { 150f, 170f, 190f }, new[] { rows[2].Y, rows[3].Y, rows[4].Y });
-        Assert.Equal("Gypsy Magic", rows[4].Text); // the plane, the row's third line
-        Assert.Equal(230f, rows[5].Y); // the next row's first line
+        Assert.Equal(11, rows.Count);
+        Assert.Equal(520f, rows[5].X);
+        Assert.Equal(new[] { 230f, 250f, 270f }, new[] { rows[5].Y, rows[6].Y, rows[7].Y });
+        Assert.Equal("Gypsy Magic", rows[7].Text); // the plane, the row's third line
+        Assert.Equal(310f, rows[8].Y); // the next row's first line
     }
 
     /// <summary>The picked row washes and outlines, the focused one takes the same outline over a
@@ -120,9 +165,9 @@ public class CampaignPreviousMissionsPageTests
 
         // Four icons plus the two arrows and the thumb, never more than the window holds.
         Assert.Equal(7, flow.Page.Pictures.Count);
-        Assert.Equal("Mission 1", flow.Page.Captions[2].Text); // still at the top of the list
+        Assert.Equal("Starting My Career", flow.Page.Captions[2].Text); // still at the top of the list
 
-        flow.FocusRow(5); // the last mission row
+        flow.FocusRow(6); // the last mission row
         Assert.Equal("Mission 3", flow.Page.Captions[2].Text); // seq 2 heads the window now
         Assert.Equal(150f, flow.Page.Captions[2].Y); // the window's first slot, wherever it stands
 
@@ -147,18 +192,18 @@ public class CampaignPreviousMissionsPageTests
         var page = (CampaignPreviousMissionsPage)flow.Page;
         var window = page.PointerWindow;
         Assert.NotNull(window);
-        Assert.Equal((6, 4, 0), (window!.Value.Count, window.Value.Rows, window.Value.Top));
+        Assert.Equal((7, 4, 0), (window!.Value.Count, window.Value.Rows, window.Value.Top));
         Assert.True(window.Value.Contains(window.Value.X + 1f, window.Value.Y + 1f));
         Assert.True(window.Value.OnThumb(window.Value.ThumbX + 1f, window.Value.ThumbY + 1f));
 
         page.ScrollTo(window.Value.TopAfterWheel(1));
         Assert.Equal(1, page.PointerWindow!.Value.Top);
-        Assert.Equal("Mission 2", flow.Page.Captions[2].Text); // seq 1 heads the window now
+        Assert.Equal("Mission 1", flow.Page.Captions[2].Text); // seq 0 heads the window now
         Assert.Equal(1, flow.Row); // row 0 left the window, so the cursor came with it
 
         page.ScrollTo(500);
-        Assert.Equal(2, page.PointerWindow!.Value.Top); // the last window of four over six rows
-        Assert.Equal(2, flow.Row);
+        Assert.Equal(3, page.PointerWindow!.Value.Top); // the last window of four over seven rows
+        Assert.Equal(3, flow.Row);
     }
 
     [Fact]
@@ -181,7 +226,7 @@ public class CampaignPreviousMissionsPageTests
         CampaignProgression.Record(profile, Attempt(1));
         var flow = OpenedOnPreviousMissions(profile);
 
-        flow.FocusRow(1);
+        flow.FocusRow(2); // the seq-1 row, past the career row
         flow.Accept(); // picks it
         Assert.Equal(CampaignScreen.PreviousMissions, flow.Screen);
 
@@ -199,9 +244,9 @@ public class CampaignPreviousMissionsPageTests
         var flow = OpenedOnPreviousMissions(profile);
         int before = profile.MissionsCompleted;
 
-        flow.FocusRow(1); // the seq-1 row (second finished mission, still row 1 in seq order)
+        flow.FocusRow(2); // the seq-1 row (second finished mission, under the career row)
         flow.Accept();    // select it
-        flow.FocusRow(3); // REPLAY MISSION (2 mission rows + VIEW SELECTED before it)
+        flow.FocusRow(4); // REPLAY MISSION (3 list rows + VIEW SELECTED before it)
         flow.Accept();
 
         Assert.Equal(CampaignScreen.Briefing, flow.Screen);
@@ -216,28 +261,18 @@ public class CampaignPreviousMissionsPageTests
         CampaignProgression.Record(profile, Attempt(0));
         var flow = OpenedOnPreviousMissions(profile);
 
-        flow.FocusRow(2); // REPLAY MISSION (1 mission row + VIEW SELECTED before it)
+        flow.FocusRow(3); // REPLAY MISSION (2 list rows + VIEW SELECTED before it)
         flow.Accept();
 
         Assert.Equal(CampaignScreen.Briefing, flow.Screen);
         Assert.Equal(0, flow.MissionSeq);
     }
 
-    /// <summary>Replay Mission is offered only where <c>uiData</c> 2411 offers it, so a profile
-    /// with nothing flown carries no such row rather than a row that refuses.</summary>
-    [Fact]
-    public void WithNoFinishedMissionsThereIsNoReplayRowAtAll()
-    {
-        var flow = OpenedOnPreviousMissions(CampaignProfileDef.NewProfile("Zachary"));
-
-        Assert.Equal(-1, RowOf(flow.Page, BoardButton.ReplayMission));
-        Assert.Equal(4, flow.Page.RowCount); // VIEW SELECTED, the tab, the bookmark, RETURN TO CABIN
-    }
-
     /// <summary>The forward page tab turns out of the contents and into the book at its first
-    /// mission, which is the page the book's own back arrow falls off to reach this screen.</summary>
+    /// page, the career page, which is the page the book's own back arrow falls off to reach this
+    /// screen.</summary>
     [Fact]
-    public void TheForwardTabTurnsIntoTheBookAtItsFirstMission()
+    public void TheForwardTabTurnsIntoTheBookAtItsFirstPage()
     {
         var profile = CampaignProfileDef.NewProfile("Zachary");
         CampaignProgression.Record(profile, Attempt(2));
@@ -246,7 +281,7 @@ public class CampaignPreviousMissionsPageTests
         Press(flow, BoardButton.ScrapbookNext);
 
         Assert.Equal(CampaignScreen.Scrapbook, flow.Screen);
-        Assert.Equal(0, flow.MissionSeq); // the front of the book, not the finished mission
+        Assert.Equal(-1, flow.MissionSeq); // the front of the book, not the finished mission
     }
 
     /// <summary>The secondary press is VIEW SELECTED without walking down to the button: on a
@@ -259,19 +294,22 @@ public class CampaignPreviousMissionsPageTests
         CampaignProgression.Record(profile, Attempt(1));
         var flow = OpenedOnPreviousMissions(profile);
 
-        flow.FocusRow(1); // the seq-1 row, never confirmed
+        flow.FocusRow(2); // the seq-1 row, never confirmed
         Assert.True(flow.Secondary());
 
         Assert.Equal(CampaignScreen.Scrapbook, flow.Screen);
         Assert.Equal(1, flow.MissionSeq);
     }
 
-    /// <summary>A profile with nothing finished has nothing to view, so the press is unhandled
-    /// rather than opening the book on a mission the list does not carry.</summary>
+    /// <summary>With nobody seated the list has no rows at all, so the press is unhandled rather
+    /// than opening the book on a page the list does not carry.</summary>
     [Fact]
-    public void TheSecondaryPressIsNothingWithNoFinishedMission()
+    public void TheSecondaryPressIsNothingWithNoProfileSeated()
     {
-        var flow = OpenedOnPreviousMissions(CampaignProfileDef.NewProfile("Zachary"));
+        string dir = Path.Combine(TestData.TempDir(), "Profiles");
+        Directory.CreateDirectory(dir);
+        var flow = new CampaignFlow(new CampaignProfileStore(dir), UiStrings.Empty);
+        flow.GoTo(CampaignScreen.PreviousMissions);
 
         Assert.False(flow.Secondary());
         Assert.Equal(CampaignScreen.PreviousMissions, flow.Screen);
@@ -287,7 +325,7 @@ public class CampaignPreviousMissionsPageTests
         CampaignProgression.Record(profile, Attempt(1));
         var flow = OpenedOnPreviousMissions(profile);
 
-        flow.FocusRow(1); // the seq-1 row
+        flow.FocusRow(2); // the seq-1 row
         flow.Accept();    // pick it
         Press(flow, BoardButton.ViewMission);
 

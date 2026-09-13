@@ -1336,8 +1336,9 @@ public sealed class OriginalHangarScreen
         }
     }
 
-    // The open list's window under its box, the thumb between its two arrows inside the right edge;
-    // null while the items fit the authored window.
+    // The open list's window under its box, the thumb between its two arrows inside the right edge
+    // and as long as the share of the list the window shows; null while the items fit the authored
+    // window.
     private ListWindow? OpenHangarListWindow()
     {
         if (_hangarOpen == null)
@@ -1370,8 +1371,7 @@ public sealed class OriginalHangarScreen
             int gridRows = (count + cells.Columns - 1) / cells.Columns;
             int lastRow = Math.Max(0, gridRows - cells.Rows);
             float track = cells.TrackHeight(upSize.Height, downSize.Height);
-            // The thumb fills its track in proportion, never past the track's own ends.
-            float thumbHeight = Math.Min(track, Math.Max(thumb.Height, track * cells.Rows / gridRows));
+            float thumbHeight = ListWindow.ThumbHeightFor(track, cells.Rows, gridRows, thumb.Height);
             float trackTop = cells.TrackTop(upSize.Height);
             return new ListWindow(
                 cells.X, cells.Y, cells.Width, cells.Height,
@@ -1383,10 +1383,11 @@ public sealed class OriginalHangarScreen
         float top = box.Y + box.Height;
         float height = window * box.Height;
         float trackHeight = height - upSize.Height - downSize.Height;
+        float plainThumb = ListWindow.ThumbHeightFor(trackHeight, window, count, thumb.Height);
         int first = Math.Clamp(_hangarListTop, 0, count - window);
         return new ListWindow(
             box.X, top, box.Width, height,
-            box.X + box.Width - upSize.Width, ListWindow.ThumbYFor(top + upSize.Height, trackHeight, thumb.Height, first, count - window), thumb.Width, thumb.Height,
+            box.X + box.Width - upSize.Width, ListWindow.ThumbYFor(top + upSize.Height, trackHeight, plainThumb, first, count - window), thumb.Width, plainThumb,
             top + upSize.Height, trackHeight, count, window, first);
     }
 
@@ -2379,11 +2380,9 @@ public sealed class OriginalHangarScreen
 
         if (OpenHangarListWindow() is { } window && opened != null && StripArt(opened.Art, 0, 1) is { } thumb)
         {
-            // The grid's thumb fills its track in proportion, so it is drawn to the height the
-            // window gives it rather than at the art's own.
-            panelPictures.Add(grid == null
-                ? new BoardPicture(thumb, window.ThumbX, window.ThumbY)
-                : new BoardPicture(thumb, window.ThumbX, window.ThumbY, Height: window.ThumbHeight));
+            // The thumb fills its track in proportion, so the tile is drawn stretched to the height
+            // the window gives it rather than at the art's own.
+            panelPictures.Add(new BoardPicture(thumb, window.ThumbX, window.ThumbY, Height: window.ThumbHeight));
         }
 
         overlays.Add(new BoardPanel(panelFills, panelPictures, panelLines));

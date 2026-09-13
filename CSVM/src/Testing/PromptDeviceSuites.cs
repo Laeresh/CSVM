@@ -7,11 +7,11 @@ using Godot;
 
 namespace CSVM.Testing;
 
-/// <summary>The control prompt over a real seat: which device the auto-dock line names as the
-/// seat's last real input moves from the pad to the keyboard and back, what the line reads when
-/// the active device has no binding for the action, and where the line sits once composed. The
-/// wording comes from the install's own message table, so each check is on the whole composed line
-/// rather than on the selection alone.
+/// <summary>The control prompts over a real seat: which device the auto-dock and respawn lines name
+/// as the seat's last real input moves from the pad to the keyboard and back, what a line reads when
+/// the active device has no binding for the action, and where each line sits once composed. The
+/// auto-dock wording comes from the install's own message table, so each check is on the whole
+/// composed line rather than on the selection alone.
 /// ⚠ A headless run holds down no key and no stick, so the tick's two halves are supplied
 /// (<c>ObserveDeviceForTest</c>) rather than polled. The seat's own poll, the prompt composition and
 /// the recompose on a handover are the shipping ones.</summary>
@@ -28,7 +28,7 @@ internal static class PromptDeviceSuites
     {
         ctx.RequireData(ctx.MessagesPath, $"the install's message table");
         var strings = Messages.Load(ctx.MessagesPath);
-        string onKey = strings.Format(PressKey, "F9");
+        string onKey = strings.Format(PressKey, "A");
         string onPad = strings.Format(PressKey, "Pad Left Stick");
         var rig = new FlightController
         {
@@ -52,7 +52,7 @@ internal static class PromptDeviceSuites
                 $"…and a tick with nothing held leaves it there: '{rig.PilotHud.AutoLandPrompt}'");
 
             var key = new OneSide();
-            key.Keys.Add((int)Key.F9);
+            key.Keys.Add((int)Key.A);
             rig.ObserveDeviceForTest(key, new OneSide());
             ctx.Check(rig.ActiveDeviceSide == DeviceSide.Keyboard && rig.PilotHud.AutoLandPrompt == onKey,
                 $"a key press takes the line back to the keyboard: '{rig.PilotHud.AutoLandPrompt}'");
@@ -77,7 +77,7 @@ internal static class PromptDeviceSuites
         ctx.RequireData(ctx.MessagesPath, $"the install's message table");
         Anchor(ctx);
         var strings = Messages.Load(ctx.MessagesPath);
-        string onKey = strings.Format(PressKey, "F9");
+        string onKey = strings.Format(PressKey, "A");
         string onPad = strings.Format(PressKey, "Pad Left Stick");
         var canvas = new CanvasLayer();
         var rig = new FlightController
@@ -107,18 +107,99 @@ internal static class PromptDeviceSuites
         }
     }
 
+    [Suite("hud-crash-prompt",
+        "the respawn prompt a crashed pilot reads: it stands on a centred line of its own, parented "
+        + "to the MESSAGE layer the crash camera leaves up rather than the HUD layer it hides, it "
+        + "names the seat's own Respawn control and follows a handover to the pad, the readout "
+        + "block carries none of it, and a flying, halted or spectating frame leaves it empty")]
+    internal static void HudCrashPrompt(TestContext ctx)
+    {
+        var canvas = new CanvasLayer { Name = "hud" };
+        var messages = new CanvasLayer { Name = "hud_messages" };
+        var rig = new FlightController
+        {
+            PlayerIndex = 0,
+            UseKeyboard = true,
+            PadDevices = Array.Empty<int>(),
+        };
+        try
+        {
+            ctx.Host.AddChild(canvas);
+            ctx.Host.AddChild(messages);
+            rig.UseMessages(null);
+            var hud = rig.PilotHud;
+            hud.Attach(canvas, messages, null, null);
+            ctx.Check(hud.CrashPrompt != null && hud.CrashPrompt.GetParent() == messages,
+                $"the prompt hangs from the layer the crash cut leaves up: '{hud.CrashPrompt?.GetParent()?.Name}'");
+            ctx.Check(hud.AutoDock != null && hud.AutoDock.GetParent() == canvas,
+                $"…and the auto-dock line stays on the HUD layer: '{hud.AutoDock?.GetParent()?.Name}'");
+            if (hud.CrashPrompt is { } prompt)
+            {
+                Crashed(ctx, hud, prompt);
+                CrashHandover(ctx, rig, hud, prompt);
+            }
+        }
+        finally
+        {
+            rig.Free();
+            canvas.Free();
+            messages.Free();
+        }
+    }
+
+    // The crashed frames themselves: the composed line lands on the prompt control and nowhere in
+    // the readout block, and the three states the button cannot answer keep it off.
+    private static void Crashed(TestContext ctx, FlightHud hud, PromptLine prompt)
+    {
+        var down = new FlightHudState { Crashed = true, RespawnOffered = true };
+        hud.Draw(in down);
+        ctx.Check(prompt.Line == "Press Backspace to respawn",
+            $"the crash puts the seat's own respawn line on the prompt control: '{prompt.Line}'");
+        ctx.Check(hud.DrawnText is { } block && !block.Contains("respawn") && block.Contains("SPD"),
+            $"…and the readout block carries the telemetry without it: '{hud.DrawnText ?? "<none>"}'");
+
+        foreach (var state in new[]
+        {
+            new FlightHudState { RespawnOffered = true },
+            new FlightHudState { Crashed = true, Halted = true, RespawnOffered = true },
+            new FlightHudState { Crashed = true },
+        })
+        {
+            hud.Draw(in state);
+            ctx.Check(prompt.Line.Length == 0 && !FlightHud.ShowsRespawnPrompt(in state),
+                $"…as do crashed={state.Crashed} halted={state.Halted} offered={state.RespawnOffered}");
+        }
+
+        hud.Draw(in down);
+        hud.SetVisible(false);
+        ctx.Check(!prompt.Visible, $"a cutscene's hide takes the respawn prompt with the rest");
+        hud.SetVisible(true);
+        ctx.Check(prompt.Visible, $"…and gives it back");
+    }
+
+    // A pad-side seat is named its pad button, never the key, over the same handover the auto-dock
+    // line follows.
+    private static void CrashHandover(TestContext ctx, FlightController rig, FlightHud hud,
+        PromptLine prompt)
+    {
+        rig.ObserveDeviceForTest(new OneSide(), OnPad(JoyButton.LeftStick));
+        hud.Draw(new FlightHudState { Crashed = true, RespawnOffered = true });
+        ctx.Check(rig.ActiveDeviceSide == DeviceSide.Pad && prompt.Line == "Press Pad Y to respawn",
+            $"a handover to the pad moves the respawn line with it: '{prompt.Line}'");
+    }
+
     // The decoded anchor, a fraction of the PANE in every pane shape: a wide pane centres the
     // prompt in its own viewport rather than in the reading box the text block measures from.
     private static void Anchor(TestContext ctx)
     {
-        var full = AutoDockLine.LineAnchor(new Vector2(2560f, 1440f));
+        var full = PromptLine.LineAnchor(new Vector2(2560f, 1440f));
         ctx.Check(Mathf.IsEqualApprox(full.X, 1280f) && Mathf.IsEqualApprox(full.Y, 432f),
             $"the prompt anchors at the pane's centre three tenths down: {full}");
-        var quarter = AutoDockLine.LineAnchor(new Vector2(640f, 360f));
+        var quarter = PromptLine.LineAnchor(new Vector2(640f, 360f));
         ctx.Check(Mathf.IsEqualApprox(quarter.X, 320f) && Mathf.IsEqualApprox(quarter.Y, 108f),
             $"…each splitscreen pane on its own viewport: {quarter}");
         var wide = new Vector2(2560f, 720f);
-        var stretched = AutoDockLine.LineAnchor(wide);
+        var stretched = PromptLine.LineAnchor(wide);
         ctx.Check(Mathf.IsEqualApprox(stretched.X, wide.X / 2f)
                   && Mathf.IsEqualApprox(stretched.Y, wide.Y * 0.3f),
             $"…and a wide pane on its own width and height, not the reading box's: {stretched}");
@@ -126,7 +207,7 @@ internal static class PromptDeviceSuites
 
     // The offer's own frames: the composed line lands on the prompt control and nowhere in the
     // readout block, and the three gates that answer no offer keep it off.
-    private static void Offer(TestContext ctx, FlightHud hud, AutoDockLine prompt, string onKey)
+    private static void Offer(TestContext ctx, FlightHud hud, PromptLine prompt, string onKey)
     {
         var offered = new FlightHudState { AutoLandOffered = true, SpeedMps = 50f };
         hud.Draw(in offered);
@@ -160,7 +241,7 @@ internal static class PromptDeviceSuites
 
     // The wording still follows the seat's device once the line has its own control to sit on.
     private static void Handover(TestContext ctx, FlightController rig, FlightHud hud,
-        AutoDockLine prompt, string onPad)
+        PromptLine prompt, string onPad)
     {
         rig.ObserveDeviceForTest(new OneSide(), OnPad(JoyButton.LeftStick));
         hud.Draw(new FlightHudState { AutoLandOffered = true, SpeedMps = 50f });

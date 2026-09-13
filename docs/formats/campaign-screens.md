@@ -610,10 +610,12 @@ declares a count anywhere: `uiData` 2402's next-page helper `FUN_00406170` probe
 following spread and, when the key is absent, rolls to spread 1 of the next mission, so the book's
 extent is exactly the file's extent.
 
-**Spread 1 is the results page.** The script activates the stat card, the two tabs, the kill stamps
-and the results rows only when `uiData` 2403, the current spread, equals 1; the remaining spreads
-are story pages and show scraps alone. Both kinds draw scraps, so the results page is a story page
-with the card laid over its right half.
+**Spread 1 is the results page, on a mission slot.** The script activates the stat card, the two
+tabs, the kill stamps and the results rows only when `uiData` 2403, the current spread, equals 1
+and a mission is open (`1 == callback(2403) && FRA`); the remaining spreads are story pages and
+show scraps alone. Both kinds draw scraps, so the results page is a story page with the card laid
+over its right half. Slot 0 fails the second half of that gate, so the career page's own spread 1
+is a story page: ten scraps and the title, with no card, no tabs and no stamps.
 
 ### Resolving a row to a file
 

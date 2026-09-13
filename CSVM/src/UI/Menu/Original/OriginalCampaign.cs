@@ -219,18 +219,18 @@ public sealed partial class OriginalShell
     /// <summary>Seats the named profile and opens the book on a mission's first spread with the
     /// cabin on its far side, the mission end's own door and the book's screenshot aid; false when
     /// the profile cannot be read. True says the profile is seated, not that the book is showing:
-    /// the closing cinema plays first for a finished campaign, and the book arrives when it
-    /// stops.</summary>
-    public bool ShowScrapbook(string profile, int seq)
+    /// the closing cinema plays first after a win on the campaign's last mission, and the book
+    /// arrives when it stops.</summary>
+    public bool ShowScrapbook(string profile, int seq, bool missionWon)
     {
         if (_flow == null || _campaign == null || !_campaign.SeatProfile(profile))
         {
             return false;
         }
 
-        if (_campaign.ClosingCinema is { } cinema && _campaign.Profile is { } seated)
+        if (_campaign.ClosingCinema is { } cinema)
         {
-            _film.Play(then => cinema.OpenScrapbook(seated, then), () => OpenBook(seq));
+            _film.Play(then => cinema.OpenScrapbook(seq, missionWon, then), () => OpenBook(seq));
             return true;
         }
 

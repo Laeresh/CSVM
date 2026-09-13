@@ -194,6 +194,18 @@ A 32×32, 16-bit buffer (`FUN_00565bf0` allocates `32·32·2` bytes), cleared an
 
 The result is published under the material name `gModShadow` (`FUN_00565ce0`).
 
+Step 1 is the ordinary node draw, not a separate silhouette pass. `FUN_00565d80` sets the
+shadow-render flag `DAT_00a07148` to 1 and the target buffer `DAT_009fda44`, then dispatches on the
+node's rendering type at `node+0x34` into `FUN_004d6d80` (type 5) or `FUN_004d6e80` (type 6).
+`FUN_004d6d80` pushes the node's own matrix, the 0x60-byte block at `classdata+0x18` off the class
+data at `node+0x38`, rasterises the node's model through `FUN_00566340`, then walks the children at
+`node+0x5c` (count at `node+0x56`) through `FUN_005662d0`, which dispatches back into
+`FUN_004d6d80`. The visible render `FUN_004d39c0` pushes that identical `classdata+0x18` matrix, so
+the shadow reads exactly the transforms the visible aircraft is drawn with, and a part animated this
+frame (a propeller or rotor blur disc) is rasterised at the angle it has turned to. The footprint is
+the exception: `FUN_004cd960` copies the node's *stored* bounding box from `*(node+0x70)`, so the
+extent the texture is mapped onto does not follow the turn.
+
 ## The player's own aircraft is a special case, three times over
 
 Worth collecting, because two of the three are the opposite of what a physical shadow would do:
@@ -270,11 +282,31 @@ from this page and where it departs:
   guard, and the spread and ramp the coverage texture is built through.
 - The silhouette is rasterised per frame from the aircraft's own triangles, off the node this page
   names (the `geometry` child for the player's own aircraft, the whole model root for every other),
-  through the same texel mapping, spread and ramp. Two departures inside it: both windings are
-  filled where the original culls one, which is the same outline for a closed hull and differs only
-  where a model's faces are inconsistently wound; and a hidden node rasterises nothing while still
-  widening the bounding box, so a torn damage panel or the player's own interior cockpit mesh casts
-  no silhouette.
+  through the same texel mapping, spread and ramp. The triangles are read off the model once, on
+  first sight, and the airframe's are held in the aircraft's own frame; a propeller or rotor blur
+  disc is kept as a separate group and re-posed from its live node each frame, so it turns in the
+  shadow the way the original's recursive draw turns it, without re-reading the whole model. Two
+  departures inside it: both windings are filled where the original culls one, which is the same
+  outline for a closed hull and differs only where a model's faces are inconsistently wound; and a
+  hidden node rasterises nothing while still widening the bounding box, so a torn damage panel or
+  the player's own interior cockpit mesh casts no silhouette.
+- **The live texture is 64 texels on a side where the original rasters 32**, the one size in the
+  port that is a choice rather than a decode. The original's step is coarse under the player's own
+  aircraft, whose footprint grows to 3× as it climbs, and at the controls that reads blocky. The
+  spread and the raster's own inset are written against the original's 32 and scaled with the step,
+  so the edge softens over the same width of ground at either size and the picture is the decode's,
+  finer. The spread itself is a weighted box rather than the mark-and-add above, which reproduces
+  the original's numbers exactly at the original's step and is what allows a half-texel reach at a
+  finer one.
+- **64 rather than 128, on cost.** The spread's box grows with the step too, so the raster is
+  quartic in the texture's edge, not square: one aircraft's raster and upload measures 0.11 ms at
+  32, 0.32 ms at 64 and 3.65 ms at 128 per frame in a debug build, and the finest step also loses
+  the raster's exact mirror symmetry to float rounding. At 64 the frame does not see it: on C2's
+  M02 with eight AI aircraft the `--perf` per-pass cost is the same at 32 and at 64 to inside that
+  instrument's noise, since only an aircraft inside 200 m and under 250 m of altitude casts at all.
+  Re-posing the blur discs adds to that 0.32 ms only on an aircraft whose discs change the outline:
+  0.05 ms per frame on the Hoplite, whose rotor is three wedges rather than a disc, and nothing
+  measurable on a fixed-wing plane, whose main disc is a full circle about its own axis.
 - The modulate lands on a **flat quad** at the probed ground height rather than on the world's own
   polygons, so it does not conform to a slope, and it is lifted clear by half a unit, a constant
   this page does not supply.

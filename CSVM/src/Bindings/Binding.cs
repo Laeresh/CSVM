@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+
 namespace CSVM.Bindings;
 
 /// <summary>What a control reads this tick, as both answers at once: held, and how far. A button
@@ -19,21 +22,72 @@ public readonly record struct ControlValue(bool Pressed, float Value)
     public static ControlValue Analogue(float value) => new(value > 0f, value);
 }
 
+/// <summary>This tick's held modifiers, and which of them each key is contested at: a key another
+/// action holds under Shift is contested at Shift, so its bare binding stands down while Shift is
+/// held. Scoped to one keymap rather than global, because a context that binds Shift alone (the free
+/// camera's boost) must keep firing its bare keys under it.
+/// ⚠ Read the held set once per tick through <see cref="Read"/>. The default value knows nothing and
+/// makes every key binding re-read the three modifier keys.</summary>
+public readonly struct ModifierGate
+{
+    private static readonly KeyModifiers[] All = { KeyModifiers.Shift, KeyModifiers.Ctrl, KeyModifiers.Alt };
+
+    private readonly IReadOnlyDictionary<int, KeyModifiers>? _contested;
+    private readonly bool _known;
+
+    private ModifierGate(KeyModifiers held, IReadOnlyDictionary<int, KeyModifiers>? contested)
+    {
+        Held = held;
+        _contested = contested;
+        _known = true;
+    }
+
+    /// <summary>The modifiers held entering this tick, meaningless until <see cref="Read"/> has
+    /// filled it.</summary>
+    public KeyModifiers Held { get; }
+
+    /// <summary>The tick's gate over one map's contested table.</summary>
+    public static ModifierGate Read(IDeviceState state, IReadOnlyDictionary<int, KeyModifiers>? contested)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        var held = KeyModifiers.None;
+        foreach (var modifier in All)
+        {
+            if (state.IsKeyDown(DeviceId.Keyboard, BindingControl.KeyCodeOf(modifier)))
+                held |= modifier;
+        }
+
+        return new ModifierGate(held, contested);
+    }
+
+    /// <summary>The same gate with the held set taken now, for a caller resolving one binding
+    /// outside a map's tick.</summary>
+    public ModifierGate Fill(IDeviceState state) => _known ? this : Read(state, _contested);
+
+    /// <summary>Which modifiers another action holds that key under.</summary>
+    public KeyModifiers ContestedFor(int keyCode) =>
+        _contested is { } table && table.TryGetValue(keyCode, out var modifiers) ? modifiers : KeyModifiers.None;
+}
+
 /// <summary>One control on one named device: everything needed to read a binding, and nothing
 /// about which action holds it. Device identity is part of the value rather than a nullable field
 /// beside it, so two pads with the same button layout are two different bindings.</summary>
 public readonly record struct Binding(DeviceId Device, BindingControl Control)
 {
+    /// <summary>What this binding reads from that tick's hardware state, reading the modifier keys
+    /// itself. <see cref="Resolve(IDeviceState, ModifierGate)"/> is the per-tick form.</summary>
+    public ControlValue Resolve(IDeviceState state) => Resolve(state, default);
+
     /// <summary>What this binding reads from that tick's hardware state. An axis fires strictly
     /// past its deadzone, only on the half of the travel its sign names, and then reports that
     /// travel raw; a hat direction reads only its own flag, so the other three directions of the
     /// same hat are independent.</summary>
-    public ControlValue Resolve(IDeviceState state)
+    public ControlValue Resolve(IDeviceState state, ModifierGate gate)
     {
         switch (Control.Kind)
         {
             case ControlKind.Key:
-                return ControlValue.Digital(state.IsKeyDown(Device, Control.Index));
+                return ControlValue.Digital(KeyHeld(state, gate));
             case ControlKind.Button:
                 return ControlValue.Digital(state.IsButtonDown(Device, Control.Index));
             case ControlKind.Mouse:
@@ -49,4 +103,20 @@ public readonly record struct Binding(DeviceId Device, BindingControl Control)
     }
 
     public override string ToString() => $"{Device}/{Control}";
+
+    // The modifier rule. A binding that NAMES modifiers wants exactly those held, so Shift+E stands
+    // down under Ctrl+Shift; a bare one stands down only under a modifier another action holds the
+    // same key under. Its own flag is excluded either way, or a binding on Shift could never fire.
+    private bool KeyHeld(IDeviceState state, ModifierGate gate)
+    {
+        if (!state.IsKeyDown(Device, Control.Index))
+            return false;
+
+        var self = BindingControl.ModifierOf(Control.Index);
+        var named = Control.Modifiers & ~self;
+        var held = gate.Fill(state).Held & ~self;
+        return named != KeyModifiers.None
+            ? held == named
+            : (held & gate.ContestedFor(Control.Index)) == KeyModifiers.None;
+    }
 }

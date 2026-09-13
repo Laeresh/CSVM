@@ -132,7 +132,10 @@ and `MoveX` with auto-repeat applied, the edges `Accept`, `Back`, `Join`, `Loado
 `Erase`, the `Typed` characters, and an optional `MenuPointer` (window pixels, `Pressed`, `Clicked`
 on the press edge, `Wheel` as the steps turned since the last poll and positive toward a list's
 foot; null when the seat's devices have none). A presentation reads meaning and never a key, button
-or axis.
+or axis. A presentation that polls its seats also reads the campaign flow's `Film`
+(`CSVM/src/UI/CinemaHandoff.cs`) before it applies a frame: a cinema stops and hands off inside the
+input flush, ahead of that poll, so the press that skipped the film would otherwise land as an edge
+on the screen the film just opened.
 
 The shipped sources: `BuiltInSeat` wraps one `MenuInput` (seat 0's reads the keyboard plus every
 unclaimed pad; a joined seat's reads its one pad); `PointerSeat` wraps a seat and adds the mouse as
@@ -201,7 +204,11 @@ drop-down, `CampaignPreviousMissionsPage.PointerWindow` for the scrapbook's cont
 Original's own for the hangar's dropdowns, Instant Action's dropdowns and contents window, and the
 sortie screens' aircraft column. An open dropdown on Instant Action shows at most the authored
 `TotalDisplayed` rows and keeps every item as a row keyed `<key>:<index>`, drawn and hit only inside
-the window, so a scripted pose and a suite walk still pick by index whatever the window shows.
+the window, so a scripted pose and a suite walk still pick by index whatever the window shows. Every
+one of those thumbs is as long as the share of the list its window shows, its scroll tile drawn
+stretched to that length and never shorter than the tile's own height, so a long list wears a short
+thumb with a long free run and a barely scrolling one wears a thumb that nearly fills its track. The
+Controls page's key list and the scrapbook's contents page still draw a fixed tile.
 
 ## Options, selection and availability
 
@@ -485,8 +492,9 @@ list open and `instant-action:weapon-loadout` on the pilot's loadout screen, `op
 `audio:mixed` with its four sliders at four distinct levels, `video`,
 `video:checked` with its Enhanced Graphics box ticked and `video:open` with its Resolution list
 standing open, the one leaf list whose sizes can outrun the window its row authors,
-`controls`, `keys` and `keys:other` with
-the KEYS AND BUTTONS page standing on the one category that outruns its list window, `credits` and
+`controls`, `keys` and `keys:<category>` with the KEYS AND BUTTONS page standing on the tab of that
+name (spaces and case ignored), `keys:other` being the one category that outruns its list window and
+`keys:targeting` the eleven targeting actions, `credits` and
 `credits:about` with the About box standing over it, the
 `plane-*` hangar poses with `plane-construction:open` standing the airframe list open on a row the
 hub's figures preview, `plane-construction:overweight` on a build past its capacity,

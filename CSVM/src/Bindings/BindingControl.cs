@@ -14,6 +14,19 @@ public enum ControlKind
     Mouse,
 }
 
+/// <summary>The modifier keys a keyboard binding names, as flags, which is the original's own
+/// three bits over a scancode (`0x100` Alt, `0x200` Ctrl, `0x400` Shift, `docs/org/input.md`). Left
+/// and right variants collapse onto one flag there and here, since Godot reports one keycode for
+/// each pair.</summary>
+[Flags]
+public enum KeyModifiers
+{
+    None = 0,
+    Shift = 1,
+    Ctrl = 2,
+    Alt = 4,
+}
+
 /// <summary>The four directions of one hat, as flags so a device can report several at once (a
 /// diagonal is Up and Right together). A binding names exactly one of them.</summary>
 [Flags]
@@ -35,13 +48,15 @@ public enum HatDirection
 /// direction) are enforced.</summary>
 public readonly record struct BindingControl
 {
-    private BindingControl(ControlKind kind, int index, int sign, float deadzone, HatDirection direction)
+    private BindingControl(
+        ControlKind kind, int index, int sign, float deadzone, HatDirection direction, KeyModifiers modifiers)
     {
         Kind = kind;
         Index = index;
         Sign = sign;
         Deadzone = deadzone;
         Direction = direction;
+        Modifiers = modifiers;
     }
 
     public ControlKind Kind { get; }
@@ -63,17 +78,44 @@ public readonly record struct BindingControl
     /// </summary>
     public HatDirection Direction { get; }
 
-    public static BindingControl Key(int keyCode) =>
-        new(ControlKind.Key, NonNegative(keyCode, nameof(keyCode)), 0, 0f, HatDirection.None);
+    /// <summary>Which modifiers a key binding names, part of its identity: E and Shift+E are two
+    /// controls and drive two actions. <c>None</c> for every other kind.</summary>
+    public KeyModifiers Modifiers { get; }
+
+    /// <summary>One key, optionally under modifiers. A bare key is blocked while a modifier another
+    /// action holds on the same key is down, which is what keeps E off Shift+E's press
+    /// (<see cref="ActionMap.ContestedFor"/>).</summary>
+    public static BindingControl Key(int keyCode, KeyModifiers modifiers = KeyModifiers.None) =>
+        new(ControlKind.Key, NonNegative(keyCode, nameof(keyCode)), 0, 0f, HatDirection.None, modifiers);
 
     public static BindingControl Button(int index) =>
-        new(ControlKind.Button, NonNegative(index, nameof(index)), 0, 0f, HatDirection.None);
+        new(ControlKind.Button, NonNegative(index, nameof(index)), 0, 0f, HatDirection.None, KeyModifiers.None);
+
+    /// <summary>The modifier that key IS, so a binding on Shift itself is not asked to prove Shift
+    /// is up. Godot reports one keycode per pair, as the original collapses its two scancodes.
+    /// </summary>
+    public static KeyModifiers ModifierOf(int keyCode) => keyCode switch
+    {
+        (int)Godot.Key.Shift => KeyModifiers.Shift,
+        (int)Godot.Key.Ctrl => KeyModifiers.Ctrl,
+        (int)Godot.Key.Alt => KeyModifiers.Alt,
+        _ => KeyModifiers.None,
+    };
+
+    /// <summary>The key that names one modifier flag, for a reader asking whether it is held.
+    /// </summary>
+    public static int KeyCodeOf(KeyModifiers modifier) => modifier switch
+    {
+        KeyModifiers.Shift => (int)Godot.Key.Shift,
+        KeyModifiers.Ctrl => (int)Godot.Key.Ctrl,
+        _ => (int)Godot.Key.Alt,
+    };
 
     /// <summary>One mouse button, held. The original carries one in bits 26-27 of every command word
     /// (`FUN_00537150`, `docs/org/input.md`), the one input this model dropped until this factory
     /// existed.</summary>
     public static BindingControl Mouse(int index) =>
-        new(ControlKind.Mouse, NonNegative(index, nameof(index)), 0, 0f, HatDirection.None);
+        new(ControlKind.Mouse, NonNegative(index, nameof(index)), 0, 0f, HatDirection.None, KeyModifiers.None);
 
     /// <summary>One direction of one axis. The sign picks the half of the travel that fires, so a
     /// stick's two ends are two bindings and can drive two different actions.</summary>
@@ -83,7 +125,8 @@ public readonly record struct BindingControl
             throw new ArgumentOutOfRangeException(nameof(sign), sign, "An axis binding needs a sign of +1 or -1.");
         if (!(deadzone >= 0f) || deadzone >= 1f)
             throw new ArgumentOutOfRangeException(nameof(deadzone), deadzone, "A deadzone lies in [0, 1).");
-        return new BindingControl(ControlKind.Axis, NonNegative(index, nameof(index)), sign, deadzone, HatDirection.None);
+        return new BindingControl(
+            ControlKind.Axis, NonNegative(index, nameof(index)), sign, deadzone, HatDirection.None, KeyModifiers.None);
     }
 
     /// <summary>One direction of one hat. Exactly one direction, because a binding on a diagonal
@@ -95,12 +138,27 @@ public readonly record struct BindingControl
     {
         if (direction is not (HatDirection.Up or HatDirection.Right or HatDirection.Down or HatDirection.Left))
             throw new ArgumentOutOfRangeException(nameof(direction), direction, "A hat binding names exactly one direction.");
-        return new BindingControl(ControlKind.Hat, NonNegative(index, nameof(index)), 0, 0f, direction);
+        return new BindingControl(
+            ControlKind.Hat, NonNegative(index, nameof(index)), 0, 0f, direction, KeyModifiers.None);
+    }
+
+    /// <summary>The modifier prefix a key's name carries, in a fixed order so one control spells one
+    /// way: <c>Ctrl+Alt+Shift+</c>, and empty for a bare key.</summary>
+    public static string Prefix(KeyModifiers modifiers)
+    {
+        string text = string.Empty;
+        if ((modifiers & KeyModifiers.Ctrl) != 0)
+            text += "Ctrl+";
+        if ((modifiers & KeyModifiers.Alt) != 0)
+            text += "Alt+";
+        if ((modifiers & KeyModifiers.Shift) != 0)
+            text += "Shift+";
+        return text;
     }
 
     public override string ToString() => Kind switch
     {
-        ControlKind.Key => $"key:{Index}",
+        ControlKind.Key => $"key:{Prefix(Modifiers)}{Index}",
         ControlKind.Button => $"button:{Index}",
         ControlKind.Axis => $"axis:{Index}{(Sign < 0 ? "-" : "+")}@{Deadzone:0.###}",
         ControlKind.Mouse => $"mouse:{Index}",

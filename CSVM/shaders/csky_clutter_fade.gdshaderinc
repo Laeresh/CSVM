@@ -1,9 +1,11 @@
 #ifndef CSKY_CLUTTER_FADE_INC
 #define CSKY_CLUTTER_FADE_INC
 
-// The templates-clutter distance fade: the original's per-node near/far test under its one global
-// scale. Each MultiMesh instance carries (near², far², 1/(far² − near²), 0) as custom data, all
-// zero for a decoration that never fades. The global is the graphics EffectsLevel's squared scale
+// The clutter distance fade: the original's per-instance near/far test under its one global scale,
+// shared by the templates clutter and the fog volumes' cloud field. The band reaches the test as
+// (near², far², 1/(far² − near²), unused), all zero for a decoration that never fades; the
+// templates clutter carries that vector as custom data, the cloud field packs a normal and its own
+// draw instead and builds the vector per vertex. The global is the graphics EffectsLevel's squared scale
 // (1/4/9 for HIGH/MEDIUM/LOW, CSVM.Utils.EffectsLevel), multiplied into the SQUARED camera
 // distance before the compare, so a lower level fades and culls at 1/2 and 1/3 of the authored
 // metres. Decode: docs/formats/templates.md.
@@ -26,6 +28,32 @@ float csky_clutter_fade_alpha(vec3 origin, vec3 camera, vec4 fade) {
         return 0.0;
     }
     return (fade.y - d2) * fade.z;
+}
+
+// The same near/far test with the per-instance VIEW-ANGLE term the fog-volume scatter installs:
+// the sprite carries the plane normal of the polygon it was scattered on, and the band is compared
+// against the squared cosine `c` between that normal and the direction to the eye. A sprite seen
+// face-on keeps its authored metres, one seen edge-on is dropped, and on a horizontal face the
+// field becomes a disc of radius sqrt(height above the cards x far). Decode: docs/org/cloudCards.md.
+float csky_clutter_fade_alpha_angled(vec3 origin, vec3 camera, vec4 fade, vec3 normal) {
+    vec3 d = camera - origin;
+    float d2 = dot(d, d);
+    if (d2 <= 0.0) {
+        return 1.0;
+    }
+    float c = max(0.0, dot(normal, d * inversesqrt(d2)));
+    float s = c * c;
+    if (s <= 0.0) {
+        return 0.0;
+    }
+    float scaled = csky_clutter_fade_scale_sq * d2;
+    if (s * fade.x >= scaled) {
+        return 1.0;
+    }
+    if (s * fade.y <= scaled) {
+        return 0.0;
+    }
+    return (fade.y - scaled / s) * fade.z;
 }
 
 // Whether a fragment survives an ordered 4x4 dither at `alpha`. The original alpha-blends the

@@ -42,6 +42,23 @@ public struct RankedTargetCandidate
     /// formation escort), the +0.4 case: the engine de-prioritises enemy wingmen.</summary>
     public bool IsWingman;
 
+    /// <summary>Whether this candidate is an aircraft. Read only by the aircraft-first preference
+    /// (<see cref="AiTargetRanking.AircraftFirst"/>), never by the decoded arithmetic, which has no
+    /// class priority at all.</summary>
+    public bool IsAircraft;
+
+    /// <summary>Whether this candidate came from the turret or the structure pool, the two classes
+    /// the aircraft-first preference suppresses while an aircraft ranks. A surface hull is a
+    /// vehicle candidate and carries neither this nor <see cref="IsAircraft"/>.</summary>
+    public bool IsStructureClass;
+
+    /// <summary>The class-dependent rank term, already in rank units: this candidate's own
+    /// <c>target_bias</c> on a vehicle candidate, the SCORER's <c>struct_bias</c> on a turret or
+    /// structure candidate (<see cref="PlaneStats.AiTargetBias"/>,
+    /// <see cref="PlaneStats.AiStructBias"/>). ⚠ Shipped negative against a minimised rank, so it
+    /// attracts.</summary>
+    public float ClassBias;
+
     /// <summary>Whether this candidate is a zeppelin gasbag, the −0.5 case. ⚠ The caller admits
     /// a gasbag only to a pilot with live gasbag ordnance (docs/org/aiPilot.md "The gasbag gate is
     /// ordnance, checked at admission"); the scorer never sees one otherwise.</summary>
@@ -76,7 +93,8 @@ public readonly struct TargetScore
     /// <summary>Straight-line distance, metres.</summary>
     public float Distance { get; }
 
-    /// <summary>The objectiveBias term, rank units.</summary>
+    /// <summary>The bias terms in rank units, the roster's objective bias plus the def's class
+    /// bias, so the rank below is reproducible from this readout alone.</summary>
     public float Bias { get; }
 
     /// <summary>weight × 1200 + distance + objectiveBias, minimised; <see
@@ -90,8 +108,9 @@ public readonly struct TargetScore
 /// closing, −0.5 on a gasbag, <c>1e21</c> beyond the activation radius. <see cref="SelectBest"/>
 /// prefers a candidate no ally already holds (<see cref="RankedTargetCandidate.AlliedAttackers"/>),
 /// falling back to the overall best when the pool is exhausted, the design's deconfliction, a
-/// minimum reading. ⚠ Unported: the activation volume is the engine's cylinder (horizontal radius
-/// and an altitude band); this scores a sphere.</summary>
+/// minimum reading. The class biases go in raw beside the objective one
+/// (<see cref="RankedTargetCandidate.ClassBias"/>). ⚠ Unported: the activation volume is the
+/// engine's cylinder (horizontal radius and an altitude band); this scores a sphere.</summary>
 public static class AiTargetRanking
 {
     /// <summary>The decoded weight scale: one weight unit is worth 1200 m of distance.</summary>
@@ -143,6 +162,14 @@ public static class AiTargetRanking
     /// <c>rating_biases</c>: it applies whether or not the roster names the turret at all.</summary>
     public const float TurretBiasFlat = 37.5f;
 
+    /// <summary>Whether a picker ranks live enemy aircraft ahead of every turret and structure
+    /// candidate, fighting a structure only when no aircraft is in reach. A deliberate departure
+    /// from the decoded picker, which has no class priority; <c>--ai-targeting=decoded</c> turns it
+    /// off and leaves the biases alone, so the original's arithmetic can be flown against this one.
+    /// It settles once per launch and no consumer chooses it, which is why it is a static and not a
+    /// per-pilot value.</summary>
+    public static bool AircraftFirst { get; set; } = true;
+
     /// <summary>One candidate's rank and its inputs, the decoded arithmetic term for term.
     /// <paramref name="ownForward"/> must be unit-length (a basis column), and is unread under
     /// <see cref="AiScorer.Other"/>. ⚠ Ahead is the UNFAVOURABLE arm and so is being above the
@@ -153,8 +180,9 @@ public static class AiTargetRanking
     {
         var to = c.Position - ownPos;
         float dist = to.Length();
+        float bias = c.ObjectiveBias + c.ClassBias;
         if (dist > activationRange)
-            return new TargetScore(0f, dist, c.ObjectiveBias, NotRanked);
+            return new TargetScore(0f, dist, bias, NotRanked);
         float weight = c.IsPlayer ? PlayerWeight : BaseWeight;
         if (c.IsWingman)
             weight += WingmanWeight;
@@ -175,21 +203,27 @@ public static class AiTargetRanking
 
         if (c.IsGasbag)
             weight -= GasbagWeight;
-        return new TargetScore(weight, dist, c.ObjectiveBias,
-            weight * WeightScale + dist + c.ObjectiveBias);
+        return new TargetScore(weight, dist, bias, weight * WeightScale + dist + bias);
     }
 
     /// <summary>The pick: the minimal-rank candidate no ally already holds; when every ranked
     /// candidate is held, the minimal-rank candidate outright (the design's exhausted-pool
     /// fallback). Returns the candidate's index and its score, or −1 when nothing ranks (all
-    /// beyond activation, or the list is empty).</summary>
+    /// beyond activation, or the list is empty). <paramref name="aircraftFirst"/> engages the
+    /// preference (<see cref="AircraftFirst"/>); it has no default because a picker that silently
+    /// took the wrong one would disagree with the pickers beside it.</summary>
     public static int SelectBest(Vector3 ownPos, Vector3 ownForward, float activationRange,
-        AiScorer scorer, IReadOnlyList<RankedTargetCandidate> candidates, out TargetScore best)
+        AiScorer scorer, bool aircraftFirst, IReadOnlyList<RankedTargetCandidate> candidates,
+        out TargetScore best)
     {
+        bool dropStructures = aircraftFirst
+            && AnyAircraftRanks(ownPos, ownForward, activationRange, scorer, candidates);
         int bestAny = -1, bestFree = -1;
         TargetScore scoreAny = default, scoreFree = default;
         for (int i = 0; i < candidates.Count; i++)
         {
+            if (dropStructures && candidates[i].IsStructureClass)
+                continue;
             var s = Score(ownPos, ownForward, activationRange, scorer, candidates[i]);
             if (s.Rank >= NotRanked)
                 continue;
@@ -248,6 +282,23 @@ public static class AiTargetRanking
         }
 
         return flat;
+    }
+
+    // Whether one live aircraft is in reach, which is what withdraws the turret and structure
+    // candidates under the preference. Ranking is the reach test: it carries the activation radius
+    // and an authored hard exclusion alike, so an aircraft nobody may shoot does not shield a
+    // structure from being picked.
+    private static bool AnyAircraftRanks(Vector3 ownPos, Vector3 ownForward, float activationRange,
+        AiScorer scorer, IReadOnlyList<RankedTargetCandidate> candidates)
+    {
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            if (candidates[i].IsAircraft
+                && Score(ownPos, ownForward, activationRange, scorer, candidates[i]).Rank < NotRanked)
+                return true;
+        }
+
+        return false;
     }
 
     // One level of the chain: the first entry this one name matches, in rank units, or null when

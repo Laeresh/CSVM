@@ -520,7 +520,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   empty; if it does not, skip `none` cells on the non-swap path. *Cross-refs:* `BL-718`'s closing
   commit (the swap table holds weapon ids, not counts), `docs/formats/vehicle.md`.
 
-- `BL-847` `[Cleanup]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **`docs/formats/destructibles.md` counts an ON_CALL sequence among a wreck's revival sources without the qualifier the runtime now applies.** *Evidence:* the revival paragraph says a revival can arrive from a `RESET_STATE`, an ON_CALL sequence, or another def's script; the runtime treats an ON_CALL sequence the def's own death chain calls through `CALL_SEQUENCE` as part of the death (`AnimRuntime.OwnDeathSequencesOf`), so only an ON_CALL sequence the chain does not call revives. The page's census of defs whose death chain switches `destroyed` back off (fourteen defs in three families) lacks C5's `agyrobus`, whose `destroy_craft` calls `randomdestseq` and one random branch of that switches `destroyed` off. *Fix shape:* qualify the sentence and add the fifteenth def. *Cross-refs:* PLAN-code-review-orch C23 (the runtime change and the census over the 16,114 compiled definitions).
 - `BL-873` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: trace]` **C1's refuel-tank debris draws near-black and reads as a
   hole punched through the flame.** *Evidence:* `--freecam --chapter=C1 --destroy=refuel
   --frames=120` and `=240` put faceted shards over the left tank's fire column, each a flat dark
@@ -672,18 +671,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   scoping; ordnance launch is unlikely to be the only one.
   *Cross-refs:* `BL-406` (closed; the ordnance plan excluded `TORPEDO` for this reason).
 
-- `BL-413` `[Feature]` `[L]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **Ground-attack ordnance leaves no crater.** *Evidence:*
-  six weapons author `CRATER` and the original carves terrain geometry for it; we do nothing. The
-  mechanism is decoded in [`docs/org/craters.md`](docs/org/craters.md): every crater in the shipped
-  game is the same shape (a 7-vertex rim clipped against the ground, radius 20, floor 6 below the
-  impact), it destroys every decoration inside the radius, it is permanent for the mission, and a
-  second crater whose footprint comes within 5 units of an existing one is refused outright, so a
-  mission accumulates a bounded scatter of non-overlapping bowls rather than a growing mesh.
-  ⚠ *Trap:* this is a **terrain and renderer** change triggered by ordnance, not an ordnance change.
-  Scope it against the terrain system's constraints (chunking, LOD, the golden manifest's mesh
-  counts), not against the weapon table.
-  *Cross-refs:* `BL-406` (closed).
-
 - `BL-603` `[Bug]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The human rig sweeps the mesh hull where the original sweeps its def's six
   `collision` probes.** *Evidence:* decoded for `BL-601` (`git log --grep=BL-601`): `FUN_0048d7f0`
   carries the def's `collision` list as rays from the previous pose, six points on the `p*` player
@@ -692,49 +679,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   clear and the hull does not (CM13's dbase arch on dzpath2) in both games; if the original passes,
   sweep the player's probes too. *Cross-refs:* `PlaneStats.CollisionProbes`, `docs/formats/vehicle.md`.
 
-- `BL-866` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **Allied AI and turret gunners engage a destroyed
-  zeppelin's surviving parts and non-enemy buildings while the live enemies go unfought.**
-  *Evidence:* reported at the controls from CM04 (C3/M03) on: wingmen, allied aircraft and the
-  Pandora's guns lock on the destroyed cargo zeppelin's engines and on buildings, leaving the
-  enemy aircraft to the player. The user's recall of the original is that its allies fight the
-  aircraft. **The decode is done and it contradicts the fix this item proposed**
-  ([`docs/org/aiPilot.md`](docs/org/aiPilot.md), "`target_bias` and `struct_bias`" and "A dead
-  vehicle's surviving parts stay candidates"; [`docs/org/targeting.md`](docs/org/targeting.md),
-  "The hostility predicate"). Three findings:
-  (1) **No dead-parent gate exists.** A structure candidate's only liveness gate is `+0x8c`, the
-  scene node's active bit ANDed up the parent chain (`FUN_004a5b90`, refreshed from
-  `FUN_004a32c0`), and a dead airship keeps that bit. C3/M04's `killpzep` deactivates only
-  `underneath` and destroys six of the twelve engine destructibles by calling their own destroy
-  animations; the other six stay active and stay candidates for an ally's guns in the original too.
-  (2) **A structure does need a hostile team, and CSVM already applies it** in both pickers
-  (`SelectRankedTarget`'s team gate, `TurretController.AcquireTarget`'s `AimAssist.Hostile`), so a
-  neutral building is already never picked and a picked one carries an authored hostile team.
-  (3) **There is no class priority.** `FUN_0041f9c0` keeps one running minimum over the four pools,
-  and the only class-dependent terms are two unported `vehicle.zrd` fields: `target_bias`
-  (`-300.0` on `player_pfighter`, `-100.0` on the twelve AI aeroplane defs) and `struct_bias`
-  (`-200.0` on eleven aeroplane defs, added to turret and structure candidates only). Both are
-  negative against a MINIMISED rank, so both attract, and an aeroplane authoring both ranks an
-  equidistant structure about 100 m AHEAD of an equidistant enemy aeroplane.
-  *The user's decision, between the two faithful readings:* the default is faithful to the recall
-  of play, an **aircraft-first preference** as a deliberate departure: an ally ranks live enemy
-  aircraft ahead of every turret and structure candidate, and fights a structure only when no
-  aircraft is in reach. The decoded picker, `target_bias` and `struct_bias` ported as they ship
-  and no class preference, is landed as well and sits behind a command line flag (name the
-  implementer's call, documented in `docs/cli.md`), so a comparison against the original has the
-  original's arithmetic to run. *Fix shape:* port both biases into `AiTargetRanking` first, since
-  the flag needs them; then the preference over the ranked list, applied in both pickers
-  (`SelectRankedTarget` and `TurretController.AcquireTarget`) so wingmen and the Pandora's guns
-  agree; a suite over a dead zeppelin's live engines beside one enemy aeroplane, asserting the
-  aeroplane under the default and the nearer engine under the flag. Not part of this item: the
-  remaining unported gate, the attack volume, a cylinder with an altitude band (`+0x328`,
-  `+0x32c`-`+0x330`) where CSVM scores a 2,000 m sphere; a band would drop the low structures
-  without touching the ranking and stands as its own possible port.
-  *⚠ Traps:* do not special-case zeppelin engines. Do not "fix" the sign of either bias to make
-  structures unattractive; the shipped values are negative and that is the decoded arithmetic.
-  Do not add a dead-parent gate; the preference alone is the departure chosen.
-  *Cross-refs:* `docs/org/targeting.md` (the player's cycle, a different list),
-  `docs/org/aiPilot.md`, `docs/formats/vehicle.md` (`target_bias`/`struct_bias`),
-  `CSVM/src/Flight/AiTargetRanking.cs`, `CSVM/src/Flight/AiGunner.cs`.
 
 - `BL-877` `[Bug]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **A stock fit of two or six pylons is split
   between the wings by a count heuristic that disagrees with the rig, so the Hoplite's ammo screen
@@ -755,49 +699,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Flight model & collision physics
 
-- `BL-447` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The mouse-flying arm's `is_autogyro` roll/yaw exchange has
-  nowhere to land: CSVM has no mouse flight-control mode.** `0x4876f4` sits inside
-  `FUN_00487460`'s mouse arm, reached only with the mouse control bit of `DAT_0071c2a0` set and the
-  free-look flag `DAT_00654120` clear, and there it exchanges and negates the roll and yaw sources,
-  so an autogyro yaws with sideways mouse motion where an aeroplane rolls
-  ([`docs/org/flightModel.md`](docs/org/flightModel.md), "`is_autogyro` reaches no flight-plant
-  term"). CSVM's mouse is head-look, so porting the exchange means first adding a mouse
-  flight-control scheme and a way to select it, which is a product decision rather than a parity
-  gap. *Decided:* CSVM offers mouse flying. *Fix shape:* a mouse flight-control scheme selectable
-  beside the keyboard and pad ones (the original's mouse control bit of `DAT_0071c2a0` is the
-  model: mouse motion drives roll and pitch, and free-look is a separate flag that hands the mouse
-  back to head-look), with the `is_autogyro` exchange inside its arm so an autogyro yaws with
-  sideways mouse motion; then the ledger row "the mouse-flying arm's `is_autogyro` roll/yaw
-  exchange" in the same page's "Parity ledger" moves to supported. *⚠ Traps:* the free-look flag
-  decides which of two consumers the mouse feeds, so the scheme needs a way to toggle it that the
-  Controls door exposes; do not take the mouse away from head-look on the keyboard and pad schemes.
-- `BL-774` `[Fidelity]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **The sustained climb plateaus at 204 mph against the original's
-  filmed 163, and every term that could move a steady climb is now ruled out by arithmetic.**
-  `--dump-flight`'s sustained climb settles at 204.03 mph on a 56.3° path where the footage reads
-  163.05, and the ceiling inherits that error because the apex above the band edge is `v_y² / 2g`.
-  A term-by-term re-read of `FUN_0048c470` → `FUN_0048fc40` → `FUN_0048e580` against
-  `FlightModel.Step` found one difference, the thrust divisor's band factor, and it is thin-band
-  only, so it moves the ceiling rows and not the climb. *What the decode settled:* the entry's two
-  candidates are both incapable. Composing the plant's own force sum leaves a cross-path term of
-  `sin α · [(T − g·nose_y) + rate·t·speed·cos α]`, whose bracket cannot vanish in the climb regime,
-  so **a sustained straight climb has exactly one state and α is zero in it**. The lift-demand lag
-  multiplies a vector that is identically zero there, and the attitude-thrust pair (`0x48fce2`–
-  `0x48fd38`) is byte-exact and validated at `a = 0` and `a = +0.94` by the two neighbouring rows.
-  Throttle, the atmosphere band and `veh_weight` are each ruled out in
-  [`docs/org/flightModel.md`](docs/org/flightModel.md) "The sustained climb". *The remaining
-  question, exactly:* what does the original spend in a climb that is not in the force accumulator,
-  given that every write to that force vector is enumerated (the zero-vector initialiser at
-  `0x48fdf9`, drag, thrust, the two lift rows, weight) and that level flight and the 70.7° dive land
-  on their decoded targets with nothing fitted while only `a = −0.83` is 25% fast? The vehicle
-  dispatch is already clean: `FUN_00489ea0` sends aeroplane classes 0 and 4 to `FUN_0048e580` and to
-  nothing else, the three calls after it being player telemetry writers, so a second force term
-  would have to sit outside the vehicle tick. The two next moves are the 35 sites that take the
-  address of the velocity triple (`LEA [obj+0x924]`) and the shipped Dynamics tuner's own `Climb90`
-  rig (`FUN_00491d90`), which is the manoeuvre the original itself calls a sustained climb.
-  *⚠ Do not* close the gap with a constant on the ceiling or by moving 0.24/0.13: the dive side of
-  the same scale lands `terminal-dive` at 356.0 mph against a measured 355.2 with nothing fitted.
-  *How you'd know it worked:* the plateau moves toward 163 mph with `level-top-speed` and
-  `terminal-dive` still on their decoded targets.
 - `BL-562` `[Perf]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: data]` `[CM11]` **CM11 (C2/M02) still spends single physics ticks of 45 to 51 ms in flight and
   about 124 ms on the first tick after the world build.** *Evidence (traced):* the bracketed
   instrument (`PhysicsTickCost`, `--perf`'s `phys_tick_ms` / `phys_tick_max_ms` / `phys_hz`) over 82
@@ -826,8 +727,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   lost steps. The per-sim-step query objects those ray casts build are now reused rather than made
   fresh (`GodotWorldQuery`), so a re-measurement of the tick meets a different allocator than C22's.
   *Cross-refs:* `PLAN-M5-polish-6` C22, `docs/verification.md` PERF-1, PERF-20 and PERF-23.
-
-- `BL-849` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **`Collider.Summary` renders through the current culture, so the plane collider census line reads `3,8×3,0×5,6 m` on a German machine.** *Evidence:* the census lines in the three session files now log invariant through `Log`, but this one interpolates a string `Collider.Summary` pre-formatted with the current culture before the log sees it, so the dimensions carry a comma decimal separator on such a machine. Any other pre-built summary string logged the same way has the same fault. *Fix shape:* format the summary with `CultureInfo.InvariantCulture`, and grep the tree for other `ToString()` or `$"{x:0.0}"` summaries built outside a `Log` call. *Cross-refs:* PLAN-code-review-orch A3 and A6.
 
 ## Environment & world
 
@@ -903,8 +802,20 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   position, never by texture.
   ⚠ Traps: `csky_world_light` is CAP-11-calibrated on terrain, a directional cloud term must be
   cloud-local, the way `C22`'s deck fix was deck-local. And C1's own daytime cards were measured
-  faithful at `lighting: false` (`C21`/`C23`), so this must not become a second global cloud
-  brightness knob beside `FogVolumeClutter`'s `CardVertexColorTune`.
+  faithful at `lighting: false` (`C21`/`C23`). Nothing in the original scales a cloud card's
+  colour at all (decoded, `docs/org/cloudCards.md`), so this must not become a global cloud
+  brightness knob; `FogVolumeClutter` now renders the authored 240 unscaled and carries no such
+  constant.
+  ⚠ **The `lighting: true` cards are the other half of this, and they are `fvol`, not
+  `cloudparent`.** `lighting: true` on a `Facade` card admits `AMBIENT + DIFFUSE × max(N·L, 0)`
+  per vertex on the card's own three authored normals through the billboard basis
+  (`docs/org/vertexLighting.md`), not a flat multiply. C1 and C4 author `lighting: false` so their
+  daytime plateau is untouched, but C1C, C2B and C5 author it true and we apply a flat
+  `csky_world_light` there. That is a look change on a visible population, owed a verdict at the
+  controls before any code moves, and it replaces the flat multiply rather than stacking on it.
+  Today's frame at C1C is the flat-multiply one: placed `cloudparent` facades **235.25**,
+  un-dimmed deck floor **195.8**, `fvol` cards **163.7** (measured 163.24 / 163.83; C2B 163.24),
+  cloud-population spread **71.6**.
   *Playtest after fix:* the C1B night spawn above, against `playtest/CAP-11/`'s t5 and t16
   frames, saying for every measured puff which side of the moon it faces.
   *Cross-refs:* `docs/formats/effects.md`'s speed-cue section (the third population),
@@ -917,82 +828,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the world light) before building on it. A directional term for this population has to come from
   some other mechanism; the flag does buy a per-vertex `N·L` on the `fvol` cards, which C1B ships
   none of.
-
-- `BL-327` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **A cloud sprite's draw distance is scaled by the
-  viewing angle against its `fvol` polygon's normal, and our flat `far_fade` plus a colour TUNE
-  stands in for it** (minted at `BL-118`'s close, PLAN-overcast-match `C24`; the fifth candidate
-  `C23` raised and deliberately did not guess at.) The decode is done and is on
-  `docs/org/cloudCards.md` with every address; what is left is landing it.
-  *Evidence (decoded):* **nothing in the original scales a cloud card's colour.** The authored
-  per-vertex 240 is copied into the Direct3D diffuse unchanged for an unlit card (`FUN_00554550`
-  with the zero mask `FUN_00552020` returns), the card's texture is a **constant-RGB 239 alpha
-  mask** in every tier (`cloud1.png`/`cloud2.png`, max alpha 254), and the fog factor rides the
-  specular alpha, which a `fog: false` card is submitted with at 255. Every per-card term is alpha,
-  and the one that matters is the clutter fade in `FUN_004d5de0`: each sprite carries
-  `FUN_0044c1c0` at `+0x58` and its own `fvol` polygon's interned world normal at `+0x5c`
-  (`FUN_0044e870`), giving `c = max(0, dot(n, unit(eye − p)))`, and the fade tests
-  `c²·near²` and `c²·far²` against `DAT_0062d170·d²`. On a slab's top face `c = dy/d`, so a card is
-  opaque out to `sqrt(dy·near)` and gone past `sqrt(dy·far)`. The band itself is **per sprite**:
-  `FUN_0044c780` draws one `t` and interpolates *both* authored `far_fade_range` pairs
-  (C1 `[[2000,3000],[3100,3500]]`), so `near = 2000+1100t`, `far = 3000+500t`.
-  `DAT_0062d170` is 1.0 at `detail.zrd`'s `EffectsLevel_HW` `HIGH` (`CPU_MHZ >= 600`, name table
-  `0x006232c8`), which is every retail capture, so the authored metres apply as they stand.
-  *Fix shape:* replace the shader's `1 − smoothstep(far_fade.x, far_fade.y, d)` with the decoded
-  law (linear in `d²`, per-sprite band, times the view-angle cosine) and **delete**
-  `CardVertexColorTune`, restoring the authored 240. The four deck chapters' map-spanning slabs
-  need no new data (their face normal is `+Y`, the same population `TopAnchorHeightFactor` already
-  classifies), so the cosine is `(camY − spriteY)/d` in the card shader; C1C's build-up frusta and
-  C5's street prisms have sloped and vertical faces and need the normal carried per instance, which
-  is what makes this `[M]` rather than `[S]`. Per-sprite `t` rides an instance custom-data channel.
-  *Evidence (what it must move):* at the CAP-12 1700 m rung `tops-L`/`tops-R` sit **+14.9 / +29.0**
-  over the altitude-matched `t97` original (were +20.1 / +30.4 before `M-a`, which neither fixed
-  nor worsened it), and at the pinned above-deck pose the original frame carries **74 dead-flat
-  rows at `FOG_COLOR` 175 (10.4 % of frame, rows 517–590)** between dome and near sheet while ours
-  carries **zero**, our `far_fade` rim stepping where the original ramps over ~240 rows. The law
-  predicts both: at `dy` = 608 m the original's field ends at 1,350–1,459 m against our flat
-  3,500 m, and past it the frame shows the fogged deck at `FOG_COLOR`. The plateau half is the same
-  mechanism at a grazing pose: at `t124` (1,208 m, `dy` 118 m) the original's field is a **~600 m
-  disc**, where ours runs to 3,500 m and reads a near-saturated 222.7 at the authored 240 against
-  the original's 208.88 / 209.16 (`t124`/`t59`). Ceiling check: a card cannot exceed
-  `239 × 240/255 = 224.9`, so 209 is 32 % of the background showing through, a coverage number
-  (`docs/org/cloudCards.md`).
-  *The lighting-flag clause, unchanged and still owed a look.* `lighting: true` on a `Facade` card
-  admits `AMBIENT + DIFFUSE × max(N·L, 0)` per vertex on the card's own three authored normals
-  through the billboard basis (`docs/org/vertexLighting.md`), not a flat multiply. It does not
-  touch the plateau (C1 and C4 author `lighting: false`), but it **does** change what we should do
-  at C1C/C2B/C5, where we apply a flat `csky_world_light`; that is a look change on a visible
-  population, owed a verdict at the controls before any code moves, and it replaces
-  the current reading rather than stacking on it. Today's frame at C1C is the flat-multiply one:
-  placed `cloudparent` facades **235.25**, un-dimmed deck floor **195.8**, `fvol` cards **163.7**
-  (measured 163.24 / 163.83; C2B 163.24), cloud-population spread **71.6**.
-  ⚠ **Do not stack anything on `CardVertexColorTune` and do not re-calibrate it.** It corrects a
-  colour where the decode says the gap is coverage, so the fade law replaces it outright. The four
-  candidates `C23` refuted on data stay refuted and are not worth re-chasing: a `cloudsprite`
-  opacity (no chapter's `zrdr` names one), `WorldLight` on C1's cards (0.802 puts them at 178.6,
-  below the original's own 204.9–213.3 at the 1160 m rung, and their `lighting: false` settles it),
-  fogging the cards (`fog: false` is a deliberate authored distinction, honoured, and the specular
-  path above confirms it), and carrying the field up with the relocated deck (card tops at
-  1177–1277 m against CAP-12's "clear above by ~1128 m").
-  ⚠ **Our scatter is the other half of the divergence, and it is not this item.** The original
-  scatters over each `fvol` polygon's face on a staggered lattice of `distance × sqrt(3)/2` by
-  `distance` in that polygon's own plane, where we fill a volume's interior with square cells
-  anchored on the world origin (`docs/org/cloudCards.md`, `docs/formats/fogvol.md`). That is what
-  supplies the per-sprite normal the fade law wants, so a faithful C1C/C5 fade may end up waiting
-  on it; the deck chapters' `+Y` shortcut is what keeps the two separable.
-  ⚠ **Instrument:** `population.py`'s flat-red deck mask (`r > 200`) can only see an **un-dimmed**
-  deck in a 0.784-`WorldLight` chapter, `255 × 0.784 = 200.0` is exactly the threshold, so
-  C1C/C2B read `0.0 %` mesh before `M-a` and `6.8 %` / `0.9 %` after. That is the mask waking up,
-  not deck appearing. C1's 0.802 (204) clears it either way. Under fog the same mask goes blind
-  further out: at the river pose it stops classifying the deck below ~55 px of elevation, where
-  the fog mix has pulled the flat red under 200.
-  ⚠ **`SHOT-21`:** `--tex-override` cannot separate the `fvol` field from `cloudparent`, they
-  share `cloud1.tif`/`cloud2.tif`. Separate by altitude or cluster position.
-  *Playtest after fix:* C1C and C2B above their band (`--chapter=C1C --pos=-7323,1192,-3829
-  --direction=0,0,-1`, and C2B's `-3843,1500,-1101 / -0.391,0,-0.921`), plus a C1 re-check that
-  the two reference stills did not move; and the CAP-12 1700 m rung for the far-field half.
-  *Cross-refs:* `BL-325`, `BL-874` (the scatter
-  half of the same decode), `docs/org/cloudCards.md` (this item's decode, every address),
-  `docs/formats/fogvol.md`, `docs/org/vertexLighting.md` (the facade decode).
 
 - `BL-328` `[Tuning]` `[S]` `[Next: decide]` `[Impact: none]` `[Evidence: data]` **The deck floor's 20,480 m annulus half-span was sized against a mechanism
   that no longer exists, re-derive it, or decide it does not need one** (minted at
@@ -1153,38 +988,27 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   over C1's lake and the open sea under Enhanced Graphics, chase view, banking so the aircraft
   crosses the water. *Cross-refs:* `BL-803` (the same sitting's dithering), `Launcher.cs`'s
   `EnableWaterReflections`.
-- `BL-835` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` `[C5]` **The authored mip LOD
-  bias reaches only the world-mesh shader arm, where the original sets it as one device-wide
-  render state.** *Evidence:* `BL-538`'s close read `MipBias` off `adjust.gw` as
-  `D3DRENDERSTATE_MIPMAPLODBIAS`, which every texture sample on the device takes;
-  `CSVM/src/Mech3/SceneBuilder.cs:1614` (at `7d2e9881`) feeds it to the world-mesh material
-  only, while the billboard arm (`:1729`), the facade arm (`:1816`) and
-  `CSVM/src/Mech3/Clutter.cs:655` sample unbiased. *Fix shape:* route the same shader global
-  through every sampling arm; `c5-city-night` re-pins with the cause named. *⚠ Traps:* the bias
-  moves C5's dark band out by 1.74x and does not remove it; with the bias applied the band no
-  longer reads wrong at the controls (`git log --grep=BL-538`), so this item is about the other
-  sampling arms, not the band. *Cross-refs:* `git log --grep=BL-538`, `docs/verification.md`
-  WORLD-38, `docs/org/textures.md`.
-
-- `BL-874` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The original
-  scatters the cloud field over each `fvol` polygon's FACE on a staggered lattice; we fill a
-  volume's interior with square cells anchored on the world origin.** *Evidence:* decoded in
-  `docs/org/cloudCards.md`. `FUN_0044dc90` walks the `fvol` mesh polygon by polygon (skipping
-  polygon flag `0x800`, splitting a triangle strip into triangles) and calls the scatter
-  `FUN_0044c780` per polygon; the lattice is laid in that polygon's own plane on the basis
-  `U = unit(v1−v0)`, `V = cross(U, n)`, with steps `distance × sqrt(3)/2` and `distance`, each
-  extent cut into a whole number of steps, **every other row offset by half a step**, and each
-  point tested against the polygon's own outline (`FUN_0044c310`). The perpendicular offset runs
-  along `unit(p − ref)` from a per-volume reference point, the perturbation is an independent draw
-  on all three axes from one random magnitude, and the scale is one uniform draw. *Fix shape:*
-  scatter per authored face rather than per volume interior; the density reading (`distance` as a
-  mean spacing) survives, and the top-anchored placement rule is what the face scatter already
-  produces for a slab, so the deck chapters should move least. *⚠ Traps:* this is the mechanism
-  that supplies the per-sprite polygon normal `BL-327`'s fade law needs, so land the two in that
-  order or accept `BL-327`'s `+Y` shortcut for the deck chapters only. Counts will move in every
-  chapter and every cloud golden with them; the C1C build-up frusta and C5 street prisms scatter
-  on their sloped and vertical faces, which reads as a shell rather than a filled mass and is the
-  change most worth a look. *Cross-refs:* `BL-327`, `docs/formats/fogvol.md`.
+- `BL-899` `[Bug]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: data]` `[C5]` **C5 builds
+  19,197 `fvol` cloud sprites that drew no pixels at either probed pose, before and after the fade
+  law landed.** C5's `fvol` geometry is seventeen polygonal street prisms rather than a deck slab,
+  and the field it scatters over their tops and ramps is the chapter's second largest by count.
+  *Evidence:* two freecam poses, street level (`--chapter=C5 --pos=-9256,178,-3155
+  --direction=-0.588,-0.1,-0.809`) and above (the same bearing at `y=600`), render byte-identical
+  with and without the view-angle fade (0 px changed at both), where the same comparison at C1
+  moves 40 to 47 % of the frame. A `--tex-override` on `cloud1.tif`/`cloud2.tif` at both poses
+  paints **0** pixels, against 92,520 at the C1 1,700 m pose. So the sprites are built and their
+  normals are right (the `cloud-field-fade` suite reads 17,095 up and 2,102 sloped of 19,197, none
+  on a wall), and nothing of them reaches the frame. ⚠ **The face scatter did not change this
+  reading**: the street-level pose is still byte-identical across it and `--tex-override` still
+  paints 0, though the same override at `--pos=-7392,400,200 --direction=0,-0.604,-0.797 --no-fog`
+  paints most of the frame, so the field does draw from some poses. *Where to look:* whether the
+  prisms' authored 1000-1500..1200-1800 m band plus the view angle can ever admit a card from
+  inside the street canyon, whether the cards sit inside solid geometry, and whether a per-view
+  cull (`GameSession`/`WorldBuilder`/`WeatherRig`) drops the field in that chapter.
+  ⚠ Two poses are not the chapter: sweep C5 from several altitudes and bearings before concluding
+  the field never draws. ⚠ Not caused by the fade law, which is why this is its own item: the same
+  two poses read 0 on the build before it. *Cross-refs:* `docs/formats/fogvol.md`,
+  `docs/org/cloudCards.md`.
 
 ## Effects & animation runtime
 
@@ -1270,36 +1094,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-231` (the pool's tuning entry), `BL-121` (the `trail-world-anchor` suite),
   `BL-700` (the same zeppelin family's wreck rest).
 
-- `BL-797` `[Fidelity]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **A choked engine's propeller keeps spinning silently, where the original winds it down with a sound.**
-  *Evidence:* the disabled-systems mask's bit-`0x2` edges call `FUN_004b15c0` and `FUN_004b1630`,
-  which swap the airframe def's `stop_props_anim` and `spin_props_anim` on two anim slots at
-  vehicle `+0x6c8`/`+0x6cc` (decode: `docs/org/ordnanceTypes.md`, "What the mask's bit-2 edges
-  run"). `stopprops` fires the `snd_propstop` one-shot, activates `staticprop1`..`3` and fades them
-  in over 2.0 s, and fades `prop1`..`prop3b` out over 1.5 s before deactivating them; `spinprops`
-  reverses it silently and instantly. CSVM plays `stopprops` at Destroy and at Crash and
-  `startprops` at spawn (`Flight/FlightController.cs`, `Session/HumanFlightAdapter.cs`,
-  `Session/AiFlightAssembler.cs`) but runs neither on the choke, so a choked aircraft's blur discs
-  turn on at full rate with no cue. *Fix shape:* play `stopprops` through `CrashRuntime` on
-  `TryChokeEngine`'s rising edge and reverse it when `EngineDead` clears, the same call shape the
-  nitro edges already use, on the human rig and the AI one alike, with a suite that asserts the
-  slot state across both edges. *⚠ Traps:* the restart side is the decision this item is waiting
-  on. `PropAnimator` turns the discs procedurally at the same authored `-220`/`60` rates, so
-  playing `spinprops` puts a second writer on the same node transforms; either suppress its
-  `OBJECT_MOTION` and keep `PropAnimator`, or hand the spin to the anim runtime for the whole
-  flight. Do not reach for `startprops` on the restart: it carries `snd_propstart`, and the
-  original's restart is silent. Do not double the death-time `stopprops` when a choked aircraft
-  then crashes. *The user's steer:* the restart side is decided, `PropAnimator` holds the spin, so
-  `spinprops` runs with its `OBJECT_MOTION` suppressed. *Decode first, before the port:* when the
-  original really plays the pair. The decode has the choke edges, the death routine and the
-  spawn/reset caller; the user asks whether `stopprops`/`spinprops` also run at mission start and
-  on a captured aeroplane (the airframe swap, `docs/formats/anim-definitions/cutscenes.md`, "The
-  airframe swap codes"), so read every caller of `FUN_004b15c0`/`FUN_004b1630` and the anim
-  runtime's own `start_anims` path and list each site the pair fires from, then port the whole
-  set, not the choke alone. *Playtest after fix:* fly into a `TANGLER` cloud and watch and listen
-  to the prop through the choke and the recovery. *Cross-refs:* `docs/formats/vehicle.md`
-  (`spin_props_anim`/`stop_props_anim`), `docs/org/vehicleDamage.md` (the mask), `BL-406` (the
-  choke itself), `BL-285` (the engine loop's start/stop inputs).
-
 - `BL-867` `[Tuning]` `[S]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` **The speed cue's wisps read more opaque than the
   original's.** *Evidence:* reported at the controls against mission recordings: the pale wisps
   each chapter's `speed_cue.zrd` emits ahead of the player (`Flight/SpeedCue.cs`, three authored
@@ -1314,9 +1108,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ahead of the aircraft, never by texture. *Cross-refs:* [`docs/formats/effects.md`](docs/formats/effects.md)
   (the cue's data), `docs/org/puffer.md`.
 
-- `BL-893` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The ground shadow's silhouette is rasterised into a 32 texel texture, the original's own size, and reads coarse under the player's aircraft.** *Evidence:* user at the controls asks for a higher resolution plane shadow. `GroundShadowLaw.TextureSize` (`GroundShadowLaw.cs:45`) is 32, decoded from `FUN_00565d80`'s 32x32 raster (`docs/org/shadows.md`); `GroundShadowSilhouette` (`GroundShadowSilhouette.cs:37`) rasterises the footprint, spreads and ramps over that buffer, and the player's quad grows to `PlayerMaxScale` 3 at altitude (`GroundShadowLaw.cs:37`), which magnifies the texels further. *Fix shape:* a deliberate departure from the decode: raise the size (64 or 128), keep the 3x3 spread and the ramp in world terms rather than texel terms so the edge softening does not shrink with the step, measure the raster cost per aircraft per frame, and re-pin the goldens that show a shadow, naming them. *⚠ Traps:* the L8 image is rebuilt on `SetData` (`GroundShadowSilhouette.cs:157`) for every live aircraft, so the cost is size squared times aircraft; measure before and after on a busy chapter. *Cross-refs:* `BL-894`, `docs/org/shadows.md`.
-
-- `BL-894` `[Bug]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: feel]` **The gyrocopter's shadow carries a still top rotor where the original's rotor shadow turns.** *Evidence:* the user's recall of the original at the controls: the rotor's shadow rotates. `GroundShadowPass.cs:142` reads an aircraft's shape once, on first sight, through `GroundShadowSilhouette.For(model, ...)` (`GroundShadowSilhouette.cs:91`), so a part that turns relative to the airframe keeps its first-sight pose in the raster; `PropAnimator` (`PropAnimator.cs:9`) spins the blur discs on the model only. `docs/org/shadows.md` says the original rasterises the model node per frame, which is what carries a turning rotor into its shadow. *Fix shape:* confirm on footage (`Z:\CSVM\OriginalScreenshots\Videos\`) or in the decode that the rotor's shadow turns, then re-rasterise the turning part each frame at the disc's current turn, or compose the rotor as a second turning silhouette over the still airframe. Whether the fixed-wing propeller discs turn in their shadows too is the same question. *⚠ Traps:* a per-frame raster of the whole model for every aircraft is the cost `BL-893` warns about; raster only the turning part. *Cross-refs:* `BL-893`, `CSVM/src/Flight/PropAnimator.cs`, `docs/org/shadows.md`.
 
 ## Audio
 
@@ -1422,8 +1213,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the easing on the engine's wall clock (the pinned goldens hold under `--det` only if the
   deterministic clock is what the easing reads, so decide that first). *Cross-refs:* `BL-816`'s
   closing commit, `docs/verification.md` DET-11, `docs/formats/camparam.md`.
-
-- `BL-846` `[Fidelity]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **An aircraft's gun loop culls at its audible distance with no margin, while the turret voice culls at 1.1x as decoded.** *Evidence:* `AiWeaponAudio` culls at the cue's own audible distance, and `docs/formats/sounds.md` says the sound manager culls at the definition's own audible distance; `docs/formats/turrets.md` reads `FUN_00597c20`, the sound manager's own routine, as silencing a voice past 1.1x the RANGE pair's audible distance, which is what `GunVoice` now applies. The same routine plausibly serves the aircraft path. *Fix shape:* read `FUN_00597c20`'s callers for the aircraft loop; if the margin applies, move it into the shared cue reading and correct `sounds.md`, and re-pin the aircraft voice suites. *⚠ Traps:* the turret voice suites now hear at 1.05x and are silent at 1.15x; a shared margin must keep both. *Cross-refs:* PLAN-code-review-orch C26.
 
 ## Cameras & views
 
@@ -1780,71 +1569,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Fix shape:* re-review `StuntRunHud.cs`/`TargetHud.cs`/`StuntScoreboard.cs` placement once such a type scale exists,
   against it rather than in isolation. *Cross-refs:* `BL-449`, whose landing prompted this wording.
 
-- `BL-827` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **Six of the original's eleven targeting actions have no key here: a
-  Previous and a class-restarting Nearest per class.** CSVM ships five of the eleven, one Next per
-  class plus nearest-crosshairs and Target Nothing, on `T`/`Y`/`U`/`I`/`O`. The original ships all
-  eleven, three directions for each of the three classes: `E`/`Shift+E`/`Ctrl+E` for
-  enemies/objectives, `W`/`Shift+W`/`Ctrl+W` for allies, `R`/`Shift+R`/`Ctrl+R` for non-aircraft,
-  authored at `FUN_004936c0` and decoded in `docs/org/targeting.md` ("The controls the eleven ship
-  on"). Both behaviours already exist behind the seam and are exercised by the suites:
-  `TargetSelection.Previous(cls)` steps back, `TargetSelection.Nearest(cls)` returns to the head of
-  a cycle the pilot has walked into. What is missing is six `InputAction` members, six
-  `DefaultBindings` rows and six lines in `FlightController.StepTargeting`.
-  *The decision this waits on:* which six keys. The original's own scheme cannot be copied, twice
-  over: our binding model carries no modifier on a key binding (`BindingControl.Key` is a bare
-  keycode, and adding one touches capture, labels and the store), and its three base letters are
-  spent here on yaw and pitch anyway. Free in the flight context today: `J`, `K`, `M`, `Z`, `Tab`,
-  `F1`, `F2`, the digit row and the punctuation keys. Six of them is a real bite out of a scheme the
-  author flies, so the shape wants a look at the controls rather than a pick from a list.
-  ⚠ *Traps.* (a) A cycle you can only walk forward is the actual complaint to test against: with
-  eight hostiles up, reaching the previous one costs seven presses. Judge whether that bites before
-  spending six keys. (b) Per-class Nearest is the weaker half of the six: `Next` into a class you
-  are not already in already lands on that cycle's head, so the action only adds "back to the head
-  of the class I am already in". (c) The pad has nothing left. The original itself puts only two
-  targeting actions on a joystick (buttons 3 and 6), so pad defaults for these six would be an
-  invention. (d) Do not reach for a modifier without pricing it: `Shift` and `Ctrl` are throttle up
-  and down in flight here, so `Shift+T` would also change the throttle.
-  *The user's steer:* "Use the default bindings if possible. Add them all (look at
-  `OriginalScreenshots/Keybinds Targeting.png`) so that they can be bound via the controls menu.
-  Don't bind them to controller, cycle + crosshair work good with controller." So: all six actions
-  exist as `InputAction` members, appear on the Controls door and take a keyboard default; the
-  default is the original's own key where it is free here, otherwise a free key of the
-  implementer's choice (the modifier form is not available without the binding-model work above,
-  so a bare key stands in for `Shift+E`/`Ctrl+E`); no pad default for any of the six, the pad
-  keeps Next and nearest-crosshairs alone.
-  *Cross-refs:* `docs/controls.md`'s flight table, `CSVM/src/Bindings/`, `docs/org/input.md`'s
-  shipped-defaults table.
-
-- `BL-897` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **The weapon
-  selectors' four keys should be the original's own `F3`..`F6`, and the pad's one direction per
-  class wants a hold to step the other way.** *Evidence:* the user at the controls with the two
-  backward steps landed (`git log --grep=BL-357`): CSVM binds the forward steps on `G`/`H` and the
-  backward ones on `F3`/`F4`, where the original's Weapons keybind page
-  (`OriginalScreenshots/Keybinds Weapons.png`, `docs/org/input.md`'s shipped-defaults table) puts
-  `Cycle guns clockwise` on `F3`, `Cycle guns counterclockwise` on `F4`, `Cycle rockets clockwise`
-  on `F5` and `Cycle rockets counterclockwise` on `F6`. `F5` is the damage lab's hard-coded key
-  (`Flight/DamageLab.cs`, `UI/WorldDamageLab.cs`) and `F6` is `SelectChaseView`'s default
-  (`Bindings/DefaultBindings.cs`). On the pad each class has one direction (D-pad right and left,
-  the original's own joystick 7 and 8 are also one direction each), and `FireControl.StepSelectors`
-  moves on rising edges only, so holding the D-pad does nothing today. *Fix shape:* (1) defaults
-  `F3` guns clockwise, `F4` guns counterclockwise, `F5` rockets clockwise, `F6` rockets
-  counterclockwise, which the user asked for verbatim; the damage lab and the chase view each take a
-  new key, named in `docs/controls.md`, `docs/cli.md` if a flag names the key, and the debug-key
-  block's own rule if the lab moves there. (2) A hold on the pad's selector button past the same
-  250 ms the targeting hold already uses steps the selector the other way, one step per hold, so
-  the pad reaches both directions without a second button; keyboard holds stay inert. *⚠ Traps:*
-  `docs/org/input.md` says the original's clockwise/counterclockwise names are inverted against
-  its message keys, so bind by the displayed name the user typed, not by `MSG_CMD_CANNON_PREV`. A
-  stored keymap that names `F3`/`F4` for the backward steps keeps them (the store does not bump
-  its version for a default change), so the new defaults reach only a profile that never saved
-  those two rows; say so in `docs/controls.md`. The hold must not also fire the rising-edge step
-  on press and then the backward step on release; feed the pad's selector level through
-  `TapHoldButton` (`CSVM/src/Utils/TapHoldButton.cs`) as the targeting hold does, so the tap
-  resolves on release and a spent hold never also taps. *Playtest after fix:* any sortie, both selectors both
-  ways on the keyboard, and a short press against a held press on the D-pad. *Cross-refs:*
-  `CSVM/src/Flight/FireControl.cs` (`StepSelectors`), `CSVM/src/Bindings/DefaultBindings.cs`,
-  `docs/controls.md`'s flight table, `docs/org/input.md` (the inverted names, the joystick column).
-
 - `BL-431` `[Feature]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The screen-space `GaugeCluster` doubles up over the driven 3D panel in
   first person, and whether it should is undecided.** The drive itself has landed:
   `CockpitGauges` (`src/Flight/CockpitGauges.cs`) binds the needle nodes, the artificial-horizon
@@ -1896,22 +1620,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   Neither that family nor either other `PLAYER_1ST_PERSON` def (`muzzle_burst`, `player-1`'s
   `pdpanel4`/`pdpanel6`) targets any node inside `gauges`, and no runtime binds a plane's own
   subtree apart from the crash rig's narrow subset, so nothing animates the panel per frame.
-
-- `BL-842` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **A list's
-  scroll thumb is a fixed 11-pixel tile where the original stretches it to the share of the list
-  its window shows.** *Evidence:* `CAP-50`'s opening Instant Action frame draws the contents
-  window's thumb from board y 182 to 356 on a track running 186 to 416, so 173 of 230 pixels for a
-  14-row window over the preset list, a length that says how much of the list is in view. Ours
-  draws `IA_B_ScrollBar.png` at its own 16x11 wherever the window stands
-  (`CSVM/src/UI/Menu/Original/OriginalInstantAction.cs`, `ContentsWindow` and `OpenListWindow`;
-  `CSVM/src/UI/Menu/Original/OriginalHangar.cs`, `OpenHangarListWindow`), so a long list and a
-  short one wear the same thumb. *Fix shape:* `ListWindow`'s thumb height becomes
-  `trackHeight * Rows / Count` clamped to a floor, and the tile is drawn stretched to it, which
-  also changes what `TopAfterDrag` divides by. *⚠ Traps:* the drag maths already reads
-  `TrackHeight - ThumbHeight` as the free run, so a growing thumb shortens the run and every list
-  suite's drag-to-the-foot check has to still land on the last row. *Cross-refs:*
-  `docs/org/menu-inventory.md`'s Instant Action reading, `BL-707`'s landing
-  (`git log --grep=BL-707`), which added the thumbs.
 
 - `BL-751` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Original's seat
   strip is a monochrome device list on the left where Built-in's is a colourised P1 to P4 chip row
@@ -2022,53 +1730,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   scripts are the decode for positions, the film only for the look. *Cross-refs:* `CAP-52`,
   `docs/org/menu-inventory.md`, `docs/formats/menu-layout.md` (`SCRAPBOOK.CSV`).
 
-- `BL-812` `[Feature]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **The load
-  screen stands still for the whole build, so a launch reads as a freeze: the bar never fills and
-  the propeller never turns.** *Evidence:* `Launcher.BeginLaunch` shows the board, lets one frame
-  render, and then `LaunchSession` builds in one synchronous block on the next tick, so nothing is
-  redrawn until the world is up (`CSVM/src/Session/Launcher.cs:1043-1076`). `LoadBoard` draws the
-  unlit strip and `prp0` on purpose (`CSVM/src/UI/LoadBoard.cs:11-13`). The original fills its bar
-  from a hand-authored milestone table, sixteen literal fractions from 0.01 to 0.90 set at fixed
-  points of the load, monotonic, never reaching 1.0, and repaints through a pump throttled to one
-  draw per 0.1 s called after each milestone; the propeller is a six-frame cycle at 6 fps
-  (`docs/org/loading-screen.md`, "The progress bar is a hand-authored milestone table" and "How the
-  screen keeps drawing"). On film the campaign bar visibly steps over the load
-  (`OriginalScreenshots/Videos/Loading Screen Mission1.mkv`, about 3 s of screen, the fill growing
-  from nothing to half; `Loading Screen Mission CM01.mkv` shows the first step only). *Fix shape:*
-  split `LaunchSession`'s build into phases the frame loop can interleave with a draw (a build that
-  yields between its steps, or one that runs off the main thread and hands scene-tree work back to
-  it), then assign each phase boundary a fraction the way the original does and let the board
-  repaint between them: the fill as `floor(fillWidth * fraction)` pixels of `prog_red` over
-  `prog_blk` (`prog_redload` over `prog_blkload` on the campaign sheet), and the propeller cycling
-  its six frames at 6 fps. *⚠ Traps:* do not derive the fractions from measured durations; the
-  original's are authored and the screen is torn down at 0.90, so a full bar is never drawn. The
-  extraction carries only the six range endpoints of the propeller cycle (`prp0`, `prp7`, `prp15`,
-  `prp22`, `prp30`, `prp37`), so the cycle is six frames, not 38. A CLI launch does not come through
-  `BeginLaunch` at all, so no scripted or golden run may gain a frame from this. The original does
-  not thread its load either; a pump from inside a blocking build is a legitimate shape if the
-  Godot frame loop can be driven that way. *Playtest after fix:* launch any Instant Action mission
-  from the menu and watch the bar step and the propeller turn until the world appears; then a
-  campaign launch for the sheet's own bar. *Cross-refs:* `BL-314` (the splitscreen
-  race whose clock starts while a load screen is still up), `docs/org/loading-screen.md` (the
-  campaign sheet's own content, which this one has to make move without changing).
-
-- `BL-825` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **The build
-  stamp stays in the corner of the Original menu and reads `CSVM v<version>`, so it is not taken
-  for the original's own version number.**
-  *Evidence:* `BuildStamp.cs` writes `v<version>` in the bottom-right corner whenever the menu is
-  up, on every presentation, so a screenshot a stranger sends carries the build it was taken on
-  (`CSVM/src/UI/BuildStamp.cs:6-12`). The original's top level draws no text outside the art: the
-  script creates `mm_t_title` and fills it from `uiData` 2152, and CAP-49's static-pixel map over
-  ten seconds leaves only the logo, the six plaques and the frame. Original draws nothing at
-  `mm_t_title` and never did; what the film contradicts is the corner stamp, which is ours and
-  which no take can speak to. *Decided:* keep it on every presentation, the stamp is a fact about
-  the binary and the presentation most likely to be screenshot is the one that would lose it.
-  *Fix shape:* the text becomes `CSVM v<version>` (the user's words: "change it to CSVM v0.1.0 so
-  it is not confused with the original's version number"), one string in `BuildStamp`, and any
-  suite or doc that quotes the `v<version>` form follows. *⚠ Traps:* the stamp's placement is
-  deliberate and cross-presentation, so do not make the prefix presentation-dependent; a bug
-  report reads the same string whichever menu it was shot on. *Cross-refs:* `BL-805`'s closing
-  commit (the rest of the top level's reading), `docs/org/menu-inventory.md` Part 4.
 - `BL-834` `[Fidelity]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The warning-shot shield
   arms on every human-piloted aeroplane, where the original ticks it only for the player vehicle
   while the `Network` key is zero.** *Evidence:* `BL-826`'s decode: the world tick calls the
@@ -2089,66 +1750,41 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   session. *Cross-refs:* `docs/org/shadows.md`, `git log --grep=BL-331` (the shadow's landed
   placement and silhouette, and the halves dropped with it), `docs/verification.md` SRC-12.
 
-- `BL-875` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Built-in's campaign
-  screens take the key or pad press that skipped a chapter or closing film.** *Evidence:* a read of
-  CSVM's own code, the twin of the leak the Original shell no longer has. `LaunchMenu` polls its
-  seats every frame (`_slots[i].Seat.Source.Poll`) and reads `Accept` as an edge, while a film's
-  stop and its hand-off both run in the input flush ahead of that poll, so the press that ended the
-  film arrives on the frame the screen it opened is first live. The mouse half is probably clear:
-  the launchscreen reads the button as an `InputEvent` in `_UnhandledInput`, which the cinema's own
-  handler takes first. *Fix shape:* the Original shell's `CinemaFilm` (`UI/CinemaHandoff.cs`) holds
-  a film's span and the tail of the press that ended it; play Built-in's two films through one of
-  those from `CampaignFlow`'s doors, and pin it with a press spanning the hand-back. *⚠ Traps:*
-  nobody has seen this at the controls, the report behind the Original fix was Original's; confirm
-  the poll order against the film's stop before writing the fix. *Cross-refs:*
-  `UI/CinemaHandoff.cs`, `docs/verification.md`'s `METHOD-30`.
+- `BL-878` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Every control prompt
+  names its control in words, where a pad player would read a glyph, and the pause and results boards
+  carry no control hint at all.** *Evidence:* both flight prompts compose off the seat's own bindings
+  and its active device, the auto-dock offer and the crashed pilot's respawn line
+  (`FlightHud.ComposeAutoLandPrompt` and `ComposeRespawnPrompt` over
+  `CSVM/src/Bindings/ActiveDevice.cs`), and each fills a `%1` slot with `BindingLabels.Describe`'s
+  words, so a pad seat reads "Pad Y" and "Pad Left Stick" rather than the button it is looking at; the
+  boards (`PauseBoard`, `OriginalPauseBoard`, the two results boards) name no control anywhere, so a
+  pad-only seat guesses at the menu. *Fix shape:* a per-control texture set keyed the way
+  `BindingControl` is (kind, index, sign), and a text-with-icon line that draws the glyph in the slot
+  the control name fills today, so the composition seam itself does not move; then the boards' own
+  hints over that same seam. *⚠ Traps:* the `%1` placeholder is what makes the glyph a drop-in, so do
+  not compose a prompt by concatenation. A seat names ONE device at a time
+  (`ActiveDevice.PromptBinding`'s `readsKeyboard` gate), so a sheet that puts a key cap and a pad
+  button in one line brings back what the device gate removed. The original ships no such art, so the
+  set is this port's own and its look is the user's call at the controls, not a luminance distance.
+  *Cross-refs:* `CSVM/src/Flight/PromptLine.cs`, `CSVM/src/Bindings/BindingLabels.cs`,
+  `docs/controls.md`.
 
-- `BL-854` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The pause and
-  load screens always draw the opening pin-up, where the original draws whichever picture the
-  profile holds.** *Evidence:* both sheets take the seeded constant rather than the profile's own
-  slot, so every one of them shows `ms_p_initialpinup1`; the reference clips under
-  `OriginalScreenshots/Videos/` show a dog photograph on one mission and the pin-up on another.
-  The slot now exists and is written: `CampaignProfileDef.Memento`, filled by the cabin's chooser
-  through `CampaignFeature.CommitMemento`, over the award table and its admission rule in
-  `CSVM/src/Session/CampaignMementos.cs`. Nothing awards a picture behind the player's back: a row
-  is admitted to the chooser once that mission's merged mask carries the won bit and the row's own
-  objective bit, and only ACCEPT writes (`uiData` 2150 mode 1). *Fix shape:* hand the two sheets
-  `CampaignMementos.Bitmap(CampaignMementos.Current(profile))` in place of the seeded constant; the
-  drawing side needs nothing, since both screens already draw whatever name they are given.
-  *⚠ Traps:* the name is stored with its extension and drawn without it, so a profile field holding
-  `MS_P_DoggiePhoto.jpg` and a bitmap lookup of `ms_p_doggiephoto` are the same value at two
-  stages; do not add a second constant beside `Launcher.SeededMemento` for a new default, since a
-  profile that has chosen nothing is exactly the seeded case. *Playtest after fix:* choose a
-  picture in the cabin, then pause and relaunch to see it on both sheets.
-  *Cross-refs:* `docs/org/pause-screen.md` (the table, the admission rule and the name rule),
-  `docs/org/loading-screen.md`, `CSVM/src/Session/CampaignMementos.cs`.
-
-- `BL-878` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **The prompts the
-  auto-dock line does not cover still name fixed controls, and every prompt names its control in
-  words where a glyph would read better on a pad.** *Evidence:* the seat remembers which device
-  produced its last real input and the auto-dock line names that device's binding
-  (`CSVM/src/Bindings/ActiveDevice.cs`, `FlightHud.ComposeAutoLandPrompt`), but the crashed line
-  in `ComposeTextLines` is still the fixed string "PRESS R (GAMEPAD Y/A) TO RESPAWN", which names
-  neither the seat's real `Respawn` bindings nor one device at a time, and the pause and results
-  boards carry no control hints at all. *Fix shape:* compose the crashed line the way the
-  auto-dock line is composed, off the seat's `Respawn` bindings and its active device, keeping the
-  message table's `%1` placeholder shape so a glyph can later fill the slot a control name fills
-  today; the glyph step then wants a per-control texture set and a text-with-icon line rather than
-  a string. *⚠ Traps:* the crashed line is the one prompt a player reads while the rest of the HUD
-  is hidden, so it has to survive the crash path's own visibility gating. A pad-only splitscreen
-  seat must never be named a key, which `ActiveDevice.PromptBinding`'s `readsKeyboard` gate
-  already handles. The auto-dock line is the one prompt that is not a readout-block line at all: it
-  stands on its own centred control (`CSVM/src/Flight/AutoDockLine.cs`), so a prompt moved onto that
-  footing follows it rather than `ComposeTextLines`. *Cross-refs:* `CSVM/src/Flight/FlightHud.cs`,
-  `CSVM/src/Bindings/ActiveDevice.cs`, `CSVM/src/Bindings/BindingLabels.cs`.
-
-- `BL-888` `[Feature]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: data]` **Photo Mode cannot be reached from the Original pause sheet.** *Evidence:* user at the controls. `escape.zrd` authors four strips (RESUME, RESTART, PREFERENCES, QUIT) and the sheet draws those; the remake's Photo Mode row lives on the Built-in `PauseBoard` only (`PauseBoard.cs:118`), so a session on the Original presentation has no door into the mode. *Decided:* the user's placement, quoted: "Button between resume and prefrences same style". A remake-only fifth strip in the same widget chain and plate art as the four authored ones, labelled PHOTO MODE in the strips' face, standing between RESUME and PREFERENCES in the sheet's own order, the strips after it moving along one slot; read the campaign sheet's strip positions from its own `LOADINGDIALOG` block rather than copying the Instant Action ones. *Fix shape:* extend `PauseSheet`'s strip list and `PauseScreens.RowAt`'s hit test and the pad walk to five, wire the strip to the same `EnterPhotoMode` the Built-in board calls, pin the five strips' positions and the door in `pause-sheet`, and take the same door on the Instant Action sheet (`git log --grep=BL-886`) if its geometry allows. A look at the sheet is owed after landing. *⚠ Traps:* the mode's exit seeds the pause key's edge (`FlightController.cs:1414`), so the door returns to the sheet, not to flight. *Cross-refs:* `BL-821`, `BL-429`, `CSVM/src/Flight/OriginalPauseBoard.cs`, `docs/org/pause-screen.md`, `git log --grep=BL-884`.
-
-- `BL-889` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The objectives parchment's rows draw upright on the pause sheet and the campaign load screen where the original sets them in italic.** *Evidence:* user at the controls on the pause sheet, and orch-4's CM01 load screen side-by-side (`BL-814`). `fonts.zrd` gives `ObjList` as Andy Bold at 14, italic (`docs/formats/objectives.md`); `PauseScreens.cs:209` and `LoadScreens.cs:267` build the rows' `BoardNote` with `EscapeObjectivesList.RowFont` and leave `Italic` at its default, while `ComposedBoardView.cs:34` already draws a synthetic oblique of the board's face for every line that asks. The same upright rows are also wider than the original's, so some stock objectives wrap to three lines where the original wraps to two; the user's read is that the size is fine and the line count is the visible gap. *Fix shape:* pass `Italic: true` on both `BoardNote`s, then take the smallest further departure that brings every stock row to the original's line count (a size step, or a narrower measure), pinned in `pause-sheet` by row line count over CM01 and CM05. *⚠ Traps:* the slant is a shear of the same outlines, so it narrows nothing on its own; measure the wrap after the flag, not before. Do not touch the title line, which the original sets upright. *Cross-refs:* `BL-821`, `BL-814`, `CSVM/src/UI/PauseScreens.cs`, `CSVM/src/UI/LoadScreens.cs`, `CSVM/src/UI/ComposedBoardView.cs`.
-
-- `BL-890` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **The pause sheet and the campaign load screen hang the seeded memento, not the one the profile chose.** *Evidence:* user at the controls after choosing another memento in the cabin: the pause sheet and the loading screen still show the first pin-up. `GameSession.cs:58` (`PauseMemento = "ms_p_initialpinup1"`) feeds `PauseReadout` at `GameSession.cs:3632`, and `Launcher.cs:67` (`SeededMemento`) feeds `LoadSheet.Load` at `Launcher.cs:1129` and the `--menu=pauseboard` door at `Launcher.cs:1254`; the cabin wall reads `CampaignMementos.Current(profile)` (`CampaignCabinPage.cs:93`), which neither screen asks. *Fix shape:* hand both screens `CampaignMementos.Bitmap(CampaignMementos.Current(profile))` for the seated profile and keep the seeded name only for a session with no profile; pin in `pause-sheet` and `load-sheet` over a profile whose memento is not the seeded one. *⚠ Traps:* the door's readout and a real pause must agree, or the screenshot door proves nothing. *Cross-refs:* `git log --grep=BL-463` (the chooser), `git log --grep=BL-814`, `git log --grep=BL-821`.
-
-- `BL-895` `[Bug]` `[S]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **The player plane's icon on the pause chart is turned 45 degrees counter-clockwise from the heading the compass shows.** *Evidence:* user at the controls on a campaign pause sheet: the icon does not agree with the compass. `MissionMap.Heading` (`MissionMap.cs:83`) takes `Atan2(forwardX, -forwardZ)` in revolutions clockwise and `PauseReadout.Icon` (`PauseScreens.cs:102`) hands it to `BoardPicture` as its turn; the `--menu=pauseboard` door turns the same icon by `HeadingDeg / 360` (`Launcher.cs:1245`), the opposite sign for the same pose, so at least one of the two is wrong, and the live one is the one the user saw. A constant 45 degree offset also fits an icon bitmap drawn pointing up-right rather than up, or a compass whose zero differs from the chart's. *Fix shape:* read the icon art's own nose direction from the extraction, compare the live turn with the compass reading on one pinned pose (a headless campaign pause with a known `PLAYER_INIT` heading), settle the sign between `MissionMap.Heading` and the door, and pin the agreement between the icon's turn and the compass in `pause-world-icons`. *⚠ Traps:* the zeppelin icon takes the same conversion (`GameSession.cs:3611`), so a fix that turns only the player plane leaves the hull wrong. *Cross-refs:* `git log --grep=BL-882`, `docs/org/pause-screen.md`.
+- `BL-904` `[Feature]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **The Original presentation's Instant Action screen
+  offers no way to set the number of lives.** *Your report:* "In the original ui for instant action we
+  can't set number of life's." *Evidence:* the lives are this port's own invention (`ia.json` carries
+  no such field, `InstantActionFeature.MaxLives`), so the decoded `[@InstantAction@]` layout authors
+  no row for them and `OriginalInstantAction` composes none; the feature's `Lives` stays at its
+  default of 1 for every sortie launched from that screen, while Built-in's Mission type screen
+  carries the stepper (`docs/org/menu-inventory.md`, Built-in screen 5). *Fix shape:* a remake-only
+  control on the Original screen in its own idiom, under the same rule Decision 11 gives
+  `IA_B_BUILD` and `IA_B_CHANGEWEAPONS` (a widget the layout does not author, drawn in the screen's
+  chrome): a lives dropdown or stepper beside the mission type dropdown, reading UNLIMITED for 0 and
+  the count otherwise, stepping the shared feature's `StepLives` so both presentations edit one
+  value; mark it remake-only in the census, pin it with a menu-original-instant-action suite arm
+  and a still. *⚠ Traps:* the ace duel blanks every enemy control in place, the lives control is
+  not an enemy control and stays; a contents row applies its preset and the presets carry no lives,
+  so the row must not reset them. *Cross-refs:* `CSVM/src/UI/Menu/Original/OriginalInstantAction.cs`,
+  `CSVM/src/UI/Menu/InstantActionFeature.cs`, `docs/org/menu-inventory.md` (Decision 11).
 
 ## Splitscreen
 
@@ -2230,22 +1866,6 @@ usual.
   mission-start path rather than the intro hold, with a suite over an Instant Action wave.
   *⚠ Traps:* `BL-736` closed on "CSVM already matches" for the story intro alone; do not re-close
   on that reading. *Cross-refs:* `BL-736`'s closing commit, `docs/formats/anim-definitions/cutscenes.md`.
-- `BL-836` `[Bug]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: trace]` **An AI ordered into Evade from
-  outside the damage path is flagged as evading, so a scripted manoeuvre suppresses its
-  steady-hand roll for the whole episode.** *Evidence:* `CSVM/src/Flight/AiModeMachine.cs:682`
-  (at `7d2e9881`) sets `Evading = true` on every entry into the Evade state, and `:394` reads it
-  to hold the roll; the decode behind `BL-558` names four writers of the original's `+0xBA` flag,
-  all inside the damage routine `FUN_004b9bc0`. *Fix shape:* set the flag only from the damage
-  arm's entry, and add an `ai-modes` phase that orders an Evade without damage and reads the roll
-  still available. *Cross-refs:* `BL-558`'s closing commit, `docs/org/aiControlLaw.md` (SRC-9).
-- `BL-839` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **A campaign launch whose profile
-  failed to load binds no target table, because the guard that keeps a director-free world
-  flight off the mode table also excludes it.** *Evidence:* `CSVM/src/Session/GameSession.cs:3013`
-  (at `7d2e9881`) tests `CampaignProfile == null`; it was added because `campaign-4p-grid` flies
-  without its `csvm-golden` profile on the test machine and moved when the mode table bound.
-  *Fix shape:* key the guard on "launched as a campaign", not on the profile having loaded, then
-  either give the grid golden its profile or re-pin it with the cause named. *Cross-refs:*
-  `BL-828`'s closing commit, `docs/verification.md` SRC-14, `analysis/goldens/README.md`.
 
 ## Missions, modes & campaign
 
@@ -2471,31 +2091,41 @@ usual.
   [`docs/formats/mission-entities.md`](docs/formats/mission-entities.md) "A gasbag section owns its
   bays and its engines".
 
-- `BL-699` `[Perf]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Every AI wave spawn hitches at the controls, and no test measures the
-  launch frame.** *Evidence (at the controls, and measured on one mission):* the author feels a
-  hitch on every wave spawn in every mission, not only CM18's generator launches. The measured
-  case is `BL-641`'s remainder (`PLAN-M5-polish-8` B14): with the crash rig
-  deferred behind the launch, a CM18 generator launch still costs 68 to 141 ms against a 40 ms
-  threshold, paired A/B under `--det` at 1P and 4P. Flown since inside the docking film itself
-  (`PT-118` (d), closed), the five credited launches read with no stall at all, so five spawns
-  4 s apart behind a film camera do not show what ten from load do. What is left on the launch frame is the model
-  build and `FlightController.Bind`, 50 to 90 ms together, and neither moves behind the frame that
-  puts the aeroplane in the world without the aeroplane arriving late. The deferred frames carry one
-  `AnimRuntime.PrewarmEmitters` call over about 194 emitters at 15 to 103 ms, whose
-  `material_create` term (194 `ShaderMaterial` and `MultiMesh` builds in `Effects/EmitterRenderer.cs`)
-  is the PERF-22-shaped follow-up.
-  *Fix shape:* two halves. (1) A test first: a suite that spawns an AI aircraft mid-flight through
-  the roster's own wave path and asserts the launch frame against the hitch threshold, so the
-  hitch is a red bar and not a feel report; `ai-crash-rig-deferral` spawns through the assembler
-  and measures nothing. (2) Then build the assembly AHEAD of the launch, off the generator's and
-  the roster wave's own authored cycle, which is a change to `AiGeneratorRuntime`'s launch
-  declaration and to spawn-index allocation rather than to the assembler. The crash-rig queue
-  (`CrashRigQueue`, `FlightRoster.PumpDeferredCrashRigs`) is the pattern for work that can trail
-  the launch; the model and bind cannot trail it.
+- `BL-699` `[Perf]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Every AI wave spawn hitches at the controls; the launch frame
+  is now measured, and the cost still has to come off it.** *Evidence:* the author feels a
+  hitch on every wave spawn in every mission, not only CM18's generator launches. The launch frame
+  is measured by `ai-wave-launch-hitch` (`CSVM/src/Testing/AiWaveLaunchHitchSuites.cs`), which
+  drives C4/M03's `cargozep1` through `FlightRoster.SpawnAi` over the mission's own built world and
+  times each sim step on the wall clock `HitchMonitor` reads: median launch frame 65.2 ms at 1P and
+  65.1 ms at 4P against that monitor's own 40 ms floor, the cold first launch 110 to 303 ms,
+  the worst frame carrying no launch 55 to 112 ms about fifteen steps behind the first launch,
+  which is the deferred crash rig's `AnimRuntime.PrewarmEmitters` phase. The suite holds regression
+  bars at the measured level (median 130 ms, worst warm launch 190 ms, worst idle frame 160 ms,
+  each about 1.4x the worst reading over repeated runs) and names the 40 ms floor in its note as
+  the target this entry owes; the bars drop to the floor when the removals below land, and until
+  then a suite failing on the cost it exposes would block every later change instead of this one.
+  The cost does not grow with the human
+  field, so it is all in the arriving aeroplane. Inside the warm launch frame, the model build is
+  18 to 29 ms and `FlightController.Bind` 24 to 40 ms, and the bind is `PlaneCollider.Build` almost
+  entirely (35.9 ms of a 39.5 ms bind in the sampled launch); props, wing lights, control surfaces
+  and damage together stay under 1.5 ms, and the loadout, the turrets, the tree insert and the
+  crash-rig arm under 6 ms.
+  *Fix shape:* three removals, in the order their size argues for. (1) `PlaneCollider.Build` is a
+  pure function of the built model's triangles, so the hulls and their `ConvexPolygonShape3D`s
+  belong to the process keyed by airframe rather than to each aeroplane, which is PERF-22's shape
+  and takes the term off every launch after an airframe's first. Check `AircraftBody`'s struck
+  shape index to part name mapping before sharing a shape resource between two bodies. (2) The
+  model build is what is left; building it AHEAD of the launch off the generator's authored cycle
+  only moves it onto a quieter frame (PERF-25, PERF-31), so the removal there is sharing the
+  airframe's immutable parts or splitting the build along its own mesh grain. (3) The
+  `material_create` term of `PrewarmEmitters` on the deferred frames (194 `ShaderMaterial` and
+  `MultiMesh` builds in `Effects/EmitterRenderer.cs`) is the separate PERF-22-shaped follow-up.
   *⚠ Traps:* the aeroplanes a session builds BEFORE its first frame keep their rigs built in
-  place, and deferring them moved the two `--ai=` goldens; keep that rule. The sim clock lags wall
+  place, and deferring them moved the goldens that fly AI aircraft; keep that rule. The spawn index
+  feeds both the livery stream and the spawn jitter (`Rng.NewSystemRandom(Rng.Spawn, index, 0)`),
+  so allocating indices ahead of the launch moves `c1-flight-kill`. The sim clock lags wall
   time on physics-bound late missions, so compare a hitch in sim frames under `--det` and read the
-  hitch lines before blaming a spawn (`docs/verification.md` PERF-12/13/21). `--det`'s numbers are
+  hitch lines before blaming a spawn (`docs/verification.md` PERF-12/13). `--det`'s numbers are
   with nobody at the controls; the author's feel report is the acceptance.
   *Cross-refs:* `BL-434` (the per-viewport splitscreen cost the same pass profiled), `BL-657`
   (CM18's generator launching at the wrong time, which is where the measured case is flown).
@@ -2572,64 +2202,6 @@ usual.
   same script-side hidden input), `docs/org/menu-inventory.md` (the PassengerCabin, ScrapBook_TOC and
   PlaneConstruction rows), `docs/org/hangar.md`.
 
-- `BL-822` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The scrapbook's
-  contents list has no career row, so the original's ordinal-0 page is unreachable in CSVM.**
-  *Evidence:* `uiData` 2409's ordinal 0 is not a mission but `SCRAPBOOK.CSV` slot 0, the
-  not-yet-started career: icon frame 11 (the card fan past the eleven airframes), and the lines
-  `langui` 1217 `Starting My Career`, 1218 `Above the clouds` and 511 `Gypsy Magic`
-  (`0x0040a5b6` to `0x0040a62e`, `docs/org/debrief.md`, "The contents list is the campaign
-  position"). It stands in the list from a brand-new profile onwards, so the original's table of
-  contents is never empty. CSVM's list is missions alone and `CampaignScrapbookPage` browses slots
-  1 to 24, so both the row and the page behind it are absent. **What the page is, decoded.** Slot 0
-  is one spread of ten scraps, `SCRAPBOOK.CSV:5-14` (`0_1_1` to `0_1_10`), every one `Objective`
-  0 and every one openable: two pin-ups (`MS_P_InitialPinup1`/`3`, zoom `A`), `SB_00_00_mag1`
-  (`M`, langui 40145 `Nathan Zachary: Cutthroat Pirate or Gentleman Privateer?` over 40146),
-  `SB_00_00_doc1` and `doc2` (`H`, 40006 to 40009, the Articles of Piracy and the Pandora
-  addendum), `MS_P_Mom` and `MS_P_DoggiePhoto` (`A`), `SB_00_00_news1` (`N`, 40002 `Market Burns
-  Wall Street Favorites!`), `SB_00_00_news2` (`F`, 40004 `United States Remembered`) and
-  `SB_00_00_fhlogo` (`A`, no text). The ids are `RESRC1.H:7-14,155-156`; all ten page images and
-  the four `.JPG` insets are under `extracted\rof\ASSETS\GRAPHICS\SCRAPBOOK\`. The engine treats
-  it as a story page with no mission behind it, on four handlers: `uiData` 2405 mode 1
-  (`0x0040a633`) stores any ordinal but -1 unclamped, so a click on the career row (`UT` 0,
-  `SCRAPBOOK_TOC.SCRIPT:81,120`) opens mission 0 at spread 1; 2408 (`0x0040a453-0x0040a47e`)
-  titles mission 0 with langui 1216 `%1!s! - Scrapbook` over the player's name alone, where every
-  other slot gets 1215 over the name and langui `3479 + m`, which is why 3479 is not in
-  `ui_strings.json`; 2411 (`0x0040a408-0x0040a414`) answers 0 for mission 0 before the record array
-  is read, so the contents' REPLAY MISSION is greyed on that row (`:136-142`) and the book's is
-  never activated; and the script's own spread-1 gate is `1 == callback(2403) && FRA` with `FRA`
-  the open mission (`SCRAPBOOK.SCRIPT:118-134`), which is false at 0, so the stat card, both tabs,
-  the stamps and the results rows all stay deactivated, the only slot whose spread 1 draws scraps
-  alone. Slot 0 is the front of the book: the back step `FUN_00406100` refuses `mission - 1 < 0`
-  and 2401 (`FUN_004060a0`) reports no previous page at `(0, 1)`, so backing out of mission 1's
-  spread 1 lands on slot 0 (its last spread, which is its only one), and the forward step
-  `FUN_00406170` probes `0_2_1`, finds nothing, and rolls to `1_1_1`. `FUN_004061d0` never refuses
-  slot 0 (its gate is `mission > completed && mission > current`), and the `Objective` 0 rows skip
-  the completion-mask read, so the page is readable on a brand-new profile. The Current Mission
-  bookmark is offered there (2401's third flag is `mission != current`). *Fix shape:* a row above
-  the missions that carries no `seq` (icon frame 11, langui 1217, 1218, 511), and a book position
-  for slot 0 that `Previous()` falls back to from `(1, 1)` and `Next()` climbs out of; `PageTitle`
-  takes langui 1216 over the name at slot 0; `Rows()` skips the tabs and Replay when the mission
-  is 0 rather than when the spread is not 1; `Result()` returns null at slot 0 instead of asking
-  `ResultOf(profile, -1)`. *⚠ Traps:* REPLAY MISSION must not be offered on it, on either screen,
-  and the page arrows must not read a mission-result record at slot 0, which the original's array
-  does not have (indexed from 1). Do not gate the results card on "no record": an unflown mission
-  slot also has none and still draws the card with `Not yet flown`; the gate is the slot number.
-  *Playtest after fix:* `./RunGame.ps1 --presentation=original --menu=campaign` on a fresh
-  profile, open Previous Missions and check the list has one row, `Starting My Career`; view it
-  and check the title reads `<name> - Scrapbook`, ten scraps and no card, and that the back arrow
-  from mission 1's results page lands on it. *Cross-refs:* `docs/formats/campaign-screens.md`
-  (`SCRAPBOOK.CSV`, "Mission slots and spreads"), `docs/org/debrief.md` ("Ordinal 0 is the career
-  page"), `BL-809` (the opened-scrap look, which every one of these ten scraps goes through).
-- `BL-833` `[Testing]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **The allocation-free scope
-  test passes when any one of its five windows is clean, so an allocator that charges
-  intermittently, the failure shape that was observed, passes.** *Evidence:*
-  `CSVM.Tests/PerfSampleTests.cs:288-305` (at `7d2e9881`) accepts one exactly-zero window of
-  five; the negative control proves only that a constant allocator is still caught. `BL-584`
-  closed with the cause of the original flake unknown. *Fix shape:* require every window clean,
-  keeping PERF-28's diagnostics on the first non-zero one; if that flakes again, the diagnostics
-  are the lead. *⚠ Traps:* do not widen to a tolerance; gen-0 charging and tiered JIT are ruled
-  out twice over (`git log --grep=BL-584`). *Cross-refs:* `BL-584`'s closing commit,
-  `docs/verification.md` PERF-28, `BL-818` (the scrapbook race found on the way).
 - `BL-840` `[Feature]` `[M]` `[Next: decide]` `[Impact: high]` `[Evidence: trace]` **Six of the eight stored
   campaign profiles, `Gab` with 18 missions done among them, are schema version 2 and the
   version-3 store refuses them.** *Evidence:* `BL-675`'s close (`git log --grep=BL-675`): the
@@ -2639,9 +2211,6 @@ usual.
   v3 writer. *⚠ Traps:* not a path fault, and a worktree shares the main checkout's `user://`.
   *Cross-refs:* `BL-662` (the v3 store), `BL-675`'s closing commit.
 
-- `BL-891` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **A failed mission on a profile that has finished the campaign plays the closing cinema.** *Evidence:* user at the controls: failing a mission on a profile with every mission complete started the end film. `ClosingCinema.OpenScrapbook` (`ClosingCinema.cs:39`) gates on `CampaignProgression.Complete(profile)` alone, and `CampaignFlow.OpenScrapbookAfterMission` (`CampaignFlow.cs:567`) reaches it after every flown mission whatever its result, so a replay that fails, or any replay at all once the campaign is complete, plays `Final.MPG` again on a fresh `Launcher` (the `Played` latch is per instance, `ClosingCinema.cs:26`). *Fix shape:* the user's rule: the film plays only after a win on the campaign's last mission, whether that win finishes the campaign or replays it; a loss on any mission, and a win on any earlier mission, opens the scrapbook with no film, whatever the profile's completion state. Gate on the flown mission's result and its story position, not on `CampaignProgression.Complete` alone. Pin in `campaign-loop` with a complete profile failing a replay of the last mission (no film), winning that replay (film), and winning a replay of an earlier mission (no film). A decode of the original's `callback 3104` (`docs/formats/cinemas.md`) would say whether the original gates on the result the same way and is optional. *Cross-refs:* `CSVM/src/Session/ClosingCinema.cs`, `CSVM/src/UI/CampaignFlow.cs`.
-
-- `BL-892` `[Feature]` `[S]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` **An Instant Action sortie ends the instant its goal is reached or the last life is lost, cutting the crash or death animation short.** *Evidence:* user at the controls: the end is too abrupt, and they want about three seconds of the world after the goal or the death so the crash is seen. `InstantActionDirector.cs:647` presents the wrap-up board on the same `MissionEnded` event that decides the outcome, with no hold. The campaign has such a hold already: `CampaignDirector.cs:37` keeps the world up after an ending for a default duration before the session leaves it. *Fix shape:* first read whether the original holds the Instant Action end (the campaign hold's decode is the model), then present the wrap-up board after a hold of the decoded length, or of the user's three seconds as a declared TUNE if nothing is decoded, with the world and the camera running and the input held back; pin the delay in `instant-action-end`. *⚠ Traps:* the respawn path at `InstantActionDirector.cs:618` runs for a death that is not the last life and must stay untouched. *Cross-refs:* `CSVM/src/Session/InstantActionDirector.cs`, `CSVM/src/Flight/IaWrapupBoard.cs`, `CSVM/src/Session/CampaignDirector.cs`.
 
 ## Tooling, platform & docs
 
@@ -2659,47 +2228,11 @@ usual.
   position; `Pads.LogPads` records the roster so the next one reads off the log rather than being
   inferred. Dropping the var also closes that divergence.
 
-- `BL-831` `[Testing]` `[M]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **The suite harness's physics space can miss
-  collision shapes the scene marks enabled, so a suite can pass on geometry the game does not have.**
-  *Evidence:* every suite runs inside one `_Ready` call with no frame or physics step between them.
-  In single-process runs of `world-turrets` an `aagun` site's `col_buildings` pad and the 12-face
-  pyramid shape of `col` answered no ray, overlap or sphere query while `CollisionShape3D.Disabled`
-  was false, `PhysicsServer3D.BodyGetShapeCount` listed them and the body was in the space; the
-  72-face base shape of the same body did answer. In some four-shard runs of the same list all
-  three answered, which is how the ground AA guns' self-blocked sight line surfaced as a
-  shard-only failure (`git log --grep=BL-830`). Node transforms written
-  during a suite never reach the physics server either (`BodyGetState` stays at the build pose
-  while the barrel slews), which the existing `ForceUpdateTransform` in `world-query-reuse` works
-  around one node at a time. The mechanism behind the missing shapes is not found; it is not the
-  physics thread (`run_on_separate_thread` is false) and not the decode cache (the same suite list
-  in one process builds identical node ids and passes). *Fix shape:* find why an enabled shape is
-  absent from the broadphase after a hide-then-show inside one frame (`WorldCollision.Sync`
-  toggling `Disabled` around `TreeEntered` is the suspect), then give `TestContext` one call that
-  brings the physics space in step with the scene before a suite casts, and have `world-turrets`
-  assert the mount is present. *⚠ Traps:* a suite that passes alone and fails sharded is not
-  load flakiness by default; trace the ray. A live session (`--fly` with `--log-file` and a
-  `Log.Info` probe) is the reference for what physics holds. *Cross-refs:* `PT-142` (the flak
-  flight the fix this hid still owes), `docs/verification.md`, `CSVM/src/Testing/TestHarness.cs`
-  (`WithPrivateWorld`).
-
-- `BL-843` `[Cleanup]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **`GD.Print` still stands in every `CSVM/src` file outside the three session files that now log through `Log`.** *Evidence:* about 263 calls remain, 124 of them under `Session/` in nineteen files (`CutsceneController.cs` holds ten, one in `Begin`). Each renders through the current culture and reaches neither the file sink nor the `--log=` filter. *Fix shape:* the same conversion the three session files took: `Log.Info` under the file's category (the shipped console threshold, so nothing leaves stdout), `Log.Error` for `PrintErr`, `Log.Raw` for a multi-line report, one interpolated string per call since `Log` takes a `FormattableString`; grep `CSVM.Tests`, `CSVM/src/Testing`, the root scripts and `analysis/` for every printed prefix first and move any reader in the same change. *⚠ Traps:* a unit test that reaches a `GD.Print` kills the xUnit host outright; a pre-formatted summary string keeps its culture (`BL-849`). *Cross-refs:* PLAN-code-review-orch A3 (the three files and the before/after log diff method).
+- `BL-843` `[Cleanup]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **`GD.Print` still stands in every `CSVM/src` file outside the three session files that now log through `Log`.** *Evidence:* about 263 calls remain, 124 of them under `Session/` in nineteen files (`CutsceneController.cs` holds ten, one in `Begin`). Each renders through the current culture and reaches neither the file sink nor the `--log=` filter. *Fix shape:* the same conversion the three session files took: `Log.Info` under the file's category (the shipped console threshold, so nothing leaves stdout), `Log.Error` for `PrintErr`, `Log.Raw` for a multi-line report, one interpolated string per call since `Log` takes a `FormattableString`; grep `CSVM.Tests`, `CSVM/src/Testing`, the root scripts and `analysis/` for every printed prefix first and move any reader in the same change. *⚠ Traps:* a unit test that reaches a `GD.Print` kills the xUnit host outright; a pre-formatted summary string keeps its culture (`docs/verification.md` LOG-23), so a converted line still needs its pre-built pieces checked. *Cross-refs:* PLAN-code-review-orch A3 (the three files and the before/after log diff method).
 
 - `BL-844` `[Cleanup]` `[S]` `[Next: decide]` `[Impact: none]` `[Evidence: trace]` **654 em dashes remain inside string literals under `CSVM/src` and `CSVM.Tests`: log messages, CLI notes and HUD text.** *Evidence:* the repo-wide sweep rewrote comments and docs and skipped literals, since suites match log lines and a HUD string is a display choice (`VersusHud` draws the glyph for a tie). The writing rule speaks of prose; whether a log message is prose is the decision. *Fix shape:* if yes, a second pass over literals only, with every suite that matches a rewritten line moved in the same change and the goldens re-pinned where a HUD string changes; if no, record the exemption on the writing rule. *Cross-refs:* PLAN-code-review-orch A7.
 
-- `BL-845` `[Cleanup]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **Five log calls emit under a `campaign` category the vocabulary does not declare, and the logging page names a method that does not exist.** *Evidence:* `Log.Categories` and `docs/org/logging.md` declare nine closed names; `CampaignDirector.cs` (one site), `CampaignDangerZones.cs` (three) and `CampaignPersistLog.cs` (one) emit under `campaign`. The page documents `Log.Block(text)` where the code has `Log.Raw(text)`. *Fix shape:* either add `campaign` to the vocabulary and the page, or move the five to `core`; correct the method name. *Cross-refs:* PLAN-code-review-orch A3.
-
-- `BL-870` `[Tooling]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **F16 toggles the all-aircraft markers HUD;
-  the node-name labels lose their key.** *Evidence:* `docs/controls.md` has F16 on the node-name
-  labels (`--debug-names`), and the markers HUD (`--debug-markers`, every live aircraft's
-  identity, range, health and AI mode on the targeting HUD) is reachable by launch flag only,
-  which is the one a flight test wants under the thumb. *Fix shape:* rebind F16 to toggle the
-  markers HUD, drop the labels' key and leave them on their flag (a viewer tool, not a flight
-  one); update `docs/controls.md` and `docs/cli.md`. *Cross-refs:*
-  `CSVM/src/Bindings/DefaultBindings.cs`.
-
 - `BL-848` `[Cleanup]` `[L]` `[Next: decide]` `[Impact: none]` `[Evidence: trace]` **About 140 dated clauses remain in `backlog.md` entries that predate the no-dates rule.** *Evidence:* `Select-String '\d{4}-\d\d-\d\d'` over the file; every one is event narration ("landed 2026-08-05", "measured 2026-08-04 from the CAP-07 re-take") of the kind the writing rule sends to the closing commit's message. *Fix shape:* decide whether the old entries are swept (each date dropped, the standing fact kept, the evidence findable through `git log --grep`) or grandfathered until the entry closes. A sweep is mechanical but every clause needs a reading. *Cross-refs:* PLAN-code-review-orch A5 (the one dated clause the review found).
-
-- `BL-896` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **Borderless and Fullscreen behave the same, and a resolution change only takes hold in Windowed mode.** *Evidence:* user at the controls on the pause sheet's PREFERENCES leaf and on the Options screen. `ResolutionSetting.Apply` (`ResolutionSetting.cs:130`) sets the window size only while the mode is Windowed, so the chosen size is ignored under either fullscreen word; `DisplayModeSetting.TryParseWord` maps Borderless to Godot's `Fullscreen` and Fullscreen to `ExclusiveFullscreen` (`DisplayModeSetting.cs:50`), and both end at the screen's own size, which is why the two look alike. *Fix shape:* the user's reading of the three modes, quoted: "Borderless should set the screen/desktop resolution fixed" and "Fullscreen should take the set resolution and be exclusive fullscreen". So Windowed takes the chosen size in a window; Borderless is the window at the desktop's resolution with the size row pinned to it and not editable; Fullscreen is exclusive at the chosen resolution, the window sized to it after `WindowSetMode(ExclusiveFullscreen)`, and the log line at `ResolutionSetting.cs:138` reports the size and mode that actually resulted. Pin the plan per mode in `DisplaySettingsSuites.cs` and the leaf's row states in `pause-preferences`. *⚠ Traps:* Godot's exclusive fullscreen on Windows sizes the window rather than switching the display mode, so read what the window reports before claiming the display switched; the monitor move must run before the size, as `MonitorSetting` already orders it. *Cross-refs:* `git log --grep=BL-884`, `git log --grep=BL-783`, `CSVM/src/Utils/DisplayModeSetting.cs`, `CSVM/src/Utils/ResolutionSetting.cs`, `docs/architecture/Utils.md`.
 
 ## Misc
 

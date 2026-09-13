@@ -1,4 +1,8 @@
+using System;
+using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
+using System.Text.RegularExpressions;
 using System.Threading;
 using CSVM.Utils;
 using Xunit;
@@ -8,7 +12,8 @@ namespace CSVM.Tests;
 /// <summary>
 /// The pure half of the logging facility: the <c>--log=</c> filter grammar, the line grammar, the
 /// invariant-culture rendering and the sink directory. None of it touches a Godot API, so it runs
-/// in a plain test host. The tests share <see cref="Log"/>'s process-global filter state, so each one re-baselines
+/// in a plain test host, and neither does the walk that holds the call sites to the closed category
+/// vocabulary. The tests share <see cref="Log"/>'s process-global filter state, so each one re-baselines
 /// with a <c>*</c> spec first (which clears every per-category override).
 /// </summary>
 public class LogTests
@@ -104,5 +109,35 @@ public class LogTests
             Log.FileLine(Log.Level.Debug, "anim", "texture cycles water=f3"));
         Assert.Equal("ERROR [core] config root is not a JSON object",
             Log.FileLine(Log.Level.Error, "core", "config root is not a JSON object"));
+    }
+
+    /// <summary>The vocabulary is closed, so a call site naming a category outside it fails here.
+    /// Nothing at runtime catches one: an undeclared name still logs and still filters, and the
+    /// only warning is for an unknown name in a <c>--log=</c> spec. The sources are walked rather
+    /// than the assembly because the category is an ordinary string argument.</summary>
+    [Fact]
+    public void EveryCategoryACallSiteNamesIsDeclared()
+    {
+        string src = Path.Combine(TestData.RepoRoot, "CSVM", "src");
+        Assert.True(Directory.Exists(src), src);
+
+        var call = new Regex(@"\bLog\.(?:Error|Warn|Info|Debug)\(\s*""([A-Za-z0-9_]+)""");
+        var undeclared = new List<string>();
+        int sites = 0;
+        foreach (string file in Directory.EnumerateFiles(src, "*.cs", SearchOption.AllDirectories))
+        {
+            foreach (Match m in call.Matches(File.ReadAllText(file)))
+            {
+                sites++;
+                if (Array.IndexOf(Log.Categories, m.Groups[1].Value) < 0)
+                {
+                    undeclared.Add($"{Path.GetFileName(file)}: {m.Groups[1].Value}");
+                }
+            }
+        }
+
+        // The able-to-fail control: a walk that matched nothing would pass the check below.
+        Assert.True(sites > 100, $"only {sites} literal-category call sites found under {src}");
+        Assert.True(undeclared.Count == 0, "undeclared categories: " + string.Join(", ", undeclared));
     }
 }

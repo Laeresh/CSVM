@@ -208,6 +208,11 @@ public sealed class CampaignDirector
     /// none, which is the unset case that line already handles.</summary>
     public string? PilotName => _profile.Name;
 
+    /// <summary>The picture the flying profile hangs, as the bitmap name a sheet draws: what the
+    /// pause screen's memento slot takes, and the same one the cabin wall carries. A profile that
+    /// has chosen none draws the seeded pin-up (<c>docs/org/pause-screen.md</c>).</summary>
+    public string Memento => CampaignMementos.BitmapFor(_profile);
+
     /// <summary>The mission's storage address, the ZBD world folder number and its <c>M0n</c>
     /// number. ⚠ Not the act and its position; it is the pair every per-mission dialog key is built
     /// from (docs/formats/campaign-missions.md).</summary>
@@ -512,7 +517,7 @@ public sealed class CampaignDirector
             // settled off this line), sharing the World mask the flight model's ground-blow probe uses.
             string groundNote = new GodotWorldQuery(rig).Ray(pos + Vector3.Up * 3000f,
                 pos - Vector3.Up * 3000f, CollisionLayers.World, null, out var groundHit)
-                ? $" terrain={groundHit.Position.Y:0} ({pos.Y - groundHit.Position.Y:+0;-0} above it)"
+                ? Log.Format($" terrain={groundHit.Position.Y:0} ({pos.Y - groundHit.Position.Y:+0;-0} above it)")
                 : " terrain=(no hit)";
 
             Log.Info("core", $"campaign: roster '{spawn.Name}' ({spawn.Def} as {spawn.PlaneNode}, {spawn.Mode}) team={spawn.Team?.ToString() ?? "-"} group={spawn.Group} {(spawn.Net is { } n ? $"net='{n.Name}#{n.Id}'" : spawn.MissingNetId is { } missing ? $"net #{missing} MISSING from this chapter" : spawn.Escorts ? $"escorts '{spawn.LeaderName ?? "(no leader)"}'" : "no net")}{(spawn.Inert ? " DEACTIVATED" : "")}{(placed ? $" on path '{spawn.TaxiPath}'" : "")}{(spawn.Volumes.IsAuthored ? $" volumes act={spawn.Volumes.Activation.Radius:0} att={spawn.Volumes.Attack.Radius:0} ret={spawn.Volumes.Return.Radius:0}" : "")} spawn=({pos.X:0},{pos.Y:0},{pos.Z:0}){groundNote}");
@@ -972,9 +977,9 @@ public sealed class CampaignDirector
     {
         string kind = t.Kind.ToString().ToLowerInvariant();
         string by = t.Source > 0 ? $" by {t.Source}" : "";
-        string nap = t.Kind == ObjectiveTransitionKind.Napped ? $" for {t.Seconds:0.#}s" : "";
+        string nap = t.Kind == ObjectiveTransitionKind.Napped ? Log.Format($" for {t.Seconds:0.#}s") : "";
         string gated = t.Gated ? " (held: TICK_DEPENDS_ON_OBJ dependency not awake)" : "";
-        Log.Info("campaign", $"objective {t.Number} {kind}{by}{nap} at {t.Elapsed:0.0}s{gated}");
+        Log.Info("core", $"objective {t.Number} {kind}{by}{nap} at {t.Elapsed:0.0}s{gated}");
         if (t.Kind == ObjectiveTransitionKind.Completed)
         {
             RetireObjectiveMarkers(t.Number);

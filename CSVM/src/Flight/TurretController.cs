@@ -705,6 +705,7 @@ public sealed class TurretController
         _pool.CollectMissionStructures(_scan);
         var here = WorldPosition;
         float best = float.MaxValue;
+        bool aircraftInReach = false;
         foreach (var c in _scan.Vehicles)
         {
             if (!c.Live || (_host != null && ReferenceEquals(c.Source, _host)))
@@ -716,7 +717,12 @@ public sealed class TurretController
                 continue;
             }
             float d = here.DistanceTo(c.Position);
-            if (d > Def.DetectionRange || d >= best)
+            if (d > Def.DetectionRange)
+            {
+                continue;
+            }
+            aircraftInReach |= c.Source is FlightController;
+            if (d >= best)
             {
                 continue;
             }
@@ -724,6 +730,13 @@ public sealed class TurretController
             pos = c.Position;
             vel = c.Velocity;
             TargetSource = c.Source;
+        }
+
+        // The aircraft-first preference, the same departure the aeroplane picker takes, so a
+        // zeppelin's guns and the wingmen beside them go after the same enemies.
+        if (AiTargetRanking.AircraftFirst && aircraftInReach)
+        {
+            return best < float.MaxValue;
         }
 
         // Walked after the vehicles against the same running best, ties going to it, which is the

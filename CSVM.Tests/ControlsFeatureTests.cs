@@ -31,7 +31,7 @@ public class ControlsFeatureTests
         Assert.Null(feature.Pending);
         Assert.Contains(Key(Godot.Key.M), feature.Bindings(InputAction.Nitro));
         Assert.DoesNotContain(Key(Godot.Key.M), map.Bindings(InputAction.Nitro));
-        Assert.Equal("Nitro is now M.", feature.Status);
+        Assert.Equal("Use Nitro-Booster is now M.", feature.Status);
     }
 
     [Fact]
@@ -584,6 +584,30 @@ public class ControlsFeatureTests
         Assert.Equal(BindingLabels.Unbound, BindingLabels.Row(System.Array.Empty<Binding>(), 4));
     }
 
+    /// <summary>A digit-row key prints its keycap rather than its enum name, which is what the nine
+    /// throttle eighths stand on.</summary>
+    [Fact]
+    public void ADigitRowKeyPrintsItsKeycapRatherThanItsEnumName()
+    {
+        Assert.Equal("5", BindingLabels.Describe(Key(Godot.Key.Key5)));
+        Assert.Equal("0", BindingLabels.Describe(Key(Godot.Key.Key0)));
+    }
+
+    /// <summary>A modified key prints its modifier ahead of the keycap, so the two rows on one
+    /// letter read as two different controls on the page.</summary>
+    [Fact]
+    public void AModifiedKeyPrintsItsModifierAheadOfTheKeycap()
+    {
+        Assert.Equal(
+            "Shift+E",
+            BindingLabels.Describe(
+                new Binding(DeviceId.Keyboard, BindingControl.Key((int)Godot.Key.E, KeyModifiers.Shift))));
+        Assert.Equal(
+            "Ctrl+E",
+            BindingLabels.Describe(
+                new Binding(DeviceId.Keyboard, BindingControl.Key((int)Godot.Key.E, KeyModifiers.Ctrl))));
+    }
+
     [Fact]
     public void DiscardDropsTheCaptureAndThePendingStealAndKeepsTheStagedEdits()
     {
@@ -626,6 +650,65 @@ public class ControlsFeatureTests
         feature.ConfirmSteal();
         Assert.Empty(feature.Bindings(InputAction.CameraDollyOut));
         Assert.Contains(Key(Godot.Key.Shift), feature.Bindings(InputAction.CameraBoost));
+    }
+
+    /// <summary>The flying scheme is staged like a rebind: the seat's own profile keeps the scheme
+    /// it had until Accept, and the save the host supplied is what carries it out.</summary>
+    [Fact]
+    public void TheFlyingSchemeIsStagedUntilAccept()
+    {
+        var written = new List<BindingProfile>();
+        var feature = new ControlsFeature((_, profile) => written.Add(profile));
+        var seat = BindingProfile.Defaults(Pad, readsKeyboard: true);
+        feature.AddSeat(1, seat, OnePad(), true);
+
+        feature.MouseFlying = true;
+
+        Assert.True(feature.MouseFlying);
+        Assert.False(seat.MouseFlying);
+        Assert.True(feature.Dirty);
+        Assert.Empty(written);
+
+        feature.Accept();
+
+        Assert.True(seat.MouseFlying);
+        Assert.Single(written);
+        Assert.True(written[0].MouseFlying);
+    }
+
+    /// <summary>Cancel abandons the scheme with everything else it staged, so a player who tried it
+    /// and changed their mind flies what they flew before.</summary>
+    [Fact]
+    public void ACancelledSchemeLeavesTheSeatOnTheOneItHad()
+    {
+        var feature = new ControlsFeature();
+        var seat = BindingProfile.Defaults(Pad, readsKeyboard: true);
+        feature.AddSeat(1, seat, OnePad(), true);
+        feature.MouseFlying = true;
+
+        feature.Cancel();
+
+        Assert.False(feature.MouseFlying);
+        Assert.False(seat.MouseFlying);
+        Assert.False(feature.Dirty);
+    }
+
+    /// <summary>A pad-only splitscreen seat has no mouse to give the stick, so the row cannot put it
+    /// on one and a saved file cannot either.</summary>
+    [Fact]
+    public void APadOnlySeatCannotTakeTheMouseScheme()
+    {
+        var feature = new ControlsFeature();
+        var seat = BindingProfile.Defaults(Pad, readsKeyboard: false);
+        seat.MouseFlying = true;
+        feature.AddSeat(2, seat, OnePad(), readsKeyboard: false);
+
+        Assert.False(feature.MouseFlying);
+
+        feature.MouseFlying = true;
+
+        Assert.False(feature.MouseFlying);
+        Assert.False(feature.Dirty);
     }
 
     private static (ControlsFeature Feature, ActionMap Map) Flight()

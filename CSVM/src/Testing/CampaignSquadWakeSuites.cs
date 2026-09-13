@@ -38,11 +38,14 @@ internal static class CampaignSquadWakeSuites
 
     // The targeting arm: the block whose list carries both authored terms, a nearer candidate on
     // the player's own side so distance argues against the human, and the mission's airship.
+    // The player ring stands past the human's own pull under the decoded rank (the 0.7 base
+    // weight and the player fighter's target_bias together are worth about 660 m), so the
+    // withheld-list control still reads distance and not that pull.
     private const string BiasBlock = "britpeace_8";
     private const string NearBlock = "devastator_1";
     private const string PirateZep = "piratezep";
     private const float NearRingM = 400f;
-    private const float PlayerRingM = 900f;
+    private const float PlayerRingM = 1500f;
     private const float ScanRangeM = 3000f;
 
     // BL-665: the block a mission script has moved before its wake. britpeace_7's own FindNodes

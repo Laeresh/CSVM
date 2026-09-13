@@ -28,17 +28,17 @@ bias for `Launcher`. [../org/textures.md](../org/textures.md), [../org/vertexLig
 
 ## src/Mech3/SceneBuilder.cs
 Shared GameZ-subtree to MeshInstance3D builder: triangulation, material and mesh caches,
-nearest-LOD only, a skip predicate. It replicates the original's draw order as depth bias
-(priority, then subface, then overlay pass, then within-mesh surface rank, with the cross-node
-tie-break from `NodeBiasOf`: the world's `ConflictRank` map where the caller set one, the flat node
-index otherwise), applies CLAMP sampling per surface off `UvsWithinUnitSquare` rather than blanket,
-and colours a surface `vertex colour x material` except where a polygon's vertex colours restate
-that material's own value. `BuildSubtree`'s `zoneGate` flag moves each instance onto its `zone_id`
-visual layer (`ZoneGate.cs`); it stays off for the camera-anchored deck and dome. `CollidersForMesh`
-splits a mesh into one trimesh per surface class and then by sidedness, both halves on one body,
-each registering with `WorldCollision`. `MissionStructureTeamMeta` is the channel
-`DestructibleRegistry` reads a pool's team through. A textured surface takes `csky_world_light` on
-its model's `lighting` flag alone. Shader selection and the enhanced-mode arms: [Root.md](Root.md), [../formats/gotchas.md](../formats/gotchas.md), [../org/vertexLighting.md](../org/vertexLighting.md).
+nearest-LOD only, a skip predicate. It replicates the original's draw order as depth bias (priority,
+subface, overlay pass, within-mesh surface rank, then `NodeBiasOf`'s cross-node tie-break off the
+world's `ConflictRank` map), applies CLAMP per surface off `UvsWithinUnitSquare` rather than blanket,
+and colours a surface `vertex colour x material` except where the two restate each other.
+`BuildSubtree`'s `zoneGate` flag moves each instance onto its `zone_id` visual layer
+(`ZoneGate.cs`), off for the camera-anchored deck and dome. `CollidersForMesh` splits a mesh into one
+trimesh per surface class and by sidedness, both halves on one body registering with
+`WorldCollision`; `MissionStructureTeamMeta` is the channel `DestructibleRegistry` reads a pool's
+team through. A textured surface takes `csky_world_light` on its `lighting` flag alone, and every
+mip-mapped arm fetches through `SampleAlbedo`, the one `csky_sample_albedo` carrying the chapter's
+LOD bias, reused by `Clutter` and `MeshLab`. Arms and selection: [Root.md](Root.md), [../formats/gotchas.md](../formats/gotchas.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../org/textures.md](../org/textures.md).
 
 ## src/Mech3/ZoneGate.cs
 The original's per-node visibility gate (`FUN_0056c430`). `FUN_004d62d0` arms the camera each frame
@@ -66,6 +66,39 @@ visibility knows nothing about. `OwnerOf` reads the relation backwards, naming t
 collider body stands for: the per-surface-class bodies `SceneBuilder` carved from one mesh node
 answer their shared parent (`SurfaceIdMeta`) and anything else answers itself, which is what a
 caller counting objects rather than bodies keys on. Read `SceneBuilder.cs` next.
+
+## src/Mech3/CraterShape.cs
+One crater as geometry: a 7-vertex rim ring laid at the impact at radius 20, a mid ring halfway in
+and one `DEPTH` further down, and an apex two `DEPTH`s under the impact. Every crater in the shipped
+game is this one shape, because all six `CRATER` weapons author the block bare and leave the engine
+template's randomisation spans at zero. `Footprint` is the XZ box the no-overlap rule compares and
+`Clears` is that rule, the recorded box grown by `Clearance` on all four sides. `Covers` is the
+decoration census, an XZ disc with no height test. Decode: [../org/craters.md](../org/craters.md).
+
+## src/Mech3/CraterField.cs
+Every crater one mission has carved and the rule that decides whether it may carve another.
+`Request` refuses a footprint within the clearance of a carved one (`Refused`), finds the world node
+under the body the round struck, hands the carve to `TerrainCarve` and the decorations to
+`ClutterCull`, and returns which of the original's outcomes happened. A crater is permanent, nothing
+ages one out, so what bounds a mission's count is the refusal alone. `TryCarve` is the sink shape
+`ProjectilePool` holds, true only when the carve landed, which is what suppresses the weapon's
+impact animation.
+
+## src/Mech3/TerrainCarve.cs
+The mesh and collider surgery one carve performs on one world node. The ring is subtracted from
+every up-facing triangle it covers by incremental half-plane clipping, so the hole is the ring's own
+edges and the bowl shares them with no crack; the pieces keep their height, normal, colour and UV by
+barycentric weights. The bowl is emitted as one further surface in the same skin, wound from the
+struck mesh's own convention. Both the `ArrayMesh` and the struck trimesh are replaced by PRIVATE
+copies, un-shared from `SceneBuilder`'s per-mesh-index caches, so a carve never reaches the other
+instances of the same model. Read `SceneBuilder.cs` for those caches.
+
+## src/Mech3/ClutterCull.cs
+Counts and destroys the decorations a crater swallows. A decoration dies outright, with no health
+test, no animation and no model swap, because the original's crater path reads no template field at
+all. `ClutterBuilder` bakes every placement of one kind into one MultiMesh, so dying means the
+instance's basis collapses to zero (the draw call and its custom data stay intact) and its shared
+collision shape is switched off on the region body it was attached to by RID. Read `Clutter.cs`.
 
 ## src/Mech3/PlaneBuilder.cs
 Builds one aircraft from its GameZ subtree, skipping the cockpit, damage, destroyed and shadow
@@ -151,12 +184,12 @@ measurements: [../formats/world-structure.md](../formats/world-structure.md). Re
 
 ## src/Mech3/Clutter.cs
 Stamps the boot-script clutter templates across placed polygons carrying the template's ground
-texture, at the polygon's own texture-UV lattice, one stamp per integer UV repeat across each
-triangle: sprites become one fullbright Y-billboard MultiMesh per kind, solids go through
-`SceneBuilder.SharedMesh`, and `SceneBuilder.ClassifyBillboard` is the split. Every stamp carries
-its authored far fade as MultiMesh custom data under the `EffectsLevel` global. `TemplateNames`
-reads `AddClutterTemplates` unfiltered, the per-polygon `no_clutter` gate deciding which patch a
-district dresses; `OverrideTemplateNames` is `--clutter-templates=`'s replacement for that list.
+texture, one stamp per integer UV repeat of the polygon's UV lattice: sprites become one fullbright
+Y-billboard MultiMesh per kind, solids go through `SceneBuilder.SharedMesh`, `ClassifyBillboard` the
+split. Every stamp carries its far fade as MultiMesh custom data under `EffectsLevel`, and samples
+through `SceneBuilder.SampleAlbedo` for the chapter's mip bias. `TemplateNames` reads
+`AddClutterTemplates` unfiltered, the per-polygon `no_clutter` gate deciding which patch a district
+dresses; `OverrideTemplateNames` is `--clutter-templates=`'s replacement.
 Placement runtime: [../org/clutter.md](../org/clutter.md); authored side: [../formats/clutter.md](../formats/clutter.md), [../formats/templates.md](../formats/templates.md).
 
 ## src/Mech3/ClutterTemplates.cs
@@ -286,12 +319,12 @@ a hull with its def's own gun. Pure over `FromRoot`, pinned in `CampaignRosterPl
 ## src/Mech3/FogVolumes.cs
 The chapter's `fogvol.zrd` (`FogVolumeSpec.Load`/`Parse`) plus `VolumesOf`, the gamez census of
 `fvol*` volumes: the two authored halves of the ambient cloud field `Effects/FogVolumeClutter`
-renders. `FogVolumeBox` carries the authored shape as its face planes rather than only its
-axis-aligned bounds; `FogVolumeWhiteout` is the in-volume whiteout rule C5 alone arms, with
-`Session/WeatherRig.Tick` its one consumer; `FindMapSpanningSlab` is the data-driven test for a
-chapter's map-edge-continuation cloud slab. Both halves are static over a `GameZ` or a reader list,
-so the pair pins off engine for all eight chapters (`CSVM.Tests/FogVolumeTests.cs`). Schema,
-per-chapter values and the decoded/inferred split: [../formats/fogvol.md](../formats/fogvol.md).
+renders. `FogVolumeBox` carries the authored shape twice: as face planes, so `SignedDistance`
+walks the real geometry, and as `FogVolumeFace` polygons (every mesh face not flagged
+`no_clutter`), the surfaces the scatter lays its lattice on and takes each sprite's normal from.
+`FogVolumeWhiteout` is the in-volume whiteout rule C5 alone arms, `Session/WeatherRig.Tick` its
+one consumer; `FindMapSpanningSlab` the test for a chapter's map-edge-continuation slab. Both
+halves pin off engine for all eight chapters (`CSVM.Tests/FogVolumeTests.cs`); schema in [../formats/fogvol.md](../formats/fogvol.md).
 
 ## src/Mech3/Messages.cs
 The game's localized string table: plain `System.Text.Json` over the extracted `messages.json`
@@ -434,7 +467,7 @@ kill, `ApplyDamageStages`, `RunDeathSequence`, `CarryState`), the world-effects 
 and the vehicle/library-root index, and hands every construction site a sealed `TemplateStage`. Its
 range gates read the players through `RangePositions`: the last pose they flew, while
 `PlayerRangeHeld` says a cutscene is posing their aeroplanes. `FastForward` is the per-definition
-rate a held key raises a cutscene to (`Anim/CutsceneFastForward.cs`), which `Advance` spends as repeated passes of the instance walk. What binds a member is on that member:
+rate a held key raises a cutscene to (`Anim/CutsceneFastForward.cs`), which `Advance` spends as repeated passes of the instance walk. `SuppressedMotionAnims` names the definitions whose `OBJECT_MOTION` events this runtime drops, for a pose another writer owns, which also ends a definition that motion was sustaining (docs/verification.md, INSTR-74). What binds a member is on that member:
 the pool-slot checkout reset, the prewarm's scope, the mission-trigger closure, the undercover
 probe's decode, the death call's site follow. Each dispatch axis is a sibling module; the router keeps the case labels and the public fields callers configure: `SequenceRunner.cs`, `Anim/MotionSet.cs`, `Anim/NameResolver.cs`, `Anim/EmitterDirector.cs`, `Anim/SoundChannel.cs`, `Anim/LightChannel.cs`, `Anim/PoseChannel.cs`, `Anim/TemplateStage.cs`. Decode: docs/org/sequences.md.
 

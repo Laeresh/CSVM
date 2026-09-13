@@ -75,7 +75,9 @@ public sealed class WorldSession
     /// <summary>Build the world named <c>world1</c> and bind its animation program. The archives
     /// are the caller's <c>using</c> locals, see the disposal-lifetime contract on the class.
     /// ⚠ Keep each phase's <see cref="StartupProfile.Record"/> call next to its step; moving one
-    /// without the other makes a dropped phase read as a growing <c>rest</c>, not as missing.</summary>
+    /// without the other makes a dropped phase read as a growing <c>rest</c>, not as missing. The
+    /// <see cref="LoadProgress"/> report beside it is the same discipline for the screen over the
+    /// build, and its fraction is authored, never derived from the phase it follows.</summary>
     public static WorldSession Build(Options o, GameZ gamez, TextureArchive textures,
         SoundArchive? sounds, Dictionary<string, SoundDef>? soundDefs,
         IReadOnlyDictionary<string, SoundGroup>? soundGroups = null)
@@ -102,6 +104,7 @@ public sealed class WorldSession
             }
         }
         StartupProfile.Record("zrdr", mark);
+        LoadProgress.Report(LoadStep.MissionFiles);
         // The EFFECTS flipbooks (effects.zrd) are installed on their target materials BEFORE the
         // build, because a material's frame list is part of what SceneBuilder registers with the
         // TextureCycler as it builds. Same ordering the engine uses. See EffectCycles.
@@ -126,6 +129,7 @@ public sealed class WorldSession
             ? builder.BuildNode(gamez, only)
             : builder.Build("world1");
         StartupProfile.Record("world", mark);
+        LoadProgress.Report(LoadStep.WorldScene);
         s.Root = root;
         // The original's material texture flipbooks (animated water/surf/wake/splash and the
         // walking crowd). Parented to the world so a session teardown takes it too.
@@ -194,6 +198,7 @@ public sealed class WorldSession
             GD.Print($"clutter: no templates for {o.Chapter} ({o.InterpPath})");
         }
         StartupProfile.Record("clutter", mark);
+        LoadProgress.Report(LoadStep.Clutter);
         s.Clutter = clutterBuilder;
 
         // --debug-clutterflag: force clutter blue and print the census. Blue is the one colour
@@ -222,6 +227,7 @@ public sealed class WorldSession
             : o.Decode.Anim(o.ZrdrPath, chapterZrdrPath, o.MissionZrdrPath,
                 chapterAnimPath, missionAnimPath);
         StartupProfile.Record("anim", mark);
+        LoadProgress.Report(LoadStep.AnimProgram);
         s.Program = animProgram;
         if (o.LandingTriggers)
         {
@@ -397,6 +403,7 @@ public sealed class WorldSession
         mark = StartupProfile.Mark();
         animRuntime.Bind(root, animProgram);
         StartupProfile.Record("bind", mark);
+        LoadProgress.Report(LoadStep.RuntimeBound);
         foreach (string line in animRuntime.ResolutionLines())
         {
             Log.Info("anim", $"{line}");
@@ -432,6 +439,7 @@ public sealed class WorldSession
                 prewarmed += builtSounds.Prewarm(extraNames);
             }
             StartupProfile.Record("prewarm", mark);
+            LoadProgress.Report(LoadStep.SoundPrewarm);
             if (prewarmed > 0)
             {
                 GD.Print($"anim: prewarmed {prewarmed} sound stream(s) before the archive closed");

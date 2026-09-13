@@ -6,7 +6,7 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>
-/// The colour-by-class overlay (key X): every drawn mesh in the live world tinted a flat colour
+/// The colour-by-class overlay (key H): every drawn mesh in the live world tinted a flat colour
 /// by what it is (destructible / facade / clutter / plain scenery), so a target named in a
 /// report can actually be found at the controls. Classification reuses the exact mechanisms a
 /// hit already uses, never a guess: this module's entry in docs/architecture.md.
@@ -56,7 +56,7 @@ public sealed partial class ClassOverlay : Node
     }
 
     /// <summary><c>--debug-classoverlay</c>: open the overlay on the first frame, the scripted
-    /// stand-in for the X press.</summary>
+    /// stand-in for the H press.</summary>
     public bool DebugShow { get; init; }
 
     public override void _Process(double delta)
@@ -72,7 +72,10 @@ public sealed partial class ClassOverlay : Node
 
     public override void _UnhandledKeyInput(InputEvent @event)
     {
-        if (@event is not InputEventKey { Pressed: true, Echo: false, Keycode: Key.X })
+        // H rather than X: the original spends X on Fire Rockets (docs/controls.md), and a tint
+        // toggling under every rocket shot is worse than an overlay on a duller key. It stays a
+        // letter because the F13 upward block's numbers are the user's own keypad rows.
+        if (@event is not InputEventKey { Pressed: true, Echo: false, Keycode: Key.H })
         {
             return;
         }
@@ -80,7 +83,7 @@ public sealed partial class ClassOverlay : Node
         GetViewport().SetInputAsHandled();
     }
 
-    /// <summary>X: show or hide the class tints. Rebuilt every time it is shown rather than cached
+    /// <summary>H: show or hide the class tints. Rebuilt every time it is shown rather than cached
     /// once, a destructible's death can swap its subtree (wreck pieces replace the healthy mesh),
     /// so a stale cache would tint a node that no longer exists and miss the one that does.</summary>
     public void Toggle()

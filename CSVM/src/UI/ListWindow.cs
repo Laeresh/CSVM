@@ -46,6 +46,18 @@ public readonly record struct ListWindow(
         return Math.Clamp(startTop + (int)Math.Round(dy * LastTop / run), 0, LastTop);
     }
 
+    /// <summary>How tall a thumb stands on a track of <paramref name="trackHeight"/>: the share of
+    /// the list its window shows, never shorter than <paramref name="floor"/> (the scroll tile's own
+    /// height, below which the thumb stops reading as a grip) and never longer than the track.
+    /// A list whose window is not smaller than itself gets the whole track.</summary>
+    public static float ThumbHeightFor(float trackHeight, int rows, int count, float floor)
+    {
+        float least = Math.Min(trackHeight, floor);
+        return count <= 0 || rows <= 0
+            ? least
+            : Math.Clamp(trackHeight * rows / count, least, trackHeight);
+    }
+
     /// <summary>Where a thumb stands on its track for a window at <paramref name="top"/>: at
     /// the head unscrolled, flush at the foot on the last row.</summary>
     public static float ThumbYFor(float trackTop, float trackHeight, float thumbHeight, int top, int lastTop) =>

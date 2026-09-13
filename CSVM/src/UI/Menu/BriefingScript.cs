@@ -47,8 +47,8 @@ public enum BriefingOp
     ToBack,
 
     /// <summary>A bitmap cycle at a fixed position and rate. Only the load screen's script authors
-    /// one, for the propeller beside its bar; the remaining frames and the rate are not read,
-    /// because the screen composing them is a still and draws the cycle's first frame.</summary>
+    /// one, for the propeller beside its bar, and it carries all six frames and the rate: a still
+    /// composition draws the first, a build reporting its steps steps through them.</summary>
     Cycle,
 }
 
@@ -101,6 +101,13 @@ public sealed record BriefingStep
 
     /// <summary>A move's path or a line's two endpoints.</summary>
     public IReadOnlyList<BriefingPoint> Path { get; init; } = Array.Empty<BriefingPoint>();
+
+    /// <summary>A <see cref="BriefingOp.Cycle"/>'s whole frame list, in authored order; empty for
+    /// every other opcode.</summary>
+    public IReadOnlyList<string> Frames { get; init; } = Array.Empty<string>();
+
+    /// <summary>A <see cref="BriefingOp.Cycle"/>'s authored rate in frames a second.</summary>
+    public float Fps { get; init; }
 }
 
 /// <summary>
@@ -285,14 +292,34 @@ public sealed class BriefingDialog
             {
                 Op = op,
                 Id = id,
-                Bitmap = d.List("bitmaps") is { Count: > 0 } frames && frames[0] is string frame0
-                    ? frame0
-                    : string.Empty,
+                Bitmap = Names(d.List("bitmaps")) is { Count: > 0 } frames ? frames[0] : string.Empty,
+                Frames = Names(d.List("bitmaps")),
+                Fps = d.Float("fps"),
                 At = new BriefingPoint(d.Float("at"), d.Float("at", 0f, 1)),
             },
             BriefingOp.Objective => new BriefingStep { Op = op, Id = id, Index = (int)d.Float("index") },
             _ => new BriefingStep { Op = op, Id = id },
         };
+    }
+
+    // A bitmap list as its names, skipping anything that is not one.
+    private static IReadOnlyList<string> Names(List<object?>? list)
+    {
+        if (list == null)
+        {
+            return Array.Empty<string>();
+        }
+
+        var names = new List<string>(list.Count);
+        foreach (var entry in list)
+        {
+            if (entry is string name)
+            {
+                names.Add(name);
+            }
+        }
+
+        return names;
     }
 
     private static IReadOnlyList<BriefingPoint> Points(List<object?>? list)
@@ -355,6 +382,13 @@ public sealed class BriefingElement
 
     /// <summary>The objectives-list entry it shows, or -1 when it is not an objective line.</summary>
     public int ObjectiveIndex { get; internal set; } = -1;
+
+    /// <summary>A cycling element's whole frame list, empty for everything else. The load screen's
+    /// propeller is the only one any shipped script authors.</summary>
+    public IReadOnlyList<string> Frames { get; internal set; } = Array.Empty<string>();
+
+    /// <summary>A cycling element's authored rate in frames a second.</summary>
+    public float Fps { get; internal set; }
 }
 
 /// <summary>
@@ -541,6 +575,8 @@ public sealed class BriefingReveal
                 placed.Bitmap = step.Bitmap;
                 placed.At = step.At;
                 placed.Center = step.Center;
+                placed.Frames = step.Frames;
+                placed.Fps = step.Fps;
                 break;
             case BriefingOp.Line:
                 var line = Ensure(step.Id);

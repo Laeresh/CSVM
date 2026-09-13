@@ -20,6 +20,7 @@ namespace CSVM.Tests;
 /// what every suite and every golden gets. The press that skips a film is spanned rather than
 /// pressed after the hand-back, which is the only way to see the board behind the film read it:
 /// with the pointer, with a key or a pad button, and held from under the film to past its end.
+/// Built-in's presentation polls its seats, so the span itself is what these read off its flow.
 /// </summary>
 [Trait("Tier", "Quick")]
 public class ChapterCinemaWiringTests : IDisposable
@@ -86,7 +87,7 @@ public class ChapterCinemaWiringTests : IDisposable
         var cinema = new Recorder();
         var flow = Flow(cinema);
 
-        flow.OpenScrapbookAfterMission(Progressed("Zachary", 5), 4);
+        flow.OpenScrapbookAfterMission(Progressed("Zachary", 5), 4, missionWon: true);
         Assert.Equal(0, cinema.Plays);
         PressReturnToCabin(flow);
 
@@ -104,7 +105,7 @@ public class ChapterCinemaWiringTests : IDisposable
         var cinema = new Recorder();
         var flow = Flow(cinema);
 
-        flow.OpenScrapbookAfterMission(Progressed("Zachary", 5), 4);
+        flow.OpenScrapbookAfterMission(Progressed("Zachary", 5), 4, missionWon: true);
         flow.Back();
 
         Assert.Equal("chap2", cinema.Name);
@@ -121,7 +122,7 @@ public class ChapterCinemaWiringTests : IDisposable
         var cinema = new Recorder();
         var flow = Flow(cinema);
 
-        flow.OpenScrapbookAfterMission(Progressed("Zachary", 3), 2);
+        flow.OpenScrapbookAfterMission(Progressed("Zachary", 3), 2, missionWon: true);
         PressReturnToCabin(flow);
 
         Assert.Equal(0, cinema.Plays);
@@ -176,6 +177,75 @@ public class ChapterCinemaWiringTests : IDisposable
         Assert.Equal(CampaignScreen.Cabin, flow.Screen);
     }
 
+    // The span a presentation that polls its input reads off the flow: the film owns every frame it
+    // plays, and the frame it hands back on is the tail of the press that ended it.
+    [Fact]
+    public void BuiltInsChapterFilmOwnsItsFramesAndTheTailOfThePressThatEndedIt()
+    {
+        var cinema = new Recorder();
+        var flow = Flow(cinema);
+
+        flow.SelectProfile(Progressed("Zachary", 5));
+
+        Assert.True(flow.Film.Up);
+        cinema.Stop();
+        Assert.False(flow.Film.Up);
+        Assert.True(flow.Film.Swallows(pointerHeld: false));
+        Assert.False(flow.Film.Swallows(pointerHeld: false));
+    }
+
+    [Fact]
+    public void BuiltInsClosingFilmOwnsItsFramesAndTheTailOfThePressThatEndedIt()
+    {
+        var cinema = new Recorder();
+        var feature = new CampaignFeature(
+            UiStrings.Empty, Airframe, closingCinema: new ClosingCinema(cinema.Play));
+        feature.Open(_store, _planes, null, null);
+        var flow = new CampaignFlow(feature);
+
+        flow.OpenScrapbookAfterMission(
+            Progressed("Zachary", CampaignSequence.MissionCount), CampaignSequence.MissionCount - 1, missionWon: true);
+
+        Assert.Equal(ClosingCinema.Name, cinema.Name);
+        Assert.True(flow.Film.Up);
+        Assert.Equal(CampaignScreen.Cabin, flow.Screen);
+        cinema.Stop();
+        Assert.Equal(CampaignScreen.Scrapbook, flow.Screen);
+        Assert.True(flow.Film.Swallows(pointerHeld: false));
+        Assert.False(flow.Film.Swallows(pointerHeld: false));
+    }
+
+    // The pointer's tail lasts while its button is down, the release being the gesture a board fires
+    // on; a key or a pad button is spent on the one frame it lands on.
+    [Fact]
+    public void ThePointerTailOfABuiltInFilmLastsUntilTheButtonComesUp()
+    {
+        var cinema = new Recorder();
+        var flow = Flow(cinema);
+        flow.SelectProfile(Progressed("Zachary", 5));
+        cinema.Stop();
+
+        Assert.True(flow.Film.Swallows(pointerHeld: true));
+        Assert.True(flow.Film.Swallows(pointerHeld: true));
+        Assert.True(flow.Film.Swallows(pointerHeld: false));
+        Assert.False(flow.Film.Swallows(pointerHeld: false));
+    }
+
+    // The negative control: a door with no film due hands its screen over inside the play call, so
+    // no frame is owned and the very next press is the player's own.
+    [Fact]
+    public void ABuiltInCabinDoorWithNoFilmDueOwnsNoFrameAndSwallowsNothing()
+    {
+        var cinema = new Recorder();
+        var flow = Flow(cinema);
+
+        flow.SelectProfile(Progressed("Zachary", 3));
+
+        Assert.Equal(0, cinema.Plays);
+        Assert.False(flow.Film.Up);
+        Assert.False(flow.Film.Swallows(pointerHeld: false));
+    }
+
     [Fact]
     public void OriginalsContinuePlaysTheChapterFilmAndTheCabinFollowsIt()
     {
@@ -215,7 +285,7 @@ public class ChapterCinemaWiringTests : IDisposable
         var cinema = new Recorder();
         var shell = Shell(cinema, out _);
         shell.OpenCampaignOver(_store);
-        Assert.True(shell.ShowScrapbook("Zachary", 4));
+        Assert.True(shell.ShowScrapbook("Zachary", 4, missionWon: true));
         Assert.Equal(0, cinema.Plays);
 
         Assert.Equal(nameof(BoardButton.ReturnToCabin), shell.FocusedKey);
@@ -234,7 +304,7 @@ public class ChapterCinemaWiringTests : IDisposable
         var cinema = new Recorder();
         var shell = Shell(cinema, out _);
         shell.OpenCampaignOver(_store);
-        Assert.True(shell.ShowScrapbook("Zachary", 4));
+        Assert.True(shell.ShowScrapbook("Zachary", 4, missionWon: true));
 
         shell.Step(new MenuCommands { Back = true });
 
@@ -253,7 +323,7 @@ public class ChapterCinemaWiringTests : IDisposable
         var cinema = new Recorder();
         var shell = Shell(cinema, out _);
         shell.OpenCampaignOver(_store);
-        Assert.True(shell.ShowScrapbook("Zachary", 2));
+        Assert.True(shell.ShowScrapbook("Zachary", 2, missionWon: true));
 
         shell.Step(Accept);
 

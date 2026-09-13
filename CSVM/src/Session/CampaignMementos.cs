@@ -112,6 +112,11 @@ public static class CampaignMementos
         return Seeded;
     }
 
+    /// <summary>The bitmap a screen hangs for a seated profile: the picture that profile chose, or
+    /// the seeded pin-up where nobody is seated. The cabin wall, the pause sheet and the campaign
+    /// load screen all draw this one name, so a chosen picture cannot reach one and miss another.</summary>
+    public static string BitmapFor(CampaignProfileDef? profile) => Bitmap(Current(profile));
+
     /// <summary>The mission-art bitmap a memento file name draws as: the name lowercased with its
     /// extension cut, which is the original's own <c>FUN_0041a820</c> truncation at the last dot.</summary>
     public static string Bitmap(string name)

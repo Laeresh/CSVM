@@ -108,6 +108,23 @@ public sealed class ControlsFeature : IMenuFeature
     /// splitscreen seat, which cannot capture a key or a mouse button.</summary>
     public bool ReadsKeyboard => _seats[_player].ReadsKeyboard;
 
+    /// <summary>Whether the seat being edited flies with the mouse, staged like every other edit on
+    /// this screen, so the scheme is chosen where the controls it competes with are listed. A
+    /// pad-only seat cannot hold it, having no mouse to give the stick.</summary>
+    public bool MouseFlying
+    {
+        get => _seats[_player].MouseFlying;
+        set
+        {
+            var seat = _seats[_player];
+            bool wanted = value && seat.ReadsKeyboard;
+            if (seat.MouseFlying == wanted)
+                return;
+            seat.MouseFlying = wanted;
+            MarkDirty();
+        }
+    }
+
     private ActionMap Map => _seats[_player].Working[_context];
 
     /// <summary>Registers one seat's live keymap. The profile is the one its polling sites read, not
@@ -332,6 +349,7 @@ public sealed class ControlsFeature : IMenuFeature
             foreach (var context in System.Enum.GetValues<InputContext>())
                 Restore(seat.Profile.Map(context), seat.Working[context]);
 
+            seat.Profile.MouseFlying = seat.MouseFlying;
             _save?.Invoke(player, seat.Profile);
         }
 
@@ -431,6 +449,8 @@ public sealed class ControlsFeature : IMenuFeature
 
         public Dictionary<InputContext, ActionMap> Working { get; } = new();
 
+        public bool MouseFlying { get; set; }
+
         public DeviceId PadOf(InputContext context) => Devices.PadOf(context);
 
         /// <summary>Takes the working copy back to what the polling sites currently hold.</summary>
@@ -438,6 +458,8 @@ public sealed class ControlsFeature : IMenuFeature
         {
             foreach (var context in System.Enum.GetValues<InputContext>())
                 Working[context] = Profile.Map(context).Clone();
+
+            MouseFlying = Profile.MouseFlying && ReadsKeyboard;
         }
     }
 }

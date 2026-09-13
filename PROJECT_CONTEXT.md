@@ -181,7 +181,7 @@ Highest-traffic modules, so the common cases skip the index: `GameSession.cs` (s
 
 ### User args (after `--`)
 
-**Flight is the default.** Any content arg builds a *flight* unless `--viewer` is present: `--plane=player_fury` flies the Fury and `--chapter=C4` flies over C4. `--viewer` gives the static inspection view, where the livery / mesh labs live. The damage lab now lives in both, F5 in `--viewer` drives a parked plane's visuals, F5 in `--fly` drives the flown plane's real HP, so `--fly` is redundant except with `--damage=`, which picks the parked viewer unless flight was asked for by name. A bare launch (no content arg) shows the launchscreen.
+**Flight is the default.** Any content arg builds a *flight* unless `--viewer` is present: `--plane=player_fury` flies the Fury and `--chapter=C4` flies over C4. `--viewer` gives the static inspection view, where the livery / mesh labs live. The damage lab now lives in both, F19 in `--viewer` drives a parked plane's visuals, F19 in `--fly` drives the flown plane's real HP, so `--fly` is redundant except with `--damage=`, which picks the parked viewer unless flight was asked for by name. A bare launch (no content arg) shows the launchscreen.
 
 The day-to-day subset; `docs/cli.md` is the description of record. **[`docs/cli.md`](docs/cli.md) opens with an index of every flag, grouped**, covering the whole `--debug-*` family, the paint overrides, spawn/mission selection, scripted `--hold` input, the data-path overrides, and the deprecated `--campos`/`--spawn-at`/`--spawn-dir` spellings of the placement pair.
 
@@ -193,10 +193,10 @@ The day-to-day subset; `docs/cli.md` is the description of record. **[`docs/cli.
 | `--stage=empty` | no *chapter* gamez: a collidable grid ground plane + the plane, booting in ~2 s, the flight/ballistics test stage |
 | `--node=<cs_name>` | `--viewer`/`--anim-lab` build only that gamez subtree, auto-framed; multiple matches build the first, a miss lists candidates |
 | `--plane=` | which aircraft; comma-separated gives one per splitscreen player |
-| `--fly` | free flight (the default): world + skydome + plane + arcade controls; also hosts the damage lab (F5) on the flown plane |
+| `--fly` | free flight (the default): world + skydome + plane + arcade controls; also hosts the damage lab (F19) on the flown plane |
 | `--stunt` | flight + the mission's Danger Zones as timed fly-through objectives; a race with `--players` |
 | `--vs` | "Dogfight": splitscreen free-for-all deathmatch on the `dogfight_ace` spawns; beats `--stunt` by fixed precedence |
-| `--viewer` | the static inspection view; hosts the damage (F5), livery (L) and mesh (M) labs |
+| `--viewer` | the static inspection view; hosts the damage (F19), livery (L) and mesh (M) labs |
 | `--freecam` | spectator mode: the live animated world, no aircraft, free-flying camera, click-selection |
 | `--anim-lab` | the animation debugger: quiet world stage + def playback (`--play-anim=`, `--seed=`) on a fixed-dt clock; a transport button panel, the freecam camera, and click-to-follow the selection |
 | `--players=N` | splitscreen 1–4 in one shared world, one pane/camera/HUD/pad each |

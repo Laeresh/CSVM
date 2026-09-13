@@ -28,10 +28,18 @@ internal static class PauseWorldIconSuites
     // Nathan Zachary's own zeppelin, the world node the shared MYZEP icon stands for.
     private const string ZepNode = "piratezep";
 
+    // How far an icon's drawn nose may stand from the compass reading of the same pose, in degrees.
+    // The two are the same conversion, so this is float slack and nothing else.
+    private const float CompassSlackDeg = 0.05f;
+
     // How far a projected literal waypoint may stand from the authored flag pin it belongs to,
     // in board pixels. The flag art is 76x80 and its point is the pole's foot, so agreement is
     // measured in tens of pixels rather than in ones.
     private const float PinReach = 40f;
+
+    // The poses the icons are read against the compass at: the mission's own authored yaw, the four
+    // cardinals and a pair either side of north, which is where a sign error hides.
+    private static readonly float[] CompassYaws = { 0f, 40f, 90f, 135f, 180f, 270f, 315f };
 
     /// <summary>The pause sheet's world-placed icons over a BUILT mission world: the player's own
     /// spawn and the mission's zeppelin both reach the chart, and the window that decides it is
@@ -40,7 +48,8 @@ internal static class PauseWorldIconSuites
         "the Original pause sheet's two world-placed icons over CM05's BUILT world: the ownship "
         + "at the mission's PLAYER_INIT and the zeppelin at the piratezep hull its own record "
         + "seats both compose onto the sheet and land inside the map's authored screen rectangle, "
-        + "the "
+        + "each icon's drawn nose (its own art's nose plus the turn it takes) points where the "
+        + "compass tape reads for the same pose, the "
         + "projection that puts them there agrees with the chart's own authored flag pins (a "
         + "literal TRAVELERS waypoint lands within 40 px of the pin it belongs to), and the "
         + "mission that opens east of the same chart places neither icon, which is the window's "
@@ -89,6 +98,7 @@ internal static class PauseWorldIconSuites
         var nets = AiNets.Load(chapterZrdr);
         ctx.WithWorld(chapter, collision: false, folder,
             world => CheckBothIcons(ctx, sheet, map, init, world, zeppelins, nets, report));
+        CheckIconsAgainstCompass(ctx, sheet, report);
         CheckProjectionAgainstPins(ctx, missions, report);
         CheckOffChartOpening(ctx, missions, report);
 
@@ -169,6 +179,36 @@ internal static class PauseWorldIconSuites
             ctx.Check(
                 inside && placed!.Centered,
                 $"{icon.Bitmap} lands centred inside the chart's screen rectangle at ({placed?.X}, {placed?.Y})");
+        }
+    }
+
+    // The sheet against the instrument the pilot reads: for one nose vector, an icon's drawn nose
+    // (where its own art points, plus the turn it is given) has to land on the heading the compass
+    // tape shows, or the chart and the cockpit disagree. Both icons, since they share the one
+    // conversion and only the player's art is drawn off the top of the sheet.
+    private static void CheckIconsAgainstCompass(
+        TestContext ctx, PauseSheet sheet, StringBuilder report)
+    {
+        foreach (string bitmap in new[] { sheet.Shared.OwnShip, sheet.Shared.MyZep })
+        {
+            foreach (float yawDeg in CompassYaws)
+            {
+                var nose = new Basis(Vector3.Up, Mathf.DegToRad(yawDeg)) * Vector3.Forward;
+                if (PauseReadout.Icon(bitmap, 0f, 0f, nose.X, nose.Z) is not { } icon)
+                {
+                    ctx.Check(false, $"{bitmap} takes an icon at yaw {yawDeg:0}");
+                    continue;
+                }
+
+                float compass = CompassTape.ReadingDeg(nose);
+                float drawn = Mathf.PosMod((MissionMap.ArtRevs(bitmap) + icon.Revs) * 360f, 360f);
+                report.AppendLine(
+                    $"{bitmap} yaw {yawDeg:0} -> compass {compass:0.0}, turn "
+                    + $"{Mathf.PosMod(icon.Revs * 360f, 360f):0.0}, nose {drawn:0.0}");
+                ctx.Check(
+                    Mathf.Abs(Mathf.Wrap(drawn - compass, -180f, 180f)) <= CompassSlackDeg,
+                    $"{bitmap}'s nose at yaw {yawDeg:0} points where the compass reads ({drawn:0.0} vs {compass:0.0})");
+            }
         }
     }
 

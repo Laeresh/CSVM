@@ -111,6 +111,42 @@ member, and it does not go here.
   drawing; check an animation by driving frames.** Timed briefing shots at five instants all read
   correctly while driving the live menu found 5193 stale frames of 5400.
 
+- **SHOT-35**, **An Instant Action wrap-up board is not on screen at the frame the mission ends; a
+  shot of it must drive frames past the decoded hold or it catches the live world instead.** The
+  ending arms `InstantActionRuntime.WrapupHoldS` (3 s) of running world before the board is
+  presented, so a `--screenshot` run whose `--frames` stops inside that hold photographs aeroplanes
+  and a falling wreck, and reading the missing board as the board being broken is the error.
+
+- **SHOT-36**, **How many lines a wrapped block takes is a font metric, and it moves with the
+  window the shot was taken at: pin it at the authored 1:1 fit, not at a capture's resolution.** A
+  board's text is rasterised at `round(size x fit.Scale)` points in a box of `width x fit.Scale`, so
+  the same objective row wrapped to one line at 800x600 and two at 1280x720 in the same build, and a
+  departure chosen from the shot alone was wrong at the fit the suite measures.
+
+- **SHOT-37**, **Where a drawn icon points is its art's own nose plus the turn applied, so measure
+  the bitmap before blaming the conversion.** The pause chart's `singledev` is drawn along the
+  45-degree diagonal, which a per-degree mirror-symmetry scan of its alpha gives exactly (0.95
+  against 0.83 one degree either side), and a scan plus the layout (propeller disc, wing at 30 % of
+  the length, tailplane at the end) says which end of that axis is the nose.
+
+- **SHOT-38**, **Render one pose twice with the same texture overridden to two different colours;
+  the pixels that differ are exactly the pixels that population touched.** An ordinary
+  `--tex-override` frame only marks where a sprite draws near-opaque, so it undercounts a blended
+  population badly. Differencing two colour runs is alpha-aware and gives a per-pixel coverage mask
+  to test a change against: at the C1 1,208 m cloud pose the two-colour mask covers 515,597 px of
+  the 921,600, the cloud fade change moved 431,238 px, and 20 of those lay outside the mask at one
+  LSB (blend rounding), which is what "confined to that population" looks like measured.
+
+- **SHOT-39**, **Measure a filled bar against footage by the one edge that moves, not by the
+  extent you can see.** A scrollbar thumb, a gauge fill or a progress bar is art with its own end
+  caps sitting in a painted gutter, so an eye reading both ends off a frame picks up the caps and
+  the gutter's own shadow and is a few pixels slack at each end. The filled-to-unfilled transition
+  is a hard luminance step one column can find exactly. Reading BL-842's Instant Action thumb off
+  `CAP-50` both ways: its extent measures as board y 182 to 356, which suggests 173 of the 230-pixel
+  track, while the transition alone lands on 356, which is 170 and the exact 14-of-19 share the
+  window shows. The slack figure would have pinned a suite one preset off the model that produced
+  the picture.
+
 ## GOLD, golden images
 
 - **GOLD-1**, **Update moved hashes with the visual change, and explain each moved shot in the
@@ -145,6 +181,20 @@ member, and it does not go here.
   value is the EXACT identity, which constrains how the arithmetic is WRITTEN and not just what it
   computes.** A head rotation kept 18 shots byte-identical because `new Basis(axis, 0)` is exactly
   the identity and the existing term order survived.
+
+- **GOLD-17**, **A shot whose command line names machine-local user state pins whether that state
+  is present, not the code alone; name the assumption in its `exercises` field.**
+  `campaign-4p-grid` launches `--campaign=csvm-golden:6`, a `CampaignProfileStore` name under
+  `user://Profiles/` that no checkout carries, so the frame it pins is a campaign launch flying
+  with no director, and a machine holding that profile renders a different one.
+
+- **GOLD-18**, **A golden that moves after a shader SOURCE change is not evidence the change had a
+  visual effect; force the value to an extreme and see whether the arm owns pixels in that framing.**
+  Routing the chapter mip bias through a shared include moved `c5-city-night` by 1 pixel at a channel
+  delta of 1. Forcing that bias to +4 through the same function moved 62.6 % of the frame, while
+  forcing +4 on the three newly routed arms alone, with the world arm held at its old call, left the
+  shot byte-identical. So the 1 pixel is a shader-recompile artifact and the pinned framing
+  photographs none of the sprite arms' mip levels, which the re-pin's reason has to say.
 
 ## DET, determinism and randomness
 
@@ -208,8 +258,31 @@ member, and it does not go here.
   its state at the moment you measure, not at process start.** A no-fade baseline read 0 steps run
   alone and 44 once an earlier suite in the same process had freed a world.
 - **PERF-28**, **An exact-zero allocation claim needs more than one measurement window: take
-  several and require that ONE of them reads zero, rather than widening the assertion to a
-  tolerance.** A real allocator charges every window alike; a lone charged window is the runtime's.
+  several and require that EVERY one reads zero, rather than widening the assertion to a
+  tolerance.** A rule that accepts one clean window of several passes an allocator that charges
+  intermittently. Report the first charged window's bytes, its gen-0 count, the thread and the
+  module id, which a rerun cannot recover, and prove the windows with a negative control. Every
+  window opens on an emptied allocation context, or PERF-29's charge lands in one of them.
+- **PERF-29**, **`GC.GetAllocatedBytesForCurrentThread` reports granted minus unused, so retiring
+  a thread's allocation context charges that thread for what the context still held. Empty it with
+  a forced collection before any window that must read zero.** The step is that remainder alone,
+  always under 8 KB: with per-thread pads 512 bytes apart it moved 512 bytes in lockstep, and
+  28,800 windows opened on an emptied context charged nothing where seven charged without it.
+- **PERF-30**, **A unit test asserts a wall-clock FLOOR, or a figure read off a clock it advances
+  itself, never a fixed millisecond ceiling: a ceiling reads the scheduler on an oversubscribed
+  machine, so raising it moves the threshold rather than removing the flake.** A six-walk mean
+  required under 20 ms read 29.9, 34.9 and 51.3 ms in three of 55 unit runs made beside three
+  concurrent builds.
+- **PERF-31**, **A threshold on one named frame is satisfiable by moving the block onto a
+  neighbouring frame, so report the worst frame of the whole window beside the frame under test.**
+  An AI wave launch measured only on its own frame reads as fixed once the assembly runs a second
+  early, while the player feels the same stall one second sooner. The window's worst frame, and its
+  worst frame carrying no launch, are what separate a removal from a relocation (PERF-25). Measure
+  both player counts in the same window: a launch cost that does not grow with the human field says
+  the work is in the arriving aeroplane, not in the rigs already flying. Where the target is still
+  owed, assert a regression bar at the measured level and name the target in the same note: a suite
+  that fails on the cost it was written to expose blocks every later change instead of the one that
+  owes it, and the bar drops to the target when the removal lands.
 
 ## LOG, logs, error censuses, and exit codes
 
@@ -235,6 +308,15 @@ member, and it does not go here.
 - **LOG-22**, **A `*.godot.log` mirror is not that run's log: exclude it when sweeping
   `.scratch/logs/` for what a run did or did not print.** Every quit copies Godot's shared log, so
   one deliberate probe was replayed by every later mirror.
+
+- **LOG-23**, **`Log` renders only the holes the log call itself interpolates, so a string built
+  before the call reaches the file in the machine's own culture.** The plane collider census read
+  `3,8×3,0×5,6 m` on a German machine although its `Log.Info` line was invariant, because the
+  summary property had already formatted the numbers. A suite never catches this: the test harness
+  pins the thread to the invariant culture, so the fault appears only in a real run. Grep for a
+  numeric format (`:0.0`, `ToString("0.#")`) OUTSIDE a `Log.*` call, in a summary property, a
+  `reason` argument, a list entry or a `StringBuilder.Append`, and give each one `Log.Format` or
+  `FormattableString.Invariant`.
 
 ## WORLD, world data and runtime traps
 
@@ -276,6 +358,51 @@ member, and it does not go here.
 - **WORLD-40**, **Two numberings of one thing coincide on some subjects, so a readout keyed on the
   wrong one passes every pin taken where they agree; pin on a subject where they disagree.** CM05's
   objective priorities and `OBJECTIVEn` numbers differ while CM01's agree, which is why its pin held.
+
+- **WORLD-41**, **A new per-instance draw on a shared `Rng` subsystem stream reseeds every later
+  consumer of that stream in the same process, so give it its own subsystem.** One
+  `Rng.NewSystemRandom(Rng.Clouds)` taken before the cloud scatter's own loop, drawing nothing the
+  placements read, still moved C5's pinned sprite count from 16,170 to 16,185 when a suite built
+  C1's field first. The fix is a new `public const string` on `Rng`, not a reordering. The same
+  ordering sensitivity is why a suite that builds two chapters' fields calls `Rng.Rewind()` before
+  each one: a session builds exactly one field, so the second field in a process is off the pin
+  unless the stream is reset.
+
+- **WORLD-42**, **A D3D render state the original sets once covers every draw on the device, so its
+  remake twin is ONE global that every arm reads, and an arm sampling around it draws that chapter
+  at a level the original never chose.** `MipBias` is `D3DRENDERSTATE_MIPMAPLODBIAS`, one state over
+  the world mesh, the camera-facing billboards, the cylindrical facades and the clutter alike; here
+  it is `csky_mip_bias` behind the single `csky_sample_albedo` in `shaders/csky_mip_bias.gdshaderinc`,
+  and `chapter-census` fails any mip-mapped sampler outside it. Count the arms from the shader
+  generators, not from the one the setting was first wired into.
+
+- **WORLD-43**, **A census that walks a built world only covers the arms the world build itself
+  makes; one a game session adds afterwards is invisible to it and passes vacuously.**
+  `chapter-census` sees no cloud-field shader in any of the eight chapters, because
+  `FogVolumeClutter` is built by `GameSession` and not by the world build, so its sampler is
+  asserted in `cloud-field-fade`, which builds the field.
+
+- **WORLD-44**, **A mesh's polygon count is not its scatter surface; read the per-polygon skip flag
+  before predicting anything from the geometry.** Every shipped `fvol` volume is a closed box or
+  prism, so laying the cloud lattice on its faces looked like it would put cards under the deck and
+  inside the streets. The census says the walls and the floor carry `no_clutter` (`0x800`) in
+  every chapter (C1 45 of 54 polygons, C1C 71 of 175, C5 102 of 148), so the scatter surface is
+  the upward skin alone and no shipped face points down or sideways. The flag, not the volume's
+  shape, is what makes a slab chapter's field a sheet.
+- **WORLD-45**, **Hand a `CollisionShape3D` the EMPTY shape and fill it afterwards. A `Shape3D`
+  that already carries its faces when it is assigned reaches the body as an empty shape for the
+  rest of the frame, so everything that body stood for falls through.** A crater carve that built
+  its private `ConcavePolygonShape3D` and then assigned it left the struck terrain node answering
+  nothing at all, at the bowl and 24 m outside it alike, while the node still read 216 faces;
+  assigning the empty shape first and calling `SetFaces` on it afterwards read the carved profile
+  at once (120.00 at the rim, 114.00 at the apex). The shape's own data write reaches the server
+  immediately; the body's swap to a different shape does not.
+- **WORLD-46**, **A region test on a face's centroid removes nothing from world geometry, because
+  a terrain triangle is far larger than anything a weapon cuts into it.** The ground triangle a
+  bomb struck has its centroid hundreds of metres from a 20 m crater, so a centroid-in-ring filter
+  left the collider at 147 faces and laid the bowl under ground that was still solid. Subtracting
+  the region from each face and re-emitting the remainder is what makes the hole the carve's own
+  size; the same subtraction serves the skin and the trimesh.
 
 ## SHELL, Windows, PowerShell, and processes
 
@@ -325,9 +452,10 @@ member, and it does not go here.
   it can see, so sample over the window rather than at its end, and ask what is left behind.**
 - **INSTR-13**, **An in-engine suite runs inside ONE frame, so the physics space never sees a body
   moved, shown or enabled after it was built: aim at bodies where they were created, build a world
-  the object already stands in, or call `ForceUpdateTransform()` over a moved static subtree.**
-  An `AnimatableBody3D` is worse: the server reads a transform write as a kinematic target and no
-  repair commits it, so a flown aeroplane leaves its collider behind.
+  the object already stands in, or call `TestContext.SyncPhysics()` (`ForceUpdateTransform()` for
+  one node) between the change and the cast.** An `AnimatableBody3D` is worse: the server reads a
+  transform write as a kinematic target and no repair commits it, so a flown aeroplane leaves its
+  collider behind.
 - **INSTR-14**, **Every automated session check runs on a PARENT-DRIVEN clock, so verify the shared
   step owner rather than either clock adapter alone.** A wave sequencer lived only in that path and
   waves 2 to 4 never arrived at the controls while every scripted check stayed green.
@@ -418,6 +546,70 @@ member, and it does not go here.
   session's instance with a control that reads the null object, not only what that instance
   reports.** Every world emitter read the null ambience while every puffer suite passed against a
   fake renderer.
+- **INSTR-64**, **A changed rebinding DEFAULT is invisible to any profile that has already saved
+  that context, because a saved keymap lists every action of the context and the store loads it
+  whole: verify new defaults on a fresh profile, and test the default table itself rather than a
+  seat built from disk.** The keymap store versions its schema, not its action list, so a default
+  change moves no stored file.
+- **INSTR-65**, **A suite that can only reach a state through the one cause it is testing cannot
+  see a flag the state ENTRY sets rather than the cause; enter the state through the scripted seam
+  too, and assert the flag is still clear there.** Every evade phase arrived by damage, so a mode
+  transition that stamped the evade flag stood unseen and swallowed the next steady-hand roll.
+- **INSTR-66**, **Scope a modifier rule to the one binding table that names the modified key, never
+  to the whole session: a global "a held Shift silences every bare key" also silences the free
+  camera's Shift boost and every menu key, which no test of the flight map would catch.** Ask the
+  map itself whether it holds that key under a modifier, and assert the silencing both where a map
+  contests the key and where none does.
+- **INSTR-67**, **Re-enabling a `CollisionShape3D` only QUEUES the shape's broadphase rebuild for
+  the next physics step, so the node reads `Disabled=false` and the server still answers nothing;
+  a suite that hides or shows anything must sync before it casts.** aagun32's woken mount answered
+  0 of its 6 enabled shapes and 6 of 6 after the sync, and one unrelated `BodyTestMotion` anywhere
+  in the world repaired all six, which is the server's own pending-shape flush.
+- **INSTR-68**, **A suite passing on a space that is missing colliders is passing on geometry the
+  game does not have, so re-read every verdict the sync changes rather than only the red one.**
+  The armed zeppelin leg had been parking its bait 200 m from a ring, which is inside a 657 m by
+  136 m hull, and it engaged only while the hull's own shapes were absent.
+- **INSTR-69**, **An input read off a device the test host does not have needs a pinned seam beside
+  the live read, or the mechanism is only reachable by hand.** The mouse flight scheme reads an
+  absolute cursor offset inside the viewport, which is zero in every headless suite, so
+  `FlightController.MouseStickForTest` supplies that offset and the live path stays the only reader
+  of the real pointer.
+- **INSTR-70**, **A new in-engine suite is not finished when it passes: `analysis/engine-suite-weights.json`
+  must name it too, and a unit test fails until it does.** The balancer weighs every registered
+  suite, so an unweighted one leaves a shard's plan guessing at its cost.
+- **INSTR-71**, **Anything a screen animates off the wall clock keeps determinism only if the thing
+  that installs its draw is the interactive path alone; install it from the build and every
+  scripted and golden run inherits the wobble.** The load screen's fill and its 6 fps propeller are
+  reported unconditionally by the session build, but the pump that draws them is installed by the
+  load board's `_Ready` and cleared by its `_ExitTree`, so a CLI launch leaves the ambient null and
+  every report is a no-op: 19 of 19 goldens unmoved, and the motion is testable only through a
+  suite that installs its own pump.
+- **INSTR-72**, **A check taken well past a threshold passes for every value of that threshold;
+  straddle it instead, one reading just inside and one just outside.** The AI gun loop's cull was
+  read with the listener at 4x the cue's audible distance, which is silent whether the cull sits at
+  1.0x or at 1.1x of it, so the missing margin survived that suite; ears at 1.05x and 1.15x
+  separate the two.
+- **INSTR-73**, **A line a readout composes is not a line the player reads: assert the control it
+  reaches and the layer that control sits on.** The crashed pilot's respawn line passed its unit
+  test on `ComposeTextLines`' return for as long as it existed, while the crash camera hid the whole
+  HUD `CanvasLayer` the text block hangs from, so the string reached no screen; the `c1-crash`
+  golden shows the crash notice from the message layer beside a blank where the prompt was.
+- **INSTR-74**, **Suppressing a definition's `OBJECT_MOTION` shortens the definition, so a suite must
+  not read its slot off `AnimStateOf`.** A definition whose only sustain is an endless
+  `XYZ_ROTATION` ends the moment that motion is dropped, and the runtime then reports it EXECUTED
+  where the unsuppressed definition would read RUNNING forever. `spinprops` is the worked example:
+  `FlightController` suppresses its motion because `PropAnimator` already turns those discs, so the
+  rig tracks the prop slot in a field of its own and the suite asserts EXECUTED deliberately.
+- **INSTR-75**, **Name a rig off the format string that prints its result, never off the function
+  next to it.** `FUN_00491d90` sits between the original tuner's climb rigs and was taken for the
+  sustained-climb one on position alone; following the global it writes to the `sprintf` that reads
+  it makes it the `Max turn ... deg/sec` rig, and the climb is the neighbouring `FUN_00491c60`. A
+  rig identified by adjacency costs the whole reading built on it.
+- **INSTR-76**, **Two instruments that share only the mechanism are a real check on each other; two
+  that share the rig are one instrument.** The sustained climb is measured twice, once flying free
+  from a 300 mph entry at 60 Hz and once with the attitude pinned and integrated from rest at
+  100 Hz. They agree to 0.06 %, which is evidence about the equilibrium, where a second probe built
+  on the first one's entry conditions would only have restated it.
 
 ## SRC, sources and documents
 

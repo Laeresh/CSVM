@@ -11,9 +11,9 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>
-/// The world damage lab (F5) in <c>--freecam</c>/<c>--anim-lab</c>: when
+/// The world damage lab (F19) in <c>--freecam</c>/<c>--anim-lab</c>: when
 /// <see cref="SelectionService"/> lands on a destructible, this panel shows its live HP pools
-/// with a slider, a Kill and a Reset, the interactive twin of <c>--damage-test</c>. Elsewhere F5
+/// with a slider, a Kill and a Reset, the interactive twin of <c>--damage-test</c>. Elsewhere F19
 /// means the aircraft's <see cref="Flight.DamageLab"/>; the two never coexist. Only the pool
 /// <see cref="DestructibleRegistry.Resolve"/> names gets controls, since a node can carry several
 /// pools and driving one nothing can ever hit would read as a working feature. Lowering the
@@ -142,7 +142,7 @@ public sealed partial class WorldDamageLab : Node
 
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F5 })
+        if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F19 })
         {
             Toggle();
             GetViewport().SetInputAsHandled();

@@ -249,9 +249,10 @@ and the four carrying `singledev` get them from their own script.
 **A row on the parchment is never marked here.** The screen stands before the mission it lists has
 run, so the objectives list draws its rows and no check.
 
-**Neither screen reads the profile's chosen memento yet**, so both draw `ms_p_initialpinup1`, the
-picture the original's own profile reset seeds. The cabin's chooser writes the choice
-(`Session/CampaignMementos.cs`); handing it to these two sheets is what remains.
+**Both screens hang the seated profile's own memento.** The cabin's chooser writes the choice into
+the profile and `CampaignMementos.BitmapFor` turns it into the drawn bitmap name, so the load
+screen, a real pause and the cabin wall all carry the one picture. A session with no profile behind
+it draws `ms_p_initialpinup1`, the picture the original's own profile reset seeds.
 
 **The three authored faces meet two of ours.** The extraction ships no menu typeface, so a board
 writes in the one the engine has: `loadListTitle` becomes that face at 17 pixels, which puts its
@@ -266,15 +267,19 @@ break is still ours: a wider face takes a wider line.
 either. Both take the mode's own name at `HEAD1`'s authored place and write nothing else, since the
 nearest dialog, the `d` family's, would state a win condition neither mode has.
 
-**What is drawn from the bar and the propeller is their still art alone.** The unlit strip
-(`prog_blkload`, `prog_blk`) is drawn at its authored position and nothing ever fills it; the
-propeller draws frame `prp0` and never steps, on the campaign sheet from its `Cycle` beat's own
-first bitmap and its own `435,535`. Both are the same blocker: the build is one
-synchronous block, so `Launcher.BeginLaunch` shows the board, lets one frame render, and builds on
-the next tick, and nothing can be redrawn during the build at all. A fill or a turning propeller
-needs that build decoupled from the draw, which is its own item; the two pieces this page supplies
-towards it are that the milestone fractions are authored rather than measured, and that the
-original's own answer to a blocking load is a throttled pump rather than an incremental build.
-The extraction also carries only the six range endpoints of the propeller cycle
-(`prp0`, `prp7`, `prp15`, `prp22`, `prp30`, `prp37`), so the authored 6 fps cycle cannot be
-reproduced from it as it stands.
+**The bar fills and the propeller turns from a pump inside the blocking build**, which is the
+original's own shape rather than a threaded or incremental load. `Utils/LoadProgress.cs` holds the
+sixteen authored fractions in build order, clamps them monotonically the way `FUN_004a2100` does,
+and throttles its repaint to one draw per 0.1 s the way `FUN_004a18a0` does; `UI/LoadBoard.cs`
+installs that repaint while it is in the tree and ends it with `RenderingServer.ForceDraw()`, our
+equivalent of the original yielding a frame from inside its own load. The build stays one
+synchronous block: `Session/Launcher.cs`, `Session/GameSession.cs` and `Mech3/WorldSession.cs`
+report each phase boundary they cross, taking the fraction the table authors for it and never one
+derived from how long the phase took. The fill is the repaint's own pixel clip,
+`floor(fillWidth * fraction)` of `prog_red` over `prog_blk` on the blackboard and `prog_redload`
+over `prog_blkload` on the chart sheet; the propeller steps the `Cycle` beat's six bitmaps
+(`prp0`, `prp7`, `prp15`, `prp22`, `prp30`, `prp37`) at the authored 6 fps off the wall clock, on
+the campaign sheet at the beat's own `435,535`. The highest milestone is 0.90 and the screen is
+torn down there, so a full bar is never drawn. Only a launch through `Launcher.BeginLaunch` builds
+the board, so the pump exists for the three interactive launches alone and a CLI, scripted or
+golden run builds with nothing over it and gains no frame.

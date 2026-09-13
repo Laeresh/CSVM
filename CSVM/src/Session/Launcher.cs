@@ -62,10 +62,6 @@ public partial class Launcher : Node3D
     // than cutting at a hard edge.
     private const float EnhancedShadowFadeStart = 0.8f;
 
-    // The memento the pause and load screens draw. Awarding one over the campaign is not built, so
-    // it is the opening keepsake the original's own profile reset seeds (docs/org/pause-screen.md).
-    private const string SeededMemento = "ms_p_initialpinup1";
-
     // TUNE, judged at the controls, and the pair trades against each other: lower values put
     // dithered acne over every terrain triangle at C1's 25° sun, higher ones dissolve a hangar's
     // shadow along with it. These keep the building and aircraft silhouettes with no acne left.
@@ -443,6 +439,9 @@ public partial class Launcher : Node3D
         {
             Pads.Disabled = true;
         }
+        // Read by both AI pickers, for the same reason the two statics above are statics: it
+        // settles once per launch and no pilot or gunner chooses it for itself.
+        Flight.AiTargetRanking.AircraftFirst = _spec.AircraftFirstTargeting;
         _captureDirector = new Testing.CaptureDirector(_spec);
         _gltfExporter = new Testing.GltfExporter(_spec);
         _pendingJoin = _spec.DebugJoin;
@@ -508,9 +507,11 @@ public partial class Launcher : Node3D
         if (!_spec.IsScripted)
         {
             MonitorSetting.Apply(MonitorSetting.Resolve(MonitorSetting.SavedWord(_spec.Det), MonitorSetting.Screens()));
-            DisplayModeSetting.Apply(DisplayModeSetting.Resolve(DisplayModeSetting.SavedWord(_spec.Det)));
-            ResolutionSetting.Apply(ResolutionSetting.Resolve(
-                ResolutionSetting.SavedWord(_spec.Det), ResolutionSetting.ScreenSizes()));
+            var displayMode = DisplayModeSetting.Resolve(DisplayModeSetting.SavedWord(_spec.Det));
+            DisplayModeSetting.Apply(displayMode);
+            ResolutionSetting.Apply(
+                ResolutionSetting.Resolve(ResolutionSetting.SavedWord(_spec.Det), ResolutionSetting.ScreenSizes(), displayMode.Word),
+                GetWindow());
         }
 
         // --debug-anim opens the call-site gates of the anim and sound families, so it is also the
@@ -1140,7 +1141,7 @@ public partial class Launcher : Node3D
         var sheet = UI.LoadSheet.Load(
             _zrdrPath, _messagesPath,
             SessionPaths.MissionZrdr(_dataRoot, named.ChapterFolder, named.MissionFolder),
-            key, SeededMemento);
+            key, SeatedMemento());
         if (sheet == null)
         {
             Log.Warn("ui",
@@ -1252,11 +1253,16 @@ public partial class Launcher : Node3D
         if (sheet.Shared.OwnShip.Length > 0
             && Flight.SpawnPoints.LoadPlayerInit(missionZrdr) is { } init)
         {
-            // The chart's turn is clockwise revolutions from a nose at -Z, which is what the
-            // spawn's own heading degrees already measure (CompassTape's convention).
-            icons.Add(new UI.PauseWorldIcon(
+            // Through the readout's own conversion off a nose vector, never off the spawn's heading
+            // degrees: those are the mission data's yaw, which runs opposite the compass.
+            var nose = new Basis(Vector3.Up, Mathf.DegToRad(init.Spawn.HeadingDeg)) * Vector3.Forward;
+            if (UI.PauseReadout.Icon(
                 sheet.Shared.OwnShip, init.Spawn.Position.X, init.Spawn.Position.Z,
-                init.Spawn.HeadingDeg / 360f));
+                nose.X, nose.Z) is { } ship)
+            {
+                icons.Add(ship);
+            }
+
             if (sheet.State.Map is { } map
                 && !map.TryProject(init.Spawn.Position.X, init.Spawn.Position.Z, out _))
             {
@@ -1265,8 +1271,17 @@ public partial class Launcher : Node3D
             }
         }
 
-        return new UI.PauseReadout(rows, SeededMemento, icons);
+        return new UI.PauseReadout(rows, SeatedMemento(), icons);
     }
+
+    // The picture the seated profile hangs, read back off the store the cabin's chooser writes, so
+    // this screen, a real pause and the cabin wall all draw the one name. A launch or a door with
+    // no profile behind it draws the seeded keepsake (docs/org/pause-screen.md).
+    private string SeatedMemento() =>
+        CampaignMementos.BitmapFor(
+            _spec.CampaignProfile is { } name
+                ? CampaignProfileStore.UserProfiles().Load(name)
+                : null);
 
     // What the load screen calls this flight: an Instant Action mission by the wizard's own name
     // for it ("Attacking a Zeppelin"), anything else by its mode. ⚠ Not ModeName, that is the log
@@ -1304,11 +1319,13 @@ public partial class Launcher : Node3D
         // flight in the same process. The flag and --det rules are the spec's own.
         var saved = OptionsStore.UserOptions().Load();
         _spec = _spec.WithSavedDifficulty(saved.Difficulty).WithSavedNearestAfterKill(saved.NearestAfterKill);
+        LoadProgress.Report(LoadStep.RenderState);
         // Set per launch, not once at startup: a relaunch can change chapter, and the original
         // re-sources the new chapter's adjust.gw at the same point.
         float mipBias = Mech3.TextureArchive.MipBias(_interpPath, _spec.Chapter);
         RenderingServer.GlobalShaderParameterSet("csky_mip_bias", mipBias);
         Log.Info("world", $"mip bias: {_spec.Chapter} adjust.gw MipBias={mipBias.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture)}");
+        LoadProgress.Report(LoadStep.ChapterPaths);
         _session = new GameSession(_spec, new LauncherContext
         {
             RepoRoot = _repoRoot,
@@ -1693,7 +1710,9 @@ public partial class Launcher : Node3D
         // mode, the size, then the pacing, which --no-vsync still beats (docs/menu-presentations.md).
         MonitorSetting.Apply(MonitorSetting.Resolve(applied.MonitorIndex, MonitorSetting.Screens()));
         DisplayModeSetting.Apply(DisplayModeSetting.Resolve(applied.DisplayMode));
-        ResolutionSetting.Apply(ResolutionSetting.Resolve(applied.Resolution, ResolutionSetting.ScreenSizes()));
+        ResolutionSetting.Apply(
+            ResolutionSetting.Resolve(applied.Resolution, ResolutionSetting.ScreenSizes(), applied.DisplayMode),
+            GetWindow());
         VSyncSetting.Apply(VSyncSetting.Resolve(_spec.NoVsync, applied.VSync, Config.GetBool(VSyncSetting.Key, VSyncSetting.ConfigDefault)));
         // The mix takes effect now too, through the same call the startup path makes. Apply is
         // idempotent, so an accept from a page that shows no slider rewrites the same three gains.
@@ -1865,7 +1884,7 @@ public partial class Launcher : Node3D
     private void OpenDebrief(string profile, CampaignMissionResult result)
     {
         GD.Print($"campaign: {result.Outcome} — arrived at the debrief with '{profile}'");
-        ReturnToMenu(new DebriefReturn(profile, result.Attempt.Seq));
+        ReturnToMenu(new DebriefReturn(profile, result.Attempt.Seq, result.Outcome == MissionOutcome.Won));
     }
 
     // The mission boards' Restart (Instant Action and campaign): free this session and build a

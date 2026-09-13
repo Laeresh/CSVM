@@ -16,18 +16,22 @@ index is `DeviceRegistry.cs`, read next.
 ## src/Bindings/BindingControl.cs
 The tagged control half of a binding: `ControlKind` picks which of `Key`, `Button`, `Axis`, `Hat` and
 `Mouse` the numeric members mean, and five static factories are the only way to build one, because
-they hold the per-kind invariants. `HatDirection` is a flags enum so a device can report a diagonal
-while a binding names one direction. `Deadzone` is both the noise gate and the digital threshold; the
-model carries no second number for the two jobs. The original's four fixed typed slots, and why an
-axis cannot be bound there at all: [../org/input.md](../org/input.md).
+they hold the per-kind invariants. A key carries `KeyModifiers` as well, the original's own Shift,
+Ctrl and Alt bits, so `E` and Shift+`E` are two controls rather than one under a qualifier.
+`HatDirection` is a flags enum so a device can report a diagonal while a binding names one direction.
+`Deadzone` is both the noise gate and the digital threshold; the model carries no second number for
+the two jobs. The original's four fixed typed slots, and why an axis cannot be bound there at all:
+[../org/input.md](../org/input.md).
 
 ## src/Bindings/Binding.cs
 A device identity plus a control, and the whole read: `Resolve` reaches hardware only through
 `IDeviceState`, so the model is exercised without an engine. `ControlValue` is the held/how-far pair,
 with `Pressed` true exactly when `Value` is above zero, which is what lets an axis drive an action
-written as digital and a button drive one written as analogue. Structural equality is what a
-rebinding screen compares when it takes a control off its previous owner. Read `BindingSet.cs` for
-what one action does with several of these.
+written as digital and a button drive one written as analogue. `ModifierGate` is the modifier rule:
+a key wanting modifiers wants exactly those, and a bare key stands down under a modifier the same
+keymap holds it under, which the gate reads once a tick and the map alone decides. Structural
+equality is what a rebinding screen compares when it takes a control off its previous owner. Read
+`BindingSet.cs` for what one action does with several of these.
 
 ## src/Bindings/IDeviceState.cs
 The tick's raw hardware state, addressed by device identity rather than connection index: keys,
@@ -72,7 +76,9 @@ and no device lookup; `ActionMap.cs` owns the first and `DeviceRegistry.cs` the 
 ## src/Bindings/InputAction.cs
 The named actions, one member per binding a polling site holds, so migrating a site is a lookup swap
 rather than a rename. The members are contiguous from zero because `ActionSnapshot` indexes arrays by
-them. Debug and lab keys are deliberately outside the enum: they are development instruments, and a
+them, and `ThrottleSet0` to `ThrottleSet8`, the original's nine absolute throttle settings, are
+contiguous and in order because their readers do the arithmetic. Debug and lab keys are deliberately
+outside the enum: they are development instruments, and a
 rebinding screen that offered them would let a player break their own diagnostics. Which context owns
 each member is `DefaultBindings.ContextOf`.
 
@@ -81,19 +87,20 @@ One player's keymap, an action to a `BindingSet`. `Assign` is the winning half o
 returns every action that lost the control, in enum order, so a screen can name each loss instead of
 performing it silently; `OwnersOf` asks the same question without committing. `Add` is the other
 half, binding without stealing, for the shipped defaults and a loaded file where a control is
-deliberately on two actions. `SameControl` is what "the same control" means here, and `Fill` replaces
-a map's contents in place so the readers already holding it follow. `ResolveInto` reads every bound
-action once per tick into a reused snapshot. It holds no defaults and no device lookup.
+deliberately on two actions. `SameControl` is what "the same control" means here, modifiers included,
+and `Fill` replaces a map's contents in place so the readers already holding it follow. `ResolveInto`
+reads every bound action once per tick into a reused snapshot, through a modifier gate this map's own
+`ContestedFor` feeds, so a bare key dies only under a modifier this map holds it under.
 
 ## src/Bindings/ControlCapture.cs
 What a rebinding screen may capture, and the scan that turns a press into a `Binding`: the bindable
 key list, Godot's pad button and SDL axis ranges, and the mouse buttons past the pointer's own. `Arm`
-masks everything already held so the press that opened the capture is not read as the answer to it.
-Every pad control is stamped with the seat's own identity rather than a hardware GUID. An axis
-carries the release-first rule as a rest-then-move rule, since a resting stick drifts, and takes a
-fixed `CapturedDeadzone` rather than the travel the crossing happened to report. Hats are not
-scanned, and the two cancel controls (Escape, the pad's Back) are never captured, a deliberate
-departure from the original (`docs/org/menu-inventory.md`). Read `ICaptureDevices.cs` next.
+masks everything already held, so the press that opened the capture is not the answer to it. Every
+pad control is stamped with the seat's own identity, not a hardware GUID. A key pressed under Shift,
+Ctrl or Alt carries them, and a modifier bound alone resolves on its release, since while one is down
+it may still be qualifying the key to come. An axis carries release-first as a rest-then-move rule,
+since a resting stick drifts, and takes a fixed `CapturedDeadzone`. Hats are not scanned, and the two
+cancel controls (Escape, the pad's Back) are never captured. Read `ICaptureDevices.cs` next.
 
 ## src/Bindings/ICaptureDevices.cs
 The hardware a rebinding screen captures through: one `IDeviceState` per `InputContext`, together
@@ -113,7 +120,9 @@ before handing the reader back, because a capture reads between the poller's own
 ## src/Bindings/BindingLabels.cs
 What a rebinding screen prints: an action's name, a control's name in keycap terms rather than enum
 terms, one row of an action's whole binding list, and the clause naming what a steal took a control
-from. A row states how many bindings it is not showing, because the original ships four slots per
+from. An action the original binds prints the original's own keybind-page caption, unprefixed and in
+its own case, since those pages read under a category heading; a modified key prints `Shift+E`. A
+row states how many bindings it is not showing, because the original ships four slots per
 action and draws the first two non-empty (`FUN_00449fc0`, [../org/input.md](../org/input.md)), so its
 screen hides bindings with no way for a player to tell. Separate from `BindingStore`'s tokens on
 purpose: a file is parsed back and a label is only read.
@@ -143,13 +152,13 @@ sharing it.
 
 ## src/Bindings/DefaultBindings.cs
 The shipped keymap as data, one `ActionMap` per context, transcribed from
-[../controls.md](../controls.md). Every action is either bound here or on the `Unbound` list, which
-stops a migrating site meeting a hole one call at a time, and `ContextOf` with `ActionsIn` is the
-action-to-context census a store and a screen both walk. A pad default names the placeholder identity
-`AnyPad`, which no hardware reports; `MapFor` and `Retarget` put the seat's own pad in its place, so
-a seat with no pad keeps the rows and resolves them to nothing. The set is built through
-`ActionMap.Add` rather than `Assign`, and the three deadzone constants are the polling sites' own
-numbers, TUNE from here. Read `BindingStore.cs` next.
+[../controls.md](../controls.md); flight is the original's own shipped table, key for key, with this
+port's own actions on keys it leaves free. Every action is either bound here or on the `Unbound`
+list, which stops a migrating site meeting a hole one call at a time, and `ContextOf` with
+`ActionsIn` is the action-to-context census a store and a screen both walk. A pad default names the
+placeholder identity `AnyPad`, which no hardware reports; `MapFor` and `Retarget` put the seat's own
+pad in its place, so a seat with no pad keeps the rows and resolves them to nothing. The set is built
+through `ActionMap.Add` rather than `Assign`. Read `BindingStore.cs` next.
 
 ## src/Bindings/BindingProfile.cs
 One seat's whole input: an `ActionMap` and a `PlayerActions` per context, and the keyboard gate that
@@ -157,7 +166,8 @@ applies to all of them at once. This is what a polling site is handed and what a
 edits. `Poll` resolves every context on the tick rather than only the mode in front of the player,
 because a pause board and the aeroplane behind it are both live on one tick. It also holds the
 seat's `ActiveDevice`, fed the tick's two halves by whoever polls them, so every prompt on the seat
-names one device. Where a seat's profile comes from is `LaunchBindings.cs`.
+names one device, and the seat's flying scheme (`MouseFlying`), which two players at one machine
+choose separately. Where a seat's profile comes from is `LaunchBindings.cs`.
 
 ## src/Bindings/ActiveDevice.cs
 Which side of a seat's hardware produced its last real input, keyboard and mouse against the pads,
@@ -172,7 +182,9 @@ into the words.
 The keymap file: versioned JSON, one per player under `user://`, written atomically through a temp
 file and a rename. Named and versioned against the original, which writes 2400 unversioned raw bytes
 to the registry and points its live array at the loaded buffer, so a record-layout change there
-reinterprets an old save. `Encode` and `Decode` are the token grammar. The file's shape, its tokens
+reinterprets an old save. `Encode` and `Decode` are the token grammar; version 2 is the key token's
+optional modifier prefix, and a version 1 file still loads whole because a bare key token means the
+same in both, which is why the reader checks no version. The file's shape, its tokens
 and what this build does with a row it cannot read: [../org/input.md](../org/input.md).
 `DirectoryOverride` is what keeps a suite off the keymap saved at this machine's controls.
 

@@ -45,6 +45,14 @@ public sealed class BindingProfile
     /// two halves calls once a tick.</summary>
     public ActiveDevice Device { get; } = new();
 
+    /// <summary>Whether this seat flies with the mouse, the third scheme beside the keyboard and the
+    /// pad (`docs/controls.md`). It belongs to the seat rather than to a process-wide option because
+    /// two players at one machine choose separately, and it rides in the keymap file because that is
+    /// already the per-player record the Controls door writes.
+    /// ⚠ Off leaves the mouse to head-look exactly as before, which is what the keyboard and pad
+    /// schemes read; nothing else may consume mouse motion while this is false.</summary>
+    public bool MouseFlying { get; set; }
+
     /// <summary>The shipped keymap for a seat flying <paramref name="pad"/>, which may be
     /// <c>default</c> for a seat with no pad.</summary>
     public static BindingProfile Defaults(DeviceId pad, bool readsKeyboard)

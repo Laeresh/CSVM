@@ -252,7 +252,9 @@ public sealed class AiModeMachine
     /// <summary>The evade flag (the original's <c>+0xBA</c>): set by a failed steady-hand test and
     /// held until <see cref="EvadeClearAlignment"/> clears it. While it stands, lay off cannot be
     /// entered, a finished maneuver chains into another one, and no second steady-hand roll is
-    /// taken. It is not a mode: the pilot keeps flying its engagement.</summary>
+    /// taken. It is not a mode: the pilot keeps flying its engagement.
+    /// ⚠ Do not set it on entry into a mode. The image's one setter is inside the damage routine,
+    /// so an ordered evade must leave the next hit its roll.</summary>
     public bool Evading { get; private set; }
 
     /// <summary>Avoid-crash's climb-out altitude order (entry altitude + <see cref="ClimbOutM"/>).</summary>
@@ -338,7 +340,7 @@ public sealed class AiModeMachine
                     && pos.DistanceTo(t) <= Mathf.Min(ActivationRange, AttackRange))
                 {
                     _pursuitAnchor = pos;
-                    Transition(AiMode.Pursue, $"target at {pos.DistanceTo(t):0} m");
+                    Transition(AiMode.Pursue, FormattableString.Invariant($"target at {pos.DistanceTo(t):0} m"));
                 }
                 break;
 
@@ -616,7 +618,7 @@ public sealed class AiModeMachine
         }
         else if (Mode != AiMode.AvoidCrash)
         {
-            EnterAvoidCrash(pos, $"obstacle inside {reach:0} m ({struck})");
+            EnterAvoidCrash(pos, FormattableString.Invariant($"obstacle inside {reach:0} m ({struck})"));
         }
     }
 
@@ -679,8 +681,6 @@ public sealed class AiModeMachine
             _stunRemaining = 0f; // an override out of the stun leaves no stale expiry behind
         if (to == AiMode.Stunned && _stunRemaining <= 0f)
             _stunRemaining = StunRecoveryIntervalS;
-        if (to is AiMode.Evade or AiMode.EvasiveManeuver)
-            Evading = true; // an ordered reaction carries the flag the hit path would have set
         if (to == AiMode.AvoidCrash && ClimbOutAltitude <= 0f)
             ClimbOutAltitude = _lastPos.Y + ClimbOutM;
         if (to == AiMode.LayOff)

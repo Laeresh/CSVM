@@ -145,7 +145,7 @@ public sealed record SessionSpec
     /// <summary><b>Resolved.</b> Open the aircraft's per-part HP sliders at launch, a modifier on
     /// <see cref="SessionMode.Viewer"/> (the parked plane) or <see cref="SessionMode.Fly"/> (the
     /// flown one), dropped by the modes that build no aircraft at all. The lab itself is always
-    /// built; this only decides whether it starts open or waits behind F5.</summary>
+    /// built; this only decides whether it starts open or waits behind F19.</summary>
     public bool DamageLab { get; private set; }
     public bool ForceMenu { get; private set; }
     public string MenuStartScreen { get; private set; } = "";
@@ -404,6 +404,13 @@ public sealed record SessionSpec
     /// <c>ai_skill_parameters</c>; default 5), auto-targeting the nearest hostile aircraft.
     /// Null when the flag was absent.</summary>
     public int? AiAttackSkill { get; private set; }
+
+    /// <summary><c>--ai-targeting=&lt;aircraft-first|decoded&gt;</c>: whether both AI pickers rank
+    /// live enemy aircraft ahead of every turret and structure candidate (the default), or run the
+    /// decoded picker's own order, which has no class priority
+    /// (<see cref="Flight.AiTargetRanking.AircraftFirst"/>). The class biases are spent either
+    /// way.</summary>
+    public bool AircraftFirstTargeting { get; private set; } = true;
 
     /// <summary>True only for <c>--ai-attack=&lt;N&gt;</c>, the typed rating. Bare <c>--ai-attack</c>
     /// arms the gunnery without an opinion on skill, so each plane flies its own vehicle def's
@@ -1062,6 +1069,16 @@ public sealed record SessionSpec
                     s.AiPlanes = entries;
             }
             else if (arg.StartsWith("--ai-damage=")) { s.AiHullDamage = Math.Clamp(Flt(arg["--ai-damage=".Length..]), 0f, 1f); }
+            // An unknown word keeps the default rather than picking a policy, the same rule
+            // --difficulty= follows: a misspelling must not quietly change what the AI fights.
+            else if (arg.StartsWith("--ai-targeting="))
+            {
+                string mode = arg["--ai-targeting=".Length..];
+                if (mode is "decoded" or "aircraft-first")
+                    s.AircraftFirstTargeting = mode == "aircraft-first";
+                else
+                    s.Print($"--ai-targeting='{mode}' is not decoded or aircraft-first; ignoring it");
+            }
             else if (arg == "--ai-attack") { s.AiAttackSkill = 5; }
             else if (arg.StartsWith("--ai-attack="))
             {

@@ -185,8 +185,8 @@ internal static class MenuOriginalCampaignSuites
         ctx.Check(shell.Rows.Count == 5 && shell.FocusedKey == "NextMission", $"the cabin's five plaques, focus on NEXT MISSION ({shell.FocusedKey})");
         Press(host, seat, Down);
         Press(host, seat, Accept);
-        ctx.Check(shell.Screen == OriginalScreen.CampaignPreviousMissions && shell.Rows.Count == 4,
-            $"PREVIOUS MISSIONS opens the contents, four buttons with nothing flown ({shell.Screen}, {shell.Rows.Count})");
+        ctx.Check(shell.Screen == OriginalScreen.CampaignPreviousMissions && shell.Rows.Count == 5,
+            $"PREVIOUS MISSIONS opens the contents, the career row over four buttons with nothing flown ({shell.Screen}, {shell.Rows.Count})");
         Press(host, seat, Back);
         ctx.Check(shell.Screen == OriginalScreen.CampaignCabin, $"Back returns to the cabin ({shell.Screen})");
     }
@@ -417,7 +417,7 @@ internal static class MenuOriginalCampaignSuites
             0, CampaignProgression.PrimaryObjectiveMask, 420_000, 200, 90, profile.Planes[0].Airframe, profile.Planes[0].Name));
         store.Save(profile);
         int begins = audio.Begins;
-        host.Show(new DebriefReturn(Pilot, 0));
+        host.Show(new DebriefReturn(Pilot, 0, MissionWon: true));
         host.Tick(Dt);
         ctx.Check(shell.Screen == OriginalScreen.CampaignScrapbook && campaign.MissionSeq == 0 && campaign.ScrapbookEntry == 1,
             $"the debrief return opens the book on the flown mission ({shell.Screen}, seq {campaign.MissionSeq})");

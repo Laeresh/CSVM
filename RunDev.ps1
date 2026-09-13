@@ -22,10 +22,10 @@
       * --viewer --chapter[=C1] static world view (no plane, no prompts)
       * --damage[=part:frac,..] the damage lab -- implies --viewer unless --fly or
                                 --stunt asked for flight by name, so it needs no
-                                extra flag. Per-part HP sliders (F5 toggles them);
+                                extra flag. Per-part HP sliders (F19 toggles them);
                                 prompts for the plane unless --plane= is given.
                                 In flight the same sliders drive the flown plane's
-                                real HP, and F5 works there with or without this.
+                                real HP, and F19 works there with or without this.
 
     Any other CSVM user args are forwarded as-is (see
     docs/cli.md for the full list: --mission=, --scenario=,

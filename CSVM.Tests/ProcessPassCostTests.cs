@@ -107,9 +107,11 @@ public class ProcessPassCostTests
         ProcessPassCost.Open();
         Spin(15);
 
-        var (firstMs, _, firstPasses) = ProcessPassCost.Take();
+        // The counts carry the claim here. That the open pass's TIME is absent from the first
+        // window is asserted by value in WallCostBankTests, because a millisecond ceiling on two
+        // trivial passes reads the scheduler once the machine is oversubscribed.
+        var (_, _, firstPasses) = ProcessPassCost.Take();
         Assert.Equal(2, firstPasses);
-        Assert.True(firstMs < 15, $"the open pass must not be banked by the drain: {firstMs} ms");
 
         ProcessPassCost.Close();
         var (secondMs, secondMaxMs, secondPasses) = ProcessPassCost.Take();

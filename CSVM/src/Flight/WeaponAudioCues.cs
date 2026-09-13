@@ -15,7 +15,19 @@ namespace CSVM.Flight;
 /// <param name="RangeMax"><c>RANGE</c>'s audible distance, m.</param>
 /// <param name="Is3D">The positional opt-in; a definition without it has no distance model at all.</param>
 public readonly record struct WeaponSoundCue(
-    string Name, AudioStreamWav Stream, float Volume, float RangeMin, float RangeMax, bool Is3D);
+    string Name, AudioStreamWav Stream, float Volume, float RangeMin, float RangeMax, bool Is3D)
+{
+    /// <summary>The margin the sound manager leaves over <c>RANGE</c>'s audible distance before it
+    /// silences a positional voice. One number for every weapon voice: the aircraft gun loop and a
+    /// mount's gun reach the same 3D update, which silences past this multiple
+    /// (docs/formats/sounds.md).</summary>
+    public const float CullMargin = 1.1f;
+
+    /// <summary>Where this cue goes silent, <see cref="RangeMax"/> grown by
+    /// <see cref="CullMargin"/>. The pair drives the attenuation curve, so the cull sits outside
+    /// that curve rather than on its end.</summary>
+    public float CullDistance => RangeMax * CullMargin;
+}
 
 /// <summary>
 /// The weapon-sound selection every aircraft shares: a definition name to a resolved

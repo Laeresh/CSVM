@@ -972,7 +972,7 @@ there.
 
 | | Original | CSVM today |
 |---|---|---|
-| Who picks the target | the player, from eleven bound actions | the pilot, from five: `TargetNextEnemy`, `TargetNextAlly`, `TargetNextNonAircraft`, `TargetNearest` and `TargetClear`, each a named action the Controls door rebinds (`Bindings/DefaultBindings.cs`, dispatched in `FlightController.StepTargeting`). The six the original spends on Previous and per-class Nearest are not shipped |
+| Who picks the target | the player, from eleven bound actions | the pilot, from the same eleven, each a named action the Controls door rebinds (`Bindings/DefaultBindings.cs`, dispatched in `FlightController.StepTargeting`). The keys differ: the original's three class letters and their Shift and Ctrl forms are all spent on flight here, and a binding is one control, so the five class and class-less actions ship on `T`/`Y`/`U`/`I`/`O` and the six per-class Previous and Nearest on the digit row above them (`../controls.md`) |
 | Selection state | sticky in plane `+0x948`, survives everything except death and an explicit clear | the same, in `TargetSelection`, one instance per pane and owned by that pane's `FlightController` |
 | Candidate pool | four typed pools, rebuilt and re-sorted every frame | `TargetPool`, rebuilt every frame off `AimCandidateSet`'s same four lists |
 | Classes | Enemy / Ally / Non-Aircraft, plus an Objective companion flag | the same three, `TargetClass`, with the objective flag on the ref (`TargetRef.Classify`) |
@@ -986,7 +986,7 @@ there.
 | World objects | neutral until a scene node authors two-bit ownership, and untargetable while neutral | the same: `AimCandidateSet.AddStructures` falls a pool with no authored team through to `AimAssist.NeutralTeam`. Two sources author one, a zeppelin record and the flagged node a pool stands on |
 | Turrets and structures | selectable **only** when the mission flags them `otherTarget` / `objectiveTarget` | the same in every flown mission: `ObjectiveSites.CollectFlagged` reads that mission's own `targets.zrd` and puts each `other_target` entry on the Non-Aircraft cycle, while a world emplacement and a zeppelin sub-part stand in for the flag nothing authors for them. A loose destructible never reaches a cycle. Instant Action and the multiplayer modes take the same feed with no director behind it |
 | Cycle order | objectives first, then ahead / behind / left / right, nearest inside each sector | the same, `TargetSelection.SectorKey` and its sort |
-| "Nearest" | head of that order, not a global nearest | `TargetSelection.Nearest`, reachable through `--target=nearest`; no key is bound to it, the original's three per-class Nearest actions being among the six CSVM does not ship |
+| "Nearest" | head of that order, not a global nearest | `TargetSelection.Nearest`, on one key per class (`TargetNearestEnemy`, `TargetNearestAlly`, `TargetNearestNonAircraft`) and reachable through `--target=nearest` |
 | Nearest-crosshairs | 15° nose cone, nearest inside it, 2000 m cap, friend or foe | the same, `TargetSelection.NearestCrosshairs`, on `TargetNearest` |
 | Marker box | fixed 20 × 16 px with 4 px arms, gated on the selected gun's `RANGE` through a lead solve | the same shape and the same gate, scaled through `HudMetrics` rather than fixed in pixels (see below) |
 | Label | three lines, 15 px pitch, below the box (above near the bottom edge), centred | the same, `TargetHud.LabelLines` and the flip-above test |

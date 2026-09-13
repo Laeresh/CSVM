@@ -623,7 +623,8 @@ public sealed class InstantActionDirector
         }
         iaEnd.MissionEnded += outcome => GD.Print(
             $"ia: mission {(outcome == InstantActionOutcome.Won ? "COMPLETE" : "FAILED")} — " +
-            $"{iaEnd.Def.MissionType} after {iaEnd.Elapsed:0.0} s");
+            $"{iaEnd.Def.MissionType} after {iaEnd.Elapsed:0.0} s; holding the world " +
+            $"{InstantActionRuntime.WrapupHoldS:0.#} s before the wrap-up board");
         GD.Print($"ia: {iaEnd.Def.MissionType} — win: " +
                  (iaEnd.ObjectiveEnabled ? objective!.Value.ToString() : "none") +
                  $", loss: every human out of lives ({(iaEnd.Def.Lives == 0 ? "unlimited" : iaEnd.Def.Lives.ToString())} " +
@@ -644,14 +645,47 @@ public sealed class InstantActionDirector
         var wrapupLayer = new CanvasLayer { Name = "ia_wrapup_board", Layer = UI.HudLayers.Board };
         wrapupLayer.AddChild(wrapupBoard);
         inputs.WorldRoot.AddChild(wrapupLayer);
+        // The four counters are read at the ENDING, not when the board appears: the mission is over
+        // at the first, and whatever the world does through the hold (a wave member flying into a
+        // hill, a round still in the air) is no longer this mission's score.
+        (bool Won, float Elapsed, int Kills, int Zones, int Shot, StuntSummary? Stunt)? ended = null;
         iaEnd.MissionEnded += outcome =>
         {
-            int zonesCompleted = _rigs!.Sum(r => r.Controller?.Stunt?.CompletedCount ?? 0);
-            int shotPercent = InstantActionRuntime.ShotPercent(
-                inputs.Projectiles?.CannonHits ?? 0, inputs.Projectiles?.CannonRoundsFired ?? 0);
-            wrapupBoard.Present(outcome == InstantActionOutcome.Won, iaEnd.Elapsed,
-                enemiesShotDown, zonesCompleted, shotPercent, StuntSummary());
+            ended = (outcome == InstantActionOutcome.Won, iaEnd.Elapsed, enemiesShotDown,
+                _rigs!.Sum(r => r.Controller?.Stunt?.CompletedCount ?? 0),
+                InstantActionRuntime.ShotPercent(
+                    inputs.Projectiles?.CannonHits ?? 0, inputs.Projectiles?.CannonRoundsFired ?? 0),
+                StuntSummary());
+            HoldPilotControls(true);
         };
+        iaEnd.WrapupDue += _ =>
+        {
+            // Released before the board is up: R and pad Y reach its Restart row through the same
+            // read the held stick went through, and the board halts the clock itself.
+            HoldPilotControls(false);
+            if (ended is { } final)
+            {
+                wrapupBoard.Present(final.Won, final.Elapsed, final.Kills, final.Zones,
+                    final.Shot, final.Stunt);
+            }
+        };
+    }
+
+    // The hold's input half: the pilots watch the ending out rather than flying through it. The
+    // world, the cameras and every wreck carry on, so only the seats stop answering.
+    private void HoldPilotControls(bool held)
+    {
+        if (_rigs is not { } rigs)
+        {
+            return;
+        }
+        foreach (var rig in rigs)
+        {
+            if (rig.Controller is { } pilot)
+            {
+                pilot.ControlsHeld = held;
+            }
+        }
     }
 
     // Teleports and activates waveNumber's built (inert) roster: a spawn drawn against every live

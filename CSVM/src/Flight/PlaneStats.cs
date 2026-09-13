@@ -181,6 +181,15 @@ public sealed class PlaneStats
     public float AiInputLimitPitch = 1f;
     public float AiInputLimitYaw = 1f;
 
+    // The AI acquisition's two class-dependent rank terms, in raw rank units (the same units as
+    // metres of distance, never scaled by the weight scale). `target_bias` is spent when this
+    // vehicle is the CANDIDATE and only on the vehicle arm; `struct_bias` when it is the SCORER,
+    // added to every turret and structure candidate. ⚠ Both ship NEGATIVE against a MINIMISED
+    // rank, so both ATTRACT; do not flip a sign to make structures unattractive. An unauthored def
+    // spends 0, which is what the vehicle constructor leaves (docs/formats/vehicle.md).
+    public float AiTargetBias;
+    public float AiStructBias;
+
     // rudder_tol: how much horizontal aim error justifies banking rather than ruddering
     // (docs/org/aiControlLaw.md). ⚠ A HIGHER value means MORE rudder, not less, clearing the
     // threshold is what selects the bank branch. At the 0.2 default any target ahead is banked
@@ -188,6 +197,12 @@ public sealed class PlaneStats
     // author 1.0, the ceiling the compared quantity can never exceed, which puts a lateral-dominant
     // error on the rudder even dead ahead. Only `balmoral` reaches this law (the autogyro is class 1).
     public float RudderTol = 0.2f;
+
+    // is_autogyro: the authored bare flag, the vehicle record's byte +0x21c. It reaches no torque,
+    // authority curve or stall (docs/org/flightModel.md). Two arms read it: the AI maneuver chooser,
+    // and the mouse-flying stick, where it exchanges the roll and yaw sources so an autogyro yaws
+    // with sideways mouse motion where an aeroplane banks.
+    public bool IsAutogyro;
 
     // player.json globals
     public float Gravity = PhysicsConstants.NomGravity; // nom_gravity, the game's arcade gravity, m/s²
@@ -562,6 +577,13 @@ public sealed class PlaneStats
                     return f;
             return fallback;
         }
+        bool Flag(string key)
+        {
+            foreach (var d in chain)
+                if (d.Has(key))
+                    return true;
+            return false;
+        }
         string PropStr(string key, string fallback)
         {
             foreach (var d in chain)
@@ -615,6 +637,7 @@ public sealed class PlaneStats
             AiInputLimitPitch = Prop("ai_input_limit_pitch", 1f),
             AiInputLimitYaw = Prop("ai_input_limit_yaw", 1f),
             RudderTol = Prop("rudder_tol", 0.2f),
+            IsAutogyro = Flag("is_autogyro"),
             FuelCapacity = Prop("fuel", 0f),
         };
         stats.EngineSound = PropStr("engine_sound", stats.EngineSound);
@@ -634,6 +657,12 @@ public sealed class PlaneStats
 
         stats.VehicleArmor = PropOpt("armor");
         stats.VehicleHealth = PropOpt("health");
+
+        // Off the damage chain, because the def the vehicle SPAWNS as is what the engine copies
+        // these off: an AI variant's own chain for an AI aeroplane, and the player chain, where
+        // player_airplane authors the -300, for a flown one.
+        stats.AiTargetBias = PropOpt("target_bias") ?? 0f;
+        stats.AiStructBias = PropOpt("struct_bias") ?? 0f;
 
         // def-level injure_anims: [frac, animName] pairs (smoke trail / fuel leak). The player's
         // two-stage ladder, or the AI defs' own seven (eight on the balmoral).

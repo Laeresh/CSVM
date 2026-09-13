@@ -52,11 +52,6 @@ public partial class GameSession : Node3D
     // the name the original looks up before deciding whether to draw it at all.
     private const string PirateZepNode = "piratezep";
 
-    // The memento the pause sheet draws. The original keeps the image name per profile and the
-    // campaign awards new ones; neither picking nor awarding one is shipped here, so it is the
-    // opening keepsake the cabin also draws. Decode: docs/org/pause-screen.md.
-    private const string PauseMemento = "ms_p_initialpinup1";
-
     private static readonly string[] InstanceShaderParams =
         { "node_bias", "csky_fog_on", "csky_light_fade", Mech3.SceneBuilder.OpacityParam };
 
@@ -176,10 +171,10 @@ public partial class GameSession : Node3D
     // The node lab (N, --freecam/--anim-lab): tree panel, search, per-node actions and the
     // dependency readout for whatever the selection holds.
     private UI.NodeLab? _nodeLab;
-    // The world damage lab (F5, --freecam/--anim-lab): HP slider + kill/reset on the selection's
+    // The world damage lab (F19, --freecam/--anim-lab): HP slider + kill/reset on the selection's
     // destructible pool, the interactive twin of --damage-test.
     private UI.WorldDamageLab? _worldDamageLab;
-    // The aircraft damage lab (F5, --viewer/--fly/--stunt): per-part HP sliders on the parked
+    // The aircraft damage lab (F19, --viewer/--fly/--stunt): per-part HP sliders on the parked
     // plane's visuals, or on P1's real PlaneDamage in flight.
     private DamageLab? _damageLab;
     // The effect/crash stage factory, builds the world-effects runtime
@@ -428,6 +423,7 @@ public partial class GameSession : Node3D
                 : GameClock.RunMode.Realtime,
         };
         GameClock.Current = _clock;
+        LoadProgress.Report(LoadStep.Scaffold);
         _camera.Fov = _spec.Fly || _spec.Freecam || _spec.AnimLab ? 62 : 50;
         // One rig per rendered view, before anything camera-anchored is built (the skydome and
         // weather visuals below are per-rig). Single player reuses the main-viewport camera.
@@ -460,6 +456,7 @@ public partial class GameSession : Node3D
             (playerIndex, colour, weight, duration) => screenFlashSink.PlayBlend(playerIndex, colour, weight, duration));
         // A fresh list per build: a tag never outlives the session that painted it.
         _beeperTags = new BeeperTags<FlightController>();
+        LoadProgress.Report(LoadStep.Rigs);
 
         // The chapter-dependent paths are recomputed here so a new launchscreen chapter selection
         // takes effect on rebuild, and ride BuildState so no phase method re-derives them.
@@ -482,6 +479,7 @@ public partial class GameSession : Node3D
                 ? SessionPaths.ChapterGamez(_dataRoot, _spec.Chapter)
                 : _planesGamezPath);
         state.MissionZrdrPath = SessionPaths.MissionZrdr(_dataRoot, _spec.Chapter, _spec.Mission);
+        LoadProgress.Report(LoadStep.Paths);
 
         // A fresh director per build, or null: construction (and its one-InstantActionRuntime ⚠)
         // lives on InstantActionDirector.TryCreate.
@@ -540,11 +538,14 @@ public partial class GameSession : Node3D
             }
         }
 
+        LoadProgress.Report(LoadStep.Directors);
+
         Stopwatch sw;
         try
         {
             sw = Stopwatch.StartNew();
             LoadArchives(state);
+            LoadProgress.Report(LoadStep.Archives);
             // The SOUND archive is scoped to this build everywhere but the lab, whose node owns its
             // disposal. ⚠ Do not scope the TEXTURE archive here: the world runtime bakes puffers
             // all session, so LoadArchives hands it to the session instead.
@@ -577,6 +578,7 @@ public partial class GameSession : Node3D
                 return false;
             AssignCloudDeckIfBuilt(state);
             BuildFreecamSpectator(state);
+            LoadProgress.Report(LoadStep.WorldStage);
             if (_spec.Fly)
             {
                 BuildFlightRigs(state);
@@ -600,6 +602,7 @@ public partial class GameSession : Node3D
                     _cutscene.ClearOrdnance = () => _projectiles?.Clear();
                 }
             }
+            LoadProgress.Report(LoadStep.PlayerRigs);
             ApplyDestroyOverride(state);
             ApplyObjectiveOverride(state);
             LogBuildSummary(state, sw);
@@ -627,6 +630,7 @@ public partial class GameSession : Node3D
         _simulation = new SessionSimulation(new SessionSimulationRuntime(this));
         _startup?.EndBuild();
         InSession = true;
+        LoadProgress.Report(LoadStep.Finished);
         return true;
     }
 
@@ -816,6 +820,15 @@ public partial class GameSession : Node3D
             HasMissionRecords(() => Zeppelins.Load(missionZrdr)),
             HasMissionRecords(() => EnemyGenerators.Load(missionZrdr)));
     }
+
+    // Whether a session binds the mission's own targets.zrd, read with nothing editing it while the
+    // session runs. The director owns that channel when one exists, so this asks for the director
+    // and not for the launch: a --campaign= launch whose profile did not load flies without one and
+    // still gets the table its mission ships. ⚠ Keep the stunt term; a stunt run binds the same
+    // channel per pane. Internal so the mode-target-table suite pins the rule the build runs.
+    internal static bool BindsMissionTargetTable(
+        SessionSpec spec, bool hasDirector, bool stunting, bool hasWorld, int rigs) =>
+        !hasDirector && spec.WorldMode && !spec.EmptyStage && !stunting && hasWorld && rigs > 0;
 
     private static void CopyInstanceShaderParams(Node source, Node copy)
     {
@@ -1248,6 +1261,10 @@ public partial class GameSession : Node3D
         state.CrashProgram = session.Program;
         state.WorldScene = session.Builder.Scene;
         state.WorldRuntime = session.Runtime;
+        // The mission's craters, which need world colliders both to find the terrain a round struck
+        // and to cut that terrain's own trimesh. Owned by the session, so they last exactly as long
+        // as the mission does and a new launch starts on uncratered ground.
+        state.Craters = BuildsCollision ? new CraterField(session.Root) : null;
         // After the bootstrap: an intro definition has already raised its codes, and this is where
         // the host picks up the two nodes it drives.
         _cutscene?.BindWorld(session.Runtime, session.Aircraft);
@@ -1755,11 +1772,11 @@ public partial class GameSession : Node3D
                 _damageLab = new DamageLab(stats, new ViewerDamageTarget(visuals),
                     _spec.DamagePreset, labGauges)
                 {
-                    StartHidden = !_spec.DamageLab, // --damage opens it; plain --viewer waits for F5
+                    StartHidden = !_spec.DamageLab, // --damage opens it; plain --viewer waits for F19
                 };
                 _worldRoot!.AddChild(_damageLab);
-                Log.Info("flight", $"damage lab: {stats.DestroyableParts.Count} part sliders, {visuals.PanelCount} panels, {panelTrails.Count} panel fire trails{(_spec.DamageLab ? "" : " (hidden, F5)")}");
-                state.What += _spec.DamageLab ? " + damage lab" : " + damage lab (F5)";
+                Log.Info("flight", $"damage lab: {stats.DestroyableParts.Count} part sliders, {visuals.PanelCount} panels, {panelTrails.Count} panel fire trails{(_spec.DamageLab ? "" : " (hidden, F19)")}");
+                state.What += _spec.DamageLab ? " + damage lab" : " + damage lab (F19)";
             }
         }
 
@@ -1903,7 +1920,7 @@ public partial class GameSession : Node3D
         };
         _worldRoot!.AddChild(_spectator);
         state.What += " + freecam";
-        Log.Info("core", $"freecam: spectator camera at ({camPos.X:0}, {camPos.Y:0}, {camPos.Z:0}) — hold RMB to look, WASD/QE to move, Shift boost, wheel sets speed; click an object to select it, PgUp/PgDn walk its ancestor ladder (Home/End jump), N opens the node lab, F5 the damage lab on whatever destructible is selected");
+        Log.Info("core", $"freecam: spectator camera at ({camPos.X:0}, {camPos.Y:0}, {camPos.Z:0}) — hold RMB to look, WASD/QE to move, Shift boost, wheel sets speed; click an object to select it, PgUp/PgDn walk its ancestor ladder (Home/End jump), N opens the node lab, F19 the damage lab on whatever destructible is selected");
     }
 
     // --fly (and --stunt): builds every rendered rig's aircraft (model, loadout, HUD, audio,
@@ -2083,6 +2100,9 @@ public partial class GameSession : Node3D
             // reports the struck collider, the runtime resolves it to a destructible and
             // spends the weapon's HEALTH_DAMAGE. Null runtime ⇒ impacts stay cosmetic.
             DamageSink = state.WorldRuntime != null ? state.WorldRuntime.DamageAt : null,
+            // Route a CRATER weapon's ground strike to the mission's crater field: the pool reports
+            // the impact and the struck collider, the field refuses or carves (Mech3.CraterField).
+            CraterSink = state.Craters != null ? state.Craters.TryCarve : null,
             // The same equal-power splitscreen factor FlightAudio's own-ship loops take, plus the
             // nearest-human snapshot shared with WorldSession and the world-effects runtime.
             MixGain = mixGain,
@@ -2287,6 +2307,9 @@ public partial class GameSession : Node3D
             sheet.Restart = Rerun;
             sheet.Exit = _exitSession;
             sheet.Preferences = preferences;
+            // Read at press time, not captured: the owner is whoever paused THIS time, and only
+            // that player drives the cursor that reached this row.
+            sheet.PhotoMode = () => EnterPhotoMode(pauseState.OwnerPlayerIndex);
             _originalPause = sheet;
             pauseBoard = sheet;
         }
@@ -2328,7 +2351,7 @@ public partial class GameSession : Node3D
         }
         BuildCockpitPasses();
 
-        // Damage lab in flight (F5): the panel --viewer hosts, bound to P1's real PlaneDamage
+        // Damage lab in flight (F19): the panel --viewer hosts, bound to P1's real PlaneDamage
         // rather than visuals alone, so a dialled-in state drives the HUD and can then be flown.
         // Splitscreen binds P1 only: the panel is one overlay, not one per pane.
         if (_rigs.Count > 0 && _rigs[0].Controller is { Damage: not null } p1)
@@ -2337,11 +2360,11 @@ public partial class GameSession : Node3D
             _damageLab = new DamageLab(p1Stats,
                 new FlightDamageTarget(p1, _rigs.Count > 1 ? "P1" : null), _spec.DamagePreset)
             {
-                StartHidden = !_spec.DamageLab, // --damage opens it; a plain flight waits for F5
+                StartHidden = !_spec.DamageLab, // --damage opens it; a plain flight waits for F19
                 RightAligned = true,            // the top-left corner is the flight HUD's
             };
             _worldRoot!.AddChild(_damageLab);
-            Log.Info("flight", $"damage lab: {p1Stats.DestroyableParts.Count} part sliders on the flown plane's armor+HP{(_spec.DamageLab ? "" : " (hidden, F5)")}");
+            Log.Info("flight", $"damage lab: {p1Stats.DestroyableParts.Count} part sliders on the flown plane's armor+HP{(_spec.DamageLab ? "" : " (hidden, F19)")}");
             state.What += _spec.DamageLab ? " + damage lab" : " + damage lab (F5)";
         }
         else if (_spec.DamageLab)
@@ -3034,10 +3057,27 @@ public partial class GameSession : Node3D
 
         // F17: kill P1's TargetSelection.Current through its own death path, the playtester's
         // escape hatch when a stray enemy blocks an objective chain. P1-only, the same precedent
-        // F5/F51 set for a single-pane debug tool.
+        // F19/F51 set for a single-pane debug tool.
         _worldRoot!.AddChild(new UI.DebugKillTarget(
             () => _rigs.Count > 0 ? _rigs[0].Controller : null,
             () => _diagRuntime));
+
+        // F16 / --debug-markers: every live aircraft marked on every human pane's targeting HUD.
+        // Session-level like F17, and read through a closure because a pane's HUD is built after
+        // this line and a rig can lose its aircraft mid-session.
+        _worldRoot!.AddChild(new UI.DebugMarkerToggle(() =>
+        {
+            var huds = new List<Flight.TargetHud>();
+            foreach (var rig in _rigs)
+            {
+                if (rig.Controller?.PilotHud.TargetHud is { } hud)
+                {
+                    huds.Add(hud);
+                }
+            }
+
+            return huds;
+        }));
 
         // The objectives readout, the mission-end fade and the objective-site feed: all campaign
         // only, the first two polling _campaign once Attach (above) has built it, the sites landing
@@ -3090,12 +3130,12 @@ public partial class GameSession : Node3D
             int flagged = offered.Count(c => c.Source is ObjectiveSite { Objective: true });
             Log.Info("core", $"campaign: {flagged} objective site(s) and {offered.Count - flagged} other-target site(s) on the player's target cycles");
         }
-        else if (_spec.WorldMode && !_spec.EmptyStage && _spec.CampaignProfile == null
-                 && stuntZones == null && state.WorldRuntime != null && _rigs.Count > 0)
+        else if (BindsMissionTargetTable(_spec, _campaign != null, stuntZones != null,
+                                         state.WorldRuntime != null, _rigs.Count))
         {
-            // Instant Action and the multiplayer modes: the same site feed with no director behind
-            // it, since their objectives.zrd carries no target directive. ⚠ A stunt run owns this
-            // channel per pane, and a campaign launch whose profile failed flies as it always has.
+            // Instant Action, the multiplayer modes, and a campaign launch flying without a
+            // director: the same site feed with no graph behind it, so the table's own objective
+            // and other_target keys are the whole answer (see BindsMissionTargetTable).
             var sites = new ObjectiveSites(Messages.Load(state.MessagesPath),
                 MissionTargets.Load(state.MissionZrdrPath,
                     SessionPaths.ChapterZrdr(_dataRoot, _spec.Chapter)),
@@ -3276,13 +3316,13 @@ public partial class GameSession : Node3D
             });
             Log.Info("world", $"collider overlay ready (C){(BuildsCollision ? "" : ", but this mode built NO collision; relaunch with --collision")}");
 
-            // Colour-by-class overlay (X): same mode set as the collider overlay, since it reads
+            // Colour-by-class overlay (H): same mode set as the collider overlay, since it reads
             // the same live world, a findable-targets view, not a collision one.
             _worldRoot!.AddChild(new UI.ClassOverlay(_plane, state.Gamez, state.WorldRuntime)
             {
                 DebugShow = _spec.ShowClassOverlay,
             });
-            Log.Info("world", $"class overlay ready (X)");
+            Log.Info("world", $"class overlay ready (H)");
         }
         else if (_spec.ForceCollision && _spec.WorldMode)
         {
@@ -3663,7 +3703,7 @@ public partial class GameSession : Node3D
             Log.Info("ui", $"pause icon {icon.Bitmap} at ({icon.WorldX:0}, {icon.WorldZ:0}) {where} the chart");
         }
 
-        return new UI.PauseReadout(rows, PauseMemento, icons);
+        return new UI.PauseReadout(rows, campaign.Memento, icons);
     }
 
     private Flight.PlayerRig? RigOf(int playerIndex)
@@ -3928,6 +3968,9 @@ public partial class GameSession : Node3D
         }
         _photoPilot = null;
         RestoreBoards();
+        // The sheet's pointer too, for the reason the options leaf re-primes it: a mouse button
+        // still down as the mode is left reads as a fresh click on the strip it rests over.
+        _originalPause?.Reprime();
         // ⚠ Prime every board reader: MenuInput POLLS raw keys, so the Escape still under the
         // player's finger would read as a fresh press on the board that just returned and dismiss
         // the pause it was meant to reopen (BL-279's mechanism, docs/architecture.md).
@@ -4099,13 +4142,13 @@ public partial class GameSession : Node3D
                 string where;
                 if (spec.WherePoint is { } pt)
                 {
-                    where = $"POINT ({pt[0]:0},{pt[1]:0},{pt[2]:0})";
+                    where = Log.Format($"POINT ({pt[0]:0},{pt[1]:0},{pt[2]:0})");
                 }
                 else
                 {
                     var found = _diagRuntime?.FindNodes(spec.WhereNode ?? "");
                     where = found is { Count: > 0 }
-                        ? $"NODE '{spec.WhereNode}' x{found.Count} -> ({found[0].GlobalPosition.X:0},{found[0].GlobalPosition.Y:0},{found[0].GlobalPosition.Z:0}) inTree={found[0].IsInsideTree()} vis={found[0].Visible}"
+                        ? Log.Format($"NODE '{spec.WhereNode}' x{found.Count} -> ({found[0].GlobalPosition.X:0},{found[0].GlobalPosition.Y:0},{found[0].GlobalPosition.Z:0}) inTree={found[0].IsInsideTree()} vis={found[0].Visible}")
                         : $"NODE '{spec.WhereNode}' UNRESOLVED";
                 }
 
@@ -4123,7 +4166,7 @@ public partial class GameSession : Node3D
         sb.Append($"DIAG t={_diagTick / 60}s ");
         if (p != null)
         {
-            sb.Append($"player=({p.WorldPosition.X:0},{p.WorldPosition.Y:0},{p.WorldPosition.Z:0}) ");
+            sb.Append(Log.Format($"player=({p.WorldPosition.X:0},{p.WorldPosition.Y:0},{p.WorldPosition.Z:0}) "));
         }
 
         foreach (var def in _campaign.Script.Objectives)
@@ -4138,8 +4181,8 @@ public partial class GameSession : Node3D
                 : _diagRuntime?.FindNodes(spec.WhereNode ?? "") is { Count: > 0 } f
                     ? f[0].GlobalPosition
                     : null;
-            string d = refPos is { } r && p != null ? $"{p.WorldPosition.DistanceTo(r):0}" : "?";
-            sb.Append($"| O{def.Number} {graph.StateOf(def.Number)}{(graph.CompletedOf(def.Number) ? "*" : "")} d={d}/r{spec.Radius:0} ");
+            string d = refPos is { } r && p != null ? Log.Format($"{p.WorldPosition.DistanceTo(r):0}") : "?";
+            sb.Append(Log.Format($"| O{def.Number} {graph.StateOf(def.Number)}{(graph.CompletedOf(def.Number) ? "*" : "")} d={d}/r{spec.Radius:0} "));
         }
 
         Log.Info("core", $"{sb}");
@@ -4348,6 +4391,7 @@ public partial class GameSession : Node3D
         public AnimProgram? CrashProgram;
         public SceneBuilder? WorldScene;
         public AnimRuntime? WorldRuntime;
+        public CraterField? Craters;
 
         /// <summary>The chapter's resolved approach rows, kept so the actor build can re-bind the
         /// trigger once the roster's own approach nodes exist (<see cref="Mech3.RosterMarkers"/>).

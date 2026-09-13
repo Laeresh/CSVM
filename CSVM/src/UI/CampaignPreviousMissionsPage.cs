@@ -217,15 +217,15 @@ public static class CampaignScrapbookResults
 
 /// <summary>
 /// The scrapbook's table of contents (<c>SCRAPBOOK_TOC.SCRIPT</c>, <c>Campaign CAP-41 Previous
-/// Mission 1.png</c>): one 80-pixel row per mission the profile has completed, each an aircraft
-/// silhouette beside the mission's short name, the area it was flown over and the plane that flew
-/// it, in a four-row window with the listbox's own scrollbar beside it, then VIEW SELECTED, REPLAY
-/// MISSION and RETURN TO CABIN. A confirm on a row picks it and a second confirm on the row already
-/// picked is REPLAY MISSION's own press; the secondary press is VIEW SELECTED on whatever the cursor
-/// stands on. The forward page tab is this screen's own rather than the original's, which leaves the
-/// contents page with no arrow a pad can turn it forward by. The list's box, row height and window
-/// are <c>SBTOC_L_TOCList</c>'s and the two headers <c>SBTOC_T_CHARACTER</c>'s and
-/// <c>SBTOC_T_MISSIONS</c>'s, read once when the page is built.
+/// Mission 1.png</c>): the career row the book opens at, then one 80-pixel row per mission the
+/// profile has completed, each an aircraft silhouette beside the mission's short name, the area
+/// it was flown over and the plane that flew it, in a four-row window with the listbox's own
+/// scrollbar beside it, then VIEW SELECTED, REPLAY MISSION and RETURN TO CABIN. A confirm on a
+/// row picks it and a second confirm is REPLAY MISSION's own press, which the career row never
+/// offers, so there it views instead; the secondary press is VIEW SELECTED on the cursor's row.
+/// The forward page tab is this screen's own, the original leaving the contents with no arrow a
+/// pad can turn forward by. The list's box, row height and window are <c>SBTOC_L_TOCList</c>'s,
+/// the headers <c>SBTOC_T_CHARACTER</c>'s and <c>SBTOC_T_MISSIONS</c>'s.
 /// </summary>
 public sealed class CampaignPreviousMissionsPage : CampaignPage
 {
@@ -282,6 +282,16 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     private const byte TrackGreen = 0x24;
     private const byte TrackBlue = 0x18;
 
+    // The career row's three lines, the fallbacks under langui 1217, 1218 and 511
+    // (docs/org/debrief.md, "The contents list is the campaign position").
+    private const string CareerTitle = "Starting My Career";
+    private const string CareerArea = "Above the clouds";
+    private const string CareerPlane = "Gypsy Magic";
+
+    // The card fan past the eleven airframes in FC_PlaneIcons.png, which uiData 2409 answers for
+    // ordinal 0.
+    private const int CareerIconFrame = CampaignProgression.AirframeCount;
+
     // fc_planeicons.png as the row sub-script mounts it: 12 frames of 80x80, the eleven airframes
     // in id order and then the card fan the not-yet-started career row takes.
     private static readonly BoardArt PlaneIcons = new(BoardArtLibrary.Ui, "FC_PlaneIcons.png", 12);
@@ -302,9 +312,9 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     private readonly BoardArt _scrollUp;
     private readonly BoardArt _scrollDown;
 
-    // The row a mission-row press marks as the one REPLAY MISSION and VIEW SELECTED act on. -1
-    // until the player has picked one; the two buttons then fall back to the first finished
-    // mission, so a press before ever selecting still does something sensible.
+    // The list row a press marks as the one REPLAY MISSION and VIEW SELECTED act on. -1 until the
+    // player has picked one; the two buttons then fall back to the first finished mission, so a
+    // press before ever selecting still does something sensible.
     private int _selected = -1;
 
     // The first row of the four the window shows, kept across visits so paging away from the list
@@ -339,7 +349,7 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
         "↑↓  Choose       Enter / A  Select       X  View       Esc / B  Back";
 
     /// <inheritdoc/>
-    public override int RowCount => Seqs().Count + Buttons().Count;
+    public override int RowCount => Slots() + Buttons().Count;
 
     /// <summary>The two header widgets, then the three lines of every row the window shows.</summary>
     public override IReadOnlyList<BoardLine> Captions
@@ -347,8 +357,8 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
         get
         {
             var layout = Flow.Layout;
-            var seqs = Seqs();
-            int top = Window(seqs.Count);
+            int slots = Slots();
+            int top = Window(slots);
             var (nameX, nameY, nameWidth) = layout.Box(Section, "SBTOC_T_CHARACTER", HeaderX, NameY, HeaderWidth);
             var (headX, headY, headWidth) = layout.Box(Section, "SBTOC_T_MISSIONS", HeaderX, HeadingY, HeaderWidth);
             var lines = new List<BoardLine>
@@ -359,10 +369,10 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
                     HeadingFont, BoardInk.Heading, Justify: layout.Justify(Section, "SBTOC_T_MISSIONS", BoardJustify.Right)),
             };
 
-            for (int i = 0; i < _visibleRows && top + i < seqs.Count; i++)
+            for (int i = 0; i < _visibleRows && top + i < slots; i++)
             {
                 float y = _listY + (i * _rowHeight) + FirstLineY;
-                foreach (string text in RowLines(seqs[top + i]))
+                foreach (string text in RowLines(top + i))
                 {
                     lines.Add(new BoardLine(text, TextX, y, 0f, RowFont, BoardInk.Row, Italic: true));
                     y += LinePitch;
@@ -379,18 +389,18 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     {
         get
         {
-            var seqs = Seqs();
-            int top = Window(seqs.Count);
+            int slots = Slots();
+            int top = Window(slots);
             var pictures = new List<BoardPicture>();
-            for (int i = 0; i < _visibleRows && top + i < seqs.Count; i++)
+            for (int i = 0; i < _visibleRows && top + i < slots; i++)
             {
                 pictures.Add(new BoardPicture(
-                    PlaneIcons, _listX + IconInset, _listY + (i * _rowHeight), Airframe(seqs[top + i])));
+                    PlaneIcons, _listX + IconInset, _listY + (i * _rowHeight), Airframe(top + i)));
             }
 
-            if (seqs.Count > _visibleRows)
+            if (slots > _visibleRows)
             {
-                var (thumbY, thumbHeight) = Thumb(seqs.Count, top);
+                var (thumbY, thumbHeight) = Thumb(slots, top);
                 pictures.Add(new BoardPicture(_scrollUp, ScrollX, _listY, Frame: 1));
                 pictures.Add(new BoardPicture(
                     _scrollDown, ScrollX, _listY + WindowHeight - ScrollButton, Frame: 1));
@@ -408,10 +418,10 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     {
         get
         {
-            var seqs = Seqs();
-            int top = Window(seqs.Count);
+            int slots = Slots();
+            int top = Window(slots);
             var fills = new List<BoardFill>();
-            for (int i = 0; i < _visibleRows && top + i < seqs.Count; i++)
+            for (int i = 0; i < _visibleRows && top + i < slots; i++)
             {
                 if (Wash(top + i) is not { } wash)
                 {
@@ -425,7 +435,7 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
                     _listX, y, _listWidth, _rowHeight, EdgeRed, EdgeGreen, EdgeBlue, Border: true));
             }
 
-            if (seqs.Count > _visibleRows)
+            if (slots > _visibleRows)
             {
                 fills.Add(new BoardFill(
                     ScrollX, _listY + ScrollButton, ScrollWidth, WindowHeight - (2f * ScrollButton),
@@ -442,19 +452,19 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     {
         get
         {
-            var seqs = Seqs();
-            int top = Window(seqs.Count);
-            if (seqs.Count <= _visibleRows)
+            int slots = Slots();
+            int top = Window(slots);
+            if (slots <= _visibleRows)
             {
                 return null;
             }
 
-            var (thumbY, thumbHeight) = Thumb(seqs.Count, top);
+            var (thumbY, thumbHeight) = Thumb(slots, top);
             return new ListWindow(
                 _listX, _listY, _listWidth, WindowHeight,
                 ScrollX, thumbY, ScrollWidth, thumbHeight,
                 _listY + ScrollButton, WindowHeight - (2f * ScrollButton),
-                seqs.Count, _visibleRows, top);
+                slots, _visibleRows, top);
         }
     }
 
@@ -464,14 +474,13 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     // Where a row's text column starts: past the icon pane and its gap.
     private float TextX => _listX + IconWidth + TextGap;
 
-    /// <summary>A mission row's rectangle inside the list window, for a presentation that
-    /// hit-tests the rows; null for a button row and for a mission row scrolled out of the
-    /// window.</summary>
+    /// <summary>A list row's rectangle inside the window, for a presentation that hit-tests the
+    /// rows; null for a button row and for a list row scrolled out of the window.</summary>
     public (float X, float Y, float Width, float Height)? RowBox(int row)
     {
-        var seqs = Seqs();
-        int top = Window(seqs.Count);
-        if (row < 0 || row >= seqs.Count || row < top || row >= top + _visibleRows)
+        int slots = Slots();
+        int top = Window(slots);
+        if (row < 0 || row >= slots || row < top || row >= top + _visibleRows)
         {
             return null;
         }
@@ -480,11 +489,11 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     }
 
     /// <summary>Puts the window's first row at <paramref name="top"/>, clamped, pulling the cursor
-    /// to the window's nearer edge when it stands on a mission row the move would hide; the
+    /// to the window's nearer edge when it stands on a list row the move would hide; the
     /// pointer's wheel and thumb, which move the window rather than the cursor.</summary>
     public void ScrollTo(int top)
     {
-        int count = Seqs().Count;
+        int count = Slots();
         _top = Math.Clamp(top, 0, Math.Max(0, count - _visibleRows));
         if (Flow.Row < count)
         {
@@ -492,7 +501,7 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
         }
     }
 
-    /// <summary>A mission row draws no list text of its own: its three lines already stand at their
+    /// <summary>A list row draws no list text of its own: its three lines already stand at their
     /// authored positions inside the row.</summary>
     public override string RowText(int row) => ButtonAt(row) switch
     {
@@ -512,18 +521,25 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     /// <inheritdoc/>
     public override string Detail(int row)
     {
-        var seqs = Seqs();
-        if (row < seqs.Count)
+        int slots = Slots();
+        if (row == 0 && slots > 0)
+        {
+            return _selected == 0
+                ? "Selected. Confirm again to open it"
+                : Flow.Strings.Text(1217, CareerTitle);
+        }
+
+        if (row < slots)
         {
             return row == _selected
                 ? "Selected. Confirm again to replay it"
-                : Flow.Strings.Text(3450 + seqs[row], $"Mission {seqs[row] + 1}");
+                : Flow.Strings.Text(3450 + row - 1, $"Mission {row}");
         }
 
         return ButtonAt(row) switch
         {
-            BoardButton.ViewMission => "Opens the scrapbook at this mission",
-            BoardButton.ReplayMission when SelectedSeq(seqs) is { } seq =>
+            BoardButton.ViewMission => "Opens the scrapbook at this page",
+            BoardButton.ReplayMission when SelectedSeq(slots) is { } seq =>
                 Flow.Strings.Text(3450 + seq, $"Mission {seq + 1}"),
             BoardButton.ScrapbookNext => "Forward into the book",
             BoardButton.CurrentMission => "Opens the scrapbook at the current mission",
@@ -532,37 +548,37 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     }
 
     /// <summary>A mission row's first confirm picks it and its second replays it, which is the
-    /// original's own double-click on a row folded onto a pad's single button. VIEW SELECTED and
-    /// the bookmark both open the book (<c>uiData</c> 2405 mode 1) on the picked mission and on
-    /// the campaign's own current one.</summary>
+    /// original's own double-click on a row folded onto a pad's single button; the career row is
+    /// never replayed, so its second confirm opens it instead. VIEW SELECTED and the bookmark both
+    /// open the book (<c>uiData</c> 2405 mode 1) on the picked page and on the campaign's own
+    /// current mission.</summary>
     public override bool Accept(int row)
     {
-        var seqs = Seqs();
-        if (row < seqs.Count)
+        int slots = Slots();
+        if (row < slots)
         {
-            if (row == _selected)
+            if (row != _selected)
             {
-                return Replay(seqs[row]);
+                _selected = row;
+                return true;
             }
 
-            _selected = row;
-            return true;
+            return row == 0 ? View(0) : Replay(row - 1);
         }
 
         switch (ButtonAt(row))
         {
             case BoardButton.ViewMission:
-                if (SelectedSeq(seqs) is { } viewing)
+                if (SelectedSlot(slots) is { } viewing)
                 {
-                    Flow.OpenScrapbook(viewing);
+                    View(viewing);
                 }
 
                 return true;
             case BoardButton.ReplayMission:
-                return SelectedSeq(seqs) is { } replaying && Replay(replaying);
+                return SelectedSeq(slots) is { } replaying && Replay(replaying);
             case BoardButton.ScrapbookNext:
-                Flow.OpenScrapbook(0);
-                return true;
+                return View(0);
             case BoardButton.CurrentMission:
                 Flow.OpenScrapbook(CurrentSeq());
                 return true;
@@ -572,33 +588,26 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
         }
     }
 
-    /// <summary>VIEW SELECTED without walking down to the button: on a mission row it picks that row
+    /// <summary>VIEW SELECTED without walking down to the button: on a list row it picks that row
     /// and opens the book there, and on any other row it opens the book on whatever is picked
-    /// already. Nothing to open (a profile with no finished mission) leaves the press unhandled.
-    /// </summary>
+    /// already. Nothing to open (no profile seated) leaves the press unhandled.</summary>
     public override bool Secondary(int row)
     {
-        var seqs = Seqs();
-        if (row >= 0 && row < seqs.Count)
+        int slots = Slots();
+        if (row >= 0 && row < slots)
         {
             _selected = row;
         }
 
-        if (SelectedSeq(seqs) is not { } seq)
-        {
-            return false;
-        }
-
-        Flow.OpenScrapbook(seq);
-        return true;
+        return SelectedSlot(slots) is { } slot && View(slot);
     }
 
-    // The listed seqs, in story order, per CampaignProgression.CompletedSeqs: every position below
-    // the campaign's own, which is what uiData 2409 counts its rows off. Read fresh every call
-    // rather than cached: a replay recorded through the briefing/flight-check screens must show up
-    // here the next time this page draws.
-    private List<int> Seqs() =>
-        Flow.Profile is { } profile ? CampaignProgression.CompletedSeqs(profile) : new List<int>();
+    // How many rows the list offers: the career page, then one per story position the profile has
+    // completed, which is uiData 2409's own count of the campaign position plus one. Read fresh
+    // every call rather than cached: a replay recorded through the briefing/flight-check screens
+    // must show up here the next time this page draws.
+    private int Slots() =>
+        Flow.Profile is { } profile ? CampaignProgression.CompletedSeqs(profile).Count + 1 : 0;
 
     // The buttons under the list, in the order they take rows, the arrow among them where the book
     // itself carries it. REPLAY MISSION is offered only where uiData 2411 offers it, on a picked
@@ -606,7 +615,7 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     private List<BoardButton> Buttons()
     {
         var buttons = new List<BoardButton> { BoardButton.ViewMission };
-        if (SelectedSeq(Seqs()) is { } seq && Flow.Profile is { } profile
+        if (SelectedSeq(Slots()) is { } seq && Flow.Profile is { } profile
             && CampaignProgression.ResultOf(profile, seq) is { } result
             && (result.Latest.TimeMs != 0 || result.Best.TimeMs != 0))
         {
@@ -622,7 +631,7 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     private BoardButton ButtonAt(int row)
     {
         var buttons = Buttons();
-        int offset = row - Seqs().Count;
+        int offset = row - Slots();
         return offset >= 0 && offset < buttons.Count ? buttons[offset] : BoardButton.None;
     }
 
@@ -650,18 +659,30 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
         return true;
     }
 
-    // The row the two buttons act on: the player's own pick, or the first finished mission when
-    // nothing has been picked yet.
-    private int? SelectedSeq(List<int> seqs)
+    // uiData 2405 mode 1 on a list row: the book opens on that slot's first spread, the career
+    // page taking seq -1 the way the original's ordinal 0 opens mission 0.
+    private bool View(int slot)
     {
-        if (seqs.Count == 0)
+        Flow.OpenScrapbook(slot - 1);
+        return true;
+    }
+
+    // The list row the two buttons act on: the player's own pick, or the first finished mission
+    // when nothing has been picked yet, which is the career row while nothing has been flown.
+    private int? SelectedSlot(int slots)
+    {
+        if (slots <= 0)
         {
             return null;
         }
 
-        int index = _selected >= 0 && _selected < seqs.Count ? _selected : 0;
-        return seqs[index];
+        return _selected >= 0 && _selected < slots ? _selected : Math.Min(1, slots - 1);
     }
+
+    // The mission that pick stands for, or null on the career row: uiData 2411 answers 0 for
+    // mission 0 before the record array is read, so REPLAY MISSION is never offered there.
+    private int? SelectedSeq(int slots) =>
+        SelectedSlot(slots) is { } slot && slot > 0 ? slot - 1 : null;
 
     // The first row of the shown window, moved only as far as it must to keep the cursor's own row
     // on screen. A cursor parked on one of the three buttons leaves it where the list last stood.
@@ -688,19 +709,37 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
         return (_listY + ScrollButton + ((track - height) * top / last), height);
     }
 
-    // The three lines uiData 2409 hands the row sub-script: the mission's short name, the area of
-    // the chapter it belongs to, and the plane whose best-of run stands in the record.
-    private string[] RowLines(int seq) => new[]
+    // The three lines uiData 2409 hands the row sub-script: for a mission slot the mission's short
+    // name, the area of the chapter it belongs to, and the plane whose best-of run stands in the
+    // record; for the career page three fixed strings and no record read at all.
+    private string[] RowLines(int slot)
     {
-        Flow.Strings.Text(3480 + seq, $"Mission {seq + 1}"),
-        Flow.Strings.Text(1220 + (seq / 5), string.Empty),
-        Run(seq)?.PlaneName ?? string.Empty,
-    };
+        if (slot == 0)
+        {
+            return new[]
+            {
+                Flow.Strings.Text(1217, CareerTitle),
+                Flow.Strings.Text(1218, CareerArea),
+                // The default-name rows carry an empty font tag, so the extraction keeps the
+                // tag's closing bracket; the name is what follows it (docs/formats/strings.md).
+                Flow.Strings.Text(511, CareerPlane).TrimStart(']'),
+            };
+        }
 
-    // The icon strip's frame for a row: the airframe its best-of run flew, clamped inside the
-    // eleven the strip carries before the card fan.
-    private int Airframe(int seq) =>
-        Math.Clamp(Run(seq)?.Airframe ?? 0, 0, CampaignProgression.AirframeCount - 1);
+        int seq = slot - 1;
+        return new[]
+        {
+            Flow.Strings.Text(3480 + seq, $"Mission {seq + 1}"),
+            Flow.Strings.Text(1220 + (seq / 5), string.Empty),
+            Run(seq)?.PlaneName ?? string.Empty,
+        };
+    }
+
+    // The icon strip's frame for a row: the card fan on the career page, else the airframe the
+    // slot's best-of run flew, clamped inside the eleven the strip carries before that fan.
+    private int Airframe(int slot) => slot == 0
+        ? CareerIconFrame
+        : Math.Clamp(Run(slot - 1)?.Airframe ?? 0, 0, CampaignProgression.AirframeCount - 1);
 
     private MissionRun? Run(int seq) =>
         Flow.Profile is { } profile && CampaignProgression.ResultOf(profile, seq) is { } result

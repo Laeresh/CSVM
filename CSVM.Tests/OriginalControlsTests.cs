@@ -64,16 +64,54 @@ public class OriginalControlsTests
         }
     }
 
+    /// <summary>The Movement tab is the six attitude half-axes in the original page's own order,
+    /// which begins with Point Nose Down rather than with the enum's first member
+    /// (<c>OriginalScreenshots/Keybinds Movement.png</c>).</summary>
     [Fact]
-    public void TheMovementTabIsTheSixAttitudeHalfAxes()
+    public void TheMovementTabIsTheSixAttitudeHalfAxesInTheOriginalsOrder()
     {
         Assert.Equal(
             new[]
             {
-                InputAction.PitchUp, InputAction.PitchDown, InputAction.RollLeft, InputAction.RollRight,
+                InputAction.PitchDown, InputAction.PitchUp, InputAction.RollLeft, InputAction.RollRight,
                 InputAction.YawLeft, InputAction.YawRight,
             },
             OriginalShell.ControlTabs[0].Rows.Select(r => r.Action).ToArray());
+    }
+
+    /// <summary>The Throttle tab is the two lever keys and then the nine absolute eighths, which are
+    /// the digit row the original reserves for them.</summary>
+    [Fact]
+    public void TheThrottleTabCarriesTheNineEighthsBelowTheLeverPair()
+    {
+        var rows = OriginalShell.ControlTabs[1].Rows.Select(r => r.Action).ToArray();
+
+        Assert.Equal(InputAction.ThrottleUp, rows[0]);
+        Assert.Equal(InputAction.ThrottleDown, rows[1]);
+        for (int eighths = 0; eighths <= 8; eighths++)
+        {
+            Assert.Equal(InputAction.ThrottleSet0 + eighths, rows[2 + eighths]);
+        }
+
+        Assert.Equal(11, rows.Length);
+    }
+
+    /// <summary>The Targeting tab lists all eleven of the original's targeting actions in the
+    /// original page's own order, Next then Previous then Nearest per class and the two class-less
+    /// ones last (<c>OriginalScreenshots/Keybinds Targeting.png</c>). Pinned because the order is
+    /// read off that page rather than off the enum, which appends new members at its end.</summary>
+    [Fact]
+    public void TheTargetingTabIsTheOriginalsElevenInItsOwnOrder()
+    {
+        Assert.Equal(
+            new[]
+            {
+                InputAction.TargetNextEnemy, InputAction.TargetPreviousEnemy, InputAction.TargetNearestEnemy,
+                InputAction.TargetNextAlly, InputAction.TargetPreviousAlly, InputAction.TargetNearestAlly,
+                InputAction.TargetNextNonAircraft, InputAction.TargetPreviousNonAircraft,
+                InputAction.TargetNearestNonAircraft, InputAction.TargetNearest, InputAction.TargetClear,
+            },
+            OriginalShell.ControlTabs[3].Rows.Select(r => r.Action).ToArray());
     }
 
     [Fact]
@@ -243,18 +281,44 @@ public class OriginalControlsTests
     }
 
     [Fact]
-    public void TheControlsPageDrawsItsSeatRowAndNotTheMouseSensitivitySlider()
+    public void TheControlsPageDrawsItsSeatRowAndItsFlyingSchemeRow()
     {
         var shell = Shell(out var controls, out _);
         shell.OpenControlsPrefs();
         Assert.Equal("Player 1", Row(shell, OriginalShell.ControlsPlayerKey)!.Label);
-        Assert.Null(Row(shell, "CP_S_MOUSE"));
+        Assert.Equal("Look", Row(shell, OriginalShell.ControlsMouseKey)!.Label);
         var board = shell.Compose();
         Assert.Contains(board.Lines, l => l.Text == "CONTROLS");
         Assert.Contains(board.Lines, l => l.Text == "Player");
+        Assert.Contains(board.Lines, l => l.Text == "Mouse");
         Assert.DoesNotContain(board.Lines, l => l.Text == "Mouse Sensitivity");
         Assert.Contains(board.Lines, l => l.Text.StartsWith("Configure the keyboard", StringComparison.Ordinal));
         Assert.Equal(1, controls.Players.Count);
+    }
+
+    /// <summary>The scheme row is the Controls door's own: a press flips it, a sideways step flips
+    /// it back, and neither reaches the seat until ACCEPT CHANGES.</summary>
+    [Fact]
+    public void TheFlyingSchemeRowStagesTheChoiceAndAcceptWritesIt()
+    {
+        var shell = Shell(out var controls, out _, out var written);
+        shell.OpenControlsPrefs();
+
+        Click(shell, Row(shell, OriginalShell.ControlsMouseKey)!);
+
+        Assert.True(controls.MouseFlying);
+        Assert.Equal("Fly", Row(shell, OriginalShell.ControlsMouseKey)!.Label);
+        Assert.Empty(written);
+
+        shell.Step(new MenuCommands { MoveX = 1 });
+
+        Assert.False(controls.MouseFlying);
+
+        shell.Step(new MenuCommands { MoveX = -1 });
+        Click(shell, Row(shell, OriginalShell.ControlsAcceptKey)!);
+
+        Assert.True(controls.MouseFlying);
+        Assert.Equal(new[] { 1 }, written);
     }
 
     private static int IndexOf(ControlsFeature controls, InputAction action)

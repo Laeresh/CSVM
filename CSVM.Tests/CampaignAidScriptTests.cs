@@ -121,7 +121,7 @@ public class CampaignAidScriptTests
         CampaignProgression.Record(profile, Flown(1));
         var flow = PreviousMissions(profile);
 
-        Assert.True(CampaignAidScript.Replay(flow, "1d-x"));
+        Assert.True(CampaignAidScript.Replay(flow, "2d-x"));
 
         Assert.Equal(CampaignScreen.Scrapbook, flow.Screen);
         Assert.Equal(1, flow.MissionSeq); // the row the cursor stood on, viewed without walking to the button

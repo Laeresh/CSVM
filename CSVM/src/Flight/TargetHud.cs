@@ -12,8 +12,8 @@ namespace CSVM.Flight;
 /// (<see cref="Selected"/>) in the original's shape: a bracket box gated on the SELECTED GUN's
 /// reach (<see cref="GunReaches"/>), the label below it, and off screen the edge marker with a name
 /// and clock bearing. Colour is the decoded <c>Target::GetColor</c> (<see cref="MarkerColor"/>).
-/// <see cref="TrackedHostile"/> is the fallback where no selection exists at all, and
-/// <c>--debug-markers</c> (<see cref="MarkAll"/>) widens the marker to every live aircraft with a
+/// <see cref="TrackedHostile"/> is the fallback where no selection exists at all, and the F16 key
+/// or <c>--debug-markers</c> (<see cref="MarkAll"/>) widens it to every live aircraft with a
 /// full identity string (<see cref="DebugTag"/>). The edge placement and clock bearing are
 /// <see cref="EdgeMarker"/>'s; only the arrow and label styling is this HUD's own.
 /// Decode: <see href="../../docs/org/targeting.md">org/targeting.md</see>.
@@ -36,11 +36,12 @@ public sealed partial class TargetHud : Control
     /// without extra plumbing.</summary>
     public ProjectilePool? HostilePool;
 
-    /// <summary><c>--debug-markers</c>: mark EVERY live aircraft in <see cref="HostilePool"/>
-    /// instead of the single nearest hostile: red for a hostile team, blue for this pane's own
-    /// side, each with its tag and slant range. A watching aid while the AI is being worked on
-    /// (which of six planes is the one that flew off), off by default and never a gameplay
-    /// feature: the shipped marker is exactly one hostile.</summary>
+    /// <summary><c>--debug-markers</c> at launch, <see cref="UI.DebugMarkerToggle"/>'s F16 in
+    /// flight: mark EVERY live aircraft in <see cref="HostilePool"/> instead of the single nearest
+    /// hostile, red for a hostile team, blue for this pane's own side, each with its tag and slant
+    /// range. A watching aid while the AI is being worked on (which of six planes is the one that
+    /// flew off), off by default and never a gameplay feature: the shipped marker is one hostile.
+    /// </summary>
     public bool MarkAll;
 
     /// <summary>This pane's own aircraft: the side every team test here runs against

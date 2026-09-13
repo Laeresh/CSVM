@@ -2,14 +2,16 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>The original's auto-dock prompt: its own centred line three tenths of the way down the
-/// pane, in the landings rig's pale yellow, standing for as long as the approach table's
-/// <c>auto</c> row keeps passing and gone the frame it stops. A text object of its own in the
-/// original rather than a line of the flight readout block, so the anchor is a fraction of the pane
-/// and static, which lets a suite assert the decode with no <see cref="Control"/> in the process.
-/// The wording is <see cref="FlightHud.ComposeAutoLandPrompt"/>'s; this owns only where it sits.
-/// Decode: docs/formats/anim-definitions/cutscenes.md "The prompt's own placement".</summary>
-public sealed partial class AutoDockLine : Control
+/// <summary>A control prompt's own centred line three tenths of the way down the pane, in the
+/// landings rig's pale yellow: the original's auto-dock offer, and the port's own respawn prompt on
+/// the same footing. A text object of its own in the original rather than a line of the flight
+/// readout block, so the anchor is a fraction of the pane and static, which lets a suite assert the
+/// decode with no <see cref="Control"/> in the process. The wording is
+/// <see cref="FlightHud.ComposeAutoLandPrompt"/>'s and <see cref="FlightHud.ComposeRespawnPrompt"/>'s;
+/// this owns only where it sits. The respawn prompt has no decode of its own to follow, the original
+/// has no such action, so it borrows this placement and the two read as one thing. Decode:
+/// docs/formats/anim-definitions/cutscenes.md "The prompt's own placement".</summary>
+public sealed partial class PromptLine : Control
 {
     // The placement, from FUN_0045e120: x is 0.5 of the viewport width (0x006032e0) with the
     // centring flag set (the text object's +0x1044, written 1 at 0x0045d9f2), y is 0.3 of its
@@ -27,7 +29,7 @@ public sealed partial class AutoDockLine : Control
     private string _line = string.Empty;
 
     /// <summary>The line to draw, or empty for none, which is what a pane being offered nothing and
-    /// a seat with no auto-land binding both read as.</summary>
+    /// a seat with no binding for the prompt's action both read as.</summary>
     public string Line
     {
         get => _line;

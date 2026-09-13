@@ -16,9 +16,12 @@ internal static class LoadSheetSuites
     private const string FilmedChapter = "C3";
     private const string FilmedMission = "M01";
 
-    // The memento the screen draws until awarding one per mission is built, and the shadow the
-    // script centres under it.
-    private const string Memento = "ms_p_initialpinup1";
+    // The picture the profile this suite seats has chosen: a mission 0 award, so every profile
+    // holds it, and not the seeded pin-up, so a screen that read no profile would draw a different
+    // name here rather than the right one by accident.
+    private const string ChosenMemento = "MS_P_Mom.jpg";
+
+    // The shadow the script centres under the memento.
     private const string Shadow = "momento_shad";
 
     /// <summary>The campaign load screens end to end: every dialog resolves, the parchment lists
@@ -30,7 +33,11 @@ internal static class LoadSheetSuites
         + "reaches the chart it belongs to past the waits 19 of the dialogs place theirs behind, "
         + "every bitmap the composition names exists in the extraction, the map is drawn at its "
         + "authored source crop rather than scaled, the parchment lists that mission's objectives "
-        + "unmarked, the memento sits over the shadow at their authored points, every picture comes "
+        + "unmarked and slanted in the measure the pause sheet's rows take, with every row of every "
+        + "sheet held inside the parchment's solid paper by a face that shrinks rather than by "
+        + "losing a row, the memento the "
+        + "seated profile chose sits over the shadow at their authored points while a session that "
+        + "seats no profile hangs the seeded pin-up instead, every picture comes "
         + "from the dialog so no world icon is placed, an unreadable sheet "
         + "still leaves the frame and the bar standing, and C3/M01's own sheet matches the "
         + "reference still flag for flag")]
@@ -46,6 +53,9 @@ internal static class LoadSheetSuites
             throw new SuiteSkippedException($"cm_sequence names no campaign mission");
         }
 
+        // The screen hangs the seated profile's own picture, so every sheet below is composed over
+        // one that chose a picture rather than over the name a fresh profile is seeded with.
+        string memento = Session.CampaignMementos.BitmapFor(SeatedProfile(ctx));
         var report = new StringBuilder();
         var sheets = new List<(CampaignMission Mission, LoadSheet Sheet)>();
         foreach (var mission in missions)
@@ -54,7 +64,7 @@ internal static class LoadSheetSuites
             var sheet = LoadSheet.Load(
                 ctx.ZrdrPath, ctx.MessagesPath,
                 SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder),
-                key, Memento);
+                key, memento);
             if (sheet == null)
             {
                 ctx.Check(false, $"{mission.ChapterFolder}/{mission.MissionFolder} resolves {key}");
@@ -70,7 +80,9 @@ internal static class LoadSheetSuites
         ctx.Same(missions.Count, sheets.Count, $"every campaign mission resolves its own loading dialog");
         CheckEveryPinPlaced(ctx, sheets, report);
         CheckArtExists(ctx, sheets, report);
-        CheckComposition(ctx, sheets, report);
+        CheckComposition(ctx, sheets, memento, report);
+        CheckRowsOnPaper(ctx, sheets, report);
+        CheckSeatedMemento(ctx, sheets, memento, report);
         CheckBareSheet(ctx);
         CheckFilmedSheet(ctx, sheets, report);
         DriveBoard(ctx, sheets);
@@ -145,7 +157,8 @@ internal static class LoadSheetSuites
     // own objectives with no mark on any row, the memento over its shadow, the propeller's first
     // frame and the unlit bar, and neither world icon.
     private static void CheckComposition(
-        TestContext ctx, List<(CampaignMission Mission, LoadSheet Sheet)> sheets, StringBuilder report)
+        TestContext ctx, List<(CampaignMission Mission, LoadSheet Sheet)> sheets, string memento,
+        StringBuilder report)
     {
         int charts = 0, parchments = 0, mementos = 0, propellers = 0, bars = 0, marks = 0, icons = 0;
         foreach (var (mission, sheet) in sheets)
@@ -164,12 +177,12 @@ internal static class LoadSheetSuites
             {
                 parchments += note.Entries.Count == ObjectiveBeats(sheet)
                     && note.X == list.ListAt.X && note.Y == list.ListAt.Y
-                    && note.Width == list.WrapWidth && note.Height == list.WrapHeight
-                    && Lists(note.Entries, sheet.Objectives) ? 1 : 0;
+                    && note.Width == list.RowWrap && note.Height == list.RowBox
+                    && note.Italic && note.Shrink && Lists(note.Entries, sheet.Objectives) ? 1 : 0;
                 marks += note.Marked == null && note.Mark == null ? 0 : 1;
             }
 
-            mementos += FindArt(board, Memento) is { } photo
+            mementos += FindArt(board, memento) is { } photo
                 && photo.X == sheet.State.MementoAt.X && photo.Y == sheet.State.MementoAt.Y
                 && !photo.Centered
                 && FindArt(board, Shadow) is { Centered: true } ? 1 : 0;
@@ -185,12 +198,133 @@ internal static class LoadSheetSuites
 
         int all = sheets.Count;
         ctx.Same(all, charts, $"every sheet draws its chart at its authored source crop and position");
-        ctx.Same(all, parchments, $"every parchment lists that mission's own objectives in the box it authors");
+        ctx.Same(
+            all, parchments,
+            $"every parchment lists that mission's own objectives, all of them, in the paper's measure");
         ctx.Same(0, marks, $"no row is marked, the screen standing before the mission it lists has run");
         ctx.Same(all, mementos, $"every memento sits at its authored point over its centred shadow");
         ctx.Same(all, propellers, $"every sheet draws the propeller cycle's first frame at its authored point");
         ctx.Same(all, bars, $"every sheet draws the unlit bar at the PROGRESS entry's own position");
         ctx.Same(0, icons, $"every picture on a sheet comes from its dialog, so no world icon is placed");
+    }
+
+    // Every row of every sheet stays on the parchment's solid paper, the rectangle measured off the
+    // bitmap's own torn-edge band. The renderer's font is the only thing that knows how a wrapped
+    // entry drew, so the sheet is fitted the way the view fits it and then measured.
+    private static void CheckRowsOnPaper(
+        TestContext ctx, List<(CampaignMission Mission, LoadSheet Sheet)> sheets, StringBuilder report)
+    {
+        if (sheets.Count == 0)
+        {
+            return;
+        }
+
+        var probe = new Godot.Control();
+        ctx.Host.AddChild(probe);
+        try
+        {
+            if (probe.GetThemeDefaultFont() is not { } font)
+            {
+                throw new SuiteSkippedException("the default theme carries no font to measure with");
+            }
+
+            SweepRowsOnPaper(ctx, sheets, font, report);
+        }
+        finally
+        {
+            ctx.Host.RemoveChild(probe);
+            probe.QueueFree();
+        }
+    }
+
+    private static void SweepRowsOnPaper(
+        TestContext ctx, List<(CampaignMission Mission, LoadSheet Sheet)> sheets, Godot.Font font,
+        StringBuilder report)
+    {
+        var fit = BoardFit.For(BoardFit.AuthoredWidth, BoardFit.AuthoredHeight);
+        var paper = PauseSheetSuites.Paper(ctx, sheets[0].Sheet.Shared.Objectives);
+        int shrunk = 0, dropped = 0;
+        float over = float.NegativeInfinity, past = float.NegativeInfinity;
+        string widest = "-", deepest = "-";
+        foreach (var (mission, sheet) in sheets)
+        {
+            var board = Compose(sheet);
+            if (board.Notes.Count == 0)
+            {
+                continue;
+            }
+
+            var note = ComposedBoardView.Fitted(fit, font, board.Notes[0]);
+            shrunk += note.Size < board.Notes[0].Size ? 1 : 0;
+            var placed = note.Flow(ComposedBoardView.Measure(fit, font, note));
+            dropped += note.Entries.Count - placed.Count;
+            var corner = PauseSheetSuites.Corner(
+                ComposedBoardView.MeasureBox(fit, font, note.Size), placed);
+            string named = $"{mission.ChapterFolder}/{mission.MissionFolder}";
+            if (corner.X - paper.End.X > over)
+            {
+                over = corner.X - paper.End.X;
+                widest = named;
+            }
+
+            if (corner.Y - paper.End.Y > past)
+            {
+                past = corner.Y - paper.End.Y;
+                deepest = named;
+            }
+        }
+
+        ctx.Same(0, dropped, $"every objective the load screen lists is drawn ({dropped} lost)");
+        ctx.Check(
+            over <= 0f && past <= 0f,
+            $"and no row leaves the paper ({widest} widest, {-over:0.0} px in; {deepest} deepest, {-past:0.0} px up)");
+        report.AppendLine(
+            $"paper: ends at {paper.End.X:0.0}/{paper.End.Y:0.0}, {shrunk} sheets shrunk, "
+            + $"widest {widest} at {paper.End.X + over:0.0}, deepest {deepest} at {paper.End.Y + past:0.0}");
+    }
+
+    // The picture is the seated profile's own, read back off a store the way the launcher reads
+    // one, and a session with nobody seated still draws the seeded pin-up. A screen that asked no
+    // profile would draw the seeded name in both cases and pass every other check here.
+    private static void CheckSeatedMemento(
+        TestContext ctx, List<(CampaignMission Mission, LoadSheet Sheet)> sheets, string memento,
+        StringBuilder report)
+    {
+        string seeded = Session.CampaignMementos.BitmapFor(null);
+        ctx.Check(
+            memento == Session.CampaignMementos.Bitmap(ChosenMemento) && memento != seeded,
+            $"the seated profile hangs {memento} where a session with no profile hangs {seeded}");
+        if (sheets.Count == 0)
+        {
+            return;
+        }
+
+        var mission = sheets[0].Mission;
+        var bare = LoadSheet.Load(
+            ctx.ZrdrPath, ctx.MessagesPath,
+            SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder),
+            EscapeDialog.CampaignKey(mission.Campaign, mission.Mission), seeded);
+        var board = bare == null ? null : Compose(bare);
+        ctx.Check(
+            board != null && FindArt(board, seeded) != null && FindArt(board, memento) == null,
+            $"and a sheet with no profile behind it hangs the seeded pin-up alone");
+        ctx.Check(
+            FindArt(Compose(sheets[0].Sheet), memento) != null,
+            $"while the seated sheet hangs the chosen picture ({memento})");
+        report.AppendLine($"memento: seated {memento}, no profile {seeded}");
+    }
+
+    // A profile that has chosen a picture, written and read back through a store of its own under
+    // the scratch root: the file round trip the launcher's own read makes, over nobody's real
+    // profile.
+    private static Session.CampaignProfileDef SeatedProfile(TestContext ctx)
+    {
+        var store = new Session.CampaignProfileStore(
+            Path.Combine(ctx.ScratchDir, "load-sheet-memento"));
+        var def = Session.CampaignProfileDef.NewProfile("Load Sheet");
+        def.Memento = ChosenMemento;
+        store.Save(def);
+        return store.Load(def.Name) ?? def;
     }
 
     // A sheet the extraction could not answer for still leaves a screen: the frame and the bar,

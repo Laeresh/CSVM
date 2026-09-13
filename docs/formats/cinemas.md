@@ -293,5 +293,7 @@ Where this stops:
 - **The engine side of the script callbacks is not traced.** Callback 2151 supplies the chapter
   number `CAMPAIGNINTRO` builds its filename from, and callback 3104 gates the final cinema, but
   neither was followed into the executable: the script callback dispatch is not a plain switch on
-  the id, so finding it is its own job. Neither blocks a player, since the chapter number is
-  something the campaign already knows and the gate is campaign completion.
+  the id, so finding it is its own job. Neither blocks a player: the chapter number is something the
+  campaign already knows, and CSVM gates the final cinema on a win on the campaign's last mission,
+  first flight or replay (`CSVM/src/Session/ClosingCinema.cs`), rather than on a decode of 3104.
+  What that callback answers for a mission failed on a finished campaign is unknown.

@@ -31,7 +31,8 @@ internal static class PausePreferencesSuites
     [Suite("pause-preferences",
         "the Preferences leaf over a paused mission: the Original pause sheet's PREFERENCES strip "
         + "opens it on the Options screen with the world still held, the VIDEO page behind its door "
-        + "opens on the settings saved for this machine, a display mode stepped there rides out on "
+        + "opens on the settings saved for this machine with the size row dead under borderless and "
+        + "live again the moment the mode leaves it, a display mode stepped there rides out on "
         + "the apply exit while the leaf writes no options file of its own, the way out closes the "
         + "leaf back onto the sheet with the mission still paused, the returning sheet cannot fire "
         + "a strip from a mouse button that was already down, applying what the exit carried leaves "
@@ -165,7 +166,7 @@ internal static class PausePreferencesSuites
         board.PointerSource = () => cell.At;
         pause.TryToggle(0);
         ctx.Check(board.Visible && !leaf.Visible, $"the pause raises the sheet with no leaf over it");
-        var strip = sheet.Shared.Button(PauseScreens.ButtonKeys[PauseScreens.PreferencesRow]);
+        var strip = sheet.Strips[PauseScreens.PreferencesRow];
         if (strip == null)
         {
             ctx.Check(false, $"the shared block authors the PREFERENCES strip");
@@ -198,12 +199,20 @@ internal static class PausePreferencesSuites
         ctx.Check(leaf.Shell.DisplayModeChoice == DisplayWords.Borderless
             && leaf.Shell.ResolutionChoice == SavedResolution,
             $"on this machine's saved display settings ({leaf.Shell.DisplayModeChoice ?? "unset"}, {leaf.Shell.ResolutionChoice ?? "unset"})");
+        string pinned = ResolutionSetting.ScreenSizes().Fallback;
+        ctx.Check(leaf.Shell.ResolutionPinned && RowOf(leaf, OriginalShell.ResolutionKey) is { Enabled: false } dead
+            && dead.Label == pinned,
+            $"with the size row dead at this screen's own size, borderless owning it ({SizeRow(leaf)})");
         WalkTo(leaf, OriginalShell.DisplayModeKey);
         leaf.Drive(new MenuCommands { MoveX = 1 });
         string stepped = leaf.Shell.DisplayModeChoice ?? string.Empty;
         ctx.Check(stepped.Length > 0 && stepped != DisplayWords.Borderless,
             $"a sideways step on the Display Mode row picks another word ({stepped})");
+        ctx.Check(!leaf.Shell.ResolutionPinned && RowOf(leaf, OriginalShell.ResolutionKey) is { Enabled: true } live
+            && live.Label == SavedResolution,
+            $"which hands the size row back, standing on the size saved all along ({SizeRow(leaf)})");
         report.AppendLine($"display mode: {DisplayWords.Borderless} stepped to {stepped}");
+        report.AppendLine($"size row: dead at {pinned} under borderless, live at {SavedResolution} under {stepped}");
         return stepped;
     }
 
@@ -330,6 +339,12 @@ internal static class PausePreferencesSuites
             leaf.Drive(new MenuCommands { MoveY = 1 });
         }
     }
+
+    // The size row as one line, for a check that has to say what it saw rather than only that it
+    // disagreed: the size drawn and whether the row takes a press.
+    private static string SizeRow(PausePreferences leaf) =>
+        RowOf(leaf, OriginalShell.ResolutionKey) is { } row
+            ? $"{row.Label}, enabled={row.Enabled}" : "no size row";
 
     private static OriginalRow? RowOf(PausePreferences leaf, string key)
     {

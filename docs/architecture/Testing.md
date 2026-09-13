@@ -36,13 +36,13 @@ lands in; the branch names and which instrument drives each unreached one are in
 
 ## src/Testing/TestHarness.cs
 `--run-tests[=filter]`: the suite registry, `TestContext` (assert verbs, resolved data paths, a
-scene-tree host, and the `WithWorld` chapter-world builder over `WorldSession`), the PASS/FAIL/SKIP
-table, `test-report.json` in `TestContext.ScratchDir`, and the process exit code. `Select` is the
-pure selector over the flag's value; `SuiteShards` handles the one term that divides rather than
-selects. The world cache and its eviction, the mission-override and private-world forms, the shared
-`DecodeCache`, the per-build `StartupProfile` and the engine-error allowlist each carry their own
-rule at their member. Read `SuiteCatalog.cs` for what gets registered and `PhaseAttribution.cs` for
-how a build's time reaches the report.
+scene-tree host, `SyncPhysics` for the space a one-frame run leaves behind, and the `WithWorld`
+chapter-world builder over `WorldSession`), the PASS/FAIL/SKIP table, `test-report.json` in
+`TestContext.ScratchDir`, and the process exit code. `Select` is the pure selector over the flag's
+value; `SuiteShards` handles the one term that divides rather than selects. The world cache and its
+eviction, the mission-override and private-world forms, the shared `DecodeCache`, the per-build
+`StartupProfile` and the engine-error allowlist each carry their own rule at their member. Read
+`SuiteCatalog.cs` for registration and `PhaseAttribution.cs` for a build's time in the report.
 
 ## src/Testing/SuiteShards.cs
 Godot-free and pure (`CSVM.Tests` proves it without the engine): the `shard:<index>/<count>` term

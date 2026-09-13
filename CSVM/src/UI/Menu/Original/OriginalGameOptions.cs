@@ -507,7 +507,7 @@ public sealed partial class OriginalShell
 
         if (DropListWindow(drop, top) is { } window && drop.Thumb is { } thumb)
         {
-            panelPictures.Add(new BoardPicture(thumb, window.ThumbX, window.ThumbY));
+            panelPictures.Add(new BoardPicture(thumb, window.ThumbX, window.ThumbY, Height: window.ThumbHeight));
         }
 
         return new BoardPanel(panelFills, panelPictures, panelLines);

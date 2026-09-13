@@ -165,7 +165,9 @@ public sealed class AiPilot
     }
 
     /// <summary>The heading (degrees, mission-data convention) whose forward vector is
-    /// <paramref name="dir"/>'s horizontal projection.</summary>
+    /// <paramref name="dir"/>'s horizontal projection.
+    /// ⚠ Not what the pilot's compass reads; <see cref="CompassTape.ReadingDeg"/> runs the other
+    /// way round, and the two agree only at north and south.</summary>
     public static float HeadingDegOf(Vector3 dir) =>
         Mathf.RadToDeg(Mathf.Atan2(-dir.X, -dir.Z));
 
@@ -549,7 +551,8 @@ public sealed class AiPilot
         {
             _rail = new DangerZoneRail(run, model.Position, model.Attitude,
                 model.VelocityDir * model.Speed, model.Speed);
-            machine.Enter(AiMode.NavigatingDangerZone, $"'{run.Ribbon.Name}' locked at {range:0} m");
+            machine.Enter(AiMode.NavigatingDangerZone,
+                FormattableString.Invariant($"'{run.Ribbon.Name}' locked at {range:0} m"));
         }
         return input;
     }

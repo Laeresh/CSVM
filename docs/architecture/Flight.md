@@ -49,8 +49,8 @@ every weapon fires from every mount of its class rather than only from what stoc
 The fire-control state machine, a plain engine-free class: trigger edges, per-group `FIRE_RATE`
 accumulators and muzzle rotation, ammo draw-down, both weapon selectors in either direction with
 their on-empty auto-advance, the rocket pull and cooldown gate, and the two once-only dry cues.
-`Step(dt, FireInputs)` takes raw held booleans, detects every edge inside, and returns decisions in
-one reused `FireOutcome`; `FlightController.ApplyFireOutcome` performs them against muzzle
+`Step(dt, FireInputs)` takes raw held booleans, detects every edge inside, splits the pad's one
+button per class into a tap forward and a hold back, and returns decisions in one reused `FireOutcome`; `FlightController.ApplyFireOutcome` performs them against muzzle
 transforms, `ProjectilePool` and `FlightAudio`. Ammo mutates through the node-free
 `IGunSlot`/`IPylonSlot` views, so `Loadout` stays the single store the gauges read and a decision
 cannot diverge from the counters mid-tick. The slot index math is `WeaponCursor.cs`; read it next.
@@ -108,11 +108,11 @@ Schema: [../formats/turrets.md](../formats/turrets.md); the team space:
 One `ai.zrd` turret gunner, both families: carried (`BuildCarried`, per host off the vehicle def's
 `TurretMount`s, ticked from `FlightController.SimStep`) and world emplacement (`BuildEmplacements`,
 per matched `NODES` pattern node, ticked by `Session/TurretEmplacementRuntime`). Per tick it takes
-the nearest hostile out of the vehicle list and then the mission structures in the decoded pass
-order, solves the lead through `AimAssist.TryIntercept`, slews the PARTS nodes inside the authored
-arcs, and runs the fire gates: activation, the attack window, the barrel-on-solution cone, a cached
-line of sight and the `FIRE_RATE` redraw, each round renewing its `GunVoice` off `SOUNDS.CANNON`.
-Aliveness, teams, and what a gun's own mount is to its sight line and to its rounds sit at their members: [../org/targeting.md](../org/targeting.md), [../formats/turrets.md](../formats/turrets.md).
+the nearest hostile out of the vehicle list and then the mission structures, stopping at the vehicle
+pass while `AiTargetRanking.AircraftFirst` holds and an aircraft is in reach, solves the lead through
+`AimAssist.TryIntercept`, slews the PARTS nodes inside the authored arcs, and runs the fire gates:
+activation, the attack window, the barrel-on-solution cone, a cached line of sight and the
+`FIRE_RATE` redraw, each round renewing its `GunVoice` off `SOUNDS.CANNON`. Aliveness, teams, and what a gun's own mount is to its sight line and to its rounds sit at their members: [../org/targeting.md](../org/targeting.md), [../formats/turrets.md](../formats/turrets.md).
 
 ## src/Flight/WeaponCursor.cs
 `FireControl`'s internal ammo-slot index math, an `internal` class nothing else may call: `NextArmed`
@@ -471,13 +471,12 @@ resolver rather than from def presence. Pinned by `AiVoiceDispatcherTests` and t
 
 ## src/Flight/AiTargetRanking.cs
 The decoded target-ranking formula ([../org/aiPilot.md](../org/aiPilot.md) "Target acquisition"): a
-rank built from a weight, the distance and an objective bias, and MINIMISED, with the player carrying
+rank built from a weight, the distance and the bias terms, and MINIMISED, with the player carrying
 a lower base weight than everyone else, a wingman a higher one, a gasbag a lower one, ±0.2 terms for
 ahead/behind on a half-metre deadband, altitude sign and closing, and an effectively infinite rank
 beyond the activation radius. `AiScorer` names the engine's two implementations and is required
 because the wrong one is silent: `Other` drops those three geometry terms. Snapshots in, index and
-score out, engine-free. `SelectBest` prefers the best candidate no ally holds; `ObjectiveBiasFor`
-matches `rating_biases` patterns, first match wins, saturating at always-target and at exclusion.
+score out, engine-free. `SelectBest` prefers the best candidate no ally holds; `ObjectiveBiasFor` matches `rating_biases` patterns, first match wins, saturating at always-target and at exclusion; a candidate's `ClassBias` carries the def's `target_bias`/`struct_bias` in raw rank units beside the objective bias, both negative and so both attracting. `AircraftFirst`, the launch-scoped switch behind `--ai-targeting=`, is CSVM's departure: while any aircraft ranks, every structure-class candidate is withdrawn, so a picker fights a structure only with no aeroplane in reach.
 
 ## src/Flight/PursuitQuarry.cs
 The flight law's snapshot of `AiGunner.Target` for one step, whatever its class: position, velocity,
@@ -507,8 +506,7 @@ the def's `turrets` block as `TurretMount`s, engines.json stock engine power, an
 globals, which are the flight constants plus the tuning the cue, aim-assist, head-look and damage
 paths read. It also carries the `crash` block's restitution ceiling, the engine sound defs and their
 curves, `destroyable_parts` as `DestroyablePart` records with the def-level injure anims, and the
-`collision` probe list. `Load` resolves down the player chain, `LoadForAi` takes only the damage
-model off the AI chain, and the `With*` family layers roster, difficulty and hangar overrides on.
+`collision` probe list, and `AiTargetBias`/`AiStructBias`, the def's two acquisition rank terms read off the chain the vehicle spawns as. `Load` resolves down the player chain, `LoadForAi` takes only the damage model off the AI chain, and the `With*` family layers roster, difficulty and hangar overrides on.
 
 ## src/Flight/SpawnPoints.cs
 Reads the flight spawn from a mission's OWN zrdr, a different archive than the shared `--zrdr`, in
@@ -685,25 +683,25 @@ off the victim's team, `WordsKillLine` keeps a hull flown into the world off tha
 `PostCrash`/`PostTimeExpired` are the two notices that are not a death. All static, so a suite
 asserts the decode with no `Control`. Decode: [../org/vehicleDamage.md](../org/vehicleDamage.md).
 
-## src/Flight/AutoDockLine.cs
-The original's auto-dock prompt: one centred line three tenths of the way down the pane, in the
-landings rig's flat pale yellow and without the drop shadow the markers and the message stack carry,
-standing while the approach table's `auto` row keeps passing and gone the frame it stops. `FlightHud`
-owns when it shows and what it reads; this owns only where it sits, as `LineAnchor` over a pane size,
-static so a suite asserts the placement with no `Control`. The fraction is of the pane, never of
-`HudMetrics`' reading box, so each splitscreen pane centres its own. Decode:
-[../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md) "The prompt's
-own placement".
+## src/Flight/PromptLine.cs
+A control prompt's own centred line, three tenths of the way down the pane, in the landings rig's
+flat pale yellow and without the drop shadow the markers and the message stack carry. Two per pane:
+the original's auto-dock offer on the HUD layer, and the port's respawn prompt on the message layer,
+the one the crash camera leaves up. `FlightHud` owns when each shows and what it reads; this owns
+only where it sits, as `LineAnchor` over a pane size, static so a suite asserts the placement with no
+`Control`. The fraction is of the pane, never of `HudMetrics`' reading box, so each splitscreen pane
+centres its own. Decode: [../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md)
+"The prompt's own placement".
 
 ## src/Flight/TargetHud.cs
 The per-pane targeting HUD, built on every human pane in every flight session: the pilot's own
 selection from `TargetSelection` (a campaign mission's objective sites included), a nearest
-AI-hostile fallback where no selection exists, and `--debug-markers`' every-aircraft overlay. Draws
-the original's bracket box and label block and owns the colour table, the label layout, the
-selected gun's reach gate and the debug identity string. Off screen it owns the arrow, `ArrowHead`,
-`ShaftTail` and `EdgeLabelAnchor` over `EdgeMarker`'s placement. It also owns the spyglass's gates
-(`UpdateSpyglass`, `SpyglassOn`) and draws `SpyglassView`'s picture as the disc all three of those
-measure against. Decode: [targeting](../org/targeting.md), [spyglass](../org/spyglass.md).
+AI-hostile fallback where no selection exists, and the F16 / `--debug-markers` every-aircraft
+overlay. Draws the original's bracket box and label block and owns the colour table, the label
+layout, the selected gun's reach gate and the debug identity string. Off screen it owns the arrow,
+`ArrowHead`, `ShaftTail` and `EdgeLabelAnchor` over `EdgeMarker`'s placement. It also owns the
+spyglass's gates (`UpdateSpyglass`, `SpyglassOn`) and draws `SpyglassView`'s picture as the disc
+all three measure against. Decode: [targeting](../org/targeting.md), [spyglass](../org/spyglass.md).
 
 ## src/Flight/VersusBoard.cs
 The Dogfight results overlay on `ResultsBoard`'s shell: the winner in their own
@@ -743,11 +741,11 @@ the same pause on a layer of its own. The Original presentation puts `OriginalPa
 The Original presentation's pause screen, on `PauseBoard`'s own seam: built once by `GameSession`
 over a `PauseSheet` its mission resolves, following `PauseState.Changed`, driven by the pausing
 player's reader alone. What it draws is `PauseScreens`' composition through `ComposedBoardView`, so
-the screen tests off engine and this node owns the cursor, the pointer and the four actions. An Instant Action sortie's sheet is the blackboard, which it writes in `BoardPalette.EscapeBlackboard` rather than the campaign sheet's ink. That
+the screen tests off engine and this node owns the cursor, the pointer and the five actions. An Instant Action sortie's sheet is the blackboard, which it writes in `BoardPalette.EscapeBlackboard` rather than the campaign sheet's ink. That
 seat's pointer shares the cursor: a hover moves it, a press holds the strip, the release on it
 fires, and the OS pointer gives way to the dialog's own. Its readout is a delegate, since the
 objectives follow the running mission. Preferences stands `PausePreferences` over the held world and
-`Reprime`s on its close; photo mode stays on `PauseBoard`. Decode: [../org/pause-screen.md](../org/pause-screen.md).
+`Reprime`s on its close, and photo mode does the same over the frozen world. Decode: [../org/pause-screen.md](../org/pause-screen.md).
 
 ## src/Flight/PausePreferences.cs
 The Preferences leaf over a paused mission: an `OriginalShell` of its own opened on the Options
@@ -814,9 +812,9 @@ sustained-fire gun loop and the dry-trigger cue on `AudioStreamPlayer3D`s riding
 another aircraft's guns are heard from where that aircraft is, which is where the original's fire
 tick puts its own ([../org/weaponFire.md](../org/weaponFire.md)), so no muzzle offset belongs here;
 the dry cue is positional by decision where the original's is flat. `Attach` is the whole
-spawner-side surface; the cues come from `WeaponAudioCues`. The cull is each cue's own audible
-distance and rides `StartGunLoop`, called every frame the loop is wanted; the listeners are the human
-pilots, the seam `AiEngineAudio` and `ProjectilePool` read too. No `3D` flag means no world player.
+spawner-side surface; the cues come from `WeaponAudioCues` and the cull with them, the margin the
+sound manager leaves over a cue's audible distance ([../formats/sounds.md](../formats/sounds.md)),
+measured against the human pilots `AiEngineAudio` reads too. No `3D` flag means no world player.
 
 ## src/Flight/GunVoice.cs
 One mounted gun's firing voice: a single `AudioStreamPlayer3D` on the mount's own cue, moved to where
@@ -825,8 +823,8 @@ continuous burst rather than a clip restarted per projectile. The lease is the c
 turret renews half a second per round, a hull's gun zero every tick
 ([../org/weaponFire.md](../org/weaponFire.md)). `Attach` takes the `GunVoiceHome` bundle of parent,
 archive and listeners a session builds once and hands every mount. One voice per mount, never one per
-owner. The cue comes from `WeaponAudioCues`, the cull is 1.1 times its authored audible distance
-off this node ([../formats/turrets.md](../formats/turrets.md)); the `sound` log names each verdict.
+owner. The cue comes from `WeaponAudioCues` and the cull with it, the same one an aircraft's loop
+takes ([../formats/sounds.md](../formats/sounds.md)); the `sound` log names each verdict.
 
 ## src/Flight/AudioListeners.cs
 Where the session's audio listeners are, for every positional flight-audio path: the human pilots'
@@ -839,8 +837,8 @@ against.
 ## src/Flight/WeaponAudioCues.cs
 The weapon-sound selection both audio paths read, `EngineAudioCurves`' counterpart for guns: a
 definition name to a `WeaponSoundCue` carrying the stream, the definition's unscaled `VOLUME`, its
-`RANGE` pair and its `3D` flag. The range travels with the cue so a positional player's `UnitSize`,
-`MaxDistance` and cull threshold cannot disagree with the definition it came from. It selects and
+`RANGE` pair, its `3D` flag and the one cull distance past that pair, which every weapon voice takes
+so the aircraft loop and a mount's gun cannot cull differently. It selects and
 nothing else, which keeps own-ship concepts out of the world path. A firing loop is decoded `LOOPED`
 whatever its definition says, and that flag is also the prewarm key (`WeaponDefs.SoundCues`). The
 dry-trigger cue resolves through `WeaponDefs.EmptyClipSound`, the `NO_AMMO_WARNING` read of record,
@@ -886,6 +884,16 @@ reversing drops the axis to centre in one frame. That asymmetry is why a fast st
 far less deflection than a slow one, and the analogue axes bypass it entirely. Pure and
 engine-free; `FlightController` steps one per keyboard axis. Decode:
 [../org/flightModel.md](../org/flightModel.md).
+
+## src/Flight/MouseFlight.cs
+The mouse as a stick, decoded from the mouse arm of `FUN_00487460`: a cursor offset over the pane in
+`[-1, 1]` per axis, each source dead inside its own deadzone (0.1 bank and pitch, 0.3 yaw) and
+rescaled so the pane's edge is full deflection, plus the `is_autogyro` exchange that takes an
+autogyro's bank off the third axis and its yaw off the sideways travel, both negated. Pure and
+engine-free, so a suite drives it with no window; `FlightController` sums what it returns into the
+keyboard and pad deflections, as the original's arm sums into the same slots. The third mouse axis
+has no counterpart here and is always passed zero. Decode:
+[../org/flightModel.md](../org/flightModel.md); the scheme: [../controls.md](../controls.md).
 
 ## src/Flight/NitroSystem.cs
 The original's nitro boost lifecycle, engine-free: a 30-unit tank burned at 4/s while boosting and
@@ -990,7 +998,7 @@ bilateral pairs such as twin fins), then one `ConvexHull` per refined piece. The
 part order are judged on the pieces' boxes, so a hull is only the emitted shape and never moves a
 cut or a name. Single-sourced: the terrain sweep casts these hulls and `AircraftBody` mounts the
 same `ConvexPolygonShape3D` resources as the plane's hittable body. `Layout` is the engine-free half
-the `airframe-hull-coverage` suite measures; `Build` wraps it in shapes.
+the `airframe-hull-coverage` suite measures, `Build` wraps it in shapes, `PartLine` its census line.
 
 ## src/Flight/ConvexHull.cs
 A convex hull over a point cloud with no engine dependency: vertices, outward faces, edges, bounds
@@ -1048,14 +1056,14 @@ since both arrive through the build DTO before the first sim step. Ground-blow p
 ground-blow write stay on `FlightController`, which has the live world a source does not.
 
 ## src/Flight/FlightHud.cs
-Everything one pane draws for its pilot, none of it written from outside: the heading tape, the
-cockpit dials and their two weapon gauges, the gun pipper, the stunt objective marker, the targeting
-HUD, `HudMessages`' message stack, `AutoDockLine`'s auto-dock prompt, the `--hud-font-test` overlay and
-the flight text block. With the cockpit interior on screen the dials, tape and text block come off
-(`SetCockpitView`), its panel carrying them; the pipper, marker, message and prompt HUDs stay.
-`Draw(in FlightHudState)`, the per-frame entry, takes a struct of aircraft STATE, so text, dials and
-gates compose and assert here with no Godot `Control` (`ComputeStallWarning`, `ComputeAgl`,
-`ComposeTextLines`, `ShowsAutoLandPrompt`, and `ComposeAutoLandPrompt` over the seat's last device).
+Everything one pane draws for its pilot, none of it written from outside: the heading tape, the cockpit
+dials and their two weapon gauges, the gun pipper, the stunt marker, the targeting HUD, `HudMessages`'
+message stack, the two `PromptLine` prompts, the `--hud-font-test` overlay and the flight text block. With
+the cockpit interior on screen the dials, tape and text block come off (`SetCockpitView`), its panel
+carrying them; the pipper, marker, message and prompt HUDs stay, the respawn prompt on the message layer the
+crash camera leaves up. `Draw(in FlightHudState)`, the per-frame entry, takes a struct of aircraft STATE, so
+text, dials and gates compose and assert here with no `Control` (`ComputeStallWarning`, `ComputeAgl`,
+`ComposeTextLines`, and both prompt gates and composers).
 
 ## src/Flight/FlightController.cs
 The flying-aircraft node: input through `FlightModel` to a transform (or, for an AI pilot publishing
@@ -1068,8 +1076,8 @@ reports, and holds the state the engine can only hold as state. Every physics qu
 one `IWorldQuery` bound in `Bind`, and contact detection fills one `ContactReport` from the hull
 sweep, the AI probe rays or the anti-tunnelling centre ray. An AI aircraft is this SAME node with
 `Pilot` driving the input source, no camera and no HUD canvas, so flight, collision, weapons and
-damage are the player's path exactly. `Held`, `Inert`, `Spectating`, `CameraOwned` and
-`AllowLiveRespawn` are the flags a session or a lab pins it with. Read `AircraftLifecycle.cs` next.
+damage are the player's path exactly. `Held`, `ControlsHeld` (the stick reads neutral and every discrete command is swallowed while the aeroplane flies on as trimmed), `Inert`, `Spectating`, `CameraOwned` and
+`AllowLiveRespawn` are the flags a session or a lab pins it with. `SelectRankedTarget` builds the pilot's four-pool candidate list, each entry carrying its own class bias, and hands it to `AiTargetRanking.SelectBest` under the session's targeting order. Read `AircraftLifecycle.cs` next.
 
 ## src/Flight/PlaneDamage.cs
 The decoded vehicle damage ledger: per-part pools from `destroyable_parts` plus a whole-vehicle
@@ -1091,7 +1099,7 @@ cockpit gauge def from ever playing on an airframe, and the panel-pairing traps 
 partners, so no separate cockpit rule exists. Decode: [../org/vehicleDamage.md](../org/vehicleDamage.md).
 
 ## src/Flight/DamageLab.cs
-The damage lab that F5 toggles: one armour slider for the parts the data gives an armour pool, one
+The damage lab that F19 toggles: one armour slider for the parts the data gives an armour pool, one
 health slider per destroyable part, and a `PartFrac` reading of health, armour or the combined
 scale the mirrored gauge dial is on. `ReadSliders` floors a part's armour once its health reads
 short of full, mirroring the real armour-first path, and a `--damage=` preset takes the same route.
@@ -1104,7 +1112,8 @@ The original's top-centre heading tape, rebuilt from the game's own compass tick
 as a cylindrical drum seen edge-on, headings increasing to the left under a cosine fade toward the
 rim. Metrics are probe-fitted reference constants times `HudMetrics.Scale`, `Build` returns null
 where a texture is missing, and the control re-anchors on resize. The heading itself comes from
-`GaugeCluster`. Rendering model: [../formats/hud.md](../formats/hud.md).
+`GaugeCluster`, and `ReadingDeg` is the one conversion from a nose vector to a heading that every
+gauge and the pause chart's icons share. Rendering model: [../formats/hud.md](../formats/hud.md).
 
 ## src/Flight/GaugeCluster.cs
 The original's cockpit dials as a screen-space HUD: altimeter, speedometer, damage display, the
@@ -1269,16 +1278,19 @@ The original's aircraft ground shadow as a rule, engine-free and pure: the proje
 (straight down, with the player's own skewed along its nose), the horizontal distance fade, the
 altitude ramp, the footprint scale, the flattening of one point onto the ground, the colour derived
 from the mission's authored `SUNLIGHT` pair, and the spread and ramp the coverage texture is built
-through. The spread has a second overload that writes into a caller's buffer, for the per-frame
-raster. Every constant carries its decode. `CSVM.Tests/GroundShadowLawTests` pins the numbers.
-Decode: [../org/shadows.md](../org/shadows.md).
+through. The texture's size is the one number here that departs from the decode, and the spread
+takes the scale between the two sizes so its softening keeps its width on the ground. Its second
+overload writes into a caller's buffer, for the per-frame raster.
+`CSVM.Tests/GroundShadowLawTests` pins the numbers. Decode: [../org/shadows.md](../org/shadows.md).
 
 ## src/Flight/GroundShadowSilhouette.cs
-One caster's shape: the triangles of the node the original rasterises, taken once, and the 32x32
-coverage texture rebuilt from them each frame. Pose, flattening onto the ground and the footprint
-collapse into one affine map, so a vertex costs two dot products, and the fill is an incremental
-edge walk with its bounds hand-inlined, which is what brings a debug-build raster down to about a
-tenth of a millisecond per aircraft. The mask is readable as data (`CoveredAt`), which is how the
+One caster's shape: the triangles of the node the original rasterises, taken once, and the 64x64
+coverage texture rebuilt from them each frame. The airframe's triangles are held still in the
+aircraft's frame; each propeller or rotor blur disc is its own group, re-posed from its live node so
+it turns in the shadow without re-reading the model. Pose, flattening and the footprint collapse
+into one affine map per group, so a vertex costs two dot products, and the fill is an incremental
+edge walk with its bounds hand-inlined, which holds a debug-build raster near a third of a
+millisecond per aircraft at that size. The mask is readable as data (`CoveredAt`), which is how the
 suites pin a shape no ellipse can satisfy. Decode: [../org/shadows.md](../org/shadows.md).
 
 ## src/Flight/GroundShadowPass.cs

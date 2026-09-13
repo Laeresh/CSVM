@@ -290,8 +290,11 @@ internal sealed class SurfaceGunner
             }
         }
 
+        // aircraftFirst: false, because the aircraft-first departure is scoped to the two pickers
+        // an ally flies behind, the aeroplane's and the turret's. A hull keeps the decoded order,
+        // which is also what leaves one picker in the build running the original's own priority.
         int best = AiTargetRanking.SelectBest(_vessel.Position, -_vessel.Body.GlobalTransform.Basis.Z,
-            _activationRange, AiScorer.Other, _ranked, out _);
+            _activationRange, AiScorer.Other, aircraftFirst: false, _ranked, out _);
         if (best < 0)
         {
             _target = null;
@@ -335,8 +338,14 @@ internal sealed class SurfaceGunner
                 Position = c.Position,
                 Velocity = c.Velocity,
                 IsPlayer = c.Source is FlightController { IsHumanPiloted: true },
+                IsAircraft = c.Source is FlightController,
+                IsStructureClass = isTurret || c.Source is DestructibleRegistry.Instance,
                 IsWingman = c.Source is FlightController { Pilot.Escort: not null },
                 IsGasbag = c.Source is DestructibleRegistry.Instance { Gasbag: true },
+                // The candidate's own target_bias; the scorer's struct_bias is a hull's own field
+                // and the shipped hull defs author none, so a turret or structure candidate here
+                // spends nothing.
+                ClassBias = (c.Source as FlightController)?.Stats?.AiTargetBias ?? 0f,
                 ObjectiveBias = AiTargetRanking.ObjectiveBiasFor(name, null, isTurret),
                 AlliedAttackers = 0,
             });

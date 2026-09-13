@@ -33,6 +33,64 @@ public class ControlCaptureTests
         Assert.Equal((int)Key.J, binding.Control.Index);
     }
 
+    /// <summary>A key pressed under a modifier is captured as that one control, so a player binding
+    /// the original's Shift+E gets one row rather than a bare E under a qualifier the map forgets.
+    /// </summary>
+    [Fact]
+    public void AKeyPressedUnderAModifierIsCapturedWithIt()
+    {
+        var state = new FakeDevices(Seat);
+        var capture = new ControlCapture(Seat, readsKeyboard: true);
+        capture.Arm(state);
+
+        state.Keys.Add((int)Key.Shift);
+        state.Keys.Add((int)Key.Ctrl);
+        state.Keys.Add((int)Key.E);
+        var binding = capture.Poll(state)!.Value;
+
+        Assert.Equal((int)Key.E, binding.Control.Index);
+        Assert.Equal(KeyModifiers.Shift | KeyModifiers.Ctrl, binding.Control.Modifiers);
+    }
+
+    /// <summary>A modifier on its own resolves on its release rather than on its press. Latching it
+    /// the moment it went down would make every chord uncapturable, since the player reaches for the
+    /// modifier first.</summary>
+    [Fact]
+    public void AModifierAloneIsCapturedOnItsReleaseAndNotWhileItIsHeld()
+    {
+        var state = new FakeDevices(Seat);
+        var capture = new ControlCapture(Seat, readsKeyboard: true);
+        capture.Arm(state);
+
+        state.Keys.Add((int)Key.Shift);
+        Assert.Null(capture.Poll(state));
+
+        state.Keys.Remove((int)Key.Shift);
+        var binding = capture.Poll(state)!.Value;
+        Assert.Equal((int)Key.Shift, binding.Control.Index);
+        Assert.Equal(KeyModifiers.None, binding.Control.Modifiers);
+    }
+
+    /// <summary>And a modifier let go as part of a chord is not captured on its own afterwards: the
+    /// chord already answered the capture, which the screen ends.</summary>
+    [Fact]
+    public void AModifierReleasedAfterItsChordIsNotASecondAnswer()
+    {
+        var state = new FakeDevices(Seat);
+        var capture = new ControlCapture(Seat, readsKeyboard: true);
+        capture.Arm(state);
+
+        state.Keys.Add((int)Key.Shift);
+        Assert.Null(capture.Poll(state));
+        state.Keys.Add((int)Key.S);
+        Assert.Equal(KeyModifiers.Shift, capture.Poll(state)!.Value.Control.Modifiers);
+
+        // A screen disarms here; a capture left armed must not then hand back the modifier too.
+        capture.Arm(state);
+        state.Keys.Clear();
+        Assert.Null(capture.Poll(state));
+    }
+
     [Fact]
     public void AControlAlreadyHeldWhenTheCaptureArmsIsNotTheAnswerToIt()
     {

@@ -353,17 +353,60 @@ public class FlightHudMappingTests
     }
 
     [Fact]
-    public void HaltedAndCrashedAreMutuallyExclusiveTrailingLines()
+    public void TheHaltIsTheOnlyTrailingLineAndACrashPutsNoneInTheBlock()
     {
         var hud = new FlightHud();
-        var halted = new FlightHudState { Halted = true, Crashed = true }; // halted wins when both are set
-        var haltedLines = hud.ComposeTextLines(in halted, mph: 0f, ft: 0f, wide: false);
-        Assert.Contains("⏸ PAUSED — . steps one frame", haltedLines);
-        Assert.DoesNotContain("PRESS R (GAMEPAD Y/A) TO RESPAWN", haltedLines);
+        var halted = new FlightHudState { Halted = true, Crashed = true };
+        Assert.Contains("⏸ PAUSED — . steps one frame",
+            hud.ComposeTextLines(in halted, mph: 0f, ft: 0f, wide: false));
 
-        var crashed = new FlightHudState { Crashed = true };
-        Assert.Contains("PRESS R (GAMEPAD Y/A) TO RESPAWN",
-            hud.ComposeTextLines(in crashed, mph: 0f, ft: 0f, wide: false));
+        // The respawn prompt is its own centred line, so the crash adds nothing to the block.
+        var crashed = new FlightHudState { Crashed = true, RespawnOffered = true };
+        Assert.Equal(1, hud.ComposeTextLines(in crashed, mph: 0f, ft: 0f, wide: false).Count);
+    }
+
+    // ---- the respawn prompt, over the shipped keymap's own Respawn bindings ----
+
+    [Theory]
+    [InlineData(true, DeviceSide.Keyboard, "Press Backspace to respawn")]
+    [InlineData(true, DeviceSide.Pad, "Press Pad Y to respawn")]
+    [InlineData(false, DeviceSide.Pad, "Press Pad Y to respawn")]
+    public void TheRespawnPromptNamesTheShippedControlOfTheSeatsActiveSide(
+        bool readsKeyboard, DeviceSide side, string expected)
+    {
+        Assert.Equal(expected, FlightHud.ComposeRespawnPrompt(RespawnDefaults(), readsKeyboard, side));
+    }
+
+    [Fact]
+    public void APadOnlySeatIsNeverNamedAKeyAndAnUnboundRespawnComposesNoPrompt()
+    {
+        var keyOnly = new[] { KeyBinding(Key.Backspace) };
+        Assert.Equal("", FlightHud.ComposeRespawnPrompt(keyOnly, readsKeyboard: false, DeviceSide.Pad));
+        Assert.Equal("", FlightHud.ComposeRespawnPrompt(
+            System.Array.Empty<Binding>(), readsKeyboard: true, DeviceSide.Keyboard));
+    }
+
+    [Fact]
+    public void ARespawnMovedOffBackspaceIsNamedWhereItNowSits()
+    {
+        var rebound = new[] { KeyBinding(Key.Delete), MouseBinding(MouseButton.Middle) };
+        Assert.Equal("Press Delete to respawn",
+            FlightHud.ComposeRespawnPrompt(rebound, readsKeyboard: true, DeviceSide.Keyboard));
+        // A mouse button takes the click wording, the same split the auto-dock line makes.
+        Assert.Equal("Click Mouse Middle to respawn", FlightHud.ComposeRespawnPrompt(
+            new[] { MouseBinding(MouseButton.Middle) }, readsKeyboard: true, DeviceSide.Keyboard));
+    }
+
+    [Theory]
+    [InlineData(true, false, true, true)]    // crashed, the button answers: shown
+    [InlineData(false, false, true, false)]  // flying: nothing to answer
+    [InlineData(true, true, true, false)]    // a board is up over the wreck
+    [InlineData(true, false, false, false)]  // out of lives, or the seat's controls are held
+    public void TheRespawnPromptStandsOnlyWhereTheButtonWouldAnswer(
+        bool crashed, bool halted, bool offered, bool expected)
+    {
+        var state = new FlightHudState { Crashed = crashed, Halted = halted, RespawnOffered = offered };
+        Assert.Equal(expected, FlightHud.ShowsRespawnPrompt(in state));
     }
 
     [Fact]
@@ -380,6 +423,12 @@ public class FlightHudMappingTests
         "{\"language_id\":1033,\"entries\":["
         + "{\"key\":\"MSG_PRESS_AUTOLAND\",\"id\":181,\"value\":\"Press %1 to autodock\"},"
         + "{\"key\":\"MSG_CLICK_AUTOLAND\",\"id\":182,\"value\":\"Click %1 to autodock\"}]}");
+
+    // The shipped flight keymap's own Respawn row, so the prompt is asserted against what the seat
+    // actually flies rather than against a hand-built pair.
+    private static IReadOnlyList<Binding> RespawnDefaults() =>
+        DefaultBindings.MapFor(InputContext.Flight, DeviceId.Joypad("test-pad"))
+            .Bindings(InputAction.Respawn);
 
     private static Binding KeyBinding(Key key) =>
         new(DeviceId.Keyboard, BindingControl.Key((int)key));

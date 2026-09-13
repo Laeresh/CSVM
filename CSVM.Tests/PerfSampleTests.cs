@@ -21,9 +21,14 @@ namespace CSVM.Tests;
 /// </summary>
 public class PerfSampleTests
 {
-    // How many measurement windows AScopeAllocatesNothing may open before it calls the scope path
-    // an allocator. One is enough whenever nothing else charges the thread, which is the usual case.
+    // How many independent measurement windows the allocation tests open. Every one of them must
+    // read exactly zero for the scope path to count as allocation-free, since an allocator that
+    // charges only some windows is the shape such a path fails in.
     private const int Windows = 5;
+
+    // Scope opens per window, and allocations per window in the negative controls. High enough that
+    // one small object per open is thousands of bytes against a counter that is exact.
+    private const int WindowOpens = 10_000;
 
     private readonly ITestOutputHelper _out;
 
@@ -271,52 +276,60 @@ public class PerfSampleTests
         Assert.Equal(500.0, mon.Last.Samples.AttributedMs + mon.Last.Samples.UnattributedMs, 9);
     }
 
-    // ---- the two properties that decide whether this can be left on ----
+    // ---- the two properties that decide whether this can be left on, and their controls ----
 
     [Fact]
     public void AScopeAllocatesNothing()
     {
         // An identical unmeasured warm-up loop pays off the runtime's own deferred work (tiered
-        // JIT recompilation, OSR) so the loop below measures the scope alone.
-        for (int i = 0; i < 10_000; i++)
-        {
-            using (PerfSample.Scope(PerfSite.DebrisSpawn))
-            {
-            }
-        }
+        // JIT recompilation, OSR) so the windows below measure the scope alone.
+        OpenScopes();
 
-        // Exactly zero, not a tolerance: an instrument that allocates manufactures the collections
-        // it exists to catch. One clean window of several is what keeps that exact claim
-        // measurable, since a real allocator charges every window (docs/verification.md PERF-28).
-        long[] charged = new long[Windows];
-        int[] collections = new int[Windows];
-        int clean = -1;
-        for (int w = 0; w < Windows && clean < 0; w++)
-        {
-            int gen0 = GC.CollectionCount(0);
-            long before = GC.GetAllocatedBytesForCurrentThread();
-            for (int i = 0; i < 10_000; i++)
+        // Exactly zero in every window, not a tolerance and not one clean window of several: an
+        // allocator that charges intermittently passes any weaker rule, and an instrument that
+        // allocates manufactures the collections it exists to catch (docs/verification.md PERF-28).
+        int firstCharged = MeasureWindows(OpenScopes, out long[] charged, out int[] collections);
+
+        // The per-window bytes are unrecoverable after the run, and the next reader of a flake needs
+        // the clean runs as much as the red one, so they are written whichever way this goes.
+        string readings = Readings(charged, collections, firstCharged);
+        _out.WriteLine(readings);
+        Assert.True(firstCharged < 0, readings);
+    }
+
+    [Fact]
+    public void TheWindowsCatchAnAllocatorThatChargesEveryWindow()
+    {
+        // The negative control on the measurement itself: a harness reading nothing at all would
+        // look exactly like a clean scope path, so a body that allocates on every open has to
+        // charge its first window and stop the run there.
+        int firstCharged = MeasureWindows(Allocate, out long[] charged, out int[] collections);
+        string readings = Readings(charged, collections, firstCharged);
+        _out.WriteLine(readings);
+        Assert.Equal(0, firstCharged);
+        Assert.True(charged[0] >= WindowOpens, readings);
+    }
+
+    [Fact]
+    public void TheWindowsCatchAnAllocatorThatChargesOneWindowOfFive()
+    {
+        // The control for the shape a one-clean-window rule accepted: a body that allocates in its
+        // third window alone, clean in the two before it. Requiring every window clean is the only
+        // reason this reads red.
+        int opened = 0;
+        int firstCharged = MeasureWindows(
+            () =>
             {
-                using (PerfSample.Scope(PerfSite.DebrisSpawn))
+                if (opened++ == 2)
                 {
+                    Allocate();
                 }
-            }
-            charged[w] = GC.GetAllocatedBytesForCurrentThread() - before;
-            collections[w] = GC.CollectionCount(0) - gen0;
-            if (charged[w] == 0)
-            {
-                clean = w;
-            }
-        }
-
-        // A window that read non-zero is what the next reader of a red run needs, whether or not a
-        // later window saved it, so it is reported on the way past as well as in the failure.
-        if (clean != 0)
-        {
-            string readings = Readings(charged, collections, clean);
-            _out.WriteLine(readings);
-            Assert.True(clean >= 0, readings);
-        }
+            },
+            out long[] charged,
+            out int[] collections);
+        string readings = Readings(charged, collections, firstCharged);
+        _out.WriteLine(readings);
+        Assert.True(firstCharged >= 0, readings);
     }
 
     [Fact]
@@ -346,12 +359,61 @@ public class PerfSampleTests
         PerfSample.Reset();
     }
 
+    // The scope path under measurement: one open and close per iteration and nothing else, so a
+    // window's reading is the scope's own.
+    private static void OpenScopes()
+    {
+        for (int i = 0; i < WindowOpens; i++)
+        {
+            using (PerfSample.Scope(PerfSite.DebrisSpawn))
+            {
+            }
+        }
+    }
+
+    // The negative controls' body. The object is handed to a call the runtime cannot inline away,
+    // since an allocation that escapes nowhere is one a runtime is free to elide.
+    private static void Allocate()
+    {
+        for (int i = 0; i < WindowOpens; i++)
+        {
+            GC.KeepAlive(new object());
+        }
+    }
+
+    // Runs body once per window, reading the thread's allocated bytes and the gen-0 count across
+    // each, and stops at the first window that charged anything. Returns that window's index, or
+    // -1 when every window read exactly zero.
+    private static int MeasureWindows(Action body, out long[] charged, out int[] collections)
+    {
+        charged = new long[Windows];
+        collections = new int[Windows];
+        for (int w = 0; w < Windows; w++)
+        {
+            // Opens the window on an emptied allocation context. The counter steps up by whatever
+            // that context still held when the runtime retires it, which charges a window that
+            // allocated nothing (docs/verification.md PERF-29).
+            GC.Collect(0, GCCollectionMode.Forced, true);
+            int gen0 = GC.CollectionCount(0);
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            body();
+            charged[w] = GC.GetAllocatedBytesForCurrentThread() - before;
+            collections[w] = GC.CollectionCount(0) - gen0;
+            if (charged[w] != 0)
+            {
+                return w;
+            }
+        }
+
+        return -1;
+    }
+
     // What a reader of a red allocation run needs and cannot get afterwards: which windows were
     // charged and by how much, whether a collection crossed each one, and which binary and thread
     // produced the readings.
-    private static string Readings(long[] charged, int[] collections, int clean)
+    private static string Readings(long[] charged, int[] collections, int firstCharged)
     {
-        int opened = clean >= 0 ? clean + 1 : charged.Length;
+        int opened = firstCharged >= 0 ? firstCharged + 1 : charged.Length;
         var text = new StringBuilder();
         text.Append(CultureInfo.InvariantCulture, $"scope allocation over {opened} window(s): ");
         for (int w = 0; w < opened; w++)

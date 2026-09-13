@@ -266,25 +266,26 @@ public sealed record BoardLine(
     bool Bold = false, float Leading = 0f);
 
 /// <summary>
-/// A list widget's entries and the box they flow inside, in authored pixels: the briefing
-/// parchment's own <c>LIST</c> is <c>POSITION [35, 335]</c>, <c>WORDWRAP [185, 240]</c>,
-/// <c>SPACING [5]</c> (<c>docs/formats/briefing.md</c>). It is a layer of its own because how tall
-/// an entry draws is a font metric the engine-free half does not hold, so where the next entry
-/// starts cannot be composed here. <paramref name="Italic"/> slants every entry the way a langui
-/// row's <c>[FONTID]</c> tag does, <paramref name="Cut"/> keeps as many words of an over-tall entry
-/// as fit rather than dropping it, and <paramref name="Skip"/> drops that many wrapped lines off
-/// the first entry's head, which is how a box the original gives a scrollbar shows a body longer
-/// than itself. <paramref name="Counted"/> hands back the lines the body wraps to and the lines the
-/// box holds, both font measurements, which is what that scrollbar is drawn and clamped from.
+/// A list widget's entries and the box they flow inside, in authored pixels (the briefing
+/// parchment's own <c>LIST</c>, <c>docs/formats/briefing.md</c>). A layer of its own because how
+/// tall an entry draws is a font metric the engine-free half does not hold, so where the next
+/// entry starts cannot be composed here. <paramref name="Italic"/> slants every entry the way a
+/// langui row's <c>[FONTID]</c> tag does. Four answers to a body longer than its box:
+/// <paramref name="Cut"/> keeps the words of an over-tall entry that fit; <paramref name="Skip"/>
+/// drops that many wrapped lines off the first entry's head, a scrolled box's window; a
+/// <paramref name="Height"/> of 0 stops the entries nowhere; <paramref name="Shrink"/> asks the
+/// renderer to scale the face down until every entry fits. <paramref name="Counted"/> hands back
+/// the lines the body wraps to and the box holds, what a scrollbar is drawn and clamped from.
 /// </summary>
 public sealed record BoardNote(
     IReadOnlyList<string> Entries, float X, float Y, float Width, float Height, float Spacing,
     float Size, BoardInk Ink, BoardArt? Mark = null, IReadOnlyList<bool>? Marked = null,
-    bool Italic = false, bool Cut = false, int Skip = 0, Action<int, int>? Counted = null)
+    bool Italic = false, bool Cut = false, bool Shrink = false, int Skip = 0, Action<int, int>? Counted = null)
 {
     /// <summary>The entries as placed lines, stacked from the widget's top-left and stopped at its
-    /// authored height. <paramref name="height"/> measures one entry wrapped to a width, in
-    /// authored pixels; a fixed pitch instead draws a wrapped entry over the one under it.</summary>
+    /// authored height, or at nothing where that height is 0 or the face may shrink to the box.
+    /// <paramref name="height"/> measures one entry wrapped to a width, in authored pixels; a fixed
+    /// pitch instead draws a wrapped entry over the one under it.</summary>
     public IReadOnlyList<BoardLine> Flow(Func<string, float, float> height)
     {
         ArgumentNullException.ThrowIfNull(height);
@@ -338,9 +339,14 @@ public sealed record BoardNote(
         for (int i = 0; i < Entries.Count; i++)
         {
             string entry = i == 0 ? Scrolled(Entries[0], height) : Entries[i];
-            float room = Y + Height - top;
-            float tall = height(entry, Width);
-            string text = tall <= room ? entry : Cut ? Fit(entry, room, height) : string.Empty;
+            string text = entry;
+            if (Height > 0f && !Shrink)
+            {
+                float room = Y + Height - top;
+                text = height(entry, Width) <= room ? entry
+                    : Cut ? Fit(entry, room, height) : string.Empty;
+            }
+
             if (text.Length == 0)
             {
                 break;

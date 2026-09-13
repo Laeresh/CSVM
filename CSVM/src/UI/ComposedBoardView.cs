@@ -15,6 +15,11 @@ namespace CSVM.UI;
 /// </summary>
 public sealed partial class ComposedBoardView : Control
 {
+    /// <summary>The smallest face a shrinking note is scaled to. A block that will not fit its box
+    /// even here is drawn at this size and runs past it, which is a visible fault rather than the
+    /// silent one of losing rows or words.</summary>
+    public const float MinNoteFont = 9f;
+
     // The controls hint and the focused row's description. Neither is the original's chrome, which
     // said both with a mouse pointer; a pad player has no pointer, so the board says it in words.
     private const float HintFont = 12f;
@@ -89,9 +94,42 @@ public sealed partial class ComposedBoardView : Control
     /// cannot make for itself, and the only reason a flowed list is not composed engine-free.</summary>
     public static Func<string, float, float> Measure(BoardFit fit, Font font, BoardNote note)
     {
-        int points = Mathf.Max(1, Mathf.RoundToInt(fit.Length(note.Size)));
+        var box = MeasureBox(fit, font, note.Size);
+        return (text, width) => box(text, width).Y;
+    }
+
+    /// <summary>How wide and how tall a wrapped entry draws at <paramref name="size"/>, in authored
+    /// pixels. The width is the widest line the wrap produced, which a word too long to break can
+    /// push past the measure it was wrapped to.</summary>
+    public static Func<string, float, Vector2> MeasureBox(BoardFit fit, Font font, float size)
+    {
+        ArgumentNullException.ThrowIfNull(fit);
+        ArgumentNullException.ThrowIfNull(font);
+        int points = Mathf.Max(1, Mathf.RoundToInt(fit.Length(size)));
         return (text, width) => font.GetMultilineStringSize(
-            text, HorizontalAlignment.Left, fit.Length(width), points).Y / fit.Scale;
+            text, HorizontalAlignment.Left, fit.Length(width), points) / fit.Scale;
+    }
+
+    /// <summary>The note at the largest whole face size, its own or smaller, whose entries all fit
+    /// its box, for a note that may shrink; the note unchanged otherwise. A block that still will
+    /// not fit at <see cref="MinNoteFont"/> is drawn there rather than losing rows.</summary>
+    public static BoardNote Fitted(BoardFit fit, Font font, BoardNote note)
+    {
+        ArgumentNullException.ThrowIfNull(note);
+        if (!note.Shrink || note.Height <= 0f || note.Entries.Count == 0)
+        {
+            return note;
+        }
+
+        for (float size = note.Size; size > MinNoteFont; size -= 1f)
+        {
+            if (Fits(MeasureBox(fit, font, size), note))
+            {
+                return size == note.Size ? note : note with { Size = size };
+            }
+        }
+
+        return note with { Size = MinNoteFont };
     }
 
     /// <summary>Advances every movie this view has opened by that many seconds, answering whether
@@ -129,6 +167,11 @@ public sealed partial class ComposedBoardView : Control
 
         return flipped && _caretOnBoard;
     }
+
+    /// <summary>One bitmap's own size in its own pixels, or zero where the extraction does not
+    /// carry it. The one measurement a composed board cannot make for itself: a progress fill is a
+    /// pixel clip against the fill bitmap's own width.</summary>
+    public Vector2 ArtSize(BoardArt art) => Load(art) is { } texture ? texture.GetSize() : Vector2.Zero;
 
     /// <summary>Puts a composed board on screen, with the two lines the shell adds under it.</summary>
     public void Show(ComposedBoard board, BoardPalette palette, string detail, string footer)
@@ -315,6 +358,24 @@ public sealed partial class ComposedBoardView : Control
 
     // The palette a piece of text takes. A plaque's label is the one place the state is in the ink
     // rather than in the art, which is what the original's three label fonts are.
+    // Every entry of a wrapped block fits the box the note carries, in both axes.
+    private static bool Fits(Func<string, float, Vector2> box, BoardNote note)
+    {
+        float tall = -note.Spacing;
+        foreach (string entry in note.Entries)
+        {
+            var drawn = box(entry, note.Width);
+            if (drawn.X > note.Width)
+            {
+                return false;
+            }
+
+            tall += drawn.Y + note.Spacing;
+        }
+
+        return tall <= note.Height;
+    }
+
     private Color InkOf(BoardInk ink) => ink switch
     {
         BoardInk.RowFocused => _palette.Focus,
@@ -544,6 +605,7 @@ public sealed partial class ComposedBoardView : Control
             return;
         }
 
+        note = Fitted(fit, font, note);
         var height = Measure(fit, font, note);
         if (note.Counted is { } counted)
         {

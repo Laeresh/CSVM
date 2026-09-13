@@ -68,14 +68,14 @@ The correlation with half 1 is exact and is the whole decode:
 
 | Chapter | `fvol*` | volume altitude band (m) | `distance` | `fog_zone` | templates named | sprites placed |
 |---|---|---|---|---|---|---|
-| C1 | 9 | 970 – 1090.5 | 130 | 0 | `cloudsprite1`, `cloudsprite2` | 9,025 |
+| C1 | 9 | 970 – 1090.5 | 130 | 0 | `cloudsprite1`, `cloudsprite2` | 10,524 |
 | C1B | **0** | - | 206.25 | *(absent)* | `cloudsprite`, **absent from every gamez** | 0 |
-| C1C | 21 | 970.7 – 1091.3, **+ 12 frusta reaching 1390–1688** | 130 | 0 | `cloudsprite1`, `cloudsprite2` | 9,569 |
+| C1C | 21 | 970.7 – 1091.3, **+ 12 frusta reaching 1390–1688** | 130 | 0 | `cloudsprite1`, `cloudsprite2` | 11,452 |
 | C2 | **0** | - | 206.25 | *(absent)* | `cloudsprite`, absent | 0 |
-| C2B | 9 | 970 – 1090.5 | 130 | 0 | `cloudsprite1`, `cloudsprite2` | 9,025 |
+| C2B | 9 | 970 – 1090.5 | 130 | 0 | `cloudsprite1`, `cloudsprite2` | 10,524 |
 | C3 | **0** | - | 206.25 | *(absent)* | `cloudsprite`, absent | 0 |
-| C4 | 9 | 1060 – 1180.5 | 130 | 0 | `cloudsprite1`, `cloudsprite2` | 9,025 |
-| C5 | 17 | −463 – 183 | 80 | 1 | `cloudsprite1`, `cloudsprite2` | 16,170 |
+| C4 | 9 | 1060 – 1180.5 | 130 | 0 | `cloudsprite1`, `cloudsprite2` | 10,064 |
+| C5 | 17 | −463 – 183 | 80 | 1 | `cloudsprite1`, `cloudsprite2` | 19,197 |
 
 C1/C1C/C2B/C4's `fvol1`–`fvol9` tile the whole 12,288 m map as a single flat slab ~120 m thick,
 and they are an **exact 3 × 3 partition of the `World` node's own `area`** (x and z each split at
@@ -88,10 +88,11 @@ than taking the first one that contains a cell. C5's are not a slab at all: seve
 low strips at −463…183 m following the streets, which is why its clouds read as ground-level
 night haze between the skyscrapers rather than as an overcast.
 
-⚠ **The C1C and C5 counts moved when the fill went from the bounding box to the authored shape**
-(C1C 11,368 → 9,569, C5 19,356 → 16,170; C1/C2B/C4 unchanged at 9,025 because their volumes are
-boxes). The spacing did not: the surplus was outside the authored footprint, and removing it is
-what makes the density authored rather than an artifact of measuring a rotated shape squarely.
+⚠ **The count a chapter carries is a property of its polygons, not of its volume geometry.** The
+scatter lays its lattice over the faces the mesh authors and skips every polygon flagged
+`no_clutter` (`0x800`), so a bigger or taller volume places nothing extra unless it authors more
+unflagged surface. Every shipped `fvol` mesh is closed and carries that flag on its walls and
+floor, which leaves the upward skin as the whole scatter surface in all five chapters.
 
 ⚠ **A fog volume is not the `CLOUD_COVER` band.** C1's floor (970) happens to equal its
 `weather.json` `BOTTOM`, but C1C (band 1055–1110 vs volume 971–1091), C4 (1000–1100 vs
@@ -141,53 +142,58 @@ decode here, only a deliberate engine-side match to the terrain's own continuati
 only over the basemap. in the original its everywhere").
 
 **What extends, decided from data (`FogVolumeSpec.FindMapSpanningSlab`):** only the volumes that
-are (1) axis-aligned boxes, (2) top-anchored by A3's own rule, and (3), as a set, exactly tile
-their own combined bounding rectangle with no gap or overlap, re-checking A1's "exact 3×3
+are (1) axis-aligned boxes, (2) sheet-thin by `TopAnchorHeightFactor`, and (3), as a set, exactly
+tile their own combined bounding rectangle with no gap or overlap, re-checking the "exact 3×3
 partition of `World.area`" finding from the data rather than assuming it, so nothing keys off a
 chapter name or an `fvol1..9` numbering convention. C1/C2B/C4's nine slab pieces and C1C's own
 map-spanning `fvol1`–`fvol9` pass; C1C's twelve build-up frusta and C5's seventeen street strips
 both fail test (2), the shortest build-up is 299.7 m (ratio 2.27 against the 1.5× cut) and the
-shallowest strip is 646 m (ratio 9.23), so neither is ever extended, verified at the render
-(their counts are bit-identical to A3/A6/A7's own, below).
+shallowest strip is 646 m (ratio 9.23), so neither is ever extended.
 
 **How far.** `MapEdgeExtender`'s rolling terrain window covers `Rings` (5) tiles of 1,024 m past
 whatever cell the camera occupies, **5,120 m**, but a full precomputed ring to that radius would
-place an estimated **~21,250** extra sprites for C1/C2B/C4 (≈2.35× the 9,025-sprite base field,
+place an estimated **~21,250** extra sprites for C1/C2B/C4 (≈2.0× the 10,524-sprite base field,
 extrapolated from the ring-area ratio at the measured radius below), past a sane budget for a
 structure that is built once and kept for the process's whole lifetime. Every kind's own shader
 already collapses a sprite past its authored `far_fade.y` to a degenerate quad (`FogVolumeClutter`
 class remarks), so a ring wider than the LARGEST authored `far_fade.y` buys zero visible pixels
 from anywhere a camera can stand, bounding the extension there is lossless, not a cut corner.
+The view-angle term the render now applies only tightens that bound: on the horizontal face these
+rings continue, a sprite's horizontal reach is `sqrt(dy x far - dy^2)`, which peaks at `far/2`.
 Both `cloudsprite1`/`cloudsprite2` carry the same **3,500 m** in every shipped deck chapter, so
 today this is one radius per chapter, read from the data rather than hardcoded.
 
-**Density, Y band, and determinism.** Identical `distance` × `distance` cell tiling as the interior
-draw (outermost cell of each axis takes the remainder, same as the interior loop), same weighted
-kind draw, same `perturb_dist_range`/`scale_range`. Y is the slab's own constant top (every
-qualifying piece's `box.End.Y`, checked equal by `FindMapSpanningSlab`) plus `perp_dist_range`,
-A3's top-anchor rule inherited, not a second vertical rule invented. Each extension cell draws off
-its OWN generator, `Rng.NewSystemRandom(Rng.Clouds, gx, gz)` (`Utils/Rng.cs`), a hash of the
-master seed, the subsystem and the cell's own coordinates, not the interior's shared sequential
-stream, so the extension is stable under `--det` regardless of how many cells the far-fade bound
-admits or what order they build in, and the interior draw's own realization is untouched (base
-counts below are bit-identical to A3/A6/A7's own).
+**Density, Y band, and determinism.** A `distance` × `distance` cell tiling (outermost cell of
+each axis takes the remainder), same weighted kind draw, same `perturb_dist_range`/`scale_range`.
+Y is the slab's own constant top (every qualifying piece's `box.End.Y`, checked equal by
+`FindMapSpanningSlab`) plus `perp_dist_range`. ⚠ **The ring's own tiling is NOT the interior
+lattice**: past the map there is no polygon to lay one on, so this is a square cell draw
+continuing the slab's top face, a deliberate engine-side match and the one place the two
+populations differ in layout. Each extension cell draws off its OWN generator,
+`Rng.NewSystemRandom(Rng.Clouds, gx, gz)` (`Utils/Rng.cs`), a hash of the master seed, the
+subsystem and the cell's own coordinates, not the interior's shared sequential stream, so the
+extension is stable under `--det` regardless of how many cells the far-fade bound admits or what
+order they build in, and the interior draw's own realization is untouched.
 
 **Measured, all 8 chapters** (`--freecam --chapter=<X> --det`, `fogvol clouds:` log line):
 
 | chapter | base (authored) | extension (engine-side) | total | extension/base |
 |---|---|---|---|---|
-| C1 | 9,025 | 13,176 | 22,201 | 1.46× |
+| C1 | 10,524 | 13,176 | 23,700 | 1.25× |
 | C1B | 0 | 0 | 0 | - |
-| C1C | 9,572 | 13,176 | 22,748 | 1.38× |
+| C1C | 11,452 | 13,176 | 24,628 | 1.15× |
 | C2 | 0 | 0 | 0 | - |
-| C2B | 9,025 | 13,176 | 22,201 | 1.46× |
+| C2B | 10,524 | 13,176 | 23,700 | 1.25× |
 | C3 | 0 | 0 | 0 | - |
-| C4 | 9,025 | 13,176 | 22,201 | 1.46× |
-| C5 | 16,170 | 0 | 16,170 | - |
+| C4 | 10,064 | 13,176 | 23,240 | 1.31× |
+| C5 | 19,197 | 0 | 19,197 | - |
 
-C5's strips and C1C's build-ups are unmoved (their own counts are exactly A3/A6/A7's), and the
-three deckless chapters stay at zero, the extension is inert exactly where the data says it must
-be, and additive only where a map-spanning slab exists.
+The extension column is the same 13,176 in every chapter that has a map-spanning slab, and the
+three deckless chapters stay at zero, so the extension is inert exactly where the data says it
+must be, and additive only where such a slab exists. ⚠ **The ring continues the slab's top face
+alone**, one authored polygon per piece rather than the volume, which is what the authored slab
+carries anyway; a chapter whose slab ever authored a second unflagged face would need this rule
+widened.
 
 **Verified at the render.** A straight-down-the-seam pair at the west map rim
 (`.scratch/a5/before-west-along-override.png` / `after-west-along-override.png`,
@@ -208,29 +214,25 @@ one child carrying the card. The card is a single 4-vertex, 1-polygon tri-strip 
 `CylindricalY`), skinned `cloud1.tif` / `cloud2.tif`, vertex colours 240/240/240, centred on its
 own quad centre to within 3 mm.
 
-⚠ **We render those cards at vertex colour 225, not the authored 240**, a marked TUNE
-(`FogVolumeClutter.CardVertexColorTune`, the user's verdict at the controls),
-applied to RGB only and never to alpha. The authored value is what this page says it is and is
-unchanged as a decode; what the TUNE fixes is a rendered-brightness gap whose mechanism **is now
-decoded, and is not a colour at all**: the card's colour reaches the vertex diffuse unchanged, the
-texture is a constant-RGB 239 alpha mask, and the original's own per-sprite draw distance is scaled
-by the cosine of the viewing angle against its `fvol` polygon's normal, which thins the field to a
-fraction of ours at exactly the grazing poses the 209 plateau was measured in
-([`../org/cloudCards.md`](../org/cloudCards.md)). The measurements below stand; what changes is that
-the quantity to correct is coverage. `236.65 × 240/255 = 222.7` is what the naive reading gives and
-it is what we shipped;
-**nothing in five independent original above-band frames renders at 222.7**, and the original's
-saturated plateau measures **208.88** (`t124`, 1208 m) and **209.16** (`t59`, 1219 m) in a
-near-field, fog-free patch, with whole-frame `p99` topping out at 213–216. `236.65 × 225/255 =
-208.8` lands there. C23 refuted the four mechanisms that could have explained it as data: (1) no
-`cloudsprite` `OBJECT_OPACITY_STATE` exists in any chapter's `zrdr`, C1's `clouds.zrd` names only
-`cloudparent`, and no other chapter ships one; (2) `WorldLight` on C1's cards would put them at
-178.6, *below* the original's own 204.9–213.3 at the matching altitude; (3) `fog: true` is
+⚠ **We render those cards at the authored 240, and no colour term is applied to them at all.**
+The card's colour reaches the vertex diffuse unchanged, the texture is a constant-RGB 239 alpha
+mask, and the per-sprite draw distance is scaled by the cosine of the viewing angle against its
+`fvol` polygon's normal ([`../org/cloudCards.md`](../org/cloudCards.md)). The measurements that a
+colour scale once stood in for still hold, but the quantity they measure is COVERAGE:
+`236.65 × 240/255 = 222.7` is what the naive reading gives, **nothing in five independent original
+above-band frames renders at 222.7**, and the original's saturated plateau measures **208.88**
+(`t124`, 1208 m) and **209.16** (`t59`, 1219 m) in a near-field, fog-free patch, with whole-frame
+`p99` topping out at 213–216. A card cannot exceed `239 × 240/255 = 224.9`, so 209 is the fogged
+background showing through a field that the viewing angle has thinned to a disc at exactly those
+grazing poses. Four mechanisms that could have explained it as a colour were refuted on data:
+(1) no `cloudsprite` `OBJECT_OPACITY_STATE` exists in any chapter's `zrdr`, C1's `clouds.zrd`
+names only `cloudparent`, and no other chapter ships one; (2) `WorldLight` on C1's cards would put
+them at 178.6, *below* the original's own 204.9–213.3 at the matching altitude; (3) `fog: true` is
 contradicted three ways (the same reader's tree templates and the world's placed cloud facades
 both author it explicitly, and `B16` verified the flag is honoured); (4) carrying the field up
-with the relocated deck is refuted by CAP-12's own altimetry. **A mechanism, if one is ever
-decoded, replaces this constant, it does not stack with it.** The TUNE is `fvol` cards only: the
-placed `cloudparent` facades keep vertex colour 255 and their range-gated `0.6` opacity.
+with the relocated deck is refuted by CAP-12's own altimetry. ⚠ **Do not re-introduce a colour
+scale here.** The placed `cloudparent` facades are a separate population and keep vertex colour 255
+and their range-gated `0.6` opacity.
 
 | Chapter | card size | `lighting` | `fog` |
 |---|---|---|---|
@@ -260,37 +262,35 @@ surviving to the horizon line (census and consequences in [`weather.md`](weather
 ## What is decoded and what is inferred
 
 **Decoded, traced to data:** which templates and their weights; the volumes and their **authored
-shapes**, not merely their extents; the per-sprite scale range; the draw distances; the card
-geometry, texture, billboard mode and render flags; and the three-chapter split, which four
-independent absences agree on (no `fvol*`, no `cloudsprite*` template, no `clutter` key,
-degenerate ranges).
+shapes**, not merely their extents; **the scatter surface**, the mesh's own polygons minus every
+one flagged `no_clutter`; the staggered lattice laid in each polygon's plane; the per-sprite scale
+range; the draw distances; the card geometry, texture, billboard mode and render flags; and the
+three-chapter split, which four independent absences agree on (no `fvol*`, no `cloudsprite*`
+template, no `clutter` key, degenerate ranges).
 
 **Inferred, and marked as such:**
 
-- **The card's RENDERED brightness, vertex colour 240 scaled to 225 (`CardVertexColorTune`).**
-  The authored 240 is decoded and unchanged; the scale is a TUNE calibrated to the original's
-  measured 209 plateau. ☑ **The mechanism it stands in for is now decoded and is an ALPHA term, so
-  this constant is a stand-in for the wrong quantity:** nothing in the original scales a card's
-  colour, its texture is a constant-RGB 239 alpha mask, and its draw distance is scaled by the
-  cosine of the viewing angle against its `fvol` polygon's normal, which shrinks the field to a
-  ~600 m disc at the grazing poses the plateau was measured in
-  ([`../org/cloudCards.md`](../org/cloudCards.md)). Four candidates were refuted before that;
-  full statement
-  under [The sprite templates](#the-sprite-templates) above. ⚠ The card's `lighting` flag is not the
-  missing mechanism, and it is decoded rather than open: it gates the sun on a facade exactly as it
-  does on any model, but what it admits is a per-vertex `AMBIENT + DIFFUSE × max(N·L, 0)` evaluated
-  on the card's own three authored normals carried through the billboard basis, never a flat
-  `WorldLight` multiply ([`../org/vertexLighting.md`](../org/vertexLighting.md)'s facade section).
-  C1 and C4, whose footage the 208.8 plateau was measured in, author `lighting: false`, so no
-  lighting term reaches their cards at all.
-- **`distance` is the scatter's mean spacing, an areal density, not a lattice period.** Each
-  volume is cut into `distance` × `distance` cells anchored on the world origin and each cell gets
-  **one placement drawn uniformly inside it**, with `perturb_dist_range` applied on top. The
-  density is what the number is for and it is corroborated: C1's 9,025 placements over the
-  12,288 m map are a mean spacing of **129.3 m** against the authored 130, and a mean card area of
-  132.3² × E[scale²] gives **1.6 sprite-areas of cover** per unit of layer, an overcast one sprite
-  deep. Cells rather than N uniform draws over the whole footprint, because a Poisson field at this
-  density opens holes and an overcast has to read as continuous.
+- ~~**The polygon normal a sprite's draw distance is scaled against, for a volume that is not a
+  slab.**~~ **Struck: the scatter lays its lattice on each authored polygon, so a sprite's normal
+  is its own face's**, exact in every chapter including C1C's build-up frusta and C5's street
+  prisms. The law itself is decoded ([`../org/cloudCards.md`](../org/cloudCards.md)) and applied:
+  each placement carries that normal and its own draw of the fade band.
+  ⚠ The card's `lighting` flag is not part of this and is decoded rather than open: it gates the
+  sun on a facade exactly as it does on any model, but what it admits is a per-vertex
+  `AMBIENT + DIFFUSE × max(N·L, 0)` evaluated on the card's own three authored normals carried
+  through the billboard basis, never a flat `WorldLight` multiply
+  ([`../org/vertexLighting.md`](../org/vertexLighting.md)'s facade section). C1 and C4, whose
+  footage the 208.8 plateau was measured in, author `lighting: false`, so no lighting term reaches
+  their cards at all.
+- **`distance` is the scatter's mean spacing, an areal density.** It is also the decoded lattice's
+  column step, and the two readings agree: the staggered lattice puts one placement every
+  `distance² × sqrt(3)/2` of face area, with `perturb_dist_range` applied on top. The density is
+  what the number is for and it is corroborated twice over: C1's 10,524 placements over the
+  12,288 m map are a mean spacing of **119.8 m**, against the **121.0 m** the lattice itself
+  predicts (`sqrt(130 × 130 × sqrt(3)/2)`), and a mean card area of
+  132.3² × E[scale²] gives **1.9 sprite-areas of cover** per unit of layer, an overcast one sprite
+  deep. A lattice rather than N uniform draws over the whole footprint, because a Poisson field at
+  this density opens holes and an overcast has to read as continuous.
   ☑ **Landed `A2`, and confirmed at the render.** The previous reading, that the
   number was a *grid phase*, with `perturb_dist_range` as jitter on it, was contradicted by
   `PT-42` + `CAP-12` (ours combed on the 130 m lattice at grazing angles; the original shows none
@@ -313,43 +313,40 @@ degenerate ranges).
   evidence against the bounded reading, the nine slab volumes ARE the map (see half 2), so the
   two readings can only differ within `far_fade_range.y` (3500 m) of the map boundary and the
   footage never samples that.
-- **`perp_dist_range` is vertical.** "Perpendicular" to the volume's horizontal plane. The
-  asymmetry supports it: `cloudsprite1` gets `[-5, 5]` and `cloudsprite2` `[-5, 10]`, so one kind
-  floats slightly higher, which is a reading a horizontal offset makes no sense of.
-  ⚠ **The decode narrows this**: the original displaces the placement along the direction from a
-  per-volume reference point to the sample point, which on a slab's top face is up near the middle
-  and tilts outward towards the rim, so "vertical" is right in effect for the deck chapters and is
-  an approximation in general ([`../org/cloudCards.md`](../org/cloudCards.md)).
+- **The per-volume reference point the `perp_dist_range` offset runs away from.** The decode has
+  the direction (`unit(p − ref)`, from a point the volume record carries to the sample point) but
+  not where in the record that point is read, so the remake uses the volume's bounds centre. On a
+  slab's top face that gives up near the middle tilting outward towards the rim, which is also why
+  the older "`perp_dist_range` is vertical" reading held for the deck chapters: the asymmetry it
+  rested on (`cloudsprite1` `[-5, 5]` against `cloudsprite2` `[-5, 10]`, one kind floating higher)
+  is what the centre-outward direction produces there. A different reference point would tilt the
+  offsets, not resize them ([`../org/cloudCards.md`](../org/cloudCards.md)).
 - ~~**`far_fade_range[1]` is what to draw at**, the pair being per detail level.~~ **Struck: the
   decode says the two pairs are the endpoints of a per-sprite interpolation** and the engine never
-  selects one of them ([`../org/cloudCards.md`](../org/cloudCards.md)). Both are still read and
-  kept; taking the farther band alone is now a known divergence, not a reading. The detail level
-  enters somewhere else entirely, as a factor of 1, 4 or 9 on the squared distance.
-- **The vertical spread is TOP-ANCHORED for sheet-thin volumes, UNIFORM for tall ones, the anchor
-  IS per-volume-shape, settled `A3` and verified at the render.** C4's clear air at
-  1135 m (`CAP-12` C4 take) falsified a uniform fill: 132.3 m cards
-  drawn uniformly across the 1060–1180.5 volume would hang to ~956 m, leaving no gap, but the clip
-  shows *clear sky*, puff bases well above the 1050 m deck sheet. `A1` decided the shape (centre
-  Y = volume top + `perp_dist_range`) and `A3` decided WHICH volumes it applies to, since a
-  map-spanning slab and a 597 m build-up tower are not the same kind of shape.
-  ☑ **Rule, as implemented (`FogVolumeClutter.Scatter`):** a volume whose own AABB height is at
-  most `TopAnchorHeightFactor` (1.5×) the chapter's card size draws every cell's Y at the volume's
-  own top (`box.End.Y`) before containment, then adds `perp_dist_range` after, same order as
-  every other placement, so the ordering trap below still applies. A taller volume keeps the
-  original full-height uniform draw untouched. **Marked inference, the factor is a judgement
-  call, not authored data**, chosen from a clean gap in the volumes' own measured thickness
-  (`extracted/{C1,C1C,C2B,C4,C5}/gamez/nodes.json`): C1/C2B/C4's nine slabs and C1C's own
-  map-spanning `fvol1`–`fvol9` are **120.5–120.6 m** thick against a 132.3 m card (ratio 0.91);
-  C1C's twelve build-up frusta start at **299.7 m** (ratio 2.27, the shortest of them) and reach
-  596.8 m; C5's seventeen street strips are **646 m** (ratio 9.23 against their 70 m card). 1.5×
-  card height (198.5 m for the 132.3 m chapters) sits in that gap with margin on both sides,
+  selects one of them ([`../org/cloudCards.md`](../org/cloudCards.md)). The render applies the
+  interpolation: each placement carries one draw `t` and its band is `mix(far_fade_0, far_fade_1, t)`.
+  The detail level enters somewhere else entirely, as a factor of 1, 4 or 9 on the squared distance,
+  which is the graphics `EffectsLevel` and reaches the shader as `csky_clutter_fade_scale_sq`.
+- ~~**The vertical spread is TOP-ANCHORED for sheet-thin volumes, UNIFORM for tall ones, the
+  anchor IS per-volume-shape.**~~ **Struck: there is no vertical rule to choose, because the
+  scatter never fills a volume's interior.** The lattice lies on the authored polygons, and every
+  shipped `fvol` mesh flags its walls and floor `no_clutter`, so the field is the upward skin of
+  each volume and its Y comes from the polygon it sits on. What the top-anchored reading was
+  built to explain survives intact: C4's clear air at 1135 m (`CAP-12` C4 take) falsified a
+  uniform fill, since 132.3 m cards drawn uniformly across the 1060–1180.5 volume would hang to
+  ~956 m, leaving no gap, but the clip shows *clear sky*, puff bases well above the 1050 m deck
+  sheet. On C4's slab the skin IS the top, so the two readings agree there and the clip still
+  discriminates against a fill.
+  ⚠ **`TopAnchorHeightFactor` (1.5× the chapter's card size) survives as the map-edge
+  continuation's sheet test alone**, deciding which volumes the ring may continue, and is a
+  judgement call rather than authored data. It reads off a clean gap in the volumes' own measured
+  thickness (`extracted/{C1,C1C,C2B,C4,C5}/gamez/nodes.json`): C1/C2B/C4's nine slabs and C1C's
+  own map-spanning `fvol1`–`fvol9` are **120.5–120.6 m** thick against a 132.3 m card (ratio
+  0.91); C1C's twelve build-up frusta start at **299.7 m** (ratio 2.27, the shortest of them) and
+  reach 596.8 m; C5's seventeen street strips are **646 m** (ratio 9.23 against their 70 m card).
+  1.5× card height (198.5 m for the 132.3 m chapters) sits in that gap with margin on both sides,
   39 % under the tallest slab, 51 % under the shortest build-up, so no shipped volume is a close
   call.
-  - **Why sampling AT the top (not inventing a band) still respects a sloped or tapered top:**
-    `Contains` already runs the exact face test, so for a volume whose top isn't a simple
-    flat plane the (x, box.End.Y, z) point drawn in a cell is rejected exactly when that XZ falls
-    outside the true top footprint at that height. No separate per-column top lookup was needed;
-    the geometry the containment test already reads does the work.
   - **C1's band is still a degenerate instrument on its own** (`CLOUD_COVER` `TOP 1124 / BOTTOM
     970 / THICKNESS 30` predicts full white 1000–1094; the slab predicts a 1090.55 m top; the
     measurement is 1003–1085 m and both fit), **C4's 1135 m clear-air frame remains the clean
@@ -365,10 +362,10 @@ degenerate ranges).
     | C2B | 960.0 | 970.00 | 10.00 | 1024.0 |
     | C4 | 1050.0 | 1060.00 | 10.00 | **1050.0** |
 
-    So the two populations are ONE sheet in the data: mesh underneath, sprite field on top of it,
-    and top-anchoring only makes sense read against the mesh at its authored altitude. C4's centre
-    lands on its authored deck exactly, which is the corroboration and also why C4 never showed
-    the `A6` defect.
+    So the two populations are ONE sheet in the data: mesh underneath, sprite field on the slab's
+    own top face above it, and the field's altitude only reads correctly against the mesh at its
+    authored altitude. C4's centre lands on its authored deck exactly, which is the corroboration
+    and also why C4 never showed the `A6` defect.
 
     ⚠ **The authored altitude is where the data puts the sheet; it is NOT where the deck mesh is
     rendered**. The original's deck is engine trickery, below the
@@ -403,55 +400,40 @@ degenerate ranges).
       the predicted card-bottom band topping out at 1127.7 m, 7 m below this altitude, against
       **fully solid** coverage from the same pose 85 m lower at 1050 m, inside the predicted
       986–1128 m band (`after-c4-1135m-override-level.png` vs `after-c4-1050m-override-level.png`).
-    - **C1C build-up** (`fvol10`, pos `-5416,1350,-9737` looking at its centroid) and **C5 street
-      pass** (C5's `fvol10` strip, pos `-2868,50,-1792`): both **unchanged pixel-for-pixel in
-      character** before/after, the tower stays a solid tapering mass, the street-level haze
-      between skyscrapers stays put, because both volumes measure far taller than
-      `TopAnchorHeightFactor` × their card and keep the old uniform draw.
+    - **C1C's build-ups and C5's street prisms read as a SHELL, not a filled mass**, which is the
+      visible signature of the lattice lying on the polygons. A C5 volume seen from 894 m with
+      `--no-fog` and both cards overridden to one colour goes from cards scattered through the
+      prism's depth to a single dense sheet at its top, 428,921 px moved of 921,600 with 3 px
+      outside the population's own two-colour mask.
     - **Sky→tops transition depth (the `A2`-amended instrument) does NOT move materially at any
       of the four poses tested** (pinned above-deck 46/13→46/7, grazing-tops-1208 60/47.5→55/48,
       above-deck-1527 25/25→25/25, high-above-1698 24/24→24/24, band/edge px). This is a genuine
-      finding, not a forced non-result: a billboard card is itself 132.3 m across, so even under
-      the old uniform-in-120 m draw there was already a card near the volume's ceiling almost
-      everywhere by sheer density, and the new tight top-anchored band doesn't change that, the
-      instrument reads how ragged the *silhouette* of the nearest cards is at a shallow viewing
-      angle, which top-anchoring does not touch. **The remaining gap to the original's 91–103 px
+      finding, not a forced non-result: a billboard card is itself 132.3 m across, so a slab
+      chapter's field is one card deep however its Y is chosen, and the instrument reads how
+      ragged the *silhouette* of the nearest cards is at a shallow viewing angle, which no
+      vertical rule touches. **The remaining gap to the original's 91–103 px
       is therefore NOT primarily a vertical-placement problem**; it is left as a finding for a
       future item (candidates: per-card alpha softness/scale distribution, or a video-compression
       artifact in the `CAP-12` capture, untraced, not investigated here).
-  - **Counts:** C1/C2B/C4 stay exactly 9,025 (their slabs are axis-aligned boxes, so top-anchoring
-    accepts the same 100 % of cells as uniform did, only the kind/scale/perturb realization
-    shifts, since sampling Y at a fixed height instead of drawing it skips one RNG draw per
-    top-anchored cell and re-aligns every later draw in the shared stream). C5 stays exactly
-    16,170 (its strips are all classified uniform, untouched). **C1C moves 9,569 → 9,572** (+3,
-    0.03 %): its nine slab pieces (including `fvol9`) are now top-anchored, and because that
-    volume-order precedes the twelve build-ups in the shared RNG stream, the build-ups' own
-    (unchanged-logic) containment draws land on different random numbers than before, an
-    expected consequence of one shared seeded stream, not a second correction to the build-up
-    rule itself.
-- ~~**The volume is its axis-aligned bounding box.**~~, **`A1`/`A2`,. The
-  volume is the authored mesh**, and the two agree only for C1/C2B/C4.
-  `FogVolumeSpec.VolumesOf` now carries each volume's face planes beside its bounds, and
-  `FogVolumeBox.Contains` is a half-space test over them, which is **exact, not an approximation,
-  because every one of the 65 shipped `fvol*` volumes is convex** (verified across all eight
-  chapters: slabs, frusta and street prisms alike). The scatter still walks cells over the bounds
-  and draws inside the cell; a draw that lands outside the authored shape simply places nothing,
-  which is what keeps the spacing authored instead of crowding the surplus inward.
-  - C1/C2B/C4's slabs are boxes (hull/AABB = 1.000): **9,025 unchanged**, and no C1 pixel of the
-    milestone's two reference stills moves for this reason.
+- ~~**The volume is its axis-aligned bounding box.**~~ **Struck: the volume is the authored
+  mesh**, and the two agree only for C1/C2B/C4. `FogVolumeSpec.VolumesOf` carries each volume's
+  face planes and its unflagged polygons beside its bounds, and `FogVolumeBox.Contains` is a
+  half-space test over the planes, **exact, not an approximation, because every one of the 65
+  shipped `fvol*` volumes is convex** (verified across all eight chapters: slabs, frusta and
+  street prisms alike). The camera-state test and the whiteout use that; the scatter uses the
+  polygons, testing each lattice point against its own polygon's outline rather than against the
+  volume.
+  - C1/C2B/C4's slabs are boxes (hull/AABB = 1.000) authoring one unflagged top polygon each, so
+    their nine faces carry the whole field.
   - **C1C's twelve build-ups are rotated *frusta*.** Footprints 2048 × 704 m (also 974 × 335,
     1864 × 641, 854 × 294), the same twelve shapes cut into `fvol9`'s own top face as coplanar
     polygons; `fvol10` is 854 × 294 m at its 1091.28 m base and ~464 × 160 m at its 1688.05 m top.
-    Base footprint = 0.383 of the bounding box, but the taper makes the **volume** fraction 0.235,
-    so C1C went **11,368 → 9,569** under the (then still uniform-in-Y) draw at A2, not the
-    ~9,922 a footprint-only estimate predicts. **It moved again at `A3`, to 9,572**, once the nine
-    slab pieces switched to top-anchored, see the vertical-spread entry above for why (an RNG
-    stream-order effect on the build-ups, not a second correction to this frustum-taper rule).
+    They are the chapter's only sloped scatter surface, 1,242 sprites of 11,452.
   - **C5's seventeen strips are polygonal prisms**, three of them with a ramped top; volume
-    fractions 0.558–1.000, and only `fvol1`/`fvol3` are boxes. **19,356 → 16,170**, the surplus
-    having sat off the streets.
-  - Because a frustum's faces slope, the test narrows with height by itself, nothing about it is
-    a footprint taken at one altitude, and no vertical rule has to be taught about it.
+    fractions 0.558–1.000, and only `fvol1`/`fvol3` are boxes. The ramps carry 2,102 sprites of
+    19,197, the flat tops the other 17,095.
+  - Because the lattice sits on the polygon it belongs to, a taper needs no vertical rule taught
+    about it: the sloped face is simply a face, and its sprites carry its own normal.
 
 **Undecoded / not implemented:**
 
@@ -466,13 +448,13 @@ degenerate ranges).
   never a contradiction, because the value was never an index. `BL-277`'s geometry rule stands
   as landed.
 - ~~**The engine's exact cell phase**, the remake anchoring its cells on the world origin.~~
-  **Struck: the cell layout is decoded** ([`../org/cloudCards.md`](../org/cloudCards.md)). The
-  original lays a staggered lattice in each `fvol` **polygon's** own plane, anchored on that
-  polygon's projected minimum corner, with steps `distance × sqrt(3)/2` and `distance` and every
-  other row offset half a step. Ours is a square lattice of `distance × distance` cells over a
-  volume's interior anchored on the world origin, which is a known divergence rather than an
-  unknown. The density reading it was chosen under is unaffected.
-- **The map-edge continuation's radius is a TUNE, like `A3`'s `TopAnchorHeightFactor`.** `A5`
+  **Struck: the lattice layout is decoded and implemented**
+  ([`../org/cloudCards.md`](../org/cloudCards.md)). The lattice lies in each `fvol` **polygon's**
+  own plane, anchored on that polygon's projected minimum corner, basis `U = unit(v1 − v0)` and
+  `V = U × n`, steps `distance × sqrt(3)/2` and `distance` cut into whole steps, every other row
+  offset half a step, each point tested against the polygon's own outline. The density reading it
+  was chosen under is unaffected.
+- **The map-edge continuation's radius is a TUNE, like `TopAnchorHeightFactor`.** `A5`
   bounds the extension to the largest authored `far_fade.y` (3,500 m, every shipped deck chapter)
   rather than to `MapEdgeExtender`'s own reach (5,120 m), a budget decision matched to the
   render's own fade shader, not a value `fogvol.zrd` or the gamez names. See the section above.
@@ -533,10 +515,12 @@ volume, 112× the 16 m ramp (predicted before the run, pinned in
 
 ## Visible consequences to know about
 
-- **The 130 m comb is not authored.** It was ours: a 10–20 m perturbation on a 130 m *grid* is
-  ±15 % jitter, and it combed at grazing angles where the original (`CAP-12` t=44/59/97/124,
-  t=29.2) shows soft continuous mottling at every angle. The grid is gone; do not re-derive one
-  from `distance`.
+- **A SQUARE 130 m grid is not authored, a staggered one is.** A 10–20 m perturbation on a square
+  130 m grid is ±15 % jitter and it combed at grazing angles, where the original (`CAP-12`
+  t=44/59/97/124, t=29.2) shows soft continuous mottling at every angle. The decoded lattice is
+  staggered (`distance × sqrt(3)/2` rows, alternate rows offset half a step) and lies in each
+  polygon's own plane, so world-axis rows never form. Do not re-derive a square grid from
+  `distance`.
 - **The sky→tops transition-depth gap survived BOTH the horizontal fix and the vertical
   one, it is evidence for neither scatter axis.** `A2` measured 0–0.5 px of movement from
   randomising the horizontal placement (13 → 13.5 px at the pinned above-deck pose); `A3`'s
@@ -549,6 +533,11 @@ volume, 112× the 16 m ramp (predicted before the run, pinned in
   still unidentified (candidates: per-card alpha falloff/scale distribution, or a capture artifact
   in the `CAP-12` video) and is a lead for a future item, not something either wave should keep
   chasing with placement changes.
+- **A volume's interior is empty; the field is its skin.** C1C's build-ups and C5's street prisms
+  read as a shell around a hollow shape rather than as a filled mass, because their walls and
+  floors carry `no_clutter` and only the upward faces scatter. Anywhere a camera can get inside a
+  C5 prism, the cards are overhead in one sheet and the air below them is clear. Do not read a
+  thin-looking interior as a missing population.
 - **Volume walls are not sprite clips.** `perturb_dist_range` is applied after containment, so a
   card's centre can sit up to `perturb_dist_range.y` outside its own volume's wall. That is what a
   perturbation means; the volume bounds where the field is placed, not where each sprite may hang.

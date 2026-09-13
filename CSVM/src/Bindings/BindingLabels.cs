@@ -18,10 +18,15 @@ public static class BindingLabels
     /// <summary>What a row prints when the action is bound to nothing.</summary>
     public const string Unbound = "unbound";
 
-    /// <summary>An action's caption: the enum name with its words separated, so
-    /// <c>FireRockets</c> reads as "Fire Rockets".</summary>
+    /// <summary>An action's caption: the original's own keybind-page string where it binds that
+    /// action, else the enum name with its words separated, so <c>FireRockets</c> reads as "Fire
+    /// Rockets". The original's captions read under their category heading, which is why the
+    /// targeting ones carry no "Target" prefix.</summary>
     public static string Name(InputAction action)
     {
+        if (Original(action) is { } original)
+            return original;
+
         string name = action.ToString();
         var text = new StringBuilder(name.Length + 8);
         for (int i = 0; i < name.Length; i++)
@@ -41,7 +46,7 @@ public static class BindingLabels
         var c = binding.Control;
         return c.Kind switch
         {
-            ControlKind.Key => KeyName((Key)c.Index),
+            ControlKind.Key => BindingControl.Prefix(c.Modifiers) + KeyName((Key)c.Index),
             ControlKind.Button => "Pad " + Spaced(EnumName<JoyButton>(c.Index)),
             ControlKind.Axis => "Pad " + Spaced(EnumName<JoyAxis>(c.Index)) + (c.Sign < 0 ? " -" : " +"),
             ControlKind.Mouse => "Mouse " + Spaced(EnumName<MouseButton>(c.Index)),
@@ -85,9 +90,61 @@ public static class BindingLabels
         return text.ToString();
     }
 
-    // A key's own caption. The numpad and the punctuation keys are named the way a keycap is
-    // rather than the way the enum is, because "Kp Enter" and "Quoteleft" are not what the player
-    // is looking at.
+    // The original's own caption for an action it binds, quoted from its keybind pages
+    // (`OriginalScreenshots/Keybinds *.png`, decoded in docs/org/input.md), or null for an action
+    // this port added. Its targeting and weapon rows are deliberately unprefixed and lowercase where
+    // the page is: the page is the record, not this file's taste.
+    private static string? Original(InputAction action) => action switch
+    {
+        InputAction.PitchDown => "Point Nose Down",
+        InputAction.PitchUp => "Point Nose Up",
+        InputAction.RollLeft => "Roll Left",
+        InputAction.RollRight => "Roll Right",
+        InputAction.YawLeft => "Turn Left",
+        InputAction.YawRight => "Turn Right",
+        InputAction.ThrottleUp => "Throttle Up",
+        InputAction.ThrottleDown => "Throttle Down",
+        InputAction.FireGuns => "Fire Guns",
+        InputAction.FireRockets => "Fire Rockets",
+        InputAction.SelectGunGroup => "Cycle guns clockwise",
+        InputAction.SelectGunGroupPrev => "Cycle guns counterclockwise",
+        InputAction.SelectOrdnance => "Cycle rockets clockwise",
+        InputAction.SelectOrdnancePrev => "Cycle rockets counterclockwise",
+        InputAction.TargetNextEnemy => "Next Enemy/Objective",
+        InputAction.TargetPreviousEnemy => "Previous Enemy/Objective",
+        InputAction.TargetNearestEnemy => "Nearest Enemy/Objective",
+        InputAction.TargetNextAlly => "Next Ally",
+        InputAction.TargetPreviousAlly => "Previous Ally",
+        InputAction.TargetNearestAlly => "Nearest Ally",
+        InputAction.TargetNextNonAircraft => "Next Non-Aircraft",
+        InputAction.TargetPreviousNonAircraft => "Previous Non-Aircraft",
+        InputAction.TargetNearestNonAircraft => "Nearest Non-Aircraft",
+        InputAction.TargetNearest => "Select Target Nearest Crosshairs",
+        InputAction.TargetClear => "Target Nothing",
+        InputAction.ToggleSpyglass => "Toggle Spyglass",
+        InputAction.CycleCockpitViews => "Cycle Cockpit Views",
+        InputAction.FlybyView => "Access Chase View",
+        InputAction.LookCenter => "Look Forward",
+        InputAction.LookBack => "Look Back",
+        InputAction.Nitro => "Use Nitro-Booster",
+        InputAction.AutoLand => "Auto-Dock",
+        InputAction.Pause => "Pause/Quit/Objectives",
+        _ => ThrottleFraction(action),
+    };
+
+    // The nine absolute-throttle actions, captioned as the original's Throttle page spells them:
+    // "Throttle 0/8" for idle through "Throttle 8/8" for full.
+    private static string? ThrottleFraction(InputAction action)
+    {
+        if (action < InputAction.ThrottleSet0 || action > InputAction.ThrottleSet8)
+            return null;
+        int eighths = action - InputAction.ThrottleSet0;
+        return "Throttle " + eighths.ToString(CultureInfo.InvariantCulture) + "/8";
+    }
+
+    // A key's own caption. The numpad, the digit row and the punctuation keys are named the way a
+    // keycap is rather than the way the enum is, because "Kp Enter", "Key5" and "Quoteleft" are not
+    // what the player is looking at.
     private static string KeyName(Key key) => key switch
     {
         Key.Quoteleft => "`",
@@ -108,6 +165,7 @@ public static class BindingLabels
         Key.KpPeriod => "Numpad .",
         Key.KpEnter => "Numpad Enter",
         >= Key.Kp0 and <= Key.Kp9 => "Numpad " + ((int)(key - Key.Kp0)).ToString(CultureInfo.InvariantCulture),
+        >= Key.Key0 and <= Key.Key9 => ((int)(key - Key.Key0)).ToString(CultureInfo.InvariantCulture),
         _ => Spaced(EnumName<Key>((int)key)),
     };
 

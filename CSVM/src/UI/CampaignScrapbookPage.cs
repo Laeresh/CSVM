@@ -7,9 +7,11 @@ namespace CSVM.UI;
 
 /// <summary>
 /// The scrapbook itself (<c>SCRAPBOOK.SCRIPT</c>), opened on the mission a finished mission just
-/// flew: the page title, the shown spread's shipped scraps, and on spread 1 the results card with
-/// its Best to Date / Most Recent tabs, the results block and the kill stamps. Every openable scrap
-/// (<see cref="ScrapbookScrap.Opens"/>) is a row opening <see cref="CampaignScreen.ScrapbookZoom"/>.
+/// flew: the page title, the shown spread's shipped scraps, and on a mission slot's spread 1 the
+/// results card with its Best to Date / Most Recent tabs, the results block and the kill stamps.
+/// Slot 0 is the career page at the front of the book, carrying scraps alone. Every openable
+/// scrap (<see cref="ScrapbookScrap.Opens"/>) is a row opening
+/// <see cref="CampaignScreen.ScrapbookZoom"/>.
 /// The page and mission arrows and the Current Mission bookmark browse the rest of the book, VIEW
 /// ALL MISSIONS jumps to the mission overview, and REPLAY MISSION acts on whichever mission is
 /// browsed, offered only where the original offers it.
@@ -93,8 +95,7 @@ public sealed class CampaignScrapbookPage : CampaignPage
         get
         {
             var lines = new List<BoardLine> { PageTitle() };
-            var (_, spread) = Position();
-            if (spread != 1)
+            if (!ResultsPage)
             {
                 return lines;
             }
@@ -138,7 +139,7 @@ public sealed class CampaignScrapbookPage : CampaignPage
             var pictures = new List<BoardPicture>(ScrapbookComposition.Pictures(
                 Flow.DataRoot, mission, spread, result?.Best.CompletedMask ?? 0, Flow.CapturePath,
                 ScrapAt(Flow.Row)?.Item ?? -1));
-            if (spread != 1)
+            if (!ResultsPage)
             {
                 return pictures;
             }
@@ -158,6 +159,36 @@ public sealed class CampaignScrapbookPage : CampaignPage
             }
 
             return pictures;
+        }
+    }
+
+    // Whether the shown page carries the results card and its tabs: spread 1 of a mission slot.
+    // The script's own gate is `1 == callback(2403) && FRA`, the open mission, which is false at
+    // slot 0, so the career page draws its scraps alone (docs/org/debrief.md, "Ordinal 0 is the
+    // career page").
+    private bool ResultsPage
+    {
+        get
+        {
+            var (mission, spread) = Position();
+            return mission > 0 && spread == 1;
+        }
+    }
+
+    // The slot the bookmark jumps to and compares itself against: the one the book was opened on,
+    // or the campaign's own position where it was opened on the career page, which has no mission
+    // behind it and so is never the current one.
+    private int CurrentMission
+    {
+        get
+        {
+            if (Flow.MissionSeq >= 0)
+            {
+                return Flow.MissionSeq + 1;
+            }
+
+            int next = Flow.Profile is { } profile ? CampaignProgression.NextMissionSeq(profile) : 0;
+            return Math.Clamp(next, 0, CampaignSequence.MissionCount - 1) + 1;
         }
     }
 
@@ -247,7 +278,7 @@ public sealed class CampaignScrapbookPage : CampaignPage
 
                 return true;
             case RowKind.CurrentMission:
-                _viewMission = Flow.MissionSeq + 1;
+                _viewMission = CurrentMission;
                 _viewSpread = 1;
                 Refocus(kind);
                 return true;
@@ -304,14 +335,14 @@ public sealed class CampaignScrapbookPage : CampaignPage
     }
 
     // The rows this page offers right now, in the order the cursor steps them. Only the widgets
-    // the original activates are here: the two tabs and the results card belong to spread 1,
-    // Replay to a spread-1 mission whose record holds a time, and Next and the bookmark to a book
-    // position that has somewhere to go.
+    // the original activates are here: the two tabs and the results card belong to a results page,
+    // Replay to one whose record holds a time, and Next and the bookmark to a book position that
+    // has somewhere to go.
     private List<RowKind> Rows()
     {
-        var (mission, spread) = Position();
+        var (mission, _) = Position();
         var rows = new List<RowKind>();
-        if (spread == 1)
+        if (ResultsPage)
         {
             if (ReplayOffered())
             {
@@ -328,7 +359,7 @@ public sealed class CampaignScrapbookPage : CampaignPage
             rows.Add(RowKind.NextPage);
         }
 
-        if (Flow.Profile != null && mission != Flow.MissionSeq + 1)
+        if (Flow.Profile != null && mission != CurrentMission)
         {
             rows.Add(RowKind.CurrentMission);
         }
@@ -364,12 +395,9 @@ public sealed class CampaignScrapbookPage : CampaignPage
     // uiData 2411: Replay Mission is offered once either half of the mission's record holds a
     // time, which a lost attempt also does, so completion bits are not the gate. The script adds
     // the spread-1 gate by only activating the button on the results page.
-    private bool ReplayOffered()
-    {
-        var (_, spread) = Position();
-        return spread == 1 && Result() is { } result
-            && (result.Latest.TimeMs != 0 || result.Best.TimeMs != 0);
-    }
+    private bool ReplayOffered() =>
+        ResultsPage && Result() is { } result
+        && (result.Latest.TimeMs != 0 || result.Best.TimeMs != 0);
 
     // Where the tab that is NOT selected draws, or null when the layout carries no such slot.
     private (BoardArt Art, float X, float Y)? UnselectedTab() =>
@@ -381,13 +409,23 @@ public sealed class CampaignScrapbookPage : CampaignPage
         : Flow.Strings.Text(1160, CampaignScrapbookResults.TabTitle(bestToDate: false));
 
     // SB_T_NAMEANDAREA's own text, langui 1215 over the player's name and the mission's short
-    // name: "Zachary - The Lost Treasure".
+    // name: "Zachary - The Lost Treasure". The career page has no mission to name, so it takes
+    // langui 1216 over the name alone, which is why 3479 is in no string table.
     private BoardLine PageTitle()
     {
         var (mission, _) = Position();
         string name = Flow.Profile?.Name ?? string.Empty;
-        string title = Flow.Strings.Text(3480 + mission - 1, $"Mission {mission}");
-        string text = Flow.Strings.Has(1215) ? Flow.Strings.Format(1215, name, title) : $"{name} - {title}";
+        string text;
+        if (mission == 0)
+        {
+            text = Flow.Strings.Has(1216) ? Flow.Strings.Format(1216, name) : $"{name} - Scrapbook";
+        }
+        else
+        {
+            string title = Flow.Strings.Text(3480 + mission - 1, $"Mission {mission}");
+            text = Flow.Strings.Has(1215) ? Flow.Strings.Format(1215, name, title) : $"{name} - {title}";
+        }
+
         var (x, y) = Flow.Layout.At(Section, "SB_T_NAMEANDAREA", TitleX, TitleY);
         return new BoardLine(text, x, y, 0f, TitleFont, BoardInk.Heading, Italic: true);
     }
@@ -409,9 +447,10 @@ public sealed class CampaignScrapbookPage : CampaignPage
         return (_viewMission, _viewSpread);
     }
 
-    // The previous spread: one back within the mission, or the previous mission's own last spread
-    // once its front is reached. Null at the front of the book (mission 1, spread 1), where the
-    // back arrow opens the mission overview instead.
+    // The previous spread: one back within the mission, or the previous slot's own last spread
+    // once its front is reached, the career page included, which is what backing out of mission 1
+    // reaches. Null at the front of the book (slot 0, spread 1), where the back arrow opens the
+    // mission overview instead.
     private (int Mission, int Spread)? Previous()
     {
         var (mission, spread) = Position();
@@ -420,7 +459,7 @@ public sealed class CampaignScrapbookPage : CampaignPage
             return (mission, spread - 1);
         }
 
-        if (mission <= 1)
+        if (mission <= 0)
         {
             return null;
         }
@@ -458,10 +497,14 @@ public sealed class CampaignScrapbookPage : CampaignPage
         return last;
     }
 
+    // The browsed slot's record, or null on the career page: the original's record array is
+    // indexed from mission 1, so slot 0 reads nothing rather than the entry before its first.
     private MissionResult? Result()
     {
         var (mission, _) = Position();
-        return Flow.Profile is { } profile ? CampaignProgression.ResultOf(profile, mission - 1) : null;
+        return mission > 0 && Flow.Profile is { } profile
+            ? CampaignProgression.ResultOf(profile, mission - 1)
+            : null;
     }
 
     // The shown spread's openable scraps, in item order -- the row order the cursor steps.

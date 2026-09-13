@@ -9,11 +9,12 @@ using Godot;
 
 namespace CSVM.Testing;
 
-/// <summary>The pilot's three class keys over a session that holds all three classes at once:
+/// <summary>The pilot's nine class keys over a session that holds all three classes at once:
 /// C3/M01's live zeppelin, that chapter's own gun emplacements switched on, and hostile and
-/// friendly aeroplanes around them, read by two panes flying 4 km apart. Each key walks its own
-/// class and reaches every entry of it, a class change lands on the head of the class it changes
-/// to, and neither pane's key moves the other pane's pick.</summary>
+/// friendly aeroplanes around them, read by two panes flying 4 km apart. Each class's Next key
+/// walks its own class and reaches every entry of it, its Previous key walks the same order back,
+/// its Nearest key restarts the cycle at the head, a class change lands on the head of the class it
+/// changes to, and neither pane's key moves the other pane's pick.</summary>
 internal static class TargetClassCycleSuites
 {
     private const string Chapter = "C3";
@@ -38,11 +39,13 @@ internal static class TargetClassCycleSuites
     private static readonly Vector3 OffTheWing = new(-500f, 0f, 0f);
 
     [Suite("target-class-cycle",
-        "the three class keys over C3/M01, which carries all three classes at once: the "
+        "the nine class keys over C3/M01, which carries all three classes at once: the "
         + "Enemy/Objective key walks the hostile aeroplanes and wraps, the Ally key the friendly "
         + "ones, and the Non-Aircraft key the live zeppelin's own parts together with the "
         + "chapter's switched-on gun emplacements, every entry of it a structure or a turret and "
-        + "never an aeroplane; a class change lands on the head of the cycle it changes to; "
+        + "never an aeroplane; each class's Previous key walks that same order backwards and wraps "
+        + "off the head onto the tail, and its Nearest key restarts the cycle at the head from "
+        + "wherever the pilot had reached; a class change lands on the head of the cycle it changes to; "
         + "Target Nothing stays cleared through a rebuild until a class key; two panes "
         + "4 km apart auto-acquire different hostiles, one pane's step leaving the other's pick "
         + "and the other's class alone; and the mission's own targets.zrd puts the one node it "
@@ -144,6 +147,8 @@ internal static class TargetClassCycleSuites
 
                 CheckCycleMembership(ctx, p1, parts.Count + liveGuns, hostileA, hostileB, p2Self, wingman);
                 CheckEachKeyWalksItsClass(ctx, p1);
+                CheckPreviousWalksItBack(ctx, p1);
+                CheckNearestRestartsTheCycle(ctx, p1);
                 CheckClassChangeLandsOnTheHead(ctx, p1);
                 CheckClearStaysCleared(ctx, p1);
                 CheckPanesAreIndependent(ctx, p1, p2);
@@ -151,7 +156,7 @@ internal static class TargetClassCycleSuites
                     new Curated(mission, script, missionTargets, messages, scan, parts, p1Self,
                         p1Pose, parts.Count + liveGuns),
                     report);
-                ctx.Note($"{Chapter}/{Mission}: three class cycles of {p1.Selection.Pool.Enemy.Count}/{p1.Selection.Pool.Ally.Count}/{p1.Selection.Pool.NonAircraft.Count}, each key walking its own");
+                ctx.Note($"{Chapter}/{Mission}: three class cycles of {p1.Selection.Pool.Enemy.Count}/{p1.Selection.Pool.Ally.Count}/{p1.Selection.Pool.NonAircraft.Count}, each walked forward, back and restarted by its own three keys");
             }
             finally
             {
@@ -194,7 +199,7 @@ internal static class TargetClassCycleSuites
     }
 
     // One key per class, each walking the whole of its own cycle and wrapping. This is what the
-    // shipped keymap's T, Y and U do, dispatched in FlightController.StepTargeting.
+    // shipped keymap's E, W and R do, dispatched in FlightController.StepTargeting.
     private static void CheckEachKeyWalksItsClass(TestContext ctx, Pane pane)
     {
         foreach (var cls in new[] { TargetClass.Enemy, TargetClass.Ally, TargetClass.NonAircraft })
@@ -213,6 +218,45 @@ internal static class TargetClassCycleSuites
             pane.Press(cls);
             ctx.Check(ReferenceEquals(pane.Selection.Current!.Value.Source, expected[0]),
                 $"…and the next press wraps back to its head");
+        }
+    }
+
+    // The Previous key of each class, the half a forward-only cycle costs seven presses to reach:
+    // it steps the same order backwards and wraps off the head onto the tail.
+    private static void CheckPreviousWalksItBack(TestContext ctx, Pane pane)
+    {
+        foreach (var cls in new[] { TargetClass.Enemy, TargetClass.Ally, TargetClass.NonAircraft })
+        {
+            pane.Home(cls);
+            var expected = Sources(pane.Selection.Ordered);
+            pane.Press(cls);
+            pane.StepBack(cls);
+            ctx.Check(expected.Count > 1
+                      && ReferenceEquals(pane.Selection.Current!.Value.Source, expected[0]),
+                $"the {cls} Previous key undoes one press of its Next key, over {expected.Count} entries");
+
+            pane.StepBack(cls);
+            ctx.Check(ReferenceEquals(pane.Selection.Current!.Value.Source, expected[expected.Count - 1]),
+                $"…and a press off the head wraps onto the tail of that same cycle");
+        }
+    }
+
+    // The class-restarting Nearest key: from anywhere in a cycle it returns to that cycle's head,
+    // which is the decoded head of the sector order rather than the nearest thing in space.
+    private static void CheckNearestRestartsTheCycle(TestContext ctx, Pane pane)
+    {
+        foreach (var cls in new[] { TargetClass.Enemy, TargetClass.Ally, TargetClass.NonAircraft })
+        {
+            pane.Home(cls);
+            var head = pane.Selection.Current!.Value.Source;
+            int count = pane.Selection.Ordered.Count;
+            pane.Press(cls);
+            ctx.Check(count > 1 && !ReferenceEquals(pane.Selection.Current!.Value.Source, head),
+                $"a press walks the {cls} cycle off its head, over {count} entries");
+            pane.Home(cls);
+            ctx.Check(pane.Selection.ActiveClass == cls
+                      && ReferenceEquals(pane.Selection.Current!.Value.Source, head),
+                $"…and that class's Nearest key restarts it there, whatever index the pilot reached");
         }
     }
 
@@ -399,11 +443,18 @@ internal static class TargetClassCycleSuites
         public void Rebuild() =>
             Selection.Rebuild(_scan, _parts, AimAssist.PlayerTeam, _self, _pose, Basis.Identity);
 
-        // The cycle's head, whatever the pilot had reached: the decoded per-class Nearest, which
-        // CSVM binds no key to. Here it is the setup step that makes a walk start at a known entry.
+        // The cycle's head, whatever the pilot had reached: the per-class Nearest key, which is
+        // also the setup step that makes a walk start at a known entry.
         public void Home(TargetClass cls)
         {
             Selection.Nearest(cls);
+            Rebuild();
+        }
+
+        // The per-class Previous key, the backward twin of Press.
+        public void StepBack(TargetClass cls)
+        {
+            Selection.Previous(cls);
             Rebuild();
         }
 

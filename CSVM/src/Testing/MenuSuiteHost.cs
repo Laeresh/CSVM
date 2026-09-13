@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using CSVM.Bindings;
 using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.Session;
 using CSVM.UI;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
@@ -20,15 +21,18 @@ internal static class MenuSuiteHost
     /// the Instant Action feature reading environment defs under <paramref name="dataRoot"/>.
     /// <paramref name="saveBindings"/> is where an accepted rebind goes, and must stay null unless
     /// the suite has pointed <see cref="CSVM.Bindings.BindingStore.DirectoryOverride"/> at scratch.
-    /// </summary>
+    /// <paramref name="chapterCinema"/> and <paramref name="closingCinema"/> are the campaign's two
+    /// films; null, every other suite's, means a cabin door plays none.</summary>
     internal static MenuHost Bare(
         List<MenuExit> exits,
         string dataRoot,
         out BuiltInSeat seat,
-        Action<int, BindingProfile>? saveBindings = null)
+        Action<int, BindingProfile>? saveBindings = null,
+        ChapterCinema? chapterCinema = null,
+        ClosingCinema? closingCinema = null)
     {
         var host = new MenuHost(new PresentationRegistry(), new SilentMenuAudio(), exits.Add);
-        AddFeatures(host, dataRoot, saveBindings);
+        AddFeatures(host, dataRoot, saveBindings, chapterCinema, closingCinema);
         seat = new BuiltInSeat(new MenuInput { Keyboard = true });
         host.AddSeat(seat);
         return host;
@@ -38,7 +42,8 @@ internal static class MenuSuiteHost
     /// the seat: the host lends the setup feature's seat list once the feature is in, so seat 0
     /// has to be joined through it.</summary>
     internal static void AddFeatures(
-        MenuHost host, string dataRoot, Action<int, BindingProfile>? saveBindings = null)
+        MenuHost host, string dataRoot, Action<int, BindingProfile>? saveBindings = null,
+        ChapterCinema? chapterCinema = null, ClosingCinema? closingCinema = null)
     {
         host.Features.Add(new FreeFlightFeature());
         host.Features.Add(InstantActionFeature.ForDataRoot(dataRoot));
@@ -48,7 +53,8 @@ internal static class MenuSuiteHost
         string zrdr = SessionPaths.PreferUnzipped(System.IO.Path.Combine(dataRoot, "extracted", "zrdr.zip"));
         var strings = UiStrings.TryLoad(dataRoot) ?? UiStrings.Empty;
         host.Features.Add(new HangarFeature(strings, PlanePickerRoster.AirframeNode, () => StockLoadouts.Load(), zrdr));
-        host.Features.Add(new CampaignFeature(strings, PlanePickerRoster.AirframeNode));
+        host.Features.Add(new CampaignFeature(
+            strings, PlanePickerRoster.AirframeNode, chapterCinema, closingCinema));
         // No save by default: a suite must never write over the keymap saved at this machine's
         // controls, and only a suite holding the store's directory override may pass one.
         host.Features.Add(new ControlsFeature(saveBindings));

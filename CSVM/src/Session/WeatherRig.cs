@@ -541,14 +541,14 @@ public sealed class WeatherRig
         if (!GraphicsMode.Enhanced)
         {
             (float sun, float ambient) = FaithfulEnergies(fog);
-            return $"; aircraft sun energy {sun:0.00} (diffuse {fog.SunDiffuse:0.##}), "
-                   + $"ambient energy {ambient:0.00} (ambient {fog.SunAmbient:0.##})";
+            return Log.Format($"; aircraft sun energy {sun:0.00} (diffuse {fog.SunDiffuse:0.##}), ")
+                   + Log.Format($"ambient energy {ambient:0.00} (ambient {fog.SunAmbient:0.##})");
         }
 
         (float sunEnergy, float ambientEnergy) = EnhancedEnergies(fog);
-        return $"; enhanced sun energy {sunEnergy:0.00} (diffuse {fog.SunDiffuse:0.##}), "
-               + $"ambient energy {ambientEnergy:0.00} (ambient {fog.SunAmbient:0.##}), "
-               + $"shadows to {FogRangeFor(new Vector2(fog.FogNear, fog.FogFar)).X:0} m"
+        return Log.Format($"; enhanced sun energy {sunEnergy:0.00} (diffuse {fog.SunDiffuse:0.##}), ")
+               + Log.Format($"ambient energy {ambientEnergy:0.00} (ambient {fog.SunAmbient:0.##}), ")
+               + Log.Format($"shadows to {FogRangeFor(new Vector2(fog.FogNear, fog.FogFar)).X:0} m")
                + (IsNightZone(fog) ? "; night zone, energies capped" : string.Empty);
     }
 

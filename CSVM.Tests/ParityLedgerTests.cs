@@ -63,6 +63,9 @@ public class ParityLedgerTests
         ("the far-field speed-hold plant", Decoded, "0x48c4e9-0x48c603"),
         ("ground blow as a control bias", Decoded, "FUN_0048c220, called at 0x48cf95"),
         ("the keyboard stick accumulator", Decoded, "FUN_00487460"),
+        ("the mouse-flying arm's is_autogyro roll/yaw exchange", Decoded,
+            "0x4876f4, inside FUN_00487460's mouse arm; MouseFlight.Read exchanges and negates the "
+            + "same two sources"),
         ("the six-slot control-surface mix and its 2/s exponential", Decoded,
             "FUN_004b27e0 / FUN_004b2a40 / FUN_004b2ca0, smoothing FUN_00460490"),
         ("contact placement, normal impulse and angular deposit", Decoded, "FUN_0048d7f0, 0x48e4bc"),
@@ -102,8 +105,6 @@ public class ParityLedgerTests
 
         ("a live producer for an AI's nitro injector", Unsupported,
             "AiSpawn.Nitro reads roster slot 34; the mission spawner does not read roster blocks yet"),
-        ("the mouse-flying arm's is_autogyro roll/yaw exchange", Unsupported,
-            "0x4876f4; CSVM has no mouse flight-control mode at all, so there is no arm to exchange in"),
     };
 
     // Every scenario the flight-envelope probe reports, its class, and the term that bounds it. The

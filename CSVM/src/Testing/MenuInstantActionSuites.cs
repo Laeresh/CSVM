@@ -71,7 +71,8 @@ internal static class MenuInstantActionSuites
         "Original Instant Action through the presentation boundary over the install's decoded "
         + "layout: the top level's Instant Action row is live and a click opens the decoded screen "
         + "with the environment's def loaded, its rows are the layout's contents window, dropdowns "
-        + "and buttons, the ace duel's enemy boxes and the wingman plane at zero wingmen standing "
+        + "and buttons, the contents thumb stands as long as the share of the presets its window "
+        + "shows, the ace duel's enemy boxes and the wingman plane at zero wingmen standing "
         + "blank and inert beside both paging buttons, keyboard frames cross to a dropdown and step and pick its value, four "
         + "representative presets (an ace duel, a squadron, a stunt run and a zeppelin run) each "
         + "leave through Fly Mission as one LaunchExit whose def derives the matching session spec, "
@@ -557,6 +558,16 @@ internal static class MenuInstantActionSuites
             $"and its rows give that column up rather than the authored box growing ({Row(shell, OriginalShell.ContentsKey + ":0")?.Width})");
         ctx.Check(List(shell, OriginalShell.ContentsKey) is { Window: { X: 76f, Width: 277f, ThumbX: 337f } },
             $"the thumb rides the same column over the authored window ({List(shell, OriginalShell.ContentsKey)?.Window.ThumbX})");
+
+        // The reference frame draws the unscrolled thumb's foot at board y 356 on a track running
+        // 186 to 416, so 170 of its 230 pixels, which is the 14-row window's share of the 19
+        // presets rather than the scroll tile's own 11.
+        var contentsWindow = List(shell, OriginalShell.ContentsKey)?.Window;
+        float share = 230f * 14f / InstantActionFeature.Presets.Count;
+        ctx.Check(contentsWindow is { TrackTop: 186f, TrackHeight: 230f, Top: 0 }
+            && Math.Abs(contentsWindow.Value.ThumbHeight - share) < 0.5f
+            && Math.Abs(contentsWindow.Value.ThumbY + contentsWindow.Value.ThumbHeight - 356f) < 1f,
+            $"and its length is the share of the list the window shows ({contentsWindow?.ThumbHeight} of {contentsWindow?.TrackHeight}, wanting {share})");
         ctx.Check(Row(shell, OriginalShell.PlayerPlaneKey) is { Label: "Stock Autogyro", X: 511f, Y: 210f, Width: 224f, Height: 18f },
             $"the player plane dropdown stands at its authored line with the first airframe as its stock row ({Row(shell, OriginalShell.PlayerPlaneKey)?.Label})");
         ctx.Check(Row(shell, OriginalShell.MissionKey)?.Label == "Dogfighting an Ace"

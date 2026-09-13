@@ -4,8 +4,24 @@ using System.IO;
 using System.Text.Json;
 using CSVM.Mech3;
 using CSVM.UI.Menu;
+using CSVM.Utils;
 
 namespace CSVM.UI;
+
+/// <summary>
+/// Where one launch's screen draws the two things that move while its build runs: the lit strip
+/// the bar's fill is clipped out of, and the propeller's frames. Both are per family, the
+/// blackboard taking the executable's own placement and the chart sheet its script's cycle beat.
+/// An empty <paramref name="Propeller"/> is a screen with no propeller on it at all.
+/// </summary>
+public sealed record LoadMotion(
+    string FillArt,
+    float FillX,
+    float FillY,
+    IReadOnlyList<string> Propeller,
+    float PropellerX,
+    float PropellerY,
+    bool PropellerCentered);
 
 /// <summary>
 /// The campaign load screen's authored half, with the two things the original's own constructor
@@ -101,9 +117,21 @@ public static class LoadScreens
     // it is the repaint's own pixel clip over prog_redload (docs/org/loading-screen.md).
     private const string BarArt = "prog_blkload";
 
+    // The lit strip the fill clips out of, drawn over the unlit one at the same point.
+    private const string FillArt = "prog_redload";
+
     // The bar's authored top left.
     private const float BarX = 90f;
     private const float BarY = 548f;
+
+    // The blackboard's own bar and propeller, which the executable places rather than a script:
+    // prog_red over prog_blk at one point, the cycle at another (docs/org/loading-screen.md).
+    private const string ChalkBarArt = "prog_blk";
+    private const string ChalkFillArt = "prog_red";
+    private const float ChalkBarX = 564f;
+    private const float ChalkBarY = 546f;
+    private const float ChalkPropellerX = 506f;
+    private const float ChalkPropellerY = 549f;
 
     // The pitch the blurb's wrapped lines take, measured between the same two lines. Our own face
     // leads wider than this, which runs a three-line blurb through the chalk rule below it.
@@ -115,6 +143,13 @@ public static class LoadScreens
         Array.Empty<BoardStroke>(),
         Array.Empty<BoardLine>(),
         Array.Empty<BoardPlaque>());
+
+    /// <summary>The propeller's six frames, the range endpoints the extraction carries, in the
+    /// order the cycle steps them (docs/org/loading-screen.md).</summary>
+    public static IReadOnlyList<string> Propeller { get; } = new[]
+    {
+        "prp0", "prp7", "prp15", "prp22", "prp30", "prp37",
+    };
 
     /// <summary>The board for one launch. <paramref name="campaign"/> picks the paper sheet over the
     /// blackboard, the split the original makes, and takes <paramref name="sheet"/> as its whole
@@ -131,6 +166,62 @@ public static class LoadScreens
         campaign
             ? CampaignSheet(sheet)
             : Blackboard(Texts(missionType, subject, zrdrPath, messagesPath));
+
+    /// <summary>The two moving pieces of one launch's screen, found once because a build reports
+    /// its steps ten times a second and a composition is not worth redoing per step.</summary>
+    public static LoadMotion MotionFor(bool campaign, LoadSheet? sheet)
+    {
+        if (!campaign)
+        {
+            return new LoadMotion(
+                ChalkFillArt, ChalkBarX, ChalkBarY,
+                Propeller, ChalkPropellerX, ChalkPropellerY, false);
+        }
+
+        // The sheet's own cycle beat, so the chart's propeller turns where its script put it and
+        // through the frames its script named. A sheet that did not read carries no propeller,
+        // which is what its still composition draws too.
+        var cycle = Cycle(sheet);
+        return new LoadMotion(
+            FillArt, BarX, BarY,
+            cycle?.Frames ?? Array.Empty<string>(),
+            cycle?.At.X ?? 0f, cycle?.At.Y ?? 0f, cycle?.Center ?? false);
+    }
+
+    /// <summary>The still board with the build's own progress over it: the lit strip clipped to
+    /// <see cref="LoadProgress.FillPixels"/> of <paramref name="fillArtWidth"/>, and the cycle's
+    /// current frame over the still one. An overlay, so the composition under it is untouched and
+    /// a screen with no build behind it draws exactly what it always did.</summary>
+    public static ComposedBoard Painted(
+        ComposedBoard still, LoadMotion motion,
+        float fillArtWidth, float fillArtHeight, float fraction, int frame)
+    {
+        ArgumentNullException.ThrowIfNull(still);
+        ArgumentNullException.ThrowIfNull(motion);
+        var over = new List<BoardPicture>(2);
+        int lit = LoadProgress.FillPixels((int)fillArtWidth, fraction);
+        if (lit > 0 && fillArtHeight > 0f)
+        {
+            over.Add(new BoardPicture(
+                new BoardArt(BoardArtLibrary.Rimage, motion.FillArt), motion.FillX, motion.FillY,
+                Crop: new BoardCrop(0f, 0f, lit, fillArtHeight)));
+        }
+
+        if (motion.Propeller.Count > 0)
+        {
+            over.Add(new BoardPicture(
+                new BoardArt(BoardArtLibrary.Rimage, motion.Propeller[frame % motion.Propeller.Count]),
+                motion.PropellerX, motion.PropellerY, 0, motion.PropellerCentered));
+        }
+
+        var overlays = new List<BoardPanel>(still.Overlays)
+        {
+            new(Array.Empty<BoardFill>(), over, Array.Empty<BoardLine>()),
+        };
+        return new ComposedBoard(
+            still.Pictures, still.Strokes, still.Lines, still.Plaques,
+            still.Notes, still.Backdrop, still.Fills, overlays);
+    }
 
     /// <summary>The mission-type letter that completes the dialog name, from the jump table at
     /// <c>0x004a14f0</c>: the ace duel, the squadron, the stunt run and the zeppelin. Null for a
@@ -243,6 +334,21 @@ public static class LoadScreens
             backdrop);
     }
 
+    // The sheet's cycling element, found by its frame list rather than by its authored id, or null
+    // where no sheet read. One script beat in the whole file authors a cycle.
+    private static BriefingElement? Cycle(LoadSheet? sheet)
+    {
+        foreach (var element in sheet?.Reveal.Elements ?? Array.Empty<BriefingElement>())
+        {
+            if (element.Frames.Count > 0)
+            {
+                return element;
+            }
+        }
+
+        return null;
+    }
+
     // The frame the dialog names, which every campaign dialog authors as its one background image.
     private static string Background(LoadSheet? sheet) =>
         sheet?.State.Background is { Length: > 0 } named ? named : Frame;
@@ -273,8 +379,9 @@ public static class LoadScreens
         return new[]
         {
             new BoardNote(
-                entries, list.ListAt.X, list.ListAt.Y, list.WrapWidth, list.WrapHeight,
-                list.Spacing, EscapeObjectivesList.RowFont, BoardInk.Row),
+                entries, list.ListAt.X, list.ListAt.Y, list.RowWrap, list.RowBox,
+                list.Spacing, EscapeObjectivesList.RowFont, BoardInk.Row,
+                Italic: true, Shrink: true),
         };
     }
 
@@ -302,8 +409,10 @@ public static class LoadScreens
                 new BoardPicture(new BoardArt(BoardArtLibrary.Rimage, "MP-shotdown"), 197, 157, 0, true),
                 new BoardPicture(new BoardArt(BoardArtLibrary.Rimage, "MP-crash"), 197, 307, 0, true),
                 new BoardPicture(new BoardArt(BoardArtLibrary.Rimage, "mp-dangerzone2"), 197, 457, 0, true),
-                new BoardPicture(new BoardArt(BoardArtLibrary.Rimage, "prp0"), 506, 549),
-                new BoardPicture(new BoardArt(BoardArtLibrary.Rimage, "prog_blk"), 564, 546),
+                new BoardPicture(
+                    new BoardArt(BoardArtLibrary.Rimage, Propeller[0]),
+                    ChalkPropellerX, ChalkPropellerY),
+                new BoardPicture(new BoardArt(BoardArtLibrary.Rimage, ChalkBarArt), ChalkBarX, ChalkBarY),
             },
             Array.Empty<BoardStroke>(),
             lines,

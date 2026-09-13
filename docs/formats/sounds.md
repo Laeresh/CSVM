@@ -57,14 +57,30 @@ sets), 35 sets named `id<N>` carry the combat-voice clips: `snd_id<N>_<TYPE>` �
 announcer id without defs) are [combat-voice.md](combat-voice.md); the reader is
 `CSVM/src/Mech3/CombatVoice.cs`.
 
+⚠ **A positional voice is silenced past 1.1 x its `RANGE` audible distance, whichever path plays
+it.** The `RANGE` pair is the attenuation curve alone; the cull sits outside it, in the sound
+manager's own 3D update `FUN_00597c20`, which sets the voice to the minimum volume once the
+listener is at or past `audibleDist * 1.1` (DirectSound's own -10000, through the voice's
+`+0x3c` setter; the compare and the ramp below it read the definition record the voice points at,
+`RANGE`'s two floats at `+0x1c` and `+0x20`). Between the pair the gain is a logarithmic ramp; in
+the band past the audible distance the computed gain is clamped silent as soon as it falls below
+that same -10000, so the margin is a quiet tail rather than full volume held longer.
+Every weapon voice reaches that routine through one dispatcher, `FUN_00597af0`, and
+one keyed-loop helper, `FUN_0045e470`: the player's own gun loop at `0x004884b8`, every other
+vehicle's at `0x0041f6fd` (the AI fire decision, which an AI aeroplane and a `mode ship` hull
+share), and a turret's at `0x004ab1d9`. So the aircraft loop and the turret voice carry one margin,
+not two. `FUN_00597af0`'s other arm, the hardware-3D `FUN_00597b40`, applies no margin of its own,
+but the flag it switches on (`DAT_00639cb4`) is zero in the image and its only writer clears it, so
+the software path above is the one the retail build runs.
+
 ⚠ **An aircraft's weapon cues are in the positional class, not the cockpit one.** Every caliber's
 `LOOPED_SOUND_NAME` (`snd_30cal` through `snd_70cal`, plus `snd_turretgun` and `snd_chaingun`)
 carries `3D` + `LOOPED` + `RANGE`. The `NO_AMMO_WARNING` cue `snd_emptyclip` carries `3D` and
 `RANGE [80, 800]` but no `LOOPED`, a dry trigger being one click. So a gun
 loop is a point in the world, which is what the remake plays it as: the pilot's own guns stay flat
 because that is what the pilot hears, and every other aircraft's come from its own position, culled
-at the definition's own audible distance. Those distances are short, 150 m for a 30-cal against 800 m
-for the dry cue, so traffic firing 300 m off is inaudible by the data's own numbers.
+at the 1.1 x above. Those distances are short, 150 m for a 30-cal (165 m with the margin) against
+800 m for the dry cue, so traffic firing 300 m off is inaudible by the data's own numbers.
 ⚠ **The flags say a definition MAY be positional, not that the original placed it.** The original's
 fire path hands its firing loop the aircraft's own position every tick, and hands the dry cue no
 position at all, which its play entry takes as flat ([weaponFire.md](../org/weaponFire.md)). ⚠ Nothing here

@@ -307,7 +307,7 @@ internal sealed class HumanFlightAdapter
         {
             var partDescs = new List<string>();
             foreach (var p in stats.DestroyableParts)
-                partDescs.Add($"{p.Name} {p.MaxHp:0}hp{(p.Critical ? "*" : "")}{(p.Engine ? " engine" : "")}");
+                partDescs.Add(Log.Format($"{p.Name} {p.MaxHp:0}hp{(p.Critical ? "*" : "")}{(p.Engine ? " engine" : "")}"));
             Log.Info("flight", $"damage parts: {string.Join(", ", partDescs)} (* = critical)");
         }
         if (custom != null)

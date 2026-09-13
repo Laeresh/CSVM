@@ -197,7 +197,7 @@ public sealed partial class SurfaceVehicleRuntime : Node
             }
             if (ProjectilePool.SurfaceIsWater(hit.Collider))
             {
-                note = $" water={hit.Position.Y:0.##}";
+                note = Log.Format($" water={hit.Position.Y:0.##}");
                 return hit.Position.Y;
             }
             from = hit.Position + Vector3.Down * WaterProbeStep;

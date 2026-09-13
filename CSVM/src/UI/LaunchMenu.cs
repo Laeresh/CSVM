@@ -753,15 +753,15 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// <summary>Opens the campaign on the named profile's scrapbook, at the mission a finished
     /// mission just flew, cabin on its far side after <see cref="Session.Launcher"/>'s deferred
     /// hop. The profile is re-read from the store, the same discipline as
-    /// <see cref="OpenCampaignCabin"/>, so the shown record is what the mission just wrote. A
-    /// profile that has just finished the campaign watches the closing film first
-    /// (<see cref="CampaignFlow.OpenScrapbookAfterMission(Session.CampaignProfileDef, int)"/>).</summary>
-    public void OpenCampaignScrapbook(string profileName, int seq)
+    /// <see cref="OpenCampaignCabin"/>, so the shown record is what the mission just wrote. A win on
+    /// the campaign's last mission watches the closing film first
+    /// (<see cref="CampaignFlow.OpenScrapbookAfterMission(Session.CampaignProfileDef, int, bool)"/>).</summary>
+    public void OpenCampaignScrapbook(string profileName, int seq, bool missionWon)
     {
         OpenCampaign();
         if (_campaign is { } flow && flow.Store.Load(profileName) is { } profile)
         {
-            flow.OpenScrapbookAfterMission(profile, seq);
+            flow.OpenScrapbookAfterMission(profile, seq, missionWon);
         }
 
         Rebuild();
@@ -1203,11 +1203,39 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     // --- navigation ---
 
+    // Whether a campaign film owns this frame rather than the screen behind it: one standing in
+    // front of that screen does, and so does the tail of the press that ended one, which the screen
+    // never saw go down and would read as an edge of its own. swallowed says that frame still asks
+    // for a redraw, the screen having changed unread behind the film. The pointer's tail lasts
+    // until its button comes up, where every other press is spent on the frame it lands on.
+    private bool CampaignFilmOwnsFrame(out bool swallowed)
+    {
+        swallowed = false;
+        if (_campaign?.Film is not { } film)
+        {
+            return false;
+        }
+
+        if (film.Up)
+        {
+            return true;
+        }
+
+        swallowed = film.Swallows(Input.IsMouseButtonPressed(MouseButton.Left));
+        return swallowed;
+    }
+
     // Reads this frame's polled intents and applies them. Mode/Chapter are player 1's
     // alone (the others can only leave); the Plane screen runs every player's cursor at once and
     // fires Launch when they are all locked. Returns true if the view changed.
     private bool HandleInput()
     {
+        // Before any screen reads the frame: a campaign film may own it.
+        if (CampaignFilmOwnsFrame(out bool swallowed))
+        {
+            return swallowed;
+        }
+
         bool dirty = false;
         if (_screen != Screen.Plane)
         {
@@ -1956,9 +1984,11 @@ public sealed partial class LaunchMenu : CanvasLayer
                 return;
             case "campaign-scrapbook":
                 // The book as a finished mission leaves it: opened on the last mission this
-                // profile flew, which is the one door the mission end itself takes.
+                // profile flew, which is the one door the mission end itself takes. No win is
+                // reported, so the shot is the book and never the closing film.
                 flow.GoTo(CampaignScreen.PreviousMissions);
-                flow.OpenScrapbookAfterMission(Math.Max(0, CampaignProgression.NextMissionSeq(profile) - 1));
+                flow.OpenScrapbookAfterMission(
+                    Math.Max(0, CampaignProgression.NextMissionSeq(profile) - 1), missionWon: false);
                 return;
             case "campaign-briefing":
                 flow.SetMission(CampaignProgression.NextMissionSeq(profile));
@@ -2813,7 +2843,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     private string ResolutionChoiceLabel()
     {
         var sizes = ResolutionSetting.ScreenSizes();
-        return sizes.Words[DisplaySettingRows.ResolutionIndex(sizes, _resolutionChoice)];
+        return sizes.Words[DisplaySettingRows.ResolutionIndex(sizes, _resolutionChoice, _displayModeChoice)];
     }
 
     private string DisplayModeChoiceLabel() =>
@@ -2832,10 +2862,18 @@ public sealed partial class LaunchMenu : CanvasLayer
         _monitorChoice = MonitorSetting.Word(DisplaySettingRows.Step(at, dir, screens.Labels.Count));
     }
 
+    // Dead while the display mode owns the size, which borderless does. The saved size is left
+    // where it is rather than overwritten with the screen's, so picking Windowed or Fullscreen
+    // again gives the player back the size they chose.
     private void StepResolutionChoice(int dir)
     {
+        if (ResolutionSetting.Pinned(_displayModeChoice))
+        {
+            return;
+        }
+
         var sizes = ResolutionSetting.ScreenSizes();
-        int at = DisplaySettingRows.ResolutionIndex(sizes, _resolutionChoice);
+        int at = DisplaySettingRows.ResolutionIndex(sizes, _resolutionChoice, _displayModeChoice);
         _resolutionChoice = sizes.Words[DisplaySettingRows.Step(at, dir, sizes.Words.Count)];
     }
 
@@ -2851,6 +2889,21 @@ public sealed partial class LaunchMenu : CanvasLayer
         var words = DisplayWords.VSyncChoices;
         int at = DisplaySettingRows.WordIndex(words, _vsyncChoice, VSyncSetting.Default);
         _vsyncChoice = words[DisplaySettingRows.Step(at, dir, words.Count)];
+    }
+
+    // The size row's detail says what the size does under the mode standing with it, since it does
+    // something different in each and under borderless the row does not step at all; a stepper that
+    // refuses without saying why reads as a broken row.
+    private string ResolutionDetail()
+    {
+        if (ResolutionSetting.Pinned(_displayModeChoice))
+        {
+            return "Borderless runs at the desktop's own size. Pick Windowed or Fullscreen to choose one.";
+        }
+
+        return _displayModeChoice == DisplayWords.Fullscreen
+            ? "Select the size the game draws at, scaled up to fill the fullscreen window."
+            : "Select the window size. The list is what the screen the window stands on can hold.";
     }
 
     // The graphics row's detail says whether a restart is still owed: the mode is resolved once at
@@ -3644,16 +3697,20 @@ public sealed partial class LaunchMenu : CanvasLayer
             : "Choose the difficulty, which presentation draws the menus, and the graphics mode.",
         Screen.Hangar => _hangar?.Page.Detail(focus) ?? "",
         Screen.Campaign => _campaign?.Page.Detail(focus) ?? "",
+        // One arm per row of the Options screen, in the order RowText writes them. A row that lost
+        // its arm would take the one under it and every row below would read one line wrong, so the
+        // two lists stay the same length.
         Screen.Options => focus switch
         {
             0 => "Select the difficulty level for a solo campaign. Enemy armour and health scale with it at spawn.",
-            1 => "Built-in needs no extracted menu art; Original draws the original's own screens from it.",
-            2 => GraphicsDetail(),
-            3 => "Select the monitor the game opens on. Applied on the way out, before the size.",
-            4 => "Select the window size. The list is what the screen the window stands on can hold.",
-            5 => "Select how the window sits on the screen. Borderless leaves the desktop beneath it.",
-            6 => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap.",
-            7 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
+            1 => "Take the nearest target after a kill instead of the first of the list.",
+            2 => "Built-in needs no extracted menu art; Original draws the original's own screens from it.",
+            3 => GraphicsDetail(),
+            4 => "Select the monitor the game opens on. Applied on the way out, before the size.",
+            5 => ResolutionDetail(),
+            6 => "Select how the window sits on the screen. Borderless leaves the desktop beneath it.",
+            7 => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap.",
+            8 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
             _ => "Saves every choice and restarts the menu at its top level; unfinished setup is discarded.",
         },
         Screen.Controls => ControlsDetail(focus),

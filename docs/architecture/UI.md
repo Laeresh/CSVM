@@ -14,7 +14,7 @@ graph. It owns the drawing, the per-seat `MenuInput` polling, the join scan, the
 the mouse (player 1's rows take Godot's hit test through `gui_input`, folded into the next frame's
 step, Accept and Back), and nothing else: rosters, seats, picks, gates and the typed exit are
 the host's features (`Menu/MenuHost.cs`), the layout is `MenuZones`, and the hangar and campaign
-screens are `HangarFlow` and `CampaignFlow` drawn through `ComposedBoardView`. Contract: [../menu-presentations.md](../menu-presentations.md).
+screens are `HangarFlow` and `CampaignFlow` drawn through `ComposedBoardView`, whose `Film` owns a frame before any screen reads it. Contract: [../menu-presentations.md](../menu-presentations.md).
 
 ## src/UI/MenuZones.cs
 How the launchscreen's three bands divide a window: a header and a footer held at the heights their
@@ -96,7 +96,7 @@ navigation; the launchscreen owns every Godot control. Screens are a stack rathe
 order, since the campaign's navigation is a graph, and `Registry` maps a `CampaignScreen` to its
 page factory. A page contributes pictures, strokes and captions and names which authored button
 each row presses; `CampaignBoards` supplies the geometry through `Layout`, which is Built-in's
-alone. `Modal` and `Message` are the dialog and the refusal band every screen shares; `OpenCabin` is every door onto the cabin, RETURN TO CABIN and the back press included, and `OpenScrapbookAfterMission` the mission end's door onto the book, each where one of the feature's two cinemas plays.
+alone. `Modal` and `Message` are the dialog and the refusal band every screen shares; `OpenCabin` is every door onto the cabin, RETURN TO CABIN and the back press included, and `OpenScrapbookAfterMission` the mission end's door onto the book, each playing one of the feature's two cinemas through `Film`, the span (`CinemaHandoff.cs`) a polling presentation reads before it applies a frame.
 
 ## src/UI/Menu/CampaignFlightField.cs
 Owns a campaign sortie's humans as part of the shared `CampaignFeature` (`Feature.Field`, in
@@ -162,9 +162,11 @@ overwriting, answering whether it landed and either the name or the OS reason, w
 A scrolled list as a pointer sees it, in the board's authored pixels: the window's box, the thumb's
 box on its track, and where the list stands inside it. `TopAfterWheel` steps the window by rows and
 `TopAfterDrag` maps the thumb's free run down the track onto the rows the window can move, both
-clamped; `ThumbYFor` places a thumb for a given window, and is the one rule every list draws its
-thumb by. Each list widget builds one from its own geometry and the presentation that owns the
-pointer decides what a new top writes back, so the arrows and the keyboard keep their own rules.
+clamped. `ThumbHeightFor` and `ThumbYFor` are the one rule every list draws its thumb by: the share
+of the list the window shows, floored at the scroll tile's own height and capped at the track, so a
+thumb's length says how much is in view and a longer one shortens the run the drag divides by. Each
+list widget builds one from its own geometry and the presentation that owns the pointer decides what
+a new top writes back, so the arrows and the keyboard keep their own rules.
 
 ## src/UI/SliderTrack.cs
 A continuous control's track as a pointer sees it, the list window's opposite number: the slot a
@@ -187,9 +189,9 @@ What a composed campaign screen is made of, engine-free: the screen's fixed back
 page paints on it, pictures at authored pixel positions, connector strokes, text lines, button
 plaques and flowed list widgets, each in draw order. The backdrop is its own layer so a fill can
 sit over the background and stay under the page's pictures, where a selection bar goes. `BoardNote`
-is a widget's entries plus its wrap box, cut at a word where the box has no room for the rest, its
-marks, and `BoardCaret` an edit box's cursor on the line it follows, all placed by a caller that can
-measure text. `PlaqueFrame` and `PlaqueInk` are a plaque's states, and a plaque whose art leaves
+is a widget's entries plus its wrap box (cut at a word where the box has no room for the rest, shrunk
+to a face the whole list fits in, or no box at all where the widget's own list stops nowhere), its
+marks, and `BoardCaret` an edit box's cursor on the line it follows, all placed by a caller that can measure text. `PlaqueFrame` and `PlaqueInk` are a plaque's states, and a plaque whose art leaves
 part of its frame empty carries its label's own baseline. `BoardArt` names a file and its frame count and the renderer resolves it; one of its four libraries is a movie, so a background film reaches the backdrop with no engine type here. `BoardCrop` takes a region of the source instead of the whole frame, which is a chart sheet's own window.
 
 ## src/UI/CampaignBoards.cs
@@ -217,9 +219,9 @@ The Godot half of the campaign boards: draws one `ComposedBoard` over the whole 
 texture cache and the only art resolution there is, mission art and screen chrome under their own
 extraction roots, and caches a miss so an absent extraction is probed once per name. A movie resolves
 to a `MovieSurface`, whose one texture the cache holds and the surface rewrites in place, so the
-picture animates with nothing invalidated; `AdvanceMovies` runs their clocks off the caller's own step
-and `AdvanceCaret` blinks a text cursor off it, each saying whether to repaint. Supplies the font
-metric a flowed `BoardNote` and a caret cannot take, and the two-line hint band a pad needs.
+picture animates with nothing invalidated; `AdvanceMovies` runs their clocks off the caller's own step and
+`AdvanceCaret` blinks a text cursor off it, each saying whether to repaint. Supplies the font metric a flowed
+`BoardNote` and a caret cannot take, `Fitted` shrinking a note's face until its list fits its box rather than losing a row, the two-line hint band a pad needs, and `ArtSize` for a caller that must clip against a bitmap's own authored width.
 
 ## src/UI/CinemaScreen.cs
 One cinema on screen: a `CinemaPlayback`, the `ImageTexture` its pictures upload into, and the
@@ -294,35 +296,40 @@ The load screen drawn over the whole window while a session builds: `LoadScreens
 through `ComposedBoardView`, so it inherits the authored-pixel surface and `BoardFit`'s scaling.
 Populated in `_Ready`, since the view sizes itself off the viewport, and it tracks the window every
 frame the way every shared board does. Holds no composition of its own, so what the screen says
-tests off engine; a campaign launch hands it the `LoadSheet` its story position resolves.
+tests off engine; a campaign launch hands it the `LoadSheet` its story position resolves. It is
+also the pump `Utils/LoadProgress.cs` repaints through, installed for its own tree lifetime alone:
+a step the build reports repaints the bar and the propeller and forces a frame out of a loop the
+build owns, which is how the screen moves at all.
 
 ## src/UI/LoadScreens.cs
 What the load screen is made of, engine-free. `LoadSheet` is the campaign screen's authored half,
-one `Loading.zrd` dialog with its mission's objectives and the profile's memento; `LoadScreens`
+one `Loading.zrd` dialog with its mission's objectives and the seated profile's own memento; `LoadScreens`
 composes either that chart sheet, through `MissionMap` the way `PauseScreens` does, or the Instant
 Action blackboard with the four texts its own `loading_i` dialog places; `DialogTexts` takes that composition by file and key, so an Instant Action pause writes its `ia_escape.zrd` dialog's texts through it. The mission type picks the
 blackboard's dialog by the exe's own letter; free flight and dogfight are ours, so they write the
-mode's name and nothing else. An absent extraction yields the frame and the bar rather than
+mode's name and nothing else. `LoadMotion` is the moving half, the fill strip and the six propeller frames the sheet's own `Cycle` beat names, and `Painted` re-lays those two into `Overlays` at a fraction and a frame, so the still composition under them is never rewritten. An absent extraction yields the frame and the bar rather than
 throwing, since this screen is shown while everything else is still loading. The dialogs, the beat
 sheet and the face mapping: [../org/loading-screen.md](../org/loading-screen.md).
 
 ## src/UI/PauseScreens.cs
 What the Original presentation's pause screen is made of, engine-free: the frame behind it, the
 mission's chart at its authored source crop, the pins and icons its dialog's script places, the
-objectives parchment, the memento, and the four labelled button strips. An Instant Action sortie's dialog carries none of that and draws the load screen's blackboard instead, its four texts composed through `LoadScreens` and its parchment left off by the dialog's own script.
+objectives parchment, the memento, and the labelled button strips, the block's four plus the remake's own PHOTO MODE at the place that block leaves free. An Instant Action sortie's dialog carries none of that and draws the load screen's blackboard instead, its four texts composed through `LoadScreens` and its parchment left off by the dialog's own script.
 `PauseSheet` is the authored half, read once per sortie, and `PauseReadout` the live half, read afresh on every
-pause: `Rows` marks a note line by the runtime's answer for that line's own objective number, and
+pause: its memento is the seated profile's own picture, `Rows` marks a note line by the runtime's answer for that line's own objective number, and
 `Icon` turns one world pose into the chart icon a session and a suite place alike, through the
 shared `MissionMap`, which draws nothing for a pose off the window. `RowAt` is the pointer's hit
-test over the four authored 132x28 plates, and a pointer draws the dialog's own cursor; an unreadable extraction leaves the pause to the Built-in board. Decode: [../org/pause-screen.md](../org/pause-screen.md).
+test over the five 132x28 plates, and a pointer draws the dialog's own cursor; an unreadable extraction leaves the pause to the Built-in board. Decode: [../org/pause-screen.md](../org/pause-screen.md).
 
 ## src/UI/MissionMap.cs
 The one chart drawer every screen showing a mission's map shares, engine-free: the sheet as a
 cropped picture, a reveal's visible elements as pictures in placement order over two layers, its
-connector lines as strokes, and one icon placed by world position through the map's own window. It
-exists as one module because the original reaches all of it through one control class from two
-dialog constructors, so the briefing, the pause screen and the campaign load screen cannot drift
-apart here. Decode: [../org/pause-screen.md](../org/pause-screen.md).
+connector lines as strokes, and one icon placed by world position through the map's own window,
+turned so its drawn nose reads against the compass: the heading, less however far that bitmap's own
+art is drawn off the top of the sheet. It exists as one module because the original reaches all of
+it through one control class from two dialog constructors, so the briefing, the pause screen and
+the campaign load screen cannot drift apart here.
+Decode: [../org/pause-screen.md](../org/pause-screen.md).
 
 ## src/UI/BoardMenuItem.cs
 The rows a board menu can offer: Resume, Photo, Restart, Preferences and Exit. The board owning the
@@ -419,10 +426,17 @@ The `--viewer` livery editor (key L): a squadron stepper that loads the whole sq
 per-slot RGB sliders, decal steppers, a random livery and copy-CLI-args.
 
 ## src/UI/NodeLabels.cs
-Floating node-name labels (key F16) in both the static viewer and flight, cycling off, meshes and
-all; `--debug-names` presets the mode at launch. In splitscreen the nearest and de-clutter pick is
-player 1's viewpoint alone, while every pane still renders the resulting labels, since they are
-ordinary world-space children of the root.
+Floating node-name labels in both the static viewer and flight, in a meshes mode and an all mode;
+`--debug-names` sets the mode at launch and is the only way in, the labels carry no key. In
+splitscreen the nearest and de-clutter pick is player 1's viewpoint alone, while every pane still
+renders the resulting labels, since they are ordinary world-space children of the root.
+
+## src/UI/DebugMarkerToggle.cs
+The all-aircraft markers key (F16): writes one answer to `TargetHud.MarkAll` on every human pane,
+the overlay `--debug-markers` switches on at launch. Session-level rather than one handler per
+pane, because a splitscreen pane's HUD sits in a `SubViewport` that routes unhandled input to the
+window and never to its own nodes. The panes are read through a closure, since a rig's HUD is built
+after this node and can go away mid-session.
 
 ## src/UI/MarkerOverlay.cs
 The `--viewer` marker overlay (key K, `--markers` at launch): every firepoint, pylon and target on
@@ -448,13 +462,14 @@ the frame's cost split, GC counts, breadcrumbs and a rolling frame-time strip, e
 view of data collected elsewhere rather than a new sample. What a frame number proves: PERF-1.
 
 ## src/UI/BuildStamp.cs
-The build's version in the menu's bottom-right corner, so a screenshot a stranger sends already
-carries the build it was taken on. Built once by `Launcher` beside `PerfHud` and shown off the menu
-host's own "the menu is up", which is what puts it on every presentation at once: the stamp is a
-fact about the binary, not part of a presentation's screen graph, and Original draws decoded
-artwork with nowhere to put one. It draws on `HudLayers.PerfReadout`, above the boards, for the
-same reason that readout does. Hidden in flight, so no golden screenshot ever sees it. The number
-itself is `Utils/BuildVersion.cs`.
+The build's version as `CSVM v<version>` in the menu's bottom-right corner, so a screenshot a
+stranger sends carries the build it was taken on and the number is not read as the original
+game's own. Built once by `Launcher` beside `PerfHud` and shown off the menu host's own "the
+menu is up", which is what puts it on every presentation at once: the stamp is a fact about the
+binary, not part of a presentation's screen graph, and Original draws decoded artwork with
+nowhere to put one. It draws on `HudLayers.PerfReadout`, above the boards, for the same reason
+that readout does. Hidden in flight, so no golden screenshot ever sees it. The number itself is
+`Utils/BuildVersion.cs`.
 
 ## src/UI/NoGameDataScreen.cs
 The dead end a launch with no extraction under the data root reaches instead of the menu: the
@@ -469,7 +484,9 @@ here: `Session/ExtractionStamp.cs` owns whether an extraction is stale and stays
 The geometry and shading lab (key M): normal lines, the smoothing-seam wireframe, collider boxes,
 light sliders with a headlight, and cull by normal-source override cyclers, all scripted by
 `--debug-mesh`. Two shapes: the `--viewer` lab owns the parked plane, and the scoped lab over a
-`SelectionService` attaches to the current selection and restores on a change or a deselect.
+`SelectionService` attaches to the current selection and restores on a change or a deselect. Its
+override shader samples through `SceneBuilder.SampleAlbedo`, so a surface under the cull override
+keeps the chapter's mip LOD bias and the lab stays a diagnostic twin of the real arm.
 
 ## src/UI/WeaponLab.cs
 The weapon lab's panel (`--weapon-lab`, key B): a configurator for the held aircraft's live loadout,
@@ -539,7 +556,7 @@ anchored net draws where it actually is, the trailer offset applied per frame as
 position, so nothing is rebuilt. The key range: [../controls.md](../controls.md).
 
 ## src/UI/ClassOverlay.cs
-The colour-by-class overlay (key X, `--debug-classoverlay` scripts it) over the same modes as
+The colour-by-class overlay (key H, `--debug-classoverlay` scripts it) over the same modes as
 `ColliderOverlay`, a findable-targets view rather than a collision one. Mixes a class colour over
 every drawn mesh at half strength, so a target stays recognisable as itself: destructible through
 the registry's own resolve, facade through the billboard classification, clutter as every multimesh
@@ -563,7 +580,7 @@ gathered whether or not the panel was ever opened. A member freed under it (a de
 to its wreck) leaves on its own. Nothing is drawn until the first node joins.
 
 ## src/UI/WorldDamageLab.cs
-The world damage lab (key F5) in `--freecam` and `--anim-lab`: the destructible pools of whatever
+The world damage lab (key F19) in `--freecam` and `--anim-lab`: the destructible pools of whatever
 the selection holds, each with live HP, and a slider with kill and reset on the one a weapon hit
 reaches, driving the anim runtime's damage and reset calls. `--debug-damage` is the scripted twin,
 an ordered script rather than a token set. Only the pool the registry resolves is drivable, since a
@@ -704,7 +721,8 @@ How the four display settings read as rows, shared so Built-in's Options screen 
 page cannot disagree about a saved value: one label per `DisplayWords` entry in that order, since a
 row reads and writes the store word by index, plus the two forgiving reads (an unknown word is the
 vocabulary's first value, a size the screen does not offer is the project default) and the wrap a
-sideways step takes. The screens and the sizes themselves are enumerated per machine by
+sideways step takes. The size row is the one a display mode can own: under a `Pinned` one it reads
+the screen's own size whatever is saved. The screens and the sizes are enumerated per machine by
 `Utils/MonitorSetting.cs` and `Utils/ResolutionSetting.cs`, which is why neither is a list here.
 Engine-free, so the rules test without a screen (`CSVM.Tests/DisplaySettingRowsTests.cs`).
 
@@ -862,7 +880,7 @@ the cursor walks it. The monitor and Resolution keep the authored Graphics and R
 enumerated per machine by `Utils/MonitorSetting.cs` and `Utils/ResolutionSetting.cs`; the Graphics row's title
 and description are the page's own, the authored ones naming a 3D card this port has no answer to. Display Mode
 and V-Sync are dropdowns on Viewing Range and Effects Level over `DisplayWords`, Enhanced Graphics takes the
-Shadows checkbox whose gate it owns, and a list opens as `OriginalGameOptions.cs` does, so the Resolution row's sizes window and scroll where they outrun the eight rows that row authors; ACCEPT CHANGES leaves as the `OptionsApplyExit`, CANCEL CHANGES drops the edits. [../org/menu-inventory.md](../org/menu-inventory.md).
+Shadows checkbox whose gate it owns, and a list opens as `OriginalGameOptions.cs` does, so the Resolution row's sizes window and scroll where they outrun the eight rows that row authors, though under borderless, which owns the size, that row shows the screen's own size, draws dead and takes no press while the saved size waits untouched; ACCEPT CHANGES leaves as the `OptionsApplyExit`, CANCEL CHANGES drops the edits. [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalControls.cs
 The two rebinding pages, the shell's partial over the decoded `[@ControlsPrefs@]` and `[@Keys@]`

@@ -160,10 +160,49 @@ public class GroundShadowLawTests
     }
 
     [Fact]
+    public void TheSofteningKeepsItsWidthOnTheGroundAtTheLiveStep()
+    {
+        // ⚠ The live texture is finer than the original's 32, so the spread is measured in world
+        // terms: the edge must soften over the same fraction of the footprint at either step.
+        float original = SofteningWidth(GroundShadowLaw.OriginalTextureSize, 1f);
+        float live = SofteningWidth(GroundShadowLaw.TextureSize, GroundShadowLaw.TexelScale);
+        Assert.Equal(original, live, 1f / GroundShadowLaw.OriginalTextureSize);
+        // And the scale is what does it: the same spread taken in texels shrinks with the step.
+        Assert.True(SofteningWidth(GroundShadowLaw.TextureSize, 1f) < original);
+    }
+
+    [Fact]
     public void TheRampRunsFromWhiteToTheShadowColour()
     {
         Assert.Equal(0f, GroundShadowLaw.Coverage(0), 4);
         Assert.Equal(1f, GroundShadowLaw.Coverage(GroundShadowLaw.RampSteps - 1), 4);
         Assert.Equal(0.5f, GroundShadowLaw.Coverage(5), 4);
+    }
+
+    // How much of a buffer's own edge-to-edge extent the spread takes to run a straight covered
+    // edge from saturated to white, which is the softening's width as the ground sees it.
+    private static float SofteningWidth(int size, float texelScale)
+    {
+        var covered = new bool[size * size];
+        for (int y = 0; y < size; y++)
+        {
+            for (int x = 0; x < size / 2; x++)
+                covered[(y * size) + x] = true;
+        }
+
+        var ramp = GroundShadowLaw.Spread(covered, size, size, texelScale);
+        int row = size / 2;
+        int lastFull = -1;
+        int firstEmpty = size;
+        for (int x = 0; x < size; x++)
+        {
+            int step = ramp[(row * size) + x];
+            if (step == GroundShadowLaw.RampSteps - 1)
+                lastFull = x;
+            else if (lastFull >= 0 && step == 0 && x < firstEmpty)
+                firstEmpty = x;
+        }
+
+        return (firstEmpty - lastFull) / (float)size;
     }
 }

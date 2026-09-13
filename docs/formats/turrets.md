@@ -156,7 +156,9 @@ one zeppelin hull hold seventeen independent voices. The lease call (`0x004ab1d9
 the turret's firepoint position (`+0x188`, the same vector the projectile spawner is given) and its
 velocity (`+0x194`) with the Doppler argument **zero**, so the voice is a point at the muzzle a round
 just left and carries no pitch shift. Attenuation is the definition's own `RANGE` pair, silent past
-1.1 x its audible distance (`FUN_00597c20`).
+1.1 x its audible distance. That margin is not the turret path's: it is in the sound manager's
+shared 3D update `FUN_00597c20`, which every positional weapon voice reaches, an aircraft's gun
+loop included ([sounds.md](sounds.md)).
 
 ⚠ **Eleven of the 42 entries are silent by the data's own two gates, and that is not a defect.**
 The lease call is guarded on `SOUNDS.CANNON` being present AND on the entry's weapon carrying the
@@ -311,9 +313,9 @@ The skirt alone cannot serve a ground gun. An `aagun` rig carries a 12 m by 12 m
 reaching 3.5 m over the gun's node and the `col_buildings` pad, and probed from a live C1/M02
 session with the turrets woken, aagun32's ray toward targets at sixteen bearings and elevations
 from 6 to 64 degrees struck one of its own bodies at 1.67 m to 5.69 m every time, well past the
-skirt. Five guns, five `Blocked` gates, from the first frame on. The suites that had passed
-on this rule were reading a physics space with two of the three shapes missing, which is the
-harness gap `BL-831` names.
+skirt. Five guns, five `Blocked` gates, from the first frame on. A suite reads that rule only after
+it brings the physics space in step with the scene: a gun whose site was switched on inside the
+frame has all three shapes marked enabled and none of them in the broadphase until then.
 
 ⚠ **The site's PARENT is the unit of exclusion in neither direction.** A chapter parks its ground
 guns wherever the modeller left them: C1's five `aagun`s hang off the world root, while C3's hang

@@ -57,6 +57,22 @@ public static class ScrapbookCompositionFixture
         return root;
     }
 
+    /// <summary>Writes a fresh temp <c>dataRoot</c> holding the book's front: slot 0, the career
+    /// page, with two openable scraps on its one spread, then mission 1's single spread, so the
+    /// book runs (0,1) -&gt; (1,1) and the step each way crosses the boundary the career page
+    /// stands on.</summary>
+    public static string WriteCareerBook(string root)
+    {
+        string dir = Path.Combine(root, "extracted", "rof", "ASSETS");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "SCRAPBOOK.CSV"),
+            "[SCRAPBOOK]\n" +
+            "0_1_1=0,0,MS_P_InitialPinup1,PJ,73,198,2,0,0,160,\"0,0,0,0\",A,120,30,0,0\n" +
+            "0_1_2=0,0,SB_00_00_news1,P0,413,56,2,0,0,60,\"0,0,0,0\",N,120,30,0,0\n" +
+            "1_1_1=0,0,SB_01_01_a,P0,10,10,1,0,0,10,\"0,0,0,0\",0,0,0,0,0\n");
+        return root;
+    }
+
     /// <summary>Writes a fresh temp <c>dataRoot</c> holding one mission's danger-zone slot: a
     /// <c>DZ_generic_corners</c> photo-corner mount (<c>Zoom=0</c>, never opens) painted one step
     /// above a <c>Snap_</c> capture at the same coordinates, matching

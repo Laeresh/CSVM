@@ -72,6 +72,16 @@ caller that wants to aggregate the spans without emitting the line, which is how
 `src/Testing/PhaseAttribution.cs` reads a harness build. Line grammar, the phase rules and the
 `boot` / `rest` / `first_frame` terms: [../org/startup-profile.md](../org/startup-profile.md).
 
+## src/Utils/LoadProgress.cs
+The load screen's progress while a build holds the frame loop: the original's sixteen authored
+milestone fractions, one per `LoadStep`, a monotonic setter that no step can drag backwards, and a
+wall-clock pump throttled to one repaint every 0.1 s. Ambient over `Current` for the reason
+`StartupProfile` is, so `Launcher`, `GameSession` and `WorldSession` report a boundary they have
+crossed without being handed a sink, and a launch with no screen over it draws nothing at all.
+Engine-free: `FillPixels` and `FrameAt` are the bar's pixel clip and the propeller's frame, and
+`UI/LoadBoard.cs` is what turns them into a drawn frame. Decode:
+[../org/loading-screen.md](../org/loading-screen.md).
+
 ## src/Utils/HitchMonitor.cs
 The always-on frame-hitch detector, ticked from `Launcher._Process` in every mode: a frame costing
 far more than its recent neighbours gets a `HitchRecord` assembled for it, describing the frame's
@@ -107,9 +117,9 @@ span, the spans that closed, and a tally carried alongside them (the planes an A
 `PhysicsTickCost`, `ProcessPassCost` and `AiStepCost` are three instances behind static facades
 that name their own terms and drop the slots their readout does not print, so the drain semantics
 are written once: a close with no open standing banks nothing, a reset drops a half-open span, and
-a span still open at the drain is carried whole into the next window. `WallCostBracket` is the node
-that opens or closes one end of a pair, named from the bank's label and pinned to an extreme of the
-process or the physics priority order.
+a span still open at the drain is carried into the next window; an optional timestamp source lets a
+test assert all three by value. `WallCostBracket` opens or closes one end of a pair, named from the
+bank's label and pinned to an extreme of the process or the physics priority order.
 
 ## src/Utils/PhysicsTickCost.cs
 The wall cost of one whole Godot physics tick and how many ticks a wall second actually got,
@@ -177,8 +187,8 @@ querying a key is also what registers it for `--dump-config`.
 ## src/Utils/EffectsLevel.cs
 The original's graphics EffectsLevel option as a config key (`graphics.effectsLevel`: `high`,
 `medium` or `low`, default `high`), and the one global it drives today:
-`csky_clutter_fade_scale_sq`, the squared distance scale every templates-clutter fade multiplies
-into its camera distance. The level's meaning and direction:
+`csky_clutter_fade_scale_sq`, the squared distance scale every templates-clutter fade and the
+`fvol` cloud field's own fade multiply into their camera distance. The level's meaning and direction:
 [../formats/templates.md](../formats/templates.md). A second key, `graphics.clutterFarFade`, is the
 remake's own switch: false resolves the global to a never-fades scale, so clutter draws out to the
 fog instead of ending at the authored metres. Enhanced mode scales it by
@@ -215,14 +225,14 @@ is the borderless window, `ExclusiveFullscreen` the exclusive mode. Nothing here
 which keeps `project.godot`'s windowed 1280x720 viewport, so the borderless default never reaches a golden.
 
 ## src/Utils/ResolutionSetting.cs
-The window's size. Godot exposes no video-mode list, only a screen's own size, so `Sizes` builds the
-per-screen `SizeList` as the standard desktop sizes that fit inside `DisplayServer.ScreenGetSize` plus that
-size, the list's fallback. `Resolve` layers the saved `resolution` over it, so nothing saved runs at the
-screen's own size, which the borderless default fills anyway; a saved size the screen does not offer falls
-back to that size and never to the nearest, since a nearest match would hand the player an aspect ratio
-they did not pick. `Unknown` is the engine-free list, every candidate size over `project.godot`'s 1280x720.
-`SavedWord` holds the `--det` guard. `Apply` is the one place `DisplayServer.WindowSetSize` is called; it
-skips a window the mode sizes (any but windowed) and re-centres one it resized, a resize growing off-screen.
+The size the game draws at, whose meaning the display mode sets. Godot exposes no video-mode list, only a screen's own
+size, so `Sizes` builds the per-screen `SizeList` as the standard desktop sizes that fit inside `ScreenGetSize` plus that
+size, the list's fallback; `Unknown` is the engine-free list, `SavedWord` the `--det` guard. `Resolve` layers the saved
+`resolution` over the list, a size the screen does not offer falling back to that fallback and never to the nearest, which
+would hand the player an aspect ratio they did not pick; a `Pinned` mode, which borderless is, takes the fallback whatever
+is saved, and both Options screens draw the size row dead under it. `Apply` sizes only a windowed window and re-centres
+it, a resize growing off-screen; Godot's exclusive fullscreen keeps the screen's size on Windows and switches no display
+mode, so the chosen size becomes the render target through `Window.ContentScaleSize`. The log line reports what resulted.
 
 ## src/Utils/MonitorSetting.cs
 The screen the window sits on. `Screens` labels the machine's screens one per index, "Screen 0 (1920x1080)"

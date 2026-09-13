@@ -103,7 +103,7 @@ the handed world root. `TryCreate` takes the wizard's def or `--ia=<path>`; `Bui
 contiguous actor phase (the chapter's first patrol net, the ace, the wingman fan and its escort
 chain, every configured wave built inert at the world origin); `Step` ticks the sequencer and
 activates what it returns; `WireEndConditions` routes each mode's own win signal, the lives
-ledger and the whole-window wrap-up board. The decoded rules stay engine-free in
+ledger and the whole-window wrap-up board, snapshotting the four counters at the ending and holding the pilots' seats (not the world, not the cameras) until the hold runs out and the board is due. The decoded rules stay engine-free in
 `InstantActionRuntime.cs` and `InstantActionWaves.cs`; this class owns every `ia:` log line.
 
 ## src/Session/SpectateHandoff.cs
@@ -117,7 +117,7 @@ Candidate and tracking lists are optional for callers without a roster or rerun 
 ## src/Session/InstantActionRuntime.cs
 Owns one Instant Action mission's actor set: the loaded `InstantActionDef`, the ace's spawn draw
 and rating, the wingmen's fan placement, each wave's per-member draws, the objective-zeppelin
-selection, and the mission's end. The static, engine-free helpers `InstantActionDirector` calls
+selection, and the mission's end with the decoded `WrapupHoldS` that `Advance` spends between that ending and the `WrapupDue` cue for the board. The static, engine-free helpers `InstantActionDirector` calls
 are here (`ChooseAceSpawn`, `RepresentativeRating`, `WingmanSlotFor`/`FlownWingmen`,
 `RandomPilotStats`/`ResolveWaveAccentId`, the zeppelin lookups, `FormatElapsed`/`ShotPercent`).
 The end half holds no engine type and calls no `GD.*`, the same construction rule `VersusMatch`
@@ -190,7 +190,7 @@ the `aiv` blocks through `CampaignRoster.cs`; `Attach` arms the graph once every
 directive can touch is up; `BindCallbackHost` takes the `CALLBACK` slot ahead of the generator
 runtime's, where 801 to 803 reactivate the lowest-numbered still-deactivated Black Hat of their
 family, CM19's only launch path, and 968 takes C4/M03's escorting wingman out of the world as that mission's docking film says her name; `Step` runs the graph, the escort repair and the music. The
-nested `World` is the `IObjectiveWorld`, a directive with no seam here a named no-op, and `WidenGroupEngagement` is where an awake `DEDG` reaches its group's live members; mission end records the attempt, folds the persist log into the profile and holds before the cabin behind `LeavingFade`, the ramp `UI.MissionEndFade` paints. Debrief: [../org/debrief.md](../org/debrief.md).
+nested `World` is the `IObjectiveWorld`, a directive with no seam here a named no-op, and `WidenGroupEngagement` is where an awake `DEDG` reaches its group's live members; `Memento` is the picture the flying profile hangs, which the pause sheet's own slot takes; mission end records the attempt, folds the persist log into the profile and holds before the cabin behind `LeavingFade`, the ramp `UI.MissionEndFade` paints. Debrief: [../org/debrief.md](../org/debrief.md).
 
 ## src/Session/CampaignProgression.cs
 The campaign's progression rules over a profile: recording one mission attempt with the original's
@@ -207,8 +207,9 @@ The pictures a campaign profile may hang on its cabin wall: the executable's own
 the mission that awards it and which bit of that mission's merged objective mask admits it) and the
 rule that reads a profile's records to say which rows it holds. Seven rows carry no mission and are
 held from the first frame, so a chooser is never empty; `Current` answers what an absent or unknown
-stored name draws as, and `Bitmap` is the truncation the drawn file name takes. The table, its
-addresses and the row the original ships but can never admit:
+stored name draws as, and `Bitmap` is the truncation the drawn file name takes. `BitmapFor` is the
+one name the cabin wall, the pause sheet and the campaign load screen all draw, so a chosen picture
+cannot reach one and miss another. The table, its addresses and the row it can never admit:
 [../org/pause-screen.md](../org/pause-screen.md).
 
 ## src/Session/CampaignProfileStore.cs
@@ -232,13 +233,13 @@ testable with no engine present; the cabin opens through that file's `Once`. `La
 
 ## src/Session/ClosingCinema.cs
 Whether the campaign's closing film plays before the scrapbook a flown mission opens, and the one
-handoff to that book. The gate is `CampaignProgression.Complete` over the seated profile, so an
-unfinished campaign reaches the book with no film, which is what the original's own script does when
-its completion callback answers false. The film is the `FinalCinema` screen's layout row's name, and
-the skip set is Escape and the left mouse alone, narrower than `ChapterCinema.cs`'s on purpose.
-Playing is a `UI/CinemaHandoff.cs` `CinemaPlay` (`Launcher.PlayCinema`), and the book opens through
-that file's `Once`. `Launcher` holds the process's one instance and hands it to
-`Menu/CampaignFeature.cs`, so both presentations' mission-end doors reach it. Films: [../formats/cinemas.md](../formats/cinemas.md).
+handoff to that book. The gate is the mission just flown, its result and its story position: a win
+on the campaign's last mission plays the film, first flight and replay alike, and any other ending
+reaches the book with no film, which is what the original's own script does when its gate callback
+answers false. Nothing is latched and completion state decides nothing, so the flown result travels
+with the menu return (`Menu/MenuReturnDestination.cs`). The film is the `FinalCinema` layout row's
+name and the skip set is Escape and the left mouse alone, narrower than `ChapterCinema.cs`'s on
+purpose; playing is a `UI/CinemaHandoff.cs` `CinemaPlay` (`Launcher.PlayCinema`) whose `Once` opens the book, and `Launcher` holds the one instance and hands it to `Menu/CampaignFeature.cs`. Films: [../formats/cinemas.md](../formats/cinemas.md).
 
 ## src/Session/CampaignPersistLog.cs
 The cross-mission state log: what a campaign mission left destroyed, carried into later missions
@@ -312,11 +313,11 @@ from here for a woken, undestroyed hull; `SurfaceVehicleRuntime.cs` is how one i
 One hull's gun ([../org/aiPilot.md](../org/aiPilot.md) "What a `mode ship` vehicle runs"): the
 acquisition, mount and fire decision a patrol boat runs, built from the def's own `weapons` tuple
 and the model's `turret` > `gun` > `firepoint` chain, or not built when any input is missing. It
-sweeps the pool's three candidate lists under the team gate, ranks with the non-`jet` scorer, holds a
-target for a hardcoded 20 s, aims through `Flight/SurfaceGunMount` and fires on the authored window,
-interval and magazine, dropping non-aircraft candidates so a boat does not shoot a boat. No pursue
-gate and no quick draw, neither reaching a hull. Its `GunVoice` is renewed per tick from the hull
-origin ([../org/weaponFire.md](../org/weaponFire.md)). Suites: `surface-vehicle-guns`, `surface-gun-voices`.
+sweeps the pool's three candidate lists under the team gate, ranks with the non-`jet` scorer and the
+defs' class biases, holds a target for a hardcoded 20 s, aims through `Flight/SurfaceGunMount` and
+fires on the authored window, interval and magazine, dropping non-aircraft candidates so a boat does
+not shoot a boat, which is why the aircraft-first preference is not spent here. No pursue gate and no
+quick draw, neither reaching a hull. Its `GunVoice` is renewed per tick from the hull origin ([../org/weaponFire.md](../org/weaponFire.md)). Suites: `surface-vehicle-guns`, `surface-gun-voices`.
 
 ## src/Session/CutsceneController.cs
 The host a story mission's intro or landings definition raises its `CALLBACK` codes to, and the

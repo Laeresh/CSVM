@@ -76,9 +76,14 @@ public partial class FlightController
     /// shipped default, and under the launch gate no file is read at all
     /// (<see cref="Bindings.LaunchBindings"/>). A human rig calls it from <see cref="Bind"/> once
     /// <see cref="PlayerIndex"/> is known; an AI rig never reads a player's file.</summary>
-    public void LoadSavedKeymap() =>
-        FlightKeymap.Fill(Bindings.LaunchBindings.Map(
-            PlayerIndex + 1, Bindings.InputContext.Flight, default, readsKeyboard: true));
+    public void LoadSavedKeymap()
+    {
+        // One load for both, since the scheme and the keymap are one saved record: two calls would
+        // read the file twice and could take the flag off a different read than the bindings.
+        var profile = Bindings.LaunchBindings.Profile(PlayerIndex + 1, default, readsKeyboard: true);
+        FlightKeymap.Fill(profile.Map(Bindings.InputContext.Flight));
+        MouseFlying = profile.MouseFlying;
+    }
 
     /// <summary>Puts this seat's control prompts on <paramref name="strings"/> and composes them
     /// now. A session rig is handed the table through <see cref="Bind"/>; a suite that assembles a
