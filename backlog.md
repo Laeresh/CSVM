@@ -2407,6 +2407,25 @@ usual.
 
 - `BL-848` `[Cleanup]` `[L]` `[Next: decide]` `[Impact: none]` `[Evidence: trace]` **About 140 dated clauses remain in `backlog.md` entries that predate the no-dates rule.** *Evidence:* `Select-String '\d{4}-\d\d-\d\d'` over the file; every one is event narration ("landed 2026-08-05", "measured 2026-08-04 from the CAP-07 re-take") of the kind the writing rule sends to the closing commit's message. *Fix shape:* decide whether the old entries are swept (each date dropped, the standing fact kept, the evidence findable through `git log --grep`) or grandfathered until the entry closes. A sweep is mechanical but every clause needs a reading. *Cross-refs:* PLAN-code-review-orch A5 (the one dated clause the review found).
 
+- `BL-902` `[Testing]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **The allocation-free
+  scope test charges one window of five under build load, and the tightened rule now fails on it.**
+  *Evidence:* the first merged-tree unit pass after `BL-833`'s every-window rule landed, run
+  beside three agents' dotnet builds, read `[0] 0 bytes, 0 gen0; [1] 4072 bytes, 0 gen0; thread
+  22, 16 cpus, server GC False` and failed at the second window; the same tree read every window
+  at zero on ten consecutive reruns, and the test's own 32 quiet-machine runs before it. One
+  charge of 4,072 bytes with no collection in a window that opens 10,000 scopes is one allocation,
+  not a per-scope leak, and it lands under load. *Fix shape:* follow the lead, not the tolerance:
+  reproduce under a concurrent build (or a CPU load generator), then find the one allocation by
+  running the window under an allocation-sampling listener (`EventListener` on the
+  `Microsoft-Windows-DotNETRuntime` GC AllocationTick event, or `GC.GetAllocatedBytesForCurrentThread`
+  bracketed inside the scope's own body) and name its type and stack; if it is the runtime's
+  (a tiered-JIT re-compilation, a timer or thread-pool callback on the test's thread), pin the
+  method's tier before the windows or run them on a dedicated thread and say so in PERF-28.
+  *⚠ Traps:* `BL-584` ruled out gen-0 charging and tiered JIT twice by reasoning, not by a stack;
+  a stack is the only thing that closes this. Do not widen the assertion. *Cross-refs:*
+  `BL-833`'s closing commit, `CSVM.Tests/PerfSampleTests.cs` (`MeasureWindows`),
+  `docs/verification.md` PERF-28.
+
 ## Misc
 
 - `BL-077` `[Feature]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: data]` **Visual prop spin-up/down** (`startprops`/`stopprops` disc crossfade), spawning mid-air
