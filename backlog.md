@@ -1121,36 +1121,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-231` (the pool's tuning entry), `BL-121` (the `trail-world-anchor` suite),
   `BL-700` (the same zeppelin family's wreck rest).
 
-- `BL-797` `[Fidelity]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **A choked engine's propeller keeps spinning silently, where the original winds it down with a sound.**
-  *Evidence:* the disabled-systems mask's bit-`0x2` edges call `FUN_004b15c0` and `FUN_004b1630`,
-  which swap the airframe def's `stop_props_anim` and `spin_props_anim` on two anim slots at
-  vehicle `+0x6c8`/`+0x6cc` (decode: `docs/org/ordnanceTypes.md`, "What the mask's bit-2 edges
-  run"). `stopprops` fires the `snd_propstop` one-shot, activates `staticprop1`..`3` and fades them
-  in over 2.0 s, and fades `prop1`..`prop3b` out over 1.5 s before deactivating them; `spinprops`
-  reverses it silently and instantly. CSVM plays `stopprops` at Destroy and at Crash and
-  `startprops` at spawn (`Flight/FlightController.cs`, `Session/HumanFlightAdapter.cs`,
-  `Session/AiFlightAssembler.cs`) but runs neither on the choke, so a choked aircraft's blur discs
-  turn on at full rate with no cue. *Fix shape:* play `stopprops` through `CrashRuntime` on
-  `TryChokeEngine`'s rising edge and reverse it when `EngineDead` clears, the same call shape the
-  nitro edges already use, on the human rig and the AI one alike, with a suite that asserts the
-  slot state across both edges. *⚠ Traps:* the restart side is the decision this item is waiting
-  on. `PropAnimator` turns the discs procedurally at the same authored `-220`/`60` rates, so
-  playing `spinprops` puts a second writer on the same node transforms; either suppress its
-  `OBJECT_MOTION` and keep `PropAnimator`, or hand the spin to the anim runtime for the whole
-  flight. Do not reach for `startprops` on the restart: it carries `snd_propstart`, and the
-  original's restart is silent. Do not double the death-time `stopprops` when a choked aircraft
-  then crashes. *The user's steer:* the restart side is decided, `PropAnimator` holds the spin, so
-  `spinprops` runs with its `OBJECT_MOTION` suppressed. *Decode first, before the port:* when the
-  original really plays the pair. The decode has the choke edges, the death routine and the
-  spawn/reset caller; the user asks whether `stopprops`/`spinprops` also run at mission start and
-  on a captured aeroplane (the airframe swap, `docs/formats/anim-definitions/cutscenes.md`, "The
-  airframe swap codes"), so read every caller of `FUN_004b15c0`/`FUN_004b1630` and the anim
-  runtime's own `start_anims` path and list each site the pair fires from, then port the whole
-  set, not the choke alone. *Playtest after fix:* fly into a `TANGLER` cloud and watch and listen
-  to the prop through the choke and the recovery. *Cross-refs:* `docs/formats/vehicle.md`
-  (`spin_props_anim`/`stop_props_anim`), `docs/org/vehicleDamage.md` (the mask), `BL-406` (the
-  choke itself), `BL-285` (the engine loop's start/stop inputs).
-
 - `BL-867` `[Tuning]` `[S]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` **The speed cue's wisps read more opaque than the
   original's.** *Evidence:* reported at the controls against mission recordings: the pale wisps
   each chapter's `speed_cue.zrd` emits ahead of the player (`Flight/SpeedCue.cs`, three authored

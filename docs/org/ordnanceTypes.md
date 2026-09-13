@@ -1142,20 +1142,50 @@ model's own read of the mask bit (`0x0048fdd0`, [flightModel.md](flightModel.md)
 `FUN_004b18a0`'s, and the nitro refusal is `FUN_004b2110`'s. The name "engine stop" describes when
 these two run, not what they do.
 
-**They run on death and at spawn too.** `FUN_004b15c0` has a second caller, the death routine
-`FUN_004b82d0`, which calls it unconditionally after setting the dead byte at `+0x91d` and before
-playing the def's destroy anim, so a killed aircraft's props wind down through the same `stopprops`.
-`FUN_004b1630`'s second caller is the spawn/reset `FUN_0047b790`, which starts the def's `start_anims`
-list from `def+0x170` and then calls it, so a fresh airframe's discs come on through `spinprops`. The
-teardown `FUN_004b1580` releases both slots without playing anything, and the anim teardown
-`FUN_0047b9c0` reaches it.
+**Every site the pair fires from.** `FUN_004b15c0` (`stopprops`) has exactly two call sites.
+`0x004b1723` is inside the mask setter `FUN_004b1690`, on bit 2 going from clear to set, which is the
+choke itself; the branch is gated both on `(param_3 & 2) != 0` and on the bit actually changing.
+`0x004b8440` is inside the death routine `FUN_004b82d0`, unconditional, after the dead byte at
+`+0x91d` and before the def's destroy anim, so a killed aircraft winds its props down through the
+same definition. `FUN_004b82d0` is reached from the collision death `FUN_0048ad20`, the shot-down
+death `FUN_004b9bc0` and the two network deaths `FUN_00498bf0` and `FUN_004995a0`.
 
-**CSVM has the machinery and does not run it on the choke.** `FlightController` already plays
-`stopprops` through `CrashRuntime` at Destroy and at Crash and `startprops` at spawn, the same call
-shape the nitro edges use, and `PlaneBuilder` keeps `staticpropN` in the flight build for it. What is
-missing is the pair on the choke's own edges, and the restart side has a conflict to settle first:
-`PropAnimator` turns the discs procedurally at the same `-220`/`60` rates, so playing `spinprops`
-would put a second writer on the same node transforms. `BL-797` carries the port.
+`FUN_004b1630` (`spinprops`) also has exactly two. `0x004b1739` is the falling edge in the same mask
+setter, the choke timer running out. `0x0047b9ac` is the tail of `FUN_0047b790`, the `start_anims`
+(re)start, which starts every `def+0x170` entry on the `+0x38c` node handle and then spins the discs
+up.
+
+**So the restart side runs at mission start and on a captured aeroplane, and the wind-down side runs
+at neither.** `FUN_0047b790` has four callers. The vehicle build `FUN_00476250` ends with it, and
+that build is reached through the body builder `FUN_0047c210` from the mission setup `FUN_004735b0`
+(every aircraft the roster places), the spawn-by-name helper `FUN_0047b650`, the airframe swap's own
+rebuild `FUN_0047fd50` behind cutscene codes 965, 966 and 967
+([cutscenes.md](../formats/anim-definitions/cutscenes.md)), `FUN_0045a390` under the player reset
+`FUN_0047f1f0`, and the multiplayer setup `FUN_00451bf0`. The un-hide arm of `FUN_004b0f40`
+(`param_2 == 0`) calls it, which is the swap's reveal step. The player destruction reset
+`FUN_00480480` calls it once the cutscene flag is clear and `FUN_00440ad0()` is nonzero. The
+multiplayer remote update `FUN_00498170` calls it when a remote's `+0x6f1` respawn flag is set.
+
+**A build clears the mask without running either function.** `FUN_00476250` calls
+`FUN_004b1690(0, 4, 0)`, and the edge work is gated on `(param_3 & 2) != 0`, which `4` fails, so the
+spin at build time comes from the `start_anims` tail rather than from the mask setter. The teardown
+`FUN_004b1580` releases both slots without playing anything, and the anim teardown `FUN_0047b9c0`
+reaches it.
+
+**CSVM runs the pair on both of the choke's edges.** `FlightController.TryChokeEngine` plays
+`stopprops` through `CrashRuntime` on the rising edge and `SimStep` plays `spinprops` when the
+engine-out timer clears, the same `Play`/`Stop` call shape the nitro edges use, on the human rig and
+the AI one alike, and `PlaneBuilder` keeps `staticpropN` in the flight build for it. `spinprops` runs
+with its `OBJECT_MOTION` suppressed (`AnimRuntime.SuppressedMotionAnims`), because `PropAnimator`
+already turns those discs procedurally at the same `-220`/`60` rates and two writers on one transform
+is one too many; the restart also puts the discs' opacity back, which the wind-down took to zero and
+the definition itself never writes. The stop call refuses while the stopped presentation already
+holds the slot, which is the original's own `+0x6cc` occupancy test, and is what keeps a choked
+aircraft's later crash from replaying the fade and re-firing `snd_propstop`. The sites that reach
+`start_anims` need no new call here: mission start and the airframe swap both build their aircraft
+through `HumanFlightAdapter.Assemble` or `AiFlightAssembler`, which replay the spawn choreography
+already. CSVM plays `startprops` there where the original plays `spinprops`, a divergence in the
+spawn sound rather than in the choke.
 
 ## Two answers this routine gives to other items
 

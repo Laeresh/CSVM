@@ -581,6 +581,7 @@ public partial class FlightController : Node3D
     private int _rocketeerVerdictsLogged;        // capped per shooter: a flight of twelve must not flood the log
     private bool _gunLoopOn;                     // the firing loop sound is currently playing
     private bool _aiNitroArmed;                  // the current AI nitro maneuver already engaged
+    private bool _propsStopped;                  // the stopped-prop presentation holds the slot
     private bool[] _gunLoggedFirst = Array.Empty<bool>(); // verification breadcrumb: each group logs its first live round once
     private int _rocketsLaunched;                // verification breadcrumb: the first few launches log their pylon
     private int? _team;                          // Team's backing field, null until overridden (B7)
@@ -708,6 +709,11 @@ public partial class FlightController : Node3D
     /// choker's one observable, since nothing else on that path changes (see
     /// <see cref="TryChokeEngine"/>).</summary>
     public float EngineDeadRemainingS => _model.EngineDeadRemainingS;
+
+    /// <summary>Whether the stopped-prop presentation holds this aircraft's prop slot: the still
+    /// blade shown and the blur discs faded out, which the engine-out edge and the death routine
+    /// both put there. The original's <c>+0x6cc</c> slot (docs/org/ordnanceTypes.md).</summary>
+    public bool PropsStopped => _propsStopped;
 
     /// <summary>The view this pilot has selected, live. Falls back to <see cref="PinnedViewMode"/>
     /// before <see cref="Setup"/> has built a camera, and reads Chase on an AI rig, which has
@@ -1155,6 +1161,7 @@ public partial class FlightController : Node3D
         // there is nothing to replay, and asking would build the whole rig on the placement frame.
         // First setup precedes adapter construction, so the adapter replays startprops after attachment.
         _crashRuntime?.Play("startprops", PlaneModel, applyReset: false);
+        _propsStopped = false;  // a fresh airframe's discs turn, whatever the last hull ended on
         // A fresh engine has no in-flight plume, and the spawn throttle jump (0 → the spawn
         // throttle) must never itself read as a slam.
         ThrottleSmoke?.Reset(_throttle);
@@ -1625,6 +1632,9 @@ public partial class FlightController : Node3D
         _model.ChokeEngine(seconds);
         if (!wasDead && _model.EngineDead)
             Log.Info("weapons", $"engine choked on P{PlayerIndex + 1} for {seconds:0.0} s");
+        // On the choking frame, as the original's edge sits inside the mask setter itself rather
+        // than on the next step.
+        SyncPropSlot();
         return _model.EngineDead;
     }
 
@@ -1772,6 +1782,12 @@ public partial class FlightController : Node3D
                 _model.Reset(rail.Origin, rail.Basis, onRails.RailSpeed, _throttle);
             else
                 _model.Step(input, dt);
+
+            // The engine-out timer ran down inside that step, so the restart edge is read here.
+            // ⚠ Never on a spent hull: the death routine put the still blade there to stay, and
+            // its timer expiring must not spin a wreck's discs back up.
+            if (!Destroyed)
+                SyncPropSlot();
 
             // The airframe boxes sweep along the carried motion; the center ray stays as an
             // anti-tunnelling backstop. Only the shapeless fallback keeps a nose margin on it.
@@ -2297,6 +2313,55 @@ public partial class FlightController : Node3D
             return;
         }
         rig.Play(EffectCatalogue.AiShakeAnim, PlaneModel, applyReset: false);
+    }
+
+    // Both bit-2 edges of the original's disabled-systems mask, read off the model's own engine-out
+    // state so the choke, its extension and its expiry all reach the same two calls.
+    private void SyncPropSlot()
+    {
+        if (_model.EngineDead)
+            PlayStopProps();
+        else
+            PlaySpinProps();
+    }
+
+    // The wind-down half of the original's two prop anim slots. ⚠ Refuse while the stopped
+    // presentation already holds the slot: the original's own routine starts nothing when its
+    // stop handle is occupied, which is what keeps a choked aircraft's crash from replaying the
+    // fade and re-firing snd_propstop (docs/org/ordnanceTypes.md).
+    private void PlayStopProps()
+    {
+        if (_propsStopped || PlaneModel == null || CrashRuntime is not { } rig)
+            return;
+        rig.Stop("spinprops");
+        rig.Play("stopprops", PlaneModel, applyReset: false);
+        _propsStopped = true;
+    }
+
+    // The restart half: silent and instant, because the original's falling edge runs `spinprops`
+    // and never `startprops`, whose snd_propstart the retail game plays nowhere.
+    private void PlaySpinProps()
+    {
+        if (!_propsStopped || PlaneModel == null || CrashRuntime is not { } rig)
+            return;
+        rig.Stop("stopprops");
+        // ⚠ Suppressed, or the def's endless XYZ_ROTATION becomes a second writer on the same
+        // disc transforms PropAnimator turns at those very rates.
+        rig.SuppressedMotionAnims.Add("spinprops");
+        rig.Play("spinprops", PlaneModel, applyReset: false);
+        RestoreDiscOpacity(rig, PlaneModel);
+        _propsStopped = false;
+    }
+
+    // `spinprops` re-activates the blur discs and writes no opacity, while the wind-down it
+    // reverses faded those same discs to zero, so the restart puts the alpha back itself or the
+    // aeroplane comes out of a choke with its propellers turning invisibly.
+    private void RestoreDiscOpacity(AnimRuntime rig, Node node)
+    {
+        if (node is Node3D n3d && PropParts.Spin(PropParts.Classify(AnimRuntime.NameOf(n3d)), out _, out _))
+            rig.SetSubtreeOpacity(n3d, 1f);
+        foreach (var child in node.GetChildren())
+            RestoreDiscOpacity(rig, child);
     }
 
     // Space / gamepad B, the gun trigger (caller drives the fire-rate clock);
@@ -2872,7 +2937,7 @@ public partial class FlightController : Node3D
             using (PerfSample.Scope(PerfSite.PartDetach))
             {
                 CrashRuntime.Play(destroyDef, CrashAnchor, applyReset: false);
-                CrashRuntime.Play("stopprops", PlaneModel, applyReset: false);
+                PlayStopProps();
             }
         }
         else if (PlaneModel != null)
@@ -3036,9 +3101,9 @@ public partial class FlightController : Node3D
             {
                 CrashRuntime.Play(crashDef, CrashAnchor, applyReset: false);
                 // The prop wind-down (staticpropN fades back in as prop1..3 fade out), inert the
-                // instant PlaneModel above hides, but keeps the def's own state consistent for
-                // whatever plays next, and matters once a shutdown can leave the airframe visible.
-                CrashRuntime.Play("stopprops", PlaneModel, applyReset: false);
+                // instant PlaneModel above hides, but it keeps the def's own state consistent for
+                // whatever plays next. A choked aircraft already holds the slot and is refused.
+                PlayStopProps();
             }
         }
         // ⚠ Not on a wreck landing: the cut and the report both belong to the kill, seconds

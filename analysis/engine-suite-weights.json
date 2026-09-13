@@ -113,6 +113,7 @@
     "carried-state-silent": 0.006,
     "carried-turrets": 0.457,
     "chapter-census": 9.767,
+    "choke-prop-edges": 3.6,
     "cloud-field-fade": 4.46,
     "clutter-determinism": 0.583,
     "cockpit-interior": 0.28,

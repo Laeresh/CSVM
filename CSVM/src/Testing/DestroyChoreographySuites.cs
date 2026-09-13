@@ -1168,6 +1168,205 @@ internal static class DestroyChoreographySuites
         });
     }
 
+    // Both edges of the original's disabled-systems mask bit 2, on the rig a session builds, reached
+    // through the flight step: the choke puts the wind-down on the slot and the timer expiring puts
+    // the silent restart back. The AI arm runs beside the human one because the original's choker
+    // branch has no player guard, so a port that reached only one rig would be half a port.
+    // ⚠ The third arm is the pair's only interaction: a choked aircraft that then crashes must not
+    // replay the wind-down, which is why it asserts an EXECUTED state stays EXECUTED.
+    [Suite("choke-prop-edges",
+        "a choked engine's propeller on a session-built rig, over both of the mask's bit-2 edges and on the human rig and the AI one alike: the choke plays stopprops, which cross-fades the blur discs out to the still blade and holds the slot for as long as the engine is out, the timer expiring plays the silent spinprops back with its endless XYZ_ROTATION suppressed so PropAnimator stays the only writer on those discs, and a crash on a already choked aircraft leaves the wind-down where it is instead of playing a second one")]
+    internal static void ChokePropEdges(TestContext ctx)
+    {
+        const string model = "player_warhawk";
+        const float Dt = 1f / 60f;
+        const int Running = 2, Executed = 3;   // AnimRuntime.AnimStateOf's ANIM_STATE numbering
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            var built = new List<FlightController>();
+            try
+            {
+                var factory = new Session.WorldEffectsFactory(
+                    SessionSpec.Parse(System.Array.Empty<string>()), ctx.Host, () => Vector3.Zero);
+                var stats = PlaneStats.Load(ctx.ZrdrPath, model);
+                FlightController? Build(bool human, Vector3 spawn, int index)
+                {
+                    // ⚠ spinningProps, as both flight assemblers build: the exterior build drops the
+                    // blur layers outright, so the two definitions would have no propN to cross-fade.
+                    var builder = new PlaneBuilder(planesGamez, textures, spinningProps: true);
+                    var planeModel = builder.Build(model);
+                    var rig = new FlightController
+                    {
+                        PlaneModel = planeModel,
+                        Collider = PlaneCollider.Build(planeModel),
+                        PlayerIndex = index,
+                        IsHumanPiloted = human,
+                        Pilot = human ? null : AiPilot.HoldingCourse(spawn, spawn + Vector3.Forward),
+                        UseKeyboard = false,
+                        PadDevices = System.Array.Empty<int>(),
+                        AllowPause = false,
+                        Damage = PlaneDamage.For(stats),
+                    };
+                    rig.AddChild(planeModel);
+                    rig.Setup(new FlightModel(stats), null, new CamParams(), spawn, spawn + Vector3.Forward);
+                    rig.Name = (human ? "p" : "ai") + index;
+                    ctx.Host.AddChild(rig);
+                    built.Add(rig);
+                    factory.BuildFlightCrashRuntime(rig, builder, model, world.Gamez,
+                        world.Session.Builder.Scene, textures, world.Session.Program, verbose: false,
+                        planesGamez: planesGamez);
+                    if (rig.CrashRuntime is not { } runtime)
+                    {
+                        ctx.Check(false, $"{rig.Name}: the session rig built a crash runtime");
+                        return null;
+                    }
+                    runtime.ManualAdvance = true;
+                    // The spawn choreography, replayed the way both assemblers do: Setup ran before
+                    // this runtime existed, so the rig would otherwise fly with no definition ever
+                    // having touched its two prop presentations.
+                    runtime.Play("startprops", planeModel, applyReset: false);
+                    return rig;
+                }
+
+                // A kilometre apart and three kilometres up, so neither aeroplane reaches the other
+                // or the ground over the ten seconds this suite flies them.
+                var human = Build(true, new Vector3(0f, 3000f, 0f), 0);
+                var ai = Build(false, new Vector3(1000f, 3000f, 0f), FlightRoster.ShooterIdBase);
+                if (human == null || ai == null)
+                {
+                    return;
+                }
+
+                void Fly(float seconds)
+                {
+                    for (int i = 0; i < Mathf.RoundToInt(seconds / Dt); i++)
+                    {
+                        foreach (var rig in built)
+                        {
+                            rig.SimStep(Dt);
+                            rig.CrashRuntime?.Advance(Dt);
+                        }
+                    }
+                }
+
+                // Flies until what is being waited on has landed, rather than for a duration read
+                // off the definition, whose authored RUN_TIME is not when its state lands. Reaching
+                // the cap is the failure the check that follows then reports.
+                float FlyUntil(System.Func<bool> settled, float capSeconds)
+                {
+                    float flown = 0f;
+                    while (!settled() && flown < capSeconds)
+                    {
+                        Fly(Dt);
+                        flown += Dt;
+                    }
+                    return flown;
+                }
+
+                // Whether a named disc under this aeroplane is on the screen. ⚠ Both channels, not
+                // the active bit alone: each cross-fade drives the opacity first and clears the bit
+                // after, so a disc faded to nothing is gone to the eye whatever its bit says.
+                // Absent reads as not shown, and a subtree nothing has faded reads as solid.
+                static bool Shown(FlightController rig, string node)
+                {
+                    if (Find(rig.PlaneModel!, node) is not { } found || !found.Visible)
+                    {
+                        return false;
+                    }
+
+                    float alpha = Alpha(found);
+                    return alpha < 0f || alpha > 0.01f;
+                }
+
+                // ⚠ The spawn definition's own end, not the moment the discs look right: its last
+                // OBJECT_ACTIVE_STATE lands a frame after the fade it follows, and a choke taken on
+                // that frame would have its own staticpropN activation undone by it.
+                float open = FlyUntil(() => human.CrashRuntime!.AnimStateOf("startprops") == Executed
+                                            && ai.CrashRuntime!.AnimStateOf("startprops") == Executed, 20f);
+                foreach (var rig in built)
+                {
+                    ctx.Check(!rig.PropsStopped && Shown(rig, "prop1") && !Shown(rig, "staticprop1"),
+                        $"{rig.Name}: opens with the spinning discs on the slot stopped={rig.PropsStopped} prop1={Shown(rig, "prop1")} staticprop1={Shown(rig, "staticprop1")} after={open:0.00} s");
+                }
+
+                // The rising edge, read on the frame the choke lands rather than the next step.
+                foreach (var rig in built)
+                {
+                    ctx.Check(rig.TryChokeEngine(3f) && rig.PropsStopped
+                              && rig.CrashRuntime!.AnimStateOf("stopprops") == Running,
+                        $"{rig.Name}: the choke put stopprops on the slot on its own frame stopped={rig.PropsStopped} state={rig.CrashRuntime!.AnimStateOf("stopprops")}");
+                }
+
+                // Inside the choke's own three seconds, so the reading below is the engine-out
+                // presentation and not the restart's.
+                float down = FlyUntil(
+                    () => !Shown(human, "prop1") && Shown(human, "staticprop1")
+                          && !Shown(ai, "prop1") && Shown(ai, "staticprop1"), 2.5f);
+                foreach (var rig in built)
+                {
+                    ctx.Check(rig.EngineDeadRemainingS > 0f && rig.PropsStopped
+                              && !Shown(rig, "prop1") && Shown(rig, "staticprop1"),
+                        $"{rig.Name}: …and the cross-fade left the still blade alone on the aeroplane while the engine is out prop1={Shown(rig, "prop1")} staticprop1={Shown(rig, "staticprop1")} dead={rig.EngineDeadRemainingS:0.00} s after={down:0.00} s");
+                }
+
+                // Past the choke's own three seconds: the falling edge is the timer running out
+                // inside the flight step, with nothing else touching the aeroplane.
+                FlyUntil(() => human.EngineDeadRemainingS == 0f && ai.EngineDeadRemainingS == 0f, 4f);
+                foreach (var rig in built)
+                {
+                    ctx.Check(rig.EngineDeadRemainingS == 0f && !rig.PropsStopped
+                              && Shown(rig, "prop1") && !Shown(rig, "staticprop1"),
+                        $"{rig.Name}: the timer expiring put the blur discs back stopped={rig.PropsStopped} prop1={Shown(rig, "prop1")} staticprop1={Shown(rig, "staticprop1")}");
+                }
+
+                // Past the definition's own 0.1 s ANIMATION_OFFSET, which is all that is left of it
+                // once the endless motion behind that offset is suppressed.
+                Fly(0.5f);
+                foreach (var rig in built)
+                {
+                    // The restart is spinprops and not startprops, whose snd_propstart the retail
+                    // data plays nowhere; EXECUTED rather than RUNNING because its only sustain was
+                    // the endless motion this rig suppresses (docs/verification.md, INSTR-74).
+                    ctx.Same(Executed, rig.CrashRuntime!.AnimStateOf("spinprops"),
+                        $"{rig.Name}: the restart ran spinprops");
+                    ctx.Check(rig.CrashRuntime!.SuppressedMotionAnims.Contains("spinprops"),
+                        $"{rig.Name}: …with its endless XYZ_ROTATION suppressed, so PropAnimator stays the only writer on the discs");
+                }
+
+                // The third arm: choke, let the wind-down finish, then crash. ⚠ A choke long enough
+                // to outlast the whole wind-down, or a restart inside it would clear the slot and
+                // the crash below would be entitled to the second stopprops this arm forbids.
+                foreach (var rig in built)
+                {
+                    rig.TryChokeEngine(60f);
+                }
+
+                float wind = FlyUntil(() => human.CrashRuntime!.AnimStateOf("stopprops") == Executed
+                                            && ai.CrashRuntime!.AnimStateOf("stopprops") == Executed, 30f);
+                foreach (var rig in built)
+                {
+                    ctx.Same(Executed, rig.CrashRuntime!.AnimStateOf("stopprops"),
+                        $"{rig.Name}: the second choke's wind-down has run to its end before the crash after={wind:0.00} s");
+                    rig.DebugForceCrash();
+                    ctx.Check(rig.PropsStopped && rig.CrashRuntime!.AnimStateOf("stopprops") == Executed,
+                        $"{rig.Name}: the crash on a choked aeroplane left that wind-down where it was rather than playing a second state={rig.CrashRuntime!.AnimStateOf("stopprops")}");
+                }
+            }
+            finally
+            {
+                foreach (var rig in built)
+                {
+                    rig.Free();
+                }
+                textures.Dispose();
+            }
+        });
+    }
+
     // The three arms of an engage that only an AI takes, on the rig a session builds: the shake
     // def a person never gets, the keyed loop sound, and the decay lockout. The maneuver is forced
     // by handing the mode machine a one-entry library, so the engage arrives through the same
@@ -2458,6 +2657,29 @@ internal static class DestroyChoreographySuites
         }
 
         return -1f;
+    }
+
+    // The strongest translucency an OBJECT_OPACITY event has left anywhere in this subtree, read
+    // off the per-instance shader parameter the fade writes; -1 where nothing has been faded, which
+    // a caller reads as solid rather than as transparent.
+    private static float Alpha(Node node)
+    {
+        float best = -1f;
+        if (node is GeometryInstance3D g)
+        {
+            var value = g.GetInstanceShaderParameter(SceneBuilder.OpacityParam);
+            if (value.VariantType != Variant.Type.Nil)
+            {
+                best = value.AsSingle();
+            }
+        }
+
+        foreach (var child in node.GetChildren())
+        {
+            best = Mathf.Max(best, Alpha(child));
+        }
+
+        return best;
     }
 
     // The first descendant carrying this authored NAME (or Godot name), the way a def's own

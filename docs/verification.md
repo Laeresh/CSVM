@@ -594,6 +594,12 @@ member, and it does not go here.
   test on `ComposeTextLines`' return for as long as it existed, while the crash camera hid the whole
   HUD `CanvasLayer` the text block hangs from, so the string reached no screen; the `c1-crash`
   golden shows the crash notice from the message layer beside a blank where the prompt was.
+- **INSTR-74**, **Suppressing a definition's `OBJECT_MOTION` shortens the definition, so a suite must
+  not read its slot off `AnimStateOf`.** A definition whose only sustain is an endless
+  `XYZ_ROTATION` ends the moment that motion is dropped, and the runtime then reports it EXECUTED
+  where the unsuppressed definition would read RUNNING forever. `spinprops` is the worked example:
+  `FlightController` suppresses its motion because `PropAnimator` already turns those discs, so the
+  rig tracks the prop slot in a field of its own and the suite asserts EXECUTED deliberately.
 
 ## SRC, sources and documents
 

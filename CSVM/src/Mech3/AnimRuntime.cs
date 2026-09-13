@@ -195,6 +195,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// Decode: docs/formats/anim-definitions/cutscenes.md.</summary>
     public HashSet<string> RangeGatedCalls = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Animation names whose <c>OBJECT_MOTION</c> events this runtime drops, everything
+    /// else in the definition running normally. For a definition whose pose work another writer
+    /// already owns, so the two do not fight over the same node transforms.
+    /// ⚠ A definition held open only by a looping motion ENDS once its motion is dropped, so
+    /// <see cref="AnimStateOf"/> reports it EXECUTED rather than RUNNING (docs/verification.md,
+    /// INSTR-74). Track such a definition's slot at the call site, not here.</summary>
+    public HashSet<string> SuppressedMotionAnims = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Where a <c>FOG_STATE</c> event's inline fog goes: the session's weather rig, which
     /// owns the fog globals. Null counts the event. ⚠ Raised under a RESET_STATE as well as in a
     /// sequence: the original's handler (dispatch slot 28) writes the fog record from either
@@ -2788,6 +2796,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 return true;
 
             case "ObjectMotion":
+                // Counted as handled, not as an unresolved op: the drop is the caller's decision
+                // (see SuppressedMotionAnims), not a gap in this table.
+                if (def.AnimName is { } motionOwner && SuppressedMotionAnims.Contains(motionOwner))
+                    return true;
                 _opsApplied += Pose.HandleMotion(ev, def, anchor, instant, out duration);
                 return true;
 
