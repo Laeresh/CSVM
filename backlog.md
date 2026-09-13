@@ -1810,13 +1810,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the nearest listed one. No custom-size dialog. *⚠ Traps:* the display mode decides what the
   saved size means (`BL-896`'s closing commit); a custom size follows the same rule.
   *Cross-refs:* `CSVM/src/Utils/ResolutionSetting.cs`, `BL-896`'s closing commit, `BL-912`.
-- `BL-917` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **The Mouse switch on
-  the Original Controls page draws misaligned against its neighbours.** *Evidence:* the row takes
-  its position from the mouse widget's own layout entry but its size from the Controller Type box
-  (the Original options screen builds it with `ControlsPlayerBox(screen)`'s width and height), so where the
-  original's Mouse Sensitivity slot differs in size the row sits off its neighbours. *Fix shape:*
-  size the row from its own layout entry. *Cross-refs:*
-  `CSVM/src/UI/Menu/Original/OriginalOptionsScreen.cs` (the controls page), `BL-447`'s closing commit.
 - `BL-919` `[Fidelity]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: feel]` **The Ammo
   Selection screen offers a rocket row for a pylon the build never bought; the original hides
   it.** *Evidence:* the rows come from the airframe's stock fit, and since `BL-841` a pick on an

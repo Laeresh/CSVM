@@ -983,13 +983,24 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         float x = widget?.Int("X", (int)fallbackX) ?? fallbackX;
         float y = widget?.Int("Y", (int)fallbackY) ?? fallbackY;
         var track = new SliderTrack(x, y, slotSize.Width, slotSize.Height, thumbSize.Width, thumbSize.Height, min, max);
+        var region = SliderRegion(widget, x, y, slotSize);
+        return new OriginalRow(key, string.Empty, OriginalRowKind.Slider, region.X, region.Y,
+            region.Width, region.Height, enabled, column, thumb,
+            Slider: new OriginalSlider(track, track.Clamp(value), setValue, slot));
+    }
+
+    // The rectangle a slider row authors: its slot art's own at the row's corner, moved in by the
+    // four insets the row carries and out where one is negative. That is the region a press has to
+    // land in, so it is what any row standing in such a box takes for its box, its words and its
+    // hit area alike, a Z row stating no width and no height of its own.
+    private static (float X, float Y, float Width, float Height) SliderRegion(
+        MenuLayoutWidget? widget, float x, float y, (float Width, float Height) slot)
+    {
         float left = x + (widget?.Int("Left", SliderInsetLeft) ?? SliderInsetLeft);
         float top = y + (widget?.Int("Top", SliderInsetTop) ?? SliderInsetTop);
-        float right = x + slotSize.Width - (widget?.Int("Right", SliderInsetRight) ?? SliderInsetRight);
-        float bottom = y + slotSize.Height - (widget?.Int("Bottom", SliderInsetBottom) ?? SliderInsetBottom);
-        return new OriginalRow(key, string.Empty, OriginalRowKind.Slider, left, top,
-            Math.Max(1f, right - left), Math.Max(1f, bottom - top), enabled, column, thumb,
-            Slider: new OriginalSlider(track, track.Clamp(value), setValue, slot));
+        float right = x + slot.Width - (widget?.Int("Right", SliderInsetRight) ?? SliderInsetRight);
+        float bottom = y + slot.Height - (widget?.Int("Bottom", SliderInsetBottom) ?? SliderInsetBottom);
+        return (left, top, Math.Max(1f, right - left), Math.Max(1f, bottom - top));
     }
 
     // The n-th art a slider row names, falling back to the shipped file name so the control still
@@ -1988,11 +1999,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         // The scheme sits in the Mouse Sensitivity slider's own box, as a chooser rather than a
         // track: the setting behind that row is what mouse motion does, and this port has two
         // answers to that rather than a cursor speed.
-        var mouse = screen.Widget(ControlsMouseKey);
+        var mouseBox = ControlsMouseBox(screen);
         rows.Add(new OriginalRow(ControlsMouseKey, MouseWord(), OriginalRowKind.Dropdown,
-            mouse?.Int("X", (int)ControlsMouseX) ?? ControlsMouseX,
-            mouse?.Int("Y", (int)ControlsMouseY) ?? ControlsMouseY,
-            box.Width, box.Height, MouseSchemeLive, 0,
+            mouseBox.X, mouseBox.Y, mouseBox.Width, mouseBox.Height, MouseSchemeLive, 0,
             StripArt(screen.Widget(ControlsPlayerKey)?.Art ?? Array.Empty<string>(), 4)));
         AddStrip(screen, rows, KeysDoorKey, OriginalRowKind.Button, true, 0);
         AddStrip(screen, rows, ControlsAcceptKey, OriginalRowKind.Button, true, 0);
@@ -2093,6 +2102,18 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
             drop?.Int("Y", (int)ControlsDropY) ?? ControlsDropY,
             drop?.Int("Width", (int)ControlsDropWidth) ?? ControlsDropWidth,
             drop?.Int("ItemHeight", (int)ControlsItemHeight) ?? ControlsItemHeight);
+    }
+
+    // The CONTROLS page's scheme chooser at the Mouse Sensitivity slot's own box, which is that
+    // row's authored press region rather than the Controller Type box: the two are different sizes
+    // and stand at different columns, so a row sized from the other one sits off its neighbours.
+    private (float X, float Y, float Width, float Height) ControlsMouseBox(MenuLayoutScreen screen)
+    {
+        var mouse = screen.Widget(ControlsMouseKey);
+        float x = mouse?.Int("X", (int)ControlsMouseX) ?? ControlsMouseX;
+        float y = mouse?.Int("Y", (int)ControlsMouseY) ?? ControlsMouseY;
+        var slot = StripSize(SliderArt(mouse, 0, SliderSlotArt), FallbackSlotWidth, FallbackSlotHeight);
+        return SliderRegion(mouse, x, y, slot);
     }
 
     private string PlayerWord() => _controls is { } controls && controls.Players.Count > 0

@@ -948,6 +948,18 @@ public class OriginalOptionsTests
         Assert.Equal(1, controls.Players.Count);
     }
 
+    /// <summary>Each CONTROLS row takes its rectangle from its own layout entry: the seat chooser
+    /// from the Controller Type dropdown's box, the scheme chooser from the Mouse Sensitivity
+    /// slider's own press region, which stands at another corner and another size.</summary>
+    [Fact]
+    public void TheControlsRowsTakeTheirBoxesFromTheirOwnLayoutEntries()
+    {
+        var host = Host(controls: Controls(out _, out _));
+        host.Module.OpenControlsPrefs();
+        Assert.Equal((128f, 305f, 175f, 17f), Rect(Row(host, OriginalOptionsScreen.ControlsPlayerKey)));
+        Assert.Equal((136f, 371f, 170f, 23f), Rect(Row(host, OriginalOptionsScreen.ControlsMouseKey)));
+    }
+
     /// <summary>The scheme row is the Controls door's own: a press flips it, a sideways step flips
     /// it back, and neither reaches the seat until ACCEPT CHANGES.</summary>
     [Fact]
@@ -1010,6 +1022,18 @@ public class OriginalOptionsTests
         VideoRowsAreClearOfEachOther(InstallLayout(out var measure), measure);
     }
 
+    [Fact]
+    public void TheControlsRowsClearEachOtherAndTheirWordsOverTheFixture()
+    {
+        ControlsRowsAreClearOfEachOther(MenuLayoutReaderTests.OriginalLayout(), Measure);
+    }
+
+    [ExtractedDataFact]
+    public void TheControlsRowsClearEachOtherAndTheirWordsOverTheInstall()
+    {
+        ControlsRowsAreClearOfEachOther(InstallLayout(out var measure), measure);
+    }
+
     // The Game Options page's five rows share one plate, so no two of them may overlap, and no
     // control may sit over a title or a description.
     private static void GameOptionRowsAreClearOfEachOther(MenuLayout layout, Func<string, (int Width, int Height)?> measure)
@@ -1065,6 +1089,36 @@ public class OriginalOptionsTests
             },
             rows.Select(r => r.Key));
         RowsAreClearOfEachOther(host, rows, "VIDEO", 10);
+    }
+
+    // The CONTROLS page's rows, the same rule over its own plate, with the scheme chooser pinned to
+    // the Mouse Sensitivity row's own authored press region (the slot art at that row's corner, the
+    // four insets applied) rather than to the Controller Type box beside it, so a layout whose two
+    // entries differ in size or column puts each row where its own entry says.
+    private static void ControlsRowsAreClearOfEachOther(MenuLayout layout, Func<string, (int Width, int Height)?> measure)
+    {
+        var host = Host(layout, measure, controls: Controls(out _, out _));
+        host.Module.OpenControlsPrefs();
+        var rows = host.Rows.ToArray();
+        Assert.Equal(
+            new[]
+            {
+                OriginalOptionsScreen.ControlsPlayerKey, OriginalOptionsScreen.ControlsMouseKey,
+                OriginalOptionsScreen.KeysDoorKey, OriginalOptionsScreen.ControlsAcceptKey,
+                OriginalOptionsScreen.ControlsCancelKey,
+            },
+            rows.Select(r => r.Key));
+
+        var mouse = layout.Screen(OriginalOptionsScreen.ControlsPrefsSection)!.Widget(OriginalOptionsScreen.ControlsMouseKey)!;
+        var slot = measure(mouse.Art[0])!.Value;
+        Assert.Equal(
+            ((float)(mouse.Int("X") + mouse.Int("Left")),
+             (float)(mouse.Int("Y") + mouse.Int("Top")),
+             (float)(slot.Width - mouse.Int("Right") - mouse.Int("Left")),
+             (float)(slot.Height - mouse.Int("Bottom") - mouse.Int("Top"))),
+            Rect(Row(host, OriginalOptionsScreen.ControlsMouseKey)));
+
+        RowsAreClearOfEachOther(host, rows, "CONTROLS", 5);
     }
 
     // No row of an option page may overlap another, and no control may sit over a title or a
