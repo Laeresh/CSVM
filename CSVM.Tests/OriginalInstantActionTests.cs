@@ -875,6 +875,16 @@ public class OriginalInstantActionTests
             lines.Add(new BoardLine(row.Label, row.X, row.Y, row.Width, 12f, BoardInk.Row, index));
         }
 
+        public OriginalRow PlaqueRow(string key, string label, int row, bool enabled, int column) =>
+            OriginalTestHost.PlaqueRow(key, label, row, enabled, column);
+
+        public void ComposePlainPage(
+            string heading, IReadOnlyList<OriginalRow> rows, int focus,
+            List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques) =>
+            OriginalTestHost.ComposePlainPage(heading, rows, focus, lines);
+
+        public BoardFill FocusMark(OriginalRow row) => OriginalTestHost.FocusMark(row);
+
         // The pointer put on one row, as a frame under the cursor leaves the shell: the row is
         // hovered and, where it is live, focused, and a click frame holds it pressed until the
         // frame after the release.

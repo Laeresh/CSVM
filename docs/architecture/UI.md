@@ -826,8 +826,8 @@ missions with every objective bit set, plus the scratch build store the export a
 ## src/UI/Menu/Original/OriginalShell.cs
 The Original presentation's screen graph (`CSVM.UI.Menu.Original`), engine-free over `MenuLayout` and the shared Free Flight, player-setup,
 Instant Action, hangar and campaign features, with the art measurer and the flight-devices answer injected. It owns the top level composed
-from `[MainMenu]`'s own rows, the two remake-only sortie screens, the Options screen over the decoded Preferences chrome, and the messagebox
-idiom every refusal and confirm goes through, whose box, `RaiseDialog` and answer keys are its own `OriginalShellDialog.cs` partial; most other screens are its own partials, below, the hangar and Instant Action families the screen groups standing outside the partials as `OriginalHangarScreen.cs` and `OriginalInstantActionScreen.cs`. Each is held as one `IOriginalScreenModule` in a list and reaches back through `IOriginalScreenHost` (`OriginalScreenHost.cs`); `ModuleFor` answers which module owns the screen showing, so `BuildRows`, `Lists`, the sideways step, the dropdown close, `Activate`, `Back` and `Compose` name a module through that one lookup rather than a field and a screen-range check per family, and `Hangar` and `InstantAction` are the typed accessors the presentation and the suites read module-specific state through. `Step` applies one seat's frame, `Compose` is
+from `[MainMenu]`'s own rows, the two remake-only sortie screens, the Options hub over the decoded Preferences chrome, and the messagebox
+idiom every refusal and confirm goes through, whose box, `RaiseDialog` and answer keys are its own `OriginalShellDialog.cs` partial; the sortie, credits and campaign screens are its own partials, below, while the hangar, Instant Action and option families stand outside them as `OriginalHangarScreen.cs`, `OriginalInstantActionScreen.cs` and `OriginalOptionsScreen.cs`. Each is held as one `IOriginalScreenModule` in a list and reaches back through `IOriginalScreenHost` (`OriginalScreenHost.cs`); `ModuleFor` answers which module owns the screen showing, so `BuildRows`, `Lists`, the sideways step, the dropdown close, `Activate`, `Back` and `Compose` name a module through that one lookup rather than a field and a screen-range check per family, and `Hangar`, `InstantAction` and `Options` are the typed accessors the presentation and the suites read module-specific state through. `Step` applies one seat's frame, `Compose` is
 the screen as a `ComposedBoard` whose backdrop takes a section's `movie` row at its bottom, and every page's row kinds live here,
 `OriginalSlider` among them. A pointer press arms a row and only the release still on it activates (`ArmedKey`), on an edit box taking the
 caret alone where Accept in one reaches the screen's own commit; the pointer's bitmap answers an enter or leave (`PointerLive`); and a film
@@ -861,13 +861,13 @@ keeps it. Each module binds its own measurer to the pane rule once, so no call s
 reading, on `OriginalDropList.cs`.
 
 ## src/UI/Menu/Original/OriginalDropList.cs
-The one rule every open dropdown of the Original shell follows, held as the file-level `OriginalDropLists` so a standalone screen module stands on
-it too, with a thin `OriginalShell` partial wrapping it for the shell's own pages: a page hands over its key, its items, the box the list hangs
+The one rule every open dropdown of the Original shell follows, held as the file-level `OriginalDropLists` because every page standing on it is a
+standalone screen module of its own: a page hands over its key, its items, the box the list hangs
 under and the layout widget behind it, and takes back the windowed rows, the `ListWindow` for the pointer and the write that scrolls it. The
 window is the widget's authored `TotalDisplayed` clamped to the item count, so a short list is exactly as tall as its items and carries no
 chrome. Every item is a row keyed `<key>:<index>`, the ones outside the window built but hidden, since the rows are the hit-test surface and a
 dropped row would let a pointer hit what it cannot see; a scrolling list adds `<key>:up` and `<key>:down` in an arrow's width of its own right
-edge and hangs the thumb between them. The Instant Action module's two screens and the two option pages come through here;
+edge and hangs the thumb between them. The Instant Action module's two screens and the options module's two listed pages come through here;
 `OriginalHangarScreen.cs`'s list does not, its arrows being the closed box's `DropUp`/`DropDown` art. [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/SliderControl.cs
@@ -879,45 +879,9 @@ as the other. `Drive` reports a slider holding the pointer, which is how the she
 spent and activates nothing under it. A row declares its slider through `OriginalShell.cs`'s
 `OriginalSlider`; this class knows a track and a value and nothing about the setting behind them.
 
-## src/UI/Menu/Original/OriginalGameOptions.cs
-The Game Options page, the shell's partial over the decoded `[@GameOptions@]` section. Its content is a
-table: per option a key, a title, a description, the control kind and how the store field is read and
-written, so a further option is one entry plus its field. Row one is the original's own Difficulty dropdown
-at its authored box over the three campaign tiers; under it the remake-only Menu row, the presentation as a
-dropdown over the registered tokens, and under that the remake-only Next Target checkbox, the nearest-after-a-kill targeting switch off by default. The row shape is read off the section's widgets, so a layout that moves
-a row moves ours, and both pages' open list is windowed and drawn from here on `OriginalDropList.cs`'s rule. ACCEPT CHANGES leaves as the `OptionsApplyExit`; only
-`Launcher.ApplyOptions` writes the store. This file also holds the shell's shared `ReadSavedOptions`/`AppliedOptions`
-pair, which every option page reads and hands back through, so a page carries the settings it does not show: the display ones stand on VIDEO (`OriginalVideo.cs`) and the volume levels on AUDIO (`OriginalAudio.cs`). Rows: [../org/menu-inventory.md](../org/menu-inventory.md).
-
-## src/UI/Menu/Original/OriginalAudio.cs
-The AUDIO page, the shell's partial over the decoded `[@Audio@]` section, behind the Preferences page's second door. Four slider
-rows over `Utils/AudioMix.cs`'s 0..100 in VIDEO's table shape: per row the authored title, slider and description widgets it stands
-on, and how the store field is read and written, a never-set level reading as its shipped default. Each row's line is read off its
-own title widget, the authored pitch being 58, 57, 53 and 53 rather than one number. Master takes the In-Game Music row with the
-page's own words and its slider at the section's slider column, since a slider that reaches zero is that checkbox in one fewer
-widget; Sound Quality is left out. A slider answers no Accept (`SliderControl.cs`); ACCEPT CHANGES leaves as the `OptionsApplyExit`
-and CANCEL CHANGES drops the edits. `AudioPreviewMix` is the mix the open page stands at, null off it, and `TakeAudioMoved` the
-level a frame moved, taken once: the host is what applies and sounds them. [../org/menu-inventory.md](../org/menu-inventory.md).
-
-## src/UI/Menu/Original/OriginalVideo.cs
-The VIDEO page, the shell's partial over the decoded `[@Video@]` section, behind the Preferences page's third
-door. Same table as Game Options with one column more: each setting names the authored title, control and
-description widgets it stands on, so a row keeps its geometry, and the table is in authored row order because
-the cursor walks it. The monitor and Resolution keep the authored Graphics and Resolution rows, their words
-enumerated per machine by `Utils/MonitorSetting.cs` and `Utils/ResolutionSetting.cs`; the Graphics row's title
-and description are the page's own, the authored ones naming a 3D card this port has no answer to. Display Mode
-and V-Sync are dropdowns on Viewing Range and Effects Level over `DisplayWords`, Enhanced Graphics takes the
-Shadows checkbox whose gate it owns, and a list opens as `OriginalGameOptions.cs` does, so the Resolution row's sizes window and scroll where they outrun the eight rows that row authors, though under borderless, which owns the size, that row shows the screen's own size, draws dead and takes no press while the saved size waits untouched; ACCEPT CHANGES leaves as the `OptionsApplyExit`, CANCEL CHANGES drops the edits. [../org/menu-inventory.md](../org/menu-inventory.md).
-
-## src/UI/Menu/Original/OriginalControls.cs
-The two rebinding pages, the shell's partial over the decoded `[@ControlsPrefs@]` and `[@Keys@]`
-sections behind the Preferences page's fourth door, all of it over the shared `ControlsFeature`.
-The CONTROLS page carries the seat chooser on the Controller Type row and the KEYS AND BUTTONS
-door; the KEYS page carries seven category tabs, one action list under a category heading in the
-listbox's own window, and each row's controls in the two authored columns, the first in Control A
-and the rest in Control B so nothing is hidden. A cell press arms a capture on that row's action
-and slot, and the page swallows the frame while one runs. Each page's ACCEPT CHANGES commits and
-its CANCEL CHANGES drops the staged edits. Rows and readings: [../org/menu-inventory.md](../org/menu-inventory.md).
+## src/UI/Menu/Original/OriginalOptionsScreen.cs
+The five pages behind the Options hub's four doors as one standalone module over the decoded `[@GameOptions@]`, `[@Audio@]`, `[@Video@]`, `[@ControlsPrefs@]` and `[@Keys@]` sections; the hub itself stays the shell's. Game Options and VIDEO are one table shape: per row a key, the authored title, control and description widgets it stands on, and how the store field is read and written, so a further option is one entry plus its field and a layout that moves a row moves ours. Game Options is the original's Difficulty dropdown over the three campaign tiers plus the remake-only Menu and Next Target rows; VIDEO is the monitor and Resolution rows enumerated per machine (`Utils/MonitorSetting.cs`, `Utils/ResolutionSetting.cs`, that row dead under borderless, which owns the size), Display Mode and V-Sync over `Utils/OptionsStore.cs`'s `DisplayWords`, and Enhanced Graphics on the Shadows checkbox whose gate it owns; the Graphics row's title and description are the page's own, the authored ones naming a 3D card this port has no answer to. AUDIO is four slider rows over `Utils/AudioMix.cs`'s 0..100 on the authored pitches 58, 57, 53 and 53, Master taking the In-Game Music row because a slider reaching zero is that checkbox in one fewer widget and Sound Quality left out; a slider answers no Accept (`SliderControl.cs`), `AudioPreviewMix` is the mix the open page stands at and `TakeAudioMoved` the level a frame moved, taken once, the host applying and sounding them. CONTROLS carries the seat chooser on the Controller Type row and the KEYS AND BUTTONS door; KEYS carries seven category tabs, one action list under its heading in the listbox's own window, and each row's controls in the two authored columns (the first in Control A, the rest in Control B so nothing is hidden), a cell press arming a capture on that row's action and slot and the page swallowing the frame while one runs, all of it over the shared `ControlsFeature`.
+An open list is windowed and drawn on `OriginalDropList.cs`'s rule. The module's own `ReadSavedOptions`/`AppliedOptions` pair is what every page reads and hands back through, so a page carries the settings it does not show; ACCEPT CHANGES leaves as the one `OptionsApplyExit` and only `Launcher.ApplyOptions` writes the store, while CANCEL CHANGES and Back drop the edits. It is one `IOriginalScreenModule` and reaches `OriginalShell` only through `IOriginalScreenHost` (`OriginalScreenHost.cs`), so `OriginalOptionsTests` drives it over a hand-written host with no shell at all; the shell dispatches to it through `ModuleFor` and exposes it whole as `Options`, the `*Choice` properties the presentation and the rebinding facts read included. Rows and readings: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalCredits.cs
 The credits screen, the shell's partial over the decoded `[@Credits@]` section behind the top

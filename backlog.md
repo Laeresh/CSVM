@@ -1689,7 +1689,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `GO_T_VIEWDESC` over the `GO_D_VIEW` dropdown) and Auto Head Turn (`GO_T_HEADTITLE` and
   `GO_T_HEADDESC` over the `GO_B_HEADTURN` checkbox). The port's table carries Difficulty and the
   remake-only Menu row alone, while `ReadGameOptionsPage` already reads both dropped rows' widgets
-  for the page's row shape (`CSVM/src/UI/Menu/Original/OriginalGameOptions.cs`), so the geometry is
+  for the page's row shape (`CSVM/src/UI/Menu/Original/OriginalOptionsScreen.cs`), so the geometry is
   present and the options are not. Both settings exist in the engine with no way to them: autohead
   runs behind the `headLook.autohead` config key, default off
   (`CSVM/src/Utils/Config.cs:224-227`, `CSVM/src/Flight/FlightController.cs:3796-3806`), and the

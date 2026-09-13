@@ -85,7 +85,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B, general seam and the options leaves
 
 11. ☑ Rename the host seam to `IOriginalScreenHost`; one screen-to-module lookup replaces the per-family field and range checks
-12. ☐ Options module (`OriginalOptionsScreen`) over the game options, audio, video and controls leaves, carrying the saved-settings fields
+12. ☑ Options module (`OriginalOptionsScreen`) over the game options, audio, video and controls leaves, carrying the saved-settings fields
 
 ### Wave C, campaign
 
@@ -274,11 +274,34 @@ range check; each dispatch site in `OriginalShell.cs` names a module only throug
 shell-level query (`ModuleFor(_screen) == Hangar`) rather than a per-family bool. The `_focus[]`
 cursor reset on screen change must keep firing for module-owned screens after the switch arms go.
 
-## B12 ☐ Options module over the four options leaves
+## B12 ☑ Options module over the four options leaves
 
-**Goal.** `OriginalOptionsScreen` is a sealed module owning `GameOptions`, `Audio`, `Video`,
-`ControlsPrefs` and `Keys`, carrying the saved-settings fields and the `*Choice` properties, with
-`OriginalOptionsTests` over a hand-written host.
+**Landed.** `CSVM/src/UI/Menu/Original/OriginalOptionsScreen.cs` is the sealed module over
+`GameOptions`, `Audio`, `Video`, `ControlsPrefs` and `Keys`, constructed over the layout, the
+host, the option/size/screen readers and `ControlsFeature?`; it owns the four partials' state,
+the twelve saved-settings fields, `ReadSavedOptions`/`AppliedOptions` and the twelve `*Choice`
+properties. The four partials are deleted; the shell keeps the `Options` hub, one `Options`
+get-only accessor and the `_modules` entry, and every option dispatch site collapsed into the
+`ModuleFor` arms (1664 to 1457 non-blank lines). `SliderControl _slider`, `ComposeSlider` and
+`FocusBox` stay on the shell: the slider row factory was AUDIO's alone and moved, but the control
+is pointer-drag arbitration inside `ApplyFrame` against the list thumb, which is the shell's
+frame. `IOriginalScreenHost` grew `PlaqueRow`, `ComposePlainPage` and `FocusMark` (the
+sectionless-page helpers the hub already used); `CSVM.Tests/OriginalTestHost.cs` holds their one
+stateless implementation for all three test fakes. `OriginalOptionsTests` has 33 facts over an
+`OptionsHost`; `OriginalShellTests` keeps the hub-door and column-walk wiring facts;
+`OriginalPresentation.cs`, `PausePreferences.cs` and four suites reach the module through
+`shell.Options`. `OriginalDropList.cs` is now `OriginalDropLists` alone (its shell wrapper went
+with the last partial that used it).
+
+**Verified.** Full `.\RunTests.ps1` on the plan tree with B12 squash-merged: PASS, exit 0 (4415
+units passed, 2 skipped for missing media; 332 engine suites, errors clean; 19 goldens
+hash-identical, which covers the pinned options shots, so the five pages compose as before).
+`CheckDocEntries.ps1`, `CheckCommentCaps.ps1` and `CheckEncoding.ps1` clean. `OriginalOptionsTests`
+names no `OriginalShell`; every `*Choice` reader resolves through `shell.Options`.
+
+**Original approach (kept for reference).** `OriginalOptionsScreen` is a sealed module owning
+`GameOptions`, `Audio`, `Video`, `ControlsPrefs` and `Keys`, carrying the saved-settings fields
+and the `*Choice` properties, with `OriginalOptionsTests` over a hand-written host.
 
 **Evidence (confidence: traced).** The four partials are `OriginalGameOptions.cs` (476 lines,
 `_goOpen`/`_goListTop` at 94-95), `OriginalAudio.cs` (291, `_audioMoved` at 89), `OriginalVideo.cs`
@@ -295,7 +318,7 @@ block, splitting them would spread it). Constructor takes the option and screen-
 controls feature and the layout; the module owns the settings fields, `ReadSavedOptions` and the
 `*Choice` properties, and registers in the B11 lookup. The `Options` hub screen itself stays on the
 shell (it is a plain button column). Decide whether `_slider` moves with the audio leaf or stays a
-shell service; `<TODO: settle where SliderControl lives, the session did not discuss it>`.
+shell service (settled at landing: it stays, see Landed above).
 
 **Model recommendation.** high. Four partials and a settings block that `OriginalPresentation.cs`
 reads on apply; a missed reader silently loses a saved option.

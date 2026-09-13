@@ -165,35 +165,3 @@ internal sealed record OpenDropList(
 
     public int LastTop => Math.Max(0, Count - Window);
 }
-
-/// <summary>The shell's own side of the open-dropdown rule: the names its option pages call it
-/// under, over the shared implementation above.</summary>
-public sealed partial class OriginalShell
-{
-    private const string DropListUpSuffix = OriginalDropLists.UpSuffix;
-    private const string DropListDownSuffix = OriginalDropLists.DownSuffix;
-
-    private static OpenDropList DropList(
-        string key, MenuLayoutWidget? widget, IReadOnlyList<string> items,
-        (float X, float Y, float Width, float Height) box, Func<int, bool>? allowed = null) =>
-        OriginalDropLists.Over(key, widget, items, box, allowed);
-
-    private static int DropListTop(OpenDropList drop, int top, int focused) =>
-        OriginalDropLists.Top(drop, top, focused);
-
-    private void AddDropListRows(OpenDropList drop, int top, List<OriginalRow> rows) =>
-        OriginalDropLists.AddRows(drop, top, rows, StripSize);
-
-    private ListWindow? DropListWindow(OpenDropList drop, int top) =>
-        OriginalDropLists.Window(drop, top, StripSize);
-
-    // The shell's focus is per screen, so the pull the rule applies to a focused item lands on the
-    // showing screen's own cursor.
-    private int ScrollDropList(OpenDropList drop, int top)
-    {
-        int focused = _focus[(int)_screen];
-        int first = OriginalDropLists.Scroll(drop, top, ref focused);
-        _focus[(int)_screen] = focused;
-        return first;
-    }
-}

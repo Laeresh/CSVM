@@ -1061,6 +1061,16 @@ public class OriginalHangarTests : IDisposable
 
             lines.Add(new BoardLine(row.Label, row.X, row.Y, row.Width, 12f, BoardInk.Row, index));
         }
+
+        public OriginalRow PlaqueRow(string key, string label, int row, bool enabled, int column) =>
+            OriginalTestHost.PlaqueRow(key, label, row, enabled, column);
+
+        public void ComposePlainPage(
+            string heading, IReadOnlyList<OriginalRow> rows, int focus,
+            List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques) =>
+            OriginalTestHost.ComposePlainPage(heading, rows, focus, lines);
+
+        public BoardFill FocusMark(OriginalRow row) => OriginalTestHost.FocusMark(row);
     }
 
     // A wallet with a stated purse and no aircraft, for the pages whose subject is the money: what

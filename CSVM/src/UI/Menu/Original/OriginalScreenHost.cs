@@ -79,6 +79,21 @@ public interface IOriginalScreenHost
     void ComposeGenericRow(
         OriginalRow row, bool focused, bool pressed, int index,
         List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPicture> pictures);
+
+    /// <summary>A paper plaque carrying a label, at the shell's own sectionless column and the
+    /// <paramref name="row"/>-th line of it. What a module's page falls back to where the layout
+    /// does not carry its section, so the page is still walkable.</summary>
+    OriginalRow PlaqueRow(string key, string label, int row, bool enabled, int column);
+
+    /// <summary>Draws a page that has no section of its own: the heading over the plaque column and
+    /// then every row on the shell's plain-page rule, the same pair the Options hub takes.</summary>
+    void ComposePlainPage(
+        string heading, IReadOnlyList<OriginalRow> rows, int focus,
+        List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques);
+
+    /// <summary>The outline that marks a focused row on a page composed over a painted plate, the
+    /// same mark the shell's own slider and dropdown rows take.</summary>
+    BoardFill FocusMark(OriginalRow row);
 }
 
 /// <summary>The other side of the same seam: what the shell calls on a module once

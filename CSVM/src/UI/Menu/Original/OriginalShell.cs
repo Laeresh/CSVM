@@ -210,42 +210,6 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     /// <summary>The Free Flight screen's launch button.</summary>
     public const string FlyKey = "FLY";
 
-    /// <summary>The Game Options page's difficulty dropdown, the page's first row.</summary>
-    public const string DifficultyKey = "DIFFICULTY";
-
-    /// <summary>The Game Options page's menu-presentation dropdown.</summary>
-    public const string PresentationKey = "PRESENTATION";
-
-    /// <summary>The Game Options page's next-target checkbox.</summary>
-    public const string NearestAfterKillKey = "NEARESTAFTERKILL";
-
-    /// <summary>The VIDEO page's enhanced-graphics checkbox.</summary>
-    public const string GraphicsKey = "GRAPHICS";
-
-    /// <summary>The AUDIO page's Master slider, the page's first row.</summary>
-    public const string AudioMasterKey = "AUDIOMASTER";
-
-    /// <summary>The AUDIO page's Music Volume slider.</summary>
-    public const string AudioMusicKey = "AUDIOMUSIC";
-
-    /// <summary>The AUDIO page's Effects Volume slider.</summary>
-    public const string AudioEffectsKey = "AUDIOEFFECTS";
-
-    /// <summary>The AUDIO page's Voice Volume slider.</summary>
-    public const string AudioVoiceKey = "AUDIOVOICE";
-
-    /// <summary>The VIDEO page's monitor dropdown, the page's first row.</summary>
-    public const string MonitorKey = "MONITOR";
-
-    /// <summary>The VIDEO page's resolution dropdown.</summary>
-    public const string ResolutionKey = "RESOLUTION";
-
-    /// <summary>The VIDEO page's display-mode dropdown.</summary>
-    public const string DisplayModeKey = "DISPLAYMODE";
-
-    /// <summary>The VIDEO page's V-Sync dropdown.</summary>
-    public const string VSyncKey = "VSYNC";
-
     /// <summary>The Options screen's section in the layout, whose chrome it is composed over.</summary>
     public const string PreferencesSection = "Preferences";
 
@@ -255,7 +219,11 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     /// <summary>The Preferences page's four page doors, in their authored order, onto the Game
     /// Options, AUDIO, VIDEO and CONTROLS pages. The fourth draws disabled only where no shared
     /// <see cref="ControlsFeature"/> stands behind it.</summary>
-    public static readonly string[] PreferencesPageKeys = { GameOptionsDoorKey, AudioDoorKey, VideoDoorKey, ControlsDoorKey };
+    public static readonly string[] PreferencesPageKeys =
+    {
+        OriginalOptionsScreen.GameOptionsDoorKey, OriginalOptionsScreen.AudioDoorKey,
+        OriginalOptionsScreen.VideoDoorKey, OriginalOptionsScreen.ControlsDoorKey,
+    };
 
     private const float PreferencesTitleFont = 20f;
     private const float PreferencesTextFont = 14f;
@@ -294,24 +262,6 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     private const float FallbackArrowHeight = 14f;
     private const float PlateItemFont = 13f;
 
-    // The slider's two art files, and their shipped pixel sizes as the fallback when neither can
-    // be measured. Neither row carries a frame count, so each is one image with no state to draw.
-    // docs/formats/menu-layout.md holds the Z row's decode.
-    private const string SliderSlotArt = "PF_B_SliderSlot.png";
-    private const string SliderThumbArt = "PF_B_Slider.png";
-    private const float FallbackSlotWidth = 171f;
-    private const float FallbackSlotHeight = 3f;
-    private const float FallbackThumbWidth = 43f;
-    private const float FallbackThumbHeight = 21f;
-
-    // The authored insets from the slot to the region a press has to land in, negative where the
-    // region grows: three pixels of slot become twenty-three, which is what makes the whole thumb
-    // pressable. Every shipped slider row authors these four.
-    private const int SliderInsetLeft = 0;
-    private const int SliderInsetTop = -10;
-    private const int SliderInsetRight = 1;
-    private const int SliderInsetBottom = -10;
-
     // The layout key every screen that authors a background movie spells it under, [@FinalCinema@]
     // and [@CampaignIntro@] excepted; those two are cinemas rather than screens with one behind them.
     private const string MovieKey = "MOVIE";
@@ -347,9 +297,6 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     private readonly BoardArt? _plaque;
     private readonly BoardArt _activePointer;
     private readonly BoardArt _passivePointer;
-    private readonly Func<CSVM.Utils.OptionsDef>? _options;
-    private readonly Func<CSVM.Utils.SizeList>? _screenSizes;
-    private readonly Func<CSVM.Utils.ScreenList>? _screens;
     private readonly ControlsFeature? _controls;
     private readonly CSVM.Flight.CustomPlaneStore? _planes;
     private readonly InstantActionFeature _instantAction;
@@ -376,26 +323,6 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     // A thumb drag in progress: which list, where the pointer took hold and where the window stood.
     private (string Key, float StartY, int StartTop)? _drag;
     private int _pickedChapter = -1;
-    private string _choice = PresentationId.Original.Value;
-    private string _graphics = CSVM.Utils.GraphicsMode.Default;
-    private int _difficulty = CSVM.Flight.Difficulty.Normal;
-    // The targeting setting as saved, null while never set, which the consumer reads as off. Held
-    // nullable rather than as the checkbox's own 0/1 so a page that never showed it hands back
-    // "never set" instead of writing a choice the player did not make.
-    private bool? _nearestAfterKill;
-    // The four display settings as they were saved. A page that shows a setting still has to hand
-    // back the ones it does not, or the one writer's save would clear them; carrying them on the
-    // shell is what lets either page's apply do that.
-    private string? _monitorIndex;
-    private string? _resolution;
-    private string? _displayMode;
-    private string? _vsync;
-    // The four saved volume levels, carried for the same reason: the AUDIO page shows them and the
-    // other option pages do not, and every page's apply hands back the settings it does not show.
-    private int? _audioMaster;
-    private int? _audioMusic;
-    private int? _audioEffects;
-    private int? _audioVoice;
 
     /// <summary>A shell over <paramref name="layout"/> and the shared features. <paramref name="measure"/>
     /// answers an art name with its strip's pixel size (null when the file is not there),
@@ -443,15 +370,13 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         _profiles = profiles;
         _stock = stock;
         _dataRoot = dataRoot;
-        _options = options;
-        _screenSizes = screenSizes;
-        _screens = screens;
         _controls = controls;
         InstantAction = new OriginalInstantActionScreen(_instantAction, _setup, planes, layout, measure, this, _stock);
+        Options = new OriginalOptionsScreen(layout, this, options, screenSizes, screens, controls);
         Hangar = hangar != null ? new OriginalHangarScreen(hangar, planes, layout, measure, this) : null;
         _modules = Hangar != null
-            ? new IOriginalScreenModule[] { InstantAction, Hangar }
-            : new IOriginalScreenModule[] { InstantAction };
+            ? new IOriginalScreenModule[] { InstantAction, Options, Hangar }
+            : new IOriginalScreenModule[] { InstantAction, Options };
         _campaignLayout = CampaignLayout.Over(layout);
         var plaqueRow = layout.Screen("FlightCheck")?.Widget("FC_B_CHANGEPLANE");
         _plaque = plaqueRow is { Art.Count: > 0 } ? new BoardArt(BoardArtLibrary.Ui, plaqueRow.Art[0], plaqueRow.Frames) : null;
@@ -525,15 +450,6 @@ public sealed partial class OriginalShell : IOriginalScreenHost
                 case var _ when ModuleFor(_screen) is { } module:
                     module.Lists(lists);
                     break;
-                case OriginalScreen.Keys:
-                    KeysLists(lists);
-                    break;
-                case OriginalScreen.GameOptions:
-                    GameOptionsLists(lists);
-                    break;
-                case OriginalScreen.Video:
-                    VideoLists(lists);
-                    break;
                 case OriginalScreen.SeatPlane:
                 case var _ when IsCampaignScreen:
                     CampaignLists(lists);
@@ -565,6 +481,11 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     /// module always stands.</summary>
     public OriginalInstantActionScreen InstantAction { get; }
 
+    /// <summary>The module behind the five pages the Options hub's doors open, holding the saved
+    /// settings every one of them shows back and the choices each one's apply would carry. The hub
+    /// itself is the shell's, being a column of doors and nothing else.</summary>
+    public OriginalOptionsScreen Options { get; }
+
     /// <summary>The list whose thumb the pointer is dragging, or null.</summary>
     public string? Dragging => _drag?.Key;
 
@@ -574,52 +495,6 @@ public sealed partial class OriginalShell : IOriginalScreenHost
 
     /// <summary>The picked chapter's code, or null.</summary>
     public string? PickedChapter => _pickedChapter >= 0 ? _chapters[_pickedChapter].Code : null;
-
-    /// <summary>The presentation the Game Options page would apply.</summary>
-    public string PresentationChoice => _choice;
-
-    /// <summary>The graphics mode word the VIDEO page would apply.</summary>
-    public string GraphicsChoice => _graphics;
-
-    /// <summary>The screen index (<see cref="CSVM.Utils.MonitorSetting.Word"/>'s spelling) the
-    /// VIDEO page would apply, or null while nothing has been saved and no row has been
-    /// touched.</summary>
-    public string? MonitorChoice => _monitorIndex;
-
-    /// <summary>The window size (<see cref="CSVM.Utils.OptionsStore.FormatResolution"/>'s spelling)
-    /// the VIDEO page would apply, or null while nothing has been saved and no row has been
-    /// touched.</summary>
-    public string? ResolutionChoice => _resolution;
-
-    /// <summary>The display-mode word (<see cref="CSVM.Utils.DisplayWords.DisplayModes"/>) the
-    /// VIDEO page would apply, or null while nothing has been saved and no row has been
-    /// touched.</summary>
-    public string? DisplayModeChoice => _displayMode;
-
-    /// <summary>The V-Sync word (<see cref="CSVM.Utils.DisplayWords.VSyncChoices"/>) the VIDEO page
-    /// would apply, or null while nothing has been saved and no row has been touched.</summary>
-    public string? VSyncChoice => _vsync;
-
-    /// <summary>The Master level (<see cref="CSVM.Utils.AudioMix"/>'s 0..100) the AUDIO page would
-    /// apply, or null while nothing has been saved and no row has been touched.</summary>
-    public int? AudioMasterChoice => _audioMaster;
-
-    /// <summary>The Music level the AUDIO page would apply, or null while never set.</summary>
-    public int? AudioMusicChoice => _audioMusic;
-
-    /// <summary>The Effects level the AUDIO page would apply, or null while never set.</summary>
-    public int? AudioEffectsChoice => _audioEffects;
-
-    /// <summary>The Voice level the AUDIO page would apply, or null while never set.</summary>
-    public int? AudioVoiceChoice => _audioVoice;
-
-    /// <summary>The difficulty tier (<see cref="CSVM.Flight.Difficulty"/>) the Game Options page
-    /// would apply.</summary>
-    public int DifficultyChoice => _difficulty;
-
-    /// <summary>The targeting setting the Game Options page would apply, or null while nothing has
-    /// been saved and no row has been touched.</summary>
-    public bool? NearestAfterKillChoice => _nearestAfterKill;
 
     /// <summary>The pointer's last authored position, or null when the seat has none.</summary>
     public (float X, float Y)? Pointer => _pointer;
@@ -663,10 +538,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         _drag = null;
         _slider.LetGo();
         ResetCreditsSecret();
-        if (screen is OriginalScreen.GameOptions or OriginalScreen.Audio or OriginalScreen.Video)
-        {
-            ReadSavedOptions();
-        }
+        Options.ScreenOpened(screen);
     }
 
     /// <summary>Applies one frame of seat 0's commands, under the rule <see cref="StepSeat"/>
@@ -864,8 +736,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
                 focus = EnsureFocus(rows);
             }
             else if (pointer.Clicked && over < 0
-                && ((ModuleFor(_screen)?.CloseDropdown() ?? false) || CloseCampaignCombo()
-                    || CloseGameOptionsDropdown() || CloseVideoDropdown()))
+                && ((ModuleFor(_screen)?.CloseDropdown() ?? false) || CloseCampaignCombo()))
             {
                 // A click off an open list closes it and picks nothing.
                 changed = true;
@@ -889,28 +760,13 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         {
             // A sideways step changes a value where the cursor stands on one (a slider, first
             // because it belongs to no one screen, then the screen's own module where one owns it,
-            // then an option row and a campaign field); else it crosses columns.
+            // then a campaign field); else it crosses columns.
             if (SliderControl.StepValue(rows, focus, commands.MoveX))
             {
                 rows = Rows;
                 focus = EnsureFocus(rows);
             }
             else if (ModuleFor(_screen) is { } module && module.StepSideways(rows, focus, commands.MoveX))
-            {
-                rows = Rows;
-                focus = EnsureFocus(rows);
-            }
-            else if (_screen == OriginalScreen.GameOptions && StepGameOptionValue(rows, focus, commands.MoveX))
-            {
-                rows = Rows;
-                focus = EnsureFocus(rows);
-            }
-            else if (_screen == OriginalScreen.Video && StepVideoValue(rows, focus, commands.MoveX))
-            {
-                rows = Rows;
-                focus = EnsureFocus(rows);
-            }
-            else if (_screen == OriginalScreen.ControlsPrefs && StepControlsValue(rows, focus, commands.MoveX))
             {
                 rows = Rows;
                 focus = EnsureFocus(rows);
@@ -946,11 +802,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             changed = true;
         }
 
-        if (_screen == OriginalScreen.Keys)
-        {
-            SyncKeysWindow();
-        }
-
+        Options.SyncWindows();
         return new OriginalStep(cues, exit, changed);
     }
 
@@ -976,9 +828,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         ComposeMovie(backdrop);
         var main = _layout.Screen(OriginalAvailability.MainMenuSection);
         var screenModule = ModuleFor(_screen);
-        bool ownPage = _screen is OriginalScreen.Options or OriginalScreen.GameOptions or OriginalScreen.Audio
-            or OriginalScreen.Video or OriginalScreen.ControlsPrefs or OriginalScreen.Keys
-            or OriginalScreen.SeatPlane or OriginalScreen.Credits
+        bool ownPage = _screen is OriginalScreen.Options or OriginalScreen.SeatPlane or OriginalScreen.Credits
             || screenModule != null || IsCampaignScreen;
         if (!ownPage && main?.Widget("MM_LOGO") is { Art.Count: > 0 } logo)
         {
@@ -1010,21 +860,6 @@ public sealed partial class OriginalShell : IOriginalScreenHost
                 break;
             case OriginalScreen.Credits:
                 ComposeCredits(pictures, lines);
-                break;
-            case OriginalScreen.GameOptions:
-                ComposeGameOptions(screenRows, screenFocus, backdrop, pictures, fills, lines, plaques, overlays);
-                break;
-            case OriginalScreen.Audio:
-                ComposeAudio(screenRows, screenFocus, backdrop, pictures, fills, lines, plaques);
-                break;
-            case OriginalScreen.Video:
-                ComposeVideo(screenRows, screenFocus, backdrop, pictures, fills, lines, plaques, overlays);
-                break;
-            case OriginalScreen.ControlsPrefs:
-                ComposeControlsPrefs(screenRows, screenFocus, backdrop, pictures, fills, lines, plaques);
-                break;
-            case OriginalScreen.Keys:
-                ComposeKeys(screenRows, screenFocus, backdrop, pictures, fills, lines, plaques);
                 break;
         }
 
@@ -1092,15 +927,6 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         }
 
         return fileName;
-    }
-
-    // The n-th art a slider row names, falling back to the shipped file name so the control still
-    // has a name to draw where the section is absent. Neither art is a strip.
-    private static BoardArt SliderArt(MenuLayoutWidget? widget, int index, string fallback)
-    {
-        var art = widget?.Art;
-        string name = art != null && index < art.Count && art[index].Length > 0 ? art[index] : fallback;
-        return new BoardArt(BoardArtLibrary.Ui, name, 1);
     }
 
     private static int HitTest(IReadOnlyList<OriginalRow> rows, float x, float y)
@@ -1507,17 +1333,17 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             case OriginalScreen.Options:
                 switch (row.Key)
                 {
-                    case GameOptionsDoorKey:
-                        OpenGameOptions();
+                    case OriginalOptionsScreen.GameOptionsDoorKey:
+                        Options.OpenGameOptions();
                         break;
-                    case AudioDoorKey:
-                        OpenAudio();
+                    case OriginalOptionsScreen.AudioDoorKey:
+                        Options.OpenAudio();
                         break;
-                    case VideoDoorKey:
-                        OpenVideo();
+                    case OriginalOptionsScreen.VideoDoorKey:
+                        Options.OpenVideo();
                         break;
-                    case ControlsDoorKey:
-                        OpenControlsPrefs();
+                    case OriginalOptionsScreen.ControlsDoorKey:
+                        Options.OpenControlsPrefs();
                         break;
                     case BackKey:
                     case OptionsBackKey:
@@ -1526,16 +1352,6 @@ public sealed partial class OriginalShell : IOriginalScreenHost
                 }
 
                 break;
-            case OriginalScreen.GameOptions:
-                return ActivateGameOptions(row);
-            case OriginalScreen.Audio:
-                return ActivateAudio(row);
-            case OriginalScreen.Video:
-                return ActivateVideo(row);
-            case OriginalScreen.ControlsPrefs:
-                return ActivateControlsPrefs(row);
-            case OriginalScreen.Keys:
-                return ActivateKeys(row);
         }
 
         return null;
@@ -1543,10 +1359,9 @@ public sealed partial class OriginalShell : IOriginalScreenHost
 
     // Back with a dialog standing takes its declining answer, the messagebox script's own Escape.
     // On a sortie screen it undoes seat 0's pick a stage at a time, then leaves; the per-seat
-    // screen has its own, whose meaning depends on who pressed it. On Instant Action, its loadout
-    // and Game Options the first Back closes an open list and the next leaves (CANCEL LOADOUT,
-    // CANCEL CHANGES); the VIDEO page has no list, so Back is its CANCEL CHANGES. The campaign and
-    // the hangar walk their graphs back, and the top level quits as MAINMENU.SCRIPT's Quit does.
+    // screen has its own, whose meaning depends on who pressed it. A module answers it on its own
+    // screens, each page's own declining answer. The campaign and the hangar walk their graphs
+    // back, and the top level quits as MAINMENU.SCRIPT's Quit does.
     private MenuExit? Back()
     {
         if (_dialog is { } dialog)
@@ -1574,31 +1389,6 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         // shell's own way out below (nothing open there and nothing to cancel is its Exit).
         if (ModuleFor(_screen) is { } module && module.Back())
         {
-            return null;
-        }
-
-        if (_screen == OriginalScreen.GameOptions)
-        {
-            BackGameOptions();
-            return null;
-        }
-
-        if (_screen == OriginalScreen.Audio)
-        {
-            // The AUDIO page carries no list to close first, so Back is its CANCEL CHANGES.
-            BackToPreferences();
-            return null;
-        }
-
-        if (_screen == OriginalScreen.Video)
-        {
-            BackVideo();
-            return null;
-        }
-
-        if (_screen is OriginalScreen.ControlsPrefs or OriginalScreen.Keys)
-        {
-            BackControls();
             return null;
         }
 
@@ -1655,21 +1445,6 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             case OriginalScreen.Options:
                 BuildOptionsRows(rows);
                 break;
-            case OriginalScreen.GameOptions:
-                BuildGameOptionsRows(rows);
-                break;
-            case OriginalScreen.Audio:
-                BuildAudioRows(rows);
-                break;
-            case OriginalScreen.Video:
-                BuildVideoRows(rows);
-                break;
-            case OriginalScreen.ControlsPrefs:
-                BuildControlsPrefsRows(rows);
-                break;
-            case OriginalScreen.Keys:
-                BuildKeysRows(rows);
-                break;
         }
 
         return rows;
@@ -1684,9 +1459,9 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         var screen = _layout.Screen(PreferencesSection);
         if (screen == null)
         {
-            rows.Add(TextButton(GameOptionsDoorKey, "GAME OPTIONS", OptionsX, OptionsTop, true, 0));
-            rows.Add(TextButton(AudioDoorKey, "AUDIO", OptionsX, OptionsTop + OptionsPitch, true, 0));
-            rows.Add(TextButton(VideoDoorKey, "VIDEO", OptionsX, OptionsTop + (2f * OptionsPitch), true, 0));
+            rows.Add(TextButton(OriginalOptionsScreen.GameOptionsDoorKey, "GAME OPTIONS", OptionsX, OptionsTop, true, 0));
+            rows.Add(TextButton(OriginalOptionsScreen.AudioDoorKey, "AUDIO", OptionsX, OptionsTop + OptionsPitch, true, 0));
+            rows.Add(TextButton(OriginalOptionsScreen.VideoDoorKey, "VIDEO", OptionsX, OptionsTop + (2f * OptionsPitch), true, 0));
             rows.Add(TextButton(BackKey, "BACK", OptionsX, OptionsTop + (3f * OptionsPitch), true, 0));
             return;
         }
@@ -1695,7 +1470,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         {
             if (screen.Widget(key) is { } door)
             {
-                rows.Add(Button(door, key != ControlsDoorKey || _controls != null));
+                rows.Add(Button(door, key != OriginalOptionsScreen.ControlsDoorKey || _controls != null));
             }
         }
 
@@ -1718,30 +1493,6 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         float height = size != null ? (float)Math.Floor(size.Value.Height / (float)frames) : FallbackButtonHeight;
         return new OriginalRow(widget.Key, string.Empty, OriginalRowKind.Button, widget.Int("X"), widget.Int("Y"),
             width, height, enabled, 0, art.Length > 0 ? new BoardArt(BoardArtLibrary.Ui, art, frames) : null);
-    }
-
-    // A slider row from its authored widget: the slot at the widget's corner in its own art's
-    // measured size, the thumb measured from its own art, and the row's rectangle the region the
-    // widget insets the slot into, which is what the pointer has to hit. A page supplies the range
-    // its setting spans, the level it stands at and where a new level goes.
-    private OriginalRow SliderRow(
-        MenuLayoutWidget? widget, string key, float fallbackX, float fallbackY,
-        int min, int max, int value, Action<int> setValue, bool enabled = true, int column = 0)
-    {
-        var slot = SliderArt(widget, 0, SliderSlotArt);
-        var thumb = SliderArt(widget, 1, SliderThumbArt);
-        var slotSize = StripSize(slot, FallbackSlotWidth, FallbackSlotHeight);
-        var thumbSize = StripSize(thumb, FallbackThumbWidth, FallbackThumbHeight);
-        float x = widget?.Int("X", (int)fallbackX) ?? fallbackX;
-        float y = widget?.Int("Y", (int)fallbackY) ?? fallbackY;
-        var track = new SliderTrack(x, y, slotSize.Width, slotSize.Height, thumbSize.Width, thumbSize.Height, min, max);
-        float left = x + (widget?.Int("Left", SliderInsetLeft) ?? SliderInsetLeft);
-        float top = y + (widget?.Int("Top", SliderInsetTop) ?? SliderInsetTop);
-        float right = x + slotSize.Width - (widget?.Int("Right", SliderInsetRight) ?? SliderInsetRight);
-        float bottom = y + slotSize.Height - (widget?.Int("Bottom", SliderInsetBottom) ?? SliderInsetBottom);
-        return new OriginalRow(key, string.Empty, OriginalRowKind.Slider, left, top,
-            Math.Max(1f, right - left), Math.Max(1f, bottom - top), enabled, column, thumb,
-            Slider: new OriginalSlider(track, track.Clamp(value), setValue, slot));
     }
 
     // The box that marks a focused row on the pages composed over a painted plate, shared by the
@@ -1925,4 +1676,17 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         OriginalRow row, bool focused, bool pressed, int index,
         List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPicture> pictures) =>
         ComposePlateRow(row, focused, pressed, index, fills, lines, plaques, pictures);
+
+    OriginalRow IOriginalScreenHost.PlaqueRow(string key, string label, int row, bool enabled, int column) =>
+        TextButton(key, label, OptionsX, OptionsTop + (row * OptionsPitch), enabled, column);
+
+    void IOriginalScreenHost.ComposePlainPage(
+        string heading, IReadOnlyList<OriginalRow> rows, int focus,
+        List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques)
+    {
+        lines.Add(new BoardLine(heading, OptionsX, OptionsTop - 44f, 0f, HeadingFont, BoardInk.Heading));
+        ComposeRows(rows, focus, fills, lines, plaques);
+    }
+
+    BoardFill IOriginalScreenHost.FocusMark(OriginalRow row) => FocusBox(row);
 }

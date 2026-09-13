@@ -100,39 +100,39 @@ internal static class MenuOriginalControlsSuites
     {
         Click(host, seat, shell, fit, "MM_B_PREFERENCES");
         ctx.Check(shell.Screen == OriginalScreen.Options, $"PREFERENCES opens the Options screen ({shell.Screen})");
-        var door = Row(shell, OriginalShell.ControlsDoorKey);
+        var door = Row(shell, OriginalOptionsScreen.ControlsDoorKey);
         ctx.Check(door is { Enabled: true }, $"its CONTROLS door is live over the shared feature ({door?.Enabled})");
 
-        Click(host, seat, shell, fit, OriginalShell.ControlsDoorKey);
+        Click(host, seat, shell, fit, OriginalOptionsScreen.ControlsDoorKey);
         ctx.Check(shell.Screen == OriginalScreen.ControlsPrefs, $"the door opens the CONTROLS page ({shell.Screen})");
         ctx.Check(controls.Players.Count == 1 && controls.Player == 1,
             $"with one seat registered on it ({controls.Players.Count} seats, player {controls.Player})");
-        ctx.Check(Row(shell, OriginalShell.ControlsPlayerKey)?.Label == "Player 1",
-            $"and the seat row naming player 1 ({Row(shell, OriginalShell.ControlsPlayerKey)?.Label})");
-        var mouse = Row(shell, OriginalShell.ControlsMouseKey);
+        ctx.Check(Row(shell, OriginalOptionsScreen.ControlsPlayerKey)?.Label == "Player 1",
+            $"and the seat row naming player 1 ({Row(shell, OriginalOptionsScreen.ControlsPlayerKey)?.Label})");
+        var mouse = Row(shell, OriginalOptionsScreen.ControlsMouseKey);
         ctx.Check(mouse is { Enabled: true, Label: "Look" },
             $"the Mouse Sensitivity row carries the flying scheme, on head-look ({mouse?.Label}, live {mouse?.Enabled})");
-        Click(host, seat, shell, fit, OriginalShell.ControlsMouseKey);
-        ctx.Check(controls.MouseFlying && Row(shell, OriginalShell.ControlsMouseKey)?.Label == "Fly",
-            $"a press hands the mouse to the stick ({controls.MouseFlying}, {Row(shell, OriginalShell.ControlsMouseKey)?.Label})");
-        Click(host, seat, shell, fit, OriginalShell.ControlsMouseKey);
+        Click(host, seat, shell, fit, OriginalOptionsScreen.ControlsMouseKey);
+        ctx.Check(controls.MouseFlying && Row(shell, OriginalOptionsScreen.ControlsMouseKey)?.Label == "Fly",
+            $"a press hands the mouse to the stick ({controls.MouseFlying}, {Row(shell, OriginalOptionsScreen.ControlsMouseKey)?.Label})");
+        Click(host, seat, shell, fit, OriginalOptionsScreen.ControlsMouseKey);
         ctx.Check(!controls.MouseFlying, $"and the next press hands it back ({controls.MouseFlying})");
 
-        Click(host, seat, shell, fit, OriginalShell.KeysDoorKey);
+        Click(host, seat, shell, fit, OriginalOptionsScreen.KeysDoorKey);
         ctx.Check(shell.Screen == OriginalScreen.Keys, $"KEYS AND BUTTONS opens the KEYS page ({shell.Screen})");
-        ctx.Check(shell.KeysTab == 0, $"on its first category ({OriginalShell.ControlTabs[shell.KeysTab].Name})");
+        ctx.Check(shell.Options.KeysTab == 0, $"on its first category ({OriginalOptionsScreen.ControlTabs[shell.Options.KeysTab].Name})");
         int tabs = 0;
-        for (int i = 0; i < OriginalShell.KeysTabCount; i++)
+        for (int i = 0; i < OriginalOptionsScreen.KeysTabCount; i++)
         {
-            if (Row(shell, OriginalShell.KeysTabKey(i)) is { Enabled: true })
+            if (Row(shell, OriginalOptionsScreen.KeysTabKey(i)) is { Enabled: true })
             {
                 tabs++;
             }
         }
 
-        ctx.Check(tabs == OriginalShell.KeysTabCount, $"the seven category strips all stand ({tabs})");
-        var cancel = Row(shell, OriginalShell.KeysCancelKey);
-        var accept = Row(shell, OriginalShell.KeysAcceptKey);
+        ctx.Check(tabs == OriginalOptionsScreen.KeysTabCount, $"the seven category strips all stand ({tabs})");
+        var cancel = Row(shell, OriginalOptionsScreen.KeysCancelKey);
+        var accept = Row(shell, OriginalOptionsScreen.KeysAcceptKey);
         ctx.Check(cancel != null && accept != null && cancel.X < accept.X && cancel.Y == accept.Y,
             $"CANCEL CHANGES is authored left of ACCEPT CHANGES on one line ({cancel?.X} vs {accept?.X})");
         var board = shell.Compose();
@@ -159,8 +159,8 @@ internal static class MenuOriginalControlsSuites
         // untouched, so its per-frame sync leaves this registration standing.
         var devices = new ScriptedCaptureDevices();
         controls.AddSeat(1, ShippedProfile(), devices, readsKeyboard: true);
-        var action = OriginalShell.ControlTabs[0].Rows[0].Action;
-        string cell = OriginalShell.KeysCellKey(0, second: false);
+        var action = OriginalOptionsScreen.ControlTabs[0].Rows[0].Action;
+        string cell = OriginalOptionsScreen.KeysCellKey(0, second: false);
 
         Click(host, seat, shell, fit, cell);
         ctx.Check(controls.Capturing && controls.Focused == action && controls.Slot == 0,
@@ -181,7 +181,7 @@ internal static class MenuOriginalControlsSuites
             $"a second capture binds the key it is given ({controls.Status})");
         ctx.Check(written.Count == 0, $"with nothing written yet ({written.Count} saves)");
 
-        Click(host, seat, shell, fit, OriginalShell.KeysAcceptKey);
+        Click(host, seat, shell, fit, OriginalOptionsScreen.KeysAcceptKey);
         ctx.Check(shell.Screen == OriginalScreen.ControlsPrefs,
             $"ACCEPT CHANGES returns to the CONTROLS page ({shell.Screen})");
         ctx.Check(written.Count == 1 && written[0] == 1,
@@ -197,8 +197,8 @@ internal static class MenuOriginalControlsSuites
     private static void Scrollbar(
         TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit)
     {
-        Click(host, seat, shell, fit, OriginalShell.KeysDoorKey);
-        Click(host, seat, shell, fit, OriginalShell.KeysTabKey(OriginalShell.KeysTabCount - 1));
+        Click(host, seat, shell, fit, OriginalOptionsScreen.KeysDoorKey);
+        Click(host, seat, shell, fit, OriginalOptionsScreen.KeysTabKey(OriginalOptionsScreen.KeysTabCount - 1));
         if (KeysWindow(shell) is not { } head)
         {
             ctx.Check(false, $"the last category's list is longer than its window and carries a bar");
@@ -208,12 +208,12 @@ internal static class MenuOriginalControlsSuites
         ctx.Check(head.Count > head.Rows,
             $"the last category is longer than its window ({head.Count} rows over {head.Rows})");
         float arrowHeight = head.TrackTop - head.Y;
-        ctx.Check(Same(head.Y, Row(shell, OriginalShell.KeysCellKey(0, second: false))?.Y ?? -1f),
+        ctx.Check(Same(head.Y, Row(shell, OriginalOptionsScreen.KeysCellKey(0, second: false))?.Y ?? -1f),
             $"its bar stands on the window's first line ({head.Y})");
 
         Wheel(host, seat, fit, head, head.Count);
-        ctx.Check(shell.KeysTop == head.LastTop,
-            $"a wheel step scrolls the list to its last window (top {shell.KeysTop} of {head.LastTop})");
+        ctx.Check(shell.Options.KeysTop == head.LastTop,
+            $"a wheel step scrolls the list to its last window (top {shell.Options.KeysTop} of {head.LastTop})");
         if (KeysWindow(shell) is not { } end)
         {
             ctx.Check(false, $"the scrolled list still carries its bar");
@@ -222,8 +222,8 @@ internal static class MenuOriginalControlsSuites
 
         ctx.Check(Same(end.Y, head.Y) && Same(end.TrackTop, head.TrackTop),
             $"the bar's top and its track stay put over the scrolled list ({end.Y} was {head.Y})");
-        ctx.Check(Same(end.Y, Row(shell, OriginalShell.KeysCellKey(shell.KeysTop, second: false))?.Y ?? -1f),
-            $"which is still the window's first line, now the tab's row {shell.KeysTop}");
+        ctx.Check(Same(end.Y, Row(shell, OriginalOptionsScreen.KeysCellKey(shell.Options.KeysTop, second: false))?.Y ?? -1f),
+            $"which is still the window's first line, now the tab's row {shell.Options.KeysTop}");
         ctx.Check(end.ThumbY > head.ThumbY
             && Same(end.ThumbY, end.TrackTop + end.TrackHeight - end.ThumbHeight),
             $"and the thumb alone walks the track, flush at its foot ({head.ThumbY} to {end.ThumbY})");
@@ -231,7 +231,7 @@ internal static class MenuOriginalControlsSuites
         ctx.Check(tops.Count >= 2 && Same(Lowest(tops), end.Y) && Holds(tops, end.ThumbY)
             && Highest(tops) <= end.Y + end.Height - arrowHeight + 0.5f,
             $"the drawn bar's marks all stand inside the window, its head on that line ({tops.Count} marks)");
-        Click(host, seat, shell, fit, OriginalShell.KeysCancelKey);
+        Click(host, seat, shell, fit, OriginalOptionsScreen.KeysCancelKey);
     }
 
     // The way out: a tab press stands another category, and the CONTROLS page's CANCEL CHANGES
@@ -239,12 +239,12 @@ internal static class MenuOriginalControlsSuites
     private static void Leave(
         TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, List<MenuExit> exits)
     {
-        Click(host, seat, shell, fit, OriginalShell.KeysDoorKey);
-        Click(host, seat, shell, fit, OriginalShell.KeysTabKey(2));
-        ctx.Check(shell.KeysTab == 2, $"a tab press stands its category ({OriginalShell.ControlTabs[shell.KeysTab].Name})");
-        Click(host, seat, shell, fit, OriginalShell.KeysCancelKey);
+        Click(host, seat, shell, fit, OriginalOptionsScreen.KeysDoorKey);
+        Click(host, seat, shell, fit, OriginalOptionsScreen.KeysTabKey(2));
+        ctx.Check(shell.Options.KeysTab == 2, $"a tab press stands its category ({OriginalOptionsScreen.ControlTabs[shell.Options.KeysTab].Name})");
+        Click(host, seat, shell, fit, OriginalOptionsScreen.KeysCancelKey);
         ctx.Check(shell.Screen == OriginalScreen.ControlsPrefs, $"CANCEL CHANGES leaves the KEYS page ({shell.Screen})");
-        Click(host, seat, shell, fit, OriginalShell.ControlsCancelKey);
+        Click(host, seat, shell, fit, OriginalOptionsScreen.ControlsCancelKey);
         ctx.Check(shell.Screen == OriginalScreen.Options, $"and the CONTROLS page's own returns to Options ({shell.Screen})");
         ctx.Check(exits.Count == 0, $"neither page leaves through an exit ({exits.Count})");
     }
@@ -293,7 +293,7 @@ internal static class MenuOriginalControlsSuites
     {
         foreach (var list in shell.Lists)
         {
-            if (list.Key == OriginalShell.KeysListKey)
+            if (list.Key == OriginalOptionsScreen.KeysListKey)
             {
                 return list.Window;
             }

@@ -382,41 +382,41 @@ public sealed class OriginalPresentation : IMenuPresentation
                     OpenGameOptionsAid(aid);
                     break;
                 case AudioAid:
-                    _shell.OpenAudio();
+                    _shell.Options.OpenAudio();
                     break;
                 case AudioAid + ":" + AudioMixedAid:
                     // The four rows open on two levels between them, so a shot of the shipped mix
                     // says nothing about where a thumb stands at a level it was moved to.
-                    _shell.OpenAudio();
-                    _shell.PoseAudioMix();
+                    _shell.Options.OpenAudio();
+                    _shell.Options.PoseAudioMix();
                     break;
                 case VideoAid:
-                    _shell.OpenVideo();
+                    _shell.Options.OpenVideo();
                     break;
                 case VideoAid + ":" + VideoCheckedAid:
                     // Onto the checkbox by name: the page opens on its first row, which is a
                     // display setting rather than the graphics one this pose is about.
-                    _shell.OpenVideoOn(OriginalShell.GraphicsKey);
+                    _shell.Options.OpenVideoOn(OriginalOptionsScreen.GraphicsKey);
                     _shell.Step(new MenuCommands { Accept = true });
                     break;
                 case VideoAid + ":" + VideoOpenAid:
                     // Onto the Resolution row by name: the page opens on the monitor row above it,
                     // whose one screen on this machine says nothing about a windowed list.
-                    _shell.OpenVideoOn(OriginalShell.ResolutionKey);
+                    _shell.Options.OpenVideoOn(OriginalOptionsScreen.ResolutionKey);
                     _shell.Step(new MenuCommands { Accept = true });
                     break;
                 case ControlsAid:
                     SyncControlsSeats();
-                    _shell.OpenControlsPrefs();
+                    _shell.Options.OpenControlsPrefs();
                     break;
                 case KeysAid:
                     SyncControlsSeats();
-                    _shell.OpenKeys();
+                    _shell.Options.OpenKeys();
                     break;
                 case string keys when keys.StartsWith(KeysAid + ":", StringComparison.Ordinal):
                     SyncControlsSeats();
-                    _shell.OpenKeys();
-                    _shell.ShowKeysTab(KeysTabOf(keys[(KeysAid.Length + 1)..]));
+                    _shell.Options.OpenKeys();
+                    _shell.Options.ShowKeysTab(KeysTabOf(keys[(KeysAid.Length + 1)..]));
                     break;
                 case CreditsAid:
                     _shell.Open(OriginalScreen.Credits);
@@ -621,9 +621,9 @@ public sealed class OriginalPresentation : IMenuPresentation
         // The AUDIO page's levels are heard while it is open and the mix it opened over goes back the
         // moment it is left, by any door. Read off the shell rather than a seat's step: the page is
         // seat 0's, and a guest's own step carries no mix, so its poll would end the preview.
-        if (_shell.AudioPreviewMix is { } mix)
+        if (_shell.Options.AudioPreviewMix is { } mix)
         {
-            _host.Audio.PreviewMix(mix, _shell.TakeAudioMoved());
+            _host.Audio.PreviewMix(mix, _shell.Options.TakeAudioMoved());
         }
         else
         {
@@ -699,7 +699,7 @@ public sealed class OriginalPresentation : IMenuPresentation
     // leaves the page on its first category, which is where the bare aid opens it anyway.
     private static int KeysTabOf(string argument)
     {
-        var tabs = OriginalShell.ControlTabs;
+        var tabs = OriginalOptionsScreen.ControlTabs;
         for (int i = 0; i < tabs.Count; i++)
         {
             if (string.Equals(tabs[i].Name.Replace(" ", string.Empty), argument, StringComparison.OrdinalIgnoreCase))
@@ -734,7 +734,7 @@ public sealed class OriginalPresentation : IMenuPresentation
 
     private void OpenGameOptionsAid(string aid)
     {
-        _shell!.OpenGameOptions();
+        _shell!.Options.OpenGameOptions();
         if (aid.IndexOf(':') >= 0)
         {
             _shell.Step(new MenuCommands { Accept = true });

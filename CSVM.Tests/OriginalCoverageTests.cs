@@ -70,23 +70,23 @@ public class OriginalCoverageTests : IDisposable
         new("seat-plane", OriginalScreen.SeatPlane, new[] { OriginalShell.FreeFlightKey, JoinStep, OriginalShell.AirframeKey(0) },
             new[] { OriginalShell.SeatPlaneFieldKey, "AcceptSelections", OriginalShell.BackKey }),
         new("options", OriginalScreen.Options, new[] { "MM_B_PREFERENCES" }, new[] { OriginalShell.OptionsBackKey }),
-        new("game-options", OriginalScreen.GameOptions, new[] { "MM_B_PREFERENCES", OriginalShell.GameOptionsDoorKey },
-            new[] { OriginalShell.GameOptionsCancelKey, OriginalShell.OptionsBackKey }),
-        new("audio", OriginalScreen.Audio, new[] { "MM_B_PREFERENCES", OriginalShell.AudioDoorKey },
-            new[] { OriginalShell.AudioCancelKey, OriginalShell.OptionsBackKey }),
-        new("video", OriginalScreen.Video, new[] { "MM_B_PREFERENCES", OriginalShell.VideoDoorKey },
-            new[] { OriginalShell.VideoCancelKey, OriginalShell.OptionsBackKey }),
-        new("controls", OriginalScreen.ControlsPrefs, new[] { "MM_B_PREFERENCES", OriginalShell.ControlsDoorKey },
-            new[] { OriginalShell.ControlsCancelKey, OriginalShell.OptionsBackKey }),
+        new("game-options", OriginalScreen.GameOptions, new[] { "MM_B_PREFERENCES", OriginalOptionsScreen.GameOptionsDoorKey },
+            new[] { OriginalOptionsScreen.GameOptionsCancelKey, OriginalShell.OptionsBackKey }),
+        new("audio", OriginalScreen.Audio, new[] { "MM_B_PREFERENCES", OriginalOptionsScreen.AudioDoorKey },
+            new[] { OriginalOptionsScreen.AudioCancelKey, OriginalShell.OptionsBackKey }),
+        new("video", OriginalScreen.Video, new[] { "MM_B_PREFERENCES", OriginalOptionsScreen.VideoDoorKey },
+            new[] { OriginalOptionsScreen.VideoCancelKey, OriginalShell.OptionsBackKey }),
+        new("controls", OriginalScreen.ControlsPrefs, new[] { "MM_B_PREFERENCES", OriginalOptionsScreen.ControlsDoorKey },
+            new[] { OriginalOptionsScreen.ControlsCancelKey, OriginalShell.OptionsBackKey }),
         new("controls-accept", OriginalScreen.Options,
-            new[] { "MM_B_PREFERENCES", OriginalShell.ControlsDoorKey, OriginalShell.ControlsAcceptKey },
+            new[] { "MM_B_PREFERENCES", OriginalOptionsScreen.ControlsDoorKey, OriginalOptionsScreen.ControlsAcceptKey },
             new[] { OriginalShell.OptionsBackKey }),
         new("keys", OriginalScreen.Keys,
-            new[] { "MM_B_PREFERENCES", OriginalShell.ControlsDoorKey, OriginalShell.KeysDoorKey },
-            new[] { OriginalShell.KeysCancelKey, OriginalShell.ControlsCancelKey, OriginalShell.OptionsBackKey }),
+            new[] { "MM_B_PREFERENCES", OriginalOptionsScreen.ControlsDoorKey, OriginalOptionsScreen.KeysDoorKey },
+            new[] { OriginalOptionsScreen.KeysCancelKey, OriginalOptionsScreen.ControlsCancelKey, OriginalShell.OptionsBackKey }),
         new("keys-accept", OriginalScreen.ControlsPrefs,
-            new[] { "MM_B_PREFERENCES", OriginalShell.ControlsDoorKey, OriginalShell.KeysDoorKey, OriginalShell.KeysAcceptKey },
-            new[] { OriginalShell.ControlsCancelKey, OriginalShell.OptionsBackKey }),
+            new[] { "MM_B_PREFERENCES", OriginalOptionsScreen.ControlsDoorKey, OriginalOptionsScreen.KeysDoorKey, OriginalOptionsScreen.KeysAcceptKey },
+            new[] { OriginalOptionsScreen.ControlsCancelKey, OriginalShell.OptionsBackKey }),
         new("credits", OriginalScreen.Credits, new[] { OriginalShell.CreditsDoorKey }, new[] { OriginalShell.CreditsExitKey }),
         new("credits-about", OriginalScreen.Credits, new[] { OriginalShell.CreditsDoorKey, OriginalShell.CreditsAboutKey },
             new[] { OriginalShell.DialogOkKey, OriginalShell.CreditsExitKey },
@@ -143,15 +143,15 @@ public class OriginalCoverageTests : IDisposable
         new("apply-options", null,
             new[]
             {
-                "MM_B_PREFERENCES", OriginalShell.GameOptionsDoorKey,
-                OriginalShell.PresentationKey, OriginalShell.PresentationKey + ":1", OriginalShell.GameOptionsAcceptKey,
+                "MM_B_PREFERENCES", OriginalOptionsScreen.GameOptionsDoorKey,
+                OriginalOptionsScreen.PresentationKey, OriginalOptionsScreen.PresentationKey + ":1", OriginalOptionsScreen.GameOptionsAcceptKey,
             },
             Array.Empty<string>(), Exit: typeof(OptionsApplyExit)),
         new("apply-audio", null,
-            new[] { "MM_B_PREFERENCES", OriginalShell.AudioDoorKey, OriginalShell.AudioAcceptKey },
+            new[] { "MM_B_PREFERENCES", OriginalOptionsScreen.AudioDoorKey, OriginalOptionsScreen.AudioAcceptKey },
             Array.Empty<string>(), Exit: typeof(OptionsApplyExit)),
         new("apply-video", null,
-            new[] { "MM_B_PREFERENCES", OriginalShell.VideoDoorKey, OriginalShell.GraphicsKey, OriginalShell.VideoAcceptKey },
+            new[] { "MM_B_PREFERENCES", OriginalOptionsScreen.VideoDoorKey, OriginalOptionsScreen.GraphicsKey, OriginalOptionsScreen.VideoAcceptKey },
             Array.Empty<string>(), Exit: typeof(OptionsApplyExit)),
         new("free-flight-launch", null, new[] { OriginalShell.FreeFlightKey, "C1", OriginalShell.AirframeKey(0), OriginalShell.FlyKey }, Array.Empty<string>(), Exit: typeof(LaunchExit)),
         new("instant-action-launch", null, new[] { "MM_B_INSTANTACTION", OriginalInstantActionScreen.FlyMissionKey }, Array.Empty<string>(), Exit: typeof(LaunchExit)),
@@ -170,21 +170,21 @@ public class OriginalCoverageTests : IDisposable
         ["MainMenu.MM_B_PREFERENCES"] = Edge.Driven("options", "MM_B_PREFERENCES"),
         ["MainMenu.MM_B_CREDITS"] = Edge.Driven("credits", OriginalShell.CreditsDoorKey),
         ["Credits.CR_B_Exit"] = Edge.Driven("credits", OriginalShell.CreditsExitKey),
-        ["Preferences.PF_B_GAMEOPTIONS"] = Edge.Driven("game-options", OriginalShell.GameOptionsDoorKey),
-        ["GameOptions.GO_B_ACCEPTCHANGES"] = Edge.Driven("apply-options", OriginalShell.GameOptionsAcceptKey),
-        ["GameOptions.GO_B_CANCELCHANGES"] = Edge.Driven("game-options", OriginalShell.GameOptionsCancelKey),
-        ["Preferences.PF_B_AUDIO"] = Edge.Driven("audio", OriginalShell.AudioDoorKey),
-        ["Audio.AP_B_ACCEPTCHANGES"] = Edge.Driven("apply-audio", OriginalShell.AudioAcceptKey),
-        ["Audio.AP_B_CANCELCHANGES"] = Edge.Driven("audio", OriginalShell.AudioCancelKey),
-        ["Preferences.PF_B_VIDEO"] = Edge.Driven("video", OriginalShell.VideoDoorKey),
-        ["Video.VP_B_ACCEPTCHANGES"] = Edge.Driven("apply-video", OriginalShell.VideoAcceptKey),
-        ["Video.VP_B_CANCELCHANGES"] = Edge.Driven("video", OriginalShell.VideoCancelKey),
-        ["Preferences.PF_B_CONTROLS"] = Edge.Driven("controls", OriginalShell.ControlsDoorKey),
-        ["ControlsPrefs.CP_B_ACCEPTCHANGES"] = Edge.Driven("controls-accept", OriginalShell.ControlsAcceptKey),
-        ["ControlsPrefs.CP_B_CANCELCHANGES"] = Edge.Driven("controls", OriginalShell.ControlsCancelKey),
-        ["ControlsPrefs.CP_B_KEYS"] = Edge.Driven("keys", OriginalShell.KeysDoorKey),
-        ["Keys.KB_B_ACCEPTCHANGES"] = Edge.Driven("keys-accept", OriginalShell.KeysAcceptKey),
-        ["Keys.KB_B_CANCELCHANGES"] = Edge.Driven("keys", OriginalShell.KeysCancelKey),
+        ["Preferences.PF_B_GAMEOPTIONS"] = Edge.Driven("game-options", OriginalOptionsScreen.GameOptionsDoorKey),
+        ["GameOptions.GO_B_ACCEPTCHANGES"] = Edge.Driven("apply-options", OriginalOptionsScreen.GameOptionsAcceptKey),
+        ["GameOptions.GO_B_CANCELCHANGES"] = Edge.Driven("game-options", OriginalOptionsScreen.GameOptionsCancelKey),
+        ["Preferences.PF_B_AUDIO"] = Edge.Driven("audio", OriginalOptionsScreen.AudioDoorKey),
+        ["Audio.AP_B_ACCEPTCHANGES"] = Edge.Driven("apply-audio", OriginalOptionsScreen.AudioAcceptKey),
+        ["Audio.AP_B_CANCELCHANGES"] = Edge.Driven("audio", OriginalOptionsScreen.AudioCancelKey),
+        ["Preferences.PF_B_VIDEO"] = Edge.Driven("video", OriginalOptionsScreen.VideoDoorKey),
+        ["Video.VP_B_ACCEPTCHANGES"] = Edge.Driven("apply-video", OriginalOptionsScreen.VideoAcceptKey),
+        ["Video.VP_B_CANCELCHANGES"] = Edge.Driven("video", OriginalOptionsScreen.VideoCancelKey),
+        ["Preferences.PF_B_CONTROLS"] = Edge.Driven("controls", OriginalOptionsScreen.ControlsDoorKey),
+        ["ControlsPrefs.CP_B_ACCEPTCHANGES"] = Edge.Driven("controls-accept", OriginalOptionsScreen.ControlsAcceptKey),
+        ["ControlsPrefs.CP_B_CANCELCHANGES"] = Edge.Driven("controls", OriginalOptionsScreen.ControlsCancelKey),
+        ["ControlsPrefs.CP_B_KEYS"] = Edge.Driven("keys", OriginalOptionsScreen.KeysDoorKey),
+        ["Keys.KB_B_ACCEPTCHANGES"] = Edge.Driven("keys-accept", OriginalOptionsScreen.KeysAcceptKey),
+        ["Keys.KB_B_CANCELCHANGES"] = Edge.Driven("keys", OriginalOptionsScreen.KeysCancelKey),
         ["PassengerCabin.PC_B_CHANGEMOMENTO"] = Edge.Driven("campaign-memento", "ChangeMemento"),
         ["MomentoSelection.MS_B_ACCEPT"] = Edge.Driven("campaign-memento-accept", "AcceptMemento"),
         ["MomentoSelection.MS_B_CANCEL"] = Edge.Driven("campaign-memento", "CancelMemento"),
@@ -265,49 +265,26 @@ public class OriginalCoverageTests : IDisposable
         Cover(layout!, art => PngSize(OriginalAvailability.ArtPath(dataRoot, art)), dataRoot, "install");
     }
 
-    [Fact]
-    public void TheGameOptionsRowsClearEachOtherAndTheirWordsOverTheFixture()
+    // A PNG's pixel size off its header, the one art format every button strip ships in; any
+    // other file measures as unknown and the row keeps its fallback rectangle. Shared with
+    // OriginalOptionsTests, whose option-page facts walk the same install art.
+    internal static (int Width, int Height)? PngSize(string path)
     {
-        GameOptionRowsAreClearOfEachOther(MenuLayoutReaderTests.OriginalLayout(), FixtureMeasure, null);
-    }
+        if (!File.Exists(path))
+        {
+            return null;
+        }
 
-    [ExtractedDataFact]
-    public void TheGameOptionsRowsClearEachOtherAndTheirWordsOverTheInstall()
-    {
-        string dataRoot = TestData.DataRoot!;
-        var layout = MenuLayout.TryLoad(MenuLayout.PathUnder(dataRoot), out var reason);
-        Assert.True(layout != null, reason ?? "the install's decoded layout reads");
-        GameOptionRowsAreClearOfEachOther(layout!, art => PngSize(OriginalAvailability.ArtPath(dataRoot, art)), dataRoot);
-    }
+        using var stream = File.OpenRead(path);
+        var header = new byte[24];
+        if (stream.Read(header, 0, header.Length) < header.Length || header[1] != (byte)'P' || header[2] != (byte)'N' || header[3] != (byte)'G')
+        {
+            return null;
+        }
 
-    [Fact]
-    public void TheAudioRowsClearEachOtherAndTheirWordsOverTheFixture()
-    {
-        AudioRowsAreClearOfEachOther(MenuLayoutReaderTests.OriginalLayout(), FixtureMeasure, null);
-    }
-
-    [ExtractedDataFact]
-    public void TheAudioRowsClearEachOtherAndTheirWordsOverTheInstall()
-    {
-        string dataRoot = TestData.DataRoot!;
-        var layout = MenuLayout.TryLoad(MenuLayout.PathUnder(dataRoot), out var reason);
-        Assert.True(layout != null, reason ?? "the install's decoded layout reads");
-        AudioRowsAreClearOfEachOther(layout!, art => PngSize(OriginalAvailability.ArtPath(dataRoot, art)), dataRoot);
-    }
-
-    [Fact]
-    public void TheVideoRowsClearEachOtherAndTheirWordsOverTheFixture()
-    {
-        VideoRowsAreClearOfEachOther(MenuLayoutReaderTests.OriginalLayout(), FixtureMeasure, null);
-    }
-
-    [ExtractedDataFact]
-    public void TheVideoRowsClearEachOtherAndTheirWordsOverTheInstall()
-    {
-        string dataRoot = TestData.DataRoot!;
-        var layout = MenuLayout.TryLoad(MenuLayout.PathUnder(dataRoot), out var reason);
-        Assert.True(layout != null, reason ?? "the install's decoded layout reads");
-        VideoRowsAreClearOfEachOther(layout!, art => PngSize(OriginalAvailability.ArtPath(dataRoot, art)), dataRoot);
+        int width = (header[16] << 24) | (header[17] << 16) | (header[18] << 8) | header[19];
+        int height = (header[20] << 24) | (header[21] << 16) | (header[22] << 8) | header[23];
+        return width > 0 && height > 0 ? (width, height) : null;
     }
 
     private static string[] Then(string[] route, params string[] more)
@@ -341,27 +318,6 @@ public class OriginalCoverageTests : IDisposable
         _ when art.StartsWith("PM_B_", StringComparison.Ordinal) || art.StartsWith("PP_B_", StringComparison.Ordinal) => (240, 200),
         _ => null,
     };
-
-    // A PNG's pixel size off its header, the one art format every button strip ships in; any
-    // other file measures as unknown and the row keeps its fallback rectangle.
-    private static (int Width, int Height)? PngSize(string path)
-    {
-        if (!File.Exists(path))
-        {
-            return null;
-        }
-
-        using var stream = File.OpenRead(path);
-        var header = new byte[24];
-        if (stream.Read(header, 0, header.Length) < header.Length || header[1] != (byte)'P' || header[2] != (byte)'N' || header[3] != (byte)'G')
-        {
-            return null;
-        }
-
-        int width = (header[16] << 24) | (header[17] << 16) | (header[18] << 8) | header[19];
-        int height = (header[20] << 24) | (header[21] << 16) | (header[22] << 8) | header[23];
-        return width > 0 && height > 0 ? (width, height) : null;
-    }
 
     // A click lands on the row's centre, since two authored plaques may share an edge pixel. The
     // press arms the row and the release on it fires, so a click is two of these frames.
@@ -733,96 +689,6 @@ public class OriginalCoverageTests : IDisposable
         }
 
         return 1;
-    }
-
-    // The Game Options page's five rows share one plate, so no two of them may overlap, and no
-    // control may sit over a title or a description.
-    private void GameOptionRowsAreClearOfEachOther(MenuLayout layout, Func<string, (int Width, int Height)?> measure, string? dataRoot)
-    {
-        var shell = Fresh(layout, measure, dataRoot, out _, out _);
-        shell.OpenGameOptions();
-        var rows = shell.Rows.ToArray();
-        Assert.Equal(
-            new[]
-            {
-                OriginalShell.DifficultyKey, OriginalShell.PresentationKey, OriginalShell.NearestAfterKillKey,
-                OriginalShell.GameOptionsAcceptKey, OriginalShell.GameOptionsCancelKey,
-            },
-            rows.Select(r => r.Key));
-        RowsAreClearOfEachOther(shell, rows, "GAME OPTIONS", 6);
-    }
-
-    // The AUDIO page's rows, the same rule over its own plate. Its press regions are the widest of
-    // any option page (the authored slot grown ten pixels above and below), and the Master row's
-    // slider stands on a line the layout authors for a checkbox, so a row that took the checkbox's
-    // own corner would land in the title column beside the words rather than under them.
-    private void AudioRowsAreClearOfEachOther(MenuLayout layout, Func<string, (int Width, int Height)?> measure, string? dataRoot)
-    {
-        var shell = Fresh(layout, measure, dataRoot, out _, out _);
-        shell.OpenAudio();
-        var rows = shell.Rows.ToArray();
-        Assert.Equal(
-            new[]
-            {
-                OriginalShell.AudioMasterKey, OriginalShell.AudioMusicKey,
-                OriginalShell.AudioEffectsKey, OriginalShell.AudioVoiceKey,
-                OriginalShell.AudioAcceptKey, OriginalShell.AudioCancelKey,
-            },
-            rows.Select(r => r.Key));
-        RowsAreClearOfEachOther(shell, rows, "AUDIO", 8);
-    }
-
-    // The VIDEO page's rows, the same rule over its own plate: each control must stand clear of the
-    // title beside it and the description must stop before the plaque column, which is what makes
-    // the authored Shadows row carry a longer title and a longer description than it was written
-    // for. The rows come back in authored order, since that is the order the cursor walks.
-    private void VideoRowsAreClearOfEachOther(MenuLayout layout, Func<string, (int Width, int Height)?> measure, string? dataRoot)
-    {
-        var shell = Fresh(layout, measure, dataRoot, out _, out _);
-        shell.OpenVideo();
-        var rows = shell.Rows.ToArray();
-        Assert.Equal(
-            new[]
-            {
-                OriginalShell.MonitorKey, OriginalShell.ResolutionKey, OriginalShell.DisplayModeKey,
-                OriginalShell.VSyncKey, OriginalShell.GraphicsKey,
-                OriginalShell.VideoAcceptKey, OriginalShell.VideoCancelKey,
-            },
-            rows.Select(r => r.Key));
-        RowsAreClearOfEachOther(shell, rows, "VIDEO", 10);
-    }
-
-    // No row of an option page may overlap another, and no control may sit over a title or a
-    // description: a control that covered the words beside it is what sent the options off the
-    // Preferences page in the first place. The authored space scales uniformly, so disjoint here is
-    // disjoint at every window size.
-    private void RowsAreClearOfEachOther(OriginalShell shell, OriginalRow[] rows, string pageTitle, int wordCount)
-    {
-        var words = shell.Compose().Lines.Where(l => l.Row < 0 && l.Text != pageTitle).ToArray();
-        Assert.Equal(wordCount, words.Length);
-        foreach (var row in rows)
-        {
-            foreach (var line in words)
-            {
-                bool clear = line.Y + line.Size <= row.Y || row.Y + row.Height <= line.Y
-                    || line.X + line.Width <= row.X || row.X + row.Width <= line.X;
-                Assert.True(clear, $"{row.Key} at ({row.X}, {row.Y}, {row.Width}, {row.Height}) covers " +
-                    $"'{line.Text}' at ({line.X}, {line.Y}, {line.Width}, {line.Size})");
-            }
-        }
-
-        for (int i = 0; i < rows.Length; i++)
-        {
-            for (int j = i + 1; j < rows.Length; j++)
-            {
-                var a = rows[i];
-                var b = rows[j];
-                bool clear = a.X + a.Width <= b.X || b.X + b.Width <= a.X
-                    || a.Y + a.Height <= b.Y || b.Y + b.Height <= a.Y;
-                Assert.True(clear, $"{a.Key} at ({a.X}, {a.Y}, {a.Width}, {a.Height}) overlaps " +
-                    $"{b.Key} at ({b.X}, {b.Y}, {b.Width}, {b.Height})");
-            }
-        }
     }
 
     // A fresh shell over fresh scratch stores: a progressed player with three planes and a second
