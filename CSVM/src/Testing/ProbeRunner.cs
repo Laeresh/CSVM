@@ -60,8 +60,7 @@ public sealed class ProbeRunner
         }
         if (verbose)
         {
-            GD.Print($"--rocket: hardpoints -> {weapon.Id} ({weapon.Name}), " +
-                     $"flyout model '{weapon.Flyout?.Model ?? "-"}', {per}/pylon");
+            Log.Info("core", $"--rocket: hardpoints -> {weapon.Id} ({weapon.Name}), flyout model '{weapon.Flyout?.Model ?? "-"}', {per}/pylon");
         }
     }
 
@@ -111,9 +110,7 @@ public sealed class ProbeRunner
                     break;
                 }
             }
-            GD.Print($"--destroy='{name}': no destructible matched. "
-                     + $"{runtime.Destructibles.DistinctAnchors} object(s) present; some def names: "
-                     + string.Join(", ", sample) + " (--damage-test lists them all)");
+            Log.Info("core", $"--destroy='{name}': no destructible matched. {runtime.Destructibles.DistinctAnchors} object(s) present; some def names: {string.Join(", ", sample)} (--damage-test lists them all)");
             return 0;
         }
 
@@ -126,8 +123,7 @@ public sealed class ProbeRunner
         {
             if (killed >= cap)
             {
-                GD.Print($"--destroy='{name}': capped at {cap} of {targets.Count} matches "
-                         + "(name a more specific def/node to kill fewer)");
+                Log.Info("core", $"--destroy='{name}': capped at {cap} of {targets.Count} matches (name a more specific def/node to kill fewer)");
                 break;
             }
             if (target.Status == Mech3.DestructibleRegistry.State.Destroyed)
@@ -148,9 +144,8 @@ public sealed class ProbeRunner
             killed++;
         }
         var c = bounds.GetCenter();
-        string at = haveBounds ? $" near ({c.X:0}, {c.Y:0}, {c.Z:0})" : "";
-        GD.Print($"--destroy='{name}': destroyed {killed} object(s){at} "
-                 + $"({string.Join(", ", targets.Values.Take(killed).Select(t => t.Def.Name).Distinct())})");
+        string at = haveBounds ? Log.Format($" near ({c.X:0}, {c.Y:0}, {c.Z:0})") : "";
+        Log.Info("core", $"--destroy='{name}': destroyed {killed} object(s){at} ({string.Join(", ", targets.Values.Take(killed).Select(t => t.Def.Name).Distinct())})");
         return killed;
     }
 
@@ -234,13 +229,13 @@ public sealed class ProbeRunner
         var r = Probes.Markers(_planesGamezPath, spec.DumpMarkersPlane);
         if (r.Error != null)
         {
-            GD.PrintErr($"--dump-markers: {r.Error}");
+            Log.Error("core", $"--dump-markers: {r.Error}");
             return false;
         }
-        GD.Print(r.Text);
+        Log.Raw(r.Text);
         // ./.scratch/ inside the workspace, per PROJECT_CONTEXT.md, never the OS temp dir.
         WriteScratch("markers_dump.txt", r.Text);
-        GD.Print($"{r.Summary} → ./.scratch/markers_dump.txt");
+        Log.Info("core", $"{r.Summary} → ./.scratch/markers_dump.txt");
         return true;
     }
 
@@ -310,12 +305,12 @@ public sealed class ProbeRunner
         var r = Probes.Weapons(_zrdrPath, _messagesPath, spec.DumpWeaponsFilter);
         if (r.Error != null)
         {
-            GD.PrintErr($"--dump-weapons: {r.Error}");
+            Log.Error("core", $"--dump-weapons: {r.Error}");
             return false;
         }
-        GD.Print(r.Text);
+        Log.Raw(r.Text);
         WriteScratch("weapons_dump.txt", r.Text);
-        GD.Print($"{r.Summary} → ./.scratch/weapons_dump.txt");
+        Log.Info("core", $"{r.Summary} → ./.scratch/weapons_dump.txt");
         return true;
     }
 
@@ -333,12 +328,12 @@ public sealed class ProbeRunner
             : Probes.FlightEnvelope(_zrdrPath, plane);
         if (r.Error != null)
         {
-            GD.PrintErr($"--dump-flight: {r.Error}");
+            Log.Error("core", $"--dump-flight: {r.Error}");
             return false;
         }
-        GD.Print(r.Text);
+        Log.Raw(r.Text);
         WriteScratch("flight_dump.txt", r.Text);
-        GD.Print($"{r.Summary} → ./.scratch/flight_dump.txt");
+        Log.Info("core", $"{r.Summary} → ./.scratch/flight_dump.txt");
         return true;
     }
 
@@ -354,12 +349,12 @@ public sealed class ProbeRunner
             spec.DumpLoadoutFilter, spec.LoadoutOverride, forRig: spec.WeaponLab);
         if (r.Error != null)
         {
-            GD.PrintErr($"--dump-loadout: {r.Error}");
+            Log.Error("core", $"--dump-loadout: {r.Error}");
             return false;
         }
-        GD.Print(r.Text);
+        Log.Raw(r.Text);
         WriteScratch("loadout_dump.txt", r.Text);
-        GD.Print($"{r.Summary} → ./.scratch/loadout_dump.txt");
+        Log.Info("core", $"{r.Summary} → ./.scratch/loadout_dump.txt");
         return true;
     }
 
@@ -374,12 +369,12 @@ public sealed class ProbeRunner
             spec.Chapter, spec.DumpMipsFilter, _interpPath);
         if (r.Error != null)
         {
-            GD.PrintErr($"--dump-mips: {r.Error}");
+            Log.Error("core", $"--dump-mips: {r.Error}");
             return false;
         }
-        GD.Print(r.Text);
+        Log.Raw(r.Text);
         WriteScratch("mips_dump.txt", r.Text);
-        GD.Print($"{r.Summary} → ./.scratch/mips_dump.txt");
+        Log.Info("core", $"{r.Summary} → ./.scratch/mips_dump.txt");
         return r.Ok;
     }
 
@@ -393,12 +388,12 @@ public sealed class ProbeRunner
         var r = Probes.Ai(_dataRoot, _zrdrPath, spec.DumpAiChapter);
         if (r.Error != null)
         {
-            GD.PrintErr($"--dump-ai: {r.Error}");
+            Log.Error("core", $"--dump-ai: {r.Error}");
             return false;
         }
-        GD.Print(r.Text);
+        Log.Raw(r.Text);
         WriteScratch("ai_dump.txt", r.Text);
-        GD.Print($"{r.Summary} → ./.scratch/ai_dump.txt");
+        Log.Info("core", $"{r.Summary} → ./.scratch/ai_dump.txt");
         return r.Ok;
     }
 
@@ -409,7 +404,7 @@ public sealed class ProbeRunner
         IReadOnlyList<string> effectAnimNames, Node3D? stage = null)
     {
         var r = Probes.Effects(effects, effectAnimNames, camera.GlobalPosition, stage, spec.Chapter);
-        GD.Print(r.Text);
+        Log.Raw(r.Text);
         WriteScratch("effects_test.txt", r.Text);
     }
 
@@ -422,14 +417,14 @@ public sealed class ProbeRunner
     public void RunDamageTest(SessionSpec spec, Mech3.AnimRuntime runtime)
     {
         var r = Probes.Damage(runtime, spec.Chapter, spec.DamageTestFilter, spec.DamageHd);
-        GD.Print(r.Text);
+        Log.Raw(r.Text);
         WriteScratch("damage_test.txt", r.Text);
         if (r.CollidableMeshes > 0)
         {
             WriteScratch("world_colliders.txt", r.CollidersText);
-            GD.Print($"damage-test: {r.CollidableMeshes} collidable meshes → ./.scratch/world_colliders.txt");
+            Log.Info("core", $"damage-test: {r.CollidableMeshes} collidable meshes → ./.scratch/world_colliders.txt");
         }
-        GD.Print($"{r.Summary} → ./.scratch/damage_test.txt");
+        Log.Info("core", $"{r.Summary} → ./.scratch/damage_test.txt");
     }
 
 }

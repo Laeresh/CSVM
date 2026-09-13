@@ -223,7 +223,7 @@ public sealed class SurfaceVehicle
             int started = _runtime.PlayWithin(Body, anim).Count;
             if (started == 0)
             {
-                GD.Print($"surface: '{Name}' start anim '{anim}' resolves no definition on the hull");
+                Log.Info("world", $"surface: '{Name}' start anim '{anim}' resolves no definition on the hull");
             }
         }
     }

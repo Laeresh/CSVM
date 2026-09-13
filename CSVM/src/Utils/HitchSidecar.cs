@@ -85,7 +85,7 @@ public sealed class HitchSidecar
             // Best-effort, same policy as Log.Open: a session must never fail to launch because
             // .scratch/logs turned out to be unwritable. A clean run with no sidecar reads as
             // "instrument unavailable", never as "no hitches" (LOG-1).
-            GD.PrintErr($"ERROR [perf] hitch sidecar unavailable path={jsonPath} error={e.GetType().Name}: {e.Message}");
+            Log.Error("perf", $"hitch sidecar unavailable path={jsonPath} error={e.GetType().Name}: {e.Message}");
             _writer = null;
         }
     }

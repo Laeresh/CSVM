@@ -203,7 +203,7 @@ public sealed record SessionSpec
     public string ModeName =>
         Mode == SessionMode.AnimLab ? "anim-lab"
         : DamageTest || EffectsTest || WeaponTest || RunTests ? "test"
-        : DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid ? "dump"
+        : DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid || DumpDebris ? "dump"
         : MovieName != null ? "movie"
         : Mode == SessionMode.Freecam ? "freecam"
         : Mode == SessionMode.Viewer ? "viewer"
@@ -218,7 +218,7 @@ public sealed record SessionSpec
     /// <c>--dump-flight</c> run turns the bundle on yet still asks for focus.</summary>
     public bool IsScripted =>
         NoFocus || ScreenshotPath != null || ExportGltfPath != null || RunTests
-        || DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid
+        || DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid || DumpDebris
         || DamageTest || EffectsTest || WeaponTest;
 
     /// <summary><b>Resolved.</b> The chapter world is built instead of a single parked plane.</summary>
@@ -491,6 +491,7 @@ public sealed record SessionSpec
         : DumpMips ? "--dump-mips"
         : DumpAi ? "--dump-ai"
         : DumpTileGrid ? "--dump-tilegrid"
+        : DumpDebris ? "--dump-debris"
         : DamageTest ? "--damage-test"
         : EffectsTest ? "--effects-test"
         : WeaponTest ? "--weapon-test"
@@ -613,6 +614,16 @@ public sealed record SessionSpec
     /// <summary>Where <c>--dump-tilegrid=</c> writes; empty means <c>./.scratch/</c> under a
     /// per-chapter name.</summary>
     public string DumpTileGridPath { get; private set; } = "";
+
+    /// <summary><c>--dump-debris=&lt;name&gt;</c>: build the chapter world, kill every destructible
+    /// the name matches, and report what shades each mesh under it, the model's <c>lighting</c>
+    /// flag, its sheets and their mean texel, the baked vertex colours, and the colour the
+    /// fullbright world shader lands on, marking which nodes flew. Needs a <c>--chapter</c>.</summary>
+    public bool DumpDebris { get; private set; }
+
+    /// <summary>Which destructible <c>--dump-debris=</c> kills, matched exactly as
+    /// <c>--destroy=</c> matches (def, animation or anchor <c>cs_name</c> substring).</summary>
+    public string DumpDebrisName { get; private set; } = "";
     public bool DamageTest { get; private set; }
     public string DamageTestFilter { get; private set; } = "";
     public float DamageHd { get; private set; }
@@ -809,6 +820,7 @@ public sealed record SessionSpec
 
     public bool NoVsync { get; private set; }
     public bool Perf { get; private set; }
+    public bool GcTypes { get; private set; }
     public bool NoFocus { get; private set; }
 
     /// <summary><c>--zip-assets</c>: read the <c>.zip</c> archives even where an unpacked sibling
@@ -897,6 +909,7 @@ public sealed record SessionSpec
             else if (arg == "--det") { s._detArg = true; }
             else if (arg == "--no-det") { s.NoDet = true; }
             else if (arg == "--perf") { s.Perf = true; }
+            else if (arg == "--gc-types") { s.Perf = true; s.GcTypes = true; }
             else if (arg.StartsWith("--log=")) { logSpecs.Add(arg["--log=".Length..]); }
             else if (arg.StartsWith("--anim-lod=")) { s.AnimLod = int.Parse(arg["--anim-lod=".Length..]); }
             else if (arg.StartsWith("--movie=")) { s.MovieName = arg["--movie=".Length..]; s.HasContentArg = true; }
@@ -1246,6 +1259,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--dump-mips=")) { s.DumpMips = true; s.DumpMipsFilter = arg["--dump-mips=".Length..]; }
             else if (arg == "--dump-ai") { s.DumpAi = true; }
             else if (arg.StartsWith("--dump-ai=")) { s.DumpAi = true; s.DumpAiChapter = arg["--dump-ai=".Length..]; }
+            else if (arg.StartsWith("--dump-debris=")) { s.DumpDebris = true; s.DumpDebrisName = arg["--dump-debris=".Length..]; s.HasContentArg = true; }
             else if (arg == "--dump-tilegrid") { s.DumpTileGrid = true; s.HasContentArg = true; }
             else if (arg.StartsWith("--dump-tilegrid=")) { s.DumpTileGrid = true; s.DumpTileGridPath = arg["--dump-tilegrid=".Length..]; s.HasContentArg = true; }
             else if (arg.StartsWith("--tex-override=")) { texOverrides.Add(arg["--tex-override=".Length..]); }
@@ -1651,7 +1665,7 @@ public sealed record SessionSpec
         // --dump-tilegrid votes freecam for one reason: the map-edge extender is only built in the
         // freecam/fly/sky-zone arm, and the census is a report ABOUT that extender. A dump that
         // resolved to the viewer would build a world with no continuation and report nothing.
-        bool freecam = _freecamArg || DamageTest || EffectsTest || DumpTileGrid;
+        bool freecam = _freecamArg || DamageTest || EffectsTest || DumpTileGrid || DumpDebris;
         bool animLab = _animLabArg || PlayAnim != null || DebugAnimUi;
 
         // --vs and --stunt are both flight modifiers, but not composable, one match mode has to
@@ -1975,11 +1989,12 @@ public sealed record SessionSpec
 
     private void Warn(string category, string message) => _notes.Add(new Note(category, message));
 
-    // A complaint that is a bare console line today, with no log category.
+    // A complaint that names no category of its own; Launcher logs it under `core`, at info.
     private void Print(string message) => _notes.Add(new Note("", message));
 
     /// <summary>A parse- or resolve-time complaint, held rather than logged so the spec stays
-    /// engine-free. <paramref name="Category"/> is the <c>Log</c> category to emit it under, or
-    /// empty for the ones that are bare console lines today (<c>GD.Print</c>).</summary>
+    /// engine-free. <paramref name="Category"/> is the <c>Log</c> category to emit it under, at
+    /// warning level; empty means the note has no category and <c>Launcher</c> logs it under
+    /// <c>core</c> at info, which is where an argument complaint sits in launch order.</summary>
     public readonly record struct Note(string Category, string Message);
 }

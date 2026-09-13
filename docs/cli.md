@@ -49,10 +49,10 @@ exactly how `PROJECT_CONTEXT.md`'s day-to-day table drifted from this page. One 
 `--debug-livery` · `--debug-mesh` · `--debug-select` · `--debug-nodelab` · `--debug-damage` · `--debug-names` · `--debug-fps` · `--debug-join` · `--debug-waves` · `--debug-wingmen` · `--debug-preset` · `--debug-pointer` · `--debug-scoreboard` · `--debug-wash` · `--debug-anim-ui` · `--debug-collision` · `--debug-dzpaths` · `--debug-ainets` · `--debug-targets` · `--debug-markers` · `--debug-spectate` · `--debug-pause` · `--debug-objective` · `--collision` · `--debug-colliders` · `--debug-classoverlay` · `--debug-tilegrid` · `--debug-clutterflag` · `--markers`
 
 **Dumps and the test harness, report text plus a verdict, then quit**
-`--dump-markers` · `--dump-weapons` · `--dump-loadout` · `--dump-flight` · `--dump-config` · `--dump-mips` · `--dump-ai` · `--dump-tilegrid` · `--run-tests` · `--damage-test` · `--effects-test` · `--hud-font-test`
+`--dump-markers` · `--dump-weapons` · `--dump-loadout` · `--dump-flight` · `--dump-config` · `--dump-mips` · `--dump-ai` · `--dump-tilegrid` · `--dump-debris` · `--run-tests` · `--damage-test` · `--effects-test` · `--hud-font-test`
 
 **Logging and profiling**
-`--log` · `--perf` · `--debug-anim` · `--anim-lod` · `--hitch-inject`
+`--log` · `--perf` · `--gc-types` · `--debug-anim` · `--anim-lod` · `--hitch-inject`
 
 **Rendering probes, is this thing drawing at all?**
 `--tex-override` · `--tex-census` · `--no-fog` · `--no-flare` · `--no-clutter` · `--clutter-templates` · `--no-zone-cull` · `--sky-zone` · `--mips` · `--no-cockpit-pass` · `--graphics`
@@ -121,6 +121,13 @@ lines**.
   cell and its surface class, plus a per-cell roll-up carrying `coverX`/`coverZ` and a `suspect`
   flag for a border cell short of ground. Implies `--freecam`, where the extender it reports on is
   built)
+- `--dump-debris=<name>` (kill every destructible `<name>` matches the way `--destroy=` does and
+  report **what shades each mesh under them**: the model's `lighting`/`fog`, per material the
+  sheet and its mean texel, the area-weighted mean baked vertex colour, and the sRGB the fullbright
+  world shader lands on. Rows carry surface counts, visibility across the kill, and `FLEW` when a
+  ballistic motion drove it, so a flung piece is read against the intact mesh beside it. Text to
+  `./.scratch/debris_shading_<chapter>.txt`; needs `--chapter`, implies `--freecam` + `--det`.
+  See WORLD-47)
 - `--map-edge-block=N` (how many border cells deep the repeated block past the map edge is.
   **Default is per chapter** (`MapEdgeExtender.DefaultBlockCells`): **2** on C1/C2/C4, **1** on C5
   and on C1B/C1C/C2B/C3, whose borders carry only water tiles, which fixes them at 1 and makes the
@@ -151,8 +158,8 @@ lines**.
   than last-flag-wins, dropping stunt mode with a warning when both are given.
   `--vs-kills=`/`--vs-time=` set the match rules. The menu requires two joined pilots before it
   starts a match and this flag does not, so `--vs --players=1` parses and runs with a warning. The
-  match bookkeeping, HUD and win/lose flow are not built, so the session flies the `dogfight_ace`
-  spawns with nothing scoring)
+  opening spawn is the list walk; a downed seat respawns on a rotated list point clear of the
+  living field and its killer)
 - `--vs-kills=N` (with `--vs`, the kill target that ends a match early once a player reaches it.
   Default 5; `0` disables the kill limit, so the match runs to `--vs-time=` alone)
 - `--vs-time=N` (with `--vs`, the match time limit **in minutes**. Default 5; `0` disables the time
@@ -172,8 +179,9 @@ lines**.
 - `--det` (**the determinism bundle**: a fixed-dt sim clock, master seed 1, `--spawn=0`, pinned liveries, `--no-pads` and `--jitter=0`. The clock steps 1/60 s per rendered frame, so the sim runs at the refresh over 60: a 120 Hz screen doubles a cheap stage. Shader time is clock-driven too, so pixel output is a function of frame count; `config.json` overrides and every saved option are dropped (DET-8), so no display setting reaches a golden. Each pin is overridable; `[core] det ... via=` names what won. `--screenshot=`, `--dump-*` and the `--*-test` probes imply it; `--no-det` opts out)
 - `--no-det` (**opt out of the implied bundle**, the one way to ask for wall-clock behaviour whatever else is on the command line: it beats both the implication (`--screenshot`, the `--dump-*` reports, `--damage-test`) and an explicit `--det`, so `--det --no-det` runs on the wall clock. Use it to measure what `--det` hides: frame-rate-dependent behaviour, live randomness, the same-build noise floor. It announces itself as `[core] no-det: --screenshot would run deterministically ...` and prints nothing at all when there was no implication to cancel)
 - `--no-pads` (ignore every gamepad, debug/verification aid: a connected pad with stick drift steers the free camera and nudges the flight model, quietly making a scripted screenshot non-deterministic; SDL's own hints don't disable pads in Godot 4.7, so this is our own switch. **Part of the `--det` bundle**, so a scripted run already has it)
-- `--perf` (the frame-cost split **every 60 rendered frames**, `RunTests.ps1 -Perf`'s line: `[perf] window sim_frame= frames= wall_ms= fps= frame_ms= script_ms= proc_ms= proc_max_ms= proc_passes= ai_ms= ai_planes= render_cpu_ms= gpu_ms= physics_ms= phys_tick_ms= phys_tick_max_ms= phys_hz= draws= prims= nodes= mem_mb= max_ms= p95_ms=`. Means but for `*_max_ms`/counts; `phys_*` empty under `--det`; `ai_ms` the flight roster's AI walk of `ai_planes`. **Read `proc_ms`, `ai_ms`, `render_cpu_ms`, `gpu_ms`, counts**, not `fps`/`script_ms`/`physics_ms` (PERF-1, PERF-2). Also `[perf] startup`)
+- `--perf` (every 60 frames: `[perf] window sim_frame= frames= wall_ms= fps= frame_ms= script_ms= proc_ms= proc_max_ms= proc_passes= ai_ms= ai_planes= render_cpu_ms= gpu_ms= physics_ms= phys_tick_ms= phys_tick_max_ms= phys_hz= draws= prims= nodes= mem_mb= max_ms= p95_ms= sim_ms= proc_sites_ms=`. Means but for `*_max_ms`/counts; `phys_*` empty under `--det`. **Read `proc_ms`, `ai_ms`, `render_cpu_ms`, `gpu_ms`, counts**, not `fps`/`script_ms`/`physics_ms` (PERF-1, PERF-2); `sim_ms` splits the tick by phase, `proc_sites_ms` the pass by consumer, each slot `mean/max`. Also `[perf] startup`)
 - `--perf`'s **GC readout**, one `[perf] gc up_s= win_s= pause_ms= pause_per_s_ms= gc0= gc1= gc2= fin= fin_per_s= alloc_mb_s= heap_mb=` line per ten wall seconds (`GcTrace`). `fin` is how many FINALIZABLE objects died, which is what the pause tracks; `up_s` is process uptime, so drop the windows under about 50 s, which are the world build settling. **Judge a change on `fin_per_s` and `pause_per_s_ms`**, never on the per-collection pause (PERF-19, PERF-20)
+- `--gc-types` (implies `--perf`; adds one `[perf] gc-types win_s= samples= per_s= top=Type:count,...` line per GC window, the types the runtime's allocation sampler saw most. One sample per ~100 KB allocated, so the tally is a share of BYTES: a small wrapper type high on the list is made in very large numbers, which is how `fin_per_s` is traced to the call making the wrappers. The listener's own event objects (`MoreEventInfo`, `EventWrittenEventArgs`, boxed payload) head every list and inflate `alloc_mb_s`, so read past them and never judge allocation on such a run)
 - `--no-vsync` (**a measurement flag, not a display one**: it uncaps the frame loop (vsync disabled,
   `Engine.MaxFps` 0) so `--perf`'s frame timings stop sitting pinned at the refresh rate. Safe with
   `--det`: that clock advances one sim step per *rendered* frame, so the simulation is identical and

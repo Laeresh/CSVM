@@ -170,8 +170,7 @@ public sealed class SpawnPicker : IFlightStarts
     // (-Z) rotated by the heading (yaw about up), and logs it for cross-checking the data.
     private (Vector3 pos, Vector3 lookAt) LogSpawn(string label, SpawnPoint s)
     {
-        var forward = new Basis(Vector3.Up, Mathf.DegToRad(s.HeadingDeg)) * Vector3.Forward;
         Log.Info("flight", $"spawn [{_spec.Chapter}/{_spec.Mission} {label}] pos=({s.Position.X:0},{s.Position.Y:0},{s.Position.Z:0}) heading={s.HeadingDeg:0}°");
-        return (s.Position, s.Position + forward);
+        return (s.Position, s.Position + s.Forward);
     }
 }

@@ -86,12 +86,12 @@ public sealed partial class SurfaceVehicleRuntime : Node
         string name = nodeName ?? plan.Name;
         if (_gamez.FindByName(plan.Def) is not { } model || !_gamez.IsLibraryRoot(model))
         {
-            GD.Print($"surface: '{name}' not spawned: this chapter carries no library-root model '{plan.Def}'");
+            Log.Info("world", $"surface: '{name}' not spawned: this chapter carries no library-root model '{plan.Def}'");
             return null;
         }
         if (_scene.BuildSubtree(model) is not { } body)
         {
-            GD.Print($"surface: '{name}' not spawned: the model '{plan.Def}' built to nothing");
+            Log.Info("world", $"surface: '{name}' not spawned: the model '{plan.Def}' built to nothing");
             return null;
         }
 
@@ -126,12 +126,7 @@ public sealed partial class SurfaceVehicleRuntime : Node
             _defs.WeaponsOf(plan.Def), _defs.ActivationOf(plan.Def) ?? DefaultActivationM, Voices);
         _vessels.Add(vessel);
         _byName[name] = vessel;
-        GD.Print($"surface: '{name}' ({plan.Def}, {plan.Mode}) built at ({position.X:0},{waterY:0.##},{position.Z:0}){waterNote}" +
-                 $" team={plan.Team?.ToString() ?? "-"} group={plan.Group}" +
-                 (vessel.MarkerName.Length > 0 ? $" marker '{vessel.MarkerName}'" : " unnamed") +
-                 (pool != null ? $" pool '{pool.Def.Name}' HP {pool.MaxHealth:0}" : " no destructible pool") +
-                 (vessel.Gunner != null ? $" armed {vessel.Gunner.Ammo} rounds" : " unarmed") +
-                 (plan.Inert ? " DEACTIVATED" : ""));
+        Log.Info("world", $"surface: '{name}' ({plan.Def}, {plan.Mode}) built at ({position.X:0},{waterY:0.##},{position.Z:0}){waterNote} team={plan.Team?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "-"} group={plan.Group}{(vessel.MarkerName.Length > 0 ? $" marker '{vessel.MarkerName}'" : " unnamed")}{(pool != null ? Log.Format($" pool '{pool.Def.Name}' HP {pool.MaxHealth:0}") : " no destructible pool")}{(vessel.Gunner != null ? Log.Format($" armed {vessel.Gunner.Ammo} rounds") : " unarmed")}{(plan.Inert ? " DEACTIVATED" : "")}");
         return vessel;
     }
 

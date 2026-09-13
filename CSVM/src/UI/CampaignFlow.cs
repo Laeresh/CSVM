@@ -255,6 +255,10 @@ public sealed class CampaignFlow
     /// <summary>The langui table the screens label themselves from.</summary>
     public UiStrings Strings => Feature.Strings;
 
+    /// <summary>What the original's menu cheats have switched on, which the cabin, the table of
+    /// contents, the book and the profile screen all read.</summary>
+    public CampaignCheats Cheats => Feature.Cheats;
+
     /// <summary>The humans flying this sortie: how many joined, whose flight check is showing, and
     /// what each guest picked. Solo until the shell says otherwise.</summary>
     public CampaignFlightField Field => Feature.Field;

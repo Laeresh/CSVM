@@ -31,30 +31,6 @@ public enum UvClampAxes
 /// </summary>
 public sealed class SceneBuilder
 {
-    /// <summary>Meta key a collider carries when its dominant surface is water or buildings.</summary>
-    public const string SurfaceMeta = "csky_surface";
-
-    /// <summary>Meta key EVERY collider carries: an <c>int</c>, the original's numeric surface
-    /// type id (<see cref="GameZMaterial.SoilId"/>) for its dominant material, by polygon count
-    ///, the same body granularity <see cref="SurfaceMeta"/> already uses, not a per-triangle
-    /// value. A different name space from <see cref="SurfaceMeta"/>'s texture-derived class, so
-    /// it is never spelled as that string (see <see cref="CollidersForMesh"/>).</summary>
-    public const string SurfaceIdMeta = "csky_surface_id";
-
-    /// <summary>Meta key a mission-structure node carries when the mission being built is one it
-    /// authors an owner for: an <c>int</c>, that owner's team
-    /// (<see cref="GameZNode.MissionStructureTeam"/>). A flagged node authoring no owner for this
-    /// mission carries none, since an unowned object is nobody's target either way. Read by
-    /// <see cref="DestructibleRegistry.Register"/>.</summary>
-    public const string MissionStructureTeamMeta = "csky_mstruct_team";
-
-    /// <summary>Meta key every flagged mission-structure node that is a gasbag carries: a
-    /// <c>bool</c>, always true where present. A turret's candidate pass drops these; the player's
-    /// own selection keeps them.</summary>
-    public const string MissionStructureGasbagMeta = "csky_mstruct_gasbag";
-
-    public const string OpacityParam = "csky_opacity";
-
     /// <summary>Instance shader parameter behind <see cref="TintLine"/>: rgb is the colour, alpha
     /// the strength. Alpha 0 (the default) is untinted.</summary>
     public const string TintParam = "csky_tint";
@@ -78,6 +54,31 @@ public sealed class SceneBuilder
     // overlay + tie-break stays inside one priority level; a chapter that ever needs more is
     // logged, not silently collapsed.
     public const int ConflictRankCap = 7;
+
+    /// <summary>Meta key a collider carries when its dominant surface is water or buildings.
+    /// StringName, not <c>const string</c>, as every meta key here (see <c>AnimRuntime.NameMeta</c>).</summary>
+    public static readonly StringName SurfaceMeta = "csky_surface";
+
+    /// <summary>Meta key EVERY collider carries: an <c>int</c>, the original's numeric surface
+    /// type id (<see cref="GameZMaterial.SoilId"/>) for its dominant material, by polygon count
+    ///, the same body granularity <see cref="SurfaceMeta"/> already uses, not a per-triangle
+    /// value. A different name space from <see cref="SurfaceMeta"/>'s texture-derived class, so
+    /// it is never spelled as that string (see <see cref="CollidersForMesh"/>).</summary>
+    public static readonly StringName SurfaceIdMeta = "csky_surface_id";
+
+    /// <summary>Meta key a mission-structure node carries when the mission being built is one it
+    /// authors an owner for: an <c>int</c>, that owner's team
+    /// (<see cref="GameZNode.MissionStructureTeam"/>). A flagged node authoring no owner for this
+    /// mission carries none, since an unowned object is nobody's target either way. Read by
+    /// <see cref="DestructibleRegistry.Register"/>.</summary>
+    public static readonly StringName MissionStructureTeamMeta = "csky_mstruct_team";
+
+    /// <summary>Meta key every flagged mission-structure node that is a gasbag carries: a
+    /// <c>bool</c>, always true where present. A turret's candidate pass drops these; the player's
+    /// own selection keeps them.</summary>
+    public static readonly StringName MissionStructureGasbagMeta = "csky_mstruct_gasbag";
+
+    public static readonly StringName OpacityParam = "csky_opacity";
 
     /// <summary>The albedo sampler every generated shader here declares, as a ready
     /// <see cref="StringName"/>. ⚠ Use this, never the bare string, wherever the write is on a
@@ -270,8 +271,9 @@ void fragment() {
     // Enhanced mode only: what a surface <see cref="ClassifySurface"/> calls water gets instead of
     // the matte world values, so screen-space reflection has a glossy surface to march against.
     // TUNE, judged at the controls: roughness sets how far a reflection smears, specular how much
-    // of it survives at a glancing angle.
-    private const float WaterRoughness = 0.1f;
+    // of it survives at a glancing angle. Roughness is also what quiets a per-texel reflection
+    // flicker, because it blurs a lost ray across its neighbours instead of dimming the water.
+    private const float WaterRoughness = 0.25f;
     private const float WaterSpecular = 0.5f;
     // ⚠ Format every scale invariantly; a comma decimal separator emits shader text that will not
     // compile. Godot discards EMISSION on an `unshaded` material and the glow pass reads the HDR

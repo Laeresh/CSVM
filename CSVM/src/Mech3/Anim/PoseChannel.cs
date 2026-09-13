@@ -527,8 +527,10 @@ internal sealed class PoseChannel
             if (EnsureOpacityPath(g, alpha))
                 n++;
         }
-        foreach (var child in node.GetChildren())
-            n += ApplyOpacity(child, alpha);
+        // Walked by index: GetChildren() allocates a finalizable engine array per node, and this
+        // runs over the whole subtree every frame of a fade (PERF-20).
+        for (int i = 0, count = node.GetChildCount(); i < count; i++)
+            n += ApplyOpacity(node.GetChild(i), alpha);
         return n;
     }
 }

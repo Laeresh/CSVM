@@ -188,6 +188,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/CustomPlaneBuild.cs`, the join from a saved plane onto what a spawn consumes: the loadout over the stock fit, the paint, the armoured zones.
 - `src/Flight/HangarEconomy.cs`, the hangar's decoded economy over a built plane: the component tables, per-line costs and weights, the totals and the verdict.
 - `src/Flight/VersusMatch.cs`, Dogfight deathmatch bookkeeping: kills and deaths per player, the host-fed clock, threshold and time-out completion, standings.
+- `src/Flight/VersusSpawnRotation.cs`, Dogfight respawn placement: the per-seat spawn-list ledger and the roomy point a downed seat rotates onto.
 - `src/Flight/VersusHud.cs`, per-pane Dogfight status line: remaining time, this player's kills, the leader, and the hostile marker.
 - `src/Flight/HudMessages.cs`, the centred HUD message stack a kill, a crash and the mission clock post into: four slots, one colour and five seconds each.
 - `src/Flight/PromptLine.cs`, a control prompt's own centred line, three tenths of the way down the pane in the landings rig's pale yellow: the auto-dock offer and the respawn prompt.
@@ -287,14 +288,17 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/Menu/CampaignFeature.cs`, the campaign as a shared feature: the profile roster, the seated player, the mission, and every write.
 - `src/UI/Menu/CampaignBriefing.cs`, one mission's briefing as the feature holds it: the state, the narration, the note, the reveal's progress.
 - `src/UI/Menu/CampaignWallet.cs`, the seated profile as the hangar's wallet: funds, affordability, availability, the builds, purchase and sale.
+- `src/UI/Menu/TypedCheat.cs`, one screen's typed-word latch: the click that arms it, the buffer, the reset on a character off the prefix, the case-sensitive fire.
+- `src/UI/Menu/CampaignCheats.cs`, what the original's four menu cheats leave switched on: the mission pull-down and its pick, the gallery reveal, the unlock-everything flag.
 - `src/UI/Menu/CampaignAidProfiles.cs`, the scratch profile store the campaign screenshot aids seat a player over, unable to reach the real one.
 - `src/UI/Menu/MenuIdleSource.cs`, a seat's input source with no device behind it, idle every frame; the screenshot aid's extra players.
 - `src/UI/MenuSeatDevices.cs`, the pad side of the shared player setup: seat 0's claimed pad, the join gesture, hotplug, the flight binding.
 - `src/UI/MenuControlsSeats.cs`, the rebinding screen's seat bookkeeping for any presentation: which seats it offers, their pad identities and staged keymaps.
 - `src/UI/Menu/FreeFlightFeature.cs`, Free Flight as a shared feature: the chapter roster, the pick, the launch gate and the typed exit.
 - `src/UI/Menu/InstantActionFeature.cs`, Instant Action as a shared feature: the decoded option sets, the typed setup state, the built def.
-- `src/UI/Menu/Original/OriginalShell.cs`, the Original presentation's screen graph over the decoded layout, and its four partials below.
+- `src/UI/Menu/Original/OriginalShell.cs`, the Original presentation's screen graph over the decoded layout, and its five partials below.
 - `src/UI/Menu/Original/OriginalShellDialog.cs`, the shell's own standing messagebox (a `partial`): `RaiseDialog`, the `DIALOG:*` answer keys, the box's rows and how it composes over the screen.
+- `src/UI/Menu/Original/OriginalCheats.cs`, the shell's three typed cheats (a `partial`): each screen's authored region, its latch, the arming click and what a word fires.
 - `src/UI/Menu/Original/OriginalScreenHost.cs`, the two sides of the screen-module seam: what a module reads off the shell, and the dispatch members the shell calls on a module.
 - `src/UI/Menu/Original/OriginalWidgets.cs`, the layout-widget readings two screen modules share: a numbered widget key's slot, a section's background pane, a strip's size, a board page's rows.
 - `src/UI/Menu/Original/OriginalDropList.cs`, the one open-dropdown window rule every Original page stands on: the authored window, the hidden rows outside it, the arrows and the thumb.
@@ -429,6 +433,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/MonitorSetting.cs`, the screen the window sits on: the machine's screens labelled, the saved index dropped where no screen answers to it, and the one place the window's screen is set.
 - `src/Utils/OptionsStore.cs`, version-tolerant JSON persistence of the process-wide options (words, display settings, volume levels) in `user://options.json`, written atomically.
 - `src/Utils/PerfSample.cs`, ambient timed leaf scopes: `PerfSample.Scope(site)` accumulates per site per frame, and a hitch record carries the frame's named work.
+- `src/Utils/PhaseCost.cs`, a row of named cost slots behind `--perf`'s `sim_ms=` (the physics tick split by session-simulation phase) and `proc_sites_ms=` (the process pass split by its heaviest consumers).
 - `src/Utils/PhysicsTickCost.cs`, the wall cost of one whole physics tick and the tick count a wall second got, measured by a bracket pair spanning the tick.
 - `src/Utils/GcTrace.cs`, the `--perf` GC readout: pause per wall second, collections, and the finalizable-object count that sets the pause, per ten-second window.
 - `src/Utils/PresentationResolution.cs`, the requested-versus-active menu presentation resolver, availability checked separately from the saved request.

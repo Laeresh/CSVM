@@ -100,7 +100,7 @@ public sealed class WorldSession
             missionSetup = MissionSetup.Load(o.InterpPath, o.Chapter, o.Mission);
             if (missionSetup == null)
             {
-                GD.Print($"mission setup: no script for {o.Chapter}/{o.Mission} ({o.InterpPath})");
+                Log.Info("world", $"mission setup: no script for {o.Chapter}/{o.Mission} ({o.InterpPath})");
             }
         }
         StartupProfile.Record("zrdr", mark);
@@ -111,7 +111,7 @@ public sealed class WorldSession
         var effectCycles = EffectCycles.Apply(gamez, o.ZrdrPath);
         if (effectCycles.Count > 0)
         {
-            GD.Print($"effect cycles: {effectCycles.Count} material(s): " + string.Join(", ", effectCycles));
+            Log.Info("world", $"effect cycles: {effectCycles.Count} material(s): {string.Join(", ", effectCycles)}");
         }
         // The area-selected toggles are resolved to gamez node indices here, while the gamez is in
         // hand: Apply runs inside the animation bootstrap, which sees only the built tree.
@@ -137,7 +137,7 @@ public sealed class WorldSession
         {
             builder.Cycler.Debug = o.DebugAnim;
             root.AddChild(builder.Cycler);
-            GD.Print($"texture cycles: {builder.Cycler.Count} animated material(s): " + string.Join(", ", builder.Cycler.Summary));
+            Log.Info("world", $"texture cycles: {builder.Cycler.Count} animated material(s): {string.Join(", ", builder.Cycler.Summary)}");
         }
         s.CloudDeck = builder.CloudDeck;     // the cloudlayer overcast, moved to follow the player
 
@@ -146,7 +146,7 @@ public sealed class WorldSession
         if (o.DebugDzPaths && builder.BuildDzPaths() is { } dzpaths)
         {
             root.AddChild(dzpaths);
-            GD.Print("debug: dzpaths route ribbons built");
+            Log.Info("world", $"debug: dzpaths route ribbons built");
         }
 
         // Clutter: forest trees, river bushes, and C2/C5's 3D city blocks (Clutter.cs). Sprites are
@@ -164,7 +164,7 @@ public sealed class WorldSession
                 : ClutterBuilder.TemplateNames(o.InterpPath, o.Chapter);
         if (o.NoClutter)
         {
-            GD.Print("clutter: skipped (--no-clutter)");
+            Log.Info("world", $"clutter: skipped (--no-clutter)");
         }
         else if (clutterNames.Count > 0)
         {
@@ -177,25 +177,15 @@ public sealed class WorldSession
             {
                 root.AddChild(clutter);
                 clutterRoot = clutter;
-                GD.Print($"clutter: {clutterBuilder.InstanceCount} sprites"
-                         + (clutterBuilder.SolidCount > 0
-                             ? $" + {clutterBuilder.SolidCount} 3D decorations"
-                               + (clutterBuilder.SolidCollisionShapes > 0
-                                   // Shared shapes: N distinct shapes / T distinct triangles,
-                                   // attached M times, the distinct totals, not the expanded
-                                   // per-attachment triangle count.
-                                   ? $" ({clutterBuilder.SolidCollisionShapes} shared collision shapes"
-                                     + $", {clutterBuilder.SolidCollisionTriangles} tris"
-                                     + $" ({clutterBuilder.SolidCollisionOneSidedTriangles} of them one-sided in the source, kept two-sided here)"
-                                     + $", {clutterBuilder.SolidCollisionInstances} attachments)"
-                                   : "")
-                             : "")
-                         + $" ({clutterBuilder.Summary})");
+                // Shared shapes: N distinct shapes / T distinct triangles,
+                // attached M times, the distinct totals, not the expanded
+                // per-attachment triangle count.
+                Log.Info("world", $"clutter: {clutterBuilder.InstanceCount} sprites{(clutterBuilder.SolidCount > 0 ? $" + {clutterBuilder.SolidCount} 3D decorations{(clutterBuilder.SolidCollisionShapes > 0 ? $" ({clutterBuilder.SolidCollisionShapes} shared collision shapes, {clutterBuilder.SolidCollisionTriangles} tris ({clutterBuilder.SolidCollisionOneSidedTriangles} of them one-sided in the source, kept two-sided here), {clutterBuilder.SolidCollisionInstances} attachments)" : "")}" : "")} ({clutterBuilder.Summary})");
             }
         }
         else if (o.NodeSubtree == null)
         {
-            GD.Print($"clutter: no templates for {o.Chapter} ({o.InterpPath})");
+            Log.Info("world", $"clutter: no templates for {o.Chapter} ({o.InterpPath})");
         }
         StartupProfile.Record("clutter", mark);
         LoadProgress.Report(LoadStep.Clutter);
@@ -207,11 +197,7 @@ public sealed class WorldSession
         if (o.DebugClutterFlag)
         {
             int painted = clutterRoot != null ? TintClutterBlue(clutterRoot) : 0;
-            GD.Print("debug: --debug-clutterflag view — world polygons "
-                     + $"no_clutter={builder.Scene.FlaggedPolygonCount} (red), "
-                     + $"clear={builder.Scene.ClearPolygonCount} (green), over the models built for "
-                     + $"{o.Chapter}; clutter blue ({painted} multimesh"
-                     + (painted == 1 ? ")" : "es)"));
+            Log.Info("world", $"debug: --debug-clutterflag view — world polygons no_clutter={builder.Scene.FlaggedPolygonCount} (red), clear={builder.Scene.ClearPolygonCount} (green), over the models built for {o.Chapter}; clutter blue ({painted} multimesh{(painted == 1 ? ")" : "es)")}");
         }
 
         // Base states first, then ON_STARTUP + startanims, which now play rather than being posed
@@ -431,8 +417,7 @@ public sealed class WorldSession
             {
                 int voiced = builtSounds.Prewarm(voiceNames);
                 prewarmed += voiced;
-                GD.Print($"anim: prewarmed {voiced} combat-voice stream(s) "
-                         + $"of {voiceNames.Count} roster clip def(s)");
+                Log.Info("anim", $"anim: prewarmed {voiced} combat-voice stream(s) of {voiceNames.Count} roster clip def(s)");
             }
             if (o.ExtraPrewarmNames is { Count: > 0 } extraNames)
             {
@@ -442,7 +427,7 @@ public sealed class WorldSession
             LoadProgress.Report(LoadStep.SoundPrewarm);
             if (prewarmed > 0)
             {
-                GD.Print($"anim: prewarmed {prewarmed} sound stream(s) before the archive closed");
+                Log.Info("anim", $"anim: prewarmed {prewarmed} sound stream(s) before the archive closed");
             }
             if (!o.SoundsOutliveBuild)
             {

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.UI;
@@ -92,7 +93,7 @@ public sealed class MenuSeatDevices
             int pad = PadOf(seats[i].Source);
             if (pad >= 0 && !connected.Contains(pad))
             {
-                GD.Print($"launchscreen: P{i + 1}'s pad {pad} disconnected — player left");
+                Log.Info("ui", $"launchscreen: P{i + 1}'s pad {pad} disconnected — player left");
                 _setup.Unjoin(seats[i]);
                 dirty = true;
             }
@@ -100,7 +101,7 @@ public sealed class MenuSeatDevices
 
         if (P1Pad >= 0 && !connected.Contains(P1Pad))
         {
-            GD.Print($"launchscreen: P1's pad {P1Pad} disconnected — back to keyboard + any free pad");
+            Log.Info("ui", $"launchscreen: P1's pad {P1Pad} disconnected — back to keyboard + any free pad");
             P1Pad = -1;
             dirty = true;
         }
@@ -167,7 +168,7 @@ public sealed class MenuSeatDevices
                 // After the join, which is what decides the seat's player number and therefore
                 // which saved keymap this pad navigates on.
                 input.LoadSavedKeymap(_setup.Seats.Count);
-                GD.Print($"launchscreen: P{_setup.Seats.Count} joined on pad {pad} \"{Input.GetJoyName(pad)}\"");
+                Log.Info("ui", $"launchscreen: P{_setup.Seats.Count} joined on pad {pad} \"{Input.GetJoyName(pad)}\"");
                 dirty = true;
             }
         }
@@ -187,7 +188,7 @@ public sealed class MenuSeatDevices
         }
 
         P1Pad = pad;
-        GD.Print($"launchscreen: P1 claimed pad {pad} \"{Input.GetJoyName(pad)}\" (other pads join at aircraft select)");
+        Log.Info("ui", $"launchscreen: P1 claimed pad {pad} \"{Input.GetJoyName(pad)}\" (other pads join at aircraft select)");
         return true;
     }
 

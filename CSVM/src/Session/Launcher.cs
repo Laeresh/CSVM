@@ -77,9 +77,11 @@ public partial class Launcher : Node3D
 
     // TUNE. Screen-space reflection on the glossy water arm: the step count buys reflection length
     // along the ray, the fades hide where a ray runs off the screen or past the depth buffer.
+    // The fade-out exponent is the lever on the border and aircraft flicker, since it dims a ray
+    // before it is lost. Depth tolerance measures inert here, from this value up to 8.0.
     private const int EnhancedSsrMaxSteps = 64;
     private const float EnhancedSsrFadeIn = 0.15f;
-    private const float EnhancedSsrFadeOut = 2.0f;
+    private const float EnhancedSsrFadeOut = 2.5f;
     private const float EnhancedSsrDepthTolerance = 0.2f;
 
     // TUNE, judged at the controls. The sun's apparent size in degrees; the real sun is about
@@ -389,7 +391,7 @@ public partial class Launcher : Node3D
         {
             if (note.Category.Length == 0)
             {
-                GD.Print(note.Message);
+                Log.Info("core", $"{note.Message}");
             }
             else
             {
@@ -404,7 +406,7 @@ public partial class Launcher : Node3D
         if (!string.IsNullOrEmpty(dataRootEnv)) _dataRoot = Path.GetFullPath(dataRootEnv);
         if (_spec.DataRoot is { } dataRootArg) _dataRoot = Path.GetFullPath(dataRootArg);
         if (_dataRoot != _repoRoot)
-            GD.Print($"data root: {_dataRoot} (repo root {_repoRoot})");
+            Log.Info("core", $"data root: {_dataRoot} (repo root {_repoRoot})");
 
         // An override is used verbatim; everything else derives from the data root.
         var planesGamezPath = Path.Combine(_dataRoot, "extracted", "planes.zip");
@@ -705,7 +707,7 @@ public partial class Launcher : Node3D
         {
             string dumpPath = Path.Combine(_repoRoot, ".scratch", "config.dump.json");
             Config.DumpConfig(dumpPath);
-            GD.Print($"config: wrote {Config.RegisteredCount}-key tuning template to ./.scratch/config.dump.json");
+            Log.Info("core", $"config: wrote {Config.RegisteredCount}-key tuning template to ./.scratch/config.dump.json");
             GetTree().Quit();
             return;
         }
@@ -714,22 +716,25 @@ public partial class Launcher : Node3D
         // mid-game works the moment the engine reports it. Log the roster at launch and every
         // connect/disconnect so a silent pad is diagnosable from the console.
         if (Pads.Disabled)
-            GD.Print("gamepad: off (--no-pads, or the --det bundle), ignoring every device (keyboard/scripted input only)");
+            Log.Info("core", $"gamepad: off (--no-pads, or the --det bundle), ignoring every device (keyboard/scripted input only)");
         else
             Input.Singleton.JoyConnectionChanged += (device, connected) =>
-                GD.Print(connected
-                    ? $"gamepad connected: device {device} \"{Input.GetJoyName((int)device)}\" guid={Input.GetJoyGuid((int)device)}"
-                    : $"gamepad disconnected: device {device}");
+            {
+                if (connected)
+                    Log.Info("core", $"gamepad connected: device {device} \"{Input.GetJoyName((int)device)}\" guid={Input.GetJoyGuid((int)device)}");
+                else
+                    Log.Info("core", $"gamepad disconnected: device {device}");
+            };
         var padsAtLaunch = Pads.Connected();
         if (Pads.Disabled)
         {
             // nothing more to report, the roster is deliberately empty
         }
         else if (padsAtLaunch.Count == 0)
-            GD.Print("gamepad: none at launch (hotplug live — connect any time)");
+            Log.Info("core", $"gamepad: none at launch (hotplug live — connect any time)");
         else
             foreach (int p in padsAtLaunch)
-                GD.Print($"gamepad: device {p} \"{Input.GetJoyName(p)}\" guid={Input.GetJoyGuid(p)} info={Input.GetJoyInfo(p)}");
+                Log.Info("core", $"gamepad: device {p} \"{Input.GetJoyName(p)}\" guid={Input.GetJoyGuid(p)} info={Input.GetJoyInfo(p)}");
 
         SetupLighting();
         _camera = new Camera3D { Fov = _spec.Fly || _spec.Freecam || _spec.AnimLab ? 62 : 50, Far = 40000f };
@@ -935,7 +940,7 @@ public partial class Launcher : Node3D
         _buildStamp?.Tick(_menuHost is { Shown: true });
         if (_spec.Perf)
         {
-            (_gcTrace ??= new Utils.GcTrace()).Tick();
+            (_gcTrace ??= Utils.GcTrace.Create(_spec.GcTypes)).Tick();
             ReportPerf(delta, counters);
         }
 
@@ -1365,11 +1370,13 @@ public partial class Launcher : Node3D
         // C8: the build's own scopes (loads, material creation) belong to no frame, and the frame
         // that closes over the build would otherwise report them all at once.
         PerfSample.Reset();
-        // Same boundary for all three brackets: a build that spans the tail leaves a half-open
-        // tick, pass or AI walk whose next close would charge the whole build to one step.
+        // Same boundary for every bracket: a build that spans the tail leaves a half-open tick,
+        // pass, AI walk or phase whose next close would charge the whole build to one step.
         PhysicsTickCost.Reset();
         ProcessPassCost.Reset();
         AiStepCost.Reset();
+        SimPhaseCost.Reset();
+        ProcessSiteCost.Reset();
         // D10: same reasoning as HitchMonitor.Rearm above, the build's own stall must never read
         // as the readout's worst recent frame.
         _perfHud.Rearm();
@@ -1883,7 +1890,7 @@ public partial class Launcher : Node3D
     // the result the mission ended with.
     private void OpenDebrief(string profile, CampaignMissionResult result)
     {
-        GD.Print($"campaign: {result.Outcome} — arrived at the debrief with '{profile}'");
+        Log.Info("core", $"campaign: {result.Outcome} — arrived at the debrief with '{profile}'");
         ReturnToMenu(new DebriefReturn(profile, result.Attempt.Seq, result.Outcome == MissionOutcome.Won));
     }
 
@@ -1902,7 +1909,7 @@ public partial class Launcher : Node3D
             _session = null;
         }
         StepSortieSeed();
-        GD.Print($"restart: rebuilding {_spec.Chapter} / {_spec.ModeName} from the same settings");
+        Log.Info("core", $"restart: rebuilding {_spec.Chapter} / {_spec.ModeName} from the same settings");
         BeginLaunch();
     }
 
@@ -1911,8 +1918,8 @@ public partial class Launcher : Node3D
     // having in the log, so an interesting one can be pinned with `--seed=`.
     private void LogMasterSeed()
     {
-        string how = _spec.SeedPinned ? "pinned" : $"sortie {_sortie}, --seed=N to pin";
-        GD.Print($"rng: master seed {_masterSeed} ({how})");
+        string how = _spec.SeedPinned ? "pinned" : Log.Format($"sortie {_sortie}, --seed=N to pin");
+        Log.Info("core", $"rng: master seed {_masterSeed} ({how})");
     }
 
     // The boards' Exit item, the pause sheet's among them: back to the screen this flight was
@@ -1962,6 +1969,8 @@ public partial class Launcher : Node3D
         PhysicsTickCost.Reset();
         ProcessPassCost.Reset();
         AiStepCost.Reset();
+        SimPhaseCost.Reset();
+        ProcessSiteCost.Reset();
         _perfHud.Rearm();
         ShowMenu(destination);
     }
@@ -2004,9 +2013,10 @@ public partial class Launcher : Node3D
         // the plane. The roster deliberately does not, see Pads.cs's docs/architecture.md
         // entry. Keyboard needs no gate: Godot releases held keys on focus loss.
         Pads.Focused = !muted;
-        GD.Print(muted
-            ? "focus: lost — audio muted, pad reads gated"
-            : "focus: regained — audio restored, pad reads live");
+        if (muted)
+            Log.Info("sound", $"focus: lost — audio muted, pad reads gated");
+        else
+            Log.Info("sound", $"focus: regained — audio restored, pad reads live");
     }
 
     // Samples the engine's eight per-frame counters once, for both instruments. The two
@@ -2134,6 +2144,10 @@ public partial class Launcher : Node3D
         double aiPlanes = aiSteps > 0 ? (double)aiPlaneSum / aiSteps : 0;
         double physHz = _perfClock > 0 ? physTicks / _perfClock : 0;
         double physTick = physTicks > 0 ? physTickMs / physTicks : 0;
+        // The split of the two whole-pass terms above by what ran: the sim step per TICK beside
+        // phys_tick_ms, the named _Process consumers per FRAME beside proc_ms (src/Utils/PhaseCost.cs).
+        string simRow = SimPhaseCost.TakeRow(physTicks);
+        string procSites = ProcessSiteCost.TakeRow(n);
         double draws = _perfDraws / n;
         double prims = _perfPrims / n;
         double nodes = _perfNodes / n;
@@ -2142,7 +2156,7 @@ public partial class Launcher : Node3D
         System.Array.Sort(_perfFrameMsSorted);
         double maxMs = _perfFrameMsSorted[PerfWindowFrames - 1];
         double p95Ms = _perfFrameMsSorted[Perf95Index];
-        Log.Info("perf", $"window sim_frame={simFrame} frames={_perfFrames} wall_ms={wallMs:0.00} fps={fps:0.0} frame_ms={frameMs:0.00} script_ms={scriptMs:0.00} proc_ms={procMs:0.000} proc_max_ms={procMaxMs:0.000} proc_passes={procPasses} ai_ms={aiMs:0.000} ai_planes={aiPlanes:0.0} render_cpu_ms={renderCpuMs:0.00} gpu_ms={gpuMs:0.00} physics_ms={physicsMs:0.00} phys_tick_ms={physTick:0.000} phys_tick_max_ms={physTickMaxMs:0.000} phys_hz={physHz:0.0} draws={draws:0.0} prims={prims:0.0} nodes={nodes:0.0} mem_mb={memMb:0.00} max_ms={maxMs:0.00} p95_ms={p95Ms:0.00}");
+        Log.Info("perf", $"window sim_frame={simFrame} frames={_perfFrames} wall_ms={wallMs:0.00} fps={fps:0.0} frame_ms={frameMs:0.00} script_ms={scriptMs:0.00} proc_ms={procMs:0.000} proc_max_ms={procMaxMs:0.000} proc_passes={procPasses} ai_ms={aiMs:0.000} ai_planes={aiPlanes:0.0} render_cpu_ms={renderCpuMs:0.00} gpu_ms={gpuMs:0.00} physics_ms={physicsMs:0.00} phys_tick_ms={physTick:0.000} phys_tick_max_ms={physTickMaxMs:0.000} phys_hz={physHz:0.0} draws={draws:0.0} prims={prims:0.0} nodes={nodes:0.0} mem_mb={memMb:0.00} max_ms={maxMs:0.00} p95_ms={p95Ms:0.00} sim_ms={simRow} proc_sites_ms={procSites}");
         _perfClock = 0; _perfFrames = 0; _perfProcess = _perfGpu = _perfCpuRender = _perfPhysics = 0;
         _perfDraws = _perfPrims = _perfNodes = _perfMem = 0;
     }

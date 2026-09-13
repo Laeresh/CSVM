@@ -511,34 +511,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   reference to compare against; `CAP-47` is that clip.
   *Cross-refs:* `BL-640` (the same zeppelin's cannons); the other prerequisite form, node state, is
   parsed on both paths and enforced at `Start` (`git log --grep=BL-575`).
-- `BL-841` `[Bug]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: trace]` **`ApplyPylons` overwrites a `none`
-  loadout cell, so a custom plane that is not an airframe swap may mount a pylon it never bought.**
-  *Evidence:* noted and left unfiled in `BL-718`'s closing commit (`git log --grep=BL-718`), which
-  made a swap fit the def's own stock loadout through the same apply; whether a shipped custom
-  build can reach the overwrite with an empty cell is not read. *Fix shape:* build a custom plane
-  with an empty cell through the plane construction hub, apply, and pin that the cell stays
-  empty; if it does not, skip `none` cells on the non-swap path. *Cross-refs:* `BL-718`'s closing
-  commit (the swap table holds weapon ids, not counts), `docs/formats/vehicle.md`.
-
-- `BL-873` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: trace]` **C1's refuel-tank debris draws near-black and reads as a
-  hole punched through the flame.** *Evidence:* `--freecam --chapter=C1 --destroy=refuel
-  --frames=120` and `=240` put faceted shards over the left tank's fire column, each a flat dark
-  grey to black polygon set with straight edges and a notch, moving and re-orienting between the two
-  frames, so they are launched debris rather than the tank's own swapped mesh. They are opaque
-  geometry in front of a bright particle plume, so the DRAW is right and the shade is what is wrong:
-  at that brightness the shard subtracts the flame behind it instead of being lit by it. A texture
-  census cannot name the sheet, four candidates (`frieght_tr01`, `exp_yel01`, `zep_cable01`,
-  `damage2`) sitting inside the chromaticity tolerance at a third of the reference brightness, which
-  is itself the finding: whatever it is, it draws at about 37 % of its own colour. *Fix shape:* find
-  what lights a debris piece launched by a `DAMAGE_SEQUENCE` death (the debris path through
-  `AnimRuntime` and `WorldEffectsFactory`) and compare it against the same mesh before the kill; the
-  candidates are a lost vertex-colour pass, an ambient that never reaches world debris (`BL-683` is
-  the aircraft-side version of that), or a genuinely dark authored sheet drawn unlit. *⚠ Traps:* do
-  not chase this as a transparency-ordering question. The particle depth sort is landed and does not
-  touch these: the shards keep their exact pixels across it, and they are hard-edged opaque facets
-  rather than sprites. Judge it against footage of a tank kill in the original before changing a
-  light, since a dark shard may be what the original draws. *Cross-refs:* the crops in the
-  particle-order closing commit (`git log -S BehindEyeSortDepth`); `BL-683`.
 
 ## Weapons & combat
 
@@ -967,27 +939,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   captured through `--shots` is a previous frame's render and carries the burst camera's dither
   (`CaptureDirector.cs:96`), so judge this at the controls or on an undithered capture.
   *Playtest after fix:* any chapter under Enhanced Graphics, still and moving, over water and over
-  ground. *Cross-refs:* `BL-804` (the same sitting's reflection flicker), `docs/architecture/Utils.md`
-  (`GraphicsMode`).
+  ground. *Cross-refs:* `docs/architecture/Utils.md` (`GraphicsMode`).
 
-- `BL-804` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Enhanced Graphics' water
-  reflections flicker at the screen border and around the player's aircraft.** *Evidence:* reported
-  at the controls under Enhanced Graphics as "screen space reflection flickering on screen border
-  and around the plane"; which chapter and view are not recorded. Both places are where
-  screen-space reflection has nothing to reflect: a ray that runs off the screen edge, and the
-  water behind the aircraft, whose reflection the aircraft itself occludes in the depth buffer,
-  so a small camera move flips those texels between a reflection and the fallback and the
-  surface shimmers. The pass is enabled for the water surfaces alone with 64 steps, a fade-in of
-  0.15, a fade-out of 2.0 and a depth tolerance of 0.2 (`CSVM/src/Session/Launcher.cs:78-83`,
-  `1168-1179`). *Fix shape:* lengthen the edge fade and raise the depth tolerance so a lost ray
-  fades into the sky colour instead of cutting, and judge whether the aircraft's own silhouette
-  still shimmers; if it does, the remaining tool is a roughness on the water material, which
-  blurs the reflection and hides the per-texel flip. *⚠ Traps:* the constants are TUNE with no
-  decoded magnitude, so there is nothing to match, only a flicker to remove; do not trade it for
-  a reflection so faint the glossy water arm no longer reads. *Playtest after fix:* a low pass
-  over C1's lake and the open sea under Enhanced Graphics, chase view, banking so the aircraft
-  crosses the water. *Cross-refs:* `BL-803` (the same sitting's dithering), `Launcher.cs`'s
-  `EnableWaterReflections`.
 - `BL-899` `[Bug]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: data]` `[C5]` **C5 builds
   19,197 `fvol` cloud sprites that drew no pixels at either probed pose, before and after the fade
   law landed.** C5's `fvol` geometry is seventeen polygonal street prisms rather than a deck slab,
@@ -1769,23 +1722,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `CSVM/src/Flight/PromptLine.cs`, `CSVM/src/Bindings/BindingLabels.cs`,
   `docs/controls.md`.
 
-- `BL-904` `[Feature]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **The Original presentation's Instant Action screen
-  offers no way to set the number of lives.** *Your report:* "In the original ui for instant action we
-  can't set number of life's." *Evidence:* the lives are this port's own invention (`ia.json` carries
-  no such field, `InstantActionFeature.MaxLives`), so the decoded `[@InstantAction@]` layout authors
-  no row for them and `OriginalInstantAction` composes none; the feature's `Lives` stays at its
-  default of 1 for every sortie launched from that screen, while Built-in's Mission type screen
-  carries the stepper (`docs/org/menu-inventory.md`, Built-in screen 5). *Fix shape:* a remake-only
-  control on the Original screen in its own idiom, under the same rule Decision 11 gives
-  `IA_B_BUILD` and `IA_B_CHANGEWEAPONS` (a widget the layout does not author, drawn in the screen's
-  chrome): a lives dropdown or stepper beside the mission type dropdown, reading UNLIMITED for 0 and
-  the count otherwise, stepping the shared feature's `StepLives` so both presentations edit one
-  value; mark it remake-only in the census, pin it with a menu-original-instant-action suite arm
-  and a still. *⚠ Traps:* the ace duel blanks every enemy control in place, the lives control is
-  not an enemy control and stays; a contents row applies its preset and the presets carry no lives,
-  so the row must not reset them. *Cross-refs:* `CSVM/src/UI/Menu/Original/OriginalInstantActionScreen.cs`,
-  `CSVM/src/UI/Menu/InstantActionFeature.cs`, `docs/org/menu-inventory.md` (Decision 11).
-
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
@@ -1856,16 +1792,6 @@ usual.
   cross-pane body-hide visually at the controls with 2+ cockpit-view pilots in the same session.
   *Cross-refs:* `PLAN-cockpit-view` B11 ("Splitscreen posture"), `BL-391` (base engine level,
   the audio half of (b)), `BL-389` (splitscreen weapon mix, same playtest family).
-- `BL-832` `[Fidelity]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **The original's forced AI
-  park runs at every mission start, but CSVM parks only off an intro episode's hold, so a mission
-  that opens without a story intro takes no park.** *Evidence:* `BL-736`'s close
-  (`git log --grep=BL-736`) found the four park calls in the start path of every mission and
-  none hosted by `player_setup`; the entry's own fix shape, extending the park to the
-  `player_setup` bootstrap with a suite over an Instant Action wave, was not done, and what lifts
-  the park (`FUN_0041f2e0`, code 914) is unread. *Fix shape:* decode the lift, then park from the
-  mission-start path rather than the intro hold, with a suite over an Instant Action wave.
-  *⚠ Traps:* `BL-736` closed on "CSVM already matches" for the story intro alone; do not re-close
-  on that reading. *Cross-refs:* `BL-736`'s closing commit, `docs/formats/anim-definitions/cutscenes.md`.
 
 ## Missions, modes & campaign
 
@@ -1946,23 +1872,25 @@ usual.
   the shipped `sticky_bullet_*` constants (decoded in
   [`docs/org/aim-assist.md`](docs/org/aim-assist.md), built by `BL-342`) read right at the
   controls, damage balance plane-vs-plane felt good and guns are now a practical kill weapon
-  without rockets, a marked improvement over firing with no assist at all. No retune. Still open:
-  spawn camping / spawn protection (none in v1), **confirmed a real problem, not speculation, by
-  `PT-43`(c) 2026-08-13**: every player has a fixed spawn point and camping one is very much
-  viable; the fix is spawn rotation, likely alongside whatever `--vs`'s existing spawn-spacing
-  logic already tracks per-pane; suicide penalty and last-damager credit (0 / none in
-  v1), sudden-death overtime on a drawn time-out (draw declared in v1; `PT-43`(f) found draw
-  frequency fine at the 5-kills/5-min defaults, so this stays low priority), menu-side match
+  without rockets, a marked improvement over firing with no assist at all. No retune.
+  **Spawn camping is settled**, which `PT-43`(c) had confirmed a real problem: spawn rotation is
+  in, so the opening spawn is still the scenario list walk (one seat per point) and a downed seat
+  then comes back on a point drawn between the roomiest entries against the living field, never
+  the one it was downed at and never one a living seat holds, with the killer weighed heaviest
+  (`CSVM/src/Flight/VersusSpawnRotation.cs`, fed the live field by `GameSession` through
+  `FlightController.RespawnPlacement`). Still open: suicide penalty and last-damager credit (0 /
+  none in v1), sudden-death overtime on a drawn time-out (draw declared in v1; `PT-43`(f) found
+  draw frequency fine at the 5-kills/5-min defaults, so this stays low priority), menu-side match
   options (kill target and time limit are CLI-only), `dogfight_ace` vs `zeppelin_run` spawn
   spacing, the self-blast exemption (own rockets can't hurt you, the guns invariant applied
   consistently, not a balance call), VS HUD line/arrow sizing at 4-player panes (`PT-43`(d):
   confirmed readable and correctly edge-flipping at both 2 and 4 players, `BL-126` chrome playtest
   2026-08-15, no retune owed; the general HUD text-scale config covers the separate font-size preference). Related,
   not absorbed: `BL-126` (splitscreen chrome, closed 2026-08-15). ⚠ The stunt race's
-  abreast starting grid landed 2026-08-08 and deliberately did **not** touch `--vs`, it is
-  selected only when a race exists, so Dogfight still walks the scattered `dogfight_ace` list.
-  Spawn spacing here stays this item's call from `PT-43`, and copying the grid over is the wrong
-  reflex: four dogfighters 60 m apart on one heading is an instant head-on merge every round.
+  abreast starting grid deliberately does **not** touch `--vs`, it is selected only when a race
+  exists, so Dogfight walks the scattered `dogfight_ace` list and the rotation keeps it that way.
+  Copying the grid over is the wrong reflex: four dogfighters 60 m apart on one heading is an
+  instant head-on merge every round.
 
 - `BL-256` `[Feature]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: feel]` **Stunt screenshot feature, triggered off `DzRadius`, much later, by user decision
   (2026-08-04).** `DzRadius` (15 m, user-hand-tuned) is settled
@@ -2147,61 +2075,6 @@ usual.
   and is the original's own behaviour; count the flag, not the mode.
   *Cross-refs:* `docs/org/aiControlLaw.md`.
 
-- `BL-819` `[Feature]` `[L]` `[Next: decode]` `[Impact: low]` `[Evidence: data]` **The original's
-  typed cheats (the hidden mission menu, the cash grant, the gallery reveal and the one-mission
-  invincibility) do nothing in CSVM, because no screen reads a typed prefix.** *Evidence:* three of
-  the cheats are script-side and share one shape: a left click inside the screen's own region gives
-  the script focus, `gui_char` appends each typed character and resets the buffer on the first
-  character that leaves the target's prefix, and the full word fires. `idaho`
-  (`PASSENGERCABIN.SCRIPT:107-133`) arms on a click in the cabin's authored region 5,336 to 85,479
-  (`:67`, the microphone side of the screen) and activates `QMA`, the `pc_d_missions` pull-down
-  (`:69-80`, list id 2038 over `@shareditems@BUA`, seeded from `$$KP$$` with 24 clamped to 23); a
-  New Mission with the buffer full then launches the picked row through `callback($$E$$, 2104,
-  QMA.QG + 1)` instead of the default `-2` (`:140-149`). `ispy` (`SCRAPBOOK_TOC.SCRIPT:52-75`,
-  region 42,426 to 136,523 at `:41`) sets `$$USA$$` and re-initialises the `sbtoc_l_toclist` list
-  (list id 2409); the only script-side reader of that flag is `SCRAPBOOK.SCRIPT:445-453`, which prints
-  a white `mission: N spread: N` line at 10,570, so whether the contents list itself widens to every
-  spread sits in the engine's list-2409 callback. `gimme` (`PLANECONSTRUCTION.SCRIPT:167-194`) arms
-  on a left click on the `$$$ on Hand` figure alone (the hub's region is the `px_t_cash` box, `:155`,
-  authored at 615,25, 120 by 55 in `LAYOUT.CSV:691`), adds 25000 to `$$DOA$$` while it is under
-  50000 and re-initialises the hub; `$$DOA$$` is `nPlayerCash`, which the script-global binder
-  `FUN_00401fc0` registers by address as an int, so the script write lands in the wallet dword
-  `0x0064b788` directly and is a fifth writer beside the four in `docs/org/hangar.md`. The same
-  binder registers `fViewAll` (`0x00647b80`) and `fAllowAll` (`0x00647b5c`, the unlock-everything
-  mode with its 250000 budget), which the readings below pair with `ispy` and `crashcheat!`. A fourth word the
-  walkthroughs do not list, `crashcheat!`, is compared against the pilot name on the new-campaign
-  name entry (`CAMPAIGN.SCRIPT:100-130`): it sets `$$SB$$`, accepts the name through `uiData`
-  2100 and `gosCallback` 9, then re-accepts the previous name and stays on the screen. Case 9 of
-  `FUN_00407670` runs the fresh-profile initialiser `FUN_004113b0` and then compares the pilot name
-  to `CrashCheat!` case-insensitively, skipping the new-pilot registration when it matches; the
-  initialiser's only binder-flag branch is `fAllowAll`, which no code writes, so `$$SB$$` is that
-  flag: 250000 cash, the eleven stock airframes in slots 2 to 12, and every airframe threshold
-  bypassed, for the rest of the session (`docs/formats/campaign-screens.md`, the name entry).
-  `ispy`'s flag is `fViewAll` by the same reading: the scrapbook lookup `FUN_004061d0` refuses a
-  spread past the campaign position unless `0x00647b80` is set, and then skips the per-spread
-  capture bits too (`docs/org/debrief.md`). The invincibility code `I AM THE ACE!!`
-  is in no script's `gui_char` (`ORDINANCELAYOUT.SCRIPT` and `FLIGHTCHECK.SCRIPT` have none) and is
-  not a plain ASCII or UTF-16 string in `crimson.exe`, so its compare is engine-side and obfuscated
-  or hashed. *What to settle first:* the exe side: where the ACE compare lives and what it sets,
-  and whether the engine holds further hidden words beside the `CrashCheat!` compare. *Fix shape:* one typed-prefix matcher owned by each of the three screens, with the
-  scripts' reset-on-miss rule, and a cheat store the campaign carries (a mission pick for the next
-  launch, a cash grant, a gallery reveal, an invincibility flag cleared when the flight ends); the
-  pull-down is the existing mission list activated where the script places it. *⚠ Traps:* the
-  walkthroughs say right-click the microphone, but the script arms on `button_clicked == mouse.left`
-  inside the region; do not add a right-button read for it, `MenuPointer.RightPressed` being the
-  credits line's alone (`git log --grep=BL-781`). The words are
-  case-sensitive and the buffer restarts from empty on a miss, so a partial retype starts over.
-  Keep the buffer per screen; do not route typed words through `MenuCommands`, which is
-  device-neutral by contract. The invincibility is one mission only; a flag that survives the
-  wrap-up is a different cheat. `ispy` reveals spreads up to mission 24 regardless of progress and
-  capture bits, not "every picture in the art"; reproduce that bound. *Playtest after fix:*
-  `./RunGame.ps1 --presentation=original --menu=campaign`, click the microphone side, type `idaho`
-  and check the mission pull-down appears and New Mission flies the picked row; in the hangar click
-  the cash figure, type `gimme` and check it rises by 25000 while under 50000; on Previous Missions click the
-  bottom-left symbol and type `ispy`. *Cross-refs:* `git log --grep=BL-781` (the credits line, the
-  same script-side hidden input), `docs/org/menu-inventory.md` (the PassengerCabin, ScrapBook_TOC and
-  PlaneConstruction rows), `docs/org/hangar.md`.
-
 - `BL-840` `[Feature]` `[M]` `[Next: decide]` `[Impact: high]` `[Evidence: trace]` **Six of the eight stored
   campaign profiles, `Gab` with 18 missions done among them, are schema version 2 and the
   version-3 store refuses them.** *Evidence:* `BL-675`'s close (`git log --grep=BL-675`): the
@@ -2228,7 +2101,7 @@ usual.
   position; `Pads.LogPads` records the roster so the next one reads off the log rather than being
   inferred. Dropping the var also closes that divergence.
 
-- `BL-843` `[Cleanup]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **`GD.Print` still stands in every `CSVM/src` file outside the three session files that now log through `Log`.** *Evidence:* about 263 calls remain, 124 of them under `Session/` in nineteen files (`CutsceneController.cs` holds ten, one in `Begin`). Each renders through the current culture and reaches neither the file sink nor the `--log=` filter. *Fix shape:* the same conversion the three session files took: `Log.Info` under the file's category (the shipped console threshold, so nothing leaves stdout), `Log.Error` for `PrintErr`, `Log.Raw` for a multi-line report, one interpolated string per call since `Log` takes a `FormattableString`; grep `CSVM.Tests`, `CSVM/src/Testing`, the root scripts and `analysis/` for every printed prefix first and move any reader in the same change. *⚠ Traps:* a unit test that reaches a `GD.Print` kills the xUnit host outright; a pre-formatted summary string keeps its culture (`docs/verification.md` LOG-23), so a converted line still needs its pre-built pieces checked. *Cross-refs:* PLAN-code-review-orch A3 (the three files and the before/after log diff method).
+- `BL-843` `[Cleanup]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Three `GD.Print` calls remain under `CSVM/src`, all in the effects files another item is holding open.** *Evidence:* `Effects/Precipitation.cs:227` (the `precipitation:` line, which a headless C4/M03 probe prints as `fall 5,0 m/s ... alpha 0,50` on a German machine), and `Session/WorldEffectsFactory.cs:529` and `:820` (`world-effects runtime:` and `data-crash:`). All three reach stdout and neither the file sink nor the `--log=` filter, so the same probe's sink log is missing them while every other session line is in it. `Utils/Log.cs`'s own four calls are the console tier the rest of the tree logs through and stay. *Fix shape:* the conversion the rest of `CSVM/src` took, `Log.Info` under the file's category (the shipped console threshold, so nothing leaves stdout), one interpolated string per call since `Log` takes a `FormattableString`, and each pre-built piece rechecked for culture. *⚠ Traps:* a unit test that reaches a `GD.Print` kills the xUnit host outright; a pre-formatted summary string keeps its culture (`docs/verification.md` LOG-23). *Cross-refs:* PLAN-code-review-orch A3 (the before/after log diff method).
 
 - `BL-844` `[Cleanup]` `[S]` `[Next: decide]` `[Impact: none]` `[Evidence: trace]` **654 em dashes remain inside string literals under `CSVM/src` and `CSVM.Tests`: log messages, CLI notes and HUD text.** *Evidence:* the repo-wide sweep rewrote comments and docs and skipped literals, since suites match log lines and a HUD string is a display choice (`VersusHud` draws the glyph for a tie). The writing rule speaks of prose; whether a log message is prose is the decision. *Fix shape:* if yes, a second pass over literals only, with every suite that matches a rewritten line moved in the same change and the goldens re-pinned where a HUD string changes; if no, record the exemption on the writing rule. *Cross-refs:* PLAN-code-review-orch A7.
 

@@ -832,6 +832,8 @@ public class OriginalCampaignTests : IDisposable
 
         public MenuExit? BeginSeatWalk() => null;
 
+        public int CheatedMission(int ordinary) => OriginalTestHost.CheatedMission(ordinary);
+
         public BoardPanel? SeatPanel(bool onPaper) => null;
 
         // Every campaign row is drawn by the shared board component, so no row of this module's ever

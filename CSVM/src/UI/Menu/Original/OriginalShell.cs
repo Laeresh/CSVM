@@ -472,10 +472,11 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     public bool IsHangarScreen => Hangar != null && ReferenceEquals(ModuleFor(_screen), Hangar);
 
     /// <summary>Whether seat 0's typed characters feed a text field right now: the campaign
-    /// roster's name box, or one of the hangar's own. None of them while a dialog stands over the
-    /// screen.</summary>
+    /// roster's name box, one of the hangar's own, or an armed typed cheat, whose latch is the
+    /// shell's rather than any module's. None of them while a dialog stands over the screen.</summary>
     public bool CapturingText =>
-        _dialog == null && (_screen == OriginalScreen.CampaignRoster || (Hangar?.CapturingText ?? false));
+        _dialog == null
+        && (TypingCheat || _screen == OriginalScreen.CampaignRoster || (Hangar?.CapturingText ?? false));
 
     /// <summary>The hangar module behind the hangar screens, with its own state and inks, or null
     /// on a shell built without a hangar feature.</summary>
@@ -566,6 +567,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         _drag = null;
         _slider.LetGo();
         ResetCreditsSecret();
+        ResetCheats();
         Options.ScreenOpened(screen);
     }
 
@@ -673,7 +675,9 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         var cues = new List<string>();
         MenuExit? exit = null;
         Campaign.SyncField();
-        bool changed = TypeName(commands, cues);
+        // A typed cheat holding the keyboard swallows the frame's characters: the script's own
+        // focus moved the caret off whatever edit box the screen carries.
+        bool changed = TypingCheat ? TypeCheat(commands) : TypeName(commands, cues);
         if (OnSeatWalk && _pickingSeat is not { Joined: true })
         {
             // The seat this screen was picking for has gone: the walk moves on or ends, and a
@@ -697,6 +701,10 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             {
                 changed |= HoldCreditsSecret(pointer);
             }
+
+            // The three typed cheats read the primary button the same way, their regions holding
+            // no row either.
+            changed |= ArmCheat(pointer);
 
             // The thumb, the slider and the wheel come before the rows: a held one owns the
             // pointer until it is let go, and a wheel step moves the rows the hit test then reads.
@@ -1695,6 +1703,8 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     void IOriginalScreenHost.OpenHangar(IHangarWallet? wallet) => OpenHangar(wallet);
 
     MenuExit? IOriginalScreenHost.BeginSeatWalk() => BeginInstantActionSeatWalk();
+
+    int IOriginalScreenHost.CheatedMission(int ordinary) => CheatedMission(ordinary);
 
     BoardPanel? IOriginalScreenHost.SeatPanel(bool onPaper) => CampaignSeatPanel(onPaper);
 

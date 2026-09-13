@@ -1059,6 +1059,8 @@ public class OriginalHangarTests : IDisposable
 
         public MenuExit? BeginSeatWalk() => null;
 
+        public int CheatedMission(int ordinary) => OriginalTestHost.CheatedMission(ordinary);
+
         public BoardPanel? SeatPanel(bool onPaper) => null;
 
         public void ComposeGenericRow(

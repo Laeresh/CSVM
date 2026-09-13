@@ -130,7 +130,7 @@ internal sealed class SurfaceGunner
         var slot = fit[0];
         if (weapons.Get(slot.WeaponId) is not { } weapon)
         {
-            GD.Print($"surface: '{vessel.Name}' unarmed: no weapon def '{slot.WeaponId}'");
+            Log.Info("weapons", $"surface: '{vessel.Name}' unarmed: no weapon def '{slot.WeaponId}'");
             return null;
         }
         var turret = FindDescendant(vessel.Body, "turret");
@@ -138,7 +138,7 @@ internal sealed class SurfaceGunner
         var firepoint = gun != null ? FindDescendant(gun, "firepoint") : null;
         if (turret == null || gun == null || firepoint == null)
         {
-            GD.Print($"surface: '{vessel.Name}' unarmed: model carries no turret/gun/firepoint chain");
+            Log.Info("weapons", $"surface: '{vessel.Name}' unarmed: model carries no turret/gun/firepoint chain");
             return null;
         }
         return new SurfaceGunner(vessel, pool, weapon, slot, activationRange, turret, gun,
@@ -233,9 +233,10 @@ internal sealed class SurfaceGunner
         {
             into.Add(body.GetRid());
         }
-        foreach (var child in node.GetChildren())
+        // By index: a hull walk per shot through GetChildren() is an engine array per node (PERF-20).
+        for (int i = 0, count = node.GetChildCount(); i < count; i++)
         {
-            CollectRids(child, into);
+            CollectRids(node.GetChild(i), into);
         }
     }
 
@@ -369,8 +370,7 @@ internal sealed class SurfaceGunner
         if (!_firstShotLogged)
         {
             _firstShotLogged = true; // verification breadcrumb: WHICH hulls actually engage
-            GD.Print($"surface: '{_vessel.Name}' engaging (first shot, team " +
-                     $"{_vessel.Team?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "-"}, {_slot.WeaponId})");
+            Log.Info("weapons", $"surface: '{_vessel.Name}' engaging (first shot, team {_vessel.Team?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "-"}, {_slot.WeaponId})");
         }
         Ammo--;
         ShotsFired++;

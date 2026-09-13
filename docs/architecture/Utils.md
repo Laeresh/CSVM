@@ -148,6 +148,15 @@ callback the clock mode makes the walk ride, so a plane-count sweep otherwise re
 whole-frame differential. The plane count rides the bank's tally slot, so `ai_planes` comes off the
 same bracket as `ai_ms`, which divides its total by FRAMES rather than walks.
 
+## src/Utils/PhaseCost.cs
+A row of named WallCostBank slots, one per phase of a pass, where only one slot is open at a time
+and opening the next closes the one before it. SimPhaseCost is the row SessionSimulation.Enter
+and AnimRuntime's physics advance feed, one slot per phase, printed as sim_ms= divided by the
+window's TICKS so it reads beside phys_tick_ms; ProcessSiteCost is the row a using scope at the
+projectile pool's, animation runtime's, aircraft's, emitters' and session's _Process feeds, as
+proc_sites_ms= divided by FRAMES beside proc_ms. Each slot prints mean/max, the max being the
+longest single span, so a stall names its slot. The gap to the whole-pass term is everything unnamed.
+
 ## src/Utils/GcTrace.cs
 The `--perf` GC readout: one `[perf] gc` line per ten wall seconds carrying the pause the process
 spent, the collections it spent it in, the bytes allocated, and how many FINALIZABLE objects died,
@@ -155,7 +164,8 @@ read off the runtime's own `GCHeapStats` event through an `EventListener` on the
 finalizable count is the figure a change to the frame path moves, and pause per wall second the
 figure it is judged on; every line carries process uptime so the world-build regime is excluded by
 uptime rather than by guesswork. What the two numbers mean and why the per-collection pause is the
-wrong one to read is `docs/verification.md` PERF-19 and PERF-20.
+wrong one to read is `docs/verification.md` PERF-19 and PERF-20. Under `--gc-types` the listener
+runs Verbose and adds a `[perf] gc-types` line naming the allocation sampler's most-seen types.
 
 ## src/Utils/Rng.cs
 The session's randomness policy: one master seed and a named generator per subsystem derived from

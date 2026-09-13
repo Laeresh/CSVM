@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.UI;
@@ -141,7 +142,7 @@ public sealed partial class NodeLabels : Node
         }
         EnsureBuilt();
         _hudLayer!.Visible = true;
-        GD.Print($"[names] node labels: {_mode}");
+        Log.Info("ui", $"[names] node labels: {_mode}");
     }
 
     private void EnsureBuilt()

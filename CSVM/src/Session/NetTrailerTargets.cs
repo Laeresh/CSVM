@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Session;
@@ -67,8 +68,7 @@ public sealed class NetTrailerTargets
             _resolved[name] = node;
             if (node == null && _reported.Add(name))
             {
-                GD.Print($"ainet: trailer target '{name}' is not in this world — the nets " +
-                         "anchored to it fly at their authored coordinates");
+                Log.Info("flight", $"ainet: trailer target '{name}' is not in this world — the nets anchored to it fly at their authored coordinates");
             }
         }
         // A destroyed target (a killed zeppelin's node is freed) drops back to the authored

@@ -406,9 +406,9 @@ internal static class TerrainCarve
         float band = (2f * shape.Depth) + CollisionBand;
         int opened = 0;
         bool bowlPlaced = false;
-        foreach (var child in body.GetChildren())
+        for (int slotIndex = 0, count = body.GetChildCount(); slotIndex < count; slotIndex++)
         {
-            if (child is not CollisionShape3D slot || slot.Shape is not ConcavePolygonShape3D trimesh)
+            if (body.GetChild(slotIndex) is not CollisionShape3D slot || slot.Shape is not ConcavePolygonShape3D trimesh)
             {
                 continue;
             }

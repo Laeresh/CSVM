@@ -16,7 +16,7 @@ internal static class WorldCollision
 {
     // Marks a subtree root faded below the collision threshold. A meta rather than a
     // static registry so it dies with the node, sessions build and free whole worlds.
-    private const string FadedMeta = "csky_col_faded";
+    private static readonly StringName FadedMeta = "csky_col_faded";
 
     // Live faded roots, so the common case (none) skips the ancestor walk. Only a
     // perf hint: a world freed mid-fade leaves it high, which costs a walk and nothing else.
@@ -94,9 +94,11 @@ internal static class WorldCollision
         {
             Sync(n3d, faded);
         }
-        foreach (var child in node.GetChildren())
+        // Index walks here and below: GetChildren() allocates a finalizable engine array per call,
+        // and a visibility toggle fires one Sync per tracked node of the subtree (PERF-20).
+        for (int i = 0, count = node.GetChildCount(); i < count; i++)
         {
-            SyncSubtree(child, faded);
+            SyncSubtree(node.GetChild(i), faded);
         }
     }
 
@@ -112,15 +114,15 @@ internal static class WorldCollision
             return; // resolved for real when the built world joins the tree
         }
         bool enabled = owner.IsVisibleInTree() && !fadedAbove;
-        foreach (var child in owner.GetChildren())
+        for (int i = 0, count = owner.GetChildCount(); i < count; i++)
         {
-            if (child is not StaticBody3D body)
+            if (owner.GetChild(i) is not StaticBody3D body)
             {
                 continue;
             }
-            foreach (var shape in body.GetChildren())
+            for (int s = 0, shapes = body.GetChildCount(); s < shapes; s++)
             {
-                if (shape is CollisionShape3D collision)
+                if (body.GetChild(s) is CollisionShape3D collision)
                 {
                     collision.Disabled = !enabled;
                 }

@@ -68,6 +68,10 @@ public static class Probes
     private static readonly HashSet<string> AiChapterScopeDirs =
         new(StringComparer.OrdinalIgnoreCase) { "gamez", "texture", "cam_anim", "zrdr" };
 
+    // One mean texel per sheet: a chapter's destructible population repeats its materials, and a
+    // decode per row would read the same archive entry dozens of times.
+    private static readonly Dictionary<string, Vector3?> MeanTexelCache = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>The eleven stock player airframes in whole-envelope dump order, the set the parity
     /// ledger classifies and <c>--dump-flight=all</c> flies.</summary>
     public static IReadOnlyList<string> StockAirframes => StockAirframeNodes;
@@ -966,6 +970,123 @@ public static class Probes
                          + $"{result.TotalInstances} instance(s) across {result.DistinctAnchors} node group(s)";
         // The one-shot death sounds this sweep fired are fire-and-forget nodes swept in
         // WorldSounds.Tick, but this harness pumps no frames, so free them here or they leak.
+        runtime.Sounds?.FlushOneShots();
+        return result;
+    }
+
+    // ---- debris shading --------------------------------------------------------------------
+
+    /// <summary>What shades the pieces a destructible's death flings: every mesh-bearing node under
+    /// a matched destructible, with the model's <c>lighting</c> flag, each material's sheet and mean
+    /// texel, the area-weighted mean baked vertex colour, and the product the fullbright world
+    /// shader draws from those, marked with whether the node flew. A null
+    /// <paramref name="textures"/> leaves the sheet unsampled and the material's own colour stands
+    /// in. ⚠ An instrument, not an assertion: no number here is a target.</summary>
+    public static DebrisShadingResult DebrisShading(AnimRuntime runtime, GameZ gamez,
+        TextureArchive? textures, string chapter, string name, float worldLightLinear)
+    {
+        System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
+
+        static string CsName(Node3D n) => n.HasMeta(AnimRuntime.NameMeta)
+            ? n.GetMeta(AnimRuntime.NameMeta).AsString()
+            : n.Name.ToString();
+
+        var result = new DebrisShadingResult { Chapter = chapter, Filter = name, WorldLight = worldLightLinear };
+        var byIndex = new Dictionary<int, GameZNode>();
+        foreach (var n in gamez.Nodes)
+            byIndex[n.Index] = n;
+
+        var targets = new Dictionary<ulong, DestructibleRegistry.Instance>();
+        foreach (var inst in runtime.Destructibles.All)
+        {
+            bool match = inst.Def.Name.Contains(name, StringComparison.OrdinalIgnoreCase)
+                || (inst.Def.AnimName?.Contains(name, StringComparison.OrdinalIgnoreCase) ?? false)
+                || CsName(inst.Anchor).Contains(name, StringComparison.OrdinalIgnoreCase);
+            if (match && runtime.Destructibles.Resolve(inst.Anchor) is { } t)
+                targets[t.Anchor.GetInstanceId()] = t;
+        }
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"debris-shading: chapter {chapter}, filter '{name}', "
+            + $"csky_world_light {worldLightLinear:0.###} linear, {targets.Count} destructible(s)");
+        if (targets.Count == 0)
+        {
+            result.Text = sb.ToString();
+            result.Summary = "debris-shading: no destructible matched";
+            return result;
+        }
+
+        // Every mesh node under each anchor, read BEFORE the kill so the pre-kill visibility is the
+        // healthy world's own; the rows are re-marked with what flew once the deaths have run.
+        var rows = new List<DebrisShadingRow>();
+        var byNode = new Dictionary<ulong, DebrisShadingRow>();
+        foreach (var target in targets.Values)
+        {
+            void Walk(Node3D n)
+            {
+                if (n.HasMeta(AnimRuntime.IndexMeta)
+                    && byIndex.TryGetValue((int)n.GetMeta(AnimRuntime.IndexMeta), out var gn)
+                    && gn.MeshIndex >= 0 && gn.MeshIndex < gamez.Meshes.Count
+                    && !gamez.IsMarkerGizmo(gn.MeshIndex))
+                {
+                    var row = ReadShadingRow(gamez, textures, gn, worldLightLinear);
+                    row.Def = target.Def.Name;
+                    row.CsName = CsName(n);
+                    row.VisibleBefore = n.IsVisibleInTree();
+                    ReadBuiltMaterial(n, row);
+                    rows.Add(row);
+                    byNode[n.GetInstanceId()] = row;
+                }
+
+                foreach (var c in n.GetChildren())
+                {
+                    if (c is Node3D c3)
+                    {
+                        Walk(c3);
+                    }
+                }
+            }
+
+            Walk(target.Anchor);
+        }
+
+        int launchesBefore = runtime.BallisticMotionsLaunched;
+        foreach (var target in targets.Values)
+            runtime.DamageAt(target.Anchor, target.MaxHealth + 1f);
+
+        // Stepped rather than jumped: a ballistic body is registered and retired inside the run, so
+        // one long advance would report an empty motion list for pieces that flew the whole way.
+        for (int i = 0; i < 24; i++)
+        {
+            runtime.Advance(0.25f);
+            foreach (var m in runtime.Motions.Live)
+            {
+                if (m is Mech3.Anim.MotionRuntime && byNode.TryGetValue(m.Target.GetInstanceId(), out var row))
+                {
+                    row.Launched = true;
+                }
+            }
+        }
+
+        result.Launches = runtime.BallisticMotionsLaunched - launchesBefore;
+        foreach (var (id, row) in byNode)
+        {
+            if (GodotObject.InstanceFromId(id) is Node3D n3)
+            {
+                row.VisibleAfter = n3.IsVisibleInTree();
+            }
+        }
+
+        sb.AppendLine($"  {result.Launches} ballistic launch(es); {rows.Count} mesh node(s) under the anchor(s)");
+        foreach (var row in rows.OrderByDescending(r => r.Launched).ThenBy(r => r.CsName, StringComparer.Ordinal))
+        {
+            sb.AppendLine("  " + row.Line);
+        }
+
+        result.Rows.AddRange(rows);
+        result.Text = sb.ToString();
+        result.Summary = $"debris-shading: {rows.Count} mesh node(s), {rows.Count(r => r.Launched)} flew, "
+            + $"{result.Launches} ballistic launch(es)";
         runtime.Sounds?.FlushOneShots();
         return result;
     }
@@ -2188,6 +2309,185 @@ public static class Probes
         return "{" + string.Join("/", parts) + "}";
     }
 
+    // One mesh node's shading inputs, read off the gamez the scene was built from: the model's
+    // lighting flag and, per material the mesh uses, the texture, its mean texel, and the
+    // area-weighted mean of the baked vertex colours the surface tool emits.
+    private static DebrisShadingRow ReadShadingRow(GameZ gamez, TextureArchive? textures,
+        GameZNode gn, float worldLightLinear)
+    {
+        var mesh = gamez.Meshes[gn.MeshIndex];
+        var row = new DebrisShadingRow
+        {
+            NodeIndex = gn.Index,
+            MeshIndex = gn.MeshIndex,
+            Lighting = mesh.Lighting,
+            Fog = mesh.Fog,
+        };
+
+        // Weighted by triangulated area, so a mesh's big flat facets decide the reading rather than
+        // a crowd of slivers; the eye reads the facets.
+        var areaByMaterial = new Dictionary<int, float>();
+        var sumByMaterial = new Dictionary<int, Vector3>();
+        var coloredByMaterial = new Dictionary<int, float>();
+        foreach (var poly in mesh.Polygons)
+        {
+            float area = TriangulatedArea(mesh, poly);
+            if (area <= 0f)
+            {
+                continue;
+            }
+            // White where the polygon carries none, which is what SurfaceTool is given there, so a
+            // mesh that authored no colours reads as the identity multiply rather than as black.
+            var mean = Vector3.One;
+            if (poly.VertexColors is { Count: > 0 } vcs)
+            {
+                var acc = Vector3.Zero;
+                foreach (var c in vcs)
+                    acc += new Vector3(c.R, c.G, c.B);
+                mean = acc / vcs.Count;
+                coloredByMaterial.TryGetValue(poly.MaterialIndex, out float ca);
+                coloredByMaterial[poly.MaterialIndex] = ca + area;
+            }
+
+            areaByMaterial.TryGetValue(poly.MaterialIndex, out float a);
+            sumByMaterial.TryGetValue(poly.MaterialIndex, out var s);
+            areaByMaterial[poly.MaterialIndex] = a + area;
+            sumByMaterial[poly.MaterialIndex] = s + (mean * area);
+        }
+
+        foreach (var (mi, area) in areaByMaterial.OrderByDescending(kv => kv.Value))
+        {
+            var vc = sumByMaterial[mi] / area;
+            var mat = mi >= 0 && mi < gamez.Materials.Count ? gamez.Materials[mi] : null;
+            var tex = mat?.TextureName != null ? MeanTexel(textures, mat.TextureName) : null;
+            var basis = tex ?? new Vector3(mat?.Color.R ?? 1f, mat?.Color.G ?? 1f, mat?.Color.B ?? 1f);
+            // The fullbright world shader's own product: linearised vertex colour times the
+            // linearised texel times the mission's dimming scalar, reported back in sRGB bytes,
+            // which is what a screenshot pixel holds.
+            var lin = new Vector3(
+                Lin(vc.X) * Lin(basis.X), Lin(vc.Y) * Lin(basis.Y), Lin(vc.Z) * Lin(basis.Z));
+            if (mesh.Lighting)
+            {
+                lin *= worldLightLinear;
+            }
+            coloredByMaterial.TryGetValue(mi, out float colored);
+            row.Materials.Add(new DebrisShadingMaterial
+            {
+                Texture = mat?.TextureName ?? $"flat {Byte3(basis)}",
+                Area = area,
+                VertexColorCoverage = colored / area,
+                VertexColor = vc,
+                Texel = basis,
+                Drawn = new Vector3(Srgb(lin.X), Srgb(lin.Y), Srgb(lin.Z)),
+            });
+            if (row.Materials.Count >= 4)
+            {
+                break;
+            }
+        }
+
+        return row;
+    }
+
+    // What the BUILT material does with those inputs, read off the node's own mesh instance rather
+    // than off the data: whether every surface committed a vertex-colour array, and whether the
+    // shader the surface carries reads the mission dimming scalar. The pair is what separates "the
+    // data authors this dark" from "the build dropped a term on the way to the screen".
+    private static void ReadBuiltMaterial(Node3D node, DebrisShadingRow row)
+    {
+        foreach (var child in node.GetChildren())
+        {
+            if (child is not MeshInstance3D { Mesh: ArrayMesh am } mi || mi.Name != "mesh")
+            {
+                continue;
+            }
+
+            row.BuiltSurfaces = am.GetSurfaceCount();
+            row.SurfacesWithColors = 0;
+            row.SurfacesReadingWorldLight = 0;
+            for (int s = 0; s < am.GetSurfaceCount(); s++)
+            {
+                if ((am.SurfaceGetFormat(s) & Mesh.ArrayFormat.FormatColor) != 0)
+                {
+                    row.SurfacesWithColors++;
+                }
+
+                if (am.SurfaceGetMaterial(s) is ShaderMaterial { Shader: { } sh }
+                    && sh.Code.Contains("ALBEDO *= csky_world_light", StringComparison.Ordinal))
+                {
+                    row.SurfacesReadingWorldLight++;
+                }
+            }
+
+            return;
+        }
+    }
+
+    // A polygon's triangulated area, fanned or stripped exactly as SceneBuilder emits it, so the
+    // weight a material carries here is the screen area that material actually covers.
+    private static float TriangulatedArea(GameZMesh mesh, GameZPolygon poly)
+    {
+        int n = poly.VertexIndices.Count;
+        float Tri(int a, int b, int c)
+        {
+            var va = mesh.Vertices[poly.VertexIndices[a]];
+            return 0.5f * (mesh.Vertices[poly.VertexIndices[b]] - va)
+                .Cross(mesh.Vertices[poly.VertexIndices[c]] - va).Length();
+        }
+
+        float area = 0f;
+        for (int i = poly.TriangleStrip ? 0 : 1; i + (poly.TriangleStrip ? 2 : 1) < n; i++)
+            area += poly.TriangleStrip ? Tri(i, i + 1, i + 2) : Tri(0, i, i + 1);
+        return area;
+    }
+
+    private static float Lin(float srgb) => srgb <= 0.04045f
+        ? srgb / 12.92f : Mathf.Pow((srgb + 0.055f) / 1.055f, 2.4f);
+
+    private static float Srgb(float linear) => linear <= 0.0031308f
+        ? linear * 12.92f : (1.055f * Mathf.Pow(linear, 1f / 2.4f)) - 0.055f;
+
+    private static string Byte3(Vector3 v) =>
+        $"({v.X * 255f:0},{v.Y * 255f:0},{v.Z * 255f:0})";
+
+    // The texture's own mean texel, alpha-weighted so a cut-out sheet reports the colour of what it
+    // actually draws rather than of its discarded background. Cached: one mesh's materials repeat
+    // across a chapter's whole destructible population.
+    private static Vector3? MeanTexel(TextureArchive? textures, string textureName)
+    {
+        if (textures == null)
+        {
+            return null;
+        }
+
+        if (MeanTexelCache.TryGetValue(textureName, out var hit))
+        {
+            return hit;
+        }
+
+        Vector3? mean = null;
+        if (textures.FindImage(textureName) is { } img)
+        {
+            var acc = Vector3.Zero;
+            float weight = 0f;
+            // A 32-tap grid per axis: the mean of a 128² sheet to within a byte, at a thousandth of
+            // the per-texel cost, and a probe reads dozens of sheets.
+            for (int y = 0; y < 32; y++)
+            {
+                for (int x = 0; x < 32; x++)
+                {
+                    var c = img.GetPixel(x * img.GetWidth() / 32, y * img.GetHeight() / 32);
+                    acc += new Vector3(c.R, c.G, c.B) * c.A;
+                    weight += c.A;
+                }
+            }
+            mean = weight > 0f ? acc / weight : Vector3.Zero;
+            img.Dispose();
+        }
+        MeanTexelCache[textureName] = mean;
+        return mean;
+    }
+
     /// <summary>Airframe marker rig: how many of the known player airframes have a rig in
     /// planes.zbd, and which were asked for but not found.</summary>
     public sealed class MarkersResult
@@ -2291,6 +2591,70 @@ public static class Probes
         public bool? CollideAccepted;   // the object took the damage, now true for EVERY activation
         public bool? CollideFlyThrough; // the plane passed through it, the ACTIVATION half
         public string Line = "";
+    }
+
+    /// <summary>One material a debris mesh draws with: its sheet, the triangulated area that sheet
+    /// covers on the mesh, the area-weighted mean baked vertex colour, the sheet's mean texel, and
+    /// the sRGB the fullbright world shader lands on from those. All three colours are 0-1.</summary>
+    public sealed class DebrisShadingMaterial
+    {
+        public string Texture = "";
+        public float Area;
+        public Vector3 VertexColor;
+        public Vector3 Texel;
+        public Vector3 Drawn;
+
+        /// <summary>The fraction of this material's area whose polygons author vertex colours at
+        /// all. Below 1 the mean above is diluted by the white the colourless polygons take, and a
+        /// 0 says the sheet reaches the screen unmodulated.</summary>
+        public float VertexColorCoverage;
+
+        public string Text => $"{Texture} area {Area:0} vc {Byte3(VertexColor)} "
+            + $"(coverage {VertexColorCoverage:0.##}) texel {Byte3(Texel)} drawn {Byte3(Drawn)}";
+    }
+
+    /// <summary>One mesh-bearing node under a destructible, with what shades it and whether the
+    /// death flung it.</summary>
+    public sealed class DebrisShadingRow
+    {
+        public readonly List<DebrisShadingMaterial> Materials = new();
+        public string Def = "";
+        public string CsName = "";
+        public int NodeIndex;
+        public int MeshIndex;
+        public bool Lighting;
+        public bool Fog;
+        public bool Launched;
+        public bool VisibleBefore;
+        public bool VisibleAfter;
+
+        /// <summary>Surfaces the node's built <c>ArrayMesh</c> committed, how many of them carry a
+        /// vertex-colour array, and how many carry a shader that reads <c>csky_world_light</c>. The
+        /// built half of the row: the data above says what was authored, these say what survived
+        /// the build.</summary>
+        public int BuiltSurfaces;
+        public int SurfacesWithColors;
+        public int SurfacesReadingWorldLight;
+
+        public string Line => $"{(Launched ? "FLEW" : "    ")} {CsName} (node {NodeIndex}, mesh {MeshIndex}, "
+            + $"lighting={Lighting}, fog={Fog}, vis {(VisibleBefore ? "on" : "off")}→{(VisibleAfter ? "on" : "off")}, "
+            + $"built {SurfacesWithColors}/{SurfacesReadingWorldLight} of {BuiltSurfaces} surface(s) coloured/dimmed): "
+            + (Materials.Count == 0 ? "no drawn polygons"
+                : string.Join("; ", Materials.Select(m => m.Text)));
+    }
+
+    /// <summary>The <c>--dump-debris</c> report: every mesh node under the matched destructibles with
+    /// its shading inputs, and which of them the death launched.</summary>
+    public sealed class DebrisShadingResult
+    {
+        public readonly List<DebrisShadingRow> Rows = new();
+        public string Chapter = "";
+        public string Filter = "";
+        public string Text = "";
+        public string Summary = "";
+        public float WorldLight;
+        public int Launches;
+        public bool Ok => Rows.Count > 0;
     }
 
     /// <summary>The destructible sweep as a whole: the swept rows plus the uncapped registry

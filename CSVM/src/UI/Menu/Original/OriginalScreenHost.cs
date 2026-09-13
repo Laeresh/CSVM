@@ -90,6 +90,11 @@ public interface IOriginalScreenHost
     /// nobody is left to pick.</summary>
     MenuExit? BeginSeatWalk();
 
+    /// <summary>The mission NEXT MISSION launches, as a <c>cm_sequence</c> index: the cabin cheat's
+    /// own pull-down pick while one stands in its buffer, else <paramref name="ordinary"/>. The
+    /// buffer is the shell's, the three typed cheats crossing every screen family.</summary>
+    int CheatedMission(int ordinary);
+
     /// <summary>The seat strip drawn over a board once a second seat has joined, or null;
     /// <paramref name="onPaper"/> puts it on a light ground for a paper page.</summary>
     BoardPanel? SeatPanel(bool onPaper);

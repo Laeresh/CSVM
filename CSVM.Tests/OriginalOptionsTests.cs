@@ -1501,6 +1501,8 @@ public class OriginalOptionsTests
 
         public MenuExit? BeginSeatWalk() => null;
 
+        public int CheatedMission(int ordinary) => OriginalTestHost.CheatedMission(ordinary);
+
         public BoardPanel? SeatPanel(bool onPaper) => null;
 
         /// <summary>The shell's own plate-row rule restated, so a page's drawing can be read with no

@@ -1,8 +1,10 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.UI;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -13,10 +15,32 @@ namespace CSVM.Tests;
 /// mount owns, which pylons a wing count hangs on, and what a count above the stock fit does,
 /// plus the guarantee that the Ammo Selection layer still composes over the result.
 /// </summary>
-public class CustomPlaneBuildTests
+public class CustomPlaneBuildTests : IDisposable
 {
+    // The airframe id the hub-built cases fly, the same one the shipped Blue Streak record names.
+    private const int Bloodhawk = 3;
+
+    private readonly string _dir;
+    private readonly CustomPlaneStore _store;
+
+    public CustomPlaneBuildTests()
+    {
+        _dir = Path.Combine(Path.GetTempPath(), "csvm-custom-build-" + Guid.NewGuid().ToString("N"));
+        _store = new CustomPlaneStore(_dir);
+    }
+
     private static StockLoadouts Stock =>
         StockLoadouts.Load(Path.Combine(TestData.RepoRoot, "CSVM", "data", "stock_loadouts.json"));
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_dir))
+        {
+            Directory.Delete(_dir, true);
+        }
+
+        GC.SuppressFinalize(this);
+    }
 
     /// <summary>Calibre row c is caliber 30 + 10c, and the id stays unresolved: the whole point of
     /// leaving WeaponId null is that Loadout.Bind resolves calibre + ammo, so a later ammo pick
@@ -211,6 +235,25 @@ public class CustomPlaneBuildTests
         Assert.Equal(6, Loadout.PylonFillOrder[3]);
     }
 
+    /// <summary>A pick never reaches a pylon the build did not buy. One hardpoint a wing hangs 1
+    /// and 2, which sit either side of the empty entry pylon 5 holds open, and the Ammo Selection
+    /// screen offers a row for all three because the airframe's own fit is three wide. The empty
+    /// entry stays empty, so the aeroplane flies the two hardpoints it was priced for.</summary>
+    [Fact]
+    public void APickNeverReachesAnEmptyCellOfAHubBuiltPlane()
+    {
+        var built = HubBuild("Blue Streak", left: 1, right: 1);
+        var choice = new LoadoutChoice();
+        foreach (int pylon in new[] { 1, 5, 2 })
+        {
+            choice.SetPylon(pylon, "wep_07");
+        }
+
+        var applied = choice.ApplyTo(Build(built, "pbloodhawk"));
+
+        Assert.Equal(new[] { "wep_07", LoadoutChoice.None, "wep_07" }, applied.Hardpoints!.Stock);
+    }
+
     /// <summary>The plane keeps its airframe's def and model (it flies that aircraft) and takes
     /// the pilot's own name for display.</summary>
     [Fact]
@@ -385,4 +428,25 @@ public class CustomPlaneBuildTests
         new DestroyablePart { Name = "leftwing", MaxHp = 20f, MaxArmor = 20f },
         new DestroyablePart { Name = "rightwing", MaxHp = 20f, MaxArmor = 20f },
     };
+
+    // One plane built the way the Plane Construction hub builds one: a flow walked to the purchase
+    // review and committed, read back out of the store the commit wrote it to. The airframe
+    // defaults are declined, so the two counts are the only hardpoints the build pays for.
+    private CustomPlaneDef HubBuild(string name, int left, int right)
+    {
+        var flow = new HangarFlow(_store, UiStrings.Empty);
+        flow.Accept();
+        flow.PickAirframe(Bloodhawk);
+        flow.AnswerDefaultsAsk(false);
+        flow.Scratch.Engine = 1;
+        flow.Scratch.LeftHardpoints = left;
+        flow.Scratch.RightHardpoints = right;
+        flow.Scratch.Name = name;
+        while (flow.Screen != HangarScreen.Purchase && flow.Advance())
+        {
+        }
+
+        Assert.True(flow.Commit(), flow.Message);
+        return Assert.Single(_store.List());
+    }
 }

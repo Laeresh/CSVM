@@ -258,6 +258,7 @@ public partial class GameSession : Node3D
     // advanced on the sim dt (never wall time). Null outside Versus, the Downed events then
     // simply have no subscriber. Freed with this node; flight holds no match state.
     private VersusMatch? _versus;
+    private VersusSpawnRotation? _versusSpawns;
     // The stunt race (--stunt with several pilots), for the same reason: a rerun resets it rather
     // than each pilot's own run. Null outside a race.
     private StuntRace? _race;
@@ -588,6 +589,14 @@ public partial class GameSession : Node3D
                 _cutscene?.BindRigs(_rigs, () => AiPlanes);
                 if (_cutscene != null)
                 {
+                    // The original parks the AI at the start of a mission of every type, before its
+                    // start list runs, and lifts it from the bootstrap definition. Missions only:
+                    // free flight has no counterpart there, so nothing outside a mission is held.
+                    if (_iaDirector != null || _campaign != null)
+                    {
+                        _cutscene.ParkAtMissionStart();
+                    }
+
                     _cutscene.SwapAirframe = SwapPlayerAirframe;
                     // The docking's own ending. Instant Action has no objectives graph to complete,
                     // and its rows never raise the code, so an unbound seam is the right answer
@@ -605,6 +614,11 @@ public partial class GameSession : Node3D
             LoadProgress.Report(LoadStep.PlayerRigs);
             ApplyDestroyOverride(state);
             ApplyObjectiveOverride(state);
+            if (!ApplyDebrisShadingDump(state))
+            {
+                return false;
+            }
+
             LogBuildSummary(state, sw);
         }
         catch (Exception e)
@@ -720,6 +734,7 @@ public partial class GameSession : Node3D
 
     public override void _Process(double delta)
     {
+        using var _ = ProcessSiteCost.Enter(ProcessSite.Session);
         // First thing in the frame (ProcessPriority): decide how much sim time this rendered frame
         // is worth, then, when the clock is not realtime, step the physics-driven consumers
         // ourselves, in the tree order Godot's physics tick would have used.
@@ -2449,14 +2464,27 @@ public partial class GameSession : Node3D
         if (versus is { } match)
         {
             _versus = match;
+            // Spawn rotation: a downed seat comes back on a point picked against the living field
+            // rather than on the fixed one it can be camped at. Its Rng is seeded from the master
+            // alone, so no pick here draws from Rng.Spawn and shifts the launch spawn index.
+            _versusSpawns = VersusSpawnRotation.For(spawnList, spawnBase, _rigs.Count,
+                new Random(Rng.IntSeedFor(Rng.VersusSpawn)));
+            // Who downed each seat last, which the rotation weighs heaviest: the Downed report
+            // carries it, and the respawn that reads it happens seconds later.
+            var lastKiller = new int?[_rigs.Count];
             foreach (var rig in _rigs)
                 if (rig.Controller is { } pilot)
                 {
+                    int seat = rig.Index;
                     pilot.AutoRespawnAfter = VersusRespawnDelay; // crash cam, then back in, R skips
                     pilot.Match = match;                  // R-ownership gate: board-up ⇒ rematch
                     pilot.RestartMatch = () => RestartMatch(match);
+                    if (_versusSpawns != null)
+                        pilot.RespawnPlacement = () => VersusRespawn(seat, lastKiller[seat]);
                     pilot.Downed += (victim, killer) =>
                     {
+                        if (victim >= 0 && victim < lastKiller.Length)
+                            lastKiller[victim] = killer;
                         if (killer is int k && k >= 0 && k < match.PlayerCount)
                             match.RegisterKill(k, victim);
                         else
@@ -3244,6 +3272,37 @@ public partial class GameSession : Node3D
         }
     }
 
+    // --dump-debris=<name>: kill the named destructibles, then report what shades every mesh under
+    // them and which of those the death flung. Runs after the build so the pieces read the same
+    // materials a screenshot draws, and ends the session, nothing is rendered.
+    // Returns false when the session is over.
+    private bool ApplyDebrisShadingDump(BuildState state)
+    {
+        if (!_spec.DumpDebris)
+        {
+            return true;
+        }
+
+        if (state.WorldRuntime == null || state.WorldScene == null)
+        {
+            Log.Error("world", $"--dump-debris='{_spec.DumpDebrisName}': no chapter world (pair it with --chapter=)");
+            GetTree().Quit(1);
+            return false;
+        }
+
+        _worldEffectsFactory.EnsureWorldEffects(state.Gamez, state.WorldScene, state.Textures, state.CrashProgram!, state.WorldRuntime);
+        // The scalar as the rig applied it, not recomputed here, so the report cannot disagree with
+        // what the same frame would draw. 1 when no rig ran, which is what an unwritten global is.
+        float worldLight = _weatherRig?.WorldLightLinear ?? 1f;
+        var report = Testing.Probes.DebrisShading(state.WorldRuntime, state.Gamez, state.Textures,
+            _spec.Chapter, _spec.DumpDebrisName, worldLight);
+        Log.Raw(report.Text);
+        _probeRunner.WriteScratch($"debris_shading_{_spec.Chapter}.txt", report.Text);
+        Log.Info("world", $"--dump-debris: {report.Summary}");
+        GetTree().Quit(report.Ok ? 0 : 1);
+        return false;
+    }
+
     // The "loaded ..." summary line and the per-pane/texture-census follow-ups, printed once the
     // whole build has finished.
     private void LogBuildSummary(BuildState state, Stopwatch sw)
@@ -3761,8 +3820,28 @@ public partial class GameSession : Node3D
     {
         Log.Info("flight", $"dogfight: rematch — scores and clock reset for every pilot");
         match.Restart();
+        // A rematch is a fresh round, so it opens on the opening spawns rather than on wherever
+        // the last round's rotation had left each seat.
+        _versusSpawns?.Restart();
         foreach (var rig in _rigs)
             rig.Controller?.Respawn();
+    }
+
+    // Where a downed dogfight seat comes back: the rotation's pick against the field as it stands
+    // at the respawn, so a seat still on its own crash camera neither holds a point nor pulls one
+    // away. Null with no rotation built, which leaves the seat on the pose it was given.
+    private (Vector3 Pos, Vector3 LookAt)? VersusRespawn(int seat, int? killer)
+    {
+        if (_versusSpawns is not { } rotation)
+            return null;
+        var field = new Vector3?[_rigs.Count];
+        for (int i = 0; i < _rigs.Count; i++)
+            field[i] = _rigs[i].Controller is { Crashed: false, Inert: false } flying
+                ? flying.GlobalPosition : null;
+        var point = rotation.Choose(seat, field, killer);
+        string list = _spawnPicker.ScenarioOverride ?? _spec.Scenario;
+        Log.Info("flight", $"dogfight: P{seat + 1} respawns on {list} #{rotation.IndexOf(seat)} of {rotation.PointCount}{(killer is { } k ? $", downed by P{k + 1}" : "")}");
+        return (point.Position, point.Position + point.Forward);
     }
 
     // Frames the parked plane in the orbit view. ⚠ --lookat is a POINT and is used verbatim;

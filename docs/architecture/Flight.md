@@ -32,9 +32,9 @@ the two dropdowns parsed from the same file's `selectable` block, authored in th
 order and neither derived nor sorted. `LoadoutChoice` keys its picks by slot identity rather than by
 position in a def's arrays, and `ApplyTo` lays them over a base handed in rather than looked up, so a
 custom plane's saved fit takes the same path and a pick for a slot the base lacks is dropped. Guns
-are slots 1 to 4; ordnance is either a physical pylon, which the loadout screens read off the fit, or
-a saved record's wing cell, which names a pylon only against a fit (`Loadout.PylonForCell`). `None`
-is an explicit empty mount, a null entry no choice at all. Fills: `Session/CampaignLoadout.cs`.
+are slots 1 to 4; ordnance is either a physical pylon, which the loadout screens read off the fit,
+or a saved record's wing cell naming a pylon only against a fit (`Loadout.PylonForCell`). `None` is
+an explicit empty mount taking no pick, a null entry no choice at all. Fills: `Session/CampaignLoadout.cs`.
 
 ## src/Flight/WeaponBench.cs
 The world-less "do all 48 weapons mount and fire without throwing" pass check behind `--weapon-test`
@@ -512,8 +512,9 @@ curves, `destroyable_parts` as `DestroyablePart` records with the def-level inju
 Reads the flight spawn from a mission's OWN zrdr, a different archive than the shared `--zrdr`, in
 two schemas both yielding `SpawnPoint(Position, HeadingDeg)`: `LoadIa` for the instant-action
 `spawn_points` per scenario, which only some folders carry and the original picks one of at random
-per launch, and `LoadPlayerInit` for the story objectives' `PLAYER_INIT` position and yaw. Schema:
-[../formats/spawns.md](../formats/spawns.md).
+per launch, and `LoadPlayerInit` for the story objectives' `PLAYER_INIT` position and yaw. A
+spawn's `Forward` is the nose axis its heading yaws to, so every placement reads one look-at point
+rather than restating the conversion. Schema: [../formats/spawns.md](../formats/spawns.md).
 
 ## src/Flight/MissionTargets.cs
 A mission's `targets.json` as one table: target key to its objective display keys
@@ -662,6 +663,16 @@ is the host-fed match clock, `MatchCompleted` fires once on the kill threshold o
 (leader wins, equal top kills draw), `Standings()` ranks by kills with ties sharing a rank, and
 `Restart()` zeroes every score and re-arms completion. Off-engine coverage:
 `CSVM.Tests/VersusMatchTests.cs`. Read `VersusHud` and `VersusBoard` for what it feeds.
+
+## src/Flight/VersusSpawnRotation.cs
+Where a Dogfight seat comes back, engine-free: it owns the per-seat spawn-list ledger the opening
+spawn sets (one living seat per point) and picks a respawn among the roomiest entries against the
+living field, weighing the killer at `KillerWeight` and drawing between everything within
+`RoomyShare` of the best, so the point rotates and no seat can be camped. `For` returns null when
+there is no list, `Restart` reopens a round on the opening points, and the draw comes from a
+caller-supplied `Random` so a pinned run replays. `GameSession` feeds it the live field and hands
+the result to `FlightController.RespawnPlacement`. Off-engine coverage:
+`CSVM.Tests/VersusSpawnRotationTests.cs`; the seam's own suite is `versus-spawn-rotation`.
 
 ## src/Flight/VersusHud.cs
 The per-pane Dogfight HUD: a compact status line (remaining time, this pane's kills and deaths, the
@@ -1077,7 +1088,7 @@ one `IWorldQuery` bound in `Bind`, and contact detection fills one `ContactRepor
 sweep, the AI probe rays or the anti-tunnelling centre ray. An AI aircraft is this SAME node with
 `Pilot` driving the input source, no camera and no HUD canvas, so flight, collision, weapons and
 damage are the player's path exactly. `Held`, `ControlsHeld` (the stick reads neutral and every discrete command is swallowed while the aeroplane flies on as trimmed), `Inert`, `Spectating`, `CameraOwned` and
-`AllowLiveRespawn` are the flags a session or a lab pins it with. `SelectRankedTarget` builds the pilot's four-pool candidate list, each entry carrying its own class bias, and hands it to `AiTargetRanking.SelectBest` under the session's targeting order. Read `AircraftLifecycle.cs` next.
+`AllowLiveRespawn` are the flags a session or a lab pins it with, and `RespawnPlacement` is the hook a session answers with where a respawn should put the aeroplane (`VersusSpawnRotation` in the dogfight), unset everywhere else so a respawn keeps the pose `Setup` fixed. `SelectRankedTarget` builds the pilot's four-pool candidate list, each entry carrying its own class bias, and hands it to `AiTargetRanking.SelectBest` under the session's targeting order. Read `AircraftLifecycle.cs` next.
 
 ## src/Flight/PlaneDamage.cs
 The decoded vehicle damage ledger: per-part pools from `destroyable_parts` plus a whole-vehicle

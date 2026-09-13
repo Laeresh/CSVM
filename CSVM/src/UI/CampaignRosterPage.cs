@@ -1,3 +1,5 @@
+using CSVM.UI.Menu;
+
 namespace CSVM.UI;
 
 /// <summary>
@@ -234,6 +236,25 @@ public sealed class CampaignRosterPage : CampaignPage
         return false;
     }
 
+    /// <summary>The unlocking pilot name pressed: every airframe is offered for the rest of the
+    /// session, the player the screen stood on before is accepted again with a full wallet and the
+    /// eleven stock airframes, and the box goes back to that name with the screen still standing.
+    /// That is the script's own <c>RB</c> path, which re-accepts <c>MB.ZC</c> and returns -1 rather
+    /// than opening the cabin. Public because Original commits this screen through a path of its
+    /// own and takes this one from here rather than repeating it.</summary>
+    public bool Unlock()
+    {
+        Flow.Cheats.AllowEverything();
+        string previous = Selected;
+        _entry.Set(previous);
+        if (previous.Length > 0 && Flow.Feature.ContinuePlayer(previous) == null)
+        {
+            Flow.Feature.Wallet()?.UnlockEverything();
+        }
+
+        return true;
+    }
+
     // Which row a profile name sits on, or 0 (the name field) for a name the roster does not
     // carry. 0 is also where a remembered profile that has since been deleted lands.
     private int RosterRow(string name)
@@ -259,6 +280,11 @@ public sealed class CampaignRosterPage : CampaignPage
     private bool Continue()
     {
         string name = NameInPlay;
+        if (CampaignCheats.IsUnlockName(name))
+        {
+            return Unlock();
+        }
+
         if (Flow.Feature.ContinuePlayer(name) is { } refusal)
         {
             Flow.SetMessage(refusal);

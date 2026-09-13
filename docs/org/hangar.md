@@ -413,8 +413,9 @@ message.
 The player's money is one dword, `0x0064b788`, exposed to the GUI scripts under the name
 `nPlayerCash` by the script-global binder `FUN_00401fc0` (which registers the whole
 `nMission` / `fIAConstruction` / `fMultiPlayerConstruction` / `fAllowAll` / `szSaveGameDir`
-family the same way). **Program-wide it has exactly four writers**, so the ledger below is
-complete, not a sample.
+family the same way). **Program-wide the executable has exactly four writers of its own**, so the
+first four rows of the ledger below are complete, not a sample. The fifth is the hub script's,
+which reaches the same dword through the scripting interface rather than through code.
 
 | Site | Effect |
 |---|---|
@@ -423,6 +424,7 @@ complete, not a sample.
 | `0x00405db9` (`FUN_00405ce0`) | mission wrap-up: `+=` the objective reward below |
 | `0x0040a067` (sell handler) | `+=` the sold plane's full build cost |
 | `0x0040b5f3` (commit 2263) | `-=` the scratch build's total cost |
+| `PLANECONSTRUCTION.SCRIPT`'s `gui_char` body | the typed `gimme`: `+= 25000` while the wallet holds under 50000 |
 
 **Starting funds are $0.** `FUN_004113b0` is the fresh-start initialiser (called from
 `FUN_004112b0` at boot and from the screen-flow dispatcher `FUN_00407670`); it zeroes the
@@ -431,7 +433,9 @@ plane-slot array, resets campaign progress `0x0064b678`, and sets the wallet to 
 that also switches off every airframe availability threshold in `FUN_00410120` /
 `FUN_004100d0` / `FUN_00410170`, and the same branch fills plane slots 2 to 12 with the eleven
 stock airframe templates. It is the unlock-everything mode, and its budget is the only
-literal money constant in the image.
+literal money constant in the image. What sets `fAllowAll` from the menus is the hidden pilot
+name `crashcheat!` on the profile screen, which `CAMPAIGN.SCRIPT` compares before the name
+validator runs.
 
 **The campaign instead starts with two aircraft, not with cash.** The same initialiser copies
 prebuilt records 11 and 12 (204 bytes each) out of the template array at `0x00619f58` into

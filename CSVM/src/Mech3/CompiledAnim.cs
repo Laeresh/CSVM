@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Text.Json;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Mech3;
@@ -88,7 +89,7 @@ public sealed class AnimArchive
         catch (Exception e)
         {
             // A corrupt/partial extraction must not take the world build down with it.
-            GD.Print($"anim archive '{label}': unreadable ({e.GetType().Name}) — skipping");
+            Log.Info("anim", $"anim archive '{label}': unreadable ({e.GetType().Name}) — skipping");
             return null;
         }
         return archive;
@@ -109,7 +110,7 @@ public sealed class AnimArchive
             }
             catch (Exception e)
             {
-                GD.Print($"anim archive '{Label}': script #{index} '{_scriptNames[index]}' unreadable ({e.GetType().Name})");
+                Log.Info("anim", $"anim archive '{Label}': script #{index} '{_scriptNames[index]}' unreadable ({e.GetType().Name})");
             }
         }
         return _scriptCache[index] = script;

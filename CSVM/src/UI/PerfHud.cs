@@ -229,7 +229,7 @@ public sealed partial class PerfHud : Node
         _hudLayer!.Visible = true;
         _sinceRefreshMs = RefreshIntervalMs; // redraw on the next Tick rather than waiting out the interval
         Refresh();
-        GD.Print($"[perf] fps readout: {_mode}");
+        Log.Info("perf", $"fps readout: {_mode}");
     }
 
     // Built lazily on first switch-on: a session that never presses F14 (or passes

@@ -780,8 +780,9 @@ Intro definitions are bootstrapped from `StartAnims.zrd`, whose two sections are
 and `LOAD_GAME_START` (C1/M04 lists `mission_intro_animation` under `NEW_GAME_START` only, so the
 intro plays on a fresh start of the mission and not on a load). The loader is `FUN_0046c370`
 (`mission.cpp`), and it starts each named def with `FUN_004edda0(def, 0, 0, 0, 0)` and **no**
-`FUN_004ee160` call. A def started that way has no host, so `FUN_004ec5e0` finds a null pointer at
-`anim+0x74` and every `CALLBACK` in it is a no-op in the original as well.
+`FUN_004ee160` call, which is the only writer of the host slot at `anim+0x74`. The start itself is
+not where a start-list definition gets a host, though it is not the only chance one has: see the
+warning below on `FUN_004735b0`'s own walk.
 
 The engine does the equivalent imperatively instead. `FUN_004654e0`, the new-mission start,
 runs `FUN_0041f250` / `FUN_004a95f0` / `FUN_004516e0(0)` / `FUN_00453660(0)`, which is code 913's
@@ -805,11 +806,32 @@ cutscene flag set, before its own start list runs, and an Instant Action bootstr
 as a story intro's is. The roster is standing at that moment rather than empty: `FUN_004735b0`
 builds the mission's vehicles through `FUN_0047c210` earlier in the same function.
 
-⚠ **What lifts that park is not read.** The unpark `FUN_0041f2e0` is reached only from the
-mission-script host's code 914 and from the console command table, and a `StartAnims` definition
-carries no host, so no start list can raise it. Do not read the park as evidence that a mission
-whose start list has no movie holds its AI down into gameplay; read it as the state the start
-enters, with the release undecoded.
+**What lifts it is the bootstrap definition's own reset, and nothing else.** The unpark is
+`FUN_0041f2e0`: it walks the same vehicle list under the same three-way filter the park uses
+(`+0x91d` clear, not the player at `DAT_0071c298`, `+0xf8` clear), clears the hold flag `+0x354`,
+sets the next-think time `+0x300` to the mission clock plus a randomised 0 to 2 s, and reactivates
+the scene node through `FUN_004cca30(node, 1)`. The park at `FUN_0041f250` is its exact inverse,
+`+0x354` to 1 and `+0x300` to the clock plus 3e10. **It is keyed on a script code, never on a timer
+and never on an episode ending**: the three call sites of `FUN_0041f2e0` are the mission-script
+host's code 914 (`0047e510`) and two arms of the console command table (`0043e4e1` and `0043ecd0`,
+each paired with a park arm on the neighbouring command). The only other writer of `+0x354` is the
+vehicle constructor `FUN_004aff80`, and the per-tick vehicle walk `FUN_004897c0` reads it at
+`004899e0` as the gate on whether a vehicle is simulated at all.
+
+So the lift comes from a definition raising 914, and what a mission opens on decides when that
+lands. A story mission's intro raises it in its own `RESET_STATE`, at the film's end. A mission
+opening without a movie bootstraps `camera1-player_setup`, whose `callback_sequence` restates the
+park with 913 and whose `RESET_STATE` raises 914 with `RESET_TIME [0]` and no timed event in
+between, so that mission's park is entered and left inside its own start. Either way the park and
+the lift belong to the start of a mission of any type, and neither is a story intro's to own.
+
+⚠ **A start-list definition is not hostless by construction.** `FUN_0046c370` installs no host of
+its own, but `FUN_004735b0` has already walked the animation-definition table with `FUN_00523920`
+and called `FUN_004ee160(def, FUN_0047e080, 0)` on every entry it yields (`00474a96`), earlier in
+the same `FUN_004654e0`. Which entries that walk yields is gated on the definition record's `+0x9c`
+bit `0x10` and on its `+0xa0` type byte not being 5, and neither is decoded, so whether a given
+start-list definition's codes reach the host is an open question. What does not depend on it is the
+park and the lift above, which the engine and the bootstrap definition assert between them.
 
 For a remake this matters in one direction only: **the codes are still the authoritative
 description of the cutscene's shape** (what is hidden, when the simulation stops, when control
@@ -856,7 +878,7 @@ readers of this install; the compiled archives carry the same events.
 | 701–704 | 1, 1, 0, 0 | ⚠ **Not a camera-parameter set; an earlier reading of this row said so and was wrong.** The case at `0x0047e35a` takes the whole range `0x2bd`–`0x2c0` and calls `FUN_0049a210(code − 700)`, which reaches the **multiplayer flag list**: `FUN_0049a1e0` finds the object carrying that id in the linked list at `DAT_0071c794` (built by `FUN_00494f40`, torn down with the rest of the network session's lists in `FUN_004966c0`), zeroes its `+0x44`, and `FUN_0049a240` broadcasts the whole list as network message `0x1d` through `FUN_005b2640`, the same message id `FUN_004966c0` registers `FUN_0049a300` as the receiver for. The list's own per-frame walk `FUN_00499e50` is a pickup-and-drop test at 625 m² against each entry. The whole case sits behind `FUN_005b4210`, false unless a network session object exists at `DAT_009c7860` and this machine is on its thread, **so the case does nothing at all in single player**. The two authored occurrences are `player-flg_throw1` and `player-flg_throw2`, in the `MP2` mission of every chapter. **Declined by design**: CSVM hosts no multiplayer session, and the original's own case is inert without one. |
 | 800–803 | 1 each | Colorado-specific hooks. **800 credits a launch budget:** it looks the generator `cargozep1` up by name and adds 5 to its remaining capacity (`+0x80`), the only credit C4/M03's generator ever receives, so the five freed-crew Furies launch during the beauty shot that raises it (`cg_beauty_shot`, called by the docking film `cg_hookup_player`; [enemy-generators.md](../mission-entities/enemy-generators.md), "Capacity rule and limit"). 801 to 803 reactivate the first still-deactivated `bhatwarhawk_1..6`, `bhatbrigand_n` and `bhatgyro_1..3` (`FUN_004b0f40(0)`, the primitive `WAKEUP_ENEMIES` uses); authored in C4's `bhm_warhawks`. CSVM answers 800 from `Session/AiGeneratorRuntime.cs`'s place in the `CALLBACK` host chain (five launches on `cargozep1`, the `generator-callback-credit` suite) and 801 to 803 from `Session/CampaignDirector.cs`'s own link ahead of it, which is the whole of what puts a CM19 Black Hat into the air, since no objective names one in `WAKEUP_ENEMIES` (the `campaign-launch-hook` suite). |
 | 913 | 7 | `FUN_0041f250` parks every AI vehicle that is not the player and not itself in a cutscene: sets its hold flag, pushes its next-think time far out, and deactivates its scene node. Plus `FUN_004a95f0` (detaches the wave director's node update), `FUN_004516e0(0)` and `FUN_00453660(0)`. **Clears the world of AI aircraft for the duration of the movie.** |
-| 914 | 8 | the exact inverse (`FUN_0041f2e0`, `FUN_004a9610`, `FUN_004516e0(1)`, `FUN_00453660(1)`), reactivating each AI vehicle with a randomised next-think. Skipped in multiplayer. |
+| 914 | 8 | the exact inverse (`FUN_0041f2e0`, `FUN_004a9610`, `FUN_004516e0(1)`, `FUN_00453660(1)`), clearing the hold flag `+0x354`, setting the next-think time `+0x300` to the clock plus a randomised 0 to 2 s and reactivating each AI vehicle's scene node. Skipped in multiplayer. **It is also what lifts the engine's own mission-start park**, from whichever definition the mission bootstraps (above, "The intro defs run without a host"); the only other callers of `FUN_0041f2e0` are two arms of the console command table. |
 | 950, 951 | 14 for 951 | 951 puts the player's aeroplane on its own `player` node's world pose and rebuilds its motion state from there. **The re-placement.** Decoded in full [below](#the-re-placement-code-951). 950 (the case at `0x0047e53e`) reads the raising definition's own root node (`FUN_00523990`) and hands it to `FUN_00422a70`, which **blocks a named AI-net edge**: `FUN_004228f0` builds the table at `DAT_0064ee54` of (scene node, net id, edge index) triples for every net edge whose name `+0x08` resolves to a gamez node, this case finds the entries whose node is the raising def's, sets that edge's blocked byte (edge `+0x20`, stride `0x24` off net `+0x5c`) and re-runs the net's goal routing `FUN_00431b70`, whose Dijkstra walk skips any edge carrying that byte. **Nothing in this install authors 950**, and no shipped net carries the GOAL nodes the re-solve exists to fill ([aiPilot.md](../../org/aiPilot.md)), so both halves are dead here. Declined by design. |
 | 965, 966, 967 | 1, 1, 3 | swap the player onto a specific airframe (`pbloodhawk`/`player_bhawk`, `pwarhawk`/`player_warhawk`, `pbalmoral`/`player_balmoral`) with its armour and hardpoint table, and set the cutscene flags. The data-side counterpart of the intro defs' `check_balmoral`/`check_warhawk` branches. Decoded in full [below](#the-airframe-swap-codes-965-966-and-967). |
 | 968 | 1 | The case at `0x0047f133`: `FUN_004aff10` looks the vehicle `bswingman_1` up by name and, if it is there with its out-of-flight byte `+0x91d` clear, `FUN_004b0f40(1)` hides it, setting the hidden bit `+0x945` and deactivating its scene node. The one occurrence is C4/M03's `player-cg_hookup_player`, two events into the docking film and **one event ahead of its own `snd_RM3SwanDown`**: `bswingman_1` is Swan (`MSG_BSWAN_NAME`), the wingman that mission's `aiv.zrd` seats on the player at 216 m, and the code is what takes her out of the world as the line plays. CSVM answers it from `Session/CampaignDirector.cs`'s link in the host chain, beside 801 to 803, as the deactivate rather than the cutscene park (the `campaign-wingman-removal` suite). |
@@ -868,7 +890,10 @@ animation takes them either, since the only host the cutscene trigger installs i
 are recorded as gaps, not guessed at: nothing in the exe tells us what 14 or 123 were meant to do.
 
 **Where each code lives in CSVM.** 1, 2, 10, 11, 13, 20, 86, 666, 667, 913, 914 and 951 are
-`CutsceneController`'s; 3 is `AnimRuntime.ResetPilotView`, reached from the crash rig rather than
+`CutsceneController`'s, which also carries the engine half of 913 and 914 as
+`ParkAtMissionStart`, the park a mission of any type enters at its start and leaves at its
+bootstrap definition's reset (the `cutscene-ai-park-mission-start` suite over an Instant Action
+wave); 3 is `AnimRuntime.ResetPilotView`, reached from the crash rig rather than
 the cutscene host because the definition that raises it is no cutscene; 800 is
 `AiGeneratorRuntime`'s and 801 to 803 and 968 are `CampaignDirector`'s; 965 to 967 are
 `AirframeSwap`'s; 15 and 16 are the runtime's own vehicle-death seams. Four are **declined by
@@ -1175,12 +1200,13 @@ C2/M03, C2/M05, C3/M04, C4/M03, C4/M05, C5/M02 and C5/M03); all 24 story mission
 `LOAD_GAME_START`, which the `ia1` and `mp` missions leave null. The multiplayer counterpart is
 `multiplayer_setup`, which every `mp` mission bootstraps in its place.
 
-What it does is its two `OBJECT_ACTIVE_STATE` events, since its nine codes reach no host like every
-other start list definition's: `RESET_STATE` switches the `player` node **ACTIVE** and calls
-`speed_cue`, and `callback_sequence` switches `player` **INACTIVE**. `ACTIVATION` is `ON_CALL`,
-`AUTO_ADD_TO_WORLD` is `OFF` and `RESET_TIME` is `[0, -1]`. The AI park a reader might expect from
-its 913 is real but comes from the engine, which parks before any start list of any mission type
-runs ([above](#the-intro-defs-run-without-a-host)).
+Beside its nine codes it does two `OBJECT_ACTIVE_STATE` events: `RESET_STATE` switches the `player`
+node **ACTIVE** and calls `speed_cue`, and `callback_sequence` switches `player` **INACTIVE**.
+`ACTIVATION` is `ON_CALL`, `AUTO_ADD_TO_WORLD` is `OFF` and `RESET_TIME` is `[0, -1]`. The AI park
+a reader might expect from its 913 is real, and comes from the engine, which parks before any start
+list of any mission type runs; its `RESET_STATE` 914 is what lifts that park, and with no timed
+event between the two the whole park lands inside the mission start
+([above](#the-intro-defs-run-without-a-host)).
 
 Reading the eight as a pair of state transitions:
 
@@ -1290,10 +1316,11 @@ beat deactivating it; the smooth phase between them is
   multiple of 2500, so whether the rounding is strict or inclusive is undetermined. Resolve these
   names by name rather than by arithmetic on the pointer.
 - **`camera1-player_setup` is the bootstrap of a mission that opens without a movie**, and of a
-  mission resumed from a save, not an Instant Action definition. Its nine codes are unhosted no-ops
-  and its own work is the two `player` active-state events (above, "The codes do not identify a
-  cutscene"). **Undecoded: what the original shows while it runs**, and what lifts the engine's
-  mission-start AI park when no hosted definition raises 914.
+  mission resumed from a save, not an Instant Action definition. Its `RESET_STATE` 914 is what lifts
+  the engine's mission-start AI park, and its own work beside the codes is the two `player`
+  active-state events (above, "The codes do not identify a cutscene"). **Undecoded: what the
+  original shows while it runs**, and whether the definition-table host walk in `FUN_004735b0`
+  reaches it, which turns on the `+0x9c` bit `0x10` gate in `FUN_00523920`.
 - **Undecoded: how the original draws a parentless active root.** `gwNodeSetActive`
   (`FUN_004cca30`) only flips the node's active bit; the traversal that reaches `letterbox` without
   it being anyone's child was not traced.

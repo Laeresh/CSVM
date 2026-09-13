@@ -59,7 +59,7 @@ public sealed class GodotWorldQuery : IWorldQuery
             query.Transform = query.Transform.Translated(
                 motion * cast[1] + (mLen > 1e-6f ? motion / mLen * 0.05f : Vector3.Zero));
             query.Motion = Vector3.Zero;
-            var rest = space.GetRestInfo(query);
+            using var rest = space.GetRestInfo(query);
             if (rest.Count > 0)
             {
                 contact = (Vector3)rest["point"];
@@ -90,7 +90,8 @@ public sealed class GodotWorldQuery : IWorldQuery
         _ray.To = to;
         _ray.CollisionMask = mask;
         _ray.Exclude = exclude ?? _noExclude;
-        var hit = space.IntersectRay(_ray);
+        // Disposed, not left to the finalizer: one per aircraft probe per tick (PERF-20).
+        using var hit = space.IntersectRay(_ray);
         if (hit.Count == 0)
             return false;
         report = new RayReport(
@@ -113,7 +114,9 @@ public sealed class GodotWorldQuery : IWorldQuery
             query.CollisionMask = mask;
             query.Exclude = exclude ?? _noExclude;
             // One hit is enough, this only asks whether the box is free.
-            if (space.IntersectShape(query, 1).Count > 0)
+            var hits = space.IntersectShape(query, 1);
+            using var hitsCore = (Godot.Collections.Array)hits; // the typed array is not disposable itself
+            if (hits.Count > 0)
                 return true;
         }
 

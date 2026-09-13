@@ -72,11 +72,11 @@ public sealed class CaptureDirector
         var err = img.SavePng(path);
         if (err == Error.Ok)
         {
-            GD.Print($"screenshot saved: {path}");
+            Log.Info("core", $"screenshot saved: {path}");
             return path;
         }
 
-        GD.PrintErr($"screenshot failed ({err}): {path}");
+        Log.Error("core", $"screenshot failed ({err}): {path}");
         return null;
     }
 

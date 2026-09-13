@@ -247,7 +247,8 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
 
     /// <summary>Whether seat 0's typed characters feed one of the hangar's own text fields right
     /// now: the name screen's edit box, or the hub's own box while the focus stands in it. None of
-    /// the two while a dialog stands over the screen.</summary>
+    /// the two while a dialog stands over the screen. An armed typed cheat also takes the keyboard,
+    /// but its latch is the shell's, so the shell adds it to its own reading.</summary>
     public bool CapturingText =>
         !_host.DialogOpen
         && (_host.Screen == OriginalScreen.PlaneName || (IsHub && _host.FocusedKey == HubNameFieldKey));
@@ -270,9 +271,15 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
     /// <summary>The tab the hub last showed, which SELL PLANES and Back on the totals page return to.</summary>
     public OriginalScreen HangarTab => _hangarTab;
 
-    private bool IsHangarTab => _host.Screen >= OriginalScreen.HangarAirframe && _host.Screen <= OriginalScreen.HangarPaint;
+    /// <summary>Whether the screen showing is the plane-construction hub, a tab or the purchase
+    /// page: where the cash figure and the hub's own name box stand.</summary>
+    public bool IsHub => IsHangarTab || _host.Screen == OriginalScreen.HangarPurchase;
 
-    private bool IsHub => IsHangarTab || _host.Screen == OriginalScreen.HangarPurchase;
+    /// <summary>The wallet the build showing is priced against, or null where the door opened
+    /// wallet-free or no build is open.</summary>
+    public IHangarWallet? OpenWallet => _hangar?.Wallet;
+
+    private bool IsHangarTab => _host.Screen >= OriginalScreen.HangarAirframe && _host.Screen <= OriginalScreen.HangarPaint;
 
     /// <summary>Whether the screen showing is one of the hangar's: the name screen, a tab, the
     /// totals page or the inventory.</summary>

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Utils;
@@ -253,6 +254,11 @@ public sealed class InstantActionFeature : IMenuFeature
 
     /// <summary>The airframe row carrying a display name, or -1.</summary>
     public static int AirframeIndex(string name) => Array.IndexOf(AirframeNames, name);
+
+    /// <summary>A lives value as a screen writes it: Unlimited at zero, else the count. One
+    /// vocabulary, so both presentations name the same setting the same way.</summary>
+    public static string LivesLabel(int lives) =>
+        lives <= 0 ? "Unlimited" : lives.ToString(CultureInfo.InvariantCulture);
 
     /// <summary>One wave slot as the <see cref="InstantActionWave"/> the def stores: the empty
     /// wave at 0 enemies whatever the cursors, so an unconfigured slot matches an omitted

@@ -621,6 +621,7 @@ public sealed partial class Puffer : Node3D
 
     public override void _Process(double delta)
     {
+        using var _ = ProcessSiteCost.Enter(ProcessSite.Puffers);
         if (!_active)
             return;
         // Particles are sim state: they freeze with a halted clock and scale with a scaled one.

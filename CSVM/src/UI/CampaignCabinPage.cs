@@ -19,6 +19,17 @@ public sealed class CampaignCabinPage : CampaignPage
     /// that leaves this flow standing while the hangar runs over the profile's wallet.</summary>
     public const int PlaneConstructionRow = 2;
 
+    // PC_D_MISSIONS, the dropdown PASSENGERCABIN.SCRIPT creates deactivated and the cabin's typed
+    // word activates: LAYOUT.CSV's own X, Y, width, item height and 24 displayed rows.
+    private const float MissionListX = 300f;
+    private const float MissionListY = 20f;
+    private const float MissionListWidth = 475f;
+    private const float MissionListRowHeight = 21f;
+    private const int MissionListRows = 24;
+
+    // langui 3450 + row, the long mission names uiData 2038 answers the list with.
+    private const int MissionNameId = 3450;
+
     // The disabled-Next-Mission reason. Not a decoded langui id: docs/formats/strings.md's
     // 1200-1219 mission-results block has no "campaign finished" row, and uiData 2600 (the
     // original's own gate) is a boolean with no accompanying message string.
@@ -48,6 +59,9 @@ public sealed class CampaignCabinPage : CampaignPage
     private HangarArt? _scene;
     private bool _sceneProbed;
 
+    // The cheat's mission pull-down, built the first time the word is typed and kept afterwards.
+    private CampaignCombo? _missions;
+
     /// <summary>Binds the page to its flow.</summary>
     public CampaignCabinPage(CampaignFlow flow)
         : base(flow)
@@ -60,8 +74,9 @@ public sealed class CampaignCabinPage : CampaignPage
     /// <inheritdoc/>
     public override string Title => "CAMPAIGN CABIN";
 
-    /// <inheritdoc/>
-    public override int RowCount => Rows.Length;
+    /// <summary>The five buttons, and the mission pull-down after them once the cabin's typed word
+    /// has shown it.</summary>
+    public override int RowCount => Rows.Length + (MissionList() == null ? 0 : 1);
 
     /// <inheritdoc/>
     /// <remarks>The cabin scene, <c>PC_BackGround.png</c>, through <see cref="PngImage"/>. The
@@ -113,6 +128,10 @@ public sealed class CampaignCabinPage : CampaignPage
     public static int MapPinCount(CampaignProfileDef profile) =>
         (CampaignProgression.NextMissionSeq(profile) / 5) + 1;
 
+    /// <summary>The cheat's pull-down, or null while the word has not been typed. Its pick is the
+    /// mission NEXT MISSION launches in place of the campaign's own position.</summary>
+    public override CampaignCombo? Combo(int row) => row == Rows.Length ? MissionList() : null;
+
     /// <inheritdoc/>
     public override BoardButtonRef Button(int row) => row switch
     {
@@ -125,7 +144,7 @@ public sealed class CampaignCabinPage : CampaignPage
     };
 
     /// <inheritdoc/>
-    public override string RowText(int row) => Rows[row];
+    public override string RowText(int row) => row < Rows.Length ? Rows[row] : string.Empty;
 
     /// <inheritdoc/>
     public override string Detail(int row)
@@ -138,6 +157,7 @@ public sealed class CampaignCabinPage : CampaignPage
 
         return row switch
         {
+            _ when row == Rows.Length => "Chooses the mission NEXT MISSION launches",
             0 when CampaignProgression.Complete(profile) => FinishedReason,
             0 => "Opens the briefing for the next mission",
             1 => CampaignProgression.CompletedSeqs(profile).Count == 0
@@ -157,6 +177,11 @@ public sealed class CampaignCabinPage : CampaignPage
         {
             Flow.Cancel();
             return true;
+        }
+
+        if (row == Rows.Length && MissionList() is { } missions)
+        {
+            return PickMission(missions);
         }
 
         switch (row)
@@ -186,6 +211,53 @@ public sealed class CampaignCabinPage : CampaignPage
                 Flow.Cancel();
                 return true;
         }
+    }
+
+    // The cheat's pull-down, or null while the cabin's word has not been typed: the 24 long mission
+    // names, opened on the campaign's own position with 24 clamped to the last row, which is what
+    // the script's QMA.QG assignment does. Built once and kept, so a pick survives a redraw.
+    private CampaignCombo? MissionList()
+    {
+        if (!Flow.Cheats.MissionListShown)
+        {
+            return null;
+        }
+
+        if (_missions != null)
+        {
+            return _missions;
+        }
+
+        var names = new List<string>(MissionListRows);
+        for (int row = 0; row < MissionListRows; row++)
+        {
+            names.Add(Flow.Strings.Text(MissionNameId + row, $"Mission {row + 1}"));
+        }
+
+        _missions = new CampaignCombo(
+            MissionListX, MissionListY, MissionListWidth, MissionListRowHeight, MissionListRows);
+        int seq = Flow.Profile is { } profile ? CampaignProgression.NextMissionSeq(profile) : 0;
+        _missions.Load(names, Math.Clamp(seq, 0, MissionListRows - 1));
+        Flow.Cheats.PickMission(_missions.Selected + 1);
+        return _missions;
+    }
+
+    // One press on the pull-down: the closed field opens, and an open one commits whatever the
+    // cursor stands on as the mission NEXT MISSION will launch.
+    private bool PickMission(CampaignCombo missions)
+    {
+        if (missions.Expand())
+        {
+            return true;
+        }
+
+        if (missions.Confirm() is { } at)
+        {
+            missions.Select(at);
+            Flow.Cheats.PickMission(missions.Selected + 1);
+        }
+
+        return true;
     }
 
     // The cabin's own flat art, decoded once. The composition A6 describes (background, then the

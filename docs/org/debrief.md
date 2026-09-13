@@ -328,6 +328,11 @@ the campaign position is refused with `-0x65` unless the unlock flag at `0x00647
 which case the limit is mission 24. That refusal is what leaves an unreached slot showing langui
 1219 `Not yet flown`.
 
+What sets `0x00647b80` from the menus is the word `ispy` typed on the table of contents, after a
+left click inside the region `SCRAPBOOK_TOC.SCRIPT` authors for the matcher. The remake builds it:
+under the flag the contents list offers all 24 missions and the book composes every spread with its
+capture slots filled, whatever the profile has flown and whatever its capture bits say.
+
 **Three readings of the shipped art did not survive the table.**
 
 - `SB_01_00_DZ.PNG` is not the danger-zone slot and no row references it. A capture is any name

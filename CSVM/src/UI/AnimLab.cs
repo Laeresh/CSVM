@@ -388,8 +388,7 @@ public sealed partial class AnimLab : Node
         var started = _runtime.Play(name, anchor);
         if (started.Count == 0)
         {
-            GD.Print($"anim-lab: no definition named '{name}' among this program's " +
-                     $"{_program.Defs.Count} defs — check --chapter/--mission (F lists them)");
+            Log.Info("ui", $"anim-lab: no definition named '{name}' among this program's {_program.Defs.Count} defs — check --chapter/--mission (F lists them)");
             _timeline?.Clear();
             return;
         }
@@ -397,8 +396,7 @@ public sealed partial class AnimLab : Node
         _stopped = false;
         _instances = started.Count;
         bool placeless = started.Any(s => ReferenceEquals(s.Anchor, anchor));
-        GD.Print($"anim-lab: playing '{name}' — {started.Count} instance(s), seed {_seed}"
-                 + (placeless ? " (placeless — staged in front of the camera)" : ""));
+        Log.Info("ui", $"anim-lab: playing '{name}' — {started.Count} instance(s), seed {_seed}{(placeless ? " (placeless — staged in front of the camera)" : "")}");
         if (_autoFrame)
         {
             // Placeless: frame + follow the staging dummy, so the in-front-of-camera effect is
@@ -454,7 +452,7 @@ public sealed partial class AnimLab : Node
         // pairs would keep re-writing the last interpolated pose every frame.
         _renderPoses.Clear();
         _stopped = true;
-        GD.Print($"anim-lab: stopped '{_defName}'");
+        Log.Info("ui", $"anim-lab: stopped '{_defName}'");
     }
 
     // ---- selection follow ----------------------------------------------------------------------
@@ -477,7 +475,7 @@ public sealed partial class AnimLab : Node
             _cam.FollowNode(node);
             _followName = NodeName(node);
         }
-        GD.Print($"anim-lab: following '{_followName}'");
+        Log.Info("ui", $"anim-lab: following '{_followName}'");
     }
 
     // Frame the camera on a node and start following it (position tracks the node as it moves).
@@ -570,7 +568,7 @@ public sealed partial class AnimLab : Node
                 return;
             }
         }
-        GD.Print($"anim-lab: '{_defName}' resolves no frameable node — camera left as-is");
+        Log.Info("ui", $"anim-lab: '{_defName}' resolves no frameable node — camera left as-is");
     }
 
     // ---- UI ----------------------------------------------------------------------------------
@@ -750,7 +748,7 @@ public sealed partial class AnimLab : Node
         var def = _program.Defs[_rows[row]];
         if (string.IsNullOrEmpty(def.AnimName))
         {
-            GD.Print($"anim-lab: '{def.Name}' has no ANIMATION_NAME — cannot play it directly");
+            Log.Info("ui", $"anim-lab: '{def.Name}' has no ANIMATION_NAME — cannot play it directly");
             return;
         }
         Play(def.AnimName!, def);

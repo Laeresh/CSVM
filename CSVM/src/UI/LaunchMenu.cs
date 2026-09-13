@@ -792,7 +792,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                 _setup.Select(seat);
         }
         SyncSlots();
-        GD.Print($"launchscreen: --debug-join → {_slots.Count} players (the added ones have no device)");
+        Log.Info("ui", $"launchscreen: --debug-join → {_slots.Count} players (the added ones have no device)");
         // --menu=campaign-guestcheck's own walk, which needs the players this call just added: the
         // aid ran inside ShowMenu, before anybody had joined.
         if (_aidGuest > 0 && _campaign is { } flow)
@@ -825,7 +825,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             _ia.SetWave(i, new InstantActionWaveSetup(
                 4, i % InstantActionFeature.Militias.Count, 0, i % InstantActionFeature.Skills.Count));
         }
-        GD.Print($"launchscreen: --debug-waves → {n} wave(s) pre-configured");
+        Log.Info("ui", $"launchscreen: --debug-waves → {n} wave(s) pre-configured");
         if (Visible)
             Rebuild();
     }
@@ -845,7 +845,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         ScrollPresetsToCursor();
         // The base def is normally loaded by Environment's own Accept, which this aid skips.
         _ia.ConfirmEnvironment();
-        GD.Print($"launchscreen: --debug-preset → '{InstantActionPresets.All[n].Name}' applied");
+        Log.Info("ui", $"launchscreen: --debug-preset → '{InstantActionPresets.All[n].Name}' applied");
         if (Visible)
             Rebuild();
     }
@@ -860,7 +860,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         _mode = MenuMode.Stunt;
         _ia.SetWingmen(count);
         _ia.SelectWingmanPlane(1);
-        GD.Print($"launchscreen: --debug-wingmen → {_ia.NumWingmen} wingman/wingmen pre-configured");
+        Log.Info("ui", $"launchscreen: --debug-wingmen → {_ia.NumWingmen} wingman/wingmen pre-configured");
         if (Visible)
             Rebuild();
     }
@@ -1195,7 +1195,7 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     private void Unjoin(int index)
     {
-        GD.Print($"launchscreen: P{index + 1} left (pad {MenuSeatDevices.PadOf(_slots[index].Seat.Source)})");
+        Log.Info("ui", $"launchscreen: P{index + 1} left (pad {MenuSeatDevices.PadOf(_slots[index].Seat.Source)})");
         _setup.Unjoin(_slots[index].Seat);
         _slots.RemoveAt(index);
         _slotsRevision = _setup.Revision;
@@ -1852,7 +1852,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                 _slots[0].PlaneIndex = at;
             }
 
-            GD.Print($"launchscreen: hangar built \"{name}\", selected in the plane picker");
+            Log.Info("ui", $"launchscreen: hangar built \"{name}\", selected in the plane picker");
         }
     }
 
@@ -2193,10 +2193,10 @@ public sealed partial class LaunchMenu : CanvasLayer
             return;
         }
 
-        GD.Print($"launchscreen: campaign '{exit.Profile}' flying mission seq {exit.MissionSeq} in \"{flow.Field.Plane(0)?.Name}\"");
+        Log.Info("ui", $"launchscreen: campaign '{exit.Profile}' flying mission seq {exit.MissionSeq} in \"{flow.Field.Plane(0)?.Name}\"");
         for (int player = 1; player < players; player++)
         {
-            GD.Print($"launchscreen: campaign P{player + 1} flying \"{flow.Field.Plane(player)?.Name}\"");
+            Log.Info("ui", $"launchscreen: campaign P{player + 1} flying \"{flow.Field.Plane(player)?.Name}\"");
         }
 
         StopNarration();
@@ -3744,7 +3744,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     // The lives stepper's own line, shown where the other screens show the focused row's
     // stat/region, it is not per-row, so it does not vary with the mission-type cursor.
     private string LivesDetail() =>
-        _ia.Lives == 0 ? "Lives   Unlimited        ◀ ▶  change" : $"Lives   {_ia.Lives}        ◀ ▶  change";
+        $"Lives   {InstantActionFeature.LivesLabel(_ia.Lives)}        ◀ ▶  change";
 
     // The Plane screen's own Instant Action line: the flown-wingmen re-clamp (decision
     // 8a, InstantActionRuntime.FlownWingmen) against the CURRENT joined-player count
@@ -3785,7 +3785,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         if (!_stats.TryGetValue(node, out var s))
         {
             try { s = PlaneStats.Load(_zrdrPath, node); }
-            catch (Exception e) { GD.Print($"launchscreen: no stats for {node}: {e.Message}"); s = null; }
+            catch (Exception e) { Log.Info("ui", $"launchscreen: no stats for {node}: {e.Message}"); s = null; }
             _stats[node] = s;
         }
         return s;

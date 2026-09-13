@@ -41,7 +41,7 @@ shadow maps, the pass is not built at all and the aircraft's own shadow is the m
 
 The energy mapping from authored SUNLIGHT units to Godot light energies, the 2x fog-range push and
 the shadow distance following it, the night key read off `FOG_COLOR` luminance with its 0.25
-separator and its 0.6 / 0.15 energy cap, and SSR's hard mirror on wave-less water planes are TUNE:
+separator and its 0.6 / 0.15 energy cap, and how far SSR smears on wave-less water planes are TUNE:
 judged at the controls against captures, not derived from a decoded rule. The night key in
 particular is a proxy the original never uses, which lights from SUNLIGHT and darkens from
 FOG_COLOR independently.

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Mech3;
@@ -126,8 +127,7 @@ public sealed class PatternLibrary
         var graphics = Path.Combine(rofRoot, "ASSETS", "GRAPHICS");
         if (!Directory.Exists(graphics))
         {
-            GD.Print($"[paint] no pattern library at {graphics} — run ExtractRof.ps1 to enable "
-                     + "the original's paint patterns; aircraft build unpainted");
+            Log.Info("world", $"[paint] no pattern library at {graphics} — run ExtractRof.ps1 to enable the original's paint patterns; aircraft build unpainted");
             return lib;
         }
         foreach (var dir in Directory.EnumerateDirectories(graphics))

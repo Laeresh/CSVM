@@ -147,6 +147,15 @@ member, and it does not go here.
   window shows. The slack figure would have pinned a suite one preset off the model that produced
   the picture.
 
+- **SHOT-40**, **A screen-space effect flickers with screen motion, so step the pose by a rotation,
+  and difference the pair against a second pair rendered with the effect off.** Translating the
+  camera 0.55 m and 3 m along the view barely moves the water reflection: at C1's lake those steps
+  flip 218 and 608 water texels of 155,444, and over C3's open sea 40 and 189 of 613,601, which
+  reads as no flicker and is the step's own doing. A 1.7 degree yaw, one frame of a brisk turn,
+  flips 3,641 and 5,270 at the same two poses, and a 5 degree yaw flips 10,534 and 17,543. The
+  effect-off pair is what separates the effect's own flipping from ordinary parallax: without it
+  every texel the camera move uncovers is counted as flicker.
+
 ## GOLD, golden images
 
 - **GOLD-1**, **Update moved hashes with the visual change, and explain each moved shot in the
@@ -403,6 +412,15 @@ member, and it does not go here.
   left the collider at 147 faces and laid the bowl under ground that was still solid. Subtracting
   the region from each face and re-emitting the remainder is what makes the hole the carve's own
   size; the same subtraction serves the skin and the trimesh.
+- **WORLD-47**, **A dark world surface is usually authored dark, so read the mesh's own baked vertex
+  colour and its sheet's mean texel before suspecting a light.** The fullbright world draws vertex
+  colour times texel times `csky_world_light`, and all three are data. C1's refuel-tank debris reads
+  near-black because its pieces carry vertex colour 119 where the rest of the same object carries
+  254, on a sheet whose mean texel is (63, 61, 64); at C1's 0.802 that is 0.375 of the sheet, which
+  is the whole of the "37 % of its own colour" a texture census had measured. A census over textures
+  cannot name the sheet a surface uses, because several sit inside its chromaticity tolerance; the
+  mesh's own material names it outright, and `--dump-debris=<name>` prints both halves of the
+  product per mesh under a destructible.
 
 ## SHELL, Windows, PowerShell, and processes
 
@@ -610,6 +628,19 @@ member, and it does not go here.
   from a 300 mph entry at 60 Hz and once with the attitude pinned and integrated from rest at
   100 Hz. They agree to 0.06 %, which is evidence about the equilibrium, where a second probe built
   on the first one's entry conditions would only have restated it.
+- **INSTR-77**, **A remake-only widget put on a screen the data authors needs its place read off the
+  authored rows, not written down: a hardcoded corner is right for one layout and lands on an
+  authored control in every other.** The Original Instant Action lives box at a written Y 260 stood
+  on the clear line the shipped layout leaves, and on the unit fixture's tighter lines it stood on
+  the mission dropdown, where a pointer at the lives box focused the mission box instead. Taking
+  the first gap in the setup stack tall enough for it puts it on a free line in both.
+- **INSTR-78**, **When the parameter under test also moves the control render, the instrument's
+  counts drift with the parameter, so report the control's own count beside them.** The water
+  flicker instrument counts texels that move with screen-space reflection on and do not move with
+  it off, and raising the water material's roughness broadens the specular sheen the reflection-off
+  render draws as well: the open-sea control rises from 7,361 texels at roughness 0.1 to 12,149 at
+  0.25 and 48,347 at 0.4. A bigger control masks more of the on-pass movement, so a high-roughness
+  flicker count is biased optimistically and no value can be picked on that count alone.
 
 ## SRC, sources and documents
 

@@ -1,4 +1,5 @@
 using System.IO;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Flight;
@@ -46,7 +47,7 @@ public sealed class HudFont
             out int runCount, out int top, out int height);
         if (normal == null)
         {
-            GD.Print($"[hudfont] no {NormalFile} in {rimageDir} — HUD text font off (run ExtractRof.ps1)");
+            Log.Info("flight", $"[hudfont] no {NormalFile} in {rimageDir} — HUD text font off (run ExtractRof.ps1)");
             return null;
         }
         if (runCount != CodeCount)

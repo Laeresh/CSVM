@@ -51,8 +51,7 @@ public sealed partial class ZeppelinRuntime
             return false;
         }
         broadside.CannonsEngaged = engaged;
-        GD.Print($"zep: '{zep.Def.Node}' broadside {(engaged ? "engaged" : "disengaged")} by the " +
-                 $"mission script, targets [{string.Join(",", zep.Def.Targets)}]");
+        Log.Info("weapons", $"zep: '{zep.Def.Node}' broadside {(engaged ? "engaged" : "disengaged")} by the mission script, targets [{string.Join(",", zep.Def.Targets)}]");
         return true;
     }
 
@@ -70,7 +69,7 @@ public sealed partial class ZeppelinRuntime
         _broadsideWeapon = weapons.Get(BroadsideWeaponId);
         if (_broadsideWeapon == null)
         {
-            GD.Print($"zep: broadside disabled — '{BroadsideWeaponId}' not in weapons.zrd");
+            Log.Info("weapons", $"zep: broadside disabled — '{BroadsideWeaponId}' not in weapons.zrd");
             return;
         }
         _gasbagRng = Rng.NewSystemRandom(Rng.Ai);
@@ -103,9 +102,9 @@ public sealed partial class ZeppelinRuntime
                     return;
                 }
             }
-            foreach (var child in node.GetChildren())
+            for (int i = 0, count = node.GetChildCount(); i < count; i++)
             {
-                Walk(child);
+                Walk(node.GetChild(i));
             }
         }
         Walk(root);
@@ -176,8 +175,7 @@ public sealed partial class ZeppelinRuntime
             var node = CannonNode(zep, cannon.Record.Node);
             if (node == null)
             {
-                GD.Print($"zep: '{def.Node}' cannon '{cannon.Record.Node}' has no world node — " +
-                         $"out of the broadside");
+                Log.Info("weapons", $"zep: '{def.Node}' cannon '{cannon.Record.Node}' has no world node — out of the broadside");
                 continue;
             }
             zep.CannonNodes[cannon.Record.Node] = node;
@@ -198,12 +196,7 @@ public sealed partial class ZeppelinRuntime
             broadside.RightSign = -1f;
         }
         zep.Broadside = broadside;
-        GD.Print($"zep: '{def.Node}' broadside wired — {def.LeftCannons.Count}+" +
-                 $"{def.RightCannons.Count} cannons, {BroadsideWeaponId} " +
-                 $"{_broadsideWeapon!.Velocity ?? ProjectilePool.DefaultVelocity:0} m/s, delay " +
-                 $"{broadside.FireDelaySeconds:0.#} s, range {def.CannonFireRange ?? 0f:0} m, " +
-                 $"inaccuracy {def.CannonInaccuracyDeg ?? 0f:0.#}°, targets " +
-                 $"[{string.Join(",", def.Targets)}], disengaged until COMPLETED_ZEPCANNONS");
+        Log.Info("weapons", $"zep: '{def.Node}' broadside wired — {def.LeftCannons.Count}+{def.RightCannons.Count} cannons, {BroadsideWeaponId} {_broadsideWeapon!.Velocity ?? ProjectilePool.DefaultVelocity:0} m/s, delay {broadside.FireDelaySeconds:0.#} s, range {def.CannonFireRange ?? 0f:0} m, inaccuracy {def.CannonInaccuracyDeg ?? 0f:0.#}°, targets [{string.Join(",", def.Targets)}], disengaged until COMPLETED_ZEPCANNONS");
     }
 
     // One broadside step for a live, active zeppelin: resolve the authored target, gate on
@@ -237,13 +230,12 @@ public sealed partial class ZeppelinRuntime
 
         foreach (var cannon in deploying)
         {
-            GD.Print($"zep: '{zep.Def.Node}' cannon '{cannon.Record.Node}' deploys " +
-                     $"({cannon.DeploySeconds:0.#} s)");
+            Log.Info("weapons", $"zep: '{zep.Def.Node}' cannon '{cannon.Record.Node}' deploys ({cannon.DeploySeconds:0.#} s)");
             _runtime?.PlayWithin(zep.Host, cannon.Record.DeployAnim, applyReset: false);
         }
         foreach (var cannon in retracting)
         {
-            GD.Print($"zep: '{zep.Def.Node}' cannon '{cannon.Record.Node}' retracts");
+            Log.Info("weapons", $"zep: '{zep.Def.Node}' cannon '{cannon.Record.Node}' retracts");
             _runtime?.PlayWithin(zep.Host, cannon.Record.RetractAnim, applyReset: false);
         }
 
@@ -293,15 +285,12 @@ public sealed partial class ZeppelinRuntime
         }
         if (fired > 0)
         {
-            GD.Print($"zep: '{zep.Def.Node}' broadside {side.ToString().ToLowerInvariant()}: " +
-                     $"{fired} cannon(s) fire {BroadsideWeaponId} at '{tgt.Name}' " +
-                     $"(range {hullPos.DistanceTo(tgt.Pos):0} m)");
+            Log.Info("weapons", $"zep: '{zep.Def.Node}' broadside {side.ToString().ToLowerInvariant()}: {fired} cannon(s) fire {BroadsideWeaponId} at '{tgt.Name}' (range {hullPos.DistanceTo(tgt.Pos):0} m)");
         }
         if (skipped > 0 && zep.SkipLogged < 8)
         {
             zep.SkipLogged++;
-            GD.Print($"zep: '{zep.Def.Node}' broadside: {skipped} cannon(s) skipped '{tgt.Name}'" +
-                     $" — no solution");
+            Log.Info("weapons", $"zep: '{zep.Def.Node}' broadside: {skipped} cannon(s) skipped '{tgt.Name}' — no solution");
         }
     }
 
@@ -346,7 +335,7 @@ public sealed partial class ZeppelinRuntime
         }
         if (_warnedTargets.Add($"{zep.Def.Node}:{name}"))
         {
-            GD.Print($"zep: '{zep.Def.Node}' target '{name}' unresolved — skipped");
+            Log.Info("weapons", $"zep: '{zep.Def.Node}' target '{name}' unresolved — skipped");
         }
         return null;
     }

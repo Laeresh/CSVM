@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using CSVM.Flight;
+using CSVM.Mech3;
 using CSVM.Session;
 
 namespace CSVM.UI.Menu;
@@ -26,16 +27,27 @@ public sealed class CampaignWallet : IHangarWallet
     /// unreserved finder <c>FUN_00406060</c>.</summary>
     public const int PurchasedPlaneCap = 20;
 
+    // langui 3000 + id, the airframe's own name, the same row every other screen names one by.
+    private const int AirframeNameId = 3000;
+
     private readonly CampaignProfileStore _store;
     private readonly CustomPlaneStore _planes;
+    private readonly UiStrings? _strings;
+    private readonly CampaignCheats? _cheats;
 
     /// <summary>Wraps an already-loaded profile. <paramref name="planes"/> is the global build
-    /// store (<c>user://Planes/</c>) the profile's owned planes name into.</summary>
-    public CampaignWallet(CampaignProfileStore store, CampaignProfileDef profile, CustomPlaneStore planes)
+    /// store (<c>user://Planes/</c>) the profile's owned planes name into. <paramref name="strings"/>
+    /// names an airframe for <see cref="UnlockEverything"/> and <paramref name="cheats"/> says what
+    /// the menu cheats have switched on; both are absent on a wallet built off the feature.</summary>
+    public CampaignWallet(
+        CampaignProfileStore store, CampaignProfileDef profile, CustomPlaneStore planes,
+        UiStrings? strings = null, CampaignCheats? cheats = null)
     {
         _store = store;
         Profile = profile;
         _planes = planes;
+        _strings = strings;
+        _cheats = cheats;
     }
 
     /// <summary>The profile this context prices and gates against. Mutated in place by
@@ -57,12 +69,14 @@ public sealed class CampaignWallet : IHangarWallet
     public bool CanAfford(int cost) => Profile.Funds >= cost;
 
     /// <summary>Whether airframe <paramref name="airframe"/> is offered yet: the stat table's own
-    /// availability threshold (<c>0x00619bb0+0x14</c>, <see cref="HangarEconomy.Airframes"/>)
-    /// against the save's progress counter (<c>UIData +0x338</c> / <c>DAT_0064b678</c>, this
-    /// profile's <see cref="CampaignProfileDef.MissionsCompleted"/>), exactly the comparison
-    /// <c>FUN_00410120</c> makes (<c>DAT_0064b678 + 1</c> against the threshold).</summary>
+    /// availability threshold (<see cref="HangarEconomy.Airframes"/>) against the save's progress
+    /// counter (<see cref="CampaignProfileDef.MissionsCompleted"/>), exactly the comparison
+    /// <c>FUN_00410120</c> makes. The unlocking pilot name switches the comparison off, which is
+    /// what <c>fAllowAll</c> does in that function and in its two neighbours
+    /// (<c>docs/org/hangar.md</c>).</summary>
     public bool IsAirframeAvailable(int airframe) =>
-        Profile.MissionsCompleted + 1 >= HangarEconomy.Airframes[airframe].Availability;
+        _cheats?.AllowAll == true
+        || Profile.MissionsCompleted + 1 >= HangarEconomy.Airframes[airframe].Availability;
 
     /// <summary>The airframe of the named owned plane, or null when the profile does not own it.</summary>
     public int? OwnedAirframe(string planeName) =>
@@ -148,6 +162,41 @@ public sealed class CampaignWallet : IHangarWallet
         _store.Save(Profile);
         _planes.Delete(planeName);
         return true;
+    }
+
+    /// <summary>The plane construction hub's typed grant, the wallet's fifth writer: 25000 while
+    /// the balance is under 50000, and nothing at or above it, which is
+    /// <c>PLANECONSTRUCTION.SCRIPT</c>'s own test. False when the grant was refused.</summary>
+    public bool GrantCheatCash()
+    {
+        if (Profile.Funds >= CampaignCheats.CashCeiling)
+        {
+            return false;
+        }
+
+        Profile.Funds += CampaignCheats.CashGrant;
+        _store.Save(Profile);
+        return true;
+    }
+
+    /// <summary>The unlocking pilot name's grant: the wallet set to 250000 and the eleven stock
+    /// airframes added to the profile, which is what <c>FUN_004113b0</c>'s <c>fAllowAll</c> branch
+    /// writes into plane slots 2 to 12 over the two starters. An airframe the profile already
+    /// carries under that name is left alone, so pressing it twice adds nothing.</summary>
+    public void UnlockEverything()
+    {
+        Profile.Funds = CampaignCheats.UnlockFunds;
+        for (int airframe = 0; airframe < HangarEconomy.Airframes.Length; airframe++)
+        {
+            string name = _strings?.Text(AirframeNameId + airframe, $"Airframe {airframe}")
+                ?? $"Airframe {airframe}";
+            if (!Profile.Planes.Any(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase)))
+            {
+                Profile.Planes.Add(new OwnedPlane { Name = name, Airframe = airframe });
+            }
+        }
+
+        _store.Save(Profile);
     }
 
     // What one ownership record flies. A hangar-built plane is its stored build; a reward aircraft

@@ -79,6 +79,9 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     /// <summary>The environment dropdown.</summary>
     public const string EnvironmentKey = "IA_D_ENVIRONMENT";
 
+    /// <summary>The remake-only lives dropdown, which the section authors no row for.</summary>
+    public const string LivesKey = "IA_D_LIVES";
+
     /// <summary>The layout section the loadout screen is composed from.</summary>
     public const string LoadoutSection = "OrdinanceLayout";
 
@@ -123,6 +126,17 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     private const byte PickedRowR = 200, PickedRowG = 151, PickedRowB = 80;
     private const byte HoveredRowR = 220, HoveredRowG = 181, HoveredRowB = 124;
     private const byte LitBoxR = 246, LitBoxG = 237, LitBoxB = 214;
+
+    // The lives box's own measurements, the section authoring it none. Its line is not written
+    // down: LivesLine reads the setup stack and takes the first clear one, which on the shipped
+    // layout is the skipped line between the Wingmen row (Y 235) and the Mission row (Y 280),
+    // beside the mission type dropdown. ⚠ Never write a Y here. A hardcoded line lands on an
+    // authored box the moment the layout spaces its rows differently, and the reader's does.
+    private const float LivesWidth = 90f;
+    private const float LivesFallbackX = 525f;
+    private const float LivesFallbackY = 260f;
+    private const float LivesLabelX = 420f;
+    private const string LivesLabelText = "Lives:";
 
     // A widget's size when the layout row is missing or its art cannot be measured.
     private const float FallbackItemHeight = 18f;
@@ -290,6 +304,20 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         _iaOpen = key;
         _iaListTop = 0;
         _host.FocusedRow = Math.Max(0, list.Current);
+        return true;
+    }
+
+    /// <summary>Stands the lives control at a count with the cursor on it, for a scripted pose;
+    /// false when the screen is not showing. The feature clamps what it is given.</summary>
+    public bool PoseLives(int lives)
+    {
+        if (_host.Screen != OriginalScreen.InstantAction)
+        {
+            return false;
+        }
+
+        _instantAction.StepLives(lives - _instantAction.Lives);
+        _host.FocusKey(LivesKey);
         return true;
     }
 
@@ -530,6 +558,27 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     private static (float X, float Y, float Width, float Height) DropBox(MenuLayoutWidget widget) =>
         (widget.Int("X"), widget.Int("Y"), widget.Int("Width", (int)FallbackDropWidth), widget.Int("ItemHeight", (int)FallbackItemHeight));
 
+    // The setup column as the layout authors it: the pilot and wingman rows, the mission and
+    // environment rows, and the first wave's boxes, which are the last of the column. The lives
+    // box's line is found in the gaps between these.
+    private static IEnumerable<string> LivesStackKeys()
+    {
+        yield return PlayerPlaneKey;
+        yield return WingmenKey;
+        yield return WingmanPlaneKey;
+        yield return MissionKey;
+        yield return EnvironmentKey;
+        foreach (string prefix in WaveKeyPrefixes)
+        {
+            yield return prefix + "0";
+        }
+    }
+
+    // The title column, read off an authored title rather than written down for the same reason
+    // the lives line is.
+    private static float LivesTitleX(MenuLayoutScreen screen) =>
+        screen.Widget("IA_T_MISSIONTITLE") is { } title ? title.Int("X", (int)LivesLabelX) : LivesLabelX;
+
     private static IReadOnlyList<string> Names<T>(IReadOnlyList<T> rows, Func<T, string> name)
     {
         var names = new string[rows.Count];
@@ -615,12 +664,21 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     // The open dropdown's list over the screen's own widget, or null while none is open.
     private OpenDropList? OpenInstantActionDrop(MenuLayoutScreen screen)
     {
-        if (_iaOpen is not { } key || screen.Widget(key) is not { } open || DropdownFor(key) is not { } list)
+        if (_iaOpen is not { } key || DropdownFor(key) is not { } list)
         {
             return null;
         }
 
-        return OriginalDropLists.Over(key, open, list.Items, DropBox(open), list.Allowed);
+        // The remake-only box has no widget to read a window off, so its list shows every item
+        // and hangs no scroll chrome, which is what the shared rule does with no widget.
+        if (key == LivesKey)
+        {
+            return OriginalDropLists.Over(key, null, list.Items, LivesBox(screen));
+        }
+
+        return screen.Widget(key) is { } open
+            ? OriginalDropLists.Over(key, open, list.Items, DropBox(open), list.Allowed)
+            : null;
     }
 
     // The screen's widgets in focus order: the left page (the contents window, its arrows, View
@@ -669,6 +727,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             AddDropdown(screen, rows, PlayerPlaneKey);
             AddDropdown(screen, rows, WingmenKey);
             AddDropdown(screen, rows, WingmanPlaneKey, live: _instantAction.NumWingmen > 0);
+            AddLives(screen, rows);
             AddDropdown(screen, rows, MissionKey);
             AddDropdown(screen, rows, EnvironmentKey);
             AddWave(screen, rows, 0);
@@ -690,6 +749,76 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         AddStrip(screen, rows, WeaponLoadoutKey, OriginalRowKind.TextButton, true, 1);
         AddStrip(screen, rows, FlyMissionKey, OriginalRowKind.TextButton, true, 1);
         AddStrip(screen, rows, ExitKey, OriginalRowKind.Button, true, 1);
+    }
+
+    // The lives box, this port's own control in the screen's dropdown idiom. It is no enemy
+    // control, so the ace duel leaves it live where it blanks the wave boxes, and no preset carries
+    // a lives value, so a contents row leaves it alone.
+    private void AddLives(MenuLayoutScreen screen, List<OriginalRow> rows)
+    {
+        var list = LivesDropdown();
+        var box = LivesBox(screen);
+        rows.Add(new OriginalRow(LivesKey, list.Items[Math.Clamp(list.Current, 0, list.Items.Count - 1)],
+            OriginalRowKind.Dropdown, box.X, box.Y, box.Width, box.Height, true, 1, LivesArrow(screen)));
+    }
+
+    // The lives box's rectangle: the mission dropdown's left edge and item height, so the
+    // remake-only row stands in the setup column at the height every other box there draws, and
+    // the first clear line that column leaves.
+    private (float X, float Y, float Width, float Height) LivesBox(MenuLayoutScreen screen)
+    {
+        var mission = screen.Widget(MissionKey) is { } widget ? DropBox(widget) : default;
+        float height = mission.Height > 0f ? mission.Height : FallbackItemHeight;
+        return (mission.Width > 0f ? mission.X : LivesFallbackX, LivesLine(screen, height), LivesWidth, height);
+    }
+
+    // The line the lives box takes: the first gap in the setup stack tall enough to hold it,
+    // centred in that gap. The shipped layout skips a line between the wingman and mission rows
+    // and another above the enemy block, and this takes the first, which is the one beside the
+    // mission type dropdown. A layout that skips none puts the box under the stack instead, which
+    // is honest about the crowding rather than drawing the box over an authored one.
+    private float LivesLine(MenuLayoutScreen screen, float height)
+    {
+        var stack = new List<(float Top, float Bottom)>();
+        foreach (string key in LivesStackKeys())
+        {
+            if (screen.Widget(key) is { } widget)
+            {
+                var box = DropBox(widget);
+                stack.Add((box.Y, box.Y + box.Height));
+            }
+        }
+
+        stack.Sort((a, b) => a.Top.CompareTo(b.Top));
+        for (int i = 1; i < stack.Count; i++)
+        {
+            float room = stack[i].Top - stack[i - 1].Bottom;
+            if (room >= height)
+            {
+                return stack[i - 1].Bottom + ((room - height) / 2f);
+            }
+        }
+
+        return stack.Count > 0 ? stack[^1].Bottom : LivesFallbackY;
+    }
+
+
+    // The lives box's closed-box arrow, taken off a dropdown the section does author (art 4 is
+    // every D row's own), so the remake-only row wears the page's chrome rather than a named file.
+    private BoardArt? LivesArrow(MenuLayoutScreen screen) =>
+        screen.Widget(MissionKey) is { } mission ? StripArt(mission.Art, 4) : null;
+
+    // The lives list: Unlimited, then one to the feature's cap.
+    private DropdownList LivesDropdown()
+    {
+        var items = new string[InstantActionFeature.MaxLives + 1];
+        for (int i = 0; i < items.Length; i++)
+        {
+            items[i] = InstantActionFeature.LivesLabel(i);
+        }
+
+        var ia = _instantAction;
+        return new DropdownList(items, ia.Lives, _ => true, i => ia.StepLives(i - ia.Lives));
     }
 
     // One wave's four boxes. The ace duel takes no wave configuration at all, so even the count
@@ -831,6 +960,8 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
                         _iaPage = 0;
                     }
                 });
+            case LivesKey:
+                return LivesDropdown();
             case EnvironmentKey:
                 return new DropdownList(Names(InstantActionFeature.Environments, e => e.Name), ia.EnvironmentIndex,
                     i => InstantActionFeature.EnvironmentAllowed(i, ia.MissionType.Key), i =>
@@ -1061,6 +1192,9 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         {
             AddText(screen, lines, "IA_T_PILOTPLANETITLE", LabelFont);
             AddText(screen, lines, "IA_T_WINGMANTITLE", LabelFont);
+            // The lives box's own title, written here rather than through a layout row because the
+            // section authors none, in the column and the ink every authored title takes.
+            lines.Add(new BoardLine(LivesLabelText, LivesTitleX(screen), LivesBox(screen).Y, 0f, LabelFont, BoardInk.Heading));
             AddText(screen, lines, "IA_T_MISSIONTITLE", LabelFont);
             AddText(screen, lines, "IA_T_ENVIRONMENTTITLE", LabelFont);
             AddText(screen, lines, "IA_T_ENEMY0", LabelFont);

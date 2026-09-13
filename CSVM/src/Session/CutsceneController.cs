@@ -47,9 +47,9 @@ public sealed partial class CutsceneController : Node
     /// <summary>The definitions a story mission's start list plays as its opening movie: the
     /// bespoke C1/M04 intro, the one the other twelve share, and C3/M03's cargo zeppelin camera,
     /// which no list names (its start anim <c>calldestroy_the_cargozep</c> calls it). ⚠ The
-    /// authored codes do NOT identify a cutscene on their own: <c>player_setup</c>, which every
-    /// mission opening without a movie bootstraps, raises the same nine and the original hosts
-    /// none of them (docs/formats/anim-definitions/cutscenes.md).</summary>
+    /// authored codes do NOT identify a cutscene: <c>player_setup</c>, which every mission opening
+    /// without a movie bootstraps, raises the same nine, so a code test would give every mission a
+    /// letterbox and a held world (docs/formats/anim-definitions/cutscenes.md).</summary>
     public static readonly string[] IntroAnims =
         { "mission_intro_animation", "generic_intro", "cgzep_camera" };
 
@@ -137,6 +137,9 @@ public sealed partial class CutsceneController : Node
     private readonly HashSet<Key> _keysDown = new();
     private readonly HashSet<(int Device, JoyButton Button)> _padsDown = new();
     private bool _scriptedHold;
+    // Is the AI held by the mission start's own park rather than by a playing definition? The lift
+    // is the bootstrap definition's reset, so this says which of the two owns the release.
+    private bool _startParked;
     private bool _fastForwardLogged;
     private AnimRuntime? _runtime;
     private IReadOnlyList<PlayerRig> _rigs = Array.Empty<PlayerRig>();
@@ -378,8 +381,7 @@ public sealed partial class CutsceneController : Node
             _cardMesh = MakeUnoccludable(_card);
         }
 
-        GD.Print($"cutscene: {(_cutsceneCamera != null ? "camera1" : "NO camera1")}, " +
-                 $"{(_card != null ? $"letterbox card {_cardBox.Size}" : "NO letterbox bars")}");
+        Log.Info("anim", $"cutscene: {(_cutsceneCamera != null ? "camera1" : "NO camera1")}, {(_card != null ? Log.Format($"letterbox card {_cardBox.Size}") : "NO letterbox bars")}");
     }
 
     /// <summary>The session's rigs and its live AI aircraft, once both exist. Re-applies whatever
@@ -486,15 +488,35 @@ public sealed partial class CutsceneController : Node
             HeldForEnding = false;
             _barsFlipsThisEpisode = 0;
             _lastBarsVisible = _bars?.Visible ?? false;
-            GD.Print(Anim == animName
-                ? $"cutscene: '{animName}' has the session"
-                : $"cutscene: '{Anim}' has the session, its callee '{animName}' raising the first code");
+            if (Anim == animName)
+                Log.Info("anim", $"cutscene: '{animName}' has the session");
+            else
+                Log.Info("anim", $"cutscene: '{Anim}' has the session, its callee '{animName}' raising the first code");
             FillsWindow?.Invoke(true);
         }
 
         _codeRoot = rootName;
         Act(code);
         return true;
+    }
+
+    /// <summary>The mission start's own AI park, which belongs to every mission of every type and
+    /// not to a story intro: the original parks imperatively before any start list runs, reading no
+    /// mission type, and the bootstrap definition's reset lifts it with code 914. An intro has
+    /// already parked by the time a session reaches this and holds it to that film's end; a mission
+    /// opening without one, an Instant Action wave among them, is lifted on its first step. Decode:
+    /// docs/formats/anim-definitions/cutscenes.md.</summary>
+    public void ParkAtMissionStart()
+    {
+        if (AiParked)
+        {
+            return;
+        }
+
+        AiParked = true;
+        _startParked = true;
+        ParkAi();
+        Log.Info("anim", $"cutscene: the mission start parks {_parked.Count} AI aircraft, lifted by the bootstrap definition's own 914");
     }
 
     /// <inheritdoc/>
@@ -505,6 +527,7 @@ public sealed partial class CutsceneController : Node
     /// cutscene is playing.</summary>
     public void Tick()
     {
+        LiftMissionStartPark();
         if (!Playing)
         {
             return;
@@ -742,9 +765,7 @@ public sealed partial class CutsceneController : Node
         _barsFlipsThisEpisode++;
         if (_barsFlipsThisEpisode > 1 || !_bars.Visible)
         {
-            GD.PrintErr($"cutscene: '{Anim}' letterbox bars flipped to {_bars.Visible} mid-episode " +
-                        $"(flip #{_barsFlipsThisEpisode}) at t={Utils.GameClock.Current?.Time ?? 0.0:0.###} " +
-                        "-- BL-452, the reported mid-cutscene flicker");
+            Log.Error("anim", $"cutscene: '{Anim}' letterbox bars flipped to {_bars.Visible} mid-episode (flip #{_barsFlipsThisEpisode}) at t={Utils.GameClock.Current?.Time ?? 0.0:0.###} -- BL-452, the reported mid-cutscene flicker");
         }
     }
 
@@ -754,8 +775,7 @@ public sealed partial class CutsceneController : Node
     // definition by name, in this engine or the original.
     private void Restore(string why)
     {
-        GD.Print($"cutscene: '{Anim}' {why} at t={Utils.GameClock.Current?.Time ?? 0.0:0.##}, " +
-                 $"handing off after {_codes.Count} code(s)");
+        Log.Info("anim", $"cutscene: '{Anim}' {why} at t={Utils.GameClock.Current?.Time ?? 0.0:0.##}, handing off after {_codes.Count} code(s)");
         // ⚠ Before the reset block below, not after: its own events register motions, and a rate
         // still standing here would run the hand-back faster than the world it hands back to.
         ClearFastForward();
@@ -764,7 +784,7 @@ public sealed partial class CutsceneController : Node
         // that completes its "Fly Through Zeppelin Hangar" objective.
         if (Anim != null && _runtime?.RunResetStateEvents(Anim) > 0)
         {
-            GD.Print($"cutscene: '{Anim}' ran its authored RESET_STATE at the handoff");
+            Log.Info("anim", $"cutscene: '{Anim}' ran its authored RESET_STATE at the handoff");
         }
 
         // The staged archive props go back to their switched-off base state. The reset's own
@@ -939,8 +959,7 @@ public sealed partial class CutsceneController : Node
 
                 if (_gapsLogged.Add(code))
                 {
-                    GD.Print($"cutscene: callback {code} is a named gap, reaching no case in the " +
-                             "original's own host either");
+                    Log.Info("anim", $"cutscene: callback {code} is a named gap, reaching no case in the original's own host either");
                 }
 
                 break;
@@ -958,8 +977,7 @@ public sealed partial class CutsceneController : Node
                       ?? default;
         if (!swapped.Swapped)
         {
-            GD.Print($"cutscene: callback {airframe.Code} names '{airframe.PlaneNode}' " +
-                     "but no aircraft was there to swap");
+            Log.Info("anim", $"cutscene: callback {airframe.Code} names '{airframe.PlaneNode}' but no aircraft was there to swap");
             return;
         }
 
@@ -1068,10 +1086,25 @@ public sealed partial class CutsceneController : Node
         }
     }
 
+    // Code 914 out of the bootstrap definition's reset. The definition a mission without a movie
+    // bootstraps carries no timed event and resets at once, so the mission-start park lasts that
+    // mission's first step; an intro is still playing here and keeps the park to its own end.
+    private void LiftMissionStartPark()
+    {
+        if (!_startParked || Playing)
+        {
+            return;
+        }
+
+        AiParked = false;
+        RevealAi();
+    }
+
     // Only what this controller parked comes back: an aircraft built inert for a later wave is not
     // this cutscene's to activate.
     private void RevealAi()
     {
+        _startParked = false;
         foreach (var ai in _parked)
         {
             ai.Inert = false;
@@ -1112,8 +1145,7 @@ public sealed partial class CutsceneController : Node
     {
         if (_playerMarker == null)
         {
-            GD.Print($"cutscene: callback {CodeReplacePlayer} re-places the pilot, but this session " +
-                     $"staged no '{AircraftStage.PlayerNode}' to read a pose off");
+            Log.Info("anim", $"cutscene: callback {CodeReplacePlayer} re-places the pilot, but this session staged no '{AircraftStage.PlayerNode}' to read a pose off");
             return;
         }
 
@@ -1122,14 +1154,13 @@ public sealed partial class CutsceneController : Node
         // instead put them on the world root, under the terrain (CM15's paratrooper drop).
         if (MarkerParked())
         {
-            GD.Print($"cutscene: '{Anim}' raises {CodeReplacePlayer} with " +
-                     $"'{AircraftStage.PlayerNode}' unposed, so it authors no placement to fly out of");
+            Log.Info("anim", $"cutscene: '{Anim}' raises {CodeReplacePlayer} with '{AircraftStage.PlayerNode}' unposed, so it authors no placement to fly out of");
             return;
         }
 
         var pose = AnimRuntime.WorldTransform(_playerMarker, out _);
         OwnerPilot?.ResumeAt(pose);
-        GD.Print($"cutscene: '{Anim}' re-places P{(EpisodeOwner?.Index ?? 0) + 1} at {pose.Origin}");
+        Log.Info("anim", $"cutscene: '{Anim}' re-places P{(EpisodeOwner?.Index ?? 0) + 1} at {pose.Origin}");
     }
 
     // Is the marker still where the build and every handoff park it: under the world root, at

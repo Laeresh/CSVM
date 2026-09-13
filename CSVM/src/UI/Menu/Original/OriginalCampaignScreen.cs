@@ -93,6 +93,12 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     /// cabin's PLANE CONSTRUCTION opens the hangar over, and what the campaign-hangar aid takes.</summary>
     public IHangarWallet? Wallet => _campaign?.Wallet();
 
+    /// <summary>What the menu's typed cheats have switched on, or null over a shell with no campaign
+    /// feature. The latches themselves are the shell's, the screens carrying them crossing this
+    /// module and the hangar's; what a completed word turns on is kept here, on the feature both
+    /// presentations commit through.</summary>
+    public CampaignCheats? Cheats => _campaign?.Cheats;
+
     /// <summary>Whether the Campaign row on the top level stands at all: a feature and a store
     /// together, since the door opens over the player's own profiles.</summary>
     internal bool CanOpen => _campaign != null && _profiles != null;
@@ -408,7 +414,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
                 ActivateRoster(row, pageRow);
                 return null;
             case OriginalScreen.CampaignCabin:
-                ActivateCabin(row);
+                ActivateCabin(row, pageRow);
                 return null;
             case OriginalScreen.CampaignBriefing:
                 ActivateBriefing(row);
@@ -881,6 +887,15 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             return;
         }
 
+        // The hidden pilot name is not a name at all, so it is read before the rule the feature
+        // applies would refuse its punctuation. What it switches on is the page's, since both
+        // presentations commit this screen onto the same store.
+        if (_flow?.Page is CampaignRosterPage roster && CampaignCheats.IsUnlockName(entry.Text))
+        {
+            roster.Unlock();
+            return;
+        }
+
         if (_campaign.ContinuePlayer(entry.Text) is { } refusal)
         {
             // CAMPAIGN.SCRIPT raises the missing-name and unknown-name refusals on the 0x1 mask.
@@ -960,7 +975,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             No());
     }
 
-    private void ActivateCabin(OriginalRow row)
+    private void ActivateCabin(OriginalRow row, int pageRow)
     {
         if (_campaign?.Profile is not { } profile)
         {
@@ -968,10 +983,17 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             return;
         }
 
+        // The cheat's mission pull-down is a row of the page, so its press is the page's own.
+        if (row.Kind == OriginalRowKind.Dropdown)
+        {
+            PagePress(pageRow);
+            return;
+        }
+
         switch (row.Key)
         {
             case nameof(BoardButton.NextMission):
-                _campaign.SetMission(CampaignProgression.NextMissionSeq(profile));
+                _campaign.SetMission(_host.CheatedMission(CampaignProgression.NextMissionSeq(profile)));
                 EnterBriefing(OriginalScreen.CampaignCabin);
                 break;
             case nameof(BoardButton.PreviousMissions):

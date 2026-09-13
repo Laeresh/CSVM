@@ -36,6 +36,11 @@ internal static class OriginalTestHost
         }
     }
 
+    // The mission NEXT MISSION launches with no cheat behind it. The three typed latches are the
+    // shell's, so no module's fake carries one and the ordinary mission is always the answer; what
+    // a cheated buffer does to that mission is the shell's own test.
+    internal static int CheatedMission(int ordinary) => ordinary;
+
     internal static BoardFill FocusMark(OriginalRow row) =>
         new(row.X, row.Y, row.Width, row.Height, 188, 188, 188, 0.75f, Border: true);
 

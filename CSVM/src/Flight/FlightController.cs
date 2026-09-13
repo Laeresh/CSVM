@@ -258,6 +258,13 @@ public partial class FlightController : Node3D
     /// dogfight results board.</summary>
     public Action? RestartMatch;
 
+    /// <summary>Where this seat comes back, asked once per <see cref="Respawn"/>: a world position
+    /// and a point to aim the nose at, or null to keep the pose it has. Null itself, the default,
+    /// leaves every respawn on the spawn <see cref="Setup"/> fixed, which is what every mode but
+    /// the dogfight wants. Set by the session, which owns the field the choice is made
+    /// against.</summary>
+    public Func<(Vector3 Pos, Vector3 LookAt)?>? RespawnPlacement;
+
     /// <summary>Splitscreen pause bookkeeping, the SAME instance on every rig
     /// (assigned by <c>GameSession</c>, the same way <see cref="Match"/> is), so any player's
     /// Start/P here can pause everyone but only <see cref="PauseState.OwnerPlayerIndex"/> can
@@ -1113,6 +1120,15 @@ public partial class FlightController : Node3D
     /// stunt run alone, a mid-run crash deliberately keeps its zones and clock.</summary>
     public void Respawn()
     {
+        // Asked before anything reads the spawn pose, so the whole reset below lands on the new
+        // point: the dogfight rotates a downed seat away from the one it was camped at.
+        if (RespawnPlacement?.Invoke() is { } placement)
+        {
+            _spawnPos = placement.Pos;
+            var aim = placement.LookAt - placement.Pos;
+            if (aim.LengthSquared() > 1e-6f)
+                _spawnAttitude = Basis.LookingAt(aim.Normalized(), Vector3.Up);
+        }
         _lifecycle.Respawn();
         (_inputSource as ScriptedInputSource)?.Reset(); // scripted hold sequences restart from the spawn
         _lastInput = default;
@@ -1950,6 +1966,7 @@ public partial class FlightController : Node3D
 
     public override void _Process(double delta)
     {
+        using var _ = ProcessSiteCost.Enter(ProcessSite.Flight);
         PollInput();
         var clock = GameClock.Current;
         if (!Inert)
@@ -2360,8 +2377,8 @@ public partial class FlightController : Node3D
     {
         if (node is Node3D n3d && PropParts.Spin(PropParts.Classify(AnimRuntime.NameOf(n3d)), out _, out _))
             rig.SetSubtreeOpacity(n3d, 1f);
-        foreach (var child in node.GetChildren())
-            RestoreDiscOpacity(rig, child);
+        for (int i = 0, count = node.GetChildCount(); i < count; i++)
+            RestoreDiscOpacity(rig, node.GetChild(i));
     }
 
     // Space / gamepad B, the gun trigger (caller drives the fire-rate clock);
@@ -2842,8 +2859,7 @@ public partial class FlightController : Node3D
             // The facing test comes with it: a hit that fails it is inert and must not read as "working".
             string what = report.Collider is { } body
                 ? $"{body.GetParent()?.Name}/{body.Name}" : "?";
-            GD.Print($"ground blow: first repelling hit on {what} at {input.GroundBlowDistM:0} m "
-                     + $"of {elev:0} (facing {_model.Attitude.Z.Dot(input.GroundBlowNormal):0.00})");
+            Log.Info("flight", $"ground blow: first repelling hit on {what} at {input.GroundBlowDistM:0} m of {elev:0} (facing {_model.Attitude.Z.Dot(input.GroundBlowNormal):0.00})");
         }
     }
 
@@ -3395,7 +3411,7 @@ public partial class FlightController : Node3D
         if (sel.ApplyInitial(InitialTarget!, _model.Position, _model.Attitude))
         {
             string picked = sel.Current is { } t && t.Name.Length > 0 ? t.Name : "nothing";
-            GD.Print($"--target={InitialTarget}: {picked} (class={sel.ActiveClass?.ToString() ?? "cleared"})");
+            Log.Info("flight", $"--target={InitialTarget}: {picked} (class={sel.ActiveClass?.ToString() ?? "cleared"})");
             return;
         }
 

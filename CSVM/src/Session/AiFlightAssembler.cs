@@ -243,13 +243,7 @@ internal sealed class AiFlightAssembler
             }
         }
 
-        GD.Print($"ai: spawned '{spawn.PlaneName}' as {controller.Name} (shooter id " +
-                 $"{controller.PlayerIndex}) pos=({spawn.Position.X:0},{spawn.Position.Y:0},{spawn.Position.Z:0}) " +
-                 $"jitter=(fd {stats.FdSpeed:0.0} thrust {stats.EnginePower:0.000}) " +
-                 (spawn.Inert ? "INERT " : "") +
-                 (spawn.Pilot.Patrol is { } patrol
-                     ? $"net='{patrol.Net.Name}#{patrol.Net.Id}' ({patrol.Net.Nodes.Count} nodes)"
-                     : $"heading={spawn.Pilot.TargetHeadingDeg:0}° alt={spawn.Pilot.TargetAltitude:0} m"));
+        Log.Info("flight", $"ai: spawned '{spawn.PlaneName}' as {controller.Name} (shooter id {controller.PlayerIndex}) pos=({spawn.Position.X:0},{spawn.Position.Y:0},{spawn.Position.Z:0}) jitter=(fd {stats.FdSpeed:0.0} thrust {stats.EnginePower:0.000}) {(spawn.Inert ? "INERT " : "")}{(spawn.Pilot.Patrol is { } patrol ? $"net='{patrol.Net.Name}#{patrol.Net.Id}' ({patrol.Net.Nodes.Count} nodes)" : Log.Format($"heading={spawn.Pilot.TargetHeadingDeg:0}° alt={spawn.Pilot.TargetAltitude:0} m"))}");
         return controller;
     }
 
@@ -296,12 +290,7 @@ internal sealed class AiFlightAssembler
                     QuickDrawAngleDeg = _aiSkills.QuickDrawAngleDeg(quickDraw),
                     QuickDrawChance = _aiSkills.QuickDrawChance(quickDraw),
                 };
-                GD.Print("ai: gunner armed at dead-eye " +
-                    $"{SkillFor(defSkills.DeadEye, skill, roster.DeadEye)} / quick-draw {quickDraw} " +
-                    $"(dead-eye {pilot.Gunner.DeadEyeAngleDeg:0.00}°, " +
-                    $"quick-draw {pilot.Gunner.QuickDrawAngleDeg:0}°, " +
-                    $"ordnance roll {pilot.Rocketeer.QuickDrawChance:0.00} per " +
-                    $"{pilot.Rocketeer.RefireSeconds:0} s)");
+                Log.Info("weapons", $"ai: gunner armed at dead-eye {SkillFor(defSkills.DeadEye, skill, roster.DeadEye)} / quick-draw {quickDraw} (dead-eye {pilot.Gunner.DeadEyeAngleDeg:0.00}°, quick-draw {pilot.Gunner.QuickDrawAngleDeg:0}°, ordnance roll {pilot.Rocketeer.QuickDrawChance:0.00} per {pilot.Rocketeer.RefireSeconds:0} s)");
             }
             catch (Exception e)
             {
@@ -333,7 +322,7 @@ internal sealed class AiFlightAssembler
             if (_policy.NoAssist && !_noAssistLogged)
             {
                 _noAssistLogged = true;
-                GD.Print("ai assist: off (--no-assist): lay off disabled, pursue only");
+                Log.Info("flight", $"ai assist: off (--no-assist): lay off disabled, pursue only");
             }
         }
         catch (Exception e)

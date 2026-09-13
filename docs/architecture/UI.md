@@ -815,6 +815,25 @@ writes that move the funds, the ownership record and the build together. Off-eng
 `CSVM.Tests/CampaignWalletTests.cs`. The thresholds, prices and decoded comparisons:
 [../org/hangar.md](../org/hangar.md).
 
+## src/UI/Menu/TypedCheat.cs
+One screen's typed-word latch, the rule the cabin, the scrapbook contents and the plane
+construction hub share in the original: a left click inside the script's authored region gives it
+the keyboard, each character that follows extends a buffer, and the first character that leaves the
+target word's prefix empties the buffer outright so a mistyped word starts again from its first
+letter. The compare is case-sensitive, arming and disarming leave the buffer alone (the script's
+`focus` moves only the caret), and reopening the screen resets both. Off-engine coverage:
+`CSVM.Tests/CampaignCheatTests.cs`. The words, the regions and the script lines:
+[../formats/campaign-screens.md](../formats/campaign-screens.md).
+
+## src/UI/Menu/CampaignCheats.cs
+What the original's four menu cheats leave switched on, carried by `CampaignFeature` so both
+presentations read one answer: the cabin's mission pull-down and the mission it stands on, the
+gallery reveal (the engine's `fViewAll`, 24 spreads whatever the campaign position), the
+unlock-everything flag (`fAllowAll`) that the hidden pilot name sets, and the words and money
+constants themselves. Closing a campaign drops the pull-down and its pick; the two engine globals
+stay, because the original clears neither short of leaving the game. Off-engine coverage:
+`CSVM.Tests/CampaignCheatTests.cs`.
+
 ## src/UI/Menu/CampaignAidProfiles.cs
 The scratch profile store the campaign screenshot aids read, in the shared namespace so both
 presentations' aids seat one player: `%TEMP%\CSVM\menu-aid-profiles`, emptied on every open,
@@ -847,7 +866,7 @@ put back when it is answered, which is the `FocusBeforeDialog` a screen under th
 The two sides of the seam between `OriginalShell` and a standalone screen module. `IOriginalScreenHost` is what a module reads off the shell and
 calls back into it for: the screen showing, the per-screen focus cursor every family shares, the pointer's row and position, whether a dialog stands,
 the string table and the art measurer, the seat strip and the shell's own plate-row rule, the film a cinema plays in front of the board and the one
-frame a screenshot aid replays, and the crossings into another family (the hangar a Build door opens, the walk FLY MISSION begins, a campaign resume, a roster re-read). The shell implements it explicitly, so the narrower vocabulary stays
+frame a screenshot aid replays, and the crossings into another family (the hangar a Build door opens, the walk FLY MISSION begins, a campaign resume, a roster re-read, the mission the cabin's typed cheat launches). The shell implements it explicitly, so the narrower vocabulary stays
 the modules' own, and each module's tests implement it as a fake and build the module with no shell at all. `IOriginalScreenModule` is the other
 side, what the shell calls on a module: `Owns` plus the seven dispatch members (`BuildRows`, `Lists`, `StepSideways`, `CloseDropdown`, `Activate`,
 `Back`, `Compose`). The shell holds its modules as these alone, so a further family is one more entry in its list and no new dispatch arm.
@@ -861,6 +880,16 @@ The rows a screen drawn by the shared board component carries are here too, read
 per-seat aircraft screen build them the same way, with `ENTRY:` naming a scrapbook row the pointer only highlights. A pane that fills the board centres onto its own corner, and one authored away from the corner
 keeps it. Each module binds its own measurer to the pane rule once, so no call site carries one. The open-dropdown window rule is the other such
 reading, on `OriginalDropList.cs`.
+
+## src/UI/Menu/Original/OriginalCheats.cs
+The three typed cheats of the Original presentation, a partial of the shell over the `gui_char` bodies of `PASSENGERCABIN.SCRIPT`,
+`SCRAPBOOK_TOC.SCRIPT` and `PLANECONSTRUCTION.SCRIPT`: the authored region of each screen, its own `TypedCheat`, the primary-button arm read off the
+pointer before the row hit test (the secondary button belongs to the credits line alone), the typed characters routed here instead of to a screen's
+edit box while a latch holds the keyboard, and what a completed word fires through `CampaignCheats` and `CampaignWallet`. The latches are the shell's
+because the three screens carrying them belong to two different modules; it reads those through `Campaign.Cheats`, `Hangar.IsHub` and
+`Hangar.OpenWallet`, and the campaign module reads the cheated mission back through the `IOriginalScreenHost.CheatedMission` seam. The cabin's NEXT
+MISSION reads and empties the buffer, so the press after a cheated launch is the ordinary one, and every screen change resets all three. Engine
+coverage: `menu-original-cheats`.
 
 ## src/UI/Menu/Original/OriginalDropList.cs
 The one rule every open dropdown of the Original shell follows, held as the file-level `OriginalDropLists` because every page standing on it is a
@@ -923,7 +952,7 @@ row and the row under the pointer, and a closed box redraws its outline in cream
 and `<build name> <airframe>`), re-read on every entry and on the hangar's return; a picked build flies its airframe's stock node with its def on the seat. Build opens the wallet-free hangar
 (`OriginalHangarScreen.cs`); Weapon Loadout maps the section's four ammunition and eight rocket fields onto the airframe's gun slots and pylons over the stock table's option lists, with the airframe's
 diagram frames, the description pane and the snapshot CANCEL and Back restore, over seat 0's fit or the wingmen's shared one by the radio pair, or the per-seat picker's own `PlayerSeat.Fit`, which is what
-decides the screen its exit returns to. It is one `IOriginalScreenModule` and reaches `OriginalShell` only through the shared `IOriginalScreenHost` seam (`OriginalScreenHost.cs`), so `OriginalInstantActionTests` drives it over a hand-written host with no shell at all; the shell still owns `Rows`/`Compose`/`ApplyFrame` dispatch, routes to whichever module owns the screen showing and exposes this one whole as `InstantAction`. Its `Back` answers false where nothing is open and nothing is to cancel, which is how Instant Action's own Exit is left to the shell. Option sets: [../formats/instant-action.md](../formats/instant-action.md); what the fit means at launch: `src/Flight/LoadoutChoice.cs`.
+decides the screen its exit returns to. It is one `IOriginalScreenModule` and reaches `OriginalShell` only through the shared `IOriginalScreenHost` seam (`OriginalScreenHost.cs`), so `OriginalInstantActionTests` drives it over a hand-written host with no shell at all; the shell still owns `Rows`/`Compose`/`ApplyFrame` dispatch, routes to whichever module owns the screen showing and exposes this one whole as `InstantAction`. Its `Back` answers false where nothing is open and nothing is to cancel, which is how Instant Action's own Exit is left to the shell. Remake-only is the Lives box, which the section authors no row for: it takes the mission dropdown's column and item height on the first clear line the setup stack leaves (read off the gaps between the authored boxes, never written down as a Y), and steps the shared `InstantActionFeature.StepLives`, reading Unlimited at zero and the count to nine. Option sets: [../formats/instant-action.md](../formats/instant-action.md); what the fit means at launch: `src/Flight/LoadoutChoice.cs`.
 
 ## src/UI/Menu/Original/OriginalHangarScreen.cs
 The Original hangar, a standalone module over the shared `HangarFeature` and the decoded hangar

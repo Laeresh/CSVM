@@ -192,9 +192,7 @@ public sealed class WorldLights : IDisposable
         if (_lastCount == _loggedSubmitted)
             return;
         _loggedSubmitted = _lastCount;
-        GD.Print($"anim/debug: world lights {_lastCount} rendered of {LiveCount} live"
-                 + (_pending.Count > MaxActive ? $" (budget {MaxActive}; the rest are past the distance fade)" : "")
-                 + (_omniParent != null ? $" (enhanced: {_lastCount} omni)" : ""));
+        Log.Info("world", $"anim/debug: world lights {_lastCount} rendered of {LiveCount} live{(_pending.Count > MaxActive ? $" (budget {MaxActive}; the rest are past the distance fade)" : "")}{(_omniParent != null ? $" (enhanced: {_lastCount} omni)" : "")}");
     }
 
     /// <summary>Drops the world's lights, called when a session is torn down, so the next

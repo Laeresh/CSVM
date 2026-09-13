@@ -73,7 +73,10 @@ internal static class MenuInstantActionSuites
         + "with the environment's def loaded, its rows are the layout's contents window, dropdowns "
         + "and buttons, the contents thumb stands as long as the share of the presets its window "
         + "shows, the ace duel's enemy boxes and the wingman plane at zero wingmen standing "
-        + "blank and inert beside both paging buttons, keyboard frames cross to a dropdown and step and pick its value, four "
+        + "blank and inert beside both paging buttons, keyboard frames cross to a dropdown and step and pick its value, the "
+        + "remake-only lives box stands on the clear line over the mission dropdown reading Unlimited at zero, takes the walk, "
+        + "a sideways step and a picked row onto the shared feature's own lives, stays live under the ace duel and keeps its "
+        + "count over a contents row's preset, four "
         + "representative presets (an ace duel, a squadron, a stunt run and a zeppelin run) each "
         + "leave through Fly Mission as one LaunchExit whose def derives the matching session spec, "
         + "the setup surviving each return to the top level, a build saved to the user's store "
@@ -126,6 +129,7 @@ internal static class MenuInstantActionSuites
             var ia = host.Features.Get<InstantActionFeature>();
             OriginalScreenOpens(ctx, host, seat, shell, fit, ia);
             OriginalKeyboard(ctx, host, seat, shell, ia);
+            OriginalLives(ctx, host, seat, shell, fit, ia);
             OriginalLaunches(ctx, host, seat, shell, fit, ia, exits);
             OriginalCustomPilot(ctx, host, seat, shell, fit, ia, exits, store, scratch);
             OriginalLoadout(ctx, host, seat, shell, fit, ia);
@@ -616,6 +620,53 @@ internal static class MenuInstantActionSuites
         Press(host, seat, Left);
         ctx.Check(ia.NumWingmen == 0 && Row(shell, OriginalInstantActionScreen.WingmanPlaneKey) is { Enabled: false, Label: "" },
             $"and zero leaves its box standing blank and inert ({ia.NumWingmen}, {Row(shell, OriginalInstantActionScreen.WingmanPlaneKey)?.Enabled})");
+    }
+
+    // The remake-only lives box, the one control on the screen the layout authors no row for: the
+    // walk reaches it, a sideways step and a picked row both write the shared feature's own value,
+    // the ace duel leaves it live where it blanks the enemy boxes, and a contents row's preset,
+    // which carries no lives, leaves it where the player put it.
+    private static void OriginalLives(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, InstantActionFeature ia)
+    {
+        var box = Row(shell, OriginalInstantActionScreen.LivesKey);
+        ctx.Check(box is { Enabled: true, Label: "1", X: 525f, Y: 257.5f, Width: 90f, Height: 18f },
+            $"the lives box stands on the clear line the layout leaves over the mission dropdown reading the opening life ({box?.Label}, {box?.X}, {box?.Y})");
+        ctx.Check(!shell.Rows.Any(r => r.Key != OriginalInstantActionScreen.LivesKey && r.Width > 0f && r.Height > 0f
+            && r.X < box!.X + box.Width && box.X < r.X + r.Width && r.Y < box.Y + box.Height && box.Y < r.Y + r.Height),
+            $"and no authored row shares its space, the line being one the section skips ({box?.Y})");
+        Press(host, seat, Down);
+        ctx.Check(shell.FocusedKey == OriginalInstantActionScreen.LivesKey, $"the walk reaches it from the wingman count ({shell.FocusedKey})");
+        Press(host, seat, Right);
+        ctx.Check(ia.Lives == 2 && Row(shell, OriginalInstantActionScreen.LivesKey)?.Label == "2",
+            $"a sideways step writes the shared feature's lives ({ia.Lives})");
+        Press(host, seat, Left);
+        Press(host, seat, Left);
+        ctx.Check(ia.Lives == 0 && Row(shell, OriginalInstantActionScreen.LivesKey)?.Label == "Unlimited",
+            $"and zero reads Unlimited, the word the Built-in stepper writes ({Row(shell, OriginalInstantActionScreen.LivesKey)?.Label})");
+        Press(host, seat, Accept);
+        ctx.Check(shell.InstantAction.OpenDropdown == OriginalInstantActionScreen.LivesKey
+            && shell.Rows.Count == InstantActionFeature.MaxLives + 1
+            && shell.Rows[0] is { Label: "Unlimited", X: 525f, Width: 90f } && shell.Rows[^1].Label == "9",
+            $"Accept opens a list of every count with no scroll chrome ({shell.Rows.Count} rows, {shell.Rows[0].Label} to {shell.Rows[^1].Label})");
+        var pick = shell.Rows[3];
+        Click(host, seat, Pointer(fit, pick.X + 5f, pick.Y + 5f, pressed: true, clicked: true));
+        ctx.Check(shell.InstantAction.OpenDropdown == null && ia.Lives == 3 && Row(shell, OriginalInstantActionScreen.LivesKey)?.Label == "3",
+            $"a click on a row picks that count and closes the list ({ia.Lives})");
+        ctx.Check(ia.IsAceDuel && Row(shell, OriginalInstantActionScreen.LivesKey) is { Enabled: true }
+            && Row(shell, "IA_D_NENEMY0") is { Enabled: false },
+            $"the ace duel leaves it live where it blanks the enemy boxes ({Row(shell, OriginalInstantActionScreen.LivesKey)?.Enabled})");
+
+        var contents = Row(shell, OriginalInstantActionScreen.ContentsKey + ":1");
+        if (contents != null)
+        {
+            Click(host, seat, Pointer(fit, contents.X + 5f, contents.Y + 5f, pressed: true, clicked: true));
+            ctx.Check(ia.PresetIndex == 1 && ia.Lives == 3 && Row(shell, OriginalInstantActionScreen.LivesKey)?.Label == "3",
+                $"and a contents row applies its preset over the page with the lives left alone ({ia.PresetIndex}, {ia.Lives})");
+        }
+
+        // Back onto the opening life, so the launches below fly the def the rest of the suite pins.
+        ctx.Check(shell.InstantAction.PoseLives(1) && ia.Lives == 1 && Row(shell, OriginalInstantActionScreen.LivesKey)?.Label == "1",
+            $"the pose the screenshot aid uses puts it back on one life ({ia.Lives})");
     }
 
     // Four presets, one per mission type, each flown through Fly Mission: the exit is the

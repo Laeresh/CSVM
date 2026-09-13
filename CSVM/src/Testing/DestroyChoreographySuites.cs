@@ -380,6 +380,67 @@ internal static class DestroyChoreographySuites
         });
     }
 
+    // ---- what shades the pieces a death flings --------------------------------------------------
+
+    // C1's refuel tanks draw their launched pieces near-black over their own fire column, which is
+    // what the data asks for and what the original draws (docs/verification.md WORLD-47). Pinned so
+    // the reading is not re-opened as a lighting bug: the pieces take the SAME shading path as the
+    // intact tank beside them, and the darkness is the authored vertex colour alone.
+    // Subject: C1's refuel-tank destructibles; able to fail by clearing the debris model's
+    // `lighting` flag, by dropping the vertex-colour pass, or by the authored colours changing.
+    [Suite("debris-shading",
+        "a death's launched pieces take the same shading path as the mesh they came off: C1's refuel debris draws lit and vertex-coloured exactly as the intact tank does, and reads dark only because its pieces are authored at vertex colour 119 on a sheet whose mean texel is 63 where the standing tank is authored at 254 (WORLD-47)")]
+    internal static void DebrisShading(TestContext ctx)
+    {
+        ctx.WithPrivateWorld("C1", collision: false, world =>
+        {
+            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            try
+            {
+                // The scalar C1's ZONE1 authors, the one a flown session writes to the global. Named
+                // here rather than read off the server, which answers with an empty Variant.
+                const float c1WorldLight = 0.6070f;
+                var report = Probes.DebrisShading(world.Runtime, world.Gamez, textures,
+                    world.Chapter, "refuel", c1WorldLight);
+                ctx.Check(report.Launches > 0, $"the refuel tanks' death launches ballistic pieces launches={report.Launches}");
+                var flew = report.Rows.Where(r => r.Launched).ToList();
+                var stood = report.Rows.Where(r => !r.Launched && r.VisibleBefore).ToList();
+                ctx.Check(flew.Count > 0 && stood.Count > 0,
+                    $"the report separates flung pieces from the standing tank flew={flew.Count} stood={stood.Count}");
+                if (flew.Count == 0 || stood.Count == 0)
+                {
+                    return;
+                }
+
+                string litFlew = string.Join(",", flew.Select(r => r.Lighting));
+                string litStood = string.Join(",", stood.Select(r => r.Lighting));
+                ctx.Check(stood.All(r => r.Lighting) && flew.All(r => r.Lighting),
+                    $"every flung piece is drawn lit, exactly as the mesh it came off is flew=[{litFlew}] stood=[{litStood}]");
+                string coverage = string.Join(",", flew.Select(r => r.Materials.Count > 0 ? r.Materials[0].VertexColorCoverage : 0f));
+                ctx.Check(flew.All(r => r.Materials.Count > 0 && r.Materials[0].VertexColorCoverage > 0.99f),
+                    $"every flung piece's sheet is modulated by authored vertex colours over its whole area coverage=[{coverage}]");
+                string built = string.Join(",", flew.Select(r => $"{r.SurfacesWithColors}/{r.SurfacesReadingWorldLight}/{r.BuiltSurfaces}"));
+                ctx.Check(flew.All(r => r.BuiltSurfaces > 0 && r.SurfacesWithColors == r.BuiltSurfaces
+                        && r.SurfacesReadingWorldLight == r.BuiltSurfaces),
+                    $"the BUILT mesh keeps both terms: every surface commits its colours and carries the dimming shader coloured/dimmed/total=[{built}]");
+
+                float flungVc = flew.Max(r => r.Materials[0].VertexColor.X);
+                float standingVc = stood.Max(r => r.Materials[0].VertexColor.X);
+                ctx.Check(flungVc > 0.44f && flungVc < 0.50f,
+                    $"the flung pieces are authored at about half brightness vc={flungVc * 255f:0}");
+                ctx.Check(standingVc > 0.97f,
+                    $"the standing tank is authored at full brightness vc={standingVc * 255f:0}");
+                float flungTexel = flew.Max(r => r.Materials[0].Texel.X);
+                ctx.Check(flungTexel > 0.20f && flungTexel < 0.30f,
+                    $"the pieces' sheet is itself dark, mean texel={flungTexel * 255f:0}");
+            }
+            finally
+            {
+                textures.Dispose();
+            }
+        });
+    }
+
     // ---- a start-state swap must reach the pool, not only the node -----------------------------
 
     // A destructible whose own Initial sequence authors the healthy/destroyed role swap directly

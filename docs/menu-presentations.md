@@ -487,7 +487,10 @@ scan automatically; anything it adds to the shared namespace falls under the fir
 the active presentation: every value in [`cli.md`](cli.md)'s bullet is Built-in's unless
 `--presentation=original` is set, in which case the same flag carries Original's own values
 (`free-flight`, `dogfight`, `instant-action`, `instant-action:pilot-plane` with its Pilot Plane
-list open and `instant-action:weapon-loadout` on the pilot's loadout screen, `options`,
+list open, `instant-action:weapon-loadout` on the pilot's loadout screen and
+`instant-action:lives[:<count>]` with the remake-only Lives box focused, at Unlimited without a
+count and at that count with one (the screen opens on one life, so neither reading is a state a
+plain shot of it can show), `options`,
 `game-options` and `game-options:open` with its Difficulty list standing open, `audio` and
 `audio:mixed` with its four sliders at four distinct levels, `video`,
 `video:checked` with its Enhanced Graphics box ticked and `video:open` with its Resolution list
@@ -595,7 +598,8 @@ In order. Each step names the file it touches and the test that proves it.
 10. **Add the driven suites.** One in-engine suite per journey family in `CSVM/src/Testing/`, over
     a real `MenuHost` through `MenuSuiteHost`, standing for the presentation what
     `menu-original-tracer`, `menu-original-instant-action`, `menu-original-hangar`,
-    `menu-original-campaign` and the Original half of `menu-player-setup-seats` stand for Original;
+    `menu-original-campaign`, `menu-original-cheats` and the Original half of
+    `menu-player-setup-seats` stand for Original;
     add the presentation's cases to `menu-launch-return`, which drives every exit and every
     destination at the host's sink. Register each suite in `SuiteCatalog`.
 11. **Prove Built-in unchanged.** Shoot Built-in's aids before and after and compare decoded pixels;

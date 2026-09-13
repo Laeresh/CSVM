@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Mech3;
@@ -32,7 +33,7 @@ public sealed class WorldBuilder
     /// <see cref="CloudDeck"/> as the rim extension rather than one of the 144 authored deck tiles.
     /// ⚠ Any census of deck tiles must skip a node carrying it; the extension has no undimmed twin
     /// and is not an authored tile. <c>WeatherRig.CollectDeckTiles</c> is the other reader.</summary>
-    internal const string DeckExtensionMeta = "deck_extension";
+    internal static readonly StringName DeckExtensionMeta = "deck_extension";
 
     // Share of the World node's own `area` rect a co-altitude bucket of flat quads must cover to
     // be the overcast deck. Per-chapter tile census: docs/formats/weather.md.
@@ -386,8 +387,7 @@ public sealed class WorldBuilder
         // Said out loud per build because "0 / 0 / 0" from a gate that stopped stamping is
         // otherwise indistinguishable from a chapter that authors no zoned content.
         var gated = _scene.ZoneGatedMeshes;
-        GD.Print($"zone gate: {gated[1]} / {gated[2]} / {gated[3]} mesh instance(s) on zone 1 / 2 / 3 "
-                 + $"(deck zone_id {CloudDeckZoneId}, fvol zone_id {FogVolumeZoneIdOf(_gamez)})");
+        Log.Info("world", $"zone gate: {gated[1]} / {gated[2]} / {gated[3]} mesh instance(s) on zone 1 / 2 / 3 (deck zone_id {CloudDeckZoneId}, fvol zone_id {FogVolumeZoneIdOf(_gamez)})");
 
         if (deck.GetChildCount() > 0)
         {
@@ -399,8 +399,7 @@ public sealed class WorldBuilder
             // The deck covers the whole map, so a shadow-casting one puts the entire world in
             // shade. Its overcast is already in the authored SUNLIGHT the sun is driven from.
             DisableShadows(deck);
-            GD.Print($"cloud deck: {_deckNodes.Count} tiles at y={_deckAltitude} "
-                     + $"({_deckCoverage:P0} of the map)");
+            Log.Info("world", $"cloud deck: {_deckNodes.Count} tiles at y={_deckAltitude} ({_deckCoverage:P0} of the map)");
         }
 
         // A post-walk pass because the clusters are nested too deep for a walk root to recognise.
@@ -408,7 +407,7 @@ public sealed class WorldBuilder
         CollectCloudClusters(root);
         if (_cloudClusters.Count > 0)
         {
-            GD.Print($"cloud clusters: {_cloudClusters.Count} placed 'cloudparent' subtree(s)");
+            Log.Info("world", $"cloud clusters: {_cloudClusters.Count} placed 'cloudparent' subtree(s)");
             // Cloud sprites are alpha billboards facing the camera, so their silhouette in a light
             // pass is whatever they happen to be turned to; ground shade from them is not authored.
             foreach (var cluster in _cloudClusters)
@@ -792,9 +791,7 @@ public sealed class WorldBuilder
 
         var report = ConflictRank.Compute(_gamez, nodes, excluded);
         _scene.ConflictRanks = report.Ranks;
-        GD.Print($"draw order: {report.Pairs} conflicting node pair(s) over {nodes.Count} node(s) / "
-                 + $"{report.Triangles} triangle(s) -> {report.MaxRank + 1} rank(s), {excluded} "
-                 + $"origin-parked root(s) excluded, {Time.GetTicksMsec() - start} ms");
+        Log.Info("world", $"draw order: {report.Pairs} conflicting node pair(s) over {nodes.Count} node(s) / {report.Triangles} triangle(s) -> {report.MaxRank + 1} rank(s), {excluded} origin-parked root(s) excluded, {Time.GetTicksMsec() - start} ms");
         if (report.MaxRank > SceneBuilder.ConflictRankCap)
         {
             GD.PushWarning($"draw order: conflict chain {report.MaxRank + 1} exceeds the "
@@ -1132,8 +1129,7 @@ public sealed class WorldBuilder
             var names = new List<string>();
             foreach (var z in zones)
                 names.Add(z.Name);
-            GD.Print($"horizon: no '{zone}' subtree (has {string.Join("/", names)}) — "
-                     + $"building '{zones[0].Name}'");
+            Log.Info("world", $"horizon: no '{zone}' subtree (has {string.Join("/", names)}) — building '{zones[0].Name}'");
         }
         return zones[0].Name;
     }

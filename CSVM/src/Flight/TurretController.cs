@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Flight;
@@ -461,12 +462,15 @@ public sealed class TurretController
         {
             return false;
         }
-        var query = PhysicsRayQueryParameters3D.Create(from + span * (MountSkirtM / len), to, CollisionLayers.World);
+        // Both disposed on the way out: the query object and the hit dictionary are finalizable
+        // wrappers otherwise, one pair per turret per tick (PERF-20).
+        using var query = PhysicsRayQueryParameters3D.Create(from + span * (MountSkirtM / len), to, CollisionLayers.World);
         if (exclude is { Count: > 0 })
         {
             query.Exclude = exclude;
         }
-        return space.IntersectRay(query).Count > 0;
+        using var hit = space.IntersectRay(query);
+        return hit.Count > 0;
     }
 
     /// <summary>Writes the team the acquisition gate runs on, for the fan a zeppelin record's team
@@ -596,7 +600,7 @@ public sealed class TurretController
         if (_host == null && !_firstShotLogged)
         {
             _firstShotLogged = true; // verification breadcrumb: WHICH emplacements actually engage
-            GD.Print($"turret {Label}: engaging (first shot, team {_team})");
+            Log.Info("weapons", $"turret {Label}: engaging (first shot, team {_team})");
         }
         // ⚠ The voice is renewed, never restarted per round: restarting chaingun.wav at each
         // projectile keeps the ballistic rate but turns an audible firing spell into isolated shots

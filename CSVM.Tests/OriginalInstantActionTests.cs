@@ -42,7 +42,8 @@ public class OriginalInstantActionTests
                 OriginalInstantActionScreen.ContentsUpKey, OriginalInstantActionScreen.ContentsDownKey,
                 OriginalInstantActionScreen.ViewStoryKey, OriginalInstantActionScreen.BuildKey,
                 OriginalInstantActionScreen.PlayerPlaneKey, OriginalInstantActionScreen.WingmenKey,
-                OriginalInstantActionScreen.WingmanPlaneKey, OriginalInstantActionScreen.MissionKey,
+                OriginalInstantActionScreen.WingmanPlaneKey,
+                OriginalInstantActionScreen.LivesKey, OriginalInstantActionScreen.MissionKey,
                 OriginalInstantActionScreen.EnvironmentKey, "IA_D_NENEMY0", "IA_D_EGROUP0", "IA_D_DIFFICULTY0", "IA_D_PLANEE0",
                 OriginalInstantActionScreen.PageUpKey, OriginalInstantActionScreen.PageDownKey,
                 OriginalInstantActionScreen.PlayerRadioKey, OriginalInstantActionScreen.WingmanRadioKey,
@@ -332,9 +333,61 @@ public class OriginalInstantActionTests
 
         Assert.True(Row(host, OriginalInstantActionScreen.PageDownKey).Enabled);
         Assert.Contains(host.Rows, r => r.Key == OriginalInstantActionScreen.WingmenKey);
+        // The lives box is no enemy control, so the blanking passes over it.
+        Assert.True(Row(host, OriginalInstantActionScreen.LivesKey).Enabled);
+        Assert.Equal("1", Row(host, OriginalInstantActionScreen.LivesKey).Label);
         var duel = Compose(host);
         Assert.Contains(duel.Lines, l => l.Text == "Enemy:");
         Assert.Contains(duel.Lines, l => l.Text == "[more ...]");
+    }
+
+    [Fact]
+    public void TheLivesBoxStepsTheSharedFeatureAndAPresetLeavesItWherePlayerPutIt()
+    {
+        // The box takes the mission dropdown's left edge and height and the first clear line the
+        // setup stack leaves, which in this layout is the one between the environment row (Y 290,
+        // 20 high) and the enemy block (Y 330); the shipped layout leaves one higher up.
+        var host = Open(out var ia);
+        var lives = Row(host, OriginalInstantActionScreen.LivesKey);
+        Assert.Equal(OriginalRowKind.Dropdown, lives.Kind);
+        Assert.Equal((520f, 310f, 90f, 20f), Rect(lives));
+        Assert.Equal(1, lives.Column);
+        Assert.Equal("1", lives.Label);
+        Assert.Contains(Compose(host).Lines, l => l.Text == "Lives:" && l.X == 420f && l.Y == 310f);
+        Assert.DoesNotContain(host.Rows, r => r.Key != OriginalInstantActionScreen.LivesKey && Overlaps(r, lives));
+
+        // A sideways step on the box is the dropdown's own, so it wraps where the feature clamps.
+        Hover(host, OriginalInstantActionScreen.LivesKey);
+        Assert.Equal(OriginalInstantActionScreen.LivesKey, host.FocusedKey);
+        Step(host, -1);
+        Assert.Equal(0, ia.Lives);
+        Assert.Equal("Unlimited", Row(host, OriginalInstantActionScreen.LivesKey).Label);
+        Step(host, -1);
+        Assert.Equal(InstantActionFeature.MaxLives, ia.Lives);
+        Step(host, 1);
+        Assert.Equal(0, ia.Lives);
+
+        // The list is every count at once, the box having no authored window to read.
+        Click(host, OriginalInstantActionScreen.LivesKey);
+        Assert.Equal(OriginalInstantActionScreen.LivesKey, host.Module.OpenDropdown);
+        Assert.Equal(InstantActionFeature.MaxLives + 1, host.Rows.Count);
+        Assert.Equal("Unlimited", host.Rows[0].Label);
+        Assert.Equal((520f, 330f, 90f, 20f), Rect(host.Rows[0]));
+        Click(host, 3);
+        Assert.Null(host.Module.OpenDropdown);
+        Assert.Equal(3, ia.Lives);
+        Assert.Equal("3", Row(host, OriginalInstantActionScreen.LivesKey).Label);
+
+        // A contents row writes the preset over the page, and no preset carries a lives value.
+        Click(host, 0);
+        Assert.Equal(0, ia.PresetIndex);
+        Assert.Equal(3, ia.Lives);
+        Assert.Equal("3", Row(host, OriginalInstantActionScreen.LivesKey).Label);
+
+        // The screenshot aid's pose stands the box at a count with the cursor on it.
+        Assert.True(host.Module.PoseLives(5));
+        Assert.Equal(5, ia.Lives);
+        Assert.Equal(OriginalInstantActionScreen.LivesKey, host.FocusedKey);
     }
 
     [Fact]
@@ -662,6 +715,9 @@ public class OriginalInstantActionTests
 
     private static (float X, float Y, float Width, float Height) Rect(OriginalRow row) => (row.X, row.Y, row.Width, row.Height);
 
+    private static bool Overlaps(OriginalRow a, OriginalRow b) =>
+        a.X < b.X + b.Width && b.X < a.X + a.Width && a.Y < b.Y + b.Height && b.Y < a.Y + a.Height;
+
     private static BoardPicture Thumb(InstantActionHost host) => Compose(host).Pictures.Single(p => p.Art.Name == "PI_B_ScrollBar.png");
 
     // One click as the shell reads it: the press puts the pointer and the focus on the row, the
@@ -879,6 +935,8 @@ public class OriginalInstantActionTests
             SeatWalks++;
             return null;
         }
+
+        public int CheatedMission(int ordinary) => OriginalTestHost.CheatedMission(ordinary);
 
         public BoardPanel? SeatPanel(bool onPaper) => null;
 

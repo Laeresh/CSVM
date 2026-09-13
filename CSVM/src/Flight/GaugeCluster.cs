@@ -217,7 +217,7 @@ public sealed partial class GaugeCluster : Control
         var gauges = FindDescendant(planes, root, "gauges");
         if (gauges == null)
         {
-            GD.Print($"[gauges] '{planeName}' has no gauges subtree — HUD dials off");
+            Log.Info("flight", $"[gauges] '{planeName}' has no gauges subtree — HUD dials off");
             return null;
         }
 
@@ -272,7 +272,7 @@ public sealed partial class GaugeCluster : Control
 
         if (cluster._altFace.Count == 0 && cluster._spdFace.Count == 0 && cluster._dmgFace.Count == 0)
         {
-            GD.Print($"[gauges] '{planeName}': no dial geometry extracted — HUD dials off");
+            Log.Info("flight", $"[gauges] '{planeName}': no dial geometry extracted — HUD dials off");
             return null;
         }
         return cluster;

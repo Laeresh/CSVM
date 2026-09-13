@@ -101,8 +101,7 @@ public sealed partial class AiGeneratorRuntime : Node
             Node3D? host = resolveNode?.Invoke(def.Node, null);
             if (host == null)
             {
-                GD.Print($"egen: generator '{def.Node}' dropped: host node unresolved" +
-                         (resolveNode == null ? " (no world runtime on this stage)" : ""));
+                Log.Info("flight", $"egen: generator '{def.Node}' dropped: host node unresolved{(resolveNode == null ? " (no world runtime on this stage)" : "")}");
                 continue;
             }
             // Load-drop 2: none of the nets resolve against the chapter's neindex names.
@@ -116,8 +115,7 @@ public sealed partial class AiGeneratorRuntime : Node
             }
             if (nets.Count == 0)
             {
-                GD.Print($"egen: generator '{def.Node}' dropped: no net of " +
-                         $"[{string.Join(", ", def.Nets)}] resolves");
+                Log.Info("flight", $"egen: generator '{def.Node}' dropped: no net of [{string.Join(", ", def.Nets)}] resolves");
                 continue;
             }
             // The zeppelin drop point; a miss falls back to the host node (not a drop condition).
@@ -127,9 +125,7 @@ public sealed partial class AiGeneratorRuntime : Node
             var path = def.IsZeppelin ? null : ResolveLaunchPath(def.Node, host, resolveNode);
             if (!def.IsZeppelin && path == null)
             {
-                GD.Print($"egen: generator '{def.Node}' dropped: no take-off path " +
-                         $"'{EnemyGenerators.LaunchPathNode(def.Node, 0)}'/" +
-                         $"'{EnemyGenerators.LaunchPathNode(def.Node, 1)}' under the host");
+                Log.Info("flight", $"egen: generator '{def.Node}' dropped: no take-off path '{EnemyGenerators.LaunchPathNode(def.Node, 0)}'/'{EnemyGenerators.LaunchPathNode(def.Node, 1)}' under the host");
                 continue;
             }
             _live.Add(new LiveGenerator(def, new GeneratorCycle(def), host, origin, nets) { LaunchPath = path });
@@ -139,13 +135,7 @@ public sealed partial class AiGeneratorRuntime : Node
             {
                 netNames.Add(n.Name);
             }
-            GD.Print($"egen: generator '{def.Node}' live ({kind}), " +
-                     $"wave {def.WaveSize} every {def.IndPeriod + def.WavePeriod:0.#} s (ind {def.IndPeriod:0.#} + wave {def.WavePeriod:0.#}), " +
-                     $"max_active {def.MaxActive}, nets [{string.Join(", ", netNames)}]" +
-                     (def.MinAltitude is { } gate ? $", launch gate {gate:0} m" : "") +
-                     (path != null ? $", take-off path {path.Count} point(s)" : "") +
-                     (def.OpenAnim != null ? $", doors '{def.OpenAnim}'/'{def.CloseAnim}'"
-                         : ", doors unnamed (timing runs log-only)"));
+            Log.Info("flight", $"egen: generator '{def.Node}' live ({kind}), wave {def.WaveSize} every {def.IndPeriod + def.WavePeriod:0.#} s (ind {def.IndPeriod:0.#} + wave {def.WavePeriod:0.#}), max_active {def.MaxActive}, nets [{string.Join(", ", netNames)}]{(def.MinAltitude is { } gate ? Log.Format($", launch gate {gate:0} m") : "")}{(path != null ? $", take-off path {path.Count} point(s)" : "")}{(def.OpenAnim != null ? $", doors '{def.OpenAnim}'/'{def.CloseAnim}'" : ", doors unnamed (timing runs log-only)")}");
         }
     }
 
@@ -236,8 +226,7 @@ public sealed partial class AiGeneratorRuntime : Node
             }
             gen.Cycle.HostDied();
             dying++;
-            GD.Print($"egen: generator '{gen.Def.Node}' host died: launches for " +
-                     $"{GeneratorCycle.HostDeathGraceSeconds:0} s more, then disabled permanently");
+            Log.Info("flight", $"egen: generator '{gen.Def.Node}' host died: launches for {GeneratorCycle.HostDeathGraceSeconds:0} s more, then disabled permanently");
         }
         return dying;
     }
@@ -258,7 +247,7 @@ public sealed partial class AiGeneratorRuntime : Node
             bool spawned = gen.Cycle.Step(dt, hostPosition.Y);
             if (gen.Cycle.Disabled && !wasDisabled)
             {
-                GD.Print($"egen: generator '{gen.Def.Node}' disabled permanently: host died");
+                Log.Info("flight", $"egen: generator '{gen.Def.Node}' disabled permanently: host died");
             }
             if (gen.Cycle.DoorOpen != gen.DoorOpen)
             {
@@ -308,8 +297,7 @@ public sealed partial class AiGeneratorRuntime : Node
             return _inner?.Invoke(code, animName, rootName) ?? false;
         }
         int fed = GrantWaveCapacity(CallbackCreditedHost, CallbackCredit);
-        GD.Print($"egen: callback {code} from '{animName ?? "?"}': '{CallbackCreditedHost}' " +
-                 $"+{CallbackCredit} credit (granted {fed})");
+        Log.Info("flight", $"egen: callback {code} from '{animName ?? "?"}': '{CallbackCreditedHost}' +{CallbackCredit} credit (granted {fed})");
         return true;
     }
 
@@ -351,7 +339,7 @@ public sealed partial class AiGeneratorRuntime : Node
         string what = opening ? "open" : "close";
         if (anim == null)
         {
-            GD.Print($"egen: '{gen.Def.Node}' door {what} (no authored anim)");
+            Log.Info("flight", $"egen: '{gen.Def.Node}' door {what} (no authored anim)");
             return 0;
         }
         // Stop the opposite motion first: a fast cycle can otherwise leave both from-to motions
@@ -362,8 +350,7 @@ public sealed partial class AiGeneratorRuntime : Node
             _stopAnim?.Invoke(other, gen.Host);
         }
         int started = _playAnim?.Invoke(anim, gen.Host) ?? 0;
-        GD.Print($"egen: '{gen.Def.Node}' door {what} (anim '{anim}'" +
-                 (started > 0 ? $", {started} instance(s))" : ", not in this program)"));
+        Log.Info("flight", $"egen: '{gen.Def.Node}' door {what} (anim '{anim}'{(started > 0 ? $", {started} instance(s))" : ", not in this program)")}");
         return started;
     }
 
@@ -416,16 +403,13 @@ public sealed partial class AiGeneratorRuntime : Node
             if (released == null)
             {
                 gen.Cycle.SpawnRemoved();   // the slot was counted before the release could fail
-                GD.Print($"egen: '{gen.Def.Node}' launch skipped: no parked wave member left");
+                Log.Info("flight", $"egen: '{gen.Def.Node}' launch skipped: no parked wave member left");
                 return;
             }
             gen.SpawnCount++;
             LaunchOrdinal++;
             released.Downed += (_, _) => gen.Cycle.SpawnRemoved();
-            GD.Print($"egen: '{gen.Def.Node}' launch #{gen.SpawnCount}: IA wave member '" +
-                     $"{released.Name}' released at ({pos.X:0},{pos.Y:0},{pos.Z:0}), " +
-                     $"active {gen.Cycle.Active}/{gen.Def.MaxActive}, " +
-                     $"{gen.Cycle.CapacityRemaining} of this wave's credit left");
+            Log.Info("flight", $"egen: '{gen.Def.Node}' launch #{gen.SpawnCount}: IA wave member '{released.Name}' released at ({pos.X:0},{pos.Y:0},{pos.Z:0}), active {gen.Cycle.Active}/{gen.Def.MaxActive}, {gen.Cycle.CapacityRemaining} of this wave's credit left");
             return;
         }
 
@@ -455,9 +439,7 @@ public sealed partial class AiGeneratorRuntime : Node
                 }
             }
             vessel.Launch(run, net);
-            GD.Print($"egen: '{gen.Def.Node}' spawn #{gen.SpawnCount}: surface vehicle '{vessel.Name}' launched at " +
-                     $"({pos.X:0},{pos.Y:0},{pos.Z:0}) down {run.Count} path point(s) onto net '{net.Name}', " +
-                     $"active {gen.Cycle.Active}/{gen.Def.MaxActive}, params '{gen.Def.VehicleParams}'");
+            Log.Info("flight", $"egen: '{gen.Def.Node}' spawn #{gen.SpawnCount}: surface vehicle '{vessel.Name}' launched at ({pos.X:0},{pos.Y:0},{pos.Z:0}) down {run.Count} path point(s) onto net '{net.Name}', active {gen.Cycle.Active}/{gen.Def.MaxActive}, params '{gen.Def.VehicleParams}'");
             return;
         }
         var controller = launched.Aircraft;
@@ -469,8 +451,7 @@ public sealed partial class AiGeneratorRuntime : Node
                 // reports it as a launch, so the ordinal advances and the max_active slot
                 // stays taken by nothing until the generator blocks itself.
                 LaunchOrdinal++;
-                GD.Print($"egen: '{gen.Def.Node}' launch counted, nothing built, " +
-                         $"active {gen.Cycle.Active}/{gen.Def.MaxActive}");
+                Log.Info("flight", $"egen: '{gen.Def.Node}' launch counted, nothing built, active {gen.Cycle.Active}/{gen.Def.MaxActive}");
                 return;
             }
             gen.Cycle.SpawnRemoved();   // the slot was counted before the spawn could fail
@@ -486,10 +467,7 @@ public sealed partial class AiGeneratorRuntime : Node
         {
             StartTakeOffRun(gen, controller, runPoints, pos, forward, net.Name);
         }
-        GD.Print($"egen: '{gen.Def.Node}' spawn #{gen.SpawnCount}: '{controller.Name}' dropped at " +
-                 $"({pos.X:0},{pos.Y:0},{pos.Z:0}) patrolling net '{net.Name}', " +
-                 $"active {gen.Cycle.Active}/{gen.Def.MaxActive}" +
-                 (gen.Def.VehicleParams != null ? $", params '{gen.Def.VehicleParams}'" : ""));
+        Log.Info("flight", $"egen: '{gen.Def.Node}' spawn #{gen.SpawnCount}: '{controller.Name}' dropped at ({pos.X:0},{pos.Y:0},{pos.Z:0}) patrolling net '{net.Name}', active {gen.Cycle.Active}/{gen.Def.MaxActive}{(gen.Def.VehicleParams != null ? $", params '{gen.Def.VehicleParams}'" : "")}");
     }
 
     // The launch pose is the run's first pose: waypoint 0 lifted the decoded 0.2 m, nose down the

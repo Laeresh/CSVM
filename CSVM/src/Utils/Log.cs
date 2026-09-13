@@ -16,8 +16,9 @@ namespace CSVM.Utils;
 /// and the --log= filter: docs/org/logging.md.
 /// ⚠ Messages are interpolated strings rendered with <see cref="CultureInfo.InvariantCulture"/>,
 /// so a float reads <c>16.667</c> on every machine, never the current-culture form.
-/// ⚠ Migration off the remaining <c>GD.Print</c> call sites is incremental by decision, a
-/// family converts when an item touches it, never a bulk sweep.
+/// ⚠ A call site under <c>CSVM/src</c> logs through this class, never <c>GD.Print</c>: a bare
+/// print misses the file sink and the <c>--log=</c> filter and kills a unit-test host (INSTR-56).
+/// The <c>GD.Print</c> calls below are this class's own console tier, the one exception.
 /// </summary>
 public static class Log
 {
