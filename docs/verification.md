@@ -584,6 +584,11 @@ member, and it does not go here.
   load board's `_Ready` and cleared by its `_ExitTree`, so a CLI launch leaves the ambient null and
   every report is a no-op: 19 of 19 goldens unmoved, and the motion is testable only through a
   suite that installs its own pump.
+- **INSTR-72**, **A check taken well past a threshold passes for every value of that threshold;
+  straddle it instead, one reading just inside and one just outside.** The AI gun loop's cull was
+  read with the listener at 4x the cue's audible distance, which is silent whether the cull sits at
+  1.0x or at 1.1x of it, so the missing margin survived that suite; ears at 1.05x and 1.15x
+  separate the two.
 
 ## SRC, sources and documents
 

@@ -812,9 +812,9 @@ sustained-fire gun loop and the dry-trigger cue on `AudioStreamPlayer3D`s riding
 another aircraft's guns are heard from where that aircraft is, which is where the original's fire
 tick puts its own ([../org/weaponFire.md](../org/weaponFire.md)), so no muzzle offset belongs here;
 the dry cue is positional by decision where the original's is flat. `Attach` is the whole
-spawner-side surface; the cues come from `WeaponAudioCues`. The cull is each cue's own audible
-distance and rides `StartGunLoop`, called every frame the loop is wanted; the listeners are the human
-pilots, the seam `AiEngineAudio` and `ProjectilePool` read too. No `3D` flag means no world player.
+spawner-side surface; the cues come from `WeaponAudioCues` and the cull with them, the margin the
+sound manager leaves over a cue's audible distance ([../formats/sounds.md](../formats/sounds.md)),
+measured against the human pilots `AiEngineAudio` reads too. No `3D` flag means no world player.
 
 ## src/Flight/GunVoice.cs
 One mounted gun's firing voice: a single `AudioStreamPlayer3D` on the mount's own cue, moved to where
@@ -823,8 +823,8 @@ continuous burst rather than a clip restarted per projectile. The lease is the c
 turret renews half a second per round, a hull's gun zero every tick
 ([../org/weaponFire.md](../org/weaponFire.md)). `Attach` takes the `GunVoiceHome` bundle of parent,
 archive and listeners a session builds once and hands every mount. One voice per mount, never one per
-owner. The cue comes from `WeaponAudioCues`, the cull is 1.1 times its authored audible distance
-off this node ([../formats/turrets.md](../formats/turrets.md)); the `sound` log names each verdict.
+owner. The cue comes from `WeaponAudioCues` and the cull with it, the same one an aircraft's loop
+takes ([../formats/sounds.md](../formats/sounds.md)); the `sound` log names each verdict.
 
 ## src/Flight/AudioListeners.cs
 Where the session's audio listeners are, for every positional flight-audio path: the human pilots'
@@ -837,8 +837,8 @@ against.
 ## src/Flight/WeaponAudioCues.cs
 The weapon-sound selection both audio paths read, `EngineAudioCurves`' counterpart for guns: a
 definition name to a `WeaponSoundCue` carrying the stream, the definition's unscaled `VOLUME`, its
-`RANGE` pair and its `3D` flag. The range travels with the cue so a positional player's `UnitSize`,
-`MaxDistance` and cull threshold cannot disagree with the definition it came from. It selects and
+`RANGE` pair, its `3D` flag and the one cull distance past that pair, which every weapon voice takes
+so the aircraft loop and a mount's gun cannot cull differently. It selects and
 nothing else, which keeps own-ship concepts out of the world path. A firing loop is decoded `LOOPED`
 whatever its definition says, and that flag is also the prewarm key (`WeaponDefs.SoundCues`). The
 dry-trigger cue resolves through `WeaponDefs.EmptyClipSound`, the `NO_AMMO_WARNING` read of record,

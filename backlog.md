@@ -1271,8 +1271,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   deterministic clock is what the easing reads, so decide that first). *Cross-refs:* `BL-816`'s
   closing commit, `docs/verification.md` DET-11, `docs/formats/camparam.md`.
 
-- `BL-846` `[Fidelity]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **An aircraft's gun loop culls at its audible distance with no margin, while the turret voice culls at 1.1x as decoded.** *Evidence:* `AiWeaponAudio` culls at the cue's own audible distance, and `docs/formats/sounds.md` says the sound manager culls at the definition's own audible distance; `docs/formats/turrets.md` reads `FUN_00597c20`, the sound manager's own routine, as silencing a voice past 1.1x the RANGE pair's audible distance, which is what `GunVoice` now applies. The same routine plausibly serves the aircraft path. *Fix shape:* read `FUN_00597c20`'s callers for the aircraft loop; if the margin applies, move it into the shared cue reading and correct `sounds.md`, and re-pin the aircraft voice suites. *⚠ Traps:* the turret voice suites now hear at 1.05x and are silent at 1.15x; a shared margin must keep both. *Cross-refs:* PLAN-code-review-orch C26.
-
 ## Cameras & views
 
 - `BL-150` `[Research]` `[Owed-playtest]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The numpad camera scheme is the head-look controller,

@@ -156,7 +156,9 @@ one zeppelin hull hold seventeen independent voices. The lease call (`0x004ab1d9
 the turret's firepoint position (`+0x188`, the same vector the projectile spawner is given) and its
 velocity (`+0x194`) with the Doppler argument **zero**, so the voice is a point at the muzzle a round
 just left and carries no pitch shift. Attenuation is the definition's own `RANGE` pair, silent past
-1.1 x its audible distance (`FUN_00597c20`).
+1.1 x its audible distance. That margin is not the turret path's: it is in the sound manager's
+shared 3D update `FUN_00597c20`, which every positional weapon voice reaches, an aircraft's gun
+loop included ([sounds.md](sounds.md)).
 
 ⚠ **Eleven of the 42 entries are silent by the data's own two gates, and that is not a defect.**
 The lease call is guarded on `SOUNDS.CANNON` being present AND on the entry's weapon carrying the

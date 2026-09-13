@@ -13,6 +13,11 @@ namespace CSVM.Testing;
 /// combat voice, and the inert state they wait in.</summary>
 internal static class AiSuites
 {
+    // The margin the sound manager leaves over a definition's audible distance before it silences
+    // the voice (docs/formats/sounds.md). Held here as the decode's own figure rather than read off
+    // WeaponSoundCue, so a build that culls an aircraft's gun loop at the RANGE pair itself fails.
+    private const float VoiceCullMargin = 1.1f;
+
     [Suite("flight-roster-transaction",
         "FlightRoster owns human and AI assembly as atomic transactions: a late second-human " +
         "failure removes external bindings, a retry commits both humans in order with complete " +
@@ -2819,8 +2824,9 @@ internal static class AiSuites
         + "other, both taking the definition's own RANGE pair as their distance model rather than "
         + "the reader default, neither rig carrying the own-ship FlightAudio, every emitter on the "
         + "Effects bus at its source asset's own pitch with Doppler tracking off (CAP-09 measured "
-        + "none in the original), and the loop silencing past the cue's own authored audible "
-        + "distance and sounding again inside it, with a `sound` log transition either way")]
+        + "none in the original), and the loop silencing past 1.1 times the cue's own authored "
+        + "audible distance, the margin the sound manager leaves over the RANGE pair, while a burst "
+        + "just outside that distance is still heard, with a `sound` log transition either way")]
     internal static void AiWeaponEmitters(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -2929,18 +2935,23 @@ internal static class AiSuites
                 ctx.Check(culls.Count(l => l.Contains(" audible ")) == 2,
                     $"both voices logged the transition into earshot (got {culls.Count(l => l.Contains(" audible "))})");
 
-                // The cull, driven from the listener rather than by moving the aeroplane: past the
-                // cue's own audible distance the loop stops, and inside it starts again.
-                var abeam = ears[0];
-                float cull = here.Count > 0 ? here[0].RangeMax : 0f;
-                ears[0] = abeam + new Vector3(cull * 4f, 0f, 0f);
+                // The cull, driven from the listener rather than by moving the aeroplane: the two
+                // ears below straddle the 1.1x, which is what separates this cull from one taken at
+                // the RANGE pair itself. Each ratio is measured after its step, the aeroplane flies.
+                float audible = here.Count > 0 ? here[0].RangeMax : 0f;
+                ctx.Check(audible > 0f
+                    && Mathf.IsEqualApprox(weaponA.LoopCull, audible * VoiceCullMargin),
+                    $"the loop culls at {weaponA.LoopCull:0} m, the {VoiceCullMargin:0.0}x of the {audible:0} m its definition calls audible");
+                ears[0] = a.GlobalPosition + new Vector3(audible * 1.15f, 0f, 0f);
                 a.SimStep(dt);
-                ctx.Check(!weaponA.LoopSounding,
-                    $"a burst {a.GlobalPosition.DistanceTo(ears[0]):0} m off, past the {cull:0} m the definition calls audible, is silent");
-                ears[0] = abeam;
+                float wellOut = a.GlobalPosition.DistanceTo(ears[0]) / Mathf.Max(audible, 1f);
+                ctx.Check(!weaponA.LoopSounding && wellOut > VoiceCullMargin,
+                    $"a burst {wellOut:0.00}x the {audible:0} m the definition calls audible is silent, past the {weaponA.LoopCull:0} m cull");
+                ears[0] = a.GlobalPosition + new Vector3(audible * 1.05f, 0f, 0f);
                 a.SimStep(dt);
-                ctx.Check(weaponA.LoopSounding,
-                    $"…and sounds again from {a.GlobalPosition.DistanceTo(abeam):0} m, inside it");
+                float justOut = a.GlobalPosition.DistanceTo(ears[0]) / Mathf.Max(audible, 1f);
+                ctx.Check(weaponA.LoopSounding && justOut > 1f && justOut < VoiceCullMargin,
+                    $"…and {justOut:0.00}x it is heard again, inside that cull");
                 ctx.Check(culls.Count(l => l.Contains(" culled ")) >= 1,
                     $"the `sound` log carries the cull transition, the pairing INSTR-45 asks for (lines={culls.Count})");
                 // ⚠ Snapshot before noting: ctx.Note echoes each line to the console, which the sink
@@ -3476,7 +3487,7 @@ internal static class AiSuites
                 $"…on the {AudioBuses.Effects} bus, not Master (got {player.Bus})");
         }
         ctx.Check(players == emitters.Count, $"{name}'s emitter roll-call matches the live players ({players})");
-        ctx.Note($"{name}: {emitters.Count} emitter(s) at ({at.X:0},{at.Y:0},{at.Z:0}) — {string.Join(", ", emitters.Select(e => $"{e.Name} cull {e.RangeMax:0} m"))}");
+        ctx.Note($"{name}: {emitters.Count} emitter(s) at ({at.X:0},{at.Y:0},{at.Z:0}), {string.Join(", ", emitters.Select(e => $"{e.Name} audible {e.RangeMax:0} m"))}, loop cull {audio.LoopCull:0} m");
         // The dry cue is named by weapons.json's own NO_AMMO_WARNING read, not by a literal of the
         // audio path's: an install that renamed it must still reach this emitter.
         ctx.Check(emitters.Any(e => e.Name == weapons.EmptyClipSound),
