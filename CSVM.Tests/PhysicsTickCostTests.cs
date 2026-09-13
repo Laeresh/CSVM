@@ -6,7 +6,7 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The open / close / drain cycle behind <see cref="PhysicsTickCost"/>, the bracket that replaces
-/// Godot's <c>TIME_PHYSICS_PROCESS</c> as the physics step's cost (docs/verification.md PERF-21).
+/// Godot's <c>TIME_PHYSICS_PROCESS</c> as the physics step's cost (docs/verification.md PERF-1).
 /// What the drain reports, that the mean and the maximum are different quantities, and the two
 /// properties an unbalanced bracket must have: a close with no open standing banks nothing, and a
 /// reset drops a half-open tick rather than letting the next close charge it.
@@ -50,7 +50,7 @@ public class PhysicsTickCostTests
 
         var (ms, maxMs, ticks) = PhysicsTickCost.Take();
         Assert.Equal(6, ticks);
-        // The point PERF-21 turns on: one slow tick among five fast ones sets the maximum, while the
+        // The point PERF-1 turns on: one slow tick among five fast ones sets the maximum, while the
         // mean stays near the fast ones. Godot's monitor reports the first; the step cost is the second.
         double mean = ms / ticks;
         Assert.True(maxMs >= 15, $"the deliberately slow tick should dominate the maximum: {maxMs} ms");

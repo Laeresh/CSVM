@@ -118,7 +118,7 @@ the pair spans every `_PhysicsProcess` callback in the tree. `Take()` drains the
 milliseconds, the worst single tick in it and the tick count; `NominalHz` turns that count into the
 sim seconds a wall second bought, which is what shows a sim running at half speed. Godot's
 `TIME_PHYSICS_PROCESS` monitor answers neither question, and the misreading it invites is
-`docs/verification.md` PERF-21.
+`docs/verification.md` PERF-1.
 
 ## src/Utils/ProcessPassCost.cs
 The wall cost of one whole `_Process` pass, measured by two `WallCostBracket` nodes pinned to the
@@ -145,7 +145,7 @@ read off the runtime's own `GCHeapStats` event through an `EventListener` on the
 finalizable count is the figure a change to the frame path moves, and pause per wall second the
 figure it is judged on; every line carries process uptime so the world-build regime is excluded by
 uptime rather than by guesswork. What the two numbers mean and why the per-collection pause is the
-wrong one to read is `docs/verification.md` PERF-19, PERF-20 and PERF-27.
+wrong one to read is `docs/verification.md` PERF-19 and PERF-20.
 
 ## src/Utils/Rng.cs
 The session's randomness policy: one master seed and a named generator per subsystem derived from

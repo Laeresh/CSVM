@@ -95,7 +95,7 @@ internal static class AlphaCutoutRaySuites
     {
         // A moved static body's transform reaches the physics server on the next frame, which
         // never comes inside a suite; without this push every ray reads the colliders at the
-        // BUILT pose and finds nothing where the meshes now are (verification INSTR-24).
+        // BUILT pose and finds nothing where the meshes now are (verification INSTR-13).
         foreach (var n in Subtree(host))
         {
             if (n is Node3D n3d)
@@ -188,7 +188,7 @@ internal static class AlphaCutoutRaySuites
         }
 
         // The burst: straight up off the first tank's top until it meets the hull. The zeppelin's
-        // own subtree already had its transforms pushed to the physics server by Census (INSTR-24).
+        // own subtree already had its transforms pushed to the physics server by Census (INSTR-13).
         var first = tanks[0];
         var from = first.Centre + (up * ((first.Box.Size.Y * 0.5f) + 0.05f));
         var upHit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(

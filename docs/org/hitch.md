@@ -5,7 +5,7 @@ This page is the reference for CSVM's own hitch instrument, `CSVM/src/Utils/Hitc
 record carries, the grammar of the two report lines, and the site vocabulary a frame's named work
 is reported in. Each module's purpose is its entry in
 [`../architecture/Utils.md`](../architecture/Utils.md); how the resulting numbers mislead is
-`docs/verification.md` PERF-12, PERF-13, PERF-14, PERF-15 and INSTR-17.
+`docs/verification.md` PERF-12, PERF-13 and PERF-15.
 
 ## The trigger
 

@@ -170,7 +170,7 @@ internal static class ZeppelinCannonStowedSuites
     }
 
     // A suite gets no physics flush, so a body an animation moved is still queried at its old pose
-    // (docs/verification.md INSTR-24). Push the whole cannon's transforms before every ray.
+    // (docs/verification.md INSTR-13). Push the whole cannon's transforms before every ray.
     private static void SyncColliders(Node3D root)
     {
         root.ForceUpdateTransform();

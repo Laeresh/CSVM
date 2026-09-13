@@ -5,7 +5,7 @@ namespace CSVM.UI;
 /// place. Godot sorts canvas layers by this number, and keeping them here rather than as bare
 /// literals across nine files is what makes "does the collider overlay draw above the cloud
 /// whiteout?" answerable by reading one file. Order is measured off the original's footage, not
-/// chosen: decode in docs/org/weather.md, wash-over-HUD evidence in docs/verification.md SHOT-22.
+/// chosen: decode in docs/org/weather.md, wash-over-HUD evidence under BL-165 in the git log.
 /// ⚠ <see cref="Debug"/> and <see cref="Lab"/> sit above <see cref="SunWash"/> on purpose: they
 /// are the instruments the picture is judged with, and the original never had them, so nothing
 /// about fidelity says they should wash out with the rest of the HUD.

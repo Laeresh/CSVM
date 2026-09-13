@@ -123,7 +123,7 @@ Switches: **`-Suite <name>[,<name>]`** (exact in-engine suite names), **`-Filter
 original|enhanced`** (default `original`, which appends nothing; `enhanced` appends
 `--graphics=enhanced` to the perf and hitch launches only).
 
-**Every stage prints its wall time against a budget, and a budget never fails a run** (PERF-18).
+**Every stage prints its wall time against a budget, and a budget never fails a run**.
 The numbers live in `analysis/verification-budgets.json`, one lane for the complete gate and one
 for `-Quick`, and live nowhere else so they cannot drift; each is the slowest of three
 back-to-back warm runs plus 50 %. A skipped stage is compared against nothing, and the total only
@@ -211,7 +211,7 @@ noise floor.
 `draws` / `prims` / `nodes` and the startup phases, and a row is marked `*` only when it clears
 **both** a relative band and an absolute floor, each this machine's own noise (PERF-9…PERF-11).
 Every other recorded metric prints as awareness only, each because its own instrument is unfit for
-a ratio (PERF-1, PERF-2, PERF-21), with the reason in the manifest's `notes`.
+a ratio (PERF-1, PERF-2), with the reason in the manifest's `notes`.
 
 **Exit-code contract: 1 if any stage FAILED, 0 otherwise, and a skip is not a failure.** A missing
 dependency and `-SkipUnits`/`-SkipEngine` report `SKIP` at 0 with a `not checked:` line, so "the

@@ -4,7 +4,7 @@ This page is the reference for CSVM's own startup timing report,
 `CSVM/src/Utils/StartupProfile.cs`. It holds the line's grammar, the rules a phase obeys, and what
 each term means. The module's purpose is its entry in
 [`../architecture/Utils.md`](../architecture/Utils.md); how `boot` and `rest` mislead is
-`docs/verification.md` PERF-16 and PERF-17.
+`docs/verification.md` PERF-16.
 
 ## The line
 
