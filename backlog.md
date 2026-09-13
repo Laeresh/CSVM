@@ -468,7 +468,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   voice line is flavour and this closes. A second report from the controls: three flak rockets
   on the hull killed it, which reads too easy if the hull takes hits at all and right if only
   the hangar does, so the count is the same question and not a second item. A third report from the
-  controls, the CM04 sortie behind `BL-910`: the Barracuda died to about six to eight flak hits on
+  controls, a CM04 campaign sortie: the Barracuda died to about six to eight flak hits on
   the hull. *Cross-refs:*
   `CAP-57` (the original filmed taking three flak rockets on the hull).
 
@@ -670,33 +670,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   The original's own Hoplite special-plane template is 1/1, which says nothing about a stock fit.
   *Cross-refs:* `docs/formats/saved-games.md` ("A cell names a pylon only against the fit"),
   `CSVM/src/UI/Menu/HangarFeature.cs`.
-- `BL-910` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` **Allied AI on CM04
-  take the camp buildings at mission start and never leave them for the enemy aircraft; the
-  original's allies attack aircraft only.** Flown in the original: on CM04 the allies never attack
-  an engine or a building, they attack enemies, and several enemies go down without the player
-  firing. In CSVM the same sortie has every wingman and Devastator on `u_camp1..3` and two AA guns
-  for the whole mission. *Evidence:* the session log on the run branch: at the mission start the
-  three wingmen and both Devastators acquire `u_camp1..3` and `aagun30/32` at 0.85 to 1.3 km with
-  183 structures in the scan, while the nearest enemy aircraft stands at 4.9 km, beyond the 2000 m
-  activation range, so no aircraft ranks and the structures are admitted. `BL-866`'s aircraft-first
-  preference is consulted only at that first pick: `FlightController.DriveAiGunner` keeps a
-  standing target while it is alive and never re-ranks. *Fix shape:* three parts. (1) Decode which
-  structures reach an AI pilot's pool in the original (the `+0x8d` mission structure list in
-  `docs/org/aiPilot.md` "Target acquisition", against `AimCandidateSet.AddStructures` in
-  `CSVM/src/Flight/AimAssist.cs`, which admits every hostile destructible), and whether a
-  `wingman` scorer admits structures at all; match that admission. (2) Port the 20 s re-score as
-  decoded (`docs/org/aiPilot.md` "A standing target is sticky for 20 seconds"): the standing
-  target is re-scored once the hold runs out and kept while it still scores valid, replacing "keep
-  while alive". (3) Keep the aircraft-first preference and apply it at each re-score too, as
-  CSVM's own layer over the decode, so a wingman leaves a building the moment an enemy aircraft is
-  in reach even where the decode alone would hold it; say so in the code. *⚠ Traps:* the re-score
-  alone does not sweep the pool in the original, a camp that still scores valid is kept, so (2) by
-  itself would not have changed the CM04 sortie; the divergence is the first pick, which is (1).
-  `--ai-targeting=decoded` restores the original's arithmetic with no class priority and is the
-  control for (1). *Playtest after fix:* CM04 from the campaign, watch the wingmen through the
-  first two minutes: they turn onto the British aircraft as those arrive and never strafe the
-  camp. *Cross-refs:* `BL-866`'s closing commit (the preference and the picker), `BL-515` (the
-  Barracuda's flak count from the same sortie), `docs/org/aiPilot.md`, `docs/org/targeting.md`.
 - `BL-918` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **The original's
   Non-Aircraft target cycle offers only the mission's curated entries and never a turret.**
   Compared at the controls: in the original's CM01 the Non-Aircraft class selects the Pandora and
@@ -709,8 +682,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   or structure outside the mission's `targets.zrd` is a wrong admission, find the path that adds
   it (`AimCandidateSet`, the turret pool, `TargetPool`) and close it. Where the lists agree the
   item closes as an answer with the per-mission table in the commit. *⚠ Traps:* the AI pilot's own
-  acquisition (`BL-910`) admits turrets by design and shares candidate code with the player's
-  cycle; do not narrow the AI's pool while fixing the player's. *Cross-refs:* `BL-400`'s closing
+  acquisition admits turrets by design, and its structure pool is already the narrower
+  mission-structure set (`AimCandidateSet.AddMissionStructures`) while the player's cycle keeps
+  `AddStructures`; do not narrow the AI's pool further while fixing the player's. *Cross-refs:* `BL-400`'s closing
   commit, `BL-839`'s closing commit (the profile-less campaign launch binds the same table),
   `docs/org/targeting.md`.
 

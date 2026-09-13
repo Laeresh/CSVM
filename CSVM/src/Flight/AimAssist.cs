@@ -507,6 +507,29 @@ public sealed class AimCandidateSet
         }
     }
 
+    /// <summary>The engine's own <c>MStructList</c>, which is narrower than every destructible:
+    /// the original builds one object per scene node carrying the mission-structure flag and sets
+    /// the acquisition byte <c>+0x8d</c> on those alone, so a pool no mission structure stands on
+    /// is not in the AI's list at all (docs/org/aiPilot.md, "What reaches the struct list"). The
+    /// port's marker for that set is an authored team, since only a mission-structure node and a
+    /// zeppelin record write one.</summary>
+    public void AddMissionStructures(DestructibleRegistry registry)
+    {
+        foreach (var inst in registry.All)
+        {
+            if (inst.Team is not { } team || team == AimAssist.NeutralTeam)
+            {
+                continue;
+            }
+            if (inst.Dormant || !inst.Anchor.IsInsideTree() || !inst.Anchor.IsVisibleInTree())
+            {
+                continue;
+            }
+            AddStructure(inst.Anchor.GlobalPosition, team,
+                inst.Status != DestructibleRegistry.State.Destroyed, inst);
+        }
+    }
+
     private static AimCandidate Make(Vector3 position, Vector3 velocity, int team, bool live,
         object? source, float coneOverride) =>
         new()

@@ -508,6 +508,46 @@ public class AiTargetRankingTests
             aircraftFirst: false, new[] { Ahead(500f), Ahead(900f) }, out _));
     }
 
+    [Fact]
+    public void AStandingTargetIsKeptWhileItStillScoresValid()
+    {
+        var camp = Ahead(1000f);
+        camp.IsStructureClass = true;
+        Assert.True(AiTargetRanking.KeepsStandingTarget(OwnPos, OwnFwd, Activation, AiScorer.Jet,
+            aircraftWithdraws: false, camp));
+
+        // Out of the activation radius the re-score is NotRanked, which is the decoded drop.
+        var gone = Ahead(Activation + 1f);
+        gone.IsStructureClass = true;
+        Assert.False(AiTargetRanking.KeepsStandingTarget(OwnPos, OwnFwd, Activation, AiScorer.Jet,
+            aircraftWithdraws: false, gone));
+
+        // And an authored hard exclusion drops it where it stands.
+        var excluded = Ahead(1000f, bias: AiTargetRanking.NotRanked);
+        excluded.IsStructureClass = true;
+        Assert.False(AiTargetRanking.KeepsStandingTarget(OwnPos, OwnFwd, Activation, AiScorer.Jet,
+            aircraftWithdraws: false, excluded));
+    }
+
+    [Fact]
+    public void AnAircraftInReachWithdrawsAStandingStructureAndNothingElse()
+    {
+        var camp = Ahead(1000f);
+        camp.IsStructureClass = true;
+        Assert.False(AiTargetRanking.KeepsStandingTarget(OwnPos, OwnFwd, Activation, AiScorer.Jet,
+            aircraftWithdraws: true, camp));
+
+        var enemy = Ahead(1000f);
+        enemy.IsAircraft = true;
+        Assert.True(AiTargetRanking.KeepsStandingTarget(OwnPos, OwnFwd, Activation, AiScorer.Jet,
+            aircraftWithdraws: true, enemy));
+
+        // A surface hull is neither class, so the preference leaves it alone here exactly as
+        // SelectBest's own withdrawal does.
+        Assert.True(AiTargetRanking.KeepsStandingTarget(OwnPos, OwnFwd, Activation, AiScorer.Jet,
+            aircraftWithdraws: true, Ahead(1000f)));
+    }
+
     private static TargetScore ScoreAs(AiScorer scorer, in RankedTargetCandidate c) =>
         AiTargetRanking.Score(OwnPos, OwnFwd, Activation, scorer, c);
 

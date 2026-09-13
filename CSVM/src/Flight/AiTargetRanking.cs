@@ -250,6 +250,16 @@ public static class AiTargetRanking
         return bestAny;
     }
 
+    /// <summary>Whether a standing target survives this tick's re-score, the decoded hold's own
+    /// test: kept while it still scores under <see cref="NotRanked"/>, dropped the moment it does
+    /// not, whereupon the caller sweeps the pool again. <paramref name="aircraftWithdraws"/> is
+    /// CSVM's layer over that decode and not the original's: an enemy aeroplane in reach takes a
+    /// turret or structure target away at once rather than at the hold's end.</summary>
+    public static bool KeepsStandingTarget(Vector3 ownPos, Vector3 ownForward, float activationRange,
+        AiScorer scorer, bool aircraftWithdraws, in RankedTargetCandidate standing) =>
+        !(aircraftWithdraws && standing.IsStructureClass)
+        && Score(ownPos, ownForward, activationRange, scorer, standing).Rank < NotRanked;
+
     /// <summary>The objectiveBias term for a named candidate, from the FIRST matching
     /// <c>rating_biases</c> entry; 0 with no list or no match. The ends saturate rather than scale:
     /// 1.0 or more is always-target, −1.0 or less a hard exclusion, an authored −1.0 means NEVER

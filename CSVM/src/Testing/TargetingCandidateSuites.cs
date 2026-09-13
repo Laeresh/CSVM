@@ -638,6 +638,161 @@ internal static class TargetingCandidateSuites
         }
     }
 
+    // The decoded 20 s hold and CSVM's withdrawal on top of it, on one rig: an allied wingman over
+    // a hostile camp with the enemy aeroplane first out of reach and then inside it. The camp keeps
+    // scoring valid throughout, so only the sweep at the hold's end, or the preference, can move
+    // the pick off it.
+    [Suite("ai-target-rescore",
+        "the AI's standing target (BL-910): an unowned destructible never reaches the pilot's " +
+        "candidate scan, a picked target carries the engine's 20 s hold, the decoded order keeps " +
+        "a still-valid camp through an enemy aeroplane arriving and sweeps the pool only once the " +
+        "hold runs out, while the aircraft-first preference takes the aeroplane the moment it is " +
+        "in reach")]
+    internal static void AiTargetRescore(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        const string PlaneNode = "player_bhawk";
+        const string WingmanDef = "wbloodhawk";
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var allyStats = PlaneStats.LoadForAi(ctx.ZrdrPath, PlaneNode, WingmanDef);
+        var enemyStats = PlaneStats.LoadForAi(ctx.ZrdrPath, PlaneNode);
+        var stock = StockLoadouts.Load().All.Values.First(d => d.Model == allyStats.NodeName);
+
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        FlightController? ally = null;
+        FlightController? enemy = null;
+        Node3D? campNode = null;
+        Node3D? sceneryNode = null;
+        bool preferenceWas = AiTargetRanking.AircraftFirst;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            int allyTeam = AimAssist.PlayerTeam;
+            int enemyTeam = allyTeam + 1;
+            var registry = new DestructibleRegistry();
+            live.Structures = registry;
+
+            // The camp: a hostile mission structure 500 m ahead of the wingman.
+            campNode = new Node3D { Name = "u_camp1", Position = new Vector3(0f, 500f, 0f) };
+            ctx.Host.AddChild(campNode);
+            var camp = registry.Register(
+                new AnimDefinition { Name = "u_camp1", AnimName = "u_camp1" }, campNode, 400f);
+            camp.Team = enemyTeam;
+
+            // Scenery beside it that no mission structure stands on, so the data owns it on no
+            // side. The original never builds a candidate for it at all.
+            sceneryNode = new Node3D { Name = "u_camp5", Position = new Vector3(60f, 500f, 0f) };
+            ctx.Host.AddChild(sceneryNode);
+            registry.Register(
+                new AnimDefinition { Name = "u_camp5", AnimName = "u_camp5" }, sceneryNode, 400f);
+
+            FlightController Rig(PlaneStats st, Vector3 pos, int team, int shooterId, AiPilot? pilot)
+            {
+                var model = new PlaneBuilder(planesGamez, textures).Build(st.NodeName);
+                var rig = new FlightController
+                {
+                    PlaneModel = model,
+                    Collider = PlaneCollider.Build(model),
+                    Damage = new PlaneDamage(st.DestroyableParts),
+                    PlayerIndex = shooterId,
+                    IsHumanPiloted = false,
+                    Pilot = pilot,
+                    Projectiles = live,
+                    Destructibles = registry,
+                    UseKeyboard = false,
+                    PadDevices = System.Array.Empty<int>(),
+                    AllowPause = false,
+                };
+                rig.AddChild(model);
+                rig.Loadout = Loadout.Bind(stock, model, weapons);
+                rig.Setup(new FlightModel(st), null, new CamParams(), pos, new Vector3(0f, 500f, 0f));
+                ctx.Host.AddChild(rig);
+                rig.Held = true;
+                rig.PlaceHeld(pos, new Vector3(0f, 500f, 0f));
+                rig.Team = team;
+                return rig;
+            }
+
+            // 2,500 m out, past the 2,000 m activation radius: nothing about the aeroplane ranks.
+            var farPos = new Vector3(0f, 500f, -2000f);
+            enemy = Rig(enemyStats, farPos, enemyTeam, FlightRoster.ShooterIdBase + 1, null);
+
+            var allyPos = new Vector3(0f, 500f, 500f);
+            var allyPilot = AiPilot.HoldingCourse(allyPos, new Vector3(0f, 500f, 0f));
+            allyPilot.Gunner = new AiGunner(new RandomNumberGenerator { Seed = 20260913 });
+            ally = Rig(allyStats, allyPos, allyTeam, FlightRoster.ShooterIdBase, allyPilot);
+
+            ally.RankedPoolSourcesForTest(allyPilot.Gunner);
+            ctx.Same(1, ally.ScannedStructureCountForTest(),
+                $"only the owned camp reaches the pilot's structure scan of {registry.Count} registered pool(s)");
+
+            object? Acquire(bool aircraftFirst)
+            {
+                AiTargetRanking.AircraftFirst = aircraftFirst;
+                allyPilot.Gunner.Target = null;
+                allyPilot.Gunner.TargetRankFor = null;
+                allyPilot.Gunner.AutoTarget = true;
+                ally!.SimStep(1f / 60f);
+                return allyPilot.Gunner.Target;
+            }
+
+            object? Step()
+            {
+                ally!.SimStep(1f / 60f);
+                return allyPilot.Gunner.Target;
+            }
+
+            // The decoded order first, so the hold is read with nothing else acting on the pick.
+            ctx.Check(ReferenceEquals(Acquire(false), camp),
+                $"with no aeroplane in reach the pilot takes the camp target={TargetPool.NameOf(allyPilot.Gunner.Target)}");
+            ctx.Check(ReferenceEquals(allyPilot.Gunner.TargetRankFor, camp)
+                && allyPilot.Gunner.TargetHoldUntil >= AiGunner.TargetHoldSeconds,
+                $"and the take stamps the engine's hold until {allyPilot.Gunner.TargetHoldUntil:0.#} s");
+
+            // The aeroplane arrives 100 m off the wingman's nose, nearer than the camp and near
+            // enough to beat the camp's struct_bias, and the decoded hold keeps the camp anyway.
+            var nearPos = new Vector3(0f, 500f, 400f);
+            enemy.PlaceHeld(nearPos, nearPos + Vector3.Forward);
+            ctx.Check(ReferenceEquals(Step(), camp),
+                $"the decoded hold keeps the camp while an enemy aeroplane closes to {ally.WorldPosition.DistanceTo(nearPos):0} m target={TargetPool.NameOf(allyPilot.Gunner.Target)}");
+
+            allyPilot.Gunner.TargetHoldUntil = 0.0; // the hold runs out: the pool is swept whole
+            ctx.Check(ReferenceEquals(Step(), enemy),
+                $"and once it runs out the sweep takes the nearer aeroplane target={TargetPool.NameOf(allyPilot.Gunner.Target)}");
+            ctx.Check(allyPilot.Gunner.TargetHoldUntil >= AiGunner.TargetHoldSeconds,
+                $"with the hold re-stamped on the new take until {allyPilot.Gunner.TargetHoldUntil:0.#} s");
+
+            // The same camp pick under the preference, with the aeroplane FARTHER than the camp, so
+            // only the withdrawal can move it, and mid-hold, so only the layer can.
+            enemy.PlaceHeld(farPos, farPos + Vector3.Forward);
+            ctx.Check(ReferenceEquals(Acquire(true), camp),
+                $"under the preference the camp is still the pick with no aeroplane in reach target={TargetPool.NameOf(allyPilot.Gunner.Target)}");
+            var reachPos = new Vector3(0f, 500f, -700f);
+            enemy.PlaceHeld(reachPos, reachPos + Vector3.Forward);
+            ctx.Check(ReferenceEquals(Step(), enemy),
+                $"and the wingman leaves it mid-hold for an aeroplane {ally.WorldPosition.DistanceTo(reachPos):0} m out, past the camp at {ally.WorldPosition.DistanceTo(campNode.GlobalPosition):0} m");
+        }
+        finally
+        {
+            AiTargetRanking.AircraftFirst = preferenceWas;
+            pool?.Free();
+            ally?.Free();
+            enemy?.Free();
+            campNode?.Free();
+            sceneryNode?.Free();
+            textures.Dispose();
+        }
+    }
+
     // AddRankedNonAircraft walked every turret with no discriminator on TurretController.Site, so
     // a carried gunner rode the ranked pool as a second entry beside its own aircraft's Vehicle
     // entry, one silhouette read as two candidates. Mirrors the guard TargetPool.Offer already

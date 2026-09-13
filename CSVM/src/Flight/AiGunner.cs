@@ -16,6 +16,12 @@ namespace CSVM.Flight;
 /// retargets an AI at runtime, so orders are never read-once.</summary>
 public sealed class AiGunner
 {
+    /// <summary>How long a picked target is held before the pool is swept again, seconds. The
+    /// engine's own hard constant: <c>FUN_004b0f20</c> writes <c>now + 20.0</c> to <c>+0x94c</c>
+    /// every time a target is taken, and no def authors it (docs/org/aiPilot.md, "A standing
+    /// target is sticky for 20 seconds").</summary>
+    public const float TargetHoldSeconds = 20f;
+
     /// <summary>The shipped forward-gun traverse limit: <c>gun_pitch</c>/<c>gun_yaw</c> are
     /// <c>[-11, 11]</c> degrees on every AI aircraft def (docs/formats/vehicle.md).
     /// ⚠ These CLAMP the aim, they do not veto the shot: what fires is the residual left over
@@ -38,6 +44,21 @@ public sealed class AiGunner
     /// <summary>Re-acquire through the D12 ranking when <see cref="Target"/> is null or dead.
     /// Off, a cleared target simply holds fire, an explicitly ordered gunner.</summary>
     public bool AutoTarget = true;
+
+    /// <summary>Game time the standing target's hold runs out, after which the host sweeps the
+    /// pool again (<see cref="TakeTarget"/>). Settable so a suite can force the expiry rather
+    /// than sim twenty seconds.</summary>
+    public double TargetHoldUntil;
+
+    /// <summary>The rank inputs the picker won <see cref="Target"/> on, re-scored each tick at
+    /// the target's live position while the hold stands. Meaningful only while
+    /// <see cref="TargetRankFor"/> is the standing target.</summary>
+    public RankedTargetCandidate TargetRank;
+
+    /// <summary>What <see cref="TargetRank"/> was taken for. A target written straight onto
+    /// <see cref="Target"/> (a mission-script order, an airframe swap's replacement) leaves this
+    /// behind, which is how the host tells an ordered target from a picked one.</summary>
+    public object? TargetRankFor;
 
     /// <summary>The roster's assigned target (slot 6, <c>primary_target</c>), by node name,
     /// mutable, the mission-script seam. While it resolves to a live hostile inside the
@@ -122,6 +143,18 @@ public sealed class AiGunner
 
     /// <summary>Clears the trigger, no target, no fire step this tick.</summary>
     public void HoldFire() => WantsFire = false;
+
+    /// <summary>Takes a target the picker chose, with the rank it won on, and stamps the
+    /// <see cref="TargetHoldSeconds"/> hold from <paramref name="now"/>. The decoded take does
+    /// exactly this: the sweep's winner replaces the standing target and <c>FUN_004b0f20</c>
+    /// re-stamps the hold, so a re-take of the same object starts the hold over.</summary>
+    public void TakeTarget(object? target, in RankedTargetCandidate rank, double now)
+    {
+        Target = target;
+        TargetRank = rank;
+        TargetRankFor = target;
+        TargetHoldUntil = now + TargetHoldSeconds;
+    }
 
     /// <summary>One tick's fire decision, in the original's gate order. All world-space;
     /// <paramref name="ownBasis"/> is the firing airframe's attitude (the traverse clamp is

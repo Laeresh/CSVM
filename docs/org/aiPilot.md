@@ -194,9 +194,15 @@ stay in the struct list as ordinary candidates. So a dead airship's surviving en
 legitimate targets in the original too, and the choreography, not the picker, is what removes the
 rest.
 
-⚠ **World structures are always swept.** The fourth argument to `FUN_0041f9c0`, which decides
-whether the struct list is walked at all, is the literal `1` pushed at `0x00420002`. Only the
-list's gasbag members are conditional.
+⚠ **World structures are always swept, by every scorer class.** The fourth argument to
+`FUN_0041f9c0`, which decides whether the struct list is walked at all, is the literal `1` pushed at
+`0x00420002`, on no branch and under no test of the scorer's `+0x67c`. The push survives the
+intervening `CALL FUN_00420070` because that one is `__fastcall` with its `this` in ECX and no stack
+argument of its own, and the call site's `ADD ESP, 0x10` at `0x0042001f` counts the four dwords
+(`1`, EAX, ECX, EBP) back off. So a `wingman` sweeps structures on the same terms as a `jet`, and
+its only acquisition difference is the ignored `primary_target` below. Only the turret caller
+conditions the argument, pushing `0` at `0x004aaf92`. Within the list, the gasbag members are the
+conditional ones.
 
 ### The scorer, and which one runs
 
@@ -270,20 +276,36 @@ climbs the same chain a `TargetTurret` does; the flat `+37.5` is what the turret
 afterwards. The loop restarts the list per level rather than trying two names per entry, so a
 candidate's own name beats an owner's entry standing earlier in the authored order.
 
-A struct-list member is **one object per mission-structure node**: the loader at `FUN_004a2e00`
-walks `DAT_0071d35c`–`DAT_0071d360`, builds a 0x94-byte object per entry (`FUN_004a2570`), reads
-the gasbag flag `+0x65` from node word `+0x28` bit 22 and sets the acquisition admission byte
-`+0x8d`. Its second loop, over `DAT_0071d34c`–`DAT_0071d350`, is the `targets.zrd` table and
-leaves `+0x8d` alone, so the curated player cycle is not the AI's pool. A docked airship therefore
-reaches the AI as one candidate per part, each named `leng31` or `rturN`, and the only place its
-own `cargozep1` appears is above them. That is why C4/M03's `bswingman_1` exclusion and the Black
-Hat Warhawks' `["cargozep1", 1.0]` both work in the original and needed the chain here.
+A docked airship reaches the AI as one candidate per part, each named `leng31` or `rturN`, and the
+only place its own `cargozep1` appears is above them. That is why C4/M03's `bswingman_1` exclusion
+and the Black Hat Warhawks' `["cargozep1", 1.0]` both work in the original and needed the chain
+here.
 
 CSVM ports the chain as `TargetPool.CollectOwners`: a zeppelin record's fanned `Owner` first, then
 each world-tree node above the pool's anchor by its original gamez name, handed to
 `AiTargetRanking.ObjectiveBiasFor`, which restarts the bias list per name. C4/M03's `cargozep1`
 carries 21 damage pools, and the `structure-part-bias` suite reads the exclusion and the
 always-target off every one of them.
+
+### What reaches the struct list
+
+A struct-list member is **one object per mission-structure node**: the loader `FUN_004a2e00` walks
+`DAT_0071d35c`–`DAT_0071d360`, builds a 0x94-byte object per entry (`FUN_004a2570`), reads the
+gasbag flag `+0x65` from node word `+0x28` bit 22 and sets the acquisition admission byte `+0x8d`.
+That range is the list `FUN_004a2be0` fills, which is every scene node carrying **bit 31 of
+`node+0x28`** and nothing else ([`targeting.md`](targeting.md)). The AI's structure pool is
+therefore the authored mission-structure set, not every destructible standing in the world, and a
+pool no flagged node owns is not a candidate for any pilot at any range.
+
+A `targets.zrd`-only object is excluded from it twice. The loader's second loop, over
+`DAT_0071d34c`–`DAT_0071d350`, builds the curated player-cycle entries, leaves `+0x8d` clear and has
+`+0x90` cleared at `0x004a3000`; `FUN_004a5b90` requires `+0x8c`, `+0x90` and `+0x8d`, so either
+omission alone keeps the entry out. The cycle the player tabs through is not the AI's pool.
+
+CSVM's marker for the same set is an authored team on the destructible, since only a
+mission-structure node's `field040` ownership slots and a zeppelin record write one:
+`AimCandidateSet.AddMissionStructures` admits that set for the AI sweep, while the player's assist
+and the turret path keep `AddStructures` over every destructible.
 
 ### The gasbag gate is ordnance, checked at admission
 
@@ -303,10 +325,12 @@ engines, turrets and cannons, which are ordinary members of the turret and struc
    for a `wingman` that field is a formation leader, not a target.
 2. **An assigned `primary_target` wins outright** whenever it scores under `1e20`, without the pool
    being swept.
-3. **A standing target is sticky for 20 seconds.** It is re-scored only once `+0x94c` exceeds
-   `DAT_0071c470`, and while it still scores under `1e20` it is kept and the pool is not swept at
-   all. `FUN_004b0f20` sets `+0x94c` to now plus a hardcoded **20.0** every time a target is taken,
-   so the hold is an engine constant and no def authors it.
+3. **A standing target is sticky for 20 seconds.** `FUN_004b0f20` sets `+0x94c` to now plus a
+   hardcoded **20.0** every time a target is taken, so the hold is an engine constant and no def
+   authors it. The test is `DAT_0071c470 < +0x94c`, now against the hold's expiry: while the hold
+   stands, the standing target alone is re-scored and it is kept while it scores under `1e20`, and
+   the pool is swept whole only once the hold has run out or that re-score fails. A re-take stamps
+   the hold again, so a pilot that re-picks the same object holds it another twenty seconds.
 
 ⚠ **Deconfliction is a count, not a pool drop.** `FUN_0041fe10` decrements `target+0x8` and
 `target->object+0x4` before scoring and restores them after (`0x0041fece`, `0x0041ff0b`), so
@@ -328,8 +352,9 @@ what the crash-avoidance ray then sees.
 ### What CSVM ports of this
 
 `FlightController.SelectRankedTarget` sweeps `TargetVehicle`/`TargetTurret`/`TargetStruct` (the
-gun aim assist's own three lists) for one global minimum into `AiGunner.Target`, a standing target
-of any class, which `AiPilot` reads through `PursuitQuarry.Of` as its pursuit quarry: the mode
+gun aim assist's own three lists, the struct arm narrowed to the flagged set by
+`AimCandidateSet.AddMissionStructures`) for one global minimum into `AiGunner.Target`, a standing
+target of any class, which `AiPilot` reads through `PursuitQuarry.Of` as its pursuit quarry: the mode
 machine promotes on it, and `FlyPursuit` takes the on-axis arm above for a non-aircraft one and
 never arms the merge rule against it. The vehicle arm is the WHOLE `VehicleList` through
 `ProjectilePool.CollectVehicleList`, so a surface hull is a candidate beside the aircraft, and the
@@ -353,13 +378,23 @@ structure candidate therefore carries the 200 m pull and a vehicle candidate its
 the aeroplane picker and in a `mode ship` hull's gun alike. A turret's own picker spends neither,
 which is what the original does.
 
+The hold is ported too. `AiGunner.TakeTarget` stamps `AiGunner.TargetHoldSeconds` (the engine's
+20.0) and keeps the winning `RankedTargetCandidate`, and `FlightController.HoldsStandingTarget`
+re-scores that one candidate at the target's live position every tick, dropping it and sweeping the
+pool whole the moment the rank fails or the hold runs out. A target written straight onto
+`AiGunner.Target` by a mission order or an airframe swap carries no rank snapshot and keeps the
+older rule that alive is enough, which is what an assigned `primary_target` gets in the original.
+
 CSVM then departs from the original deliberately. `AiTargetRanking.AircraftFirst`, on by default and
 settled once per launch from `--ai-targeting=` ([`../cli.md`](../cli.md)), withdraws every turret and
 structure candidate while any aircraft still ranks, in `FlightController.SelectRankedTarget` and
 `TurretController.AcquireTarget` both, so a wingman and the guns of the airship beside it go after
-the same enemies and an ally fights a structure only with no aeroplane in reach. A hull is neither
-class and keeps its ranked place. `--ai-targeting=decoded` puts the single running minimum back, and
-the order is then the two biases' alone. `Session/SurfaceGunner` never takes the preference, since it
+the same enemies and an ally fights a structure only with no aeroplane in reach. The same preference
+runs inside the hold through `AiTargetRanking.KeepsStandingTarget`, so an enemy aeroplane coming
+into reach takes an ally off a camp building at once rather than at the hold's end. A hull is neither
+class and keeps its ranked place. `--ai-targeting=decoded` puts the single running minimum back and
+the bare decoded hold with it, and the order is then the two biases' alone.
+`Session/SurfaceGunner` never takes the preference, since it
 drops non-aircraft candidates anyway.
 
 Unmodelled, named rather than guessed: the activation volume is scored as a sphere where the engine

@@ -56,14 +56,14 @@ transforms, `ProjectilePool` and `FlightAudio`. Ammo mutates through the node-fr
 cannot diverge from the counters mid-tick. The slot index math is `WeaponCursor.cs`; read it next.
 
 ## src/Flight/AimAssist.cs
-The gun aim assist, decoded in [../org/aim-assist.md](../org/aim-assist.md). `GunAimSlot` is one gun
-barrel's plane-local state and `Tick` the per-frame forget and catch-up pass over it; `TryIntercept`
-is the constant-velocity lead solver every other module in the namespace consumes rather than
-re-deriving; `Scan` picks the target the original would pick out of an `AimCandidateSet`, whose four
-lists are kept separately and are fed by `ProjectilePool` and `DestructibleRegistry`; `FireDirection`
-is the whole fire call in one place and `Scatter` its launch cone. A static, engine-free class that
-reads no clock of its own, so it unit-tests without a `FlightController`, which owns one
-`GunAimSlot[]` per firable gun group. Read `FireControl.cs` for what fires along the answer.
+The gun aim assist, decoded in [../org/aim-assist.md](../org/aim-assist.md). `GunAimSlot` is one gun barrel's
+plane-local state and `Tick` the per-frame forget and catch-up pass over it; `TryIntercept` is the constant-velocity
+lead solver every other module in the namespace consumes rather than re-deriving; `Scan` picks the target the original
+would pick out of an `AimCandidateSet`, whose four lists are kept separately and filled by `ProjectilePool` and
+`DestructibleRegistry`, the structure one whole through `AddStructures` for the player and narrowed to the flagged
+mission-structure nodes through `AddMissionStructures` for an AI pilot; `FireDirection` is the whole fire call in one
+place and `Scatter` its launch cone. A static, engine-free class that reads no clock of its own, so it unit-tests
+without a `FlightController`, which owns one `GunAimSlot[]` per firable gun group. Read `FireControl.cs` next.
 
 ## src/Flight/TargetRef.cs
 The one abstraction over everything the player can select: an enemy Fury, a zeppelin engine and a
@@ -432,14 +432,14 @@ positive-duration step is held for its time and a zero-duration step advances wh
 captured. Pure and engine-free, deterministic on a fixed dt (`ManeuverExecutorTests`).
 
 ## src/Flight/AiGunner.cs
-The AI's forward-gun gunnery: per sim tick the host `FlightController` hands it the fire geometry
-(`Solve`), it answers with the trigger (`WantsFire`) and the intercept, and each round leaves along
-`ShotDirection(muzzlePos)`, the line from that barrel to the intercept point so wing guns converge,
-perturbed inside the dead-eye cone by one seeded draw per shot. Gates in the engine's order: the
-quick-draw cone off the target's nose-tail axis, the separation inside the slot's authored engagement
-window, then the airframe's traverse clamp on the lead with the residual the clamp leaves gated in
-turn, so the employable cone is the traverse limit plus that gate. Engine-free; the live half is the
-`ai-gunnery` suite. Decode: [../org/aiPilot/aiWeapons.md](../org/aiPilot/aiWeapons.md).
+The AI's forward-gun gunnery: per sim tick the host `FlightController` hands it the fire geometry (`Solve`), it
+answers with the trigger (`WantsFire`) and the intercept, and each round leaves along `ShotDirection(muzzlePos)`, the
+line from that barrel to the intercept point so wing guns converge, perturbed inside the dead-eye cone by one seeded
+draw per shot. Gates in the engine's order: the quick-draw cone off the target's nose-tail axis, the separation inside
+the slot's authored engagement window, then the airframe's traverse clamp on the lead with the residual the clamp
+leaves gated in turn, so the employable cone is the traverse limit plus that gate. It also carries the standing target:
+`TakeTarget` stamps the engine's 20 s `TargetHoldSeconds` and keeps the rank the host re-scores while the hold stands.
+Engine-free; the live half is the `ai-gunnery` suite. Decode: [../org/aiPilot/aiWeapons.md](../org/aiPilot/aiWeapons.md).
 
 ## src/Flight/SurfaceGunMount.cs
 The gun mount a `mode ship` hull carries, pure and frame-local
@@ -476,7 +476,7 @@ a lower base weight than everyone else, a wingman a higher one, a gasbag a lower
 ahead/behind on a half-metre deadband, altitude sign and closing, and an effectively infinite rank
 beyond the activation radius. `AiScorer` names the engine's two implementations and is required
 because the wrong one is silent: `Other` drops those three geometry terms. Snapshots in, index and
-score out, engine-free. `SelectBest` prefers the best candidate no ally holds; `ObjectiveBiasFor` matches `rating_biases` patterns, first match wins, saturating at always-target and at exclusion; a candidate's `ClassBias` carries the def's `target_bias`/`struct_bias` in raw rank units beside the objective bias, both negative and so both attracting. `AircraftFirst`, the launch-scoped switch behind `--ai-targeting=`, is CSVM's departure: while any aircraft ranks, every structure-class candidate is withdrawn, so a picker fights a structure only with no aeroplane in reach.
+score out, engine-free. `SelectBest` prefers the best candidate no ally holds; `ObjectiveBiasFor` matches `rating_biases` patterns, first match wins, saturating at always-target and at exclusion; a candidate's `ClassBias` carries the def's `target_bias`/`struct_bias` in raw rank units beside the objective bias, both negative and so both attracting. `KeepsStandingTarget` is the decoded hold's own per-tick test, a standing target kept while it still scores valid. `AircraftFirst`, the launch-scoped switch behind `--ai-targeting=`, is CSVM's departure: while any aircraft ranks, every structure-class candidate is withdrawn, so a picker fights a structure only with no aeroplane in reach, and the same withdrawal runs inside the hold so an aeroplane coming into reach takes an ally off a building at once.
 
 ## src/Flight/PursuitQuarry.cs
 The flight law's snapshot of `AiGunner.Target` for one step, whatever its class: position, velocity,
@@ -1088,7 +1088,7 @@ one `IWorldQuery` bound in `Bind`, and contact detection fills one `ContactRepor
 sweep, the AI probe rays or the anti-tunnelling centre ray. An AI aircraft is this SAME node with
 `Pilot` driving the input source, no camera and no HUD canvas, so flight, collision, weapons and
 damage are the player's path exactly. `Held`, `ControlsHeld` (the stick reads neutral and every discrete command is swallowed while the aeroplane flies on as trimmed), `Inert`, `Spectating`, `CameraOwned` and
-`AllowLiveRespawn` are the flags a session or a lab pins it with, and `RespawnPlacement` is the hook a session answers with where a respawn should put the aeroplane (`VersusSpawnRotation` in the dogfight), unset everywhere else so a respawn keeps the pose `Setup` fixed. `SelectRankedTarget` builds the pilot's four-pool candidate list, each entry carrying its own class bias, and hands it to `AiTargetRanking.SelectBest` under the session's targeting order. Read `AircraftLifecycle.cs` next.
+`AllowLiveRespawn` are the flags a session or a lab pins it with, and `RespawnPlacement` is the hook a session answers with where a respawn should put the aeroplane (`VersusSpawnRotation` in the dogfight), unset everywhere else so a respawn keeps the pose `Setup` fixed. `SelectRankedTarget` builds the pilot's four-pool candidate list, each entry carrying its own class bias, and hands it to `AiTargetRanking.SelectBest` under the session's targeting order; `HoldsStandingTarget` is the sweep's gate, re-scoring the standing target alone until the hold expires or the rank fails. Read `AircraftLifecycle.cs` next.
 
 ## src/Flight/PlaneDamage.cs
 The decoded vehicle damage ledger: per-part pools from `destroyable_parts` plus a whole-vehicle

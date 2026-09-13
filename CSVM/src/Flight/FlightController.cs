@@ -478,6 +478,7 @@ public partial class FlightController : Node3D
     private readonly SweepCadence _sweep = new();    // the original's alternate-step sweep and its carried motion
     private readonly AimCandidateSet _aimCandidates = new(); // rebuilt once per fire call (B4/B5)
     private readonly AimCandidateSet _gunnerScan = new();    // the AI gunner's acquisition scan (D14)
+    private readonly AimCandidateSet _rescoreScan = new();   // the aircraft-only walk the re-score's withdrawal reads
     private readonly List<RocketPylonView> _pylonViews = new();          // the AI rocketeer's pylon walk
     private readonly List<RankedTargetCandidate> _rankCandidates = new(); // the D12/D36 ranking snapshots
     // …and their sources, by index: a FlightController, a TurretController or a
@@ -582,6 +583,7 @@ public partial class FlightController : Node3D
     private bool _aimListsLogged;                // verification breadcrumb: the candidate list sizes log once
     private bool _groundBlowLoggedFirst;         // verification breadcrumb: ground blow's first repelling hit
     private bool _gunnerLoggedTarget;            // verification breadcrumb: the AI gunner's first acquisition
+    private int _gunnerRetargetsLogged;          // capped per shooter: every re-score switch would flood the log
     private bool _gunnerLoggedFire;              // verification breadcrumb: the AI gunner's first open fire
     private bool _rocketeerLoggedFire;           // verification breadcrumb: the AI's first ordnance launch
     private string _rocketeerLastVerdict = "";   // the last rocketeer verdict KEY logged, so a repeat is silent
@@ -3613,7 +3615,61 @@ public partial class FlightController : Node3D
     }
 #pragma warning restore SA1204
 
-    // One AI-gunner tick: keep the standing target while it is in play (re-acquiring
+    // Whether this tick keeps the standing target. The decoded hold: a picked target is re-scored
+    // every tick and kept while it scores valid, until the hold runs out, whereupon the pool is
+    // swept whole (docs/org/aiPilot.md). A target written straight onto AiGunner.Target, a mission
+    // order or an airframe swap's replacement, carries no rank snapshot and keeps the older rule
+    // that alive is enough, which is also what an assigned primary_target gets in the original.
+    private bool HoldsStandingTarget(AiGunner gunner, out Vector3 pos, out Vector3 vel, out Vector3 fwd)
+    {
+        if (!TryTargetGeometry(StandingTarget(gunner), out pos, out vel, out fwd, out bool live)
+            || !live)
+            return false;
+        if (!gunner.AutoTarget || !ReferenceEquals(gunner.TargetRankFor, gunner.Target))
+            return true;
+        if ((GameClock.Current?.Time ?? 0.0) >= gunner.TargetHoldUntil)
+            return false;
+        var rank = gunner.TargetRank;
+        rank.Position = pos;   // the re-score runs on the live geometry; the bias terms stand
+        rank.Velocity = vel;
+        // ⚠ The withdrawal argument is CSVM's layer, not the decode. Evaluated last, and only for a
+        // structure target, so the aircraft walk costs nothing on the ordinary aeroplane duel.
+        return AiTargetRanking.KeepsStandingTarget(WorldPosition, NoseDirection,
+            Pilot?.Machine?.ActivationRange ?? 2000f, AiScorer.Jet,
+            AiTargetRanking.AircraftFirst && rank.IsStructureClass && EnemyAircraftRanks(gunner),
+            rank);
+    }
+
+    // Whether one live enemy aeroplane is in reach, the withdrawal's test, over the aircraft roster
+    // alone: a hull is neither class the preference suppresses. Ranking is the reach test in
+    // AiTargetRanking.SelectBest, so this asks the same two things it does, the activation radius
+    // and an authored hard exclusion, rather than a second reading of "in reach".
+    private bool EnemyAircraftRanks(AiGunner gunner)
+    {
+        if (Projectiles == null)
+            return false;
+        float activation = Pilot?.Machine?.ActivationRange ?? 2000f;
+        var ownPos = WorldPosition;
+        _rescoreScan.Clear();
+        Projectiles.CollectAircraft(_rescoreScan);
+        foreach (var c in _rescoreScan.Vehicles)
+        {
+            if (!c.Live || c.Source is not FlightController fc || ReferenceEquals(fc, this))
+                continue;
+            if (!AimAssist.Hostile(Team, c.Team)
+                || ownPos.DistanceSquaredTo(c.Position) > activation * activation)
+                continue;
+            float bias = AiTargetRanking.ObjectiveBiasFor(
+                fc.IsHumanPiloted ? AiTargetRanking.PlayerRole : TargetPool.NameOf(c.Source),
+                gunner.RatingBiases);
+            if (bias < AiTargetRanking.NotRanked)
+                return true;
+        }
+
+        return false;
+    }
+
+    // One AI-gunner tick: keep the standing target while the hold above holds it (re-acquiring
     // through the D12/D36 ranking when it is gone and AiGunner.AutoTarget allows), then
     // hand the gunner this tick's fire geometry, the SELECTED gun group's weapon and muzzle
     // midpoint, the sim pose (never the render pose), and the target's state, so
@@ -3623,22 +3679,30 @@ public partial class FlightController : Node3D
         gunner.HoldFire();
         if (_fire == null || Projectiles == null)
             return;
-        if (!TryTargetGeometry(StandingTarget(gunner), out var targetPos, out var targetVel,
-                out var targetFwd, out bool targetLive) || !targetLive)
+        if (!HoldsStandingTarget(gunner, out var targetPos, out var targetVel, out var targetFwd))
         {
+            object? left = StandingTarget(gunner);
             TargetScore score = default;
             string how = "ranked";
             gunner.Target = gunner.AutoTarget
                 ? SelectRankedTarget(gunner, out score, out how)
                 : null;
             if (!TryTargetGeometry(StandingTarget(gunner), out targetPos, out targetVel, out targetFwd,
-                    out targetLive) || !targetLive)
+                    out bool targetLive) || !targetLive)
                 return;
             if (!_gunnerLoggedTarget)
             {
                 _gunnerLoggedTarget = true; // verification breadcrumb: who the gunner went after
                 Log.Info("flight",
                     $"ai gunner: shooter {PlayerIndex} targets {TargetLabel(StandingTarget(gunner))} at {score.Distance:0} m ({how}: weight {score.Weight:0.0#} bias {score.Bias:0} rank {score.Rank:0}; gasbag ordnance {GasbagOrdnanceState()}, {_gunnerScan.Structures.Count} structure(s) in the scan)");
+            }
+            else if (_gunnerRetargetsLogged < 8 && !ReferenceEquals(left, StandingTarget(gunner)))
+            {
+                // Capped per shooter: the switch is the thing the re-score exists for, and a
+                // flight of twelve re-scoring all mission must not flood the log.
+                _gunnerRetargetsLogged++;
+                Log.Info("flight",
+                    $"ai gunner: shooter {PlayerIndex} leaves {TargetLabel(left)} for {TargetLabel(StandingTarget(gunner))} at {score.Distance:0} m ({how}: rank {score.Rank:0}; {_gunnerScan.Structures.Count} structure(s) in the scan)");
             }
         }
         // ⚠ Only Pursue shoots. Lay off holds fire deliberately (the rubber-band assist) even
@@ -3755,7 +3819,7 @@ public partial class FlightController : Node3D
         Projectiles.CollectTurrets(_gunnerScan);
         if (Destructibles != null)
         {
-            _gunnerScan.AddStructures(Destructibles);
+            _gunnerScan.AddMissionStructures(Destructibles);
         }
         int ownTeam = Team;
         float activation = Pilot?.Machine?.ActivationRange ?? 2000f; // min_ai_active_dist fallback
@@ -3854,7 +3918,13 @@ public partial class FlightController : Node3D
         // those aircraft target, which is a behaviour claim wanting its own evidence.
         int best = AiTargetRanking.SelectBest(ownPos, ownFwd, activation, AiScorer.Jet,
             AiTargetRanking.AircraftFirst, _rankCandidates, out score);
-        return best >= 0 ? _rankSources[best] : null;
+        if (best < 0)
+            return null;
+        // The take stamps the hold and the rank the re-score re-runs. Only the ranked arm does:
+        // an assigned primary_target wins outright at every acquisition in the original, so it
+        // never reaches the hold at all.
+        gunner.TakeTarget(_rankSources[best], _rankCandidates[best], GameClock.Current?.Time ?? 0.0);
+        return _rankSources[best];
     }
 
     // Files one turret or structure candidate into the shared rank pool, mirroring the vehicle
@@ -3922,6 +3992,11 @@ public partial class FlightController : Node3D
         SelectRankedTarget(gunner, out _, out _);
         return _rankSources;
     }
+
+    // Internal rather than private: the admission suite asserts on the scan's own membership. A
+    // pool the team gate would drop downstream is indistinguishable from one never admitted, and
+    // the decoded list is the narrower one, so only the scan itself can show which happened.
+    internal int ScannedStructureCountForTest() => _gunnerScan.Structures.Count;
 
     // Internal rather than private: PilotInputSource/KeyboardInputSource (IFlightInputSource.cs)
     // call this and its sibling above to keep each body exactly where it always lived among the
