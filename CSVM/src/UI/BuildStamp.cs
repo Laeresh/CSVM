@@ -4,8 +4,9 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>
-/// The build's version in the bottom-right corner of the menu, so a screenshot a stranger sends
-/// already carries the build it was taken on. Built once by <see cref="CSVM.Session.Launcher"/>
+/// The build's version as <c>CSVM v&lt;version&gt;</c> in the bottom-right corner of the menu, so a
+/// screenshot a stranger sends already carries the build it was taken on, and the number is not
+/// taken for the original game's own. Built once by <see cref="CSVM.Session.Launcher"/>
 /// and shown whenever the menu is up, which is what puts it on EVERY presentation: the stamp is a
 /// fact about the binary, not part of any one presentation's screen graph, and Original draws the
 /// decoded artwork with no place to put one. Hidden in flight, so no golden screenshot sees it.
@@ -53,7 +54,9 @@ public sealed partial class BuildStamp : Node
         _layer = new CanvasLayer { Layer = HudLayers.BuildStamp, Visible = false };
         var root = new Control { MouseFilter = Control.MouseFilterEnum.Ignore };
         root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        _label = new Label { Text = $"v{BuildVersion.Current}", MouseFilter = Control.MouseFilterEnum.Ignore };
+        // ⚠ Keep the CSVM prefix on every presentation. A bare version number in the corner of the
+        // Original menu is read as the original game's own, and a bug report has to name the build.
+        _label = new Label { Text = $"CSVM v{BuildVersion.Current}", MouseFilter = Control.MouseFilterEnum.Ignore };
         // Dimmer than anything a player navigates by: it is there to be read back off a capture,
         // not to compete with the screen it sits on. The shadow carries it over the Original
         // presentation's artwork, which is not the flat backdrop Built-in draws.

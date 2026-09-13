@@ -1962,23 +1962,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   race whose clock starts while a load screen is still up), `docs/org/loading-screen.md` (the
   campaign sheet's own content, which this one has to make move without changing).
 
-- `BL-825` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **The build
-  stamp stays in the corner of the Original menu and reads `CSVM v<version>`, so it is not taken
-  for the original's own version number.**
-  *Evidence:* `BuildStamp.cs` writes `v<version>` in the bottom-right corner whenever the menu is
-  up, on every presentation, so a screenshot a stranger sends carries the build it was taken on
-  (`CSVM/src/UI/BuildStamp.cs:6-12`). The original's top level draws no text outside the art: the
-  script creates `mm_t_title` and fills it from `uiData` 2152, and CAP-49's static-pixel map over
-  ten seconds leaves only the logo, the six plaques and the frame. Original draws nothing at
-  `mm_t_title` and never did; what the film contradicts is the corner stamp, which is ours and
-  which no take can speak to. *Decided:* keep it on every presentation, the stamp is a fact about
-  the binary and the presentation most likely to be screenshot is the one that would lose it.
-  *Fix shape:* the text becomes `CSVM v<version>` (the user's words: "change it to CSVM v0.1.0 so
-  it is not confused with the original's version number"), one string in `BuildStamp`, and any
-  suite or doc that quotes the `v<version>` form follows. *⚠ Traps:* the stamp's placement is
-  deliberate and cross-presentation, so do not make the prefix presentation-dependent; a bug
-  report reads the same string whichever menu it was shot on. *Cross-refs:* `BL-805`'s closing
-  commit (the rest of the top level's reading), `docs/org/menu-inventory.md` Part 4.
 - `BL-834` `[Fidelity]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The warning-shot shield
   arms on every human-piloted aeroplane, where the original ticks it only for the player vehicle
   while the `Network` key is zero.** *Evidence:* `BL-826`'s decode: the world tick calls the
