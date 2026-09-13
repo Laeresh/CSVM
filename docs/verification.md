@@ -137,6 +137,16 @@ member, and it does not go here.
   the 921,600, the cloud fade change moved 431,238 px, and 20 of those lay outside the mask at one
   LSB (blend rounding), which is what "confined to that population" looks like measured.
 
+- **SHOT-39**, **Measure a filled bar against footage by the one edge that moves, not by the
+  extent you can see.** A scrollbar thumb, a gauge fill or a progress bar is art with its own end
+  caps sitting in a painted gutter, so an eye reading both ends off a frame picks up the caps and
+  the gutter's own shadow and is a few pixels slack at each end. The filled-to-unfilled transition
+  is a hard luminance step one column can find exactly. Reading BL-842's Instant Action thumb off
+  `CAP-50` both ways: its extent measures as board y 182 to 356, which suggests 173 of the 230-pixel
+  track, while the transition alone lands on 356, which is 170 and the exact 14-of-19 share the
+  window shows. The slack figure would have pinned a suite one preset off the model that produced
+  the picture.
+
 ## GOLD, golden images
 
 - **GOLD-1**, **Update moved hashes with the visual change, and explain each moved shot in the

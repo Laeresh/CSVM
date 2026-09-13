@@ -771,7 +771,10 @@ The Instant Action screen is built from what the layout and the script evidence:
 their authored positions over `IA_BackGround`, the contents list's 14-row window with its own
 `UpArrow`/`DownArrow`/`Slider` art in the gutter the background paints for it (a dark bar over
 x 336 to 354 and y 173 to 428, inside `IA_TL_Contents`' own X 76 plus Width 277, so the 16-pixel
-scroll art stands at 337 and the rows stop there), a dropdown's box `Width` wide and `ItemHeight`
+scroll art stands at 337 and the rows stop there), the `Slider` tile drawn stretched to the share of
+the list that window shows rather than at its own 11 pixels (the film's opening frame fills the
+track from its head at board y 186 down to y 356, which is 14 of the 19 presets over the 230-pixel
+track between the arrows), a dropdown's box `Width` wide and `ItemHeight`
 high showing its picked value with the `DropDown` arrow strip, the enemy rows on two pages keyed off `IA_B_UP`/
 `IA_B_DOWN` (the script's mailbox 20002), the ace duel blanking every enemy dropdown in place (the
 script's `0 == WT` branch deactivates them), the wingman plane blanking at zero wingmen, a changed

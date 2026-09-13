@@ -796,7 +796,8 @@ public sealed partial class OriginalShell
     }
 
     // The contents list's window, its thumb inside the list's right edge on the track between the
-    // two arrows, placed by how far the window has scrolled; null while the presets fit the window.
+    // two arrows, placed by how far the window has scrolled and as long as the share of the list
+    // that window shows; null while the presets fit the window.
     private ListWindow? ContentsWindow(MenuLayoutWidget list)
     {
         int window = Math.Max(1, list.Int("TotalDisplayed", 14));
@@ -814,10 +815,11 @@ public sealed partial class OriginalShell
         var thumb = StripSize(StripArt(list.Art, 0, 1), arrow.Width, 11f);
         float height = window * itemHeight;
         float trackHeight = height - (2f * arrow.Height);
+        float thumbHeight = ListWindow.ThumbHeightFor(trackHeight, window, count, thumb.Height);
         int top = ContentsTopClamped(window);
         return new ListWindow(
             x, y, width, height,
-            x + width - arrow.Width, ListWindow.ThumbYFor(y + arrow.Height, trackHeight, thumb.Height, top, count - window), thumb.Width, thumb.Height,
+            x + width - arrow.Width, ListWindow.ThumbYFor(y + arrow.Height, trackHeight, thumbHeight, top, count - window), thumb.Width, thumbHeight,
             y + arrow.Height, trackHeight, count, window, top);
     }
 
@@ -987,7 +989,7 @@ public sealed partial class OriginalShell
         if (OpenInstantActionDrop(screen) is { } drop && DropListWindow(drop, _iaListTop) is { } window
             && drop.Thumb is { } thumb)
         {
-            panelPictures.Add(new BoardPicture(thumb, window.ThumbX, window.ThumbY));
+            panelPictures.Add(new BoardPicture(thumb, window.ThumbX, window.ThumbY, Height: window.ThumbHeight));
         }
 
         overlays.Add(new BoardPanel(panelFills, panelPictures, panelLines));
@@ -1081,13 +1083,14 @@ public sealed partial class OriginalShell
         }
     }
 
-    // The contents list's slider thumb, on the track between its two arrows, placed by how far
-    // the window has scrolled.
+    // The contents list's slider thumb, on the track between its two arrows, placed by how far the
+    // window has scrolled and stretched to the length the window gives it, which is what says how
+    // much of the list is in view.
     private void ComposeContentsThumb(MenuLayoutScreen screen, List<BoardPicture> pictures)
     {
         if (screen.Widget(ContentsKey) is { } list && StripArt(list.Art, 0, 1) is { } thumb && ContentsWindow(list) is { } window)
         {
-            pictures.Add(new BoardPicture(thumb, window.ThumbX, window.ThumbY));
+            pictures.Add(new BoardPicture(thumb, window.ThumbX, window.ThumbY, Height: window.ThumbHeight));
         }
     }
 

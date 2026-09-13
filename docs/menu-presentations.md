@@ -201,7 +201,11 @@ drop-down, `CampaignPreviousMissionsPage.PointerWindow` for the scrapbook's cont
 Original's own for the hangar's dropdowns, Instant Action's dropdowns and contents window, and the
 sortie screens' aircraft column. An open dropdown on Instant Action shows at most the authored
 `TotalDisplayed` rows and keeps every item as a row keyed `<key>:<index>`, drawn and hit only inside
-the window, so a scripted pose and a suite walk still pick by index whatever the window shows.
+the window, so a scripted pose and a suite walk still pick by index whatever the window shows. Every
+one of those thumbs is as long as the share of the list its window shows, its scroll tile drawn
+stretched to that length and never shorter than the tile's own height, so a long list wears a short
+thumb with a long free run and a barely scrolling one wears a thumb that nearly fills its track. The
+Controls page's key list and the scrapbook's contents page still draw a fixed tile.
 
 ## Options, selection and availability
 

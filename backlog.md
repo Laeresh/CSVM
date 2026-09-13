@@ -1772,22 +1772,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `pdpanel4`/`pdpanel6`) targets any node inside `gauges`, and no runtime binds a plane's own
   subtree apart from the crash rig's narrow subset, so nothing animates the panel per frame.
 
-- `BL-842` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **A list's
-  scroll thumb is a fixed 11-pixel tile where the original stretches it to the share of the list
-  its window shows.** *Evidence:* `CAP-50`'s opening Instant Action frame draws the contents
-  window's thumb from board y 182 to 356 on a track running 186 to 416, so 173 of 230 pixels for a
-  14-row window over the preset list, a length that says how much of the list is in view. Ours
-  draws `IA_B_ScrollBar.png` at its own 16x11 wherever the window stands
-  (`CSVM/src/UI/Menu/Original/OriginalInstantAction.cs`, `ContentsWindow` and `OpenListWindow`;
-  `CSVM/src/UI/Menu/Original/OriginalHangar.cs`, `OpenHangarListWindow`), so a long list and a
-  short one wear the same thumb. *Fix shape:* `ListWindow`'s thumb height becomes
-  `trackHeight * Rows / Count` clamped to a floor, and the tile is drawn stretched to it, which
-  also changes what `TopAfterDrag` divides by. *⚠ Traps:* the drag maths already reads
-  `TrackHeight - ThumbHeight` as the free run, so a growing thumb shortens the run and every list
-  suite's drag-to-the-foot check has to still land on the last row. *Cross-refs:*
-  `docs/org/menu-inventory.md`'s Instant Action reading, `BL-707`'s landing
-  (`git log --grep=BL-707`), which added the thumbs.
-
 - `BL-751` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Original's seat
   strip is a monochrome device list on the left where Built-in's is a colourised P1 to P4 chip row
   on the right.** *Evidence:* reported at the controls over `PLAN-M5-polish-12`'s closing sortie,

@@ -71,6 +71,20 @@ public class ListWindowTests
     }
 
     [Fact]
+    public void AThumbIsAsLongAsTheShareOfTheListItsWindowShows()
+    {
+        // Instant Action's contents window: 14 of 19 presets on a 230-pixel track, which is the
+        // length the reference frame draws, its foot 169.5 pixels below the track's head.
+        Assert.Equal(230f * 14f / 19f, ListWindow.ThumbHeightFor(230f, 14, 19, 11f), 3);
+        Assert.Equal(115f, ListWindow.ThumbHeightFor(230f, 1, 2, 11f));
+        Assert.Equal(11f, ListWindow.ThumbHeightFor(230f, 1, 500, 11f)); // the floor holds a grip
+        Assert.Equal(230f, ListWindow.ThumbHeightFor(230f, 19, 19, 11f)); // nothing to scroll
+        Assert.Equal(230f, ListWindow.ThumbHeightFor(230f, 40, 19, 11f)); // a window past the list
+        Assert.Equal(8f, ListWindow.ThumbHeightFor(8f, 1, 500, 11f)); // a track shorter than the art
+        Assert.Equal(11f, ListWindow.ThumbHeightFor(230f, 5, 0, 11f)); // a list with no rows to share
+    }
+
+    [Fact]
     public void AThumbStandsAtTheHeadUnscrolledAndFlushAtTheFootOnTheLastRow()
     {
         Assert.Equal(100f, ListWindow.ThumbYFor(100f, 100f, 20f, 0, 15));

@@ -95,7 +95,8 @@ public static class CampaignBoards
     // for.
     private const int DialogIconFrames = 3;
 
-    // The scrollbar thumb's own art height, and where a field's words sit inside its box.
+    // The scrollbar thumb's own art height, which a proportional thumb never drops below since a
+    // shorter one stops reading as a grip, and where a field's words sit inside its box.
     private const float ScrollThumbHeight = 12f;
     private const float ComboTextInset = 4f;
     private const float ComboTextDrop = 1f;
@@ -533,8 +534,8 @@ public static class CampaignBoards
     }
 
     /// <summary>An open drop-down's list as a pointer sees it: the window under the field, the
-    /// thumb on its track in the scrollbar column; null while the list is closed or fits its
-    /// window.</summary>
+    /// thumb on its track in the scrollbar column and as long as the share of the list the window
+    /// shows; null while the list is closed or fits its window.</summary>
     public static ListWindow? ComboWindow(CampaignCombo combo)
     {
         ArgumentNullException.ThrowIfNull(combo);
@@ -547,7 +548,8 @@ public static class CampaignBoards
         float height = combo.Visible * combo.RowHeight;
         return new ListWindow(
             combo.X, top, combo.Width, height,
-            combo.X + combo.Width - ComboArrowWidth, ThumbY(combo, top, height), ComboArrowWidth, ScrollThumbHeight,
+            combo.X + combo.Width - ComboArrowWidth, ThumbY(combo, top, height), ComboArrowWidth,
+            ThumbHeight(combo, height),
             top + ScrollArrowHeight, height - (ScrollArrowHeight * 2f),
             combo.Entries.Count, combo.RowsDisplayed, combo.First);
     }
@@ -645,7 +647,9 @@ public static class CampaignBoards
             pictures.Add(new BoardPicture(layout.GlobalArt("FC_UP", ScrollUp), bar, top, ArrowNormal));
             pictures.Add(new BoardPicture(
                 layout.GlobalArt("FC_DOWN", ScrollDown), bar, top + height - ScrollArrowHeight, ArrowNormal));
-            pictures.Add(new BoardPicture(layout.GlobalArt("FC_SLIDER", ScrollThumb), bar, ThumbY(combo, top, height)));
+            pictures.Add(new BoardPicture(
+                layout.GlobalArt("FC_SLIDER", ScrollThumb), bar, ThumbY(combo, top, height),
+                Height: ThumbHeight(combo, height)));
         }
 
         return new BoardPanel(fills, pictures, lines);
@@ -655,8 +659,14 @@ public static class CampaignBoards
     // list, so a full list's thumb is at the bottom and an unscrolled one's is at the top.
     private static float ThumbY(CampaignCombo combo, float top, float height) =>
         ListWindow.ThumbYFor(
-            top + ScrollArrowHeight, height - (ScrollArrowHeight * 2f), ScrollThumbHeight,
+            top + ScrollArrowHeight, height - (ScrollArrowHeight * 2f), ThumbHeight(combo, height),
             combo.First, combo.Entries.Count - combo.RowsDisplayed);
+
+    // How long the thumb stands, which is what says how much of the list is in view: the share the
+    // window shows, floored at the art's own height so a very long list still leaves a grip.
+    private static float ThumbHeight(CampaignCombo combo, float height) =>
+        ListWindow.ThumbHeightFor(
+            height - (ScrollArrowHeight * 2f), combo.RowsDisplayed, combo.Entries.Count, ScrollThumbHeight);
 
     // A field's words, inset from its left edge and sat on the row's own baseline the way the
     // reference draws them: the text is vertically centred in a 16-pixel field at an 11-pixel face.

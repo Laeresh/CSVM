@@ -162,9 +162,11 @@ overwriting, answering whether it landed and either the name or the OS reason, w
 A scrolled list as a pointer sees it, in the board's authored pixels: the window's box, the thumb's
 box on its track, and where the list stands inside it. `TopAfterWheel` steps the window by rows and
 `TopAfterDrag` maps the thumb's free run down the track onto the rows the window can move, both
-clamped; `ThumbYFor` places a thumb for a given window, and is the one rule every list draws its
-thumb by. Each list widget builds one from its own geometry and the presentation that owns the
-pointer decides what a new top writes back, so the arrows and the keyboard keep their own rules.
+clamped. `ThumbHeightFor` and `ThumbYFor` are the one rule every list draws its thumb by: the share
+of the list the window shows, floored at the scroll tile's own height and capped at the track, so a
+thumb's length says how much is in view and a longer one shortens the run the drag divides by. Each
+list widget builds one from its own geometry and the presentation that owns the pointer decides what
+a new top writes back, so the arrows and the keyboard keep their own rules.
 
 ## src/UI/SliderTrack.cs
 A continuous control's track as a pointer sees it, the list window's opposite number: the slot a

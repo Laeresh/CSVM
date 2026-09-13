@@ -20,7 +20,9 @@ public sealed partial class OriginalShell
     private const string DropListUpSuffix = "up";
     private const string DropListDownSuffix = "down";
 
-    // The scroll thumb's height where its art cannot be measured, the shipped bar's own.
+    // The scroll thumb's height where its art cannot be measured, the shipped bar's own. The
+    // measured tile's height is also the floor a proportional thumb never drops below, since a
+    // shorter one stops reading as a grip.
     private const float FallbackScrollThumbHeight = 11f;
 
     // An open dropdown's list off its own widget: the box it hangs under, the authored
@@ -96,7 +98,8 @@ public sealed partial class OriginalShell
     }
 
     // An open list's window for the pointer's wheel and its thumb drag, the thumb on the track
-    // between the two arrows inside the right edge; null while the items fit the authored window.
+    // between the two arrows inside the right edge and as long as the share of the list the window
+    // shows; null while the items fit the authored window.
     private ListWindow? DropListWindow(OpenDropList drop, int top)
     {
         if (!drop.Scrolls)
@@ -110,12 +113,13 @@ public sealed partial class OriginalShell
         float y = drop.Y + drop.ItemHeight;
         float height = drop.Window * drop.ItemHeight;
         float trackHeight = height - upSize.Height - downSize.Height;
+        float thumbHeight = ListWindow.ThumbHeightFor(trackHeight, drop.Window, drop.Count, thumb.Height);
         int first = Math.Clamp(top, 0, drop.LastTop);
         return new ListWindow(
             drop.X, y, drop.Width, height,
             drop.X + drop.Width - upSize.Width,
-            ListWindow.ThumbYFor(y + upSize.Height, trackHeight, thumb.Height, first, drop.LastTop),
-            thumb.Width, thumb.Height,
+            ListWindow.ThumbYFor(y + upSize.Height, trackHeight, thumbHeight, first, drop.LastTop),
+            thumb.Width, thumbHeight,
             y + upSize.Height, trackHeight, drop.Count, drop.Window, first);
     }
 
