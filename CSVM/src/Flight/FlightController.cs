@@ -16,7 +16,7 @@ namespace CSVM.Flight;
 /// Controls: docs/controls.md. Collaborators and other constraints: this module's entry in
 /// docs/architecture.md.
 /// Hitting terrain or a building crashes the plane: explosion, airframe hidden, frozen at the
-/// impact point until R (or gamepad Y/A) respawns.
+/// impact point until the seat's own Respawn control brings it back, which its crash prompt names.
 /// ⚠ P (or gamepad Start) halts the WHOLE simulation, not just this plane; see
 /// <see cref="PauseTogglePressed"/>.
 /// </summary>
@@ -2477,6 +2477,7 @@ public partial class FlightController : Node3D
             AvailableLoadFactor = _model.AvailableLoadFactor,
             Stalled = _model.isStalled(),
             AutoLandOffered = AutoLandOffered,
+            RespawnOffered = !Spectating && !ControlsHeld,
             WallDt = wallDt,
             SimDt = simDt,
             DamageSummary = _pilotHud.DrawsTextBlock ? Damage?.Summary() : null,
@@ -3093,9 +3094,14 @@ public partial class FlightController : Node3D
     // Every control prompt this pane draws, over the bindings of the side the seat is reading. Run
     // at construction and again on each handover, rather than per frame: the wording is a string
     // build over the message table, and it only moves when a binding or the side does.
-    private void ComposeControlPrompts() =>
+    private void ComposeControlPrompts()
+    {
+        var side = _bindings.Device.Side;
         _pilotHud.AutoLandPrompt = FlightHud.ComposeAutoLandPrompt(
-            _strings, FlightKeymap.Bindings(InputAction.AutoLand), UseKeyboard, _bindings.Device.Side);
+            _strings, FlightKeymap.Bindings(InputAction.AutoLand), UseKeyboard, side);
+        _pilotHud.RespawnPrompt = FlightHud.ComposeRespawnPrompt(
+            FlightKeymap.Bindings(InputAction.Respawn), UseKeyboard, side);
+    }
 
     // The largest-magnitude value of the axis across this player's gamepads (0 when
     // none), idle phantom devices read ~0 and never mask the real stick.

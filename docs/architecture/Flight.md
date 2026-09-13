@@ -683,15 +683,15 @@ off the victim's team, `WordsKillLine` keeps a hull flown into the world off tha
 `PostCrash`/`PostTimeExpired` are the two notices that are not a death. All static, so a suite
 asserts the decode with no `Control`. Decode: [../org/vehicleDamage.md](../org/vehicleDamage.md).
 
-## src/Flight/AutoDockLine.cs
-The original's auto-dock prompt: one centred line three tenths of the way down the pane, in the
-landings rig's flat pale yellow and without the drop shadow the markers and the message stack carry,
-standing while the approach table's `auto` row keeps passing and gone the frame it stops. `FlightHud`
-owns when it shows and what it reads; this owns only where it sits, as `LineAnchor` over a pane size,
-static so a suite asserts the placement with no `Control`. The fraction is of the pane, never of
-`HudMetrics`' reading box, so each splitscreen pane centres its own. Decode:
-[../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md) "The prompt's
-own placement".
+## src/Flight/PromptLine.cs
+A control prompt's own centred line, three tenths of the way down the pane, in the landings rig's
+flat pale yellow and without the drop shadow the markers and the message stack carry. Two per pane:
+the original's auto-dock offer on the HUD layer, and the port's respawn prompt on the message layer,
+the one the crash camera leaves up. `FlightHud` owns when each shows and what it reads; this owns
+only where it sits, as `LineAnchor` over a pane size, static so a suite asserts the placement with no
+`Control`. The fraction is of the pane, never of `HudMetrics`' reading box, so each splitscreen pane
+centres its own. Decode: [../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md)
+"The prompt's own placement".
 
 ## src/Flight/TargetHud.cs
 The per-pane targeting HUD, built on every human pane in every flight session: the pilot's own
@@ -1056,14 +1056,14 @@ since both arrive through the build DTO before the first sim step. Ground-blow p
 ground-blow write stay on `FlightController`, which has the live world a source does not.
 
 ## src/Flight/FlightHud.cs
-Everything one pane draws for its pilot, none of it written from outside: the heading tape, the
-cockpit dials and their two weapon gauges, the gun pipper, the stunt objective marker, the targeting
-HUD, `HudMessages`' message stack, `AutoDockLine`'s auto-dock prompt, the `--hud-font-test` overlay and
-the flight text block. With the cockpit interior on screen the dials, tape and text block come off
-(`SetCockpitView`), its panel carrying them; the pipper, marker, message and prompt HUDs stay.
-`Draw(in FlightHudState)`, the per-frame entry, takes a struct of aircraft STATE, so text, dials and
-gates compose and assert here with no Godot `Control` (`ComputeStallWarning`, `ComputeAgl`,
-`ComposeTextLines`, `ShowsAutoLandPrompt`, and `ComposeAutoLandPrompt` over the seat's last device).
+Everything one pane draws for its pilot, none of it written from outside: the heading tape, the cockpit
+dials and their two weapon gauges, the gun pipper, the stunt marker, the targeting HUD, `HudMessages`'
+message stack, the two `PromptLine` prompts, the `--hud-font-test` overlay and the flight text block. With
+the cockpit interior on screen the dials, tape and text block come off (`SetCockpitView`), its panel
+carrying them; the pipper, marker, message and prompt HUDs stay, the respawn prompt on the message layer the
+crash camera leaves up. `Draw(in FlightHudState)`, the per-frame entry, takes a struct of aircraft STATE, so
+text, dials and gates compose and assert here with no `Control` (`ComputeStallWarning`, `ComputeAgl`,
+`ComposeTextLines`, and both prompt gates and composers).
 
 ## src/Flight/FlightController.cs
 The flying-aircraft node: input through `FlightModel` to a transform (or, for an AI pilot publishing

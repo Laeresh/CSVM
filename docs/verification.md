@@ -589,6 +589,11 @@ member, and it does not go here.
   read with the listener at 4x the cue's audible distance, which is silent whether the cull sits at
   1.0x or at 1.1x of it, so the missing margin survived that suite; ears at 1.05x and 1.15x
   separate the two.
+- **INSTR-73**, **A line a readout composes is not a line the player reads: assert the control it
+  reaches and the layer that control sits on.** The crashed pilot's respawn line passed its unit
+  test on `ComposeTextLines`' return for as long as it existed, while the crash camera hid the whole
+  HUD `CanvasLayer` the text block hangs from, so the string reached no screen; the `c1-crash`
+  golden shows the crash notice from the message layer beside a blank where the prompt was.
 
 ## SRC, sources and documents
 
