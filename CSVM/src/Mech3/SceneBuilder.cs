@@ -270,8 +270,9 @@ void fragment() {
     // Enhanced mode only: what a surface <see cref="ClassifySurface"/> calls water gets instead of
     // the matte world values, so screen-space reflection has a glossy surface to march against.
     // TUNE, judged at the controls: roughness sets how far a reflection smears, specular how much
-    // of it survives at a glancing angle.
-    private const float WaterRoughness = 0.1f;
+    // of it survives at a glancing angle. Roughness is also what quiets a per-texel reflection
+    // flicker, because it blurs a lost ray across its neighbours instead of dimming the water.
+    private const float WaterRoughness = 0.25f;
     private const float WaterSpecular = 0.5f;
     // ⚠ Format every scale invariantly; a comma decimal separator emits shader text that will not
     // compile. Godot discards EMISSION on an `unshaded` material and the glow pass reads the HDR

@@ -147,6 +147,15 @@ member, and it does not go here.
   window shows. The slack figure would have pinned a suite one preset off the model that produced
   the picture.
 
+- **SHOT-40**, **A screen-space effect flickers with screen motion, so step the pose by a rotation,
+  and difference the pair against a second pair rendered with the effect off.** Translating the
+  camera 0.55 m and 3 m along the view barely moves the water reflection: at C1's lake those steps
+  flip 218 and 608 water texels of 155,444, and over C3's open sea 40 and 189 of 613,601, which
+  reads as no flicker and is the step's own doing. A 1.7 degree yaw, one frame of a brisk turn,
+  flips 3,641 and 5,270 at the same two poses, and a 5 degree yaw flips 10,534 and 17,543. The
+  effect-off pair is what separates the effect's own flipping from ordinary parallax: without it
+  every texel the camera move uncovers is counted as flicker.
+
 ## GOLD, golden images
 
 - **GOLD-1**, **Update moved hashes with the visual change, and explain each moved shot in the
@@ -616,6 +625,13 @@ member, and it does not go here.
   on the clear line the shipped layout leaves, and on the unit fixture's tighter lines it stood on
   the mission dropdown, where a pointer at the lives box focused the mission box instead. Taking
   the first gap in the setup stack tall enough for it puts it on a free line in both.
+- **INSTR-78**, **When the parameter under test also moves the control render, the instrument's
+  counts drift with the parameter, so report the control's own count beside them.** The water
+  flicker instrument counts texels that move with screen-space reflection on and do not move with
+  it off, and raising the water material's roughness broadens the specular sheen the reflection-off
+  render draws as well: the open-sea control rises from 7,361 texels at roughness 0.1 to 12,149 at
+  0.25 and 48,347 at 0.4. A bigger control masks more of the on-pass movement, so a high-roughness
+  flicker count is biased optimistically and no value can be picked on that count alone.
 
 ## SRC, sources and documents
 

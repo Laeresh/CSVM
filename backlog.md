@@ -967,27 +967,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   captured through `--shots` is a previous frame's render and carries the burst camera's dither
   (`CaptureDirector.cs:96`), so judge this at the controls or on an undithered capture.
   *Playtest after fix:* any chapter under Enhanced Graphics, still and moving, over water and over
-  ground. *Cross-refs:* `BL-804` (the same sitting's reflection flicker), `docs/architecture/Utils.md`
-  (`GraphicsMode`).
+  ground. *Cross-refs:* `docs/architecture/Utils.md` (`GraphicsMode`).
 
-- `BL-804` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Enhanced Graphics' water
-  reflections flicker at the screen border and around the player's aircraft.** *Evidence:* reported
-  at the controls under Enhanced Graphics as "screen space reflection flickering on screen border
-  and around the plane"; which chapter and view are not recorded. Both places are where
-  screen-space reflection has nothing to reflect: a ray that runs off the screen edge, and the
-  water behind the aircraft, whose reflection the aircraft itself occludes in the depth buffer,
-  so a small camera move flips those texels between a reflection and the fallback and the
-  surface shimmers. The pass is enabled for the water surfaces alone with 64 steps, a fade-in of
-  0.15, a fade-out of 2.0 and a depth tolerance of 0.2 (`CSVM/src/Session/Launcher.cs:78-83`,
-  `1168-1179`). *Fix shape:* lengthen the edge fade and raise the depth tolerance so a lost ray
-  fades into the sky colour instead of cutting, and judge whether the aircraft's own silhouette
-  still shimmers; if it does, the remaining tool is a roughness on the water material, which
-  blurs the reflection and hides the per-texel flip. *⚠ Traps:* the constants are TUNE with no
-  decoded magnitude, so there is nothing to match, only a flicker to remove; do not trade it for
-  a reflection so faint the glossy water arm no longer reads. *Playtest after fix:* a low pass
-  over C1's lake and the open sea under Enhanced Graphics, chase view, banking so the aircraft
-  crosses the water. *Cross-refs:* `BL-803` (the same sitting's dithering), `Launcher.cs`'s
-  `EnableWaterReflections`.
 - `BL-899` `[Bug]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: data]` `[C5]` **C5 builds
   19,197 `fvol` cloud sprites that drew no pixels at either probed pose, before and after the fade
   law landed.** C5's `fvol` geometry is seventeen polygonal street prisms rather than a deck slab,

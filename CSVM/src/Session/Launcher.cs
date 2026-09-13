@@ -77,9 +77,11 @@ public partial class Launcher : Node3D
 
     // TUNE. Screen-space reflection on the glossy water arm: the step count buys reflection length
     // along the ray, the fades hide where a ray runs off the screen or past the depth buffer.
+    // The fade-out exponent is the lever on the border and aircraft flicker, since it dims a ray
+    // before it is lost. Depth tolerance measures inert here, from this value up to 8.0.
     private const int EnhancedSsrMaxSteps = 64;
     private const float EnhancedSsrFadeIn = 0.15f;
-    private const float EnhancedSsrFadeOut = 2.0f;
+    private const float EnhancedSsrFadeOut = 2.5f;
     private const float EnhancedSsrDepthTolerance = 0.2f;
 
     // TUNE, judged at the controls. The sun's apparent size in degrees; the real sun is about
