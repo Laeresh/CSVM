@@ -20,17 +20,22 @@ namespace CSVM.Effects;
 /// </summary>
 public sealed partial class FogVolumeClutter : Node3D
 {
-    // A runaway guard, not a tuning knob: the shipped chapters place up to ~22k sprites (base
+    // A runaway guard, not a tuning knob: the shipped chapters place up to ~25k sprites (base
     // field plus the map-edge continuation), so this is several times the largest real field. It
     // can only bind if a future extraction reports a `distance` near zero or a volume far larger
     // than a map, both of which should be seen rather than swallowed.
     private const int MaxPlacements = 80_000;
 
     // Shape-classification threshold (docs/formats/fogvol.md): a volume no more than this many
-    // card-heights thick reads as a sheet and is TOP-ANCHORED; taller volumes keep the full-height
-    // UNIFORM draw. A judgement call from a clean gap in the volumes' own measured thickness, not
-    // authored data, see the docs page for the measurements.
+    // card-heights thick reads as a sheet, which is what the map-edge continuation continues. A
+    // judgement call from a clean gap in the volumes' own measured thickness, not authored data,
+    // see the docs page for the measurements.
     private const float TopAnchorHeightFactor = 1.5f;
+
+    // sqrt(3)/2, the row step of the scatter's staggered lattice as a multiple of the authored
+    // `distance` (the column step). Decoded, not chosen: it is the spacing that makes a row
+    // offset by half a column step equidistant from its neighbours (docs/org/cloudCards.md).
+    private const float RowStepFactor = 0.8660254f;
 
     /// <summary>Sprites placed, summed over every kind, the authored volumes' own placements
     /// plus the map-edge continuation (<see cref="ExtensionCount"/>). Zero means nothing was
@@ -292,10 +297,11 @@ public sealed partial class FogVolumeClutter : Node3D
             """;
     }
 
-    // The scatter: each volume is cut into `distance` x `distance` cells anchored on the world
-    // origin, and each cell gets ONE placement drawn uniformly inside it, weighted over the
-    // resolved clutter table. `distance` is the field's areal DENSITY, an authored mean spacing,
-    // not a lattice phase. See docs/formats/fogvol.md for the density arithmetic and evidence.
+    // The scatter: every authored face of every volume carries a staggered lattice in its own
+    // plane, `distance * sqrt(3)/2` by `distance`, and each point that falls inside that face's
+    // outline places one sprite, weighted over the resolved clutter table. `distance` is still the
+    // field's areal DENSITY, an authored mean spacing, not a lattice phase.
+    // See docs/org/cloudCards.md for the decoded walk and docs/formats/fogvol.md for the density.
     private void Scatter(FogVolumeSpec spec, IReadOnlyList<FogVolumeBox> volumes, List<Kind> kinds)
     {
         Name = "fog_volume_clutter";
@@ -312,97 +318,35 @@ public sealed partial class FogVolumeClutter : Node3D
 
         // The authored card's own extent (docs/formats/fogvol.md's "card size", e.g. 132.3 m for
         // C1/C1C/C2B/C4, 70 m for C5), every kind in a chapter shares one, so the largest among
-        // them is that chapter's card height for the TopAnchorHeightFactor test below.
+        // them is the card height the map-spanning-slab test below measures a volume against.
         float cardHeight = 0f;
         foreach (var kind in kinds)
         {
             cardHeight = Mathf.Max(cardHeight, kind.Radius * 2f);
         }
 
-        // One draw sequence off the master seed's cloud stream, fixed volume/cell order, so
+        // One draw sequence off the master seed's cloud stream, fixed volume/face/lattice order, so
         // the whole field is a function of the seed. No camera, pane or frame is read
         // here, so world-anchoring and determinism are the same property.
         var rng = Rng.NewSystemRandom(Rng.Clouds);
-        float Rand(float a, float b) => a + ((float)rng.NextDouble() * (b - a));
 
         // ⚠ Keep the band draws off Rng.Clouds entirely: one there, even taken before the loop,
         // reseeds the placements of any later field built in the same process, which is how a
         // suite that builds two chapters sees the second one's counts move.
         var bandRng = Rng.NewSystemRandom(Rng.CloudBands);
 
-        // One pass per volume, not per clutter block, weights are already flattened into
-        // Kind.Weight. Overlapping volumes (C1C's build-ups over its own slab) each get their own
-        // fill; cells anchor on the world origin, not the volume.
+        // One pass per volume's own faces, not per clutter block, weights are already flattened
+        // into Kind.Weight. Overlapping volumes (C1C's build-ups over its own slab) each scatter
+        // their own faces; every lattice is anchored on its face, not on the world origin.
         foreach (var volume in volumes)
         {
-            var box = volume.Box;
-            // Sheet-thin volumes (the slab's own AABB height) anchor their draw at the
-            // volume's own top; tall ones keep filling uniformly, see
-            // TopAnchorHeightFactor and docs/formats/fogvol.md for the evidence.
-            bool topAnchored = box.End.Y - box.Position.Y <= cardHeight * TopAnchorHeightFactor;
-            int gx0 = Mathf.CeilToInt(box.Position.X / period), gx1 = Mathf.FloorToInt(box.End.X / period);
-            int gz0 = Mathf.CeilToInt(box.Position.Z / period), gz1 = Mathf.FloorToInt(box.End.Z / period);
-            for (int gx = gx0; gx <= gx1 && InstanceCount < MaxPlacements; gx++)
+            // The per-volume reference point the perpendicular offset runs away from. The decode
+            // reads it off the volume record and no further, and the direction it has to give on a
+            // slab's top face (up near the middle, tilting outward at the rim) is the centre's.
+            var reference = volume.Box.GetCenter();
+            foreach (var face in volume.Polygons ?? Array.Empty<FogVolumeFace>())
             {
-                // Cells tile the volume exactly (outermost cell of each axis takes the
-                // remainder), never a Poisson draw over the footprint, that would open holes
-                // in what must read as a continuous overcast.
-                float x0 = gx == gx0 ? box.Position.X : (gx * period) - (period * 0.5f);
-                float x1 = gx == gx1 ? box.End.X : (gx * period) + (period * 0.5f);
-                for (int gz = gz0; gz <= gz1 && InstanceCount < MaxPlacements; gz++)
-                {
-                    float z0 = gz == gz0 ? box.Position.Z : (gz * period) - (period * 0.5f);
-                    float z1 = gz == gz1 ? box.End.Z : (gz * period) + (period * 0.5f);
-
-                    float x = Rand(x0, x1);
-                    float z = Rand(z0, z1);
-                    // Top-anchored: Y is the volume's own top; perp_dist_range still adds after
-                    // containment, as for a uniform draw. ⚠ Never sample it before containment,
-                    // that would reject the whole field.
-                    float y = topAnchored ? box.End.Y : Rand(box.Position.Y, box.End.Y);
-
-                    // The volume is its AUTHORED shape, not its bounding box, exact for C1/C2B/C4's
-                    // slabs, approximate-by-rejection for C1C's frusta and C5's prisms (fogvol.md).
-                    // A rejected draw places nothing rather than crowding the surplus inward.
-                    if (!volume.Contains(new Vector3(x, y, z)))
-                    {
-                        continue;
-                    }
-
-                    // Weighted draw over the whole table (block weight x node weight).
-                    float pick = Rand(0f, totalWeight);
-                    var kind = kinds[kinds.Count - 1];
-                    foreach (var candidate in kinds)
-                    {
-                        pick -= Mathf.Max(candidate.Weight, 0f);
-                        if (pick <= 0f)
-                        {
-                            kind = candidate;
-                            break;
-                        }
-                    }
-
-                    // Perturbation is applied AFTER containment, so a placement can sit up to
-                    // perturb_dist_range.y outside its own volume's wall, that is what a
-                    // perturbation means; the volume bounds the field, not each sprite.
-                    var block = kind.Block;
-                    float bearing = Rand(0f, Mathf.Tau);
-                    float perturb = Lerp(block.PerturbDistRange, (float)rng.NextDouble());
-                    float scale = Lerp(block.ScaleRange, (float)rng.NextDouble());
-                    kind.Placements.Add(new Transform3D(
-                        Basis.Identity.Scaled(new Vector3(scale, scale, scale)),
-                        new Vector3(
-                            x + (Mathf.Sin(bearing) * perturb),
-                            y + Lerp(block.PerpDistRange, (float)rng.NextDouble()),
-                            z + (Mathf.Cos(bearing) * perturb))));
-                    // A top-anchored draw sits ON the volume's top face, so its normal is +Y by
-                    // construction; a uniform draw has no face of its own and takes the one it
-                    // fell nearest, which is the face the authored scatter would have used.
-                    kind.Bands.Add(BandData(
-                        topAnchored ? Vector3.Up : volume.NearestFaceNormal(new Vector3(x, y, z)),
-                        (float)bandRng.NextDouble()));
-                    InstanceCount++;
-                }
+                ScatterFace(face, reference, period, kinds, totalWeight, rng, bandRng);
             }
         }
 
@@ -412,11 +356,95 @@ public sealed partial class FogVolumeClutter : Node3D
         ExtendPastMapEdge(volumes, kinds, period, cardHeight, totalWeight);
     }
 
+    // One authored face's own staggered lattice, laid in the face's plane on the basis
+    // U = unit(v1 - v0), V = cross(U, n): steps `distance * sqrt(3)/2` along U and `distance`
+    // along V, each extent cut into a whole number of steps, every other row offset by half a
+    // step, every point tested against the face's own outline. The draws per accepted point are
+    // the decoded order: kind, band, perpendicular offset, perturbation, scale
+    // (docs/org/cloudCards.md).
+    private void ScatterFace(in FogVolumeFace face, Vector3 reference, float period,
+        List<Kind> kinds, float totalWeight, Random rng, Random bandRng)
+    {
+        var origin = face.Vertices[0];
+        var along = face.Vertices[1] - origin;
+        if (along.LengthSquared() <= 0f)
+        {
+            return;
+        }
+        var u = along.Normalized();
+        var v = u.Cross(face.Normal);
+
+        float uMin = 0f, uMax = 0f, vMin = 0f, vMax = 0f;
+        foreach (var vertex in face.Vertices)
+        {
+            var offset = vertex - origin;
+            float du = offset.Dot(u), dv = offset.Dot(v);
+            uMin = Mathf.Min(uMin, du);
+            uMax = Mathf.Max(uMax, du);
+            vMin = Mathf.Min(vMin, dv);
+            vMax = Mathf.Max(vMax, dv);
+        }
+
+        float stepU = period * RowStepFactor;
+        int rows = Mathf.FloorToInt((uMax - uMin) / stepU);
+        int columns = Mathf.FloorToInt((vMax - vMin) / period);
+        float Rand(float a, float b) => a + ((float)rng.NextDouble() * (b - a));
+
+        for (int row = 0; row <= rows && InstanceCount < MaxPlacements; row++)
+        {
+            float stagger = (row & 1) == 0 ? 0f : period * 0.5f;
+            for (int column = 0; column <= columns && InstanceCount < MaxPlacements; column++)
+            {
+                var point = origin + (u * (uMin + (row * stepU)))
+                    + (v * (vMin + (column * period) + stagger));
+                if (!face.Contains(point))
+                {
+                    continue;
+                }
+
+                // Weighted draw over the whole table (block weight x node weight).
+                float pick = Rand(0f, totalWeight);
+                var kind = kinds[kinds.Count - 1];
+                foreach (var candidate in kinds)
+                {
+                    pick -= Mathf.Max(candidate.Weight, 0f);
+                    if (pick <= 0f)
+                    {
+                        kind = candidate;
+                        break;
+                    }
+                }
+
+                var block = kind.Block;
+                float band = (float)bandRng.NextDouble();
+                // The offset runs along the direction from the volume's reference point, not along
+                // the face normal and not along +Y: on a slab's top face that is up in the middle
+                // and tilts outward at the rim, which is the shape the decode describes.
+                var away = point - reference;
+                away = away.LengthSquared() > 0f ? away.Normalized() : face.Normal;
+                float perp = Lerp(block.PerpDistRange, (float)rng.NextDouble());
+                // One magnitude, then an independent draw on each axis, so the perturbation is a
+                // displacement in space rather than a ring around the lattice point.
+                float perturb = Lerp(block.PerturbDistRange, (float)rng.NextDouble());
+                var jitter = new Vector3(Rand(-0.5f, 0.5f), Rand(-0.5f, 0.5f), Rand(-0.5f, 0.5f))
+                    * perturb;
+                float scale = Lerp(block.ScaleRange, (float)rng.NextDouble());
+
+                kind.Placements.Add(new Transform3D(
+                    Basis.Identity.Scaled(new Vector3(scale, scale, scale)),
+                    point + (away * perp) + jitter));
+                kind.Bands.Add(BandData(face.Normal, band));
+                InstanceCount++;
+            }
+        }
+    }
+
     // Identifies the chapter's map-spanning slab from data (FogVolumeSpec.FindMapSpanningSlab,
     // pure geometry, never a chapter name or a hardcoded fvol1..9 range) and, if one exists, tiles
-    // its own `distance`-cell field outward past the map rim. C1C's build-up frusta and C5's
-    // street strips fail the top-anchored test and are never extended; C1B/C2/C3 ship no fvol* at
-    // all. See docs/formats/fogvol.md's Map-edge continuation section for the verification.
+    // its own `distance`-cell field outward past the map rim. C1C's build-ups and C5's strips are
+    // too tall to read as a sheet and are never extended; C1B/C2/C3 ship no fvol* at all
+    // (docs/formats/fogvol.md's Map-edge continuation section). ⚠ The ring continues the slab's
+    // TOP face alone, one authored face rather than the volume.
     private void ExtendPastMapEdge(IReadOnlyList<FogVolumeBox> volumes, List<Kind> kinds,
         float period, float cardHeight, float totalWeight)
     {
@@ -521,8 +549,8 @@ public sealed partial class FogVolumeClutter : Node3D
                         x + (Mathf.Sin(bearing) * perturb),
                         topY + Lerp(block.PerpDistRange, (float)rng.NextDouble()),
                         z + (Mathf.Cos(bearing) * perturb))));
-                // The slab's own top face continues out here, so +Y like the interior's
-                // top-anchored draw. ⚠ The band draw comes last, after every draw a placement
+                // The slab's own top face continues out here, so +Y like the face the interior
+                // scatters over. ⚠ The band draw comes last, after every draw a placement
                 // reads, so adding it left the ring's positions where they were.
                 kind.Bands.Add(BandData(Vector3.Up, (float)rng.NextDouble()));
                 InstanceCount++;

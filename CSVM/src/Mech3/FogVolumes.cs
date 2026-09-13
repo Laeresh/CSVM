@@ -14,7 +14,10 @@ namespace CSVM.Mech3;
 /// <param name="Box">World-space axis-aligned bounds of the node's mesh.</param>
 /// <param name="Faces">The mesh's distinct face planes, outward-facing, see
 /// <see cref="Contains"/>.</param>
-public readonly record struct FogVolumeBox(string Name, Aabb Box, IReadOnlyList<Plane> Faces)
+/// <param name="Polygons">The mesh's own faces, the surfaces the cloud lattice is laid on
+/// (<see cref="FogVolumeFace"/>). Null for a hand-built volume.</param>
+public readonly record struct FogVolumeBox(
+    string Name, Aabb Box, IReadOnlyList<Plane> Faces, IReadOnlyList<FogVolumeFace>? Polygons = null)
 {
     // Slack on the face test, in metres. A placement drawn AT a face, which any rule that anchors
     // the spread to a wall does by construction, must read as inside, and float error at map
@@ -126,26 +129,6 @@ public readonly record struct FogVolumeBox(string Name, Aabb Box, IReadOnlyList<
         return point.DistanceTo(x);
     }
 
-    /// <summary>The outward normal of the face this point lies nearest to, <see cref="Vector3.Up"/>
-    /// for a volume with no faces (never shipped). The same max-over-planes walk
-    /// <see cref="SignedDistance"/> takes, returning the winning plane's normal instead of its
-    /// distance, so an interior placement can name the face it would have been scattered on.</summary>
-    public Vector3 NearestFaceNormal(Vector3 point)
-    {
-        var normal = Vector3.Up;
-        float worst = float.MinValue;
-        foreach (var face in Faces)
-        {
-            float d = face.DistanceTo(point);
-            if (d > worst)
-            {
-                worst = d;
-                normal = face.Normal;
-            }
-        }
-        return normal;
-    }
-
     /// <summary>True when this volume's authored shape IS its own axis-aligned bounds, every
     /// corner of <see cref="Box"/> passes <see cref="Contains"/>. Per-chapter census:
     /// docs/formats/fogvol.md. Shared by the test census and
@@ -161,6 +144,45 @@ public readonly record struct FogVolumeBox(string Name, Aabb Box, IReadOnlyList<
             }
         }
         return true;
+    }
+}
+
+/// <summary>One authored face of an <c>fvol</c> volume, in world coordinates: the surface the cloud
+/// lattice is laid over, and the normal every sprite it carries scales its draw distance against.
+/// Triangle strips are already split and the <c>no_clutter</c> polygons already dropped, so this
+/// list is exactly what the original's own polygon walk hands its scatter.
+/// Decode: docs/org/cloudCards.md.</summary>
+/// <param name="Vertices">The polygon's own vertex loop, at least three, world space.</param>
+/// <param name="Normal">Unit, pointing away from the volume's interior.</param>
+public readonly record struct FogVolumeFace(IReadOnlyList<Vector3> Vertices, Vector3 Normal)
+{
+    // Slack on the outline test, in metres, the same tolerance FogVolumeBox.Contains gives its
+    // half-spaces: a lattice point landing exactly on an edge must read as inside, and float error
+    // at map scale (coordinates to 16 km) is orders of magnitude below this.
+    private const float Slack = 0.05f;
+
+    /// <summary>Is this in-plane point inside the face's own outline? The signed perpendicular
+    /// distance to each edge, taken against <see cref="Normal"/>: inside is one consistent sign for
+    /// every edge. EXACT for a convex face, which every shipped <c>fvol</c> polygon is, and the
+    /// winding is not assumed, since a strip's triangles alternate it.</summary>
+    public bool Contains(Vector3 point)
+    {
+        int n = Vertices.Count;
+        float lowest = float.MaxValue, highest = float.MinValue;
+        for (int i = 0; i < n; i++)
+        {
+            var a = Vertices[i];
+            var edge = Vertices[(i + 1) % n] - a;
+            float length = edge.Length();
+            if (length <= 0f)
+            {
+                continue;   // a repeated corner bounds nothing
+            }
+            float side = (edge / length).Cross(point - a).Dot(Normal);
+            lowest = Mathf.Min(lowest, side);
+            highest = Mathf.Max(highest, side);
+        }
+        return lowest >= -Slack || highest <= Slack;
     }
 }
 
@@ -502,7 +524,8 @@ public sealed class FogVolumeSpec
             Collect(gamez, node, node.Local ?? Transform3D.Identity, shape);
             if (shape.Bounds is { } box)
             {
-                volumes.Add(new FogVolumeBox(node.Name, box, shape.OutwardFaces()));
+                volumes.Add(new FogVolumeBox(
+                    node.Name, box, shape.OutwardFaces(), shape.ScatterFaces()));
             }
         }
         return volumes;
@@ -620,6 +643,7 @@ public sealed class FogVolumeSpec
             foreach (var poly in mesh.Polygons)
             {
                 shape.AddPolygon(mesh, poly, xf);
+                shape.AddScatterFaces(mesh, poly, xf);
             }
         }
         foreach (var childIndex in node.Children)
@@ -646,6 +670,7 @@ public sealed class FogVolumeSpec
         private const float SameOffset = 1e-2f;
 
         private readonly List<Plane> _faces = new();
+        private readonly List<Vector3[]> _outlines = new();
         private Vector3 _sum;
         private int _count;
 
@@ -691,6 +716,53 @@ public sealed class FogVolumeSpec
             _faces.Add(new Plane(normal, normal.Dot(first)));
         }
 
+        // The faces the cloud lattice is laid over, the original's own polygon walk: a polygon
+        // carrying the no_clutter bit (raw 0x800) is skipped, a triangle strip is split into its
+        // triangles, and everything else is taken whole. Kept apart from AddPolygon's planes, which
+        // merge coplanar faces and must keep the skipped ones, since they still bound the volume.
+        public void AddScatterFaces(GameZMesh mesh, GameZPolygon poly, Transform3D xf)
+        {
+            if (poly.NoClutter)
+            {
+                return;
+            }
+            int n = poly.VertexIndices.Count;
+            if (poly.TriangleStrip)
+            {
+                for (int i = 0; i + 2 < n; i++)
+                {
+                    AddOutline(mesh, poly, xf, i, 3);
+                }
+                return;
+            }
+            if (n >= 3)
+            {
+                AddOutline(mesh, poly, xf, 0, n);
+            }
+        }
+
+        /// <summary>The scatter faces, every normal pointing away from the body, degenerate ones
+        /// dropped. The winding is not trusted: a strip's triangles alternate it, so the vertex
+        /// centroid decides which way is out, exactly as <see cref="OutwardFaces"/> does.</summary>
+        public IReadOnlyList<FogVolumeFace> ScatterFaces()
+        {
+            var centre = _count > 0 ? _sum / _count : Vector3.Zero;
+            var faces = new List<FogVolumeFace>(_outlines.Count);
+            foreach (var outline in _outlines)
+            {
+                if (Newell(outline) is not { } normal)
+                {
+                    continue;
+                }
+                if (normal.Dot(outline[0] - centre) < 0f)
+                {
+                    normal = -normal;
+                }
+                faces.Add(new FogVolumeFace(outline, normal));
+            }
+            return faces;
+        }
+
         /// <summary>The distinct face planes, every normal pointing away from the body.</summary>
         public IReadOnlyList<Plane> OutwardFaces()
         {
@@ -720,6 +792,37 @@ public sealed class FogVolumeSpec
                 }
             }
             return distinct;
+        }
+
+        private static Vector3? Newell(IReadOnlyList<Vector3> loop)
+        {
+            var normal = Vector3.Zero;
+            int n = loop.Count;
+            for (int i = 0; i < n; i++)
+            {
+                var a = loop[i];
+                var b = loop[(i + 1) % n];
+                normal += new Vector3(
+                    (a.Y - b.Y) * (a.Z + b.Z),
+                    (a.Z - b.Z) * (a.X + b.X),
+                    (a.X - b.X) * (a.Y + b.Y));
+            }
+            return normal.LengthSquared() < 1e-12f ? null : normal.Normalized();
+        }
+
+        private void AddOutline(GameZMesh mesh, GameZPolygon poly, Transform3D xf, int start, int count)
+        {
+            var loop = new Vector3[count];
+            for (int i = 0; i < count; i++)
+            {
+                int vi = poly.VertexIndices[start + i];
+                if (vi < 0 || vi >= mesh.Vertices.Count)
+                {
+                    return;
+                }
+                loop[i] = xf * mesh.Vertices[vi];
+            }
+            _outlines.Add(loop);
         }
     }
 }

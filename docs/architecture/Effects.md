@@ -37,14 +37,14 @@ keeping this seam free of `TextureArchive`; a column set spanning both draws one
 blend, each in write order and depth-sorted on its cloud's AABB centre. Read `Puffer.cs` next.
 
 ## src/Effects/FogVolumeClutter.cs
-The ambient cloud field, entirely authored: `fogvol.zrd`'s weighted clutter table scattered through
-every `fvol*` volume the gamez carries, one alpha-blended MultiMesh per sprite kind, plus a map-edge
-continuation (`ExtendPastMapEdge`/`EmitExtensionRegion`) tiling it past the map rim for a chapter's
-map-spanning slab. Templates resolve through `ClutterBuilder.FindTemplateRoot`. `BandData` packs
-each sprite's polygon normal and the one draw both authored `far_fade_range` pairs are interpolated
-with into a custom-data slot, which `csky_clutter_fade_alpha_angled` turns into the view-angle fade;
-that draw takes its own `Rng.CloudBands` stream so placements keep their seeds. Gating lives in
-`GameSession`/`WorldBuilder`/`WeatherRig`. Schema: [../formats/fogvol.md](../formats/fogvol.md).
+The ambient cloud field, entirely authored: `fogvol.zrd`'s weighted clutter table laid on a
+staggered lattice over every unflagged polygon of every `fvol*` volume, one alpha-blended
+MultiMesh per sprite kind, plus a map-edge continuation
+(`ExtendPastMapEdge`/`EmitExtensionRegion`) past the map rim for a map-spanning slab. Templates
+resolve through `ClutterBuilder.FindTemplateRoot`. `BandData` packs each sprite's own face normal
+and the one draw both `far_fade_range` pairs are interpolated with into a custom-data slot, which
+`csky_clutter_fade_alpha_angled` turns into the view-angle fade; that draw takes its own
+`Rng.CloudBands` stream. Gating: `GameSession`/`WorldBuilder`/`WeatherRig`. Schema: [../formats/fogvol.md](../formats/fogvol.md).
 
 ## src/Effects/Precipitation.cs
 Rain and snow from `weather.json`'s precipitation block (`WeatherState.PrecipData`): ONE MultiMesh

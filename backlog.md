@@ -1043,46 +1043,27 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   over C1's lake and the open sea under Enhanced Graphics, chase view, banking so the aircraft
   crosses the water. *Cross-refs:* `BL-803` (the same sitting's dithering), `Launcher.cs`'s
   `EnableWaterReflections`.
-- `BL-874` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The original
-  scatters the cloud field over each `fvol` polygon's FACE on a staggered lattice; we fill a
-  volume's interior with square cells anchored on the world origin.** *Evidence:* decoded in
-  `docs/org/cloudCards.md`. `FUN_0044dc90` walks the `fvol` mesh polygon by polygon (skipping
-  polygon flag `0x800`, splitting a triangle strip into triangles) and calls the scatter
-  `FUN_0044c780` per polygon; the lattice is laid in that polygon's own plane on the basis
-  `U = unit(v1−v0)`, `V = cross(U, n)`, with steps `distance × sqrt(3)/2` and `distance`, each
-  extent cut into a whole number of steps, **every other row offset by half a step**, and each
-  point tested against the polygon's own outline (`FUN_0044c310`). The perpendicular offset runs
-  along `unit(p − ref)` from a per-volume reference point, the perturbation is an independent draw
-  on all three axes from one random magnitude, and the scale is one uniform draw. *Fix shape:*
-  scatter per authored face rather than per volume interior; the density reading (`distance` as a
-  mean spacing) survives, and the top-anchored placement rule is what the face scatter already
-  produces for a slab, so the deck chapters should move least. *⚠ Traps:* this is the mechanism
-  that supplies the per-sprite polygon normal the landed fade law wants. That law is in the render
-  already, taking `+Y` where the volume is a top-anchored slab (exact) and the outward normal of
-  the face a placement lies nearest everywhere else (a stand-in, C1C's build-up frusta and C5's
-  street prisms), so landing the face scatter is what makes those two chapters exact. Counts will
-  move in every chapter and every cloud golden with them; the C1C frusta and C5 prisms scatter
-  on their sloped and vertical faces, which reads as a shell rather than a filled mass and is the
-  change most worth a look. *Cross-refs:* `docs/org/cloudCards.md`, `docs/formats/fogvol.md`.
-
 - `BL-899` `[Bug]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: data]` `[C5]` **C5 builds
-  16,170 `fvol` cloud sprites that drew no pixels at either probed pose, before and after the fade
+  19,197 `fvol` cloud sprites that drew no pixels at either probed pose, before and after the fade
   law landed.** C5's `fvol` geometry is seventeen polygonal street prisms rather than a deck slab,
-  and the field it scatters through them is the chapter's second largest by count.
+  and the field it scatters over their tops and ramps is the chapter's second largest by count.
   *Evidence:* two freecam poses, street level (`--chapter=C5 --pos=-9256,178,-3155
   --direction=-0.588,-0.1,-0.809`) and above (the same bearing at `y=600`), render byte-identical
   with and without the view-angle fade (0 px changed at both), where the same comparison at C1
   moves 40 to 47 % of the frame. A `--tex-override` on `cloud1.tif`/`cloud2.tif` at both poses
   paints **0** pixels, against 92,520 at the C1 1,700 m pose. So the sprites are built and their
-  normals are right (the `cloud-field-fade` suite reads 5,514 up and 4,808 on a wall of 16,170),
-  and nothing of them reaches the frame. *Where to look:* whether the prisms' authored
-  1000-1500..1200-1800 m band plus the view angle can ever admit a card from inside the street
-  canyon, whether the cards sit inside solid geometry, and whether a per-view cull
-  (`GameSession`/`WorldBuilder`/`WeatherRig`) drops the field in that chapter.
+  normals are right (the `cloud-field-fade` suite reads 17,095 up and 2,102 sloped of 19,197, none
+  on a wall), and nothing of them reaches the frame. ⚠ **The face scatter did not change this
+  reading**: the street-level pose is still byte-identical across it and `--tex-override` still
+  paints 0, though the same override at `--pos=-7392,400,200 --direction=0,-0.604,-0.797 --no-fog`
+  paints most of the frame, so the field does draw from some poses. *Where to look:* whether the
+  prisms' authored 1000-1500..1200-1800 m band plus the view angle can ever admit a card from
+  inside the street canyon, whether the cards sit inside solid geometry, and whether a per-view
+  cull (`GameSession`/`WorldBuilder`/`WeatherRig`) drops the field in that chapter.
   ⚠ Two poses are not the chapter: sweep C5 from several altitudes and bearings before concluding
   the field never draws. ⚠ Not caused by the fade law, which is why this is its own item: the same
-  two poses read 0 on the build before it. *Cross-refs:* `BL-874` (the face scatter that would
-  move where these sprites sit), `docs/formats/fogvol.md`, `docs/org/cloudCards.md`.
+  two poses read 0 on the build before it. *Cross-refs:* `docs/formats/fogvol.md`,
+  `docs/org/cloudCards.md`.
 
 ## Effects & animation runtime
 

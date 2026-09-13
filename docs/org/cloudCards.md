@@ -183,6 +183,13 @@ field is scattered **over the volume mesh's faces**, not through its interior. P
 Every `rand()` above runs inside the fixed-seed window `FUN_0044e010` opens, so the whole field is
 the same every launch.
 
+⚠ **The `0x800` skip is what shapes the field, not a detail of the walk.** Every shipped `fvol`
+mesh is a CLOSED box or prism, and its walls and floor carry that bit, so the polygons the scatter
+actually sees are the upward skin alone: one flat top quad per deck slab piece, the four sloping
+sides of a C1C build-up, the tops and ramps of a C5 street prism. The per-chapter census is in
+[`../formats/fogvol.md`](../formats/fogvol.md). A walk that ignored the bit would scatter the
+underside and the walls too and place several times the field.
+
 ## Where CSVM stands
 
 `FogVolumeClutter` and its generated card shader carry the colour path and the alpha path above.
@@ -193,6 +200,11 @@ the same every launch.
 - **The fade band is drawn per sprite.** The scatter draws one `t` per placement and hands it to
   the shader as instance custom data; the shader interpolates both authored `far_fade_range` pairs
   with it and ramps linearly in squared distance, not as a smoothstep.
+- **The scatter runs over the authored faces**, the walk above: the `fvol` mesh's polygons, the
+  `0x800`-flagged ones skipped and triangle strips split, each carrying the staggered lattice in
+  its own plane on `U = unit(v1 − v0)`, `V = cross(U, n)`, with every point tested against that
+  polygon's outline. So a placement sits ON a face and the normal it carries is that face's own,
+  for every volume shape, not only for a slab.
 - **The view-angle term is applied.** Each placement also carries the outward normal it is scaled
   against, packed into the same custom-data slot, and the shader evaluates `c = max(0, dot(n,
   unit(eye − p)))` and the `c²·near²` / `c²·far²` tests above. `DAT_0062d170` is the same global
@@ -200,16 +212,15 @@ the same every launch.
   authored metres literal and the two clutter populations cannot drift apart.
 - **The card takes no fog in either build**, which is the one place the two agree by construction.
 
-⚠ **The normal is exact only where the volume is a slab.** Our scatter fills a volume's interior by
-cells rather than laying the lattice over its faces, so a placement has no face to inherit a normal
-from. A top-anchored draw sits on the volume's own top face and takes `+Y`, which is exact for the
-four deck chapters' map-spanning slabs; a uniformly filled volume's placement takes the outward
-normal of the face it lies nearest, which is a stand-in. C1C's build-up frusta and C5's street
-prisms are that case, and only scattering over the authored faces makes their normals the
-original's.
+⚠ **Two quantities are still inferred.** The per-volume reference point the perpendicular offset
+runs away from is taken as the volume's own bounds centre, which gives the direction the decode
+describes on a slab's top face (up in the middle, tilting outward at the rim) but is not traced to
+the record field. And a face's outward sense is decided by the volume's vertex centroid rather than
+by the polygon's winding, because a mesh's winding convention is not guaranteed here.
 
 ⚠ **The field is culled, not merely faded, wherever the angle closes.** A sprite whose face points
 away from the eye is dropped outright, which is the original's own rule and is why a slab's field
-disappears from below rather than fading out. The map-edge continuation's ring is still bounded at
-the largest authored `far`, which stays conservative: the disc's horizontal reach
-`sqrt(dy·far − dy²)` peaks at `far/2`.
+disappears from below rather than fading out. No shipped `fvol` polygon faces downward or
+sideways, so this is a property of the whole install and not of the deck chapters alone. The
+map-edge continuation's ring is still bounded at the largest authored `far`, which stays
+conservative: the disc's horizontal reach `sqrt(dy·far − dy²)` peaks at `far/2`.

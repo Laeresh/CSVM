@@ -286,12 +286,12 @@ a hull with its def's own gun. Pure over `FromRoot`, pinned in `CampaignRosterPl
 ## src/Mech3/FogVolumes.cs
 The chapter's `fogvol.zrd` (`FogVolumeSpec.Load`/`Parse`) plus `VolumesOf`, the gamez census of
 `fvol*` volumes: the two authored halves of the ambient cloud field `Effects/FogVolumeClutter`
-renders. `FogVolumeBox` carries the authored shape as its face planes, so `SignedDistance` and
-`NearestFaceNormal` (the face a placement sits nearest, whose normal scales its draw distance)
-walk the real geometry. `FogVolumeWhiteout` is the in-volume whiteout rule C5 alone arms, with
-`Session/WeatherRig.Tick` its one consumer; `FindMapSpanningSlab` the test for a chapter's
-map-edge-continuation slab. Both halves are static and pin off engine for all eight chapters
-(`CSVM.Tests/FogVolumeTests.cs`); schema in [../formats/fogvol.md](../formats/fogvol.md).
+renders. `FogVolumeBox` carries the authored shape twice: as face planes, so `SignedDistance`
+walks the real geometry, and as `FogVolumeFace` polygons (every mesh face not flagged
+`no_clutter`), the surfaces the scatter lays its lattice on and takes each sprite's normal from.
+`FogVolumeWhiteout` is the in-volume whiteout rule C5 alone arms, `Session/WeatherRig.Tick` its
+one consumer; `FindMapSpanningSlab` the test for a chapter's map-edge-continuation slab. Both
+halves pin off engine for all eight chapters (`CSVM.Tests/FogVolumeTests.cs`); schema in [../formats/fogvol.md](../formats/fogvol.md).
 
 ## src/Mech3/Messages.cs
 The game's localized string table: plain `System.Text.Json` over the extracted `messages.json`

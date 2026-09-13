@@ -361,6 +361,14 @@ member, and it does not go here.
   `FogVolumeClutter` is built by `GameSession` and not by the world build, so its sampler is
   asserted in `cloud-field-fade`, which builds the field.
 
+- **WORLD-44**, **A mesh's polygon count is not its scatter surface; read the per-polygon skip flag
+  before predicting anything from the geometry.** Every shipped `fvol` volume is a closed box or
+  prism, so laying the cloud lattice on its faces looked like it would put cards under the deck and
+  inside the streets. The census says the walls and the floor carry `no_clutter` (`0x800`) in
+  every chapter (C1 45 of 54 polygons, C1C 71 of 175, C5 102 of 148), so the scatter surface is
+  the upward skin alone and no shipped face points down or sideways. The flag, not the volume's
+  shape, is what makes a slab chapter's field a sheet.
+
 ## SHELL, Windows, PowerShell, and processes
 
 - **SHELL-2**, **Identify stray Godot processes by worktree and probe flag.**
