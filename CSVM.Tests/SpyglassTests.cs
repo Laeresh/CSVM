@@ -1,4 +1,7 @@
+using System.Collections.Generic;
 using CSVM.Flight;
+using CSVM.Mech3;
+using CSVM.UI;
 using Godot;
 using Xunit;
 
@@ -9,6 +12,8 @@ namespace CSVM.Tests;
 /// placement helpers the disc changes: the fog-derived range gate with its engage/release
 /// asymmetry and its 2000 m ceiling, the constant-apparent-size field of view and both its clamps,
 /// the camera pose's roll rule, where the arrow's shaft starts, and the label block's disc variant.
+/// Plus the layer band each pilot's own aeroplane is drawn on and the single bit the disc's cull
+/// mask drops, which is what keeps the aircraft the eye sits inside out of the picture.
 /// Decode: docs/org/spyglass.md.
 /// </summary>
 public class SpyglassTests
@@ -164,6 +169,48 @@ public class SpyglassTests
         Assert.Equal(96f, Spyglass.RefWindow);
         Assert.Equal(48f, Spyglass.RefRadius);
         Assert.Equal(Spyglass.RefWindow / 2f, Spyglass.RefRadius);
+    }
+
+    [Fact]
+    public void EachPilotsOwnAirframeGetsALayerNothingElseCulls()
+    {
+        // One bit per seat, and outside both bands that are already spoken for: the zone gate
+        // narrows its own band every frame and a pane's cull mask clears the rest of the per-player
+        // band, so an airframe on a bit inside either would vanish for a reason of its own.
+        var seen = new HashSet<uint>();
+        for (int i = 0; i < 4; i++)
+        {
+            uint layer = SplitScreen.OwnAirframeLayer(i);
+            Assert.True(seen.Add(layer), $"seat {i} shares its airframe layer with another seat");
+            Assert.Equal(0u, layer & ZoneGate.LayerBand);
+            Assert.NotEqual(layer, SplitScreen.PlayerVisualLayer(i));
+            Assert.Equal(layer, ZoneGate.CullMask(0xFFFFF, 2) & layer);
+            for (int pane = 0; pane < 4; pane++)
+            {
+                // Every pane draws every pilot's aeroplane, which is what makes this band the
+                // opposite of the private per-player one it sits below.
+                Assert.Equal(layer, SplitScreen.PlayerCullMask(pane) & layer);
+            }
+        }
+    }
+
+    [Fact]
+    public void TheDiscDropsThePilotsOwnAirframeAndNothingElse()
+    {
+        uint own = SplitScreen.OwnAirframeLayer(0);
+        uint pane = SplitScreen.PlayerCullMask(0);
+        uint disc = SpyglassView.DiscMask(pane, own);
+
+        Assert.Equal(0u, disc & own);
+        Assert.NotEqual(0u, pane & own);            // the control: the pane itself still draws it
+        Assert.Equal(pane & ~own, disc);
+        Assert.NotEqual(0u, disc & 1u);             // the shared world's own layer 1
+        for (int other = 1; other < 4; other++)
+        {
+            // A splitscreen neighbour's aeroplane is a target like any other and stays in the
+            // picture; only the aircraft the eye sits inside is taken out.
+            Assert.NotEqual(0u, disc & SplitScreen.OwnAirframeLayer(other));
+        }
     }
 
     [Fact]

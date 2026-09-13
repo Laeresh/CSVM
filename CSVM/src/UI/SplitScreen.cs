@@ -13,8 +13,8 @@ namespace CSVM.UI;
 /// (<see cref="PlayerLayerBit0"/>) for camera-anchored singletons like the skydome;
 /// <see cref="SetVisualLayer"/> moves the copies, <see cref="PlayerCullMask"/> culls the rest of
 /// the band. Every pane is a 3D audio listener, or a splitscreen session has no listener at all.
-/// The zone-gate band (<c>Mech3.ZoneGate.LayerBand</c>) is a separate, shared allocation of the
-/// same 20 layers. The listener model: this module's entry in docs/architecture.md.
+/// The zone-gate band (<c>Mech3.ZoneGate.LayerBand</c>) and <see cref="OwnAirframeLayer"/>'s are
+/// separate allocations of the same 20 layers. The listener model: docs/architecture.md.
 /// </summary>
 public sealed partial class SplitScreen : CanvasLayer
 {
@@ -27,6 +27,13 @@ public sealed partial class SplitScreen : CanvasLayer
     private const int PlayerLayerBit0 = 16;
     private const uint AllLayers = 0xFFFFF;              // Godot's 20 visual layers
     private const uint PlayerBand = 0xFu << PlayerLayerBit0;
+
+    // First layer of the own-airframe band, four bits taken well below the two bands above.
+    // ⚠ These bits are the opposite of the per-player band's: they are IN every cull mask the
+    // engine builds, so an aeroplane wearing one is hidden from nobody until a single camera drops
+    // the single bit. Putting an airframe on its pilot's PRIVATE layer instead would hide that
+    // aeroplane from every other pane, which is the reverse of what a splitscreen seat needs.
+    private const int OwnAirframeBit0 = 9;
 
     // The shared zone-gate band is Mech3.ZoneGate.LayerBand (bits 13–15 = layers 14–16, zone_id
     // 1/2/3), taken immediately below the per-player band. Outside PlayerBand on purpose: every
@@ -121,6 +128,14 @@ public sealed partial class SplitScreen : CanvasLayer
     /// <summary>Cull mask for player <paramref name="index"/>'s camera: everything outside the
     /// reserved per-player band (the shared world, all aircraft) plus only this player's own bit.</summary>
     public static uint PlayerCullMask(int index) => (AllLayers & ~PlayerBand) | PlayerVisualLayer(index);
+
+    /// <summary>The visual layer player <paramref name="index"/>'s OWN airframe is drawn on, so one
+    /// camera can leave that pilot's aeroplane out while every other camera, this pane's included,
+    /// still draws it. The spyglass disc is the only taker: its eye stands inside the aeroplane it
+    /// is looking out of. Stamp the whole airframe subtree with
+    /// <see cref="SetVisualLayer"/>.</summary>
+    public static uint OwnAirframeLayer(int index) =>
+        1u << (OwnAirframeBit0 + Mathf.PosMod(index, MaxPlayers));
 
     /// <summary>Moves a whole subtree onto one visual layer (recursively, every
     /// VisualInstance3D), used on each player's private skydome / deck / puff copies.</summary>

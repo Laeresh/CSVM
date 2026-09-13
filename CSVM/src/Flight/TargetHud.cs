@@ -125,9 +125,13 @@ public sealed partial class TargetHud : Control
     /// <summary>This pane's own nose heading, 0 = north (−Z), see <see cref="PlanePos"/>.</summary>
     public float HeadingDeg { get; set; }
 
-    /// <summary>This pane's own attitude, which the spyglass picture rolls with for an aircraft
-    /// target and ignores for every other class.</summary>
-    public Basis Attitude { get; set; } = Basis.Identity;
+    /// <summary>The pose this pane's aeroplane is DRAWN at, the render-interpolated one the chase
+    /// camera follows, which the spyglass eye stands on and rolls with (for an aircraft target;
+    /// every other class is watched level).
+    /// ⚠ Not <see cref="PlanePos"/>'s sim pose. The target point the picture is aimed at comes off
+    /// the same interpolation, and an eye quantised to the physics tick against it is the shake
+    /// <see cref="FlightController.TryRenderPosition"/> exists to keep out of the markers.</summary>
+    public Transform3D RenderPose { get; set; } = Transform3D.Identity;
 
     /// <summary>Whether this pane's spyglass is armed, <see cref="Spyglass.DefaultOn"/> at level
     /// load; the pilot's toggle flips it and every other gate is re-answered every frame regardless
@@ -142,6 +146,10 @@ public sealed partial class TargetHud : Control
     /// alone does not say: a pane with no scale yet shows the gate open and the viewport idle.
     /// Read by the suite.</summary>
     public bool PictureLive => _spyglass is { Live: true };
+
+    /// <summary>This pane's picture, or null on a HUD built without one. Read by the suite, which
+    /// pins where its eye stands and what its camera is allowed to draw.</summary>
+    public SpyglassView? Picture => _spyglass;
 
     /// <summary>This pane's tracked AI hostile, or null with none in the pool. Read by the
     /// suite; the fallback marker draws off the same field.</summary>
@@ -180,7 +188,7 @@ public sealed partial class TargetHud : Control
         };
         // The picture hangs on the HUD control itself, so it lives inside this pane's viewport and
         // renders this pane's world; it is idle until a target is off screen and inside the gate.
-        hud._spyglass = SpyglassView.Build(camera);
+        hud._spyglass = SpyglassView.Build(camera, UI.SplitScreen.OwnAirframeLayer(playerIndex));
         hud.AddChild(hud._spyglass);
         return hud;
     }
@@ -482,9 +490,12 @@ public sealed partial class TargetHud : Control
         float s = Size.Y <= 0f ? 0f : HudMetrics.Scale(this);
         if (_spyglass != null && s > 0f)
         {
-            // Rolling with the pilot's own attitude is the original's aircraft case and nothing
-            // else's; a structure or a ship is watched level so the horizon reads as the horizon.
-            _spyglass.Aim(Spyglass.Pose(PlanePos, at, Attitude, target.Source is FlightController),
+            // The eye stands on the DRAWN pose, never the sim one the gates above read: an eye
+            // quantised to the physics tick shakes against the frame around it. The roll is the
+            // original's aircraft case alone, every other class is watched level.
+            _spyglass.Aim(
+                Spyglass.Pose(RenderPose.Origin, at, RenderPose.Basis,
+                    target.Source is FlightController),
                 Spyglass.FovDeg(_heldRadius, PlanePos.DistanceTo(at)),
                 Mathf.Max(1, Mathf.RoundToInt(Spyglass.RefWindow * s)));
         }

@@ -102,6 +102,11 @@ public struct FlightHudState
     /// the artificial horizon reads this, not <c>CameraController.HeadPitchOffsetRad</c> or any
     /// look-around the pilot has applied.</summary>
     public Basis Attitude;
+
+    /// <summary>The pose the aircraft is DRAWN at this frame, interpolated between sim steps, which
+    /// the chase camera and the aircraft's own node both sit on. The spyglass eye stands here;
+    /// everything the gauges read stays on the sim pair above.</summary>
+    public Transform3D RenderPose;
 }
 
 /// <summary>Everything one pane draws for its pilot: the heading tape, the cockpit dials and their
@@ -435,7 +440,7 @@ public sealed class FlightHud
         {
             TargetHud.PlanePos = state.Position;
             TargetHud.HeadingDeg = state.HeadingDeg;
-            TargetHud.Attitude = state.Attitude;   // the spyglass picture rolls with the aeroplane
+            TargetHud.RenderPose = state.RenderPose;   // where the spyglass eye stands, and its roll
         }
         float mph = MphFromSpeedMps(state.SpeedMps);
         float ft = FeetFromWorldY(state.Position.Y);

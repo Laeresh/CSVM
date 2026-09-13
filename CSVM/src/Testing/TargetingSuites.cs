@@ -1173,7 +1173,9 @@ internal static class TargetingSuites
         + "picture is up only while it is armed, the selected target is off screen and its slant "
         + "range is inside the fog-derived gate, and the gate is wider while a subject is already "
         + "held, so the picture engages nearer than it releases; a wider fog band opens it further "
-        + "out, up to the 2000 m cap; plus the three placement rules the disc brings, half the "
+        + "out, up to the 2000 m cap; its eye stands on the pose the aeroplane is drawn at rather "
+        + "than the sim pose the gates read, and its camera drops the one layer that aeroplane is "
+        + "drawn on and no other; plus the three placement rules the disc brings, half the "
         + "window added to the anchor's inset with the tip and the on-screen test untouched, the "
         + "shaft starting on the rim, and the label 3 under the disc's bottom or 45 over its top")]
     internal static void SpyglassMarkerHud(TestContext ctx)
@@ -1290,9 +1292,42 @@ internal static class TargetingSuites
             hud.SpyglassOn = true;
             ctx.Check(hud.UpdateSpyglass(bogeyRef, At(600f), offScreen: true) && hud.PictureLive,
                 $"CONTROL: re-armed, it comes straight back, so the toggle is what shut it and not one of the other gates");
+            // Where the eye stands. The drawn pose and the sim pose are set 100 m and 30 degrees
+            // apart, which no single physics tick would ever produce, so the answer names one of
+            // them instead of measuring a tick's worth of difference.
+            var drawn = new Transform3D(new Basis(Vector3.Forward, Mathf.DegToRad(30f)),
+                new Vector3(0f, 100f, 0f));
+            hud.RenderPose = drawn;
+            ctx.Check(hud.UpdateSpyglass(bogeyRef, At(600f), offScreen: true)
+                      && hud.Picture is { } aimed && aimed.Eye.Origin.IsEqualApprox(drawn.Origin)
+                      && aimed.Eye.Basis.Y.Dot(drawn.Basis.Y) > aimed.Eye.Basis.Y.Dot(Vector3.Up),
+                $"the picture's eye stands on the pose the aeroplane is DRAWN at ({hud.Picture?.Eye.Origin}) and leans with it, so it cannot shake against a frame drawn from that same pose");
+            ctx.Check(hud.Picture is { } notSim && !notSim.Eye.Origin.IsEqualApprox(hud.PlanePos),
+                $"CONTROL: it is NOT the sim pose the gates read ({hud.PlanePos}), which is the tick-quantised eye the disc used to jitter from");
+
+            // What the picture may draw. The own-airframe layer is the one bit the disc drops.
+            uint own = UI.SplitScreen.OwnAirframeLayer(0);
+            ctx.Check(hud.Picture is { } masked && (masked.DiscCullMask & own) == 0
+                      && (ctx.Camera.CullMask & own) != 0,
+                $"the disc's camera drops the layer this pilot's own aeroplane is drawn on (0x{hud.Picture?.DiscCullMask:X5} against the pane's 0x{ctx.Camera.CullMask:X5}), so no part of the aircraft the eye sits inside is in the picture");
+            ctx.Check(hud.Picture is { } kept
+                      && (kept.DiscCullMask & UI.SplitScreen.OwnAirframeLayer(1)) != 0
+                      && kept.DiscCullMask == (ctx.Camera.CullMask & ~own),
+                $"CONTROL: it drops that ONE bit and nothing else, so the world, every AI aircraft and a splitscreen neighbour's aeroplane are all still in the picture");
+
             hud.ReleaseSpyglass();
             ctx.Check(!hud.DiscShown && !hud.PictureLive,
                 $"a hidden pane releases the picture outright");
+
+            // The other half of the exclusion, on a REAL built airframe standing in for the
+            // pilot's own: the stamp a human rig applies moves every mesh onto that one layer, so
+            // dropping the bit takes the whole aeroplane out rather than its root node alone.
+            UI.SplitScreen.SetVisualLayer(model, own);
+            uint discMask = SpyglassView.DiscMask(ctx.Camera.CullMask, own);
+            var (meshes, inDisc) = DrawnUnder(model, discMask);
+            var (_, inPane) = DrawnUnder(model, ctx.Camera.CullMask);
+            ctx.Check(meshes > 0 && inDisc == 0 && inPane == meshes,
+                $"the stamped airframe's {meshes} mesh(es) are all drawn by the pane ({inPane}) and none of them by the disc ({inDisc}), which is the aeroplane, its props, its pylons and their ordnance together");
         }
         finally
         {
@@ -1394,5 +1429,30 @@ internal static class TargetingSuites
             pool?.Free();
             textures.Dispose();
         }
+    }
+
+    // Every drawable under a subtree, and how many of them a camera on this cull mask would draw.
+    // The pair is what makes a "nothing is drawn" claim readable: a subtree carrying no drawable
+    // at all would otherwise pass it.
+    private static (int Total, int Drawn) DrawnUnder(Node node, uint mask)
+    {
+        int total = 0, drawn = 0;
+        if (node is VisualInstance3D vi)
+        {
+            total++;
+            if ((vi.Layers & mask) != 0)
+            {
+                drawn++;
+            }
+        }
+
+        foreach (var child in node.GetChildren())
+        {
+            var (childTotal, childDrawn) = DrawnUnder(child, mask);
+            total += childTotal;
+            drawn += childDrawn;
+        }
+
+        return (total, drawn);
     }
 }

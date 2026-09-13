@@ -531,6 +531,11 @@ internal sealed class HumanFlightAdapter
             // every later respawn, but Setup() above called Respawn() before this runtime existed.
             controller.CrashRuntime?.Play("startprops", planeModel, applyReset: false);
         }
+
+        // This pilot's own airframe onto its own visual layer, LAST, so everything the lines above
+        // hung on the model travels with it. The only camera that drops the layer is this pane's
+        // spyglass, whose eye stands inside the aeroplane (docs/architecture/Session.md).
+        SplitScreen.SetVisualLayer(planeModel, SplitScreen.OwnAirframeLayer(pi));
     }
 
     public AssemblyState CaptureState() =>

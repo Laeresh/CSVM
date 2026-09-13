@@ -396,6 +396,20 @@ reasons that have nothing to do with any of these checks.
   *Blocks:* nothing tracks the outcome; a fail mints a new `BL`. The per-element choice and the
   one-pixel tolerance are in the landing commit (`git log --grep=BL-778`).
 
+- `PT-148` `[Own]` **The spyglass disc holds steady and never shows the pilot's own aeroplane.** The
+  picture's eye now stands on the interpolated pose the aeroplane is drawn at rather than on the last
+  physics pose, and the disc's camera drops the visual layer that aeroplane is drawn on. Both are
+  pinned by instrument (`spyglass-marker-hud`), but the jitter was reported by feel, so only the
+  controls can say whether it is gone and whether a second source of shake is left under it.
+  *Look for:*
+  - (a) select the AI, turn until it leaves the screen so the disc comes up, then hold a hard turn:
+    the picture inside the disc moves smoothly with the target instead of stepping;
+  - (b) no wing, tail, prop, pylon or ordnance of the own aeroplane crosses the disc at any bearing,
+    the target dead astern included;
+  - (c) the disc still shows the world, the target and the zone's fog as it did.
+  *Blocks:* nothing tracks the outcome; a fail on (a) mints a new `BL` naming what still steps, a
+  fail on (b) one naming what is still drawn.
+
 ### C1 · two pilots, Dogfight (splitscreen VS)
 
 ```powershell

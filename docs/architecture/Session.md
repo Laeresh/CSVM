@@ -460,12 +460,12 @@ block's objective marker, and owns the AI skills cache. Read `FlightRoster.cs` n
 ## src/Session/HumanFlightAdapter.cs
 `FlightRoster`'s private human-aircraft path: one `Assemble` builds the painted model,
 `FlightController`, loadout and ordnance, carried turrets, HUD and instruments, damage visuals,
-audio, stunt and match bindings, target selection, the authored start placement and the crash
-runtime. It reads only the roster's copied policy plus the grouped aircraft, world and
+audio, stunt and match bindings, target selection, the authored start placement, the crash runtime,
+and last the `UI.SplitScreen.OwnAirframeLayer` stamp that keeps the whole model out of this pilot's
+own spyglass disc. It reads only the roster's copied policy plus the grouped aircraft, world and
 human-session contracts. Player order decides the shared paint and spawn draws. An airframe swap's
-captured scheme and its own build are laid over that assembly, which is the one path a bought plane
-takes. `BuildDamageVisuals` is also the common first phase for AI damage. Read `FlightRoster.cs`
-next.
+captured scheme and its own build are laid over that assembly, the one path a bought plane takes.
+`BuildDamageVisuals` is also the common first phase for AI damage. Read `FlightRoster.cs` next.
 
 ## src/Session/EffectCatalogue.cs
 The record of which authored anims are playable effects and what their defs need staged: the name

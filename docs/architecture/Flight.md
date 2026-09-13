@@ -596,11 +596,13 @@ aircraft and level otherwise. Also owns `RefWindow`, `RefRadius` and `DefaultOn`
 
 ## src/Flight/SpyglassView.cs
 The spyglass picture: a square `SubViewport` rendering the SHARED world through a `Camera3D` of its
-own, one per pane, built with `TargetHud` and hung on it so it sits inside that pane's viewport.
-`Aim` points it (`Spyglass.Pose`/`FovDeg`), sizes it to the disc's drawn diameter, borrows the pane
-camera's clip planes and cull mask and starts it rendering; `Idle` stops it. Unlike
-`CockpitOverlay` the world is inherited rather than owned, so the target is the one in play and
-wears the flown zone's fog. `TargetHud.DrawDisc` masks the texture to a circle.
+own, one per pane, hung on `TargetHud` so it sits inside that pane's viewport. `Aim` points it
+(`Spyglass.Pose`/`FovDeg`), sizes it to the disc's drawn diameter, borrows the pane camera's clip
+planes and cull mask and starts it rendering; `Idle` stops it. The world is inherited rather than
+owned, so the target is the one in play and wears the flown zone's fog. `DiscMask` is the one
+departure from the pane's view: the eye stands inside the pilot's own aeroplane, so that aeroplane's
+layer (`UI.SplitScreen.OwnAirframeLayer`, stamped by `Session/HumanFlightAdapter`) is dropped, on
+the original at the controls and not on the decode. `TargetHud.DrawDisc` masks it to a circle.
 
 ## src/Flight/StuntRunHud.cs
 The stunt run's own readouts, one per pane and sized through `HudMetrics.Scale`: the clock and
@@ -706,13 +708,13 @@ centres its own. Decode: [../formats/anim-definitions/cutscenes.md](../formats/a
 
 ## src/Flight/TargetHud.cs
 The per-pane targeting HUD, built on every human pane in every flight session: the pilot's own
-selection from `TargetSelection` (a campaign mission's objective sites included), a nearest
-AI-hostile fallback where no selection exists, and the F16 / `--debug-markers` every-aircraft
-overlay. Draws the original's bracket box and label block and owns the colour table, the label
-layout, the selected gun's reach gate and the debug identity string. Off screen it owns the arrow,
-`ArrowHead`, `ShaftTail` and `EdgeLabelAnchor` over `EdgeMarker`'s placement. It also owns the
-spyglass's gates (`UpdateSpyglass`, `SpyglassOn`) and draws `SpyglassView`'s picture as the disc
-all three measure against. Decode: [targeting](../org/targeting.md), [spyglass](../org/spyglass.md).
+selection from `TargetSelection` (objective sites included), a nearest AI-hostile fallback where no
+selection exists, and the F16 / `--debug-markers` every-aircraft overlay. Draws the original's
+bracket box and label block and owns the colour table, the label layout, the selected gun's reach
+gate and the debug identity string. Off screen it owns the arrow, `ArrowHead`, `ShaftTail` and
+`EdgeLabelAnchor` over `EdgeMarker`'s placement. It owns the spyglass's gates, which read the sim
+pose in `PlanePos` while the picture's eye stands on the drawn `RenderPose`, and draws that picture.
+Decode: [targeting](../org/targeting.md), [spyglass](../org/spyglass.md).
 
 ## src/Flight/VersusBoard.cs
 The Dogfight results overlay on `ResultsBoard`'s shell: the winner in their own

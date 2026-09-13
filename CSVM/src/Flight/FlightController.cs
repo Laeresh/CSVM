@@ -2576,6 +2576,7 @@ public partial class FlightController : Node3D
             ReticleNose = reticleNose,
             InheritedVelocity = inheritedVelocity,
             Attitude = Attitude,
+            RenderPose = _renderPose,
         };
     }
 

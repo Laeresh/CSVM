@@ -1555,24 +1555,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-150` (its measured "level" rows are level only up to this angle),
   `docs/formats/camparam.md` (`thirdp_pitch`, and the Known limits paragraph this corrects),
   `docs/org/cameraViews.md` (head-look controller, the chase placement's own elevation).
-- `BL-906` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **The spyglass picture
-  jitters and shows the pilot's own aircraft; the original's disc shows neither.** *Evidence:*
-  `SpyglassView.Aim` copies the pane camera's cull mask verbatim, so nothing keeps the own mesh
-  out of the disc; the user knows from the original that parts of the player's plane are not
-  drawn in it. The jitter: `TargetHud.StepSpyglass` runs in `_Process`, but the eye it hands
-  `Spyglass.Pose` is the raw last physics pose (`FlightController.BuildHudState` and `Attitude`
-  read `_model`), while the chase camera and the plane's visual follow the interpolated
-  `_renderPose`; the target point is already interpolated through `TryRenderPosition`, so the disc
-  frames a smooth target from a tick-quantised eye, the same shake `TryRenderPosition` was written
-  to remove from markers. *Fix shape:* feed the interpolated render pose (origin and basis) into
-  the spyglass eye; give the pilot's own aircraft mesh a render layer the spyglass camera masks
-  out (per pane in splitscreen, the layer band `SplitScreen.PlayerCullMask` reserves is the
-  place). *⚠ Traps:* `docs/org/spyglass.md` says the camera stands at the plane's own position
-  and does not mention own-mesh culling either way; the exclusion rests on the user's recall, say
-  so in the code. `c1-stunt-marker` pins the disc's layout and should not move. *Playtest after
-  fix:* Instant Action, select a target and hold a turn: the disc holds steady and no wing or tail
-  of the own plane crosses it. *Cross-refs:* `CSVM/src/Flight/SpyglassView.cs`,
-  `CSVM/src/Flight/TargetHud.cs`, `FlightController.TryRenderPosition`, `docs/org/spyglass.md`.
 
 
 ## HUD & UI
