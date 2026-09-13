@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Text;
 using CSVM.Flight;
 using CSVM.Mech3;
@@ -31,6 +32,11 @@ internal static class GroundShadowSuites
     // How close a reading has to be to count. The quad is placed from the drawn pose, so the
     // slack covers the lift off the ground and nothing else.
     private const float PlaceTolerance = 1.5f;
+
+    // How many passes the cost reading times, and how many it throws away first. The raster runs
+    // once per aircraft per frame, so the timed loop is the frame cost the roster multiplies.
+    private const int CostPasses = 200;
+    private const int CostWarmups = 20;
 
     // What an ellipse inscribed in the footprint would cover, which is what the silhouette
     // replaced, against the wing sample that tells the two apart.
@@ -207,6 +213,22 @@ internal static class GroundShadowSuites
         pass.Tick();
     }
 
+    // What one pass costs per aircraft, wall clock, over the stage. Reported and never checked: a
+    // wall-clock number on a shared machine is awareness, not a threshold (docs/verification.md
+    // PERF-5). It is here because the texture's area sets it, so a size change is read off it.
+    private static void Cost(GroundShadowPass pass, int aircraft, StringBuilder report)
+    {
+        for (int i = 0; i < CostWarmups; i++)
+            pass.Tick();
+        var clock = Stopwatch.StartNew();
+        for (int i = 0; i < CostPasses; i++)
+            pass.Tick();
+        clock.Stop();
+        int size = GroundShadowLaw.TextureSize;
+        double each = clock.Elapsed.TotalMilliseconds / (CostPasses * (double)aircraft);
+        report.AppendLine($"cost: {each:0.0000} ms per aircraft per frame over {CostPasses} passes at {aircraft} aircraft, texture {size}x{size} = {size * size} bytes rebuilt and uploaded per aircraft per frame");
+    }
+
     // The flat stage: known ground at y=0 under every pose, so a reading that disagrees is the
     // placement law and never the terrain.
     private static void FlatStage(TestContext ctx, GameZ planesGamez, TextureArchive textures,
@@ -268,6 +290,7 @@ internal static class GroundShadowSuites
 
             Silhouette(ctx, pass, ai, report);
             Mask(pass, player, "player", report);
+            Cost(pass, rigs.Count, report);
 
             // Climb both. The player's footprint grows with the altitude ramp and the AI's does
             // not, which is the size law's whole content.

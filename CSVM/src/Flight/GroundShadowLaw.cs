@@ -41,19 +41,39 @@ public static class GroundShadowLaw
     public const float Darkening = 0.8f;
 
     /// <summary>The live shadow texture's edge, in texels: the raster, the spread and the ramp
-    /// all run over a buffer this size.</summary>
-    public const int TextureSize = 32;
+    /// all run over a buffer this size. ⚠ The one number here the original does not supply: it
+    /// rasters <see cref="OriginalTextureSize"/>, which reads coarse under the player's own
+    /// aircraft once its footprint grows to <see cref="PlayerMaxScale"/>.</summary>
+    public const int TextureSize = 64;
+
+    /// <summary>The edge the original rasters, and the step every texel-measured term of the
+    /// spread and the raster is written against, so a finer texture keeps the softening's width
+    /// on the ground instead of shrinking it with the step.</summary>
+    public const int OriginalTextureSize = 32;
+
+    /// <summary>How many texels of the live texture stand for one of the original's. Every term
+    /// measured in texels is multiplied by it, which is what holds the picture fixed in world
+    /// terms while the step gets finer.</summary>
+    public const float TexelScale = TextureSize / (float)OriginalTextureSize;
 
     /// <summary>Entries in the colour ramp the spread indexes, white at 0 and the shadow colour
     /// at 10.</summary>
     public const int RampSteps = 11;
 
-    // What the silhouette raster writes into a covered texel, and what the spread adds to a
-    // covered texel and to each of its eight neighbours. The cover mark is odd and both addends
-    // are even, so a texel stays readable as covered however much its neighbours have added.
-    private const int CoverMark = 1;
-    private const int SpreadSelf = 4;
-    private const int SpreadNeighbour = 2;
+    // The original's spread reaches one texel of its own 32 in every direction, so the box it
+    // sums over runs this far either side of a texel's centre. Scaled by the texel scale, it is
+    // the same width of ground whatever the step.
+    private const float OriginalSpreadHalfWidth = 1.5f;
+
+    // What the spread is worth in ramp steps: a texel covered inside the scanned band takes this
+    // for itself, and the eight neighbours of the original's own box are worth this together. A
+    // lone covered texel reaches step 2 and an interior one saturates the ramp, as the decode has it.
+    private const int SelfSteps = 2;
+    private const int NeighbourSteps = 8;
+
+    // The doubled weight of a texel wholly inside the spread's box, the unit its two end texels
+    // take a fraction of. Doubled, since a box of half-integer width cuts its ends in half.
+    private const int WholeWeight = 2;
 
     /// <summary>The direction the shadow projects along. Straight down for every aircraft, that
     /// being the <c>SHADOW_ANGLES</c> all 53 shipped weather files author, with the player's own
@@ -120,49 +140,78 @@ public static class GroundShadowLaw
             Channel(diffuse.Y, ambient.Y, direction.Y, strength),
             Channel(diffuse.Z, ambient.Z, direction.Y, strength));
 
-    /// <summary>The original's fixed spread over a coverage mask, in place: every covered texel
-    /// adds to itself and to each of its eight neighbours. The border ring is never scanned, so
-    /// a silhouette touching the edge spreads inward only. Returns the ramp index per texel.
-    /// </summary>
-    public static int[] Spread(bool[] covered, int width, int height)
+    /// <summary>The original's fixed spread over a coverage mask, at its own step: every covered
+    /// texel adds to itself and to each of its eight neighbours. The border band is never
+    /// scanned, so a silhouette touching the edge spreads inward only. Returns the ramp index per
+    /// texel, and <paramref name="texelScale"/> holds that picture at a finer step.</summary>
+    public static int[] Spread(bool[] covered, int width, int height, float texelScale = 1f)
     {
         var acc = new int[covered.Length];
-        Spread(covered, width, height, acc);
+        Spread(covered, width, height, acc, texelScale);
         return acc;
     }
 
     /// <summary>The same spread into a caller's own buffer, for the per-frame raster, which runs
     /// once per live aircraft and has no reason to allocate one each time.</summary>
-    public static void Spread(bool[] covered, int width, int height, int[] acc)
+    public static void Spread(bool[] covered, int width, int height, int[] acc,
+        float texelScale = 1f)
     {
-        for (int i = 0; i < covered.Length; i++)
-            acc[i] = covered[i] ? CoverMark : 0;
-        for (int y = 1; y < height - 1; y++)
+        float half = OriginalSpreadHalfWidth * texelScale;
+        int reach = (int)Math.Ceiling(half - 0.5f);
+        int band = Math.Max(1, Mathf.RoundToInt(texelScale));
+        // The box ends on a texel's edge only at odd scales; at even ones it cuts the two end
+        // texels in half, which is why the weights are carried doubled.
+        int end = Mathf.RoundToInt(WholeWeight * (half + 0.5f - reach));
+        Array.Clear(acc, 0, acc.Length);
+        for (int y = band; y < height - band; y++)
         {
-            for (int x = 1; x < width - 1; x++)
+            for (int x = band; x < width - band; x++)
             {
-                int at = (y * width) + x;
-                if ((acc[at] & 1) == 0)
-                    continue;
-                acc[at] += SpreadSelf;
-                for (int dy = -1; dy <= 1; dy++)
-                {
-                    for (int dx = -1; dx <= 1; dx++)
-                    {
-                        if (dx != 0 || dy != 0)
-                            acc[at + (dy * width) + dx] += SpreadNeighbour;
-                    }
-                }
+                if (covered[(y * width) + x])
+                    Add(acc, width, height, x, y, reach, end);
             }
         }
 
-        for (int i = 0; i < acc.Length; i++)
-            acc[i] = Math.Min(acc[i] / 2, RampSteps - 1);
+        // The box's own weight with the covered texel itself taken out of it, which is what the
+        // eight neighbours of the original's 3x3 are worth together.
+        float neighbourhood = (4f * half * half) - 1f;
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                int at = (y * width) + x;
+                bool source = covered[at] && x >= band && x < width - band
+                    && y >= band && y < height - band;
+                int neighbours = acc[at] - (source ? WholeWeight * WholeWeight : 0);
+                int steps = (source ? SelfSteps : 0) + Mathf.RoundToInt(
+                    NeighbourSteps * neighbours / (WholeWeight * WholeWeight * neighbourhood));
+                acc[at] = Math.Min(steps, RampSteps - 1);
+            }
+        }
     }
 
     /// <summary>Where a ramp index sits between white and the shadow colour. The original's
     /// 11-entry table is exactly this mix, built once per frame per channel.</summary>
     public static float Coverage(int rampIndex) => rampIndex / (float)(RampSteps - 1);
+
+    // One covered texel's box into the accumulator, in doubled weights: a texel wholly inside the
+    // box is worth 2, and its two end texels take the fraction of a texel they cover. Clamped to
+    // the buffer, so what a texel near the edge would spread past it is lost, as at the original's
+    // own step.
+    private static void Add(int[] acc, int width, int height, int x, int y, int reach, int end)
+    {
+        int fromY = Math.Max(0, y - reach);
+        int toY = Math.Min(height - 1, y + reach);
+        int fromX = Math.Max(0, x - reach);
+        int toX = Math.Min(width - 1, x + reach);
+        for (int ny = fromY; ny <= toY; ny++)
+        {
+            int down = ny == y - reach || ny == y + reach ? end : WholeWeight;
+            int row = ny * width;
+            for (int nx = fromX; nx <= toX; nx++)
+                acc[row + nx] += down * (nx == x - reach || nx == x + reach ? end : WholeWeight);
+        }
+    }
 
     // One channel of the colour. k is the physical ratio "ambient alone" over "ambient plus
     // diffuse at normal incidence" for flat ground. ⚠ Keep the zero guards: with no ambient at

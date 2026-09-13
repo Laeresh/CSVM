@@ -1267,16 +1267,17 @@ The original's aircraft ground shadow as a rule, engine-free and pure: the proje
 (straight down, with the player's own skewed along its nose), the horizontal distance fade, the
 altitude ramp, the footprint scale, the flattening of one point onto the ground, the colour derived
 from the mission's authored `SUNLIGHT` pair, and the spread and ramp the coverage texture is built
-through. The spread has a second overload that writes into a caller's buffer, for the per-frame
-raster. Every constant carries its decode. `CSVM.Tests/GroundShadowLawTests` pins the numbers.
-Decode: [../org/shadows.md](../org/shadows.md).
+through. The texture's size is the one number here that departs from the decode, and the spread
+takes the scale between the two sizes so its softening keeps its width on the ground. Its second
+overload writes into a caller's buffer, for the per-frame raster.
+`CSVM.Tests/GroundShadowLawTests` pins the numbers. Decode: [../org/shadows.md](../org/shadows.md).
 
 ## src/Flight/GroundShadowSilhouette.cs
-One caster's shape: the triangles of the node the original rasterises, taken once, and the 32x32
+One caster's shape: the triangles of the node the original rasterises, taken once, and the 64x64
 coverage texture rebuilt from them each frame. Pose, flattening onto the ground and the footprint
 collapse into one affine map, so a vertex costs two dot products, and the fill is an incremental
-edge walk with its bounds hand-inlined, which is what brings a debug-build raster down to about a
-tenth of a millisecond per aircraft. The mask is readable as data (`CoveredAt`), which is how the
+edge walk with its bounds hand-inlined, which is what holds a debug-build raster near a third of a
+millisecond per aircraft at that size. The mask is readable as data (`CoveredAt`), which is how the
 suites pin a shape no ellipse can satisfy. Decode: [../org/shadows.md](../org/shadows.md).
 
 ## src/Flight/GroundShadowPass.cs

@@ -6,7 +6,7 @@ namespace CSVM.Flight;
 
 /// <summary>
 /// One aircraft's own shape, as the ground shadow needs it: the triangles the original rasterises
-/// top down into the 32x32 modulate texture every frame, the bounding box the footprint comes
+/// top down into the modulate texture every frame, the bounding box the footprint comes
 /// from, and the texture that raster, the spread and the ramp write. The node both are taken from
 /// is the original's own choice, the whole model root for an AI aircraft and the <c>geometry</c>
 /// child for the player's own. <see cref="GroundShadowPass"/> is the only caller and
@@ -19,8 +19,9 @@ public sealed class GroundShadowSilhouette
     /// without one falls back to the model root, as the original does.</summary>
     public const string PlayerNode = "geometry";
 
-    // Where the footprint's own extremes land in the texture, in texels from either edge. It
-    // keeps the silhouette off the border ring, which the spread writes into but never scans.
+    // Where the footprint's own extremes land in the texture, in texels of the original's own 32
+    // from either edge. It keeps the silhouette off the border band, which the spread writes into
+    // but never scans, and it is scaled with the step so the margin is the same ground either way.
     private const float RasterInset = 0.6f;
 
     private readonly Vector3[] _vertices;
@@ -125,8 +126,9 @@ public sealed class GroundShadowSilhouette
         {
             // Pose, flattening and footprint collapse into one affine map per frame, so a vertex
             // costs two dot products rather than a transform, a projection and a division.
-            float perX = (size - (2f * RasterInset)) / width;
-            float perZ = (size - (2f * RasterInset)) / depth;
+            float inset = RasterInset * GroundShadowLaw.TexelScale;
+            float perX = (size - (2f * inset)) / width;
+            float perZ = (size - (2f * inset)) / depth;
             float alongX = direction.X / direction.Y;
             float alongZ = direction.Z / direction.Y;
             var basis = pose.Basis;
@@ -135,9 +137,9 @@ public sealed class GroundShadowSilhouette
             var rowZ = new Vector3(basis.X.Z, basis.Y.Z, basis.Z.Z);
             var perVertexX = (rowX - (rowY * alongX)) * perX;
             var perVertexZ = (rowZ - (rowY * alongZ)) * perZ;
-            float atX = RasterInset + (perX
+            float atX = inset + (perX
                 * (pose.Origin.X + ((groundY - pose.Origin.Y) * alongX) - footprint.Position.X));
-            float atZ = RasterInset + (perZ
+            float atZ = inset + (perZ
                 * (pose.Origin.Z + ((groundY - pose.Origin.Y) * alongZ) - footprint.Position.Z));
             for (int i = 0; i < _vertices.Length; i++)
             {
@@ -151,7 +153,7 @@ public sealed class GroundShadowSilhouette
                 Fill(_projected[_indices[i]], _projected[_indices[i + 1]], _projected[_indices[i + 2]]);
         }
 
-        GroundShadowLaw.Spread(_covered, size, size, _ramp);
+        GroundShadowLaw.Spread(_covered, size, size, _ramp, GroundShadowLaw.TexelScale);
         for (int i = 0; i < _ramp.Length; i++)
             _texels[i] = (byte)Mathf.RoundToInt(GroundShadowLaw.Coverage(_ramp[i]) * 255f);
         _image.SetData(size, size, false, Image.Format.L8, _texels);

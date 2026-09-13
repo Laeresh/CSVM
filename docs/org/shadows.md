@@ -275,6 +275,20 @@ from this page and where it departs:
   where a model's faces are inconsistently wound; and a hidden node rasterises nothing while still
   widening the bounding box, so a torn damage panel or the player's own interior cockpit mesh casts
   no silhouette.
+- **The live texture is 64 texels on a side where the original rasters 32**, the one size in the
+  port that is a choice rather than a decode. The original's step is coarse under the player's own
+  aircraft, whose footprint grows to 3× as it climbs, and at the controls that reads blocky. The
+  spread and the raster's own inset are written against the original's 32 and scaled with the step,
+  so the edge softens over the same width of ground at either size and the picture is the decode's,
+  finer. The spread itself is a weighted box rather than the mark-and-add above, which reproduces
+  the original's numbers exactly at the original's step and is what allows a half-texel reach at a
+  finer one.
+- **64 rather than 128, on cost.** The spread's box grows with the step too, so the raster is
+  quartic in the texture's edge, not square: one aircraft's raster and upload measures 0.11 ms at
+  32, 0.32 ms at 64 and 3.65 ms at 128 per frame in a debug build, and the finest step also loses
+  the raster's exact mirror symmetry to float rounding. At 64 the frame does not see it: on C2's
+  M02 with eight AI aircraft the `--perf` per-pass cost is the same at 32 and at 64 to inside that
+  instrument's noise, since only an aircraft inside 200 m and under 250 m of altitude casts at all.
 - The modulate lands on a **flat quad** at the probed ground height rather than on the world's own
   polygons, so it does not conform to a slope, and it is lifted clear by half a unit, a constant
   this page does not supply.
