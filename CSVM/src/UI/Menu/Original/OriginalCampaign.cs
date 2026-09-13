@@ -5,23 +5,11 @@ using CSVM.Session;
 
 namespace CSVM.UI.Menu.Original;
 
-/// <summary>One answer of a dialog standing over a campaign screen: its row key, the messagebox
-/// button row it draws at, its words, and what answering it runs.</summary>
-public sealed record OriginalDialogAnswer(string Key, string LayoutKey, string Label, Action? Run);
-
-/// <summary>A dialog standing over a campaign screen, the original's <c>messagebox.script</c>
-/// over whatever screen was showing: its words, the icon its message class draws, its one, two or
-/// three answers and the widget set it is drawn from (null for the shared <c>mb_</c> box). While
-/// one stands the rows are its answers alone.</summary>
-public sealed record OriginalDialog(
-    string Message, DialogIcon Icon, IReadOnlyList<OriginalDialogAnswer> Answers,
-    CampaignBoards.DialogChrome? Chrome = null);
-
 /// <summary>
 /// The Original campaign, the shell's partial over the shared <see cref="CampaignFeature"/>: the
 /// decoded profile, cabin, table of contents, flight check, ammo, plane selection, scrapbook and
-/// zoom screens and the briefing dialog. The screen graph, the pointer's hit rectangles, the
-/// rollover and pressed frames, the cues, the dialogs and every door out are this file's; what
+/// zoom screens and the briefing dialog. The screen graph, the hit rectangles, the rollover and
+/// pressed frames, the cues and every door out are this file's, the standing box the shell's own; what
 /// each screen draws is the shared board component, <c>CampaignBoards.For</c> over the campaign
 /// pages, which this shell hosts in a <c>CampaignFlow</c> of its own built over the feature and
 /// the layout it already holds. That flow is never walked: its screen is moved to mirror the one
@@ -33,18 +21,6 @@ public sealed partial class OriginalShell
 {
     /// <summary>The Campaign row's key on the top level.</summary>
     public const string CampaignKey = "MM_B_CAMPAIGN";
-
-    /// <summary>A one-answer dialog's OK.</summary>
-    public const string DialogOkKey = "DIALOG:OK";
-
-    /// <summary>A two-answer dialog's confirming answer.</summary>
-    public const string DialogYesKey = "DIALOG:YES";
-
-    /// <summary>A two-answer dialog's declining answer.</summary>
-    public const string DialogNoKey = "DIALOG:NO";
-
-    /// <summary>A three-answer dialog's third answer, which leaves the screen as it was.</summary>
-    public const string DialogCancelKey = "DIALOG:CANCEL";
 
     // A page row that is neither a button nor a field: a roster name, a mission row, a scrap.
     private const string RowKeyPrefix = "ROW:";
@@ -72,11 +48,6 @@ public sealed partial class OriginalShell
     // The name box's own height where the row carries none.
     private const float FallbackFieldHeight = 20f;
 
-    // How far outside an answer's own rectangle its focus mark stands. The strip fills its frame
-    // corner to corner but for the pill's rounded ends, so a mark on the rectangle itself would be
-    // drawn under the art and lost; three pixels clear puts it on the box's black ground.
-    private const float DialogMarkOutset = 3f;
-
     private readonly CampaignFeature? _campaign;
     private readonly Func<CampaignProfileStore>? _profiles;
     private readonly Func<CSVM.Flight.StockLoadouts?>? _stock;
@@ -85,8 +56,6 @@ public sealed partial class OriginalShell
 
     // The pages' host, mirrored to the screen showing and never walked (see the class summary).
     private CampaignFlow? _flow;
-    private OriginalDialog? _dialog;
-    private int _focusBeforeDialog = -1;
     private OriginalScreen _briefingReturn = OriginalScreen.CampaignCabin;
     private OriginalScreen _bookReturn = OriginalScreen.CampaignCabin;
 
@@ -105,9 +74,6 @@ public sealed partial class OriginalShell
     public CampaignScreen? CampaignPage => IsCampaignScreen ? CampaignScreenOf(_screen)
         : _screen == OriginalScreen.SeatPlane ? CampaignScreen.PlaneSelection
         : null;
-
-    /// <summary>The dialog standing over the screen, or null.</summary>
-    public OriginalDialog? Dialog => _dialog;
 
     /// <summary>The name in the roster's box.</summary>
     public string RosterName => RosterEntry?.Text ?? string.Empty;
@@ -385,90 +351,6 @@ public sealed partial class OriginalShell
             ? entry
             : null;
 
-    // The messagebox script's own answer words, read here through whichever feature carries the
-    // string table: langui 100 (OK) for the one-button box, 102 and 103 (Yes, No) for the
-    // two-button pair, and 102, 103 and 101 across all three slots of the 0x8 box.
-    private OriginalDialogAnswer Ok(Action? run = null) =>
-        new(DialogOkKey, CampaignBoards.DialogCenterKey, DialogWord(100, "OK"), run);
-
-    private OriginalDialogAnswer Yes(Action run) =>
-        new(DialogYesKey, CampaignBoards.DialogLeftKey, DialogWord(102, "Yes"), run);
-
-    private OriginalDialogAnswer No() =>
-        new(DialogNoKey, CampaignBoards.DialogRightKey, DialogWord(103, "No"), null);
-
-    // The 0x8 box's own two extra answers: its No moves onto the centre slot the two-button box
-    // leaves empty, and Cancel takes the right one (MESSAGEBOX.SCRIPT's gui_init).
-    private OriginalDialogAnswer NoCentred(Action run) =>
-        new(DialogNoKey, CampaignBoards.DialogCenterKey, DialogWord(103, "No"), run);
-
-    private OriginalDialogAnswer Cancel(Action run) =>
-        new(DialogCancelKey, CampaignBoards.DialogRightKey, DialogWord(101, "Cancel"), run);
-
-    private string DialogWord(int id, string fallback)
-    {
-        var strings = _campaign?.Strings ?? _hangarModule?.Strings;
-        string word = strings?.Text(id, fallback) ?? fallback;
-        return word.Length > 0 ? word : fallback;
-    }
-
-    // A standing dialog's answers, at the messagebox rows they draw on, whatever screen it stands over.
-    private List<OriginalRow> DialogRows()
-    {
-        var rows = new List<OriginalRow>();
-        if (_dialog is not { } dialog)
-        {
-            return rows;
-        }
-
-        foreach (var answer in dialog.Answers)
-        {
-            var (art, x, y) = CampaignBoards.DialogSlot(answer.LayoutKey, _campaignLayout, dialog.Chrome);
-            var size = PlaqueSizeOf(art);
-            rows.Add(new OriginalRow(answer.Key, answer.Label, OriginalRowKind.Button, x, y, size.Width, size.Height, true, 0, art));
-        }
-
-        return rows;
-    }
-
-    // The standing dialog as the shared board component's messagebox panel.
-    // ⚠ Do not take the strip frame off the focus. Every raise focuses an answer, so a frame read
-    // from it would stand on the default answer for the life of the box, which is not what the
-    // original draws; the pointer owns the rollover frame and the cursor gets the focus mark
-    // instead (docs/org/campaign-board.md). The ink is the box's own rather than the screen's,
-    // which on a paper screen would hide the label on the dark strip.
-    private void ComposeDialog(IReadOnlyList<OriginalRow> rows, int focus, List<BoardPanel> overlays)
-    {
-        var dialog = _dialog!;
-        var buttons = new List<CampaignBoards.DialogButton>(dialog.Answers.Count);
-        var marks = new List<BoardFill>();
-        for (int i = 0; i < dialog.Answers.Count; i++)
-        {
-            // The hit is re-checked rather than trusted, since the hover index outlives the frame
-            // that set it and the answers are not the rows it was measured against.
-            var row = i < rows.Count ? rows[i] : null;
-            bool lit = i == _hover && row != null && _pointer is { } at && row.Contains(at.X, at.Y);
-            bool held = i == _pressed;
-            if (i == focus && !lit && row != null)
-            {
-                marks.Add(FocusBox(row, DialogMarkOutset));
-            }
-
-            buttons.Add(new CampaignBoards.DialogButton(
-                dialog.Answers[i].LayoutKey, dialog.Answers[i].Label,
-                ComposedBoard.PlaqueFrame(4, lit, held), ComposedBoard.DialogInk(held)));
-        }
-
-        overlays.Add(CampaignBoards.Dialog(dialog.Message, buttons, dialog.Icon, _campaignLayout, dialog.Chrome));
-        if (marks.Count > 0)
-        {
-            // The mark rides its own panel over the box rather than the box's fill layer, which a
-            // panel draws before its pictures: the messagebox's background covers the whole panel,
-            // so a mark inside it would be drawn and then painted over.
-            overlays.Add(new BoardPanel(marks, Array.Empty<BoardPicture>(), Array.Empty<BoardLine>()));
-        }
-    }
-
     private bool RosterHas(string name)
     {
         if (_campaign == null || name.Length == 0)
@@ -577,46 +459,6 @@ public sealed partial class OriginalShell
         }
 
         return changed;
-    }
-
-    // Every raise names its icon, because MESSAGEBOX.SCRIPT reads the frame off the raising
-    // screen's button mask rather than off anything the box itself can see. A default here would
-    // be a rule of "one button means the warning", which the original's 0x2 boxes break.
-    private void RaiseDialog(string message, DialogIcon icon, params OriginalDialogAnswer[] answers) =>
-        RaiseDialog(null, message, icon, answers);
-
-    // The same raise in another widget set, which the credits screen's About box is drawn from.
-    private void RaiseDialog(
-        CampaignBoards.DialogChrome? chrome, string message, DialogIcon icon, params OriginalDialogAnswer[] answers)
-    {
-        _focusBeforeDialog = _focus[(int)_screen];
-        _dialog = new OriginalDialog(message, icon, answers, chrome);
-        _hover = -1;
-        _pressed = -1;
-        _armed = null;
-        // A box opens on its first answer, the left button MESSAGEBOX.SCRIPT focuses for the plain
-        // 0x4 and 0x8 masks. Back still takes the last one, which is the answer the script's own
-        // Escape posts for every mask, so a mistake has a way out.
-        _focus[(int)_screen] = 0;
-    }
-
-    private void AnswerDialog(string key)
-    {
-        if (_dialog is not { } dialog)
-        {
-            return;
-        }
-
-        _dialog = null;
-        _focus[(int)_screen] = _focusBeforeDialog;
-        foreach (var answer in dialog.Answers)
-        {
-            if (answer.Key == key)
-            {
-                answer.Run?.Invoke();
-                return;
-            }
-        }
     }
 
     private void BuildCampaignRows(List<OriginalRow> rows)

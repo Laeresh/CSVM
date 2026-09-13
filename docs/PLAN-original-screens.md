@@ -80,7 +80,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A, second module and the dialog
 
 1. ☐ Instant Action + Loadout module (`OriginalInstantActionScreen`) over the hangar host seam
-2. ☐ The standing dialog and `RaiseDialog` move from the campaign partial into the shell proper
+2. ☑ The standing dialog and `RaiseDialog` move from the campaign partial into the shell proper
 
 ### Wave B, general seam and the options leaves
 
@@ -153,11 +153,26 @@ leave them on the shell, do not copy them. `_focus[]` is indexed per screen and 
 the module reads and writes the cursor through the host's `FocusedRow`. `_loadoutSeat` is set by the
 seat walk; do not move the seat walk.
 
-## A2 ☐ The standing dialog and `RaiseDialog` move into the shell proper
+## A2 ☑ The standing dialog and `RaiseDialog` move into the shell proper
 
-**Goal.** `_dialog`, `_focusBeforeDialog`, `DialogRows` and `RaiseDialog` are shell members in
-`OriginalShell.cs` (or a small `OriginalShellDialog.cs` partial of the shell, not of a family), and
-`OriginalCampaign.cs` raises dialogs only by calling `RaiseDialog`.
+**Landed.** `CSVM/src/UI/Menu/Original/OriginalShellDialog.cs` is the shell's own dialog partial:
+the `OriginalDialog`/`OriginalDialogAnswer` records, the `DIALOG:*` keys, `_dialog`,
+`_focusBeforeDialog`, the answer builders, `DialogRows`, `ComposeDialog`, both `RaiseDialog`
+overloads and `AnswerDialog`, moved verbatim out of `OriginalCampaign.cs` (158 lines out; it now
+only raises). `OriginalShell.cs` is untouched; every consumer already spelled the keys
+`OriginalShell.DialogOkKey`, so no reference changed. `PlaqueSizeOf`, which `DialogRows` calls,
+still lives in the campaign partial and comes to the shell with C21.
+
+**Verified.** Full `.\RunTests.ps1` on the plan tree with the relocation applied: PASS, exit 0
+(4410 units passed, 2 skipped for missing media; 332 engine suites, errors clean; 19 goldens
+hash-identical). `CheckDocEntries.ps1`, `CheckCommentCaps.ps1` and `CheckEncoding.ps1` clean.
+`git diff --stat` on the item: `OriginalCampaign.cs` 162 lines down, one comment line in
+`OriginalHangarScreen.cs`, no change to `OriginalShell.cs`, no test file touched.
+
+**Original approach (kept for reference).** `_dialog`, `_focusBeforeDialog`, `DialogRows` and
+`RaiseDialog` become shell members in `OriginalShell.cs` (or a small `OriginalShellDialog.cs`
+partial of the shell, not of a family), and `OriginalCampaign.cs` raises dialogs only by calling
+`RaiseDialog`.
 
 **Evidence (confidence: traced).** `OriginalCampaign.cs:88-89` declares `_dialog` and
 `_focusBeforeDialog` on the campaign partial while `OriginalShell.cs` already reads them in

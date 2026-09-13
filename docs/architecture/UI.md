@@ -827,11 +827,21 @@ missions with every objective bit set, plus the scratch build store the export a
 The Original presentation's screen graph (`CSVM.UI.Menu.Original`), engine-free over `MenuLayout` and the shared Free Flight, player-setup,
 Instant Action, hangar and campaign features, with the art measurer and the flight-devices answer injected. It owns the top level composed
 from `[MainMenu]`'s own rows, the two remake-only sortie screens, the Options screen over the decoded Preferences chrome, and the messagebox
-idiom every refusal and confirm goes through; most other screens are its own partials, below, the hangar family the one screen group standing outside the partial as `OriginalHangarScreen.cs`, reached through `IOriginalHangarHost` and read through the one `Hangar` accessor. `Step` applies one seat's frame, `Compose` is
+idiom every refusal and confirm goes through, whose box, `RaiseDialog` and answer keys are its own `OriginalShellDialog.cs` partial; most other screens are its own partials, below, the hangar family the one screen group standing outside the partial as `OriginalHangarScreen.cs`, reached through `IOriginalHangarHost` and read through the one `Hangar` accessor. `Step` applies one seat's frame, `Compose` is
 the screen as a `ComposedBoard` whose backdrop takes a section's `movie` row at its bottom, and every page's row kinds live here,
 `OriginalSlider` among them. A pointer press arms a row and only the release still on it activates (`ArmedKey`), on an edit box taking the
 caret alone where Accept in one reaches the screen's own commit; the pointer's bitmap answers an enter or leave (`PointerLive`); and a film
 in front of the board takes every frame, the tail of the press that ended it included (`CinemaFilm`). Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
+
+## src/UI/Menu/Original/OriginalShellDialog.cs
+The standing dialog, a partial of the shell itself rather than of any screen family: the
+`OriginalDialog`/`OriginalDialogAnswer` pair, the `DIALOG:*` answer keys every family and both test
+files read off `OriginalShell`, `RaiseDialog` with the chrome-bearing overload the credits About box
+takes, `DialogRows`, `AnswerDialog` and `ComposeDialog`. The shell owns it because the shell answers
+for it: while a box stands its answers are the only rows, `Compose` draws it over the screen's own
+picture, and Back takes the declining answer. The rollover frame is the pointer's alone, the cursor's
+answer marked with an outline three pixels clear of the strip instead, and the focus a raise took is
+put back when it is answered. The campaign screens and the hangar module only raise. [../org/campaign-board.md](../org/campaign-board.md).
 
 ## src/UI/Menu/Original/OriginalDropList.cs
 The one rule every open dropdown of the Original shell follows, a partial of it: a page hands over its key, its items,
@@ -949,7 +959,7 @@ right page, the totals page and the INVENTORY, entered from Instant Action's Bui
 the cabin, the door naming the airframe a default build opens on. It reaches `OriginalShell` only through `IOriginalHangarHost`, the shell's own explicit-interface implementation narrowing it to the screen/cursor/dialog surface a screen family needs (`Open`, `FocusKey`, `RaiseDialog`, the focused row and the campaign plane roster), so `OriginalHangarTests` drives it over a hand-written host with no shell at all; the shell still owns `Rows`/`Compose`/`ApplyFrame` dispatch, routes to this module by `OriginalScreen` range and exposes it whole as `Hangar` (its typed name, open list, last build and `OriginalHangarInks`) rather than forwarding member by member. It owns the plane picture over
 the blueprint panes; the hub's figures, which `HubBill` prices on the row an open list has under the cursor so they preview it and take nothing, the cost line reddening on that bill's funds verdict and the weight line on its capacity verdict, bar a previewed airframe row, whose weight line is pending and plain; the cash note on both doors (the wallet's funds, else the export door's figure), every combo row staying bare over either;
 the tab bar with the standing tab latched and its labels on the strips' own baseline; the tab pages' description box, which `HangarDescriptions` fills and whose prose flows as a note inside it; every list under its box bar the decal picker, the page's own five-across grid of tiles carrying its chrome inside its right edge; the two name boxes with their
-caret, the airframe swap's own three-answer question as the shared messagebox (its answer keys mirroring `OriginalCampaign.cs`'s `DialogOkKey`/`DialogYesKey`/`DialogNoKey`/`DialogCancelKey`), and the export door's own Export, Delete and delete confirm; `PaneOrigin` centres a small pane and places its rows on it. [../org/hangar.md](../org/hangar.md), [../org/menu-inventory.md](../org/menu-inventory.md).
+caret, the airframe swap's own three-answer question as the shared messagebox (its answer keys mirroring `OriginalShellDialog.cs`'s `DialogOkKey`/`DialogYesKey`/`DialogNoKey`/`DialogCancelKey`), and the export door's own Export, Delete and delete confirm; `PaneOrigin` centres a small pane and places its rows on it. [../org/hangar.md](../org/hangar.md), [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalCampaign.cs
 The Original campaign, the shell's partial over the shared `CampaignFeature`: the profile screen,
@@ -958,7 +968,7 @@ zoom and the briefing dialog. What each screen draws is the shared board compone
 hosts the Built-in campaign pages in a `CampaignFlow` of its own and copies every composed layer
 into its own board; that flow is never walked, its screen and cursor mirroring this file's. The
 screen graph, the rows at the rectangles the board draws them at, the pointer hit-testing, the
-cues and the dialogs are this file's, as are `OpenCabin` (every door onto the cabin, which is why RETURN TO CABIN is taken here rather than mirrored off a page), `ComposeDialog` (a standing box's answers, whose rollover frame is the pointer's alone, the cursor's own answer marked with an outline over the box instead), `ShowScrapbook`, where the feature's two cinemas play, and `CheckSeat`: the check and the two screens it opens stand for one player at a time, that seat's own device driving them while seat 0 keeps its pointer alone. Read `src/UI/CampaignFlow.cs` for the pages; the screens and
+cues and every dialog raise are this file's, as are `OpenCabin` (every door onto the cabin, which is why RETURN TO CABIN is taken here rather than mirrored off a page), `ShowScrapbook`, where the feature's two cinemas play, and `CheckSeat`: the check and the two screens it opens stand for one player at a time, that seat's own device driving them while seat 0 keeps its pointer alone. Read `src/UI/CampaignFlow.cs` for the pages; the screens and
 their strings: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalPresentation.cs

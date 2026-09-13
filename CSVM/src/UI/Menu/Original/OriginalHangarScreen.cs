@@ -194,7 +194,7 @@ public sealed class OriginalHangarScreen
     private const float FallbackThumbHeight = 21f;
 
     // The shell's own dialog answer keys (OriginalShell.DialogOkKey and its three siblings,
-    // OriginalCampaign.cs), restated here so this module holds no reference to OriginalShell.
+    // OriginalShellDialog.cs), restated here so this module holds no reference to OriginalShell.
     private const string DialogOkKey = "DIALOG:OK";
     private const string DialogYesKey = "DIALOG:YES";
     private const string DialogNoKey = "DIALOG:NO";
