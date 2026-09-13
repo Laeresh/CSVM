@@ -117,9 +117,9 @@ span, the spans that closed, and a tally carried alongside them (the planes an A
 `PhysicsTickCost`, `ProcessPassCost` and `AiStepCost` are three instances behind static facades
 that name their own terms and drop the slots their readout does not print, so the drain semantics
 are written once: a close with no open standing banks nothing, a reset drops a half-open span, and
-a span still open at the drain is carried whole into the next window. `WallCostBracket` is the node
-that opens or closes one end of a pair, named from the bank's label and pinned to an extreme of the
-process or the physics priority order.
+a span still open at the drain is carried into the next window; an optional timestamp source lets a
+test assert all three by value. `WallCostBracket` opens or closes one end of a pair, named from the
+bank's label and pinned to an extreme of the process or the physics priority order.
 
 ## src/Utils/PhysicsTickCost.cs
 The wall cost of one whole Godot physics tick and how many ticks a wall second actually got,

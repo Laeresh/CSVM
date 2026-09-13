@@ -2278,19 +2278,6 @@ usual.
 
 - `BL-848` `[Cleanup]` `[L]` `[Next: decide]` `[Impact: none]` `[Evidence: trace]` **About 140 dated clauses remain in `backlog.md` entries that predate the no-dates rule.** *Evidence:* `Select-String '\d{4}-\d\d-\d\d'` over the file; every one is event narration ("landed 2026-08-05", "measured 2026-08-04 from the CAP-07 re-take") of the kind the writing rule sends to the closing commit's message. *Fix shape:* decide whether the old entries are swept (each date dropped, the standing fact kept, the evidence findable through `git log --grep`) or grandfathered until the entry closes. A sweep is mechanical but every clause needs a reading. *Cross-refs:* PLAN-code-review-orch A5 (the one dated clause the review found).
 
-- `BL-903` `[Testing]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **`AiStepCostTests`
-  asserts a wall-clock mean and goes red about once in eighteen unit runs made beside three
-  concurrent builds.** *Evidence:* `BTheTotalIsEveryWalkAndNotTheWorstOfThem` opens one walk that
-  spins 20 ms and five that do nothing, then requires the six-walk mean under 20 ms, so any single
-  walk stalled past ~100 ms fails it; three of 55 full unit runs beside three `dotnet build` loops
-  read means of 29.9, 34.9 and 51.3 ms. A trivial walk cannot take 100 ms of work, so what it
-  measures there is the scheduler, not the accumulator. *Fix shape:* the assertion wants the
-  property without the clock, either by driving `AiStepCost` through an injected time source, or
-  by comparing the banked total against a walk the same run measured rather than against a fixed
-  millisecond ceiling. *⚠ Traps:* the ceiling is not too tight, it is a wall-clock claim on an
-  oversubscribed machine, so raising it only moves the threshold. *Cross-refs:*
-  `CSVM.Tests/AiStepCostTests.cs`.
-
 ## Misc
 
 - `BL-077` `[Feature]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: data]` **Visual prop spin-up/down** (`startprops`/`stopprops` disc crossfade), spawning mid-air

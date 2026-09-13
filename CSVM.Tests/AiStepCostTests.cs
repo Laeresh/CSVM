@@ -39,20 +39,22 @@ public class AiStepCostTests
     [Fact]
     public void BTheTotalIsEveryWalkAndNotTheWorstOfThem()
     {
-        AiStepCost.Open();
-        Spin(20);
-        AiStepCost.Close(8);
-        for (int i = 0; i < 5; i++)
+        // Six walks that each burn the same time, so a total banking only the worst of them would
+        // read one walk's cost. The claim is a floor: load can only inflate it, never redden it.
+        // WallCostBankTests asserts the same sum by value, on a clock it advances itself.
+        const double walkMs = 5;
+        const int walks = 6;
+        for (int i = 0; i < walks; i++)
         {
             AiStepCost.Open();
+            Spin(walkMs);
             AiStepCost.Close(8);
         }
 
         var (ms, steps, planes) = AiStepCost.Take();
-        Assert.Equal(6, steps);
+        Assert.Equal(walks, steps);
         Assert.Equal(48, planes);
-        Assert.True(ms >= 20, $"the slow walk is inside the total, not instead of it: {ms} ms");
-        Assert.True(ms / steps < 20, $"the mean sits below the worst walk: {ms / steps} ms");
+        Assert.True(ms >= walks * walkMs, $"every walk is inside the total, not just the worst: {ms} ms");
     }
 
     [Fact]

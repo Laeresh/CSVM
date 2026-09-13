@@ -268,6 +268,11 @@ member, and it does not go here.
   a forced collection before any window that must read zero.** The step is that remainder alone,
   always under 8 KB: with per-thread pads 512 bytes apart it moved 512 bytes in lockstep, and
   28,800 windows opened on an emptied context charged nothing where seven charged without it.
+- **PERF-30**, **A unit test asserts a wall-clock FLOOR, or a figure read off a clock it advances
+  itself, never a fixed millisecond ceiling: a ceiling reads the scheduler on an oversubscribed
+  machine, so raising it moves the threshold rather than removing the flake.** A six-walk mean
+  required under 20 ms read 29.9, 34.9 and 51.3 ms in three of 55 unit runs made beside three
+  concurrent builds.
 
 ## LOG, logs, error censuses, and exit codes
 

@@ -1,3 +1,4 @@
+using System;
 using System.Diagnostics;
 using Godot;
 
@@ -15,13 +16,23 @@ namespace CSVM.Utils;
 /// </summary>
 public sealed class WallCostBank
 {
+    private readonly Func<long> _now;
     private long _openedAt;
     private double _accumMs;
     private double _maxMs;
     private long _spans;
     private long _tally;
 
-    public WallCostBank(string label) => Label = label;
+    /// <summary>Builds the meter. <paramref name="now"/> replaces the wall clock with a source the
+    /// caller advances, which is what lets a test assert the banked arithmetic by value instead of
+    /// against a millisecond ceiling the machine's load can cross; the ticks are
+    /// <see cref="Stopwatch"/>'s either way.
+    /// ⚠ Never return 0 from it: a zero stamp reads as no span open.</summary>
+    public WallCostBank(string label, Func<long>? now = null)
+    {
+        Label = label;
+        _now = now ?? Stopwatch.GetTimestamp;
+    }
 
     /// <summary>Names the meter. A bracket node is this plus <c>Head</c> or <c>Tail</c>.</summary>
     public string Label { get; }
@@ -30,7 +41,7 @@ public sealed class WallCostBank
     public long Spans => _spans;
 
     /// <summary>Stamps the start of a span.</summary>
-    public void Open() => _openedAt = Stopwatch.GetTimestamp();
+    public void Open() => _openedAt = _now();
 
     /// <summary>Closes the span, banking its wall cost and <paramref name="tally"/>. A close with no
     /// open standing is dropped rather than charged, so a span that never opened cannot bank the
@@ -41,7 +52,7 @@ public sealed class WallCostBank
         {
             return;
         }
-        double ms = (Stopwatch.GetTimestamp() - _openedAt) * 1000.0 / Stopwatch.Frequency;
+        double ms = (_now() - _openedAt) * 1000.0 / Stopwatch.Frequency;
         _accumMs += ms;
         if (ms > _maxMs)
         {
