@@ -339,8 +339,7 @@ public sealed partial class WorldSounds : Node3D
                 if (e.Player.Playing)
                     e.Player.Stop();
                 if (DegenerateHosts.Add(e.Name))
-                    GD.Print($"sound: '{e.Name}' silenced — its host node's world pose is "
-                             + $"degenerate ({pos}); pre-existing, not caused by the sound path");
+                    Log.Info("sound", $"sound: '{e.Name}' silenced — its host node's world pose is degenerate ({pos}); pre-existing, not caused by the sound path");
                 continue;
             }
             e.Player.GlobalPosition = pos;
@@ -423,10 +422,7 @@ public sealed partial class WorldSounds : Node3D
         OneShotsStarted++;
         if (Debug)
         {
-            GD.Print($"sound one-shot: {name}"
-                     + (resolved != name ? $" → {resolved}" : "")
-                     + $" @ {worldPos.Snapped(Vector3.One)}"
-                     + (source != null ? " (following)" : ""));
+            Log.Info("sound", $"sound one-shot: {name}{(resolved != name ? $" → {resolved}" : "")} @ {worldPos.Snapped(Vector3.One)}{(source != null ? " (following)" : "")}");
         }
         return resolved;
     }
@@ -454,9 +450,8 @@ public sealed partial class WorldSounds : Node3D
         // the one whose volume the engine's per-channel max keeps, not player one's.
         var where = new System.Text.StringBuilder();
         for (int i = 0; i < ears.Count; i++)
-            where.Append(i == 0 ? " at " : ", ").Append(ears[i].Snapped(Vector3.One));
-        GD.Print($"sound: {ears.Count} listener{(ears.Count == 1 ? "" : "s")}{where} "
-                 + $"(dist below = range to the NEAREST pane camera)");
+            where.Append(i == 0 ? " at " : ", ").Append(Log.Format($"{ears[i].Snapped(Vector3.One)}"));
+        Log.Info("sound", $"sound: {ears.Count} listener{(ears.Count == 1 ? "" : "s")}{where} (dist below = range to the NEAREST pane camera)");
         foreach (var e in _emitters)
         {
             string host = e.Host is { } h && IsInstanceValid(h)
@@ -464,11 +459,7 @@ public sealed partial class WorldSounds : Node3D
                 : "UNATTACHED";
             bool hidden = e.Host is { } hv && IsInstanceValid(hv) && !hv.IsVisibleInTree();
             var near = NearestEar(ears, e.Player.GlobalPosition);
-            GD.Print($"sound: {e.Name} @ {host}{(hidden ? " (host hidden)" : "")} "
-                     + $"pos {e.Player.GlobalPosition.Snapped(Vector3.One)} "
-                     + $"dist {near.Range:0} m (P{near.Index + 1}) "
-                     + $"max {e.Player.MaxDistance:0} m "
-                     + (e.Player.Playing ? "PLAYING" : e.Active ? "silent" : "off"));
+            Log.Info("sound", $"sound: {e.Name} @ {host}{(hidden ? " (host hidden)" : "")} pos {e.Player.GlobalPosition.Snapped(Vector3.One)} dist {near.Range:0} m (P{near.Index + 1}) max {e.Player.MaxDistance:0} m {(e.Player.Playing ? "PLAYING" : e.Active ? "silent" : "off")}");
         }
     }
 

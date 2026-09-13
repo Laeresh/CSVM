@@ -180,12 +180,7 @@ public sealed class ClutterBuilder
         var absent = new List<string>();
         foreach (var name in requested)
             (FindTemplateRoot(gamez, name) != null ? resolved : absent).Add(name);
-        GD.Print($"clutter: --clutter-templates={string.Join(",", requested)} replaces the chapter's"
-                 + " registered set (the per-polygon no_clutter gate still applies) — in gamez: "
-                 + (resolved.Count > 0 ? string.Join(",", resolved) : "(none)")
-                 + "; not carried by this chapter: "
-                 + (absent.Count > 0 ? string.Join(",", absent) : "(none)")
-                 + " (retail-data-normal, not an error)");
+        Log.Info("world", $"clutter: --clutter-templates={string.Join(",", requested)} replaces the chapter's registered set (the per-polygon no_clutter gate still applies) — in gamez: {(resolved.Count > 0 ? string.Join(",", resolved) : "(none)")}; not carried by this chapter: {(absent.Count > 0 ? string.Join(",", absent) : "(none)")} (retail-data-normal, not an error)");
         return resolved;
     }
 

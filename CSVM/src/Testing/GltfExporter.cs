@@ -30,7 +30,7 @@ public sealed class GltfExporter
     {
         if (plane == null || string.IsNullOrEmpty(path))
         {
-            GD.PrintErr("gltf export failed: no node or no path");
+            Log.Error("core", $"gltf export failed: no node or no path");
             return Error.InvalidParameter;
         }
         // Duplicate so material overrides and node pruning below never touch the live tree. The
@@ -136,7 +136,7 @@ public sealed class GltfExporter
         }
         else
         {
-            GD.PrintErr($"gltf export failed ({err}): {path}");
+            Log.Error("core", $"gltf export failed ({err}): {path}");
         }
         return err;
     }

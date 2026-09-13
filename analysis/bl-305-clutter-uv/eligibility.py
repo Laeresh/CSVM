@@ -83,7 +83,7 @@ then
 
     python analysis/bl-305-clutter-uv/eligibility.py --reconcile-log <log> --reconcile-chapter C1
 
-which parses the engine's `clutter: N sprites ... (kind ×count, ...)` line
+which parses the engine's `[world] clutter: N sprites ... (kind ×count, ...)` line
 (`CSVM/src/Mech3/WorldSession.cs:158-170`) and diffs it against this script's own remake-side
 placement simulation for that chapter, kind by kind.
 
@@ -801,10 +801,15 @@ def resolve_template_ground_textures(nodes, meshes, materials, names):
 
 def parse_reconcile_log(path):
     """Extracts the per-kind counts from WorldSession.cs's
-    `GD.Print($"clutter: {N} sprites ... ({clutterBuilder.Summary})")` line."""
+    `Log.Info("world", $"clutter: {N} sprites ... ({clutterBuilder.Summary})")` line.
+
+    The line carries a prefix now that it goes through CSVM's own Log: the console and the
+    Godot --log-file mirror write `[world] clutter: ...`, the file sink under .scratch/logs
+    writes `INFO  [world] clutter: ...`. Either prefix, or none, is accepted, so a log taken
+    from any of the three sinks reconciles."""
     with open(path, encoding="utf-8", errors="replace") as f:
         text = f.read()
-    m = re.search(r"^clutter: (.*)$", text, re.MULTILINE)
+    m = re.search(r"^(?:(?:INFO|WARN|DEBUG|ERROR)\s+)?(?:\[\w+\] )?clutter: (.*)$", text, re.MULTILINE)
     if not m:
         return None
     line = m.group(1)

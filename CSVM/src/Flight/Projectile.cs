@@ -1040,8 +1040,7 @@ public sealed partial class ProjectilePool : Node3D
                 // the comparison so the breadcrumb keeps meaning the same thing in both modes.
                 var stored = anchored ? planeBasis * muzzleSprites[^1].Orient : muzzleSprites[^1].Orient;
                 float match = stored.Z.Dot(planeBasis.Z);
-                GD.Print($"muzzle flash basis: z=({stored.Z.X:0.00},{stored.Z.Y:0.00},{stored.Z.Z:0.00}) " +
-                         $"stored.Z==aircraft.Z match={match:0.000} ammo={ammoIdx} anchored={anchored} t={t:0.00}s");
+                Log.Info("weapons", $"muzzle flash basis: z=({stored.Z.X:0.00},{stored.Z.Y:0.00},{stored.Z.Z:0.00}) stored.Z==aircraft.Z match={match:0.000} ammo={ammoIdx} anchored={anchored} t={t:0.00}s");
             }
         }
 
@@ -1071,7 +1070,7 @@ public sealed partial class ProjectilePool : Node3D
             node = _flyoutGamez.FindByName(modelName);
             _flyoutNodes[modelName] = node;
             if (node == null)
-                GD.Print($"flyout model '{modelName}' ({weapon.Id}) absent from this chapter gamez — rocket flies streak-only");
+                Log.Info("weapons", $"flyout model '{modelName}' ({weapon.Id}) absent from this chapter gamez — rocket flies streak-only");
         }
         if (node == null)
             return null;
@@ -1082,7 +1081,7 @@ public sealed partial class ProjectilePool : Node3D
         // Verification breadcrumb (once per model name): confirms the named prototype resolved and
         // instanced real geometry, without needing a lucky screenshot; then it goes quiet.
         if (inst != null && _flyoutLogged.Add(modelName))
-            GD.Print($"flyout model '{modelName}' ({weapon.Id}) instanced: {CountMeshes(inst)} mesh(es)");
+            Log.Info("weapons", $"flyout model '{modelName}' ({weapon.Id}) instanced: {CountMeshes(inst)} mesh(es)");
         return inst;
     }
 
@@ -1111,8 +1110,7 @@ public sealed partial class ProjectilePool : Node3D
                 if (_decaysLogged < 4)
                 {
                     _decaysLogged++;
-                    GD.Print($"launch-velocity decay: {p.Weapon.Id} shed {p.Inherited.Length():0.#} m/s of launcher"
-                             + $" over LOCK_ON {p.Weapon.LockOn ?? 0f:0.##} s, now {p.Vel.Length():0.#} m/s");
+                    Log.Info("weapons", $"launch-velocity decay: {p.Weapon.Id} shed {p.Inherited.Length():0.#} m/s of launcher over LOCK_ON {p.Weapon.LockOn ?? 0f:0.##} s, now {p.Vel.Length():0.#} m/s");
                 }
                 p.Inherited = Vector3.Zero;
             }
@@ -1843,7 +1841,7 @@ public sealed partial class ProjectilePool : Node3D
                 twin.Shader = fadeShader;
             _splashFadeTwins[sm] = twin;
             if (twin == null)
-                GD.Print("splash fade: source shader has no alpha path — fade skipped, curves unaffected");
+                Log.Info("weapons", $"splash fade: source shader has no alpha path — fade skipped, curves unaffected");
         }
         if (twin != null)
             mi.SetSurfaceOverrideMaterial(0, twin);
@@ -1892,7 +1890,7 @@ public sealed partial class ProjectilePool : Node3D
             // A geometry-less host (e.g. the `gunhit` puffer root): nothing would render, drop it
             // and keep the spark. Logged once so the data fact is visible, not silently swallowed.
             if (_impactFxLogged.Add(animName))
-                GD.Print($"impact effect '{animName}' is a geometry-less node — spark stands in");
+                Log.Info("weapons", $"impact effect '{animName}' is a geometry-less node — spark stands in");
             inst.QueueFree();
             return false;
         }
@@ -1934,8 +1932,7 @@ public sealed partial class ProjectilePool : Node3D
             AdvanceSplash(fx); // pose t=0 (the column at full authored scale) before the first tick
         _impactFx.Add(fx);
         if (_impactFxLogged.Add(animName))
-            GD.Print($"impact effect '{animName}' instanced: {meshes} mesh(es)"
-                     + (animated ? $" — splash curves driven (base {(baseNode != null ? "✓" : "–")}, column {(splashNode != null ? "✓" : "–")})" : ""));
+            Log.Info("weapons", $"impact effect '{animName}' instanced: {meshes} mesh(es){(animated ? $" — splash curves driven (base {(baseNode != null ? "✓" : "–")}, column {(splashNode != null ? "✓" : "–")})" : "")}");
         return true;
     }
 
@@ -1976,9 +1973,7 @@ public sealed partial class ProjectilePool : Node3D
         if (_impactsLogged < 8)
         {
             _impactsLogged++;
-            GD.Print($"impact: {weapon.Id} ({weapon.Name}) -> {surface}/{SurfaceRegistry.NameForId(surface) ?? "?"} at " +
-                     $"({point.X:0},{point.Y:0},{point.Z:0}) on {collider?.GetParent()?.Name}/{collider?.Name}" +
-                     $" fx={outcome.EffectName ?? "-"} snd={outcome.Sound ?? "-"} standin={outcome.StandIn}");
+            Log.Info("weapons", $"impact: {weapon.Id} ({weapon.Name}) -> {surface}/{SurfaceRegistry.NameForId(surface) ?? "?"} at ({point.X:0},{point.Y:0},{point.Z:0}) on {collider?.GetParent()?.Name}/{collider?.Name} fx={outcome.EffectName ?? "-"} snd={outcome.Sound ?? "-"} standin={outcome.StandIn}");
         }
         Apply(weapon, surface, outcome, point, collider, normal, shapeIdx, shooter, team, owner);
     }
@@ -2181,9 +2176,7 @@ public sealed partial class ProjectilePool : Node3D
             if (_disablingLogged < 8)
             {
                 _disablingLogged++;
-                GD.Print($"disabling hit: {weapon.Id} on P{rig.PlayerIndex + 1} at {Mathf.Sqrt(c.DistanceSq):0.#} m"
-                         + $" intensity {intensity:0.00} for {stunSeconds:0.0} s"
-                         + $" ({(rig.IsHumanPiloted ? "wash" : "stun")}{(applied ? "" : ", no taker")})");
+                Log.Info("weapons", $"disabling hit: {weapon.Id} on P{rig.PlayerIndex + 1} at {Mathf.Sqrt(c.DistanceSq):0.#} m intensity {intensity:0.00} for {stunSeconds:0.0} s ({(rig.IsHumanPiloted ? "wash" : "stun")}{(applied ? "" : ", no taker")})");
             }
         }
         _blastCandidates.Clear();
@@ -2326,7 +2319,7 @@ public sealed partial class ProjectilePool : Node3D
             if (_flyoutDestroysLogged < 2)
             {
                 _flyoutDestroysLogged++;
-                GD.Print($"flyout destroyed: {p.Weapon.Id} shot down, playing '{anim}'");
+                Log.Info("weapons", $"flyout destroyed: {p.Weapon.Id} shot down, playing '{anim}'");
             }
             RetireRound(ref p);
             return;
@@ -2359,8 +2352,7 @@ public sealed partial class ProjectilePool : Node3D
         if (_armedLogged < 2)
         {
             _armedLogged++;
-            GD.Print($"flyout intersect: {p.Weapon.Id} hittable after {p.Travelled:0.#} m of its"
-                     + $" RANGE_MINIMUM {p.Weapon.RangeMinimum ?? 0f:0.#} m");
+            Log.Info("weapons", $"flyout intersect: {p.Weapon.Id} hittable after {p.Travelled:0.#} m of its RANGE_MINIMUM {p.Weapon.RangeMinimum ?? 0f:0.#} m");
         }
     }
 
@@ -2463,10 +2455,7 @@ public sealed partial class ProjectilePool : Node3D
         {
             if (accepted == MaxBlastTargets)
             {
-                GD.Print($"blast limit: {weapon.Id} burst at ({point.X:0},{point.Y:0},{point.Z:0}) had"
-                         + $" {_blastCandidates.Count} targets inside {radius:0.#} m; the nearest"
-                         + $" {MaxBlastTargets} took damage and {_blastCandidates.Count - i} were dropped"
-                         + " (the original's 32-entry hit buffer)");
+                Log.Info("weapons", $"blast limit: {weapon.Id} burst at ({point.X:0},{point.Y:0},{point.Z:0}) had {_blastCandidates.Count} targets inside {radius:0.#} m; the nearest {MaxBlastTargets} took damage and {_blastCandidates.Count - i} were dropped (the original's 32-entry hit buffer)");
                 break;
             }
             var c = _blastCandidates[i];
@@ -2808,7 +2797,7 @@ public sealed partial class ProjectilePool : Node3D
             _casingProtoResolved = true;
             _casingProto = _flyoutGamez!.FindByName("gunshell");
             if (_casingProto == null)
-                GD.Print("gun casing 'gunshell' absent from this chapter gamez — no ejection");
+                Log.Info("weapons", $"gun casing 'gunshell' absent from this chapter gamez — no ejection");
         }
         if (_casingProto == null)
             return null;
@@ -2822,14 +2811,14 @@ public sealed partial class ProjectilePool : Node3D
         if (!_casingLogged)
         {
             _casingLogged = true;
-            GD.Print($"gun casing 'gunshell' instanced: {CountMeshes(inst)} mesh(es)");
+            Log.Info("weapons", $"gun casing 'gunshell' instanced: {CountMeshes(inst)} mesh(es)");
         }
         var slot = new CasingSlot { Node = inst };
         _casings.Add(slot);
         // Verification breadcrumb (once): sustained fire keeps this many casings alive at once,
         // per-shot pooled anchors, so nothing is dropped by a shared-anchor already-live gate.
         if (_casings.Count == 12)
-            GD.Print($"gun casings: 12 live simultaneously (gun-rate ejection, no shared-anchor gate)");
+            Log.Info("weapons", $"gun casings: 12 live simultaneously (gun-rate ejection, no shared-anchor gate)");
         return slot;
     }
 
@@ -2868,14 +2857,12 @@ public sealed partial class ProjectilePool : Node3D
                         TumbleRate = fwd?.Num("initial") ?? 0f,
                         TumbleAccel = fwd?.Num("delta") ?? 0f,
                     };
-                    GD.Print($"gun casing spec: gravity {_casingSpec.Gravity}, azimuth [{_casingSpec.XzMin},{_casingSpec.XzMax}]deg, " +
-                             $"elevation [{_casingSpec.YMin},{_casingSpec.YMax}]deg, speed [{_casingSpec.SpeedMin},{_casingSpec.SpeedMax}] m/s, " +
-                             $"tumble {_casingSpec.TumbleRate:0.##} rad/s (+{_casingSpec.TumbleAccel:0.##} rad/s²) over {runTime} s");
+                    Log.Info("weapons", $"gun casing spec: gravity {_casingSpec.Gravity}, azimuth [{_casingSpec.XzMin},{_casingSpec.XzMax}]deg, elevation [{_casingSpec.YMin},{_casingSpec.YMax}]deg, speed [{_casingSpec.SpeedMin},{_casingSpec.SpeedMax}] m/s, tumble {_casingSpec.TumbleRate:0.##} rad/s (+{_casingSpec.TumbleAccel:0.##} rad/s²) over {runTime} s");
                     return _casingSpec;
                 }
             }
         }
-        GD.Print("gun casing 'gunshell' def not in the anim program — no ejection");
+        Log.Info("weapons", $"gun casing 'gunshell' def not in the anim program — no ejection");
         return null;
     }
 
@@ -2929,8 +2916,7 @@ public sealed partial class ProjectilePool : Node3D
         if (_soundGainsLogged < 8)
         {
             _soundGainsLogged++;
-            GD.Print($"sound gain: {resolved} MixGain={MixGain:0.00} dist={(nearest >= float.MaxValue ? "n/a" : $"{nearest:0}m")} " +
-                     $"range=[{def.RangeMin:0}-{def.RangeMax:0}]m distGain={distanceGain:0.00} vol={gain:0.000}");
+            Log.Info("sound", $"sound gain: {resolved} MixGain={MixGain:0.00} dist={(nearest >= float.MaxValue ? "n/a" : Log.Format($"{nearest:0}m"))} range=[{def.RangeMin:0}-{def.RangeMax:0}]m distGain={distanceGain:0.00} vol={gain:0.000}");
         }
     }
 
@@ -3010,7 +2996,7 @@ public sealed partial class ProjectilePool : Node3D
                     _flyoutPoseLogged = true;
                     var nose = -p.Model.GlobalTransform.Basis.Z.Normalized();
                     var vdir = worldVel.Normalized();
-                    GD.Print($"flyout orientation: nose·velocity = {nose.Dot(vdir):0.000} (1.000 = nose-forward)");
+                    Log.Info("weapons", $"flyout orientation: nose·velocity = {nose.Dot(vdir):0.000} (1.000 = nose-forward)");
                 }
             }
             // Ordnance draws no streak and no tip: its FLYOUT prototype is a missile body, and its

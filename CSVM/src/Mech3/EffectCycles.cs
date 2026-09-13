@@ -64,8 +64,7 @@ public static class EffectCycles
             material.CycleSpeed = d.Float("SPEED");
             // The engine string-compares LOOPING against "ON" and loops only on an exact match.
             material.CycleLooping = string.Equals(d.Str("LOOPING"), "ON", StringComparison.OrdinalIgnoreCase);
-            applied.Add($"{nodeName}→mat{materialIndex}"
-                        + $" {material.TextureName ?? "?"}×{material.CycleTextures.Count}@{material.CycleSpeed:0.#}");
+            applied.Add(Log.Format($"{nodeName}→mat{materialIndex} {material.TextureName ?? "?"}×{material.CycleTextures.Count}@{material.CycleSpeed:0.#}"));
         }
         return applied;
     }

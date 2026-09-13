@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.UI;
@@ -74,7 +75,7 @@ public sealed partial class LiveryLab : Node
         if (DebugPatternSteps != 0)
         {
             SelectPattern(DebugPatternSteps);
-            GD.Print($"[livery] --debug-livery stepped {DebugPatternSteps} → {CliArgs()}");
+            Log.Info("ui", $"[livery] --debug-livery stepped {DebugPatternSteps} → {CliArgs()}");
         }
         if (DebugShow)
             _ui.Visible = true;
@@ -403,7 +404,7 @@ public sealed partial class LiveryLab : Node
         {
             var args = CliArgs();
             DisplayServer.ClipboardSet(args);
-            GD.Print($"[livery] {args}");
+            Log.Info("ui", $"[livery] {args}");
         };
         box.AddChild(copy);
 

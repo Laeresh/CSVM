@@ -50,12 +50,11 @@ public sealed class LiveryResolver
         try
         {
             _paintCatalog = PaintScheme.LoadCatalog(zrdrPath);
-            GD.Print($"[paint] {_paintCatalog.Count} shipped patterns: "
-                + string.Join(", ", _paintCatalog.ConvertAll(s => s.Pattern)));
+            Log.Info("world", $"[paint] {_paintCatalog.Count} shipped patterns: {string.Join(", ", _paintCatalog.ConvertAll(s => s.Pattern))}");
         }
         catch (Exception e)
         {
-            GD.Print($"[paint] vehicle.json paint catalog unavailable ({e.Message}) — flying unpainted");
+            Log.Info("world", $"[paint] vehicle.json paint catalog unavailable ({e.Message}) — flying unpainted");
             _paintCatalog = new List<PaintScheme>();
         }
         return _paintCatalog;
@@ -76,7 +75,7 @@ public sealed class LiveryResolver
         }
         catch (Exception e)
         {
-            GD.Print($"[paint] no authored scheme for '{defName}' ({e.Message}) — falling back");
+            Log.Info("world", $"[paint] no authored scheme for '{defName}' ({e.Message}) — falling back");
         }
         _defSchemes[defName] = scheme;
         return scheme;
@@ -120,7 +119,7 @@ public sealed class LiveryResolver
         {
             var fortune = catalog.Find(s => string.Equals(s.Pattern, DefaultPattern, StringComparison.OrdinalIgnoreCase));
             if (fortune == null)
-                GD.Print($"[paint] no '{DefaultPattern}' entry in the paint catalog — flying unpainted");
+                Log.Info("world", $"[paint] no '{DefaultPattern}' entry in the paint catalog — flying unpainted");
             return fortune != null ? WithOverrides(fortune) : null;
         }
 
@@ -143,13 +142,12 @@ public sealed class LiveryResolver
             if (known == null && !haveMasks)
             {
                 var offer = available is { Count: > 0 } ? string.Join(", ", available) : "(no pattern library)";
-                GD.Print($"[paint] unknown pattern '{name}' — this aircraft has: {offer}, random, none");
+                Log.Info("world", $"[paint] unknown pattern '{name}' — this aircraft has: {offer}, random, none");
                 return null;
             }
             scheme = known ?? new PaintScheme { Pattern = name };
             if (!haveMasks)
-                GD.Print($"[paint] pattern '{name}' ships no skins for this aircraft — "
-                    + $"it has: {string.Join(", ", available!)}; painting decals only");
+                Log.Info("world", $"[paint] pattern '{name}' ships no skins for this aircraft — it has: {string.Join(", ", available!)}; painting decals only");
         }
 
         return WithOverrides(scheme);

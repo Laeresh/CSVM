@@ -269,7 +269,7 @@ public partial class FlightAudio : Node
         _crash.Play();
         // Which of the four explosions played, plus D32's computed gain, the only
         // trace this pick leaves outside the speakers.
-        GD.Print($"crash sound: {name} MixGain={MixGain:0.00} vol={gain:0.000}");
+        Log.Info("sound", $"crash sound: {name} MixGain={MixGain:0.00} vol={gain:0.000}");
     }
 
     /// <summary>The `dirt`(13) crash's earth-impact boom (snd_exp_ground_a), layered over the
@@ -283,7 +283,7 @@ public partial class FlightAudio : Node
     {
         float gain = _groundExpVol * MixGain;
         PlayOneShot(_groundExp, gain);
-        GD.Print($"crash sound: snd_exp_ground_a MixGain={MixGain:0.00} vol={gain:0.000}");
+        Log.Info("sound", $"crash sound: snd_exp_ground_a MixGain={MixGain:0.00} vol={gain:0.000}");
     }
 
     /// <summary>The sea dive's counterpart (snd_exp_water_a, the `_a` pair, not the graze's
@@ -295,7 +295,7 @@ public partial class FlightAudio : Node
     {
         float gain = _waterExpVol * MixGain;
         PlayOneShot(_waterExp, gain);
-        GD.Print($"crash sound: snd_exp_water_a MixGain={MixGain:0.00} vol={gain:0.000}");
+        Log.Info("sound", $"crash sound: snd_exp_water_a MixGain={MixGain:0.00} vol={gain:0.000}");
     }
 
     /// <summary>The survivable scrape's authored bark, alongside the <c>touchdown_*</c> effect the
@@ -336,7 +336,7 @@ public partial class FlightAudio : Node
         // the same pile-up reason, not the "your prop" respawn cue StartEngine plays below.
         float gain = _propStopVol * MixGain;
         PlayOneShot(_propStop, gain);
-        GD.Print($"engine stop: snd_propstop MixGain={MixGain:0.00} vol={gain:0.000}");
+        Log.Info("sound", $"engine stop: snd_propstop MixGain={MixGain:0.00} vol={gain:0.000}");
     }
 
     private static void PlayOneShot(AudioStreamPlayer? player, float volume)
@@ -443,7 +443,7 @@ public partial class FlightAudio : Node
             _engine.Play();
         // The headless observable for a swap nobody can screenshot: which def the slot took and
         // what the draw gave it. A hard cut, same as the damaged swap, no crossfade is decoded.
-        GD.Print($"engine sound: slot 0 -> {name} pitchMul={_enginePitchMul:0.000}");
+        Log.Info("sound", $"engine sound: slot 0 -> {name} pitchMul={_enginePitchMul:0.000}");
     }
 
     private AudioStreamPlayer? MakeLoop(SoundArchive archive,

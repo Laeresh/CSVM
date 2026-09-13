@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Session;
@@ -89,7 +90,7 @@ public sealed partial class LandingApproachRuntime : Node
 
         if (_bound.Count > 0)
         {
-            GD.Print($"landings: {_bound.Count} approach trigger(s) armed");
+            Log.Info("world", $"landings: {_bound.Count} approach trigger(s) armed");
         }
     }
 
@@ -107,7 +108,7 @@ public sealed partial class LandingApproachRuntime : Node
         }
         if (RefreshBindings() > 0)
         {
-            GD.Print($"landings: {_bound.Count} approach trigger(s) armed after world staging");
+            Log.Info("world", $"landings: {_bound.Count} approach trigger(s) armed after world staging");
         }
         if (_bound.Count == 0 || _humans?.Invoke() is not { Count: > 0 } humans)
         {
@@ -237,8 +238,7 @@ public sealed partial class LandingApproachRuntime : Node
 
         LastStarted = approach.Anim;
         LastStartedBy = by.Index;
-        GD.Print($"landings: '{approach.Node}' flown by P{by.Index + 1}, started '{approach.Anim}' " +
-                 $"({started} definition(s))");
+        Log.Info("world", $"landings: '{approach.Node}' flown by P{by.Index + 1}, started '{approach.Anim}' ({started} definition(s))");
     }
 
     private readonly record struct Bound(int Id, LandingApproach Approach, Node3D Node, Node3D? Arm);

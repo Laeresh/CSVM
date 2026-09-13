@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Session;
@@ -91,8 +92,7 @@ public sealed partial class LadderSwitchRuntime : Node
         if (started != null)
         {
             LastStarted = started;
-            GD.Print($"ladder: started '{started}' ({_switch.State})" +
-                     $"{(Holder != null ? $" for P{Holder.Index + 1}" : "")}");
+            Log.Info("world", $"ladder: started '{started}' ({_switch.State}){(Holder != null ? Log.Format($" for P{Holder.Index + 1}") : "")}");
         }
     }
 

@@ -188,7 +188,7 @@ public sealed partial class DamageLab : Node
         {
             if (!_healthSliders.TryGetValue(part, out var health))
             {
-                GD.Print($"damage lab: --damage names unknown part '{part}'");
+                Log.Info("flight", $"damage lab: --damage names unknown part '{part}'");
                 continue;
             }
             health.Value = frac * 100.0; // fires ValueChanged → Reapply

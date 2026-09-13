@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.UI;
@@ -174,9 +175,10 @@ public sealed partial class SplitScreen : CanvasLayer
         // whole window there is nothing left for it to paint.
         _backdrop.Visible = !on;
         Relayout();
-        GD.Print(on
-            ? $"splitscreen: pane1 fills the window for a cutscene, {_panes.Count - 1} pane(s) down, one listener left"
-            : $"splitscreen: {_panes.Count} panes back, a listener and a render each");
+        if (on)
+            Log.Info("ui", $"splitscreen: pane1 fills the window for a cutscene, {_panes.Count - 1} pane(s) down, one listener left");
+        else
+            Log.Info("ui", $"splitscreen: {_panes.Count} panes back, a listener and a render each");
     }
 
     /// <summary>Names the player who skipped a cutscene, in that player's own colour, for a few

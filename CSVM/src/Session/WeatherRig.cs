@@ -322,11 +322,7 @@ public sealed class WeatherRig
             WriteFogRange(FogRangeFor(range));
         if (fog.Altitude is { } altitude)
             WriteFogAltitude(altitude);
-        GD.Print($"weather: FOG_STATE '{fog.Name}' over zone '{_activeZone}': "
-                 + (fog.Color is { } c ? $"fog {c.R:0.00} gray, " : "")
-                 + (fog.Range is { } r ? $"range {r.X:0}–{r.Y:0} m, " : "")
-                 + (fog.Altitude is { } a ? $"altitude {a.X:0}–{a.Y:0} m" : "")
-                 + (_spec.NoFog ? " (--no-fog: range untouched)" : ""));
+        Log.Info("world", $"weather: FOG_STATE '{fog.Name}' over zone '{_activeZone}': {(fog.Color is { } c ? Log.Format($"fog {c.R:0.00} gray, ") : "")}{(fog.Range is { } r ? Log.Format($"range {r.X:0}–{r.Y:0} m, ") : "")}{(fog.Altitude is { } a ? Log.Format($"altitude {a.X:0}–{a.Y:0} m") : "")}{(_spec.NoFog ? " (--no-fog: range untouched)" : "")}");
     }
 
     /// <summary>The deck geometry's original AABB centre, so <see cref="Tick"/> can re-anchor it
@@ -517,18 +513,12 @@ public sealed class WeatherRig
                 // Once per state, not per crossing: a mission with no authored ZONE<n> keeps the
                 // file's first zone rather than rendering fullbright/no-fog. The one line
                 // explaining a state change that moves nothing on screen.
-                GD.Print($"weather: {_spec.Chapter}/{_spec.Mission} authors no 'zone{change.State}' "
-                         + $"(zones: {string.Join("/", _weather.ZoneNames)}) — camera state "
-                         + $"{change.State} keeps fog zone '{change.Zone}'");
+                Log.Info("world", $"weather: {_spec.Chapter}/{_spec.Mission} authors no 'zone{change.State}' (zones: {string.Join("/", _weather.ZoneNames)}) — camera state {change.State} keeps fog zone '{change.Zone}'");
             if (change.Applied)
             {
                 var fog = _weather.Zone(change.Zone);
                 ApplyZone(fog);
-                GD.Print($"weather: camera state {change.State} -> fog zone '{change.Zone}' — "
-                         + $"fog {fog.FogNear:0}-{fog.FogFar:0} m, altitude {fog.FogLow:0}-{fog.FogHigh:0} m, "
-                         + $"world light {fog.WorldLight:0.00}, sun {Mathf.RadToDeg(fog.SunOrientation.X):0.#}°/"
-                         + $"{Mathf.RadToDeg(fog.SunOrientation.Y):0.#}° (dome built for '{_activeZone}')"
-                         + LightSuffix(fog));
+                Log.Info("world", $"weather: camera state {change.State} -> fog zone '{change.Zone}' — fog {fog.FogNear:0}-{fog.FogFar:0} m, altitude {fog.FogLow:0}-{fog.FogHigh:0} m, world light {fog.WorldLight:0.00}, sun {Mathf.RadToDeg(fog.SunOrientation.X):0.#}°/{Mathf.RadToDeg(fog.SunOrientation.Y):0.#}° (dome built for '{_activeZone}'){LightSuffix(fog)}");
             }
         }
     }
@@ -669,8 +659,7 @@ public sealed class WeatherRig
             // Said out loud once per session: "0 of 144" is what a broken lookup looks like, and
             // it would otherwise be indistinguishable from a deck that is simply never above the
             // band.
-            GD.Print($"deck lighting: {lighting.Tiles.Count} of {instances} deck tile(s) carry an "
-                     + "undimmed twin — the sheet keeps SUNLIGHT below the cloud band, drops it above");
+            Log.Info("world", $"deck lighting: {lighting.Tiles.Count} of {instances} deck tile(s) carry an undimmed twin — the sheet keeps SUNLIGHT below the cloud band, drops it above");
         }
         if (lighting.Tiles.Count != instances)
         {
@@ -718,11 +707,7 @@ public sealed class WeatherRig
             // Said out loud once per session: a puffer that drifts sideways for no visible reason
             // is otherwise indistinguishable from a broken spawn, and this is the one line that
             // names the force doing it.
-            GD.Print($"wind: static ({_weather.WindStatic.X:0.##}, {_weather.WindStatic.Y:0.##}, "
-                     + $"{_weather.WindStatic.Z:0.##}) m/s, gust <= {_weather.WindRandomMaxSpeed:0.##} m/s "
-                     + $"(step {_weather.WindRandomAccel:0.##} m/s per frame, turning "
-                     + $"{_weather.WindRandomAngVel:0.##} deg/s) — carries every puffer with FRICTION "
-                     + "by its WIND_FACTOR");
+            Log.Info("world", $"wind: static ({_weather.WindStatic.X:0.##}, {_weather.WindStatic.Y:0.##}, {_weather.WindStatic.Z:0.##}) m/s, gust <= {_weather.WindRandomMaxSpeed:0.##} m/s (step {_weather.WindRandomAccel:0.##} m/s per frame, turning {_weather.WindRandomAngVel:0.##} deg/s) — carries every puffer with FRICTION by its WIND_FACTOR");
         string byFile = _weather?.ResolveZone(_spec.SkyZone) ?? _spec.SkyZone;
         _activeZone = _spec.SkyZoneExplicit
             ? byFile
@@ -731,9 +716,7 @@ public sealed class WeatherRig
         if (!_activeZone.Equals(byFile, StringComparison.OrdinalIgnoreCase))
             // The horizon correction. Printed with the counts it was decided on, because this is
             // the one line that says which sky and which fog the flight actually got.
-            GD.Print($"weather: {_spec.Chapter} builds no horizon geometry under '{byFile}' "
-                     + $"({string.Join(", ", HorizonZoneCounts(horizonZones))}) — "
-                     + $"rendering '{_activeZone}' sky and fog");
+            Log.Info("world", $"weather: {_spec.Chapter} builds no horizon geometry under '{byFile}' ({string.Join(", ", HorizonZoneCounts(horizonZones))}) — rendering '{_activeZone}' sky and fog");
         // The fog zone follows the camera's weather state from here, starting at the zone Build
         // just resolved. An explicit --sky-zone disarms the machine entirely, so an inspection
         // pose renders one named zone reproducibly.
@@ -747,8 +730,7 @@ public sealed class WeatherRig
             // Not a fault: a chapter that numbers its zones differently resolves here every
             // flight. C5 (zone1/zone3) does so on all 8 missions, and zone1 is the confirmed
             // correct choice there, so this must not read as a missing-data warning.
-            GD.Print($"weather: {_spec.Chapter}/{_spec.Mission} has no '{_spec.SkyZone}' "
-                     + $"(zones: {string.Join("/", _weather.ZoneNames)}) — rendering '{_activeZone}'");
+            Log.Info("world", $"weather: {_spec.Chapter}/{_spec.Mission} has no '{_spec.SkyZone}' (zones: {string.Join("/", _weather.ZoneNames)}) — rendering '{_activeZone}'");
     }
 
     // Applies the loaded weather: sets the distance-fog global shader parameters for
@@ -762,21 +744,13 @@ public sealed class WeatherRig
             return;
         var fog = _weather.Zone(_activeZone);
         var fogRange = ApplyZone(fog);
-        GD.Print($"weather [{_activeZone}]{(_spec.NoFog ? " --no-fog: fog + whiteout OFF, world light unchanged;" : ":")} " +
-                 $"fog {fog.FogColor.R:0.00} gray {fogRange.X:0}–{fogRange.Y:0} m " +
-                 $"(authored {fog.FogNear:0}–{fog.FogFar:0}), " +
-                 $"altitude {fog.FogLow:0}–{fog.FogHigh:0} m; world light {fog.WorldLight:0.00}; " +
-                 $"sun {Mathf.RadToDeg(fog.SunOrientation.X):0.#}° pitch / {Mathf.RadToDeg(fog.SunOrientation.Y):0.#}° yaw; " +
-                 $"cloud band {_weather.CloudBottom:0}–{_weather.CloudTop:0} m (±{_weather.CloudThickness:0})"
-                 + LightSuffix(fog));
+        Log.Info("world", $"weather [{_activeZone}]{(_spec.NoFog ? " --no-fog: fog + whiteout OFF, world light unchanged;" : ":")} fog {fog.FogColor.R:0.00} gray {fogRange.X:0}–{fogRange.Y:0} m (authored {fog.FogNear:0}–{fog.FogFar:0}), altitude {fog.FogLow:0}–{fog.FogHigh:0} m; world light {fog.WorldLight:0.00}; sun {Mathf.RadToDeg(fog.SunOrientation.X):0.#}° pitch / {Mathf.RadToDeg(fog.SunOrientation.Y):0.#}° yaw; cloud band {_weather.CloudBottom:0}–{_weather.CloudTop:0} m (±{_weather.CloudThickness:0}){LightSuffix(fog)}");
         if (_fogWhiteout.Armed)
         {
             // Said out loud once per session, because "the curtain never fired" and "the chapter
             // never armed it" are the same picture otherwise. Only C5 prints it.
             var wc = _fogWhiteout.Color ?? _weather.CloudTopColor ?? WhiteoutFallbackColor;
-            GD.Print($"fvol whiteout: armed — {_fogVolumes.Count} volume(s), approach {_fogWhiteout.FadeDist:0.#} m, "
-                     + $"interior decay {_fogWhiteout.InteriorFadeDist:0.#} m, colour {wc.ToHtml(false)}"
-                     + $"{(_fogWhiteout.Color == null ? " (CLOUD_COVER TOP_COLOR default)" : " (authored)")}");
+            Log.Info("world", $"fvol whiteout: armed — {_fogVolumes.Count} volume(s), approach {_fogWhiteout.FadeDist:0.#} m, interior decay {_fogWhiteout.InteriorFadeDist:0.#} m, colour {wc.ToHtml(false)}{(_fogWhiteout.Color == null ? " (CLOUD_COVER TOP_COLOR default)" : " (authored)")}");
         }
         SetupWhiteoutAndPrecip(rigs);
     }

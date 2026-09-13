@@ -71,7 +71,7 @@ public sealed partial class ZeppelinRuntime : Node
             var host = resolveNode(def.Node);
             if (host == null)
             {
-                GD.Print($"zep: '{def.Node}' skipped: world node unresolved");
+                Log.Info("flight", $"zep: '{def.Node}' skipped: world node unresolved");
                 continue;
             }
             // ⚠ Do not drop this: a record is itself the hull's activation, so without it C2's
@@ -79,7 +79,7 @@ public sealed partial class ZeppelinRuntime : Node
             // Dormancy is opacity, so a `deactivated` record may be activated here too.
             if (!host.Visible)
             {
-                GD.Print($"zep: '{def.Node}' hull switched on — its node was built inactive");
+                Log.Info("flight", $"zep: '{def.Node}' hull switched on — its node was built inactive");
             }
 
             AnimRuntime.SetSubtreeActive(host, true);
@@ -90,7 +90,7 @@ public sealed partial class ZeppelinRuntime : Node
                 // generator altitude gate reads the node's live Y).
                 if (!Driven(host))
                     Place(host, def.Position, Mathf.DegToRad(def.YawDeg), Mathf.DegToRad(def.PitchDeg));
-                GD.Print($"zep: '{def.Node}' placed but held: net '{def.Net}' not in neindex");
+                Log.Info("flight", $"zep: '{def.Node}' placed but held: net '{def.Net}' not in neindex");
                 continue;
             }
             // A zeppelin flies its net through ZeppelinMotion, not the aeroplane executor whose
@@ -112,11 +112,7 @@ public sealed partial class ZeppelinRuntime : Node
             _live.Add(zep);
             // ⚠ The motion's position, not the record's: --zep= re-seats the law, so the authored
             // seat and where the hull actually stands are different points on that path.
-            GD.Print($"zep: '{def.Node}' placed at ({motion.Position.X:0},{motion.Position.Y:0}," +
-                     $"{motion.Position.Z:0}) on net '{net.Name}' ({net.Nodes.Count} nodes), " +
-                     $"max_speed {def.MaxSpeed:0.#} m/s, engines {motion.TotalEngines}, " +
-                     $"team {AuthoredTeam(def)?.ToString() ?? "unauthored"}" +
-                     (def.Deactivated ? " — deactivated, out of the world until woken" : ""));
+            Log.Info("flight", $"zep: '{def.Node}' placed at ({motion.Position.X:0},{motion.Position.Y:0},{motion.Position.Z:0}) on net '{net.Name}' ({net.Nodes.Count} nodes), max_speed {def.MaxSpeed:0.#} m/s, engines {motion.TotalEngines}, team {AuthoredTeam(def)?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unauthored"}{(def.Deactivated ? " — deactivated, out of the world until woken" : "")}");
         }
     }
 
@@ -168,7 +164,7 @@ public sealed partial class ZeppelinRuntime : Node
             }
             int changed = turrets.SetTeamUnder(zep.Host, team);
             moved += changed;
-            GD.Print($"zep: '{zep.Def.Node}' team {team} onto {changed} turret(s)");
+            Log.Info("flight", $"zep: '{zep.Def.Node}' team {team} onto {changed} turret(s)");
         }
         return moved;
     }
@@ -212,7 +208,7 @@ public sealed partial class ZeppelinRuntime : Node
         }
         zep.Dormant = false;
         SetDormancy(zep, false);
-        GD.Print($"zep: '{zep.Def.Node}' woken by the mission script — motion, damage and targeting live");
+        Log.Info("flight", $"zep: '{zep.Def.Node}' woken by the mission script — motion, damage and targeting live");
         return true;
     }
 
@@ -234,13 +230,11 @@ public sealed partial class ZeppelinRuntime : Node
             int node = follower.SetStopPoint(stopPointId, halts);
             if (node < 0)
             {
-                GD.Print($"zep: stop point {stopPointId} of '{netName}' addresses no node — " +
-                         $"'{zep.Def.Node}' unchanged");
+                Log.Info("flight", $"zep: stop point {stopPointId} of '{netName}' addresses no node — '{zep.Def.Node}' unchanged");
                 continue;
             }
             hit++;
-            GD.Print($"zep: '{zep.Def.Node}' stop point {stopPointId} of '{netName}' " +
-                     $"{(halts ? "armed" : "released")} at node {node}");
+            Log.Info("flight", $"zep: '{zep.Def.Node}' stop point {stopPointId} of '{netName}' {(halts ? "armed" : "released")} at node {node}");
         }
         return hit;
     }
@@ -382,8 +376,7 @@ public sealed partial class ZeppelinRuntime : Node
                 if (_gateLogged < 8)
                 {
                     _gateLogged++;
-                    GD.Print($"zep: gasbag hit by {weapon.Id} ({weapon.Name}) blocked — " +
-                             $"no DAMAGES_ZEPPELIN");
+                    Log.Info("flight", $"zep: gasbag hit by {weapon.Id} ({weapon.Name}) blocked — no DAMAGES_ZEPPELIN");
                 }
                 return false;
             }
@@ -405,7 +398,7 @@ public sealed partial class ZeppelinRuntime : Node
                 if (_gateLogged < 8)
                 {
                     _gateLogged++;
-                    GD.Print("zep: gasbag RAM blocked — a collision carries no DAMAGES_ZEPPELIN");
+                    Log.Info("flight", $"zep: gasbag RAM blocked — a collision carries no DAMAGES_ZEPPELIN");
                 }
                 return false;
             }
@@ -441,8 +434,7 @@ public sealed partial class ZeppelinRuntime : Node
                 if (log)
                 {
                     var p = zep.Host.GlobalPosition;
-                    GD.Print($"zep: '{zep.Def.Node}' at ({p.X:0},{p.Y:0},{p.Z:0}) under a " +
-                             $"scripted motion, follower parked");
+                    Log.Info("flight", $"zep: '{zep.Def.Node}' at ({p.X:0},{p.Y:0},{p.Z:0}) under a scripted motion, follower parked");
                 }
             }
             else if (!zep.Dead)
@@ -454,17 +446,12 @@ public sealed partial class ZeppelinRuntime : Node
                 Place(zep.Host, zep.Motion.Position, zep.Motion.YawRad, zep.Motion.PitchRad);
                 if (zep.Motion.Follower.CurrentIndex != before && before >= 0)
                 {
-                    GD.Print($"zep: '{zep.Def.Node}' captured node {before}, next " +
-                             $"{zep.Motion.Follower.CurrentIndex} of '{zep.Motion.Follower.Net.Name}'");
+                    Log.Info("flight", $"zep: '{zep.Def.Node}' captured node {before}, next {zep.Motion.Follower.CurrentIndex} of '{zep.Motion.Follower.Net.Name}'");
                 }
                 if (log)
                 {
                     var p = zep.Motion.Position;
-                    GD.Print($"zep: '{zep.Def.Node}' at ({p.X:0},{p.Y:0},{p.Z:0}) " +
-                             $"speed {zep.Motion.Speed:0.#}/{zep.Motion.EffectiveMaxSpeed:0.#} m/s " +
-                             $"pitch {Mathf.RadToDeg(zep.Motion.PitchRad):0.#}° " +
-                             $"toward node {zep.Motion.Follower.CurrentIndex}" +
-                             (zep.Motion.Follower.Holding ? " — holding on its stop point" : ""));
+                    Log.Info("flight", $"zep: '{zep.Def.Node}' at ({p.X:0},{p.Y:0},{p.Z:0}) speed {zep.Motion.Speed:0.#}/{zep.Motion.EffectiveMaxSpeed:0.#} m/s pitch {Mathf.RadToDeg(zep.Motion.PitchRad):0.#}° toward node {zep.Motion.Follower.CurrentIndex}{(zep.Motion.Follower.Holding ? " — holding on its stop point" : "")}");
                 }
             }
             PollDamage(zep);
@@ -490,8 +477,7 @@ public sealed partial class ZeppelinRuntime : Node
     {
         zep.Scripted = true;
         var p = zep.Host.GlobalPosition;
-        GD.Print($"zep: '{zep.Def.Node}' pose owned by a scripted motion from ({p.X:0},{p.Y:0}," +
-                 $"{p.Z:0}), net follower parked");
+        Log.Info("flight", $"zep: '{zep.Def.Node}' pose owned by a scripted motion from ({p.X:0},{p.Y:0},{p.Z:0}), net follower parked");
     }
 
     // The follower's first write after the script: the motion restarts from the hull's live pose
@@ -505,10 +491,7 @@ public sealed partial class ZeppelinRuntime : Node
         var follower = zep.Motion.Follower;
         follower.Reseat();
         zep.Motion.ResumeAt(xform.Origin, euler.Y, euler.X);
-        GD.Print($"zep: '{zep.Def.Node}' scripted motion ended, follower resumes from " +
-                 $"({xform.Origin.X:0},{xform.Origin.Y:0},{xform.Origin.Z:0}) yaw " +
-                 $"{Mathf.RadToDeg(euler.Y):0.#}° pitch {Mathf.RadToDeg(euler.X):0.#}°, " +
-                 $"re-seating on '{follower.Net.Name}'");
+        Log.Info("flight", $"zep: '{zep.Def.Node}' scripted motion ended, follower resumes from ({xform.Origin.X:0},{xform.Origin.Y:0},{xform.Origin.Z:0}) yaw {Mathf.RadToDeg(euler.Y):0.#}° pitch {Mathf.RadToDeg(euler.X):0.#}°, re-seating on '{follower.Net.Name}'");
     }
 
     // The zone-pool seeding rule: an authored record hp re-seeds an existing def pool or
@@ -550,8 +533,7 @@ public sealed partial class ZeppelinRuntime : Node
         {
             // The record authored hp but its anim resolves to no def (degraded extraction):
             // the pool still exists so the zone can die; the death plays nothing.
-            GD.Print($"zep: zone '{nodeName}' destroy anim '{destroyAnim ?? "-"}' resolves to " +
-                     $"no def — pool registered without choreography");
+            Log.Info("flight", $"zep: zone '{nodeName}' destroy anim '{destroyAnim ?? "-"}' resolves to no def — pool registered without choreography");
             poolDef = new AnimDefinition { Name = nodeName, AnimName = $"zep_zone_{nodeName}" };
         }
         return runtime.Destructibles.Register(poolDef, node, hp);
@@ -711,8 +693,7 @@ public sealed partial class ZeppelinRuntime : Node
             }
             else
             {
-                GD.Print($"zep: '{def.Node}' zone '{zone.Node}' has no authored hp and no " +
-                         $"destructible def — not damageable");
+                Log.Info("flight", $"zep: '{def.Node}' zone '{zone.Node}' has no authored hp and no destructible def — not damageable");
             }
         }
 
@@ -764,11 +745,7 @@ public sealed partial class ZeppelinRuntime : Node
             }
         }
 
-        GD.Print($"zep: '{def.Node}' damage wired — {zep.GasbagInstances.Count}/" +
-                 $"{zep.GasbagZones.Count} gasbag zones pooled, {pooled}/{def.Engines.Count} " +
-                 $"engines, {zep.CannonZones.Count}/{def.CannonHealth.Count} cannons, " +
-                 $"kill at survivors < {def.NumHealthyRequired} of {def.Healthy.Count}" +
-                 (zep.Team is { } team ? $", team {team} on {fanned} pool(s)" : ", no authored team"));
+        Log.Info("flight", $"zep: '{def.Node}' damage wired — {zep.GasbagInstances.Count}/{zep.GasbagZones.Count} gasbag zones pooled, {pooled}/{def.Engines.Count} engines, {zep.CannonZones.Count}/{def.CannonHealth.Count} cannons, kill at survivors < {def.NumHealthyRequired} of {def.Healthy.Count}{(zep.Team is { } team ? Log.Format($", team {team} on {fanned} pool(s)") : ", no authored team")}");
     }
 
     // Out of the world, or back in it. The hull is posed at the fade alpha an
@@ -798,8 +775,7 @@ public sealed partial class ZeppelinRuntime : Node
         if (engines != zep.Motion.AliveEngines)
         {
             zep.Motion.AliveEngines = engines;
-            GD.Print($"zep: '{zep.Def.Node}' engines {engines}/{zep.Motion.TotalEngines} — " +
-                     $"max speed now {zep.Motion.EffectiveMaxSpeed:0.#} m/s");
+            Log.Info("flight", $"zep: '{zep.Def.Node}' engines {engines}/{zep.Motion.TotalEngines} — max speed now {zep.Motion.EffectiveMaxSpeed:0.#} m/s");
         }
 
         // ⚠ Gated on the hull, and on the record's own engine count, not
@@ -808,8 +784,7 @@ public sealed partial class ZeppelinRuntime : Node
         if (!zep.Dead && !zep.EnginesDisabled && engines == 0)
         {
             zep.EnginesDisabled = true;
-            GD.Print($"zep: '{zep.Def.Node}' ENGINES DISABLED — 0 of {zep.Def.Engines.Count} " +
-                     $"engine(s) live");
+            Log.Info("flight", $"zep: '{zep.Def.Node}' ENGINES DISABLED — 0 of {zep.Def.Engines.Count} engine(s) live");
             ZeppelinEnginesDisabled?.Invoke(zep.Def.Node);
         }
 
@@ -818,8 +793,7 @@ public sealed partial class ZeppelinRuntime : Node
         {
             if (inst is { Status: DestructibleRegistry.State.Destroyed } && zep.DeadZones.Add(node))
             {
-                GD.Print($"zep: '{zep.Def.Node}' gasbag '{node}' destroyed — survivors " +
-                         $"{damage.Survivors(zep.ZoneAlive)}/{damage.Required} required");
+                Log.Info("flight", $"zep: '{zep.Def.Node}' gasbag '{node}' destroyed — survivors {damage.Survivors(zep.ZoneAlive)}/{damage.Required} required");
             }
         }
 
@@ -838,9 +812,7 @@ public sealed partial class ZeppelinRuntime : Node
             if (cannon.Instance.Status == DestructibleRegistry.State.Destroyed
                 && zep.DeadZones.Add(cannon.Record.Cannon))
             {
-                GD.Print($"zep: '{zep.Def.Node}' cannon '{cannon.Record.Cannon}' destroyed" +
-                         $" (bound gasbag '{cannon.Record.Gasbag}' — binding recorded, no " +
-                         $"decoded damage transfer)");
+                Log.Info("flight", $"zep: '{zep.Def.Node}' cannon '{cannon.Record.Cannon}' destroyed (bound gasbag '{cannon.Record.Gasbag}' — binding recorded, no decoded damage transfer)");
             }
         }
 
@@ -849,8 +821,7 @@ public sealed partial class ZeppelinRuntime : Node
         {
             zep.Dead = true;
             int survivors = damage.Survivors(zep.ZoneAlive);
-            GD.Print($"zep: '{zep.Def.Node}' DESTROYED — survivors {survivors} < required " +
-                     $"{damage.Required}");
+            Log.Info("flight", $"zep: '{zep.Def.Node}' DESTROYED — survivors {survivors} < required {damage.Required}");
             PlayHullDeath(zep);
             ZeppelinKilled?.Invoke(zep.Def.Node);
         }
@@ -872,13 +843,12 @@ public sealed partial class ZeppelinRuntime : Node
             if (def.PrereqAnims.Count > 0 && def.AnimName != null
                 && def.Name.Equals(zep.Def.Node, StringComparison.OrdinalIgnoreCase))
             {
-                GD.Print($"zep: '{zep.Def.Node}' death plays '{def.AnimName}'");
+                Log.Info("flight", $"zep: '{zep.Def.Node}' death plays '{def.AnimName}'");
                 _runtime.Play(def.AnimName);
                 return;
             }
         }
-        GD.Print($"zep: '{zep.Def.Node}' ships no prerequisite-gated hull death def — kill " +
-                 $"recorded without choreography");
+        Log.Info("flight", $"zep: '{zep.Def.Node}' ships no prerequisite-gated hull death def — kill recorded without choreography");
     }
 
     private sealed class LiveZeppelin

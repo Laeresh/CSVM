@@ -228,7 +228,7 @@ public sealed partial class MeshLab : Node
         {
             _normals = Cycle(_normals);
             ApplyOverrides();
-            GD.Print($"[mesh] --debug-mesh cycle {i + 1}/{_debugCycles} → source={_normals}");
+            Log.Info("ui", $"[mesh] --debug-mesh cycle {i + 1}/{_debugCycles} → source={_normals}");
         }
         if (_debugCycles > 0)
         {
@@ -534,8 +534,7 @@ public sealed partial class MeshLab : Node
         else if (!_warnedOverrideGap)
         {
             _warnedOverrideGap = true;
-            GD.Print($"[mesh] '{s.Instance.Name}' surface {s.Index} has no override slot — "
-                     + "override not applied there (results for that surface are not A/B'd)");
+            Log.Info("ui", $"[mesh] '{s.Instance.Name}' surface {s.Index} has no override slot — override not applied there (results for that surface are not A/B'd)");
         }
     }
 
@@ -1285,16 +1284,15 @@ void fragment() {{
                             System.Globalization.CultureInfo.InvariantCulture, out float dz))
                         _sunDir = new Vector3(dx, dy, dz);
                     else
-                        GD.Print($"[mesh] --debug-mesh: bad dir '{value}' (want dir=x/y/z)");
+                        Log.Info("ui", $"[mesh] --debug-mesh: bad dir '{value}' (want dir=x/y/z)");
                     break;
                 case "sun":
                     if (float.TryParse(value, System.Globalization.NumberStyles.Float,
                     System.Globalization.CultureInfo.InvariantCulture, out float e)) _sunEnergy = e; break;
-                default: GD.Print($"[mesh] --debug-mesh: unknown token '{raw.Trim()}'"); break;
+                default: Log.Info("ui", $"[mesh] --debug-mesh: unknown token '{raw.Trim()}'"); break;
             }
         }
-        GD.Print($"[mesh] --debug-mesh: normals={_density}/{_colorMode} wire={_wire} boxes={_boxes} "
-                 + $"cull={_cull} source={_normals} headlight={_headlight}");
+        Log.Info("ui", $"[mesh] --debug-mesh: normals={_density}/{_colorMode} wire={_wire} boxes={_boxes} cull={_cull} source={_normals} headlight={_headlight}");
     }
 
     // ---- UI -----------------------------------------------------------------------------------

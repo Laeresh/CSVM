@@ -1,4 +1,5 @@
 using System.IO;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Flight;
@@ -33,7 +34,7 @@ public sealed partial class ImpactReticle : Control
         var path = Path.Combine(rimageDir, file);
         if (!File.Exists(path))
         {
-            GD.Print($"[reticle] no {file} in {rimageDir} — gun reticle off (run ExtractRof.ps1)");
+            Log.Info("flight", $"[reticle] no {file} in {rimageDir} — gun reticle off (run ExtractRof.ps1)");
             return null;
         }
         var img = Image.LoadFromFile(path);

@@ -122,8 +122,7 @@ public sealed class LensFlareRig
 
         if (_spec.NoFlare)
         {
-            GD.Print($"lens flare: --no-flare, {chapter} flare suppressed "
-                     + $"(slots {string.Join(",", names)})");
+            Log.Info("world", $"lens flare: --no-flare, {chapter} flare suppressed (slots {string.Join(",", names)})");
             return;
         }
 
@@ -186,8 +185,7 @@ public sealed class LensFlareRig
 
         if (_instances.Count > 0)
         {
-            GD.Print($"lens flare [{chapter}]: {_instances.Count} rig(s), "
-                     + $"slots {string.Join(",", names)}");
+            Log.Info("world", $"lens flare [{chapter}]: {_instances.Count} rig(s), slots {string.Join(",", names)}");
         }
     }
 

@@ -1975,11 +1975,12 @@ public sealed record SessionSpec
 
     private void Warn(string category, string message) => _notes.Add(new Note(category, message));
 
-    // A complaint that is a bare console line today, with no log category.
+    // A complaint that names no category of its own; Launcher logs it under `core`, at info.
     private void Print(string message) => _notes.Add(new Note("", message));
 
     /// <summary>A parse- or resolve-time complaint, held rather than logged so the spec stays
-    /// engine-free. <paramref name="Category"/> is the <c>Log</c> category to emit it under, or
-    /// empty for the ones that are bare console lines today (<c>GD.Print</c>).</summary>
+    /// engine-free. <paramref name="Category"/> is the <c>Log</c> category to emit it under, at
+    /// warning level; empty means the note has no category and <c>Launcher</c> logs it under
+    /// <c>core</c> at info, which is where an argument complaint sits in launch order.</summary>
     public readonly record struct Note(string Category, string Message);
 }

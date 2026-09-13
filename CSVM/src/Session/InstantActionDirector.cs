@@ -91,8 +91,7 @@ public sealed class InstantActionDirector
     {
         if (spec.IaDef is { } wizardDef)
         {
-            GD.Print($"ia: wizard mission_type={wizardDef.MissionType} " +
-                     $"player='{wizardDef.PlayerPlane}' ace='{wizardDef.AceName}' ({wizardDef.AcePlane})");
+            Log.Info("core", $"ia: wizard mission_type={wizardDef.MissionType} player='{wizardDef.PlayerPlane}' ace='{wizardDef.AceName}' ({wizardDef.AcePlane})");
             return new InstantActionDirector(new InstantActionRuntime(wizardDef), spec);
         }
         if (spec.IaPath != null)
@@ -100,8 +99,7 @@ public sealed class InstantActionDirector
             try
             {
                 var def = InstantAction.LoadFromJson(spec.IaPath);
-                GD.Print($"ia: '{spec.IaPath}' mission_type={def.MissionType} " +
-                         $"player='{def.PlayerPlane}' ace='{def.AceName}' ({def.AcePlane})");
+                Log.Info("core", $"ia: '{spec.IaPath}' mission_type={def.MissionType} player='{def.PlayerPlane}' ace='{def.AceName}' ({def.AcePlane})");
                 return new InstantActionDirector(new InstantActionRuntime(def), spec);
             }
             catch (Exception e)
@@ -148,12 +146,13 @@ public sealed class InstantActionDirector
         {
             iaPatrolNet = null;
         }
-        GD.Print(iaPatrolNet != null
-            ? $"ia: actors patrol '{iaPatrolNet.Name}' (net {iaPatrolNet.Id}), the chapter's first"
-              + (iaPatrolNet.Trailer is { NodeIndex: >= 0, Name: { } anchorName }
-                  ? $", anchored to '{anchorName}' at node {iaPatrolNet.Trailer.Value.NodeIndex}"
-                  : "")
-            : $"ia: {_spec.Chapter} has no first patrol net, actors fly their spawn course");
+        string iaPatrolAnchor = iaPatrolNet?.Trailer is { NodeIndex: >= 0, Name: { } anchorName } anchorTrailer
+            ? Log.Format($", anchored to '{anchorName}' at node {anchorTrailer.NodeIndex}")
+            : "";
+        if (iaPatrolNet != null)
+            Log.Info("core", $"ia: actors patrol '{iaPatrolNet.Name}' (net {iaPatrolNet.Id}), the chapter's first{iaPatrolAnchor}");
+        else
+            Log.Info("core", $"ia: {_spec.Chapter} has no first patrol net, actors fly their spawn course");
         // The net IS the standing order. ⚠ Do not let it bring its own volumes: the original copies
         // the roster block's volumes over the net's afterwards, so ApplyActorVolumes has the last
         // word (docs/formats/instant-action.md).
@@ -199,8 +198,7 @@ public sealed class InstantActionDirector
                 InstantActionRuntime.ApplyActorVolumes(pilot.Machine);
                 if (ace != null)
                 {
-                    GD.Print($"ia: ace '{ia.Def.AceName}' ({aceNode}) rating={rating} " +
-                              $"team={InstantActionRuntime.EnemyTeam} spawn #{spIndex} of {aceSpawns.Count}");
+                    Log.Info("core", $"ia: ace '{ia.Def.AceName}' ({aceNode}) rating={rating} team={InstantActionRuntime.EnemyTeam} spawn #{spIndex} of {aceSpawns.Count}");
                     what += " + IA ace";
                 }
             }
@@ -222,8 +220,7 @@ public sealed class InstantActionDirector
                 int flown = InstantActionRuntime.FlownWingmen(ia.Def.NumWingmen, humans);
                 if (flown < ia.Def.NumWingmen)
                 {
-                    GD.Print($"ia: wingmen clamped to {flown} of {ia.Def.NumWingmen} " +
-                              $"configured ({humans} human(s), flight cap 6 — decision 8a)");
+                    Log.Info("core", $"ia: wingmen clamped to {flown} of {ia.Def.NumWingmen} configured ({humans} human(s), flight cap 6 — decision 8a)");
                 }
                 // player_fortune: the wingmen's shared livery. The colour and decal values ride the
                 // setup screen in the original, not ia.json, so the catalog entry stands in
@@ -280,7 +277,7 @@ public sealed class InstantActionDirector
                 int wmSpawned = wingmen.Count(w => w != null);
                 if (wmSpawned > 0)
                 {
-                    GD.Print($"ia: {wmSpawned} wingman(s) ({wingmanNode}) team={AimAssist.PlayerTeam}");
+                    Log.Info("core", $"ia: {wmSpawned} wingman(s) ({wingmanNode}) team={AimAssist.PlayerTeam}");
                     what += $" + {wmSpawned} IA wingmen";
                 }
             }
@@ -364,9 +361,7 @@ public sealed class InstantActionDirector
         int iaWaveEnemies = rosters.Sum(r => r.Count);
         if (iaWaveEnemies > 0)
         {
-            GD.Print($"ia: {iaWaveEnemies} wave enemies across " +
-                      $"{rosters.Count(r => r.Count > 0)} wave(s), built inert, " +
-                      $"team={InstantActionRuntime.EnemyTeam}");
+            Log.Info("core", $"ia: {iaWaveEnemies} wave enemies across {rosters.Count(r => r.Count > 0)} wave(s), built inert, team={InstantActionRuntime.EnemyTeam}");
             what += $" + {iaWaveEnemies} IA wave enemies";
         }
         return what;
@@ -394,8 +389,7 @@ public sealed class InstantActionDirector
                 && zepName.Equals(selectedZep, StringComparison.OrdinalIgnoreCase);
             if (world.FindNodes(zepName) is not { Count: > 0 } zepNodes)
             {
-                GD.Print($"ia: zeppelin '{zepName}' is not in {chapter}'s world — " +
-                          "nothing to switch");
+                Log.Info("core", $"ia: zeppelin '{zepName}' is not in {chapter}'s world — nothing to switch");
                 continue;
             }
             foreach (var zepNode in zepNodes)
@@ -407,9 +401,7 @@ public sealed class InstantActionDirector
             {
                 zeppelins?.Hold(zepName);
             }
-            GD.Print($"ia: zeppelin '{zepName}' " + (objective
-                ? "ACTIVATED as this mission's objective (zeppelin_run)"
-                : "deactivated by the Instant Action builder"));
+            Log.Info("core", $"ia: zeppelin '{zepName}' {(objective ? "ACTIVATED as this mission's objective (zeppelin_run)" : "deactivated by the Instant Action builder")}");
         }
         return switched;
     }
@@ -438,9 +430,7 @@ public sealed class InstantActionDirector
         }
         else
         {
-            GD.Print($"ia: zeppelin run: '{objectiveZep}' launches every wave " +
-                      $"({claimed} generator(s) on the wave-credit budget). BL-350 is open " +
-                      "and in this mission's way: a drop is not gated on the doors opening.");
+            Log.Info("core", $"ia: zeppelin run: '{objectiveZep}' launches every wave ({claimed} generator(s) on the wave-credit budget). BL-350 is open and in this mission's way: a drop is not gated on the doors opening.");
         }
         int firstZepWave = waves.Start();
         if (firstZepWave != 0)
@@ -613,22 +603,14 @@ public sealed class InstantActionDirector
             {
                 if (iaEnd.NotifyPilotDown(victim))
                 {
-                    GD.Print($"ia: P{victim + 1} down — " + (iaEnd.Def.Lives == 0
-                        ? "unlimited lives" : $"{iaEnd.LivesLeft(victim)} life/lives left") +
-                        $", respawning in {inputs.RespawnDelay:0.#} s");
+                    Log.Info("core", $"ia: P{victim + 1} down — {(iaEnd.Def.Lives == 0 ? "unlimited lives" : Log.Format($"{iaEnd.LivesLeft(victim)} life/lives left"))}, respawning in {inputs.RespawnDelay:0.#} s");
                     return;
                 }
                 BeginSpectate(rig);
             };
         }
-        iaEnd.MissionEnded += outcome => GD.Print(
-            $"ia: mission {(outcome == InstantActionOutcome.Won ? "COMPLETE" : "FAILED")} — " +
-            $"{iaEnd.Def.MissionType} after {iaEnd.Elapsed:0.0} s; holding the world " +
-            $"{InstantActionRuntime.WrapupHoldS:0.#} s before the wrap-up board");
-        GD.Print($"ia: {iaEnd.Def.MissionType} — win: " +
-                 (iaEnd.ObjectiveEnabled ? objective!.Value.ToString() : "none") +
-                 $", loss: every human out of lives ({(iaEnd.Def.Lives == 0 ? "unlimited" : iaEnd.Def.Lives.ToString())} " +
-                 $"per pilot), {iaEnd.PilotCount} human seat(s)");
+        iaEnd.MissionEnded += outcome => Log.Info("core", $"ia: mission {(outcome == InstantActionOutcome.Won ? "COMPLETE" : "FAILED")} — {iaEnd.Def.MissionType} after {iaEnd.Elapsed:0.0} s; holding the world {InstantActionRuntime.WrapupHoldS:0.#} s before the wrap-up board");
+        Log.Info("core", $"ia: {iaEnd.Def.MissionType} — win: {(iaEnd.ObjectiveEnabled ? objective!.Value.ToString() : "none")}, loss: every human out of lives ({(iaEnd.Def.Lives == 0 ? "unlimited" : Log.Format($"{iaEnd.Def.Lives}"))} per pilot), {iaEnd.PilotCount} human seat(s)");
 
         // The wrap-up board, shared over the WHOLE window like the race and dogfight boards,
         // never per pane: the mission ends for every human at once. ⚠ Danger Zones Completed
@@ -705,9 +687,7 @@ public sealed class InstantActionDirector
             _launchWave = waveNumber;   // the decoded group stamp (the generator's +0x64)
             string objectiveZep = InstantActionRuntime.SelectedZeppelinNode(iaZepRun.Def);
             int fed = _generators?.GrantWaveCapacity(objectiveZep, roster.Count) ?? 0;
-            GD.Print($"ia: wave {waveNumber} ({roster.Count} aircraft) credited to '" +
-                      $"{objectiveZep}' ({fed} generator(s)) — they launch from the bay, " +
-                      "not teleported");
+            Log.Info("core", $"ia: wave {waveNumber} ({roster.Count} aircraft) credited to '{objectiveZep}' ({fed} generator(s)) — they launch from the bay, not teleported");
             return;
         }
         if (_waveSpawnList is not { Count: > 0 } spawns)
@@ -734,8 +714,7 @@ public sealed class InstantActionDirector
             var pos = sp.Position + dir * metres;
             roster[m].Activate(pos, pos + fwd);
         }
-        GD.Print($"ia: wave {waveNumber} ({roster.Count} aircraft) activated at spawn #{spIndex} " +
-                  $"of {spawns.Count}");
+        Log.Info("core", $"ia: wave {waveNumber} ({roster.Count} aircraft) activated at spawn #{spIndex} of {spawns.Count}");
     }
 
     // A pilot has spent its last life, which is this mission type's own "out for good": the shared
@@ -749,8 +728,7 @@ public sealed class InstantActionDirector
             return;
         }
         var pilot = rig.Controller!;
-        GD.Print($"ia: P{pilot.PlayerIndex + 1} is out of lives — spectating" +
-                 (follow != null ? $", following P{follow.PlayerIndex + 1}" : " from the crash camera"));
+        Log.Info("core", $"ia: P{pilot.PlayerIndex + 1} is out of lives — spectating{(follow != null ? Log.Format($", following P{follow.PlayerIndex + 1}") : " from the crash camera")}");
         // One of the two events that can complete a stunt mission's zone sets: this pilot has
         // stopped being one the mission waits for.
         CheckZoneSets();

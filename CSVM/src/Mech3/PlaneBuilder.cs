@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Flight;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Mech3;
@@ -264,14 +265,11 @@ public sealed class PlaneBuilder
             return;
         if (_skinPrefix == null)
         {
-            GD.Print($"[paint] {root.Name}: no <prefix>_noselogo/_taillogo/_winglogo material — building unpainted");
+            Log.Info("world", $"[paint] {root.Name}: no <prefix>_noselogo/_taillogo/_winglogo material — building unpainted");
             return;
         }
         _painter = new PlanePainter(_textures, _patterns, _scheme, _skinPrefix);
-        GD.Print($"[paint] {root.Name} ({_skinPrefix}): {_scheme}"
-            + (_painter.PatternMissesAircraft
-                ? $" — pattern '{_scheme.FolderName}' ships no {_skinPrefix} skins, decals only"
-                : ""));
+        Log.Info("world", $"[paint] {root.Name} ({_skinPrefix}): {_scheme}{(_painter.PatternMissesAircraft ? $" — pattern '{_scheme.FolderName}' ships no {_skinPrefix} skins, decals only" : "")}");
     }
 
     // Hides and re-skins the wingtip flares (WingLights.cs), and in the same walk collects

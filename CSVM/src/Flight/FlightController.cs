@@ -2858,8 +2858,7 @@ public partial class FlightController : Node3D
             // The facing test comes with it: a hit that fails it is inert and must not read as "working".
             string what = report.Collider is { } body
                 ? $"{body.GetParent()?.Name}/{body.Name}" : "?";
-            GD.Print($"ground blow: first repelling hit on {what} at {input.GroundBlowDistM:0} m "
-                     + $"of {elev:0} (facing {_model.Attitude.Z.Dot(input.GroundBlowNormal):0.00})");
+            Log.Info("flight", $"ground blow: first repelling hit on {what} at {input.GroundBlowDistM:0} m of {elev:0} (facing {_model.Attitude.Z.Dot(input.GroundBlowNormal):0.00})");
         }
     }
 
@@ -3411,7 +3410,7 @@ public partial class FlightController : Node3D
         if (sel.ApplyInitial(InitialTarget!, _model.Position, _model.Attitude))
         {
             string picked = sel.Current is { } t && t.Name.Length > 0 ? t.Name : "nothing";
-            GD.Print($"--target={InitialTarget}: {picked} (class={sel.ActiveClass?.ToString() ?? "cleared"})");
+            Log.Info("flight", $"--target={InitialTarget}: {picked} (class={sel.ActiveClass?.ToString() ?? "cleared"})");
             return;
         }
 

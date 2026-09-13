@@ -65,7 +65,7 @@ public sealed partial class AiVoiceRuntime : Node
         int? voId = _voice.PilotFor(accentId, _rng);
         if (voId is not { } vo)
         {
-            GD.Print($"ai voice: {ai.Name}: accent {accentId} resolves to no voiced pilot — silent");
+            Log.Info("sound", $"ai voice: {ai.Name}: accent {accentId} resolves to no voiced pilot — silent");
             return;
         }
         var speaker = _dispatcher.Register(ai.PlayerIndex, vo, ai.Team,
@@ -75,8 +75,7 @@ public sealed partial class AiVoiceRuntime : Node
         // the dispatcher cannot see a FlightController's own aliveness.
         speaker.Alive = ai.InPlay;
         ai.InertChanged += plane => speaker.Alive = plane.InPlay;
-        GD.Print($"ai voice: {ai.Name}: accent {accentId} -> VO id {vo} " +
-                 $"(talker {talkerChance:0.00})");
+        Log.Info("sound", $"ai voice: {ai.Name}: accent {accentId} -> VO id {vo} (talker {talkerChance:0.00})");
 
         ai.DamageApplied += damaged =>
         {
@@ -182,9 +181,7 @@ public sealed partial class AiVoiceRuntime : Node
             // its category is named on the call while the destruction and impact callers that share
             // the path keep the Effects default.
             string? resolved = _sounds.PlayOneShot(clip, node, _rng, AudioBuses.Voice);
-            GD.Print($"ai voice: {tag}: trigger #{decision.TriggerId} -> {clip}" +
-                     (resolved != null && resolved != clip ? $" ({resolved})" : "") +
-                     $" ({decision.Outcome})");
+            Log.Info("sound", $"ai voice: {tag}: trigger #{decision.TriggerId} -> {clip}{(resolved != null && resolved != clip ? $" ({resolved})" : "")} ({decision.Outcome})");
             if (resolved != null)
             {
                 LinePlayed?.Invoke(tag, decision.TriggerId, resolved);
@@ -194,7 +191,7 @@ public sealed partial class AiVoiceRuntime : Node
         {
             // The engine logs both roll outcomes; gate short-circuits (cooling, no clip) are
             // silent here, they fire at hit rate.
-            GD.Print($"ai voice: {tag}: trigger #{decision.TriggerId} silent ({decision.Outcome})");
+            Log.Info("sound", $"ai voice: {tag}: trigger #{decision.TriggerId} silent ({decision.Outcome})");
         }
     }
 }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using CSVM.Effects;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Flight;
@@ -372,7 +373,7 @@ public sealed class SmokeScreenEmitters
             if (!_logged)
             {
                 _logged = true;
-                GD.Print($"smoke screen '{EffectAnimName}': no DISTANCE_INTERVAL puffer in the anim program — screens lay no smoke");
+                Log.Info("weapons", $"smoke screen '{EffectAnimName}': no DISTANCE_INTERVAL puffer in the anim program — screens lay no smoke");
             }
             return null;
         }
