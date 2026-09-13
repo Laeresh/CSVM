@@ -220,9 +220,9 @@ public sealed partial class PausePreferences : Control
 
         // The AUDIO page's levels are heard while it stands and the mix it opened over goes back
         // the moment it is left, by any door, exactly as the menu's own host does it.
-        if (_shell.AudioPreviewMix is { } mix)
+        if (_shell.Options.AudioPreviewMix is { } mix)
         {
-            _audio?.PreviewMix(mix, _shell.TakeAudioMoved());
+            _audio?.PreviewMix(mix, _shell.Options.TakeAudioMoved());
         }
         else
         {

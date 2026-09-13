@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using CSVM.Bindings;
 using CSVM.UI;
 using CSVM.UI.Menu;
@@ -10,190 +9,37 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// Original's two rebinding pages over the hand-authored layout fixture: which actions each of the
-/// seven category tabs lists, how a row's two control cells map onto the shared feature's slots,
-/// what the cells print when an action holds more controls than the two authored columns, the exit
-/// pair's authored order, and the capture a cell arms with its Escape cancel and its accept.
+/// What the two rebinding pages need a whole shell for: the hub's CONTROLS door standing only where
+/// the shared feature is behind it, an armed cell answered from the shell's own frame (the Escape
+/// cancel, a bound key as the answer, and CANCEL CHANGES dropping the whole visit), and the list
+/// window following the cursor a frame drives. The pages themselves are the options module's, and
+/// <see cref="OriginalOptionsTests"/> drives them over it.
 /// </summary>
 public class OriginalControlsTests
 {
     private static readonly MenuCommands None = MenuCommands.None;
 
     [Fact]
-    public void EveryActionBelongsToExactlyOneCategoryTab()
-    {
-        var seen = new Dictionary<InputAction, int>();
-        foreach (var tab in OriginalShell.ControlTabs)
-        {
-            foreach (var row in tab.Rows)
-            {
-                seen[row.Action] = seen.TryGetValue(row.Action, out int count) ? count + 1 : 1;
-            }
-        }
-
-        foreach (var action in Enum.GetValues<InputAction>())
-        {
-            Assert.True(seen.TryGetValue(action, out int count) && count == 1,
-                $"{action} is listed {(seen.TryGetValue(action, out int n) ? n : 0)} times across the seven tabs");
-        }
-    }
-
-    [Fact]
-    public void TheSixNamedTabsAreFlightActionsAndOtherHoldsWhatTheOriginalNeverBound()
-    {
-        var tabs = OriginalShell.ControlTabs;
-        Assert.Equal(7, tabs.Count);
-        Assert.Equal(
-            new[] { "Movement", "Throttle", "Weapons", "Targeting", "Views 1", "Views 2", "Other" },
-            tabs.Select(t => t.Name).ToArray());
-        for (int i = 0; i < 6; i++)
-        {
-            Assert.All(tabs[i].Rows, row => Assert.Equal(InputContext.Flight, row.Context));
-        }
-
-        var other = tabs[6].Rows;
-        Assert.Contains(other, row => row.Context == InputContext.Menu);
-        Assert.Contains(other, row => row.Context == InputContext.Camera);
-        // Every menu and free-camera action, which the original binds on no page of its own.
-        foreach (var context in new[] { InputContext.Menu, InputContext.Camera })
-        {
-            foreach (var action in DefaultBindings.ActionsIn(context))
-            {
-                Assert.Contains(other, row => row.Context == context && row.Action == action);
-            }
-        }
-    }
-
-    /// <summary>The Movement tab is the six attitude half-axes in the original page's own order,
-    /// which begins with Point Nose Down rather than with the enum's first member
-    /// (<c>OriginalScreenshots/Keybinds Movement.png</c>).</summary>
-    [Fact]
-    public void TheMovementTabIsTheSixAttitudeHalfAxesInTheOriginalsOrder()
-    {
-        Assert.Equal(
-            new[]
-            {
-                InputAction.PitchDown, InputAction.PitchUp, InputAction.RollLeft, InputAction.RollRight,
-                InputAction.YawLeft, InputAction.YawRight,
-            },
-            OriginalShell.ControlTabs[0].Rows.Select(r => r.Action).ToArray());
-    }
-
-    /// <summary>The Throttle tab is the two lever keys and then the nine absolute eighths, which are
-    /// the digit row the original reserves for them.</summary>
-    [Fact]
-    public void TheThrottleTabCarriesTheNineEighthsBelowTheLeverPair()
-    {
-        var rows = OriginalShell.ControlTabs[1].Rows.Select(r => r.Action).ToArray();
-
-        Assert.Equal(InputAction.ThrottleUp, rows[0]);
-        Assert.Equal(InputAction.ThrottleDown, rows[1]);
-        for (int eighths = 0; eighths <= 8; eighths++)
-        {
-            Assert.Equal(InputAction.ThrottleSet0 + eighths, rows[2 + eighths]);
-        }
-
-        Assert.Equal(11, rows.Length);
-    }
-
-    /// <summary>The Targeting tab lists all eleven of the original's targeting actions in the
-    /// original page's own order, Next then Previous then Nearest per class and the two class-less
-    /// ones last (<c>OriginalScreenshots/Keybinds Targeting.png</c>). Pinned because the order is
-    /// read off that page rather than off the enum, which appends new members at its end.</summary>
-    [Fact]
-    public void TheTargetingTabIsTheOriginalsElevenInItsOwnOrder()
-    {
-        Assert.Equal(
-            new[]
-            {
-                InputAction.TargetNextEnemy, InputAction.TargetPreviousEnemy, InputAction.TargetNearestEnemy,
-                InputAction.TargetNextAlly, InputAction.TargetPreviousAlly, InputAction.TargetNearestAlly,
-                InputAction.TargetNextNonAircraft, InputAction.TargetPreviousNonAircraft,
-                InputAction.TargetNearestNonAircraft, InputAction.TargetNearest, InputAction.TargetClear,
-            },
-            OriginalShell.ControlTabs[3].Rows.Select(r => r.Action).ToArray());
-    }
-
-    [Fact]
     public void TheControlsDoorIsLiveOnlyWhereTheSharedFeatureStandsBehindIt()
     {
         var without = Shell(controls: null, out _, out _);
         without.Open(OriginalScreen.Options);
-        Assert.True(Row(without, OriginalShell.ControlsDoorKey) is { Enabled: false });
+        Assert.True(Row(without, OriginalOptionsScreen.ControlsDoorKey) is { Enabled: false });
 
         var with = Shell(out _, out _);
         with.Open(OriginalScreen.Options);
-        Assert.True(Row(with, OriginalShell.ControlsDoorKey) is { Enabled: true });
-        Click(with, Row(with, OriginalShell.ControlsDoorKey)!);
+        Assert.True(Row(with, OriginalOptionsScreen.ControlsDoorKey) is { Enabled: true });
+        Click(with, Row(with, OriginalOptionsScreen.ControlsDoorKey)!);
         Assert.Equal(OriginalScreen.ControlsPrefs, with.Screen);
-    }
-
-    [Fact]
-    public void TheKeysPageAuthorsCancelLeftOfAccept()
-    {
-        var shell = Shell(out _, out _);
-        shell.OpenKeys();
-        var cancel = Row(shell, OriginalShell.KeysCancelKey);
-        var accept = Row(shell, OriginalShell.KeysAcceptKey);
-        Assert.NotNull(cancel);
-        Assert.NotNull(accept);
-        Assert.True(cancel!.X < accept!.X, $"CANCEL CHANGES stands left of ACCEPT CHANGES ({cancel.X} vs {accept.X})");
-        Assert.Equal(cancel.Y, accept.Y);
-    }
-
-    [Fact]
-    public void ACellNamesTheActionItsRowStandsOnAndArmsACaptureOnItsOwnSlot()
-    {
-        var shell = Shell(out var controls, out _);
-        shell.OpenKeys();
-        var tab = OriginalShell.ControlTabs[0];
-        int row = tab.Rows.Count - 1;
-        Click(shell, Row(shell, OriginalShell.KeysCellKey(row, second: false))!);
-        Assert.Equal(tab.Rows[row].Context, controls.Context);
-        Assert.Equal(tab.Rows[row].Action, controls.Focused);
-        Assert.Equal(0, controls.Slot);
-        Assert.True(controls.Capturing);
-
-        controls.CancelCapture();
-        Click(shell, Row(shell, OriginalShell.KeysCellKey(row, second: true))!);
-        Assert.Equal(tab.Rows[row].Action, controls.Focused);
-        Assert.Equal(Math.Min(1, controls.FocusedBindings.Count), controls.Slot);
-    }
-
-    [Fact]
-    public void ARowWithMoreControlsThanColumnsSaysHowManyItIsNotShowing()
-    {
-        var shell = Shell(out var controls, out _);
-        shell.OpenKeys();
-        var action = OriginalShell.ControlTabs[0].Rows[0].Action;
-        controls.Context = InputContext.Flight;
-        controls.Focus(IndexOf(controls, action));
-        while (controls.FocusedBindings.Count > 0)
-        {
-            controls.MoveSlot(0);
-            controls.UnbindSlot();
-        }
-
-        foreach (var key in new[] { Godot.Key.M, Godot.Key.N, Godot.Key.B })
-        {
-            controls.MoveSlot(9);
-            controls.Offer(new Binding(DeviceId.Keyboard, BindingControl.Key((int)key)));
-            // A key the shipped set already holds asks first; this row wants all three either way.
-            controls.ConfirmSteal();
-        }
-
-        var text = shell.KeysCellText(0);
-        Assert.Equal("M", text.A);
-        Assert.Equal("N, +1 more", text.B);
     }
 
     [Fact]
     public void AnArmedCellTakesEscapeAsTheAbandonAndABoundKeyAsTheAnswer()
     {
         var shell = Shell(out var controls, out var devices, out var written);
-        shell.OpenKeys();
-        var action = OriginalShell.ControlTabs[0].Rows[0].Action;
-        Click(shell, Row(shell, OriginalShell.KeysCellKey(0, second: false))!);
+        shell.Options.OpenKeys();
+        var action = OriginalOptionsScreen.ControlTabs[0].Rows[0].Action;
+        Click(shell, Row(shell, OriginalOptionsScreen.KeysCellKey(0, second: false))!);
         Assert.True(controls.Capturing);
 
         devices.Flight.Keys.Add((int)Godot.Key.Escape);
@@ -204,7 +50,7 @@ public class OriginalControlsTests
             b => b.Control.Kind == ControlKind.Key && b.Control.Index == (int)Godot.Key.M);
 
         devices.Flight.Keys.Clear();
-        Click(shell, Row(shell, OriginalShell.KeysCellKey(0, second: false))!);
+        Click(shell, Row(shell, OriginalOptionsScreen.KeysCellKey(0, second: false))!);
         devices.Flight.Keys.Add((int)Godot.Key.M);
         shell.Step(None);
         Assert.False(controls.Capturing);
@@ -212,7 +58,7 @@ public class OriginalControlsTests
             b => b.Control.Kind == ControlKind.Key && b.Control.Index == (int)Godot.Key.M);
         Assert.Empty(written);
 
-        Click(shell, Row(shell, OriginalShell.KeysAcceptKey)!);
+        Click(shell, Row(shell, OriginalOptionsScreen.KeysAcceptKey)!);
         Assert.Equal(OriginalScreen.ControlsPrefs, shell.Screen);
         Assert.Equal(new[] { 1 }, written.ToArray());
     }
@@ -221,14 +67,14 @@ public class OriginalControlsTests
     public void CancelChangesDropsTheWholeVisitAndLeavesTheLiveKeymapAlone()
     {
         var shell = Shell(out var controls, out var devices, out var written);
-        shell.OpenKeys();
-        var action = OriginalShell.ControlTabs[0].Rows[0].Action;
-        Click(shell, Row(shell, OriginalShell.KeysCellKey(0, second: false))!);
+        shell.Options.OpenKeys();
+        var action = OriginalOptionsScreen.ControlTabs[0].Rows[0].Action;
+        Click(shell, Row(shell, OriginalOptionsScreen.KeysCellKey(0, second: false))!);
         devices.Flight.Keys.Add((int)Godot.Key.M);
         shell.Step(None);
         Assert.True(controls.Dirty);
 
-        Click(shell, Row(shell, OriginalShell.KeysCancelKey)!);
+        Click(shell, Row(shell, OriginalOptionsScreen.KeysCancelKey)!);
         Assert.Equal(OriginalScreen.ControlsPrefs, shell.Screen);
         Assert.False(controls.Dirty);
         Assert.DoesNotContain(controls.Bindings(InputContext.Flight, action),
@@ -240,99 +86,40 @@ public class OriginalControlsTests
     public void ATabPressStandsItsCategoryAndTheListWindowHoldsTheCursor()
     {
         var shell = Shell(out _, out _);
-        shell.OpenKeys();
-        Assert.Equal(0, shell.KeysTab);
-        int last = OriginalShell.ControlTabs.Count - 1;
-        Click(shell, Row(shell, OriginalShell.KeysTabKey(last))!);
-        Assert.Equal(last, shell.KeysTab);
-        Assert.Equal(0, shell.KeysTop);
+        shell.Options.OpenKeys();
+        Assert.Equal(0, shell.Options.KeysTab);
+        int last = OriginalOptionsScreen.ControlTabs.Count - 1;
+        Click(shell, Row(shell, OriginalOptionsScreen.KeysTabKey(last))!);
+        Assert.Equal(last, shell.Options.KeysTab);
+        Assert.Equal(0, shell.Options.KeysTop);
 
         // The Other tab outruns the list's window, so a cell past its foot is off screen until the
         // cursor walks onto it and the window follows.
-        int rows = OriginalShell.ControlTabs[last].Rows.Count;
+        int rows = OriginalOptionsScreen.ControlTabs[last].Rows.Count;
         Assert.True(rows > 11, $"the Other tab outruns the authored window ({rows} rows)");
-        Assert.False(Row(shell, OriginalShell.KeysCellKey(rows - 1, second: false))!.Visible);
+        Assert.False(Row(shell, OriginalOptionsScreen.KeysCellKey(rows - 1, second: false))!.Visible);
         shell.Step(new MenuCommands { MoveX = 1 });
-        for (int i = 0; i < rows + 4 && shell.FocusedKey != OriginalShell.KeysCellKey(rows - 1, second: false); i++)
+        for (int i = 0; i < rows + 4 && shell.FocusedKey != OriginalOptionsScreen.KeysCellKey(rows - 1, second: false); i++)
         {
             shell.Step(new MenuCommands { MoveY = 1 });
         }
 
-        Assert.Equal(OriginalShell.KeysCellKey(rows - 1, second: false), shell.FocusedKey);
-        Assert.True(Row(shell, OriginalShell.KeysCellKey(rows - 1, second: false))!.Visible);
-        Assert.True(shell.KeysTop > 0, $"the window followed the cursor down ({shell.KeysTop})");
+        Assert.Equal(OriginalOptionsScreen.KeysCellKey(rows - 1, second: false), shell.FocusedKey);
+        Assert.True(Row(shell, OriginalOptionsScreen.KeysCellKey(rows - 1, second: false))!.Visible);
+        Assert.True(shell.Options.KeysTop > 0, $"the window followed the cursor down ({shell.Options.KeysTop})");
     }
 
-    [Fact]
-    public void TheKeysPageDrawsItsTabsWithTheStandingOneDepressed()
+    // The shipped keymaps as one seat's profile, shared with OriginalOptionsTests, whose rebinding
+    // facts stage their edits in the same feature.
+    internal static BindingProfile Profile()
     {
-        var shell = Shell(out _, out _);
-        shell.OpenKeys();
-        Click(shell, Row(shell, OriginalShell.KeysTabKey(2))!);
-        var board = shell.Compose();
-        var tabs = board.Plaques.Where(p => p.Label.Length > 0).ToList();
-        Assert.Equal(OriginalShell.ControlTabs.Select(t => t.Name).ToArray(), tabs.Select(p => p.Label).ToArray());
-        Assert.Equal(3, tabs[2].Frame);
-        Assert.All(tabs.Where((_, i) => i != 2), p => Assert.NotEqual(3, p.Frame));
-        Assert.Contains(board.Lines, l => l.Text == "Weapons");
-        Assert.Contains(board.Lines, l => l.Text == "Action");
-        Assert.Contains(board.Lines, l => l.Text == "Control A");
-        Assert.Contains(board.Lines, l => l.Text == "Control B");
-    }
-
-    [Fact]
-    public void TheControlsPageDrawsItsSeatRowAndItsFlyingSchemeRow()
-    {
-        var shell = Shell(out var controls, out _);
-        shell.OpenControlsPrefs();
-        Assert.Equal("Player 1", Row(shell, OriginalShell.ControlsPlayerKey)!.Label);
-        Assert.Equal("Look", Row(shell, OriginalShell.ControlsMouseKey)!.Label);
-        var board = shell.Compose();
-        Assert.Contains(board.Lines, l => l.Text == "CONTROLS");
-        Assert.Contains(board.Lines, l => l.Text == "Player");
-        Assert.Contains(board.Lines, l => l.Text == "Mouse");
-        Assert.DoesNotContain(board.Lines, l => l.Text == "Mouse Sensitivity");
-        Assert.Contains(board.Lines, l => l.Text.StartsWith("Configure the keyboard", StringComparison.Ordinal));
-        Assert.Equal(1, controls.Players.Count);
-    }
-
-    /// <summary>The scheme row is the Controls door's own: a press flips it, a sideways step flips
-    /// it back, and neither reaches the seat until ACCEPT CHANGES.</summary>
-    [Fact]
-    public void TheFlyingSchemeRowStagesTheChoiceAndAcceptWritesIt()
-    {
-        var shell = Shell(out var controls, out _, out var written);
-        shell.OpenControlsPrefs();
-
-        Click(shell, Row(shell, OriginalShell.ControlsMouseKey)!);
-
-        Assert.True(controls.MouseFlying);
-        Assert.Equal("Fly", Row(shell, OriginalShell.ControlsMouseKey)!.Label);
-        Assert.Empty(written);
-
-        shell.Step(new MenuCommands { MoveX = 1 });
-
-        Assert.False(controls.MouseFlying);
-
-        shell.Step(new MenuCommands { MoveX = -1 });
-        Click(shell, Row(shell, OriginalShell.ControlsAcceptKey)!);
-
-        Assert.True(controls.MouseFlying);
-        Assert.Equal(new[] { 1 }, written);
-    }
-
-    private static int IndexOf(ControlsFeature controls, InputAction action)
-    {
-        var actions = controls.Actions;
-        for (int i = 0; i < actions.Count; i++)
+        var maps = new Dictionary<InputContext, ActionMap>();
+        foreach (var context in Enum.GetValues<InputContext>())
         {
-            if (actions[i] == action)
-            {
-                return i;
-            }
+            maps[context] = DefaultBindings.MapFor(context, MenuControlsSeats.PadOf(context));
         }
 
-        return 0;
+        return new BindingProfile(maps, readsKeyboard: true);
     }
 
     private static OriginalRow? Row(OriginalShell shell, string key)
@@ -379,17 +166,6 @@ public class OriginalControlsTests
         setup.SetRoster(OriginalPresentation.Roster(Array.Empty<CSVM.Flight.CustomPlaneDef>()));
         setup.Join(new ScriptedMenuSeat());
         return new OriginalShell(MenuLayoutReaderTests.OriginalLayout(), free, setup, Measure, controls: controls);
-    }
-
-    private static BindingProfile Profile()
-    {
-        var maps = new Dictionary<InputContext, ActionMap>();
-        foreach (var context in Enum.GetValues<InputContext>())
-        {
-            maps[context] = DefaultBindings.MapFor(context, MenuControlsSeats.PadOf(context));
-        }
-
-        return new BindingProfile(maps, readsKeyboard: true);
     }
 
     // The fixture's strips: the button strips 240x200 in four frames, the tab strip 120x148 in

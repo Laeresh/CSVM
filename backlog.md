@@ -1642,7 +1642,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `GO_T_VIEWDESC` over the `GO_D_VIEW` dropdown) and Auto Head Turn (`GO_T_HEADTITLE` and
   `GO_T_HEADDESC` over the `GO_B_HEADTURN` checkbox). The port's table carries Difficulty and the
   remake-only Menu row alone, while `ReadGameOptionsPage` already reads both dropped rows' widgets
-  for the page's row shape (`CSVM/src/UI/Menu/Original/OriginalGameOptions.cs`), so the geometry is
+  for the page's row shape (`CSVM/src/UI/Menu/Original/OriginalOptionsScreen.cs`), so the geometry is
   present and the options are not. Both settings exist in the engine with no way to them: autohead
   runs behind the `headLook.autohead` config key, default off
   (`CSVM/src/Utils/Config.cs:224-227`, `CSVM/src/Flight/FlightController.cs:3796-3806`), and the
@@ -2038,20 +2038,37 @@ usual.
   entirely (35.9 ms of a 39.5 ms bind in the sampled launch); props, wing lights, control surfaces
   and damage together stay under 1.5 ms, and the loadout, the turrets, the tree insert and the
   crash-rig arm under 6 ms.
-  *Fix shape:* three removals, in the order their size argues for. (1) `PlaneCollider.Build` is a
-  pure function of the built model's triangles, so the hulls and their `ConvexPolygonShape3D`s
-  belong to the process keyed by airframe rather than to each aeroplane, which is PERF-22's shape
-  and takes the term off every launch after an airframe's first. Check `AircraftBody`'s struck
-  shape index to part name mapping before sharing a shape resource between two bodies. (2) The
-  model build is what is left; building it AHEAD of the launch off the generator's authored cycle
-  only moves it onto a quieter frame (PERF-25, PERF-31), so the removal there is sharing the
-  airframe's immutable parts or splitting the build along its own mesh grain. (3) The
-  `material_create` term of `PrewarmEmitters` on the deferred frames (194 `ShaderMaterial` and
-  `MultiMesh` builds in `Effects/EmitterRenderer.cs`) is the separate PERF-22-shaped follow-up.
+  *Fix shape:* the whole build moves into the loading screen, where there is no frame budget, and
+  the launch frame claims a finished aeroplane. `AiFlightAssembler.Assemble` already builds the
+  spawn-independent parts first (the painted model, `PlaneCollider.Build`, the prop and surface
+  animators) and only then binds them into the controller with the spawn's own stats, loadout and
+  marker; the pool holds those parts per roster block, detached from the tree (a hidden subtree
+  still has bodies in the space and nodes the anim runtime walks, a detached one costs nothing per
+  frame), and the launch frame keeps the bind, the loadout and the tree insert, which measure
+  under 6 ms together. The crash rig's `PrewarmEmitters` (194 `ShaderMaterial` and `MultiMesh`
+  builds in `Effects/EmitterRenderer.cs`, 55 to 112 ms on the deferred frames) is built at load
+  for the same entry. Campaign rosters author their waves, so the pool is sized off the roster;
+  Instant Action generates its waves during play, so its pool refills one aeroplane per quiet
+  frame, and a refill is where the per-airframe removals still pay: `PlaneCollider.Build` is a
+  pure function of the model's triangles, so the hulls and their `ConvexPolygonShape3D`s belong to
+  the process keyed by airframe (PERF-22's shape; check `AircraftBody`'s struck shape index to
+  part name mapping before sharing a shape resource between two bodies), and the model build
+  shares the airframe's immutable parts or splits along its own mesh grain. Building ahead during
+  play without those removals only moves the lump onto a quieter frame (PERF-25, PERF-31).
+  *Precondition:* the livery is fixed before loading. Today `Assemble` resolves the scheme from
+  `_humanCount + index` where `index` is `FlightRoster._spawned` at launch, so the livery a block
+  wears depends on the order the player wakes the waves in, and a pool built at load could not
+  paint it. The scheme becomes a function of the roster block itself (the mission and the block's
+  position, not the running spawn count), which is the author's decision; blocks that launch out
+  of roster order then wear a different livery than before, so re-pin the goldens that show AI
+  liveries in the same change and say so in the `exercises` field.
   *⚠ Traps:* the aeroplanes a session builds BEFORE its first frame keep their rigs built in
-  place, and deferring them moved the goldens that fly AI aircraft; keep that rule. The spawn index
-  feeds both the livery stream and the spawn jitter (`Rng.NewSystemRandom(Rng.Spawn, index, 0)`),
-  so allocating indices ahead of the launch moves `c1-flight-kill`. The sim clock lags wall
+  place, and deferring them moved the goldens that fly AI aircraft; the pool's claim path must
+  produce the same tree the in-place build does, or those goldens move again. The spawn index
+  still feeds the spawn jitter (`Rng.NewSystemRandom(Rng.Spawn, index, 0)`) at launch and stays
+  there: the pool holds models and colliders, never indices, since allocating indices ahead of the
+  launch moves `c1-flight-kill`. The loading screen has to be a real yield of several frames, not
+  one: ten aeroplanes with their crash rigs are about 1.5 s of build. The sim clock lags wall
   time on physics-bound late missions, so compare a hitch in sim frames under `--det` and read the
   hitch lines before blaming a spawn (`docs/verification.md` PERF-12/13). `--det`'s numbers are
   with nobody at the controls; the author's feel report is the acceptance.

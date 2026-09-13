@@ -578,9 +578,9 @@ internal static class MenuPlayerSetupSuites
         ctx.Check(Row(shell, row) is { Enabled: true }, $"a selected seat's screen offers WEAPON LOADOUT ({Row(shell, row)?.Label})");
         ctx.Check(WalkTo(host, picking, shell, row), $"the picking seat's own cursor reaches it ({shell.FocusedKey})");
         Press(host, picking, Accept);
-        ctx.Check(shell.Screen == CSVM.UI.Menu.Original.OriginalScreen.InstantActionLoadout && shell.LoadoutSeat == 1
-            && ReferenceEquals(shell.LoadoutFit, seat.Fit) && shell.LoadoutNode == setup.Roster[seat.Cursor].Node,
-            $"and opens the loadout screen on that seat's own fit and airframe ({shell.Screen}, seat {shell.LoadoutSeat}, {shell.LoadoutNode})");
+        ctx.Check(shell.Screen == CSVM.UI.Menu.Original.OriginalScreen.InstantActionLoadout && shell.InstantAction.LoadoutSeat == 1
+            && ReferenceEquals(shell.InstantAction.LoadoutFit, seat.Fit) && shell.InstantAction.LoadoutNode == setup.Roster[seat.Cursor].Node,
+            $"and opens the loadout screen on that seat's own fit and airframe ({shell.Screen}, seat {shell.InstantAction.LoadoutSeat}, {shell.InstantAction.LoadoutNode})");
         ctx.Check(HasLine(shell, "P2  " + setup.Roster[seat.Cursor].Name), $"named for the pilot whose loadout it is");
         Press(host, seat0, Back);
         ctx.Check(shell.Screen == CSVM.UI.Menu.Original.OriginalScreen.InstantActionLoadout && host.Seats.Count == 2,
@@ -596,7 +596,7 @@ internal static class MenuPlayerSetupSuites
 
         Press(host, picking, Accept);
         Press(host, picking, Right);
-        ctx.Check(WalkTo(host, picking, shell, CSVM.UI.Menu.Original.OriginalShell.LoadoutAcceptKey),
+        ctx.Check(WalkTo(host, picking, shell, CSVM.UI.Menu.Original.OriginalInstantActionScreen.LoadoutAcceptKey),
             $"the cursor reaches ACCEPT LOADOUT ({shell.FocusedKey})");
         Press(host, picking, Accept);
         ctx.Check(shell.Screen == CSVM.UI.Menu.Original.OriginalScreen.SeatPlane && !seat.Fit.IsStock,

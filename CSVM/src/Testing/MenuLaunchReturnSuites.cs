@@ -464,7 +464,7 @@ internal static class MenuLaunchReturnSuites
             }
 
             run.Click(Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
-            var row = Row(shell, $"{OriginalShell.ContentsKey}:{preset}");
+            var row = Row(shell, $"{OriginalInstantActionScreen.ContentsKey}:{preset}");
             if (row == null)
             {
                 ctx.Check(false, $"contents row {preset} is on screen");
@@ -472,7 +472,7 @@ internal static class MenuLaunchReturnSuites
             }
 
             run.Click(Pointer(fit, row.X + 5f, row.Y + 5f, pressed: true, clicked: true));
-            var fly = Row(shell, OriginalShell.FlyMissionKey)!;
+            var fly = Row(shell, OriginalInstantActionScreen.FlyMissionKey)!;
             run.Click(Pointer(fit, fly.X + 5f, fly.Y + 5f, pressed: true, clicked: true));
             var launch = run.Expect<LaunchExit>();
             ctx.Check(launch is { Mode: MenuMode.Stunt } && launch.InstantAction?.MissionType == mission,
@@ -531,7 +531,7 @@ internal static class MenuLaunchReturnSuites
         run.Click(Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Screen == OriginalScreen.CampaignRoster && ReferenceEquals(campaign.Store, store),
             $"the Campaign door opens the profile screen over the scratch store ({shell.Screen})");
-        if (shell.RosterName != Pilot)
+        if (shell.Campaign.RosterName != Pilot)
         {
             run.Press(new MenuCommands { Typed = Pilot });
         }

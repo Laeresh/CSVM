@@ -229,7 +229,7 @@ chapter number in, and chapter N plays `chapN.mpg`. `CampaignCabinPage.MapPinCou
 story chapter for the cabin map's pins; `CampaignSequence.Chapter` is a different number, the world
 folder. Playing is a `UI/CinemaHandoff.cs` `CinemaPlay` the caller supplies, `Launcher.PlayCinema`
 being what it is handed, which leaves the film to `UI/CinemaScreen.cs` and keeps every decision here
-testable with no engine present; the cabin opens through that file's `Once`. `Launcher` holds the process's one instance and hands it to `Menu/CampaignFeature.cs`, which is how both presentations' cabin doors reach it (`UI/CampaignFlow.cs`, `UI/Menu/Original/OriginalCampaign.cs`). Films: [../formats/cinemas.md](../formats/cinemas.md).
+testable with no engine present; the cabin opens through that file's `Once`. `Launcher` holds the process's one instance and hands it to `Menu/CampaignFeature.cs`, which is how both presentations' cabin doors reach it (`UI/CampaignFlow.cs`, `UI/Menu/Original/OriginalCampaignScreen.cs`). Films: [../formats/cinemas.md](../formats/cinemas.md).
 
 ## src/Session/ClosingCinema.cs
 Whether the campaign's closing film plays before the scrapbook a flown mission opens, and the one

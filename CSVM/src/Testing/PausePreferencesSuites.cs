@@ -192,23 +192,23 @@ internal static class PausePreferencesSuites
     // Answers the word the row now stands on.
     private static string StepDisplayMode(TestContext ctx, PausePreferences leaf, StringBuilder report)
     {
-        WalkTo(leaf, OriginalShell.VideoDoorKey);
+        WalkTo(leaf, OriginalOptionsScreen.VideoDoorKey);
         leaf.Drive(new MenuCommands { Accept = true });
         ctx.Check(leaf.Shell.Screen == OriginalScreen.Video,
             $"the VIDEO door behind the Options screen opens in flight ({leaf.Shell.Screen})");
-        ctx.Check(leaf.Shell.DisplayModeChoice == DisplayWords.Borderless
-            && leaf.Shell.ResolutionChoice == SavedResolution,
-            $"on this machine's saved display settings ({leaf.Shell.DisplayModeChoice ?? "unset"}, {leaf.Shell.ResolutionChoice ?? "unset"})");
+        ctx.Check(leaf.Shell.Options.DisplayModeChoice == DisplayWords.Borderless
+            && leaf.Shell.Options.ResolutionChoice == SavedResolution,
+            $"on this machine's saved display settings ({leaf.Shell.Options.DisplayModeChoice ?? "unset"}, {leaf.Shell.Options.ResolutionChoice ?? "unset"})");
         string pinned = ResolutionSetting.ScreenSizes().Fallback;
-        ctx.Check(leaf.Shell.ResolutionPinned && RowOf(leaf, OriginalShell.ResolutionKey) is { Enabled: false } dead
+        ctx.Check(leaf.Shell.Options.ResolutionPinned && RowOf(leaf, OriginalOptionsScreen.ResolutionKey) is { Enabled: false } dead
             && dead.Label == pinned,
             $"with the size row dead at this screen's own size, borderless owning it ({SizeRow(leaf)})");
-        WalkTo(leaf, OriginalShell.DisplayModeKey);
+        WalkTo(leaf, OriginalOptionsScreen.DisplayModeKey);
         leaf.Drive(new MenuCommands { MoveX = 1 });
-        string stepped = leaf.Shell.DisplayModeChoice ?? string.Empty;
+        string stepped = leaf.Shell.Options.DisplayModeChoice ?? string.Empty;
         ctx.Check(stepped.Length > 0 && stepped != DisplayWords.Borderless,
             $"a sideways step on the Display Mode row picks another word ({stepped})");
-        ctx.Check(!leaf.Shell.ResolutionPinned && RowOf(leaf, OriginalShell.ResolutionKey) is { Enabled: true } live
+        ctx.Check(!leaf.Shell.Options.ResolutionPinned && RowOf(leaf, OriginalOptionsScreen.ResolutionKey) is { Enabled: true } live
             && live.Label == SavedResolution,
             $"which hands the size row back, standing on the size saved all along ({SizeRow(leaf)})");
         report.AppendLine($"display mode: {DisplayWords.Borderless} stepped to {stepped}");
@@ -223,7 +223,7 @@ internal static class PausePreferencesSuites
         Cell cell, Func<OptionsApplyExit?> applied, string stepped, StringBuilder report)
     {
         cell.At = (cell.OnStrip.X, cell.OnStrip.Y, true);
-        WalkTo(leaf, OriginalShell.VideoAcceptKey);
+        WalkTo(leaf, OriginalOptionsScreen.VideoAcceptKey);
         leaf.Drive(new MenuCommands { Accept = true });
         var exit = applied();
         ctx.Check(exit != null && exit.DisplayMode == stepped,
@@ -272,11 +272,11 @@ internal static class PausePreferencesSuites
         options.DisplayMode = applied.DisplayMode;
         store.Save(options);
         board.Preferences?.Invoke();
-        WalkTo(leaf, OriginalShell.VideoDoorKey);
+        WalkTo(leaf, OriginalOptionsScreen.VideoDoorKey);
         leaf.Drive(new MenuCommands { Accept = true });
-        ctx.Check(leaf.Shell.DisplayModeChoice == stepped,
-            $"the VIDEO page reopened in the same flight stands on the mode just applied ({leaf.Shell.DisplayModeChoice ?? "unset"})");
-        report.AppendLine($"reopened page: {leaf.Shell.DisplayModeChoice ?? "-"}");
+        ctx.Check(leaf.Shell.Options.DisplayModeChoice == stepped,
+            $"the VIDEO page reopened in the same flight stands on the mode just applied ({leaf.Shell.Options.DisplayModeChoice ?? "unset"})");
+        report.AppendLine($"reopened page: {leaf.Shell.Options.DisplayModeChoice ?? "-"}");
     }
 
     // A display change mid-flight resizes the viewport the flight draws into, and the leaf
@@ -285,7 +285,7 @@ internal static class PausePreferencesSuites
     private static void Resized(
         TestContext ctx, OriginalPauseBoard board, PausePreferences leaf, SubViewport view, StringBuilder report)
     {
-        var row = RowOf(leaf, OriginalShell.VideoAcceptKey);
+        var row = RowOf(leaf, OriginalOptionsScreen.VideoAcceptKey);
         if (row == null)
         {
             ctx.Check(false, $"the VIDEO page draws the row the pointer is aimed at");
@@ -303,18 +303,18 @@ internal static class PausePreferencesSuites
 
         leaf.WindowPointer = () => (before.Item1, before.Item2, false);
         leaf._Process(0.0);
-        ctx.Check(HoverKey(leaf) == OriginalShell.VideoAcceptKey,
+        ctx.Check(HoverKey(leaf) == OriginalOptionsScreen.VideoAcceptKey,
             $"the pointer hits the row it is drawn over at {FlightWindow.X}x{FlightWindow.Y} ({HoverKey(leaf)})");
 
         view.Size = ResizedWindow;
         leaf._Process(0.0);
         ctx.Check(leaf.Size.X == ResizedWindow.X && leaf.Size.Y == ResizedWindow.Y,
             $"the resized viewport is the one the leaf covers ({leaf.Size})");
-        ctx.Check(HoverKey(leaf) != OriginalShell.VideoAcceptKey,
+        ctx.Check(HoverKey(leaf) != OriginalOptionsScreen.VideoAcceptKey,
             $"the window pixel that hit that row no longer does, the screen having moved under it ({HoverKey(leaf)})");
         leaf.WindowPointer = () => (after.Item1, after.Item2, false);
         leaf._Process(0.0);
-        ctx.Check(HoverKey(leaf) == OriginalShell.VideoAcceptKey,
+        ctx.Check(HoverKey(leaf) == OriginalOptionsScreen.VideoAcceptKey,
             $"and the pixel the new fit puts it at does, so the leaf re-fit rather than kept the old one ({HoverKey(leaf)})");
         ctx.Check(leaf.Shown is { } shown && shown.Lines.Count + shown.Plaques.Count > 0,
             $"with the page still composing at the new size");
@@ -343,7 +343,7 @@ internal static class PausePreferencesSuites
     // The size row as one line, for a check that has to say what it saw rather than only that it
     // disagreed: the size drawn and whether the row takes a press.
     private static string SizeRow(PausePreferences leaf) =>
-        RowOf(leaf, OriginalShell.ResolutionKey) is { } row
+        RowOf(leaf, OriginalOptionsScreen.ResolutionKey) is { } row
             ? $"{row.Label}, enabled={row.Enabled}" : "no size row";
 
     private static OriginalRow? RowOf(PausePreferences leaf, string key)

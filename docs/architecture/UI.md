@@ -845,32 +845,61 @@ missions with every objective bit set, plus the scratch build store the export a
 ## src/UI/Menu/Original/OriginalShell.cs
 The Original presentation's screen graph (`CSVM.UI.Menu.Original`), engine-free over `MenuLayout` and the shared Free Flight, player-setup,
 Instant Action, hangar and campaign features, with the art measurer and the flight-devices answer injected. It owns the top level composed
-from `[MainMenu]`'s own rows, the two remake-only sortie screens, the Options screen over the decoded Preferences chrome, and the messagebox
-idiom every refusal and confirm goes through; the other screens are its own partials, below. `Step` applies one seat's frame, `Compose` is
+from `[MainMenu]`'s own rows, the two remake-only sortie screens, the Options hub over the decoded Preferences chrome, and the messagebox
+idiom every refusal and confirm goes through, whose box, `RaiseDialog` and answer keys are its own `OriginalShellDialog.cs` partial; the sortie and credits screens are its own partials, below, while the campaign, hangar, Instant Action and option families stand outside them as `OriginalCampaignScreen.cs`, `OriginalHangarScreen.cs`, `OriginalInstantActionScreen.cs` and `OriginalOptionsScreen.cs`. Each is held as one `IOriginalScreenModule` in a list and reaches back through `IOriginalScreenHost` (`OriginalScreenHost.cs`); `ModuleFor` answers which module owns the screen showing, so `BuildRows`, `Lists`, the sideways step, the dropdown close, `Activate`, `Back` and `Compose` name a module through that one lookup rather than a field and a screen-range check per family, and `Campaign`, `Hangar`, `InstantAction` and `Options` are the typed accessors the presentation and the suites read module-specific state through, the seat walk and the shell's own hangar and seat-strip members reaching campaign state through the first of them. `Step` applies one seat's frame, `Compose` is
 the screen as a `ComposedBoard` whose backdrop takes a section's `movie` row at its bottom, and every page's row kinds live here,
 `OriginalSlider` among them. A pointer press arms a row and only the release still on it activates (`ArmedKey`), on an edit box taking the
 caret alone where Accept in one reaches the screen's own commit; the pointer's bitmap answers an enter or leave (`PointerLive`); and a film
 in front of the board takes every frame, the tail of the press that ended it included (`CinemaFilm`). Screen by screen: [../org/menu-inventory.md](../org/menu-inventory.md).
 
+## src/UI/Menu/Original/OriginalShellDialog.cs
+The standing dialog, a partial of the shell itself rather than of any screen family: the
+`OriginalDialog`/`OriginalDialogAnswer` pair, the `DIALOG:*` answer keys every family and both test
+files read off `OriginalShell`, `RaiseDialog` with the chrome-bearing overload the credits About box
+takes, `DialogRows`, `AnswerDialog` and `ComposeDialog`. The shell owns it because the shell answers
+for it: while a box stands its answers are the only rows, `Compose` draws it over the screen's own
+picture, and Back takes the declining answer. The rollover frame is the pointer's alone, the cursor's
+answer marked with an outline three pixels clear of the strip instead, and the focus a raise took is
+put back when it is answered, which is the `FocusBeforeDialog` a screen under the box draws itself from. `DialogRows` sizes an answer plaque through `OriginalWidgets.PlaqueSizeOf`, so the box reaches into no module; every module only raises, and a door onto a new screen closes the box it left behind. [../org/campaign-board.md](../org/campaign-board.md).
+
+## src/UI/Menu/Original/OriginalScreenHost.cs
+The two sides of the seam between `OriginalShell` and a standalone screen module. `IOriginalScreenHost` is what a module reads off the shell and
+calls back into it for: the screen showing, the per-screen focus cursor every family shares, the pointer's row and position, whether a dialog stands,
+the string table and the art measurer, the seat strip and the shell's own plate-row rule, the film a cinema plays in front of the board and the one
+frame a screenshot aid replays, and the crossings into another family (the hangar a Build door opens, the walk FLY MISSION begins, a campaign resume, a roster re-read, the mission the cabin's typed cheat launches). The shell implements it explicitly, so the narrower vocabulary stays
+the modules' own, and each module's tests implement it as a fake and build the module with no shell at all. `IOriginalScreenModule` is the other
+side, what the shell calls on a module: `Owns` plus the seven dispatch members (`BuildRows`, `Lists`, `StepSideways`, `CloseDropdown`, `Activate`,
+`Back`, `Compose`). The shell holds its modules as these alone, so a further family is one more entry in its list and no new dispatch arm.
+
+## src/UI/Menu/Original/OriginalWidgets.cs
+The layout-widget readings more than one Original screen module needs, a file-level static because a module is a sealed class of its own and a rule
+two of them follow can live in neither: the slot number a numbered widget key carries (`AR_D_POINT2`, `OL_D_AMMO1`, and the same key behind a
+`<key>:<index>` list row), where a section's background pane lands on the board, which for art smaller than the board is the centre its own
+script sets rather than the corner it is authored at, a strip art's one-frame size, and the plaque size the shell's own messagebox measures an answer at.
+The rows a screen drawn by the shared board component carries are here too, read off an `ICampaignPage`, because the campaign module and the shell's
+per-seat aircraft screen build them the same way, with `ENTRY:` naming a scrapbook row the pointer only highlights. A pane that fills the board centres onto its own corner, and one authored away from the corner
+keeps it. Each module binds its own measurer to the pane rule once, so no call site carries one. The open-dropdown window rule is the other such
+reading, on `OriginalDropList.cs`.
+
 ## src/UI/Menu/Original/OriginalCheats.cs
-The three typed cheats of the Original presentation, a partial of the shell over the `gui_char`
-bodies of `PASSENGERCABIN.SCRIPT`, `SCRAPBOOK_TOC.SCRIPT` and `PLANECONSTRUCTION.SCRIPT`: the
-authored region of each screen, its own `TypedCheat`, the primary-button arm read off the pointer
-before the row hit test (the secondary button belongs to the credits line alone), the typed
-characters routed here instead of to a screen's edit box while a latch holds the keyboard, and what
-a completed word fires through `CampaignCheats` and `CampaignWallet`. The cabin's NEXT MISSION
-reads and empties the buffer, so the press after a cheated launch is the ordinary one, and every
-screen change resets all three. Engine coverage: `menu-original-cheats`.
+The three typed cheats of the Original presentation, a partial of the shell over the `gui_char` bodies of `PASSENGERCABIN.SCRIPT`,
+`SCRAPBOOK_TOC.SCRIPT` and `PLANECONSTRUCTION.SCRIPT`: the authored region of each screen, its own `TypedCheat`, the primary-button arm read off the
+pointer before the row hit test (the secondary button belongs to the credits line alone), the typed characters routed here instead of to a screen's
+edit box while a latch holds the keyboard, and what a completed word fires through `CampaignCheats` and `CampaignWallet`. The latches are the shell's
+because the three screens carrying them belong to two different modules; it reads those through `Campaign.Cheats`, `Hangar.IsHub` and
+`Hangar.OpenWallet`, and the campaign module reads the cheated mission back through the `IOriginalScreenHost.CheatedMission` seam. The cabin's NEXT
+MISSION reads and empties the buffer, so the press after a cheated launch is the ordinary one, and every screen change resets all three. Engine
+coverage: `menu-original-cheats`.
 
 ## src/UI/Menu/Original/OriginalDropList.cs
-The one rule every open dropdown of the Original shell follows, a partial of it: a page hands over its key, its items,
-the box the list hangs under and the layout widget behind it, and takes back the windowed rows, the `ListWindow` for the
-pointer and the write that scrolls it. The window is the widget's authored `TotalDisplayed` clamped to the item count,
-so a short list is exactly as tall as its items and carries no chrome. Every item is a row keyed `<key>:<index>`, the
-ones outside the window built but hidden, since the rows are the hit-test surface and a dropped row would let a pointer
-hit what it cannot see; a scrolling list adds `<key>:up` and `<key>:down` in an arrow's width of its own right edge and
-hangs the thumb between them. The Instant Action screen, the loadout screen and the two option pages come through here;
-`OriginalHangar.cs`'s list does not, its arrows being the closed box's `DropUp`/`DropDown` art. [../org/menu-inventory.md](../org/menu-inventory.md).
+The one rule every open dropdown of the Original shell follows, held as the file-level `OriginalDropLists` because every page standing on it is a
+standalone screen module of its own: a page hands over its key, its items, the box the list hangs
+under and the layout widget behind it, and takes back the windowed rows, the `ListWindow` for the pointer and the write that scrolls it. The
+window is the widget's authored `TotalDisplayed` clamped to the item count, so a short list is exactly as tall as its items and carries no
+chrome. Every item is a row keyed `<key>:<index>`, the ones outside the window built but hidden, since the rows are the hit-test surface and a
+dropped row would let a pointer hit what it cannot see; a scrolling list adds `<key>:up` and `<key>:down` in an arrow's width of its own right
+edge and hangs the thumb between them. The Instant Action module's two screens and the options module's two listed pages come through here;
+`OriginalHangarScreen.cs`'s list does not, its arrows being the closed box's `DropUp`/`DropDown` art. [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/SliderControl.cs
 The Original shell's continuous control: a pointer's hold-and-move over a slider row, and the
@@ -881,45 +910,9 @@ as the other. `Drive` reports a slider holding the pointer, which is how the she
 spent and activates nothing under it. A row declares its slider through `OriginalShell.cs`'s
 `OriginalSlider`; this class knows a track and a value and nothing about the setting behind them.
 
-## src/UI/Menu/Original/OriginalGameOptions.cs
-The Game Options page, the shell's partial over the decoded `[@GameOptions@]` section. Its content is a
-table: per option a key, a title, a description, the control kind and how the store field is read and
-written, so a further option is one entry plus its field. Row one is the original's own Difficulty dropdown
-at its authored box over the three campaign tiers; under it the remake-only Menu row, the presentation as a
-dropdown over the registered tokens, and under that the remake-only Next Target checkbox, the nearest-after-a-kill targeting switch off by default. The row shape is read off the section's widgets, so a layout that moves
-a row moves ours, and both pages' open list is windowed and drawn from here on `OriginalDropList.cs`'s rule. ACCEPT CHANGES leaves as the `OptionsApplyExit`; only
-`Launcher.ApplyOptions` writes the store. This file also holds the shell's shared `ReadSavedOptions`/`AppliedOptions`
-pair, which every option page reads and hands back through, so a page carries the settings it does not show: the display ones stand on VIDEO (`OriginalVideo.cs`) and the volume levels on AUDIO (`OriginalAudio.cs`). Rows: [../org/menu-inventory.md](../org/menu-inventory.md).
-
-## src/UI/Menu/Original/OriginalAudio.cs
-The AUDIO page, the shell's partial over the decoded `[@Audio@]` section, behind the Preferences page's second door. Four slider
-rows over `Utils/AudioMix.cs`'s 0..100 in VIDEO's table shape: per row the authored title, slider and description widgets it stands
-on, and how the store field is read and written, a never-set level reading as its shipped default. Each row's line is read off its
-own title widget, the authored pitch being 58, 57, 53 and 53 rather than one number. Master takes the In-Game Music row with the
-page's own words and its slider at the section's slider column, since a slider that reaches zero is that checkbox in one fewer
-widget; Sound Quality is left out. A slider answers no Accept (`SliderControl.cs`); ACCEPT CHANGES leaves as the `OptionsApplyExit`
-and CANCEL CHANGES drops the edits. `AudioPreviewMix` is the mix the open page stands at, null off it, and `TakeAudioMoved` the
-level a frame moved, taken once: the host is what applies and sounds them. [../org/menu-inventory.md](../org/menu-inventory.md).
-
-## src/UI/Menu/Original/OriginalVideo.cs
-The VIDEO page, the shell's partial over the decoded `[@Video@]` section, behind the Preferences page's third
-door. Same table as Game Options with one column more: each setting names the authored title, control and
-description widgets it stands on, so a row keeps its geometry, and the table is in authored row order because
-the cursor walks it. The monitor and Resolution keep the authored Graphics and Resolution rows, their words
-enumerated per machine by `Utils/MonitorSetting.cs` and `Utils/ResolutionSetting.cs`; the Graphics row's title
-and description are the page's own, the authored ones naming a 3D card this port has no answer to. Display Mode
-and V-Sync are dropdowns on Viewing Range and Effects Level over `DisplayWords`, Enhanced Graphics takes the
-Shadows checkbox whose gate it owns, and a list opens as `OriginalGameOptions.cs` does, so the Resolution row's sizes window and scroll where they outrun the eight rows that row authors, though under borderless, which owns the size, that row shows the screen's own size, draws dead and takes no press while the saved size waits untouched; ACCEPT CHANGES leaves as the `OptionsApplyExit`, CANCEL CHANGES drops the edits. [../org/menu-inventory.md](../org/menu-inventory.md).
-
-## src/UI/Menu/Original/OriginalControls.cs
-The two rebinding pages, the shell's partial over the decoded `[@ControlsPrefs@]` and `[@Keys@]`
-sections behind the Preferences page's fourth door, all of it over the shared `ControlsFeature`.
-The CONTROLS page carries the seat chooser on the Controller Type row and the KEYS AND BUTTONS
-door; the KEYS page carries seven category tabs, one action list under a category heading in the
-listbox's own window, and each row's controls in the two authored columns, the first in Control A
-and the rest in Control B so nothing is hidden. A cell press arms a capture on that row's action
-and slot, and the page swallows the frame while one runs. Each page's ACCEPT CHANGES commits and
-its CANCEL CHANGES drops the staged edits. Rows and readings: [../org/menu-inventory.md](../org/menu-inventory.md).
+## src/UI/Menu/Original/OriginalOptionsScreen.cs
+The five pages behind the Options hub's four doors as one standalone module over the decoded `[@GameOptions@]`, `[@Audio@]`, `[@Video@]`, `[@ControlsPrefs@]` and `[@Keys@]` sections; the hub itself stays the shell's. Game Options and VIDEO are one table shape: per row a key, the authored title, control and description widgets it stands on, and how the store field is read and written, so a further option is one entry plus its field and a layout that moves a row moves ours. Game Options is the original's Difficulty dropdown over the three campaign tiers plus the remake-only Menu and Next Target rows; VIDEO is the monitor and Resolution rows enumerated per machine (`Utils/MonitorSetting.cs`, `Utils/ResolutionSetting.cs`, that row dead under borderless, which owns the size), Display Mode and V-Sync over `Utils/OptionsStore.cs`'s `DisplayWords`, and Enhanced Graphics on the Shadows checkbox whose gate it owns; the Graphics row's title and description are the page's own, the authored ones naming a 3D card this port has no answer to. AUDIO is four slider rows over `Utils/AudioMix.cs`'s 0..100 on the authored pitches 58, 57, 53 and 53, Master taking the In-Game Music row because a slider reaching zero is that checkbox in one fewer widget and Sound Quality left out; a slider answers no Accept (`SliderControl.cs`), `AudioPreviewMix` is the mix the open page stands at and `TakeAudioMoved` the level a frame moved, taken once, the host applying and sounding them. CONTROLS carries the seat chooser on the Controller Type row and the KEYS AND BUTTONS door; KEYS carries seven category tabs, one action list under its heading in the listbox's own window, and each row's controls in the two authored columns (the first in Control A, the rest in Control B so nothing is hidden), a cell press arming a capture on that row's action and slot and the page swallowing the frame while one runs, all of it over the shared `ControlsFeature`.
+An open list is windowed and drawn on `OriginalDropList.cs`'s rule. The module's own `ReadSavedOptions`/`AppliedOptions` pair is what every page reads and hands back through, so a page carries the settings it does not show; ACCEPT CHANGES leaves as the one `OptionsApplyExit` and only `Launcher.ApplyOptions` writes the store, while CANCEL CHANGES and Back drop the edits. It is one `IOriginalScreenModule` and reaches `OriginalShell` only through `IOriginalScreenHost` (`OriginalScreenHost.cs`), so `OriginalOptionsTests` drives it over a hand-written host with no shell at all; the shell dispatches to it through `ModuleFor` and exposes it whole as `Options`, the `*Choice` properties the presentation and the rebinding facts read included. Rows and readings: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalCredits.cs
 The credits screen, the shell's partial over the decoded `[@Credits@]` section behind the top
@@ -951,43 +944,32 @@ device drives it, and the mouse riding seat 0's source. Accept selects, a second
 Back and CANCEL SELECTIONS drop a selection then leave the walk with every seat kept and nothing
 unjoined, and the last seat's confirm is the launch: [../menu-presentations.md](../menu-presentations.md).
 
-## src/UI/Menu/Original/OriginalInstantAction.cs
-The Original Instant Action screen, the shell's partial over the decoded `[@InstantAction@]`
-section and the shared `InstantActionFeature`. Its rows are the section's own widgets keyed by their
-layout keys: the contents list in its authored window with its arrows and thumb, the dropdowns at
-their authored boxes, the enemy rows on two pages under both paging buttons, the radio pair and the
-buttons. A box no setting can fill stands blank with a pale arrow rather than leaving the page; an
-open list is windowed by `OriginalDropList.cs`, bands its picked row and the row under the pointer, and a closed box redraws its outline
-in cream under one. The Pilot Plane list is `OriginalRosters.Roster` (stock, then the saved builds, rows named `Stock <airframe>` and `<build name> <airframe>`), re-read on every entry and on the hangar's return; a picked build flies its airframe's stock node with its def on the seat.
-Build opens the wallet-free hangar (`OriginalHangar.cs`), Weapon Loadout the loadout screen (`OriginalLoadout.cs`). Remake-only is the Lives box, which the section authors no row for: it takes the mission dropdown's column and item height on the first clear line the setup stack leaves (read off the gaps between the authored boxes, never written down as a Y), and steps the shared `InstantActionFeature.StepLives`, reading Unlimited at zero and the count to nine. Option sets: [../formats/instant-action.md](../formats/instant-action.md).
+## src/UI/Menu/Original/OriginalInstantActionScreen.cs
+The Original Instant Action screen and its Weapon Loadout, one standalone module over the shared `InstantActionFeature` and the decoded `[@InstantAction@]` and `[@OrdinanceLayout@]` sections. Its rows are
+the sections' own widgets keyed by their layout keys: the contents list in its authored window with its arrows and thumb, the dropdowns at their authored boxes, the enemy rows on two pages under both
+paging buttons, the radio pair and the buttons. A box no setting can fill stands blank with a pale arrow rather than leaving the page; an open list is windowed by `OriginalDropList.cs`, bands its picked
+row and the row under the pointer, and a closed box redraws its outline in cream under one. The Pilot Plane list is `OriginalRosters.Roster` (stock, then the saved builds, rows named `Stock <airframe>`
+and `<build name> <airframe>`), re-read on every entry and on the hangar's return; a picked build flies its airframe's stock node with its def on the seat. Build opens the wallet-free hangar
+(`OriginalHangarScreen.cs`); Weapon Loadout maps the section's four ammunition and eight rocket fields onto the airframe's gun slots and pylons over the stock table's option lists, with the airframe's
+diagram frames, the description pane and the snapshot CANCEL and Back restore, over seat 0's fit or the wingmen's shared one by the radio pair, or the per-seat picker's own `PlayerSeat.Fit`, which is what
+decides the screen its exit returns to. It is one `IOriginalScreenModule` and reaches `OriginalShell` only through the shared `IOriginalScreenHost` seam (`OriginalScreenHost.cs`), so `OriginalInstantActionTests` drives it over a hand-written host with no shell at all; the shell still owns `Rows`/`Compose`/`ApplyFrame` dispatch, routes to whichever module owns the screen showing and exposes this one whole as `InstantAction`. Its `Back` answers false where nothing is open and nothing is to cancel, which is how Instant Action's own Exit is left to the shell. Remake-only is the Lives box, which the section authors no row for: it takes the mission dropdown's column and item height on the first clear line the setup stack leaves (read off the gaps between the authored boxes, never written down as a Y), and steps the shared `InstantActionFeature.StepLives`, reading Unlimited at zero and the count to nine. Option sets: [../formats/instant-action.md](../formats/instant-action.md); what the fit means at launch: `src/Flight/LoadoutChoice.cs`.
 
-## src/UI/Menu/Original/OriginalLoadout.cs
-The Weapon Loadout screen, the shell's partial over the decoded `[@OrdinanceLayout@]` section (the
-campaign's ammo chrome) and one aeroplane's `LoadoutChoice`: the Instant Action strip's seat (seat
-0's fit or the `InstantActionFeature`'s wingman fit, by the radio pair) or the per-seat picker's own
-`PlayerSeat.Fit`, `_loadoutSeat` deciding which screen the exit returns to. It owns the mapping of
-the section's four ammunition and eight rocket fields onto the airframe's gun slots and pylons over
-the stock table's option lists, the snapshot CANCEL and Back restore, the airframe's diagram frames
-and the description pane; rows and open lists reuse the Instant Action partial's dropdown machinery.
-What the fit means at launch: `src/Flight/LoadoutChoice.cs`.
-
-## src/UI/Menu/Original/OriginalHangar.cs
-The Original hangar, the shell's partial over the shared `HangarFeature` and the decoded hangar
+## src/UI/Menu/Original/OriginalHangarScreen.cs
+The Original hangar, a standalone module over the shared `HangarFeature` and the decoded hangar
 sections: the PLANE NAME screen, the Plane Construction hub with one of six tab sections on its
 right page, the totals page and the INVENTORY, entered from Instant Action's Build Custom Plane or
-the cabin, the door naming the airframe a default build opens on. It owns the plane picture over
+the cabin, the door naming the airframe a default build opens on. It is one `IOriginalScreenModule` and reaches `OriginalShell` only through `IOriginalScreenHost` (`OriginalScreenHost.cs`), the shell's own explicit-interface implementation narrowing it to the screen/cursor/dialog surface a screen family needs (`Open`, `FocusKey`, `RaiseDialog`, the focused row and the campaign plane roster), so `OriginalHangarTests` drives it over a hand-written host with no shell at all; the shell still owns `Rows`/`Compose`/`ApplyFrame` dispatch, finds this module through its own `Owns` (every screen from `PlaneName` on) and exposes it whole as `Hangar` (its typed name, open list, last build and `OriginalHangarInks`) rather than forwarding member by member. It owns the plane picture over
 the blueprint panes; the hub's figures, which `HubBill` prices on the row an open list has under the cursor so they preview it and take nothing, the cost line reddening on that bill's funds verdict and the weight line on its capacity verdict, bar a previewed airframe row, whose weight line is pending and plain; the cash note on both doors (the wallet's funds, else the export door's figure), every combo row staying bare over either;
 the tab bar with the standing tab latched and its labels on the strips' own baseline; the tab pages' description box, which `HangarDescriptions` fills and whose prose flows as a note inside it; every list under its box bar the decal picker, the page's own five-across grid of tiles carrying its chrome inside its right edge; the two name boxes with their
-caret, the airframe swap's own three-answer question as the shared messagebox, and the export door's own Export, Delete and delete confirm; `PaneOrigin` centres a small pane and places its rows on it. [../org/hangar.md](../org/hangar.md), [../org/menu-inventory.md](../org/menu-inventory.md).
+caret, the airframe swap's own three-answer question as the shared messagebox (its answer keys mirroring `OriginalShellDialog.cs`'s `DialogOkKey`/`DialogYesKey`/`DialogNoKey`/`DialogCancelKey`), and the export door's own Export, Delete and delete confirm; the shared pane rule (`OriginalWidgets.cs`) centres a small pane and this module places its rows on it. [../org/hangar.md](../org/hangar.md), [../org/menu-inventory.md](../org/menu-inventory.md).
 
-## src/UI/Menu/Original/OriginalCampaign.cs
-The Original campaign, the shell's partial over the shared `CampaignFeature`: the profile screen,
+## src/UI/Menu/Original/OriginalCampaignScreen.cs
+The Original campaign, one standalone module over the shared `CampaignFeature`: the profile screen,
 the cabin, the table of contents, the flight check, ammo and plane selection, the book, a scrap's
-zoom and the briefing dialog. What each screen draws is the shared board component, so the shell
-hosts the Built-in campaign pages in a `CampaignFlow` of its own and copies every composed layer
-into its own board; that flow is never walked, its screen and cursor mirroring this file's. The
-screen graph, the rows at the rectangles the board draws them at, the pointer hit-testing, the
-cues and the dialogs are this file's, as are `OpenCabin` (every door onto the cabin, which is why RETURN TO CABIN is taken here rather than mirrored off a page), `ComposeDialog` (a standing box's answers, whose rollover frame is the pointer's alone, the cursor's own answer marked with an outline over the box instead), `ShowScrapbook`, where the feature's two cinemas play, and `CheckSeat`: the check and the two screens it opens stand for one player at a time, that seat's own device driving them while seat 0 keeps its pointer alone. Read `src/UI/CampaignFlow.cs` for the pages; the screens and
+zoom and the briefing. What each screen draws is the shared board component, so the module hosts
+the Built-in campaign pages in a `CampaignFlow` of its own and copies every composed layer into the
+board it hands back; that flow is never walked, its screen and cursor mirroring this module's. The
+screen graph, the rows at the rectangles the board draws them at, the pointer hit-testing, the cues and every dialog raise are this file's, as are `OpenCabin` (every door onto the cabin, which is why RETURN TO CABIN is taken here rather than mirrored off a page), `ShowScrapbook`, where the feature's two cinemas play, and `CheckSeat`: the check and the two screens it opens stand for one player at a time, that seat's own device driving them while seat 0 keeps its pointer alone. It is one `IOriginalScreenModule` and reaches `OriginalShell` only through `IOriginalScreenHost` (`OriginalScreenHost.cs`), which raises its messageboxes, runs a script's frames and plays its films, so `OriginalCampaignTests` drives it over a hand-written host with no shell at all; the shell dispatches through `ModuleFor` and exposes it whole as `Campaign`, which is also how the seat walk and the hangar door's wallet reach campaign state. The scrapbook's pen is the only stroke any module draws, which is why `Compose` carries a strokes layer. Read `src/UI/CampaignFlow.cs` for the pages; the screens and
 their strings: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalPresentation.cs

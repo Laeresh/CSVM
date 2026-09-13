@@ -55,9 +55,14 @@ public sealed partial class OriginalShell
                 return _contentsCheat;
             }
 
-            return IsHub ? _hubCheat : null;
+            return OnHub ? _hubCheat : null;
         }
     }
+
+    // Whether the plane-construction hub is showing, which is the hangar module's own reading: the
+    // cash figure PLANECONSTRUCTION.SCRIPT sets its region off stands on the tabs and the purchase
+    // page and nowhere else. The module answers it; it learns nothing about the cheat.
+    private bool OnHub => Hangar?.IsHub ?? false;
 
     private static bool Inside(MenuPointer pointer, float left, float top, float right, float bottom) =>
         pointer.X >= left && pointer.X <= right && pointer.Y >= top && pointer.Y <= bottom;
@@ -69,7 +74,7 @@ public sealed partial class OriginalShell
             pointer, CabinCheatLeft, CabinCheatTop, CabinCheatRight, CabinCheatBottom),
         OriginalScreen.CampaignPreviousMissions => Inside(
             pointer, ContentsCheatLeft, ContentsCheatTop, ContentsCheatRight, ContentsCheatBottom),
-        _ => IsHub && Inside(pointer, HubCheatLeft, HubCheatTop, HubCheatRight, HubCheatBottom),
+        _ => OnHub && Inside(pointer, HubCheatLeft, HubCheatTop, HubCheatRight, HubCheatBottom),
     };
 
     // The screens' own lbutton_update: the PRIMARY button, since the secondary one belongs to the
@@ -112,7 +117,7 @@ public sealed partial class OriginalShell
     // gallery, and the hub grants cash through the wallet the build is already priced against.
     private void FireCheat(TypedCheat cheat)
     {
-        if (_campaign?.Cheats is not { } cheats)
+        if (Campaign.Cheats is not { } cheats)
         {
             return;
         }
@@ -125,7 +130,7 @@ public sealed partial class OriginalShell
         {
             cheats.Reveal();
         }
-        else if (_hangar?.Wallet is CampaignWallet wallet)
+        else if (Hangar?.OpenWallet is CampaignWallet wallet)
         {
             wallet.GrantCheatCash();
         }
@@ -136,7 +141,7 @@ public sealed partial class OriginalShell
     // empties it, so the next press is the ordinary one until the word is typed again.
     private int CheatedMission(int ordinary)
     {
-        if (_campaign?.Cheats is not { } cheats || !_cabinCheat.Typed)
+        if (Campaign.Cheats is not { } cheats || !_cabinCheat.Typed)
         {
             return ordinary;
         }

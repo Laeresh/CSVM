@@ -1,5 +1,6 @@
 using System.Linq;
 using CSVM.Mech3;
+using CSVM.Session;
 using CSVM.UI;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.Original;
@@ -24,7 +25,6 @@ public class OriginalShellTests
     private static readonly MenuCommands Down = new() { MoveY = 1 };
     private static readonly MenuCommands Up = new() { MoveY = -1 };
     private static readonly MenuCommands Right = new() { MoveX = 1 };
-    private static readonly MenuCommands Left = new() { MoveX = -1 };
 
     [Fact]
     public void TheTopLevelIsTheSixDecodedRowsPlusTheFreeFlightDoorAndOpensFocusedOnTheDoor()
@@ -246,659 +246,6 @@ public class OriginalShellTests
         Assert.Equal(OriginalShell.AirframeKey(2), shell.FocusedKey);
     }
 
-    [Fact]
-    public void TheGameOptionsPageTakesEveryChoiceAndAppliesThemAsOneExit()
-    {
-        var shell = Shell(out _);
-        shell.Step(Down);
-        shell.Step(Down);
-        shell.Step(Down);
-        shell.Step(Accept);
-        Assert.Equal(OriginalScreen.Options, shell.Screen);
-        Assert.Equal(OriginalShell.GameOptionsDoorKey, shell.FocusedKey);
-        shell.Step(Accept);
-        Assert.Equal(OriginalScreen.GameOptions, shell.Screen);
-        Assert.Equal(CSVM.Flight.Difficulty.Normal, shell.DifficultyChoice);
-        Assert.Equal(PresentationId.Original.Value, shell.PresentationChoice);
-        Assert.Equal(GraphicsMode.Default, shell.GraphicsChoice);
-        Assert.Equal(OriginalShell.DifficultyKey, shell.FocusedKey);
-
-        // The first row is the original's own Difficulty dropdown over the three campaign tiers:
-        // its list opens on Accept, and the third item picks Hardest.
-        shell.Step(Accept);
-        Assert.Equal(OriginalShell.DifficultyKey, shell.OpenGameOption);
-        Assert.Equal(new[] { "Normal", "Hard", "Hardest" }, shell.Rows.Select(r => r.Label));
-        shell.Step(Down);
-        shell.Step(Down);
-        shell.Step(Accept);
-        Assert.Null(shell.OpenGameOption);
-        Assert.Equal(CSVM.Flight.Difficulty.Hardest, shell.DifficultyChoice);
-        Assert.Equal("Hardest", shell.Rows.Single(r => r.Key == OriginalShell.DifficultyKey).Label);
-        // A sideways step wraps back onto Normal, then on to Hard.
-        shell.Step(Right);
-        Assert.Equal(CSVM.Flight.Difficulty.Normal, shell.DifficultyChoice);
-        shell.Step(Right);
-        Assert.Equal(CSVM.Flight.Difficulty.Hard, shell.DifficultyChoice);
-
-        shell.Step(Down);
-        Assert.Equal(OriginalShell.PresentationKey, shell.FocusedKey);
-
-        // Accept on the closed dropdown opens its list; picking the second item closes it and
-        // leaves the focus on the box, now reading the other token.
-        shell.Step(Accept);
-        Assert.Equal(OriginalShell.PresentationKey, shell.OpenGameOption);
-        Assert.Equal(new[] { "ORIGINAL", "BUILT-IN" }, shell.Rows.Select(r => r.Label));
-        shell.Step(Down);
-        shell.Step(Accept);
-        Assert.Null(shell.OpenGameOption);
-        Assert.Equal(PresentationId.BuiltIn.Value, shell.PresentationChoice);
-        Assert.Equal("BUILT-IN", shell.Rows.Single(r => r.Key == OriginalShell.PresentationKey).Label);
-
-        // A sideways step on the closed box takes the next token with wrap.
-        shell.Step(Right);
-        Assert.Equal(PresentationId.Original.Value, shell.PresentationChoice);
-        shell.Step(Right);
-        Assert.Equal(PresentationId.BuiltIn.Value, shell.PresentationChoice);
-
-        // The third row is the remake-only Next Target checkbox: Accept flips it, and a sideways
-        // step is the same flip, so the row is walkable with either gesture.
-        shell.Step(Down);
-        Assert.Equal(OriginalShell.NearestAfterKillKey, shell.FocusedKey);
-        Assert.Null(shell.NearestAfterKillChoice);
-        shell.Step(Accept);
-        Assert.True(shell.NearestAfterKillChoice);
-        shell.Step(Right);
-        Assert.False(shell.NearestAfterKillChoice);
-        shell.Step(Right);
-        Assert.True(shell.NearestAfterKillChoice);
-
-        shell.Step(Down);
-        Assert.Equal(OriginalShell.GameOptionsAcceptKey, shell.FocusedKey);
-        var step = shell.Step(Accept);
-        var exit = Assert.IsType<OptionsApplyExit>(step.Exit);
-        Assert.Equal(PresentationId.BuiltIn, exit.Presentation);
-        Assert.True(exit.NearestAfterKill);
-        // The graphics word rides this page's apply unchanged: it is the VIDEO page's row now, and
-        // the apply carries every saved choice whichever page sends it.
-        Assert.Equal(GraphicsMode.Default, exit.Graphics);
-        Assert.Equal("hard", exit.Difficulty);
-    }
-
-    /// <summary>The AUDIO page behind the Preferences page's second door: it opens on the saved
-    /// mix with Master focused, a sideways step moves the focused level and clamps rather than
-    /// wrapping, and ACCEPT CHANGES leaves as the one apply exit carrying the four levels beside
-    /// the settings the page never showed.</summary>
-    [Fact]
-    public void TheAudioPageMovesALevelAndAppliesTheMixAsOneExit()
-    {
-        var saved = new OptionsDef
-        {
-            AudioMaster = 80, AudioMusic = 20, AudioEffects = 55, AudioVoice = 5,
-            Difficulty = "hard", VSync = "120",
-        };
-        var shell = Shell(out _, () => saved);
-        shell.Step(Down);
-        shell.Step(Down);
-        shell.Step(Down);
-        shell.Step(Accept);
-        Assert.Equal(OriginalScreen.Options, shell.Screen);
-        shell.Step(Down);
-        Assert.Equal(OriginalShell.AudioDoorKey, shell.FocusedKey);
-        shell.Step(Accept);
-
-        // The page opens on the saved mix, not on the shipped defaults.
-        Assert.Equal(OriginalScreen.Audio, shell.Screen);
-        Assert.Equal(OriginalShell.AudioMasterKey, shell.FocusedKey);
-        Assert.Equal(80, shell.AudioMasterChoice);
-        Assert.Equal(20, shell.AudioMusicChoice);
-        Assert.Equal(55, shell.AudioEffectsChoice);
-        Assert.Equal(5, shell.AudioVoiceChoice);
-
-        // A sideways step moves the focused level by the control's own step and clamps at silence
-        // instead of wrapping to full, which is what every other stepped row on this shell does.
-        shell.Step(Right);
-        Assert.Equal(85, shell.AudioMasterChoice);
-        shell.Step(Down);
-        shell.Step(Down);
-        shell.Step(Down);
-        Assert.Equal(OriginalShell.AudioVoiceKey, shell.FocusedKey);
-        shell.Step(Left);
-        Assert.Equal(0, shell.AudioVoiceChoice);
-        shell.Step(Left);
-        Assert.Equal(0, shell.AudioVoiceChoice);
-
-        // Accept on a slider is a no-op: the level moves under the pointer or by a step alone.
-        shell.Step(Accept);
-        Assert.Equal(0, shell.AudioVoiceChoice);
-
-        shell.Step(Down);
-        Assert.Equal(OriginalShell.AudioAcceptKey, shell.FocusedKey);
-        var exit = Assert.IsType<OptionsApplyExit>(shell.Step(Accept).Exit);
-        Assert.Equal(85, exit.AudioMaster);
-        Assert.Equal(20, exit.AudioMusic);
-        Assert.Equal(55, exit.AudioEffects);
-        Assert.Equal(0, exit.AudioVoice);
-        // The settings this page never showed ride the apply unchanged, read back when it opened.
-        Assert.Equal("hard", exit.Difficulty);
-        Assert.Equal("120", exit.VSync);
-        Assert.Equal(PresentationId.Original, exit.Presentation);
-    }
-
-    /// <summary>A level the options file has never carried opens the row on the shipped default,
-    /// and CANCEL CHANGES and Back both leave with the edits dropped and no exit.</summary>
-    [Fact]
-    public void TheAudioPageOpensOnTheShippedDefaultsAndDropsAnEditOnCancelAndOnBack()
-    {
-        var shell = Shell(out _);
-        shell.OpenAudio();
-        Assert.Null(shell.AudioMasterChoice);
-        Assert.Equal(AudioMix.DefaultMaster, shell.Rows.Single(r => r.Key == OriginalShell.AudioMasterKey).Slider!.Value);
-        Assert.Equal(AudioMix.DefaultMusic, shell.Rows.Single(r => r.Key == OriginalShell.AudioMusicKey).Slider!.Value);
-        Assert.Equal(AudioMix.DefaultEffects, shell.Rows.Single(r => r.Key == OriginalShell.AudioEffectsKey).Slider!.Value);
-        Assert.Equal(AudioMix.DefaultVoice, shell.Rows.Single(r => r.Key == OriginalShell.AudioVoiceKey).Slider!.Value);
-
-        shell.Step(Down);
-        shell.Step(Left);
-        Assert.Equal(45, shell.AudioMusicChoice);
-        shell.Step(Down);
-        shell.Step(Down);
-        shell.Step(Down);
-        shell.Step(Down);
-        Assert.Equal(OriginalShell.AudioCancelKey, shell.FocusedKey);
-        Assert.Null(shell.Step(Accept).Exit);
-        Assert.Equal(OriginalScreen.Options, shell.Screen);
-        Assert.Null(shell.AudioMusicChoice);
-
-        shell.OpenAudio();
-        // A step at an end moves nothing, so it writes nothing and the level is still never set.
-        shell.Step(Right);
-        Assert.Null(shell.AudioMasterChoice);
-        shell.Step(Left);
-        Assert.Equal(95, shell.AudioMasterChoice);
-        Assert.Null(shell.Step(Back).Exit);
-        Assert.Equal(OriginalScreen.Options, shell.Screen);
-        Assert.Null(shell.AudioMasterChoice);
-    }
-
-    /// <summary>The AUDIO page's live preview as the shell states it: while the page is open it
-    /// names the four levels it stands at, off the page it names no mix at all, and it names the
-    /// level a frame moved only on the frames that actually moved one, so a host cannot sound a
-    /// category once per pointer frame of a drag.</summary>
-    [Fact]
-    public void TheAudioPageStatesItsMixWhileOpenAndNamesAMovedLevelOnlyWhenOneMoved()
-    {
-        var shell = Shell(out _);
-        Assert.Null(shell.AudioPreviewMix);
-        shell.OpenAudio();
-        Assert.Equal(
-            new AudioLevels(AudioMix.DefaultMaster, AudioMix.DefaultMusic, AudioMix.DefaultEffects, AudioMix.DefaultVoice),
-            shell.AudioPreviewMix);
-        Assert.Equal(MenuMixLevel.None, shell.TakeAudioMoved());
-
-        // A sideways step on the Effects row names Effects, and names it once: the moved level is
-        // taken rather than read, so a second ask cannot sound the same move again.
-        shell.Step(Down);
-        shell.Step(Down);
-        Assert.Equal(OriginalShell.AudioEffectsKey, shell.FocusedKey);
-        shell.Step(Left);
-        Assert.Equal(MenuMixLevel.Effects, shell.TakeAudioMoved());
-        Assert.Equal(MenuMixLevel.None, shell.TakeAudioMoved());
-        Assert.Equal(AudioMix.DefaultEffects - SliderControl.KeyStep, shell.AudioPreviewMix!.Value.Effects);
-
-        // A drag: the frame that takes hold moves the level and names it, a held frame at the same
-        // point moves nothing and names nothing, and the same holds at the far end of the track.
-        var row = shell.Rows.Single(r => r.Key == OriginalShell.AudioEffectsKey);
-        float left = row.X + 1f;
-        float right = row.X + row.Width - 1f;
-        shell.Step(Pointer(left, row.Y + 5f, pressed: true, clicked: true));
-        Assert.Equal(AudioMix.MinLevel, shell.AudioEffectsChoice);
-        Assert.Equal(MenuMixLevel.Effects, shell.TakeAudioMoved());
-        shell.Step(Pointer(left, row.Y + 5f, pressed: true));
-        Assert.Equal(MenuMixLevel.None, shell.TakeAudioMoved());
-        shell.Step(Pointer(right, row.Y + 5f, pressed: true));
-        Assert.Equal(AudioMix.MaxLevel, shell.AudioEffectsChoice);
-        Assert.Equal(MenuMixLevel.Effects, shell.TakeAudioMoved());
-        shell.Step(Pointer(right, row.Y + 5f, pressed: true));
-        Assert.Equal(MenuMixLevel.None, shell.TakeAudioMoved());
-        Assert.Equal(AudioMix.MaxLevel, shell.AudioPreviewMix!.Value.Effects);
-
-        // And off the page there is no mix to apply, which is what drops the preview whichever door
-        // the page was left by.
-        Assert.Null(shell.Step(Back).Exit);
-        Assert.Equal(OriginalScreen.Options, shell.Screen);
-        Assert.Null(shell.AudioPreviewMix);
-    }
-
-    /// <summary>The AUDIO page over its own section: four sliders in the section's slider column,
-    /// each on its own authored line (the pitch is uneven, so a first row and one pitch would
-    /// misplace the rows below the second), the Master row on the In-Game Music line at the slider
-    /// offset rather than at that row's checkbox corner, and the two plaques under them.</summary>
-    [Fact]
-    public void TheAudioPageIsComposedOverItsSectionsOwnRowShape()
-    {
-        var shell = Shell(out _);
-        shell.OpenAudio();
-
-        // Each row is the authored slot inset by 0, -10, 1 and -10: 137 wide of press region over a
-        // three-pixel line, standing at the slider column and 26 pixels under its own title.
-        var master = shell.Rows.Single(r => r.Key == OriginalShell.AudioMasterKey);
-        Assert.Equal((130f, 266f, 170f, 23f), (master.X, master.Y, master.Width, master.Height));
-        var music = shell.Rows.Single(r => r.Key == OriginalShell.AudioMusicKey);
-        Assert.Equal((130f, 326f, 170f, 23f), (music.X, music.Y, music.Width, music.Height));
-        var effects = shell.Rows.Single(r => r.Key == OriginalShell.AudioEffectsKey);
-        Assert.Equal((130f, 381f, 170f, 23f), (effects.X, effects.Y, effects.Width, effects.Height));
-        var voice = shell.Rows.Single(r => r.Key == OriginalShell.AudioVoiceKey);
-        Assert.Equal((130f, 431f, 170f, 23f), (voice.X, voice.Y, voice.Width, voice.Height));
-        var accept = shell.Rows.Single(r => r.Key == OriginalShell.AudioAcceptKey);
-        Assert.Equal((200f, 500f, 240f, 50f), (accept.X, accept.Y, accept.Width, accept.Height));
-
-        var board = shell.Compose();
-        // The logo and the plate are the backdrop, not pictures. A board draws its fills between the
-        // two layers, so a plate among the pictures would paint over the focused row's own mark and
-        // the page would show no focus at all.
-        Assert.Equal(new[] { "PM_Flag.MPG", "PM_Logo.png", "PP_ApBack.png" }, board.Backdrop.Select(p => p.Art.Name));
-        Assert.DoesNotContain(board.Pictures, p => p.Art.Name is "PM_Logo.png" or "PP_ApBack.png");
-        Assert.Contains(board.Lines, l => l.Text == "AUDIO" && l.X == 120f && l.Justify == BoardJustify.Center);
-        Assert.Contains(board.Lines, l => l.Text == "Master" && l.X == 130f && l.Y == 250f && l.Width == 112f);
-        Assert.Contains(board.Lines, l => l.Text == "Set the overall volume of all sounds."
-            && l.X == 340f && l.Y == 260f && l.Width == 310f);
-        Assert.Contains(board.Lines, l => l.Text == "Music Volume" && l.X == 130f && l.Y == 310f && l.Width == 170f);
-        Assert.Contains(board.Lines, l => l.Text == "Effects Volume" && l.X == 130f && l.Y == 365f && l.Width == 170f);
-        Assert.Contains(board.Lines, l => l.Text == "Voice Volume" && l.X == 130f && l.Y == 415f && l.Width == 170f);
-        Assert.Equal(9, board.Lines.Count(l => l.Row < 0));
-
-        // The focused row is marked twice and the others not at all: an outline around the row the
-        // page opens on, and that row's title alone in the focused ink. Both halves are asserted
-        // because either alone is a mark a player at a pad reported not seeing.
-        Assert.Equal(
-            new[] { (130f, 266f, 170f, 23f) },
-            board.Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));
-        Assert.Contains(board.Lines, l => l.Text == "Master" && l.Ink == BoardInk.RowFocused);
-        Assert.All(
-            new[] { "Music Volume", "Effects Volume", "Voice Volume" },
-            title => Assert.Contains(board.Lines, l => l.Text == title && l.Ink == BoardInk.Row));
-
-        // And the mark follows the cursor rather than sticking to the first row.
-        shell.Step(Down);
-        var moved = shell.Compose();
-        Assert.Equal(
-            new[] { (130f, 326f, 170f, 23f) },
-            moved.Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));
-        Assert.Contains(moved.Lines, l => l.Text == "Music Volume" && l.Ink == BoardInk.RowFocused);
-        Assert.Contains(moved.Lines, l => l.Text == "Master" && l.Ink == BoardInk.Row);
-
-        // The slot is drawn at the track's corner, the thumb at the level's own place on it. The
-        // Master row authors no slider, so it takes the shipped art names as well as the sizes.
-        var masterSlot = board.Pictures.Single(p => p.Art.Name == "PF_B_SliderSlot.png");
-        Assert.Equal((130f, 276f), (masterSlot.X, masterSlot.Y));
-        var masterThumb = board.Pictures.Single(p => p.Art.Name == "PF_B_Slider.png");
-        Assert.Equal((258f, 267f), (masterThumb.X, masterThumb.Y));
-        // The music row stands at the shipped default of 50, which is half a run along its slot.
-        Assert.Equal(130f, board.Pictures.Single(p => p.Art.Name == "PP_B_SliderSlot.png" && p.Y == 336f).X);
-        Assert.Equal(194f, board.Pictures.Single(p => p.Art.Name == "PP_B_Slider.png" && p.Y == 327f).X);
-    }
-
-    /// <summary>The VIDEO page behind the Preferences page's third door: it opens on the saved
-    /// words with its first row focused, the checkbox under that flips the graphics word, and
-    /// ACCEPT CHANGES leaves as the one apply exit carrying both display choices beside the two the
-    /// Game Options page owns.</summary>
-    [Fact]
-    public void TheVideoPageFlipsEnhancedGraphicsAndAppliesItAsOneExit()
-    {
-        var shell = Shell(out _);
-        shell.Step(Down);
-        shell.Step(Down);
-        shell.Step(Down);
-        shell.Step(Accept);
-        Assert.Equal(OriginalScreen.Options, shell.Screen);
-        // The AUDIO door stands between them, so the VIDEO door is two steps down.
-        shell.Step(Down);
-        shell.Step(Down);
-        Assert.Equal(OriginalShell.VideoDoorKey, shell.FocusedKey);
-        shell.Step(Accept);
-        Assert.Equal(OriginalScreen.Video, shell.Screen);
-        Assert.Equal(OriginalShell.MonitorKey, shell.FocusedKey);
-        Assert.Null(shell.MonitorChoice);
-        Assert.Null(shell.ResolutionChoice);
-        Assert.Null(shell.DisplayModeChoice);
-        Assert.Null(shell.VSyncChoice);
-        Assert.Equal(GraphicsMode.Default, shell.GraphicsChoice);
-
-        // Three steps, not four: the size row is dead under the borderless default, which owns the
-        // size, and a dead row is out of the walk.
-        shell.Step(Down);
-        shell.Step(Down);
-        shell.Step(Down);
-        Assert.Equal(OriginalShell.GraphicsKey, shell.FocusedKey);
-        shell.Step(Accept);
-        Assert.Equal(GraphicsMode.EnhancedWord, shell.GraphicsChoice);
-        Assert.Equal(4 + 2, shell.Compose().Plaques.Single(p => p.Art.Name == "PP_B_Check8.png").Frame);
-
-        // A sideways step takes the next word with wrap, as a Game Options row does.
-        shell.Step(Right);
-        Assert.Equal(GraphicsMode.Default, shell.GraphicsChoice);
-        shell.Step(Right);
-        Assert.Equal(GraphicsMode.EnhancedWord, shell.GraphicsChoice);
-
-        shell.Step(Down);
-        Assert.Equal(OriginalShell.VideoAcceptKey, shell.FocusedKey);
-        var step = shell.Step(Accept);
-        var exit = Assert.IsType<OptionsApplyExit>(step.Exit);
-        Assert.Equal(GraphicsMode.EnhancedWord, exit.Graphics);
-        Assert.Null(exit.MonitorIndex);
-        Assert.Null(exit.Resolution);
-        Assert.Null(exit.DisplayMode);
-        Assert.Null(exit.VSync);
-        Assert.Equal(PresentationId.Original, exit.Presentation);
-        Assert.Equal("normal", exit.Difficulty);
-    }
-
-    /// <summary>The display-mode row: its list opens over the three words at the authored Viewing
-    /// Range dropdown's own box, picking one closes the list on it, and ACCEPT CHANGES carries the
-    /// store word rather than the label the row draws.</summary>
-    [Fact]
-    public void TheVideoPageDisplayModeRowPicksAWordAndCarriesItOnTheApply()
-    {
-        var shell = Shell(out _);
-        shell.OpenVideoOn(OriginalShell.DisplayModeKey);
-        Assert.Equal("Borderless", shell.Rows.Single(r => r.Key == OriginalShell.DisplayModeKey).Label);
-
-        // The list opens focused on the row's own word, the borderless default here, not on its first.
-        shell.Step(Accept);
-        Assert.Equal(OriginalShell.DisplayModeKey, shell.OpenVideoOption);
-        Assert.Equal(DisplayWords.DisplayModes.Count, shell.Rows.Count);
-        Assert.Equal((260f, 352f, 70f, 17f), (shell.Rows[0].X, shell.Rows[0].Y, shell.Rows[0].Width, shell.Rows[0].Height));
-        shell.Step(Down);
-        shell.Step(Accept);
-        Assert.Null(shell.OpenVideoOption);
-        Assert.Equal(DisplayWords.Fullscreen, shell.DisplayModeChoice);
-        Assert.Equal("Fullscreen", shell.Rows.Single(r => r.Key == OriginalShell.DisplayModeKey).Label);
-
-        // A sideways step wraps past the last word back to the first, as every word row does.
-        shell.Step(Right);
-        Assert.Equal(DisplayWords.Windowed, shell.DisplayModeChoice);
-        shell.Step(Right);
-        Assert.Equal(DisplayWords.Borderless, shell.DisplayModeChoice);
-
-        shell.Step(Left);
-        Assert.Equal(DisplayWords.Windowed, shell.DisplayModeChoice);
-
-        shell.Step(Down);
-        shell.Step(Down);
-        shell.Step(Down);
-        Assert.Equal(OriginalShell.VideoAcceptKey, shell.FocusedKey);
-        var exit = Assert.IsType<OptionsApplyExit>(shell.Step(Accept).Exit);
-        Assert.Equal(DisplayWords.Windowed, exit.DisplayMode);
-    }
-
-    /// <summary>The V-Sync row's dropdown: Accept opens the list over every choice at the row's own
-    /// box, picking closes it on that word, and Back closes an open list before it leaves the
-    /// page.</summary>
-    [Fact]
-    public void TheVideoPageVSyncRowOpensItsListPicksAndCloses()
-    {
-        var shell = Shell(out _);
-        shell.OpenVideoOn(OriginalShell.VSyncKey);
-        Assert.Equal("Off", shell.Rows.Single(r => r.Key == OriginalShell.VSyncKey).Label);
-
-        // The list opens focused on the row's own word, the off default here, so two steps down
-        // land on the third choice after it.
-        shell.Step(Accept);
-        Assert.Equal(OriginalShell.VSyncKey, shell.OpenVideoOption);
-        // Five words in the row's authored four-row window, so the list carries its two arrows
-        // beside the five item rows and the rows narrow by the column those stand in.
-        Assert.Equal(DisplayWords.VSyncChoices.Count + 2, shell.Rows.Count);
-        Assert.Equal((260f, 397f, 54f, 17f), (shell.Rows[0].X, shell.Rows[0].Y, shell.Rows[0].Width, shell.Rows[0].Height));
-        shell.Step(Down);
-        shell.Step(Down);
-        shell.Step(Accept);
-        Assert.Null(shell.OpenVideoOption);
-        Assert.Equal("120", shell.VSyncChoice);
-        Assert.Equal("120 FPS", shell.Rows.Single(r => r.Key == OriginalShell.VSyncKey).Label);
-
-        // Back on the open list closes it; the next Back is CANCEL CHANGES.
-        shell.Step(Accept);
-        Assert.Equal(OriginalShell.VSyncKey, shell.OpenVideoOption);
-        Assert.Null(shell.Step(Back).Exit);
-        Assert.Null(shell.OpenVideoOption);
-        Assert.Equal(OriginalScreen.Video, shell.Screen);
-        shell.Step(Back);
-        Assert.Equal(OriginalScreen.Options, shell.Screen);
-    }
-
-    /// <summary>A leaf's list that fits the window its own row authors stands exactly as tall as its
-    /// items and carries no chrome: no arrows, no thumb, no column given up and nothing for the
-    /// pointer to scroll.</summary>
-    [Fact]
-    public void AnOptionListInsideItsWindowIsAsTallAsItsItemsAndCarriesNoBar()
-    {
-        var shell = Shell(out _);
-        shell.OpenGameOptions();
-        shell.Step(Accept);
-
-        Assert.Equal(OriginalShell.DifficultyKey, shell.OpenGameOption);
-        Assert.Equal(3, shell.Rows.Count);
-        Assert.All(shell.Rows, r => Assert.Equal(OriginalRowKind.ListRow, r.Kind));
-        Assert.All(shell.Rows, r => Assert.True(r.Visible));
-        // The fixture's box is 144 wide at x 135, and a list with nowhere to scroll keeps all of it.
-        Assert.Equal((135f, 312f, 144f, 17f), (shell.Rows[0].X, shell.Rows[0].Y, shell.Rows[0].Width, shell.Rows[0].Height));
-        Assert.Empty(shell.Lists);
-        Assert.Empty(Box(shell).Pictures);
-    }
-
-    /// <summary>A leaf's list longer than the window its own row authors: every word is still a row
-    /// so the walk reaches it, only the window's are drawn and hit, the arrows and the thumb stand
-    /// inside the box's own right edge, and a wheel step, an arrow press and a press on a hidden
-    /// row each do what they should.</summary>
-    [Fact]
-    public void AnOptionListPastItsWindowScrollsOnItsOwnBarInsideTheBox()
-    {
-        var shell = Shell(out _);
-        shell.OpenVideoOn(OriginalShell.VSyncKey);
-        shell.Step(Accept);
-
-        // Five words in the authored four-row window: five item rows, four of them visible.
-        Assert.Equal(5, shell.Rows.Count(r => r.Kind == OriginalRowKind.ListRow));
-        Assert.Equal(4, shell.Rows.Count(r => r.Kind == OriginalRowKind.ListRow && r.Visible));
-        var up = Row(shell, OriginalShell.VSyncKey + ":up");
-        var down = Row(shell, OriginalShell.VSyncKey + ":down");
-        Assert.False(up.Enabled);
-        Assert.True(down.Enabled);
-
-        // The chrome stands inside the box, whose right edge is at 260 + 70: a 16-wide arrow at its
-        // head and its foot, the thumb between them, and the two arrow pictures and the thumb on
-        // the list's own panel.
-        Assert.Equal((314f, 397f, 16f, 11f), (up.X, up.Y, up.Width, up.Height));
-        Assert.Equal((314f, 454f, 16f, 11f), (down.X, down.Y, down.Width, down.Height));
-        var window = Assert.Single(shell.Lists).Window;
-        Assert.Equal(314f, window.ThumbX);
-        Assert.Equal((260f, 397f, 70f, 68f), (window.X, window.Y, window.Width, window.Height));
-        Assert.Equal(3, Box(shell).Pictures.Count);
-
-        // A wheel over the window moves it by a row, and the word that was outside it is the one
-        // drawn; both arrows then have somewhere to go but the down one does not.
-        shell.Step(Wheel(window.X + 2f, window.Y + 2f, 1));
-        Assert.True(Row(shell, OriginalShell.VSyncKey + ":4").Visible);
-        Assert.False(Row(shell, OriginalShell.VSyncKey + ":0").Visible);
-        Assert.True(Row(shell, OriginalShell.VSyncKey + ":up").Enabled);
-        Assert.False(Row(shell, OriginalShell.VSyncKey + ":down").Enabled);
-
-        // The up arrow puts the window back where it stood, and picks nothing on the way.
-        var arrow = Row(shell, OriginalShell.VSyncKey + ":up");
-        Click(shell, arrow.X + 2f, arrow.Y + 2f);
-        Assert.False(Row(shell, OriginalShell.VSyncKey + ":4").Visible);
-        Assert.Equal(OriginalShell.VSyncKey, shell.OpenVideoOption);
-        Assert.Null(shell.VSyncChoice);
-
-        // A press on the row outside the window lands on no row at all: it is built for the walk
-        // and hidden, so the list closes on nothing rather than picking the word under the pointer.
-        var hidden = Row(shell, OriginalShell.VSyncKey + ":4");
-        Assert.False(hidden.Visible);
-        Assert.Equal(string.Empty, HitTestKey(shell, hidden.X + 2f, hidden.Y + 2f));
-        Click(shell, hidden.X + 2f, hidden.Y + 2f);
-        Assert.Null(shell.OpenVideoOption);
-        Assert.Null(shell.VSyncChoice);
-    }
-
-    /// <summary>CANCEL CHANGES and Back both leave the VIDEO page with every choice dropped, and
-    /// neither is an exit: the page's own plaques are its two doors back to Preferences.</summary>
-    [Fact]
-    public void TheVideoPageDropsTheChoiceOnCancelAndOnBack()
-    {
-        var shell = Shell(out _);
-        shell.OpenVideo();
-        // The size row is dead under the borderless default, which owns the size, so the walk goes
-        // from the monitor row straight onto Display Mode.
-        shell.Step(Down);
-        shell.Step(Right);
-        Assert.Equal(DisplayWords.Fullscreen, shell.DisplayModeChoice);
-        shell.Step(Down);
-        shell.Step(Right);
-        Assert.Equal("60", shell.VSyncChoice);
-        shell.Step(Down);
-        shell.Step(Accept);
-        Assert.Equal(GraphicsMode.EnhancedWord, shell.GraphicsChoice);
-        shell.Step(Down);
-        shell.Step(Down);
-        Assert.Equal(OriginalShell.VideoCancelKey, shell.FocusedKey);
-        Assert.Null(shell.Step(Accept).Exit);
-        Assert.Equal(OriginalScreen.Options, shell.Screen);
-        Assert.Equal(GraphicsMode.Default, shell.GraphicsChoice);
-        Assert.Null(shell.DisplayModeChoice);
-        Assert.Null(shell.VSyncChoice);
-
-        shell.OpenVideo();
-        shell.Step(Down);
-        shell.Step(Down);
-        shell.Step(Down);
-        Assert.Equal(OriginalShell.GraphicsKey, shell.FocusedKey);
-        shell.Step(Accept);
-        Assert.Equal(GraphicsMode.EnhancedWord, shell.GraphicsChoice);
-        Assert.Null(shell.Step(Back).Exit);
-        Assert.Equal(OriginalScreen.Options, shell.Screen);
-        Assert.Equal(GraphicsMode.Default, shell.GraphicsChoice);
-    }
-
-    [Fact]
-    public void CancelChangesAndBackBothDropTheEditsAndReturnToPreferences()
-    {
-        var shell = Shell(out _);
-        shell.OpenGameOptions();
-        shell.Step(Right);
-        Assert.Equal(CSVM.Flight.Difficulty.Hard, shell.DifficultyChoice);
-        shell.Step(Down);
-        shell.Step(Right);
-        Assert.Equal(PresentationId.BuiltIn.Value, shell.PresentationChoice);
-        shell.Step(Down);
-        shell.Step(Right);
-        Assert.True(shell.NearestAfterKillChoice);
-
-        shell.Step(Down);
-        shell.Step(Down);
-        Assert.Equal(OriginalShell.GameOptionsCancelKey, shell.FocusedKey);
-        shell.Step(Accept);
-        Assert.Equal(OriginalScreen.Options, shell.Screen);
-        Assert.Equal(PresentationId.Original.Value, shell.PresentationChoice);
-        Assert.Equal(CSVM.Flight.Difficulty.Normal, shell.DifficultyChoice);
-        Assert.Null(shell.NearestAfterKillChoice);
-
-        // Back on the open list closes it; the next Back is CANCEL CHANGES.
-        shell.OpenGameOptions();
-        shell.Step(Accept);
-        Assert.Equal(OriginalShell.DifficultyKey, shell.OpenGameOption);
-        // The open list is only as tall as its own items: three tiers, three rows, and the panel
-        // under them no taller, which is how the original draws a list shorter than its box allows.
-        var open = Assert.Single(shell.Compose().Overlays);
-        Assert.Equal(3, open.Lines.Count);
-        Assert.Equal(3f * 17f, open.Fills[0].Height);
-        shell.Step(Back);
-        Assert.Null(shell.OpenGameOption);
-        Assert.Equal(OriginalScreen.GameOptions, shell.Screen);
-        shell.Step(Back);
-        Assert.Equal(OriginalScreen.Options, shell.Screen);
-    }
-
-    /// <summary>Opening the page shows back the saved words, not what this process resolved: a
-    /// flag or the config key can have decided the running mode, and the rows owe the player the
-    /// choices their own ACCEPT CHANGES saved. The store is a scratch one; the shell never writes it.</summary>
-    [Fact]
-    public void TheRowsOpenOnTheSavedWords()
-    {
-        var saved = new OptionsDef
-        {
-            GraphicsMode = GraphicsMode.EnhancedWord, MenuPresentation = PresentationId.BuiltIn.Value,
-            Difficulty = "hardest", VSync = "120", DisplayMode = DisplayWords.Fullscreen,
-            Resolution = "1920x1080", MonitorIndex = "0", NearestAfterKill = true,
-        };
-        var shell = Shell(out _, () => saved);
-        shell.OpenGameOptions();
-
-        Assert.Equal(GraphicsMode.EnhancedWord, shell.GraphicsChoice);
-        Assert.Equal(PresentationId.BuiltIn.Value, shell.PresentationChoice);
-        Assert.Equal(CSVM.Flight.Difficulty.Hardest, shell.DifficultyChoice);
-        Assert.True(shell.NearestAfterKillChoice);
-        Assert.Equal("BUILT-IN", shell.Rows.Single(r => r.Key == OriginalShell.PresentationKey).Label);
-        Assert.Equal("Hardest", shell.Rows.Single(r => r.Key == OriginalShell.DifficultyKey).Label);
-        shell.OpenVideo();
-        Assert.Equal("120", shell.VSyncChoice);
-        Assert.Equal("120 FPS", shell.Rows.Single(r => r.Key == OriginalShell.VSyncKey).Label);
-        Assert.Equal(DisplayWords.Fullscreen, shell.DisplayModeChoice);
-        Assert.Equal("Fullscreen", shell.Rows.Single(r => r.Key == OriginalShell.DisplayModeKey).Label);
-        Assert.Equal("1920x1080", shell.ResolutionChoice);
-        Assert.Equal("1920x1080", shell.Rows.Single(r => r.Key == OriginalShell.ResolutionKey).Label);
-        Assert.Equal("0", shell.MonitorChoice);
-        Assert.Equal("Screen 0", shell.Rows.Single(r => r.Key == OriginalShell.MonitorKey).Label);
-
-        // A file that never set the fields opens the rows on the shipped defaults, each row agreeing
-        // with its own setting's fallback rule: off and borderless rather than either vocabulary's
-        // first word, the size list's fallback (the project size, with no screen to ask), the standing screen.
-        saved.GraphicsMode = null;
-        saved.MenuPresentation = null;
-        saved.Difficulty = null;
-        saved.NearestAfterKill = null;
-        saved.VSync = null;
-        saved.DisplayMode = null;
-        saved.Resolution = null;
-        saved.MonitorIndex = "9";
-        shell.OpenGameOptions();
-        Assert.Equal(GraphicsMode.Default, shell.GraphicsChoice);
-        Assert.Equal(PresentationId.Original.Value, shell.PresentationChoice);
-        Assert.Equal(CSVM.Flight.Difficulty.Normal, shell.DifficultyChoice);
-        Assert.Null(shell.NearestAfterKillChoice);
-        shell.OpenVideo();
-        Assert.Null(shell.VSyncChoice);
-        Assert.Equal("Off", shell.Rows.Single(r => r.Key == OriginalShell.VSyncKey).Label);
-        Assert.Null(shell.DisplayModeChoice);
-        Assert.Equal("Borderless", shell.Rows.Single(r => r.Key == OriginalShell.DisplayModeKey).Label);
-        Assert.Null(shell.ResolutionChoice);
-        Assert.Equal(ResolutionSetting.ProjectSize, shell.Rows.Single(r => r.Key == OriginalShell.ResolutionKey).Label);
-        Assert.Equal("9", shell.MonitorChoice);
-        Assert.Equal("Screen 0", shell.Rows.Single(r => r.Key == OriginalShell.MonitorKey).Label);
-    }
-
-    /// <summary>The graphics row's description reads the choice against the running mode, so a
-    /// saved word the world has not picked up yet says a restart is owed rather than repeating
-    /// the next-start note. Which of the two words is the running one depends on the process, so
-    /// the fact checks that exactly one of them owes the restart.</summary>
-    [Fact]
-    public void TheGraphicsRowSaysWhenARestartIsStillOwed()
-    {
-        var saved = new OptionsDef { GraphicsMode = GraphicsMode.EnhancedWord };
-        var shell = Shell(out _, () => saved);
-        shell.OpenVideo();
-        string enhanced = shell.Compose().Lines.Single(l => l.Text.StartsWith("Select the lit world.", System.StringComparison.Ordinal)).Text;
-
-        saved.GraphicsMode = GraphicsMode.Default;
-        shell.OpenVideo();
-        string original = shell.Compose().Lines.Single(l => l.Text.StartsWith("Select the lit world.", System.StringComparison.Ordinal)).Text;
-
-        var owed = new[] { enhanced, original }.Where(t => t.EndsWith("restart to apply.", System.StringComparison.Ordinal)).ToList();
-        var settled = new[] { enhanced, original }.Where(t => t.EndsWith("Takes effect on the next start.", System.StringComparison.Ordinal)).ToList();
-        Assert.Single(owed);
-        Assert.Single(settled);
-        Assert.Contains(GraphicsMode.Enhanced ? "This run is enhanced" : "This run is original", owed[0]);
-    }
-
     /// <summary>A drag holds the pointer, so the click that took hold of a thumb is spent on it
     /// and the row the thumb is drawn over is not activated. The shell makes that distinction once
     /// for anything that holds the pointer; the list thumb is the hold an engine-free screen has,
@@ -969,129 +316,46 @@ public class OriginalShellTests
         Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
     }
 
+    /// <summary>The seam to the options module (<see cref="OriginalOptionsTests"/> drives the module
+    /// alone): each of the hub's doors opens the page it names on that page's own first row, the
+    /// cursor's walk down a page is over the module's rows, and Back on one is the module's answer.
+    /// </summary>
     [Fact]
-    public void TheGameOptionsPageIsComposedOverItsSectionsOwnRowShape()
+    public void ThePreferencesDoorsOpenTheModulesPagesAndTheWalkIsOverItsRows()
     {
         var shell = Shell(out _);
-        shell.OpenGameOptions();
+        shell.Open(OriginalScreen.Options);
 
-        // Row one's dropdown box at the authored Difficulty dropdown's corner and width, row two's
-        // one row down at the pitch, then the two decoded plaques.
-        var difficulty = shell.Rows.Single(r => r.Key == OriginalShell.DifficultyKey);
-        Assert.Equal((135f, 295f, 144f, 17f), (difficulty.X, difficulty.Y, difficulty.Width, difficulty.Height));
-        var menu = shell.Rows.Single(r => r.Key == OriginalShell.PresentationKey);
-        Assert.Equal((135f, 355f, 144f, 17f), (menu.X, menu.Y, menu.Width, menu.Height));
-        // The exit pair side by side on one line, ACCEPT left of CANCEL, which is the arrangement
-        // this section authors and the film shows; the VIDEO page's own section stacks them instead.
-        var accept = shell.Rows.Single(r => r.Key == OriginalShell.GameOptionsAcceptKey);
-        Assert.Equal((200f, 470f, 240f, 50f), (accept.X, accept.Y, accept.Width, accept.Height));
-        var cancel = shell.Rows.Single(r => r.Key == OriginalShell.GameOptionsCancelKey);
-        Assert.Equal((450f, 470f, 240f, 50f), (cancel.X, cancel.Y, cancel.Width, cancel.Height));
+        Click(shell, OriginalOptionsScreen.GameOptionsDoorKey);
+        Assert.Equal(OriginalScreen.GameOptions, shell.Screen);
+        Assert.Equal(OriginalOptionsScreen.DifficultyKey, shell.FocusedKey);
 
-        var board = shell.Compose();
-        // Backdrop, not pictures, for the reason the AUDIO page's own case states: a board draws its
-        // fills between the two layers, so a plate among the pictures buries every focus mark. The
-        // leaf authors no movie row, so the Preferences page's own runs under it.
-        Assert.Equal(new[] { "PM_Flag.MPG", "PM_Logo.png", "PP_GoBack.png" }, board.Backdrop.Select(p => p.Art.Name));
-        Assert.DoesNotContain(board.Pictures, p => p.Art.Name is "PM_Logo.png" or "PP_GoBack.png");
-        Assert.Contains(board.Lines, l => l.Text == "GAME OPTIONS" && l.X == 120f && l.Justify == BoardJustify.Center);
-        Assert.Contains(board.Lines, l => l.Text == "Difficulty" && l.X == 130f && l.Y == 280f && l.Width == 170f);
-        Assert.Contains(board.Lines, l => l.Text == "Select the difficulty level for a solo campaign." && l.X == 340f && l.Y == 290f && l.Width == 310f);
-        Assert.Contains(board.Lines, l => l.Text == "Menu" && l.X == 130f && l.Y == 340f && l.Width == 170f);
-        Assert.Contains(board.Lines, l => l.Text == "Select the menu presentation." && l.X == 340f && l.Y == 350f && l.Width == 310f);
-        // The checkbox row takes the narrower title box the authored head-turn row carries, which
-        // is what leaves the box beside the words clear of them.
-        Assert.Contains(board.Lines, l => l.Text == "Next Target" && l.X == 130f && l.Y == 400f && l.Width == 112f);
-        Assert.Contains(board.Lines,
-            l => l.Text == "Take the nearest target after a kill instead of the first of the list."
-                && l.X == 340f && l.Y == 410f && l.Width == 310f);
-        // The first three authored rows are taken: three titles, three descriptions and the page's
-        // own tab title.
-        Assert.Equal(7, board.Lines.Count(l => l.Row < 0));
-
-        // The box is this page's focus mark, not standing chrome, so exactly one row carries it and
-        // it is the focused one.
-        Assert.Equal(
-            new[] { (135f, 295f, 144f, 17f) },
-            board.Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));
+        // Down is the shell's own column walk over the page's rows and Right the module's own
+        // sideways step, which changes the value there and keeps the focus.
         shell.Step(Down);
-        var moved = shell.Compose();
-        Assert.Equal(
-            new[] { (135f, 355f, 144f, 17f) },
-            moved.Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));
-    }
+        Assert.Equal(OriginalOptionsScreen.PresentationKey, shell.FocusedKey);
+        shell.Step(Right);
+        Assert.Equal(OriginalOptionsScreen.PresentationKey, shell.FocusedKey);
+        Assert.Equal("BUILT-IN", Row(shell, OriginalOptionsScreen.PresentationKey).Label);
 
-    /// <summary>The VIDEO page over its own section: the dropdowns at the authored Graphics,
-    /// Resolution, Viewing Range and Effects Level boxes and the checkbox at the authored Shadows
-    /// box, each title box stopped at the control beside it and each description at the description
-    /// column, the Shadows one wrapped at the plaque column since that authored row carries no width
-    /// of its own. The Graphics title keeps its authored width, that row's title already stopping
-    /// before the control beside it.</summary>
-    [Fact]
-    public void TheVideoPageIsComposedOverItsSectionsOwnRowShape()
-    {
-        var shell = Shell(out _);
-        shell.OpenVideo();
+        // Back on the page is the module's, answered the way that page's own CANCEL CHANGES is.
+        Assert.Null(shell.Step(Back).Exit);
+        Assert.Equal(OriginalScreen.Options, shell.Screen);
 
-        var monitor = shell.Rows.Single(r => r.Key == OriginalShell.MonitorKey);
-        Assert.Equal((260f, 245f, 70f, 15f), (monitor.X, monitor.Y, monitor.Width, monitor.Height));
-        var resolution = shell.Rows.Single(r => r.Key == OriginalShell.ResolutionKey);
-        Assert.Equal((260f, 290f, 70f, 17f), (resolution.X, resolution.Y, resolution.Width, resolution.Height));
-        // The size row keeps its authored geometry under the borderless default and draws dead.
-        Assert.False(resolution.Enabled);
-        var mode = shell.Rows.Single(r => r.Key == OriginalShell.DisplayModeKey);
-        Assert.Equal((260f, 335f, 70f, 17f), (mode.X, mode.Y, mode.Width, mode.Height));
-        var vsync = shell.Rows.Single(r => r.Key == OriginalShell.VSyncKey);
-        Assert.Equal((260f, 380f, 70f, 17f), (vsync.X, vsync.Y, vsync.Width, vsync.Height));
-        var graphics = shell.Rows.Single(r => r.Key == OriginalShell.GraphicsKey);
-        Assert.Equal((260f, 420f, 16f, 16f), (graphics.X, graphics.Y, graphics.Width, graphics.Height));
-        var accept = shell.Rows.Single(r => r.Key == OriginalShell.VideoAcceptKey);
-        Assert.Equal((500f, 470f, 240f, 50f), (accept.X, accept.Y, accept.Width, accept.Height));
-        var cancel = shell.Rows.Single(r => r.Key == OriginalShell.VideoCancelKey);
-        Assert.Equal((500f, 520f, 240f, 50f), (cancel.X, cancel.Y, cancel.Width, cancel.Height));
+        Click(shell, OriginalOptionsScreen.AudioDoorKey);
+        Assert.Equal(OriginalScreen.Audio, shell.Screen);
+        Assert.Equal(OriginalOptionsScreen.AudioMasterKey, shell.FocusedKey);
+        shell.Step(Back);
 
-        var board = shell.Compose();
-        // Backdrop, not pictures, for the reason the AUDIO page's own case states: a board draws its
-        // fills between the two layers, so a plate among the pictures buries every focus mark.
-        Assert.Equal(new[] { "PM_Flag.MPG", "PM_Logo.png", "PP_VpBack.png" }, board.Backdrop.Select(p => p.Art.Name));
-        Assert.DoesNotContain(board.Pictures, p => p.Art.Name is "PM_Logo.png" or "PP_VpBack.png");
-        Assert.Contains(board.Lines, l => l.Text == "VIDEO" && l.X == 120f && l.Justify == BoardJustify.Center);
-        Assert.Contains(board.Lines, l => l.Text == "Monitor" && l.X == 130f && l.Y == 245f && l.Width == 90f);
-        Assert.Contains(board.Lines, l => l.Text.StartsWith("Select the monitor", System.StringComparison.Ordinal)
-            && l.X == 340f && l.Y == 245f && l.Width == 310f);
-        Assert.Contains(board.Lines, l => l.Text == "Resolution" && l.X == 130f && l.Y == 290f && l.Width == 130f);
-        // The size row's description is the mode's, and nothing saved stands on the borderless
-        // default, which owns the size.
-        Assert.Contains(board.Lines, l => l.Text.StartsWith("Borderless runs at", System.StringComparison.Ordinal)
-            && l.X == 340f && l.Y == 290f && l.Width == 310f);
-        Assert.Contains(board.Lines, l => l.Text == "Display Mode" && l.X == 130f && l.Y == 335f && l.Width == 130f);
-        Assert.Contains(board.Lines, l => l.Text.StartsWith("Select how the window sits", System.StringComparison.Ordinal)
-            && l.X == 340f && l.Y == 335f && l.Width == 310f);
-        Assert.Contains(board.Lines, l => l.Text == "V-Sync" && l.X == 130f && l.Y == 380f && l.Width == 130f);
-        Assert.Contains(board.Lines, l => l.Text.StartsWith("Select the frame pacing.", System.StringComparison.Ordinal)
-            && l.X == 340f && l.Y == 380f && l.Width == 310f);
-        Assert.Contains(board.Lines, l => l.Text == "Enhanced Graphics" && l.X == 130f && l.Y == 425f && l.Width == 130f);
-        Assert.Contains(board.Lines, l => l.Text.StartsWith("Select the lit world.", System.StringComparison.Ordinal)
-            && l.X == 340f && l.Y == 425f && l.Width == 160f);
-        Assert.Equal(11, board.Lines.Count(l => l.Row < 0));
-        // The checkbox draws unchecked and unfocused, the page opening on the monitor row above it:
-        // the second of its eight frames.
-        Assert.Equal(1, board.Plaques.Single(p => p.Art.Name == "PP_B_Check8.png").Frame);
+        Click(shell, OriginalOptionsScreen.VideoDoorKey);
+        Assert.Equal(OriginalScreen.Video, shell.Screen);
+        Assert.Equal(OriginalOptionsScreen.MonitorKey, shell.FocusedKey);
+        shell.Step(Back);
+        Assert.Equal(OriginalScreen.Options, shell.Screen);
 
-        // The box marks the focused dropdown and no other, and it follows the cursor past the dead
-        // size row onto the display mode's. Three rows down it stands on the checkbox, a plaque
-        // strip that takes no box at all, so the page draws none.
-        Assert.Equal(
-            new[] { (260f, 245f, 70f, 15f) },
-            board.Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));
-        shell.Step(Down);
-        Assert.Equal(
-            new[] { (260f, 335f, 70f, 17f) },
-            shell.Compose().Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));
-        shell.Step(Down);
-        shell.Step(Down);
-        Assert.Equal(OriginalShell.GraphicsKey, shell.FocusedKey);
-        Assert.Empty(shell.Compose().Fills.Where(f => f.Border));
+        // The CONTROLS door stands dead with no rebinding feature behind it, which is where this
+        // shell's walk stops; OriginalControlsTests drives the live one.
+        Assert.False(Row(shell, OriginalOptionsScreen.ControlsDoorKey).Enabled);
     }
 
     [Fact]
@@ -1298,6 +562,334 @@ public class OriginalShellTests
         Assert.DoesNotContain(shell.Compose().Lines, l => l.Ink == BoardInk.Secret);
     }
 
+    /// <summary>The seam to the Instant Action module (<see cref="OriginalInstantActionTests"/>
+    /// drives the module alone): the top level's own door opens the module's first screen with the
+    /// environment confirmed, and its rows are the ones the shell composes and walks.</summary>
+    [Fact]
+    public void TheInstantActionDoorOpensTheModulesScreenOnItsFirstRow()
+    {
+        var shell = Shell(out _);
+        Assert.True(Row(shell, "MM_B_INSTANTACTION").Enabled);
+
+        var step = Click(shell, "MM_B_INSTANTACTION");
+
+        Assert.Equal(OriginalScreen.InstantAction, shell.Screen);
+        Assert.Contains(OriginalCues.Click, step.Cues);
+        Assert.Equal($"{OriginalInstantActionScreen.ContentsKey}:0", shell.FocusedKey);
+        Assert.Contains(shell.Rows, r => r.Key == OriginalInstantActionScreen.FlyMissionKey);
+    }
+
+    [Fact]
+    public void TheKeyboardsColumnWalkLandsOnTheInstantActionModulesOwnRows()
+    {
+        var shell = Shell(out _);
+        Click(shell, "MM_B_INSTANTACTION");
+
+        // Down is the shell's own column walk down the contents window and Right its crossing into
+        // the module's second column, landing on the dropdown level with the row it left. A further
+        // Right is the module's own sideways step, changing that value and keeping the focus.
+        shell.Step(Down);
+        Assert.Equal($"{OriginalInstantActionScreen.ContentsKey}:1", shell.FocusedKey);
+        shell.Step(Right);
+        Assert.Equal(OriginalInstantActionScreen.WingmenKey, shell.FocusedKey);
+        shell.Step(Up);
+        Assert.Equal(OriginalInstantActionScreen.PlayerPlaneKey, shell.FocusedKey);
+        shell.Step(Right);
+        Assert.Equal(OriginalInstantActionScreen.PlayerPlaneKey, shell.FocusedKey);
+        Assert.Equal("Stock Hellhound", Row(shell, OriginalInstantActionScreen.PlayerPlaneKey).Label);
+
+        // Back on the screen is the shell's own return, the module declining it.
+        Assert.Null(shell.Step(Back).Exit);
+        Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
+    }
+
+    /// <summary>The seam to the hangar module (<see cref="OriginalHangarTests"/> drives the module
+    /// alone): the Build door opens it on the screen the door stands on, a dialog it raises is the
+    /// shell's messagebox, its typing goes through the shell's one text seam, and a commit comes
+    /// back to the door's screen with both rosters re-read off the store.</summary>
+    [Fact]
+    public void TheBuildDoorOpensTheHangarModuleAndACommitComesBackWithTheRostersReRead()
+    {
+        WithHangarShell((shell, hangar, setup, store) =>
+        {
+            Assert.DoesNotContain(shell.Rows, r => r.Key == "HANGAR");
+            Click(shell, "MM_B_INSTANTACTION");
+            var door = Row(shell, OriginalInstantActionScreen.BuildKey);
+            Assert.True(door.Enabled);
+            Click(shell, door.X + 2f, door.Y + 2f);
+
+            Assert.Equal(OriginalScreen.PlaneName, shell.Screen);
+            Assert.True(shell.IsHangarScreen);
+            Assert.True(hangar.IsOpen);
+            Assert.True(shell.CapturingText);
+            Assert.Equal(OriginalHangarScreen.NameFieldKey, shell.FocusedKey);
+
+            // The refusal the module raises is the shell's messagebox: its rows are the answer
+            // alone, it is drawn as an overlay, and its OK hands the focus back to the box.
+            Click(shell, OriginalHangarScreen.NameOkKey);
+            Assert.NotNull(shell.Dialog);
+            Assert.Equal(new[] { OriginalShell.DialogOkKey }, shell.Rows.Select(r => r.Key));
+            Assert.False(shell.CapturingText);
+            Assert.Contains(Box(shell).Lines, l => l.Text == shell.Dialog!.Message);
+            Click(shell, OriginalShell.DialogOkKey);
+            Assert.Null(shell.Dialog);
+            Assert.Equal(OriginalHangarScreen.NameFieldKey, shell.FocusedKey);
+
+            shell.Step(new MenuCommands { Typed = "Ace" });
+            Assert.Equal("Ace", shell.Hangar!.HangarName);
+            Click(shell, OriginalHangarScreen.NameOkKey);
+            Assert.Equal(OriginalScreen.HangarAirframe, shell.Screen);
+            Assert.False(shell.CapturingText);
+
+            Click(shell, OriginalHangarScreen.ReadyKey);
+            Click(shell, OriginalHangarScreen.PurchaseNowKey);
+            Assert.Equal(OriginalScreen.InstantAction, shell.Screen);
+            Assert.False(shell.IsHangarScreen);
+            Assert.Equal(OriginalInstantActionScreen.BuildKey, shell.FocusedKey);
+            Assert.Equal("Ace", shell.Hangar!.LastBuiltPlane);
+            Assert.NotNull(store.Load("Ace"));
+            Assert.Contains(setup.Roster, a => a.Name == "Ace" && a.IsCustom);
+            Assert.Contains(shell.InstantAction.PilotRoster, a => a.Name == "Ace" && a.IsCustom);
+        });
+    }
+
+    [Fact]
+    public void TheKeyboardWalksFromTheHangarDropdownsOntoTheTabBarAndAlongIt()
+    {
+        WithHangarShell((shell, _, _, _) =>
+        {
+            shell.OpenHangarTab(OriginalScreen.HangarAirframe, "Ace");
+            Assert.Equal(OriginalHangarScreen.AirframeDropKey, shell.FocusedKey);
+
+            // Down is the shell's own column walk and Right along the bar the module's sideways
+            // step; the standing tab is a sibling like the other five, so the walk steps onto it.
+            shell.Step(Down);
+            Assert.Equal("PX_B_AIRFRAME", shell.FocusedKey);
+            shell.Step(Right);
+            Assert.Equal("PX_B_ENGINE", shell.FocusedKey);
+            shell.Step(Right);
+            shell.Step(Right);
+            shell.Step(Right);
+            shell.Step(Right);
+            Assert.Equal("PX_B_PAINT", shell.FocusedKey);
+            shell.Step(Right);
+            Assert.Equal(OriginalHangarScreen.SellPlanesKey, shell.FocusedKey);
+            shell.Step(Up);
+            Assert.Equal("PX_B_PAINT", shell.FocusedKey);
+        });
+    }
+
+    /// <summary>The seam to the campaign module (<see cref="OriginalCampaignTests"/> drives the
+    /// module alone): the top level's own door opens its profile screen, the box there takes seat 0's
+    /// typed characters through the shell's one text seam, and the rows are the module's own.</summary>
+    [Fact]
+    public void TheCampaignDoorOpensTheModulesProfileScreen()
+    {
+        WithCampaignShell((shell, campaign, _, _, _) =>
+        {
+            var door = Row(shell, OriginalShell.CampaignKey);
+            Assert.True(door.Enabled);
+
+            var step = Click(shell, door.X + 2f, door.Y + 2f);
+
+            Assert.Equal(OriginalScreen.CampaignRoster, shell.Screen);
+            Assert.True(campaign.IsOpen && shell.Campaign.IsOpen);
+            Assert.Contains(OriginalCues.Click, step.Cues);
+            Assert.True(shell.CapturingText);
+            Assert.Equal(
+                new[] { "ROW:0", "Continue", "DeletePlayer", "CancelProfile" }, shell.Rows.Select(r => r.Key));
+            Assert.Equal(0, shell.Focus);
+            shell.Step(new MenuCommands { Typed = "Zac" });
+            Assert.Equal("Zac", shell.Campaign.RosterName);
+        });
+    }
+
+    [Fact]
+    public void TheKeyboardsColumnWalkLandsOnTheCampaignModulesOwnRows()
+    {
+        WithCampaignShell((shell, campaign, _, _, _) =>
+        {
+            Seat(shell, "Zachary");
+
+            // Down is the shell's own column walk over the cabin's plaques, and the door it ends on
+            // is the module's own way out of the campaign.
+            Assert.Equal("NextMission", shell.FocusedKey);
+            shell.Step(Down);
+            Assert.Equal("PreviousMissions", shell.FocusedKey);
+            shell.Step(Down);
+            shell.Step(Down);
+            Assert.Equal("ReturnToMainMenu", shell.FocusedKey);
+            shell.Step(Accept);
+            Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
+            Assert.False(campaign.IsOpen);
+            Assert.False(shell.Campaign.IsOpen);
+        });
+    }
+
+    /// <summary>The two-answer box as the campaign raises it: the box is the shell's, so its answers
+    /// are the rows the pointer and the cursor see, at the messagebox pane's own places, with the mark
+    /// on the one Accept would take and the rollover frame on whichever the pointer rests on.</summary>
+    [Fact]
+    public void TheCampaignsTwoAnswerBoxIsTheShellsOwnMessagebox()
+    {
+        WithCampaignShell((shell, _, _, _, store) =>
+        {
+            store.Save(CampaignProfileDef.NewProfile("Zachary"));
+            store.RecordLastPlayed("Zachary");
+            shell.Campaign.OpenCampaignOver(store);
+            Click(shell, "DeletePlayer");
+
+            Assert.NotNull(shell.Dialog);
+            Assert.Equal(
+                new[] { OriginalShell.DialogYesKey, OriginalShell.DialogNoKey }, shell.Rows.Select(r => r.Key));
+            Assert.Equal(OriginalShell.DialogYesKey, shell.FocusedKey);
+            Assert.False(shell.CapturingText);
+            // The messagebox buttons at their own rows inside the centred pane.
+            var yes = shell.Rows[0];
+            var no = shell.Rows[1];
+            Assert.Equal((195f + 70f, 150f + 250f), (yes.X, yes.Y));
+            var box = Box(shell);
+            Assert.Contains(box.Lines, l => l.Text == shell.Dialog!.Message);
+            Assert.Equal((int)DialogIcon.Query, DialogIconTests.IconFrame(box));
+
+            // Raised from a click, the pointer resting where DELETE PLAYER was: neither answer is
+            // lit, so both keep the normal frame and the mark alone says which Accept would take.
+            Assert.Equal(new[] { 1, 1 }, box.Pictures.Skip(2).Select(p => p.Frame));
+            var mark = Assert.Single(Marks(shell));
+            Assert.True(mark.Border);
+            Assert.Equal((yes.X - 3f, yes.Y - 3f), (mark.X, mark.Y));
+
+            // The pointer carries the rollover frame and the cursor with it, so a hovered answer is
+            // the lit one and wears no mark, and the answer left behind is back on its normal frame.
+            shell.Step(Pointer(no.X + 4f, no.Y + 4f));
+            Assert.Equal(new[] { 1, 2 }, Box(shell).Pictures.Skip(2).Select(p => p.Frame));
+            Assert.Empty(Marks(shell));
+            Assert.Equal(OriginalShell.DialogNoKey, shell.FocusedKey);
+        });
+    }
+
+    /// <summary>A box raised over a campaign screen keeps the messagebox's own inks and strip frames
+    /// rather than taking the paper palette the page under it is drawn in.</summary>
+    [Fact]
+    public void TheBoxOverAPaperCampaignScreenKeepsTheMessageboxsOwnInk()
+    {
+        WithCampaignShell((shell, _, _, _, store) =>
+        {
+            store.Save(CampaignProfileDef.NewProfile("Zachary"));
+            shell.Campaign.OpenCampaignOver(store);
+            Assert.True(shell.Campaign.ShowCabin("Zachary"));
+            shell.Campaign.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
+
+            shell.Campaign.PressExport();
+
+            Assert.NotNull(shell.Dialog);
+            var ok = Assert.Single(shell.Rows);
+            Assert.Equal(OriginalShell.DialogOkKey, ok.Key);
+            // With no pointer on it OK stands on its normal frame under the focus mark, in the box's
+            // white rather than the paper palette.
+            var panel = Box(shell);
+            Assert.Equal(BoardInk.Dialog, Assert.Single(panel.Lines, l => l.Text == ok.Label).Ink);
+            Assert.Contains(panel.Pictures, p => p.Art.Name == "PM_B_Small.png" && p.Frame == 1);
+            Assert.True(Assert.Single(Marks(shell)).Border);
+
+            // Held under the pointer it takes the depressed frame and the black that reads on it.
+            shell.Step(Pointer(ok.X + 2f, ok.Y + 2f, pressed: true, clicked: true));
+            panel = Box(shell);
+            Assert.Equal(BoardInk.DialogPressed, Assert.Single(panel.Lines, l => l.Text == ok.Label).Ink);
+            Assert.Contains(panel.Pictures, p => p.Art.Name == "PM_B_Small.png" && p.Frame == 3);
+        });
+    }
+
+    /// <summary>The cabin's own crossing into the hangar module: the door opens it over the seated
+    /// profile's purse, and the way back out of the hangar comes through the host onto the cabin
+    /// with its profile re-read.</summary>
+    [Fact]
+    public void PlaneConstructionOpensTheHangarOverTheWalletWithTheCabinAsItsReturn()
+    {
+        WithCampaignShell((shell, campaign, hangar, _, _) =>
+        {
+            Seat(shell, "Zachary");
+            var door = Row(shell, "PlaneConstruction");
+
+            Click(shell, door.X + 2f, door.Y + 2f);
+            Assert.Equal(OriginalScreen.PlaneName, shell.Screen);
+            Assert.True(hangar.IsOpen);
+            Assert.NotNull(hangar.Wallet);
+            Assert.Equal(campaign.Profile!.Funds, hangar.Wallet!.Funds);
+
+            shell.Step(Back);
+            Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
+            Assert.False(hangar.IsOpen);
+            Assert.True(campaign.IsOpen);
+            Assert.Equal("PlaneConstruction", shell.FocusedKey);
+        });
+    }
+
+    /// <summary>The check standing on a guest belongs to that guest's device and to the mouse riding
+    /// seat 0's source, nothing else of seat 0's: its cursor, Accept and Back would otherwise change
+    /// a pilot's ammunition, aircraft and readiness from another chair. Seat 0 keeps the whole frame
+    /// on its own check, which is what the field's index answers. The per-seat walk is the shell's,
+    /// so the fact stands here rather than over the module alone.</summary>
+    [Fact]
+    public void SeatZeroDrivesItsOwnCheckAndOnlyItsPointerReachesAGuests()
+    {
+        WithCampaignShell((shell, campaign, _, setup, _) =>
+        {
+            Seat(shell, "Zachary");
+            setup.Join(new ScriptedMenuSeat());
+            shell.Step(Accept);
+            var go = Row(shell, "GoToFlightCheck");
+            Click(shell, go.X + 2f, go.Y + 2f);
+            Assert.Equal(OriginalScreen.CampaignFlightCheck, shell.Screen);
+
+            // Seat 0's own check takes its whole frame, into ammo selection and back out.
+            Assert.Equal("ChangeAmmo", shell.FocusedKey);
+            shell.Step(Accept);
+            Assert.Equal(OriginalScreen.CampaignAmmo, shell.Screen);
+            shell.Step(Back);
+            Assert.Equal(OriginalScreen.CampaignFlightCheck, shell.Screen);
+
+            // FLY MISSION hands the screen to the guest, and seat 0's cursor, Accept and Back then
+            // move nothing: no row, no ammo screen, no retreat off the guest's check.
+            var fly = Row(shell, "FlyMission");
+            Assert.Null(Click(shell, fly.X + 2f, fly.Y + 2f).Exit);
+            Assert.Equal((1, 2), (campaign.Field.Current, campaign.Field.Players));
+            Assert.Equal("ChangeAmmo", shell.FocusedKey);
+            Assert.False(shell.Step(Down).Changed);
+            Assert.False(shell.Step(Accept).Changed);
+            Assert.False(shell.Step(Back).Changed);
+            Assert.Equal(OriginalScreen.CampaignFlightCheck, shell.Screen);
+            Assert.Equal(1, campaign.Field.Current);
+            Assert.Equal("ChangeAmmo", shell.FocusedKey);
+
+            // The guest's own device drives it, and the ammo screen its row opens is the guest's too.
+            Assert.True(shell.StepSeat(1, Accept).Changed);
+            Assert.Equal(OriginalScreen.CampaignAmmo, shell.Screen);
+            Assert.False(shell.Step(Back).Changed);
+            Assert.Equal(OriginalScreen.CampaignAmmo, shell.Screen);
+            shell.StepSeat(1, Back);
+            Assert.Equal(OriginalScreen.CampaignFlightCheck, shell.Screen);
+            Assert.Equal(1, campaign.Field.Current);
+
+            // Seat 0's pointer still reaches the guest's check, the one device a pilot with no pad of
+            // their own has, so the last check's FLY MISSION is the launch for both seats.
+            fly = Row(shell, "FlyMission");
+            var exit = Assert.IsType<CampaignMissionExit>(Click(shell, fly.X + 2f, fly.Y + 2f).Exit);
+            Assert.Equal(2, exit.Seats.Count);
+        });
+    }
+
+    [Fact]
+    public void AShellWithoutAHangarFeatureHasNoModuleAndNoHangarDoor()
+    {
+        var shell = Shell(out _);
+        Assert.Null(shell.Hangar);
+        shell.OpenHangar();
+        Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
+        Assert.False(shell.IsHangarScreen);
+        Assert.False(shell.CapturingText);
+    }
+
     // The characters the script stores, shifted down by three the way its own loop shifts them.
     private static string Shifted(string cipher) => string.Concat(cipher.Select(c => (char)(c - 3)));
 
@@ -1320,6 +912,74 @@ public class OriginalShellTests
             hangar: new HangarFeature(strings, PlanePickerRoster.AirframeNode));
         shell.Open(OriginalScreen.Credits);
         return shell;
+    }
+
+    // A shell with the hangar behind its Build door, over a scratch store in a temp directory
+    // that goes with the test: the hangar's own art measure, since the door's screens are the
+    // module's, and the Devastator as the Instant Action pick a default build inherits.
+    private static void WithHangarShell(System.Action<OriginalShell, HangarFeature, PlayerSetupFeature, CSVM.Flight.CustomPlaneStore> test)
+    {
+        string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "csvm-original-shell-hangar-" + System.Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new CSVM.Flight.CustomPlaneStore(dir);
+            var setup = new PlayerSetupFeature();
+            setup.SetRoster(OriginalPresentation.Roster(System.Array.Empty<CSVM.Flight.CustomPlaneDef>()));
+            setup.Join(new ScriptedMenuSeat());
+            var hangar = new HangarFeature(UiStrings.Empty, PlanePickerRoster.AirframeNode);
+            var instantAction = new InstantActionFeature(_ => InstantAction.Defaults());
+            instantAction.SelectPlayerPlane(HangarFeature.DefaultAirframe);
+            var shell = new OriginalShell(
+                MenuLayoutReaderTests.OriginalLayout(), new FreeFlightFeature(), setup, OriginalHangarTests.Measure,
+                instantAction: instantAction, hangar: hangar, planes: store);
+            test(shell, hangar, setup, store);
+        }
+        finally
+        {
+            if (System.IO.Directory.Exists(dir))
+            {
+                System.IO.Directory.Delete(dir, true);
+            }
+        }
+    }
+
+    // A shell with the campaign behind its own door, over a scratch profile store and build store in
+    // a temp directory that goes with the test, and a hangar behind the cabin's PLANE CONSTRUCTION.
+    private static void WithCampaignShell(
+        System.Action<OriginalShell, CampaignFeature, HangarFeature, PlayerSetupFeature, CampaignProfileStore> test)
+    {
+        string dir = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "csvm-original-shell-campaign-" + System.Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new CampaignProfileStore(System.IO.Path.Combine(dir, "Profiles"));
+            var planes = new CSVM.Flight.CustomPlaneStore(System.IO.Path.Combine(dir, "Planes"));
+            var setup = new PlayerSetupFeature();
+            setup.SetRoster(OriginalPresentation.Roster(System.Array.Empty<CSVM.Flight.CustomPlaneDef>()));
+            setup.Join(new ScriptedMenuSeat());
+            var hangar = new HangarFeature(UiStrings.Empty, PlanePickerRoster.AirframeNode);
+            var campaign = new CampaignFeature(UiStrings.Empty, airframe => $"node{airframe}");
+            var shell = new OriginalShell(
+                MenuLayoutReaderTests.OriginalLayout(), new FreeFlightFeature(), setup, Measure,
+                hangar: hangar, planes: planes, campaign: campaign, profiles: () => store);
+            test(shell, campaign, hangar, setup, store);
+        }
+        finally
+        {
+            if (System.IO.Directory.Exists(dir))
+            {
+                System.IO.Directory.Delete(dir, true);
+            }
+        }
+    }
+
+    // A player typed into the campaign's name box and started, landing on the cabin.
+    private static void Seat(OriginalShell shell, string name)
+    {
+        Click(shell, OriginalShell.CampaignKey);
+        shell.Step(new MenuCommands { Typed = name });
+        shell.Step(Accept);
+        Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
     }
 
     // Seat 0 is a scripted source; the roster is the eleven stock airframes with no customs. No
@@ -1362,9 +1022,6 @@ public class OriginalShellTests
     private static MenuCommands Pointer(float x, float y, bool pressed = false, bool clicked = false, bool right = false) =>
         new() { Pointer = new MenuPointer(x, y, pressed, clicked, 0, right) };
 
-    private static MenuCommands Wheel(float x, float y, int steps) =>
-        new() { Pointer = new MenuPointer(x, y, false, false, steps) };
-
     // One row of the screen by its key.
     private static OriginalRow Row(OriginalShell shell, string key) =>
         shell.Rows.Single(r => r.Key == key);
@@ -1375,6 +1032,13 @@ public class OriginalShellTests
     {
         shell.Step(Pointer(x, y, pressed: true, clicked: true));
         return shell.Step(Pointer(x, y));
+    }
+
+    // The same click, landing just inside the corner of the row carrying a key.
+    private static OriginalStep Click(OriginalShell shell, string key)
+    {
+        var row = Row(shell, key);
+        return Click(shell, row.X + 2f, row.Y + 2f);
     }
 
     // The standing dialog's panel: the one overlay carrying words, the pointer's own carrying none.

@@ -260,7 +260,7 @@ internal static class MenuOriginalCheatSuites
         var hangar = host.Features.Get<HangarFeature>();
         Click(host, seat, Pointer(fit, door.X + 5f, door.Y + 5f, pressed: true, clicked: true));
         Press(host, seat, new MenuCommands { Typed = Built });
-        var ok = Row(shell, OriginalShell.NameOkKey);
+        var ok = Row(shell, OriginalHangarScreen.NameOkKey);
         if (ok == null)
         {
             ctx.Check(false, $"the name screen carries its OK button");
@@ -312,8 +312,8 @@ internal static class MenuOriginalCheatSuites
         }
 
         Click(host, seat, Pointer(fit, campaignRow.X + 5f, campaignRow.Y + 5f, pressed: true, clicked: true));
-        ctx.Check(shell.Screen == OriginalScreen.CampaignRoster && shell.RosterName == Pilot,
-            $"the profile screen opens with the remembered player in the box ({shell.Screen}, {shell.RosterName})");
+        ctx.Check(shell.Screen == OriginalScreen.CampaignRoster && shell.Campaign.RosterName == Pilot,
+            $"the profile screen opens with the remembered player in the box ({shell.Screen}, {shell.Campaign.RosterName})");
 
         for (int i = Pilot.Length; i > 0; i--)
         {
@@ -321,8 +321,8 @@ internal static class MenuOriginalCheatSuites
         }
 
         Press(host, seat, new MenuCommands { Typed = CampaignCheats.UnlockName });
-        ctx.Check(shell.RosterName == CampaignCheats.UnlockName,
-            $"the box takes the name's own exclamation mark, which the campaign's name rule refuses ({shell.RosterName})");
+        ctx.Check(shell.Campaign.RosterName == CampaignCheats.UnlockName,
+            $"the box takes the name's own exclamation mark, which the campaign's name rule refuses ({shell.Campaign.RosterName})");
 
         var start = Row(shell, nameof(BoardButton.Continue));
         if (start == null)
@@ -332,8 +332,8 @@ internal static class MenuOriginalCheatSuites
         }
 
         Click(host, seat, Pointer(fit, start.X + 5f, start.Y + 5f, pressed: true, clicked: true));
-        ctx.Check(shell.Screen == OriginalScreen.CampaignRoster && shell.RosterName == Pilot,
-            $"the name leaves the screen standing with the previous player back in the box ({shell.Screen}, {shell.RosterName})");
+        ctx.Check(shell.Screen == OriginalScreen.CampaignRoster && shell.Campaign.RosterName == Pilot,
+            $"the name leaves the screen standing with the previous player back in the box ({shell.Screen}, {shell.Campaign.RosterName})");
         ctx.Check(campaign.Cheats.AllowAll && store.Load(CampaignCheats.UnlockName) == null,
             $"every airframe is offered for the rest of the session and no profile was created under the name");
         var profile = store.Load(Pilot);

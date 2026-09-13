@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using CSVM.Flight;
@@ -12,21 +13,17 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The Original campaign over the hand-authored layout fixture and a scratch profile store: the
-/// Campaign row's door, the profile screen's box, roster rows, refusals and its two-answer delete,
-/// the cabin's four plaques under the pointer and the keyboard, the briefing, the flight check's
-/// launch, the ammo screen's way back, a guest's check driven by its own device and by seat 0's
-/// pointer alone, the hangar over the wallet with the cabin as its return,
-/// the two flight returns' mapping, and every door out leaving no open campaign. Every rectangle
-/// here is the fixture's invented geometry; the game's is read the same way.
+/// The campaign module alone over the hand-authored layout fixture and a scratch profile store: the
+/// profile screen's box, roster rows, refusals and its two-answer delete, the cabin's plaques under
+/// the pointer and the keyboard, the briefing, the flight check's launch, the ammo screen's way back,
+/// the hangar door the cabin asks the host for, the two flight returns' mapping, the book's doors and
+/// tabs, the EXPORT box and the screenshot aids' script. The top level's Campaign door, the seat walk
+/// and the messagebox's own drawing are the shell's, so the seams to them are wiring facts in
+/// <see cref="OriginalShellTests"/>; everything here drives the module over a hand-written host. Every
+/// rectangle is the fixture's invented geometry; the game's is read the same way.
 /// </summary>
 public class OriginalCampaignTests : IDisposable
 {
-    private static readonly MenuCommands Accept = new() { Accept = true };
-    private static readonly MenuCommands Back = new() { Back = true };
-    private static readonly MenuCommands Down = new() { MoveY = 1 };
-    private static readonly MenuCommands Up = new() { MoveY = -1 };
-
     private readonly string _dir;
     private readonly CampaignProfileStore _store;
     private readonly CustomPlaneStore _planes;
@@ -49,25 +46,21 @@ public class OriginalCampaignTests : IDisposable
     }
 
     [Fact]
-    public void TheCampaignRowStandsOnlyOverAFeatureAndAStoreAndOpensTheProfileScreen()
+    public void TheProfileScreenOpensOnItsFourRowsWithTheBoxFocusedAndThePlaquesAtTheirSlots()
     {
-        var shell = Shell(out var campaign, out _);
-        var row = shell.Rows.Single(r => r.Key == OriginalShell.CampaignKey);
-        Assert.True(row.Enabled);
+        var host = Host(out var campaign);
 
-        var step = Click(shell, row.X + 2f, row.Y + 2f);
+        host.Module.OpenCampaign();
 
-        Assert.Equal(OriginalScreen.CampaignRoster, shell.Screen);
-        Assert.True(campaign.IsOpen && shell.CampaignOpen);
-        Assert.Contains(OriginalCues.Click, step.Cues);
-        Assert.True(shell.CapturingText);
-        Assert.Equal(new[] { "ROW:0", "Continue", "DeletePlayer", "CancelProfile" }, shell.Rows.Select(r => r.Key));
-        Assert.Equal(0, shell.Focus);
+        Assert.Equal(OriginalScreen.CampaignRoster, host.Screen);
+        Assert.True(campaign.IsOpen && host.Module.IsOpen);
+        Assert.Equal(new[] { "ROW:0", "Continue", "DeletePlayer", "CancelProfile" }, host.Rows.Select(r => r.Key));
+        Assert.Equal(0, host.Focus);
         // The plaques sit at the fixture's own rows, CONTINUE keeping its pinned strip.
-        var cancel = shell.Rows.Single(r => r.Key == "CancelProfile");
-        Assert.Equal((450f, 540f, 240f, 50f), (cancel.X, cancel.Y, cancel.Width, cancel.Height));
+        var cancel = Row(host, "CancelProfile");
+        Assert.Equal((450f, 540f, 240f, 50f), Rect(cancel));
         Assert.Equal("PM_B_Cancel.png", cancel.Art!.Name);
-        var start = shell.Rows.Single(r => r.Key == "Continue");
+        var start = Row(host, "Continue");
         Assert.Equal((470f, 290f), (start.X, start.Y));
         Assert.Equal("CM_B_Start.png", start.Art!.Name);
     }
@@ -75,24 +68,26 @@ public class OriginalCampaignTests : IDisposable
     [Fact]
     public void TypingFeedsTheNameBoxWithTheEditBoxCuesAndContinueCreatesAndSeatsThePlayer()
     {
-        var shell = Shell(out var campaign, out _);
-        OpenCampaign(shell);
+        var host = Host(out var campaign);
+        OpenCampaign(host);
 
-        var step = shell.Step(new MenuCommands { Typed = "Zac/k" });
-        Assert.Equal("Zack", shell.RosterName);
-        Assert.Equal(new[] { OriginalCues.Text, OriginalCues.Text, OriginalCues.Text, OriginalCues.TextError, OriginalCues.Text }, step.Cues);
-        Assert.Contains(shell.Compose().Lines, l => l.Row == 0 && l.Text == "Zack_");
-        shell.Step(new MenuCommands { Erase = true });
-        Assert.Equal("Zac", shell.RosterName);
+        var cues = Type(host, "Zac/k");
+        Assert.Equal("Zack", host.Module.RosterName);
+        Assert.Equal(
+            new[] { OriginalCues.Text, OriginalCues.Text, OriginalCues.Text, OriginalCues.TextError, OriginalCues.Text },
+            cues);
+        Assert.Contains(Compose(host).Lines, l => l.Row == 0 && l.Text == "Zack_");
+        Erase(host);
+        Assert.Equal("Zac", host.Module.RosterName);
 
         // Enter in the box is the script's own commit path.
         Assert.Null(_store.Load("Zac"));
-        step = shell.Step(Accept);
-        Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
+        Accept(host);
+        Assert.Equal(OriginalScreen.CampaignCabin, host.Screen);
         Assert.Equal("Zac", campaign.Profile?.Name);
         Assert.NotNull(_store.Load("Zac"));
         Assert.Equal("Zac", _store.LastPlayed);
-        Assert.Contains(OriginalCues.Click, step.Cues);
+        Assert.Contains(OriginalCues.Click, host.TakeCues());
     }
 
     // The box's second route to the same reject cue, which the character-set route never reached:
@@ -100,44 +95,41 @@ public class OriginalCampaignTests : IDisposable
     [Fact]
     public void AnAcceptedCharacterAtTheCapRefusesWithTheSameRejectCue()
     {
-        var shell = Shell(out _, out _);
-        OpenCampaign(shell);
+        var host = Host(out _);
+        OpenCampaign(host);
 
-        var step = shell.Step(new MenuCommands { Typed = new string('A', CampaignFeature.MaxNameLength + 1) });
+        var cues = Type(host, new string('A', CampaignFeature.MaxNameLength + 1));
 
-        Assert.Equal(CampaignFeature.MaxNameLength, shell.RosterName.Length);
-        Assert.Equal(CampaignFeature.MaxNameLength + 1, step.Cues.Count);
-        Assert.Equal(OriginalCues.TextError, step.Cues[step.Cues.Count - 1]);
-        Assert.DoesNotContain(OriginalCues.TextError, step.Cues.Take(step.Cues.Count - 1));
+        Assert.Equal(CampaignFeature.MaxNameLength, host.Module.RosterName.Length);
+        Assert.Equal(CampaignFeature.MaxNameLength + 1, cues.Count);
+        Assert.Equal(OriginalCues.TextError, cues[cues.Count - 1]);
+        Assert.DoesNotContain(OriginalCues.TextError, cues.Take(cues.Count - 1));
     }
 
     [Fact]
-    public void ContinueWithNoNameRaisesTheRefusalAsADialogWhoseOkIsTheOnlyRow()
+    public void ContinueWithNoNameRaisesTheRefusalAsADialogAndItsOkComesBackToTheScreen()
     {
-        var shell = Shell(out var campaign, out _);
-        OpenCampaign(shell);
-        var start = shell.Rows.Single(r => r.Key == "Continue");
+        var host = Host(out var campaign);
+        OpenCampaign(host);
+        var start = Row(host, "Continue");
 
-        Click(shell, start.X + 2f, start.Y + 2f);
+        Click(host, start.X + 2f, start.Y + 2f);
 
-        Assert.NotNull(shell.Dialog);
-        Assert.Equal(campaign.Strings.Text(200, "You must enter a player name."), shell.Dialog!.Message);
-        Assert.False(shell.CapturingText);
-        var ok = Assert.Single(shell.Rows);
+        Assert.NotNull(host.Dialog);
+        Assert.Equal(campaign.Strings.Text(200, "You must enter a player name."), host.Dialog!.Message);
+        var ok = Assert.Single(host.Dialog.Answers);
         Assert.Equal(OriginalShell.DialogOkKey, ok.Key);
-        // The messagebox button at its row inside the centred 410x300 art.
-        Assert.Equal((365f, 400f, 240f, 50f), (ok.X, ok.Y, ok.Width, ok.Height));
-        var panel = shell.Compose().Overlays.First(o => o.Lines.Count > 0);
-        Assert.Contains(panel.Lines, l => l.Text == shell.Dialog.Message);
         // CAMPAIGN.SCRIPT raises langui 200 on the 0x1 mask, which is the warning icon.
-        Assert.Equal(DialogIcon.Warning, shell.Dialog.Icon);
-        Assert.Equal((int)DialogIcon.Warning, DialogIconTests.IconFrame(panel));
+        Assert.Equal(DialogIcon.Warning, host.Dialog.Icon);
         Assert.Null(_store.Load(string.Empty));
+        // The screen under the box draws itself with nothing focused and nothing picked, so the
+        // roster's own bar and caret stand down while the box does.
+        Assert.DoesNotContain(Compose(host).Lines, l => l.Text.EndsWith("_", StringComparison.Ordinal));
 
-        Click(shell, ok.X + 2f, ok.Y + 2f);
-        Assert.Null(shell.Dialog);
-        Assert.Equal(OriginalScreen.CampaignRoster, shell.Screen);
-        Assert.Equal(4, shell.Rows.Count);
+        host.Answer(OriginalShell.DialogOkKey);
+        Assert.Null(host.Dialog);
+        Assert.Equal(OriginalScreen.CampaignRoster, host.Screen);
+        Assert.Equal(4, host.Rows.Count);
     }
 
     [Fact]
@@ -145,26 +137,25 @@ public class OriginalCampaignTests : IDisposable
     {
         _store.Save(CampaignProfileDef.NewProfile("Nathan"));
         _store.Save(CampaignProfileDef.NewProfile("Zachary"));
-        var shell = Shell(out var campaign, out _);
-        OpenCampaign(shell);
-        Assert.Equal(6, shell.Rows.Count);
-        var nathan = shell.Rows[1];
-        Assert.Equal((250f, 360f, 300f, 24f), (nathan.X, nathan.Y, nathan.Width, nathan.Height));
+        var host = Host(out var campaign);
+        OpenCampaign(host);
+        Assert.Equal(6, host.Rows.Count);
+        var nathan = host.Rows[1];
+        Assert.Equal((250f, 360f, 300f, 24f), Rect(nathan));
         Assert.Equal(OriginalRowKind.ListRow, nathan.Kind);
 
-        var step = shell.Step(Pointer(nathan.X + 4f, nathan.Y + 4f));
-        Assert.Empty(step.Cues);
-        Assert.Contains(shell.Compose().Fills, f => f.Border && f.X == nathan.X && f.Y == nathan.Y);
-        step = Click(shell, nathan.X + 4f, nathan.Y + 4f);
-        Assert.Equal("Nathan", shell.RosterName);
-        Assert.Equal(OriginalScreen.CampaignRoster, shell.Screen);
-        Assert.Empty(step.Cues);
-        Assert.Contains(shell.Compose().Fills, f => !f.Border && f.X == nathan.X && f.Y == nathan.Y && f.R == 0x80);
-        Assert.DoesNotContain(shell.Compose().Lines, l => l.Text.StartsWith("✓", StringComparison.Ordinal));
+        Hover(host, nathan.X + 4f, nathan.Y + 4f);
+        Assert.Empty(host.TakeCues());
+        Assert.Contains(Compose(host).Fills, f => f.Border && f.X == nathan.X && f.Y == nathan.Y);
+        Click(host, nathan.X + 4f, nathan.Y + 4f);
+        Assert.Equal("Nathan", host.Module.RosterName);
+        Assert.Equal(OriginalScreen.CampaignRoster, host.Screen);
+        Assert.Empty(host.TakeCues());
+        Assert.Contains(Compose(host).Fills, f => !f.Border && f.X == nathan.X && f.Y == nathan.Y && f.R == 0x80);
+        Assert.DoesNotContain(Compose(host).Lines, l => l.Text.StartsWith("✓", StringComparison.Ordinal));
 
-        shell.Step(Pointer(nathan.X + 4f, nathan.Y + 4f, pressed: false, clicked: false));
-        Click(shell, nathan.X + 4f, nathan.Y + 4f);
-        Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
+        Click(host, nathan.X + 4f, nathan.Y + 4f);
+        Assert.Equal(OriginalScreen.CampaignCabin, host.Screen);
         Assert.Equal("Nathan", campaign.Profile?.Name);
     }
 
@@ -176,316 +167,247 @@ public class OriginalCampaignTests : IDisposable
     public void AClickInTheNameBoxTakesTheCaretAndStartsNothingWhereEnterStillStarts()
     {
         _store.Save(CampaignProfileDef.NewProfile("Nathan"));
-        var shell = Shell(out var campaign, out _);
-        OpenCampaign(shell);
-        var nathan = shell.Rows[1];
-        Click(shell, nathan.X + 4f, nathan.Y + 4f);
-        Assert.Equal("Nathan", shell.RosterName);
-        var box = shell.Rows[0];
+        var host = Host(out var campaign);
+        OpenCampaign(host);
+        var nathan = host.Rows[1];
+        Click(host, nathan.X + 4f, nathan.Y + 4f);
+        Assert.Equal("Nathan", host.Module.RosterName);
+        var box = host.Rows[0];
         Assert.Equal(OriginalRowKind.TextField, box.Kind);
 
-        shell.Step(Pointer(box.X + 4f, box.Y + 4f, pressed: true, clicked: true));
-        Assert.Equal("ROW:0", shell.ArmedKey);
-        var step = shell.Step(Pointer(box.X + 4f, box.Y + 4f));
-        Assert.Equal(OriginalScreen.CampaignRoster, shell.Screen);
-        Assert.Null(campaign.Profile);
-        Assert.Equal("ROW:0", shell.FocusedKey);
-        Assert.Equal("Nathan", shell.RosterName);
-        Assert.Contains(OriginalCues.Click, step.Cues);
+        Click(host, box.X + 4f, box.Y + 4f);
 
-        shell.Step(Accept);
-        Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
+        Assert.Equal(OriginalScreen.CampaignRoster, host.Screen);
+        Assert.Null(campaign.Profile);
+        Assert.Equal("ROW:0", host.FocusedKey);
+        Assert.Equal("Nathan", host.Module.RosterName);
+        Assert.Contains(OriginalCues.Click, host.TakeCues());
+
+        Accept(host);
+        Assert.Equal(OriginalScreen.CampaignCabin, host.Screen);
         Assert.Equal("Nathan", campaign.Profile?.Name);
     }
 
     [Fact]
-    public void TheBoxOpensOnTheLastPlayerSeatedAndDeletePlayerAsksWithTwoAnswersOpeningOnYes()
+    public void TheBoxOpensOnTheLastPlayerSeatedAndDeletePlayerAsksWithTwoAnswersDeletingOnYes()
     {
         _store.Save(CampaignProfileDef.NewProfile("Nathan"));
         _store.Save(CampaignProfileDef.NewProfile("Zachary"));
         _store.RecordLastPlayed("Zachary");
-        var shell = Shell(out var campaign, out _);
-        OpenCampaign(shell);
-        Assert.Equal("Zachary", shell.RosterName);
+        var host = Host(out var campaign);
+        OpenCampaign(host);
+        Assert.Equal("Zachary", host.Module.RosterName);
 
-        var delete = shell.Rows.Single(r => r.Key == "DeletePlayer");
-        Click(shell, delete.X + 2f, delete.Y + 2f);
-        Assert.NotNull(shell.Dialog);
-        Assert.Equal(new[] { OriginalShell.DialogYesKey, OriginalShell.DialogNoKey }, shell.Rows.Select(r => r.Key));
-        Assert.Equal(OriginalShell.DialogYesKey, shell.FocusedKey);
-        Assert.Equal((195f + 70f, 150f + 250f), (shell.Rows[0].X, shell.Rows[0].Y));
-        // Langui 201 comes up on the 0x4 mask, the one set of masks that keeps the query icon.
-        Assert.Equal(DialogIcon.Query, shell.Dialog!.Icon);
+        var delete = Row(host, "DeletePlayer");
+        Click(host, delete.X + 2f, delete.Y + 2f);
+        Assert.NotNull(host.Dialog);
         Assert.Equal(
-            (int)DialogIcon.Query,
-            DialogIconTests.IconFrame(shell.Compose().Overlays.First(o => o.Lines.Count > 0)));
+            new[] { OriginalShell.DialogYesKey, OriginalShell.DialogNoKey },
+            host.Dialog!.Answers.Select(a => a.Key));
+        Assert.Equal(OriginalShell.DialogYesKey, host.FocusedKey);
+        // Langui 201 comes up on the 0x4 mask, the one set of masks that keeps the query icon.
+        Assert.Equal(DialogIcon.Query, host.Dialog.Icon);
 
-        // Raised from a click, the pointer resting where DELETE PLAYER was: neither answer is lit,
-        // so both keep the normal frame and the mark alone says Yes is the one Accept would take.
-        var yes = shell.Rows[0];
-        var no = shell.Rows[1];
-        var box = shell.Compose().Overlays.First(o => o.Lines.Count > 0);
-        Assert.Equal(new[] { 1, 1 }, box.Pictures.Skip(2).Select(p => p.Frame));
-        var mark = Assert.Single(Marks(shell));
-        Assert.True(mark.Border);
-        Assert.Equal((yes.X - 3f, yes.Y - 3f), (mark.X, mark.Y));
-
-        // The pointer carries the rollover frame and the cursor with it, so a hovered answer is
-        // the lit one and wears no mark, and the answer left behind is back on its normal frame.
-        shell.Step(Pointer(no.X + 4f, no.Y + 4f));
-        box = shell.Compose().Overlays.First(o => o.Lines.Count > 0);
-        Assert.Equal(new[] { 1, 2 }, box.Pictures.Skip(2).Select(p => p.Frame));
-        Assert.Empty(Marks(shell));
-        Assert.Equal(OriginalShell.DialogNoKey, shell.FocusedKey);
-
-        shell.Step(Back);
-        Assert.Null(shell.Dialog);
+        // Back declines with the last answer, which leaves the profile where it was and hands the
+        // focus back to the plaque that asked.
+        Back(host);
+        Assert.Null(host.Dialog);
         Assert.NotNull(_store.Load("Zachary"));
-        Assert.Equal("DeletePlayer", shell.FocusedKey);
+        Assert.Equal("DeletePlayer", host.FocusedKey);
 
-        shell.Step(Accept);
-        shell.Step(Down);
-        Assert.Equal(OriginalShell.DialogNoKey, shell.FocusedKey);
-        shell.Step(Up);
-        Assert.Equal(OriginalShell.DialogYesKey, shell.FocusedKey);
-        shell.Step(Accept);
+        Accept(host);
+        Down(host);
+        Assert.Equal(OriginalShell.DialogNoKey, host.FocusedKey);
+        Up(host);
+        Assert.Equal(OriginalShell.DialogYesKey, host.FocusedKey);
+        Accept(host);
         Assert.Null(_store.Load("Zachary"));
         Assert.NotNull(_store.Load("Nathan"));
-        Assert.Equal(string.Empty, shell.RosterName);
+        Assert.Equal(string.Empty, host.Module.RosterName);
         Assert.Equal(new[] { "Nathan" }, campaign.Roster);
-        Assert.Equal(5, shell.Rows.Count);
+        Assert.Equal(5, host.Rows.Count);
     }
 
     [Fact]
     public void TheCabinsPlaquesTakeThePointerAndTheKeyboardAndReturnToMainMenuClosesTheCampaign()
     {
-        var shell = Shell(out var campaign, out _);
-        Seat(shell, "Zachary");
+        var host = Host(out var campaign);
+        Seat(host, "Zachary");
         Assert.Equal(
             new[] { "NextMission", "PreviousMissions", "PlaneConstruction", "ReturnToMainMenu", "ChangeMemento" },
-            shell.Rows.Select(r => r.Key));
-        Assert.Equal("NextMission", shell.FocusedKey);
-        var previous = shell.Rows[1];
-        Assert.Equal((360f, 540f, 240f, 50f), (previous.X, previous.Y, previous.Width, previous.Height));
+            host.Rows.Select(r => r.Key));
+        Assert.Equal("NextMission", host.FocusedKey);
+        var previous = host.Rows[1];
+        Assert.Equal((360f, 540f, 240f, 50f), Rect(previous));
 
-        var step = shell.Step(Pointer(previous.X + 3f, previous.Y + 3f));
-        Assert.Equal("PreviousMissions", shell.FocusedKey);
-        Assert.Equal(new[] { OriginalCues.Rollover }, step.Cues);
-        var plaque = shell.Compose().Plaques.Single(p => p.Art.Name == "PM_B_Previous.png");
+        Hover(host, previous.X + 3f, previous.Y + 3f);
+        Assert.Equal("PreviousMissions", host.FocusedKey);
+        Assert.Equal(new[] { OriginalCues.Rollover }, host.TakeCues());
+        var plaque = Compose(host).Plaques.Single(p => p.Art.Name == "PM_B_Previous.png");
         Assert.Equal(2, plaque.Frame);
-        shell.Step(Pointer(previous.X + 3f, previous.Y + 3f, pressed: true, clicked: true));
-        Assert.Equal(3, shell.Compose().Plaques.Single(p => p.Art.Name == "PM_B_Previous.png").Frame);
-        Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
+        Press(host, previous.X + 3f, previous.Y + 3f);
+        Assert.Equal(3, Compose(host).Plaques.Single(p => p.Art.Name == "PM_B_Previous.png").Frame);
+        Assert.Equal(OriginalScreen.CampaignCabin, host.Screen);
 
-        shell.Step(Pointer(previous.X + 3f, previous.Y + 3f));
-        Assert.Equal(OriginalScreen.CampaignPreviousMissions, shell.Screen);
-        Assert.Equal("ROW:0", shell.FocusedKey); // the career row, a fresh profile's one list row
-        shell.Step(Back);
-        Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
+        Release(host, previous.X + 3f, previous.Y + 3f);
+        Assert.Equal(OriginalScreen.CampaignPreviousMissions, host.Screen);
+        Assert.Equal("ROW:0", host.FocusedKey); // the career row, a fresh profile's one list row
+        Back(host);
+        Assert.Equal(OriginalScreen.CampaignCabin, host.Screen);
 
-        shell.Step(Down);
-        shell.Step(Down);
-        Assert.Equal("ReturnToMainMenu", shell.FocusedKey);
-        shell.Step(Down);
-        Assert.Equal("ChangeMemento", shell.FocusedKey);
-        shell.Step(Down);
-        Assert.Equal("NextMission", shell.FocusedKey);
-        shell.Step(Up);
-        shell.Step(Up);
-        Assert.Equal("ReturnToMainMenu", shell.FocusedKey);
-        shell.Step(Accept);
-        Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
+        Down(host);
+        Down(host);
+        Assert.Equal("ReturnToMainMenu", host.FocusedKey);
+        Down(host);
+        Assert.Equal("ChangeMemento", host.FocusedKey);
+        Down(host);
+        Assert.Equal("NextMission", host.FocusedKey);
+        Up(host);
+        Up(host);
+        Assert.Equal("ReturnToMainMenu", host.FocusedKey);
+        Accept(host);
+        Assert.Equal(OriginalScreen.TopLevel, host.Screen);
         Assert.False(campaign.IsOpen);
-        Assert.False(shell.CampaignOpen);
+        Assert.False(host.Module.IsOpen);
     }
 
     [Fact]
     public void BackFromTheCabinReturnsToTheProfileScreenAndBackAgainLeaves()
     {
-        var shell = Shell(out var campaign, out _);
-        Seat(shell, "Zachary");
+        var host = Host(out var campaign);
+        Seat(host, "Zachary");
 
-        shell.Step(Back);
-        Assert.Equal(OriginalScreen.CampaignRoster, shell.Screen);
+        Back(host);
+        Assert.Equal(OriginalScreen.CampaignRoster, host.Screen);
         Assert.True(campaign.IsOpen);
-        Assert.Equal("Zachary", shell.RosterName);
+        Assert.Equal("Zachary", host.Module.RosterName);
 
-        shell.Step(Back);
-        Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
+        Back(host);
+        Assert.Equal(OriginalScreen.TopLevel, host.Screen);
         Assert.False(campaign.IsOpen);
     }
 
     [Fact]
     public void NextMissionOpensTheBriefingWhoseThreePlaquesLeadBackAndOnAndReplayRestartsTheReveal()
     {
-        var shell = Shell(out var campaign, out _);
-        Seat(shell, "Zachary");
+        var host = Host(out var campaign);
+        Seat(host, "Zachary");
 
-        shell.Step(Accept);
-        Assert.Equal(OriginalScreen.CampaignBriefing, shell.Screen);
+        Accept(host);
+        Assert.Equal(OriginalScreen.CampaignBriefing, host.Screen);
         Assert.Equal(0, campaign.MissionSeq);
-        Assert.Equal(new[] { "ReplayBriefing", "ReturnToCabin", "GoToFlightCheck" }, shell.Rows.Select(r => r.Key));
-        var flightCheck = shell.Rows[2];
-        Assert.Equal((597f, 560f, 196f, 32f), (flightCheck.X, flightCheck.Y, flightCheck.Width, flightCheck.Height));
+        Assert.Equal(new[] { "ReplayBriefing", "ReturnToCabin", "GoToFlightCheck" }, host.Rows.Select(r => r.Key));
+        var flightCheck = host.Rows[2];
+        Assert.Equal((597f, 560f, 196f, 32f), Rect(flightCheck));
         Assert.Equal(BoardArtLibrary.Rimage, flightCheck.Art!.Library);
         // No extraction here, so the briefing has no state; the plaques still stand.
-        Assert.Equal(0, shell.NarrationStarts);
-        Assert.False(shell.AdvanceBriefing(1.0 / 60.0));
+        Assert.Equal(0, host.Module.NarrationStarts);
+        Assert.False(host.Module.AdvanceBriefing(1.0 / 60.0));
 
-        shell.Step(Down);
-        shell.Step(Accept);
-        Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
-        shell.Step(Accept);
-        Assert.Equal(OriginalScreen.CampaignBriefing, shell.Screen);
-        shell.Step(Back);
-        Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
+        Down(host);
+        Accept(host);
+        Assert.Equal(OriginalScreen.CampaignCabin, host.Screen);
+        Accept(host);
+        Assert.Equal(OriginalScreen.CampaignBriefing, host.Screen);
+        Back(host);
+        Assert.Equal(OriginalScreen.CampaignCabin, host.Screen);
     }
 
     [Fact]
     public void TheFlightCheckOpensAmmoAndFliesAsOneCampaignMissionExitWithTheProfileSaved()
     {
-        var shell = Shell(out var campaign, out _);
-        Seat(shell, "Zachary");
-        shell.Step(Accept);
-        var go = shell.Rows.Single(r => r.Key == "GoToFlightCheck");
-        Click(shell, go.X + 2f, go.Y + 2f);
-        Assert.Equal(OriginalScreen.CampaignFlightCheck, shell.Screen);
+        var host = Host(out var campaign);
+        Seat(host, "Zachary");
+        Accept(host);
+        var go = Row(host, "GoToFlightCheck");
+        Click(host, go.X + 2f, go.Y + 2f);
+        Assert.Equal(OriginalScreen.CampaignFlightCheck, host.Screen);
         // The pilot heading is text the cursor steps over; CHANGE PLANE is barred under three planes.
-        Assert.Equal(new[] { "ROW:0", "ChangeAmmo", "ReturnToBriefing", "FlyMission" }, shell.Rows.Select(r => r.Key));
-        Assert.False(shell.Rows[0].Enabled);
-        Assert.False(shell.Rows[0].Visible);
-        Assert.Equal("ChangeAmmo", shell.FocusedKey);
-        var ammo = shell.Rows[1];
-        Assert.Equal((270f, 131f, 160f, 28f), (ammo.X, ammo.Y, ammo.Width, ammo.Height));
+        Assert.Equal(new[] { "ROW:0", "ChangeAmmo", "ReturnToBriefing", "FlyMission" }, host.Rows.Select(r => r.Key));
+        Assert.False(host.Rows[0].Enabled);
+        Assert.False(host.Rows[0].Visible);
+        Assert.Equal("ChangeAmmo", host.FocusedKey);
+        var ammo = host.Rows[1];
+        Assert.Equal((270f, 131f, 160f, 28f), Rect(ammo));
 
-        shell.Step(Accept);
-        Assert.Equal(OriginalScreen.CampaignAmmo, shell.Screen);
+        Accept(host);
+        Assert.Equal(OriginalScreen.CampaignAmmo, host.Screen);
         Assert.Equal(0, campaign.AmmoSlot);
-        Assert.Contains(shell.Rows, r => r.Key == "AcceptLoadout" && r.X == 340f && r.Y == 550f);
-        shell.Step(Back);
-        Assert.Equal(OriginalScreen.CampaignFlightCheck, shell.Screen);
+        Assert.Contains(host.Rows, r => r.Key == "AcceptLoadout" && r.X == 340f && r.Y == 550f);
+        Back(host);
+        Assert.Equal(OriginalScreen.CampaignFlightCheck, host.Screen);
 
-        shell.Step(Down);
-        Assert.Equal("ReturnToBriefing", shell.FocusedKey);
-        shell.Step(Accept);
-        Assert.Equal(OriginalScreen.CampaignBriefing, shell.Screen);
-        shell.Step(Down);
-        shell.Step(Down);
-        shell.Step(Accept);
-        Assert.Equal(OriginalScreen.CampaignFlightCheck, shell.Screen);
+        Down(host);
+        Assert.Equal("ReturnToBriefing", host.FocusedKey);
+        Accept(host);
+        Assert.Equal(OriginalScreen.CampaignBriefing, host.Screen);
+        Down(host);
+        Down(host);
+        Accept(host);
+        Assert.Equal(OriginalScreen.CampaignFlightCheck, host.Screen);
 
-        var fly = shell.Rows.Single(r => r.Key == "FlyMission");
+        var fly = Row(host, "FlyMission");
         var profile = campaign.Profile!;
-        var step = Click(shell, fly.X + 2f, fly.Y + 2f);
-        var exit = Assert.IsType<CampaignMissionExit>(step.Exit);
+        var exit = Assert.IsType<CampaignMissionExit>(Click(host, fly.X + 2f, fly.Y + 2f));
         Assert.Equal(("Zachary", 0, 1), (exit.Profile, exit.MissionSeq, exit.Seats.Count));
         Assert.Equal("node5", exit.Seats[0].PlaneNode);
-        Assert.Equal(CampaignProfileStore.Serialize(profile), File.ReadAllText(Path.Combine(_store.DirFor("Zachary"), "profile.json")));
-        Assert.Contains(OriginalCues.Click, step.Cues);
+        Assert.Equal(
+            CampaignProfileStore.Serialize(profile),
+            File.ReadAllText(Path.Combine(_store.DirFor("Zachary"), "profile.json")));
+        Assert.Contains(OriginalCues.Click, host.TakeCues());
     }
 
-    /// <summary>The check standing on a guest belongs to that guest's device and to the mouse
-    /// riding seat 0's source, nothing else of seat 0's: its cursor, Accept and Back would
-    /// otherwise change a pilot's ammunition, aircraft and readiness from another chair. Seat 0
-    /// keeps the whole frame on its own check, which is what the field's index answers.</summary>
+    /// <summary>PLANE CONSTRUCTION is the one door out of the campaign that comes back: the module
+    /// asks the host for the hangar over the seated profile's own purse, and the return the host
+    /// makes re-reads that profile and lands on the plaque the door was pressed from.</summary>
     [Fact]
-    public void SeatZeroDrivesItsOwnCheckAndOnlyItsPointerReachesAGuests()
+    public void PlaneConstructionAsksTheHostForTheHangarOverTheWalletAndTheReturnLandsOnTheCabin()
     {
-        var shell = Shell(out var campaign, out _, out var setup);
-        Seat(shell, "Zachary");
-        setup.Join(new ScriptedMenuSeat());
-        shell.Step(Accept);
-        var go = shell.Rows.Single(r => r.Key == "GoToFlightCheck");
-        Click(shell, go.X + 2f, go.Y + 2f);
-        Assert.Equal(OriginalScreen.CampaignFlightCheck, shell.Screen);
+        var host = Host(out var campaign);
+        Seat(host, "Zachary");
+        var door = Row(host, "PlaneConstruction");
 
-        // Seat 0's own check takes its whole frame, into ammo selection and back out.
-        Assert.Equal("ChangeAmmo", shell.FocusedKey);
-        shell.Step(Accept);
-        Assert.Equal(OriginalScreen.CampaignAmmo, shell.Screen);
-        shell.Step(Back);
-        Assert.Equal(OriginalScreen.CampaignFlightCheck, shell.Screen);
+        Click(host, door.X + 2f, door.Y + 2f);
 
-        // FLY MISSION hands the screen to the guest, and seat 0's cursor, Accept and Back then
-        // move nothing: no row, no ammo screen, no retreat off the guest's check.
-        var fly = shell.Rows.Single(r => r.Key == "FlyMission");
-        Assert.Null(Click(shell, fly.X + 2f, fly.Y + 2f).Exit);
-        Assert.Equal((1, 2), (campaign.Field.Current, campaign.Field.Players));
-        Assert.Equal("ChangeAmmo", shell.FocusedKey);
-        Assert.False(shell.Step(Down).Changed);
-        Assert.False(shell.Step(Accept).Changed);
-        Assert.False(shell.Step(Back).Changed);
-        Assert.Equal(OriginalScreen.CampaignFlightCheck, shell.Screen);
-        Assert.Equal(1, campaign.Field.Current);
-        Assert.Equal("ChangeAmmo", shell.FocusedKey);
+        Assert.Equal(1, host.HangarOpens);
+        Assert.NotNull(host.HangarWallet);
+        Assert.Equal(campaign.Profile!.Funds, host.HangarWallet!.Funds);
 
-        // The guest's own device drives it, and the ammo screen its row opens is the guest's too.
-        Assert.True(shell.StepSeat(1, Accept).Changed);
-        Assert.Equal(OriginalScreen.CampaignAmmo, shell.Screen);
-        Assert.False(shell.Step(Back).Changed);
-        Assert.Equal(OriginalScreen.CampaignAmmo, shell.Screen);
-        shell.StepSeat(1, Back);
-        Assert.Equal(OriginalScreen.CampaignFlightCheck, shell.Screen);
-        Assert.Equal(1, campaign.Field.Current);
-
-        // Seat 0's pointer still reaches the guest's check, the one device a pilot with no pad of
-        // their own has, so the last check's FLY MISSION is the launch for both seats.
-        fly = shell.Rows.Single(r => r.Key == "FlyMission");
-        var exit = Assert.IsType<CampaignMissionExit>(
-            Click(shell, fly.X + 2f, fly.Y + 2f).Exit);
-        Assert.Equal(2, exit.Seats.Count);
-    }
-
-    [Fact]
-    public void PlaneConstructionOpensTheHangarOverTheWalletWithTheCabinAsItsReturn()
-    {
-        var shell = Shell(out var campaign, out var hangar);
-        Seat(shell, "Zachary");
-        var door = shell.Rows.Single(r => r.Key == "PlaneConstruction");
-
-        Click(shell, door.X + 2f, door.Y + 2f);
-        Assert.Equal(OriginalScreen.PlaneName, shell.Screen);
-        Assert.True(hangar.IsOpen);
-        Assert.NotNull(hangar.Wallet);
-        Assert.Equal(campaign.Profile!.Funds, hangar.Wallet!.Funds);
-
-        shell.Step(Back);
-        Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
-        Assert.False(hangar.IsOpen);
+        host.ResumeCampaign();
+        Assert.Equal(OriginalScreen.CampaignCabin, host.Screen);
         Assert.True(campaign.IsOpen);
-        Assert.Equal("PlaneConstruction", shell.FocusedKey);
+        Assert.Equal("PlaneConstruction", host.FocusedKey);
     }
 
     [Fact]
-    public void TheTwoFlightReturnsLandOnTheCabinAndTheBookAndAReturnToTheTopLevelClosesTheCampaign()
+    public void TheTwoFlightReturnsLandOnTheCabinAndTheBookAndClosingDropsTheCampaign()
     {
         _store.Save(CampaignProfileDef.NewProfile("Zachary"));
-        var shell = Shell(out var campaign, out _);
+        var host = Host(out var campaign);
 
-        shell.OpenCampaignOver(_store);
-        Assert.True(shell.ShowCabin("Zachary"));
-        Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
+        host.Module.OpenCampaignOver(_store);
+        Assert.True(host.Module.ShowCabin("Zachary"));
+        Assert.Equal(OriginalScreen.CampaignCabin, host.Screen);
         Assert.Equal("Zachary", campaign.Profile?.Name);
         Assert.Equal("Zachary", _store.LastPlayed);
 
-        shell.OpenCampaignOver(_store);
-        Assert.True(shell.ShowScrapbook("Zachary", 0, missionWon: true));
-        Assert.Equal(OriginalScreen.CampaignScrapbook, shell.Screen);
+        host.Module.OpenCampaignOver(_store);
+        Assert.True(host.Module.ShowScrapbook("Zachary", 0, missionWon: true));
+        Assert.Equal(OriginalScreen.CampaignScrapbook, host.Screen);
         Assert.Equal(0, campaign.MissionSeq);
         Assert.Equal(1, campaign.ScrapbookEntry);
-        Assert.Equal("ReturnToCabin", shell.FocusedKey);
-        Assert.Contains(shell.Rows, r => r.Key == "ReturnToCabin" && r.X == 590f && r.Y == 560f);
-        shell.Step(Accept);
-        Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
+        Assert.Equal("ReturnToCabin", host.FocusedKey);
+        Assert.Contains(host.Rows, r => r.Key == "ReturnToCabin" && r.X == 590f && r.Y == 560f);
+        Accept(host);
+        Assert.Equal(OriginalScreen.CampaignCabin, host.Screen);
 
-        shell.OpenCampaignOver(_store);
-        Assert.False(shell.ShowCabin("Nobody"));
-        Assert.Equal(OriginalScreen.CampaignRoster, shell.Screen);
+        host.Module.OpenCampaignOver(_store);
+        Assert.False(host.Module.ShowCabin("Nobody"));
+        Assert.Equal(OriginalScreen.CampaignRoster, host.Screen);
 
-        shell.ReturnToTopLevel();
-        Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
+        host.Module.CloseCampaign();
         Assert.False(campaign.IsOpen);
-        Assert.False(shell.CampaignOpen);
+        Assert.False(host.Module.IsOpen);
     }
 
     [Fact]
@@ -494,39 +416,40 @@ public class OriginalCampaignTests : IDisposable
         var profile = CampaignProfileDef.NewProfile("Zachary");
         for (int seq = 0; seq < 2; seq++)
         {
-            CampaignProgression.Record(profile, new MissionAttempt(seq, CampaignProgression.PrimaryObjectiveMask, 300_000, 400, 120, 5, "Gypsy Magic"));
+            CampaignProgression.Record(profile, new MissionAttempt(
+                seq, CampaignProgression.PrimaryObjectiveMask, 300_000, 400, 120, 5, "Gypsy Magic"));
         }
 
         _store.Save(profile);
-        var shell = Shell(out var campaign, out _);
-        Seat(shell, "Zachary");
-        shell.Step(Down);
-        shell.Step(Accept);
-        Assert.Equal(OriginalScreen.CampaignPreviousMissions, shell.Screen);
+        var host = Host(out var campaign);
+        Seat(host, "Zachary");
+        Down(host);
+        Accept(host);
+        Assert.Equal(OriginalScreen.CampaignPreviousMissions, host.Screen);
         // The career row and two mission rows at the fixture's list box, then the buttons.
-        Assert.Equal((410f, 150f, 330f, 60f), (shell.Rows[0].X, shell.Rows[0].Y, shell.Rows[0].Width, shell.Rows[0].Height));
-        Assert.Equal((410f, 210f), (shell.Rows[1].X, shell.Rows[1].Y));
-        Assert.Equal((410f, 270f), (shell.Rows[2].X, shell.Rows[2].Y));
-        Assert.Contains(shell.Rows, r => r.Key == "ViewMission" && r.X == 440f && r.Y == 500f);
+        Assert.Equal((410f, 150f, 330f, 60f), Rect(host.Rows[0]));
+        Assert.Equal((410f, 210f), (host.Rows[1].X, host.Rows[1].Y));
+        Assert.Equal((410f, 270f), (host.Rows[2].X, host.Rows[2].Y));
+        Assert.Contains(host.Rows, r => r.Key == "ViewMission" && r.X == 440f && r.Y == 500f);
 
-        var second = shell.Rows[2];
-        Click(shell, second.X + 5f, second.Y + 5f);
-        Assert.Equal(OriginalScreen.CampaignPreviousMissions, shell.Screen);
-        Assert.Contains(shell.Compose().Fills, f => f.Y == second.Y && !f.Border);
-        var view = shell.Rows.Single(r => r.Key == "ViewMission");
-        Click(shell, view.X + 2f, view.Y + 2f);
-        Assert.Equal(OriginalScreen.CampaignScrapbook, shell.Screen);
+        var second = host.Rows[2];
+        Click(host, second.X + 5f, second.Y + 5f);
+        Assert.Equal(OriginalScreen.CampaignPreviousMissions, host.Screen);
+        Assert.Contains(Compose(host).Fills, f => f.Y == second.Y && !f.Border);
+        var view = Row(host, "ViewMission");
+        Click(host, view.X + 2f, view.Y + 2f);
+        Assert.Equal(OriginalScreen.CampaignScrapbook, host.Screen);
         Assert.Equal(1, campaign.MissionSeq);
-        shell.Step(Back);
-        Assert.Equal(OriginalScreen.CampaignPreviousMissions, shell.Screen);
+        Back(host);
+        Assert.Equal(OriginalScreen.CampaignPreviousMissions, host.Screen);
 
-        var replay = shell.Rows.Single(r => r.Key == "ReplayMission");
-        Click(shell, replay.X + 2f, replay.Y + 2f);
-        Assert.Equal(OriginalScreen.CampaignBriefing, shell.Screen);
-        shell.Step(Back);
-        Assert.Equal(OriginalScreen.CampaignPreviousMissions, shell.Screen);
-        shell.Step(Back);
-        Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
+        var replay = Row(host, "ReplayMission");
+        Click(host, replay.X + 2f, replay.Y + 2f);
+        Assert.Equal(OriginalScreen.CampaignBriefing, host.Screen);
+        Back(host);
+        Assert.Equal(OriginalScreen.CampaignPreviousMissions, host.Screen);
+        Back(host);
+        Assert.Equal(OriginalScreen.CampaignCabin, host.Screen);
     }
 
     /// <summary>The book's unselected results tab presses no authored button, so it is the page's
@@ -536,106 +459,138 @@ public class OriginalCampaignTests : IDisposable
     public void TheBooksUnselectedTabIsHitAtItsArtAndSwitchesTheHalfTheCardReads()
     {
         var profile = CampaignProfileDef.NewProfile("Zachary");
-        CampaignProgression.Record(profile, new MissionAttempt(0, CampaignProgression.PrimaryObjectiveMask, 300_000, 400, 120, 5, "Gypsy Magic"));
+        CampaignProgression.Record(profile, new MissionAttempt(
+            0, CampaignProgression.PrimaryObjectiveMask, 300_000, 400, 120, 5, "Gypsy Magic"));
         _store.Save(profile);
-        var shell = Shell(out _, out _);
+        var host = Host(out _);
 
-        shell.OpenCampaignOver(_store);
-        Assert.True(shell.ShowScrapbook("Zachary", 0, missionWon: true));
+        host.Module.OpenCampaignOver(_store);
+        Assert.True(host.Module.ShowScrapbook("Zachary", 0, missionWon: true));
 
         // Most Recent is the plaque the card shows, Best to Date the picture beside it, at the
         // slot's authored 432,283 and the fixture's unmeasured-strip fallback size.
-        Assert.Contains(shell.Rows, r => r.Key == nameof(BoardButton.MostTab));
-        var best = Assert.Single(shell.Rows, r => r.X == 432f && r.Y == 283f);
+        Assert.Contains(host.Rows, r => r.Key == nameof(BoardButton.MostTab));
+        var best = Assert.Single(host.Rows, r => r.X == 432f && r.Y == 283f);
         Assert.Equal((113f, 34f, true), (best.Width, best.Height, best.Visible));
 
-        Click(shell, best.X + 2f, best.Y + 2f);
+        Click(host, best.X + 2f, best.Y + 2f);
 
-        Assert.Contains(shell.Rows, r => r.Key == nameof(BoardButton.BestTab));
-        Assert.DoesNotContain(shell.Rows, r => r.Key == nameof(BoardButton.MostTab));
-        Assert.Contains(shell.Rows, r => r.X == 594f && r.Y == 283f && r.Width == 113f);
+        Assert.Contains(host.Rows, r => r.Key == nameof(BoardButton.BestTab));
+        Assert.DoesNotContain(host.Rows, r => r.Key == nameof(BoardButton.MostTab));
+        Assert.Contains(host.Rows, r => r.X == 594f && r.Y == 283f && r.Width == 113f);
     }
 
     [Fact]
-    public void TheExportPressRaisesTheOneButtonBoxInItsOwnInkOverThePaperScreenAndWritesTheGivenStore()
+    public void TheExportPressRaisesTheOneButtonBoxAndWritesTheGivenStore()
     {
         _store.Save(CampaignProfileDef.NewProfile("Zachary"));
         var scratchPlanes = new CustomPlaneStore(Path.Combine(_dir, "AidPlanes"));
-        var shell = Shell(out var campaign, out _);
-        shell.OpenCampaignOver(_store, scratchPlanes);
-        Assert.True(shell.ShowCabin("Zachary"));
-        shell.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
-        Assert.Equal(OriginalScreen.CampaignPlaneSelection, shell.Screen);
+        var host = Host(out var campaign);
+        host.Module.OpenCampaignOver(_store, scratchPlanes);
+        Assert.True(host.Module.ShowCabin("Zachary"));
+        host.Module.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
+        Assert.Equal(OriginalScreen.CampaignPlaneSelection, host.Screen);
 
-        shell.PressExport();
+        host.Module.PressExport();
 
-        Assert.NotNull(shell.Dialog);
-        var ok = Assert.Single(shell.Rows);
-        Assert.Equal(OriginalShell.DialogOkKey, ok.Key);
+        Assert.NotNull(host.Dialog);
+        Assert.Equal(OriginalShell.DialogOkKey, Assert.Single(host.Dialog!.Answers).Key);
         Assert.NotNull(scratchPlanes.Load(campaign.Profile!.Planes[0].Name));
         Assert.Null(_planes.Load(campaign.Profile.Planes[0].Name));
 
-        // With no pointer on it OK stands on its normal frame under the focus mark, in the box's
-        // white rather than the paper palette.
-        var panel = shell.Compose().Overlays.First(o => o.Lines.Count > 0);
-        var label = Assert.Single(panel.Lines, l => l.Text == ok.Label);
-        Assert.Equal(BoardInk.Dialog, label.Ink);
-        Assert.Contains(panel.Pictures, p => p.Art.Name == "PM_B_Small.png" && p.Frame == 1);
-        Assert.True(Assert.Single(Marks(shell)).Border);
-
-        // Held under the pointer it takes the depressed frame and the black that reads on it.
-        shell.Step(Pointer(ok.X + 2f, ok.Y + 2f, pressed: true, clicked: true));
-        panel = shell.Compose().Overlays.First(o => o.Lines.Count > 0);
-        Assert.Equal(BoardInk.DialogPressed, Assert.Single(panel.Lines, l => l.Text == ok.Label).Ink);
-        Assert.Contains(panel.Pictures, p => p.Art.Name == "PM_B_Small.png" && p.Frame == 3);
-
-        // A second press off the screen does nothing: the dialog stands and the rows are still its own.
-        shell.PressExport();
-        Assert.NotNull(shell.Dialog);
+        // A second press off the screen does nothing: the box stands and the screen under it is
+        // left alone, the answers being the rows a player can reach.
+        host.Module.PressExport();
+        Assert.NotNull(host.Dialog);
     }
 
     [Fact]
     public void AnAidScriptSpellsTheSamePressesUnderOriginalAsItDoesUnderBuiltIn()
     {
         _store.Save(CampaignProfileDef.NewProfile("Zachary"));
-        var shell = Shell(out _, out _);
-        shell.OpenCampaignOver(_store, _planes);
-        Assert.True(shell.ShowCabin("Zachary"));
-        shell.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
+        var host = Host(out _);
+        host.Module.OpenCampaignOver(_store, _planes);
+        Assert.True(host.Module.ShowCabin("Zachary"));
+        host.Module.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
 
         // A confirm on the opening row stands the pilot's list open, the entries joining the rows.
-        int closed = shell.Rows.Count;
-        shell.RunAidScript("a");
-        Assert.Equal("FIELD:0", shell.Rows[shell.Focus].Key);
-        Assert.Contains(shell.Rows, r => r.Key.StartsWith("ENTRY:", StringComparison.Ordinal));
+        int closed = host.Rows.Count;
+        host.Module.RunAidScript("a");
+        Assert.Equal("FIELD:0", host.Rows[host.Focus].Key);
+        Assert.Contains(host.Rows, r => r.Key.StartsWith("ENTRY:", StringComparison.Ordinal));
 
-        shell.RunAidScript("b");
-        Assert.Equal(closed, shell.Rows.Count);
+        host.Module.RunAidScript("b");
+        Assert.Equal(closed, host.Rows.Count);
 
         // A count with no verb is that many rows down, and the button word is that plaque's press.
-        shell.RunAidScript("2");
-        Assert.Equal("AcceptSelections", shell.Rows[shell.Focus].Key);
-        shell.RunAidScript(CampaignAidProfiles.ExportArgument);
-        Assert.NotNull(shell.Dialog);
+        host.Module.RunAidScript("2");
+        Assert.Equal("AcceptSelections", host.Rows[host.Focus].Key);
+        host.Module.RunAidScript(CampaignAidProfiles.ExportArgument);
+        Assert.NotNull(host.Dialog);
 
         // A word spelling no press at all leaves the screen where it stood.
-        shell.RunAidScript("qqq");
-        Assert.NotNull(shell.Dialog);
+        host.Module.RunAidScript("qqq");
+        Assert.NotNull(host.Dialog);
     }
 
-    private static void OpenCampaign(OriginalShell shell)
+    private static void OpenCampaign(CampaignHost host)
     {
-        var row = shell.Rows.Single(r => r.Key == OriginalShell.CampaignKey);
-        Click(shell, row.X + 2f, row.Y + 2f);
+        host.Module.OpenCampaign();
+        Assert.Equal(OriginalScreen.CampaignRoster, host.Screen);
     }
 
     // A player typed into the box and started, landing on the cabin.
-    private static void Seat(OriginalShell shell, string name)
+    private static void Seat(CampaignHost host, string name)
     {
-        OpenCampaign(shell);
-        shell.Step(new MenuCommands { Typed = name });
-        shell.Step(Accept);
-        Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
+        OpenCampaign(host);
+        Type(host, name);
+        Accept(host);
+        Assert.Equal(OriginalScreen.CampaignCabin, host.Screen);
+    }
+
+    private static OriginalRow Row(CampaignHost host, string key) => host.Rows.Single(r => r.Key == key);
+
+    private static (float X, float Y, float Width, float Height) Rect(OriginalRow row) =>
+        (row.X, row.Y, row.Width, row.Height);
+
+    private static List<string> Type(CampaignHost host, string text) =>
+        host.Type(new MenuCommands { Typed = text });
+
+    private static List<string> Erase(CampaignHost host) => host.Type(new MenuCommands { Erase = true });
+
+    private static MenuExit? Accept(CampaignHost host) => host.AcceptPress();
+
+    private static void Back(CampaignHost host) => host.BackPress();
+
+    private static void Down(CampaignHost host) => host.Walk(1);
+
+    private static void Up(CampaignHost host) => host.Walk(-1);
+
+    // The pointer moved onto a point with no button down.
+    private static void Hover(CampaignHost host, float x, float y)
+    {
+        var rows = host.Rows;
+        host.Point(rows, HitTest(rows, x, y), x, y, press: false);
+    }
+
+    private static void Press(CampaignHost host, float x, float y)
+    {
+        var rows = host.Rows;
+        host.Point(rows, HitTest(rows, x, y), x, y, press: true);
+    }
+
+    private static MenuExit? Release(CampaignHost host, float x, float y)
+    {
+        var rows = host.Rows;
+        return host.Release(rows, HitTest(rows, x, y));
+    }
+
+    // One click as the shell reads it: the press arms the row and the release on it fires, so the
+    // step that carries the activation is the second one.
+    private static MenuExit? Click(CampaignHost host, float x, float y)
+    {
+        Press(host, x, y);
+        return Release(host, x, y);
     }
 
     // The fixture's strips: every button strip 240x200 (four 50-pixel frames), the paper plaque
@@ -647,38 +602,417 @@ public class OriginalCampaignTests : IDisposable
         _ => null,
     };
 
-    private static MenuCommands Pointer(float x, float y, bool pressed = false, bool clicked = false) =>
-        new() { Pointer = new MenuPointer(x, y, pressed, clicked) };
-
-    // The focus marks standing over a raised box, which ride a panel of nothing but fills.
-    private static System.Collections.Generic.List<BoardFill> Marks(OriginalShell shell) =>
-        shell.Compose().Overlays
-            .Where(o => o.Pictures.Count == 0 && o.Lines.Count == 0)
-            .SelectMany(o => o.Fills)
-            .ToList();
-
-    // One click as the shell reads it: the press arms the row and the release on it fires, so the
-    // step that carries the activation is the second one.
-    private static OriginalStep Click(OriginalShell shell, float x, float y)
+    private static int HitTest(IReadOnlyList<OriginalRow> rows, float x, float y)
     {
-        shell.Step(Pointer(x, y, pressed: true, clicked: true));
-        return shell.Step(Pointer(x, y));
+        // Later rows draw over earlier ones, so the last hit wins.
+        for (int i = rows.Count - 1; i >= 0; i--)
+        {
+            if (rows[i].Visible && rows[i].Contains(x, y))
+            {
+                return i;
+            }
+        }
+
+        return -1;
     }
 
-    private OriginalShell Shell(out CampaignFeature campaign, out HangarFeature hangar) =>
-        Shell(out campaign, out hangar, out _);
-
-    // The shell over the fixture, a scripted seat, no extraction, and a private hangar and campaign
-    // feature over this test's scratch stores. The setup comes back for the tests that join a guest.
-    private OriginalShell Shell(out CampaignFeature campaign, out HangarFeature hangar, out PlayerSetupFeature setup)
+    // The screen as the module draws it, assembled the way the shell assembles its own board. The
+    // shell's own layers (the flag movie, the standing box and the pointer overlay) are not the
+    // module's, and the strokes the scrapbook writes ride the board like every other layer.
+    private static ComposedBoard Compose(CampaignHost host)
     {
-        setup = new PlayerSetupFeature();
+        var rows = host.Rows;
+        var backdrop = new List<BoardPicture>();
+        var pictures = new List<BoardPicture>();
+        var fills = new List<BoardFill>();
+        var strokes = new List<BoardStroke>();
+        var lines = new List<BoardLine>();
+        var plaques = new List<BoardPlaque>();
+        var notes = new List<BoardNote>();
+        var overlays = new List<BoardPanel>();
+        int focus = host.Dialog == null ? host.Focus : -1;
+        host.Module.Compose(rows, focus, backdrop, pictures, fills, strokes, lines, plaques, notes, overlays);
+        return new ComposedBoard(pictures, strokes, lines, plaques, notes,
+            backdrop: backdrop, fills: fills, overlays: overlays);
+    }
+
+    // The module over the layout fixture, a scripted seat, no extraction, and a campaign feature
+    // over this test's scratch stores.
+    private CampaignHost Host(out CampaignFeature campaign)
+    {
+        var setup = new PlayerSetupFeature();
         setup.SetRoster(OriginalPresentation.Roster(Array.Empty<CustomPlaneDef>()));
         setup.Join(new ScriptedMenuSeat());
-        hangar = new HangarFeature(UiStrings.Empty, PlanePickerRoster.AirframeNode);
         campaign = new CampaignFeature(UiStrings.Empty, airframe => $"node{airframe}");
         var store = _store;
-        return new OriginalShell(MenuLayoutReaderTests.OriginalLayout(), new FreeFlightFeature(), setup, Measure,
-            hangar: hangar, planes: _planes, campaign: campaign, profiles: () => store);
+        var host = new CampaignHost();
+        host.Module = new OriginalCampaignScreen(
+            campaign, setup, _planes, CampaignLayout.Over(MenuLayoutReaderTests.OriginalLayout()), host, () => store);
+        return host;
+    }
+
+    /// <summary>The shell's side of the seam, hand-written: the screen showing, one focus per screen
+    /// (the first live row where none was set, as the shell's own EnsureFocus rules), the pointer's
+    /// hover and hold, a standing messagebox opened on its first answer, and the cues a frame
+    /// collected. The rows are the module's own even while a box stands, the box's answers being the
+    /// shell's rows then, and the hangar door and the return through it are counted rather than
+    /// walked.</summary>
+    private sealed class CampaignHost : IOriginalScreenHost
+    {
+        private readonly int[] _focus = new int[Enum.GetValues<OriginalScreen>().Length];
+        private readonly List<string> _cues = new();
+        private int _hover = -1;
+        private int _pressed = -1;
+        private int _focusBeforeDialog = -1;
+        private int _dialogFocus;
+        private (float X, float Y)? _pointer;
+
+        internal CampaignHost()
+        {
+            Array.Fill(_focus, -1);
+        }
+
+        public OriginalCampaignScreen Module { get; set; } = null!;
+
+        public OriginalScreen Screen { get; private set; } = OriginalScreen.TopLevel;
+
+        public OriginalDialog? Dialog { get; private set; }
+
+        public IHangarWallet? HangarWallet { get; private set; }
+
+        public int HangarOpens { get; private set; }
+
+        public bool DialogOpen => Dialog != null;
+
+        public int PressedRow => _pressed;
+
+        public int HoveredRow => _hover;
+
+        public int FocusBeforeDialog => _focusBeforeDialog;
+
+        public (float X, float Y)? Pointer => _pointer;
+
+        public CustomPlaneStore? CampaignPlanes => Module.Planes;
+
+        public UiStrings MenuStrings => Module.Strings ?? UiStrings.Empty;
+
+        public bool CanBuildPlane => true;
+
+        public IReadOnlyList<OriginalRow> Rows
+        {
+            get
+            {
+                var rows = new List<OriginalRow>();
+                if (Module.Owns(Screen))
+                {
+                    Module.BuildRows(rows);
+                }
+
+                return rows;
+            }
+        }
+
+        public int Focus
+        {
+            get
+            {
+                var rows = Rows;
+                int focus = _focus[(int)Screen];
+                if (focus >= 0 && focus < rows.Count && rows[focus].Enabled)
+                {
+                    return focus;
+                }
+
+                focus = rows.ToList().FindIndex(r => r.Enabled);
+                _focus[(int)Screen] = focus;
+                return focus;
+            }
+        }
+
+        public string FocusedKey
+        {
+            get
+            {
+                if (Dialog is { } dialog)
+                {
+                    return dialog.Answers[_dialogFocus].Key;
+                }
+
+                int focus = Focus;
+                return focus >= 0 ? Rows[focus].Key : string.Empty;
+            }
+        }
+
+        public int FocusedRow
+        {
+            get => _focus[(int)Screen];
+            set => _focus[(int)Screen] = value;
+        }
+
+        public void Open(OriginalScreen screen)
+        {
+            Screen = screen;
+            _pressed = -1;
+        }
+
+        public void FocusKey(string key)
+        {
+            var rows = Rows;
+            for (int i = 0; i < rows.Count; i++)
+            {
+                if (rows[i].Key == key)
+                {
+                    _focus[(int)Screen] = i;
+                    return;
+                }
+            }
+        }
+
+        public void RaiseDialog(string message, DialogIcon icon, params OriginalDialogAnswer[] answers)
+        {
+            _focusBeforeDialog = _focus[(int)Screen];
+            Dialog = new OriginalDialog(message, icon, answers);
+            _dialogFocus = 0;
+        }
+
+        public void CloseDialog() => Dialog = null;
+
+        /// <summary>One frame of the driving seat's commands, the shell's own ApplyFrame narrowed to
+        /// the presses a campaign screen takes: the typing, the axis, then Accept or Back. What the
+        /// screenshot aids' script replays through the module.</summary>
+        public void Frame(MenuCommands commands)
+        {
+            ArgumentNullException.ThrowIfNull(commands);
+            if (commands.Typed.Length > 0 || commands.Erase)
+            {
+                Module.TypeName(commands, _cues);
+            }
+
+            if (commands.MoveY != 0)
+            {
+                Walk(commands.MoveY);
+            }
+
+            if (commands.MoveX != 0)
+            {
+                Module.StepSideways(Rows, Focus, commands.MoveX);
+            }
+
+            if (commands.Accept)
+            {
+                AcceptPress();
+            }
+            else if (commands.Back)
+            {
+                BackPress();
+            }
+        }
+
+        public void PlayFilm(Action<Action> play, Action then) => OriginalTestHost.PlayFilm(play, then);
+
+        public (int Width, int Height)? Measure(string art) =>
+            art.Length > 0 ? OriginalCampaignTests.Measure(art) : null;
+
+        // The hangar's own return, which the shell makes by handing it back to this module.
+        public void ResumeCampaign() => Module.ResumeCampaign();
+
+        public void RefreshInstantActionRoster()
+        {
+        }
+
+        public void RefreshRosterFromStore()
+        {
+        }
+
+        public void OpenHangar(IHangarWallet? wallet)
+        {
+            HangarWallet = wallet;
+            HangarOpens++;
+        }
+
+        public MenuExit? BeginSeatWalk() => null;
+
+        public int CheatedMission(int ordinary) => OriginalTestHost.CheatedMission(ordinary);
+
+        public BoardPanel? SeatPanel(bool onPaper) => null;
+
+        // Every campaign row is drawn by the shared board component, so no row of this module's ever
+        // falls back to the shell's own plate rule.
+        public void ComposeGenericRow(
+            OriginalRow row, bool focused, bool pressed, int index,
+            List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPicture> pictures)
+        {
+        }
+
+        public OriginalRow PlaqueRow(string key, string label, int row, bool enabled, int column) =>
+            OriginalTestHost.PlaqueRow(key, label, row, enabled, column);
+
+        public void ComposePlainPage(
+            string heading, IReadOnlyList<OriginalRow> rows, int focus,
+            List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques) =>
+            OriginalTestHost.ComposePlainPage(heading, rows, focus, lines);
+
+        public BoardFill FocusMark(OriginalRow row) => OriginalTestHost.FocusMark(row);
+
+        // One answer taken, the way the shell takes one: the box goes first, the focus behind it
+        // comes back, then the answer runs over the bare screen.
+        internal void Answer(string key)
+        {
+            var dialog = Dialog!;
+            var answer = dialog.Answers.Single(a => a.Key == key);
+            Dialog = null;
+            _focus[(int)Screen] = _focusBeforeDialog;
+            answer.Run?.Invoke();
+        }
+
+        internal List<string> Type(MenuCommands commands)
+        {
+            var cues = new List<string>();
+            Module.TypeName(commands, cues);
+            return cues;
+        }
+
+        internal List<string> TakeCues()
+        {
+            var cues = _cues.ToList();
+            _cues.Clear();
+            return cues;
+        }
+
+        // The cursor's walk, the shell's own rule restated: inside an open list the axis walks the
+        // list's entries and over a box its answers, else it steps within the focused row's column
+        // over enabled rows, wrapping at either end.
+        internal void Walk(int direction)
+        {
+            _cues.Clear();
+            if (Dialog is { } dialog)
+            {
+                _dialogFocus = (_dialogFocus + direction + dialog.Answers.Count) % dialog.Answers.Count;
+                return;
+            }
+
+            if (Module.OpenCombo is { } combo && combo.Move(direction))
+            {
+                return;
+            }
+
+            var rows = Rows;
+            int focus = Focus;
+            if (focus < 0)
+            {
+                return;
+            }
+
+            int i = focus;
+            for (int n = 0; n < rows.Count; n++)
+            {
+                i = (i + direction + rows.Count) % rows.Count;
+                if (rows[i].Column == rows[focus].Column && rows[i].Enabled)
+                {
+                    _focus[(int)Screen] = i;
+                    return;
+                }
+            }
+        }
+
+        internal MenuExit? AcceptPress()
+        {
+            _cues.Clear();
+            if (Dialog != null)
+            {
+                _cues.Add(OriginalCues.Click);
+                Answer(FocusedKey);
+                return null;
+            }
+
+            var rows = Rows;
+            int focus = Focus;
+            return focus >= 0 && rows[focus].Enabled ? Fire(rows[focus], byPointer: false) : null;
+        }
+
+        internal void BackPress()
+        {
+            _cues.Clear();
+            if (Dialog is { } dialog)
+            {
+                Answer(dialog.Answers[dialog.Answers.Count - 1].Key);
+                return;
+            }
+
+            Module.Back();
+        }
+
+        // The pointer on one row, as a frame under the cursor leaves the shell: the row it lands on
+        // is hovered and, where it is live, focused and cued once, an open list's entry taking the
+        // list's own highlight instead of the focus.
+        internal void Point(IReadOnlyList<OriginalRow> rows, int over, float x, float y, bool press)
+        {
+            _cues.Clear();
+            _pointer = (x, y);
+            _pressed = -1;
+            if (over != _hover)
+            {
+                _hover = over;
+                if (over >= 0 && rows[over].Enabled)
+                {
+                    if (OriginalWidgets.HoverOnly(rows[over]))
+                    {
+                        OriginalWidgets.Highlight(Module.OpenCombo, rows[over].Key);
+                    }
+                    else
+                    {
+                        _focus[(int)Screen] = over;
+                    }
+
+                    if (rows[over].Kind != OriginalRowKind.ListRow)
+                    {
+                        _cues.Add(OriginalCues.Rollover);
+                    }
+                }
+            }
+
+            if (press && over >= 0 && rows[over].Enabled)
+            {
+                _pressed = over;
+            }
+        }
+
+        // The release that fires: only on the row the press took hold of, and a click off every row
+        // closes an open list and picks nothing.
+        internal MenuExit? Release(IReadOnlyList<OriginalRow> rows, int over)
+        {
+            _cues.Clear();
+            MenuExit? exit = null;
+            if (over >= 0 && over == _pressed && rows[over].Enabled)
+            {
+                exit = Fire(rows[over], byPointer: true);
+            }
+            else if (over < 0)
+            {
+                Module.CloseDropdown();
+            }
+
+            _pressed = -1;
+            return exit;
+        }
+
+        // The shell's own Activate: every press but a list row's cues the click, a standing box
+        // takes the answer whatever screen it stands over, and a click in an edit box puts the caret
+        // there and does nothing else.
+        private MenuExit? Fire(OriginalRow row, bool byPointer)
+        {
+            if (row.Kind != OriginalRowKind.ListRow)
+            {
+                _cues.Add(OriginalCues.Click);
+            }
+
+            if (Dialog != null)
+            {
+                Answer(row.Key);
+                return null;
+            }
+
+            return byPointer && row.Kind == OriginalRowKind.TextField ? null : Module.Activate(row);
+        }
     }
 }

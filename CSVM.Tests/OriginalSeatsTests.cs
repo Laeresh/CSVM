@@ -397,18 +397,18 @@ public class OriginalSeatsTests
     {
         PlayerSetupFeature setup = null!;
         var shell = Shell(out setup, out _, seat => ReferenceEquals(seat, setup.Seats[1]) ? new[] { 2 } : Array.Empty<int>());
-        shell.OpenInstantAction();
+        shell.InstantAction.OpenInstantAction();
         Assert.DoesNotContain(shell.Compose().Overlays.SelectMany(o => o.Lines), l => l.Text.StartsWith("P1", StringComparison.Ordinal));
         var second = setup.Join(new ScriptedMenuSeat())!;
         Assert.Contains(shell.Compose().Overlays.SelectMany(o => o.Lines), l => l.Text == "P2  scripted");
 
-        var fly = shell.Rows.Single(r => r.Key == OriginalShell.FlyMissionKey);
+        var fly = shell.Rows.Single(r => r.Key == OriginalInstantActionScreen.FlyMissionKey);
         Assert.Null(Click(shell, fly.X + 4f, fly.Y + 4f).Exit);
         Assert.Equal(OriginalScreen.SeatPlane, shell.Screen);
         Assert.Equal(1, shell.PickingSeat);
         Assert.Equal(OriginalScreen.InstantAction, shell.SeatReturn);
         Assert.True(setup.Seats[0].Locked);
-        Assert.Same(shell.PilotRoster, setup.Roster);
+        Assert.Same(shell.InstantAction.PilotRoster, setup.Roster);
 
         shell.StepSeat(1, Down);
         shell.StepSeat(1, Down);
@@ -418,7 +418,7 @@ public class OriginalSeatsTests
         Assert.Equal(OriginalScreen.InstantAction, shell.Screen);
         Assert.NotNull(launch.InstantAction);
         Assert.Equal(2, launch.Seats.Count);
-        Assert.Equal(setup.Roster[shell.PilotRow].Node, launch.Seats[0].PlaneNode);
+        Assert.Equal(setup.Roster[shell.InstantAction.PilotRow].Node, launch.Seats[0].PlaneNode);
         Assert.Equal("player_balmoral", launch.Seats[1].PlaneNode);
         Assert.Equal(new[] { 2 }, launch.Seats[1].Pads);
         Assert.True(setup.Seats[0].Confirmed && second.Confirmed);
@@ -449,9 +449,9 @@ public class OriginalSeatsTests
         Assert.Equal(LoadoutRow, shell.FocusedKey);
         shell.StepSeat(1, Accept);
         Assert.Equal(OriginalScreen.InstantActionLoadout, shell.Screen);
-        Assert.Equal(1, shell.LoadoutSeat);
-        Assert.Same(second.Fit, shell.LoadoutFit);
-        Assert.Equal(setup.Roster[second.Cursor].Node, shell.LoadoutNode);
+        Assert.Equal(1, shell.InstantAction.LoadoutSeat);
+        Assert.Same(second.Fit, shell.InstantAction.LoadoutFit);
+        Assert.Equal(setup.Roster[second.Cursor].Node, shell.InstantAction.LoadoutNode);
 
         // The walk stands on this screen too: seat 0's frame still moves nothing, and the picking
         // seat's Back is CANCEL LOADOUT rather than an unjoin, so it lands back on its own row.
@@ -467,7 +467,7 @@ public class OriginalSeatsTests
         // ACCEPT LOADOUT keeps the picks, and on that seat's fit alone.
         shell.StepSeat(1, Accept);
         second.Fit.SetGunAmmo(1, "wep_ap");
-        var keep = shell.Rows.Single(r => r.Key == OriginalShell.LoadoutAcceptKey);
+        var keep = shell.Rows.Single(r => r.Key == OriginalInstantActionScreen.LoadoutAcceptKey);
         Click(shell, keep.X + 4f, keep.Y + 4f);
         Assert.Equal(OriginalScreen.SeatPlane, shell.Screen);
         Assert.Equal(LoadoutRow, shell.FocusedKey);
@@ -508,8 +508,8 @@ public class OriginalSeatsTests
         Assert.True(shell.Step(None).Changed);
         Assert.Equal(OriginalScreen.SeatPlane, shell.Screen);
         Assert.Equal(1, shell.PickingSeat);
-        Assert.Equal(-1, shell.LoadoutSeat);
-        Assert.Null(shell.LoadoutFit);
+        Assert.Equal(-1, shell.InstantAction.LoadoutSeat);
+        Assert.Null(shell.InstantAction.LoadoutFit);
     }
 
     [Fact]

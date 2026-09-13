@@ -85,6 +85,14 @@ public sealed partial class OriginalShell
 
     private bool IsSortie => _screen is OriginalScreen.FreeFlight or OriginalScreen.Dogfight;
 
+    // The strip's focused line: the seat picking on the per-seat screen, else the seat whose flight
+    // check shows, else none. The ammo and plane screens the check opens name no seat of their own,
+    // their strip standing for the campaign rather than for a check.
+    private int StripFocus =>
+        _screen == OriginalScreen.SeatPlane ? PickingSeat
+        : _screen == OriginalScreen.CampaignFlightCheck ? Campaign.CheckSeat
+        : -1;
+
     private MenuMode SortieMode => _screen == OriginalScreen.Dogfight ? MenuMode.Versus : MenuMode.Free;
 
     private PlayerSeat? Seat0 => _setup.Seats.Count > 0 ? _setup.Seats[0] : null;
@@ -129,7 +137,7 @@ public sealed partial class OriginalShell
         }
 
         var seat = seats[index];
-        bool own = OnSeatWalk ? ReferenceEquals(seat, _pickingSeat) : CheckSeat == index;
+        bool own = OnSeatWalk ? ReferenceEquals(seat, _pickingSeat) : Campaign.CheckSeat == index;
         if (own)
         {
             return ApplyFrame(commands);
@@ -165,7 +173,7 @@ public sealed partial class OriginalShell
             return null;
         }
 
-        int current = StripFocus();
+        int current = StripFocus;
         var lines = new List<BoardLine>(seats.Count);
         for (int i = 0; i < seats.Count; i++)
         {

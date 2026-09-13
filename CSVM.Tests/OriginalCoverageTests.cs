@@ -54,11 +54,11 @@ public class OriginalCoverageTests : IDisposable
     };
 
     private static readonly string[] Cabin ={ OriginalShell.CampaignKey, "Continue" };
-    private static readonly string[] Build = { "MM_B_INSTANTACTION", OriginalShell.BuildKey };
-    private static readonly string[] Hub = { "MM_B_INSTANTACTION", OriginalShell.BuildKey, TypeStep + BuildName, OriginalShell.NameOkKey };
+    private static readonly string[] Build = { "MM_B_INSTANTACTION", OriginalInstantActionScreen.BuildKey };
+    private static readonly string[] Hub = { "MM_B_INSTANTACTION", OriginalInstantActionScreen.BuildKey, TypeStep + BuildName, OriginalHangarScreen.NameOkKey };
 
     // Out of the wallet-free hangar: CANCEL lands on the Instant Action screen, whose Exit leaves.
-    private static readonly string[] CancelBuild = { OriginalShell.CancelBuildKey, OriginalShell.ExitKey };
+    private static readonly string[] CancelBuild = { OriginalHangarScreen.CancelBuildKey, OriginalInstantActionScreen.ExitKey };
 
     private static readonly Journey[] Journeys =
     {
@@ -70,34 +70,34 @@ public class OriginalCoverageTests : IDisposable
         new("seat-plane", OriginalScreen.SeatPlane, new[] { OriginalShell.FreeFlightKey, JoinStep, OriginalShell.AirframeKey(0) },
             new[] { OriginalShell.SeatPlaneFieldKey, "AcceptSelections", OriginalShell.BackKey }),
         new("options", OriginalScreen.Options, new[] { "MM_B_PREFERENCES" }, new[] { OriginalShell.OptionsBackKey }),
-        new("game-options", OriginalScreen.GameOptions, new[] { "MM_B_PREFERENCES", OriginalShell.GameOptionsDoorKey },
-            new[] { OriginalShell.GameOptionsCancelKey, OriginalShell.OptionsBackKey }),
-        new("audio", OriginalScreen.Audio, new[] { "MM_B_PREFERENCES", OriginalShell.AudioDoorKey },
-            new[] { OriginalShell.AudioCancelKey, OriginalShell.OptionsBackKey }),
-        new("video", OriginalScreen.Video, new[] { "MM_B_PREFERENCES", OriginalShell.VideoDoorKey },
-            new[] { OriginalShell.VideoCancelKey, OriginalShell.OptionsBackKey }),
-        new("controls", OriginalScreen.ControlsPrefs, new[] { "MM_B_PREFERENCES", OriginalShell.ControlsDoorKey },
-            new[] { OriginalShell.ControlsCancelKey, OriginalShell.OptionsBackKey }),
+        new("game-options", OriginalScreen.GameOptions, new[] { "MM_B_PREFERENCES", OriginalOptionsScreen.GameOptionsDoorKey },
+            new[] { OriginalOptionsScreen.GameOptionsCancelKey, OriginalShell.OptionsBackKey }),
+        new("audio", OriginalScreen.Audio, new[] { "MM_B_PREFERENCES", OriginalOptionsScreen.AudioDoorKey },
+            new[] { OriginalOptionsScreen.AudioCancelKey, OriginalShell.OptionsBackKey }),
+        new("video", OriginalScreen.Video, new[] { "MM_B_PREFERENCES", OriginalOptionsScreen.VideoDoorKey },
+            new[] { OriginalOptionsScreen.VideoCancelKey, OriginalShell.OptionsBackKey }),
+        new("controls", OriginalScreen.ControlsPrefs, new[] { "MM_B_PREFERENCES", OriginalOptionsScreen.ControlsDoorKey },
+            new[] { OriginalOptionsScreen.ControlsCancelKey, OriginalShell.OptionsBackKey }),
         new("controls-accept", OriginalScreen.Options,
-            new[] { "MM_B_PREFERENCES", OriginalShell.ControlsDoorKey, OriginalShell.ControlsAcceptKey },
+            new[] { "MM_B_PREFERENCES", OriginalOptionsScreen.ControlsDoorKey, OriginalOptionsScreen.ControlsAcceptKey },
             new[] { OriginalShell.OptionsBackKey }),
         new("keys", OriginalScreen.Keys,
-            new[] { "MM_B_PREFERENCES", OriginalShell.ControlsDoorKey, OriginalShell.KeysDoorKey },
-            new[] { OriginalShell.KeysCancelKey, OriginalShell.ControlsCancelKey, OriginalShell.OptionsBackKey }),
+            new[] { "MM_B_PREFERENCES", OriginalOptionsScreen.ControlsDoorKey, OriginalOptionsScreen.KeysDoorKey },
+            new[] { OriginalOptionsScreen.KeysCancelKey, OriginalOptionsScreen.ControlsCancelKey, OriginalShell.OptionsBackKey }),
         new("keys-accept", OriginalScreen.ControlsPrefs,
-            new[] { "MM_B_PREFERENCES", OriginalShell.ControlsDoorKey, OriginalShell.KeysDoorKey, OriginalShell.KeysAcceptKey },
-            new[] { OriginalShell.ControlsCancelKey, OriginalShell.OptionsBackKey }),
+            new[] { "MM_B_PREFERENCES", OriginalOptionsScreen.ControlsDoorKey, OriginalOptionsScreen.KeysDoorKey, OriginalOptionsScreen.KeysAcceptKey },
+            new[] { OriginalOptionsScreen.ControlsCancelKey, OriginalShell.OptionsBackKey }),
         new("credits", OriginalScreen.Credits, new[] { OriginalShell.CreditsDoorKey }, new[] { OriginalShell.CreditsExitKey }),
         new("credits-about", OriginalScreen.Credits, new[] { OriginalShell.CreditsDoorKey, OriginalShell.CreditsAboutKey },
             new[] { OriginalShell.DialogOkKey, OriginalShell.CreditsExitKey },
             Expect: new[] { OriginalShell.DialogOkKey }),
-        new("instant-action", OriginalScreen.InstantAction, new[] { "MM_B_INSTANTACTION" }, new[] { OriginalShell.ExitKey }),
-        new("instant-action-exit", OriginalScreen.TopLevel, new[] { "MM_B_INSTANTACTION", OriginalShell.ExitKey }, Array.Empty<string>()),
-        new("instant-action-loadout", OriginalScreen.InstantActionLoadout, new[] { "MM_B_INSTANTACTION", OriginalShell.WeaponLoadoutKey },
-            new[] { OriginalShell.LoadoutCancelKey, OriginalShell.ExitKey }),
+        new("instant-action", OriginalScreen.InstantAction, new[] { "MM_B_INSTANTACTION" }, new[] { OriginalInstantActionScreen.ExitKey }),
+        new("instant-action-exit", OriginalScreen.TopLevel, new[] { "MM_B_INSTANTACTION", OriginalInstantActionScreen.ExitKey }, Array.Empty<string>()),
+        new("instant-action-loadout", OriginalScreen.InstantActionLoadout, new[] { "MM_B_INSTANTACTION", OriginalInstantActionScreen.WeaponLoadoutKey },
+            new[] { OriginalInstantActionScreen.LoadoutCancelKey, OriginalInstantActionScreen.ExitKey }),
         new("instant-action-loadout-accept", OriginalScreen.InstantAction,
-            new[] { "MM_B_INSTANTACTION", OriginalShell.WingmanRadioKey, OriginalShell.WeaponLoadoutKey, OriginalShell.LoadoutAcceptKey },
-            new[] { OriginalShell.ExitKey }),
+            new[] { "MM_B_INSTANTACTION", OriginalInstantActionScreen.WingmanRadioKey, OriginalInstantActionScreen.WeaponLoadoutKey, OriginalInstantActionScreen.LoadoutAcceptKey },
+            new[] { OriginalInstantActionScreen.ExitKey }),
         new("campaign-roster", OriginalScreen.CampaignRoster, new[] { OriginalShell.CampaignKey }, new[] { "CancelProfile" }),
         new("campaign-cabin", OriginalScreen.CampaignCabin, Cabin, new[] { "ReturnToMainMenu" }),
         new("campaign-memento", OriginalScreen.CampaignMemento, Then(Cabin, "ChangeMemento"), new[] { "CancelMemento", "ReturnToMainMenu" }),
@@ -112,8 +112,8 @@ public class OriginalCoverageTests : IDisposable
         new("campaign-planeselection-accept", OriginalScreen.CampaignFlightCheck, Then(Cabin, "NextMission", "GoToFlightCheck", "ChangePlane", "AcceptSelections"), new[] { "ReturnToBriefing", "ReturnToCabin", "ReturnToMainMenu" }),
         new("campaign-scrapbook", OriginalScreen.CampaignScrapbook, Then(Cabin, "PreviousMissions", "ROW:0", "ViewMission"), new[] { "ReturnToCabin", "ReturnToMainMenu" }),
         new("campaign-scrapbook-zoom", OriginalScreen.CampaignScrapbookZoom, Then(Cabin, "PreviousMissions", "ROW:0", "ViewMission", ScrapStep), new[] { "CloseZoom", "ReturnToCabin", "ReturnToMainMenu" }, InstallOnly: true),
-        new("campaign-hangar-door", OriginalScreen.PlaneName, Then(Cabin, "PlaneConstruction"), new[] { OriginalShell.NameCancelKey, "ReturnToMainMenu" }),
-        new("plane-name", OriginalScreen.PlaneName, Build, new[] { OriginalShell.NameCancelKey, OriginalShell.ExitKey }),
+        new("campaign-hangar-door", OriginalScreen.PlaneName, Then(Cabin, "PlaneConstruction"), new[] { OriginalHangarScreen.NameCancelKey, "ReturnToMainMenu" }),
+        new("plane-name", OriginalScreen.PlaneName, Build, new[] { OriginalHangarScreen.NameCancelKey, OriginalInstantActionScreen.ExitKey }),
         new("plane-airframe", OriginalScreen.HangarAirframe, Hub, CancelBuild),
         new("plane-engine", OriginalScreen.HangarEngine, Then(Hub, "PX_B_ENGINE"), CancelBuild),
         new("plane-armor", OriginalScreen.HangarArmor, Then(Hub, "PX_B_ARMOR"), CancelBuild),
@@ -121,42 +121,42 @@ public class OriginalCoverageTests : IDisposable
         new("plane-hardpoints", OriginalScreen.HangarHardpoints, Then(Hub, "PX_B_HARDPOINTS"), CancelBuild),
         new("plane-paint", OriginalScreen.HangarPaint, Then(Hub, "PX_B_PAINT"), CancelBuild),
         new("plane-paint-then-airframe", OriginalScreen.HangarAirframe, Then(Hub, "PX_B_PAINT", "PX_B_AIRFRAME"), CancelBuild),
-        new("plane-purchase", OriginalScreen.HangarPurchase, Then(Hub, OriginalShell.ReadyKey), CancelBuild),
-        new("plane-inventory", OriginalScreen.HangarInventory, Then(Hub, OriginalShell.SellPlanesKey), Then(new[] { OriginalShell.InventoryDoneKey }, CancelBuild)),
+        new("plane-purchase", OriginalScreen.HangarPurchase, Then(Hub, OriginalHangarScreen.ReadyKey), CancelBuild),
+        new("plane-inventory", OriginalScreen.HangarInventory, Then(Hub, OriginalHangarScreen.SellPlanesKey), Then(new[] { OriginalHangarScreen.InventoryDoneKey }, CancelBuild)),
         new("delete-player-confirm", OriginalScreen.CampaignRoster, new[] { OriginalShell.CampaignKey, "DeletePlayer" }, new[] { OriginalShell.DialogNoKey, "CancelProfile" },
             Expect: new[] { OriginalShell.DialogYesKey, OriginalShell.DialogNoKey }),
         new("empty-name-refusal", OriginalScreen.CampaignRoster, new[] { OriginalShell.CampaignKey, EraseStep, "Continue" }, new[] { OriginalShell.DialogOkKey, "CancelProfile" },
             Expect: new[] { OriginalShell.DialogOkKey }),
-        new("empty-plane-name-refusal", OriginalScreen.PlaneName, Then(Build, OriginalShell.NameOkKey),
-            new[] { OriginalShell.DialogOkKey, OriginalShell.NameCancelKey, OriginalShell.ExitKey },
+        new("empty-plane-name-refusal", OriginalScreen.PlaneName, Then(Build, OriginalHangarScreen.NameOkKey),
+            new[] { OriginalShell.DialogOkKey, OriginalHangarScreen.NameCancelKey, OriginalInstantActionScreen.ExitKey },
             Expect: new[] { OriginalShell.DialogOkKey }),
-        new("sell-confirm", OriginalScreen.HangarInventory, Then(Hub, OriginalShell.SellPlanesKey, OriginalShell.InventorySellKey),
-            Then(new[] { OriginalShell.DialogNoKey, OriginalShell.InventoryDoneKey }, CancelBuild),
+        new("sell-confirm", OriginalScreen.HangarInventory, Then(Hub, OriginalHangarScreen.SellPlanesKey, OriginalHangarScreen.InventorySellKey),
+            Then(new[] { OriginalShell.DialogNoKey, OriginalHangarScreen.InventoryDoneKey }, CancelBuild),
             Expect: new[] { OriginalShell.DialogYesKey, OriginalShell.DialogNoKey }),
         // Only an airframe swap over an edited build asks, so the engine is hand-picked on the way.
         new("defaults-ask", OriginalScreen.HangarAirframe,
-            Then(Hub, "PX_B_ENGINE", OriginalShell.EngineDropKey, OriginalShell.EngineDropKey + ":2",
-                "PX_B_AIRFRAME", OriginalShell.AirframeDropKey, OriginalShell.AirframeDropKey + ":1"),
+            Then(Hub, "PX_B_ENGINE", OriginalHangarScreen.EngineDropKey, OriginalHangarScreen.EngineDropKey + ":2",
+                "PX_B_AIRFRAME", OriginalHangarScreen.AirframeDropKey, OriginalHangarScreen.AirframeDropKey + ":1"),
             Then(new[] { OriginalShell.DialogCancelKey }, CancelBuild),
             Expect: new[] { OriginalShell.DialogYesKey, OriginalShell.DialogNoKey, OriginalShell.DialogCancelKey }),
         new("quit", null, new[] { "MM_B_QUIT" }, Array.Empty<string>(), Exit: typeof(QuitExit)),
         new("apply-options", null,
             new[]
             {
-                "MM_B_PREFERENCES", OriginalShell.GameOptionsDoorKey,
-                OriginalShell.PresentationKey, OriginalShell.PresentationKey + ":1", OriginalShell.GameOptionsAcceptKey,
+                "MM_B_PREFERENCES", OriginalOptionsScreen.GameOptionsDoorKey,
+                OriginalOptionsScreen.PresentationKey, OriginalOptionsScreen.PresentationKey + ":1", OriginalOptionsScreen.GameOptionsAcceptKey,
             },
             Array.Empty<string>(), Exit: typeof(OptionsApplyExit)),
         new("apply-audio", null,
-            new[] { "MM_B_PREFERENCES", OriginalShell.AudioDoorKey, OriginalShell.AudioAcceptKey },
+            new[] { "MM_B_PREFERENCES", OriginalOptionsScreen.AudioDoorKey, OriginalOptionsScreen.AudioAcceptKey },
             Array.Empty<string>(), Exit: typeof(OptionsApplyExit)),
         new("apply-video", null,
-            new[] { "MM_B_PREFERENCES", OriginalShell.VideoDoorKey, OriginalShell.GraphicsKey, OriginalShell.VideoAcceptKey },
+            new[] { "MM_B_PREFERENCES", OriginalOptionsScreen.VideoDoorKey, OriginalOptionsScreen.GraphicsKey, OriginalOptionsScreen.VideoAcceptKey },
             Array.Empty<string>(), Exit: typeof(OptionsApplyExit)),
         new("free-flight-launch", null, new[] { OriginalShell.FreeFlightKey, "C1", OriginalShell.AirframeKey(0), OriginalShell.FlyKey }, Array.Empty<string>(), Exit: typeof(LaunchExit)),
-        new("instant-action-launch", null, new[] { "MM_B_INSTANTACTION", OriginalShell.FlyMissionKey }, Array.Empty<string>(), Exit: typeof(LaunchExit)),
+        new("instant-action-launch", null, new[] { "MM_B_INSTANTACTION", OriginalInstantActionScreen.FlyMissionKey }, Array.Empty<string>(), Exit: typeof(LaunchExit)),
         new("campaign-launch", null, Then(Cabin, "NextMission", "GoToFlightCheck", "FlyMission"), Array.Empty<string>(), Exit: typeof(CampaignMissionExit)),
-        new("purchase", OriginalScreen.InstantAction, Then(Hub, OriginalShell.ReadyKey, OriginalShell.PurchaseNowKey), new[] { OriginalShell.ExitKey }),
+        new("purchase", OriginalScreen.InstantAction, Then(Hub, OriginalHangarScreen.ReadyKey, OriginalHangarScreen.PurchaseNowKey), new[] { OriginalInstantActionScreen.ExitKey }),
     };
 
     // Every ScriptToExe edge of an in-scope section, by "Section.Widget": the journey whose route
@@ -170,21 +170,21 @@ public class OriginalCoverageTests : IDisposable
         ["MainMenu.MM_B_PREFERENCES"] = Edge.Driven("options", "MM_B_PREFERENCES"),
         ["MainMenu.MM_B_CREDITS"] = Edge.Driven("credits", OriginalShell.CreditsDoorKey),
         ["Credits.CR_B_Exit"] = Edge.Driven("credits", OriginalShell.CreditsExitKey),
-        ["Preferences.PF_B_GAMEOPTIONS"] = Edge.Driven("game-options", OriginalShell.GameOptionsDoorKey),
-        ["GameOptions.GO_B_ACCEPTCHANGES"] = Edge.Driven("apply-options", OriginalShell.GameOptionsAcceptKey),
-        ["GameOptions.GO_B_CANCELCHANGES"] = Edge.Driven("game-options", OriginalShell.GameOptionsCancelKey),
-        ["Preferences.PF_B_AUDIO"] = Edge.Driven("audio", OriginalShell.AudioDoorKey),
-        ["Audio.AP_B_ACCEPTCHANGES"] = Edge.Driven("apply-audio", OriginalShell.AudioAcceptKey),
-        ["Audio.AP_B_CANCELCHANGES"] = Edge.Driven("audio", OriginalShell.AudioCancelKey),
-        ["Preferences.PF_B_VIDEO"] = Edge.Driven("video", OriginalShell.VideoDoorKey),
-        ["Video.VP_B_ACCEPTCHANGES"] = Edge.Driven("apply-video", OriginalShell.VideoAcceptKey),
-        ["Video.VP_B_CANCELCHANGES"] = Edge.Driven("video", OriginalShell.VideoCancelKey),
-        ["Preferences.PF_B_CONTROLS"] = Edge.Driven("controls", OriginalShell.ControlsDoorKey),
-        ["ControlsPrefs.CP_B_ACCEPTCHANGES"] = Edge.Driven("controls-accept", OriginalShell.ControlsAcceptKey),
-        ["ControlsPrefs.CP_B_CANCELCHANGES"] = Edge.Driven("controls", OriginalShell.ControlsCancelKey),
-        ["ControlsPrefs.CP_B_KEYS"] = Edge.Driven("keys", OriginalShell.KeysDoorKey),
-        ["Keys.KB_B_ACCEPTCHANGES"] = Edge.Driven("keys-accept", OriginalShell.KeysAcceptKey),
-        ["Keys.KB_B_CANCELCHANGES"] = Edge.Driven("keys", OriginalShell.KeysCancelKey),
+        ["Preferences.PF_B_GAMEOPTIONS"] = Edge.Driven("game-options", OriginalOptionsScreen.GameOptionsDoorKey),
+        ["GameOptions.GO_B_ACCEPTCHANGES"] = Edge.Driven("apply-options", OriginalOptionsScreen.GameOptionsAcceptKey),
+        ["GameOptions.GO_B_CANCELCHANGES"] = Edge.Driven("game-options", OriginalOptionsScreen.GameOptionsCancelKey),
+        ["Preferences.PF_B_AUDIO"] = Edge.Driven("audio", OriginalOptionsScreen.AudioDoorKey),
+        ["Audio.AP_B_ACCEPTCHANGES"] = Edge.Driven("apply-audio", OriginalOptionsScreen.AudioAcceptKey),
+        ["Audio.AP_B_CANCELCHANGES"] = Edge.Driven("audio", OriginalOptionsScreen.AudioCancelKey),
+        ["Preferences.PF_B_VIDEO"] = Edge.Driven("video", OriginalOptionsScreen.VideoDoorKey),
+        ["Video.VP_B_ACCEPTCHANGES"] = Edge.Driven("apply-video", OriginalOptionsScreen.VideoAcceptKey),
+        ["Video.VP_B_CANCELCHANGES"] = Edge.Driven("video", OriginalOptionsScreen.VideoCancelKey),
+        ["Preferences.PF_B_CONTROLS"] = Edge.Driven("controls", OriginalOptionsScreen.ControlsDoorKey),
+        ["ControlsPrefs.CP_B_ACCEPTCHANGES"] = Edge.Driven("controls-accept", OriginalOptionsScreen.ControlsAcceptKey),
+        ["ControlsPrefs.CP_B_CANCELCHANGES"] = Edge.Driven("controls", OriginalOptionsScreen.ControlsCancelKey),
+        ["ControlsPrefs.CP_B_KEYS"] = Edge.Driven("keys", OriginalOptionsScreen.KeysDoorKey),
+        ["Keys.KB_B_ACCEPTCHANGES"] = Edge.Driven("keys-accept", OriginalOptionsScreen.KeysAcceptKey),
+        ["Keys.KB_B_CANCELCHANGES"] = Edge.Driven("keys", OriginalOptionsScreen.KeysCancelKey),
         ["PassengerCabin.PC_B_CHANGEMOMENTO"] = Edge.Driven("campaign-memento", "ChangeMemento"),
         ["MomentoSelection.MS_B_ACCEPT"] = Edge.Driven("campaign-memento-accept", "AcceptMemento"),
         ["MomentoSelection.MS_B_CANCEL"] = Edge.Driven("campaign-memento", "CancelMemento"),
@@ -205,10 +205,10 @@ public class OriginalCoverageTests : IDisposable
         ["PlaneConstruction.PX_B_GUNS"] = Edge.Driven("plane-guns", "PX_B_GUNS"),
         ["PlaneConstruction.PX_B_HARDPOINTS"] = Edge.Driven("plane-hardpoints", "PX_B_HARDPOINTS"),
         ["PlaneConstruction.PX_B_PAINT"] = Edge.Driven("plane-paint", "PX_B_PAINT"),
-        ["PlaneConstruction.PX_B_Ready"] = Edge.Driven("plane-purchase", OriginalShell.ReadyKey),
+        ["PlaneConstruction.PX_B_Ready"] = Edge.Driven("plane-purchase", OriginalHangarScreen.ReadyKey),
         ["ScrapBook_TOC.SBTOC_B_RETURN"] = Edge.Driven("campaign-previous", "ReturnToCabin"),
         ["ScrapBook.SB_B_RETURNPC"] = Edge.Driven("campaign-scrapbook", "ReturnToCabin"),
-        ["InstantAction.IA_B_Exit"] = Edge.Driven("instant-action", OriginalShell.ExitKey),
+        ["InstantAction.IA_B_Exit"] = Edge.Driven("instant-action", OriginalInstantActionScreen.ExitKey),
     };
 
     private readonly ITestOutputHelper _output;
@@ -265,49 +265,26 @@ public class OriginalCoverageTests : IDisposable
         Cover(layout!, art => PngSize(OriginalAvailability.ArtPath(dataRoot, art)), dataRoot, "install");
     }
 
-    [Fact]
-    public void TheGameOptionsRowsClearEachOtherAndTheirWordsOverTheFixture()
+    // A PNG's pixel size off its header, the one art format every button strip ships in; any
+    // other file measures as unknown and the row keeps its fallback rectangle. Shared with
+    // OriginalOptionsTests, whose option-page facts walk the same install art.
+    internal static (int Width, int Height)? PngSize(string path)
     {
-        GameOptionRowsAreClearOfEachOther(MenuLayoutReaderTests.OriginalLayout(), FixtureMeasure, null);
-    }
+        if (!File.Exists(path))
+        {
+            return null;
+        }
 
-    [ExtractedDataFact]
-    public void TheGameOptionsRowsClearEachOtherAndTheirWordsOverTheInstall()
-    {
-        string dataRoot = TestData.DataRoot!;
-        var layout = MenuLayout.TryLoad(MenuLayout.PathUnder(dataRoot), out var reason);
-        Assert.True(layout != null, reason ?? "the install's decoded layout reads");
-        GameOptionRowsAreClearOfEachOther(layout!, art => PngSize(OriginalAvailability.ArtPath(dataRoot, art)), dataRoot);
-    }
+        using var stream = File.OpenRead(path);
+        var header = new byte[24];
+        if (stream.Read(header, 0, header.Length) < header.Length || header[1] != (byte)'P' || header[2] != (byte)'N' || header[3] != (byte)'G')
+        {
+            return null;
+        }
 
-    [Fact]
-    public void TheAudioRowsClearEachOtherAndTheirWordsOverTheFixture()
-    {
-        AudioRowsAreClearOfEachOther(MenuLayoutReaderTests.OriginalLayout(), FixtureMeasure, null);
-    }
-
-    [ExtractedDataFact]
-    public void TheAudioRowsClearEachOtherAndTheirWordsOverTheInstall()
-    {
-        string dataRoot = TestData.DataRoot!;
-        var layout = MenuLayout.TryLoad(MenuLayout.PathUnder(dataRoot), out var reason);
-        Assert.True(layout != null, reason ?? "the install's decoded layout reads");
-        AudioRowsAreClearOfEachOther(layout!, art => PngSize(OriginalAvailability.ArtPath(dataRoot, art)), dataRoot);
-    }
-
-    [Fact]
-    public void TheVideoRowsClearEachOtherAndTheirWordsOverTheFixture()
-    {
-        VideoRowsAreClearOfEachOther(MenuLayoutReaderTests.OriginalLayout(), FixtureMeasure, null);
-    }
-
-    [ExtractedDataFact]
-    public void TheVideoRowsClearEachOtherAndTheirWordsOverTheInstall()
-    {
-        string dataRoot = TestData.DataRoot!;
-        var layout = MenuLayout.TryLoad(MenuLayout.PathUnder(dataRoot), out var reason);
-        Assert.True(layout != null, reason ?? "the install's decoded layout reads");
-        VideoRowsAreClearOfEachOther(layout!, art => PngSize(OriginalAvailability.ArtPath(dataRoot, art)), dataRoot);
+        int width = (header[16] << 24) | (header[17] << 16) | (header[18] << 8) | header[19];
+        int height = (header[20] << 24) | (header[21] << 16) | (header[22] << 8) | header[23];
+        return width > 0 && height > 0 ? (width, height) : null;
     }
 
     private static string[] Then(string[] route, params string[] more)
@@ -341,27 +318,6 @@ public class OriginalCoverageTests : IDisposable
         _ when art.StartsWith("PM_B_", StringComparison.Ordinal) || art.StartsWith("PP_B_", StringComparison.Ordinal) => (240, 200),
         _ => null,
     };
-
-    // A PNG's pixel size off its header, the one art format every button strip ships in; any
-    // other file measures as unknown and the row keeps its fallback rectangle.
-    private static (int Width, int Height)? PngSize(string path)
-    {
-        if (!File.Exists(path))
-        {
-            return null;
-        }
-
-        using var stream = File.OpenRead(path);
-        var header = new byte[24];
-        if (stream.Read(header, 0, header.Length) < header.Length || header[1] != (byte)'P' || header[2] != (byte)'N' || header[3] != (byte)'G')
-        {
-            return null;
-        }
-
-        int width = (header[16] << 24) | (header[17] << 16) | (header[18] << 8) | header[19];
-        int height = (header[20] << 24) | (header[21] << 16) | (header[22] << 8) | header[23];
-        return width > 0 && height > 0 ? (width, height) : null;
-    }
 
     // A click lands on the row's centre, since two authored plaques may share an edge pixel. The
     // press arms the row and the release on it fires, so a click is two of these frames.
@@ -404,7 +360,7 @@ public class OriginalCoverageTests : IDisposable
     private static void AssertHome(OriginalShell shell, CampaignFeature campaign, HangarFeature hangar, string way)
     {
         Assert.True(shell.Screen == OriginalScreen.TopLevel, $"{way} stops on {shell.Screen}");
-        Assert.True(shell.Dialog == null && !shell.CampaignOpen && !campaign.IsOpen && !hangar.IsOpen,
+        Assert.True(shell.Dialog == null && !shell.Campaign.IsOpen && !campaign.IsOpen && !hangar.IsOpen,
             $"{way} leaves residue: dialog={shell.Dialog != null} campaign={campaign.IsOpen} hangar={hangar.IsOpen}");
     }
 
@@ -512,7 +468,7 @@ public class OriginalCoverageTests : IDisposable
             }
             else if (step == EraseStep)
             {
-                for (int i = 0; i < CampaignFeature.MaxNameLength && shell.RosterName.Length > 0; i++)
+                for (int i = 0; i < CampaignFeature.MaxNameLength && shell.Campaign.RosterName.Length > 0; i++)
                 {
                     shell.Step(Erase);
                 }
@@ -733,96 +689,6 @@ public class OriginalCoverageTests : IDisposable
         }
 
         return 1;
-    }
-
-    // The Game Options page's five rows share one plate, so no two of them may overlap, and no
-    // control may sit over a title or a description.
-    private void GameOptionRowsAreClearOfEachOther(MenuLayout layout, Func<string, (int Width, int Height)?> measure, string? dataRoot)
-    {
-        var shell = Fresh(layout, measure, dataRoot, out _, out _);
-        shell.OpenGameOptions();
-        var rows = shell.Rows.ToArray();
-        Assert.Equal(
-            new[]
-            {
-                OriginalShell.DifficultyKey, OriginalShell.PresentationKey, OriginalShell.NearestAfterKillKey,
-                OriginalShell.GameOptionsAcceptKey, OriginalShell.GameOptionsCancelKey,
-            },
-            rows.Select(r => r.Key));
-        RowsAreClearOfEachOther(shell, rows, "GAME OPTIONS", 6);
-    }
-
-    // The AUDIO page's rows, the same rule over its own plate. Its press regions are the widest of
-    // any option page (the authored slot grown ten pixels above and below), and the Master row's
-    // slider stands on a line the layout authors for a checkbox, so a row that took the checkbox's
-    // own corner would land in the title column beside the words rather than under them.
-    private void AudioRowsAreClearOfEachOther(MenuLayout layout, Func<string, (int Width, int Height)?> measure, string? dataRoot)
-    {
-        var shell = Fresh(layout, measure, dataRoot, out _, out _);
-        shell.OpenAudio();
-        var rows = shell.Rows.ToArray();
-        Assert.Equal(
-            new[]
-            {
-                OriginalShell.AudioMasterKey, OriginalShell.AudioMusicKey,
-                OriginalShell.AudioEffectsKey, OriginalShell.AudioVoiceKey,
-                OriginalShell.AudioAcceptKey, OriginalShell.AudioCancelKey,
-            },
-            rows.Select(r => r.Key));
-        RowsAreClearOfEachOther(shell, rows, "AUDIO", 8);
-    }
-
-    // The VIDEO page's rows, the same rule over its own plate: each control must stand clear of the
-    // title beside it and the description must stop before the plaque column, which is what makes
-    // the authored Shadows row carry a longer title and a longer description than it was written
-    // for. The rows come back in authored order, since that is the order the cursor walks.
-    private void VideoRowsAreClearOfEachOther(MenuLayout layout, Func<string, (int Width, int Height)?> measure, string? dataRoot)
-    {
-        var shell = Fresh(layout, measure, dataRoot, out _, out _);
-        shell.OpenVideo();
-        var rows = shell.Rows.ToArray();
-        Assert.Equal(
-            new[]
-            {
-                OriginalShell.MonitorKey, OriginalShell.ResolutionKey, OriginalShell.DisplayModeKey,
-                OriginalShell.VSyncKey, OriginalShell.GraphicsKey,
-                OriginalShell.VideoAcceptKey, OriginalShell.VideoCancelKey,
-            },
-            rows.Select(r => r.Key));
-        RowsAreClearOfEachOther(shell, rows, "VIDEO", 10);
-    }
-
-    // No row of an option page may overlap another, and no control may sit over a title or a
-    // description: a control that covered the words beside it is what sent the options off the
-    // Preferences page in the first place. The authored space scales uniformly, so disjoint here is
-    // disjoint at every window size.
-    private void RowsAreClearOfEachOther(OriginalShell shell, OriginalRow[] rows, string pageTitle, int wordCount)
-    {
-        var words = shell.Compose().Lines.Where(l => l.Row < 0 && l.Text != pageTitle).ToArray();
-        Assert.Equal(wordCount, words.Length);
-        foreach (var row in rows)
-        {
-            foreach (var line in words)
-            {
-                bool clear = line.Y + line.Size <= row.Y || row.Y + row.Height <= line.Y
-                    || line.X + line.Width <= row.X || row.X + row.Width <= line.X;
-                Assert.True(clear, $"{row.Key} at ({row.X}, {row.Y}, {row.Width}, {row.Height}) covers " +
-                    $"'{line.Text}' at ({line.X}, {line.Y}, {line.Width}, {line.Size})");
-            }
-        }
-
-        for (int i = 0; i < rows.Length; i++)
-        {
-            for (int j = i + 1; j < rows.Length; j++)
-            {
-                var a = rows[i];
-                var b = rows[j];
-                bool clear = a.X + a.Width <= b.X || b.X + b.Width <= a.X
-                    || a.Y + a.Height <= b.Y || b.Y + b.Height <= a.Y;
-                Assert.True(clear, $"{a.Key} at ({a.X}, {a.Y}, {a.Width}, {a.Height}) overlaps " +
-                    $"{b.Key} at ({b.X}, {b.Y}, {b.Width}, {b.Height})");
-            }
-        }
     }
 
     // A fresh shell over fresh scratch stores: a progressed player with three planes and a second

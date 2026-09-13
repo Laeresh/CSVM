@@ -304,8 +304,11 @@ public sealed class OriginalPresentation : IMenuPresentation
             _controlsSeats = host.Features.TryGet<ControlsFeature>(out var rebinds) ? new MenuControlsSeats(rebinds) : null;
             _palette = PaletteFor(_shell.Inks);
             _preferencesPalette = PaletteFor(_shell.PreferencesInks, _shell.Inks);
-            _paperPalette = PaletteFor(_shell.InstantActionInks);
-            _hangarPalette = PaletteFor(_shell.HangarInks);
+            _paperPalette = PaletteFor(_shell.InstantAction.Inks);
+            if (_shell.Hangar != null)
+            {
+                _hangarPalette = PaletteFor(_shell.Hangar.Inks);
+            }
         }
 
         if (_layer == null)
@@ -334,8 +337,8 @@ public sealed class OriginalPresentation : IMenuPresentation
         {
             // The two flight returns reopen the campaign on the user's store and seat the profile
             // the mission wrote; a profile that cannot be read leaves the profile screen showing.
-            _shell.OpenCampaign();
-            if (!_shell.ShowCabin(cabin.Profile))
+            _shell.Campaign.OpenCampaign();
+            if (!_shell.Campaign.ShowCabin(cabin.Profile))
             {
                 Log.Warn("ui", $"original presentation: cabin return could not seat '{cabin.Profile}'; the profile screen shows instead");
             }
@@ -344,12 +347,12 @@ public sealed class OriginalPresentation : IMenuPresentation
         {
             // The sortie's settings are the feature's, which outlives the flight, so the screen
             // stands on them again; the roster re-read is the door's own.
-            _shell.OpenInstantAction();
+            _shell.InstantAction.OpenInstantAction();
         }
         else if (destination is DebriefReturn debrief)
         {
-            _shell.OpenCampaign();
-            if (!_shell.ShowScrapbook(debrief.Profile, debrief.MissionSeq, debrief.MissionWon))
+            _shell.Campaign.OpenCampaign();
+            if (!_shell.Campaign.ShowScrapbook(debrief.Profile, debrief.MissionSeq, debrief.MissionWon))
             {
                 Log.Warn("ui", $"original presentation: debrief return could not seat '{debrief.Profile}'; the profile screen shows instead");
             }
@@ -364,7 +367,7 @@ public sealed class OriginalPresentation : IMenuPresentation
             {
                 case CampaignAidProfiles.PlayerDoor:
                     // The player's own door, over the presentation's store and never the scratch one.
-                    _shell.OpenCampaign();
+                    _shell.Campaign.OpenCampaign();
                     break;
                 case FreeFlightAid:
                     _shell.Open(OriginalScreen.FreeFlight);
@@ -384,41 +387,41 @@ public sealed class OriginalPresentation : IMenuPresentation
                     OpenGameOptionsAid(aid);
                     break;
                 case AudioAid:
-                    _shell.OpenAudio();
+                    _shell.Options.OpenAudio();
                     break;
                 case AudioAid + ":" + AudioMixedAid:
                     // The four rows open on two levels between them, so a shot of the shipped mix
                     // says nothing about where a thumb stands at a level it was moved to.
-                    _shell.OpenAudio();
-                    _shell.PoseAudioMix();
+                    _shell.Options.OpenAudio();
+                    _shell.Options.PoseAudioMix();
                     break;
                 case VideoAid:
-                    _shell.OpenVideo();
+                    _shell.Options.OpenVideo();
                     break;
                 case VideoAid + ":" + VideoCheckedAid:
                     // Onto the checkbox by name: the page opens on its first row, which is a
                     // display setting rather than the graphics one this pose is about.
-                    _shell.OpenVideoOn(OriginalShell.GraphicsKey);
+                    _shell.Options.OpenVideoOn(OriginalOptionsScreen.GraphicsKey);
                     _shell.Step(new MenuCommands { Accept = true });
                     break;
                 case VideoAid + ":" + VideoOpenAid:
                     // Onto the Resolution row by name: the page opens on the monitor row above it,
                     // whose one screen on this machine says nothing about a windowed list.
-                    _shell.OpenVideoOn(OriginalShell.ResolutionKey);
+                    _shell.Options.OpenVideoOn(OriginalOptionsScreen.ResolutionKey);
                     _shell.Step(new MenuCommands { Accept = true });
                     break;
                 case ControlsAid:
                     SyncControlsSeats();
-                    _shell.OpenControlsPrefs();
+                    _shell.Options.OpenControlsPrefs();
                     break;
                 case KeysAid:
                     SyncControlsSeats();
-                    _shell.OpenKeys();
+                    _shell.Options.OpenKeys();
                     break;
                 case string keys when keys.StartsWith(KeysAid + ":", StringComparison.Ordinal):
                     SyncControlsSeats();
-                    _shell.OpenKeys();
-                    _shell.ShowKeysTab(KeysTabOf(keys[(KeysAid.Length + 1)..]));
+                    _shell.Options.OpenKeys();
+                    _shell.Options.ShowKeysTab(KeysTabOf(keys[(KeysAid.Length + 1)..]));
                     break;
                 case CreditsAid:
                     _shell.Open(OriginalScreen.Credits);
@@ -429,21 +432,21 @@ public sealed class OriginalPresentation : IMenuPresentation
                     _shell.Step(new MenuCommands { Accept = true });
                     break;
                 case InstantActionAid:
-                    _shell.OpenInstantAction();
+                    _shell.InstantAction.OpenInstantAction();
                     break;
                 case InstantActionAid + ":" + InstantActionPilotPlaneAid:
-                    _shell.OpenInstantAction();
-                    _shell.OpenInstantActionDropdown(OriginalShell.PlayerPlaneKey);
+                    _shell.InstantAction.OpenInstantAction();
+                    _shell.InstantAction.OpenDropdownOn(OriginalInstantActionScreen.PlayerPlaneKey);
                     break;
                 case InstantActionAid + ":" + InstantActionLoadoutAid:
-                    _shell.OpenInstantAction();
-                    _shell.OpenLoadout();
+                    _shell.InstantAction.OpenInstantAction();
+                    _shell.InstantAction.OpenLoadout();
                     break;
                 case string lives when lives.StartsWith(InstantActionAid + ":" + InstantActionLivesAid, StringComparison.Ordinal):
                     // The screen opens on one life, so neither the unlimited reading nor a count
                     // above one is a state a plain shot of it can show.
-                    _shell.OpenInstantAction();
-                    _shell.PoseInstantActionLives(AidLives(lives));
+                    _shell.InstantAction.OpenInstantAction();
+                    _shell.InstantAction.PoseLives(AidLives(lives));
                     break;
                 case PlaneNameAid:
                     _shell.OpenHangar();
@@ -504,7 +507,7 @@ public sealed class OriginalPresentation : IMenuPresentation
 
                     if (aid.EndsWith(PlanePaintDecalsAid, StringComparison.Ordinal))
                     {
-                        _shell.OpenHangarDropdownOn(OriginalShell.NoseDecalKey);
+                        _shell.Hangar?.OpenHangarDropdownOn(OriginalHangarScreen.NoseDecalKey);
                     }
 
                     break;
@@ -629,9 +632,9 @@ public sealed class OriginalPresentation : IMenuPresentation
         // The AUDIO page's levels are heard while it is open and the mix it opened over goes back the
         // moment it is left, by any door. Read off the shell rather than a seat's step: the page is
         // seat 0's, and a guest's own step carries no mix, so its poll would end the preview.
-        if (_shell.AudioPreviewMix is { } mix)
+        if (_shell.Options.AudioPreviewMix is { } mix)
         {
-            _host.Audio.PreviewMix(mix, _shell.TakeAudioMoved());
+            _host.Audio.PreviewMix(mix, _shell.Options.TakeAudioMoved());
         }
         else
         {
@@ -702,9 +705,6 @@ public sealed class OriginalPresentation : IMenuPresentation
 
     private static Color ToColor(MenuLayoutColor c) => new(c.R / 255f, c.G / 255f, c.B / 255f, 1f);
 
-    // Which category the KEYS aid's argument names, matched against the tab captions themselves
-    // with spaces and case ignored so "views1" reaches "Views 1". An argument that names no tab
-    // leaves the page on its first category, which is where the bare aid opens it anyway.
     // The lives aid's count: the digits after a further colon, else 0, the unlimited reading. The
     // feature clamps a count past its cap, so an out-of-range aid poses the cap rather than failing.
     private static int AidLives(string aid)
@@ -714,9 +714,12 @@ public sealed class OriginalPresentation : IMenuPresentation
             aid[(colon + 1)..], NumberStyles.Integer, CultureInfo.InvariantCulture, out int lives) ? lives : 0;
     }
 
+    // Which category the KEYS aid's argument names, matched against the tab captions themselves
+    // with spaces and case ignored so "views1" reaches "Views 1". An argument that names no tab
+    // leaves the page on its first category, which is where the bare aid opens it anyway.
     private static int KeysTabOf(string argument)
     {
-        var tabs = OriginalShell.ControlTabs;
+        var tabs = OriginalOptionsScreen.ControlTabs;
         for (int i = 0; i < tabs.Count; i++)
         {
             if (string.Equals(tabs[i].Name.Replace(" ", string.Empty), argument, StringComparison.OrdinalIgnoreCase))
@@ -751,7 +754,7 @@ public sealed class OriginalPresentation : IMenuPresentation
 
     private void OpenGameOptionsAid(string aid)
     {
-        _shell!.OpenGameOptions();
+        _shell!.Options.OpenGameOptions();
         if (aid.IndexOf(':') >= 0)
         {
             _shell.Step(new MenuCommands { Accept = true });
@@ -769,12 +772,12 @@ public sealed class OriginalPresentation : IMenuPresentation
             return false;
         }
 
-        bool running = _shell.AdvanceBriefing(dt);
-        int starts = _shell.NarrationStarts;
+        bool running = _shell.Campaign.AdvanceBriefing(dt);
+        int starts = _shell.Campaign.NarrationStarts;
         if (starts != _narrationStarts && starts > 0)
         {
             _narrationStarts = starts;
-            _host.Audio.BeginNarration(_shell.NarrationWav);
+            _host.Audio.BeginNarration(_shell.Campaign.NarrationWav);
         }
 
         bool repaint = running || _revealRunning;
@@ -814,61 +817,61 @@ public sealed class OriginalPresentation : IMenuPresentation
         }
 
         bool seeded = value != "campaign-empty";
-        _shell.OpenCampaignOver(
+        _shell.Campaign.OpenCampaignOver(
             CampaignAidProfiles.Store(seeded, progressed: value != "campaign-roster"), CampaignAidProfiles.Planes());
         switch (value)
         {
             case CampaignDeleteAid:
-                _shell.ShowDeleteConfirm(CampaignAidProfiles.Pilot);
+                _shell.Campaign.ShowDeleteConfirm(CampaignAidProfiles.Pilot);
                 break;
             case "campaign-cabin":
-                _shell.ShowCabin(CampaignAidProfiles.Pilot);
+                _shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
                 break;
             case "campaign-previous":
-                _shell.ShowCabin(CampaignAidProfiles.Pilot);
-                _shell.ShowMissionScreen(OriginalScreen.CampaignPreviousMissions);
+                _shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
+                _shell.Campaign.ShowMissionScreen(OriginalScreen.CampaignPreviousMissions);
                 break;
             case "campaign-scrapbook":
                 // The book as a finished mission leaves it: opened on the last mission this
                 // profile flew. No win is reported, so the shot is the book and never the film.
-                _shell.ShowScrapbook(
+                _shell.Campaign.ShowScrapbook(
                     CampaignAidProfiles.Pilot, Math.Max(0, CampaignAidProfiles.MissionsFlown - 1), missionWon: false);
                 break;
             case "campaign-briefing":
-                _shell.ShowCabin(CampaignAidProfiles.Pilot);
-                _shell.ShowMissionScreen(OriginalScreen.CampaignBriefing);
+                _shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
+                _shell.Campaign.ShowMissionScreen(OriginalScreen.CampaignBriefing);
                 double.TryParse(argument, System.Globalization.NumberStyles.Float,
                     System.Globalization.CultureInfo.InvariantCulture, out double seconds);
 
                 for (double t = 0; t < seconds; t += AidSlice)
                 {
-                    _shell.AdvanceBriefing(AidSlice);
+                    _shell.Campaign.AdvanceBriefing(AidSlice);
                 }
 
                 break;
             case "campaign-flightcheck":
-                _shell.ShowCabin(CampaignAidProfiles.Pilot);
-                _shell.ShowMissionScreen(OriginalScreen.CampaignFlightCheck);
+                _shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
+                _shell.Campaign.ShowMissionScreen(OriginalScreen.CampaignFlightCheck);
                 break;
             case "campaign-ammo":
-                _shell.ShowCabin(CampaignAidProfiles.Pilot);
-                _shell.ShowMissionScreen(OriginalScreen.CampaignAmmo);
+                _shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
+                _shell.Campaign.ShowMissionScreen(OriginalScreen.CampaignAmmo);
                 break;
             case "campaign-planeselection":
-                _shell.ShowCabin(CampaignAidProfiles.Pilot);
-                _shell.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
+                _shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
+                _shell.Campaign.ShowMissionScreen(OriginalScreen.CampaignPlaneSelection);
                 break;
             case "campaign-hangar":
                 // The cabin's own PLANE CONSTRUCTION press, so the shot carries the cash note: the
                 // name screen bare, or the named tab on the aid's build.
-                _shell.ShowCabin(CampaignAidProfiles.Pilot);
+                _shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
                 if (colon >= 0 && CampaignHangarTabs.TryGetValue(aid[(colon + 1)..], out var tab))
                 {
-                    _shell.OpenHangarTab(tab, AidPlaneName, _shell.CampaignWallet);
+                    _shell.OpenHangarTab(tab, AidPlaneName, _shell.Campaign.Wallet);
                 }
                 else
                 {
-                    _shell.OpenHangar(_shell.CampaignWallet);
+                    _shell.OpenHangar(_shell.Campaign.Wallet);
                 }
 
                 break;
@@ -877,7 +880,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         // The briefing spends its colon on the reveal's seconds and the hangar's names a tab, both
         // taken above; every other screen's is the script CampaignAidScript reads, the same words
         // Built-in's aids take, with export still that button's own press.
-        if (value is not ("campaign-briefing" or "campaign-hangar") && !_shell.RunAidScript(argument))
+        if (value is not ("campaign-briefing" or "campaign-hangar") && !_shell.Campaign.RunAidScript(argument))
         {
             // A script this presentation cannot press leaves nothing worth shooting, so the run
             // ends before the capture takes a screen that looks like it simply did not respond.
