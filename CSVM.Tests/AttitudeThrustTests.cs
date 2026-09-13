@@ -91,6 +91,39 @@ public class AttitudeThrustTests
             + "residual has always been on the fast side, so this is a different defect");
     }
 
+    /// <summary>The executable's own sustained climb, taken through the rig the shipped Dynamics
+    /// tuner uses. A climb settles slower the steeper it is, so the vertical figure is the FLOOR of
+    /// every climb angle: if it is above the filmed 163.05 mph, no sustained climb this plant can
+    /// fly reaches that speed, and the footage residual is the footage's
+    /// (docs/org/flightModel.md, "The sustained climb").</summary>
+    [ExtractedDataFact]
+    public void TheTunersOwnClimbFloorIsAboveTheFilmedPlateau()
+    {
+        var r = Probes.TunerEnvelope(ZrdrPath, "player_bhawk");
+        Assert.True(r.Error == null, $"{r.Error ?? "-"}");
+        Assert.All(r.Rows, x => Assert.True(x.Converged,
+            $"'{x.Name}' never stopped gaining speed in {Probes.TunerEnvelopeSteps} steps, so "
+            + $"{x.SpeedMph:0.0} mph is a lower bound, not the equilibrium the tuner reports"));
+
+        double climb90 = r.At(90);
+        double climb45 = r.At(45);
+        Assert.True(climb90 < climb45,
+            $"a vertical climb must settle SLOWER than a 45° one ({climb90:0.0} vs {climb45:0.0} "
+            + "mph), so the attitude-thrust sign is inverted");
+        Assert.True(climb90 > 163.05,
+            $"the tuner's vertical climb settles at {climb90:0.0} mph, at or below the filmed "
+            + "163.05, so the plant CAN fly the footage's plateau and the residual has a home in "
+            + "the force sum after all");
+
+        // The able-to-fail half: two rigs that share only the force sum. One pins the attitude and
+        // integrates from rest at 100 Hz, the other flies free from a 300 mph entry at 60 Hz.
+        double free = Probes.SustainedClimb(ZrdrPath, "player_bhawk").PlateauMph;
+        Assert.True(System.Math.Abs(r.At(56.3) - free) < 2.0,
+            $"the pinned rig settles at {r.At(56.3):0.00} mph on the filmed path and the free climb "
+            + $"plateaus at {free:0.00}; they read the same equilibrium, so a gap means one of "
+            + "them has stopped measuring it");
+    }
+
     // One step's thrust contribution along the nose, m/s², at a nose-up angle: the
     // difference between a full-throttle step and a zero-throttle step from the same state.
     private static float ThrustTermAt(float noseDeg)

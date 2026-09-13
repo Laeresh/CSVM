@@ -1656,7 +1656,7 @@ on upward pitch* so climbs stay flyable. The shipped executable does the opposit
 different term: it penalises the climb through thrust. **The GDD is design intent; the binary is
 behaviour, and they disagree in sign here.**
 
-### The sustained climb, what this cost, and what it did not close
+### The sustained climb, settled: the plant's climb is 204 mph and the filmed 163 is below its floor
 
 The remake carried a fitted `ClimbGravityScale = 0.6` that spared a climbing aircraft, on the
 reading that the original held speed in a climb better than plain energy exchange predicts. It runs
@@ -1723,9 +1723,17 @@ above, the lag rate because it multiplies a vector that is identically zero at �
 because it is 1 at the filmed full throttle, the band because the whole climb is below the edge, and
 `veh_weight` because the weight that balances the climb at the filmed speed is 1.375 × the authored
 one and moves `terminal-dive` off its measured 355.2 (weight cancels out of level flight but not out
-of either climb or dive). The open question is what the original spends in a climb that
-`FUN_0048c470` → `FUN_0048fc40` does not contain, given that every write to that force vector is
-enumerated: the zero-vector initialiser at `0x48fdf9`, drag, thrust, the two lift rows and weight.
+of either climb or dive).
+
+⚠ **The original spends nothing in a climb outside the force accumulator, and the filmed 163.05 mph
+is below the plant's own floor.** The two sections below settle it from opposite directions: a
+complete census of every write to the velocity triple, which finds no writer that can run in a
+steady climb outside `FUN_0048e580`, and the original's own climb rig, which measures the manoeuvre
+through the same `FUN_0048fc40` and reports 170.2 mph with the nose vertical. A climb settles slower
+the steeper it is, so 170.2 is the floor of every sustained climb this plant can fly and the footage
+sits 4.2 % under it. Run at the footage's own 56.3° path the rig reads **203.9 mph**, against the
+free-flight probe's **204.03**, two rigs sharing only the force sum and agreeing to 0.06 %. The
+residual is the footage's, and the executable overrules it.
 
 ⚠ **The throttle-spending candidate is disproven as well.** The lever is a plain linear multiply on
 available thrust and touches no other term ("Part-throttle equilibrium" below), so at the clip's
@@ -1737,6 +1745,63 @@ velocity": the near-field composition is the same demand → clamp → force sum
 retiring the remake's extra kinematic chase moved the plateau not at all (204.04 → 204.03), because
 a straight climb settles at α = 0, where the chase was a no-op. The throttle spending, the
 atmosphere band and α itself are all settled above, and none of them carries the residual.
+
+### Every write to the velocity triple, censused
+
+The velocity lives at `+0x924` with its square at `+0x930` and its magnitude at `+0x934`. Nothing in
+the image addresses those bytes with a direct memory operand; every access takes the address first,
+at **37 sites**: 35 `LEA <reg>, [<obj> + 0x924]` plus two `ADD ECX, 0x924` inside `FUN_0047c210`
+that a search for `LEA` alone misses. Exactly one of the 37 is a pure reader (`0x48b182`, the
+speed-squared recomputation inside `FUN_0048ad20`); the rest write.
+
+| group | sites | runs when |
+|---|---|---|
+| the aeroplane tick `FUN_0048e580` | `0x48e99b` | every frame, classes 0 and 4 |
+| the other movement laws: `FUN_0048ffe0` (class 1), `FUN_0048a880`/`FUN_0048ad20` (class 2), `FUN_0048b480` (classes 3 and 5) | `0x490321`, `0x48a991`, `0x48b16b`, `0x48b182`, `0x48b56e` | the class switch in `FUN_00489ea0` picks exactly one |
+| the scripted-path follower `FUN_0048a110` | `0x48a4e2` | `[obj+0xcc] != 0`, ahead of the switch |
+| the rail mover `FUN_00490590` | `0x490810` | `[obj+0x358] == 5`, chosen ahead of the dispatch in `FUN_004897c0` |
+| contact and ground: `FUN_0048d7f0`, `FUN_00486d60`, `FUN_004871e0`, `FUN_0048c220` | `0x48e470`, `0x4870c9`, `0x487219`, `0x48c41e` | a collision or a ground blow |
+| spawn and reset: `FUN_0046a490`, `FUN_0047c210`, `FUN_004aff80`, `FUN_00451bf0`, `FUN_00452450`, `FUN_00498170`, `FUN_004b40c0`, `FUN_0041b560` | `0x46ab11`, `0x47d7de`, `0x47d870`, `0x4b033e`, `0x451f90`, `0x45251d`, `0x498499`, `0x4b41d6`, `0x41b7df`, `0x41bb16` | placement, not flight |
+| cutscene writers on the player pointer `DAT_0071c298`: `FUN_0047e080`, `FUN_0047f1f0`, `FUN_0047f740`, `FUN_0047fd50` | `0x47e6ef`, `0x47f2b5`, `0x47f324`, `0x47f4ea`, `0x47f829`, `0x480246` | scripted camera work, never with the stick live |
+| the Dynamics tuner | `0x491add`, `0x491c80`, `0x491e01`, `0x491f37`, `0x4922fb`, `0x4923ac`, `0x49247e`, `0x49269a`, `0x492a81` | the tuner overlay only |
+
+The dispatch is the whole of it: `FUN_00489ea0` switches on `[obj+0x67c]` and sends classes 0 and 4
+to `FUN_0048e580` and to nothing else, the three calls after it being player telemetry writers. So
+in a steady climb of a class-0 aeroplane with no contact, no script and no rail, the only writer
+that runs is the vehicle tick, and the tick's force sum is the enumerated accumulator.
+
+### The shipped tuner's own climb rig (`FUN_00491c60`)
+
+`FUN_00492040` is the Dynamics overlay the original ships, and its format strings name what each
+rig measures: `Max climb 90 degrees: %5.1f MPH` at `0x628bbc`, the 45° climb and the two dives after
+it, then `Max turn 100% top speed: %5.1f deg/sec` at `0x628c3c`. The climb and dive rows come from
+**`FUN_00491c60`**, called with π/2, π/4, −π/4 and −π/2. `FUN_00491d90` is the **turn** rig, not the
+climb one: it pins a 90° bank, holds the along-nose speed at the requested figure by rewriting the
+velocity through the body frame each step (`0x491f37`), and reads the world angular rate back out of
+`[obj+0x170]`.
+
+What `FUN_00491c60` holds fixed, per step: the attitude, rebuilt from the requested angle alone
+(`0x491ce5`); the position, written back to the origin (`0x491cf2`), so the whole sweep is a
+**sea-level** measurement; the angular momentum, zeroed (`0x491d40`), so the aircraft cannot rotate
+out of the attitude; the stall flag at `[obj+0xf4]`, cleared (`0x491d2a`). The throttle is pinned to
+1.0 once at entry (`0x491c69`). What it leaves free is the velocity, zeroed once at `0x491c80` and
+then owned by the integrator. What it reads back is `[obj+0x934]`, compared against its value before
+the step; the rig stops at the first step that gains no speed, up to 10000 steps at the 0.01 s step
+`FUN_00492040` forces. So **the original's own sustained climb is an equilibrium of the force sum
+and nothing else**: no entry transient, no path angle distinct from the nose, no memory.
+
+Its force path is `FUN_00491820` → `FUN_00490f70` → `FUN_0048fc40`, the same accumulator the live
+tick reaches at `0x48c883`. A term the game spent in a climb but kept out of the accumulator would
+be invisible to the tool the airframes were tuned with, so there is no such term.
+
+⚠ **The tuner's numbers are sea-level numbers by construction, and the live tick's are not.**
+`FUN_00490f70` saves `[obj+0x208]` (the world Y), writes zero into it at `0x491270`, calls the
+accumulator at `0x49127a` and restores it at `0x491284`. `FUN_0048c470` does no such thing. Do not
+read a tuner figure as an in-flight one at altitude.
+
+`Probes.TunerEnvelope` runs this rig against the ported plant and `--dump-flight` prints it beside
+the free-flight climb. For the Bloodhawk: 170.2 mph vertical, 203.9 at the filmed 56.3°, 223.7 at
+45°, 343.8 and 358.8 mph in the two dives.
 
 ## Thrust available, resolved, `pow` operands recovered
 
@@ -3624,7 +3689,10 @@ the tests, not the prose, are what stops a mechanism being quietly re-derived.
   that still looks entirely plausible, it merely swaps climb for dive. The four-arrangement climb
   table above is asserted as a BOUND that separates the four, not one the shipped arrangement merely
   passes, and the probe fails the run outright if the altitude clamp binds (a clamped run measures
-  the clamp, not the climb).
+  the clamp, not the climb). The same class pins the tuner's own rig (`Probes.TunerEnvelope`): that
+  the vertical climb, the floor of every climb angle, stays above the filmed 163.05 mph, and that
+  the pinned rig and the free climb agree at the filmed path. They share only the force sum, so a
+  gap between them means one of the two has stopped measuring the equilibrium.
 - **`PartThrottleEquilibriumTests`** covers the level-flight curve of "Part-throttle equilibrium", solved
   from the decoded constants in the test itself and flown on all eleven airframes at eight lever
   positions from both above and below, so an equilibrium that is right by construction rather than

@@ -600,6 +600,16 @@ member, and it does not go here.
   where the unsuppressed definition would read RUNNING forever. `spinprops` is the worked example:
   `FlightController` suppresses its motion because `PropAnimator` already turns those discs, so the
   rig tracks the prop slot in a field of its own and the suite asserts EXECUTED deliberately.
+- **INSTR-75**, **Name a rig off the format string that prints its result, never off the function
+  next to it.** `FUN_00491d90` sits between the original tuner's climb rigs and was taken for the
+  sustained-climb one on position alone; following the global it writes to the `sprintf` that reads
+  it makes it the `Max turn ... deg/sec` rig, and the climb is the neighbouring `FUN_00491c60`. A
+  rig identified by adjacency costs the whole reading built on it.
+- **INSTR-76**, **Two instruments that share only the mechanism are a real check on each other; two
+  that share the rig are one instrument.** The sustained climb is measured twice, once flying free
+  from a 300 mph entry at 60 Hz and once with the attitude pinned and integrated from rest at
+  100 Hz. They agree to 0.06 %, which is evidence about the equilibrium, where a second probe built
+  on the first one's entry conditions would only have restated it.
 
 ## SRC, sources and documents
 

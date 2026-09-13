@@ -30,10 +30,15 @@ public static class Probes
     /// <see cref="DamageResult.TotalInstances"/>.</summary>
     public const int SweepCap = 16;
 
+    /// <summary>The tuner rig's own iteration cap, 100 s at the step it forces. A run that reaches
+    /// it was still gaining speed and reports a lower bound rather than an equilibrium.</summary>
+    public const int TunerEnvelopeSteps = 10000;
+
     private const float Mph = 0.44704f;         // m/s per mph
     private const float Ft = 0.3048f;           // m per foot
     private const float BandEdgeM = 2000f;      // the atmosphere band edge, the plant's ceiling
     private const float EnvDt = 1f / 60f;       // the sim step --det pins every session to
+    private const float TunerDt = 0.01f;        // the step the shipped Dynamics tuner forces
 
     // The Bloodhawk's two decoded envelope targets. Kept as constants so a row states the number it
     // is judged against instead of computing it from the plant it is judging; FlightEnvelopeTests
@@ -1406,6 +1411,11 @@ public static class Probes
         // with a tolerance, and the recipe belongs in code where it cannot be lost.
         sb.AppendLine();
         sb.Append(SustainedClimb(zrdrPath, planeNodeName, watch).Text);
+        // The same manoeuvre as the climb above, taken the original's own way instead of the
+        // footage's: it says what the executable settles at, which is the figure a disagreeing
+        // filmed number is judged against.
+        sb.AppendLine();
+        sb.Append(TunerEnvelope(zrdrPath, planeNodeName).Text);
 
         // Branch coverage last, because it is a claim about the whole report above it: which
         // decoded branches these scenarios drove, and which the set leaves untouched.
@@ -1612,6 +1622,60 @@ public static class Probes
         return r;
     }
 
+    // ---- the shipped tuner's own envelope ------------------------------------------------------
+
+    /// <summary>The climb and dive figures taken the way the original's own Dynamics tuner takes
+    /// them (<c>FUN_00491c60</c>), so this is the executable's answer to what a sustained climb
+    /// settles at, not a reading off footage. The rig pins attitude, altitude, rotation and
+    /// throttle and leaves speed the only free variable; the climb it reports is therefore an
+    /// equilibrium of the force sum and nothing else (docs/org/flightModel.md, "The sustained
+    /// climb").</summary>
+    public static TunerEnvelopeResult TunerEnvelope(string zrdrPath, string planeNodeName)
+    {
+        System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
+        var r = new TunerEnvelopeResult { Plane = planeNodeName };
+        PlaneStats stats;
+        try
+        {
+            stats = PlaneStats.Load(zrdrPath, planeNodeName);
+        }
+        catch (Exception e)
+        {
+            r.Error = $"could not load plane stats for '{planeNodeName}' ({zrdrPath}): {e.Message}";
+            r.Summary = $"tuner envelope: {r.Error}";
+            return r;
+        }
+
+        // The tuner's own four, plus the angle the climb footage settles on, which the tuner never
+        // prints. Without it the filmed path would have to be read off an interpolation between
+        // the 45° and 90° rows rather than run.
+        foreach (float deg in new[] { 90f, 56.3f, 45f, -45f, -90f })
+        {
+            r.Rows.Add(TunerHold(stats, deg));
+        }
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"# tuner envelope, {planeNodeName} ({stats.DefName}), the shipped Dynamics "
+                      + "tuner's own rig");
+        sb.AppendLine("# nose angle, altitude and rotation pinned every step, throttle 1, speed free "
+                      + "from rest,");
+        sb.AppendLine("# stepped at the tuner's own 100 Hz until the first step that gains no speed");
+        sb.AppendLine("# ⚠ the original prints these as its 'Max climb/dive NN degrees' rows, and "
+                      + "they are SEA LEVEL");
+        sb.AppendLine("# figures: the tuner zeroes the aircraft's world Y for the duration of the "
+                      + "force sum");
+        foreach (var x in r.Rows)
+        {
+            sb.AppendLine($"  {x.Name,-24} {x.SpeedMph,8:0.0} MPH  path {x.PathDeg,6:0.0}°  "
+                          + $"settled +{x.Seconds,5:0.00} s{(x.Converged ? "" : "  ⚠ ran out of steps")}");
+        }
+
+        r.Text = sb.ToString();
+        r.Summary = $"tuner envelope: climb 90° {r.At(90f):0.0} mph, climb 45° {r.At(45f):0.0} mph, "
+                    + $"dive 90° {r.At(-90f):0.0} mph";
+        return r;
+    }
+
     // ---- effects -------------------------------------------------------------------------------
 
     /// <summary>Play every impact/destruction effect at <paramref name="playPoint"/> and report,
@@ -1763,6 +1827,43 @@ public static class Probes
             }
         }
         return records;
+    }
+
+    // One run of the tuner's climb/dive rig. The attitude, the altitude and the body rates are
+    // written back before every step, so the only state carried from one step to the next is the
+    // velocity, which is what makes the reported speed a force-sum equilibrium and not a path.
+    private static TunerEnvelopeRow TunerHold(PlaneStats stats, float noseDeg)
+    {
+        var row = new TunerEnvelopeRow
+        {
+            Name = Mathf.Abs(noseDeg - 56.3f) < 0.05f
+                ? "Climb at the filmed path"
+                : noseDeg >= 0f ? $"Max climb {noseDeg:0} degrees" : $"Max dive {-noseDeg:0} degrees",
+            NoseDeg = noseDeg,
+        };
+        var m = new FlightModel(stats);
+        var attitude = Pitched(noseDeg);
+        var velocity = Vector3.Zero;
+        int steps = 0;
+        while (steps < TunerEnvelopeSteps)
+        {
+            m.Reset(Vector3.Zero, attitude, 0f, 1f);
+            m.SetVelocity(velocity);
+            float before = m.Speed;
+            m.Step(new FlightInput { Throttle = 1f }, TunerDt);
+            velocity = m.VelocityDir * m.Speed;
+            steps++;
+            if (m.Speed <= before)
+            {
+                row.Converged = true;
+                break;
+            }
+        }
+
+        row.SpeedMph = m.Speed / Mph;
+        row.PathDeg = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(m.VelocityDir.Y, -1f, 1f)));
+        row.Seconds = steps * TunerDt;
+        return row;
     }
 
     private static Basis Level() => Basis.Identity;
@@ -2342,6 +2443,33 @@ public static class Probes
         public string Text = "";
         public string Summary = "";
         public string? Error;
+    }
+
+    /// <summary>One angle of the tuner's rig: the speed it settles at with the nose held there.
+    /// <see cref="Converged"/> is false when the rig hit its iteration cap still gaining speed, in
+    /// which case the speed is a lower bound and not the equilibrium.</summary>
+    public sealed class TunerEnvelopeRow
+    {
+        public string Name = "";
+        public double NoseDeg;
+        public double SpeedMph;
+        public double PathDeg;
+        public double Seconds;
+        public bool Converged;
+    }
+
+    /// <summary>The four angles the original's tuner prints, run through its own rig.</summary>
+    public sealed class TunerEnvelopeResult
+    {
+        public readonly List<TunerEnvelopeRow> Rows = new();
+        public string Plane = "";
+        public string Text = "";
+        public string Summary = "";
+        public string? Error;
+
+        /// <summary>The settled speed in mph at a nose angle the rig was run at, 0 if it was not.</summary>
+        public double At(double noseDeg) =>
+            Rows.FirstOrDefault(x => Math.Abs(x.NoseDeg - noseDeg) < 0.5)?.SpeedMph ?? 0;
     }
 
     /// <summary>One effect's sweep reading, both halves. <see cref="MeshPeaks"/> holds every
