@@ -279,7 +279,7 @@ public class OriginalCampaignTests : IDisposable
 
         shell.Step(Pointer(previous.X + 3f, previous.Y + 3f));
         Assert.Equal(OriginalScreen.CampaignPreviousMissions, shell.Screen);
-        Assert.Equal("ViewMission", shell.FocusedKey);
+        Assert.Equal("ROW:0", shell.FocusedKey); // the career row, a fresh profile's one list row
         shell.Step(Back);
         Assert.Equal(OriginalScreen.CampaignCabin, shell.Screen);
 
@@ -503,12 +503,13 @@ public class OriginalCampaignTests : IDisposable
         shell.Step(Down);
         shell.Step(Accept);
         Assert.Equal(OriginalScreen.CampaignPreviousMissions, shell.Screen);
-        // Two mission rows at the fixture's list box, then the buttons.
+        // The career row and two mission rows at the fixture's list box, then the buttons.
         Assert.Equal((410f, 150f, 330f, 60f), (shell.Rows[0].X, shell.Rows[0].Y, shell.Rows[0].Width, shell.Rows[0].Height));
         Assert.Equal((410f, 210f), (shell.Rows[1].X, shell.Rows[1].Y));
+        Assert.Equal((410f, 270f), (shell.Rows[2].X, shell.Rows[2].Y));
         Assert.Contains(shell.Rows, r => r.Key == "ViewMission" && r.X == 440f && r.Y == 500f);
 
-        var second = shell.Rows[1];
+        var second = shell.Rows[2];
         Click(shell, second.X + 5f, second.Y + 5f);
         Assert.Equal(OriginalScreen.CampaignPreviousMissions, shell.Screen);
         Assert.Contains(shell.Compose().Fills, f => f.Y == second.Y && !f.Border);

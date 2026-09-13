@@ -185,8 +185,8 @@ internal static class MenuOriginalCampaignSuites
         ctx.Check(shell.Rows.Count == 5 && shell.FocusedKey == "NextMission", $"the cabin's five plaques, focus on NEXT MISSION ({shell.FocusedKey})");
         Press(host, seat, Down);
         Press(host, seat, Accept);
-        ctx.Check(shell.Screen == OriginalScreen.CampaignPreviousMissions && shell.Rows.Count == 4,
-            $"PREVIOUS MISSIONS opens the contents, four buttons with nothing flown ({shell.Screen}, {shell.Rows.Count})");
+        ctx.Check(shell.Screen == OriginalScreen.CampaignPreviousMissions && shell.Rows.Count == 5,
+            $"PREVIOUS MISSIONS opens the contents, the career row over four buttons with nothing flown ({shell.Screen}, {shell.Rows.Count})");
         Press(host, seat, Back);
         ctx.Check(shell.Screen == OriginalScreen.CampaignCabin, $"Back returns to the cabin ({shell.Screen})");
     }

@@ -10,7 +10,8 @@ namespace CSVM.Tests;
 /// <summary>The scrapbook's results page: opened on the mission a finished mission just flew,
 /// drawing the results block and kill stamps off it, with the page/mission arrows and the Current
 /// Mission bookmark browsing the rest of the book and REPLAY MISSION acting on whichever mission
-/// is currently shown rather than a fixed one.</summary>
+/// is currently shown rather than a fixed one. Slot 0, the career page at the front of the book,
+/// carries scraps alone.</summary>
 public class CampaignScrapbookPageTests
 {
     [Fact]
@@ -127,6 +128,49 @@ public class CampaignScrapbookPageTests
         var flow = OpenedOnScrapbook(profile, seq: 0);
 
         Assert.NotEqual(-1, RowOf(flow.Page, BoardButton.ReplayMission));
+    }
+
+    /// <summary><c>SCRAPBOOK.CSV</c> slot 0 is the career page: its scraps draw, the results card,
+    /// its two tabs and REPLAY MISSION do not, and the title is langui 1216 over the player's name
+    /// alone, there being no mission to name.</summary>
+    [Fact]
+    public void TheCareerPageDrawsItsScrapsWithNoResultsCard()
+    {
+        string root = ScrapbookCompositionFixture.WriteCareerBook(TestData.TempDir());
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, Attempt(0));
+        var flow = OpenedOnScrapbook(profile, seq: -1, dataRoot: root);
+
+        Assert.Single(flow.Page.Captions); // the title alone: no outcome line, block or stamp count
+        Assert.Equal("Zachary - Scrapbook", flow.Page.Captions[0].Text);
+        Assert.Equal(2, flow.Page.Pictures.Count); // the spread's two scraps, no tab and no card
+        Assert.Equal(-1, RowOf(flow.Page, BoardButton.ReplayMission));
+        Assert.Equal(-1, RowOf(flow.Page, BoardButton.BestTab));
+        Assert.Equal(-1, RowOf(flow.Page, BoardButton.MostTab));
+        Assert.NotEqual(-1, RowOf(flow.Page, BoardButton.CurrentMission)); // never the current one
+    }
+
+    /// <summary>The career page is the front of the book: the back arrow off mission 1's results
+    /// page lands on it, the forward arrow climbs out of it, and the back arrow there falls into
+    /// the mission overview.</summary>
+    [Fact]
+    public void TheBackArrowOffMissionOneLandsOnTheCareerPage()
+    {
+        string root = ScrapbookCompositionFixture.WriteCareerBook(TestData.TempDir());
+        var profile = CampaignProfileDef.NewProfile("Zachary");
+        CampaignProgression.Record(profile, Attempt(0));
+        var flow = OpenedOnScrapbook(profile, seq: 0, dataRoot: root);
+
+        StepPrev(flow); // (1,1) -> (0,1)
+        Assert.Equal(CampaignScreen.Scrapbook, flow.Screen);
+        Assert.Equal("Zachary - Scrapbook", flow.Page.Captions[0].Text);
+
+        StepNext(flow); // (0,1) -> (1,1), climbing out of the career page
+        Assert.Equal("Zachary - Mission 1", flow.Page.Captions[0].Text);
+
+        StepPrev(flow); // back onto it, where nothing stands before it
+        StepPrev(flow);
+        Assert.Equal(CampaignScreen.PreviousMissions, flow.Screen);
     }
 
     /// <summary>VIEW ALL MISSIONS jumps to the mission overview, and so does the back arrow at the

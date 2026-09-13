@@ -208,12 +208,59 @@ internal static class MenuCampaignSuites
         menu.Drive(Accept);
         ctx.Check(flow.Screen == CampaignScreen.PreviousMissions && menu.ShownHeading == "PREVIOUS MISSIONS",
             $"Previous Missions opens the table of contents ({flow.Screen})");
-        ctx.Check(menu.ShownRowCount == 4 && menu.ShownRowText == "VIEW SELECTED", $"with no mission rows, only the four buttons ({menu.ShownRowCount}, {menu.ShownRowText})");
+        ctx.Check(menu.ShownRowCount == 5 && menu.ShownRow == 0,
+            $"with no mission flown, the career row alone over the four buttons ({menu.ShownRowCount})");
+        Is(ctx, "the one row is the career page", flow.Strings.Text(1217, "Starting My Career"), menu.ShownDetail);
+        ctx.Check(ButtonRow(flow, BoardButton.ReplayMission) < 0, $"REPLAY MISSION is not offered on it");
+        CareerPage(ctx, menu, flow);
+        ctx.Check(flow.Screen == CampaignScreen.PreviousMissions, $"Back returns to the contents ({flow.Screen})");
         menu.Drive(Back);
         ctx.Check(flow.Screen == CampaignScreen.Cabin, $"Back returns to the cabin ({flow.Screen})");
         menu.Drive(Back);
         menu.Drive(Back);
         ctx.Check(menu.ShownScreen == "Mode" && menu.Campaign == null, $"Back twice more leaves the campaign ({menu.ShownScreen})");
+    }
+
+    // The career page as the contents' secondary press reaches it: SCRAPBOOK.CSV slot 0, whose one
+    // spread carries scraps alone, titled langui 1216 over the player's name. Leaves the cursor
+    // back on the contents.
+    private static void CareerPage(TestContext ctx, LaunchMenu menu, CampaignFlow flow)
+    {
+        menu.Drive(Secondary);
+        ctx.Check(flow.Screen == CampaignScreen.Scrapbook && flow.MissionSeq == -1 && menu.ShownHeading == "SCRAPBOOK",
+            $"X on the career row opens the book at its front ({flow.Screen}, seq {flow.MissionSeq})");
+        ctx.Check(menu.ShownBoard is { } board && HasLine(board, flow.Strings.Format(1216, Pilot)),
+            $"titled over the player's name alone, langui 1216");
+        int shipped = ScrapbookComposition.Items(ctx.DataRoot, 0, 1).Count;
+        ctx.Note($"SCRAPBOOK.CSV slot 0 carries {shipped} scraps");
+        ctx.Check(shipped > 0 && flow.Page.Pictures.Count == shipped && flow.Page.Captions.Count == 1,
+            $"its scraps draw with no results card over them ({flow.Page.Pictures.Count} pictures, {flow.Page.Captions.Count} lines)");
+        ctx.Check(ButtonRow(flow, BoardButton.ReplayMission) < 0 && ButtonRow(flow, BoardButton.MostTab) < 0,
+            $"and the page offers neither REPLAY MISSION nor a results tab");
+        menu.Drive(Back);
+    }
+
+    // The career page from the other side: the book opened on mission 1 and its back arrow pressed
+    // once, which lands on the front of the book rather than falling into the mission overview.
+    // Leaves the cursor back on the contents.
+    private static void BackArrowOffMissionOne(TestContext ctx, LaunchMenu menu, CampaignFlow flow)
+    {
+        WalkToRow(menu, 1);
+        menu.Drive(Secondary);
+        ctx.Check(flow.Screen == CampaignScreen.Scrapbook && flow.MissionSeq == 0,
+            $"X on the first mission row opens the book on mission 1 ({flow.Screen}, seq {flow.MissionSeq})");
+        int prev = ButtonRow(flow, BoardButton.ScrapbookPrev);
+        ctx.Check(prev >= 0, $"whose results page carries the back arrow ({prev})");
+        if (prev >= 0 && ScrapbookComposition.Items(ctx.DataRoot, 0, 1).Count > 0)
+        {
+            WalkToRow(menu, prev);
+            menu.Drive(Accept);
+            ctx.Check(flow.Screen == CampaignScreen.Scrapbook && flow.Page.Captions.Count == 1
+                && flow.Page.Captions[0].Text == flow.Strings.Format(1216, Pilot),
+                $"and the arrow turns back onto the career page ({flow.Screen}, {flow.Page.Captions.Count} lines, '{(flow.Page.Captions.Count > 0 ? flow.Page.Captions[0].Text : string.Empty)}')");
+        }
+
+        menu.Drive(Back);
     }
 
     // Three missions flown, the shape the progressed aid store has, written the way the session's
@@ -241,9 +288,11 @@ internal static class MenuCampaignSuites
         menu.Drive(Down);
         Is(ctx, "previous missions now offers a review", "Review or replay a finished mission", menu.ShownDetail);
         menu.Drive(Accept);
-        ctx.Check(menu.ShownRowCount == FlownBefore + 5 && menu.ShownRow == 0,
-            $"three mission rows then VIEW SELECTED, REPLAY MISSION, the arrow, the bookmark and RETURN TO CABIN ({menu.ShownRowCount})");
-        Is(ctx, "the first row is the first mission", flow.Strings.Text(3450, "Mission 1"), menu.ShownDetail);
+        ctx.Check(menu.ShownRowCount == FlownBefore + 6 && menu.ShownRow == 0,
+            $"the career row and three mission rows, then VIEW SELECTED, REPLAY MISSION, the arrow, the bookmark and RETURN TO CABIN ({menu.ShownRowCount})");
+        Is(ctx, "the first row is the career page", flow.Strings.Text(1217, "Starting My Career"), menu.ShownDetail);
+        menu.Drive(Down);
+        Is(ctx, "the second is the first mission", flow.Strings.Text(3450, "Mission 1"), menu.ShownDetail);
         Has(ctx, "the footer names the view shortcut", "X  View", menu.ShownFooter);
         ctx.Check(menu.ShownBoard is { } board && board.Fills.Count >= 2, $"the focused row draws its wash and outline ({menu.ShownBoard?.Fills.Count})");
         menu.Drive(Accept);
@@ -261,6 +310,7 @@ internal static class MenuCampaignSuites
         ctx.Check(flow.Screen == CampaignScreen.Briefing && flow.MissionSeq == 1, $"and opens its briefing ({flow.Screen}, seq {flow.MissionSeq})");
         menu.Drive(Back);
         ctx.Check(flow.Screen == CampaignScreen.PreviousMissions, $"Back from a replay's briefing returns to the contents ({flow.Screen})");
+        BackArrowOffMissionOne(ctx, menu, flow);
         WalkTo(menu, "RETURN TO CABIN");
         menu.Drive(Accept);
         ctx.Check(flow.Screen == CampaignScreen.Cabin, $"RETURN TO CABIN lands on the cabin ({flow.Screen})");
@@ -554,12 +604,12 @@ internal static class MenuCampaignSuites
         menu.ShowMenu("campaign-cabin");
         ctx.Check(menu.Campaign is { Screen: CampaignScreen.Cabin } && menu.Campaign.Profile?.MissionsCompleted == FlownBefore, $"--menu=campaign-cabin opens the progressed cabin ({menu.Campaign?.Profile?.MissionsCompleted})");
         menu.ShowMenu("campaign-previous");
-        ctx.Check(menu.Campaign is { Screen: CampaignScreen.PreviousMissions } && menu.ShownRowCount == FlownBefore + 5, $"--menu=campaign-previous opens the contents with three flights ({menu.ShownRowCount})");
+        ctx.Check(menu.Campaign is { Screen: CampaignScreen.PreviousMissions } && menu.ShownRowCount == FlownBefore + 6, $"--menu=campaign-previous opens the contents with the career row over three flights ({menu.ShownRowCount})");
         // x is the pad's secondary press, which Built-in binds and Original does not: here it views
         // the mission the cursor stands on without walking down to the button.
-        menu.ShowMenu("campaign-previous:1d-x");
+        menu.ShowMenu("campaign-previous:2d-x");
         ctx.Check(menu.Campaign is { Screen: CampaignScreen.Scrapbook, MissionSeq: 1 },
-            $"--menu=campaign-previous:1d-x presses Built-in's secondary on the second flight ({menu.Campaign?.Screen}, {menu.Campaign?.MissionSeq})");
+            $"--menu=campaign-previous:2d-x presses Built-in's secondary on the second flight ({menu.Campaign?.Screen}, {menu.Campaign?.MissionSeq})");
         menu.ShowMenu("campaign-scrapbook");
         ctx.Check(menu.Campaign is { Screen: CampaignScreen.Scrapbook, MissionSeq: FlownBefore - 1 } && menu.ShownRowText == "RETURN TO CABIN", $"--menu=campaign-scrapbook opens the book on the last flown mission ({menu.Campaign?.MissionSeq})");
         menu.ShowMenu("campaign-briefing:24");

@@ -48,6 +48,11 @@ doesn't have a specific [FONTID] in it will use this font*"), and IDs 10 onward 
 one font as `[TAG]/font=<TAG.ttf>`. The most-used tags are `COUR9` (153 strings), `CSB9I` (90),
 `AB14I` (88) and the `TREB*` Trebuchet family.
 
+⚠ **29 rows carry an empty tag, `[]`, and the extraction keeps its closing bracket.** They are the
+default names and a few sentinels (`IDS_DEFAULT` `]Stock`, `IDS_DEFAULTPLAYERNAME`
+`]Nathan Zachary`, `IDS_PILOTPLANENAME` `]Gypsy Magic`, `IDS_KB_JOYSTICK` `]Joystick %1!d!`), so a
+reader that shows one of them strips a leading `]` as well as a whole tag.
+
 A handful of strings also carry inline `<B>…<b>` bold markup.
 
 ## Placeholders
