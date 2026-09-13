@@ -507,6 +507,10 @@ member, and it does not go here.
   whole: verify new defaults on a fresh profile, and test the default table itself rather than a
   seat built from disk.** The keymap store versions its schema, not its action list, so a default
   change moves no stored file.
+- **INSTR-65**, **A suite that can only reach a state through the one cause it is testing cannot
+  see a flag the state ENTRY sets rather than the cause; enter the state through the scripted seam
+  too, and assert the flag is still clear there.** Every evade phase arrived by damage, so a mode
+  transition that stamped the evade flag stood unseen and swallowed the next steady-hand roll.
 
 ## SRC, sources and documents
 

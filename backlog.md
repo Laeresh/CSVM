@@ -2017,14 +2017,7 @@ usual.
   mission-start path rather than the intro hold, with a suite over an Instant Action wave.
   *⚠ Traps:* `BL-736` closed on "CSVM already matches" for the story intro alone; do not re-close
   on that reading. *Cross-refs:* `BL-736`'s closing commit, `docs/formats/anim-definitions/cutscenes.md`.
-- `BL-836` `[Bug]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: trace]` **An AI ordered into Evade from
-  outside the damage path is flagged as evading, so a scripted manoeuvre suppresses its
-  steady-hand roll for the whole episode.** *Evidence:* `CSVM/src/Flight/AiModeMachine.cs:682`
-  (at `7d2e9881`) sets `Evading = true` on every entry into the Evade state, and `:394` reads it
-  to hold the roll; the decode behind `BL-558` names four writers of the original's `+0xBA` flag,
-  all inside the damage routine `FUN_004b9bc0`. *Fix shape:* set the flag only from the damage
-  arm's entry, and add an `ai-modes` phase that orders an Evade without damage and reads the roll
-  still available. *Cross-refs:* `BL-558`'s closing commit, `docs/org/aiControlLaw.md` (SRC-9).
+
 ## Missions, modes & campaign
 
 - `BL-469` `[Feature]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: data]` **An escort cannot hold station on a leader using nitro, and nothing measures

@@ -1979,7 +1979,8 @@ internal static class AiSuites
         "the shipped 2000 m radius, a scripted failed steady-hand roll on a real projectile " +
         "hit sets the evade flag and enters an evasive maneuver, a pursuer pointed elsewhere " +
         "clears the flag and releases the reaction while a nose-on one holds it and chains a " +
-        "second program, a failed " +
+        "second program, an ordered evade carries no flag and leaves the next hit its roll " +
+        "while a hit with nothing eligible sets and holds one, a failed " +
         "sixth-sense roll stuns (gunner silent) and recovers after stun_recovery_interval, " +
         "the avoid-crash override climbs out on a blocked probe and releases, and the D15 " +
         "rubber-band assist: a chasing human fallen behind puts the machine in lay off " +
@@ -2163,6 +2164,58 @@ internal static class AiSuites
                 Step(1);
             ctx.Check(!machine.Evading && machine.Executor == null,
                 $"the pursuer turning away ends the chain mode={AiModeMachine.NameOf(machine.Mode)}");
+
+            // --- an ORDERED evade, no damage: the flag belongs to the damage routine alone, so a
+            // scripted entry into the mode leaves it clear and the next hit still gets its roll.
+            machine.Enter(AiMode.Evade, "test: ordered, no damage");
+            ctx.Check(machine.Mode == AiMode.Evade && !machine.Evading,
+                $"an ordered evade sets no flag evading={machine.Evading}");
+            lastRoll = null;
+            machine.SteadyHandChance = 1f;
+            ai.TakeProjectileHit(gun, ai.WorldPosition + new Vector3(2f, 0f, 0f), "fuselage", 0);
+            machine.SteadyHandChance = 0f;
+            ctx.Check(lastRoll != null && lastRoll.Contains("steady hand test failed. Evading."),
+                $"…so a hit taken there still rolls steady hand roll={lastRoll}");
+            ctx.Check(machine.Evading,
+                $"…and the roll is what sets the flag evading={machine.Evading}");
+            budget = 60 * 60;
+            while (machine.Mode == AiMode.EvasiveManeuver && budget-- > 0)
+                Step(1);
+            ctx.Check(!machine.Evading,
+                $"…which the turned-away pursuer then clears mode={AiModeMachine.NameOf(machine.Mode)}");
+
+            // --- the damage arm's own entry into the marked engagement: with nothing in the
+            // library eligible the hit sets flag and mode together, and a nose-on pursuer holds
+            // both while the pilot flies its engagement, taking no second roll.
+            var savedLibrary = machine.Library;
+            machine.Library = null;
+            target.PlaceHeld(targetPos, ai.WorldPosition);
+            lastRoll = null;
+            machine.SteadyHandChance = 1f;
+            ai.TakeProjectileHit(gun, ai.WorldPosition + new Vector3(2f, 0f, 0f), "fuselage", 0);
+            ctx.Check(machine.Mode == AiMode.Evade && machine.Evading,
+                $"a hit with nothing eligible enters evade with the flag set mode={AiModeMachine.NameOf(machine.Mode)}");
+            for (int i = 0; i < 60; i++)
+            {
+                target.PlaceHeld(targetPos, ai.WorldPosition); // the pursuer's nose held on
+                Step(1);
+            }
+            ctx.Check(machine.Mode == AiMode.Evade && machine.Evading,
+                $"…held over a second of nose-on engagement mode={AiModeMachine.NameOf(machine.Mode)}");
+            lastRoll = null;
+            ai.TakeProjectileHit(gun, ai.WorldPosition + new Vector3(2f, 0f, 0f), "fuselage", 0);
+            machine.SteadyHandChance = 0f;
+            ctx.Check(lastRoll == null, $"…and takes no second steady-hand roll roll={lastRoll}");
+            target.PlaceHeld(targetPos, targetPos + Vector3.Forward);
+            Step(1);
+            ctx.Check(!machine.Evading && machine.Mode != AiMode.Evade,
+                $"the pursuer turning away releases it mode={AiModeMachine.NameOf(machine.Mode)}");
+            machine.Library = savedLibrary;
+
+            // Fly the engagement out before the phases that read the aeroplane's own flight: a
+            // program ends in whatever attitude its last step left, and a descending entry is not
+            // what the climb-out below means to measure.
+            Step(180);
 
             // --- a scripted FAILED sixth-sense roll stuns: gunner silent, then recovery after
             // stun_recovery_interval (the shipped value at rating 5).

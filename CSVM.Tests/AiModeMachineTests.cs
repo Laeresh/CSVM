@@ -147,6 +147,35 @@ public class AiModeMachineTests
         Assert.Equal(AiMode.Patrol, m2.Mode);
     }
 
+    /// <summary>The flag is the damage routine's to write: an ordered entry into the evade state
+    /// leaves it clear, so the hit that follows still takes its own steady-hand roll.</summary>
+    [Fact]
+    public void AnOrderedEvadeCarriesNoFlag()
+    {
+        var m = Machine();
+        var target = Home + new Vector3(500f, 0f, 0f);
+        string? logged = null;
+        m.RollLogged += line => logged = line;
+        PursueFrom(m, target);
+
+        m.Enter(AiMode.Evade, "scripted");
+        Assert.Equal(AiMode.Evade, m.Mode);
+        Assert.False(m.Evading);
+
+        // The roll the flag would have swallowed is taken, and it is what sets the flag.
+        m.SteadyHandChance = 1f;
+        m.NotifyDamage(8f);
+        Assert.Contains("steady hand test failed. Evading.", logged);
+        Assert.True(m.Evading);
+
+        // The same ordered entry through a maneuver: no flag either, and no executor to fly.
+        var m2 = Machine();
+        PursueFrom(m2, target);
+        m2.Enter(AiMode.EvasiveManeuver, "scripted");
+        Assert.False(m2.Evading);
+        Assert.Null(m2.Executor);
+    }
+
     /// <summary>A maneuver that runs out with the flag still set chains into another one, and the
     /// repeat penalty makes that another program rather than the same one again.</summary>
     [Fact]
