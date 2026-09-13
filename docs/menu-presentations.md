@@ -485,8 +485,9 @@ list open and `instant-action:weapon-loadout` on the pilot's loadout screen, `op
 `audio:mixed` with its four sliders at four distinct levels, `video`,
 `video:checked` with its Enhanced Graphics box ticked and `video:open` with its Resolution list
 standing open, the one leaf list whose sizes can outrun the window its row authors,
-`controls`, `keys` and `keys:other` with
-the KEYS AND BUTTONS page standing on the one category that outruns its list window, `credits` and
+`controls`, `keys` and `keys:<category>` with the KEYS AND BUTTONS page standing on the tab of that
+name (spaces and case ignored), `keys:other` being the one category that outruns its list window and
+`keys:targeting` the eleven targeting actions, `credits` and
 `credits:about` with the About box standing over it, the
 `plane-*` hangar poses with `plane-construction:open` standing the airframe list open on a row the
 hub's figures preview, `plane-construction:overweight` on a build past its capacity,

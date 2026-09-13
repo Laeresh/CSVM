@@ -85,9 +85,9 @@ public static class BindingLabels
         return text.ToString();
     }
 
-    // A key's own caption. The numpad and the punctuation keys are named the way a keycap is
-    // rather than the way the enum is, because "Kp Enter" and "Quoteleft" are not what the player
-    // is looking at.
+    // A key's own caption. The numpad, the digit row and the punctuation keys are named the way a
+    // keycap is rather than the way the enum is, because "Kp Enter", "Key5" and "Quoteleft" are not
+    // what the player is looking at.
     private static string KeyName(Key key) => key switch
     {
         Key.Quoteleft => "`",
@@ -108,6 +108,7 @@ public static class BindingLabels
         Key.KpPeriod => "Numpad .",
         Key.KpEnter => "Numpad Enter",
         >= Key.Kp0 and <= Key.Kp9 => "Numpad " + ((int)(key - Key.Kp0)).ToString(CultureInfo.InvariantCulture),
+        >= Key.Key0 and <= Key.Key9 => ((int)(key - Key.Key0)).ToString(CultureInfo.InvariantCulture),
         _ => Spaced(EnumName<Key>((int)key)),
     };
 

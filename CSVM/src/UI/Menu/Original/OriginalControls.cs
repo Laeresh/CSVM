@@ -110,8 +110,10 @@ public sealed partial class OriginalShell
         },
         new[]
         {
-            InputAction.TargetNextEnemy, InputAction.TargetNextAlly, InputAction.TargetNextNonAircraft,
-            InputAction.TargetNearest, InputAction.TargetClear,
+            InputAction.TargetNextEnemy, InputAction.TargetPreviousEnemy, InputAction.TargetNearestEnemy,
+            InputAction.TargetNextAlly, InputAction.TargetPreviousAlly, InputAction.TargetNearestAlly,
+            InputAction.TargetNextNonAircraft, InputAction.TargetPreviousNonAircraft,
+            InputAction.TargetNearestNonAircraft, InputAction.TargetNearest, InputAction.TargetClear,
         },
         new[]
         {

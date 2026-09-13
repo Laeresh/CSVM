@@ -76,6 +76,24 @@ public class OriginalControlsTests
             OriginalShell.ControlTabs[0].Rows.Select(r => r.Action).ToArray());
     }
 
+    /// <summary>The Targeting tab lists all eleven of the original's targeting actions in the
+    /// original page's own order, Next then Previous then Nearest per class and the two class-less
+    /// ones last (<c>OriginalScreenshots/Keybinds Targeting.png</c>). Pinned because the order is
+    /// read off that page rather than off the enum, which appends new members at its end.</summary>
+    [Fact]
+    public void TheTargetingTabIsTheOriginalsElevenInItsOwnOrder()
+    {
+        Assert.Equal(
+            new[]
+            {
+                InputAction.TargetNextEnemy, InputAction.TargetPreviousEnemy, InputAction.TargetNearestEnemy,
+                InputAction.TargetNextAlly, InputAction.TargetPreviousAlly, InputAction.TargetNearestAlly,
+                InputAction.TargetNextNonAircraft, InputAction.TargetPreviousNonAircraft,
+                InputAction.TargetNearestNonAircraft, InputAction.TargetNearest, InputAction.TargetClear,
+            },
+            OriginalShell.ControlTabs[3].Rows.Select(r => r.Action).ToArray());
+    }
+
     [Fact]
     public void TheControlsDoorIsLiveOnlyWhereTheSharedFeatureStandsBehindIt()
     {

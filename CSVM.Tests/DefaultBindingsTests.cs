@@ -167,6 +167,33 @@ public class DefaultBindingsTests
             map.Bindings(InputAction.SelectOrdnancePrev));
     }
 
+    /// <summary>The other two directions of each target class ship on the keyboard alone, on the
+    /// digit row above the class keys. The original spends Shift and Ctrl on the class letter for
+    /// these, which no binding here can hold, and the pad keeps the cycle and the crosshairs alone.
+    /// Recorded so a later edit cannot hand one a pad control or move it off its row.</summary>
+    [Fact]
+    public void ThePerClassPreviousAndNearest_ShipOnTheDigitRowAndOnTheKeyboardOnly()
+    {
+        var map = DefaultBindings.MapFor(InputContext.Flight, Pad);
+        var expected = new Dictionary<InputAction, Key>
+        {
+            [InputAction.TargetPreviousEnemy] = Key.Key5,
+            [InputAction.TargetPreviousAlly] = Key.Key6,
+            [InputAction.TargetPreviousNonAircraft] = Key.Key7,
+            [InputAction.TargetNearestEnemy] = Key.Key8,
+            [InputAction.TargetNearestAlly] = Key.Key9,
+            [InputAction.TargetNearestNonAircraft] = Key.Key0,
+        };
+
+        foreach (var (action, key) in expected)
+        {
+            Assert.Equal(InputContext.Flight, DefaultBindings.ContextOf(action));
+            Assert.Equal(
+                new[] { new Binding(DeviceId.Keyboard, BindingControl.Key((int)key)) },
+                map.Bindings(action));
+        }
+    }
+
     /// <summary>The spyglass toggle ships on both devices. The original's own Shift+S is
     /// unreachable (a binding is one control, and both halves are flight actions here), so the
     /// keyboard takes F2 for its camera 2 and the pad takes Misc1, the one control no other flight

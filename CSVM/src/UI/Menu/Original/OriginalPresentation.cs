@@ -65,7 +65,8 @@ public sealed class OriginalPresentation : IMenuPresentation
     public const string KeysAid = "keys";
 
     /// <summary>The KEYS aid's argument that stands the page on its last category, the one whose
-    /// rows outrun the list's window.</summary>
+    /// rows outrun the list's window. Any other category name works the same way, spaces and case
+    /// ignored, so every tab has a shot of its own.</summary>
     public const string KeysOtherAid = "other";
 
     /// <summary>The aid value that opens the credits screen behind the top level's fifth row.</summary>
@@ -409,10 +410,10 @@ public sealed class OriginalPresentation : IMenuPresentation
                     SyncControlsSeats();
                     _shell.OpenKeys();
                     break;
-                case KeysAid + ":" + KeysOtherAid:
+                case string keys when keys.StartsWith(KeysAid + ":", StringComparison.Ordinal):
                     SyncControlsSeats();
                     _shell.OpenKeys();
-                    _shell.ShowKeysTab(OriginalShell.KeysTabCount - 1);
+                    _shell.ShowKeysTab(KeysTabOf(keys[(KeysAid.Length + 1)..]));
                     break;
                 case CreditsAid:
                     _shell.Open(OriginalScreen.Credits);
@@ -689,6 +690,23 @@ public sealed class OriginalPresentation : IMenuPresentation
     }
 
     private static Color ToColor(MenuLayoutColor c) => new(c.R / 255f, c.G / 255f, c.B / 255f, 1f);
+
+    // Which category the KEYS aid's argument names, matched against the tab captions themselves
+    // with spaces and case ignored so "views1" reaches "Views 1". An argument that names no tab
+    // leaves the page on its first category, which is where the bare aid opens it anyway.
+    private static int KeysTabOf(string argument)
+    {
+        var tabs = OriginalShell.ControlTabs;
+        for (int i = 0; i < tabs.Count; i++)
+        {
+            if (string.Equals(tabs[i].Name.Replace(" ", string.Empty), argument, StringComparison.OrdinalIgnoreCase))
+            {
+                return i;
+            }
+        }
+
+        return 0;
+    }
 
     // The Game Options aid's posed state, the keyboard walk that reaches it rather than a state the
     // page can only be put in from outside: Accept on the opening focus stands the Difficulty

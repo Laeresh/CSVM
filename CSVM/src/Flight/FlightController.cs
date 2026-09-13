@@ -476,7 +476,7 @@ public partial class FlightController : Node3D
     private readonly AimCandidateSet _targetScan = new();   // the targeting pass's own scan, rebuilt per frame
     private readonly List<AimCandidate> _targetParts = new(); // this frame's selectable sub-parts
     private readonly List<AimCandidate> _targetSites = new(); // this frame's objective sites
-    private readonly bool[] _targetKeyPrev = new bool[7];   // T/Y/U/I/O plus the spyglass pair
+    private readonly bool[] _targetKeyPrev = new bool[13];  // the eleven targeting keys, spyglass pair last
     private readonly bool[] _viewModeKeyPrev = new bool[5]; // F8/F6/F7 + pad view-selection edges
     private readonly TapHoldButton _targetHold = new(TargetHoldSeconds); // D-pad Up tap vs hold
     // Swallows a discrete flight command's next read when a cutscene skip or a pause-sheet dismiss
@@ -3212,20 +3212,26 @@ public partial class FlightController : Node3D
                 break;
         }
 
-        // The curated keyboard set (decision 14): every one of the original's eleven targeting keys
-        // collides with our flight scheme, so these five free keys carry one action per class plus
-        // the two class-less ones. They are defaults, not a scheme, the rebind layer is its own item.
+        // The keyboard set: every one of the original's eleven targeting keys collides with our
+        // flight scheme, so the shipped keys are this port's own. All eleven actions are here, one
+        // per class per direction plus the two class-less ones, and each is rebindable.
         DispatchTargetKey(0, InputAction.TargetNextEnemy, () => sel.NextEnemy());
         DispatchTargetKey(1, InputAction.TargetNextAlly, () => sel.Next(TargetClass.Ally));
         DispatchTargetKey(2, InputAction.TargetNextNonAircraft, () => sel.Next(TargetClass.NonAircraft));
         DispatchTargetKey(3, InputAction.TargetNearest, () => sel.NearestCrosshairs(_model.Position, _model.Attitude));
         DispatchTargetKey(4, InputAction.TargetClear, () => sel.Clear());
+        DispatchTargetKey(5, InputAction.TargetPreviousEnemy, () => sel.Previous(TargetClass.Enemy));
+        DispatchTargetKey(6, InputAction.TargetPreviousAlly, () => sel.Previous(TargetClass.Ally));
+        DispatchTargetKey(7, InputAction.TargetPreviousNonAircraft, () => sel.Previous(TargetClass.NonAircraft));
+        DispatchTargetKey(8, InputAction.TargetNearestEnemy, () => sel.Nearest(TargetClass.Enemy));
+        DispatchTargetKey(9, InputAction.TargetNearestAlly, () => sel.Nearest(TargetClass.Ally));
+        DispatchTargetKey(10, InputAction.TargetNearestNonAircraft, () => sel.Nearest(TargetClass.NonAircraft));
 
-        // The spyglass toggle, both halves on their own slots: unlike the five keys above, the pad
+        // The spyglass toggle, both halves on their own slots: unlike the keys above, the pad
         // control here is a button of its own rather than the tap/hold splitter, so a pad-only
         // pilot reaches it without dispatching the action twice.
-        DispatchEdge(5, _keyActions.Held(InputAction.ToggleSpyglass), ToggleSpyglass);
-        DispatchEdge(6, _padActions.Held(InputAction.ToggleSpyglass), ToggleSpyglass);
+        DispatchEdge(11, _keyActions.Held(InputAction.ToggleSpyglass), ToggleSpyglass);
+        DispatchEdge(12, _padActions.Held(InputAction.ToggleSpyglass), ToggleSpyglass);
     }
 
     // The pilot's spyglass arm/disarm. Every other gate (off screen, the range band) is re-answered

@@ -1690,41 +1690,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Fix shape:* re-review `StuntRunHud.cs`/`TargetHud.cs`/`StuntScoreboard.cs` placement once such a type scale exists,
   against it rather than in isolation. *Cross-refs:* `BL-449`, whose landing prompted this wording.
 
-- `BL-827` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **Six of the original's eleven targeting actions have no key here: a
-  Previous and a class-restarting Nearest per class.** CSVM ships five of the eleven, one Next per
-  class plus nearest-crosshairs and Target Nothing, on `T`/`Y`/`U`/`I`/`O`. The original ships all
-  eleven, three directions for each of the three classes: `E`/`Shift+E`/`Ctrl+E` for
-  enemies/objectives, `W`/`Shift+W`/`Ctrl+W` for allies, `R`/`Shift+R`/`Ctrl+R` for non-aircraft,
-  authored at `FUN_004936c0` and decoded in `docs/org/targeting.md` ("The controls the eleven ship
-  on"). Both behaviours already exist behind the seam and are exercised by the suites:
-  `TargetSelection.Previous(cls)` steps back, `TargetSelection.Nearest(cls)` returns to the head of
-  a cycle the pilot has walked into. What is missing is six `InputAction` members, six
-  `DefaultBindings` rows and six lines in `FlightController.StepTargeting`.
-  *The decision this waits on:* which six keys. The original's own scheme cannot be copied, twice
-  over: our binding model carries no modifier on a key binding (`BindingControl.Key` is a bare
-  keycode, and adding one touches capture, labels and the store), and its three base letters are
-  spent here on yaw and pitch anyway. Free in the flight context today: `J`, `K`, `M`, `Z`, `Tab`,
-  `F1`, `F2`, the digit row and the punctuation keys. Six of them is a real bite out of a scheme the
-  author flies, so the shape wants a look at the controls rather than a pick from a list.
-  ⚠ *Traps.* (a) A cycle you can only walk forward is the actual complaint to test against: with
-  eight hostiles up, reaching the previous one costs seven presses. Judge whether that bites before
-  spending six keys. (b) Per-class Nearest is the weaker half of the six: `Next` into a class you
-  are not already in already lands on that cycle's head, so the action only adds "back to the head
-  of the class I am already in". (c) The pad has nothing left. The original itself puts only two
-  targeting actions on a joystick (buttons 3 and 6), so pad defaults for these six would be an
-  invention. (d) Do not reach for a modifier without pricing it: `Shift` and `Ctrl` are throttle up
-  and down in flight here, so `Shift+T` would also change the throttle.
-  *The user's steer:* "Use the default bindings if possible. Add them all (look at
-  `OriginalScreenshots/Keybinds Targeting.png`) so that they can be bound via the controls menu.
-  Don't bind them to controller, cycle + crosshair work good with controller." So: all six actions
-  exist as `InputAction` members, appear on the Controls door and take a keyboard default; the
-  default is the original's own key where it is free here, otherwise a free key of the
-  implementer's choice (the modifier form is not available without the binding-model work above,
-  so a bare key stands in for `Shift+E`/`Ctrl+E`); no pad default for any of the six, the pad
-  keeps Next and nearest-crosshairs alone.
-  *Cross-refs:* `docs/controls.md`'s flight table, `CSVM/src/Bindings/`, `docs/org/input.md`'s
-  shipped-defaults table.
-
 - `BL-897` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **The weapon
   selectors' four keys should be the original's own `F3`..`F6`, and the pad's one direction per
   class wants a hold to step the other way.** *Evidence:* the user at the controls with the two

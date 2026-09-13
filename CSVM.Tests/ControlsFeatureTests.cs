@@ -584,6 +584,15 @@ public class ControlsFeatureTests
         Assert.Equal(BindingLabels.Unbound, BindingLabels.Row(System.Array.Empty<Binding>(), 4));
     }
 
+    /// <summary>A digit-row key prints its keycap rather than its enum name, which is what the
+    /// per-class Previous and Nearest rows stand on.</summary>
+    [Fact]
+    public void ADigitRowKeyPrintsItsKeycapRatherThanItsEnumName()
+    {
+        Assert.Equal("5", BindingLabels.Describe(Key(Godot.Key.Key5)));
+        Assert.Equal("0", BindingLabels.Describe(Key(Godot.Key.Key0)));
+    }
+
     [Fact]
     public void DiscardDropsTheCaptureAndThePendingStealAndKeepsTheStagedEdits()
     {

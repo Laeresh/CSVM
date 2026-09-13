@@ -123,6 +123,16 @@ public static class DefaultBindings
         b.Keys(InputAction.TargetNextNonAircraft, Key.U);
         b.Keys(InputAction.TargetNearest, Key.I);
         b.Keys(InputAction.TargetClear, Key.O);
+
+        // The other two directions of each class, on the digit row above the T/Y/U run. The
+        // original's Shift and Ctrl forms want a modifier no binding here carries (docs/controls.md).
+        // No pad default for any of them: the pad keeps the cycle and the crosshairs alone.
+        b.Keys(InputAction.TargetPreviousEnemy, Key.Key5);
+        b.Keys(InputAction.TargetPreviousAlly, Key.Key6);
+        b.Keys(InputAction.TargetPreviousNonAircraft, Key.Key7);
+        b.Keys(InputAction.TargetNearestEnemy, Key.Key8);
+        b.Keys(InputAction.TargetNearestAlly, Key.Key9);
+        b.Keys(InputAction.TargetNearestNonAircraft, Key.Key0);
         b.Keys(InputAction.CycleCockpitViews, Key.F8).Buttons(InputAction.CycleCockpitViews, JoyButton.DpadDown);
         b.Keys(InputAction.SelectChaseView, Key.F6).Buttons(InputAction.SelectChaseView, JoyButton.Back);
         // F7 is the original's own key for this camera ("Access Chase View", which its own decode

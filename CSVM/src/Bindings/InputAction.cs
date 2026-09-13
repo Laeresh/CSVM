@@ -102,4 +102,14 @@ public enum InputAction
     // are: the members are positional and inserting one beside the view actions would renumber
     // every action after it.
     ToggleSpyglass,
+
+    // The other two directions of each target class, which complete the original's eleven targeting
+    // actions: a Previous that steps the cycle back and a Nearest that restarts it at its head.
+    // Appended for the same reason the members above are, the enum being positional.
+    TargetPreviousEnemy,
+    TargetNearestEnemy,
+    TargetPreviousAlly,
+    TargetNearestAlly,
+    TargetPreviousNonAircraft,
+    TargetNearestNonAircraft,
 }
