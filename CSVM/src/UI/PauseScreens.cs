@@ -326,14 +326,13 @@ public static class PauseScreens
         return new[]
         {
             new BoardNote(
-                entries, list.ListAt.X, list.ListAt.Y, list.RowWrap,
-                EscapeObjectivesList.RowStop,
+                entries, list.ListAt.X, list.ListAt.Y, list.RowWrap, list.RowBox,
                 list.Spacing, EscapeObjectivesList.RowFont, BoardInk.Row,
                 list.CheckMark.Length > 0
                     ? new BoardArt(BoardArtLibrary.Rimage, list.CheckMark)
                     : null,
                 marked,
-                Italic: true),
+                Italic: true, Shrink: true),
         };
     }
 

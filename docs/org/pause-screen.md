@@ -198,12 +198,19 @@ which appends a row, is called only from the script's `Objective` opcode at `0x0
 guarded by the display row count alone (`FUN_004ad180`), so it refuses nothing either. A list
 taller than the 240x312 `parchment` bitmap would simply run down off it and keep drawing.
 
-The remake follows that: `EscapeObjectivesList.RowStop` is 0 and `UI/ComposedBoard.cs`'s
-`BoardNote` places every entry when its height is 0. What holds a mission's rows is therefore the
-artwork, not the authored 255, and the `pause-sheet` suite pins the deepest sequence against the
-parchment's own bottom edge rather than against that number. In the substitute face, at the
-authored 1:1 fit, `CM15` (`C2/M05`) is the deepest: its five objectives take twelve lines and end 8
-pixels above the parchment's bottom edge, so no mission's rows leave the art.
+**The remake keeps every row but holds them on the paper.** Stacking rows off the artwork is what
+the executable does, and on the parchment it reads as ink spilled over the torn edge, so the remake
+takes the box from the bitmap instead. The largest fully opaque rectangle in the 240x312 `parchment`
+art (alpha at least 250) runs from x 15 to x 214 and y 21 to y 283, which off its `POSITION
+[555, 6]` puts the paper's right edge at x 770 and its bottom at y 290. `EscapeObjectivesList`
+carries those two and gives the list `RowWrap` 190 (the authored `WORDWRAP` width exactly) and
+`RowBox` 240 from its `[580, 50]` corner. `BoardNote.Shrink` then asks the renderer for a fit:
+`UI/ComposedBoardView.cs`'s `Fitted` steps the face down a point at a time until every entry fits
+that box in both axes, and never cuts a row or a word. `RowFont` is 13 rather than the authored 14
+because the substitute face is wider and taller per character; at 13 all 24 campaign lists keep the
+original's own line breaks and stand inside the paper, the deepest, `CM15` (`C2/M05`), ending at
+y 286 and the widest, `C4/M05`, reaching x 770. The `pause-sheet` and `load-sheet` suites measure
+the paper off the bitmap again and hold every row of every sheet inside it.
 
 ## The flags are authored art, not a runtime reveal
 
@@ -370,19 +377,20 @@ dialog describes, so they keep the Built-in board, the same split the load scree
 inks rather than three faces, which is the same mapping every other composed board takes
 ([`campaign-board.md`](campaign-board.md)).
 
-**The parchment's rows lean, and wrap in a wider measure than the data authors.** `ObjList` is
+**The parchment's rows lean, and are set a point smaller than the data authors.** `ObjList` is
 Andy Bold 14 italic, so both screens set the rows through `UI/ComposedBoardView.cs`'s synthetic
 oblique, a 0.25-em x-shear of the board's own face; the `ObjListTitle` line above them stays
 upright, which is how the original sets it. The shear is a transform on the glyph outlines and
 leaves their advances alone, so it changes no line break. What does is the substitute face itself,
-which is wider per character than Andy Bold: inside the authored `WORDWRAP` of 190 the filmed
-mission's first objective takes two lines where the reference crop shows one. `EscapeObjectivesList`
-therefore wraps the rows at `RowWrap`, the authored 190 widened by 20, which is what the 240-wide
-parchment holds with the list inset 25 from its left edge. At that measure CM01's four rows break
-1/2/2/1, the crop's own pattern, and 15 of the sequence's 78 rows still run to three lines or more
-because the face is wider than the one the text was written for. The face size is left at the
-authored 14: a step down to 13 reaches the same break pattern at the authored measure, but only at
-the 1:1 fit, and the rows then read visibly smaller than the original's.
+which is wider per character than Andy Bold: at the authored 14 inside the authored `WORDWRAP` of
+190 the filmed mission's first objective takes two lines where the reference crop shows one. The
+measure stays at 190, since that is the paper the parchment bitmap holds under the list, and the
+face comes down to 13 instead. At 13 CM01's four rows break 1/2/2/1, the crop's own pattern, and 15
+of the sequence's 78 rows still run to three lines or more because the face is wider than the one
+the text was written for. A wider measure would buy those lines back only by writing over the
+bitmap's torn right edge. Line breaks are a font metric and move with the window scale, so a list
+that leaves the paper at some other scale is caught by `BoardNote.Shrink` rather than by these
+numbers.
 
 **One cursor serves all three devices.** The authored pointer is drawn, the glove over the sheet and
 the finger over a strip, and the OS pointer is hidden while the sheet stands; but a hover moves the

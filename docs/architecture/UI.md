@@ -187,9 +187,9 @@ What a composed campaign screen is made of, engine-free: the screen's fixed back
 page paints on it, pictures at authored pixel positions, connector strokes, text lines, button
 plaques and flowed list widgets, each in draw order. The backdrop is its own layer so a fill can
 sit over the background and stay under the page's pictures, where a selection bar goes. `BoardNote`
-is a widget's entries plus its wrap box (cut at a word where the box has no room for the rest, or
-no box at all where the widget's own list stops nowhere), its marks, and `BoardCaret` an edit box's
-cursor on the line it follows, all placed by a caller that can measure text. `PlaqueFrame` and `PlaqueInk` are a plaque's states, and a plaque whose art leaves
+is a widget's entries plus its wrap box (cut at a word where the box has no room for the rest, shrunk
+to a face the whole list fits in, or no box at all where the widget's own list stops nowhere), its
+marks, and `BoardCaret` an edit box's cursor on the line it follows, all placed by a caller that can measure text. `PlaqueFrame` and `PlaqueInk` are a plaque's states, and a plaque whose art leaves
 part of its frame empty carries its label's own baseline. `BoardArt` names a file and its frame count and the renderer resolves it; one of its four libraries is a movie, so a background film reaches the backdrop with no engine type here. `BoardCrop` takes a region of the source instead of the whole frame, which is a chart sheet's own window.
 
 ## src/UI/CampaignBoards.cs
@@ -217,9 +217,9 @@ The Godot half of the campaign boards: draws one `ComposedBoard` over the whole 
 texture cache and the only art resolution there is, mission art and screen chrome under their own
 extraction roots, and caches a miss so an absent extraction is probed once per name. A movie resolves
 to a `MovieSurface`, whose one texture the cache holds and the surface rewrites in place, so the
-picture animates with nothing invalidated; `AdvanceMovies` runs their clocks off the caller's own step
-and `AdvanceCaret` blinks a text cursor off it, each saying whether to repaint. Supplies the font
-metric a flowed `BoardNote` and a caret cannot take, and the two-line hint band a pad needs.
+picture animates with nothing invalidated; `AdvanceMovies` runs their clocks off the caller's own step and
+`AdvanceCaret` blinks a text cursor off it, each saying whether to repaint. Supplies the font metric a flowed
+`BoardNote` and a caret cannot take, `Fitted` shrinking a note's face until its list fits its box rather than losing a row, and the two-line hint band a pad needs.
 
 ## src/UI/CinemaScreen.cs
 One cinema on screen: a `CinemaPlayback`, the `ImageTexture` its pictures upload into, and the
@@ -1012,7 +1012,7 @@ arrives as one jump. The four device reads are injected delegates, so the seat i
 Built-in ignores the pointer; Original maps it into its authored space; a later pad seat has none.
 
 ## src/UI/Menu/MenuReturnDestination.cs
-Where the menu stands when it comes back, said semantically: `TopLevel`, `InstantAction`, `CabinReturn(profile)` and `DebriefReturn(profile, missionSeq, missionWon)`, whose result is carried because a lost replay leaves the profile unchanged and the closing film is gated on it. The host names the destination and the
+Where the menu stands when it comes back, said semantically: `TopLevel`, `InstantAction`, `CabinReturn(profile)` and `DebriefReturn(profile, missionSeq)`. The host names the destination and the
 active presentation maps it into its own graph at `Activate`, so no presentation-specific screen id crosses the seam. `ForLaunch(exit)` reads off a launch's own exit the screen it came from, which is
 where a flight left early lands; the exit and not the session's spec, since a spec inherits the command line's `--campaign=` and would call a Free Flight launched afterwards a campaign mission. A
 destination names where the player stands and never a store: the two campaign returns name a profile, the store it is re-read from is the presentation's own, and an Instant Action return names

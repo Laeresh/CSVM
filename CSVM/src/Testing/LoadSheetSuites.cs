@@ -33,7 +33,9 @@ internal static class LoadSheetSuites
         + "reaches the chart it belongs to past the waits 19 of the dialogs place theirs behind, "
         + "every bitmap the composition names exists in the extraction, the map is drawn at its "
         + "authored source crop rather than scaled, the parchment lists that mission's objectives "
-        + "unmarked and slanted in the widened measure the pause sheet's rows take, the memento the "
+        + "unmarked and slanted in the measure the pause sheet's rows take, with every row of every "
+        + "sheet held inside the parchment's solid paper by a face that shrinks rather than by "
+        + "losing a row, the memento the "
         + "seated profile chose sits over the shadow at their authored points while a session that "
         + "seats no profile hangs the seeded pin-up instead, every picture comes "
         + "from the dialog so no world icon is placed, an unreadable sheet "
@@ -79,6 +81,7 @@ internal static class LoadSheetSuites
         CheckEveryPinPlaced(ctx, sheets, report);
         CheckArtExists(ctx, sheets, report);
         CheckComposition(ctx, sheets, memento, report);
+        CheckRowsOnPaper(ctx, sheets, report);
         CheckSeatedMemento(ctx, sheets, memento, report);
         CheckBareSheet(ctx);
         CheckFilmedSheet(ctx, sheets, report);
@@ -174,8 +177,8 @@ internal static class LoadSheetSuites
             {
                 parchments += note.Entries.Count == ObjectiveBeats(sheet)
                     && note.X == list.ListAt.X && note.Y == list.ListAt.Y
-                    && note.Width == list.RowWrap && note.Height == EscapeObjectivesList.RowStop
-                    && note.Italic && Lists(note.Entries, sheet.Objectives) ? 1 : 0;
+                    && note.Width == list.RowWrap && note.Height == list.RowBox
+                    && note.Italic && note.Shrink && Lists(note.Entries, sheet.Objectives) ? 1 : 0;
                 marks += note.Marked == null && note.Mark == null ? 0 : 1;
             }
 
@@ -197,12 +200,87 @@ internal static class LoadSheetSuites
         ctx.Same(all, charts, $"every sheet draws its chart at its authored source crop and position");
         ctx.Same(
             all, parchments,
-            $"every parchment lists that mission's own objectives, all of them, in the widened measure");
+            $"every parchment lists that mission's own objectives, all of them, in the paper's measure");
         ctx.Same(0, marks, $"no row is marked, the screen standing before the mission it lists has run");
         ctx.Same(all, mementos, $"every memento sits at its authored point over its centred shadow");
         ctx.Same(all, propellers, $"every sheet draws the propeller cycle's first frame at its authored point");
         ctx.Same(all, bars, $"every sheet draws the unlit bar at the PROGRESS entry's own position");
         ctx.Same(0, icons, $"every picture on a sheet comes from its dialog, so no world icon is placed");
+    }
+
+    // Every row of every sheet stays on the parchment's solid paper, the rectangle measured off the
+    // bitmap's own torn-edge band. The renderer's font is the only thing that knows how a wrapped
+    // entry drew, so the sheet is fitted the way the view fits it and then measured.
+    private static void CheckRowsOnPaper(
+        TestContext ctx, List<(CampaignMission Mission, LoadSheet Sheet)> sheets, StringBuilder report)
+    {
+        if (sheets.Count == 0)
+        {
+            return;
+        }
+
+        var probe = new Godot.Control();
+        ctx.Host.AddChild(probe);
+        try
+        {
+            if (probe.GetThemeDefaultFont() is not { } font)
+            {
+                throw new SuiteSkippedException("the default theme carries no font to measure with");
+            }
+
+            SweepRowsOnPaper(ctx, sheets, font, report);
+        }
+        finally
+        {
+            ctx.Host.RemoveChild(probe);
+            probe.QueueFree();
+        }
+    }
+
+    private static void SweepRowsOnPaper(
+        TestContext ctx, List<(CampaignMission Mission, LoadSheet Sheet)> sheets, Godot.Font font,
+        StringBuilder report)
+    {
+        var fit = BoardFit.For(BoardFit.AuthoredWidth, BoardFit.AuthoredHeight);
+        var paper = PauseSheetSuites.Paper(ctx, sheets[0].Sheet.Shared.Objectives);
+        int shrunk = 0, dropped = 0;
+        float over = float.NegativeInfinity, past = float.NegativeInfinity;
+        string widest = "-", deepest = "-";
+        foreach (var (mission, sheet) in sheets)
+        {
+            var board = Compose(sheet);
+            if (board.Notes.Count == 0)
+            {
+                continue;
+            }
+
+            var note = ComposedBoardView.Fitted(fit, font, board.Notes[0]);
+            shrunk += note.Size < board.Notes[0].Size ? 1 : 0;
+            var placed = note.Flow(ComposedBoardView.Measure(fit, font, note));
+            dropped += note.Entries.Count - placed.Count;
+            var corner = PauseSheetSuites.Corner(
+                ComposedBoardView.MeasureBox(fit, font, note.Size), placed);
+            string named = $"{mission.ChapterFolder}/{mission.MissionFolder}";
+            if (corner.X - paper.End.X > over)
+            {
+                over = corner.X - paper.End.X;
+                widest = named;
+            }
+
+            if (corner.Y - paper.End.Y > past)
+            {
+                past = corner.Y - paper.End.Y;
+                deepest = named;
+            }
+        }
+
+        ctx.Same(0, dropped, $"every objective the load screen lists is drawn ({dropped} lost)");
+        ctx.Check(
+            over <= 0f && past <= 0f,
+            $"and no row leaves the paper ({widest} widest, {-over:0.0} px in; {deepest} deepest, {-past:0.0} px up)");
+        report.AppendLine(
+            $"paper: ends at {paper.End.X:0.0}/{paper.End.Y:0.0}, {shrunk} sheets shrunk, "
+            + $"widest {widest} at {paper.End.X + over:0.0}, deepest {deepest} at {paper.End.Y + past:0.0}");
     }
 
     // The picture is the seated profile's own, read back off a store the way the launcher reads

@@ -273,9 +273,9 @@ public static class LoadScreens
         return new[]
         {
             new BoardNote(
-                entries, list.ListAt.X, list.ListAt.Y, list.RowWrap,
-                EscapeObjectivesList.RowStop,
-                list.Spacing, EscapeObjectivesList.RowFont, BoardInk.Row, Italic: true),
+                entries, list.ListAt.X, list.ListAt.Y, list.RowWrap, list.RowBox,
+                list.Spacing, EscapeObjectivesList.RowFont, BoardInk.Row,
+                Italic: true, Shrink: true),
         };
     }
 

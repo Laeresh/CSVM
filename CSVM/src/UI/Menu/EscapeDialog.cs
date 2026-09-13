@@ -82,25 +82,30 @@ public sealed record EscapeObjectivesList(
     /// this one shared widget cannot come to write it in two sizes.</summary>
     public const float TitleFont = 17f;
 
-    /// <summary>A row's face size, <c>ObjList</c>, which <c>fonts.zrd</c> gives as Andy Bold at
-    /// 14.</summary>
-    public const float RowFont = 14f;
+    /// <summary>A row's face size in authored pixels. <c>fonts.zrd</c> gives <c>ObjList</c> as Andy
+    /// Bold at 14, and the substitute face is wider and taller per character, so at 14 it breaks
+    /// rows the original keeps whole and stacks the deepest lists off the paper. At 13 every
+    /// campaign list keeps the original's own line breaks inside the parchment's paper.</summary>
+    public const float RowFont = 13f;
 
-    /// <summary>The height the stacked rows stop at: none. The authored <c>WORDWRAP</c> height is
-    /// the box one row wraps in, not the list's, and the executable's list walks its whole row
-    /// vector, so a list taller than the parchment runs on rather than losing its last rows.
+    // Where the parchment's solid paper ends, in authored pixels: the largest fully opaque
+    // rectangle inside the 240x312 art runs to 25 px short of its right edge and 28 px short of its
+    // bottom, which off its POSITION [555, 6] is x 770 and y 290. Measured off the extracted
+    // bitmap, and the pause-sheet suite measures it again against these two.
+    private const float PaperRight = 770f;
+    private const float PaperBottom = 290f;
+
+    /// <summary>The measure a row wraps in: the paper's own right edge from the list's left, which
+    /// is the authored <c>WORDWRAP</c> width of 190 exactly. A row wrapped wider reaches into the
+    /// bitmap's torn edge, and the substitute face buys its lost characters back by shrinking
+    /// rather than by running wide. Decode: docs/org/pause-screen.md.</summary>
+    public float RowWrap => PaperRight - ListAt.X;
+
+    /// <summary>The room the stacked rows have: the paper's own bottom edge from the list's top.
+    /// The authored <c>WORDWRAP</c> height is the box one row wraps in rather than the list's, and
+    /// the executable's list stops at no height at all, so what holds the rows is the artwork.
     /// Decode: docs/org/pause-screen.md.</summary>
-    public const float RowStop = 0f;
-
-    // How much wider than the authored WORDWRAP a row is allowed to run, in authored pixels.
-    private const float RowWrapGain = 20f;
-
-    /// <summary>The measure a row wraps in: the authored <c>WORDWRAP</c> of 190 widened to the room
-    /// the 240-wide parchment still holds. Andy Bold is narrower per character than the face the
-    /// extraction leaves us, so rows the original breaks once break twice inside the authored box,
-    /// and the wider measure buys those characters back without touching the face size.
-    /// Decode: docs/org/pause-screen.md.</summary>
-    public float RowWrap => WrapWidth + RowWrapGain;
+    public float RowBox => PaperBottom - ListAt.Y;
 }
 
 /// <summary>One button strip: the three bitmaps its three states draw and the label centred over

@@ -41,13 +41,23 @@ internal static class PauseSheetSuites
 
     // How many objectives across the whole sequence are composed away rather than drawn. The
     // executable's list walks its whole row vector and stops at no height, so every row reaches
-    // both screens; nothing may raise this.
+    // both screens, and a list too deep for the paper shrinks its face instead of losing a row.
     private const int OverrunRows = 0;
 
-    // How far the deepest mission's last row reaches past the parchment art's own bottom edge, in
-    // authored pixels, negative while the rows stay on the art. That edge is the real room, since
-    // the authored WORDWRAP height is the box one row wraps in rather than the list's.
-    private const float RowsPastParchment = -8f;
+    // Where the parchment's solid paper ends in authored pixels, off the art's own position. No
+    // row may cross either edge: the bitmap's torn band is not paper, and words drawn over it read
+    // as ink spilled off the sheet. The sweep measures the band again rather than trusting these.
+    private const float PaperRight = 770f;
+    private const float PaperBottom = 290f;
+
+    // How many points over its own face the deepest list is put at to exercise the fit. Every
+    // campaign list fits the paper at the size the screen writes it in, so nothing on the disc
+    // drives the shrink, and a rule no data reaches is a rule nothing checks.
+    private const float Swollen = 6f;
+
+    // The alpha a pixel counts as paper at. The torn edge fades out over a few pixels rather than
+    // ending, so the solid rectangle is read at very nearly opaque rather than at any coverage.
+    private const float SolidAlpha = 250f / 255f;
 
     // How many lines each of the filmed mission's four objectives takes on the parchment, read off
     // the reference crop of the original's own sheet. The face is ours, so the count is what a row
@@ -120,8 +130,9 @@ internal static class PauseSheetSuites
         + "sheet matches the reference stills flag for flag, every parchment sets its rows in the "
         + "slanted face the original's ObjList authors and breaks C3/M01's four where the reference "
         + "crop breaks them, every objective is drawn rather than composed away at a height the "
-        + "original's own list stops at nowhere, with C2/M05's five, the deepest in the sequence, "
-        + "still ending above the parchment art's bottom edge, and a pointer over a strip moves the "
+        + "original's own list stops at nowhere, with the whole sequence's rows held inside the "
+        + "parchment's solid paper (measured off the bitmap's own torn-edge band) by a face that "
+        + "shrinks where a list would leave it, and a pointer over a strip moves the "
         + "shared cursor onto it and fires it on the release while a press let go elsewhere fires "
         + "nothing")]
     internal static void PauseSheetScreen(TestContext ctx)
@@ -228,6 +239,46 @@ internal static class PauseSheetSuites
 
         ctx.WriteArtifact($"test-pause-sheet-ia.txt", report.ToString());
         ctx.Note($"composed {sheets.Count} Instant Action pause sheets and drove one over a live pause state");
+    }
+
+    // The parchment's solid paper in authored pixels, measured off the extraction rather than
+    // assumed: the largest fully opaque rectangle in the art, which is the paper inside the torn
+    // edges, at the point the sheet hangs the art. An empty rectangle where the bitmap is missing.
+    internal static Godot.Rect2 Paper(TestContext ctx, EscapeObjectivesList? list)
+    {
+        if (list == null)
+        {
+            return default;
+        }
+
+        string path = Path.Combine(
+            ctx.DataRoot, "extracted", "rimage", list.Background.ToLowerInvariant() + ".png");
+        if (!File.Exists(path) || Godot.Image.LoadFromFile(path) is not { } art || art.IsEmpty())
+        {
+            return default;
+        }
+
+        var solid = Solid(art);
+        return new Godot.Rect2(
+            list.BackgroundAt.X + solid.Position.X, list.BackgroundAt.Y + solid.Position.Y,
+            solid.Size.X, solid.Size.Y);
+    }
+
+    // The far corner of a flowed block in authored pixels: the widest line's own right edge and the
+    // last line's bottom. A word too long to break pushes a line's box past the measure it wrapped
+    // to, so the drawn width is asked for rather than taken from the note.
+    internal static Godot.Vector2 Corner(
+        System.Func<string, float, Godot.Vector2> box, IReadOnlyList<BoardLine> placed)
+    {
+        var corner = Godot.Vector2.Zero;
+        foreach (var line in placed)
+        {
+            var drawn = box(line.Text, line.Width);
+            corner = new Godot.Vector2(
+                Godot.Mathf.Max(corner.X, line.X + drawn.X), Godot.Mathf.Max(corner.Y, line.Y + drawn.Y));
+        }
+
+        return corner;
     }
 
     // The lookup falls back on the file's own default dialog, which resolves for any key at all, so
@@ -1017,9 +1068,11 @@ internal static class PauseSheetSuites
         StringBuilder report)
     {
         var fit = BoardFit.For(BoardFit.AuthoredWidth, BoardFit.AuthoredHeight);
-        int slanted = 0, tall = 0, rows = 0, dropped = 0;
-        float edge = ParchmentBottom(ctx, sheets[0].Sheet), past = float.NegativeInfinity;
-        string deepest = "-";
+        var paper = Paper(ctx, sheets[0].Sheet.Shared.Objectives);
+        int slanted = 0, tall = 0, rows = 0, dropped = 0, shrunk = 0;
+        float past = float.NegativeInfinity, over = float.NegativeInfinity;
+        string deepest = "-", widest = "-";
+        BoardNote? deep = null;
         var filmed = System.Array.Empty<int>();
         var numbered = System.Array.Empty<int>();
         foreach (var (mission, sheet) in sheets)
@@ -1030,8 +1083,10 @@ internal static class PauseSheetSuites
                 continue;
             }
 
-            var note = board.Notes[0];
+            var written = board.Notes[0];
+            var note = ComposedBoardView.Fitted(fit, font, written);
             slanted += note.Italic ? 1 : 0;
+            shrunk += note.Size < written.Size ? 1 : 0;
             var counts = RowLines(fit, font, note);
             rows += counts.Length;
             var height = ComposedBoardView.Measure(fit, font, note);
@@ -1043,11 +1098,19 @@ internal static class PauseSheetSuites
                 tall += lines > 2 ? 1 : 0;
             }
 
-            float over = Bottom(placed, height, note.Width) - edge;
-            if (over > past)
+            var corner = Corner(ComposedBoardView.MeasureBox(fit, font, note.Size), placed);
+            string named = $"{mission.ChapterFolder}/{mission.MissionFolder}";
+            if (corner.Y - paper.End.Y > past)
             {
-                past = over;
-                deepest = $"{mission.ChapterFolder}/{mission.MissionFolder}";
+                past = corner.Y - paper.End.Y;
+                deepest = named;
+                deep = written;
+            }
+
+            if (corner.X - paper.End.X > over)
+            {
+                over = corner.X - paper.End.X;
+                widest = named;
             }
 
             if (Named(mission, FilmedChapter, FilmedMission))
@@ -1060,8 +1123,8 @@ internal static class PauseSheetSuites
             }
 
             report.AppendLine(
-                $"{mission.ChapterFolder}/{mission.MissionFolder} rows {string.Join("/", counts)} "
-                + $"dropped {lost} bottom {Bottom(placed, height, note.Width):0.0}");
+                $"{named} rows {string.Join("/", counts)} at {note.Size:0} pt, dropped {lost}, "
+                + $"corner {corner.X:0.0}/{corner.Y:0.0}");
         }
 
         ctx.Same(sheets.Count, slanted, $"every campaign parchment sets its rows in the slanted face");
@@ -1077,35 +1140,73 @@ internal static class PauseSheetSuites
             OverrunRows, dropped,
             $"every objective in the sequence is drawn rather than composed away ({dropped} lost)");
         ctx.Check(
-            past <= RowsPastParchment,
-            $"and the deepest rows, {deepest}'s, end {-past:0.0} px above the parchment's bottom edge");
+            paper.End.X == PaperRight && paper.End.Y == PaperBottom,
+            $"the bitmap's own paper ends at {paper.End.X:0}/{paper.End.Y:0}, where the rows are held");
+        ctx.Check(
+            over <= 0f,
+            $"no row reaches the torn right edge, {widest}'s widest stopping {-over:0.0} px inside it");
+        ctx.Check(
+            past <= 0f,
+            $"and none the torn bottom, {deepest}'s last ending {-past:0.0} px above it");
+        CheckSwollenListShrinks(ctx, fit, font, deep, paper, report);
         report.AppendLine(
-            $"wrap: {rows} rows, {tall} of them on three lines or more, {dropped} dropped; "
-            + $"parchment ends at {edge:0.0}, deepest rows {deepest} at {edge + past:0.0}");
+            $"wrap: {rows} rows, {tall} of them on three lines or more, {dropped} dropped, "
+            + $"{shrunk} sheets shrunk; paper ends at {paper.End.X:0.0}/{paper.End.Y:0.0}, "
+            + $"deepest {deepest}, widest {widest}");
     }
 
-    // The parchment art's own bottom edge in authored pixels, measured from the extraction rather
-    // than assumed. That edge is the room the rows really have: the executable's list stops at no
-    // height, so what holds a mission's rows is the artwork under them.
-    private static float ParchmentBottom(TestContext ctx, PauseSheet sheet)
+    // The largest rectangle of paper pixels in a bitmap, by the histogram walk: each row carries
+    // how far the solid run above every column reaches, and the widest bar-chart rectangle standing
+    // on that row is a candidate. A profile of per-row runs cannot do this, since a few rows of the
+    // torn edge are almost all fringe and would shrink the answer to a sliver.
+    private static Godot.Rect2I Solid(Godot.Image art)
     {
-        if (sheet.Shared.Objectives is not { } list)
+        int wide = art.GetWidth(), high = art.GetHeight();
+        var run = new int[wide];
+        var best = default(Godot.Rect2I);
+        for (int y = 0; y < high; y++)
         {
-            return 0f;
+            for (int x = 0; x < wide; x++)
+            {
+                run[x] = art.GetPixel(x, y).A >= SolidAlpha ? run[x] + 1 : 0;
+            }
+
+            for (int x = 0; x < wide; x++)
+            {
+                int deep = run[x];
+                for (int span = x; span < wide && deep > 0; span++)
+                {
+                    deep = Godot.Mathf.Min(deep, run[span]);
+                    if (deep * (span - x + 1) > best.Size.X * best.Size.Y)
+                    {
+                        best = new Godot.Rect2I(x, y - deep + 1, span - x + 1, deep);
+                    }
+                }
+            }
         }
 
-        string path = Path.Combine(
-            ctx.DataRoot, "extracted", "rimage", list.Background.ToLowerInvariant() + ".png");
-        return File.Exists(path) && Godot.Image.LoadFromFile(path) is { } art && !art.IsEmpty()
-            ? list.BackgroundAt.Y + art.GetHeight()
-            : 0f;
+        return best;
     }
 
-    // Where the flowed rows end, in authored pixels: the last line's own top plus how tall it drew.
-    private static float Bottom(
-        IReadOnlyList<BoardLine> placed, System.Func<string, float, float> height, float width) =>
-        placed.Count == 0 ? 0f
-            : placed[placed.Count - 1].Y + height(placed[placed.Count - 1].Text, width);
+    // The deepest list in a face too large for the paper, which the fit has to bring back onto it
+    // without losing a row. This is the shrink's only exercise: every campaign list as written fits.
+    private static void CheckSwollenListShrinks(
+        TestContext ctx, BoardFit fit, Godot.Font font, BoardNote? deep, Godot.Rect2 paper,
+        StringBuilder report)
+    {
+        if (deep == null)
+        {
+            return;
+        }
+
+        var swollen = ComposedBoardView.Fitted(fit, font, deep with { Size = deep.Size + Swollen });
+        var placed = swollen.Flow(ComposedBoardView.Measure(fit, font, swollen));
+        var corner = Corner(ComposedBoardView.MeasureBox(fit, font, swollen.Size), placed);
+        ctx.Check(
+            placed.Count == deep.Entries.Count && corner.X <= paper.End.X && corner.Y <= paper.End.Y,
+            $"a list {Swollen:0} pt too large is fitted onto the paper at {swollen.Size:0} pt, {placed.Count} rows kept");
+        report.AppendLine($"fit: the deepest list at {deep.Size + Swollen:0} pt comes back at {swollen.Size:0} pt");
+    }
 
     // One note's entries as line counts: a short word measured in the same box is one line's worth,
     // so an entry's own measured height divided by it is how many lines it wrapped to.
