@@ -6,7 +6,7 @@ namespace CSVM.Utils;
 /// it about once a second and holds the WORST step of that second in it, so a window's reading
 /// routinely exceeds the worst frame in the same window. This measures the tick directly instead,
 /// with two bracket nodes at the ends of the physics priority order, and counts the ticks the
-/// engine managed. Rules and the misreading it replaces: docs/verification.md PERF-21.
+/// engine managed. Rules and the misreading it replaces: docs/verification.md PERF-1.
 /// </summary>
 public static class PhysicsTickCost
 {

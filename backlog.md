@@ -817,7 +817,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   current build no window's worst tick reaches 133 ms, so nothing exhausts the cap. **Do not chase
   the sustained step** either: the ~39 ms step and half-speed sim the entry once claimed were a
   misreading of Godot's `physics_ms` monitor, which holds the WORST tick of the last wall second
-  (`docs/verification.md` PERF-21). The recurring 18 to 25 ms band that dominated every earlier
+  (`docs/verification.md` PERF-1). The recurring 18 to 25 ms band that dominated every earlier
   reading was the ungated once-a-sim-second telemetry print, one write per live aircraft in the same
   tick (PERF-23); it is gated and gone, so do not re-derive it. Compare durations in sim seconds,
   never wall seconds; state which mode a re-measurement flew (the numbers here are `--no-det` with
@@ -825,7 +825,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   raise `max_physics_steps_per_frame`, which deepens the catch-up spiral rather than recovering
   lost steps. The per-sim-step query objects those ray casts build are now reused rather than made
   fresh (`GodotWorldQuery`), so a re-measurement of the tick meets a different allocator than C22's.
-  *Cross-refs:* `PLAN-M5-polish-6` C22, `docs/verification.md` PERF-21, PERF-23 and PERF-27.
+  *Cross-refs:* `PLAN-M5-polish-6` C22, `docs/verification.md` PERF-1, PERF-20 and PERF-23.
 
 - `BL-849` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **`Collider.Summary` renders through the current culture, so the plane collider census line reads `3,8×3,0×5,6 m` on a German machine.** *Evidence:* the census lines in the three session files now log invariant through `Log`, but this one interpolates a string `Collider.Summary` pre-formatted with the current culture before the log sees it, so the dimensions carry a comma decimal separator on such a machine. Any other pre-built summary string logged the same way has the same fault. *Fix shape:* format the summary with `CultureInfo.InvariantCulture`, and grep the tree for other `ToString()` or `$"{x:0.0}"` summaries built outside a `Log` call. *Cross-refs:* PLAN-code-review-orch A3 and A6.
 
@@ -955,7 +955,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   disc**, where ours runs to 3,500 m and reads a near-saturated 222.7 at the authored 240 against
   the original's 208.88 / 209.16 (`t124`/`t59`). Ceiling check: a card cannot exceed
   `239 × 240/255 = 224.9`, so 209 is 32 % of the background showing through, a coverage number
-  (`docs/verification.md` SHOT-34).
+  (`docs/org/cloudCards.md`).
   *The lighting-flag clause, unchanged and still owed a look.* `lighting: true` on a `Facade` card
   admits `AMBIENT + DIFFUSE × max(N·L, 0)` per vertex on the card's own three authored normals
   through the billboard basis (`docs/org/vertexLighting.md`), not a flat multiply. It does not
@@ -2077,7 +2077,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   gates on `IsHumanPiloted` alone, so all four splitscreen pilots carry it, and no doc records the
   difference. *Fix shape:* decide whether a splitscreen session shields every human pilot (a
   remake-only rule, then written on the shield's docs page) or none; either is one condition.
-  *Cross-refs:* `BL-826`'s closing commit, `docs/verification.md` SRC-11, `BL-389` (the
+  *Cross-refs:* `BL-826`'s closing commit, `docs/verification.md` SRC-7, `BL-389` (the
   splitscreen weapon mix, the same family).
 - `BL-838` `[Bug]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The ground shadow's forward
   skew, threefold growth and fade exemption key on any human-piloted aeroplane, so a four-pilot
@@ -2237,7 +2237,7 @@ usual.
   to hold the roll; the decode behind `BL-558` names four writers of the original's `+0xBA` flag,
   all inside the damage routine `FUN_004b9bc0`. *Fix shape:* set the flag only from the damage
   arm's entry, and add an `ai-modes` phase that orders an Evade without damage and reads the roll
-  still available. *Cross-refs:* `BL-558`'s closing commit, `docs/org/aiControlLaw.md` (SRC-13).
+  still available. *Cross-refs:* `BL-558`'s closing commit, `docs/org/aiControlLaw.md` (SRC-9).
 - `BL-839` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **A campaign launch whose profile
   failed to load binds no target table, because the guard that keeps a director-free world
   flight off the mode table also excludes it.** *Evidence:* `CSVM/src/Session/GameSession.cs:3013`
@@ -2463,7 +2463,7 @@ usual.
   and engine correlation is what the authored data produces rather than a defect. Two of this
   entry's own readings are unsafe on any build: an absent `[anim] damage:` line is not evidence a
   bay survived, because a bay killed by another definition's call logs none
-  (`docs/verification.md` DIAG-25), and a ladder completing with no hatch shot is authored
+  (only `AnimRuntime.DamageAt` writes that line), and a ladder completing with no hatch shot is authored
   behaviour once the hull dies, since `all_gmzep_gasbags` demolishes every section. What is left to
   answer is the run's own shape: the Gemini alive at the end with five engines gone and the ladder
   complete. Do not tighten the objective count; `gemini-gasbag-bays` asserts the authored six.

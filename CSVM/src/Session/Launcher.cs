@@ -2063,7 +2063,7 @@ public partial class Launcher : Node3D
     // single hitch doesn't read as a regression, A/B two builds by comparing the same line.
     // `script_ms`/`physics_ms` are Godot's two worst-of-the-last-second monitors, kept only
     // because older records hold them. The measured terms are `proc_ms`, `phys_tick_ms` and
-    // `ai_ms` (verification PERF-1, PERF-21). `max_ms`/`p95_ms` answer "how bad did it get"; no
+    // `ai_ms` (verification PERF-1). `max_ms`/`p95_ms` answer "how bad did it get"; no
     // `p99_ms` since a 60-sample window's nearest-rank p99 is just `max_ms` (Perf95Index).
     private void ReportPerf(double delta, in FrameCounters counters)
     {
@@ -2098,7 +2098,7 @@ public partial class Launcher : Node3D
         double renderCpuMs = _perfCpuRender / n;
         double gpuMs = _perfGpu / n;
         double physicsMs = _perfPhysics / n;
-        // ⚠ These are the physics terms to read, not physics_ms above (verification PERF-21). One
+        // ⚠ These are the physics terms to read, not physics_ms above (verification PERF-1). One
         // tick is one 1/60 sim step on a realtime clock, so phys_hz is sim seconds per wall second
         // and a step over its 16.7 ms budget shows here as a rate under 60.
         var (physTickMs, physTickMaxMs, physTicks) = PhysicsTickCost.Take();

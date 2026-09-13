@@ -598,7 +598,7 @@ public static class Probes
     /// <summary>Every enabled collision shape under a subtree. <c>SetSubtreeActive</c> toggles each
     /// shape's <c>Disabled</c> as it swaps healthy→destroyed, and the swap can resolve to geometry
     /// outside the small anim anchor, pass <see cref="WorldRootOf"/> and compare the two sets
-    /// around one kill. ⚠ Report OFF and ON separately, never their signed sum: see INSTR-15 in
+    /// around one kill. ⚠ Report OFF and ON separately, never their signed sum: see WORLD-10 in
     /// docs/verification.md.</summary>
     public static HashSet<CollisionShape3D> EnabledColliders(Node root)
     {
@@ -840,7 +840,7 @@ public static class Probes
                     swap = $"swap[healthy {hVis}/{hAll} shown, destroyed {dVis}/{dAll} shown]; ";
                 }
                 // Colliders switched OFF (healthy collision that blocked flight) vs ON (wreck/debris
-                // brought solid). ⚠ Report both, per INSTR-15; a net count hides the door removal.
+                // brought solid). ⚠ Report both, per WORLD-10; a net count hides the door removal.
                 var colAfter = EnabledColliders(WorldRootOf(target.Anchor));
                 row.CollidersOff = colBefore.Count(cs => !colAfter.Contains(cs));
                 row.CollidersOn = colAfter.Count(cs => !colBefore.Contains(cs));

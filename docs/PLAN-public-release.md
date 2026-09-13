@@ -331,7 +331,7 @@ clean, 18 goldens hash-identical, exit 0. The one thing a headless run
 cannot sign off is the sortie itself, so the two flights this item's Verify names are `PT-119`, and
 `CAP-55` still owes the original's own answer to (b) and (d) there. `BL-695`'s and `BL-698`'s traps
 are corrected in `backlog.md`: both were waiting on this open question, and `BL-695`'s central
-evidence needs re-reading against `docs/verification.md`'s DIAG-25, since a bay killed by another
+evidence needs re-reading, since a bay killed by another
 definition's call writes no `[anim] damage:` line at all.
 
 # Wave B, What the package says about itself

@@ -584,7 +584,7 @@ staged effect and crash anchor set so placeless on-call defs play at the camera.
 draw each live transform-motion target interpolated between its last two sim poses, and sim poses
 are restored before any step runs, so render smoothing never leaks into event held-pose seeding and
 fixed stepping stays byte-identical. Puffer particle spread is unseeded, so same-step shots differ
-in particle noise alone (DIAG-21). The picker toggle is bound away from the camera's target key.
+in particle noise alone. The picker toggle is bound away from the camera's target key.
 
 ## src/UI/AnimTimeline.cs
 The anim lab's authored-against-fired timeline, a custom-drawn control: authored blocks above, fired
