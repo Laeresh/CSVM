@@ -18,7 +18,7 @@ public sealed record OriginalDialog(
 /// <summary>
 /// The standing dialog, the shell's own partial rather than any screen family's: the original's
 /// <c>messagebox.script</c> over whatever screen is showing, raised by the campaign's screens, by
-/// the hangar module through <see cref="IOriginalHangarHost.RaiseDialog"/> and by the credits
+/// the hangar module through <see cref="IOriginalScreenHost.RaiseDialog"/> and by the credits
 /// screen's About box in its own widget set. The shell owns it because the shell answers for it:
 /// while a box stands its answers are the only rows, <c>Compose</c> draws it over the screen's own
 /// picture, an Activate on one of its rows is the answer and Back takes the declining one. The
@@ -72,7 +72,7 @@ public sealed partial class OriginalShell
 
     private string DialogWord(int id, string fallback)
     {
-        var strings = _campaign?.Strings ?? _hangarModule?.Strings;
+        var strings = _campaign?.Strings ?? Hangar?.Strings;
         string word = strings?.Text(id, fallback) ?? fallback;
         return word.Length > 0 ? word : fallback;
     }

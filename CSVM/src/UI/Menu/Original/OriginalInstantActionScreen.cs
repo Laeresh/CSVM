@@ -23,7 +23,7 @@ public sealed record OriginalInstantActionInks(
 /// per-seat picker's own door lands there over that seat's fit. ACCEPT LOADOUT keeps the picks,
 /// CANCEL LOADOUT and Back restore. Readings: docs/org/menu-inventory.md, docs/formats/instant-action.md.
 /// </summary>
-public sealed class OriginalInstantActionScreen
+public sealed class OriginalInstantActionScreen : IOriginalScreenModule
 {
     /// <summary>The layout section the screen is composed from.</summary>
     public const string InstantActionSection = "InstantAction";
@@ -139,7 +139,7 @@ public sealed class OriginalInstantActionScreen
     private readonly CustomPlaneStore? _planes;
     private readonly MenuLayout _layout;
     private readonly Func<string, (int Width, int Height)?> _measure;
-    private readonly IOriginalHangarHost _host;
+    private readonly IOriginalScreenHost _host;
     private readonly Func<StockLoadouts?>? _stock;
     private readonly string?[] _loadoutBefore = new string?[LoadoutChoice.MaxGunSlot + LoadoutChoice.MaxPylon];
     private IReadOnlyList<MenuAircraft> _iaPilotRoster = OriginalRosters.Roster(Array.Empty<CustomPlaneDef>());
@@ -169,7 +169,7 @@ public sealed class OriginalInstantActionScreen
     /// weapon table the loadout screen's fields stand over.</summary>
     public OriginalInstantActionScreen(
         InstantActionFeature instantAction, PlayerSetupFeature setup, CustomPlaneStore? planes, MenuLayout layout,
-        Func<string, (int Width, int Height)?> measure, IOriginalHangarHost host,
+        Func<string, (int Width, int Height)?> measure, IOriginalScreenHost host,
         Func<StockLoadouts?>? stock = null)
     {
         _instantAction = instantAction ?? throw new ArgumentNullException(nameof(instantAction));
@@ -459,10 +459,13 @@ public sealed class OriginalInstantActionScreen
         return false;
     }
 
-    /// <summary>The showing screen as drawn.</summary>
+    /// <summary>The showing screen as drawn. Neither of these two pages writes a note, the prose
+    /// layer being the hangar's description box alone, so <paramref name="notes"/> stands unused;
+    /// it is here because one signature serves every module's dispatch.</summary>
     public void Compose(
         IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> backdrop, List<BoardPicture> pictures,
-        List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPanel> overlays)
+        List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardNote> notes,
+        List<BoardPanel> overlays)
     {
         if (_host.Screen == OriginalScreen.InstantActionLoadout)
         {
@@ -521,18 +524,6 @@ public sealed class OriginalInstantActionScreen
 
     private static string Capitalise(string s) =>
         s.Length == 0 ? s : char.ToUpperInvariant(s[0]) + s[1..];
-
-    // A slot number a keyed widget carries after a shared prefix, or null for a key from another
-    // family or a plain key with none. The ammunition and pylon fields are numbered this way.
-    private static int? Indexed(string key, string prefix)
-    {
-        if (!key.StartsWith(prefix, StringComparison.Ordinal))
-        {
-            return null;
-        }
-
-        return int.TryParse(key.AsSpan(prefix.Length), NumberStyles.Integer, CultureInfo.InvariantCulture, out int i) ? i : null;
-    }
 
     // A dropdown's box: its authored corner and width, one item high.
     private static (float X, float Y, float Width, float Height) DropBox(MenuLayoutWidget widget) =>
@@ -1441,7 +1432,7 @@ public sealed class OriginalInstantActionScreen
             return null;
         }
 
-        if (Indexed(key, LoadoutAmmoPrefix) is { } group && GunFor(def, group + 1) is { } gun)
+        if (OriginalWidgets.Indexed(key, LoadoutAmmoPrefix) is { } group && GunFor(def, group + 1) is { } gun)
         {
             var options = _loadoutOptions.GunAmmo;
             int slot = group + 1;
@@ -1449,7 +1440,7 @@ public sealed class OriginalInstantActionScreen
                 i => fit.SetGunAmmo(slot, options[i].Id));
         }
 
-        if (Indexed(key, LoadoutRocketPrefix) is { } cell && PylonEntry(def, cell + 1) is >= 0 and var entry)
+        if (OriginalWidgets.Indexed(key, LoadoutRocketPrefix) is { } cell && PylonEntry(def, cell + 1) is >= 0 and var entry)
         {
             var options = _loadoutOptions.PylonOrdnance;
             int pylon = cell + 1;
@@ -1560,38 +1551,13 @@ public sealed class OriginalInstantActionScreen
         }
     }
 
-    // Where a section's pane lands on the board, which for art smaller than the board is centred
-    // rather than left at the corner it is authored at. The messagebox and the hangar's name screen
-    // place theirs the same way, their scripts setting the screen's own location to
-    // ((getresx() - its width) / 2, (getresy() - its height) / 2). A pane that fills the board
-    // centres onto its own corner, and one authored away from the corner keeps it.
-    private (float X, float Y) PaneOrigin(MenuLayoutScreen screen, string key)
-    {
-        if (screen.Widget(key) is not { Art.Count: > 0 } pane)
-        {
-            return (0f, 0f);
-        }
+    // The shared pane rule (OriginalWidgets) over this module's own measurer, bound here so no call
+    // site has to carry it.
+    private (float X, float Y) PaneOrigin(MenuLayoutScreen screen, string key) =>
+        OriginalWidgets.PaneOrigin(screen, key, _measure);
 
-        float x = pane.Int("X");
-        float y = pane.Int("Y");
-        if (x != 0f || y != 0f || _measure(pane.Art[0]) is not { } size)
-        {
-            return (x, y);
-        }
-
-        return (
-            Math.Max(0f, (float)Math.Floor((BoardFit.AuthoredWidth - size.Width) / 2f)),
-            Math.Max(0f, (float)Math.Floor((BoardFit.AuthoredHeight - size.Height) / 2f)));
-    }
-
-    private void AddPane(MenuLayoutScreen screen, List<BoardPicture> pictures, string key)
-    {
-        if (screen.Widget(key) is { Art.Count: > 0 } pane)
-        {
-            var at = PaneOrigin(screen, key);
-            pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, pane.Art[0], Math.Max(1, pane.Frames)), at.X, at.Y));
-        }
-    }
+    private void AddPane(MenuLayoutScreen screen, List<BoardPicture> pictures, string key) =>
+        OriginalWidgets.AddPane(screen, pictures, key, _measure);
 
     // The section's text rows at their authored places: the title and the panel headings as
     // authored, the plane-info row naming the fitted aircraft, and each gun caption as the slot's
@@ -1617,7 +1583,7 @@ public sealed class OriginalInstantActionScreen
             {
                 text = _loadoutName;
             }
-            else if (Indexed(widget.Key, "OL_T_GunName") is { } group)
+            else if (OriginalWidgets.Indexed(widget.Key, "OL_T_GunName") is { } group)
             {
                 var gun = GunFor(_loadoutDef, group + 1);
                 text = gun != null
@@ -1653,7 +1619,7 @@ public sealed class OriginalInstantActionScreen
         int title;
         int body;
         IReadOnlyList<LoadoutOption> options;
-        if (Indexed(key, LoadoutAmmoPrefix) is { } group && GunFor(def, group + 1) is { } gun)
+        if (OriginalWidgets.Indexed(key, LoadoutAmmoPrefix) is { } group && GunFor(def, group + 1) is { } gun)
         {
             pane = "OL_S_AMMODESC";
             options = _loadoutOptions.GunAmmo;
@@ -1661,7 +1627,7 @@ public sealed class OriginalInstantActionScreen
             title = AmmoTitleLabel;
             body = AmmoBodyLabel;
         }
-        else if (Indexed(key, LoadoutRocketPrefix) is { } cell && PylonEntry(def, cell + 1) is >= 0 and var entry)
+        else if (OriginalWidgets.Indexed(key, LoadoutRocketPrefix) is { } cell && PylonEntry(def, cell + 1) is >= 0 and var entry)
         {
             pane = "OL_S_ROCKETDESC";
             options = _loadoutOptions.PylonOrdnance;

@@ -175,7 +175,7 @@ public sealed partial class OriginalShell
     // a bold run nothing strips centrally, so the row is cleaned here.
     private string AboutMessage()
     {
-        var strings = _campaign?.Strings ?? _hangarModule?.Strings;
+        var strings = _campaign?.Strings ?? Hangar?.Strings;
         string text = strings?.Format(AboutStringId, AboutProductId) ?? string.Empty;
         return text.Replace("<B>", string.Empty).Replace("<b>", string.Empty);
     }

@@ -7,83 +7,6 @@ using CSVM.Mech3;
 
 namespace CSVM.UI.Menu.Original;
 
-/// <summary>What a standalone screen module reads off the shell and calls back into it for: the
-/// focus, pointer and dialog state tied to whatever screen is showing, the shared dialog-raising
-/// and focus-setting seams, the shell-wide chrome a module draws over (the seat strip, the plate
-/// pages' row rule), and the points where one family's flow crosses into another (the door a build
-/// opens on, a return that resumes one of them, the hangar the Build button opens and the per-seat
-/// walk FLY MISSION begins). The hangar and Instant Action modules both stand on it.</summary>
-public interface IOriginalHangarHost
-{
-    /// <summary>The screen showing.</summary>
-    OriginalScreen Screen { get; }
-
-    /// <summary>Whether a dialog stands over the screen.</summary>
-    bool DialogOpen { get; }
-
-    /// <summary>The focused row's key, or "".</summary>
-    string FocusedKey { get; }
-
-    /// <summary>The showing screen's focus index, shared with every other family.</summary>
-    int FocusedRow { get; set; }
-
-    /// <summary>The row index a pointer press is holding, or -1.</summary>
-    int PressedRow { get; }
-
-    /// <summary>The row index the pointer stands on, or -1.</summary>
-    int HoveredRow { get; }
-
-    /// <summary>The pointer's last authored position, or null when the seat has none.</summary>
-    (float X, float Y)? Pointer { get; }
-
-    /// <summary>The campaign's own build store, where a purchase over the cabin's wallet writes.</summary>
-    CustomPlaneStore? CampaignPlanes { get; }
-
-    /// <summary>The string table the menu reads its words from, empty where none is loaded.</summary>
-    UiStrings MenuStrings { get; }
-
-    /// <summary>Whether a build can be made at all: a hangar feature and a build store together.</summary>
-    bool CanBuildPlane { get; }
-
-    /// <summary>Opens a screen directly, the shell's own graph switch.</summary>
-    void Open(OriginalScreen screen);
-
-    /// <summary>Puts the focus on the row carrying a key, when the current rows have it.</summary>
-    void FocusKey(string key);
-
-    /// <summary>Raises a messagebox over whatever screen is showing.</summary>
-    void RaiseDialog(string message, DialogIcon icon, params OriginalDialogAnswer[] answers);
-
-    /// <summary>An art name's strip pixel size, or null when the file is not there.</summary>
-    (int Width, int Height)? Measure(string art);
-
-    /// <summary>Re-reads the cabin's profile after a purchase or a sale through its wallet.</summary>
-    void ResumeCampaign();
-
-    /// <summary>Re-reads Instant Action's Pilot Plane list off the build store.</summary>
-    void RefreshInstantActionRoster();
-
-    /// <summary>Re-reads the sortie roster off the build store after it changes.</summary>
-    void RefreshRosterFromStore();
-
-    /// <summary>Opens the hangar wallet-free, Instant Action's Build Custom Plane.</summary>
-    void OpenHangar();
-
-    /// <summary>Starts the per-seat aircraft walk from Instant Action, the launch itself where
-    /// nobody is left to pick.</summary>
-    MenuExit? BeginSeatWalk();
-
-    /// <summary>The seat strip drawn over a board once a second seat has joined, or null;
-    /// <paramref name="onPaper"/> puts it on a light ground for a paper page.</summary>
-    BoardPanel? SeatPanel(bool onPaper);
-
-    /// <summary>Composes a row kind the hangar has no special drawing for, on the shell's own
-    /// plate-page rule.</summary>
-    void ComposeGenericRow(
-        OriginalRow row, bool focused, bool pressed, int index,
-        List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPicture> pictures);
-}
-
 /// <summary>The colours the plane-construction screens write in, read off their own rows: the
 /// right page's authored text and title colours, the left page's white, and the tab bar's label
 /// tail (the standing tab draws in its disabled colour).</summary>
@@ -103,7 +26,7 @@ public sealed record OriginalHangarInks(
 /// the wallet from the cabin's PLANE CONSTRUCTION, the door also naming the airframe a
 /// default-configuration build opens on. Remake-only: the open list, keyboard and pad focus.
 /// </summary>
-public sealed class OriginalHangarScreen
+public sealed class OriginalHangarScreen : IOriginalScreenModule
 {
     /// <summary>The layout section the name screen is composed from.</summary>
     public const string PlaneNameSection = "PlaneName";
@@ -283,7 +206,7 @@ public sealed class OriginalHangarScreen
 
     private readonly MenuLayout _layout;
     private readonly Func<string, (int Width, int Height)?> _measure;
-    private readonly IOriginalHangarHost _host;
+    private readonly IOriginalScreenHost _host;
     private readonly HangarFeature? _hangar;
     private readonly CustomPlaneStore? _planes;
     private OriginalScreen _hangarReturn = OriginalScreen.TopLevel;
@@ -306,7 +229,7 @@ public sealed class OriginalHangarScreen
     /// seams every screen family shares.</summary>
     public OriginalHangarScreen(
         HangarFeature hangar, CustomPlaneStore? planes, MenuLayout layout,
-        Func<string, (int Width, int Height)?> measure, IOriginalHangarHost host)
+        Func<string, (int Width, int Height)?> measure, IOriginalScreenHost host)
     {
         _hangar = hangar ?? throw new ArgumentNullException(nameof(hangar));
         _planes = planes;
@@ -490,16 +413,6 @@ public sealed class OriginalHangarScreen
         return screen == OriginalScreen.HangarPurchase ? PurchaseSection : PlaneConstructionSection;
     }
 
-    private static int? Indexed(string key, string prefix)
-    {
-        if (!key.StartsWith(prefix, StringComparison.Ordinal))
-        {
-            return null;
-        }
-
-        return int.TryParse(key.AsSpan(prefix.Length), NumberStyles.Integer, CultureInfo.InvariantCulture, out int i) ? i : null;
-    }
-
     private static int IndexOf(IReadOnlyList<int> values, int value)
     {
         for (int i = 0; i < values.Count; i++)
@@ -523,7 +436,7 @@ public sealed class OriginalHangarScreen
 
         string key = rows[focus].Key;
         int colon = key.IndexOf(':');
-        return Indexed(colon > 0 ? key[..colon] : key, prefix);
+        return OriginalWidgets.Indexed(colon > 0 ? key[..colon] : key, prefix);
     }
 
     // A strip's depressed frame, the fourth of a four-state strip; a shorter strip has only one.
@@ -723,30 +636,10 @@ public sealed class OriginalHangarScreen
             size.Width, size.Height, enabled, column, art));
     }
 
-    // Where a section's pane lands on the board, which for art smaller than the board is centred
-    // rather than left at the corner it is authored at. PLANENAME.SCRIPT initializes
-    // pn_p_background with relative = 1 and then sets the screen's own location to
-    // ((getresx() - its width) / 2, (getresy() - its height) / 2); the messagebox does the same,
-    // its 410x300 pane landing on the 195,150 the reference shots measure. A pane that fills the
-    // board centres onto its own corner, and one authored away from the corner keeps it.
-    private (float X, float Y) PaneOrigin(MenuLayoutScreen screen, string key)
-    {
-        if (screen.Widget(key) is not { Art.Count: > 0 } pane)
-        {
-            return (0f, 0f);
-        }
-
-        float x = pane.Int("X");
-        float y = pane.Int("Y");
-        if (x != 0f || y != 0f || _host.Measure(pane.Art[0]) is not { } size)
-        {
-            return (x, y);
-        }
-
-        return (
-            Math.Max(0f, (float)Math.Floor((BoardFit.AuthoredWidth - size.Width) / 2f)),
-            Math.Max(0f, (float)Math.Floor((BoardFit.AuthoredHeight - size.Height) / 2f)));
-    }
+    // The shared pane rule (OriginalWidgets) over the shell's own cached measurer, bound here so no
+    // call site has to carry it.
+    private (float X, float Y) PaneOrigin(MenuLayoutScreen screen, string key) =>
+        OriginalWidgets.PaneOrigin(screen, key, _host.Measure);
 
     // The scroll-text box as a panel: its authored back and border colours, the component's
     // figures on their own lines, the shipped heading a line under them and the prose flowed in
@@ -865,14 +758,8 @@ public sealed class OriginalHangarScreen
         fills.Add(new BoardFill(window.ThumbX, window.ThumbY, window.ThumbWidth, window.ThumbHeight, 255, 255, 255, 0.6f));
     }
 
-    private void AddPane(MenuLayoutScreen screen, List<BoardPicture> pictures, string key)
-    {
-        if (screen.Widget(key) is { Art.Count: > 0 } pane)
-        {
-            var at = PaneOrigin(screen, key);
-            pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, pane.Art[0], Math.Max(1, pane.Frames)), at.X, at.Y));
-        }
-    }
+    private void AddPane(MenuLayoutScreen screen, List<BoardPicture> pictures, string key) =>
+        OriginalWidgets.AddPane(screen, pictures, key, _host.Measure);
 
     // Enters one of the hub's screens: the tabs remember themselves for the inventory's Done and
     // the totals page's Back, and no list stays open across the change.
@@ -1020,7 +907,7 @@ public sealed class OriginalHangarScreen
         return typed;
     }
 
-    public bool CloseHangarDropdown()
+    public bool CloseDropdown()
     {
         if (_hangarOpen == null)
         {
@@ -1034,27 +921,28 @@ public sealed class OriginalHangarScreen
     }
 
     // Back inside the hangar: an open list closes, the totals page and the inventory return to
-    // the tab, a tab or the name screen cancels the build.
-    public MenuExit? BackHangar()
+    // the tab, a tab or the name screen cancels the build. Every hangar screen answers its own
+    // Back, so the shell's default way out is never reached from here.
+    public bool Back()
     {
-        if (CloseHangarDropdown())
+        if (CloseDropdown())
         {
-            return null;
+            return true;
         }
 
         if (_host.Screen is OriginalScreen.HangarPurchase or OriginalScreen.HangarInventory)
         {
             ShowHangarScreen(_hangarTab);
-            return null;
+            return true;
         }
 
         CancelHangar();
-        return null;
+        return true;
     }
 
     // A sideways step inside the hangar: on a dropdown it picks the next value with wrap, on the
     // tab bar and the buttons it walks along them; a text field or a checkbox takes none.
-    public bool StepHangarSideways(IReadOnlyList<OriginalRow> rows, int focus, int direction)
+    public bool StepSideways(IReadOnlyList<OriginalRow> rows, int focus, int direction)
     {
         if (focus < 0 || focus >= rows.Count)
         {
@@ -1094,7 +982,7 @@ public sealed class OriginalHangarScreen
         return true;
     }
 
-    public void BuildHangarRows(List<OriginalRow> rows)
+    public void BuildRows(List<OriginalRow> rows)
     {
         if (_hangar == null)
         {
@@ -1349,7 +1237,7 @@ public sealed class OriginalHangarScreen
     // The hangar's lists for the pointer: an open dropdown's list alone while one stands, and the
     // tab page's description box otherwise, which is the only other thing on these screens a wheel
     // or a dragged thumb moves.
-    public void HangarLists(List<OriginalList> lists)
+    public void Lists(List<OriginalList> lists)
     {
         if (_hangarOpen != null && OpenHangarListWindow() is { } window)
         {
@@ -1484,7 +1372,7 @@ public sealed class OriginalHangarScreen
                 return new HangarList(saved, saved.Length == 0 ? -1 : _inventoryIndex, i => _inventoryIndex = i);
         }
 
-        if (Indexed(key, "AR_D_POINT") is { } zone && zone < 4)
+        if (OriginalWidgets.Indexed(key, "AR_D_POINT") is { } zone && zone < 4)
         {
             var units = new string[CustomPlaneDef.MaxArmourUnits + 1];
             for (int i = 0; i < units.Length; i++)
@@ -1496,7 +1384,7 @@ public sealed class OriginalHangarScreen
                 i => hangar.BillWithArmour(zone, i));
         }
 
-        if (Indexed(key, "GN_D_GUN") is { } slot && slot < CustomPlaneDef.GunSlots)
+        if (OriginalWidgets.Indexed(key, "GN_D_GUN") is { } slot && slot < CustomPlaneDef.GunSlots)
         {
             var guns = new string[HangarFeature.GunCycleRows];
             for (int i = 0; i < guns.Length; i++)
@@ -1508,7 +1396,7 @@ public sealed class OriginalHangarScreen
                 i => hangar.BillWithGun(slot, i));
         }
 
-        if (Indexed(key, "HP_D_POINT") is { } wing && wing < 2)
+        if (OriginalWidgets.Indexed(key, "HP_D_POINT") is { } wing && wing < 2)
         {
             var counts = new string[CustomPlaneDef.MaxHardpointsPerWing + 1];
             for (int i = 0; i < counts.Length; i++)
@@ -1521,7 +1409,7 @@ public sealed class OriginalHangarScreen
         }
 
         var tables = HangarPaintTables.Default;
-        if (Indexed(key, "PT_D_COLORS") is { } colourSlot && colourSlot < HangarPaintTables.Slots)
+        if (OriginalWidgets.Indexed(key, "PT_D_COLORS") is { } colourSlot && colourSlot < HangarPaintTables.Slots)
         {
             int rows = Math.Max(1, tables.Swatches.Count);
             var blanks = new string[rows];
@@ -1530,7 +1418,7 @@ public sealed class OriginalHangarScreen
                 Swatch: i => Tint(tables.Resolve(i, tables.DefaultShadeFor(i))));
         }
 
-        if (Indexed(key, "PT_D_SHADES") is { } shadeSlot && shadeSlot < HangarPaintTables.Slots)
+        if (OriginalWidgets.Indexed(key, "PT_D_SHADES") is { } shadeSlot && shadeSlot < HangarPaintTables.Slots)
         {
             int colour = scratch.PaintColours[shadeSlot];
             int rows = Math.Max(1, tables.ShadeCount(colour));
@@ -1540,7 +1428,7 @@ public sealed class OriginalHangarScreen
                 Swatch: i => Tint(tables.Resolve(colour, i)));
         }
 
-        if (Indexed(key, "PT_D_DECALS") is { } decalSlot && decalSlot < HangarPaintTables.Slots)
+        if (OriginalWidgets.Indexed(key, "PT_D_DECALS") is { } decalSlot && decalSlot < HangarPaintTables.Slots)
         {
             var decals = new string[HangarPaintTables.DecalCount];
             for (int i = 0; i < decals.Length; i++)
@@ -1617,7 +1505,7 @@ public sealed class OriginalHangarScreen
         _host.RaiseDialog(Fill(message), DialogIcon.Warning, Ok());
     }
 
-    public MenuExit? ActivateHangar(OriginalRow row)
+    public MenuExit? Activate(OriginalRow row)
     {
         if (_hangar == null)
         {
@@ -1705,7 +1593,7 @@ public sealed class OriginalHangarScreen
     }
 
     // The hangar screens as drawn.
-    public void ComposeHangar(
+    public void Compose(
         IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> backdrop, List<BoardPicture> pictures,
         List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardNote> notes,
         List<BoardPanel> overlays)
@@ -2045,7 +1933,7 @@ public sealed class OriginalHangarScreen
             return null;
         }
 
-        return Indexed(rows[focus].Key, key + ":");
+        return OriginalWidgets.Indexed(rows[focus].Key, key + ":");
     }
 
     // The totals page: the column heads, one line per priced component at the authored lines,
@@ -2367,7 +2255,7 @@ public sealed class OriginalHangarScreen
                 continue;
             }
 
-            int index = Indexed(item.Key, _hangarOpen + ":") ?? -1;
+            int index = OriginalWidgets.Indexed(item.Key, _hangarOpen + ":") ?? -1;
             if (i == focus)
             {
                 // A tile keeps its own colours, so the grid marks the row under the focus with the

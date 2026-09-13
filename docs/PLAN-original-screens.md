@@ -84,7 +84,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B, general seam and the options leaves
 
-11. ☐ Rename the host seam to `IOriginalScreenHost`; one screen-to-module lookup replaces the per-family field and range checks
+11. ☑ Rename the host seam to `IOriginalScreenHost`; one screen-to-module lookup replaces the per-family field and range checks
 12. ☐ Options module (`OriginalOptionsScreen`) over the game options, audio, video and controls leaves, carrying the saved-settings fields
 
 ### Wave C, campaign
@@ -220,12 +220,33 @@ declaring type; keep that name or update every reference in the same commit.
 
 # Wave B, general seam and the options leaves
 
-## B11 ☐ Rename the host seam and dispatch through one lookup
+## B11 ☑ Rename the host seam and dispatch through one lookup
 
-**Goal.** `IOriginalScreenHost` is the one host interface; the shell holds the modules in one
-screen-to-module lookup, and `IsHangarScreen`, `IsInstantActionFamily` and the `Compose`/`Lists`/
-`ApplyFrame`/`BuildRows` switch arms for module-owned screens collapse into a single
-`ModuleFor(_screen)` call per site.
+**Landed.** `CSVM/src/UI/Menu/Original/OriginalScreenHost.cs` holds both seam interfaces:
+`IOriginalScreenHost` (the 21 members the hangar seam had, renamed) and `IOriginalScreenModule`
+(`Owns`, `BuildRows`, `Lists`, `StepSideways`, `CloseDropdown`, `Activate`, `Back`, `Compose`),
+which both sealed modules implement. The shell holds `_modules` and `ModuleFor(OriginalScreen)`;
+`BuildRows`, `Lists`, `Compose`, `Activate` and `Back` each have one `case var _ when
+ModuleFor(_screen) is { } module` arm, and the MoveX cascade and dropdown-close chain ask the
+owner once. `IsInstantActionFamily` is gone; `IsHangarScreen` (the presentation's palette query)
+is `ReferenceEquals(ModuleFor(_screen), Hangar)`. `Hangar` and `InstantAction` are get-only
+properties. `OriginalWidgets.cs` is the one home of `Indexed`, `PaneOrigin` and `AddPane` (each
+module keeps a two-line forwarder binding its own measurer). `HoveredRow` and `Pointer` stay on the
+seam: each is read at one site, but dropping them would widen the shared `Compose` signature with
+two parameters the hangar ignores. The hangar's `BackHangar()` became `bool Back()`; every old path
+returned null, which is "handled, no exit".
+
+**Verified.** Full `.\RunTests.ps1` on the plan tree with B11 squash-merged: PASS, exit 0 (4414
+units passed, 2 skipped for missing media; 332 engine suites, errors clean; 19 goldens
+hash-identical, so the dispatch rewrite composes every Original board as before). Unit count
+unchanged from A1, as a pure restructuring should be. `CheckDocEntries.ps1`,
+`CheckCommentCaps.ps1` and `CheckEncoding.ps1` clean. `Grep IsInstantActionFamily` finds nothing;
+`OriginalShell.cs` names a module only through `ModuleFor`, `Hangar` and `InstantAction`.
+
+**Original approach (kept for reference).** `IOriginalScreenHost` is the one host interface; the
+shell holds the modules in one screen-to-module lookup, and `IsHangarScreen`,
+`IsInstantActionFamily` and the `Compose`/`Lists`/`ApplyFrame`/`BuildRows` switch arms for
+module-owned screens collapse into a single `ModuleFor(_screen)` call per site.
 
 **Evidence (confidence: traced).** `OriginalShell.cs:349` holds `_hangarModule`; `IsHangarScreen`
 is `_hangarModule?.Owns(_screen) ?? false`. After A1 there is a second field and a second range
@@ -299,7 +320,7 @@ scroll window like the hangar `_descWindow`; copy that shape.
 `_campaign`, `_profiles`, `_stock`, `_dataRoot`, `_campaignLayout`, `_flow`, `_briefingReturn`,
 `_bookReturn` (`OriginalCampaign.cs:80-91`). The `ApplyFrame` MoveX cascade calls
 `StepCampaignSideways`. The hangar module already reaches campaign through the host
-(`CampaignPlanes`, `ResumeCampaign` on `IOriginalHangarHost`), so the campaign module and the hangar
+(`CampaignPlanes`, `ResumeCampaign` on `IOriginalScreenHost`), so the campaign module and the hangar
 module talk through the shell, never directly.
 
 **Approach.** Same shape as A1 and B12 over the B11 seam. `CampaignPlanes` and `ResumeCampaign`

@@ -827,7 +827,7 @@ missions with every objective bit set, plus the scratch build store the export a
 The Original presentation's screen graph (`CSVM.UI.Menu.Original`), engine-free over `MenuLayout` and the shared Free Flight, player-setup,
 Instant Action, hangar and campaign features, with the art measurer and the flight-devices answer injected. It owns the top level composed
 from `[MainMenu]`'s own rows, the two remake-only sortie screens, the Options screen over the decoded Preferences chrome, and the messagebox
-idiom every refusal and confirm goes through, whose box, `RaiseDialog` and answer keys are its own `OriginalShellDialog.cs` partial; most other screens are its own partials, below, the hangar and Instant Action families the screen groups standing outside the partials as `OriginalHangarScreen.cs` and `OriginalInstantActionScreen.cs`, both reached through `IOriginalHangarHost` and read through the one `Hangar` and `InstantAction` accessor each. `Step` applies one seat's frame, `Compose` is
+idiom every refusal and confirm goes through, whose box, `RaiseDialog` and answer keys are its own `OriginalShellDialog.cs` partial; most other screens are its own partials, below, the hangar and Instant Action families the screen groups standing outside the partials as `OriginalHangarScreen.cs` and `OriginalInstantActionScreen.cs`. Each is held as one `IOriginalScreenModule` in a list and reaches back through `IOriginalScreenHost` (`OriginalScreenHost.cs`); `ModuleFor` answers which module owns the screen showing, so `BuildRows`, `Lists`, the sideways step, the dropdown close, `Activate`, `Back` and `Compose` name a module through that one lookup rather than a field and a screen-range check per family, and `Hangar` and `InstantAction` are the typed accessors the presentation and the suites read module-specific state through. `Step` applies one seat's frame, `Compose` is
 the screen as a `ComposedBoard` whose backdrop takes a section's `movie` row at its bottom, and every page's row kinds live here,
 `OriginalSlider` among them. A pointer press arms a row and only the release still on it activates (`ArmedKey`), on an edit box taking the
 caret alone where Accept in one reaches the screen's own commit; the pointer's bitmap answers an enter or leave (`PointerLive`); and a film
@@ -842,6 +842,23 @@ for it: while a box stands its answers are the only rows, `Compose` draws it ove
 picture, and Back takes the declining answer. The rollover frame is the pointer's alone, the cursor's
 answer marked with an outline three pixels clear of the strip instead, and the focus a raise took is
 put back when it is answered. The campaign screens and the hangar module only raise. [../org/campaign-board.md](../org/campaign-board.md).
+
+## src/UI/Menu/Original/OriginalScreenHost.cs
+The two sides of the seam between `OriginalShell` and a standalone screen module. `IOriginalScreenHost` is what a module reads off the shell and
+calls back into it for: the screen showing, the per-screen focus cursor every family shares, the pointer's row and position, whether a dialog stands,
+the string table and the art measurer, the seat strip and the shell's own plate-row rule, and the crossings into another family (the hangar a Build
+door opens, the walk FLY MISSION begins, a campaign resume, a roster re-read). The shell implements it explicitly, so the narrower vocabulary stays
+the modules' own, and each module's tests implement it as a fake and build the module with no shell at all. `IOriginalScreenModule` is the other
+side, what the shell calls on a module: `Owns` plus the seven dispatch members (`BuildRows`, `Lists`, `StepSideways`, `CloseDropdown`, `Activate`,
+`Back`, `Compose`). The shell holds its modules as these alone, so a further family is one more entry in its list and no new dispatch arm.
+
+## src/UI/Menu/Original/OriginalWidgets.cs
+The layout-widget readings more than one Original screen module needs, a file-level static because a module is a sealed class of its own and a rule
+two of them follow can live in neither: the slot number a numbered widget key carries (`AR_D_POINT2`, `OL_D_AMMO1`, and the same key behind a
+`<key>:<index>` list row), and where a section's background pane lands on the board, which for art smaller than the board is the centre its own
+script sets rather than the corner it is authored at. A pane that fills the board centres onto its own corner, and one authored away from the corner
+keeps it. Each module binds its own measurer to the pane rule once, so no call site carries one. The open-dropdown window rule is the other such
+reading, on `OriginalDropList.cs`.
 
 ## src/UI/Menu/Original/OriginalDropList.cs
 The one rule every open dropdown of the Original shell follows, held as the file-level `OriginalDropLists` so a standalone screen module stands on
@@ -940,16 +957,16 @@ row and the row under the pointer, and a closed box redraws its outline in cream
 and `<build name> <airframe>`), re-read on every entry and on the hangar's return; a picked build flies its airframe's stock node with its def on the seat. Build opens the wallet-free hangar
 (`OriginalHangarScreen.cs`); Weapon Loadout maps the section's four ammunition and eight rocket fields onto the airframe's gun slots and pylons over the stock table's option lists, with the airframe's
 diagram frames, the description pane and the snapshot CANCEL and Back restore, over seat 0's fit or the wingmen's shared one by the radio pair, or the per-seat picker's own `PlayerSeat.Fit`, which is what
-decides the screen its exit returns to. It reaches `OriginalShell` only through the shared `IOriginalHangarHost` seam, so `OriginalInstantActionTests` drives it over a hand-written host with no shell at all; the shell still owns `Rows`/`Compose`/`ApplyFrame` dispatch and exposes the module whole as `InstantAction`. Option sets: [../formats/instant-action.md](../formats/instant-action.md); what the fit means at launch: `src/Flight/LoadoutChoice.cs`.
+decides the screen its exit returns to. It is one `IOriginalScreenModule` and reaches `OriginalShell` only through the shared `IOriginalScreenHost` seam (`OriginalScreenHost.cs`), so `OriginalInstantActionTests` drives it over a hand-written host with no shell at all; the shell still owns `Rows`/`Compose`/`ApplyFrame` dispatch, routes to whichever module owns the screen showing and exposes this one whole as `InstantAction`. Its `Back` answers false where nothing is open and nothing is to cancel, which is how Instant Action's own Exit is left to the shell. Option sets: [../formats/instant-action.md](../formats/instant-action.md); what the fit means at launch: `src/Flight/LoadoutChoice.cs`.
 
 ## src/UI/Menu/Original/OriginalHangarScreen.cs
 The Original hangar, a standalone module over the shared `HangarFeature` and the decoded hangar
 sections: the PLANE NAME screen, the Plane Construction hub with one of six tab sections on its
 right page, the totals page and the INVENTORY, entered from Instant Action's Build Custom Plane or
-the cabin, the door naming the airframe a default build opens on. It reaches `OriginalShell` only through `IOriginalHangarHost`, the shell's own explicit-interface implementation narrowing it to the screen/cursor/dialog surface a screen family needs (`Open`, `FocusKey`, `RaiseDialog`, the focused row and the campaign plane roster), so `OriginalHangarTests` drives it over a hand-written host with no shell at all; the shell still owns `Rows`/`Compose`/`ApplyFrame` dispatch, routes to this module by `OriginalScreen` range and exposes it whole as `Hangar` (its typed name, open list, last build and `OriginalHangarInks`) rather than forwarding member by member. It owns the plane picture over
+the cabin, the door naming the airframe a default build opens on. It is one `IOriginalScreenModule` and reaches `OriginalShell` only through `IOriginalScreenHost` (`OriginalScreenHost.cs`), the shell's own explicit-interface implementation narrowing it to the screen/cursor/dialog surface a screen family needs (`Open`, `FocusKey`, `RaiseDialog`, the focused row and the campaign plane roster), so `OriginalHangarTests` drives it over a hand-written host with no shell at all; the shell still owns `Rows`/`Compose`/`ApplyFrame` dispatch, finds this module through its own `Owns` (every screen from `PlaneName` on) and exposes it whole as `Hangar` (its typed name, open list, last build and `OriginalHangarInks`) rather than forwarding member by member. It owns the plane picture over
 the blueprint panes; the hub's figures, which `HubBill` prices on the row an open list has under the cursor so they preview it and take nothing, the cost line reddening on that bill's funds verdict and the weight line on its capacity verdict, bar a previewed airframe row, whose weight line is pending and plain; the cash note on both doors (the wallet's funds, else the export door's figure), every combo row staying bare over either;
 the tab bar with the standing tab latched and its labels on the strips' own baseline; the tab pages' description box, which `HangarDescriptions` fills and whose prose flows as a note inside it; every list under its box bar the decal picker, the page's own five-across grid of tiles carrying its chrome inside its right edge; the two name boxes with their
-caret, the airframe swap's own three-answer question as the shared messagebox (its answer keys mirroring `OriginalShellDialog.cs`'s `DialogOkKey`/`DialogYesKey`/`DialogNoKey`/`DialogCancelKey`), and the export door's own Export, Delete and delete confirm; `PaneOrigin` centres a small pane and places its rows on it. [../org/hangar.md](../org/hangar.md), [../org/menu-inventory.md](../org/menu-inventory.md).
+caret, the airframe swap's own three-answer question as the shared messagebox (its answer keys mirroring `OriginalShellDialog.cs`'s `DialogOkKey`/`DialogYesKey`/`DialogNoKey`/`DialogCancelKey`), and the export door's own Export, Delete and delete confirm; the shared pane rule (`OriginalWidgets.cs`) centres a small pane and this module places its rows on it. [../org/hangar.md](../org/hangar.md), [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalCampaign.cs
 The Original campaign, the shell's partial over the shared `CampaignFeature`: the profile screen,

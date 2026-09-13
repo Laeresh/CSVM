@@ -38,7 +38,7 @@ public sealed partial class OriginalShell
     // picker as the walk's screen made the picking seat's Back unjoin it from the loadout screen.
     private bool OnSeatWalk =>
         _screen == OriginalScreen.SeatPlane
-        || (_screen == OriginalScreen.InstantActionLoadout && _instantActionModule.OnSeatLoadout);
+        || (_screen == OriginalScreen.InstantActionLoadout && InstantAction.OnSeatLoadout);
 
     /// <summary>Picks the first chapter and the first aircraft for seat 0 on the sortie screen
     /// showing, the screenshot aid's pose; with a joined seat still to confirm, the per-seat
@@ -127,7 +127,7 @@ public sealed partial class OriginalShell
             return null;
         }
 
-        var roster = _instantActionModule.PilotRoster;
+        var roster = InstantAction.PilotRoster;
         _setup.SetRoster(roster);
         int last = Math.Max(0, roster.Count - 1);
         foreach (var joined in _setup.Seats)
@@ -139,7 +139,7 @@ public sealed partial class OriginalShell
         {
         }
 
-        _setup.Browse(seat, Math.Clamp(_instantActionModule.PilotRow, 0, last));
+        _setup.Browse(seat, Math.Clamp(InstantAction.PilotRow, 0, last));
         _setup.Select(seat);
         _seatReturn = OriginalScreen.InstantAction;
         return AdvanceSeatWalk();
@@ -238,7 +238,7 @@ public sealed partial class OriginalShell
 
                 return null;
             case nameof(BoardButton.ChangeAmmo):
-                _instantActionModule.OpenSeatLoadout(seat);
+                InstantAction.OpenSeatLoadout(seat);
                 return null;
             case nameof(BoardButton.AcceptSelections):
                 if (seat.Locked)
@@ -512,7 +512,7 @@ public sealed partial class OriginalShell
             }
         }
 
-        private UiStrings Strings => _shell._campaign?.Strings ?? _shell._hangarModule?.Strings ?? UiStrings.Empty;
+        private UiStrings Strings => _shell._campaign?.Strings ?? _shell.Hangar?.Strings ?? UiStrings.Empty;
 
         private BoardButton[] Plaques => _seat.Locked ? SelectedPlaques : BrowsingPlaques;
 

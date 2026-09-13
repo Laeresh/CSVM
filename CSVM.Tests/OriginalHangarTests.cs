@@ -335,11 +335,11 @@ public class OriginalHangarTests : IDisposable
         host.FocusKey("PX_B_PAINT");
         Right(host);
         Assert.Equal(OriginalHangarScreen.SellPlanesKey, host.FocusedKey);
-        Assert.True(host.Module.StepHangarSideways(host.Rows, host.Focus, -1));
+        Assert.True(host.Module.StepSideways(host.Rows, host.Focus, -1));
         Assert.Equal("PX_B_PAINT", host.FocusedKey);
 
         host.FocusKey(OriginalHangarScreen.HubNameFieldKey);
-        Assert.False(host.Module.StepHangarSideways(host.Rows, host.Focus, 1));
+        Assert.False(host.Module.StepSideways(host.Rows, host.Focus, 1));
         Assert.Equal(OriginalHangarScreen.HubNameFieldKey, host.FocusedKey);
     }
 
@@ -788,7 +788,7 @@ public class OriginalHangarTests : IDisposable
         Assert.True(index >= 0, $"no row {key}");
         Assert.True(rows[index].Enabled, $"{key} is disabled");
         host.FocusedRow = index;
-        host.Module.ActivateHangar(rows[index]);
+        host.Module.Activate(rows[index]);
     }
 
     // Accept on the focused row, or on a dialog's focused answer.
@@ -801,7 +801,7 @@ public class OriginalHangarTests : IDisposable
         }
 
         var rows = host.Rows;
-        host.Module.ActivateHangar(rows[host.Focus]);
+        host.Module.Activate(rows[host.Focus]);
     }
 
     // Back declines a dialog with its last answer, else steps back inside the hangar.
@@ -813,10 +813,10 @@ public class OriginalHangarTests : IDisposable
             return;
         }
 
-        host.Module.BackHangar();
+        host.Module.Back();
     }
 
-    private static void Right(HangarHost host) => host.Module.StepHangarSideways(host.Rows, host.Focus, 1);
+    private static void Right(HangarHost host) => host.Module.StepSideways(host.Rows, host.Focus, 1);
 
     private static void Type(HangarHost host, string text) =>
         host.Module.TypeName(new MenuCommands { Typed = text }, new List<string>());
@@ -827,7 +827,7 @@ public class OriginalHangarTests : IDisposable
     private static IReadOnlyList<OriginalList> Lists(HangarHost host)
     {
         var lists = new List<OriginalList>();
-        host.Module.HangarLists(lists);
+        host.Module.Lists(lists);
         return lists;
     }
 
@@ -842,7 +842,7 @@ public class OriginalHangarTests : IDisposable
         var plaques = new List<BoardPlaque>();
         var notes = new List<BoardNote>();
         var overlays = new List<BoardPanel>();
-        host.Module.ComposeHangar(rows, host.Focus, backdrop, pictures, fills, lines, plaques, notes, overlays);
+        host.Module.Compose(rows, host.Focus, backdrop, pictures, fills, lines, plaques, notes, overlays);
         return new ComposedBoard(pictures, Array.Empty<BoardStroke>(), lines, plaques, notes,
             backdrop: backdrop, fills: fills, overlays: overlays);
     }
@@ -915,7 +915,7 @@ public class OriginalHangarTests : IDisposable
     // first live row where none was set, as the shell's own EnsureFocus rules), a standing dialog
     // opened on its first answer, and a count of each re-read the module asks for. Rows the module
     // has no drawing of its own for become a plaque or a line, standing in for the shell's rule.
-    private sealed class HangarHost : IOriginalHangarHost
+    private sealed class HangarHost : IOriginalScreenHost
     {
         private readonly int[] _focus = new int[Enum.GetValues<OriginalScreen>().Length];
         private int _focusBeforeDialog = -1;
@@ -959,7 +959,7 @@ public class OriginalHangarTests : IDisposable
             get
             {
                 var rows = new List<OriginalRow>();
-                Module.BuildHangarRows(rows);
+                Module.BuildRows(rows);
                 return rows;
             }
         }

@@ -709,7 +709,8 @@ public class OriginalInstantActionTests
     }
 
     // The screen as the module draws it, assembled the way the shell assembles its own board. The
-    // shell's own layers (the pointer overlay, the strokes and the notes) are not the module's.
+    // shell's own layers (the pointer overlay and the strokes) are not the module's, and neither of
+    // these two pages writes a note, so the note layer is handed over and comes back empty.
     private static ComposedBoard Compose(InstantActionHost host)
     {
         var rows = host.Rows;
@@ -718,9 +719,10 @@ public class OriginalInstantActionTests
         var fills = new List<BoardFill>();
         var lines = new List<BoardLine>();
         var plaques = new List<BoardPlaque>();
+        var notes = new List<BoardNote>();
         var overlays = new List<BoardPanel>();
-        host.Module.Compose(rows, host.Focus, backdrop, pictures, fills, lines, plaques, overlays);
-        return new ComposedBoard(pictures, Array.Empty<BoardStroke>(), lines, plaques, Array.Empty<BoardNote>(),
+        host.Module.Compose(rows, host.Focus, backdrop, pictures, fills, lines, plaques, notes, overlays);
+        return new ComposedBoard(pictures, Array.Empty<BoardStroke>(), lines, plaques, notes,
             backdrop: backdrop, fills: fills, overlays: overlays);
     }
 
@@ -745,7 +747,7 @@ public class OriginalInstantActionTests
     // and position as a frame leaves them, and a count of each crossing into another family. The
     // rows are the module's own only while the screen showing is one of its two, which is where the
     // shell's own dispatch sends them.
-    private sealed class InstantActionHost : IOriginalHangarHost
+    private sealed class InstantActionHost : IOriginalScreenHost
     {
         private readonly int[] _focus = new int[Enum.GetValues<OriginalScreen>().Length];
         private int _hover = -1;
