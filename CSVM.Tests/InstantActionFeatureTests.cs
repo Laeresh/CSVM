@@ -99,6 +99,14 @@ public class InstantActionFeatureTests
     }
 
     [Fact]
+    public void LivesReadUnlimitedAtZeroAndTheCountAbove()
+    {
+        Assert.Equal("Unlimited", InstantActionFeature.LivesLabel(0));
+        Assert.Equal("1", InstantActionFeature.LivesLabel(1));
+        Assert.Equal("9", InstantActionFeature.LivesLabel(InstantActionFeature.MaxLives));
+    }
+
+    [Fact]
     public void LivesClampBetweenUnlimitedAndTheCap()
     {
         var ia = Feature();

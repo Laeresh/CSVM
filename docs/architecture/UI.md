@@ -930,7 +930,7 @@ their authored boxes, the enemy rows on two pages under both paging buttons, the
 buttons. A box no setting can fill stands blank with a pale arrow rather than leaving the page; an
 open list is windowed by `OriginalDropList.cs`, bands its picked row and the row under the pointer, and a closed box redraws its outline
 in cream under one. The Pilot Plane list is `OriginalRosters.Roster` (stock, then the saved builds, rows named `Stock <airframe>` and `<build name> <airframe>`), re-read on every entry and on the hangar's return; a picked build flies its airframe's stock node with its def on the seat.
-Build opens the wallet-free hangar (`OriginalHangar.cs`), Weapon Loadout the loadout screen (`OriginalLoadout.cs`). Option sets: [../formats/instant-action.md](../formats/instant-action.md).
+Build opens the wallet-free hangar (`OriginalHangar.cs`), Weapon Loadout the loadout screen (`OriginalLoadout.cs`). Remake-only is the Lives box, which the section authors no row for: it takes the mission dropdown's column and item height on the first clear line the setup stack leaves (read off the gaps between the authored boxes, never written down as a Y), and steps the shared `InstantActionFeature.StepLives`, reading Unlimited at zero and the count to nine. Option sets: [../formats/instant-action.md](../formats/instant-action.md).
 
 ## src/UI/Menu/Original/OriginalLoadout.cs
 The Weapon Loadout screen, the shell's partial over the decoded `[@OrdinanceLayout@]` section (the

@@ -1769,23 +1769,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `CSVM/src/Flight/PromptLine.cs`, `CSVM/src/Bindings/BindingLabels.cs`,
   `docs/controls.md`.
 
-- `BL-904` `[Feature]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **The Original presentation's Instant Action screen
-  offers no way to set the number of lives.** *Your report:* "In the original ui for instant action we
-  can't set number of life's." *Evidence:* the lives are this port's own invention (`ia.json` carries
-  no such field, `InstantActionFeature.MaxLives`), so the decoded `[@InstantAction@]` layout authors
-  no row for them and `OriginalInstantAction` composes none; the feature's `Lives` stays at its
-  default of 1 for every sortie launched from that screen, while Built-in's Mission type screen
-  carries the stepper (`docs/org/menu-inventory.md`, Built-in screen 5). *Fix shape:* a remake-only
-  control on the Original screen in its own idiom, under the same rule Decision 11 gives
-  `IA_B_BUILD` and `IA_B_CHANGEWEAPONS` (a widget the layout does not author, drawn in the screen's
-  chrome): a lives dropdown or stepper beside the mission type dropdown, reading UNLIMITED for 0 and
-  the count otherwise, stepping the shared feature's `StepLives` so both presentations edit one
-  value; mark it remake-only in the census, pin it with a menu-original-instant-action suite arm
-  and a still. *⚠ Traps:* the ace duel blanks every enemy control in place, the lives control is
-  not an enemy control and stays; a contents row applies its preset and the presets carry no lives,
-  so the row must not reset them. *Cross-refs:* `CSVM/src/UI/Menu/Original/OriginalInstantAction.cs`,
-  `CSVM/src/UI/Menu/InstantActionFeature.cs`, `docs/org/menu-inventory.md` (Decision 11).
-
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored

@@ -3744,7 +3744,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     // The lives stepper's own line, shown where the other screens show the focused row's
     // stat/region, it is not per-row, so it does not vary with the mission-type cursor.
     private string LivesDetail() =>
-        _ia.Lives == 0 ? "Lives   Unlimited        ◀ ▶  change" : $"Lives   {_ia.Lives}        ◀ ▶  change";
+        $"Lives   {InstantActionFeature.LivesLabel(_ia.Lives)}        ◀ ▶  change";
 
     // The Plane screen's own Instant Action line: the flown-wingmen re-clamp (decision
     // 8a, InstantActionRuntime.FlownWingmen) against the CURRENT joined-player count

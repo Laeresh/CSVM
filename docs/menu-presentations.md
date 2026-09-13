@@ -487,7 +487,10 @@ scan automatically; anything it adds to the shared namespace falls under the fir
 the active presentation: every value in [`cli.md`](cli.md)'s bullet is Built-in's unless
 `--presentation=original` is set, in which case the same flag carries Original's own values
 (`free-flight`, `dogfight`, `instant-action`, `instant-action:pilot-plane` with its Pilot Plane
-list open and `instant-action:weapon-loadout` on the pilot's loadout screen, `options`,
+list open, `instant-action:weapon-loadout` on the pilot's loadout screen and
+`instant-action:lives[:<count>]` with the remake-only Lives box focused, at Unlimited without a
+count and at that count with one (the screen opens on one life, so neither reading is a state a
+plain shot of it can show), `options`,
 `game-options` and `game-options:open` with its Difficulty list standing open, `audio` and
 `audio:mixed` with its four sliders at four distinct levels, `video`,
 `video:checked` with its Enhanced Graphics box ticked and `video:open` with its Resolution list

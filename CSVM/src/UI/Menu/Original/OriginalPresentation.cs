@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using CSVM.Flight;
 using CSVM.Session;
@@ -83,6 +84,10 @@ public sealed class OriginalPresentation : IMenuPresentation
 
     /// <summary>The Instant Action aid's argument that opens its Weapon Loadout for the pilot.</summary>
     public const string InstantActionLoadoutAid = "weapon-loadout";
+
+    /// <summary>The Instant Action aid's argument that stands its remake-only lives control at the
+    /// count a further <c>:n</c> names, and at Unlimited when it names none.</summary>
+    public const string InstantActionLivesAid = "lives";
 
     /// <summary>The aid value that opens the hangar's name screen on a fresh build.</summary>
     public const string PlaneNameAid = "plane-name";
@@ -434,6 +439,12 @@ public sealed class OriginalPresentation : IMenuPresentation
                     _shell.OpenInstantAction();
                     _shell.OpenLoadout();
                     break;
+                case string lives when lives.StartsWith(InstantActionAid + ":" + InstantActionLivesAid, StringComparison.Ordinal):
+                    // The screen opens on one life, so neither the unlimited reading nor a count
+                    // above one is a state a plain shot of it can show.
+                    _shell.OpenInstantAction();
+                    _shell.PoseInstantActionLives(AidLives(lives));
+                    break;
                 case PlaneNameAid:
                     _shell.OpenHangar();
                     break;
@@ -694,6 +705,15 @@ public sealed class OriginalPresentation : IMenuPresentation
     // Which category the KEYS aid's argument names, matched against the tab captions themselves
     // with spaces and case ignored so "views1" reaches "Views 1". An argument that names no tab
     // leaves the page on its first category, which is where the bare aid opens it anyway.
+    // The lives aid's count: the digits after a further colon, else 0, the unlimited reading. The
+    // feature clamps a count past its cap, so an out-of-range aid poses the cap rather than failing.
+    private static int AidLives(string aid)
+    {
+        int colon = aid.LastIndexOf(':');
+        return colon > 0 && int.TryParse(
+            aid[(colon + 1)..], NumberStyles.Integer, CultureInfo.InvariantCulture, out int lives) ? lives : 0;
+    }
+
     private static int KeysTabOf(string argument)
     {
         var tabs = OriginalShell.ControlTabs;

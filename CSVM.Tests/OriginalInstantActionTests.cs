@@ -55,7 +55,8 @@ public class OriginalInstantActionTests
             new[]
             {
                 OriginalShell.ContentsUpKey, OriginalShell.ContentsDownKey, OriginalShell.ViewStoryKey, OriginalShell.BuildKey,
-                OriginalShell.PlayerPlaneKey, OriginalShell.WingmenKey, OriginalShell.WingmanPlaneKey, OriginalShell.MissionKey,
+                OriginalShell.PlayerPlaneKey, OriginalShell.WingmenKey, OriginalShell.WingmanPlaneKey,
+                OriginalShell.LivesKey, OriginalShell.MissionKey,
                 OriginalShell.EnvironmentKey, "IA_D_NENEMY0", "IA_D_EGROUP0", "IA_D_DIFFICULTY0", "IA_D_PLANEE0",
                 OriginalShell.PageUpKey, OriginalShell.PageDownKey,
                 OriginalShell.PlayerRadioKey, OriginalShell.WingmanRadioKey, OriginalShell.WeaponLoadoutKey,
@@ -325,9 +326,56 @@ public class OriginalInstantActionTests
 
         Assert.True(Row(shell, OriginalShell.PageDownKey).Enabled);
         Assert.Contains(shell.Rows, r => r.Key == OriginalShell.WingmenKey);
+        // The lives box is no enemy control, so the blanking passes over it.
+        Assert.True(Row(shell, OriginalShell.LivesKey).Enabled);
+        Assert.Equal("1", Row(shell, OriginalShell.LivesKey).Label);
         var duel = shell.Compose();
         Assert.Contains(duel.Lines, l => l.Text == "Enemy:");
         Assert.Contains(duel.Lines, l => l.Text == "[more ...]");
+    }
+
+    [Fact]
+    public void TheLivesBoxStepsTheSharedFeatureAndAPresetLeavesItWherePlayerPutIt()
+    {
+        // The box takes the mission dropdown's left edge and height and the first clear line the
+        // setup stack leaves, which in this layout is the one between the environment row (Y 290,
+        // 20 high) and the enemy block (Y 330); the shipped layout leaves one higher up.
+        var shell = Open(out var ia);
+        var lives = Row(shell, OriginalShell.LivesKey);
+        Assert.Equal(OriginalRowKind.Dropdown, lives.Kind);
+        Assert.Equal((520f, 310f, 90f, 20f), Rect(lives));
+        Assert.Equal(1, lives.Column);
+        Assert.Equal("1", lives.Label);
+        Assert.Contains(shell.Compose().Lines, l => l.Text == "Lives:" && l.X == 420f && l.Y == 310f);
+        Assert.DoesNotContain(shell.Rows, r => r.Key != OriginalShell.LivesKey && Overlaps(r, lives));
+
+        // A sideways step on the box is the dropdown's own, so it wraps where the feature clamps.
+        shell.Step(Hover(lives));
+        Assert.Equal(OriginalShell.LivesKey, shell.FocusedKey);
+        shell.Step(Left);
+        Assert.Equal(0, ia.Lives);
+        Assert.Equal("Unlimited", Row(shell, OriginalShell.LivesKey).Label);
+        shell.Step(Left);
+        Assert.Equal(InstantActionFeature.MaxLives, ia.Lives);
+        shell.Step(Right);
+        Assert.Equal(0, ia.Lives);
+
+        // The list is every count at once, the box having no authored window to read.
+        Click(shell, Row(shell, OriginalShell.LivesKey));
+        Assert.Equal(OriginalShell.LivesKey, shell.OpenDropdown);
+        Assert.Equal(InstantActionFeature.MaxLives + 1, shell.Rows.Count);
+        Assert.Equal("Unlimited", shell.Rows[0].Label);
+        Assert.Equal((520f, 330f, 90f, 20f), Rect(shell.Rows[0]));
+        Click(shell, shell.Rows[3]);
+        Assert.Null(shell.OpenDropdown);
+        Assert.Equal(3, ia.Lives);
+        Assert.Equal("3", Row(shell, OriginalShell.LivesKey).Label);
+
+        // A contents row writes the preset over the page, and no preset carries a lives value.
+        Click(shell, shell.Rows[0]);
+        Assert.Equal(0, ia.PresetIndex);
+        Assert.Equal(3, ia.Lives);
+        Assert.Equal("3", Row(shell, OriginalShell.LivesKey).Label);
     }
 
     [Fact]
@@ -613,6 +661,9 @@ public class OriginalInstantActionTests
         new() { Pointer = new MenuPointer(x, y, pressed, clicked) };
 
     private static MenuCommands Hover(OriginalRow row) => Pointer(row.X + 3f, row.Y + 3f);
+
+    private static bool Overlaps(OriginalRow a, OriginalRow b) =>
+        a.X < b.X + b.Width && b.X < a.X + a.Width && a.Y < b.Y + b.Height && b.Y < a.Y + a.Height;
 
     // One click as the shell reads it: the press arms the row and the release on it fires, so the
     // step that carries the activation is the second one.

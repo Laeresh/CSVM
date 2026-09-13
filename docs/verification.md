@@ -610,6 +610,12 @@ member, and it does not go here.
   from a 300 mph entry at 60 Hz and once with the attitude pinned and integrated from rest at
   100 Hz. They agree to 0.06 %, which is evidence about the equilibrium, where a second probe built
   on the first one's entry conditions would only have restated it.
+- **INSTR-77**, **A remake-only widget put on a screen the data authors needs its place read off the
+  authored rows, not written down: a hardcoded corner is right for one layout and lands on an
+  authored control in every other.** The Original Instant Action lives box at a written Y 260 stood
+  on the clear line the shipped layout leaves, and on the unit fixture's tighter lines it stood on
+  the mission dropdown, where a pointer at the lives box focused the mission box instead. Taking
+  the first gap in the setup stack tall enough for it puts it on a free line in both.
 
 ## SRC, sources and documents
 
