@@ -33,6 +33,10 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/ZoneGate.cs`, the original's per-node `zone_id` visibility gate: the rule, its visual-layer allocation, and the per-camera cull mask.
 - `src/Mech3/ConflictRank.cs`, the world's cross-node draw-order tie-break: ranks nodes by their conflict graph, one slot per coplanar layer.
 - `src/Mech3/WorldCollision.cs`, derives every world collider's `Disabled` flag from its owner's tree visibility and the fade channel.
+- `src/Mech3/CraterShape.cs`, one crater as geometry: the 7-vertex rim at radius 20, the bowl under it, the footprint the no-overlap rule compares.
+- `src/Mech3/CraterField.cs`, every crater a mission has carved, the 5-unit refusal that bounds the count, and the sink a round's impact reaches.
+- `src/Mech3/TerrainCarve.cs`, subtracts the ring from the struck node's ground and lays the bowl in it, in a private mesh and a private trimesh.
+- `src/Mech3/ClutterCull.cs`, counts and destroys the decorations inside a crater: a zeroed MultiMesh basis and a disabled RID-attached shape.
 - `src/Mech3/PlaneBuilder.cs`, builds one aircraft from its GameZ subtree (shaded, backface-culled); `Repaint` re-liveries it in place.
 - `src/Mech3/PaintScheme.cs`, one aircraft livery: pattern + 3 colours + 3 decals, parsed from vehicle.json or drawn at random.
 - `src/Mech3/PatternLibrary.cs`, decodes the original's `.BM` paint patterns from the extracted ROF archive; `PatternsFor` lists a plane's liveries.

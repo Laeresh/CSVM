@@ -379,6 +379,20 @@ member, and it does not go here.
   every chapter (C1 45 of 54 polygons, C1C 71 of 175, C5 102 of 148), so the scatter surface is
   the upward skin alone and no shipped face points down or sideways. The flag, not the volume's
   shape, is what makes a slab chapter's field a sheet.
+- **WORLD-45**, **Hand a `CollisionShape3D` the EMPTY shape and fill it afterwards. A `Shape3D`
+  that already carries its faces when it is assigned reaches the body as an empty shape for the
+  rest of the frame, so everything that body stood for falls through.** A crater carve that built
+  its private `ConcavePolygonShape3D` and then assigned it left the struck terrain node answering
+  nothing at all, at the bowl and 24 m outside it alike, while the node still read 216 faces;
+  assigning the empty shape first and calling `SetFaces` on it afterwards read the carved profile
+  at once (120.00 at the rim, 114.00 at the apex). The shape's own data write reaches the server
+  immediately; the body's swap to a different shape does not.
+- **WORLD-46**, **A region test on a face's centroid removes nothing from world geometry, because
+  a terrain triangle is far larger than anything a weapon cuts into it.** The ground triangle a
+  bomb struck has its centroid hundreds of metres from a 20 m crater, so a centroid-in-ring filter
+  left the collider at 147 faces and laid the bowl under ground that was still solid. Subtracting
+  the region from each face and re-emitting the remainder is what makes the hole the carve's own
+  size; the same subtraction serves the skin and the trimesh.
 
 ## SHELL, Windows, PowerShell, and processes
 

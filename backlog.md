@@ -671,18 +671,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   scoping; ordnance launch is unlikely to be the only one.
   *Cross-refs:* `BL-406` (closed; the ordnance plan excluded `TORPEDO` for this reason).
 
-- `BL-413` `[Feature]` `[L]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **Ground-attack ordnance leaves no crater.** *Evidence:*
-  six weapons author `CRATER` and the original carves terrain geometry for it; we do nothing. The
-  mechanism is decoded in [`docs/org/craters.md`](docs/org/craters.md): every crater in the shipped
-  game is the same shape (a 7-vertex rim clipped against the ground, radius 20, floor 6 below the
-  impact), it destroys every decoration inside the radius, it is permanent for the mission, and a
-  second crater whose footprint comes within 5 units of an existing one is refused outright, so a
-  mission accumulates a bounded scatter of non-overlapping bowls rather than a growing mesh.
-  ⚠ *Trap:* this is a **terrain and renderer** change triggered by ordnance, not an ordnance change.
-  Scope it against the terrain system's constraints (chunking, LOD, the golden manifest's mesh
-  counts), not against the weapon table.
-  *Cross-refs:* `BL-406` (closed).
-
 - `BL-603` `[Bug]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The human rig sweeps the mesh hull where the original sweeps its def's six
   `collision` probes.** *Evidence:* decoded for `BL-601` (`git log --grep=BL-601`): `FUN_0048d7f0`
   carries the def's `collision` list as rays from the previous pose, six points on the `p*` player

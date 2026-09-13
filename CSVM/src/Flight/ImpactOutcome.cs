@@ -10,8 +10,8 @@ public enum ImpactStandIn { None, Spark, Explosion, Ricochet }
 
 /// <summary>The mask a weapon's impact hook returns to <c>FUN_005ac7a0</c>, each bit removing one
 /// piece of the row's own bindings. The direct damage and the splash run before and after the
-/// hook and are under no bit. <c>Effects</c> covers the crater/quicksand carve and the row's
-/// <c>EFFECT</c>, neither of which CSVM plays, so it is held for the record and consumed nowhere.
+/// hook and are under no bit. <c>Effects</c> covers the crater and quicksand carves and the row's
+/// <c>EFFECT</c>: CSVM gates its crater carve on it and plays no row <c>EFFECT</c>.
 /// The one hook in the binary (the choker's) returns <c>Sound</c>.</summary>
 [Flags]
 public enum ImpactSuppression
@@ -61,10 +61,11 @@ public readonly record struct ImpactOutcome
     /// touches no scene, sink or sound archive (docs/org/weaponImpact.md). <c>default</c> already
     /// backfills ids the weapon names no block for (<see cref="WeaponDefs.InheritDefaultRow"/>), so
     /// do not re-add a fallback here, it would also fire on ids a weapon names and leaves empty,
-    /// like <c>player</c>(6). <paramref name="modelResolved"/>, <paramref name="hasEffectsRuntime"/>
-    /// and <paramref name="suppression"/> (the impact hook's answer) are caller facts.</summary>
+    /// like <c>player</c>(6). The last four parameters are caller facts, <paramref name="cratered"/>
+    /// being whether the round's carve landed.</summary>
     public static ImpactOutcome Resolve(WeaponDef weapon, int surfaceId, bool modelResolved,
-        bool hasEffectsRuntime, ImpactSuppression suppression = ImpactSuppression.None)
+        bool hasEffectsRuntime, ImpactSuppression suppression = ImpactSuppression.None,
+        bool cratered = false)
     {
         // The struck id's IMPACT row, already carrying `default`'s binding if the weapon named no
         // block for this id (WeaponDefs.InheritDefaultRow).
@@ -72,14 +73,19 @@ public readonly record struct ImpactOutcome
         // The hook's Animation bit removes the ANIMATION slot only; SURFACE_ANIMATION is spawned
         // under no bit (FUN_005ac7a0 tests the mask before the first spawn and not the second).
         string? animation = (suppression & ImpactSuppression.Animation) != 0 ? null : effect?.Animation;
-        string? name = animation ?? effect?.SurfaceAnimation;
+        // ⚠ A carve that landed removes BOTH slots, and the stand-in that covers for them, since a
+        // weapon that authored ANIMATION_ALWAYS would be the only exception and nothing does. The
+        // crater IS the ground effect on the six CRATER weapons (docs/org/craters.md).
+        string? name = cratered ? null : animation ?? effect?.SurfaceAnimation;
 
         return new ImpactOutcome
         {
             EffectName = name,
             SurfaceOriented = name != null && animation == null,
             Sound = (suppression & ImpactSuppression.Sound) != 0 ? null : effect?.Sound,
-            StandIn = StandInFor(weapon, surfaceId, modelResolved, hasEffectsRuntime),
+            StandIn = cratered
+                ? ImpactStandIn.None
+                : StandInFor(weapon, surfaceId, modelResolved, hasEffectsRuntime),
             Damage = weapon.HealthDamage ?? 0f,
             BlastRadius = weapon.ImpactProximity ?? 0f,
         };

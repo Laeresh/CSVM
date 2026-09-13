@@ -67,6 +67,39 @@ collider body stands for: the per-surface-class bodies `SceneBuilder` carved fro
 answer their shared parent (`SurfaceIdMeta`) and anything else answers itself, which is what a
 caller counting objects rather than bodies keys on. Read `SceneBuilder.cs` next.
 
+## src/Mech3/CraterShape.cs
+One crater as geometry: a 7-vertex rim ring laid at the impact at radius 20, a mid ring halfway in
+and one `DEPTH` further down, and an apex two `DEPTH`s under the impact. Every crater in the shipped
+game is this one shape, because all six `CRATER` weapons author the block bare and leave the engine
+template's randomisation spans at zero. `Footprint` is the XZ box the no-overlap rule compares and
+`Clears` is that rule, the recorded box grown by `Clearance` on all four sides. `Covers` is the
+decoration census, an XZ disc with no height test. Decode: [../org/craters.md](../org/craters.md).
+
+## src/Mech3/CraterField.cs
+Every crater one mission has carved and the rule that decides whether it may carve another.
+`Request` refuses a footprint within the clearance of a carved one (`Refused`), finds the world node
+under the body the round struck, hands the carve to `TerrainCarve` and the decorations to
+`ClutterCull`, and returns which of the original's outcomes happened. A crater is permanent, nothing
+ages one out, so what bounds a mission's count is the refusal alone. `TryCarve` is the sink shape
+`ProjectilePool` holds, true only when the carve landed, which is what suppresses the weapon's
+impact animation.
+
+## src/Mech3/TerrainCarve.cs
+The mesh and collider surgery one carve performs on one world node. The ring is subtracted from
+every up-facing triangle it covers by incremental half-plane clipping, so the hole is the ring's own
+edges and the bowl shares them with no crack; the pieces keep their height, normal, colour and UV by
+barycentric weights. The bowl is emitted as one further surface in the same skin, wound from the
+struck mesh's own convention. Both the `ArrayMesh` and the struck trimesh are replaced by PRIVATE
+copies, un-shared from `SceneBuilder`'s per-mesh-index caches, so a carve never reaches the other
+instances of the same model. Read `SceneBuilder.cs` for those caches.
+
+## src/Mech3/ClutterCull.cs
+Counts and destroys the decorations a crater swallows. A decoration dies outright, with no health
+test, no animation and no model swap, because the original's crater path reads no template field at
+all. `ClutterBuilder` bakes every placement of one kind into one MultiMesh, so dying means the
+instance's basis collapses to zero (the draw call and its custom data stay intact) and its shared
+collision shape is switched off on the region body it was attached to by RID. Read `Clutter.cs`.
+
 ## src/Mech3/PlaneBuilder.cs
 Builds one aircraft from its GameZ subtree, skipping the cockpit, damage, destroyed and shadow
 subtrees and the airframe's `*_hook` skyhook group unless `dockingHook` asks for it. `Repaint`

@@ -676,7 +676,7 @@ and sound a row binds and how rows are filled. It does not cover what a detonati
   `CRATER` weapons the ground effect is the crater rather than the ring where the terrain takes one.
   The randomisation never fires, because all six carriers author the block bare and every span is
   zero; what the carve then builds, and why a carve is often refused outright, is
-  [`craters.md`](craters.md). CSVM builds none of it.
+  [`craters.md`](craters.md), which also says what CSVM builds and what stands in for the rest.
 - **The row's own bindings** follow: the sound through `FUN_005ad100`; the `ANIMATION` (row `+0x4`)
   spawned through `FUN_004edc10` with a zero rotation, and only when `FUN_005abcf0` returned 0; and
   the `SURFACE_ANIMATION` (row `+0x1c`) spawned with an orientation built from the hit record:

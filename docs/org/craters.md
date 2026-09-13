@@ -8,9 +8,10 @@ them can be re-checked at source. No decompiler output is reproduced.
 this install ships in the block, is [`formats/weapons.md`](../formats/weapons.md). The detonation
 that reaches this subsystem, including the flag word the gate reads and the animation suppression a
 successful carve causes, is [`ordnanceTypes.md`](ordnanceTypes.md) "Detonation: the impact, then the
-splash". The decorations a crater destroys are [`clutter.md`](clutter.md). Our implementation is
-`WeaponDef.Crater`, a parsed boolean the weapon lab and the probes print as a label; CSVM builds no
-part of the subsystem below.
+splash". The decorations a crater destroys are [`clutter.md`](clutter.md). Our implementation reads
+`WeaponDef.Crater` and carves: `CraterShape.cs` is the geometry, `CraterField.cs` the mission's
+record list and the refusal, `TerrainCarve.cs` the mesh and collider surgery, `ClutterCull.cs` the
+decoration destruction. What is faithful and what stands in for it is "How CSVM builds it" below.
 
 **Scope.** This page covers the **engine-wide crater template**, the **weapon sub-block** that
 overrides it, **what one carve actually builds**, the **three failure paths**, and the
@@ -237,6 +238,37 @@ the per-cell counters and deletes every `ZDEC_FEATURE` node in the world, then e
 world position under the cursor and calls `FUN_004e4a10` directly, and another that does the same
 for quicksand through `FUN_004e3bf0`. That path takes no weapon and so always carves at the engine
 defaults.
+
+## How CSVM builds it
+
+A `CRATER` weapon's round that strikes anything other than an aircraft asks `CraterField` for a
+crater at its impact point, and only a carve that landed suppresses the row's impact animation, the
+same AND the original runs. What is faithful:
+
+- The shape. Seven rim vertices at radius 20 on the ground the ring was clipped against, a mid ring
+  halfway in and one `DEPTH` down, an apex two `DEPTH`s under the impact. No randomisation, because
+  all six carriers author the block bare.
+- The refusal. A new footprint is compared against every recorded one grown by 5 units on all four
+  sides, and any overlap is refused outright. Bombing one spot twice produces one crater and then
+  nothing, and that refusal is what bounds a mission's crater count.
+- Permanence. The record list only grows, nothing ages a crater out, and the carve is merged into
+  the terrain rather than pooled.
+- The destruction. Every decoration whose origin is inside the radius dies outright, on the XZ
+  distance alone with no height test and with no template field read.
+
+What stands in for the original's own mechanism:
+
+- **The terrain is a built scene, not the original's cell grid.** CSVM has no terrain cells, so
+  there is no per-cell carve cap and no `ZDEC_FEATURE` node: the record list is per mission and the
+  refusal is compared against all of it. With a 45-unit reach per crater the refusal alone holds the
+  count to a bounded scatter, which is what the cap existed to do.
+- **The carve rewrites the struck world node's own mesh and trimesh.** The ring is subtracted from
+  every up-facing triangle it covers and the bowl is added as one further surface in the same skin,
+  so the hole and the bowl share edges exactly. Both the mesh and the collision shape are replaced
+  by private copies first, because `SceneBuilder` shares one of each per mesh index across every
+  instance of a model.
+- **Nothing is serialised.** The original writes its record list under `zDEClient` and replays it on
+  load; CSVM's craters live for the mission and no save path reads them.
 
 ## Evidence & limits
 

@@ -1261,6 +1261,10 @@ public partial class GameSession : Node3D
         state.CrashProgram = session.Program;
         state.WorldScene = session.Builder.Scene;
         state.WorldRuntime = session.Runtime;
+        // The mission's craters, which need world colliders both to find the terrain a round struck
+        // and to cut that terrain's own trimesh. Owned by the session, so they last exactly as long
+        // as the mission does and a new launch starts on uncratered ground.
+        state.Craters = BuildsCollision ? new CraterField(session.Root) : null;
         // After the bootstrap: an intro definition has already raised its codes, and this is where
         // the host picks up the two nodes it drives.
         _cutscene?.BindWorld(session.Runtime, session.Aircraft);
@@ -2096,6 +2100,9 @@ public partial class GameSession : Node3D
             // reports the struck collider, the runtime resolves it to a destructible and
             // spends the weapon's HEALTH_DAMAGE. Null runtime ⇒ impacts stay cosmetic.
             DamageSink = state.WorldRuntime != null ? state.WorldRuntime.DamageAt : null,
+            // Route a CRATER weapon's ground strike to the mission's crater field: the pool reports
+            // the impact and the struck collider, the field refuses or carves (Mech3.CraterField).
+            CraterSink = state.Craters != null ? state.Craters.TryCarve : null,
             // The same equal-power splitscreen factor FlightAudio's own-ship loops take, plus the
             // nearest-human snapshot shared with WorldSession and the world-effects runtime.
             MixGain = mixGain,
@@ -4384,6 +4391,7 @@ public partial class GameSession : Node3D
         public AnimProgram? CrashProgram;
         public SceneBuilder? WorldScene;
         public AnimRuntime? WorldRuntime;
+        public CraterField? Craters;
 
         /// <summary>The chapter's resolved approach rows, kept so the actor build can re-bind the
         /// trigger once the roster's own approach nodes exist (<see cref="Mech3.RosterMarkers"/>).
