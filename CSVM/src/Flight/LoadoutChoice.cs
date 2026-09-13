@@ -146,7 +146,8 @@ public sealed class LoadoutChoice
     /// <summary>This choice laid over <paramref name="stock"/>, as a new def, the base is never
     /// mutated. The base is handed in rather than looked up so a custom plane's saved fit works
     /// here unchanged. A gun slot picked <see cref="None"/> is omitted from the result entirely
-    /// rather than built with no rounds, so it never occupies a slot in the gun cycle.</summary>
+    /// rather than built with no rounds, so it never occupies a slot in the gun cycle, and a
+    /// pylon the base leaves empty stays empty whatever is picked for it.</summary>
     public LoadoutDef ApplyTo(LoadoutDef stock)
     {
         var def = new LoadoutDef { Def = stock.Def, Model = stock.Model, Display = stock.Display };
@@ -211,9 +212,12 @@ public sealed class LoadoutChoice
             // sentinel instead of shortening the array, because dropping one would slide every
             // later pylon onto a different wing.
             int pylon = i < Loadout.PylonFillOrder.Length ? Loadout.PylonFillOrder[i] : 0;
-            stock[i] = PylonFor(pylon)
-                ?? (pylon > 0 && pylon <= MaxPylon ? ofCell[pylon] : null)
-                ?? (i < hardpoints.Stock.Length ? hardpoints.Stock[i] : None);
+            string mount = i < hardpoints.Stock.Length ? hardpoints.Stock[i] : None;
+
+            // ⚠ An empty mount takes no pick: the sentinel is a pylon the build never bought, and
+            // the original's own commit writes it past each wing's count (docs/formats/paint.md).
+            stock[i] = string.Equals(mount, None, StringComparison.OrdinalIgnoreCase) ? None
+                : PylonFor(pylon) ?? (pylon > 0 && pylon <= MaxPylon ? ofCell[pylon] : null) ?? mount;
         }
 
         return new HardpointSpec { Count = hardpoints.Count, Stock = stock, Rounds = hardpoints.Rounds };

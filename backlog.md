@@ -511,15 +511,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   reference to compare against; `CAP-47` is that clip.
   *Cross-refs:* `BL-640` (the same zeppelin's cannons); the other prerequisite form, node state, is
   parsed on both paths and enforced at `Start` (`git log --grep=BL-575`).
-- `BL-841` `[Bug]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: trace]` **`ApplyPylons` overwrites a `none`
-  loadout cell, so a custom plane that is not an airframe swap may mount a pylon it never bought.**
-  *Evidence:* noted and left unfiled in `BL-718`'s closing commit (`git log --grep=BL-718`), which
-  made a swap fit the def's own stock loadout through the same apply; whether a shipped custom
-  build can reach the overwrite with an empty cell is not read. *Fix shape:* build a custom plane
-  with an empty cell through the plane construction hub, apply, and pin that the cell stays
-  empty; if it does not, skip `none` cells on the non-swap path. *Cross-refs:* `BL-718`'s closing
-  commit (the swap table holds weapon ids, not counts), `docs/formats/vehicle.md`.
-
 - `BL-873` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: trace]` **C1's refuel-tank debris draws near-black and reads as a
   hole punched through the flame.** *Evidence:* `--freecam --chapter=C1 --destroy=refuel
   --frames=120` and `=240` put faceted shards over the left tank's fire column, each a flat dark

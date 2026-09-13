@@ -32,9 +32,9 @@ the two dropdowns parsed from the same file's `selectable` block, authored in th
 order and neither derived nor sorted. `LoadoutChoice` keys its picks by slot identity rather than by
 position in a def's arrays, and `ApplyTo` lays them over a base handed in rather than looked up, so a
 custom plane's saved fit takes the same path and a pick for a slot the base lacks is dropped. Guns
-are slots 1 to 4; ordnance is either a physical pylon, which the loadout screens read off the fit, or
-a saved record's wing cell, which names a pylon only against a fit (`Loadout.PylonForCell`). `None`
-is an explicit empty mount, a null entry no choice at all. Fills: `Session/CampaignLoadout.cs`.
+are slots 1 to 4; ordnance is either a physical pylon, which the loadout screens read off the fit,
+or a saved record's wing cell naming a pylon only against a fit (`Loadout.PylonForCell`). `None` is
+an explicit empty mount taking no pick, a null entry no choice at all. Fills: `Session/CampaignLoadout.cs`.
 
 ## src/Flight/WeaponBench.cs
 The world-less "do all 48 weapons mount and fire without throwing" pass check behind `--weapon-test`
