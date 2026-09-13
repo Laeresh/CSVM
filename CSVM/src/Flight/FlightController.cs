@@ -1990,8 +1990,8 @@ public partial class FlightController : Node3D
             else if (_cam.FirstPerson)
             {
                 // Rigid at cockpit_camera (wobble inherited), the mode's own FOV, aimed by the
-                // head. Look-back stays IN the cockpit, head to dead astern while held, as the
-                // original does, which is why this arm sits above the look-behind branch below.
+                // head. Look-back stays IN the cockpit, the head snapped to dead astern while held,
+                // as the original does, so this arm sits above the look-behind cut below.
                 _cam.StepHead(simDt, _cam.BackActive(_padActions.Held(InputAction.LookBack))
                     ? new HeadLookInput(0f, -1f, 0f, 0f, false)
                     : HeadLookRead(), HeadLook.FirstPersonElevationFloor);
@@ -3059,7 +3059,7 @@ public partial class FlightController : Node3D
     // leaving the flight; the board's Exit item is what leaves, and a pad can reach it.
     // ⚠ Silent in photo mode and under the pause's options leaf: Escape is what LEAVES both, and
     // this reads Escape too, so one press would both close the screen and unpause the session
-    // behind it (BL-429).
+    // behind it.
     private bool PauseTogglePressed() =>
         AllowPause && !InPhotoMode && !InPauseLeaf && _actions.Held(InputAction.Pause);
 

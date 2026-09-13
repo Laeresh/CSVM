@@ -280,9 +280,9 @@ public sealed class CameraController
     /// <summary>One frame of the pilot's head, in the shape the original's own controller takes it
     /// (<c>FUN_0042d010(floor, autohead)</c>): the view placing the frame hands the elevation floor
     /// it uses, level in the cockpit and <see cref="HeadLook.ChaseElevationFloor"/> on the chase
-    /// camera, and the one shared head takes the input. ⚠ The look-behind steps no head, in either
-    /// view: the original's own look-behind arm never reaches the controller, so a held look-back
-    /// leaves the head where it was.</summary>
+    /// camera, and the one shared head takes the input. ⚠ The look-behind steps this head only in
+    /// first person, to dead astern while held; the chase camera's look-behind is a rigid pose of
+    /// its own, and the original's arm for it never reaches the controller.</summary>
     public void StepHead(float dt, in HeadLookInput input, float elevationFloor)
     {
         Head.ElevationFloor = elevationFloor;
