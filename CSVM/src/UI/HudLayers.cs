@@ -47,7 +47,7 @@ internal static class HudLayers
     public const int Debug = 4;
 
     /// <summary>The interactive labs that own a full panel: the node lab (N) and the world damage
-    /// lab (F5).</summary>
+    /// lab (F19).</summary>
     public const int Lab = 5;
 
     /// <summary>Scoreboards and the launchscreen, always on top of everything.</summary>

@@ -1045,7 +1045,7 @@ public sealed partial class WeaponLab : Node3D
 
         // Top-right: in flight the bottom-right corner belongs to the gauge cluster (its right-hand
         // dials sit 420 px from the right edge in reference space), and the top-left is the flight
-        // HUD's. Top-right is free unless F5 opens the damage lab.
+        // HUD's. Top-right is free unless F19 opens the damage lab.
         var panel = new PanelContainer { SelfModulate = new Color(1, 1, 1, 0.85f) };
         panel.SetAnchorsPreset(Control.LayoutPreset.TopRight);
         panel.GrowHorizontal = Control.GrowDirection.Begin;

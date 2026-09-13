@@ -106,14 +106,14 @@ public static class DefaultBindings
         b.Keys(InputAction.ThrottleDown, Key.Ctrl).Stick(InputAction.ThrottleDown, JoyAxis.TriggerLeft, 1, 0f);
         b.Keys(InputAction.FireGuns, Key.Space).Buttons(InputAction.FireGuns, JoyButton.B);
         b.Keys(InputAction.FireRockets, Key.F).Buttons(InputAction.FireRockets, JoyButton.A);
-        b.Keys(InputAction.SelectGunGroup, Key.G).Buttons(InputAction.SelectGunGroup, JoyButton.DpadRight);
-        b.Keys(InputAction.SelectOrdnance, Key.H).Buttons(InputAction.SelectOrdnance, JoyButton.DpadLeft);
+        b.Keys(InputAction.SelectGunGroup, Key.F3).Buttons(InputAction.SelectGunGroup, JoyButton.DpadRight);
+        b.Keys(InputAction.SelectOrdnance, Key.F5).Buttons(InputAction.SelectOrdnance, JoyButton.DpadLeft);
 
-        // The backward step of each selector, on two of the four function keys the original spends
-        // on these cycles (docs/controls.md). No pad default: a flight pad has no free control
-        // left, so a second pair is what the rebinding screen is for.
-        b.Keys(InputAction.SelectGunGroupPrev, Key.F3);
-        b.Keys(InputAction.SelectOrdnancePrev, Key.F4);
+        // The four selector keys are the original's own, by the name its keybind page displays
+        // (docs/controls.md, docs/org/input.md). The backward pair ships on no pad control: the
+        // pad reaches it by HOLDING the forward button, which FireControl's tap/hold split reads.
+        b.Keys(InputAction.SelectGunGroupPrev, Key.F4);
+        b.Keys(InputAction.SelectOrdnancePrev, Key.F6);
         b.Keys(InputAction.Nitro, Key.N).Buttons(InputAction.Nitro, JoyButton.X);
         b.Keys(InputAction.Respawn, Key.R).Buttons(InputAction.Respawn, JoyButton.Y);
         b.Keys(InputAction.AutoLand, Key.F9).Buttons(InputAction.AutoLand, JoyButton.LeftStick);
@@ -134,7 +134,10 @@ public static class DefaultBindings
         b.Keys(InputAction.TargetNearestAlly, Key.Key9);
         b.Keys(InputAction.TargetNearestNonAircraft, Key.Key0);
         b.Keys(InputAction.CycleCockpitViews, Key.F8).Buttons(InputAction.CycleCockpitViews, JoyButton.DpadDown);
-        b.Keys(InputAction.SelectChaseView, Key.F6).Buttons(InputAction.SelectChaseView, JoyButton.Back);
+        // F1 rather than a key in the F6-F8 run: the original spends F3 to F6 on the weapon
+        // selectors and this port reproduces that, leaving F1 (its own View Help, which this port
+        // has no screen for) as the function key the views cluster can still take.
+        b.Keys(InputAction.SelectChaseView, Key.F1).Buttons(InputAction.SelectChaseView, JoyButton.Back);
         // F7 is the original's own key for this camera ("Access Chase View", which its own decode
         // settles as the flyby rather than the following chase view); the pad has no spare button.
         b.Keys(InputAction.FlybyView, Key.F7);

@@ -236,7 +236,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/AircraftLifecycle.cs`, the states one aircraft moves between and the spawn timers; every transition reports what the node must then perform.
 - `src/Flight/PlaneDamage.cs`, the decoded damage ledger: per-part pools plus the whole-vehicle pair, the armour-first take-hit flow, and the kill rule.
 - `src/Flight/DamageVisuals.cs`, flips the torn-skin `pdpN` panels (paired by mesh position) at the data's injure thresholds, plus fire trails.
-- `src/Flight/DamageLab.cs`, the `--damage` and F5 slider panel: one slider per part, driving a parked plane's visuals or the flown plane's real ledger.
+- `src/Flight/DamageLab.cs`, the `--damage` and F19 slider panel: one slider per part, driving a parked plane's visuals or the flown plane's real ledger.
 - `src/Flight/CompassTape.cs`, the top-centre heading tape from the game's own HUD textures, drawn as a cylindrical drum seen edge-on.
 - `src/Flight/GaugeCluster.cs`, the cockpit dials as HUD (altimeter/speedo/damage + gun/missile), geometry from the plane's `gauges` subtree.
 - `src/Flight/FlightController.cs`, the flying-aircraft node: input → FlightModel → transform, weapons, collision, crash and respawn.
@@ -397,7 +397,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/SelectionService.cs`, the shared `--freecam` and `--anim-lab` selection: click-pick, the `cs_name` ancestor ladder, a breadcrumb and a highlight box.
 - `src/UI/NodeLab.cs`, the node lab (N): a lazy `cs_name` tree, search, frame, hide and glTF export, a dependency readout and a destructibles view.
 - `src/UI/ExportSet.cs`, the node lab's Ctrl+click export set: cyan outlines, the breadcrumb's count, and one combined glTF at world transforms.
-- `src/UI/WorldDamageLab.cs`, the world damage lab (F5): an HP slider with kill and reset on the selection's own destructible pool.
+- `src/UI/WorldDamageLab.cs`, the world damage lab (F19): an HP slider with kill and reset on the selection's own destructible pool.
 - `src/UI/OrbitCamera.cs`, the static inspection view's orbit camera: orbit, zoom and AABB framing over a camera it does not own.
 - `src/UI/AnimLab.cs`, the `--anim-lab` debugger: a quiet stage, a fixed-dt clock, a transport panel, a def picker, the timeline and a freecam.
 - `src/UI/AnimTimeline.cs`, the anim lab's per-sequence timeline: authored event blocks against runtime-fired ticks, the scheduler-divergence instrument.

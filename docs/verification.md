@@ -500,6 +500,11 @@ member, and it does not go here.
   session's instance with a control that reads the null object, not only what that instance
   reports.** Every world emitter read the null ambience while every puffer suite passed against a
   fake renderer.
+- **INSTR-64**, **A changed rebinding DEFAULT is invisible to any profile that has already saved
+  that context, because a saved keymap lists every action of the context and the store loads it
+  whole: verify new defaults on a fresh profile, and test the default table itself rather than a
+  seat built from disk.** The keymap store versions its schema, not its action list, so a default
+  change moves no stored file.
 
 ## SRC, sources and documents
 

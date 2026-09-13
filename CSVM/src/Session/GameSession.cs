@@ -171,10 +171,10 @@ public partial class GameSession : Node3D
     // The node lab (N, --freecam/--anim-lab): tree panel, search, per-node actions and the
     // dependency readout for whatever the selection holds.
     private UI.NodeLab? _nodeLab;
-    // The world damage lab (F5, --freecam/--anim-lab): HP slider + kill/reset on the selection's
+    // The world damage lab (F19, --freecam/--anim-lab): HP slider + kill/reset on the selection's
     // destructible pool, the interactive twin of --damage-test.
     private UI.WorldDamageLab? _worldDamageLab;
-    // The aircraft damage lab (F5, --viewer/--fly/--stunt): per-part HP sliders on the parked
+    // The aircraft damage lab (F19, --viewer/--fly/--stunt): per-part HP sliders on the parked
     // plane's visuals, or on P1's real PlaneDamage in flight.
     private DamageLab? _damageLab;
     // The effect/crash stage factory, builds the world-effects runtime
@@ -1759,11 +1759,11 @@ public partial class GameSession : Node3D
                 _damageLab = new DamageLab(stats, new ViewerDamageTarget(visuals),
                     _spec.DamagePreset, labGauges)
                 {
-                    StartHidden = !_spec.DamageLab, // --damage opens it; plain --viewer waits for F5
+                    StartHidden = !_spec.DamageLab, // --damage opens it; plain --viewer waits for F19
                 };
                 _worldRoot!.AddChild(_damageLab);
-                Log.Info("flight", $"damage lab: {stats.DestroyableParts.Count} part sliders, {visuals.PanelCount} panels, {panelTrails.Count} panel fire trails{(_spec.DamageLab ? "" : " (hidden, F5)")}");
-                state.What += _spec.DamageLab ? " + damage lab" : " + damage lab (F5)";
+                Log.Info("flight", $"damage lab: {stats.DestroyableParts.Count} part sliders, {visuals.PanelCount} panels, {panelTrails.Count} panel fire trails{(_spec.DamageLab ? "" : " (hidden, F19)")}");
+                state.What += _spec.DamageLab ? " + damage lab" : " + damage lab (F19)";
             }
         }
 
@@ -1907,7 +1907,7 @@ public partial class GameSession : Node3D
         };
         _worldRoot!.AddChild(_spectator);
         state.What += " + freecam";
-        Log.Info("core", $"freecam: spectator camera at ({camPos.X:0}, {camPos.Y:0}, {camPos.Z:0}) — hold RMB to look, WASD/QE to move, Shift boost, wheel sets speed; click an object to select it, PgUp/PgDn walk its ancestor ladder (Home/End jump), N opens the node lab, F5 the damage lab on whatever destructible is selected");
+        Log.Info("core", $"freecam: spectator camera at ({camPos.X:0}, {camPos.Y:0}, {camPos.Z:0}) — hold RMB to look, WASD/QE to move, Shift boost, wheel sets speed; click an object to select it, PgUp/PgDn walk its ancestor ladder (Home/End jump), N opens the node lab, F19 the damage lab on whatever destructible is selected");
     }
 
     // --fly (and --stunt): builds every rendered rig's aircraft (model, loadout, HUD, audio,
@@ -2335,7 +2335,7 @@ public partial class GameSession : Node3D
         }
         BuildCockpitPasses();
 
-        // Damage lab in flight (F5): the panel --viewer hosts, bound to P1's real PlaneDamage
+        // Damage lab in flight (F19): the panel --viewer hosts, bound to P1's real PlaneDamage
         // rather than visuals alone, so a dialled-in state drives the HUD and can then be flown.
         // Splitscreen binds P1 only: the panel is one overlay, not one per pane.
         if (_rigs.Count > 0 && _rigs[0].Controller is { Damage: not null } p1)
@@ -2344,11 +2344,11 @@ public partial class GameSession : Node3D
             _damageLab = new DamageLab(p1Stats,
                 new FlightDamageTarget(p1, _rigs.Count > 1 ? "P1" : null), _spec.DamagePreset)
             {
-                StartHidden = !_spec.DamageLab, // --damage opens it; a plain flight waits for F5
+                StartHidden = !_spec.DamageLab, // --damage opens it; a plain flight waits for F19
                 RightAligned = true,            // the top-left corner is the flight HUD's
             };
             _worldRoot!.AddChild(_damageLab);
-            Log.Info("flight", $"damage lab: {p1Stats.DestroyableParts.Count} part sliders on the flown plane's armor+HP{(_spec.DamageLab ? "" : " (hidden, F5)")}");
+            Log.Info("flight", $"damage lab: {p1Stats.DestroyableParts.Count} part sliders on the flown plane's armor+HP{(_spec.DamageLab ? "" : " (hidden, F19)")}");
             state.What += _spec.DamageLab ? " + damage lab" : " + damage lab (F5)";
         }
         else if (_spec.DamageLab)
@@ -3041,7 +3041,7 @@ public partial class GameSession : Node3D
 
         // F17: kill P1's TargetSelection.Current through its own death path, the playtester's
         // escape hatch when a stray enemy blocks an objective chain. P1-only, the same precedent
-        // F5/F51 set for a single-pane debug tool.
+        // F19/F51 set for a single-pane debug tool.
         _worldRoot!.AddChild(new UI.DebugKillTarget(
             () => _rigs.Count > 0 ? _rigs[0].Controller : null,
             () => _diagRuntime));

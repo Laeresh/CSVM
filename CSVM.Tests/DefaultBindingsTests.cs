@@ -150,21 +150,64 @@ public class DefaultBindingsTests
         Assert.Equal(3, map.Bindings(InputAction.Pause).Count);
     }
 
-    /// <summary>The two backward weapon selectors ship on the keyboard alone: every control a
-    /// flight pad has is already spoken for, so the rebinding screen is where a pad player finds
-    /// their second pair. Recorded so a later edit cannot hand one a pad control by accident.
-    /// </summary>
+    /// <summary>The four weapon selectors are the original's own keys, by the name its keybind page
+    /// displays: F3/F4 the guns clockwise and counterclockwise, F5/F6 the rockets
+    /// (`OriginalScreenshots/Keybinds Weapons.png`). Recorded key by key because the page's names
+    /// are inverted against the message keys behind them, so a later edit taking the direction off
+    /// `MSG_CMD_CANNON_PREV` would bind both pairs backwards.</summary>
+    [Fact]
+    public void TheFourWeaponSelectors_AreTheOriginalsOwnKeys()
+    {
+        var map = DefaultBindings.MapFor(InputContext.Flight, Pad);
+        var expected = new Dictionary<InputAction, Key>
+        {
+            [InputAction.SelectGunGroup] = Key.F3,
+            [InputAction.SelectGunGroupPrev] = Key.F4,
+            [InputAction.SelectOrdnance] = Key.F5,
+            [InputAction.SelectOrdnancePrev] = Key.F6,
+        };
+
+        foreach (var (action, key) in expected)
+        {
+            Assert.Contains(
+                new Binding(DeviceId.Keyboard, BindingControl.Key((int)key)), map.Bindings(action));
+        }
+    }
+
+    /// <summary>The two backward weapon selectors ship on the keyboard alone: the pad reaches that
+    /// direction by holding the forward button, as the original's joystick reaches it by going
+    /// round. Recorded so a later edit cannot hand one a pad control by accident, which would step
+    /// the cursor twice for one press.</summary>
     [Fact]
     public void TheBackwardSelectors_ShipOnTheKeyboardOnly()
     {
         var map = DefaultBindings.MapFor(InputContext.Flight, Pad);
 
         Assert.Equal(
-            new[] { new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.F3)) },
+            new[] { new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.F4)) },
             map.Bindings(InputAction.SelectGunGroupPrev));
         Assert.Equal(
-            new[] { new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.F4)) },
+            new[] { new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.F6)) },
             map.Bindings(InputAction.SelectOrdnancePrev));
+    }
+
+    /// <summary>The chase view moved off F6 when the rocket selector took it, and the debug damage
+    /// lab off F5 for the same reason. Recorded so neither is quietly handed back a key the
+    /// original spends on a weapon cycle.</summary>
+    [Fact]
+    public void TheChaseView_LeavesTheOriginalsWeaponKeysAlone()
+    {
+        var map = DefaultBindings.MapFor(InputContext.Flight, Pad);
+
+        Assert.Contains(
+            new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.F1)),
+            map.Bindings(InputAction.SelectChaseView));
+        foreach (var key in new[] { Key.F3, Key.F4, Key.F5, Key.F6 })
+        {
+            Assert.DoesNotContain(
+                new Binding(DeviceId.Keyboard, BindingControl.Key((int)key)),
+                map.Bindings(InputAction.SelectChaseView));
+        }
     }
 
     /// <summary>The other two directions of each target class ship on the keyboard alone, on the

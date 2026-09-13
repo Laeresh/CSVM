@@ -297,13 +297,13 @@ reasons that have nothing to do with any of these checks.
   *Blocks:* nothing; a fail on (a) says the gate reads the wrong pool, a fail on (b) says something
   is re-evaluating the swap per frame.
 
-- `PT-81` `[Own]` **A repair retracts the stage it lifted back over (F5 damage lab).** Staging used
+- `PT-81` `[Own]` **A repair retracts the stage it lifted back over (F19 damage lab).** Staging used
   to latch one way; the original stops an entry's anim and clears its handle on the upward crossing.
   This one needs no AI, so it flies on the bare command:
   ```powershell
   ./RunGame.ps1 --chapter=C1 --plane=player_bhawk
   ```
-  *Look for:* open the F5 damage lab, drag a zone down past a threshold to start its stage, then
+  *Look for:* open the F19 damage lab, drag a zone down past a threshold to start its stage, then
   repair back above it and watch the stage stop. Un-staging on repair is faithful, not a regression.
   *Look for also:* it must fire ONCE per downward crossing. A stage that re-fires while the fraction
   merely stays below its threshold is a different bug, not this fix working.

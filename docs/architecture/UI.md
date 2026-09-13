@@ -570,7 +570,7 @@ gathered whether or not the panel was ever opened. A member freed under it (a de
 to its wreck) leaves on its own. Nothing is drawn until the first node joins.
 
 ## src/UI/WorldDamageLab.cs
-The world damage lab (key F5) in `--freecam` and `--anim-lab`: the destructible pools of whatever
+The world damage lab (key F19) in `--freecam` and `--anim-lab`: the destructible pools of whatever
 the selection holds, each with live HP, and a slider with kill and reset on the one a weapon hit
 reaches, driving the anim runtime's damage and reset calls. `--debug-damage` is the scripted twin,
 an ordered script rather than a token set. Only the pool the registry resolves is drivable, since a

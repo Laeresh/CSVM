@@ -1675,36 +1675,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Fix shape:* re-review `StuntRunHud.cs`/`TargetHud.cs`/`StuntScoreboard.cs` placement once such a type scale exists,
   against it rather than in isolation. *Cross-refs:* `BL-449`, whose landing prompted this wording.
 
-- `BL-897` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **The weapon
-  selectors' four keys should be the original's own `F3`..`F6`, and the pad's one direction per
-  class wants a hold to step the other way.** *Evidence:* the user at the controls with the two
-  backward steps landed (`git log --grep=BL-357`): CSVM binds the forward steps on `G`/`H` and the
-  backward ones on `F3`/`F4`, where the original's Weapons keybind page
-  (`OriginalScreenshots/Keybinds Weapons.png`, `docs/org/input.md`'s shipped-defaults table) puts
-  `Cycle guns clockwise` on `F3`, `Cycle guns counterclockwise` on `F4`, `Cycle rockets clockwise`
-  on `F5` and `Cycle rockets counterclockwise` on `F6`. `F5` is the damage lab's hard-coded key
-  (`Flight/DamageLab.cs`, `UI/WorldDamageLab.cs`) and `F6` is `SelectChaseView`'s default
-  (`Bindings/DefaultBindings.cs`). On the pad each class has one direction (D-pad right and left,
-  the original's own joystick 7 and 8 are also one direction each), and `FireControl.StepSelectors`
-  moves on rising edges only, so holding the D-pad does nothing today. *Fix shape:* (1) defaults
-  `F3` guns clockwise, `F4` guns counterclockwise, `F5` rockets clockwise, `F6` rockets
-  counterclockwise, which the user asked for verbatim; the damage lab and the chase view each take a
-  new key, named in `docs/controls.md`, `docs/cli.md` if a flag names the key, and the debug-key
-  block's own rule if the lab moves there. (2) A hold on the pad's selector button past the same
-  250 ms the targeting hold already uses steps the selector the other way, one step per hold, so
-  the pad reaches both directions without a second button; keyboard holds stay inert. *⚠ Traps:*
-  `docs/org/input.md` says the original's clockwise/counterclockwise names are inverted against
-  its message keys, so bind by the displayed name the user typed, not by `MSG_CMD_CANNON_PREV`. A
-  stored keymap that names `F3`/`F4` for the backward steps keeps them (the store does not bump
-  its version for a default change), so the new defaults reach only a profile that never saved
-  those two rows; say so in `docs/controls.md`. The hold must not also fire the rising-edge step
-  on press and then the backward step on release; feed the pad's selector level through
-  `TapHoldButton` (`CSVM/src/Utils/TapHoldButton.cs`) as the targeting hold does, so the tap
-  resolves on release and a spent hold never also taps. *Playtest after fix:* any sortie, both selectors both
-  ways on the keyboard, and a short press against a held press on the D-pad. *Cross-refs:*
-  `CSVM/src/Flight/FireControl.cs` (`StepSelectors`), `CSVM/src/Bindings/DefaultBindings.cs`,
-  `docs/controls.md`'s flight table, `docs/org/input.md` (the inverted names, the joystick column).
-
 - `BL-431` `[Feature]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The screen-space `GaugeCluster` doubles up over the driven 3D panel in
   first person, and whether it should is undecided.** The drive itself has landed:
   `CockpitGauges` (`src/Flight/CockpitGauges.cs`) binds the needle nodes, the artificial-horizon

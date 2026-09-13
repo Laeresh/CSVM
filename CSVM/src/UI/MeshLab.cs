@@ -1321,7 +1321,7 @@ void fragment() {{
         box.AddChild(new Label { Text = Scoped ? "MESH LAB — SELECTION" : "MESH LAB" });
         box.AddChild(Small(Scoped
             ? "M detaches (restores the subtree) · click / PgUp / PgDn re-target it"
-            : "M hides this panel · F5 damage lab · L livery lab"));
+            : "M hides this panel · F19 damage lab · L livery lab"));
         _countsLabel = Small("");
         box.AddChild(_countsLabel);
         box.AddChild(Separator());

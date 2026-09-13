@@ -145,7 +145,7 @@ public sealed record SessionSpec
     /// <summary><b>Resolved.</b> Open the aircraft's per-part HP sliders at launch, a modifier on
     /// <see cref="SessionMode.Viewer"/> (the parked plane) or <see cref="SessionMode.Fly"/> (the
     /// flown one), dropped by the modes that build no aircraft at all. The lab itself is always
-    /// built; this only decides whether it starts open or waits behind F5.</summary>
+    /// built; this only decides whether it starts open or waits behind F19.</summary>
     public bool DamageLab { get; private set; }
     public bool ForceMenu { get; private set; }
     public string MenuStartScreen { get; private set; } = "";

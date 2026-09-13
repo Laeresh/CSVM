@@ -24,7 +24,7 @@ anything the file does not carry (`Bindings/LaunchBindings.cs`). A `--det` or
 committed tree and not of whoever ran it.
 
 Not every row here is a bindable action. The debug overlays and the lab panels
-(`F5`, `F10` through `F18`, `C`, `X`, and the viewer and weapon-lab keys) are
+(`F10` through `F19`, `C`, `X`, and the viewer and weapon-lab keys) are
 development instruments and sit deliberately outside the action set, so no
 rebinding screen offers them and no player can break their own diagnostics on
 them. The few gameplay controls in the same position say so in their own row.
@@ -42,11 +42,11 @@ specified in [`cli.md`](cli.md).
 | `Shift` / `Ctrl` | triggers | throttle up / down |
 | `Space` | B | fire guns |
 | `F` | A | fire rockets, one per pull |
-| `G` | D-pad → | step the gun-group selector forward (one group fires at a time). The pad side follows the cockpit dial: the **GUNS** gauge is in the right column, **ROCKETS** in the left (`docs/formats/hud.md`, "Weapon gauges") |
-| `H` | D-pad ← | select ordnance: step the hardpoint selector one mount along the belt, skipping every pylon that is spent |
-| `F3` · `F4` | | step the gun-group and hardpoint selectors the other way, over the same order and skipping the same empties, so a press each way returns to the slot you started on. The original carries one bound action per direction per weapon class (`OriginalScreenshots/Keybinds Weapons.png`: `F3`/`F4` guns, `F5`/`F6` rockets); `F5` and `F6` are the damage lab and the chase view here, so the backward halves take the two of its four keys this port leaves free. No pad default: every control a flight pad has is already spoken for, and the Controls door is where a pad player picks their second pair |
+| `F3` | D-pad → | cycle the guns clockwise: step the gun-group selector forward (one group fires at a time). The pad side follows the cockpit dial: the **GUNS** gauge is in the right column, **ROCKETS** in the left (`docs/formats/hud.md`, "Weapon gauges") |
+| `F5` | D-pad ← | cycle the rockets clockwise: step the hardpoint selector one mount along the belt, skipping every pylon that is spent |
+| `F4` · `F6` | D-pad → / ← **held** | cycle the guns and the rockets counterclockwise, over the same order and skipping the same empties, so a press each way returns to the slot you started on. These four are the original's own keys, by the name its keybind page displays (`OriginalScreenshots/Keybinds Weapons.png`: `F3`/`F4` guns, `F5`/`F6` rockets; the names are inverted against the message keys behind them, `docs/org/input.md`). The pad has one button per class rather than two, as the original's joystick column does, so holding it past 250 ms steps that class the other way, one step per hold, and the tap resolves on release so a spent hold never also steps forward. A keyboard hold does nothing: each direction has its own key. ⚠ **A saved keymap keeps whatever it saved.** The store does not bump its version for a default change and a seat's file lists every action, so these four reach only a player whose Controls door has never written a flight profile; anyone else sees their own rows and resets to these from that screen |
 | `N` | X | nitro boost (the original's "Use Nitro-Booster"): engages only with a nitrous engine fitted and the tank at 99 % or more, then burns the whole tank (9.5 s) with no way to stop it, and re-arms after a 28 s refill. The nitro dial appears at the bottom of the right column, below the speedometer, with the injector fitted (`docs/org/flightModel.md`, "Nitro") |
-| `F5` | | damage lab on the flown plane, `--damage=` |
+| `F19` | | damage lab on the flown plane, `--damage=` |
 | `B` | | weapon lab panel, `--weapon-lab` sessions only; its steppers arm the plane's live loadout and Space/`F` then fire it (`--weapon-lab=` picks the weapon, `--weapon-mount=` the mount, `--weapon-cycle=` steps the list) |
 | click | | weapon lab: park the held plane on the surface under the cursor, at the panel's stand-off, nose on it, `--weapon-click=x,y`, or `--weapon-target=x,y,z` / `--weapon-surface=<registry name>` (any of the fourteen surface ids; `dirt` means id 13, not "untagged") to place without a mouse at all |
 | shift-click | | weapon lab: aim at that point without moving the plane, `--weapon-click=x,y,aim` |
@@ -63,7 +63,7 @@ specified in [`cli.md`](cli.md).
 | `5` · `6` · `7` | | step the enemy/objective, ally and non-aircraft cycle **back** one, the same order the keys above walk forward, wrapping off the head onto the tail. The original binds these to Shift+`E`, Shift+`W` and Shift+`R`; a binding here is one control and both Shift and Ctrl are the throttle in flight, so the three sit on the digit row directly above their own forward key |
 | `8` · `9` · `0` | | restart the enemy/objective, ally and non-aircraft cycle at its head, whatever entry the pilot had walked to. "Head" is the head of the decoded sector order (objectives, then ahead, behind, left, right), not the nearest thing in space. The original's Ctrl+`E`, Ctrl+`W` and Ctrl+`R`, on the digit row here for the same reason as the row above |
 | `F8` | D-pad ↓ | cycle the views: Cockpit → Nose → Chase → Cockpit, the original's own three-stop walk confirmed at its controls, `--view=cockpit` / `--view=nose` / `--view=chase`. The original's binding for "Cycle Cockpit Views" (`OriginalScreenshots/Keybinds Views 1.png`, which also gives it a joystick button); the D-pad slot is this port's pick of the free buttons, and gives a pad-only seat its way in |
-| `F6` | Back/Select | select the chase view directly, without walking the cycle, `--view=chase` (the default). `F6` and Back are this port's choices: the original's own `F7` is the flyby, the row below |
+| `F1` | Back/Select | select the chase view directly, without walking the cycle, `--view=chase` (the default). `F1` and Back are this port's choices: `F3` through `F6` are the original's weapon selectors, its own `F7` is the flyby (the row below), and `F1` is its View Help, a screen this port does not have |
 | `F7` | | the flyby camera, `--view=flyby`. The view leaves the aeroplane and takes a spot ahead of it and off to one side, holds that spot while the aircraft runs past within a few metres, then re-sites itself a few seconds later. The original's own binding, labelled "Access Chase View" (`OriginalScreenshots/Keybinds Views 1.png`), which its own code settles as camera mode 9 rather than the following chase view. `F8` or `F6` leaves it; so does a respawn. Placement, radii and timing all come from `camparam.json` (`docs/formats/camparam.md`) |
 | `F2` | Misc1 | arm or disarm the spyglass, on at level load. Armed, a selected target that is off screen and inside the fog-derived range gate is shown in a round inset picture at its edge marker, framed to a constant apparent size. The original binds this to Shift+`S` ("Toggle Spyglass", `OriginalScreenshots/Keybinds Views 1.png`, which also gives it joystick button 5); a binding here is one control and both halves of that chord are flight actions already, so the key is `F2` for the camera 2 the decode names, and the pad takes its one control no other flight action holds |
 | `numpad 1–9` (not `5`) | | head-look snap, in **every** view: hold a direction and the head swings there, release and it returns straight ahead. **The original's own bindings** (`OriginalScreenshots/Keybinds Views 2.png`): `Kp8` Look Up, `Kp4`/`Kp6` Look Left/Right, `Kp2` Look Back, `Kp7`/`Kp9` Look Up/Left and Up/Right, `Kp1`/`Kp3` Look Up/Left/Rear and Up/Right/Rear. So dead ahead looks straight **up**, every diagonal 45° up, and the flanks and astern look level. In Cockpit or Nose the head aims; in the chase view the same head swings the camera around the aeroplane, so looking left puts the camera on the aircraft's starboard side and `Kp8` gives the belly plan view. One head, so a bearing taken in the cockpit is the bearing the chase view shows, and several keys down compose as one direction rather than the lowest digit winning |
@@ -99,7 +99,7 @@ specified in [`cli.md`](cli.md).
 | any key held · any button held | any button held | during a cutscene the mission arms no skip on (every mid-mission scene), holding that same input fast-forwards the picture and its sound to 4x over a quarter-second ramp instead, and releasing it spools back down. A remake-only rule with nothing in the original behind it: every authored beat still plays, in order, only sooner (`docs/formats/anim-definitions/cutscenes.md`) |
 | `.` | | step one frame while paused |
 | `F12` | | screenshot, from any screen: in flight, in the viewer, on the launchscreen and on the campaign boards. Every shot lands in the repo's git-ignored `Screenshots/` folder, so one folder collects them however they were taken. The menu screens take the key themselves rather than leaving it to the launcher (`LaunchMenu._UnhandledInput`), which is what makes a menu defect showable rather than only describable (`BL-489`) |
-| `F13` | | AI patrol-net overlay (chapter worlds only), `--debug-ainets`. First tenant of the F13–F24 range reserved for debug overlays; the letter-key overlays (`C`/`X`/…) are to migrate there |
+| `F13` | | AI patrol-net overlay (chapter worlds only), `--debug-ainets`. First tenant of the F13–F24 range reserved for debug overlays and lab panels; the letter-key overlays (`C`/`X`/…) are to migrate there. A gameplay action may not take a key in this range, and an instrument that has to leave a lower function key moves into it (the damage lab on `F19` left `F5` to the original's rocket selector) |
 | `F14` | | frame-cost readout: fps / current frame cost / worst recent frame, cycling Off → Compact → Full, `--debug-fps=`. Works at the launchscreen too |
 | `F15` | | targeting overlay, `--debug-targets`. A line from every turret gunner and AI gunner to the target it has acquired: red firing, amber tracking, grey held; the HUD names the gate holding each one (blocked / slewing / shot clock / bored / no solution) |
 | `F16` | | node-name labels, `--debug-names[=meshes\|all]`. Migrated off `T`, which is free for targeting |
@@ -114,7 +114,7 @@ specified in [`cli.md`](cli.md).
 
 | Input | Does | Scripted twin |
 |---|---|---|
-| `F5` | damage lab | `--damage=` |
+| `F19` | damage lab | `--damage=` |
 | `L` | livery lab | |
 | `M` | mesh lab | `--debug-mesh=` |
 | `K` | marker overlay | |
@@ -138,5 +138,5 @@ specified in [`cli.md`](cli.md).
 | `M` | mesh lab, on that selection alone | `--debug-mesh=` |
 | `C` | show the built colliders, coloured by the surface id they resolve to (see `--collision`), also bound in `--fly`/`--stunt` | `--debug-colliders` |
 | `X` | colour world objects by class (destructible/facade/clutter/scenery), also bound in `--fly`/`--stunt` | `--debug-classoverlay` |
-| `F5` | damage lab on the selected destructible | `--debug-damage=` |
+| `F19` | damage lab on the selected destructible | `--debug-damage=` |
 | `F18` | anim lab: the def picker. Moved off `F`, which the camera's lock key now owns, the camera polls raw key state, so one key could not serve both (`BL-428`) | |

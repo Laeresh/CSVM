@@ -20,10 +20,10 @@ public class FlightBindingMappingTests
     {
         { Key.Space, InputAction.FireGuns },
         { Key.F, InputAction.FireRockets },
-        { Key.G, InputAction.SelectGunGroup },
-        { Key.H, InputAction.SelectOrdnance },
-        { Key.F3, InputAction.SelectGunGroupPrev },
-        { Key.F4, InputAction.SelectOrdnancePrev },
+        { Key.F3, InputAction.SelectGunGroup },
+        { Key.F4, InputAction.SelectGunGroupPrev },
+        { Key.F5, InputAction.SelectOrdnance },
+        { Key.F6, InputAction.SelectOrdnancePrev },
         { Key.N, InputAction.Nitro },
         { Key.R, InputAction.Respawn },
         { Key.F9, InputAction.AutoLand },
@@ -41,7 +41,7 @@ public class FlightBindingMappingTests
         { Key.Key9, InputAction.TargetNearestAlly },
         { Key.Key0, InputAction.TargetNearestNonAircraft },
         { Key.F8, InputAction.CycleCockpitViews },
-        { Key.F6, InputAction.SelectChaseView },
+        { Key.F1, InputAction.SelectChaseView },
         { Key.Kp0, InputAction.LookBack },
         { Key.Kp5, InputAction.LookCenter },
     };

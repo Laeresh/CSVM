@@ -49,8 +49,8 @@ every weapon fires from every mount of its class rather than only from what stoc
 The fire-control state machine, a plain engine-free class: trigger edges, per-group `FIRE_RATE`
 accumulators and muzzle rotation, ammo draw-down, both weapon selectors in either direction with
 their on-empty auto-advance, the rocket pull and cooldown gate, and the two once-only dry cues.
-`Step(dt, FireInputs)` takes raw held booleans, detects every edge inside, and returns decisions in
-one reused `FireOutcome`; `FlightController.ApplyFireOutcome` performs them against muzzle
+`Step(dt, FireInputs)` takes raw held booleans, detects every edge inside, splits the pad's one
+button per class into a tap forward and a hold back, and returns decisions in one reused `FireOutcome`; `FlightController.ApplyFireOutcome` performs them against muzzle
 transforms, `ProjectilePool` and `FlightAudio`. Ammo mutates through the node-free
 `IGunSlot`/`IPylonSlot` views, so `Loadout` stays the single store the gauges read and a decision
 cannot diverge from the counters mid-tick. The slot index math is `WeaponCursor.cs`; read it next.
@@ -1089,7 +1089,7 @@ cockpit gauge def from ever playing on an airframe, and the panel-pairing traps 
 partners, so no separate cockpit rule exists. Decode: [../org/vehicleDamage.md](../org/vehicleDamage.md).
 
 ## src/Flight/DamageLab.cs
-The damage lab that F5 toggles: one armour slider for the parts the data gives an armour pool, one
+The damage lab that F19 toggles: one armour slider for the parts the data gives an armour pool, one
 health slider per destroyable part, and a `PartFrac` reading of health, armour or the combined
 scale the mirrored gauge dial is on. `ReadSliders` floors a part's armour once its health reads
 short of full, mirroring the real armour-first path, and a `--damage=` preset takes the same route.

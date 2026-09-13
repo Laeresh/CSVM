@@ -175,7 +175,7 @@ before release, they shipped, and the string table says so plainly. See
 
 **Gun and rocket selection is rotational, not linear**, the labels are "clockwise" and
 "counterclockwise", i.e. the selector walks the mounts around the airframe, not up and down a
-list. The remake's single-direction `G`/`H` steppers are a simplification of this.
+list. The remake carries both directions of each class on the original's own four keys.
 
 ### Targeting, three groups, four verbs
 

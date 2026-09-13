@@ -9,7 +9,7 @@ namespace CSVM.UI;
 /// The debug kill key (F17): kills P1's currently selected <see cref="TargetSelection"/> target
 /// through its own death path, so kill-count and objective bookkeeping see it the same way a real
 /// shot would, never by freeing the node. The playtester's escape hatch for a stray enemy blocking
-/// an objective chain. P1-only, the precedent F5's <see cref="WorldDamageLab"/> and F51's weapon
+/// an objective chain. P1-only, the precedent F19's <see cref="WorldDamageLab"/> and F51's weapon
 /// lab already set for a single-pane debug tool. Inert with nothing selected.
 /// ⚠ A world/carried turret carries no <c>HEALTH</c> key at all (<see cref="TargetRef.Health"/>'s
 /// own rule), so a turret selection is inert too rather than inventing a kill switch the decoded

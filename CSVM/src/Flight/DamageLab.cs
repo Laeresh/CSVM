@@ -126,7 +126,7 @@ public sealed class FlightDamageTarget : IDamageLabTarget
     }
 }
 
-/// <summary>The damage lab (F5 toggles): one armor slider plus one health slider per destroyable
+/// <summary>The damage lab (F19 toggles): one armor slider plus one health slider per destroyable
 /// part, driving <see cref="DamageVisuals"/> through an <see cref="IDamageLabTarget"/> off their
 /// HEALTH fraction (<see cref="PartFrac.Combined"/> feeds the gauge dial, not the visuals stages).
 /// Two hosts, one panel: <c>--viewer</c>'s sliders ARE the state on a parked plane,
@@ -147,7 +147,7 @@ public sealed partial class DamageLab : Node
     private CanvasLayer _ui = null!;
     private CanvasLayer? _gaugeLayer;
     private HashSet<string> _applied = new(StringComparer.OrdinalIgnoreCase);
-    private bool _gaugesWanted = true; // the panel's HUD-gauges checkbox, remembered across F5
+    private bool _gaugesWanted = true; // the panel's HUD-gauges checkbox, remembered across F19
     private int _dragging; // sliders under the mouse right now, the read-back leaves those alone
 
     public DamageLab(PlaneStats stats, IDamageLabTarget target,
@@ -160,7 +160,7 @@ public sealed partial class DamageLab : Node
         Name = "damage_lab";
     }
 
-    /// <summary>Build the lab but keep it out of sight until F5. Set for a plain launch
+    /// <summary>Build the lab but keep it out of sight until F19. Set for a plain launch
     /// (no --damage), so the lab is always THERE to toggle while an unadorned viewer or
     /// flight screenshot stays byte-identical to one with no lab at all.</summary>
     public bool StartHidden { get; init; }
@@ -213,7 +213,7 @@ public sealed partial class DamageLab : Node
 
     public override void _UnhandledKeyInput(InputEvent @event)
     {
-        if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F5 })
+        if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F19 })
         {
             SetLabVisible(!_ui.Visible);
             GetViewport().SetInputAsHandled();
@@ -313,7 +313,7 @@ public sealed partial class DamageLab : Node
             Text = $"DAMAGE LAB — {_stats.DefName}" +
                    (_target.Subtitle is { } who ? $"  ·  {who}" : ""),
         });
-        box.AddChild(Small("drag a part's armor/health over its thresholds · F5 hides this panel"));
+        box.AddChild(Small("drag a part's armor/health over its thresholds · F19 hides this panel"));
 
         foreach (var part in _stats.DestroyableParts)
         {
@@ -358,7 +358,7 @@ public sealed partial class DamageLab : Node
         panel.AddChild(margin);
         _ui.AddChild(panel);
         AddChild(_ui);
-        // This lab has a flight host (F5 while flying), where Space is the trigger and a focused
+        // This lab has a flight host (F19 while flying), where Space is the trigger and a focused
         // "repair all" would swallow it, the same defect the weapon lab's panel had.
         UI.PanelFocus.Strip(_ui, "damage lab: panel built");
     }

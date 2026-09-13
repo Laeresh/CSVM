@@ -204,7 +204,7 @@ public partial class FlightController : Node3D
 
     /// <summary>--gun-select=N: the gun selector's initial firable group (0-based; 0 = the first
     /// group, the default). Only one gun group fires at a time. A headless testing hook so a scripted
-    /// run can fire one group in isolation; interactively the selector cycles with G / gamepad D-pad Right.</summary>
+    /// run can fire one group in isolation; interactively the selector cycles with F3 / gamepad D-pad Right.</summary>
     public int InitialGunSelect;
 
     /// <summary>This airframe's DESTROY def, the anim slot the original starts the instant health
@@ -449,10 +449,6 @@ public partial class FlightController : Node3D
                                                       // ANIMATION_OFFSET 1.5, so this is one whole authored
                                                       // reaction per scrape rather than a restart per frame
     private const int InitialTargetGrace = 300;    // frames --target= waits for the pool to fill
-    private const float TargetHoldSeconds = 0.25f; // decision 7: D-pad Up past this is a HOLD,
-                                                   // not a tap. ⚠ TUNE, ours, not the original's,
-                                                   // which needs no threshold because it has a key
-                                                   // per action
     private const float PropIdleSpin = 0.4f;    // blur discs still turn at zero throttle (windmilling)
 
     // Everything this pane draws for its pilot. Always present, so no site has to ask whether
@@ -477,8 +473,10 @@ public partial class FlightController : Node3D
     private readonly List<AimCandidate> _targetParts = new(); // this frame's selectable sub-parts
     private readonly List<AimCandidate> _targetSites = new(); // this frame's objective sites
     private readonly bool[] _targetKeyPrev = new bool[13];  // the eleven targeting keys, spyglass pair last
-    private readonly bool[] _viewModeKeyPrev = new bool[5]; // F8/F6/F7 + pad view-selection edges
-    private readonly TapHoldButton _targetHold = new(TargetHoldSeconds); // D-pad Up tap vs hold
+    private readonly bool[] _viewModeKeyPrev = new bool[5]; // F8/F1/F7 + pad view-selection edges
+    // Decision 7: D-pad Up down longer than the shared threshold is a HOLD, not a tap. The two
+    // weapon selectors' pad buttons split on the same number, inside FireControl.
+    private readonly TapHoldButton _targetHold = new(TapHoldButton.PadHoldSeconds);
     // Swallows a discrete flight command's next read when a cutscene skip or a pause-sheet dismiss
     // hands input back while the control that confirmed it is still down.
     private readonly FlightReentryLatch _reentryLatch = new();
@@ -1418,13 +1416,13 @@ public partial class FlightController : Node3D
     }
 
     /// <summary>Weapon lab: point the gun selector at a firable gun group (0-based, clamped),
-    /// the programmatic twin of G / D-pad Right, which only cycles. Interactively that cycle still
+    /// the programmatic twin of F3 / D-pad Right, which only cycles. Interactively that cycle still
     /// wins the next time it is pressed; <see cref="InitialGunSelect"/> is the _Ready-time
     /// equivalent and cannot be re-applied once the rig is built.</summary>
     public void SelectGunGroup(int index) => _fire?.SelectGunGroup(index);
 
     /// <summary>Weapon lab: point the hardpoint selector at a pylon (0-based, clamped), the
-    /// programmatic twin of H. Unlike H this lands on an EMPTY pylon too (the lab picks a mount to
+    /// programmatic twin of F5. Unlike F5 this lands on an EMPTY pylon too (the lab picks a mount to
     /// look at, not a mount to fire); the firing path's own armed scan still advances off it when
     /// the trigger is pulled.</summary>
     public void SelectPylon(int index) => _fire?.SelectPylon(index);
@@ -1829,20 +1827,14 @@ public partial class FlightController : Node3D
             // GameSession also sets InfiniteAmmo post-_Ready), mirror them into the machine.
             _fire.AutoFireRockets = AutoFireRockets;
             _fire.InfiniteAmmo = InfiniteAmmo;
-            var fireInputs = new FireInputs
-            {
-                // A null pool could spawn nothing, feed the triggers as released so no ammo is
-                // decided away on rounds that could never fire. An AI pilot's gunner IS its
-                // trigger; without one the raw controls (--fire's AutoFire included) decide.
-                FireHeld = Projectiles != null
-                    && (!IsHumanPiloted && Pilot?.Gunner is { } g ? g.WantsFire : FirePressed()),
-                RocketHeld = Projectiles != null
-                    && (!IsHumanPiloted && Pilot?.Rocketeer is { } r ? r.WantsFire : RocketFirePressed()),
-                GunSelectHeld = GunSelectPressed(),
-                RocketSelectHeld = RocketSelectPressed(),
-                GunSelectBackHeld = GunSelectBackPressed(),
-                RocketSelectBackHeld = RocketSelectBackPressed(),
-            };
+            var fireInputs = ReadSelectorInputs();
+            // A null pool could spawn nothing, feed the triggers as released so no ammo is
+            // decided away on rounds that could never fire. An AI pilot's gunner IS its
+            // trigger; without one the raw controls (--fire's AutoFire included) decide.
+            fireInputs.FireHeld = Projectiles != null
+                && (!IsHumanPiloted && Pilot?.Gunner is { } g ? g.WantsFire : FirePressed());
+            fireInputs.RocketHeld = Projectiles != null
+                && (!IsHumanPiloted && Pilot?.Rocketeer is { } r ? r.WantsFire : RocketFirePressed());
             // The assist's forget + catch-up pass (docs/org/aim-assist.md "Per frame"), ticked on
             // the PRE-shot state; must run before a round out this frame restamps last-update.
             if (IsHumanPiloted)
@@ -2316,6 +2308,16 @@ public partial class FlightController : Node3D
         return down && !ControlsHeld;
     }
 
+    // The same read over the keyboard and mouse half alone, for an action whose pad half is
+    // dispatched by a tap/hold slot of its own. ⚠ One latch read per action per frame: the latch
+    // disarms on the first reading that says "up", so a second read of the same action in the same
+    // frame would clear it early.
+    private bool ReadLatchedKeys(InputAction action)
+    {
+        bool down = _reentryLatch.Read(action, _keyActions.Held(action));
+        return down && !ControlsHeld;
+    }
+
     // Called at flight's own resume/skip re-entry points (the Inert setter above, and
     // PollPauseAndHalt's halt-clearing edge) so a press that just confirmed a cutscene skip or a
     // pause-sheet dismiss cannot also read as a flight command. ⚠ Pass the latch no button reading
@@ -2354,10 +2356,13 @@ public partial class FlightController : Node3D
 
     // The tick's two halves as a suite supplies them, so the seat's device memory has something to
     // follow: a headless run holds down no key and no stick. Each state answers for one side alone,
-    // the split a live poll gets from its own pad-muted reader.
+    // the split a live poll gets from its own pad-muted reader; the whole-seat reader gets both at
+    // once, since a site reading through it must see what the suite pressed rather than the empty
+    // hardware underneath.
     internal void ObserveDeviceForTest(IDeviceState keyboardSide, IDeviceState padSide)
     {
         PollInput();
+        _actions.Poll(new BothSides(keyboardSide, padSide));
         _keyActions.Poll(keyboardSide);
         _padActions.Poll(padSide);
         if (_bindings.ObserveDevice(_keyActions.Current, _padActions.Current))
@@ -2365,17 +2370,18 @@ public partial class FlightController : Node3D
     }
 #pragma warning restore SA1202
 
-    // G / gamepad D-pad Right, cycles the gun selector forward through the firable groups (1 → 2 →
-    // … → 1). Only ONE group fires at a time; the gun trigger fires the selected one. Caller edge-detects.
-    // ⚠ The D-pad side follows the cockpit dial it drives: the GUNS gauge sits in the right column
-    // (above the speedometer) and ROCKETS in the left, so pressing away from the dial reads as a
-    // mis-binding at the controls.
-    private bool GunSelectPressed() => ReadLatched(InputAction.SelectGunGroup);
+    // F3 ("Cycle guns clockwise"), the KEY half alone: cycles the gun selector forward through the
+    // firable groups (1 → 2 → … → 1). Only ONE group fires at a time; the gun trigger fires the
+    // selected one. Caller edge-detects.
+    // ⚠ Do not widen this to the seat's whole reading. The pad half of the same action carries both
+    // directions through its own tap/hold slot, so a combined read would step forward on the press
+    // and back again on the release of one long hold.
+    private bool GunSelectPressed() => ReadLatchedKeys(InputAction.SelectGunGroup);
 
-    // F3, the same walk the other way, its own bound action because the original's own keybind
-    // page carries one per direction per weapon class. The gun cycle's second direction was never
-    // watched at the original's controls; it is wired because that page names it, and the pages are
-    // what the port reproduces where a play session cannot reach.
+    // F4 ("Cycle guns counterclockwise"), the same walk the other way, its own bound action because
+    // the original's keybind page carries one per direction per weapon class. Read whole rather
+    // than key-only: nothing ships on the pad here, so a pad control on this row is one a player
+    // bound themselves and means exactly one step back.
     private bool GunSelectBackPressed() => ReadLatched(InputAction.SelectGunGroupPrev);
 
     // F9 / gamepad left-stick click, the auto-land button, read live by
@@ -2389,15 +2395,44 @@ public partial class FlightController : Node3D
     }
 #pragma warning restore SA1202
 
-    // H / gamepad D-pad Left, moves the hardpoint selector forward to the next pylon that still
-    // carries ordnance (each pylon is its own selectable slot, whatever it loads, even a plane with
-    // one uniform ordnance type). The rocket trigger then launches from the selected pylon. Caller
-    // edge-detects.
-    private bool RocketSelectPressed() => ReadLatched(InputAction.SelectOrdnance);
+    // F5 ("Cycle rockets clockwise"), the KEY half alone for the same reason as the gun row above:
+    // moves the hardpoint selector forward to the next pylon that still carries ordnance (each
+    // pylon is its own selectable slot, whatever it loads, even a plane with one uniform ordnance
+    // type). The rocket trigger then launches from the selected pylon. Caller edge-detects.
+    private bool RocketSelectPressed() => ReadLatchedKeys(InputAction.SelectOrdnance);
 
-    // F4, the hardpoint walk the other way, over the same physical mount order and skipping the
-    // same empties, so a press each way from one pylon returns to it. Caller edge-detects.
+    // F6 ("Cycle rockets counterclockwise"), the hardpoint walk the other way, over the same
+    // physical mount order and skipping the same empties, so a press each way from one pylon
+    // returns to it. Caller edge-detects.
     private bool RocketSelectBackPressed() => ReadLatched(InputAction.SelectOrdnancePrev);
+
+    // The pad half of a forward selector, as a LEVEL: FireControl splits it into a tap that steps
+    // forward and a hold that steps back, so one button serves a class both ways.
+    // ⚠ The D-pad side follows the cockpit dial it drives: the GUNS gauge sits in the right column
+    // (above the speedometer) and ROCKETS in the left, so pressing away from the dial reads as a
+    // mis-binding at the controls.
+    private bool PadSelectorHeld(InputAction action) =>
+        !ControlsHeld && _padActions.Held(action);
+
+    // This tick's four selector readings, each side on its own field. One call per tick: the two
+    // key-half reads go through the re-entry latch, which answers once.
+    private FireInputs ReadSelectorInputs() => new()
+    {
+        GunSelectHeld = GunSelectPressed(),
+        RocketSelectHeld = RocketSelectPressed(),
+        GunSelectBackHeld = GunSelectBackPressed(),
+        RocketSelectBackHeld = RocketSelectBackPressed(),
+        GunSelectPadHeld = PadSelectorHeld(InputAction.SelectGunGroup),
+        RocketSelectPadHeld = PadSelectorHeld(InputAction.SelectOrdnance),
+    };
+
+#pragma warning disable SA1202
+    // The selector readings for the suite that drives the shipped keys and the pad's tap/hold
+    // button against a real seat: a headless run holds nothing down, so the suite supplies the
+    // tick's two device sides and the production reads above answer them. Kept beside those reads
+    // rather than hoisted for SA1202's sake, the same trade made elsewhere here.
+    internal FireInputs SelectorInputsForTest() => ReadSelectorInputs();
+#pragma warning restore SA1202
 
     // This frame's pilot-HUD feed. The pipper's inputs are resolved HERE and only where there is a
     // reticle to draw: a muzzle midpoint reads one world transform per barrel, which every aircraft
@@ -3308,7 +3343,7 @@ public partial class FlightController : Node3D
     }
 
     /// <summary>The view-selection inputs, edge-detected: F8 or D-pad Down advances the original's
-    /// three-stop Cockpit → Nose → Chase cycle; F6 or the pad's Back/Select selects Chase directly.
+    /// three-stop Cockpit → Nose → Chase cycle; F1 or the pad's Back/Select selects Chase directly.
     /// The keyboard bindings and pad slots are this port's choices; the original's binding menu
     /// also places its cycle action on a joystick button.
     /// The pad half makes the views reachable for a pad-only pilot (P2–P4), who has no keyboard.</summary>
@@ -4182,6 +4217,42 @@ public partial class FlightController : Node3D
         _mouseLookPrev = pos;
         bool looking = _actions.Held(InputAction.FreeLook);
         return looking && delta.LengthSquared() > 1f ? delta : Vector2.Zero;
+    }
+
+    // The two supplied sides of a suite's tick as ONE reading, for the seat's whole-seat reader.
+    // Each side answers for its own devices, so the union is what a live poll of both would give.
+    private sealed class BothSides : IDeviceState
+    {
+        private readonly IDeviceState _keyboard;
+        private readonly IDeviceState _pad;
+
+        public BothSides(IDeviceState keyboard, IDeviceState pad)
+        {
+            _keyboard = keyboard;
+            _pad = pad;
+        }
+
+        public bool IsKeyDown(DeviceId device, int keyCode) =>
+            _keyboard.IsKeyDown(device, keyCode) || _pad.IsKeyDown(device, keyCode);
+
+        public bool IsButtonDown(DeviceId device, int button) =>
+            _keyboard.IsButtonDown(device, button) || _pad.IsButtonDown(device, button);
+
+        public bool IsMouseButtonDown(DeviceId device, int button) =>
+            _keyboard.IsMouseButtonDown(device, button) || _pad.IsMouseButtonDown(device, button);
+
+        public float AxisValue(DeviceId device, int axis)
+        {
+            float key = _keyboard.AxisValue(device, axis);
+            float pad = _pad.AxisValue(device, axis);
+            return Mathf.Abs(pad) > Mathf.Abs(key) ? pad : key;
+        }
+
+        public HatDirection HatState(DeviceId device, int hat)
+        {
+            var hats = _keyboard.HatState(device, hat);
+            return hats == HatDirection.None ? _pad.HatState(device, hat) : hats;
+        }
     }
 
     // This plane's half of a contact the resolver is deciding: the engine effects it has to
