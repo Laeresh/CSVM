@@ -432,6 +432,30 @@ public class DefaultBindingsTests
             map.Bindings(InputAction.SelectChaseView));
     }
 
+    /// <summary>F13 to F24 is the debug block (`docs/controls.md`): the overlays and lab panels
+    /// poll those keys raw, outside the action set, so no rebinding screen offers them and no
+    /// player can break their own diagnostics. A gameplay default landing in the range would give
+    /// one press two owners, the flight action and the instrument, with only the instrument's
+    /// author aware of it. F16 is the all-aircraft markers HUD and is the reason this is pinned.
+    /// </summary>
+    [Fact]
+    public void NoDefault_TakesAKeyInTheDebugBlock()
+    {
+        var debugBlock = new HashSet<int>();
+        for (var key = Key.F13; key <= Key.F24; key++)
+        {
+            debugBlock.Add((int)key);
+        }
+
+        Assert.Equal(12, debugBlock.Count);
+        foreach (var (action, binding) in AllDefaults())
+        {
+            Assert.False(
+                binding.Control.Kind == ControlKind.Key && debugBlock.Contains(binding.Control.Index),
+                $"{action} takes a key in the F13-F24 debug block");
+        }
+    }
+
     private static IEnumerable<(InputAction Action, Binding Binding)> AllDefaults()
     {
         foreach (var context in Enum.GetValues<InputContext>())

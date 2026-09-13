@@ -20,9 +20,9 @@ namespace CSVM.UI;
 /// </summary>
 public sealed partial class TileGridOverlay : Node
 {
-    // The block depths F15 walks: today's clamp, C4's measurement, C2's measurement, one past C2,
-    // and whole-map (the constant-free alternative implementation, refuted by the airport
-    // observation but one keypress away from being checked at the controls). --map-edge-block=
+    // The block depths the cycle walks: today's clamp, C4's measurement, C2's measurement, one
+    // past C2, and whole-map (the constant-free alternative implementation, refuted by the airport
+    // observation but one step away from being checked at the controls). --map-edge-block=
     // inserts its own value in sorted position, so a CLI choice is never stranded off the cycle.
     private static readonly int[] BaseCycle = { 1, 2, 3, 4, 12 };
 
@@ -95,8 +95,8 @@ public sealed partial class TileGridOverlay : Node
         Log.Info("world", $"{StatusText()}");
     }
 
-    /// <summary>F15: step the block depth to the next value in the cycle and rebuild the window.
-    /// A no-op while the overlay is hidden, the whole point of the key is to watch the bands
+    /// <summary>Steps the block depth to the next value in the cycle and rebuilds the window.
+    /// A no-op while the overlay is hidden, the whole point of stepping is to watch the bands
     /// change, and silently rebuilding 121 cells for an invisible effect is a hitch for
     /// nothing.</summary>
     public void StepBlock()
@@ -113,7 +113,7 @@ public sealed partial class TileGridOverlay : Node
         Log.Info("world", $"{StatusText()}");
     }
 
-    /// <summary>F16: swap between the confirmed alternating reflection and plain repetition.
+    /// <summary>Swaps between the confirmed alternating reflection and plain repetition.
     /// Hidden-overlay no-op, for the same reason as <see cref="StepBlock"/>.</summary>
     public void ToggleMode()
     {
@@ -126,9 +126,9 @@ public sealed partial class TileGridOverlay : Node
         Log.Info("world", $"{StatusText()}");
     }
 
-    /// <summary>The F15 cycle: the standing candidates, dropped to what this grid can hold, plus
-    /// whatever <c>--map-edge-block=</c> asked for so a CLI value is always reachable again after
-    /// stepping away from it.</summary>
+    /// <summary>The block-depth cycle: the standing candidates, dropped to what this grid can
+    /// hold, plus whatever <c>--map-edge-block=</c> asked for so a CLI value is always reachable
+    /// again after stepping away from it.</summary>
     internal static List<int> BuildCycle(int maxBlockCells, int current)
     {
         var set = new SortedSet<int>();

@@ -423,10 +423,17 @@ The `--viewer` livery editor (key L): a squadron stepper that loads the whole sq
 per-slot RGB sliders, decal steppers, a random livery and copy-CLI-args.
 
 ## src/UI/NodeLabels.cs
-Floating node-name labels (key F16) in both the static viewer and flight, cycling off, meshes and
-all; `--debug-names` presets the mode at launch. In splitscreen the nearest and de-clutter pick is
-player 1's viewpoint alone, while every pane still renders the resulting labels, since they are
-ordinary world-space children of the root.
+Floating node-name labels in both the static viewer and flight, in a meshes mode and an all mode;
+`--debug-names` sets the mode at launch and is the only way in, the labels carry no key. In
+splitscreen the nearest and de-clutter pick is player 1's viewpoint alone, while every pane still
+renders the resulting labels, since they are ordinary world-space children of the root.
+
+## src/UI/DebugMarkerToggle.cs
+The all-aircraft markers key (F16): writes one answer to `TargetHud.MarkAll` on every human pane,
+the overlay `--debug-markers` switches on at launch. Session-level rather than one handler per
+pane, because a splitscreen pane's HUD sits in a `SubViewport` that routes unhandled input to the
+window and never to its own nodes. The panes are read through a closure, since a rig's HUD is built
+after this node and can go away mid-session.
 
 ## src/UI/MarkerOverlay.cs
 The `--viewer` marker overlay (key K, `--markers` at launch): every firepoint, pylon and target on

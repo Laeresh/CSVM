@@ -696,12 +696,12 @@ own placement".
 ## src/Flight/TargetHud.cs
 The per-pane targeting HUD, built on every human pane in every flight session: the pilot's own
 selection from `TargetSelection` (a campaign mission's objective sites included), a nearest
-AI-hostile fallback where no selection exists, and `--debug-markers`' every-aircraft overlay. Draws
-the original's bracket box and label block and owns the colour table, the label layout, the
-selected gun's reach gate and the debug identity string. Off screen it owns the arrow, `ArrowHead`,
-`ShaftTail` and `EdgeLabelAnchor` over `EdgeMarker`'s placement. It also owns the spyglass's gates
-(`UpdateSpyglass`, `SpyglassOn`) and draws `SpyglassView`'s picture as the disc all three of those
-measure against. Decode: [targeting](../org/targeting.md), [spyglass](../org/spyglass.md).
+AI-hostile fallback where no selection exists, and the F16 / `--debug-markers` every-aircraft
+overlay. Draws the original's bracket box and label block and owns the colour table, the label
+layout, the selected gun's reach gate and the debug identity string. Off screen it owns the arrow,
+`ArrowHead`, `ShaftTail` and `EdgeLabelAnchor` over `EdgeMarker`'s placement. It also owns the
+spyglass's gates (`UpdateSpyglass`, `SpyglassOn`) and draws `SpyglassView`'s picture as the disc
+all three measure against. Decode: [targeting](../org/targeting.md), [spyglass](../org/spyglass.md).
 
 ## src/Flight/VersusBoard.cs
 The Dogfight results overlay on `ResultsBoard`'s shell: the winner in their own

@@ -3046,6 +3046,23 @@ public partial class GameSession : Node3D
             () => _rigs.Count > 0 ? _rigs[0].Controller : null,
             () => _diagRuntime));
 
+        // F16 / --debug-markers: every live aircraft marked on every human pane's targeting HUD.
+        // Session-level like F17, and read through a closure because a pane's HUD is built after
+        // this line and a rig can lose its aircraft mid-session.
+        _worldRoot!.AddChild(new UI.DebugMarkerToggle(() =>
+        {
+            var huds = new List<Flight.TargetHud>();
+            foreach (var rig in _rigs)
+            {
+                if (rig.Controller?.PilotHud.TargetHud is { } hud)
+                {
+                    huds.Add(hud);
+                }
+            }
+
+            return huds;
+        }));
+
         // The objectives readout, the mission-end fade and the objective-site feed: all campaign
         // only, the first two polling _campaign once Attach (above) has built it, the sites landing
         // on the player's target cycle.

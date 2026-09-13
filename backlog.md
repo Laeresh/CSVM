@@ -2322,15 +2322,6 @@ usual.
 
 - `BL-844` `[Cleanup]` `[S]` `[Next: decide]` `[Impact: none]` `[Evidence: trace]` **654 em dashes remain inside string literals under `CSVM/src` and `CSVM.Tests`: log messages, CLI notes and HUD text.** *Evidence:* the repo-wide sweep rewrote comments and docs and skipped literals, since suites match log lines and a HUD string is a display choice (`VersusHud` draws the glyph for a tie). The writing rule speaks of prose; whether a log message is prose is the decision. *Fix shape:* if yes, a second pass over literals only, with every suite that matches a rewritten line moved in the same change and the goldens re-pinned where a HUD string changes; if no, record the exemption on the writing rule. *Cross-refs:* PLAN-code-review-orch A7.
 
-- `BL-870` `[Tooling]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **F16 toggles the all-aircraft markers HUD;
-  the node-name labels lose their key.** *Evidence:* `docs/controls.md` has F16 on the node-name
-  labels (`--debug-names`), and the markers HUD (`--debug-markers`, every live aircraft's
-  identity, range, health and AI mode on the targeting HUD) is reachable by launch flag only,
-  which is the one a flight test wants under the thumb. *Fix shape:* rebind F16 to toggle the
-  markers HUD, drop the labels' key and leave them on their flag (a viewer tool, not a flight
-  one); update `docs/controls.md` and `docs/cli.md`. *Cross-refs:*
-  `CSVM/src/Bindings/DefaultBindings.cs`.
-
 - `BL-848` `[Cleanup]` `[L]` `[Next: decide]` `[Impact: none]` `[Evidence: trace]` **About 140 dated clauses remain in `backlog.md` entries that predate the no-dates rule.** *Evidence:* `Select-String '\d{4}-\d\d-\d\d'` over the file; every one is event narration ("landed 2026-08-05", "measured 2026-08-04 from the CAP-07 re-take") of the kind the writing rule sends to the closing commit's message. *Fix shape:* decide whether the old entries are swept (each date dropped, the standing fact kept, the evidence findable through `git log --grep`) or grandfathered until the entry closes. A sweep is mechanical but every clause needs a reading. *Cross-refs:* PLAN-code-review-orch A5 (the one dated clause the review found).
 
 - `BL-902` `[Testing]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **The allocation-free

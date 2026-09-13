@@ -6,13 +6,14 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>
-/// Floating node-name labels over the built scene (key F16), available in the static viewer and in
-/// flight: the fastest way to identify an object at a wrong position is to read its name off it.
+/// Floating node-name labels over the built scene, available in the static viewer and in flight:
+/// the fastest way to identify an object at a wrong position is to read its name off it.
 /// Names come from the <c>cs_name</c> meta SceneBuilder stamps on every node, not
 /// <c>Node.Name</c>, which Godot sanitises and auto-renames on duplicate siblings. Labels are
 /// limited to <see cref="MaxLabels"/> nearest the camera within <see cref="Radius"/>, recomputed
 /// on a timer since the tree changes in flight as MapEdgeExtender adds and drops border tiles.
-/// Off by default; modes cycle Off, Meshes (nodes that draw something), All (every gamez node).
+/// Off unless <c>--debug-names</c> asks for a mode, which is the only way in: this is a viewer
+/// instrument and holds no key. Modes are Meshes (nodes that draw something) and All (every node).
 /// Full decode, including the splitscreen selection trap: docs/architecture.md.
 /// </summary>
 public sealed partial class NodeLabels : Node
@@ -86,17 +87,6 @@ public sealed partial class NodeLabels : Node
     {
         if (InitialMode != Mode.Off)
             SetMode(InitialMode);
-    }
-
-    public override void _UnhandledKeyInput(InputEvent @event)
-    {
-        if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F16 })
-            SetMode(_mode switch
-            {
-                Mode.Off => Mode.Meshes,
-                Mode.Meshes => Mode.All,
-                _ => Mode.Off,
-            });
     }
 
     public override void _Process(double delta)
@@ -266,7 +256,7 @@ public sealed partial class NodeLabels : Node
             _pool[i].Visible = false;
 
         if (_hud != null)
-            _hud.Text = $"node labels [F16]: {_mode} — {shown} shown"
+            _hud.Text = $"node labels: {_mode} — {shown} shown"
                         + (hidden > 0 ? $", {hidden} hidden (overlap / cap {MaxLabels})" : "")
                         + $" within {Radius:0} m";
     }
