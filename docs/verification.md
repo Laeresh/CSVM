@@ -261,7 +261,13 @@ member, and it does not go here.
   several and require that EVERY one reads zero, rather than widening the assertion to a
   tolerance.** A rule that accepts one clean window of several passes an allocator that charges
   intermittently. Report the first charged window's bytes, its gen-0 count, the thread and the
-  module id, which a rerun cannot recover, and prove the windows with a negative control.
+  module id, which a rerun cannot recover, and prove the windows with a negative control. Every
+  window opens on an emptied allocation context, or PERF-29's charge lands in one of them.
+- **PERF-29**, **`GC.GetAllocatedBytesForCurrentThread` reports granted minus unused, so retiring
+  a thread's allocation context charges that thread for what the context still held. Empty it with
+  a forced collection before any window that must read zero.** The step is that remainder alone,
+  always under 8 KB: with per-thread pads 512 bytes apart it moved 512 bytes in lockstep, and
+  28,800 windows opened on an emptied context charged nothing where seven charged without it.
 
 ## LOG, logs, error censuses, and exit codes
 

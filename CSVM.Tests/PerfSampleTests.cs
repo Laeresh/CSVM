@@ -390,6 +390,10 @@ public class PerfSampleTests
         collections = new int[Windows];
         for (int w = 0; w < Windows; w++)
         {
+            // Opens the window on an emptied allocation context. The counter steps up by whatever
+            // that context still held when the runtime retires it, which charges a window that
+            // allocated nothing (docs/verification.md PERF-29).
+            GC.Collect(0, GCCollectionMode.Forced, true);
             int gen0 = GC.CollectionCount(0);
             long before = GC.GetAllocatedBytesForCurrentThread();
             body();
