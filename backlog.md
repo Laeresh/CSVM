@@ -2104,59 +2104,49 @@ usual.
   [`docs/formats/mission-entities.md`](docs/formats/mission-entities.md) "A gasbag section owns its
   bays and its engines".
 
-- `BL-699` `[Perf]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Every AI wave spawn hitches at the controls; the launch frame
-  is now measured, and the cost still has to come off it.** *Evidence:* the author feels a
-  hitch on every wave spawn in every mission, not only CM18's generator launches. The launch frame
-  is measured by `ai-wave-launch-hitch` (`CSVM/src/Testing/AiWaveLaunchHitchSuites.cs`), which
-  drives C4/M03's `cargozep1` through `FlightRoster.SpawnAi` over the mission's own built world and
-  times each sim step on the wall clock `HitchMonitor` reads: median launch frame 65.2 ms at 1P and
-  65.1 ms at 4P against that monitor's own 40 ms floor, the cold first launch 110 to 303 ms,
-  the worst frame carrying no launch 55 to 112 ms about fifteen steps behind the first launch,
-  which is the deferred crash rig's `AnimRuntime.PrewarmEmitters` phase. The suite holds regression
-  bars at the measured level (median 130 ms, worst warm launch 190 ms, worst idle frame 160 ms,
-  each about 1.4x the worst reading over repeated runs) and names the 40 ms floor in its note as
-  the target this entry owes; the bars drop to the floor when the removals below land, and until
-  then a suite failing on the cost it exposes would block every later change instead of this one.
-  The cost does not grow with the human
-  field, so it is all in the arriving aeroplane. Inside the warm launch frame, the model build is
-  18 to 29 ms and `FlightController.Bind` 24 to 40 ms, and the bind is `PlaneCollider.Build` almost
-  entirely (35.9 ms of a 39.5 ms bind in the sampled launch); props, wing lights, control surfaces
-  and damage together stay under 1.5 ms, and the loadout, the turrets, the tree insert and the
-  crash-rig arm under 6 ms.
-  *Fix shape:* the whole build moves into the loading screen, where there is no frame budget, and
-  the launch frame claims a finished aeroplane. `AiFlightAssembler.Assemble` already builds the
-  spawn-independent parts first (the painted model, `PlaneCollider.Build`, the prop and surface
-  animators) and only then binds them into the controller with the spawn's own stats, loadout and
-  marker; the pool holds those parts per roster block, detached from the tree (a hidden subtree
-  still has bodies in the space and nodes the anim runtime walks, a detached one costs nothing per
-  frame), and the launch frame keeps the bind, the loadout and the tree insert, which measure
-  under 6 ms together. The crash rig's `PrewarmEmitters` (194 `ShaderMaterial` and `MultiMesh`
-  builds in `Effects/EmitterRenderer.cs`, 55 to 112 ms on the deferred frames) is built at load
-  for the same entry. Campaign rosters author their waves, so the pool is sized off the roster;
-  Instant Action generates its waves during play, so its pool refills one aeroplane per quiet
-  frame, and a refill is where the per-airframe removals still pay: `PlaneCollider.Build` is a
-  pure function of the model's triangles, so the hulls and their `ConvexPolygonShape3D`s belong to
-  the process keyed by airframe (PERF-22's shape; check `AircraftBody`'s struck shape index to
-  part name mapping before sharing a shape resource between two bodies), and the model build
-  shares the airframe's immutable parts or splits along its own mesh grain. Building ahead during
-  play without those removals only moves the lump onto a quieter frame (PERF-25, PERF-31).
-  *Precondition:* the livery is fixed before loading. Today `Assemble` resolves the scheme from
-  `_humanCount + index` where `index` is `FlightRoster._spawned` at launch, so the livery a block
-  wears depends on the order the player wakes the waves in, and a pool built at load could not
-  paint it. The scheme becomes a function of the roster block itself (the mission and the block's
-  position, not the running spawn count), which is the author's decision; blocks that launch out
-  of roster order then wear a different livery than before, so re-pin the goldens that show AI
-  liveries in the same change and say so in the `exercises` field.
-  *⚠ Traps:* the aeroplanes a session builds BEFORE its first frame keep their rigs built in
-  place, and deferring them moved the goldens that fly AI aircraft; the pool's claim path must
-  produce the same tree the in-place build does, or those goldens move again. The spawn index
-  still feeds the spawn jitter (`Rng.NewSystemRandom(Rng.Spawn, index, 0)`) at launch and stays
-  there: the pool holds models and colliders, never indices, since allocating indices ahead of the
-  launch moves `c1-flight-kill`. The loading screen has to be a real yield of several frames, not
-  one: ten aeroplanes with their crash rigs are about 1.5 s of build. The sim clock lags wall
-  time on physics-bound late missions, so compare a hitch in sim frames under `--det` and read the
-  hitch lines before blaming a spawn (`docs/verification.md` PERF-12/13). `--det`'s numbers are
-  with nobody at the controls; the author's feel report is the acceptance.
+- `BL-699` `[Perf]` `[Owed-playtest]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: trace]` **The wave's aeroplanes are built in the
+  loading screen and the launch frame binds one; whether the hitch a player feels is gone is the
+  author's to say.** *Evidence:* the author feels a hitch on every wave spawn in every mission, not
+  only CM18's generator launches. The launch frame is measured by `ai-wave-launch-hitch`
+  (`CSVM/src/Testing/AiWaveLaunchHitchSuites.cs`), which orders the pool exactly as a launch does,
+  holds the load screen's build in a window of its own, then drives C4/M03's `cargozep1` through
+  `FlightRoster.SpawnAi` over the mission's own built world and times each sim step on the wall
+  clock `HitchMonitor` reads. The median launch frame went from 62.6 ms to 17.0 to 17.8 ms at 1P
+  and from 65.6 ms to 17.2 to 18.4 ms at 4P, the cold first launch from 197 ms to 39.6 to 42.1 ms
+  at 1P and from 87.4 ms to 19.2 to 19.6 ms at 4P, and the worst frame carrying no launch from
+  73.5 ms to 24.5 ms at 1P and from 48.3 ms to 13.0 ms at 4P; five launches take five prepared
+  aeroplanes and miss none. The median now sits under `HitchMonitor`'s own 40 ms floor, so the
+  suite's bars are regression bars at the new level (median 50 ms, worst warm launch 110 ms, worst
+  idle frame 80 ms, each about 1.4x the worst reading over repeated runs, alone and inside the
+  sharded engine stage) and the floor is reported beside them rather than asserted: the readings
+  that still cross 40 ms are the frames a gen-0 collection lands on, which a bar at the floor would
+  fail on (`docs/verification.md` PERF-33).
+  *What is in place:* `Session/AiAirframePool.cs` holds one slot per airframe and livery, ordered
+  off the generator's own roster block at build time and filled by `GameSession.StepOwedLoad`, one
+  aeroplane a frame behind the load screen, so that screen is a real yield of several frames. The
+  launch frame keeps only the bind, the loadout and the tree insert. A quiet frame in play refills
+  one, never a frame a crash rig or a launch already builds on (PERF-32), which is what covers
+  Instant Action's waves and a campaign burst deeper than its block. The crash rig's
+  `PrewarmEmitters` is a resumable slice (`AnimRuntime.PrewarmSlice`), so a rig's 194 emitters
+  arrive about twelve a frame instead of all on one, and `PlaneCollider` hulls are shared per
+  airframe with `PlanePainter` shared per airframe and livery (PERF-22).
+  *What still costs:* the refill build is 19 to 28 ms, nearly all of it `PlaneBuilder.Build`'s mesh
+  instancing, so one refill still overruns a 60 Hz frame even though it now lands on a frame
+  carrying nothing else. Sharing the airframe's immutable mesh parts, or splitting that build along
+  its own mesh grain (PERF-25), is what would make a refill fit; until then a wave deeper than its
+  ordered block, or two waves inside a second, is where a stutter could still be felt.
+  *⚠ Traps:* the pool's claim path produces the same tree an in-place build does, asserted node by
+  node by `ai-airframe-pool-claim`; the goldens that fly AI aircraft did not move and must not. The
+  spawn index still feeds the spawn jitter (`Rng.NewSystemRandom(Rng.Spawn, index, 0)`) at launch
+  and is never allocated ahead, since that moves `c1-flight-kill`. C4/M03 cannot be made to launch
+  a wave headlessly: `cargozep1` takes its credit from the mission script's callback 800, which
+  `--wake-generators` does not grant, so the suite and not a `--det` probe is the launch-frame
+  instrument. The sim clock lags wall time on physics-bound late missions, so read hitch lines in
+  sim frames under `--det` (`docs/verification.md` PERF-12/13). The instrument numbers are with
+  nobody at the controls; the author's feel report is the acceptance.
+  *Playtest after fix:* fly a mission whose waves launch from a generator (C4/M03's `cargozep1`
+  after the cargo objective, or CM18) and watch a wave arrive: the arrival frame should pass
+  without a stutter, and the seconds between waves too.
   *Cross-refs:* `BL-434` (the per-viewport splitscreen cost the same pass profiled), `BL-657`
   (CM18's generator launching at the wrong time, which is where the measured case is flown).
 

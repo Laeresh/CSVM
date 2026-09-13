@@ -103,8 +103,14 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
 
     // One compiled Shader per code variant (blend × soft), shared by every renderer. A Shader per
     // emitter cost about 6 ms to compile, paid by every live miss and by each of the couple of
-    // hundred emitters a crash rig builds ahead. The material stays per emitter.
+    // hundred emitters a crash rig builds ahead.
     private static readonly Dictionary<(bool Mix, bool Soft), Shader> ShaderVariants = new();
+
+    // One quad for every layer in the process: the mesh is a unit billboard and the per-instance
+    // scale lives in the MultiMesh transforms, so nothing about it is per emitter. The material
+    // stays per emitter, since it carries that emitter's atlas and would hold it alive past the
+    // texture archive it was baked from.
+    private static readonly QuadMesh UnitQuad = new() { Size = Vector2.One };
 
     private readonly ImageTexture _atlas;
     private readonly int _frameCount;
@@ -234,7 +240,7 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
                 TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
                 UseCustomData = true,
                 UseColors = true,
-                Mesh = new QuadMesh { Size = Vector2.One },
+                Mesh = UnitQuad,
                 InstanceCount = capacity,
                 VisibleInstanceCount = 0,
             };

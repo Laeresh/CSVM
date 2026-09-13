@@ -14,9 +14,9 @@ namespace CSVM.Testing;
 
 /// <summary>What a wave spawn costs the frame it lands on, over C4/M03's own built world and its
 /// own generator cycle. The measurement a hitch report needs is the whole session step a launch
-/// happens in, not the assembler in isolation: that step carries the model build, the bind, the
-/// loadout and the crash-rig arm together, while the steps around it carry the deferred rig's
-/// pump. Both are read off one clock, at one and at four human rigs, so neither a fix that moves
+/// happens in, not the assembler in isolation: that step carries the bind, the loadout and the
+/// crash-rig arm together, while the steps around it carry the deferred rig's pump and the pool's
+/// refill. Both are read off one clock, at one and at four human rigs, so neither a fix that moves
 /// cost onto a neighbouring frame nor one that only holds at a single player count can read as a
 /// win.</summary>
 internal static class AiWaveLaunchHitchSuites
@@ -33,24 +33,26 @@ internal static class AiWaveLaunchHitchSuites
     // this covers all five with a few seconds of pumped frames behind the last.
     private const float LaunchWindowS = 26f;
 
-    // Regression bars, not the target: the target is HitchMonitor's own 40 ms floor, which
-    // BL-699's remaining half has to reach and which would fail the landing gate for every later
-    // change if it were asserted here. Each bar sits about 1.4x the worst reading over repeated
-    // runs, alone and inside the four-way sharded engine stage (a 95 ms median, a 136 ms warm
-    // launch frame, a 112 ms idle frame), so contention does not flake the suite while growth in
-    // the assembly still trips it.
-    private const double MedianBarMs = 130.0;
-    private const double WarmLaunchBarMs = 190.0;
-    private const double IdleBarMs = 160.0;
+    // Regression bars, not the target. The median launch frame now sits under HitchMonitor's own
+    // 40 ms floor, so the floor is reported beside these rather than asserted: a bar at the floor
+    // would fail the landing gate on a garbage collection, which is what the warm worst reading
+    // carries when it is high. Each bar sits about 1.4x the worst reading over repeated runs, alone
+    // and inside the four-way sharded engine stage, so contention does not flake the suite while a
+    // build creeping back onto the launch frame still trips it.
+    private const double MedianBarMs = 50.0;
+    private const double WarmLaunchBarMs = 110.0;
+    private const double IdleBarMs = 80.0;
 
     [Suite("ai-wave-launch-hitch",
         "what a wave spawn costs the frame it lands on: over C4/M03's built world the cargozep1 "
         + "generator's five credited launches run through the roster's own SpawnAi, and the sim "
         + "step each one lands in is timed on the wall clock the hitch monitor reads, at one and at "
-        + "four human rigs. The median, the warm worst and the worst frame carrying no launch are "
-        + "each held under a regression bar set from repeated readings, while the hitch monitor's "
-        + "own 40 ms floor is reported beside them as the target BL-699 still owes, so growth in "
-        + "the assembly fails here and work merely moved onto a neighbouring frame is visible")]
+        + "four human rigs. The load screen is stood in for first, so the launches claim the "
+        + "aeroplanes it built and the window measures the bind rather than the build. The median, "
+        + "the warm worst and the worst frame carrying no launch are each held under a regression "
+        + "bar set from repeated readings, with the hitch monitor's own 40 ms floor reported "
+        + "beside them, so a build creeping back onto the launch frame fails here and work merely "
+        + "moved onto a neighbouring frame is visible")]
     internal static void AiWaveLaunchHitch(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -175,6 +177,19 @@ internal static class AiWaveLaunchHitchSuites
                 new HumanRosterBindings { RigCount = rigCount });
             roster = built;
 
+            // The loading screen, stood in for: a launch orders its generators' aeroplanes and the
+            // screen builds them before the first frame, so the window below measures what a launch
+            // costs once the build it used to carry is behind the load rather than inside it.
+            GameSession.OrderWaveAirframes(built, defs, templates);
+            long loadMark = Stopwatch.GetTimestamp();
+            window.Prebuilt = 0;
+            while (built.BuildOrderedAirframe())
+            {
+                window.Prebuilt++;
+            }
+
+            window.LoadMs = (Stopwatch.GetTimestamp() - loadMark) * 1000.0 / Stopwatch.Frequency;
+
             // The session's first frame: the pump is what puts the roster into deferring, so every
             // launch below is a mid-flight introduction and owes its crash rig to a later frame.
             built.PumpDeferredCrashRigs();
@@ -191,8 +206,10 @@ internal static class AiWaveLaunchHitchSuites
                 }
                 window.PlaneNode = plan.PlaneNode;
                 string name = EnemyGenerators.LaunchName(EnemyGenerators.LaunchBase(plan.Name), ordinal);
+                long spawnMark = Stopwatch.GetTimestamp();
                 var aircraft = built.SpawnAi(CampaignRosterPlan.SpawnFor(plan, pos, look, pilot,
                     $"{name}_p{rigCount}"));
+                window.SpawnMs.Add((Stopwatch.GetTimestamp() - spawnMark) * 1000.0 / Stopwatch.Frequency);
                 CampaignRosterPlan.ApplyPlan(pilot, plan, 0f);
                 launched.Add(aircraft);
                 return aircraft;
@@ -215,24 +232,30 @@ internal static class AiWaveLaunchHitchSuites
             for (float t = 0f; t < LaunchWindowS; t += StepDt)
             {
                 int before = gens.LaunchOrdinal;
+                int gen0 = GC.CollectionCount(0);
                 long mark = Stopwatch.GetTimestamp();
                 gens.SimStep(StepDt);
+                long mid = Stopwatch.GetTimestamp();
                 built.PumpDeferredCrashRigs();
                 double ms = (Stopwatch.GetTimestamp() - mark) * 1000.0 / Stopwatch.Frequency;
+                double pumpMs = (Stopwatch.GetTimestamp() - mid) * 1000.0 / Stopwatch.Frequency;
                 if (gens.LaunchOrdinal > before)
                 {
                     window.LaunchMs.Add(ms);
                     report.AppendLine(Line(
-                        $"{rigCount}P step {step}: launch {gens.LaunchOrdinal} at t={t:0.00} s, {ms:0.0} ms"));
+                        $"{rigCount}P step {step}: launch {gens.LaunchOrdinal} at t={t:0.00} s, {ms:0.0} ms, {GC.CollectionCount(0) - gen0} gen-0 collection(s)"));
                 }
                 else if (ms > window.WorstIdleMs)
                 {
                     window.WorstIdleMs = ms;
                     window.WorstIdleStep = step;
+                    window.WorstIdlePumpMs = pumpMs;
                 }
                 window.WorstStepMs = Math.Max(window.WorstStepMs, ms);
                 step++;
             }
+
+            (window.Claims, window.Misses) = built.AirframeClaims;
 
             // The model build alone, warm, off the same airframe the launches flew. Not part of the
             // frame above: it is the share of it a pre-build would move rather than remove.
@@ -289,8 +312,14 @@ internal static class AiWaveLaunchHitchSuites
         double median = window.LaunchMs[window.LaunchMs.Count / 2];
         double floor = HitchMonitor.FloorMsDefault;
         report.AppendLine(Line($"{rigCount}P launch frames (ms, sorted): {Join(window.LaunchMs)}"));
+        report.AppendLine(Line($"{rigCount}P the assembly inside them, in arrival order: {Join(window.SpawnMs)}"));
         report.AppendLine(Line(
-            $"{rigCount}P worst non-launch step {window.WorstIdleMs:0.0} ms at step {window.WorstIdleStep}; worst step of the window {window.WorstStepMs:0.0} ms; warm model build {window.ModelMs:0.0} ms"));
+            $"{rigCount}P worst non-launch step {window.WorstIdleMs:0.0} ms at step {window.WorstIdleStep} ({window.WorstIdlePumpMs:0.0} ms of it the rig pump and the pool refill); worst step of the window {window.WorstStepMs:0.0} ms; warm model build {window.ModelMs:0.0} ms; load screen built {window.Prebuilt} aeroplane(s) in {window.LoadMs:0} ms; {window.Claims} claim(s), {window.Misses} miss(es)"));
+
+        // The pool is what makes the frames below what they are, so a run where the launches built
+        // in place after all would otherwise read as a plain regression with no cause named.
+        ctx.Same(window.LaunchMs.Count, window.Claims,
+            $"{rigCount}P: every launch flew an aeroplane the load screen had built claims={window.Claims} misses={window.Misses} prebuilt={window.Prebuilt}");
 
         // The median rather than every launch: the engine suites shard four ways, so one contended
         // step is noise while the middle of five launches is what the frame costs.
@@ -305,7 +334,7 @@ internal static class AiWaveLaunchHitchSuites
         ctx.Check(window.WorstIdleMs < IdleBarMs,
             $"{rigCount}P: the worst frame carrying no launch holds its bar idle_worst={window.WorstIdleMs:0.0} ms at step {window.WorstIdleStep} bar={IdleBarMs:0} ms");
 
-        ctx.Note($"{rigCount}P: median launch frame {median:0.0} ms (min {window.LaunchMs[0]:0.0}, max {window.LaunchMs[^1]:0.0}, cold first {cold:0.0}, warm worst {warmWorst:0.0}), worst frame of the window {window.WorstStepMs:0.0} ms, worst frame carrying no launch {window.WorstIdleMs:0.0} ms, warm model build {window.ModelMs:0.0} ms, bars {MedianBarMs:0}/{WarmLaunchBarMs:0}/{IdleBarMs:0} ms, hitch floor {floor:0} ms is the target BL-699 still owes");
+        ctx.Note($"{rigCount}P: median launch frame {median:0.0} ms (min {window.LaunchMs[0]:0.0}, max {window.LaunchMs[^1]:0.0}, cold first {cold:0.0}, warm worst {warmWorst:0.0}), worst frame of the window {window.WorstStepMs:0.0} ms, worst frame carrying no launch {window.WorstIdleMs:0.0} ms, warm model build {window.ModelMs:0.0} ms, load screen built {window.Prebuilt} aeroplane(s) in {window.LoadMs:0} ms, bars {MedianBarMs:0}/{WarmLaunchBarMs:0}/{IdleBarMs:0} ms, hitch floor {floor:0} ms");
     }
 
     // A human rig in the world but not flying: the field the livery stream, the listener feed and
@@ -351,13 +380,25 @@ internal static class AiWaveLaunchHitchSuites
     {
         public List<double> LaunchMs { get; } = new();
 
+        public List<double> SpawnMs { get; } = new();
+
         public double WorstStepMs { get; set; }
 
         public double WorstIdleMs { get; set; }
 
         public int WorstIdleStep { get; set; } = -1;
 
+        public double WorstIdlePumpMs { get; set; }
+
         public double ModelMs { get; set; }
+
+        public int Prebuilt { get; set; }
+
+        public int Claims { get; set; }
+
+        public int Misses { get; set; }
+
+        public double LoadMs { get; set; }
 
         public string? PlaneNode { get; set; }
     }

@@ -581,6 +581,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     private AnimProgram _program = null!;
 
+    // Per called def name, the nodes a CALL_ANIMATION targets it with (CallTargetNames). Memoized:
+    // the program is fixed at Bind, and a stepped pre-warm asks for it once a slice.
+    private Dictionary<string, HashSet<string>>? _callTargets;
+
     private int _opsApplied, _opsUnresolved;
 
     private int _hookSeeds, _hookSeedsBound;
@@ -1584,10 +1588,33 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// ⚠ For the crash-rig and world-effects runtimes only, never the ambient world runtime.</summary>
     public EmitterPrewarm PrewarmEmitters(params Node3D[] callSiteAnchors)
     {
-        var callTargets = CallTargetNames();
         int built = 0, unhosted = 0, selfHosted = 0;
-        foreach (var def in _program.Defs)
+        int at = 0;
+        while (at < _program.Defs.Count)
         {
+            at = PrewarmSlice(at, int.MaxValue, out var slice, callSiteAnchors);
+            built += slice.Built;
+            unhosted += slice.Unhosted;
+            selfHosted += slice.SelfHosted;
+        }
+
+        return new EmitterPrewarm(built, unhosted, selfHosted);
+    }
+
+    /// <summary>One slice of <see cref="PrewarmEmitters"/>: the defs from <paramref name="from"/>
+    /// on, stopping once <paramref name="budget"/> emitters have been built, and answering the def
+    /// index to carry on at. A caller with a frame to spend steps it so a rig's couple of hundred
+    /// emitters are spread rather than landing on one frame; a def is never split, so the slice may
+    /// overrun the budget by one def's worth.</summary>
+    public int PrewarmSlice(int from, int budget, out EmitterPrewarm warmed,
+        params Node3D[] callSiteAnchors)
+    {
+        var callTargets = _callTargets ??= CallTargetNames();
+        int built = 0, unhosted = 0, selfHosted = 0;
+        int at = Math.Max(0, from);
+        for (; at < _program.Defs.Count && built < budget; at++)
+        {
+            var def = _program.Defs[at];
             foreach (var seq in def.Sequences)
             {
                 foreach (var ev in seq.Events)
@@ -1620,7 +1647,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 }
             }
         }
-        return new EmitterPrewarm(built, unhosted, selfHosted);
+        warmed = new EmitterPrewarm(built, unhosted, selfHosted);
+        return at;
     }
 
     /// <summary>Applies weapon damage to whatever destructible a struck world node belongs to, and
@@ -2239,6 +2267,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         var sw = System.Diagnostics.Stopwatch.StartNew();
         _root = worldRoot;
         _program = program;
+        _callTargets = null;
         // ⚠ Hand these flags over before the first Add/Anchors call; they are construction-time
         // facts about this runtime. The census covers the bootstrap passes only.
         _resolver.NameResolveFallback = NameResolveFallback;

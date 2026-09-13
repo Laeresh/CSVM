@@ -543,6 +543,11 @@ public sealed class WorldEffectsFactory
     /// aircraft be shot at while its rig is open owes it a forcing call on the damage path.</summary>
     public sealed class CrashRigBuild
     {
+        // Emitters per pre-warm step. A rig names about two hundred, which is 55 to 112 ms if they
+        // land together, so the phase repeats like StageSlots rather than building them all at once.
+        // A def is never split, so a step builds this many or the rest of the def it was inside.
+        private const int PrewarmBudget = 12;
+
         private readonly WorldEffectsFactory _factory;
         private readonly FlightController _controller;
         private readonly PlaneBuilder _planeBuilder;
@@ -570,6 +575,10 @@ public sealed class WorldEffectsFactory
         private GameZ? _altGamez;
         private SceneBuilder? _altScene;
         private AnimRuntime? _crashRuntime;
+        private int _warmAt;
+        private int _warmSteps;
+        private double _warmMs;
+        private EmitterPrewarm _warmed;
 
         internal CrashRigBuild(WorldEffectsFactory factory, FlightController controller,
             PlaneBuilder planeBuilder, string planeName, GameZ gamez, SceneBuilder worldScene,
@@ -638,8 +647,12 @@ public sealed class WorldEffectsFactory
                     BindRuntime();
                     break;
                 case Phase.Prewarm:
-                    _phase = Phase.Complete;
-                    PrewarmEmitters();
+                    if (PrewarmSome())
+                    {
+                        _phase = Phase.Complete;
+                        ReportPrewarm();
+                    }
+
                     break;
                 default:
                     break;
@@ -795,18 +808,32 @@ public sealed class WorldEffectsFactory
             WireDamageStages(_controller, crashRuntime, _crashProgram);
         }
 
-        private void PrewarmEmitters()
+        /// <summary>Builds the next slice of the rig's emitters and answers whether the last def is
+        /// behind it. Every emitter the rig's defs name is built off the frame that plays it, so a
+        /// crash or a damage stage finds its puffers and materials already made.</summary>
+        private bool PrewarmSome()
         {
-            // Every emitter the rig's defs name is built here, off the frame that plays it, so a crash
-            // or a damage stage finds its puffers and materials already made.
             var crashRuntime = _crashRuntime!;
             var warmMark = StartupProfile.Mark();
-            var warmed = _controller.PlaneModel is { } model
-                ? crashRuntime.PrewarmEmitters(model, _crashRoot!)
-                : crashRuntime.PrewarmEmitters(_crashRoot!);
+            int at = _controller.PlaneModel is { } model
+                ? crashRuntime.PrewarmSlice(_warmAt, PrewarmBudget, out var slice, model, _crashRoot!)
+                : crashRuntime.PrewarmSlice(_warmAt, PrewarmBudget, out slice, _crashRoot!);
             StartupProfile.Record("emitters", warmMark);
-            double warmMs = Stopwatch.GetElapsedTime(warmMark).TotalMilliseconds;
-            Log.Info("anim", $"crash rig '{_planeName}': pre-warmed {warmed.Built} emitter(s) in {warmMs:0} ms ({warmed.SelfHosted} call-site hosted, {warmed.Unhosted} unhosted here)");
+            _warmMs += Stopwatch.GetElapsedTime(warmMark).TotalMilliseconds;
+            _warmSteps++;
+            _warmed = new EmitterPrewarm(
+                _warmed.Built + slice.Built,
+                _warmed.Unhosted + slice.Unhosted,
+                _warmed.SelfHosted + slice.SelfHosted);
+            bool done = at == _warmAt;
+            _warmAt = at;
+            return done;
+        }
+
+        private void ReportPrewarm()
+        {
+            var warmed = _warmed;
+            Log.Info("anim", $"crash rig '{_planeName}': pre-warmed {warmed.Built} emitter(s) in {_warmMs:0} ms over {_warmSteps} step(s) ({warmed.SelfHosted} call-site hosted, {warmed.Unhosted} unhosted here)");
             if (_slot0Roots != _rootNames!.Count)
                 Log.Warn("anim", $"crash rig '{_planeName}': staged {_slot0Roots} of {_rootNames.Count} template root(s) the bound defs anchor on — the rest built nothing from this chapter's gamez, so their defs play nothing");
             // ⚠ Both kinds' roots, never this rig's alone: one crash section sizes two families that

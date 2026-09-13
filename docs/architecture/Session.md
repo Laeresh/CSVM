@@ -14,11 +14,11 @@ membership to `FlightRoster`, world construction to `WorldSession`, and effects 
 `WorldEffectsFactory`. After the synchronous build it constructs one `SessionSimulation`, which
 owns the step order; `_PhysicsProcess` requests one realtime step and `_Process` each
 parent-driven `GameClock` substep. `AllAircraft` combines the roster's AI view with the ordered
-rig controllers, for consumers that read membership without stepping it. Exit frees the session
+rig controllers, for consumers that read membership without stepping it. `OrderWaveAirframes` at build time and `StepOwedLoad` per
+load-screen frame put the coming waves' aeroplanes behind the load rather than on the launch frame that needs them. Exit frees the session
 subtree atomically and releases only the non-node resources this orchestrator owns. The
 prohibitions that keep those rules true, no `Teardown`, no argument parsing here and no
-re-derived camera set, sit on the members they bind. Read `SessionSimulation.cs` for the step
-order and `Launcher.cs` for what outlives one session.
+re-derived camera set, sit on the members they bind. Read `SessionSimulation.cs` for the step order and `Launcher.cs` for what outlives one session.
 
 ## src/Session/SessionSimulation.cs
 The session simulation: one plain-C# module owning hold admission and the exact order of flight,
@@ -38,7 +38,7 @@ menu as one `MenuHost` built on the first show, the presentation resolution, the
 the frame pacing and the window's screen, mode and size at startup and on an Options apply (`Utils/VSyncSetting.cs`, `Utils/MonitorSetting.cs`, `Utils/DisplayModeSetting.cs`, `Utils/ResolutionSetting.cs`),
 and the sink every menu exit takes ([../menu-presentations.md](../menu-presentations.md)); with no
 extraction it shows `UI/NoGameDataScreen.cs`. `LaunchSession`, `ReturnToMenu`, `RestartSession` and
-`BeginLaunch`/`RunOwedLaunch` are every path a session starts or ends on, a flight left early comes back to the screen it was launched from (settled by the launch through `MenuReturnDestination.ForLaunch`, not by the exit press), and what the persistent `WorldEnvironment` draws behind all of it is `Utils/WorldBackdrop.cs`'s: black while the menu owns the screen and at the quits that still draw, the sky again at every launch.
+`BeginLaunch`/`RunOwedLaunch` are every path a session starts or ends on (the load screen stays up past the build while the session's owed build steps run one a frame through `GameSession.StepOwedLoad`, which is what makes it a yield of several frames; a CLI launch has no screen and drains them inside `LaunchSession`), a flight left early comes back to the screen it was launched from (settled by the launch through `MenuReturnDestination.ForLaunch`, not by the exit press), and what the persistent `WorldEnvironment` draws behind all of it is `Utils/WorldBackdrop.cs`'s: black while the menu owns the screen and at the quits that still draw, the sky again at every launch.
 
 ## src/Session/LiveryResolver.cs
 Resolves which livery each player flies: the shipped paint catalog and the per-pattern
@@ -423,14 +423,14 @@ liveness, the only place the engine-free dispatcher and a controller meet. Clips
 default, and every roll prints an `ai voice:` line. [../formats/combat-voice.md](../formats/combat-voice.md).
 
 ## src/Session/FlightRoster.cs
-The session-owned aircraft aggregate. `BuildPlayers` commits the whole human field in ascending
-player order and `SpawnAi` commits one later mission, wave or generator aircraft; both publish only
-finished controllers, preserve the shared livery and spawn streams, and roll back new nodes and
-registrations on failure. It owns the live human and AI membership views, the target-source fan-out,
-and `VehicleDowned`, the AI death report the HUD kill line is fed from. `SwapPlayerAirframe` is the
-third commit path, a mission putting one player into a different airframe mid-flight, and `RunSwap`
-the whole order a cutscene code raises. `HumanFlightAdapter.cs` and `AiFlightAssembler.cs` are the
-two private assembly paths; the swap decode is [../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md).
+The session-owned aircraft aggregate. `BuildPlayers` commits the whole human field in ascending player order and `SpawnAi` commits one
+later mission, wave or generator aircraft; both publish only finished controllers, preserve the shared livery and spawn streams, and roll
+back new nodes and registrations on failure. It owns the live human and AI membership views, the target-source fan-out, and
+`VehicleDowned`, the AI death report the HUD kill line is fed from. `SwapPlayerAirframe` is the third commit path, a mission putting one
+player into a different airframe mid-flight, and `RunSwap` the whole order a cutscene code raises. The loading screen builds the coming
+waves' aeroplanes through `OrderWaveAirframes` and `BuildOrderedAirframe`, and `PumpDeferredCrashRigs` takes one more off the owed list
+per quiet frame, never on a frame a crash rig or a launch already builds on. `HumanFlightAdapter.cs`, `AiFlightAssembler.cs` and
+`AiAirframePool.cs` are the private assembly paths; the swap decode is [../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md).
 
 ## src/Session/FlightRosterInputs.cs
 The grouped construction facts `FlightRoster` accepts: the copied flight policy, the immutable
@@ -447,15 +447,25 @@ the head build by one step, while `Defer` arms the aeroplane itself so any reade
 it in place first. `Drop` is the rollback path and `Discard` the membership clear's. Read
 `WorldEffectsFactory.cs` for the build being stepped.
 
+## src/Session/AiAirframePool.cs
+The wave aeroplanes a mission is going to need, built before it starts and held outside the tree, so
+a launch costs the bind, the loadout and the tree insert instead of the painted model, its collision
+hulls and its animators. One slot per airframe and livery, `Order`ed off the roster blocks the waves
+launch from, `BuildOne` per loading-screen step and per quiet frame in play, `Claim` at the launch,
+`Discard` at teardown. A claim on an empty ordered slot counts a miss and the caller builds in place,
+which is what every spawn did before the pool; `Claims`/`Misses`/`Owed`/`Ready` are what the hitch
+suite reads. It holds no spawn index, the jitter draws its own at the launch, so nothing here moves
+the spawn streams. Read `AiFlightAssembler.cs` for the build it calls.
+
 ## src/Session/AiFlightAssembler.cs
-`FlightRoster`'s private AI assembly path: authored or fallback pilot skills and maneuvers, then the
-model, controller, livery, loadout and ordnance, damage visuals, the positional engine and weapon
-voices that stand in for the own-ship `FlightAudio`, the optional crash runtime, then the node
-placed. That runtime is OPENED rather than built wherever the caller supplied a queue, so the launch
-frame carries no rig and the prop choreography plays from the queue's completion hook. It chains the
-durability override ahead of the enemy scale and the spawn jitter, the engine's own order
-([../org/vehicleDamage.md](../org/vehicleDamage.md)), resolves the readout's title, stamps the
-block's objective marker, and owns the AI skills cache. Read `FlightRoster.cs` next.
+`FlightRoster`'s private AI assembly path: authored or fallback pilot skills and maneuvers, then the airframe, controller, livery,
+loadout and ordnance, damage visuals, the positional engine and weapon voices that stand in for the own-ship `FlightAudio`, the
+optional crash runtime, then the node placed. The airframe (painted model, hulls, prop, wing-light and surface animators) is CLAIMED
+from `AiAirframePool.cs` where one is ready and built in place otherwise, over one shared `PlaneCollider` per airframe and one shared
+`PlanePainter` per airframe and livery (PERF-22). That runtime is OPENED rather than built wherever the caller supplied a queue, so the
+launch frame carries no rig and the prop choreography plays from the queue's completion hook. It chains the durability override ahead of
+the enemy scale and the spawn jitter, the engine's own order ([../org/vehicleDamage.md](../org/vehicleDamage.md)), resolves the readout's
+title, stamps the block's objective marker, and owns the AI skills cache. Read `FlightRoster.cs` next.
 
 ## src/Session/HumanFlightAdapter.cs
 `FlightRoster`'s private human-aircraft path: one `Assemble` builds the painted model,
@@ -484,8 +494,8 @@ every def that plays ON one aircraft (the crash-def vector, the destroy def, the
 and the prop choreography). Both stages are built in pool slots sized from `data/effect_pools.json`
 and handed to their runtime sealed, and both pre-warm their emitters after the bind so a first burst
 finds its puffers already made. `BeginFlightCrashRuntime` opens the crash build as a handle a caller
-steps a phase at a time (`CrashRigQueue.cs`) and `BuildFlightCrashRuntime` is the one-call form. The
-names it binds are `EffectCatalogue.cs`; the slot mechanism is `Mech3/TemplateStage.cs`.
+steps a phase at a time (`CrashRigQueue.cs`), where the pre-warm itself repeats a slice at a time so a rig's two hundred emitters never
+land on one frame, and `BuildFlightCrashRuntime` is the one-call form. The names it binds are `EffectCatalogue.cs`; the slot mechanism is `Mech3/TemplateStage.cs`.
 
 ## src/Session/WeatherRig.cs
 Applies the flown mission's weather, driving each rig's skydome, whiteout, deck regime and zone gate

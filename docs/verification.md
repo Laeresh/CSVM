@@ -292,6 +292,16 @@ member, and it does not go here.
   owed, assert a regression bar at the measured level and name the target in the same note: a suite
   that fails on the cost it was written to expose blocks every later change instead of the one that
   owes it, and the bar drops to the target when the removal lands.
+- **PERF-32**, **A "quiet frame" test placed beside an existing deferral pump must read that
+  queue's pending count BEFORE the pump runs, not after.** A pump's last step finishes its item, so
+  a count read after it says quiet on the very frame that just carried one, and the two builds land
+  together: the wave-airframe refill read that way left a worst idle frame of 44.4 ms where reading
+  first gives 24.9 ms. The same holds for any frame the measured window already knows is busy.
+- **PERF-33**, **Count gen-0 collections per measured frame beside its milliseconds, or a
+  collection that lands on one frame of the window is read as the cost of whatever that frame was
+  carrying.** In the wave-launch window the one launch frame over 40 ms is the one with
+  `GC.CollectionCount(0)` incremented, and the same launch without a collection costs 18 ms; a bar
+  set from the collected frame measures the allocator, not the launch.
 
 ## LOG, logs, error censuses, and exit codes
 

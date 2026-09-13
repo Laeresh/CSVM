@@ -29,9 +29,9 @@ own. `Still` is the camera-less null object an unwired puffer reads. Read `Puffe
 ## src/Effects/EmitterRenderer.cs
 `Puffer`'s lower seam. `IEmitterRenderer` takes live particles (`Attach` sizes the pool, `Grow`
 re-sizes it, `Write` per particle, `Show` publishes the frame), reaching the three emitter modes
-without a GPU via `RecordingEmitterRenderer`. `MultiMeshEmitterRenderer` draws them as MultiMeshes
-of camera-billboarded quads and owns the shader: quad-rim fade, flipbook column from per-instance
-custom data, the soft-particle depth fade, `csky_srgb_to_linear` on the `COLORS` ramp, and the
+without a GPU via `RecordingEmitterRenderer`. `MultiMeshEmitterRenderer` draws them as MultiMeshes of camera-billboarded quads, over one
+process-wide unit quad and one compiled shader per blend and soft pair, and owns that shader: quad-rim fade, flipbook column from
+per-instance custom data, the soft-particle depth fade, `csky_srgb_to_linear` on the `COLORS` ramp, and the
 mission's distance fog off the sky's globals. Blend arrives per atlas column from `Puffer.Create`,
 keeping this seam free of `TextureArchive`; a column set spanning both draws one MultiMesh per
 blend, each in write order and depth-sorted on its cloud's AABB centre. Read `Puffer.cs` next.

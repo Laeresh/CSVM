@@ -18,6 +18,14 @@ internal sealed class AiFlightAssembler
     private readonly CrashRigQueue? _crashRigs;
     private readonly System.Collections.Generic.HashSet<string> _liveryDefsLogged =
         new(StringComparer.OrdinalIgnoreCase);
+    // PERF-22: the hulls are a pure function of the airframe's triangles, so one set serves every
+    // aeroplane of that airframe. AircraftBody indexes its OWN CollisionShape3D children, so two
+    // bodies mounting the same shape resource still report their own part names.
+    private readonly System.Collections.Generic.Dictionary<string, PlaneCollider?> _hulls =
+        new(StringComparer.OrdinalIgnoreCase);
+    private readonly System.Collections.Generic.Dictionary<string, PlanePainter> _painters =
+        new(StringComparer.Ordinal);
+    private readonly AiAirframePool _airframes;
     private AiSkills? _aiSkills;
     private System.Collections.Generic.List<Maneuver>? _maneuvers;
     private bool _noAssistLogged;
@@ -34,9 +42,13 @@ internal sealed class AiFlightAssembler
         _aircraft = aircraft;
         _world = world;
         _humanCount = humanCount;
+        _airframes = new AiAirframePool(BuildAirframe);
     }
 
     public AiSkills? Skills => _aiSkills;
+
+    /// <summary>The aeroplanes built ahead of the launches that need them.</summary>
+    public AiAirframePool Airframes => _airframes;
 
     public AssemblyState CaptureState(AiSpawn spawn)
     {
@@ -63,6 +75,21 @@ internal sealed class AiFlightAssembler
         _aiSkills = state.Skills;
         _maneuvers = state.Maneuvers;
         _noAssistLogged = state.NoAssistLogged;
+    }
+
+    /// <summary>Orders <paramref name="depth"/> aeroplanes for the block <paramref name="template"/>
+    /// describes, up to <paramref name="cap"/> held for one airframe and livery. False where the
+    /// livery is not a function of the block, which builds in place as it always did.</summary>
+    public bool OrderAirframes(AiSpawn template, int depth, int cap)
+    {
+        var stats = _aircraft.AiStatsFor(template.PlaneName, template.AiDef);
+        if (!TryBlockScheme(stats, template, out var scheme))
+        {
+            return false;
+        }
+
+        _airframes.Order(template.PlaneName, scheme, depth, cap);
+        return true;
     }
 
     public FlightController Assemble(AiSpawn spawn, int index, Action<FlightController> onCreated)
@@ -95,14 +122,26 @@ internal sealed class AiFlightAssembler
         using (PerfSample.Scope(PerfSite.AiSpawn))
         {
             // The decoded order: the caller's own scheme, then the militia def's authored one, then
-            // the default-pattern rule. ShippedSkins reaches only the last step.
-            var scheme = spawn.Scheme ?? MilitiaScheme(stats, spawn) ?? _liveries.SchemeFor(
+            // the default-pattern rule. ShippedSkins reaches only the last step. The first two are
+            // a function of the block alone, so a pooled aeroplane can already wear them.
+            PaintScheme? scheme;
+            AiAirframePool.Prepared? prepared = null;
+            if (TryBlockScheme(stats, spawn, out var blockScheme))
+            {
+                scheme = blockScheme;
+                prepared = _airframes.Claim(spawn.PlaneName, scheme);
+            }
+            else
+            {
+                scheme = _liveries.SchemeFor(
                     _humanCount + index, _aircraft.ZrdrPath,
                     _aircraft.PaintRng, _liveries.PatternsForPlane(_aircraft.PlanesGamez, spawn.PlaneName),
                     useDefaultPattern: !spawn.ShippedSkins);
-            var planeBuilder = new PlaneBuilder(_aircraft.PlanesGamez, _aircraft.Textures, spinningProps: true,
-                scheme: scheme, patterns: _liveries.Patterns);
-            planeModel = planeBuilder.Build(spawn.PlaneName);
+            }
+
+            prepared ??= BuildAirframe(spawn.PlaneName, scheme);
+            var planeBuilder = prepared.Builder;
+            planeModel = prepared.Model;
 
             controller = new FlightController
             {
@@ -116,10 +155,10 @@ internal sealed class AiFlightAssembler
                 IsHumanPiloted = false,
                 Pilot = spawn.Pilot,
                 PlaneModel = planeModel,
-                Props = PropAnimator.Build(planeModel),
-                WingLights = WingLightBlinker.Build(planeBuilder.WingFlares, _policy.AnimLod),
-                Surfaces = ControlSurfaceAnimator.Build(planeModel),
-                Collider = PlaneCollider.Build(planeModel),
+                Props = prepared.Props,
+                WingLights = prepared.WingLights,
+                Surfaces = prepared.Surfaces,
+                Collider = prepared.Collider,
                 Damage = stats.DestroyableParts.Count > 0 || stats.VehicleHealth is > 0f
                     ? PlaneDamage.For(stats) : null,
                 CollideDamageSink = _world.WorldRuntime != null ? _world.WorldRuntime.CollideDamageAt : null,
@@ -249,6 +288,88 @@ internal sealed class AiFlightAssembler
 
         Log.Info("flight", $"ai: spawned '{spawn.PlaneName}' as {controller.Name} (shooter id {controller.PlayerIndex}) pos=({spawn.Position.X:0},{spawn.Position.Y:0},{spawn.Position.Z:0}) jitter=(fd {stats.FdSpeed:0.0} thrust {stats.EnginePower:0.000}) {(spawn.Inert ? "INERT " : "")}{(spawn.Pilot.Patrol is { } patrol ? $"net='{patrol.Net.Name}#{patrol.Net.Id}' ({patrol.Net.Nodes.Count} nodes)" : Log.Format($"heading={spawn.Pilot.TargetHeadingDeg:0}° alt={spawn.Pilot.TargetAltitude:0} m"))}");
         return controller;
+    }
+
+    // The spawn-independent half of an AI aeroplane, in the order the launch used to build it: the
+    // painted model, the prop and surface animators, the wing lamps and the collision hulls. The
+    // pool runs this at load and a claim-less launch runs it in place, so both produce one tree.
+    private AiAirframePool.Prepared BuildAirframe(string planeName, PaintScheme? scheme)
+    {
+        var builder = new PlaneBuilder(_aircraft.PlanesGamez, _aircraft.Textures, spinningProps: true,
+            scheme: scheme, patterns: _liveries.Patterns, painter: PainterFor(planeName, scheme));
+        var model = builder.Build(planeName);
+        return new AiAirframePool.Prepared(builder, model,
+            PropAnimator.Build(model),
+            WingLightBlinker.Build(builder.WingFlares, _policy.AnimLod),
+            ControlSurfaceAnimator.Build(model),
+            HullsFor(planeName, model));
+    }
+
+    // One painter per airframe and livery (PERF-22): the painted skins and the swapped decals are a
+    // function of the scheme and the aircraft's own skin prefix, so the second aeroplane of a wave
+    // wears the images the first composed instead of composing them again. Held by this assembler,
+    // which is the session's, so the painted skins die with the archive they were baked from.
+    private PlanePainter? PainterFor(string planeName, PaintScheme? scheme)
+    {
+        if (scheme == null)
+        {
+            return null;
+        }
+
+        string key = AiAirframePool.KeyFor(planeName, scheme);
+        if (_painters.TryGetValue(key, out var cached))
+        {
+            return cached;
+        }
+
+        var root = _aircraft.PlanesGamez.FindByName(planeName);
+        if (root == null || PlanePainter.PrefixFor(_aircraft.PlanesGamez, root) is not { } prefix)
+        {
+            return null;
+        }
+
+        var made = new PlanePainter(_aircraft.Textures, _liveries.Patterns, scheme, prefix);
+        _painters[key] = made;
+        Log.Info("world", $"[paint] {planeName} ({prefix}): {scheme}{(made.PatternMissesAircraft ? $": pattern '{scheme.FolderName}' ships no {prefix} skins, decals only" : "")}");
+        return made;
+    }
+
+    // One hull set per airframe, reused by every aeroplane of it (PERF-22). Keyed on the airframe
+    // name because the geometry is the airframe's; a livery substitutes textures and moves no
+    // triangle.
+    private PlaneCollider? HullsFor(string planeName, Node3D model)
+    {
+        if (_hulls.TryGetValue(planeName, out var cached))
+        {
+            return cached;
+        }
+
+        var built = PlaneCollider.Build(model);
+        _hulls[planeName] = built;
+        return built;
+    }
+
+    // The livery wherever it is a function of the block alone: the caller's own scheme, then the
+    // militia def's, then the shipped-default rule, which reads no spawn order. False under
+    // --paint=, which picks per player index and so cannot be resolved before the launch.
+    private bool TryBlockScheme(PlaneStats stats, AiSpawn spawn, out PaintScheme? scheme)
+    {
+        scheme = spawn.Scheme;
+        if (scheme != null)
+        {
+            return true;
+        }
+
+        if (_liveries.PaintRequested)
+        {
+            return false;
+        }
+
+        scheme = MilitiaScheme(stats, spawn) ?? _liveries.SchemeFor(
+            0, _aircraft.ZrdrPath, _aircraft.PaintRng,
+            _liveries.PatternsForPlane(_aircraft.PlanesGamez, spawn.PlaneName),
+            useDefaultPattern: !spawn.ShippedSkins);
+        return true;
     }
 
     private void PreparePilot(AiSpawn spawn, PlaneStats defStats)

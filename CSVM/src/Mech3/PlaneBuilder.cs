@@ -56,17 +56,18 @@ public sealed class PlaneBuilder
 
     /// <param name="spinningProps">Spins the blur layers instead of the static disc; implies damage panels.</param>
     /// <param name="damagePanels">Builds exterior pdpN panels hidden, for the --damage lab.</param>
-    /// <param name="scheme">Paint livery (<see cref="PlanePainter"/>); null keeps shipped skins, per builder so two players can differ.</param>
+    /// <param name="scheme">Paint livery (<see cref="PlanePainter"/>); null keeps shipped skins, per builder so two players can differ.</param><param name="painter">A painter already built for this airframe and this <paramref name="scheme"/>, so a second aeroplane of the pair wears the skins the first composed instead of composing them again (PERF-22). ⚠ Its scheme and skin prefix must be this build's, nothing here checks them.</param>
     /// <param name="patterns"><see cref="PatternLibrary"/>'s region masks; empty paints nothing.</param>
     /// <param name="cockpitInterior">Builds <see cref="CockpitInterior"/>; a human rig only, so an AI plane never pays for a cockpit nobody sits in.</param>
     /// <param name="dockingHook">Builds the airframe's <c>*_hook</c> group, parked at its archive-authored inactive bit; a human rig only.</param>
     public PlaneBuilder(GameZ gamez, TextureArchive textures, bool spinningProps = false,
         bool damagePanels = false, PaintScheme? scheme = null, PatternLibrary? patterns = null,
-        bool cockpitInterior = false, bool dockingHook = false)
+        bool cockpitInterior = false, bool dockingHook = false, PlanePainter? painter = null)
     {
         _gamez = gamez;
         _textures = textures;
         _scheme = scheme;
+        _painter = scheme != null ? painter : null;
         _patterns = patterns ?? PatternLibrary.Empty;
         _scene = new SceneBuilder(gamez, textures, blendTexture: IsPropBlurTexture, cullBackfaces: true,
             textureSubstitute: (name, tex) => _painter?.Substitute(name, tex) ?? tex);

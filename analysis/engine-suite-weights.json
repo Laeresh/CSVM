@@ -10,6 +10,8 @@
   "suites": {
     "ace-wake-terrain": 2.926,
     "ai-actor": 0.474,
+    "ai-airframe-pool": 0.005,
+    "ai-airframe-pool-claim": 3.85,
     "ai-crash-defs": 3.291,
     "ai-crash-rig-deferral": 3.469,
     "ai-damage-stages": 0.77,

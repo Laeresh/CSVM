@@ -60,6 +60,7 @@ public sealed class FlightRoster
     private Action<List<AimCandidate>>? _targetSubParts;
     private Action<List<AimCandidate>>? _targetObjectives;
     private int _spawned;
+    private bool _joinedSincePump;
 
     internal FlightRoster(FlightRosterPolicy policy, LiveryResolver liveries,
         WorldEffectsFactory? worldEffects, Node3D worldRoot, AircraftAssemblyResources aircraft,
@@ -107,6 +108,19 @@ public sealed class FlightRoster
     /// <summary>How many mid-flight AI introductions are still owed their crash rig. Zero on any
     /// frame no aeroplane joined on and the frames after it have been pumped.</summary>
     public int PendingCrashRigs => _crashRigs.PendingRigs;
+
+    /// <summary>Aeroplanes ordered for this session's waves that are not built yet. The loading
+    /// screen calls <see cref="BuildOrderedAirframe"/> until this is zero.</summary>
+    public int OwedAirframes => _aiAssembler.Airframes.Owed;
+
+    /// <summary>Aeroplanes built ahead and waiting for the launch that claims them.</summary>
+    public int ReadyAirframes => _aiAssembler.Airframes.Ready;
+
+    /// <summary>Launches that flew an aeroplane the pool had ready, and launches that found their
+    /// slot empty and built one in place. A wave that misses is a wave the refill did not keep up
+    /// with, so a hitch report reads the pair beside its frame times.</summary>
+    public (int Claims, int Misses) AirframeClaims =>
+        (_aiAssembler.Airframes.Claims, _aiAssembler.Airframes.Misses);
 
     public IReadOnlyList<PlayerRig> Humans => _humans;
 
@@ -252,6 +266,7 @@ public sealed class FlightRoster
             _aiSubscriptions.Add(controller,
                 new AiSubscriptions(spawn.Pilot.Machine, modeChanged, rollLogged, downed));
             _spawned++;
+            _joinedSincePump = true;
             return controller;
         }
         catch
@@ -272,8 +287,31 @@ public sealed class FlightRoster
     public void PumpDeferredCrashRigs()
     {
         _crashRigs.GoLive();
+        // ⚠ Read before the pump, not after: the pump's last step finishes a rig, so a count read
+        // after it says "quiet" on the very frame that just carried one and puts both builds on it.
+        bool quiet = _crashRigs.PendingRigs == 0;
         _crashRigs.Pump();
+        // One aeroplane per quiet frame, so the pool comes back to depth between waves: never on
+        // the frame one joined, and never while a crash rig is still building, since those are the
+        // two frames that already carry a build of their own.
+        if (!_joinedSincePump && quiet)
+        {
+            _aiAssembler.Airframes.BuildOne();
+        }
+
+        _joinedSincePump = false;
     }
+
+    /// <summary>Orders the aeroplanes one wave-launching roster block will need, so the loading
+    /// screen builds them and the launch frame only binds one. <paramref name="cap"/> bounds what
+    /// one airframe and livery holds however many blocks order it. False where the block's livery
+    /// is not a function of the block, which keeps building in place.</summary>
+    public bool OrderWaveAirframes(AiSpawn template, int depth, int cap) =>
+        _aiAssembler.OrderAirframes(template, depth, cap);
+
+    /// <summary>Builds one ordered aeroplane and answers whether it built anything. The loading
+    /// screen calls it until it answers false, which is what makes that screen several frames.</summary>
+    public bool BuildOrderedAirframe() => _aiAssembler.Airframes.BuildOne();
 
     /// <summary>Releases the roster's non-node membership and controller bindings. The session
     /// subtree still owns and frees the aircraft nodes atomically.</summary>
@@ -282,6 +320,9 @@ public sealed class FlightRoster
         // Dropped rather than finished: these controllers are on their way out of the tree, and a
         // rig built onto one now would stage a subtree that is freed in the same teardown.
         _crashRigs.Discard();
+        // The unclaimed aeroplanes are outside the tree, so the session subtree's own teardown
+        // never reaches them.
+        _aiAssembler.Airframes.Discard();
         foreach (var rig in _humans)
         {
             if (rig.Controller is { } controller)
@@ -301,6 +342,7 @@ public sealed class FlightRoster
         _targetSubParts = null;
         _targetObjectives = null;
         _spawned = 0;
+        _joinedSincePump = false;
     }
 
     /// <summary>The airframe and paint one human rig is flying. Read before a swap replaces it: the

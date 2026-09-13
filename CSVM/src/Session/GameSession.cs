@@ -36,6 +36,12 @@ public partial class GameSession : Node3D
     // How many near-miss names a failed --node= lookup offers: a usable hint, not a census.
     private const int NodeSuggestCap = 20;
 
+    // How many aeroplanes one generator's wave is built ahead for, and how many one airframe and
+    // livery holds however many generators order it. A wave arrives a second or more apart and a
+    // quiet frame refills one, so a few deep covers a burst without lengthening the load screen.
+    private const int WaveAirframeDepth = 4;
+    private const int WaveAirframeCap = 8;
+
     // The empty stage's squadron ring, metres. Two opposed sides therefore start 2000 m apart,
     // AiModeMachine's decoded attack range, so an --ai= sortie engages without a dead approach.
     private const float SquadronRingRadiusM = 1000f;
@@ -844,6 +850,44 @@ public partial class GameSession : Node3D
     internal static bool BindsMissionTargetTable(
         SessionSpec spec, bool hasDirector, bool stunting, bool hasWorld, int rigs) =>
         !hasDirector && spec.WorldMode && !spec.EmptyStage && !stunting && hasWorld && rigs > 0;
+
+    /// <summary>Orders the aeroplanes this mission's generators will launch, off the roster blocks
+    /// they launch from, so the loading screen builds them instead of the launch frame. Depth is the
+    /// generator's own authored wave size: that is how many arrive before the cycle rests, and a
+    /// quiet frame refills one. Internal so the wave-launch hitch suite orders exactly as a launch
+    /// does rather than modelling it.</summary>
+    internal static void OrderWaveAirframes(FlightRoster roster,
+        IReadOnlyList<EnemyGeneratorDef> defs, IReadOnlyDictionary<string, RosterSpawnPlan> templates)
+    {
+        int ordered = 0;
+        var pilot = AiPilot.HoldingCourse(Vector3.Zero, Vector3.Forward);
+        foreach (var def in defs)
+        {
+            if (CampaignRosterPlan.ResolveGeneratorLaunch(templates, def.VehicleParams, out var plan)
+                != GeneratorLaunch.Template || plan == null)
+            {
+                continue;
+            }
+
+            int depth = Math.Clamp(def.WaveSize, 1, WaveAirframeDepth);
+            if (roster.OrderWaveAirframes(
+                CampaignRosterPlan.SpawnFor(plan, Vector3.Zero, Vector3.Forward, pilot),
+                depth, WaveAirframeCap))
+            {
+                ordered += depth;
+            }
+        }
+
+        if (ordered > 0)
+        {
+            Log.Info("world", $"egen: {roster.OwedAirframes} wave aeroplane(s) ordered from {ordered} block slot(s); the load screen builds them so a launch binds one instead of building it");
+        }
+    }
+
+    /// <summary>Carries out one step of the build the loading screen still owes and answers
+    /// whether more is left. The wave aeroplanes are that work: they belong to the load, where
+    /// there is no frame budget, rather than to the launch frame that needs one.</summary>
+    internal bool StepOwedLoad() => _flightRoster?.BuildOrderedAirframe() ?? false;
 
     private static void CopyInstanceShaderParams(Node source, Node copy)
     {
@@ -2965,6 +3009,7 @@ public partial class GameSession : Node3D
             }
             Log.Info("world", $"egen: {_generators.LiveCount} of {egenDefs.Count} generator(s) live for {_spec.Chapter}/{_spec.Mission}, spawning '{_spec.GeneratorsPlane}'");
             state.What += $" + {_generators.LiveCount} generator(s)";
+            OrderWaveAirframes(flightRoster, egenDefs, generatorTemplates);
         }
 
         // The zeppelin run's wave arm (the director's phase): the objective zeppelin's generator

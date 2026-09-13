@@ -254,6 +254,10 @@ public partial class Launcher : Node3D
     // ⚠ Null/-1 means no launch is owed; a CLI launch does not come through here at all.
     private CanvasLayer? _loadLayer;
     private int _launchFramesWaited = -1;
+    // The load screen's second half: once the session is built, the work it ordered for the load
+    // is carried out one step a frame with the screen still up, which is what makes the screen a
+    // real yield of several frames. -1 means nothing is owed.
+    private int _loadStepsRun = -1;
 
     private double _perfClock;
     private int _perfFrames;
@@ -1082,14 +1086,37 @@ public partial class Launcher : Node3D
     // published clock, the world lights, the camera restore) cannot land on top of the new one.
     private void RunOwedLaunch()
     {
+        // The load screen's second half: the session exists, and what it ordered for the load is
+        // carried out a step a frame behind the same screen. A step is one wave aeroplane, so the
+        // launch frame that needs it later binds a finished one instead of building it.
+        if (_loadStepsRun >= 0)
+        {
+            if (_session is { } loading && loading.StepOwedLoad())
+            {
+                _loadStepsRun++;
+                return;
+            }
+
+            Log.Info("ui", $"load screen: {_loadStepsRun} owed build step(s) run behind the screen");
+            _loadStepsRun = -1;
+            HideLoadScreen();
+            return;
+        }
+
         if (_launchFramesWaited < 0 || _launchFramesWaited++ < 1)
         {
             return;
         }
         _launchFramesWaited = -1;
         bool built = LaunchSession();
-        // In the same tick the build returned, before anything renders: a load screen left up for
-        // a frame would draw over the first frame of the world, and over a --screenshot capture.
+        // The screen stays up while the build's own owed steps run, and comes down on the frame
+        // they finish: a load screen left up past that would draw over the first frame of the
+        // world, and over a --screenshot capture.
+        if (built && _session is { } loaded && loaded.StepOwedLoad())
+        {
+            _loadStepsRun = 1;
+            return;
+        }
         HideLoadScreen();
         if (built || !_menuDriven)
         {
@@ -1361,6 +1388,22 @@ public partial class Launcher : Node3D
         });
         AddChild(_session);
         bool built = _session.StartSession();
+        // A CLI launch has no load screen to yield behind, so what the build ordered for the load
+        // runs here, inside the same block the rest of the build ran in. The menu path steps it one
+        // a frame with the screen still up instead (RunOwedLaunch).
+        if (built && _loadLayer == null)
+        {
+            int steps = 0;
+            while (_session.StepOwedLoad())
+            {
+                steps++;
+            }
+
+            if (steps > 0)
+            {
+                Log.Info("world", $"load: {steps} owed build step(s) run inside the build (no load screen on this launch)");
+            }
+        }
         // A build stalls the frame loop, and the frames either side of it are not neighbours, so
         // the hitch monitor drops its baseline here rather than reporting the build as a hitch.
         // Flushed first so nothing queued from before the build is held through it.

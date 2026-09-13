@@ -105,10 +105,10 @@ Builds one aircraft from its GameZ subtree, skipping the cockpit, damage, destro
 subtrees and the airframe's `*_hook` skyhook group unless `dockingHook` asks for it. `Repaint`
 re-liveries the built plane in place, `BuildDestroyed` builds the wreck subtree with the
 plane-root to destroyed transform chain baked in, and `WingFlares`, `DamagePanels` and
-`CockpitDamagePanels` expose the nodes the build collected. `spinningProps` selects the flight
-propeller set (`PropParts.cs`); `Build` also reads `CockpitCameraOffset` off the `cockpit_camera`
-marker for `CameraController`. `cockpitInterior` mounts `cockpit1` hidden at that offset under
-`InteriorScale` and the fixed head-pitch tilt, then `ParkInteriorStates` walks it. Camera decode: [../org/cameraViews.md](../org/cameraViews.md).
+`CockpitDamagePanels` expose the nodes the build collected. A caller building a second aeroplane of one airframe and livery passes the
+`painter` the first composed, so those skins are composed once (PERF-22). `spinningProps` selects the flight propeller set
+(`PropParts.cs`); `Build` also reads `CockpitCameraOffset` off the `cockpit_camera` marker for `CameraController`. `cockpitInterior`
+mounts `cockpit1` hidden at that offset under `InteriorScale` and the fixed head-pitch tilt, then `ParkInteriorStates` walks it. Camera decode: [../org/cameraViews.md](../org/cameraViews.md).
 
 ## src/Mech3/PaintScheme.cs
 One aircraft livery: the pattern name, three colours and three decal indices of the `paint_*`
@@ -458,12 +458,12 @@ and the cells' own bounds. Its one reader is `MissionSetup`'s area verb. The rec
 in cell space and the two axes run opposite ways; both are in [../formats/interp.md](../formats/interp.md).
 
 ## src/Mech3/AnimRuntime.cs
-The animation engine: bootstrap passes (mission setup, anchored RESET_STATEs, ON_STARTUP,
-startanims, a safety net), then dispatch-table event playback; an unhandled event kind is counted,
-never fatal. It owns the live definition instances and their condition evaluation, the
+The animation engine: bootstrap passes (mission setup, anchored RESET_STATEs, ON_STARTUP, startanims, a safety net), then dispatch-table
+event playback; an unhandled event kind is counted, never fatal. It owns the live definition instances and their condition evaluation, the
 destructible-damage entries (`DamageAt`, which also raises `DestructibleKilled` on a healthy-role
 kill, `ApplyDamageStages`, `RunDeathSequence`, `CarryState`), the world-effects runtime
-(`PlayEffectAt` over a hidden template stage), the emitter prewarm, the range-deferred start sweep
+(`PlayEffectAt` over a hidden template stage), the emitter prewarm (`PrewarmEmitters` in one call, `PrewarmSlice` resumable for a caller
+with a frame budget, which never splits one def), the range-deferred start sweep
 and the vehicle/library-root index, and hands every construction site a sealed `TemplateStage`. Its
 range gates read the players through `RangePositions`: the last pose they flew, while
 `PlayerRangeHeld` says a cutscene is posing their aeroplanes. `FastForward` is the per-definition
