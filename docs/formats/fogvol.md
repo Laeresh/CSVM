@@ -158,6 +158,8 @@ structure that is built once and kept for the process's whole lifetime. Every ki
 already collapses a sprite past its authored `far_fade.y` to a degenerate quad (`FogVolumeClutter`
 class remarks), so a ring wider than the LARGEST authored `far_fade.y` buys zero visible pixels
 from anywhere a camera can stand, bounding the extension there is lossless, not a cut corner.
+The view-angle term the render now applies only tightens that bound: on the horizontal face these
+rings continue, a sprite's horizontal reach is `sqrt(dy x far - dy^2)`, which peaks at `far/2`.
 Both `cloudsprite1`/`cloudsprite2` carry the same **3,500 m** in every shipped deck chapter, so
 today this is one radius per chapter, read from the data rather than hardcoded.
 
@@ -208,29 +210,25 @@ one child carrying the card. The card is a single 4-vertex, 1-polygon tri-strip 
 `CylindricalY`), skinned `cloud1.tif` / `cloud2.tif`, vertex colours 240/240/240, centred on its
 own quad centre to within 3 mm.
 
-⚠ **We render those cards at vertex colour 225, not the authored 240**, a marked TUNE
-(`FogVolumeClutter.CardVertexColorTune`, the user's verdict at the controls),
-applied to RGB only and never to alpha. The authored value is what this page says it is and is
-unchanged as a decode; what the TUNE fixes is a rendered-brightness gap whose mechanism **is now
-decoded, and is not a colour at all**: the card's colour reaches the vertex diffuse unchanged, the
-texture is a constant-RGB 239 alpha mask, and the original's own per-sprite draw distance is scaled
-by the cosine of the viewing angle against its `fvol` polygon's normal, which thins the field to a
-fraction of ours at exactly the grazing poses the 209 plateau was measured in
-([`../org/cloudCards.md`](../org/cloudCards.md)). The measurements below stand; what changes is that
-the quantity to correct is coverage. `236.65 × 240/255 = 222.7` is what the naive reading gives and
-it is what we shipped;
-**nothing in five independent original above-band frames renders at 222.7**, and the original's
-saturated plateau measures **208.88** (`t124`, 1208 m) and **209.16** (`t59`, 1219 m) in a
-near-field, fog-free patch, with whole-frame `p99` topping out at 213–216. `236.65 × 225/255 =
-208.8` lands there. C23 refuted the four mechanisms that could have explained it as data: (1) no
-`cloudsprite` `OBJECT_OPACITY_STATE` exists in any chapter's `zrdr`, C1's `clouds.zrd` names only
-`cloudparent`, and no other chapter ships one; (2) `WorldLight` on C1's cards would put them at
-178.6, *below* the original's own 204.9–213.3 at the matching altitude; (3) `fog: true` is
+⚠ **We render those cards at the authored 240, and no colour term is applied to them at all.**
+The card's colour reaches the vertex diffuse unchanged, the texture is a constant-RGB 239 alpha
+mask, and the per-sprite draw distance is scaled by the cosine of the viewing angle against its
+`fvol` polygon's normal ([`../org/cloudCards.md`](../org/cloudCards.md)). The measurements that a
+colour scale once stood in for still hold, but the quantity they measure is COVERAGE:
+`236.65 × 240/255 = 222.7` is what the naive reading gives, **nothing in five independent original
+above-band frames renders at 222.7**, and the original's saturated plateau measures **208.88**
+(`t124`, 1208 m) and **209.16** (`t59`, 1219 m) in a near-field, fog-free patch, with whole-frame
+`p99` topping out at 213–216. A card cannot exceed `239 × 240/255 = 224.9`, so 209 is the fogged
+background showing through a field that the viewing angle has thinned to a disc at exactly those
+grazing poses. Four mechanisms that could have explained it as a colour were refuted on data:
+(1) no `cloudsprite` `OBJECT_OPACITY_STATE` exists in any chapter's `zrdr`, C1's `clouds.zrd`
+names only `cloudparent`, and no other chapter ships one; (2) `WorldLight` on C1's cards would put
+them at 178.6, *below* the original's own 204.9–213.3 at the matching altitude; (3) `fog: true` is
 contradicted three ways (the same reader's tree templates and the world's placed cloud facades
 both author it explicitly, and `B16` verified the flag is honoured); (4) carrying the field up
-with the relocated deck is refuted by CAP-12's own altimetry. **A mechanism, if one is ever
-decoded, replaces this constant, it does not stack with it.** The TUNE is `fvol` cards only: the
-placed `cloudparent` facades keep vertex colour 255 and their range-gated `0.6` opacity.
+with the relocated deck is refuted by CAP-12's own altimetry. ⚠ **Do not re-introduce a colour
+scale here.** The placed `cloudparent` facades are a separate population and keep vertex colour 255
+and their range-gated `0.6` opacity.
 
 | Chapter | card size | `lighting` | `fog` |
 |---|---|---|---|
@@ -267,22 +265,19 @@ degenerate ranges).
 
 **Inferred, and marked as such:**
 
-- **The card's RENDERED brightness, vertex colour 240 scaled to 225 (`CardVertexColorTune`).**
-  The authored 240 is decoded and unchanged; the scale is a TUNE calibrated to the original's
-  measured 209 plateau. ☑ **The mechanism it stands in for is now decoded and is an ALPHA term, so
-  this constant is a stand-in for the wrong quantity:** nothing in the original scales a card's
-  colour, its texture is a constant-RGB 239 alpha mask, and its draw distance is scaled by the
-  cosine of the viewing angle against its `fvol` polygon's normal, which shrinks the field to a
-  ~600 m disc at the grazing poses the plateau was measured in
-  ([`../org/cloudCards.md`](../org/cloudCards.md)). Four candidates were refuted before that;
-  full statement
-  under [The sprite templates](#the-sprite-templates) above. ⚠ The card's `lighting` flag is not the
-  missing mechanism, and it is decoded rather than open: it gates the sun on a facade exactly as it
-  does on any model, but what it admits is a per-vertex `AMBIENT + DIFFUSE × max(N·L, 0)` evaluated
-  on the card's own three authored normals carried through the billboard basis, never a flat
-  `WorldLight` multiply ([`../org/vertexLighting.md`](../org/vertexLighting.md)'s facade section).
-  C1 and C4, whose footage the 208.8 plateau was measured in, author `lighting: false`, so no
-  lighting term reaches their cards at all.
+- **The polygon normal a sprite's draw distance is scaled against, for a volume that is not a
+  slab.** The law itself is decoded ([`../org/cloudCards.md`](../org/cloudCards.md)) and applied:
+  each placement carries a normal and its own draw of the fade band. The normal is exact where the
+  volume is a top-anchored slab, which is `+Y`, and inferred elsewhere, the outward normal of the
+  face the placement lies nearest, because our scatter fills a volume's interior rather than laying
+  the lattice over its faces. C1C's build-up frusta and C5's street prisms are the inferred case.
+  ⚠ The card's `lighting` flag is not part of this and is decoded rather than open: it gates the
+  sun on a facade exactly as it does on any model, but what it admits is a per-vertex
+  `AMBIENT + DIFFUSE × max(N·L, 0)` evaluated on the card's own three authored normals carried
+  through the billboard basis, never a flat `WorldLight` multiply
+  ([`../org/vertexLighting.md`](../org/vertexLighting.md)'s facade section). C1 and C4, whose
+  footage the 208.8 plateau was measured in, author `lighting: false`, so no lighting term reaches
+  their cards at all.
 - **`distance` is the scatter's mean spacing, an areal density, not a lattice period.** Each
   volume is cut into `distance` × `distance` cells anchored on the world origin and each cell gets
   **one placement drawn uniformly inside it**, with `perturb_dist_range` applied on top. The
@@ -322,9 +317,10 @@ degenerate ranges).
   an approximation in general ([`../org/cloudCards.md`](../org/cloudCards.md)).
 - ~~**`far_fade_range[1]` is what to draw at**, the pair being per detail level.~~ **Struck: the
   decode says the two pairs are the endpoints of a per-sprite interpolation** and the engine never
-  selects one of them ([`../org/cloudCards.md`](../org/cloudCards.md)). Both are still read and
-  kept; taking the farther band alone is now a known divergence, not a reading. The detail level
-  enters somewhere else entirely, as a factor of 1, 4 or 9 on the squared distance.
+  selects one of them ([`../org/cloudCards.md`](../org/cloudCards.md)). The render applies the
+  interpolation: each placement carries one draw `t` and its band is `mix(far_fade_0, far_fade_1, t)`.
+  The detail level enters somewhere else entirely, as a factor of 1, 4 or 9 on the squared distance,
+  which is the graphics `EffectsLevel` and reaches the shader as `csky_clutter_fade_scale_sq`.
 - **The vertical spread is TOP-ANCHORED for sheet-thin volumes, UNIFORM for tall ones, the anchor
   IS per-volume-shape, settled `A3` and verified at the render.** C4's clear air at
   1135 m (`CAP-12` C4 take) falsified a uniform fill: 132.3 m cards

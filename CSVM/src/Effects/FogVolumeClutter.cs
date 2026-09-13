@@ -13,7 +13,7 @@ namespace CSVM.Effects;
 /// Built once, world-anchored, zero per-frame cost, one <see cref="MultiMeshInstance3D"/> per
 /// sprite kind, shared by every splitscreen pane; the shader billboards, fades and culls per view.
 /// ⚠ Do not re-introduce a hand-tuned cloud field. Every count, radius, size, opacity and band
-/// margin is authored data read here; this file holds exactly two TUNE constants, each marked at
+/// margin is authored data read here; this file holds exactly one TUNE constant, marked at
 /// its own field.
 /// ⚠ C1B, C2 and C3 render nothing here on purpose, see fogvol.md. Their ambient sky is the
 /// world's own placed <c>cloudparent</c> sprites, built elsewhere.
@@ -31,14 +31,6 @@ public sealed partial class FogVolumeClutter : Node3D
     // UNIFORM draw. A judgement call from a clean gap in the volumes' own measured thickness, not
     // authored data, see the docs page for the measurements.
     private const float TopAnchorHeightFactor = 1.5f;
-
-    // TUNE: the fvol cards' authored vertex colour 240 scaled to 225, applied in BuildCardMesh.
-    // ⚠ It corrects a colour where the decoded gap is COVERAGE (docs/org/cloudCards.md): nothing
-    // in the original scales a card's colour. Replace it with the decoded fade law, never with
-    // another colour, and never re-calibrate it.
-    // ⚠ fvol cards only: the placed cloudparent facades keep their own authored rules
-    // (vcol 255, range-gated opacity); see fogvol.md.
-    private const float CardVertexColorTune = 225f / 240f;
 
     /// <summary>Sprites placed, summed over every kind, the authored volumes' own placements
     /// plus the map-edge continuation (<see cref="ExtensionCount"/>). Zero means nothing was
@@ -59,7 +51,8 @@ public sealed partial class FogVolumeClutter : Node3D
     public int BaseCount => InstanceCount - ExtensionCount;
 
     /// <summary>Per-kind counts of the build, e.g. "cloudsprite1 x4471 (cloud1.tif, fade
-    /// 3100-3500 m)", the evidence that the authored weights and fades reached the field.</summary>
+    /// 2000-3000..3100-3500 m)", the evidence that the authored weights and both endpoints of the
+    /// per-sprite band reached the field.</summary>
     public string Summary { get; private set; } = "";
 
     /// <summary>Builds the chapter's ambient cloud field, or null when the data asks for none:
@@ -185,6 +178,12 @@ public sealed partial class FogVolumeClutter : Node3D
 
     private static float Lerp(Vector2 range, float t) => range.X + ((range.Y - range.X) * t);
 
+    // One sprite's shader custom data: the polygon normal its draw distance is scaled against, and
+    // the single draw `t` its fade band is interpolated with. The normal is remapped onto [0, 1]
+    // because a MultiMesh custom-data slot is a Color, whose range a future Godot may narrow.
+    private static Color BandData(Vector3 normal, float t) => new(
+        (normal.X * 0.5f) + 0.5f, (normal.Y * 0.5f) + 0.5f, (normal.Z * 0.5f) + 0.5f, t);
+
     // The card's own source geometry (verts, UVs and the authored vertex colours), triangulated by
     // the same fan/strip rule as SceneBuilder.EmitPolygon, the cloud cards are tri-strips.
     // Recentred on the quad's centroid so the billboard pivots at its middle, like the placed cloud
@@ -218,16 +217,12 @@ public sealed partial class FogVolumeClutter : Node3D
                 foreach (int corner in corners)
                 {
                     st.SetNormal(Vector3.Back);
-                    var vcol = poly.VertexColors != null && corner < poly.VertexColors.Count
+                    // The authored colour, unscaled. ⚠ Never scale it: nothing in the original
+                    // touches a card's colour, the texture is a constant-RGB alpha mask, and a
+                    // brightness gap on this population is coverage (docs/org/cloudCards.md).
+                    st.SetColor(poly.VertexColors != null && corner < poly.VertexColors.Count
                         ? poly.VertexColors[corner]
-                        : Colors.White;
-                    // RGB only: alpha is the card's own coverage, and scaling it would thin the
-                    // overcast instead of darkening it (CardVertexColorTune).
-                    st.SetColor(new Color(
-                        vcol.R * CardVertexColorTune,
-                        vcol.G * CardVertexColorTune,
-                        vcol.B * CardVertexColorTune,
-                        vcol.A));
+                        : Colors.White);
                     if (poly.UvCoords != null && corner < poly.UvCoords.Count)
                     {
                         st.SetUV(poly.UvCoords[corner]);
@@ -242,11 +237,11 @@ public sealed partial class FogVolumeClutter : Node3D
     }
 
     // Camera-facing billboard (hand-rolled: a MultiMesh cannot use Godot's billboard flag), plus
-    // the authored far fade. `cull` collapses the quad to a point past the fade's far end, so a
-    // sprite outside its draw distance costs no fragments, what lets the whole field be one
-    // static MultiMesh with no streaming.
-    // ⚠ The fade distance is the true 3D one, not the fog's horizontal cylinder: a cloud overhead
-    // is as far away as one on the horizon.
+    // the clutter fade, whose draw distance is scaled by the viewing angle against each sprite's
+    // own polygon normal. `cull` collapses the quad to a point once the fade has dropped it, so a
+    // sprite outside its draw distance costs no fragments, what lets the whole field be one static
+    // MultiMesh with no streaming. ⚠ The fade distance is the true 3D one, not the fog's
+    // horizontal cylinder: a cloud overhead is as far away as one on the horizon.
     private static string ShaderCode(bool lit, bool fogged)
     {
         string light = lit ? " * csky_world_light" : string.Empty;
@@ -260,18 +255,25 @@ public sealed partial class FogVolumeClutter : Node3D
             render_mode blend_mix, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;
 
             uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, repeat_disable;
-            uniform vec2 far_fade = vec2(1e8, 1e9);  // metres: alpha 1 below x, 0 at y
+            uniform vec2 far_fade_0 = vec2(1e8, 1e9);  // far_fade_range[0], metres: band start, gone
+            uniform vec2 far_fade_1 = vec2(1e8, 1e9);  // far_fade_range[1], the band's other end
 
             #include "res://shaders/csky_atmosphere.gdshaderinc"
             #include "res://shaders/csky_srgb.gdshaderinc"
+            #include "res://shaders/csky_clutter_fade.gdshaderinc"
 
             varying flat float v_alpha;
 
             void vertex() {
                 vec3 origin = MODEL_MATRIX[3].xyz;
-                float d = distance(origin, CAMERA_POSITION_WORLD);
-                v_alpha = 1.0 - smoothstep(far_fade.x, far_fade.y, d);
-                float cull = step(d, far_fade.y);
+                // INSTANCE_CUSTOM: xyz the sprite's own polygon normal off the [0,1] encoding,
+                // w the one draw its whole fade band is interpolated with.
+                vec2 band = mix(far_fade_0, far_fade_1, INSTANCE_CUSTOM.w);
+                vec2 band_sq = band * band;
+                vec4 fade = vec4(band_sq, 1.0 / max(band_sq.y - band_sq.x, 1.0), 0.0);
+                v_alpha = csky_clutter_fade_alpha_angled(
+                    origin, CAMERA_POSITION_WORLD, fade, INSTANCE_CUSTOM.xyz * 2.0 - 1.0);
+                float cull = step(0.004, v_alpha);
                 MODELVIEW_MATRIX = VIEW_MATRIX * mat4(
                     INV_VIEW_MATRIX[0], INV_VIEW_MATRIX[1], INV_VIEW_MATRIX[2], MODEL_MATRIX[3]);
                 MODELVIEW_MATRIX[0] *= length(MODEL_MATRIX[0].xyz) * cull;
@@ -319,6 +321,11 @@ public sealed partial class FogVolumeClutter : Node3D
         // here, so world-anchoring and determinism are the same property.
         var rng = Rng.NewSystemRandom(Rng.Clouds);
         float Rand(float a, float b) => a + ((float)rng.NextDouble() * (b - a));
+
+        // ⚠ Keep the band draws off Rng.Clouds entirely: one there, even taken before the loop,
+        // reseeds the placements of any later field built in the same process, which is how a
+        // suite that builds two chapters sees the second one's counts move.
+        var bandRng = Rng.NewSystemRandom(Rng.CloudBands);
 
         // One pass per volume, not per clutter block, weights are already flattened into
         // Kind.Weight. Overlapping volumes (C1C's build-ups over its own slab) each get their own
@@ -385,6 +392,12 @@ public sealed partial class FogVolumeClutter : Node3D
                             x + (Mathf.Sin(bearing) * perturb),
                             y + Lerp(block.PerpDistRange, (float)rng.NextDouble()),
                             z + (Mathf.Cos(bearing) * perturb))));
+                    // A top-anchored draw sits ON the volume's top face, so its normal is +Y by
+                    // construction; a uniform draw has no face of its own and takes the one it
+                    // fell nearest, which is the face the authored scatter would have used.
+                    kind.Bands.Add(BandData(
+                        topAnchored ? Vector3.Up : volume.NearestFaceNormal(new Vector3(x, y, z)),
+                        (float)bandRng.NextDouble()));
                     InstanceCount++;
                 }
             }
@@ -415,9 +428,9 @@ public sealed partial class FogVolumeClutter : Node3D
             return;
         }
 
-        // Bounded at the largest authored far_fade, not at MapEdgeExtender's own reach: the
-        // shader already collapses a sprite past its kind's far_fade.y, so a wider ring would
-        // cost memory for zero visible pixels. See docs/formats/fogvol.md for the arithmetic.
+        // Bounded at the largest authored far_fade, not at MapEdgeExtender's own reach: the shader
+        // collapses a sprite once its band has dropped it, and the view-angle law reaches at most
+        // half that band horizontally, so a wider ring buys nothing (docs/formats/fogvol.md).
         float radius = 0f;
         foreach (var kind in kinds)
         {
@@ -505,6 +518,10 @@ public sealed partial class FogVolumeClutter : Node3D
                         x + (Mathf.Sin(bearing) * perturb),
                         topY + Lerp(block.PerpDistRange, (float)rng.NextDouble()),
                         z + (Mathf.Cos(bearing) * perturb))));
+                // The slab's own top face continues out here, so +Y like the interior's
+                // top-anchored draw. ⚠ The band draw comes last, after every draw a placement
+                // reads, so adding it left the ring's positions where they were.
+                kind.Bands.Add(BandData(Vector3.Up, (float)rng.NextDouble()));
                 InstanceCount++;
                 ExtensionCount++;
             }
@@ -530,17 +547,21 @@ public sealed partial class FogVolumeClutter : Node3D
             {
                 mat.SetShaderParameter("albedo_tex", kind.Texture);
             }
-            mat.SetShaderParameter("far_fade", kind.Block.FarFade);
+            mat.SetShaderParameter("far_fade_0", kind.Block.FarFadeNear);
+            mat.SetShaderParameter("far_fade_1", kind.Block.FarFade);
 
             var mm = new MultiMesh
             {
                 TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+                // ⚠ Before InstanceCount, or the band has no slot in the buffer.
+                UseCustomData = true,
                 Mesh = mesh,
                 InstanceCount = kind.Placements.Count,
             };
             for (int i = 0; i < kind.Placements.Count; i++)
             {
                 mm.SetInstanceTransform(i, kind.Placements[i]);
+                mm.SetInstanceCustomData(i, kind.Bands[i]);
             }
             AddChild(new MultiMeshInstance3D
             {
@@ -552,7 +573,8 @@ public sealed partial class FogVolumeClutter : Node3D
                 Name = kind.Name,
             });
             parts.Add($"{kind.Name} x{kind.Placements.Count} ({kind.TextureName}, "
-                      + $"fade {kind.Block.FarFade.X:0}-{kind.Block.FarFade.Y:0} m)");
+                      + $"fade {kind.Block.FarFadeNear.X:0}-{kind.Block.FarFadeNear.Y:0}"
+                      + $"..{kind.Block.FarFade.X:0}-{kind.Block.FarFade.Y:0} m)");
         }
         Summary = string.Join(", ", parts);
     }
@@ -562,6 +584,9 @@ public sealed partial class FogVolumeClutter : Node3D
     private sealed class Kind
     {
         public readonly List<Transform3D> Placements = new();
+
+        // Parallel to Placements, one entry per instance, see BandData.
+        public readonly List<Color> Bands = new();
 
         public string Name = "";
         public FogClutter Block = null!;

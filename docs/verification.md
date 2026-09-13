@@ -202,6 +202,13 @@ one sentence of measured evidence; everything else belongs in the commit that la
   45-degree diagonal, which a per-degree mirror-symmetry scan of its alpha gives exactly (0.95
   against 0.83 one degree either side), and a scan plus the layout (propeller disc, wing at 30 % of
   the length, tailplane at the end) says which end of that axis is the nose.
+- **SHOT-38**, **Render one pose twice with the same texture overridden to two different colours;
+  the pixels that differ are exactly the pixels that population touched.** An ordinary
+  `--tex-override` frame only marks where a sprite draws near-opaque, so it undercounts a blended
+  population badly. Differencing two colour runs is alpha-aware and gives a per-pixel coverage mask
+  to test a change against: at the C1 1,208 m cloud pose the two-colour mask covers 515,597 px of
+  the 921,600, the cloud fade change moved 431,238 px, and 20 of those lay outside the mask at one
+  LSB (blend rounding), which is what "confined to that population" looks like measured.
 
 ## GOLD, golden images
 
@@ -514,6 +521,14 @@ one sentence of measured evidence; everything else belongs in the commit that la
   two-second wake, so a mark keyed on priority checks the first row two seconds into the mission.
   CM01, whose numberings agree, marks correctly either way, which is why its pin held. Pin a rule
   that reads one of the two numberings on a mission where they disagree.
+- **WORLD-41**, **A new per-instance draw on a shared `Rng` subsystem stream reseeds every later
+  consumer of that stream in the same process, so give it its own subsystem.** One
+  `Rng.NewSystemRandom(Rng.Clouds)` taken before the cloud scatter's own loop, drawing nothing the
+  placements read, still moved C5's pinned sprite count from 16,170 to 16,185 when a suite built
+  C1's field first. The fix is a new `public const string` on `Rng`, not a reordering. The same
+  ordering sensitivity is why a suite that builds two chapters' fields calls `Rng.Rewind()` before
+  each one: a session builds exactly one field, so the second field in a process is off the pin
+  unless the stream is reset.
 
 ## SHELL, Windows, PowerShell, and processes
 

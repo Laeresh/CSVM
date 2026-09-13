@@ -177,8 +177,8 @@ querying a key is also what registers it for `--dump-config`.
 ## src/Utils/EffectsLevel.cs
 The original's graphics EffectsLevel option as a config key (`graphics.effectsLevel`: `high`,
 `medium` or `low`, default `high`), and the one global it drives today:
-`csky_clutter_fade_scale_sq`, the squared distance scale every templates-clutter fade multiplies
-into its camera distance. The level's meaning and direction:
+`csky_clutter_fade_scale_sq`, the squared distance scale every templates-clutter fade and the
+`fvol` cloud field's own fade multiply into their camera distance. The level's meaning and direction:
 [../formats/templates.md](../formats/templates.md). A second key, `graphics.clutterFarFade`, is the
 remake's own switch: false resolves the global to a never-fades scale, so clutter draws out to the
 fog instead of ending at the authored metres. Enhanced mode scales it by

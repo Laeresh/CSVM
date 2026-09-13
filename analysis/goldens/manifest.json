@@ -62,6 +62,13 @@
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute"]
     },
     {
+      "name": "c1-cloud-field",
+      "frame": 120,
+      "hash": "c023fb295c661d128637f4724e71f368",
+      "exercises": "the fvol cloud field seen along its own deck: each sprite's fade band drawn between both authored far_fade_range pairs and scaled by the viewing angle against its polygon normal, the authored card colour, and the deck sheet beyond the field's edge.",
+      "args": ["--freecam", "--chapter=C1", "--pos=-6144,1208,-6144", "--direction=0,0,-1", "--det", "--mute"]
+    },
+    {
       "name": "viewer-bhawk",
       "frame": 30,
       "hash": "0f50dc5b19ba2531221ae1cb826ceade",

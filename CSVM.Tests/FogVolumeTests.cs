@@ -317,6 +317,33 @@ public class FogVolumeTests
         Assert.False(volume.Contains(new Vector3(0f, 1.5f, 0f)));     // above the top face
     }
 
+    [Fact]
+    public void APlacementTakesTheOutwardNormalOfTheFaceItLiesNearest()
+    {
+        // The view-angle draw distance scales a sprite's band by the cosine against the normal of
+        // the polygon it sits on, so a placement in a volume's interior has to name a face. A tall
+        // narrow prism is the case the deck slab's flat +Y answer cannot cover.
+        var volume = BoxVolume("fvoltest", new Vector3(-1f, -10f, -1f), new Vector3(1f, 10f, 1f));
+
+        Assert.Equal(Vector3.Up, volume.NearestFaceNormal(new Vector3(0f, 10f, 0f)));
+        Assert.Equal(Vector3.Down, volume.NearestFaceNormal(new Vector3(0f, -10f, 0f)));
+        Assert.Equal(new Vector3(1f, 0f, 0f), volume.NearestFaceNormal(new Vector3(0.9f, 0f, 0f)));
+        Assert.Equal(new Vector3(0f, 0f, -1f), volume.NearestFaceNormal(new Vector3(0f, 0f, -0.9f)));
+
+        // The centre of a prism is nearest its four walls, never its far-off top, which is what
+        // makes a tall volume's field read as a shell rather than as a lid.
+        Assert.Equal(0f, volume.NearestFaceNormal(Vector3.Zero).Y);
+    }
+
+    [Fact]
+    public void AVolumeWithNoFacesNamesUpRatherThanNothing()
+    {
+        var volume = new FogVolumeBox("fvoltest", new Aabb(Vector3.Zero, Vector3.One),
+            Array.Empty<Plane>());
+
+        Assert.Equal(Vector3.Up, volume.NearestFaceNormal(Vector3.Zero));
+    }
+
     // A hand-built axis-aligned FogVolumeBox: the 6 outward-facing unit-normal planes of [min,
     // max], so IsAxisAlignedBox() is trivially true and Contains() is an exact box test, the
     // fixture shape FindMapSpanningSlab's synthetic tests above compose.

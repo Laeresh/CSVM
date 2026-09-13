@@ -126,6 +126,26 @@ public readonly record struct FogVolumeBox(string Name, Aabb Box, IReadOnlyList<
         return point.DistanceTo(x);
     }
 
+    /// <summary>The outward normal of the face this point lies nearest to, <see cref="Vector3.Up"/>
+    /// for a volume with no faces (never shipped). The same max-over-planes walk
+    /// <see cref="SignedDistance"/> takes, returning the winning plane's normal instead of its
+    /// distance, so an interior placement can name the face it would have been scattered on.</summary>
+    public Vector3 NearestFaceNormal(Vector3 point)
+    {
+        var normal = Vector3.Up;
+        float worst = float.MinValue;
+        foreach (var face in Faces)
+        {
+            float d = face.DistanceTo(point);
+            if (d > worst)
+            {
+                worst = d;
+                normal = face.Normal;
+            }
+        }
+        return normal;
+    }
+
     /// <summary>True when this volume's authored shape IS its own axis-aligned bounds, every
     /// corner of <see cref="Box"/> passes <see cref="Contains"/>. Per-chapter census:
     /// docs/formats/fogvol.md. Shared by the test census and
@@ -303,14 +323,13 @@ public sealed class FogClutter
     /// shipped block names exactly one.</summary>
     public IReadOnlyList<FogClutterNode> Nodes { get; init; } = Array.Empty<FogClutterNode>();
 
-    /// <summary><c>far_fade_range[0]</c>, the nearer of the two authored fade bands (metres,
-    /// start then gone). Read but not rendered; see <see cref="FarFade"/>.</summary>
+    /// <summary><c>far_fade_range[0]</c>, one endpoint of the per-sprite fade band (metres, start
+    /// then gone). The scatter draws one <c>t</c> per placement and interpolates this pair with
+    /// <see cref="FarFade"/>, so neither pair is ever rendered on its own.</summary>
     public Vector2 FarFadeNear { get; init; }
 
-    /// <summary><c>far_fade_range[1]</c>, the farther authored fade band (metres, start then
-    /// gone), which is what the remake renders. The pair mirrors <c>templates.zrd</c>'s ground
-    /// clutter, where the same key carries two bands per decoration; the remake draws at the
-    /// farther one because it has no reduced-detail mode to select the nearer with.</summary>
+    /// <summary><c>far_fade_range[1]</c>, the other endpoint of the per-sprite band, and the
+    /// widest band any sprite can draw. Decode: docs/org/cloudCards.md.</summary>
     public Vector2 FarFade { get; init; }
 
     /// <summary><c>perp_dist_range</c>, the placement's offset perpendicular to the volume's

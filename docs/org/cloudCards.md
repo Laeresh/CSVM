@@ -185,26 +185,31 @@ the same every launch.
 
 ## Where CSVM stands
 
-`FogVolumeClutter` and its generated card shader reproduce the colour path exactly and the alpha
-path only in part.
+`FogVolumeClutter` and its generated card shader carry the colour path and the alpha path above.
 
-- **The colour is right in kind and wrong in value.** We render the card at vertex colour 225
-  rather than the authored 240 (`CardVertexColorTune`), a constant calibrated to the original's
-  measured 209 plateau. The decode says no colour term exists, and the constant-RGB texture says a
-  cloud pixel's brightness is coverage. So the constant stands in for the missing alpha terms below,
-  and the mechanism that replaces it is those terms, not another colour.
-- **The fade band is one fixed pair for every sprite.** We take the farther authored pair (3,100 to
-  3,500 m) for all of them and ramp it with a smoothstep; the original draws a band per sprite by
-  interpolating the two pairs, and ramps linearly in squared distance.
-- **The view-angle term is absent entirely.** We fade on the true 3D distance alone, so our field
-  keeps full opacity to 3,100 m and ends at a flat 3,500 m from any pose, where the original's ends
-  at the geometric mean above. At a grazing pose above the deck that is the difference between a
-  600 m disc and a 3,500 m one.
+- **The colour is the authored 240, unscaled.** There is no colour term left in the cloud path:
+  the card's own vertex colour reaches the shader as the data authors it, and a brightness gap on
+  this population is read as coverage rather than corrected as a colour.
+- **The fade band is drawn per sprite.** The scatter draws one `t` per placement and hands it to
+  the shader as instance custom data; the shader interpolates both authored `far_fade_range` pairs
+  with it and ramps linearly in squared distance, not as a smoothstep.
+- **The view-angle term is applied.** Each placement also carries the outward normal it is scaled
+  against, packed into the same custom-data slot, and the shader evaluates `c = max(0, dot(n,
+  unit(eye − p)))` and the `c²·near²` / `c²·far²` tests above. `DAT_0062d170` is the same global
+  the templates clutter already takes from the graphics `EffectsLevel`, so `HIGH` leaves the
+  authored metres literal and the two clutter populations cannot drift apart.
 - **The card takes no fog in either build**, which is the one place the two agree by construction.
 
-⚠ **Applying the view-angle term needs the sprite's own polygon normal, which our scatter does not
-produce.** We fill a volume's interior by cells rather than scattering over its faces, so a
-placement has no face to inherit a normal from. For the four deck chapters' map-spanning slabs the
-answer is `+Y` by inspection, which is the same population the top-anchored placement rule already
-classifies, but C1C's build-up frusta and C5's street prisms have sloped and vertical faces and
-would need the normal carried per instance.
+⚠ **The normal is exact only where the volume is a slab.** Our scatter fills a volume's interior by
+cells rather than laying the lattice over its faces, so a placement has no face to inherit a normal
+from. A top-anchored draw sits on the volume's own top face and takes `+Y`, which is exact for the
+four deck chapters' map-spanning slabs; a uniformly filled volume's placement takes the outward
+normal of the face it lies nearest, which is a stand-in. C1C's build-up frusta and C5's street
+prisms are that case, and only scattering over the authored faces makes their normals the
+original's.
+
+⚠ **The field is culled, not merely faded, wherever the angle closes.** A sprite whose face points
+away from the eye is dropped outright, which is the original's own rule and is why a slab's field
+disappears from below rather than fading out. The map-edge continuation's ring is still bounded at
+the largest authored `far`, which stays conservative: the disc's horizontal reach
+`sqrt(dy·far − dy²)` peaks at `far/2`.

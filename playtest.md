@@ -240,6 +240,21 @@ draws its authored 800x600 space one-to-one.
     steady through a slow turn instead of stepping or flickering between neighbours.
   *Blocks:* `BL-113`.
 
+- `PT-147` `[A/B: playtest/CAP-12/]` **The cloud field's view-angle fade, flown through the deck
+  and above it.** Each `fvol` sprite's draw distance is now scaled by the cosine of the viewing
+  angle against its polygon's normal, so the field is a disc around the camera rather than a flat
+  3,500 m wall, and the cards render the authored colour with nothing scaling it. The instruments
+  settle the arithmetic (the fade matches the decoded law, and no pinned shot moved); what they
+  cannot settle is whether the thinned field reads like the original at the controls.
+  *Look for:*
+  - (a) climbing from the ground through the deck, the cards thin out ahead of you rather than
+    ending at a rim, and the deck sheet and horizon behind them read the way CAP-12's takes do;
+  - (b) at the grazing pose just above the band (around 1,200 m), the field is a small disc and
+    the fogged deck shows through beyond it, the near-saturated wall of white being gone;
+  - (c) at the 1,700 m rung the cloud tops sit at the original's brightness rather than above it;
+  - (d) flying level inside the band, no popping as a sprite's own band swings across the cull.
+  *Blocks:* nothing tracks the outcome; a fail mints a new `BL` naming which of (a)-(d) failed.
+
 ### C1 · Bloodhawk vs AI, the kill sequence, sound on
 
 ```powershell
