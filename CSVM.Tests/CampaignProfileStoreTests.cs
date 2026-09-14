@@ -285,4 +285,27 @@ public class CampaignProfileStoreTests
         store.Delete("Nathan");
         Assert.Equal(string.Empty, store.LastPlayed);
     }
+
+    /// <summary>The name a sortie outside a campaign flies under, which is the one its HUD kill
+    /// line prints when that pilot is shot down: the profile last used, resolved through the
+    /// profile itself, so a store that has recorded nobody and a record whose profile is gone both
+    /// read as none and leave the line its unnamed fall-through.</summary>
+    [Fact]
+    public void LastPlayedPilotName_IsTheProfileLastUsedAndNoneWithoutOne()
+    {
+        var dir = TestData.TempDir();
+        var store = new CampaignProfileStore(dir);
+        Assert.Null(store.LastPlayedPilotName);
+
+        store.Save(CampaignProfileDef.NewProfile("Nathan Zachary"));
+        Assert.Null(store.LastPlayedPilotName); // saved, but nobody has been seated yet
+
+        store.RecordLastPlayed("Nathan Zachary");
+        Assert.Equal("Nathan Zachary", store.LastPlayedPilotName);
+        Assert.Equal("Nathan Zachary", new CampaignProfileStore(dir).LastPlayedPilotName);
+
+        Directory.Delete(store.DirFor("Nathan Zachary"), recursive: true);
+        Assert.Equal("Nathan Zachary", store.LastPlayed);
+        Assert.Null(store.LastPlayedPilotName);
+    }
 }

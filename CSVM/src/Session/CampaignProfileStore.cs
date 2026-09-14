@@ -219,6 +219,14 @@ public sealed class CampaignProfileStore
         }
     }
 
+    /// <summary>The last used profile's own name, or null when the store records none and when the
+    /// name it records no longer loads. A sortie outside a campaign flies under this name, which is
+    /// where the original's <c>PlayerName</c> comes from too (<c>docs/formats/saved-games.md</c>,
+    /// "Which player is current, across runs"). Resolved through the profile rather than off the
+    /// record, so a deleted profile's name never reaches a session.</summary>
+    public string? LastPlayedPilotName =>
+        Load(LastPlayed) is { Name.Length: > 0 } profile ? profile.Name : null;
+
     /// <summary>The production store, <c>user://Profiles/</c> resolved to its OS path.</summary>
     public static CampaignProfileStore UserProfiles() =>
         new(Path.Combine(Godot.ProjectSettings.GlobalizePath("user://"), "Profiles"));

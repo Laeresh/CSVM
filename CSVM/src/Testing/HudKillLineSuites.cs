@@ -12,6 +12,9 @@ namespace CSVM.Testing;
 /// the mission clock's expiry pair). Decode: docs/org/vehicleDamage.md "The kill message".</summary>
 internal static class HudKillLineSuites
 {
+    // The profile the store arm seats, the pilot the wording checks name throughout.
+    private const string PilotName = "Nathan Zachary";
+
     // A 1440p pane, so the reference geometry reads back unscaled.
     private static readonly Vector2 Pane = new(2560f, 1440f);
 
@@ -19,7 +22,9 @@ internal static class HudKillLineSuites
         "the kill line the original posts top-centre when a vehicle dies: a real Medusa Kestrel " +
         "shot down in C1 reads 'Medusa Kestrel was shot down' in the enemy colour, the other " +
         "three wording rules (the viewer's own name, a wingman with no name, a non-aeroplane " +
-        "destroyed) read as decoded, the stack keeps four lines a fifth of the way down with an " +
+        "destroyed) read as decoded, the name a sortie outside a campaign prints for its own " +
+        "death is the profile the store last used and an empty store keeps the fall-through, " +
+        "the stack keeps four lines a fifth of the way down with an " +
         "18 px pitch, a newer line pushes the older ones down carrying their own remaining time, " +
         "a repeat refreshes rather than duplicates, every line clears after five seconds, and the " +
         "same stack takes the crash notice in the player's own colour and the mission clock's " +
@@ -42,6 +47,7 @@ internal static class HudKillLineSuites
             $"the three decoded rows read out of the string table: '{shotDown}' / '{wingman}' / '{destroyed}'");
 
         Wording(ctx, strings, shotDown, wingman, destroyed);
+        Pilot(ctx, strings, shotDown, wingman);
         Colours(ctx);
         Geometry(ctx);
 
@@ -171,6 +177,40 @@ internal static class HudKillLineSuites
             victimIsViewer: true, viewerName: null, victimOnViewerTeam: true);
         ctx.Check(nameless == wingman,
             $"an unset pilot name falls through to the team rule as the original's does: '{nameless}'");
+    }
+
+    // Where the name in the viewer's own line comes from outside a campaign: the profile the store
+    // last used, which is the player the original's startup reads back. Over a scratch store of its
+    // own, since no suite may touch user://Profiles.
+    private static void Pilot(TestContext ctx, Messages strings, string shotDown, string wingman)
+    {
+        string dir = Path.Combine(ctx.ScratchDir, "hud-kill-line", "Profiles");
+        try
+        {
+            var store = new CampaignProfileStore(dir);
+            string none = HudMessages.KillLine(strings, aeroplane: true, "Kestrel",
+                victimIsViewer: true, store.LastPlayedPilotName, victimOnViewerTeam: true);
+            ctx.Check(store.LastPlayedPilotName == null && none == wingman,
+                $"a store that has seated nobody names no pilot, so the player's own death keeps the team wording: '{none}'");
+
+            store.Save(CampaignProfileDef.NewProfile(PilotName));
+            store.RecordLastPlayed(PilotName);
+            string named = HudMessages.KillLine(strings, aeroplane: true, "Kestrel",
+                victimIsViewer: true, store.LastPlayedPilotName, victimOnViewerTeam: true);
+            ctx.Check(store.LastPlayedPilotName == PilotName && named == $"{PilotName} {shotDown}",
+                $"…and the profile last used is the name that line carries instead: '{named}'");
+
+            Directory.Delete(store.DirFor(PilotName), recursive: true);
+            ctx.Check(store.LastPlayedPilotName == null,
+                $"…a record whose profile is gone names nobody: '{store.LastPlayedPilotName ?? "<none>"}'");
+        }
+        finally
+        {
+            if (Directory.Exists(dir))
+            {
+                Directory.Delete(dir, recursive: true);
+            }
+        }
     }
 
     // The two lines that are not a death: the local player's crash notice and the mission clock's

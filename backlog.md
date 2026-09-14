@@ -1746,21 +1746,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   set is this port's own and its look is the user's call at the controls, not a luminance distance.
   *Cross-refs:* `CSVM/src/Flight/PromptLine.cs`, `CSVM/src/Bindings/BindingLabels.cs`,
   `docs/controls.md`.
-- `BL-907` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Instant Action's
-  kill line names the pilot with the last used campaign profile's name, as the original's does;
-  CSVM prints "Wingman was shot down" for the player's own death.** *Evidence:* tested in the
-  original with two profiles: an Instant Action sortie carries the last used profile's name and
-  the line on the player's death reads "<name> was shot down". In CSVM `GameSession` hands
-  `HudMessages.PostKill` `_campaign?.PilotName`, null outside a campaign, so the named arm fails
-  and the team arm prints the wingman line (`HudMessages.KillLine`, the fall-through
-  `HudKillLineSuites` pins). *Fix shape:* an Instant Action session reads the pilot name from the
-  profile store's last used profile, the same field the campaign feeds the kill line, and passes
-  it to `PostKill`; with no profile on disk the fall-through stays. *⚠ Traps:* the decode's
-  "PlayerName is only set by a campaign profile" reading described the setter, not its lifetime;
-  the global survives the campaign screen, do not re-litigate it. Keep the suite's unset case.
-  *Playtest after fix:* Instant Action after a campaign session, get shot down: the line carries
-  the profile's name. *Cross-refs:* `CSVM/src/Flight/HudMessages.cs`,
-  `CSVM/src/Session/CampaignDirector.cs` (the name's comment), `docs/org/vehicleDamage.md`.
 - `BL-908` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: data]` **The Original UI
   ends an Instant Action on the `IA_WRAPUP` notepad page, not on the in-flight board.** After the
   3 s hold the original leaves the world for the menu shell's wrap-up page: the Air Spicy Tales

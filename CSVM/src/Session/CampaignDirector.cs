@@ -204,8 +204,9 @@ public sealed class CampaignDirector
     public int Seq => _mission.Seq;
 
     /// <summary>The flying profile's own name, the original's <c>PlayerName</c>: the subject of
-    /// the HUD kill line when the player is the one shot down. A session with no campaign has
-    /// none, which is the unset case that line already handles.</summary>
+    /// the HUD kill line when the player is the one shot down. A session with no campaign takes
+    /// the same name from the profile last used
+    /// (<see cref="CampaignProfileStore.LastPlayedPilotName"/>).</summary>
     public string? PilotName => _profile.Name;
 
     /// <summary>The picture the flying profile hangs, as the bitmap name a sheet draws: what the

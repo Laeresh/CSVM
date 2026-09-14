@@ -504,6 +504,15 @@ The name in the three `"%s %s"` cases is the victim's own `+0x14` string (the bl
 and leaves the line with its leading space. `FUN_0059ce40(id)` is the lookup and the ids are
 `extracted/messages.json` rows, not `langui` ones.
 
+⚠ **`PlayerName` is a startup global, not the campaign's own field.** `FUN_004113b0` fills
+`UIData +0x314` from the registry's remembered player at startup
+([../formats/saved-games.md](../formats/saved-games.md), "Which player is current, across runs"),
+so an Instant Action sortie flown after a campaign prints that campaign profile's name on the
+player's own death, not the wingman line. CSVM feeds the kill line the flying campaign profile's
+name, and outside a campaign `CampaignProfileStore.LastPlayedPilotName`, the profile last used;
+a store that has seated nobody names nobody, which is the unset case the line already falls
+through. The last-used record is machine state, so a `--det` run reads none of it.
+
 The colour is a three-way fork on the victim's team at `0x004b85c9`-`0x004b8621`: a team above 1
 takes `DAT_006eba60`, the player's own team takes `DAT_006eba64`, and anything else falls to
 `FUN_004587d0`'s default `DAT_006eba5c`. ⚠ All three COLORREF globals read 0 in the image and

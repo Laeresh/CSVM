@@ -248,6 +248,12 @@ public partial class GameSession : Node3D
     // end/return flow (see CampaignDirector). Built at the top of StartSession alongside the
     // Instant Action one, null outside a --campaign= launch.
     private CampaignDirector? _campaign;
+    // The name the HUD kill line prints when the player is the one shot down: the flying campaign
+    // profile's, and outside a campaign the profile last used, which is where the original's
+    // startup takes its PlayerName from (docs/org/vehicleDamage.md "The kill message"). ⚠ The
+    // second arm is refused under --det: a record of who played last is machine state, and a
+    // pinned run reads none of it. No profile on disk leaves the line its unnamed fall-through.
+    private string? _pilotName;
     // The cutscene host: built for any flown chapter session, since a story mission's intro
     // definition starts itself out of startanims and needs its CALLBACK codes hosted from the
     // bootstrap on. Null everywhere else, which leaves the world build's node census untouched.
@@ -504,6 +510,10 @@ public partial class GameSession : Node3D
             // convenience of flying on past a crash.
             campaign.EndsOnPlayerDeath = !_spec.NoCrashLoss;
         }
+
+        // Resolved once here rather than per death: a kill must not reach the disk.
+        _pilotName = _campaign?.PilotName
+            ?? (_spec.Det ? null : CampaignProfileStore.UserProfiles().LastPlayedPilotName);
 
         // The cutscene host, before the world build hands it to the animation runtime. Its world
         // hold stops the objectives update as well as the per-step world update (callback 20).
@@ -2597,7 +2607,7 @@ public partial class GameSession : Node3D
                     continue;
                 }
                 HudMessages.PostKill(stack, weaponMessages, victim, viewer.Team,
-                    ReferenceEquals(victim, viewer), _campaign?.PilotName);
+                    ReferenceEquals(victim, viewer), _pilotName);
             }
         }
 
