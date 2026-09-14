@@ -89,7 +89,7 @@ delegate to a flow rather than screens of their own, so the 12 contribute 10 pla
 | # | Built-in screen | Enum | Surface | Drawn from |
 |---|---|---|---|---|
 | 1 | Mode | `Screen.Mode` | centred | `Modes` + the campaign and hangar door rows |
-| 2 | Chapter | `Screen.Chapter` | centred | `Chapters`, filtered by `DangerZones` under Stunt Flying |
+| 2 | Chapter | `Screen.Chapter` | centred | `Chapters`, filtered by `DangerZones` under Stunt Flying, plus Dogfight's kill target and time limit as two rows under the list |
 | 3 | Table of Contents | `Screen.Presets` | centred | `InstantActionPresets.All`, 19 rows in a 14-row window |
 | 4 | Environment | `Screen.Environment` | centred | `Environments` (7) |
 | 5 | Mission type + lives | `Screen.MissionType` | centred | `CurrentMissionTypes` (4, minus Stunt Flying where barred) |
@@ -120,7 +120,7 @@ Loadout is L / Y, Presets is P / X.
 | Mode | Accept on the Campaign row | Campaign host, `CampaignScreen.Roster` |
 | Mode | Accept on Build Custom Plane | Hangar host, `HangarScreen.PlaneSelection`, return Mode |
 | Mode | Back | `Quit`, and the host leaves the game |
-| Chapter | Accept | Plane (`PrimeJoins`) |
+| Chapter | Accept on a map row | Plane (`PrimeJoins`); on a match row Accept steps that rule and stays |
 | Chapter | Back | Mode |
 | Environment | Accept | MissionType; loads the environment's `ia.zrd.json` as `_iaBaseDef` |
 | Environment | Presets | Table of Contents, cursor on the applied preset |
@@ -256,9 +256,9 @@ problem, and none of them is visible to a census of the three enums.
 
 ### The `--menu=` aid map
 
-The parser accepts **32** values; `docs/cli.md` documents **31**. `name` (the hangar's PLANENAME
-screen, reached through `OpenHangarAid`) is accepted and undocumented, which is a `cli.md` edit
-outside this item's fence.
+The parser accepts **33** values; `docs/cli.md` documents **31**. `name` (the hangar's PLANENAME
+screen, reached through `OpenHangarAid`) and `dogfight` (the chapter pick with the mode forced to
+Versus) are accepted and named only here, which is a `cli.md` edit outside this item's fence.
 
 Every accepted value appears exactly once below. Eleven of the 12 `LaunchMenu.Screen` members are
 named in it; `WaveEdit` is the twelfth and has no aid, which is the warning under the table.
@@ -267,6 +267,7 @@ named in it; `WaveEdit` is the twelfth and has no aid, which is the warning unde
 |---|---|---|
 | (absent), `mode` | the Mode screen | `Mode` |
 | `chapter` | the chapter pick | `Chapter` |
+| `dogfight` | the chapter pick under Versus, so the two match rows draw | `Chapter` |
 | `presets` | the Table of Contents | `Presets` |
 | `environment` | wizard step 1 | `Environment` |
 | `missiontype` | wizard step 2 | `MissionType` |
@@ -851,7 +852,9 @@ a bare airframe); string 203; and whether keyboard or pad input reaches the hub 
 (Original walks the page's rows then the tab bar and steps a dropdown's value sideways, a remake
 equivalence).
 - **Built-in's Chapter screen is ours.** The original picks a map through Instant Action's
-  environment dropdown; there is no standalone chapter list.
+  environment dropdown; there is no standalone chapter list. Dogfight's kill target and time limit
+  ride that screen as two rows for the same reason: the mode is remake-only, so there is no authored
+  place for them, and Original's own Dogfight screen has no slot to take them either.
 - **The original's plane construction is a tab bar; Built-in's is a linear nine-screen walk.**
 - **The cabin's Plane Construction button goes to `PlaneName` first.**
 - **Built-in is not asset-independent today.** The milestone's first bullet says Built-in requires no

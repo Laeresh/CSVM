@@ -89,6 +89,41 @@ public class SessionSpecMenuTests
         Assert.Equal(2, spec.Players);
     }
 
+    /// <summary>Dogfight's two match rules: the shipped defaults stand when no screen offers them,
+    /// a screen's choice reaches the spec, and a spelled-out flag beats that choice, which is what
+    /// keeps a scripted `--vs --vs-kills=` run saying what it asks for whatever a menu was left
+    /// at.</summary>
+    [Fact]
+    public void TheMenusMatchRulesReachTheSpecAndTheFlagsStillBeatThem()
+    {
+        var bare = Cli();
+        Assert.False(bare.VsKillsExplicit);
+        Assert.False(bare.VsTimeExplicit);
+
+        var untouched = Menu(bare, "C1", MenuMode.Versus, "player_bhawk", "player_fury");
+        Assert.Equal(5, untouched.VsKills);
+        Assert.Equal(5, untouched.VsTimeMinutes);
+
+        var chosen = SessionSpec.FromMenu(bare, "C1", new[] { "player_bhawk", "player_fury" },
+            MenuMode.Versus, vsKills: 12, vsTimeMinutes: 0);
+        Assert.Equal(12, chosen.VsKills);
+        Assert.Equal(0, chosen.VsTimeMinutes);
+
+        var pinned = Cli("--vs-kills=3", "--vs-time=9");
+        Assert.True(pinned.VsKillsExplicit);
+        Assert.True(pinned.VsTimeExplicit);
+        var beaten = SessionSpec.FromMenu(pinned, "C1", new[] { "player_bhawk", "player_fury" },
+            MenuMode.Versus, vsKills: 12, vsTimeMinutes: 0);
+        Assert.Equal(3, beaten.VsKills);
+        Assert.Equal(9, beaten.VsTimeMinutes);
+
+        // One flag alone: the other rule is still the screen's.
+        var half = SessionSpec.FromMenu(Cli("--vs-time=9"), "C1", new[] { "player_bhawk", "player_fury" },
+            MenuMode.Versus, vsKills: 12, vsTimeMinutes: 0);
+        Assert.Equal(12, half.VsKills);
+        Assert.Equal(9, half.VsTimeMinutes);
+    }
+
     /// <summary>A tester who pinned a scenario alongside a bare launch keeps it, in all three
     /// modes, the re-derivation is a default, not an override.</summary>
     [Fact]

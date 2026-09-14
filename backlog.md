@@ -1925,10 +1925,16 @@ usual.
   then comes back on a point drawn between the roomiest entries against the living field, never
   the one it was downed at and never one a living seat holds, with the killer weighed heaviest
   (`CSVM/src/Flight/VersusSpawnRotation.cs`, fed the live field by `GameSession` through
-  `FlightController.RespawnPlacement`). Still open: suicide penalty and last-damager credit (0 /
+  `FlightController.RespawnPlacement`). **The match rules are on the menu**: the built-in
+  launchscreen's Dogfight map screen carries the kill target and the time limit as two rows under
+  the maps, defaulting to the command line's own 5 kills and 5 minutes, with an explicit
+  `--vs-kills=`/`--vs-time=` still beating the row it names (`PlayerSetupFeature`,
+  `LaunchExit.Match`, `SessionSpec.FromMenu`); Original's Dogfight screen is remake-designed with
+  no authored slot for a widget, so it offers neither and launches at the defaults.
+  Still open: suicide penalty and last-damager credit (0 /
   none in v1), sudden-death overtime on a drawn time-out (draw declared in v1; `PT-43`(f) found
-  draw frequency fine at the 5-kills/5-min defaults, so this stays low priority), menu-side match
-  options (kill target and time limit are CLI-only), `dogfight_ace` vs `zeppelin_run` spawn
+  draw frequency fine at the 5-kills/5-min defaults, so this stays low priority),
+  `dogfight_ace` vs `zeppelin_run` spawn
   spacing, the self-blast exemption (own rockets can't hurt you, the guns invariant applied
   consistently, not a balance call), VS HUD line/arrow sizing at 4-player panes (`PT-43`(d):
   confirmed readable and correctly edge-flipping at both 2 and 4 players, `BL-126` chrome playtest

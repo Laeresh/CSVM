@@ -107,7 +107,7 @@ concrete members and composes them its own way.
 |---|---|---|
 | `FreeFlightFeature` | the chapter roster it offers, the chapter pick, the launch gate over the setup's seats, `BuildExit` | seats, aircraft, stores |
 | `InstantActionFeature` | every decoded option set, the environment, mission type, lives, four waves, wingmen and their fit, the player plane, presets, the base def, `BuildExit` | which screens the fields appear on, the wizard order |
-| `PlayerSetupFeature` | the seats claimed by input-source identity (four at most, seat 0 never leaving), the aircraft roster (`BuildRoster`), each seat's cursor, the two-stage pick and its fit, the per-mode gate, `Choices`, `BuildExit` for Dogfight | the pad behind a seat (asked of the presentation through `MenuSeatDevices`), the join gesture, the split-pane or seat-strip drawing |
+| `PlayerSetupFeature` | the seats claimed by input-source identity (four at most, seat 0 never leaving), the aircraft roster (`BuildRoster`), each seat's cursor, the two-stage pick and its fit, the per-mode gate, Dogfight's kill target and time limit with their steppers, `Choices`, `BuildExit` for Dogfight | the pad behind a seat (asked of the presentation through `MenuSeatDevices`), the join gesture, the split-pane or seat-strip drawing |
 | `HangarFeature` | one scratch build at a time over a `CustomPlaneStore` and an optional `IHangarWallet`, the three starts, the airframe pick with its changed-since gate and the defaults ask's three answers, the per-tab operations, the purchase gate in the original's words, `Commit`, `DeleteSaved`, the labels and name rules | the nine-screen walk or the tab bar, the dropdowns, the dialog idiom |
 | `ControlsFeature` | the seats it can edit and their staged keymaps, the context and action cursors, the capture and the steal it names first, `Accept`, `Cancel`, `ResetSeat` | which page the rows are split across, the tabs or columns they are drawn in, the join that raises a second seat's row |
 | `CampaignFeature` | the profile store, roster and seated profile, `ContinuePlayer` and `DeletePlayer` with their refusals, the mission position and its briefing state and reveal progress, the intents between screens, `CommitLoadout`, `CommitPlanes`, `ExportPlane`, the flight field, the wallet, `BuildExit` | the screen stack, the cursor, the refusal line, the modal, the working copies before ACCEPT, the reveal's clock |
@@ -409,7 +409,7 @@ consumed by `Launcher.OnMenuExit`. The hierarchy is closed:
 
 | Exit | Carries | The consumer's action |
 |---|---|---|
-| `LaunchExit` | chapter, one `MenuSeatChoice` per seat, `MenuMode`, an `InstantActionDef` for Instant Action | derive the session spec from the CLI plus the payload, bind the seats' pads, build |
+| `LaunchExit` | chapter, one `MenuSeatChoice` per seat, `MenuMode`, an `InstantActionDef` for Instant Action, a `VersusRules` for Dogfight | derive the session spec from the CLI plus the payload, bind the seats' pads, build |
 | `CampaignMissionExit` | the profile name, the `cm_sequence` position, one `MenuSeatChoice` per joined human | the same, over the campaign's story position |
 | `QuitExit` | nothing | quit the process |
 | `OptionsApplyExit` | the requested `PresentationId`, the graphics-mode and difficulty words, the four display settings and the nearest-after-a-kill switch | save every one of them, then the three-call switch one frame later |
@@ -420,6 +420,16 @@ these exits (`FreeFlightFeature.BuildExit`, `InstantActionFeature.BuildExit`,
 `PlayerSetupFeature.BuildExit`, `CampaignFeature.BuildExit`), so a presentation assembles no payload
 of its own beyond handing the feature the seats. The host hides the presentation before the sink
 runs, and a failed build shows the same instance again where it stood.
+
+Dogfight's two match rules, the kill target that ends a match early and the match clock in minutes,
+are the `PlayerSetupFeature`'s (`KillTarget`, `TimeLimitMinutes`, stepped by `StepKillTarget` and
+`StepTimeLimit`, either at 0 disabling that limit). They start at the command line's own defaults of
+5 kills and 5 minutes, ride `LaunchExit.Match` into `SessionSpec.FromMenu`, and lose to an explicit
+`--vs-kills=`/`--vs-time=`, one flag beating only the rule it names. Built-in offers both as two rows
+under the map list on its Dogfight map screen. Original offers neither, because its Dogfight screen
+is remake-designed with no authored layout section to take a widget, so its Dogfight launches carry
+the defaults or whatever the flags say. A presentation that wants the rules on a screen reads the
+feature's two values and steps them; nothing in the launch leg changes.
 
 ## Return
 

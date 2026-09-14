@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using CSVM.Bindings;
 using CSVM.Flight;
 using CSVM.Mech3;
@@ -397,6 +398,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     // instead (its own environment list is decoded, not this table's alphabetic one).
     private (string Name, string Code, bool DangerZones)[] CurrentChapters => ChaptersFor(_mode);
 
+    // Dogfight's two match rows under the map list, on the same screen rather than a step of their
+    // own: the setup is a map and two numbers, and a screen carrying one row would read as a step
+    // the pilot has to walk through. Free Flight draws neither, so its map screen is unchanged.
+    private int MatchRowCount => _mode == MenuMode.Versus ? 2 : 0;
+
     // The mission types the picked environment's chapter actually offers: all four, minus Stunt
     // Flying where that chapter's own `disallow_missions` bars it, the feature's own filter.
     private IReadOnlyList<InstantActionMissionType> CurrentMissionTypes => _ia.MissionTypes;
@@ -615,7 +621,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     {
         _screen = startScreen switch
         {
-            "chapter" => Screen.Chapter,
+            "chapter" or "dogfight" => Screen.Chapter,
             "presets" => Screen.Presets,
             "environment" => Screen.Environment,
             "missiontype" => Screen.MissionType,
@@ -645,6 +651,14 @@ public sealed partial class LaunchMenu : CanvasLayer
         {
             _modeIndex = (int)MenuMode.Stunt;
             _mode = MenuMode.Stunt;
+        }
+
+        // The map screen's two match rows exist under Dogfight alone, so its own aid forces the
+        // mode the way the wizard's aids force theirs; plain `chapter` still opens on Free Flight.
+        if (startScreen == "dogfight")
+        {
+            _modeIndex = (int)MenuMode.Versus;
+            _mode = MenuMode.Versus;
         }
 
         // The wingman list needs a flight to arm and a mission that HAS wingmen, so the aid
@@ -1039,6 +1053,10 @@ public sealed partial class LaunchMenu : CanvasLayer
     private static int Mph(PlaneStats s) => Mathf.RoundToInt(s.FdSpeed * 2.23694f);
 
     private static string Cap(string s) => s.Length == 0 ? s : char.ToUpperInvariant(s[0]) + s[1..];
+
+    // A match limit as its row reads it, 0 being the disabled one rather than a target of nothing.
+    private static string LimitLabel(int value, string unit) =>
+        value == 0 ? "no limit" : value.ToString(CultureInfo.InvariantCulture) + unit;
 
     private static Label Label(string text, int fontSize, Color color, HorizontalAlignment align)
     {
@@ -1559,6 +1577,24 @@ public sealed partial class LaunchMenu : CanvasLayer
                     case 7: StepVSyncChoice(dir); return true;
                     default: return false;
                 }
+            case Screen.Chapter:
+                // Only the two Dogfight rows under the map list step; a map row has nothing
+                // sideways, and MatchRowCount is 0 in the other two modes.
+                if (_chapterIndex < CurrentChapters.Length)
+                {
+                    return false;
+                }
+
+                if (_chapterIndex == CurrentChapters.Length)
+                {
+                    _setup.StepKillTarget(dir);
+                }
+                else
+                {
+                    _setup.StepTimeLimit(dir);
+                }
+
+                return true;
             case Screen.MissionType:
                 // The lives stepper rides the same screen as the mission choice (decision 18),
                 // so it never competes with the vertical list cursor above.
@@ -1709,6 +1745,15 @@ public sealed partial class LaunchMenu : CanvasLayer
                 }
                 break;
             case Screen.Chapter:
+                // A match row's Accept is its own sideways step, so a row is walkable with one
+                // gesture; only a map row leaves the screen, which keeps the cursor on a map
+                // whenever anything downstream reads the pick.
+                if (_chapterIndex >= CurrentChapters.Length)
+                {
+                    HandleMoveX(1);
+                    break;
+                }
+
                 if (_mode == MenuMode.Free)
                 {
                     _free.SelectChapter(CurrentChapters[_chapterIndex].Code);
@@ -2353,9 +2398,10 @@ public sealed partial class LaunchMenu : CanvasLayer
         ? _free.CanLaunch(_setup.Seats.Count, _setup.ConfirmedCount)
         : _setup.CanLaunch(_mode);
 
-    // Every non-campaign launch leaves as one LaunchExit through the host. Free Flight's and
-    // Instant Action's are their features' own; Dogfight builds its here until its feature exists.
-    // Our state is left as-is either way, so a failed build can send us back with ShowMenu.
+    // Every non-campaign launch leaves as one LaunchExit through the host. Each mode's exit is its
+    // own feature's: Free Flight's, Instant Action's, and Dogfight's the shared player setup's,
+    // which is where its match rules live. Our state is left as-is either way, so a failed build
+    // can send us back with ShowMenu.
     private void FireLaunch()
     {
         var seats = SeatChoices();
@@ -2374,7 +2420,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             return;
         }
 
-        _host.Exit(new LaunchExit(CurrentChapters[_chapterIndex].Code, seats, _mode));
+        _host.Exit(_setup.BuildExit(CurrentChapters[_chapterIndex].Code, _mode, _devices.FlightPads));
     }
 
     // Every joined seat's pick as the typed seat choice, built by the setup: the roster row's
@@ -2960,7 +3006,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         return _screen switch
         {
             Screen.Mode => "SELECT MODE",
-            Screen.Chapter => "SELECT MAP",
+            Screen.Chapter => MatchRowCount > 0 ? "SELECT MAP AND MATCH RULES" : "SELECT MAP",
             // The window shows 14 of 19, so the position has to be on screen somewhere or the
             // list looks like it ends where the window does.
             Screen.Presets => $"TABLE OF CONTENTS  ({_presetCursor + 1}/{CurrentCount()})",
@@ -3384,7 +3430,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.Campaign => _campaign?.Page.RowCount ?? 1,
         Screen.Options => OptionsStepperRows + 2, // + the controls door and the apply row
         Screen.Controls => ControlsHeaderRows + _controls.Actions.Count + ControlsFooterRows,
-        Screen.Chapter => CurrentChapters.Length,
+        Screen.Chapter => CurrentChapters.Length + MatchRowCount,
         Screen.Presets => InstantActionPresets.All.Count,
         Screen.Environment => InstantActionFeature.Environments.Count,
         Screen.MissionType => CurrentMissionTypes.Count,
@@ -3452,7 +3498,9 @@ public sealed partial class LaunchMenu : CanvasLayer
                 _ => "Apply and restart the menu",
             },
             Screen.Controls => $"{ControlsRowLabel(index)}   {ControlsRowValue(index)}",
-            Screen.Chapter => CurrentChapters[index].Name,
+            Screen.Chapter => index < CurrentChapters.Length
+                ? CurrentChapters[index].Name
+                : MatchRowText(index - CurrentChapters.Length),
             Screen.Presets => InstantActionPresets.All[index].Name,
             Screen.Environment => InstantActionFeature.Environments[index].Name,
             Screen.MissionType => CurrentMissionTypes[index].Label,
@@ -3462,6 +3510,13 @@ public sealed partial class LaunchMenu : CanvasLayer
             _ => index < _roster.Count ? _roster[index].Name : HangarRow,
         };
     }
+
+    // One Dogfight match row: the kill target, then the match clock. 0 on either reads as no
+    // limit, the meaning VersusMatch and the two flags already give it, and a match with neither
+    // limit set runs until somebody leaves.
+    private string MatchRowText(int row) => row == 0
+        ? $"Kill target     {LimitLabel(_setup.KillTarget, "")}"
+        : $"Time limit      {LimitLabel(_setup.TimeLimitMinutes, " min")}";
 
     // One Waves-screen row: an unconfigured slot reads "empty" (decision 1's own "starts
     // empty" wizard, not the original's always-four dropdowns), a configured one summarises its
@@ -3693,6 +3748,9 @@ public sealed partial class LaunchMenu : CanvasLayer
         {
             Screen.MissionType => "↑↓  Choose mission       ←→  Lives",
             Screen.WaveEdit or Screen.Wingmen or Screen.Options => "↑↓  Choose field       ←→  Change",
+            // Dogfight's map screen carries the two match rows, whose stepper is an unbound axis
+            // nobody can guess at; Free Flight's map screen has nothing sideways and says so.
+            Screen.Chapter when MatchRowCount > 0 => "↑↓  Choose map or rule       ←→  Change",
             _ => "↑↓  Navigate",
         };
         // The loadout is an unbound face button, so it is invisible unless the footer says so.
@@ -3769,7 +3827,11 @@ public sealed partial class LaunchMenu : CanvasLayer
         },
         Screen.Controls => ControlsDetail(focus),
         Screen.Presets => PresetDetail(focus),
-        Screen.Chapter => $"Region {CurrentChapters[focus].Code}",
+        Screen.Chapter => focus < CurrentChapters.Length
+            ? $"Region {CurrentChapters[focus].Code}"
+            : focus == CurrentChapters.Length
+                ? "←→  how many kills end the match; no limit leaves the clock to end it."
+                : "←→  how long the match runs; no limit leaves the kill target to end it.",
         Screen.Environment => $"Region {InstantActionFeature.Environments[focus].Code}",
         Screen.MissionType => LivesDetail(),
         Screen.Waves => focus == InstantActionFeature.WaveSlots ? "Enter / A  on to the wingmen" : "Enter / A  edit a wave",

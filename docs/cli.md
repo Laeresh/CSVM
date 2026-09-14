@@ -161,10 +161,14 @@ lines**.
   opening spawn is the list walk; a downed seat respawns on a rotated list point clear of the
   living field and its killer)
 - `--vs-kills=N` (with `--vs`, the kill target that ends a match early once a player reaches it.
-  Default 5; `0` disables the kill limit, so the match runs to `--vs-time=` alone)
+  Default 5; `0` disables the kill limit, so the match runs to `--vs-time=` alone. The built-in
+  menu's Dogfight map screen carries the same setting as a row, and spelling this flag out beats
+  what that row is left at)
 - `--vs-time=N` (with `--vs`, the match time limit **in minutes**. Default 5; `0` disables the time
   limit, so the match runs to `--vs-kills=` alone. Both limits at `0` is a match with no end
-  condition, accepted, not guarded against, since the mode's win/lose flow is a later item)
+  condition, accepted, not guarded against, since the mode's win/lose flow is a later item. The
+  built-in menu's Dogfight map screen carries this as a row too, under the same rule, each flag
+  beating only the row it names)
 - `--coop` (plain splitscreen free flight defaults to **FFA**, every
   human on their own team (`AimAssist.TeamOfPilot`), so aim assist, world turrets and AI gunners
   treat the other humans as hostile. `--coop` opts a plain `--fly`/`--stunt` session into one

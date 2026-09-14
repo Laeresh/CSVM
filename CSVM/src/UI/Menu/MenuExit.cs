@@ -56,14 +56,21 @@ public sealed record OptionsApplyExit(
     int? AudioVoice,
     bool? NearestAfterKill) : MenuExit;
 
+/// <summary>Dogfight's two match rules as a screen set them: the kill target that ends a match
+/// early and the match clock in MINUTES, 0 on either disabling that limit. The consumer applies
+/// them under the command line, so an explicit <c>--vs-kills=</c>/<c>--vs-time=</c> still wins.</summary>
+public sealed record VersusRules(int KillTarget, int TimeLimitMinutes);
+
 /// <summary>A non-campaign launch: the chapter, one <see cref="MenuSeatChoice"/> per joined seat
-/// in seat order, the picked <see cref="MenuMode"/>, and, for Instant Action only, the wizard's
-/// built <see cref="InstantActionDef"/> (null otherwise).</summary>
+/// in seat order, the picked <see cref="MenuMode"/>, for Instant Action only the wizard's built
+/// <see cref="InstantActionDef"/>, and for Dogfight only the match rules (both null otherwise; a
+/// null <paramref name="Match"/> leaves the command line's own kill target and time limit).</summary>
 public sealed record LaunchExit(
     string Chapter,
     IReadOnlyList<MenuSeatChoice> Seats,
     MenuMode Mode,
-    InstantActionDef? InstantAction = null) : MenuExit;
+    InstantActionDef? InstantAction = null,
+    VersusRules? Match = null) : MenuExit;
 
 /// <summary>A campaign mission launch: the seated profile's name, the <c>cm_sequence</c> story
 /// position, and one <see cref="MenuSeatChoice"/> per joined human in seat order. Seat 0 is the

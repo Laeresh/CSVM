@@ -8,7 +8,7 @@ Traps do not live here; the rule is in `docs/architecture.md`.
 
 ## src/UI/LaunchMenu.cs
 The Built-in presentation's launchscreen: one CanvasLayer holding the whole screen graph and every
-Godot control behind it. Mode leads to Chapter and Plane for Free Flight and Dogfight, and to
+Godot control behind it. Mode leads to Chapter and Plane for Free Flight and Dogfight (whose Chapter screen also steps Dogfight's two match rules as rows below the maps), and to
 Instant Action's own wizard; the Options, Controls, hangar and campaign doors hang off the same
 graph. It owns the drawing, the per-seat `MenuInput` polling, the join scan, the screenshot key and
 the mouse (player 1's rows take Godot's hit test through `gui_input`, folded into the next frame's
@@ -733,7 +733,7 @@ narration.
 
 ## src/UI/Menu/MenuExit.cs
 The one typed way out of the menu, handed to `IMenuHost.Exit` and consumed by `Launcher`:
-`LaunchExit` (chapter, per-seat `MenuSeatChoice`, `MenuMode`, optional `InstantActionDef`),
+`LaunchExit` (chapter, per-seat `MenuSeatChoice`, `MenuMode`, optional `InstantActionDef`, and for Dogfight a `VersusRules` of kill target and minutes that an explicit `--vs-kills=`/`--vs-time=` beats),
 `CampaignMissionExit` (profile, `cm_sequence` position, per-seat choices), `QuitExit` and
 `OptionsApplyExit` (the `PresentationId`, the graphics-mode and difficulty words, the four display settings and the four volume levels, null where never set).
 An applied choice rides the exit rather than being saved by the screen that took it, so the options file keeps one writer, and a screen
@@ -1117,7 +1117,7 @@ seat, settled in arrival order, and seat 0 never leaves. `Roster` is the `MenuAi
 seat picks from, set by the presentation and built by the shared rule (the stock rows in their given
 order, then one row per saved custom flying its airframe's stock node, a campaign plane nobody has
 exported left out). Per seat it owns the cursor, the two stages of the pick, the loadout door and
-the backing-out ladder; the gate is the mode's minimum of seats and every seat confirmed. `Choices`
+the backing-out ladder; the gate is the mode's minimum of seats and every seat confirmed. It also holds Dogfight's two match rules, `KillTarget` and `TimeLimitMinutes` with their steppers, starting at the command line's own 5 and 5 and riding a Versus exit. `Choices`
 and `BuildExit` are the typed result. Nothing here reads a pad: `src/UI/MenuSeatDevices.cs`, below.
 
 ## src/UI/MenuSeatDevices.cs

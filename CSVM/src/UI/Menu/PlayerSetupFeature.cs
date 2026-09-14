@@ -79,6 +79,21 @@ public sealed class PlayerSetupFeature : IMenuFeature
     /// <summary>How many seats may join, the splitscreen rig's own maximum.</summary>
     public const int MaxSeats = 4;
 
+    /// <summary>The kill target a screen may step up to. Remake-only: the original's Multiplayer
+    /// is network play and authors no such box, so the ceiling is this port's, picked to keep the
+    /// row one press per kill rather than a ladder of invented round numbers.</summary>
+    public const int MaxKillTarget = 20;
+
+    /// <summary>The match clock a screen may step up to, in minutes, remake-only for the same
+    /// reason as <see cref="MaxKillTarget"/>.</summary>
+    public const int MaxTimeLimitMinutes = 30;
+
+    /// <summary>The shipped kill target, the same default <c>--vs-kills=</c> carries.</summary>
+    public const int DefaultKillTarget = 5;
+
+    /// <summary>The shipped match clock in minutes, the same default <c>--vs-time=</c> carries.</summary>
+    public const int DefaultTimeLimitMinutes = 5;
+
     private readonly List<PlayerSeat> _seats = new();
     private readonly SourceView _sources;
     private IReadOnlyList<MenuAircraft> _roster = Array.Empty<MenuAircraft>();
@@ -96,6 +111,13 @@ public sealed class PlayerSetupFeature : IMenuFeature
 
     /// <summary>The roster every seat picks from: the stock airframes, then the saved customs.</summary>
     public IReadOnlyList<MenuAircraft> Roster => _roster;
+
+    /// <summary>Dogfight's kill target, 0 meaning no kill limit. Rides a Versus
+    /// <see cref="BuildExit"/> and is ignored by every other mode.</summary>
+    public int KillTarget { get; private set; } = DefaultKillTarget;
+
+    /// <summary>Dogfight's match clock in minutes, 0 meaning no time limit.</summary>
+    public int TimeLimitMinutes { get; private set; } = DefaultTimeLimitMinutes;
 
     /// <summary>Bumps on every join and unjoin, so a presentation holding per-seat state can tell
     /// the seat list moved without comparing it.</summary>
@@ -151,6 +173,16 @@ public sealed class PlayerSetupFeature : IMenuFeature
 
     /// <summary>The fewest seats a mode launches with: two for Dogfight, one otherwise.</summary>
     public static int MinimumSeats(MenuMode mode) => mode == MenuMode.Versus ? 2 : 1;
+
+    /// <summary>Steps the kill target, clamped to 0 (no kill limit) and
+    /// <see cref="MaxKillTarget"/>.</summary>
+    public void StepKillTarget(int direction) =>
+        KillTarget = Math.Clamp(KillTarget + direction, 0, MaxKillTarget);
+
+    /// <summary>Steps the match clock in minutes, clamped to 0 (no time limit) and
+    /// <see cref="MaxTimeLimitMinutes"/>.</summary>
+    public void StepTimeLimit(int direction) =>
+        TimeLimitMinutes = Math.Clamp(TimeLimitMinutes + direction, 0, MaxTimeLimitMinutes);
 
     /// <summary>Replaces the roster. Cursors are left where they are; a presentation clamps its
     /// own, since it may keep a row of its own past the roster.</summary>
@@ -373,8 +405,8 @@ public sealed class PlayerSetupFeature : IMenuFeature
     }
 
     /// <summary>The typed exit for a mode with no feature of its own (Dogfight): the chapter, the
-    /// seats' choices and the mode. Throws when the gate is closed, so a half-built launch cannot
-    /// leave the menu.</summary>
+    /// seats' choices, the mode and, for Versus, the match rules. Throws when the gate is closed,
+    /// so a half-built launch cannot leave the menu.</summary>
     public LaunchExit BuildExit(string chapter, MenuMode mode, Func<PlayerSeat, IReadOnlyList<int>> flightDevices)
     {
         ArgumentException.ThrowIfNullOrEmpty(chapter);
@@ -383,14 +415,17 @@ public sealed class PlayerSetupFeature : IMenuFeature
             throw new InvalidOperationException($"{mode} cannot launch: {refusal}");
         }
 
-        return new LaunchExit(chapter, Choices(flightDevices), mode);
+        var rules = mode == MenuMode.Versus ? new VersusRules(KillTarget, TimeLimitMinutes) : null;
+        return new LaunchExit(chapter, Choices(flightDevices), mode, null, rules);
     }
 
-    /// <summary>Drops every seat but the first and every stage of its pick, cursor included:
-    /// unfinished setup does not survive a presentation switch. The roster stays; it is read
-    /// from the store, not chosen.</summary>
+    /// <summary>Drops every seat but the first and every stage of its pick, cursor included, and
+    /// puts the match rules back to the shipped defaults: unfinished setup does not survive a
+    /// presentation switch. The roster stays; it is read from the store, not chosen.</summary>
     public void Discard()
     {
+        KillTarget = DefaultKillTarget;
+        TimeLimitMinutes = DefaultTimeLimitMinutes;
         while (_seats.Count > 1)
         {
             var seat = _seats[^1];

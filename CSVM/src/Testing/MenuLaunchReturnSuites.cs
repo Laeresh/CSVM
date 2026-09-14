@@ -329,6 +329,24 @@ internal static class MenuLaunchReturnSuites
         var setup = run.Host.Features.Get<PlayerSetupFeature>();
         WalkTo(run, menu, "Dogfight");
         run.Press(Accept);
+        ctx.Check(menu.ShownScreen == "Chapter" && menu.ShownRowCount == UI.LaunchMenu.ChapterCodesFor(MenuMode.Versus).Length + 2,
+            $"the map screen carries the two match rows under the maps ({menu.ShownScreen}, {menu.ShownRowCount} rows)");
+        for (int i = 0; i < UI.LaunchMenu.ChapterCodesFor(MenuMode.Versus).Length; i++)
+        {
+            run.Press(Down);
+        }
+
+        ctx.Check(menu.ShownRowText.StartsWith("Kill target", StringComparison.Ordinal),
+            $"the first is the kill target ({menu.ShownRowText})");
+        run.Press(Right);
+        run.Press(Accept);
+        run.Press(Down);
+        run.Press(Right);
+        ctx.Check(menu.ShownScreen == "Chapter" && setup.KillTarget == PlayerSetupFeature.DefaultKillTarget + 2
+            && setup.TimeLimitMinutes == PlayerSetupFeature.DefaultTimeLimitMinutes + 1,
+            $"each row steps its own rule and Accept on one steps rather than leaving ({menu.ShownScreen}, {setup.KillTarget} kills, {setup.TimeLimitMinutes} min)");
+        run.Press(Up);
+        run.Press(Up);
         run.Press(Accept);
         ctx.Check(menu.ShownScreen == "Plane", $"Dogfight reaches the aircraft screen ({menu.ShownScreen})");
         var guest = new ScriptedSeat();
@@ -343,6 +361,8 @@ internal static class MenuLaunchReturnSuites
         var dogfight = run.Expect<LaunchExit>();
         ctx.Check(dogfight is { Mode: MenuMode.Versus, Seats.Count: 2 },
             $"Dogfight leaves as one Versus LaunchExit for both seats ({dogfight?.Mode}, {dogfight?.Seats.Count})");
+        ctx.Check(dogfight?.Match == new VersusRules(PlayerSetupFeature.DefaultKillTarget + 2, PlayerSetupFeature.DefaultTimeLimitMinutes + 1),
+            $"carrying the match rules the map screen was left at ({dogfight?.Match})");
         ctx.Check(dogfight != null && MenuReturnDestination.ForLaunch(dogfight) is TopLevelReturn,
             $"whose launch origin is the top level, a Dogfight carrying no Instant Action def ({Origin(dogfight)})");
         run.Show(MenuReturnDestination.TopLevel);

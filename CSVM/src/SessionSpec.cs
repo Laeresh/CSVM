@@ -139,9 +139,15 @@ public sealed record SessionSpec
     /// <summary><c>--vs-kills=N</c>: the kill target that ends a match early. Default 5; 0
     /// disables the kill limit (the match then runs to the time limit alone).</summary>
     public int VsKills { get; private set; } = 5;
+    /// <summary><b>Resolved.</b> <c>--vs-kills=</c> was spelled out, so the flag beats a kill
+    /// target a menu screen chose (<see cref="FromMenu"/>).</summary>
+    public bool VsKillsExplicit { get; private set; }
     /// <summary><c>--vs-time=minutes</c>: the match time limit, in MINUTES. Default 5; 0 disables
     /// the time limit (the match then runs to the kill target alone).</summary>
     public int VsTimeMinutes { get; private set; } = 5;
+    /// <summary><b>Resolved.</b> <c>--vs-time=</c> was spelled out, so the flag beats a time limit
+    /// a menu screen chose (<see cref="FromMenu"/>).</summary>
+    public bool VsTimeExplicit { get; private set; }
     /// <summary><b>Resolved.</b> Open the aircraft's per-part HP sliders at launch, a modifier on
     /// <see cref="SessionMode.Viewer"/> (the parked plane) or <see cref="SessionMode.Fly"/> (the
     /// flown one), dropped by the modes that build no aircraft at all. The lab itself is always
@@ -896,8 +902,8 @@ public sealed record SessionSpec
             else if (arg == "--stunt") { s._stuntArg = true; s.HasContentArg = true; }
             else if (arg == "--vs") { s._vsArg = true; s.HasContentArg = true; }
             else if (arg == "--coop") { s.Coop = true; }
-            else if (arg.StartsWith("--vs-kills=")) { s.VsKills = int.Parse(arg["--vs-kills=".Length..]); }
-            else if (arg.StartsWith("--vs-time=")) { s.VsTimeMinutes = int.Parse(arg["--vs-time=".Length..]); }
+            else if (arg.StartsWith("--vs-kills=")) { s.VsKills = int.Parse(arg["--vs-kills=".Length..]); s.VsKillsExplicit = true; }
+            else if (arg.StartsWith("--vs-time=")) { s.VsTimeMinutes = int.Parse(arg["--vs-time=".Length..]); s.VsTimeExplicit = true; }
             else if (arg == "--freecam") { s._freecamArg = true; s.HasContentArg = true; }
             else if (arg == "--anim-lab") { s._animLabArg = true; s.HasContentArg = true; }
             else if (arg.StartsWith("--play-anim=")) { s.PlayAnim = arg["--play-anim=".Length..]; s.HasContentArg = true; }
@@ -1349,13 +1355,13 @@ public sealed record SessionSpec
 
     /// <summary>The spec for a launchscreen launch, one plane per player, derived from
     /// <paramref name="cli"/>, the pristine command line, never the last session's spec.
-    /// ⚠ Does not re-resolve: every menu-settable field must be written here, or the pristine
-    /// base re-opens the carry-over bug. <paramref name="mode"/> is Free/Stunt/Versus, not a bool
-    ///, the &gt;= 2-player Dogfight lock is <see cref="UI.LaunchMenu"/>'s job. <paramref
-    /// name="iaDef"/>, when given, decides <see cref="Scenario"/>/<see cref="Stunt"/> instead.</summary>
+    /// ⚠ Does not re-resolve: every menu-settable field must be written here, or the pristine base
+    /// re-opens the carry-over bug. <paramref name="mode"/> is Free/Stunt/Versus, not a bool, the
+    /// &gt;= 2-player Dogfight lock is <see cref="UI.LaunchMenu"/>'s job. <paramref name="iaDef"/>,
+    /// when given, decides <see cref="Scenario"/>/<see cref="Stunt"/> instead; the two vs arguments are a screen's match rules, null where none offers them (<see cref="VsKillsExplicit"/>).</summary>
     public static SessionSpec FromMenu(SessionSpec cli, string chapter, IReadOnlyList<string> planeNodes,
         MenuMode mode, InstantActionDef? iaDef = null, IReadOnlyList<LoadoutChoice?>? loadouts = null,
-        IReadOnlyList<CustomPlaneDef?>? customPlanes = null)
+        IReadOnlyList<CustomPlaneDef?>? customPlanes = null, int? vsKills = null, int? vsTimeMinutes = null)
     {
         var names = planeNodes.ToArray();
         return cli with
@@ -1371,6 +1377,8 @@ public sealed record SessionSpec
             Players = Mathf.Clamp(names.Length, 1, UI.SplitScreen.MaxPlayers),
             Stunt = iaDef != null ? iaDef.MissionType == "stunt_flying" : mode == MenuMode.Stunt,
             Versus = mode == MenuMode.Versus,
+            VsKills = cli.VsKillsExplicit ? cli.VsKills : vsKills ?? cli.VsKills,
+            VsTimeMinutes = cli.VsTimeExplicit ? cli.VsTimeMinutes : vsTimeMinutes ?? cli.VsTimeMinutes,
             Mode = SessionMode.Fly,
             WorldMode = true,
             Scenario = cli.ScenarioExplicit ? cli.Scenario : iaDef?.MissionType ?? mode switch
