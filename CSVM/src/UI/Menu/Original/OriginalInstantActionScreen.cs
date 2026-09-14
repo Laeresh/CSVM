@@ -322,19 +322,20 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     }
 
     /// <summary>Opens the Weapon Loadout for the seat the radio pair names: the wingmen's airframe
-    /// and shared fit, or the picked pilot row (a build edits its airframe's stock fit) and seat
+    /// and shared fit, or the picked pilot row (a build edits its own purchased fit) and seat
     /// 0's fit. The picks standing on entry are remembered for CANCEL.</summary>
     public void OpenLoadout()
     {
         if (_iaRadio == 1)
         {
+            // Wingmen fly stock airframes, so their rows are the airframe's own.
             var wingman = _instantAction.WingmanPlane;
-            BeginLoadout(wingman.Node, wingman.Name, _instantAction.WingmanFit, null);
+            BeginLoadout(wingman.Node, wingman.Name, _instantAction.WingmanFit, null, null);
         }
         else
         {
             var pilot = PilotPick();
-            BeginLoadout(pilot.Node, PilotRowText(pilot), PilotFit, null);
+            BeginLoadout(pilot.Node, PilotRowText(pilot), PilotFit, null, pilot.Custom);
         }
     }
 
@@ -350,7 +351,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         }
 
         var row = roster[seat.Cursor];
-        BeginLoadout(row.Node, $"P{SeatIndex(seat) + 1}  {row.Name}", seat.Fit, seat);
+        BeginLoadout(row.Node, $"P{SeatIndex(seat) + 1}  {row.Name}", seat.Fit, seat, row.Custom);
     }
 
     /// <summary>Forgets what the loadout screen was editing without deciding where to go next, which
@@ -1440,21 +1441,12 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         return -1;
     }
 
-    // The fill-order entry a physical pylon occupies inside the def's hardpoint count, or -1 when
-    // the airframe carries no hardpoint there.
-    private static int PylonEntry(LoadoutDef? def, int pylon)
-    {
-        int count = def?.Hardpoints?.Count ?? 0;
-        for (int i = 0; i < count && i < Loadout.PylonFillOrder.Length; i++)
-        {
-            if (Loadout.PylonFillOrder[i] == pylon)
-            {
-                return i;
-            }
-        }
-
-        return -1;
-    }
+    // The fill-order entry a physical pylon occupies inside the def's fit, or -1 when the
+    // aeroplane hangs no hardpoint there and the screen therefore draws no field. An entry the
+    // fit leaves on the empty sentinel is no hardpoint either: it holds a fill-order index open
+    // for a pylon the build never bought.
+    private static int PylonEntry(LoadoutDef? def, int pylon) =>
+        Loadout.Hangs(def?.Hardpoints, pylon) ? Array.IndexOf(Loadout.PylonFillOrder, pylon) : -1;
 
     private static string StockPylon(LoadoutDef def, int entry) =>
         def.Hardpoints != null && entry < def.Hardpoints.Stock.Length ? def.Hardpoints.Stock[entry] : LoadoutChoice.None;
@@ -1479,16 +1471,20 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         return null;
     }
 
-    // The screen over one aeroplane's fit, whichever door opened it: the airframe's stock def and
+    // The screen over one aeroplane's fit, whichever door opened it: the def the rows stand on and
     // the option lists, then the picks standing on entry, which CANCEL and Back restore.
-    private void BeginLoadout(string node, string name, LoadoutChoice fit, PlayerSeat? seat)
+    // ⚠ A saved build stands on its OWN fit, not on its airframe's stock one: the original's
+    // screen deactivates the rocket field of a pylon the record's two hardpoint counts do not
+    // reach, and a field it deactivates is not drawn at all.
+    private void BeginLoadout(string node, string name, LoadoutChoice fit, PlayerSeat? seat, CustomPlaneDef? build)
     {
         _loadoutNode = node;
         _loadoutName = name;
         _loadoutFit = fit;
         _loadoutSeat = seat;
         var stock = _stock?.Invoke();
-        _loadoutDef = stock?.ForModel(_loadoutNode);
+        var stockDef = stock?.ForModel(_loadoutNode);
+        _loadoutDef = build != null && stockDef != null ? CustomPlaneBuild.LoadoutFor(build, stockDef) : stockDef;
         _loadoutOptions = stock?.Options ?? new LoadoutOptions();
         for (int slot = 1; slot <= LoadoutChoice.MaxGunSlot; slot++)
         {

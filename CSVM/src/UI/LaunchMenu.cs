@@ -229,6 +229,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     // user:// needs the engine, which a bare construction (tests, --menu= screenshots before
     // ShowMenu) may not have.
     private IReadOnlyList<PickerPlane> _roster = PlanePickerRoster.Build(Planes, Array.Empty<CustomPlaneDef>());
+    // The saved builds behind the roster's custom rows, refreshed with it. An Ammo Selection list
+    // stands on the pylons the row actually bought, so the screen needs the def, not just the name.
+    private IReadOnlyList<CustomPlaneDef> _customDefs = Array.Empty<CustomPlaneDef>();
     private MenuMode _mode;
     // The Build Custom Plane flow while it is open, and the screen it was opened from. Both
     // doors (the Mode screen's trailing row, the Instant Action plane pick) come through
@@ -570,6 +573,25 @@ public sealed partial class LaunchMenu : CanvasLayer
     public static string[] AircraftFor(string militiaName) =>
         Names(InstantActionFeature.AircraftFor(militiaName), a => a);
 
+    /// <summary>The pylons the Ammo Selection list offers for <paramref name="def"/>, in the
+    /// order it lists them: fill order under their PHYSICAL number, so the screen agrees with the
+    /// weapon gauge's belt lights rather than renumbering them 1..N. A fill-order entry the fit
+    /// leaves empty is left out, since it is a pylon the build never bought and the original
+    /// draws no field for one (docs/formats/campaign-screens.md, the ammo screen).</summary>
+    public static IReadOnlyList<int> AmmoPylons(LoadoutDef? def)
+    {
+        var hp = def?.Hardpoints;
+        var pylons = new List<int>();
+        for (int i = 0; hp != null && i < hp.Count && i < Loadout.PylonFillOrder.Length; i++)
+        {
+            if (Loadout.Hangs(hp, Loadout.PylonFillOrder[i]))
+            {
+                pylons.Add(Loadout.PylonFillOrder[i]);
+            }
+        }
+
+        return pylons;
+    }
     /// <summary>The wave editor's Skill field roster, internal keys in the langui dropdown order
     /// (3695), the same vocabulary <c>InstantActionWave.EnemySkill</c> stores.</summary>
     public static string[] SkillKeys() => Names(InstantActionFeature.Skills, s => s);
@@ -1427,7 +1449,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     private bool HandleFitInput(Slot slot)
     {
         var input = slot.Frame;
-        var def = StockFitFor(slot.PlaneIndex);
+        var def = FitFor(slot.PlaneIndex);
         var rows = FitRowsFor(def, slot.Fit);
         bool dirty = false;
         if (input.MoveY != 0)
@@ -1461,7 +1483,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     // The wingman list's rows, the one fit the whole flight carries, so it hangs off the
     // Wingmen step rather than any pane.
     private List<FitRow> WingmanFitRows() =>
-        FitRowsFor(StockFitFor(_ia.WingmanPlaneIndex), _ia.WingmanFit);
+        FitRowsFor(FitFor(_ia.WingmanPlaneIndex), _ia.WingmanFit);
 
     // The fit list the centred body is showing, or null when it is showing something else. A
     // lone pilot's plane screen keeps the centred layout, so its list draws through the same
@@ -1469,7 +1491,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     private List<FitRow>? CentredFitRows() =>
         _screen == Screen.WingmanLoadout ? WingmanFitRows()
         : _screen == Screen.Plane && _slots.Count == 1 && _slots[0].InLoadout
-            ? FitRowsFor(StockFitFor(_slots[0].PlaneIndex), _slots[0].Fit)
+            ? FitRowsFor(FitFor(_slots[0].PlaneIndex), _slots[0].Fit)
             : null;
 
     // The list's two column widths, measured rather than guessed: the label column takes the
@@ -1569,7 +1591,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                 {
                     var rows = WingmanFitRows();
                     _wingmanFitRow = Math.Clamp(_wingmanFitRow, 0, rows.Count - 1);
-                    StepFit(StockFitFor(_ia.WingmanPlaneIndex), _ia.WingmanFit, rows[_wingmanFitRow], dir);
+                    StepFit(FitFor(_ia.WingmanPlaneIndex), _ia.WingmanFit, rows[_wingmanFitRow], dir);
                 }
                 return true;
             default:
@@ -2256,6 +2278,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     private void RefreshRoster()
     {
         var customs = CustomPlaneStore.UserPlanes().List();
+        _customDefs = customs;
         _roster = PlanePickerRoster.Build(Planes, customs);
         _setup.SetRoster(MenuRoster(customs));
         foreach (var slot in _slots)
@@ -3116,7 +3139,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         // browsing untouched, and nobody can launch while somebody is still in here.
         if (slot.InLoadout)
         {
-            var fitRows = FitRowsFor(StockFitFor(slot.PlaneIndex), slot.Fit);
+            var fitRows = FitRowsFor(FitFor(slot.PlaneIndex), slot.Fit);
             for (int i = 0; i < fitRows.Count; i++)
             {
                 bool selected = i == slot.FitRow;
@@ -3220,16 +3243,34 @@ public sealed partial class LaunchMenu : CanvasLayer
         return totals.Length > 0 && wallet.Length > 0 ? totals + "      " + wallet : totals + wallet;
     }
 
-    // The stock fit behind a roster row, or null when the table has no def flying that model.
-    // A custom row resolves through its airframe's stock node, so its Ammo Selection list is the
-    // airframe's until custom loadouts are supported. Wingman indices land here too: wingmen
+    // The fit behind a roster row, or null when the table has no def flying that model. A custom
+    // row stands on its own build over that airframe's stock def, so its Ammo Selection list is
+    // the pylons it bought rather than the airframe's. Wingman indices land here too: wingmen
     // are stock-only, and the roster's first eleven rows ARE the stock table in its order.
-    private LoadoutDef? StockFitFor(int planeIndex) => Fits.ForModel(_roster[planeIndex].Node);
+    private LoadoutDef? FitFor(int planeIndex)
+    {
+        var pick = _roster[planeIndex];
+        var stock = Fits.ForModel(pick.Node);
+        if (stock == null || pick.CustomName is not { } saved)
+        {
+            return stock;
+        }
 
-    // One airframe's loadout list: a row per firable gun slot, a row per pylon, then reset.
-    // Turret slots are left out while they are built inert, an ammo pick there would change
-    // nothing that can be fired. Pylons list in fill order under their PHYSICAL number, so the
-    // screen agrees with the weapon gauge's belt lights rather than renumbering them 1..N.
+        foreach (var build in _customDefs)
+        {
+            if (string.Equals(build.Name, saved, StringComparison.Ordinal))
+            {
+                return CustomPlaneBuild.LoadoutFor(build, stock);
+            }
+        }
+
+        return stock;
+    }
+
+
+    // One aeroplane's loadout list: a row per firable gun slot, a row per pylon it hangs, then
+    // reset. Turret slots are left out while they are built inert, an ammo pick there would change
+    // nothing that can be fired.
     private List<FitRow> FitRowsFor(LoadoutDef? def, LoadoutChoice fit)
     {
         var rows = new List<FitRow>();
@@ -3250,10 +3291,11 @@ public sealed partial class LaunchMenu : CanvasLayer
         }
 
         var hp = def.Hardpoints;
-        for (int i = 0; hp != null && i < hp.Count && i < Loadout.PylonFillOrder.Length; i++)
+        foreach (int pylon in AmmoPylons(def))
         {
-            int pylon = Loadout.PylonFillOrder[i];
-            string id = fit.PylonFor(pylon) ?? (i < hp.Stock.Length ? hp.Stock[i] : LoadoutChoice.None);
+            int entry = Array.IndexOf(Loadout.PylonFillOrder, pylon);
+            string id = fit.PylonFor(pylon)
+                ?? (hp != null && entry >= 0 && entry < hp.Stock.Length ? hp.Stock[entry] : LoadoutChoice.None);
             rows.Add(new FitRow(FitRowKind.Pylon, pylon, $"Pylon {pylon}", LabelFor(Fits.Options.PylonOrdnance, id)));
         }
 

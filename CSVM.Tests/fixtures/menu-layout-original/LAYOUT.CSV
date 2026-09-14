@@ -201,6 +201,9 @@ SBTOC_B_RETURN=B,PM_B_ReturnCabin.png,590,560,0,0,PassengerCabin,0x1000,1,,,,,,
 OL_S_AMMODESC=S,0xFF554C67,0xFFE6DABE,PM_B_Slider.png,PM_B_Up.png,PM_B_Down.png,560,100,0,180,190,,0xFF000000
 OL_S_ROCKETDESC=S,0xFF554C67,0xFFE6DABE,PM_B_Slider.png,PM_B_Up.png,PM_B_Down.png,560,340,0,180,199,,0xFF000000
 OL_D_AMMO0=D,PM_B_Slider.png,PM_B_Up.png,PM_B_Down.png,PM_B_DropUp.png,PM_B_DropDown.png,130,125,0,150,16,6
+OL_D_ROCKETS0=D,PM_B_Slider.png,PM_B_Up.png,PM_B_Down.png,PM_B_DropUp.png,PM_B_DropDown.png,130,320,0,150,16,12
+OL_D_ROCKETS1=D,PM_B_Slider.png,PM_B_Up.png,PM_B_Down.png,PM_B_DropUp.png,PM_B_DropDown.png,130,348,0,150,16,12
+OL_D_ROCKETS4=D,PM_B_Slider.png,PM_B_Up.png,PM_B_Down.png,PM_B_DropUp.png,PM_B_DropDown.png,410,320,0,150,16,12
 OL_B_ACCEPT=B,PM_B_AcceptLoadout.png,340,550,0,0,FlightCheck,0x1000,1,,,,,,
 OL_B_CANCEL=B,PM_B_CancelLoadout.png,550,550,0,0,FlightCheck,0x1000,1,,,,,,
 

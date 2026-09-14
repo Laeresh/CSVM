@@ -1748,14 +1748,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   set is this port's own and its look is the user's call at the controls, not a luminance distance.
   *Cross-refs:* `CSVM/src/Flight/PromptLine.cs`, `CSVM/src/Bindings/BindingLabels.cs`,
   `docs/controls.md`.
-- `BL-919` `[Fidelity]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: feel]` **The Ammo
-  Selection screen offers a rocket row for a pylon the build never bought; the original hides
-  it.** *Evidence:* the rows come from the airframe's stock fit, and since `BL-841` a pick on an
-  unbought pylon's row is dropped silently rather than the row greyed or hidden. The user recalls
-  the original hiding such a row; not decoded. *Fix shape:* decode what the original's screen does
-  with an unbought pylon's row (`docs/formats/campaign-screens.md`'s ammo screen, the row's
-  visibility against the build's fit), expected hidden, and do the same. *Cross-refs:* `BL-841`'s
-  closing commit, `CSVM/src/UI/Menu/HangarFeature.cs`, `docs/formats/saved-games.md`.
 
 
 ## Splitscreen

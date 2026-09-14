@@ -504,10 +504,24 @@ the script greys its label to `0xff808080` and deactivates its dropdown, which i
 fourth row visible in the reference screenshot. `uiData` 2036 writes a new pick into the working
 copy.
 
-**Ordnance is per pylon, and non-existent pylons are deactivated.** `uiData` 2031 returns pylon
-`N`'s current ordnance, or -1 when `N` is past that wing's hardpoint count (cells 0 to 3 are
-checked against record `+0x34`, cells 4 to 7 against `+0x38` plus four), and the script deactivates
-the dropdown on -1. `uiData` 2037 writes the pick.
+**Ordnance is per pylon, and a pylon the aeroplane does not carry is deactivated.** `uiData` 2031
+returns pylon `N`'s current ordnance, or -1 when `N` is past that wing's hardpoint count (cells 0
+to 3 are checked against record `+0x34`, cells 4 to 7 against `+0x38` plus four). On -1 the script
+parks the field's selection on row 0, initialises it like any other, and then deactivates it.
+`uiData` 2037 writes the pick.
+
+**⚠ A field this screen deactivates is not drawn at all.** The row is hidden, not greyed and not
+left blank in its box. `Ammo Selector Hoplite.png` is the reference: a 1/1 record whose airframe's
+own fit is wider, and each ROCKETS box holds a single field at its top slot with the three slots
+below it bare paper, no box, no arrow and no words. `Ammo Selector Balmoral.png` is the 4/4
+counterpart carrying all four. The empty gun group is the same act read through a second widget,
+since the script greys `ol_t_gunname<N>` to `0xff808080` *and* deactivates `ol_d_ammo<N>`: the
+Hoplite shot shows three greyed `No Gun` captions with no field under any of them, so what survives
+a deactivation is the caption beside it, never the field. The rows that remain do not close up into
+the gap either, because every `OL_D_ROCKETS<N>` carries its own `LAYOUT.CSV` rect (y 320, 348, 376
+and 404, cells 0 to 3 anchored in `<V3>` and 4 to 7 in `<V4>`), so a hidden row leaves its slot
+empty and every other row stays where the layout put it. Both readings are this screen's own; a
+deactivated widget elsewhere is evidence about that screen, not about this one.
 
 **⚠ A rocket dropdown's row index is not the ordnance id.** The rocket list is a table of twelve
 8-byte records at `0x00619efc`; an entry is offered only when its first field is at most the
@@ -894,7 +908,7 @@ corroborate but do not establish them.
 | Chapter intro | the movie name, the skip gesture, the one-shot guard | not covered by any screenshot | the MPG decode itself, deliberately out of scope |
 | Flight check | both slots, all four lists, the wingman gate, both plane-change rules, the grant table, both exits | the title, plane lines, six of eight gun rows filled and two blank, the objectives note, the calibre label's string block, both buttons | the `10018`/`10000` state art |
 | Plane selection | both blocks and their gates, the dropdown fill, the rollover preview, the duplicate rule and its revert, the export and cancel paths, the deactivated SELL pair | the widget positions, the list rows, the rating words and their captions, both message boxes verbatim, the preview following the pointer | what `gosCallback` 22 writes |
-| Ammo selection | both callers, the working-copy commit, the greyed empty group, the pylon deactivation, all six string blocks | the greyed fourth group, two of four pylons per wing, both description panes, both plane diagrams | the rocket table's unread second field |
+| Ammo selection | both callers, the working-copy commit, the greyed empty group, the pylon deactivation, all six string blocks | that a deactivated field is not drawn (the Hoplite's one pylon a wing against the Balmoral's four), the greyed `No Gun` captions standing without fields, both description panes, both plane diagrams | the rocket table's unread second field |
 | Scrapbook | every button's transition, the composition file, the results rows, the kill stamps, the table of contents, the Replay Mission fork | the three reference spreads scrap for scrap, the stamps and total on two of them | the native side of the cabin entry and of `$$SR$$`, both in `crimson.exe`, unreached this session |
 
 Where this decode stops:

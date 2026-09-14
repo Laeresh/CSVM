@@ -14,7 +14,7 @@ graph. It owns the drawing, the per-seat `MenuInput` polling, the join scan, the
 the mouse (player 1's rows take Godot's hit test through `gui_input`, folded into the next frame's
 step, Accept and Back), and nothing else: rosters, seats, picks, gates and the typed exit are
 the host's features (`Menu/MenuHost.cs`), the layout is `MenuZones`, and the hangar and campaign
-screens are `HangarFlow` and `CampaignFlow` drawn through `ComposedBoardView`, whose `Film` owns a frame before any screen reads it. Contract: [../menu-presentations.md](../menu-presentations.md).
+screens are `HangarFlow` and `CampaignFlow` drawn through `ComposedBoardView`, whose `Film` owns a frame before any screen reads it. Its Ammo Selection rows stand on the flown build's own fit, and `AmmoPylons` leaves out a pylon that build never bought, since the original draws no field for one. Contract: [../menu-presentations.md](../menu-presentations.md).
 
 ## src/UI/MenuZones.cs
 How the launchscreen's three bands divide a window: a header and a footer held at the heights their
@@ -967,7 +967,7 @@ the sections' own widgets keyed by their layout keys: the contents list in its a
 paging buttons, the radio pair and the buttons. A box no setting can fill stands blank with a pale arrow rather than leaving the page; an open list is windowed by `OriginalDropList.cs`, bands its picked
 row and the row under the pointer, and a closed box redraws its outline in cream under one. The Pilot Plane list is `OriginalRosters.Roster` (stock, then the saved builds, rows named `Stock <airframe>`
 and `<build name> <airframe>`), re-read on every entry and on the hangar's return; a picked build flies its airframe's stock node with its def on the seat. Build opens the wallet-free hangar
-(`OriginalHangarScreen.cs`); Weapon Loadout maps the section's four ammunition and eight rocket fields onto the airframe's gun slots and pylons over the stock table's option lists, with the airframe's
+(`OriginalHangarScreen.cs`); Weapon Loadout maps the section's four ammunition and eight rocket fields onto the flown aeroplane's gun slots and the pylons it actually hangs, over the stock table's option lists, so a fill-order entry a saved build leaves empty gets no rocket field at all, with the airframe's
 diagram frames, the description pane and the snapshot CANCEL and Back restore, over seat 0's fit or the wingmen's shared one by the radio pair, or the per-seat picker's own `PlayerSeat.Fit`, which is what
 decides the screen its exit returns to. It is one `IOriginalScreenModule` and reaches `OriginalShell` only through the shared `IOriginalScreenHost` seam (`OriginalScreenHost.cs`), so `OriginalInstantActionTests` drives it over a hand-written host with no shell at all; the shell still owns `Rows`/`Compose`/`ApplyFrame` dispatch, routes to whichever module owns the screen showing and exposes this one whole as `InstantAction`. Its `Back` answers false where nothing is open and nothing is to cancel, which is how Instant Action's own Exit is left to the shell. Remake-only is the Lives box, which the section authors no row for: it takes the mission dropdown's column and item height on the first clear line the setup stack leaves (read off the gaps between the authored boxes, never written down as a Y), and steps the shared `InstantActionFeature.StepLives`, reading Unlimited at zero and the count to nine. Option sets: [../formats/instant-action.md](../formats/instant-action.md); what the fit means at launch: `src/Flight/LoadoutChoice.cs`.
 

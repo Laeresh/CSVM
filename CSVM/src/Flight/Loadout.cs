@@ -303,6 +303,24 @@ public sealed class Loadout
         return 0;
     }
 
+    /// <summary>Whether <paramref name="fit"/> hangs <paramref name="pylon"/> at all: its
+    /// fill-order entry is inside the count and is not the empty sentinel, which holds an index
+    /// open and carries nothing. An Ammo Selection screen asks this before it draws a pylon's
+    /// row, since the original draws no field for a hardpoint the aeroplane does not carry
+    /// (docs/formats/campaign-screens.md, the ammo screen).</summary>
+    public static bool Hangs(HardpointSpec? fit, int pylon)
+    {
+        for (int i = 0; fit != null && i < fit.Count && i < PylonFillOrder.Length && i < fit.Stock.Length; i++)
+        {
+            if (PylonFillOrder[i] == pylon)
+            {
+                return !string.Equals(fit.Stock[i], LoadoutChoice.None, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>Binds an authored loadout to a built plane and the weapon catalogue. Throws if a
     /// named marker is absent on the model or a resolved <c>wep_*</c> id is missing.</summary>
     public static Loadout Bind(LoadoutDef def, Node3D plane, WeaponDefs weapons)
@@ -554,21 +572,6 @@ public sealed class Loadout
         }
 
         return Bind(def, plane, weapons);
-    }
-
-    // Whether a fit hangs this pylon at all: its fill-order entry is inside the count and is not
-    // the empty sentinel, which holds an index open and carries nothing.
-    private static bool Hangs(HardpointSpec fit, int pylon)
-    {
-        for (int i = 0; i < fit.Count && i < PylonFillOrder.Length && i < fit.Stock.Length; i++)
-        {
-            if (PylonFillOrder[i] == pylon)
-            {
-                return !string.Equals(fit.Stock[i], LoadoutChoice.None, StringComparison.OrdinalIgnoreCase);
-            }
-        }
-
-        return false;
     }
 
     // The hardpoint list read in physical mount order: list positions sorted by pylon number.

@@ -521,10 +521,18 @@ public class OriginalInstantActionTests
         Assert.Equal(ia.WingmanPlane.Node, host.Module.LoadoutNode);
         Assert.Equal(-1, host.Module.LoadoutSeat);
         Assert.False(host.Module.OnSeatLoadout);
-        // The fixture's section authors the first ammunition field alone, which the Autogyro's
-        // one gun slot takes; the buttons are the section's own strips.
+        // The fixture's section authors the first ammunition field, which the Autogyro's one gun
+        // slot takes, and three of the eight rocket fields, of which the Autogyro's two stock
+        // pylons (1 and 5) take the first and the fourth; the buttons are the section's own strips.
         Assert.Equal(
-            new[] { OriginalInstantActionScreen.LoadoutAmmoPrefix + "0", OriginalInstantActionScreen.LoadoutAcceptKey, OriginalInstantActionScreen.LoadoutCancelKey },
+            new[]
+            {
+                OriginalInstantActionScreen.LoadoutAmmoPrefix + "0",
+                OriginalInstantActionScreen.LoadoutRocketPrefix + "0",
+                OriginalInstantActionScreen.LoadoutRocketPrefix + "4",
+                OriginalInstantActionScreen.LoadoutAcceptKey,
+                OriginalInstantActionScreen.LoadoutCancelKey,
+            },
             host.Rows.Select(r => r.Key));
         var field = Row(host, OriginalInstantActionScreen.LoadoutAmmoPrefix + "0");
         Assert.Equal(OriginalRowKind.Dropdown, field.Kind);
@@ -631,6 +639,63 @@ public class OriginalInstantActionTests
         host.Module.DropLoadout();
         Assert.Null(host.Module.LoadoutFit);
         Assert.Equal(OriginalScreen.InstantActionLoadout, host.Screen);
+    }
+
+    [Fact]
+    public void TheLoadoutScreenDrawsNoRocketFieldForAPylonTheBuildNeverBought()
+    {
+        var store = new CustomPlaneStore(TestData.TempDir());
+        var built = new CustomPlaneDef
+        {
+            Name = "Blue Streak",
+            Airframe = 3,
+            Engine = 1,
+            LeftHardpoints = 1,
+            RightHardpoints = 1,
+        };
+        built.Guns[0] = new GunChoice(1, Twin: false);
+        store.Save(built);
+        var host = Host(out _, stock: true, out _, planes: store);
+        host.Module.OpenInstantAction();
+
+        // The stock Bloodhawk hangs three pylons, 1, 5 and 2 in fill order, so all three of the
+        // fixture's rocket fields stand.
+        Click(host, OriginalInstantActionScreen.PlayerPlaneKey);
+        Click(host, 3);
+        Assert.Equal("Bloodhawk", host.Module.PilotRoster[3].Name);
+        Click(host, OriginalInstantActionScreen.WeaponLoadoutKey);
+        Assert.Equal(
+            new[]
+            {
+                OriginalInstantActionScreen.LoadoutAmmoPrefix + "0",
+                OriginalInstantActionScreen.LoadoutRocketPrefix + "0",
+                OriginalInstantActionScreen.LoadoutRocketPrefix + "1",
+                OriginalInstantActionScreen.LoadoutRocketPrefix + "4",
+                OriginalInstantActionScreen.LoadoutAcceptKey,
+                OriginalInstantActionScreen.LoadoutCancelKey,
+            },
+            host.Rows.Select(r => r.Key));
+        Click(host, OriginalInstantActionScreen.LoadoutCancelKey);
+
+        // The same airframe bought one hardpoint a wing, which hangs pylons 1 and 2 and leaves
+        // pylon 5's fill-order entry empty. That field is not drawn at all, and the two that are
+        // keep their own authored boxes rather than closing up into the gap.
+        Click(host, OriginalInstantActionScreen.PlayerPlaneKey);
+        Click(host, 11);
+        Assert.Equal("Blue Streak", host.Module.PilotRoster[11].Name);
+        Click(host, OriginalInstantActionScreen.WeaponLoadoutKey);
+        Assert.Equal(
+            new[]
+            {
+                OriginalInstantActionScreen.LoadoutAmmoPrefix + "0",
+                OriginalInstantActionScreen.LoadoutRocketPrefix + "0",
+                OriginalInstantActionScreen.LoadoutRocketPrefix + "1",
+                OriginalInstantActionScreen.LoadoutAcceptKey,
+                OriginalInstantActionScreen.LoadoutCancelKey,
+            },
+            host.Rows.Select(r => r.Key));
+        Assert.Equal((130f, 320f, 150f, 16f), Rect(Row(host, OriginalInstantActionScreen.LoadoutRocketPrefix + "0")));
+        Assert.Equal((130f, 348f, 150f, 16f), Rect(Row(host, OriginalInstantActionScreen.LoadoutRocketPrefix + "1")));
     }
 
     [Fact]
