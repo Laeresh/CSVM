@@ -31,6 +31,33 @@ at `plane + (group·3 + 0x13e)·4` (= byte offset `0x138 + 12·group`). Only **o
 There is no second "active gun" state, four groups, one armed at a time, one `+0x604` selector.
 That is the engine's "one gun slot at a time" model, verbatim.
 
+## Nothing re-arms in flight outside the multiplayer rearm base
+
+`MSG_AMMO_PICKUP` (message id 128, "1 round of %1") and `MSG_AMMO_PICKUPS` (id 129, "%1!d! rounds
+of %2") are dead text: no code path in the retail build consumes either id. Messages reach the
+screen through `FUN_0059cd90` (`LoadStringA` then `FormatMessageA`), its varargs wrapper
+`FUN_0059cd70` and the id-only wrapper `FUN_0059ce40`, and every instruction in the image carrying
+the immediate `0x80` or `0x81` is a buffer size, a stack adjustment, a mask, an assert line number
+or a `REP` count, with no id table holding the pair either; the same scan does find live ids
+(`PUSH 0x84` at `0049e23c` formats id 132, and the multiplayer flag builder `FUN_00495d40` formats
+7056 to 7061), so the absence is the finding rather than the method. The shipped data agrees: no
+reader, node tree or `.gw` script names an ammo, supply or crate pickup, and the four `pickups.zrd`
+files are campaign person rescues. What does re-arm is a fixed multiplayer base. `FUN_0049b970`
+walks the rearm-node list (`DAT_0071c7c4`), compares the player's distance against `_DAT_00628f10`
+(624.0 by default, written from the config keys read at `00473f8c` and `0043f33b`), and on entry
+calls `FUN_00480480`, which restores health and armour (`FUN_004b80a0` and `FUN_004b8180`, from the
+stored maxima at `plane + 0x2c4` and `plane + 0x2cc`) and re-applies the entire loadout through
+`FUN_004b24d0`, calling `FUN_004b2550(plane, slot, def, -1, flag)` for all four gun groups and all
+eight pylons, where `-1` means the def's own full count from `FUN_004bad90`. A rearm therefore
+restores everything at once, never one round and never one weapon; the caller preserves the
+selected group (`plane + 0x604`) and pylon (`plane + 0x608`) across the reset, latches on
+`DAT_0071d23c` so it fires once per entry into the radius, requires the base to belong to the
+player's own team in the team modes, and announces with id 7077 (`MSG_MP_REARMED`, "Rearmed!") at
+`0049ba99` and `0049bbb9`. The nodes (`rabase1`, `rabase2`, `racmplx`, `rabaset1`, `ammosign`,
+`rearm_node_1`, `rearm_node_2`, and `zep_rearm_node_1` / `zep_rearm_node_2` on the zeppelin map)
+exist only in the multiplayer maps, and the `.gw` scripts of every campaign mission and of Instant
+Action switch them off.
+
 ## The fire tick spawns exactly ONE round
 
 The per-frame fire update `FUN_004897c0` (the main weapon/AI tick) calls, for the player plane:
