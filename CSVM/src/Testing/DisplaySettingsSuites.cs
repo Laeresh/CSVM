@@ -30,8 +30,8 @@ internal static class DisplaySettingsSuites
     private const string CustomSize = "640x480";
 
     // Where the size row stands on the built-in Options screen, under difficulty, the targeting
-    // switch, the presentation, the graphics mode and the monitor.
-    private const int BuiltInResolutionRow = 5;
+    // switch, the rumble toggle, the presentation, the graphics mode and the monitor.
+    private const int BuiltInResolutionRow = 6;
 
     // Every field OptionsDef carries, with a value the store validates and whether it is a display
     // setting, which is what makes it something no deterministic run may read. The list is compared
@@ -45,6 +45,7 @@ internal static class DisplaySettingsSuites
         ("GraphicsMode", GraphicsMode.EnhancedWord, false),
         ("Difficulty", Flight.Difficulty.Word(Flight.Difficulty.Hard), false),
         ("NearestAfterKill", true, false),
+        ("Rumble", false, false),
         ("MonitorIndex", "3", true),
         ("Resolution", "1920x1080", true),
         ("DisplayMode", DisplayWords.Borderless, true),

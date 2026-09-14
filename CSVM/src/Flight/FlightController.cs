@@ -537,6 +537,11 @@ public partial class FlightController : Node3D
     private readonly PlayerActions _padActions;   // the pad half alone
     private readonly SeatDeviceState _seatState;
     private readonly SeatDeviceState _padMutedState;
+    // The pad haptics for this seat, routed to the same devices the bindings above read, so a
+    // splitscreen pane rumbles its own pilot's controller and no other. The shot total beside it is
+    // what turns the carried gunners' running counters into a fired-this-tick edge.
+    private readonly PadRumble _rumble;
+    private int _turretShots;
 
     // The message table this seat's control prompts take their wording from, null on a rig built
     // with none (which then reads the prompt's own data-less stand-in).
@@ -656,6 +661,7 @@ public partial class FlightController : Node3D
     {
         _seatState = new SeatDeviceState(DefaultBindings.AnyPad, () => PadDevices);
         _padMutedState = new SeatDeviceState(DefaultBindings.AnyPad, () => PadDevices, readsPads: false);
+        _rumble = new PadRumble(() => PadDevices);
         _bindings = BindingProfile.Defaults(default, true);
         _actions = _bindings.Actions(InputContext.Flight);
         var map = _bindings.Map(InputContext.Flight);
@@ -1601,6 +1607,15 @@ public partial class FlightController : Node3D
             Shake?.ExplosionAt((weapon.ArmorDamage ?? 0f) * damageScale);
         else
             Shake?.MissileHit(weapon.ArmorDamage ?? 0f, weapon.HighExplosive);
+        // The pad's half of the same event. Two effects, not one: the original splits a gun round
+        // from everything else and gives each its own damage edge (docs/org/input.md).
+        if (IsHumanPiloted)
+        {
+            float took = (weapon.ArmorDamage ?? 0f) * damageScale;
+            _rumble.Play(weapon.Caliber.HasValue
+                ? PadRumble.CannonHit(took)
+                : PadRumble.OrdnanceHit(took));
+        }
         // The shield took it: the damage pair is discarded where the original zeroes it
         // (0x004b9ea4) and returns, so nothing below this line runs, no armour spend, no hit
         // marker, no kill test.
@@ -1938,21 +1953,38 @@ public partial class FlightController : Node3D
         // The carried turret gunners: each tracks and fires on its own, into the same
         // shared pool, under this pilot's shooter id. The crash branch above already returned,
         // so a downed host's gunners take no further ticks.
+        int turretShots = 0;
         foreach (var turret in Turrets)
         {
             turret.SimStep(dt);
+            turretShots += turret.ShotsFired;
+        }
+
+        // The original rumbles for the pilot's OWN gunner alone: its turret effect is gated on the
+        // firing turret belonging to the player's aeroplane, and every round restarts the loop.
+        if (turretShots != _turretShots)
+        {
+            _turretShots = turretShots;
+            if (IsHumanPiloted)
+                _rumble.Play(RumbleEvent.TurretFire);
         }
 
         // The plane wobble: overspeed drive plus this tick's fire/hit kicks, written as
         // visual-only roll to the pivot the model hangs under. Physics, aim and the camera
         // read this node's transform, which the pivot sits below, never the wobble.
+        float speedRatio = _model.Speed / Mathf.Max(1f, _model.Stats.FdSpeed);
         if (Shake != null)
         {
-            Shake.SetSpeedRatio(_model.Speed / Mathf.Max(1f, _model.Stats.FdSpeed));
+            Shake.SetSpeedRatio(speedRatio);
             Shake.Advance(dt);
             if (ShakePivot != null)
                 ShakePivot.Rotation = new Vector3(0f, 0f, Shake.Roll);
         }
+
+        // The pad's overspeed rattle rides the same gate the wobble's authored min_speed puts on
+        // it, past the plane's rated maximum, and stops on its own once the dive ends.
+        if (IsHumanPiloted)
+            _rumble.Overspeed(speedRatio > 1f, GameClock.Current?.Time ?? 0.0);
 
         // Stunt run: flew-through-a-danger-zone test against this frame's committed position.
         Stunt?.Update(_model.Position);
@@ -2334,9 +2366,14 @@ public partial class FlightController : Node3D
         if (Nitro.EngagedThisTick)
         {
             if (IsHumanPiloted)
+            {
                 Shake?.NitroEngaged();
+                _rumble.Play(RumbleEvent.NitroStart);
+            }
             else
+            {
                 PlayAiShake();
+            }
             // Play, not PlayWithin: the def's anchor NAME ("warhawk") never resolves in this
             // per-plane index, same as startprops/stopprops above, Play's fallback to
             // PlaneModel is what makes those work; PlayWithin has no such fallback.
@@ -2782,6 +2819,10 @@ public partial class FlightController : Node3D
             var aimDir = AssistedGunDirection(g.Weapon, gi, mi, muzzle, planeBasis, inheritVel, aimNow);
             Projectiles!.Spawn(g.Weapon, muzzle.GlobalTransform, inheritVel, PlayerIndex, muzzle, aimDir, Team);
             Shake?.FireBullet(g.Weapon.Caliber ?? 0f); // the firing buzz: factor × caliber (measured)
+            // One of three effects by calibre, each restarted per round: the original's loop is
+            // infinite and its own timer stops it 0.3 s after the last shot.
+            if (IsHumanPiloted)
+                _rumble.Play(PadRumble.GunFire(g.Weapon.Caliber ?? 0f));
             if (!_gunLoggedFirst[gi])
             {
                 _gunLoggedFirst[gi] = true;   // verification breadcrumb: which groups actually fire
@@ -2809,6 +2850,10 @@ public partial class FlightController : Node3D
                 Projectiles!.Spawn(hp.Weapon, hp.Pylon.GlobalTransform, inheritVel, PlayerIndex, hp.Pylon,
                     rocketAim, Team, launchTarget);
             }
+            // After the spawn branch, so a SMOKE_SCREEN launch rumbles too: the cue hangs on the
+            // pylon firing, which is where the original hangs it, not on a round appearing.
+            if (IsHumanPiloted)
+                _rumble.Play(PadRumble.Launch(hp.Weapon.Torpedo, hp.Weapon.Rear));
             if (_rocketsLaunched < 12)
             {
                 _rocketsLaunched++;
@@ -3159,6 +3204,10 @@ public partial class FlightController : Node3D
         var landing = _lifecycle.Crash(surfaceId, killer);
         if (!landing.Occurred)
             return;
+        // The original has no crash effect of its own: a ground impact runs the same contact effect
+        // every other collision does, and a fatal one is always past its heavy edge.
+        if (IsHumanPiloted)
+            _rumble.Play(RumbleEvent.ContactHeavy);
         string? crashDef = landing.CrashDef;
         if (PlaneModel != null)
             PlaneModel.Visible = false; // the airframe is gone; HUD prompts for respawn
@@ -4265,6 +4314,10 @@ public partial class FlightController : Node3D
         // 0x48d3aa's second guard is the fd developer switch, which no gameplay event sets.
         if (outcome.ShakeMagnitude > 0f)
             Shake?.ContactHit(outcome.ShakeMagnitude);
+        // The pad takes the larger of the damage pair, the quantity the original's contact path
+        // hands its own effect, and the 50.5 edge picks the heavy effect over the light one.
+        if (IsHumanPiloted)
+            _rumble.Play(PadRumble.Contact(outcome.ArmorDamage, outcome.HealthDamage));
         if (outcome.DamageFlashText is { } flash)
             _pilotHud.Flash(flash);
         _model.Position += outcome.PushOut;

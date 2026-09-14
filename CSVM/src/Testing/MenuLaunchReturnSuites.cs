@@ -154,7 +154,9 @@ internal static class MenuLaunchReturnSuites
 
         WalkTo(run, menu, LaunchMenu.OptionsRow);
         run.Press(Accept);
-        // Two rows down, past the targeting setting, onto the presentation row.
+        // Three rows down, past the targeting setting and the rumble toggle, onto the presentation
+        // row.
+        run.Press(Down);
         run.Press(Down);
         run.Press(Down);
         // The row opens on the saved word, which with no options file is the shipped Original, so

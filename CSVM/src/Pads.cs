@@ -25,7 +25,11 @@ public static class Pads
     /// gets a focus notification behaves as it did before this gate existed.</summary>
     public static bool Focused = true;
 
-    private static readonly Godot.Collections.Array<int> NoPads = new();
+    // ⚠ Built on first use, never as a field initialiser. A Godot.Collections.Array cannot be
+    // constructed without a running engine, and a static initialiser here would run on the first
+    // touch of ANY static field on this class, taking every off-engine reader of Disabled, Focused
+    // and For down with it.
+    private static Godot.Collections.Array<int>? _noPads;
 
     /// <summary>Whether pad <i>input</i> is currently suppressed, the gate <see cref="For"/>
     /// applies. Not a statement about which devices exist; see <see cref="Connected"/>.</summary>
@@ -35,14 +39,15 @@ public static class Pads
     /// noticing a disconnect. Empty when <see cref="Disabled"/>. Deliberately NOT gated on focus:
     /// see the class remarks.</summary>
     public static Godot.Collections.Array<int> Connected() =>
-        Disabled ? NoPads : Input.GetConnectedJoypads();
+        Disabled ? _noPads ??= new Godot.Collections.Array<int>() : Input.GetConnectedJoypads();
 
     /// <summary>The pads a given consumer may <b>read</b>: its explicit binding when it has one
     /// (a splitscreen player owns exactly one pad), otherwise every connected pad, and nothing
     /// at all when <see cref="InputBlocked"/>. Every per-frame stick/button read goes through
-    /// here, which is what makes the focus gate a single switch.</summary>
+    /// here, which is what makes the focus gate a single switch. A plain empty array on the blocked
+    /// path, not an engine one, so a seat holding an explicit binding resolves off-engine.</summary>
     public static IEnumerable<int> For(IEnumerable<int>? bound) =>
-        InputBlocked ? NoPads : bound ?? Connected();
+        InputBlocked ? Array.Empty<int>() : bound ?? Connected();
 
     /// <summary>Splits the connected gamepads across the players: P2–P4 each get the next roster
     /// slot, P1 gets every pad none of them claimed (docs/architecture.md). Null for a

@@ -39,6 +39,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     /// <summary>The Game Options page's next-target checkbox.</summary>
     public const string NearestAfterKillKey = "NEARESTAFTERKILL";
 
+    /// <summary>The Game Options page's controller-rumble checkbox.</summary>
+    public const string RumbleKey = "RUMBLE";
+
     /// <summary>The AUDIO page's layout section.</summary>
     public const string AudioSection = "Audio";
 
@@ -312,6 +315,11 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
             OriginalRowKind.Radio, NearestAfterKillWords,
             s => s._nearestAfterKill == true ? 1 : 0,
             (s, i) => s._nearestAfterKill = i == 1),
+        new(RumbleKey, "Rumble",
+            _ => "Rumble the gamepad for guns, launches, hits, the nitro and a dive past the rated maximum.",
+            OriginalRowKind.Radio, NearestAfterKillWords,
+            s => s._rumble == false ? 0 : 1,
+            (s, i) => s._rumble = i == 1),
     };
 
     // The AUDIO page's levels, in the authored order of the rows they stand on, since the cursor
@@ -459,6 +467,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     // nullable rather than as the checkbox's own 0/1 so a page that never showed it hands back
     // "never set" instead of writing a choice the player did not make.
     private bool? _nearestAfterKill;
+    // The haptics setting as saved, held the same way but read the other way round: null is "never
+    // set", which the consumer reads as ON, since the original ships force feedback on.
+    private bool? _rumble;
     // The four display settings as they were saved. A page that shows a setting still has to hand
     // back the ones it does not, or the one writer's save would clear them; carrying them here is
     // what lets every page's apply do that.
@@ -587,6 +598,10 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     /// <summary>The targeting setting the Game Options page would apply, or null while nothing has
     /// been saved and no row has been touched.</summary>
     public bool? NearestAfterKillChoice => _nearestAfterKill;
+
+    /// <summary>The haptics setting the Game Options page would apply, or null while nothing has
+    /// been saved and no row has been touched.</summary>
+    public bool? RumbleChoice => _rumble;
 
     /// <summary>The n-th tab's own button key, which is how the layout spells the strip.</summary>
     public static string KeysTabKey(int tab) =>
@@ -892,6 +907,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         _graphics = saved?.GraphicsMode ?? CSVM.Utils.GraphicsMode.Default;
         _difficulty = CSVM.Flight.Difficulty.Parse(saved?.Difficulty) ?? CSVM.Flight.Difficulty.Normal;
         _nearestAfterKill = saved?.NearestAfterKill;
+        _rumble = saved?.Rumble;
         _monitorIndex = saved?.MonitorIndex;
         _resolution = saved?.Resolution;
         _savedResolution = saved?.Resolution;
@@ -909,7 +925,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     private OptionsApplyExit AppliedOptions() =>
         new(new PresentationId(_choice), _graphics, CSVM.Flight.Difficulty.Word(_difficulty),
             _monitorIndex, _resolution, _displayMode, _vsync,
-            _audioMaster, _audioMusic, _audioEffects, _audioVoice, _nearestAfterKill);
+            _audioMaster, _audioMusic, _audioEffects, _audioVoice, _nearestAfterKill, _rumble);
 
     // Back from a page: the saved settings are read again, so an edit the player declined is gone.
     private void BackToPreferences()
@@ -1199,23 +1215,51 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         float titleX = first?.Int("X", (int)GameOptionTitleX) ?? GameOptionTitleX;
         float firstY = first?.Int("Y", (int)GameOptionFirstY) ?? GameOptionFirstY;
         float pitch = first != null && second != null ? second.Int("Y") - first.Int("Y") : GameOptionPitch;
+        float descDy = description != null ? description.Int("Y") - firstY : GameOptionDescDy;
+        float dropDy = drop != null ? drop.Int("Y") - firstY : GameOptionDropDy;
+        float dropHeight = drop?.Int("ItemHeight", (int)GameOptionItemHeight) ?? GameOptionItemHeight;
+        var checkArt = box != null ? StripArt(box.Art, 0, box.Frames) : null;
+        float checkDy = box != null && third != null ? box.Int("Y") - third.Int("Y") : GameOptionCheckDy;
+        float checkHeight = StripSize(checkArt, FallbackCheckSize, FallbackCheckSize).Height;
+        float below = Math.Max(descDy + GameOptionDescFont,
+            Math.Max(dropDy + dropHeight, checkDy + checkHeight));
+        pitch = FitGameOptionPitch(pitch > 0f ? pitch : GameOptionPitch, firstY, below,
+            screen.Widget(GameOptionsAcceptKey));
         return new GameOptionsPage(
             titleX,
             first?.Int("Width", (int)GameOptionTitleWidth) ?? GameOptionTitleWidth,
             third?.Int("Width", (int)GameOptionCheckTitleWidth) ?? GameOptionCheckTitleWidth,
             firstY,
-            pitch > 0f ? pitch : GameOptionPitch,
+            pitch,
             drop?.Int("X", (int)GameOptionDropX) ?? GameOptionDropX,
-            drop != null ? drop.Int("Y") - firstY : GameOptionDropDy,
+            dropDy,
             drop?.Int("Width", (int)GameOptionDropWidth) ?? GameOptionDropWidth,
-            drop?.Int("ItemHeight", (int)GameOptionItemHeight) ?? GameOptionItemHeight,
+            dropHeight,
             box != null ? box.Int("X") - titleX : GameOptionCheckDx,
-            box != null && third != null ? box.Int("Y") - third.Int("Y") : GameOptionCheckDy,
+            checkDy,
             description?.Int("X", (int)GameOptionDescX) ?? GameOptionDescX,
-            description != null ? description.Int("Y") - firstY : GameOptionDescDy,
+            descDy,
             description?.Int("Width", (int)GameOptionDescWidth) ?? GameOptionDescWidth,
             StripArt(drop?.Art ?? Array.Empty<string>(), 4),
-            box != null ? StripArt(box.Art, 0, box.Frames) : null);
+            checkArt);
+    }
+
+    // The authored section carries three rows and this page holds more of them. The authored pitch
+    // stands while the last row still clears ACCEPT CHANGES; past that the rows tighten to fit the
+    // space between the first line and the button, which is the only room the plate has.
+    // ⚠ Never draw a row over the button. Their press regions would overlap and the pointer would
+    // take one press for two rows. <paramref name="below"/> is how far a row reaches under its line.
+    private static float FitGameOptionPitch(float authored, float firstY, float below, MenuLayoutWidget? accept)
+    {
+        if (accept == null || GameOptions.Length < 2)
+        {
+            return authored;
+        }
+
+        // Floored to a whole point: the authored pitches are integers and a fractional one would put
+        // every row below the first on a half pixel.
+        float fit = MathF.Floor((accept.Int("Y") - firstY - below) / (GameOptions.Length - 1));
+        return fit > 0f && fit < authored ? fit : authored;
     }
 
     private int IndexOfGameOption(string key)

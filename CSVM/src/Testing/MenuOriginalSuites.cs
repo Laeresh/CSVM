@@ -52,11 +52,11 @@ internal static class MenuOriginalSuites
         + "top-right corner clear of the book tab, a switch to Built-in "
         + "from mid-setup discards the pick and shows Built-in's Mode screen, a switch back starts "
         + "Original fresh, Built-in's Options route steps the difficulty, the targeting setting on "
-        + "and back off, the two other choices and "
+        + "and back off, the rumble toggle off, the two other choices and "
         + "its four display rows over the machine's own screens and sizes, the two vocabularies and "
         + "a wrap onto the last frame cap, "
         + "opens and leaves the rebinding screen behind its Controls door and emits the apply exit "
-        + "carrying all eight, Original's VIDEO door opens the decoded page on its Display Mode dropdown "
+        + "carrying all nine, Original's VIDEO door opens the decoded page on its Display Mode dropdown "
         + "which fits its authored window and draws no bar, over the V-Sync one whose five words "
         + "window into four with the arrows and the thumb inside the box's right edge and the fifth "
         + "kept for the walk but unseen and unhit, that list wheeling and dragging like any other "
@@ -462,8 +462,8 @@ internal static class MenuOriginalSuites
         Press(host, seat, Up);
         ctx.Check(menu.ShownRowText == LaunchMenu.OptionsRow, $"Up from Free Flight wraps onto Options ({menu.ShownRowText})");
         Press(host, seat, Accept);
-        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 10 && menu.ShownRowText == "Difficulty: Normal",
-            $"Accept opens the Options screen with its ten rows, the difficulty stepper first ({menu.ShownScreen}, {menu.ShownRowCount}, {menu.ShownRowText})");
+        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 11 && menu.ShownRowText == "Difficulty: Normal",
+            $"Accept opens the Options screen with its eleven rows, the difficulty stepper first ({menu.ShownScreen}, {menu.ShownRowCount}, {menu.ShownRowText})");
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == "Difficulty: Hard", $"Right steps the difficulty to Hard ({menu.ShownRowText})");
         Press(host, seat, Down);
@@ -475,6 +475,12 @@ internal static class MenuOriginalSuites
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == "Nearest target after a kill: Off",
             $"and Right again turns it back off ({menu.ShownRowText})");
+        Press(host, seat, Down);
+        ctx.Check(menu.ShownRowText == "Controller rumble: On",
+            $"the third row is the rumble toggle, unsaved showing the default On ({menu.ShownRowText})");
+        Press(host, seat, Right);
+        ctx.Check(menu.ShownRowText == "Controller rumble: Off",
+            $"Right turns the rumble off ({menu.ShownRowText})");
         Press(host, seat, Down);
         string before = menu.ShownRowText;
         Press(host, seat, Right);
@@ -489,7 +495,7 @@ internal static class MenuOriginalSuites
         string graphics = menu.ShownRowText.EndsWith("Enhanced", System.StringComparison.Ordinal) ? "enhanced" : "original";
         var display = BuiltInDisplayRows(ctx, host, seat, menu);
         Press(host, seat, Down);
-        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow, $"the ninth row is the Controls door ({menu.ShownRowText})");
+        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow, $"the tenth row is the Controls door ({menu.ShownRowText})");
         Press(host, seat, Accept);
         ctx.Check(menu.ShownScreen == "Controls" && menu.ShownRowCount > 2,
             $"which opens the rebinding screen over a seat's own keymap ({menu.ShownScreen}, {menu.ShownRowCount} rows)");
@@ -503,8 +509,8 @@ internal static class MenuOriginalSuites
         if (exits.Count == 2 && exits[1] is OptionsApplyExit applied)
         {
             ctx.Check(applied.Presentation.Value == chosen && applied.Graphics == graphics && applied.Difficulty == "hard"
-                && applied.NearestAfterKill == false,
-                $"carrying every stepped choice, the targeting setting stepped back off among them ({applied.Presentation}, {applied.Graphics}, {applied.Difficulty}, {applied.NearestAfterKill})");
+                && applied.NearestAfterKill == false && applied.Rumble == false,
+                $"carrying every stepped choice, the targeting setting stepped back off and the rumble turned off among them ({applied.Presentation}, {applied.Graphics}, {applied.Difficulty}, {applied.NearestAfterKill}, {applied.Rumble})");
             ctx.Check(applied.MonitorIndex == display.Monitor && applied.Resolution == display.Resolution
                 && applied.DisplayMode == display.DisplayMode && applied.VSync == display.VSync,
                 $"and all four display settings the rows stepped ({applied.MonitorIndex}, {applied.Resolution}, {applied.DisplayMode}, {applied.VSync})");

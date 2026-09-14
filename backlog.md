@@ -571,31 +571,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   which state `2` enters and leaves through, `docs/org/targeting.md` "Track Target", `docs/controls.md`,
   `PLAN-cockpit-view` (`HeadLook`, `src/Flight/HeadLook.cs`).
 
-- `BL-922` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **Controller haptics: a
-  remake rumble on the pad, magnitude only, seeded from the original's force-feedback table rather
-  than reproducing it.** This is not a faithful port of the original's Immersion effects, which is
-  declined because Godot's vibration API carries no direction (`git log --grep=BL-411`); it is
-  the modern equivalent a pad player expects, built on what Godot offers. *Evidence:* nothing in
-  `CSVM/src` mentions vibration, rumble or haptics. The original's carriers are the seed for which
-  events rumble and how hard: ordnance launch in `FUN_00480f50` (torpedo 1.0, rear weapon 0.58,
-  other ordnance 0.79, [`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md) "`TORPEDO` selects a
-  force-feedback effect"), gun fire sized by `CALIBER` through `FUN_004810d0`, and the nitro start
-  (`NitroStart`, [`docs/org/flightModel.md`](docs/org/flightModel.md) nitro block). *Fix shape:* one
-  haptics module the existing event sites call (ordnance launch, gun fire, nitro start, damage
-  taken, the crash) with a per-event weak/strong/duration table, driven through
-  `Input.StartJoyVibration(device, weak, strong, duration)` on the pad the local player's bindings
-  came from, and a Game Options toggle defaulting to on, since a player with a rumble-less pad or
-  a desk that rattles wants it off. *⚠ Traps:* (a) Godot's API has no direction, so the rear
-  weapon's kick-from-behind is a magnitude difference only, which is the remake call and not a gap
-  to close. (b) Survey the remaining `CImmCompoundEffect` carriers in the executable before fixing
-  the event list, ordnance launch and nitro are the two found so far. (c) Splitscreen: each pad
-  rumbles for its own pilot's events only, never the other's. (d) Do not add a camera shake beside
-  the rumble; the original's launch shake is guns-only and already handled. *Playtest after fix:*
-  a pad sitting, fire guns, launch a rocket and a torpedo, hit nitro, take a hit, crash; each
-  should read as its own weight and none should linger past the event.
-  *Cross-refs:* `PT-120` (the pad sitting), `docs/org/input.md`,
-  `docs/org/ordnanceTypes.md` "`TORPEDO` selects a force-feedback effect".
-
 - `BL-603` `[Bug]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The human rig sweeps the mesh hull where the original sweeps its def's six
   `collision` probes.** *Evidence:* decoded for `BL-601` (`git log --grep=BL-601`): `FUN_0048d7f0`
   carries the def's `collision` list as rays from the previous pose, six points on the `p*` player

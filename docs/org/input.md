@@ -299,6 +299,109 @@ unknown context or action name, a token in a shape this build does not know, and
 is deliberately unreadable because Godot reports a d-pad as four buttons and a hat row would be a
 second encoding of a control the defaults already author as a button.
 
+## Force feedback
+
+The original drives an Immersion TouchSense stick through `CImmProject`, and every effect it plays
+is authored in `CrimsonFF.ifr` (the filename string at `0x00628790`), which ships beside the
+executable. The code never builds an effect: it loads thirteen of them by name at startup and then
+only starts, stops and rescales them.
+
+`FUN_00480840` is the constructor that opens the file and loads the set. It runs only when
+`FUN_00440540()` returns 2 (the force-feedback device class) and `FUN_00536d10()` reports a device,
+takes the `IDirectInputDevice2A` from `FUN_00536cf0`, binds it through `CImmDXDevice::Initialize`,
+and then makes one `CImmProject::CreateEffect` call per name. Every carrier below asks two questions
+before it touches the hardware: `FUN_00480d30()`, the per-call enable predicate, and the byte at
+`DAT_0071c298 + 0x91d`, a global suppress flag that shuts the whole system off while it is set.
+
+### The effect slots
+
+Loaded in this order, each into a fixed offset on the manager object. Six of them fall back to a
+neighbour when the file does not carry them, and the fallback is what the gain writes further down
+exist for.
+
+| Effect | Name string | Slot | Falls back to |
+|---|---|---|---|
+| `FireGun_large` | `0x006287a0` | `+0x148` | none |
+| `RocketFire_large` | `0x006287b0` | `+0x158` | none |
+| `GunHit` | `0x006287c4` | `+0x160` | none |
+| `RocketHit` | `0x006287cc` | `+0x164` | none |
+| `Collision_large` | `0x006287d8` | `+0x168` | none |
+| `NitroStart` | `0x006287e8` | `+0x170` | none |
+| `ExcessiveSpeed` | `0x006287f4` | `+0x184` | none |
+| `TurretFire` | `0x00628804` | `+0x190` | `+0x148`, flag `+0x14c` |
+| `FireGun_small` | `0x00628810` | `+0x140` | `+0x148`, flag `+0x14c` |
+| `FireGun_medium` | `0x00628820` | `+0x144` | `+0x148`, flag `+0x14c` |
+| `RocketFire_small` | `0x00628830` | `+0x150` | `+0x158`, flag `+0x15c` |
+| `RocketFire_small_rear` | `0x00628844` | `+0x154` | `+0x158`, flag `+0x15c` |
+| `Collision_small` | `0x0062885c` | `+0x16c` | `+0x168`, no flag |
+
+The file carries two more effects, `EngineStart` and `EngineStop`, that no `CreateEffect` call names.
+They are authored and unreachable.
+
+### The carriers
+
+Thirteen effects, nine routines. Every event the original rumbles for is one of these.
+
+| Routine | Event | Condition, and what it writes |
+|---|---|---|
+| `FUN_004810d0` | gun fire | The weapon's `CALIBER`: below `0x32` takes `+0x140`, below `0x46` takes `+0x144`, at or above takes `+0x148`. Sets the hold-over `+0x13c` to the clock plus 0.3 s and stops the turret effect if that shares the slot. The gains 0.647, 0.82 and 1.0 are written only on the fallback path. |
+| `FUN_00480f50` | ordnance launch | Only for a weapon whose flag word (`**(uint**)(*param_3 + 0x210)`) has `0x10` set. `0x08` (torpedo) takes `+0x158`, else `0x20000` (rear mount) takes `+0x154`, else `+0x150`. The gains 1.0, 0.58 at bearing 180 and 0.79 are fallback-path only. |
+| `FUN_00481330` | a gun round taken | Always `+0x160`, with the gain written every time: 0.75 below 6.0 damage, 1.0 at or above. |
+| `FUN_004813c0` | any other round taken | Always `+0x164`, gain written every time: 0.8 below 100.0 damage, 1.0 at or above. |
+| `FUN_00481450` | a collision | Below 50.5 damage takes `+0x16c`, at or above takes `+0x168`. The gain is 1.0 for both; the 0.85 appears only where `Collision_small` fell back onto `Collision_large`. |
+| `FUN_004814f0` | the nitro engaging | `+0x170`, a plain stop and start with no gain written at all. |
+| `FUN_00481540` | flight past the rated maximum | `+0x184`, started once and held: sets the hold-over `+0x178` to the clock plus 0.2 s on every tick past the gate. Re-parameterises the gain from its float argument, but only when that has moved more than 0.1 since `+0x17c` and at most once a second (`+0x180`). |
+| `FUN_00481640` | the turret gunner firing | `+0x190`, started once and held, hold-over `+0x18c` at the clock plus 0.2 s. The gain 0.515 at bearing 180 is fallback-path only. |
+| `FUN_00480d60` | the per-frame tick | Stops each of the three held effects once the clock passes its hold-over, which is what gives the gun, overspeed and turret effects their length. |
+
+### The authored effects
+
+Read out of `CrimsonFF.ifr` itself. `Magnitude` and `AttackLevel` are 0 to 10000, `Duration` is
+microseconds, `Direction` is hundredths of a degree.
+
+| Effect | Type | Magnitude | Duration | Direction | Infinite |
+|---|---|---|---|---|---|
+| `FireGun_small` | Periodic | 4400 | 90900 | 0 | yes |
+| `FireGun_medium` | Periodic | 5600 | 125000 | 0 | yes |
+| `FireGun_large` | Periodic | 9534 | 167000 | 0 | yes |
+| `RocketFire_small` | Vector Force | 7500 | 250000 | 0 | no |
+| `RocketFire_small_rear` | Vector Force | 5500 | 250000 | 18000 | no |
+| `RocketFire_large` | Vector Force | 9371 | 500000 | 0 | no |
+| `GunHit` | Vector Force | 8000 | 100000 | 27000 | no |
+| `RocketHit` | Compound | push 8500, rumble 6434 | 400000 and 500000 | 27000 and 0 | no |
+| `Collision_large` | Compound | pop 10000, rumble 8500 | 800000 and 1000000 | 27000 and 0 | no |
+| `Collision_small` | Compound | push 8500, rumble 6434 | 400000 and 500000 | 27000 and 0 | no |
+| `NitroStart` | Pop | attack 10000 | 1000000 | 0 | no |
+| `ExcessiveSpeed` | Periodic | 4500 | 1000000 | 27000 | yes |
+| `TurretFire` | Periodic | 3500 | 1000000 | 18000 | yes |
+
+A compound is a list of child GUIDs, and the code starts the parent. The three infinite effects
+carry a `Duration` that never applies; their length at the controls is the hold-over above.
+
+### What CSVM plays
+
+`CSVM/src/Bindings/PadRumble.cs` holds this survey as a table of fifteen rows, one per event the
+carriers above distinguish. The mapping to a two-motor pad is mechanical: a `Periodic` child drives
+the weak motor and a `Vector Force` or `Pop` child the strong one, which is the nearest a pad comes
+to hardware that took a bearing. A magnitude is the authored one over 10000, except where the code
+writes a gain on every call (the two hit routines and the collision routine), where the gain is the
+number. A length is the authored `Duration`, except on the three infinite effects, where it is the
+hold-over `FUN_00480d60` stops them after.
+
+⚠ **Direction is dropped, not folded in.** Seven of the thirteen effects aim along a bearing to what
+caused them. A pad has two motors and nothing to aim, so the bearing is discarded rather than turned
+into a left/right split, which would be a different cue rather than a smaller one.
+
+The fallback gains are not reproduced. They exist so a file missing an effect still rumbles with a
+rescaled neighbour, and CSVM's table has a row for every event already.
+
+### The one quantity not pinned
+
+`FUN_00481540` rewrites the overspeed effect's gain from a float its caller hands it, rate-limited to
+once a second. That float is a speed ratio, but the scale it is expressed on was not established, so
+CSVM plays the effect at its authored 4500 throughout a dive instead of tracking the ratio. The cue
+is there and its strength is the original's; what a deeper dive adds to it is not.
+
 ## Open questions
 
 - The `key_*` string table at `0x0060cdcc`-`0x0060d30f`, with a 120-entry pointer array at

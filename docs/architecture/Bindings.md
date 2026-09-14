@@ -195,3 +195,13 @@ defaults. `FlightController`, `SpectatorCamera` and `MenuInput` each ask this in
 look when a rebind is not felt. `Configure` resolves that gate once at launch and it is shut until
 called. A seat is put on the loaded map through `ActionMap.Fill`. Coverage:
 `CSVM.Tests/LaunchBindingsTests.cs` and the `bindings-launch-load` engine suite.
+
+## src/Bindings/PadRumble.cs
+The pad half of the flight cues: one seat's rumble, routed through `Pads.For` to the pads that seat's
+own bindings read, so a splitscreen pane never buzzes another pilot's controller. `RumbleEvent` is the
+original's own event list and a fixed table gives each row a weak magnitude, a strong one and a length.
+The static band functions (`GunFire`, `Launch`, `CannonHit`, `OrdnanceHit`, `Contact`) hold the
+original's own edges, so a call site passes the quantity it already has; `Overspeed` is the one
+sustained cue, restarted on a cadence while the dive lasts. `IRumbleSink` is the seam the unit tests
+replace and `JoyRumbleSink` is `Input.StartJoyVibration`; the static `Enabled` is the Game Options
+toggle, held off under `--det`. Every number, and why the bearing is dropped: [../org/input.md](../org/input.md).

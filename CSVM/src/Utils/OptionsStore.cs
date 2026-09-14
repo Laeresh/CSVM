@@ -66,6 +66,13 @@ public sealed class OptionsDef
     /// A plain <c>bool</c> would make a saved off indistinguishable from an absent field.</summary>
     public bool? NearestAfterKill { get; set; }
 
+    /// <summary>Whether the gamepad rumbles for this pilot's flight events
+    /// (<see cref="Bindings.PadRumble"/>).
+    /// ⚠ Nullable for the same reason as the field above, but read the other way round: null is
+    /// "never set", which the consumer reads as ON, since the original ships force feedback on.
+    /// </summary>
+    public bool? Rumble { get; set; }
+
     /// <summary>The screen the window opens on, its index rendered decimal (<c>"0"</c>,
     /// <c>"1"</c>). This is not a vocabulary word, so the store proves the shape alone: whether a
     /// screen with that index is plugged in can only be answered by a caller holding an engine,
@@ -207,6 +214,7 @@ public sealed class OptionsStore
             Write(w, "graphicsMode", def.GraphicsMode);
             Write(w, "difficulty", def.Difficulty);
             WriteFlag(w, "nearestAfterKill", def.NearestAfterKill);
+            WriteFlag(w, "rumble", def.Rumble);
             Write(w, "monitorIndex", def.MonitorIndex);
             Write(w, "resolution", def.Resolution);
             Write(w, "displayMode", def.DisplayMode);
@@ -248,6 +256,7 @@ public sealed class OptionsStore
                 GraphicsMode = Read(root, "graphicsMode", ValidGraphicsModes),
                 Difficulty = Read(root, "difficulty", ValidDifficulties),
                 NearestAfterKill = ReadFlag(root, "nearestAfterKill"),
+                Rumble = ReadFlag(root, "rumble"),
                 MonitorIndex = ReadShaped(root, "monitorIndex", static v => TryParseMonitorIndex(v, out _)),
                 Resolution = ReadShaped(root, "resolution", static v => TryParseResolution(v, out _, out _)),
                 DisplayMode = Read(root, "displayMode", ValidDisplayModes),

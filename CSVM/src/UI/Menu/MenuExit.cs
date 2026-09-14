@@ -39,7 +39,7 @@ public sealed record QuitExit : MenuExit;
 /// display values and the four volume levels (<see cref="Utils.AudioMix"/>'s 0..100) are
 /// <see cref="Utils.OptionsDef"/>'s own, null where never set; a screen that shows none of them
 /// hands back what it read, since the consumer writes every field it is given.
-/// ⚠ All twelve ride the exit rather than being saved by the screen, so the options file keeps one
+/// ⚠ All thirteen ride the exit rather than being saved by the screen, so the options file keeps one
 /// writer and no driven screen can write it. None of them is defaulted here on purpose: a defaulted
 /// level would let a page that never read one hand back a null and wipe a saved mix.</summary>
 public sealed record OptionsApplyExit(
@@ -54,7 +54,8 @@ public sealed record OptionsApplyExit(
     int? AudioMusic,
     int? AudioEffects,
     int? AudioVoice,
-    bool? NearestAfterKill) : MenuExit;
+    bool? NearestAfterKill,
+    bool? Rumble) : MenuExit;
 
 /// <summary>Dogfight's two match rules as a screen set them: the kill target that ends a match
 /// early and the match clock in MINUTES, 0 on either disabling that limit. The consumer applies

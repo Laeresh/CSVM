@@ -183,21 +183,33 @@ draws its authored 800x600 space one-to-one.
   stale numbers, a missing stamp or scrap, a scrap that will not open, an arrow or the bookmark
   appearing where it should not (or not appearing where it should), or landing straight on the cabin
   means the debrief screen is broken.
-- `PT-120` `[Own]` **The rebinding screen's three axis-capture constants, judged with a real pad in
-  hand (`BL-693`).** `ControlCapture.RestBand` 0.25, `MoveThreshold` 0.6 and `CapturedDeadzone` 0.5
-  decide whether a stick or a trigger a player pushes becomes a binding, and none of them has a
-  decode behind it: the original cannot bind an axis to a command at all, so there is nothing to
-  match. Reach the screen through Options, bind a flight action to a stick direction and to a
-  trigger, then fly the result. *Look for:*
+- `PT-120` `[Own]` **The pad sitting: three axis-capture constants and the rumble, both judged with a
+  real pad in hand (`BL-693`).** `ControlCapture.RestBand` 0.25, `MoveThreshold` 0.6 and
+  `CapturedDeadzone` 0.5 decide whether a stick or a trigger a player pushes becomes a binding, and
+  none of them has a decode behind it: the original cannot bind an axis to a command at all, so there
+  is nothing to match. The rumble does have one, the original's own effect table
+  (`docs/org/input.md`), but a magnitude that is right on the hardware the original wrote for is not
+  automatically right on a pad's two motors. Reach the rebinding screen through Options, bind a
+  flight action to a stick direction and to a trigger, then fly the result: guns, a rocket, a
+  torpedo, the nitro, a round taken, a contact and a dive past the rated maximum. *Look for:*
   - (a) 0.6 (`MoveThreshold`) reads as a decisive push rather than a nudge: a deliberate deflection
     captures, a brush past does not;
   - (b) 0.25 (`RestBand`) forgives the stick your pad actually rests at, so a drifting centre never
     latches a binding on its own;
   - (c) in flight, the bound half of the stick at 0.5 (`CapturedDeadzone`) feels like a button, on
-    and off, with no dead patch that reads as a broken binding.
+    and off, with no dead patch that reads as a broken binding;
+  - (d) each rumble reads as its own weight against the others (a torpedo heavier than a rocket, a
+    rocket heavier than the rear mount, a collision heaviest of all) and none lingers past the event
+    that caused it;
+  - (e) the sustained pair, the overspeed rattle and a turret gunner firing, hold while their cause
+    lasts and stop when it does, without stuttering at the refresh seam;
+  - (f) the Game Options Rumble row turns all of it off and back on, and the choice survives a
+    restart.
   *Blocks:* `BL-693`. ⚠ Capturing the right trigger takes it from both Camera Boost and Camera
   Dolly Out rather than stacking a third reading (`ActionMap.SameControl` ignores the deadzone on
   purpose): that is not a fault of these three numbers and must not be tuned against.
+  ⚠ The rumble carries no direction and no camera shake of its own. Both are deliberate
+  (`docs/org/input.md`) and neither is a gap to report.
 
 ### C1 · Bloodhawk, the overcast sky, ground to above the deck
 

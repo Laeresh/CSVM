@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using CSVM.Bindings;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Mech3.Anim;
@@ -604,6 +605,10 @@ public partial class Launcher : Node3D
         // rule the saved graphics word below follows; SavedLevels owns that drop.
         var savedMix = AudioMix.SavedLevels(_spec.Det);
         AudioMix.Apply(savedMix.Master, savedMix.Music, savedMix.Effects, savedMix.Voice);
+        // The haptics toggle, read under the same rule and defaulting ON where nothing is saved.
+        // ⚠ A deterministic run never rumbles: a golden sweep or a scripted probe must not reach the
+        // hardware on the desk, and no screen is drawn from this.
+        PadRumble.Enabled = !_spec.Det && OptionsStore.UserOptions().Load().Rumble != false;
         // Before the first PreferUnzipped call and process-wide, so every later resolution (the
         // chapter paths in StartSession, the menu pages' own lookups) takes the same asset shape.
         SessionPaths.ForceZipped = _spec.ZipAssets;
@@ -1809,6 +1814,7 @@ public partial class Launcher : Node3D
         options.GraphicsMode = applied.Graphics;
         options.Difficulty = applied.Difficulty;
         options.NearestAfterKill = applied.NearestAfterKill;
+        options.Rumble = applied.Rumble;
         options.MonitorIndex = applied.MonitorIndex;
         options.Resolution = applied.Resolution;
         options.DisplayMode = applied.DisplayMode;
@@ -1830,6 +1836,9 @@ public partial class Launcher : Node3D
         // The mix takes effect now too, through the same call the startup path makes. Apply is
         // idempotent, so an accept from a page that shows no slider rewrites the same three gains.
         AudioMix.Apply(applied.AudioMaster, applied.AudioMusic, applied.AudioEffects, applied.AudioVoice);
+        // The haptics toggle takes effect now for the same reason, so a pilot turning it off over the
+        // pause sheet flies the rest of the sortie with a quiet pad.
+        PadRumble.Enabled = !_spec.Det && applied.Rumble != false;
         Log.Info("ui", $"options applied: presentation={requested.Value} {Utils.GraphicsMode.Key}={applied.Graphics} difficulty={applied.Difficulty}");
     }
 

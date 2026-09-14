@@ -259,7 +259,10 @@ default is `normal`. The nearest-after-a-kill targeting setting (`nearestAfterKi
 rather than a word, so what stands in for an unknown value is a JSON kind the reader drops) takes
 the same rule less the flag in `SessionSpec.WithSavedNearestAfterKill`: no flag names it, a `--det`
 run reads nothing, and never set is off, which is the decoded head rule
-(`docs/org/targeting.md`). For the V-Sync choice it is `VSyncSetting.Resolve`, where `--no-vsync` beats
+(`docs/org/targeting.md`). The controller-rumble toggle (`rumble`) is the one boolean that reads the
+other way, since the original rumbles unless the hardware is absent: never set is on, and
+`Launcher` shuts it under `--det` so no deterministic run reaches the hardware on the desk
+(`docs/org/input.md`). For the V-Sync choice it is `VSyncSetting.Resolve`, where `--no-vsync` beats
 the saved word, which beats the `display.vsync` config key, which beats V-Sync off, and for the
 display mode `DisplayModeSetting.Resolve`, where the saved word beats the borderless default and
 there is no flag or config key above it. The window size is `ResolutionSetting.Resolve`, the same
@@ -412,7 +415,7 @@ consumed by `Launcher.OnMenuExit`. The hierarchy is closed:
 | `LaunchExit` | chapter, one `MenuSeatChoice` per seat, `MenuMode`, an `InstantActionDef` for Instant Action, a `VersusRules` for Dogfight | derive the session spec from the CLI plus the payload, bind the seats' pads, build |
 | `CampaignMissionExit` | the profile name, the `cm_sequence` position, one `MenuSeatChoice` per joined human | the same, over the campaign's story position |
 | `QuitExit` | nothing | quit the process |
-| `OptionsApplyExit` | the requested `PresentationId`, the graphics-mode and difficulty words, the four display settings and the nearest-after-a-kill switch | save every one of them, then the three-call switch one frame later |
+| `OptionsApplyExit` | the requested `PresentationId`, the graphics-mode and difficulty words, the four display settings, the nearest-after-a-kill switch and the controller-rumble toggle | save every one of them, then the three-call switch one frame later |
 
 `MenuSeatChoice` is the plane node, the pad devices the seat claimed, the fit and, for a saved
 custom plane, its resolved `CustomPlaneDef`; the consumer never reads a store. The features build

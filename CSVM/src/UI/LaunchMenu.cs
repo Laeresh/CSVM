@@ -101,11 +101,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     // every category page; here they are the tail of the one list this presentation has. TUNE.
     private const int ControlsFooterRows = 3;
     // The Options screen's stepper rows, above the Controls door and the apply row. The screen is a
-    // form the cursor walks top to bottom: the two gameplay settings, the presentation and the
+    // form the cursor walks top to bottom: the three gameplay settings, the presentation and the
     // graphics mode, then the four display settings in the order the Original presentation's VIDEO
-    // page draws them, then the two doors. Ten rows fit the band without a window, which is why
+    // page draws them, then the two doors. Eleven rows fit the band without a window, which is why
     // this screen has no paging rule of its own.
-    private const int OptionsStepperRows = 8;
+    private const int OptionsStepperRows = 9;
     // The Controls list's two column widths and the extra band width they need, in ems of the row
     // font and in 720p points. TUNE: measured against the longest shipped action name and the
     // longest four-control row, not decoded from anything.
@@ -192,6 +192,8 @@ public sealed partial class LaunchMenu : CanvasLayer
     // The targeting setting as saved, null while never set, which the consumer reads as off: a
     // screen hands back "never set" rather than a choice the player did not make.
     private bool? _nearestAfterKillChoice;
+    // The haptics setting as saved, null while never set, which the consumer reads as ON.
+    private bool? _rumbleChoice;
     private string _presentationChoice = PresentationId.BuiltIn.Value;
     private string _graphicsChoice = GraphicsMode.Default;
     // The four display settings, stepped by the four rows under the graphics one. Each is stored as
@@ -1564,17 +1566,18 @@ public sealed partial class LaunchMenu : CanvasLayer
         switch (_screen)
         {
             case Screen.Options:
-                // The eight choice rows are steppers; the doors under them have nothing to step.
+                // The nine choice rows are steppers; the doors under them have nothing to step.
                 switch (_optionsIndex)
                 {
                     case 0: StepDifficultyChoice(dir); return true;
                     case 1: ToggleNearestAfterKillChoice(); return true;
-                    case 2: TogglePresentationChoice(); return true;
-                    case 3: ToggleGraphicsChoice(); return true;
-                    case 4: StepMonitorChoice(dir); return true;
-                    case 5: StepResolutionChoice(dir); return true;
-                    case 6: StepDisplayModeChoice(dir); return true;
-                    case 7: StepVSyncChoice(dir); return true;
+                    case 2: ToggleRumbleChoice(); return true;
+                    case 3: TogglePresentationChoice(); return true;
+                    case 4: ToggleGraphicsChoice(); return true;
+                    case 5: StepMonitorChoice(dir); return true;
+                    case 6: StepResolutionChoice(dir); return true;
+                    case 7: StepDisplayModeChoice(dir); return true;
+                    case 8: StepVSyncChoice(dir); return true;
                     default: return false;
                 }
             case Screen.Chapter:
@@ -1674,7 +1677,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                     _host.Exit(new OptionsApplyExit(new PresentationId(_presentationChoice), _graphicsChoice,
                         Difficulty.Word(_difficultyChoice), _monitorChoice, _resolutionChoice,
                         _displayModeChoice, _vsyncChoice, _audioMasterChoice, _audioMusicChoice,
-                        _audioEffectsChoice, _audioVoiceChoice, _nearestAfterKillChoice));
+                        _audioEffectsChoice, _audioVoiceChoice, _nearestAfterKillChoice, _rumbleChoice));
                 }
 
                 break;
@@ -2587,6 +2590,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         var saved = OptionsStore.UserOptions().Load();
         _difficultyChoice = Difficulty.Parse(saved.Difficulty) ?? Difficulty.Normal;
         _nearestAfterKillChoice = saved.NearestAfterKill;
+        _rumbleChoice = saved.Rumble;
         _presentationChoice = saved.MenuPresentation ?? PresentationId.Original.Value;
         _graphicsChoice = saved.GraphicsMode ?? GraphicsMode.Default;
         _monitorChoice = saved.MonitorIndex;
@@ -2887,6 +2891,12 @@ public sealed partial class LaunchMenu : CanvasLayer
         _nearestAfterKillChoice = _nearestAfterKillChoice != true;
 
     private string NearestAfterKillChoiceLabel() => _nearestAfterKillChoice == true ? "On" : "Off";
+
+    // The same two-way toggle read the other way round: a never-set rumble is ON, the way the
+    // original ships force feedback, so a first press has to turn it off.
+    private void ToggleRumbleChoice() => _rumbleChoice = _rumbleChoice == false;
+
+    private string RumbleChoiceLabel() => _rumbleChoice != false ? "On" : "Off";
 
     private void TogglePresentationChoice() =>
         _presentationChoice = _presentationChoice == PresentationId.Original.Value
@@ -3488,13 +3498,14 @@ public sealed partial class LaunchMenu : CanvasLayer
             {
                 0 => $"Difficulty: {Difficulty.Label(_difficultyChoice)}",
                 1 => $"Nearest target after a kill: {NearestAfterKillChoiceLabel()}",
-                2 => $"Menu presentation: {PresentationChoiceLabel()}",
-                3 => $"Graphics: {GraphicsChoiceLabel()}",
-                4 => $"Monitor: {MonitorChoiceLabel()}",
-                5 => $"Resolution: {ResolutionChoiceLabel()}",
-                6 => $"Display mode: {DisplayModeChoiceLabel()}",
-                7 => $"V-Sync: {VSyncChoiceLabel()}",
-                8 => ControlsRow,
+                2 => $"Controller rumble: {RumbleChoiceLabel()}",
+                3 => $"Menu presentation: {PresentationChoiceLabel()}",
+                4 => $"Graphics: {GraphicsChoiceLabel()}",
+                5 => $"Monitor: {MonitorChoiceLabel()}",
+                6 => $"Resolution: {ResolutionChoiceLabel()}",
+                7 => $"Display mode: {DisplayModeChoiceLabel()}",
+                8 => $"V-Sync: {VSyncChoiceLabel()}",
+                9 => ControlsRow,
                 _ => "Apply and restart the menu",
             },
             Screen.Controls => $"{ControlsRowLabel(index)}   {ControlsRowValue(index)}",
@@ -3816,13 +3827,14 @@ public sealed partial class LaunchMenu : CanvasLayer
         {
             0 => "Select the difficulty level for a solo campaign. Enemy armour and health scale with it at spawn.",
             1 => "Take the nearest target after a kill instead of the first of the list.",
-            2 => "Built-in needs no extracted menu art; Original draws the original's own screens from it.",
-            3 => GraphicsDetail(),
-            4 => "Select the monitor the game opens on. Applied on the way out, before the size.",
-            5 => ResolutionDetail(),
-            6 => "Select how the window sits on the screen. Borderless leaves the desktop beneath it.",
-            7 => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap.",
-            8 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
+            2 => "Rumble the gamepad for guns, launches, hits, the nitro and a dive past the rated maximum.",
+            3 => "Built-in needs no extracted menu art; Original draws the original's own screens from it.",
+            4 => GraphicsDetail(),
+            5 => "Select the monitor the game opens on. Applied on the way out, before the size.",
+            6 => ResolutionDetail(),
+            7 => "Select how the window sits on the screen. Borderless leaves the desktop beneath it.",
+            8 => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap.",
+            9 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
             _ => "Saves every choice and restarts the menu at its top level; unfinished setup is discarded.",
         },
         Screen.Controls => ControlsDetail(focus),
