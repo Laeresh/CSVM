@@ -1079,10 +1079,6 @@ Anything A2 or a later wave closes comes off this list.
 
 ## What the world looks and sounds like
 
-- **The player's own engine loop reads too loud against everything else.** Preferences' AUDIO page
-  carries Master, Music, Effects and Voice levels, so a player can pull the effects category down,
-  but nothing separates that one loop from the rest of its category. (`BL-391`; no landing commit,
-  and the gain in question is the loop's own rather than a category's.)
 - **An aircraft's ground shadow lies on a flat quad.** It is placed, sized, faded, coloured and
   shaped the way the original draws its own, but on a steep slope it rides over the ground rather
   than wrapping it, and water takes no shadow. Set Enhanced Graphics in Game Options and restart
