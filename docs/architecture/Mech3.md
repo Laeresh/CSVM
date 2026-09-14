@@ -571,14 +571,14 @@ carries the CALL_SEQUENCE/STOP_SEQUENCE semantics. Anchors are opaque pass-throu
 drives the seam with a recorder host. Decode: docs/org/sequences.md.
 
 ## src/Mech3/DestructibleRegistry.cs
-Live, mutable per-instance HP for the world's destructibles, any `AnimDefinition` with
-`HEALTH > 0`: one `Instance` per `(def, anchor)` pair seeded from the authored `HEALTH`, plus a
-coarse healthy/damaged/destroyed `State` and a monotonic `DamageStage`. Built during
-`AnimRuntime`'s bootstrap, read by `ANIM_HEALTH` evaluation, escalated by `ApplyDamageStages`,
-damaged via `DamageAt`. `Resolve(struck)` maps a raycast-hit node back to its instance by climbing
-to the nearest claiming pool. `Instance` also carries what a mission record authors on a pool
-(`Team`, `Owner`, `Gasbag`, `Dormant`, `Reseed`), each rule on its own member. Schema:
-docs/formats/destructibles.md; the team space is docs/org/targeting.md.
+Live per-instance HP for the world's destructibles, any `AnimDefinition` with `HEALTH > 0`: one
+`Instance` per `(def, anchor)` pair seeded from the authored `HEALTH`, plus a coarse
+healthy/damaged/destroyed `State` and a monotonic `DamageStage`. Built in `AnimRuntime`'s
+bootstrap, read by `ANIM_HEALTH` evaluation, escalated by `ApplyDamageStages`, damaged via
+`DamageAt`. `Resolve(struck)` climbs a hit node to the nearest claiming pool; a live pool rooting
+on a part of its own body (`Instance.RootsOnAPart`) and reached through its anchor answers inside
+that part alone. `Instance` carries what a mission record authors (`Team`, `Owner`, `Gasbag`,
+`Dormant`, `Reseed`). Schema: docs/formats/destructibles.md; teams docs/org/targeting.md.
 
 ## src/Mech3/WavFile.cs
 Pure-C# WAV parser with an MS ADPCM to PCM16 decoder (`DecodeMsAdpcm`), no Godot dependencies:

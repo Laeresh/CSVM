@@ -329,14 +329,40 @@ own-root claim outranks an anchor claim whichever order the two defs register in
 stays the animation anchor, so `ANIM_HEALTH` evaluation, the objective marker layer and the AI
 target pool are unaffected by which node the hit resolves through.
 
-The anchor claim reaches only as far as the pool's own piece being in the world. While a live pool's
-damage node is switched off, a climb that arrives at that pool through its anchor alone answers with
-nothing, and the climb stops there rather than continuing up. C2B/M04's Gemini is the case: the
-deploy definition's `RESET_STATE` holds `gunback` and `gun1` inactive and `upper_br_door` shut, so
-the hatch is the only solid geometry over a stowed broadside cannon, and a round on it would
-otherwise drain the cannon's HP through `lbroad11`. Climbing on is worse than stopping, since the
-next claim up is the airship's gasbag. A destroyed pool is exempt: its own death hid the same node,
-and a hit on the wreck still belongs to it.
+The anchor claim reaches only as far as the pool's own piece, and only while the pool lives. Two
+limits hold it there, and a destroyed pool is exempt from both: its own death hid the same node, and
+a hit on the wreck still belongs to it, which is the reason the anchor claim exists at all. Both
+limits apply to the climb only, a strike on the anchor node itself still answers, which is what the
+probes and the objective layer ask for.
+
+**While the damage node is switched off, the climb stops at the anchor.** A climb that arrives at a
+live pool through its anchor alone answers with nothing and goes no further up. C2B/M04's Gemini is
+the case: the deploy definition's `RESET_STATE` holds `gunback` and `gun1` inactive and
+`upper_br_door` shut, so the hatch is the only solid geometry over a stowed broadside cannon, and a
+round on it would otherwise drain the cannon's HP through `lbroad11`. Climbing on is worse than
+stopping, since the next claim up is the airship's gasbag.
+
+**While a pool that roots on a part of its own body is in the world, the anchor claim answers only
+for a strike on that part or inside it.** The qualifier is the whole of the rule's reach. Most defs
+root on the healthy body itself (`root=healthy` on crates, buildings, water towers, boats, engines,
+turrets), their HP stands for that whole body, and the climb is the only thing that makes them
+hittable at all; narrowing those would take most of the world's destructibles out of the game. The
+registry separates the two by resolving the def's healthy-role node inside the anchor next to the
+damage node: a damage node strictly under that body is a part, anything else is the body. For a part
+pool, the rest of the group is geometry the HP does not stand for, so the climb passes the claim by
+and carries on, and a real owner higher up can still answer.
+
+C3/M03's Barracuda is the case the rule was written for: `sub_destruction` `HEALTH 200` anchors on
+the whole `barracuda` group but roots on `subgen_doors`, the hangar block that is a sibling of the
+five hull meshes under `subhealthy`, so the flight deck, the conning tower and the doors cost the
+submarine nothing and only the hangar mouth reaches its pool. This also decides what a blast spends:
+`Projectile.ApplyDamage` gives one splash share per world object, so a `wep_07` FLAK burst over the
+boat has one recipient on it rather than six, and the pool's 200 HP takes the authored six hits.
+Six more pools have the same shape and take the same limit, each of them a hit target modelled
+inside a larger body: C2's `ramses_ruin` roots on `trigger` inside the ruin's `healthy`, so the ruin
+shell and `tomb_statues` no longer answer, and C5/M04's six support-beam sites (`smash_lsprt1..3`,
+`smash_sprt4..6`) root on each site's `spprt`, so the masonry around a beam no longer answers and
+the beam itself does. Whether the climb should exist at all is a separate question, BL-672.
 
 Two death-sequence shapes the registry's per-instance state has to track beyond the swap above:
 

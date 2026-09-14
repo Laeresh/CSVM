@@ -144,6 +144,7 @@
     "death-slot": 0.278,
     "debris-shading": 1.18,
     "debug-kill-target": 0.331,
+    "destructible-sub-hull": 5.31,
     "disabling-hits": 0.749,
     "display-det-guard": 0.021,
     "display-mode": 0.027,
