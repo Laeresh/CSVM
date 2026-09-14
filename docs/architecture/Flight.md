@@ -400,7 +400,7 @@ aim point, that point's velocity and one of four parameter tables read out of th
 intercept solve for the direction, bank-to-turn with the elevator joining once the bank command is
 inside a deadband, a wings-level rule, a low-speed unload, and a per-axis scale and limit stage off
 `PlaneStats`. The throttle lever has one path, the walk toward the desired speed; the original's
-distance-gated open-loop branch is not ported. Engine-free and pure over its arguments.
+distance-gated open-loop branch is not ported. The aim-altitude band is clamped for every caller but one: the danger-zone approach opens it for its own solve and closes it again, as the original does. Engine-free and pure over its arguments.
 
 ## src/Flight/AiEscort.cs
 The formation-escort law a netless `mode wingman` aircraft flies, which in the shipped data is the
@@ -418,18 +418,19 @@ vocabulary are the engine's own debug-readout dispatch. Decoded and wired are th
 inside the shipped distances, the steady-hand roll a hit provokes as a power law over the bite it takes of
 the pre-hit pools, looping on the leftover (`RollLogged` reports every hit reaching the pilot, rolls taken
 and skipped alike, so its line count is the hit count), the `Evading` flag a failed test sets and the
-weighted library draw it enters under the natural-touch and injector culls, chaining a fresh maneuver until
+weighted library draw it enters under the natural-touch, injector and predicted-end altitude culls (that last one vetoing a program whose predicted end falls under the floor and sweeping the predicted path below the ceiling, from the position and attitude `Update` was last handed), chaining a fresh maneuver until
 the pursuer's nose falls off, the sixth-sense roll and its stun, the `Stun` entry, the rubber-band `lay off` `--no-assist` disables, and `avoid crash`'s bands. Engine-free, inventions marked where declared.
 Decode: [../org/aiPilot.md](../org/aiPilot.md), [../org/aiControlLaw.md](../org/aiControlLaw.md).
 
 ## src/Flight/ManeuverExecutor.cs
-Plays one library maneuver's timed step program as `FlightInput` values: `Next(model, dt)` each sim
-step until `Done`, consumed the way `AiPilot` is, with the state machine holding one per
-`evasive maneuver` run and switching back to its own law on `Done`. Steps are target attitudes in
-degrees rather than stick deflections or rates, composed onto the entry frame, which is the level
-entry-heading frame normally and the full entry attitude for a `relative` maneuver; a
-positive-duration step is held for its time and a zero-duration step advances when the attitude is
-captured. Pure and engine-free, deterministic on a fixed dt (`ManeuverExecutorTests`).
+Plays one library maneuver's timed step program as `FlightInput` values: `Next(model, dt)` each sim step
+until `Done`, consumed the way `AiPilot` is, with the state machine holding one per `evasive maneuver` run
+and switching back to its own law on `Done`. Steps are target attitudes in degrees rather than stick
+deflections or rates, composed onto the entry frame, which is the level entry-heading frame normally and
+the full entry attitude for a `relative` maneuver; a positive-duration step is held for its time and a
+zero-duration step advances when the attitude is captured. `PredictedPath` composes those same steps onto
+that same frame without flying them, one decoded step reach each, which is the estimate the selection-time
+altitude veto reads. Pure and engine-free, deterministic on a fixed dt (`ManeuverExecutorTests`).
 
 ## src/Flight/AiGunner.cs
 The AI's forward-gun gunnery: per sim tick the host `FlightController` hands it the fire geometry (`Solve`), it

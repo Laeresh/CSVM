@@ -538,6 +538,62 @@ public class AiModeMachineTests
     }
 
     [Fact]
+    public void AltitudeVetoCullsAProgramPredictedToEndBelowTheFloor()
+    {
+        // The shipped split_s ends one prediction step lower than it started, so the veto turns on
+        // the altitude it is flown at and on nothing else.
+        foreach (float altitude in new[] { 60f, 600f })
+        {
+            var m = Machine();
+            m.NaturalTouch = 9;
+            m.Library = new[] { SplitS() };
+            var pos = new Vector3(0f, altitude, 0f);
+            m.Update(pos, Level, null, null, 1f / 60f, attitude: Basis.Identity);
+            m.NotifyDamage(0f, 8f, 0f, 8f);
+
+            if (altitude < ManeuverExecutor.PredictedStepM + AiModeMachine.AltitudeFloorM)
+            {
+                Assert.Equal(AiMode.Evade, m.Mode);
+                Assert.Null(m.Executor);
+            }
+            else
+            {
+                Assert.Equal(AiMode.EvasiveManeuver, m.Mode);
+                Assert.Equal("split_s", m.Executor!.Maneuver.Name);
+            }
+        }
+    }
+
+    [Fact]
+    public void AltitudeVetoSweepsThePredictedPathAndStopsAtTheCeiling()
+    {
+        // A climb ends one prediction step higher, so the same program crosses the ceiling from
+        // 7950 m and does not from 1000 m. Above it the obstacle sweep is not run at all.
+        foreach (float altitude in new[] { 1000f, 7950f })
+        {
+            var m = Machine();
+            m.NaturalTouch = 9;
+            m.Library = new[] { Climb() };
+            m.Update(new Vector3(0f, altitude, 0f), Level, null, null, 1f / 60f,
+                attitude: Basis.Identity);
+            int probes = 0;
+            m.ProbeBlocked = (_, _) => { probes++; return "wall"; };
+            m.NotifyDamage(0f, 8f, 0f, 8f);
+
+            if (altitude > AiModeMachine.ProbeCeilingM - ManeuverExecutor.PredictedStepM)
+            {
+                Assert.Equal(AiMode.EvasiveManeuver, m.Mode);
+                Assert.Equal(0, probes);
+            }
+            else
+            {
+                Assert.Equal(AiMode.Evade, m.Mode);
+                Assert.Equal(1, probes);
+            }
+        }
+    }
+
+    [Fact]
     public void SignatureManeuversAreWeightedUpInTheDraw()
     {
         int signaturePicks = 0;
@@ -790,6 +846,30 @@ public class AiModeMachineTests
         Difficulty = 0,
         Nitro = true,
         Steps = new[] { new ManeuverStep(0.05f, 0f, 0f, 0f, Array.Empty<float>()) },
+    };
+
+    // The shipped split_s, verbatim from maneuvers.zrd: level, nose straight down, then two
+    // half-rolled reversals. Its predicted path ends one step below where it began.
+    private static Maneuver SplitS() => new()
+    {
+        Name = "split_s",
+        Difficulty = 8,
+        Steps = new[]
+        {
+            new ManeuverStep(0f, 0f, 0f, 0f, Array.Empty<float>()),
+            new ManeuverStep(0f, -90f, 0f, 0f, Array.Empty<float>()),
+            new ManeuverStep(0f, 0f, 180f, 180f, Array.Empty<float>()),
+            new ManeuverStep(0f, 0f, 180f, 0f, Array.Empty<float>()),
+        },
+    };
+
+    // The shipped climb: one step at 60 degrees nose up, held four seconds.
+    private static Maneuver Climb() => new()
+    {
+        Name = "climb",
+        Difficulty = 3,
+        Bias = -0.5f,
+        Steps = new[] { new ManeuverStep(4f, 60f, 0f, 0f, Array.Empty<float>()) },
     };
 
     private static Maneuver Stub(string name) => new()

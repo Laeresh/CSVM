@@ -79,14 +79,15 @@ public sealed class AiModeMachine
     /// <summary>Obstacle-probe cadence ceiling, seconds (see <see cref="ProbeIntervalMinS"/>).</summary>
     public const float ProbeIntervalMaxS = 1f;
 
-    /// <summary>The world-Y floor below which the climb-out arms with no ray at all, decoded:
-    /// <c>DAT_0071c3f0</c>, written 20.0 at level setup (<c>FUN_004735b0</c>, <c>0x0047415b</c>).
-    /// ⚠ Flat world Y, not a terrain follow: it saves a plane over water and does nothing over a
-    /// ridge, which is what the ray is for.</summary>
+    /// <summary>The world-Y floor the climb-out arms below, and the one a candidate maneuver's
+    /// predicted end point is vetoed below, decoded: <c>DAT_0071c3f0</c>, written 20.0 at level
+    /// setup (<c>FUN_004735b0</c>, <c>0x0047415b</c>). ⚠ Flat world Y, not a terrain follow: it
+    /// saves a plane over water and does nothing over a ridge, which is what the ray is for.</summary>
     public const float AltitudeFloorM = 20f;
 
     /// <summary>The world-Y ceiling above which no ray is cast and a running climb-out is released
-    ///, decoded: <c>DAT_0071c3f4</c>, written 8000.0 alongside the floor above.</summary>
+    ///, decoded: <c>DAT_0071c3f4</c>, written 8000.0 alongside the floor above. A candidate
+    /// maneuver predicted to end above it is taken with no obstacle test.</summary>
     public const float ProbeCeilingM = 8000f;
 
     /// <summary>Obstacle-probe lookahead, seconds of current velocity, decoded: the original's
@@ -211,12 +212,12 @@ public sealed class AiModeMachine
     /// weighted up <see cref="SignatureWeight"/>× during selection; null/empty = none.</summary>
     public IReadOnlyCollection<string>? SignatureManeuvers;
 
-    /// <summary>Line-of-sight probe for the avoid-crash test: static world plus other aircraft,
-    /// never the caster's own body (docs/org/aiPilot.md "What the ray can hit"). Returns the
-    /// struck body's name, or null for a clear line, the name lets the transition log say
-    /// whether the override fired on terrain or another aircraft. The host wires
-    /// <c>FlightController.AvoidCrashBlocksLine</c>; a null delegate means no world data and the
-    /// mode is never entered.</summary>
+    /// <summary>Line-of-sight probe for the avoid-crash test and the maneuver veto's path sweep:
+    /// static world plus other aircraft, never the caster's own body (docs/org/aiPilot.md "What the
+    /// ray can hit"). Returns the struck body's name, or null for a clear line, so the transition
+    /// log can say whether the override fired on terrain or on another aircraft. The host wires
+    /// <c>FlightController.AvoidCrashBlocksLine</c>; a null delegate means no world data, so the
+    /// mode is never entered and no candidate is vetoed for an obstacle.</summary>
     public Func<Vector3, Vector3, string?>? ProbeBlocked;
 
     /// <summary>Whether a nitro-flagged library entry may be drawn at all: the injector installed
@@ -238,6 +239,7 @@ public sealed class AiModeMachine
     private Vector3 _lastPos;
     private Vector3 _lastVelocity;
     private Vector3? _nose;
+    private Basis? _attitude;
     private string? _lastManeuver;
     private string? _secondLastManeuver;
     private float _layOffHold;
@@ -335,16 +337,17 @@ public sealed class AiModeMachine
     /// <summary>One sim tick's transitions. <paramref name="targetMode"/> is the standing target's
     /// own mode when it is an AI aircraft, for the sixth-sense trigger; a human target reports
     /// null, since that roll is undecoded against a human.
-    /// <paramref name="targetVelocity"/>/<paramref name="targetIsHuman"/> feed the lay-off
-    /// pursued test, extended only to a human-piloted pursuer, and
-    /// <paramref name="targetNose"/> the evade flag's alignment clear.</summary>
+    /// <paramref name="targetVelocity"/>/<paramref name="targetIsHuman"/> feed the lay-off pursued
+    /// test, extended only to a human-piloted pursuer, <paramref name="targetNose"/> the evade
+    /// flag's alignment clear, and <paramref name="attitude"/> the frame the veto predicts in.</summary>
     public AiMode Update(Vector3 pos, Vector3 velocity, Vector3? targetPos, AiMode? targetMode,
         float dt, Vector3? targetVelocity = null, bool targetIsHuman = false, Vector3? nose = null,
-        Vector3? targetNose = null)
+        Vector3? targetNose = null, Basis? attitude = null)
     {
         _lastPos = pos;
         _lastVelocity = velocity;
         _nose = nose;
+        _attitude = attitude;
         if (Mode == AiMode.Stunned)
         {
             // Nothing interrupts a stun: the pilot has no controls to react with.
@@ -695,11 +698,11 @@ public sealed class AiModeMachine
         Transition(AiMode.AvoidCrash, reason);
     }
 
-    // One weighted seeded draw over the entries that pass the natural-touch and injector culls;
-    // null when no library is set or nothing passes. The weight is the entry's own bias plus one,
-    // penalised for the last two flown and multiplied up for a signature entry, floored last.
-    // The original's remaining term, a point for a maneuver whose simulated end helps the
-    // aircraft toward its preferred altitude, needs the flown-out program and is not modelled.
+    // One weighted seeded draw over the entries that pass the natural-touch, injector and altitude
+    // culls; null when no library is set or nothing passes. The weight is the entry's own bias plus
+    // one, penalised for the last two flown and multiplied up for a signature entry, floored last.
+    // The original's remaining term, a point for a program whose predicted end direction carries
+    // the aircraft toward its preferred altitude, wants a roster value this machine does not carry.
     private Maneuver? PickManeuver()
     {
         if (Library is not { Count: > 0 } library)
@@ -711,6 +714,8 @@ public sealed class AiModeMachine
             if (!m.EligibleFor(NaturalTouch))
                 continue;
             if (m.Nitro && NitroUsable?.Invoke() != true)
+                continue;
+            if (!EndsSafely(m))
                 continue;
             float weight = m.Bias + 1f;
             if (m.Name == _lastManeuver)
@@ -735,6 +740,38 @@ public sealed class AiModeMachine
         }
         return pool[^1].Maneuver;
     }
+
+    // The altitude veto, run before a program can be drawn: the candidate's PREDICTED end point
+    // decides, never the aeroplane's own altitude. Below AltitudeFloorM the program is dropped; at
+    // or above ProbeCeilingM it is kept with no obstacle test; between them the predicted path is
+    // swept segment by segment and any blocked segment drops it.
+    // ⚠ Do not fold this into the reactive arm. That one fires on an aeroplane already below the
+    // floor; this one keeps a doomed program from ever starting.
+    private bool EndsSafely(Maneuver maneuver)
+    {
+        var path = ManeuverExecutor.PredictedPath(maneuver, _lastPos, PredictionFrame());
+        float endY = path[^1].Y;
+        if (endY < AltitudeFloorM)
+            return false;
+        if (endY >= ProbeCeilingM || ProbeBlocked is not { } probe)
+            return true;
+        var from = _lastPos;
+        foreach (var point in path)
+        {
+            if (probe(from, point) is not null)
+                return false;
+            from = point;
+        }
+        return true;
+    }
+
+    // The frame a candidate program is predicted in: the aeroplane's own attitude when the caller
+    // supplies one, else the level frame of its nose, which is what a non-relative program composes
+    // onto in any case.
+    private Basis PredictionFrame() =>
+        _attitude ?? (_nose is { } n && n.LengthSquared() > 1e-4f
+            ? new Basis(Vector3.Up, Mathf.DegToRad(AiPilot.HeadingDegOf(n)))
+            : Basis.Identity);
 
     private void Transition(AiMode to, string reason)
     {

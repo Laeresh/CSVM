@@ -1824,39 +1824,6 @@ usual.
   pursuing".
   *Cross-refs:* `BL-524`, `docs/org/aiPilot.md`, `BL-522`'s closing commit (`git log --grep=BL-522`).
 
-- `BL-550` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The AI's altitude floor is enforced at one site in CSVM and at three in
-  the original: the manoeuvre veto and the mode-5 global disable are both missing.** *Decision:*
-  faithful, the floor becomes a session-scoped value and mode 5 suspends it for every AI aircraft
-  in the mission for the duration, global bleed included. *Evidence:*
-  decoded from `crimson.exe` while reading the cockpit lamps for `PLAN-cockpit-panel`. `AiModeMachine`'s
-  `AltitudeFloorM` (20 m world Y, `DAT_0071c3f0`) and `ProbeCeilingM` (8000 m, `DAT_0071c3f4`) are
-  the right constants and the climb-out that arms below the floor is the right behaviour, but the
-  original reads those two globals at **four** sites, not one. We have the reactive arm
-  (`AiModeMachine.cs:529`) and the goal clamp (`FUN_0041b560` at `0041b5c5`, ours as
-  `AiControlLaw.AimAltitudeFloor`). Missing: (1) the **manoeuvre veto**, `FUN_004201a0` at
-  `00420405`, which rejects a candidate manoeuvre whose PREDICTED end point falls below the floor
-  and takes a separate branch at `0042042d` when it lands above the ceiling, so the original never
-  *starts* a programme that would fly the aircraft into the ground; ours culls only on natural
-  touch and signature weight (`AiModeMachine.PickManeuver`). (2) `FUN_004216e0`, which sets mode 5
-  after writing `DAT_0071c3f0 = -FLT_MAX` at `004216f5` and restoring it at `00421775`. Since the
-  floor is a **global**, that suspends it for every AI aircraft in the mission for the duration,
-  not just the one entering the mode. *Why it matters at the controls:* an AI that commits to a
-  split-S at 60 m flies it into the terrain and is saved only by the reactive climb-out, which
-  abandons the manoeuvre mid-programme. The visible difference is enemies that pick sane
-  manoeuvres near the deck rather than starting doomed ones and yanking out. *Fix shape:* add the
-  predicted-end-point test to `PickManeuver`'s cull, reusing the `Maneuver` programme's own end
-  pose rather than inventing a predictor. For the mode-5 disable, move `AltitudeFloorM` off the
-  per-machine constant onto a session-scoped value every `AiModeMachine` reads, suspended on
-  mode-5 entry and restored on exit by the one aircraft that entered it, with a suite case
-  showing a second aircraft's floor gone while the first is in mode 5. *⚠ Traps:* the floor is flat world Y and NOT a terrain
-  follow, so it saves an aircraft over water and does nothing over a ridge; the forward probe is
-  what handles terrain, and neither is a substitute for the other. Do not fold the veto into the
-  reactive arm, which is a different mechanism at a different moment. ⚠ Whether the original's
-  mode 5 is worth reproducing at all is open: a global floor disable reads like a deliberate
-  licence for one scripted manoeuvre, and porting it faithfully means every other AI aircraft
-  loses its floor at the same time. *Cross-refs:* `BL-523` (the same mode machine's
-  patrol/pursue cycle), `docs/org/aiPilot.md`, `PLAN-cockpit-panel` (the decode session that found this).
-
 - `BL-699` `[Perf]` `[Owed-playtest]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: trace]` **The wave's aeroplanes are built in the
   loading screen and the launch frame binds one; whether the hitch a player feels is gone is the
   author's to say.** *Evidence:* the author feels a hitch on every wave spawn in every mission, not

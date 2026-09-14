@@ -297,7 +297,7 @@ public sealed class AiPilot
             var mode = machine.Update(model.Position, model.VelocityDir * model.Speed,
                 quarry?.Position, quarry?.Mode, dt,
                 quarry?.Velocity, quarry?.IsHumanPiloted ?? false,
-                nose: -model.Attitude.Z, targetNose: quarry?.Nose);
+                nose: -model.Attitude.Z, targetNose: quarry?.Nose, attitude: model.Attitude);
             // The two states the escort law itself short-circuits on come first, then the escort,
             // which is the whole dispatch for a wingman, a maneuver included, since the original
             // never reaches its maneuver arm from the mode-4 fork.
@@ -367,10 +367,11 @@ public sealed class AiPilot
     // multiplies all three channels every step; a pilot with no machine gets a neutral 1.
     private FlightInput Fly(FlightModel model, float dt, Vector3 aimPoint, Vector3 aimVelocity,
         in AiLawParams p, bool emergency = false, bool engaged = false, bool gunLead = false,
-        bool stationKeeping = false)
+        bool stationKeeping = false, bool openAltitudeBand = false)
     {
         var input = AiControlLaw.Steer(model, aimPoint, aimVelocity, p, Throttle, dt,
-            emergency, engaged, gunLead, Machine?.SixthSenseFactor ?? 1f, stationKeeping);
+            emergency, engaged, gunLead, Machine?.SixthSenseFactor ?? 1f, stationKeeping,
+            openAltitudeBand);
         Throttle = input.Throttle;
         return input;
     }
@@ -536,7 +537,9 @@ public sealed class AiPilot
     }
 
     // The approach (FUN_004216e0): the run's current point on the emergency table, no aim
-    // velocity, and inside LockRangeM of it the rail takes the pose.
+    // velocity, and inside LockRangeM of it the rail takes the pose. The altitude band is opened
+    // for this solve alone, so a ribbon entry below the AI floor or above the airframe's ceiling
+    // is flown to rather than clamped away from.
     private FlightInput FlyDangerZoneApproach(FlightModel model, float dt, AiModeMachine machine)
     {
         var run = ZoneRun!;
@@ -545,7 +548,7 @@ public sealed class AiPilot
         if (new Vector2(toAim.X, toAim.Z).LengthSquared() > 1f)
             TargetHeadingDeg = HeadingDegOf(toAim);
         TargetAltitude = aim.Y;
-        var input = Fly(model, dt, aim, Vector3.Zero, AiLawParams.AvoidCrash);
+        var input = Fly(model, dt, aim, Vector3.Zero, AiLawParams.AvoidCrash, openAltitudeBand: true);
         float range = toAim.Length();
         if (range < DangerZoneRibbon.LockRangeM)
         {

@@ -87,7 +87,10 @@ public static class AiControlLaw
     /// is. On the quicker fighters this binds well before <c>fd_speed · SpeedCap</c> does.</summary>
     public const float SpeedCeiling = 111.76f;
 
-    /// <summary>The floor the aim point's altitude is held above, a compiled 20 m global.</summary>
+    /// <summary>The floor the aim point's altitude is held above, a compiled 20 m global.
+    /// ⚠ The danger-zone approach opens the whole band around its own solve and closes it again in
+    /// the same call, so this is a one-solve exemption and never a mission-wide suspension; nothing
+    /// else in the original writes the global (docs/org/aiPilot.md).</summary>
     public const float AimAltitudeFloor = 20f;
 
     /// <summary>How fast the commanded throttle walks toward the desired speed, per second.</summary>
@@ -144,12 +147,14 @@ public static class AiControlLaw
 
     /// <summary>One step's stick and throttle for an aim point. <paramref name="emergency"/> is the
     /// crash-recovery arm; <paramref name="engaged"/> is the combat driver's authority bonus;
-    /// <paramref name="gunLead"/> swaps the fly-to solve for a firing solution.
+    /// <paramref name="gunLead"/> swaps the fly-to solve for a firing solution;
     /// <paramref name="stationKeeping"/> swaps the desired-speed ceiling for
-    /// <see cref="StationCeiling"/>, and is the escort's alone.</summary>
+    /// <see cref="StationCeiling"/> and is the escort's alone; <paramref name="openAltitudeBand"/>
+    /// drops the aim-altitude clamp for this solve, which only the danger-zone approach asks.</summary>
     public static FlightInput Steer(FlightModel model, Vector3 aimPoint, Vector3 aimVelocity,
         in AiLawParams p, float throttle, float dt, bool emergency = false, bool engaged = false,
-        bool gunLead = false, float skillFactor = 1f, bool stationKeeping = false)
+        bool gunLead = false, float skillFactor = 1f, bool stationKeeping = false,
+        bool openAltitudeBand = false)
     {
         var stats = model.Stats;
         var att = model.Attitude;
@@ -160,18 +165,22 @@ public static class AiControlLaw
         float noseY = att.Z.Y;
 
         // The aim point is held inside the AI's altitude band, and an aim velocity that would carry
-        // it further outside is flattened rather than followed.
-        if (aimPoint.Y > stats.FlightCeiling)
+        // it further outside is flattened rather than followed. The band opens only for a caller
+        // that must reach a point outside it, which is the danger-zone approach and nothing else.
+        if (!openAltitudeBand)
         {
-            aimPoint.Y = stats.FlightCeiling;
-            if (aimVelocity.Y > 0f)
-                aimVelocity.Y = 0f;
-        }
-        if (aimPoint.Y < AimAltitudeFloor)
-        {
-            aimPoint.Y = AimAltitudeFloor;
-            if (aimVelocity.Y < 0f)
-                aimVelocity.Y = 0f;
+            if (aimPoint.Y > stats.FlightCeiling)
+            {
+                aimPoint.Y = stats.FlightCeiling;
+                if (aimVelocity.Y > 0f)
+                    aimVelocity.Y = 0f;
+            }
+            if (aimPoint.Y < AimAltitudeFloor)
+            {
+                aimPoint.Y = AimAltitudeFloor;
+                if (aimVelocity.Y < 0f)
+                    aimVelocity.Y = 0f;
+            }
         }
 
         var delta = aimPoint - pos;

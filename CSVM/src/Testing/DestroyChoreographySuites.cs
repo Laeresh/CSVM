@@ -1506,6 +1506,11 @@ internal static class DestroyChoreographySuites
                 }
                 rig.ManualAdvance = true;
 
+                // One tick first, so the machine knows where the aeroplane is: the selection vetoes
+                // a program predicted to end under the altitude floor, and an unseated machine
+                // would read the origin.
+                machine.Update(spawn, Vector3.Forward, null, null, Dt, attitude: Basis.Identity);
+
                 // A bite covering the whole pool, which the decoded roll fails outright.
                 machine.NotifyDamage(0f, 10f, 0f, 10f);
                 bool armed = machine.Executor is { Maneuver.Nitro: true };

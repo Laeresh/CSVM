@@ -218,6 +218,30 @@ public class AiControlLawTests
         Assert.Equal(0.85 - (0.35 * Dt), law.Throttle, 5);
     }
 
+    [Fact]
+    public void TheAimAltitudeBandOpensOnlyForTheCallerThatAsksForIt()
+    {
+        // The danger-zone approach is the original's one caller that opens the band, around its own
+        // solve alone. A point under the floor is flown to; closed, it is pulled up to the floor,
+        // which commands less nose-down. Shallow aim points keep the elevator proportional.
+        var under = new Vector3(0f, 5f, -12000f);
+        Assert.True(Pitch(under, open: true) < Pitch(under, open: false));
+
+        // The ceiling half of the same clamp, and the same exemption.
+        var over = new Vector3(0f, 3000f, -12000f);
+        Assert.True(Pitch(over, open: true) > Pitch(over, open: false));
+
+        // An aim point already inside the band reads the same either way.
+        var inside = new Vector3(0f, 420f, -12000f);
+        Assert.Equal(Pitch(inside, open: false), Pitch(inside, open: true), 6);
+    }
+
+    // The elevator command for one aim point on the approach's own table, with the emergency arm
+    // set so the roll branch is the same on both sides of the comparison.
+    private static float Pitch(Vector3 aimPoint, bool open) =>
+        AiControlLaw.Steer(Model(), aimPoint, Vector3.Zero, AiLawParams.AvoidCrash, 0.85f, Dt,
+            emergency: true, openAltitudeBand: open).Pitch;
+
     private static FlightModel Model(float fdSpeed = 113f, float rudderTol = 0.2f,
         Basis? attitude = null, float speed = 80f)
     {

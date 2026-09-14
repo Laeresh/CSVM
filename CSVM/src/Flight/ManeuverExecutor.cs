@@ -20,6 +20,11 @@ public sealed class ManeuverExecutor
     /// its attitude was never captured. Not an original value.</summary>
     public const float ZeroDurationTimeoutS = 6f;
 
+    /// <summary>How far <see cref="PredictedPath"/> carries the aircraft per step, metres, decoded
+    /// (<c>FUN_004201a0</c>, the float at <c>0x006036a0</c> and the same value pushed at
+    /// <c>0x0042045a</c>): 240 mph in m/s. A selection-time estimate only, never flown.</summary>
+    public const float PredictedStepM = 107.2896f;
+
     /// <summary>Throttle flown for the whole program. Mutable like <see cref="AiPilot"/>'s
     /// orders; the shipped data carries no per-step throttle.</summary>
     public float Throttle = 1f;
@@ -49,6 +54,24 @@ public sealed class ManeuverExecutor
     /// frame; the owner (D11's state machine) is expected to switch input sources.</summary>
     public bool Done => StepIndex >= Maneuver.Steps.Count;
 
+    /// <summary>The program's predicted flight path from <paramref name="pos"/> at
+    /// <paramref name="attitude"/>: one <see cref="PredictedStepM"/> segment per step along that
+    /// step's own target forward, chained, the last point being the program's predicted end. This
+    /// is what the maneuver library's altitude veto reads, so it composes the same steps onto the
+    /// same entry frame <see cref="Next"/> flies rather than modelling the aircraft.</summary>
+    public static Vector3[] PredictedPath(Maneuver maneuver, Vector3 pos, Basis attitude)
+    {
+        var reference = ReferenceFrame(maneuver, attitude);
+        var path = new Vector3[maneuver.Steps.Count];
+        var at = pos;
+        for (int i = 0; i < path.Length; i++)
+        {
+            at -= TargetBasis(reference, maneuver.Steps[i]).Z * PredictedStepM;
+            path[i] = at;
+        }
+        return path;
+    }
+
     /// <summary>One sim step's stick and throttle. The first call captures the entry frame:
     /// the level entry-heading frame, or the full entry attitude when the maneuver is
     /// <c>relative</c>.</summary>
@@ -57,16 +80,13 @@ public sealed class ManeuverExecutor
         if (!_begun)
         {
             _begun = true;
-            var att = model.Attitude.Orthonormalized();
-            _reference = Maneuver.Relative
-                ? att
-                : new Basis(Vector3.Up, Mathf.DegToRad(AiPilot.HeadingDegOf(-att.Z)));
+            _reference = ReferenceFrame(Maneuver, model.Attitude);
         }
 
         var error = Vector3.Zero;
         while (!Done)
         {
-            error = BodyFrameError(model.Attitude, TargetBasis(Maneuver.Steps[StepIndex]));
+            error = BodyFrameError(model.Attitude, TargetBasis(_reference, Maneuver.Steps[StepIndex]));
             var step = Maneuver.Steps[StepIndex];
             // Half a frame of slack so an accumulated float clock advances on the nearest
             // frame rather than one late (60 × 1/60f sums just under 1.0).
@@ -93,6 +113,16 @@ public sealed class ManeuverExecutor
         };
     }
 
+    // The frame the steps compose onto: the full entry attitude for a `relative` program, the
+    // level entry-heading frame otherwise, which is the original's own pair of branches.
+    private static Basis ReferenceFrame(Maneuver maneuver, Basis attitude)
+    {
+        var att = attitude.Orthonormalized();
+        return maneuver.Relative
+            ? att
+            : new Basis(Vector3.Up, Mathf.DegToRad(AiPilot.HeadingDegOf(-att.Z)));
+    }
+
     // The rotation from the current attitude to the target as a body-frame
     // axis·angle vector (radians), whose components line up with the stick axes.
     private static Vector3 BodyFrameError(Basis attitude, Basis target)
@@ -108,10 +138,10 @@ public sealed class ManeuverExecutor
 
     // The step's target attitude in the world frame: entry frame · yaw · pitch · roll
     // (degrees; body axes, pitch +up about X, yaw +left about Y, roll +left about Z).
-    // ⚠ Whether the original mirrors a maneuver left/right at selection time is undecided,
-    // do not bake a side in here.
-    private Basis TargetBasis(ManeuverStep step) =>
-        _reference
+    // ⚠ Do not bake a side in here. The original mirrors the whole program on a coin flip at
+    // selection, which negates every step's yaw and roll at once (docs/org/aiPilot.md).
+    private static Basis TargetBasis(Basis reference, ManeuverStep step) =>
+        reference
         * new Basis(Vector3.Up, Mathf.DegToRad(step.YawDeg))
         * new Basis(Vector3.Right, Mathf.DegToRad(step.PitchDeg))
         * new Basis(Vector3.Back, Mathf.DegToRad(step.RollDeg));

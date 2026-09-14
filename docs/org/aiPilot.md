@@ -852,16 +852,61 @@ hotter lever, and it ends when the check stops setting the state.
 
 Two neighbouring facts about the same floor. `FUN_0041b560`, the shared steering law, reads
 `DAT_0071c3f0` directly (`0x0041b5c5`, `0x0041b5d5`), so the floor is enforced inside the control
-law as well as by this check. And `FUN_004216e0` (the maneuver, reached from the follower
-`FUN_0041d1f0` at `0x0041d4f2` and the merge rule `FUN_0041d9f0` at `0x0041da75`) bypasses both
-bounds: it stashes `DAT_0071c3f0` and writes −FLT_MAX (`0x004216f5`), with a paired per-vehicle
-ceiling at `+0x314` written +FLT_MAX, and restores both at `0x00421775`.
+law as well as by this check. And `FUN_004216e0`, the danger-zone approach (reached from the
+follower `FUN_0041d1f0` at `0x0041d4f2` and the merge rule `FUN_0041d9f0` at `0x0041da75`),
+bypasses both bounds: it stashes `DAT_0071c3f0` and writes −FLT_MAX (`0x004216f5`), with a paired
+per-vehicle ceiling at `+0x314` written +FLT_MAX, and restores both at `0x00421775`.
 
-⚠ **That bypass spans one steering solve, not the maneuver's duration.** The two writes bracket a
-single `FUN_0041b560` call and the restore is the next thing the function does, so the clamp is off
-for one aim-point evaluation. It therefore never reaches `FUN_0041f810`, which the frame loop calls
-from its own site and which always sees the restored 20.0. Nothing in the original suspends crash
-avoidance while a maneuver runs.
+⚠ **That bypass spans one steering solve, not a mode and not a duration.** The two writes bracket
+the single `FUN_0041b560` call at `0x0042176a`, and the restore is three instructions after it
+returns, so the clamp is off for one aim-point evaluation. The state-5 write `+0x358 = 5` sits at
+`0x0042180f`, well past the restore, so this is not a mode-5 disable and there is no window in
+which a second aircraft could read an opened floor: the global is back at 20.0 before anything else
+in the frame runs. The bypass also never reaches `FUN_0041f810`, which the frame loop calls from
+its own site and which always sees the restored 20.0. Nothing in the original suspends the floor
+for the duration of anything, and the only writer of the global outside level setup is this pair.
+
+`AiPilot.FlyDangerZoneApproach` is the port: it is the one caller that passes
+`AiControlLaw.Steer`'s `openAltitudeBand`, so a ribbon entry point under 20 m or over the
+airframe's `flight_ceiling` is flown to rather than clamped away from, and every other caller keeps
+the band closed. The shipped ribbons do not exercise it: the `campaign-racers` suite still carries
+C2/M03's six racers through the same seven zones with the world's colliders up, so the exemption
+binds only where a mission authors a zone outside the band.
+
+### The maneuver veto, the fourth reader of the two bounds
+
+`FUN_004201a0`, the evasive-maneuver selector, reads both bounds once per CANDIDATE, against a
+point that candidate is predicted to reach rather than against the aeroplane's own position. For
+each library entry it copies the step list (`FUN_00421f50`), composes the entry frame onto every
+step (`FUN_0045f7c0`, the vehicle quaternion at `+0x150` for a `relative` entry and the level
+heading frame off `+0x180` otherwise), and sums each step's own forward (`FUN_0045f860` folding
+`FUN_0045fd80`, which rotates the unit −Z at `DAT_00607b40` by the step and adds). That sum times
+**107.2896** (`0x006036a0`, 240 mph in m/s) added to the position at `+0x204` is the predicted end
+point, and its Y goes through the same three bands `FUN_0041f810` uses:
+
+| predicted end Y | What happens |
+|---|---|
+| below `DAT_0071c3f0` (**20.0**) | the candidate is dropped outright, `0x00420405` |
+| `DAT_0071c3f0` … `DAT_0071c3f4` (**8000.0**) | sweep the predicted path, a hit drops it, `0x0042042d` |
+| above `DAT_0071c3f4` | the candidate is kept, with no sweep at all |
+
+The sweep is `FUN_0045f8a0`: the same chain walked one segment at a time, `FUN_004c8f70` between
+each consecutive pair, with the aeroplane's own node deactivated for the duration exactly as the
+crash check deactivates it. This is why the original never STARTS a program that would fly it into
+the ground, and it is a different mechanism at a different moment from the reactive climb-out.
+
+⚠ **A coin flip mirrors the program before the prediction.** `rand() & 1` at `0x0042031e` runs
+`FUN_0045f840`, which applies `FUN_0045f770` to every copied step: the step's own X axis is
+reflected against the unit X at `DAT_006379b0`, which on each pure axis works out as "negate the
+yaw and the roll, keep the pitch". The forward vector's vertical component is the same either way,
+so the ALTITUDE test reads identically on both sides of the flip and only the swept ground track
+differs. CSVM does not draw the flip (`ManeuverExecutor` deliberately bakes no side in), so its
+veto matches the original on altitude and is half of it on obstacles.
+
+`AiModeMachine.PickManeuver` runs the three bands through `ManeuverExecutor.PredictedPath`, which
+composes the same steps onto the same entry frame `Next` flies, and sweeps the path through the
+same `ProbeBlocked` delegate the crash check uses. ⚠ The machine predicts from the position and
+attitude `Update` was last handed, so a rig that never steps the machine vetoes against the origin.
 
 ### Which state wins
 
@@ -929,9 +974,12 @@ CSVM's probe is `FlightController.AvoidCrashBlocksLine`, masking `CollisionLayer
 with the caster's own body excluded, which is this rule. `AiModeMachine` carries the rest of the
 band structure: `ProbeLookaheadS` 4.5 s, `ProbeIntervalMinS`/`ProbeIntervalMaxS` 0.5…1.0 s drawn
 per plane from its seeded rng, `AltitudeFloorM` 20, `ProbeCeilingM` 8000, `ClimbOutM` 1000, one ray
-along the aeroplane's own velocity, and release on the first clear ray. What remains invented there
-is `ProbeMinLookaheadM`, marked as such, plus `AiPilot.ClimbOutBreakM` below, which a netted pilot
-flies and an escorting one does not.
+along the aeroplane's own velocity, and release on the first clear ray. The same two bounds serve
+`AiModeMachine.EndsSafely`, the maneuver veto above, which is a separate reader at a separate
+moment and must not be folded into the reactive arm: this one refuses to start a doomed program,
+that one rescues an aeroplane already in trouble. What remains invented is `ProbeMinLookaheadM`,
+marked as such, plus `AiPilot.ClimbOutBreakM` below, which a netted pilot flies and an escorting one
+does not.
 
 ### Retired: a second, deck-slanted probe ray
 
@@ -1111,7 +1159,12 @@ seeded at `−FLT_MAX` under a strict compare.
 
 The aim point is the run's CURRENT point (segment, metres, lane), flown through the steering law
 on the emergency table `DAT_0061fb48` (0.6/1.3) with no aim velocity, and with the altitude floor
-`DAT_0071c3f0` and the vehicle ceiling `+0x314` opened for that one solve. When the 3-D distance
+`DAT_0071c3f0` and the vehicle ceiling `+0x314` opened for that one solve (written `0x004216f5`
+and `0x004216ff`, restored `0x00421775` and `0x0042177b`, around the single `FUN_0041b560` call at
+`0x0042176a`). ⚠ The state-5 write is at `0x0042180f`, after the restore, so nothing here suspends
+the floor for any other aircraft or for any span longer than that one solve; whether a mission-wide
+suspension would have been the more interesting design is a question about a mechanism the original
+does not have. When the 3-D distance
 to that point falls under 105 m (11025 m²) the state becomes **5** and the rail state is seeded:
 `+0x35c` the offset from the rail point, `+0x374` the rail point, `+0x368` the aeroplane's
 velocity minus `speed × tangent`, `+0x380` the lock time, and the velocity zeroed. There is no

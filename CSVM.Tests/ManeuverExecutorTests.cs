@@ -136,6 +136,21 @@ public class ManeuverExecutorTests
         Assert.True(model.Position.Y < 1500f, $"split_s ended higher than it began ({model.Position.Y:0.0} m)");
     }
 
+    [ExtractedDataFact]
+    public void ThePredictedPathChainsOneStepReachPerProgramStep()
+    {
+        var splitS = Maneuvers.Load(InstallZrdr).Single(m => m.Name == "split_s");
+        var path = ManeuverExecutor.PredictedPath(splitS, new Vector3(0f, 1500f, 0f), Basis.Identity);
+
+        // Level, straight down, then two reversals: one step lower and one step back down the
+        // entry heading, which is what the selection-time altitude veto reads.
+        Assert.Equal(splitS.Steps.Count, path.Length);
+        float reach = ManeuverExecutor.PredictedStepM;
+        Assert.Equal(1500f - reach, path[^1].Y, 2);
+        Assert.Equal(reach, path[^1].Z, 2);
+        Assert.Equal(0f, path[^1].X, 2);
+    }
+
     private static Maneuver Hand(string name, IReadOnlyList<ManeuverStep> steps) => new()
     {
         Name = name,
