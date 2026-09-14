@@ -2023,33 +2023,6 @@ usual.
   loses its floor at the same time. *Cross-refs:* `BL-523` (the same mode machine's
   patrol/pursue cycle), `docs/org/aiPilot.md`, `BL-431` (the decode session that found this).
 
-- `BL-695` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: data]` `[CM14]` **CM14's cannon-hatch ladder can complete with no Gemini cannon destroyed at
-  all.** *Evidence (traced from a sortie log):* on one CM14 run the whole primary ladder completed
-  without a single `[anim] damage:` line on any `lbroadNN` node anywhere in the mission window, and
-  with the Gemini still alive at the end (`engines 9/14`, never `DESTROYED`); the mission was Won at
-  208.7 s through `hooked_to_klondike`. The six `lbroad11..32` guns deploy normally in that window,
-  so the nodes exist and are reachable. The completions track the hull's ENGINE count rather than
-  its hatches: `objective 12` (authored `COMPLETION_COUNT 3`) completes on the line after
-  `geminizep' engines 11/14`, the third engine kill, and `objective 13` (`COMPLETION_COUNT 5`) on
-  the line after `engines 9/14`, the fifth. Ten `wep_07` FLAK launches and five engine kills over the
-  window, no hatch damage.
-  A second logged run shows the ladder working correctly off real hatch kills, so the fault is
-  conditional rather than constant, and finding what distinguishes the two runs is the first step.
-  *⚠ Traps:* **the evidence above is stale and has to be re-flown before anything is changed.** It
-  was taken on a build without `KillCalledDestructible`, and `BL-694`'s landing commit
-  (`git log --grep=BL-694`) is where the whole cannon-hatch chain is decoded: a gasbag section owns
-  its four bays AND its four engines, so a section demolition moves both counts together and a bay
-  and engine correlation is what the authored data produces rather than a defect. Two of this
-  entry's own readings are unsafe on any build: an absent `[anim] damage:` line is not evidence a
-  bay survived, because a bay killed by another definition's call logs none
-  (only `AnimRuntime.DamageAt` writes that line), and a ladder completing with no hatch shot is authored
-  behaviour once the hull dies, since `all_gmzep_gasbags` demolishes every section. What is left to
-  answer is the run's own shape: the Gemini alive at the end with five engines gone and the ladder
-  complete. Do not tighten the objective count; `gemini-gasbag-bays` asserts the authored six.
-  *Cross-refs:* `BL-694`'s landing commit, `BL-639`,
-  [`docs/formats/mission-entities.md`](docs/formats/mission-entities.md) "A gasbag section owns its
-  bays and its engines".
-
 - `BL-699` `[Perf]` `[Owed-playtest]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: trace]` **The wave's aeroplanes are built in the
   loading screen and the launch frame binds one; whether the hitch a player feels is gone is the
   author's to say.** *Evidence:* the author feels a hitch on every wave spawn in every mission, not

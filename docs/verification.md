@@ -84,6 +84,12 @@ member, and it does not go here.
   counter and the screenshot advance normally, so a bounded probe reads as dead rather than held.**
   Reach a chapter's geometry through a mission with no intro, or give a `--campaign=` run a minute
   of sim and read its `cutscene:` lines first.
+- **DIAG-27**, **Count a sortie's deaths off the lines that name a death, never off the absence of
+  a damage line.** A CM14 ladder read as crediting itself from nothing: every part its section burns
+  demolished died through `KillCalledDestructible`, which spends no health and wrote no line, and
+  `DamageAt`'s twelve-line ceiling had already been spent on chip hits. Both now always log a death.
+  `zep: … engines N/14` is a poll snapshot too, so the counts between two lines are kills nobody
+  printed.
 
 ## SHOT, screenshots and pixel evidence
 

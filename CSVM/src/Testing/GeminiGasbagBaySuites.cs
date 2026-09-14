@@ -40,6 +40,16 @@ internal static class GeminiGasbagBaySuites
         "lbroad11", "lbroad12", "lbroad21", "lbroad22", "lbroad31", "lbroad32",
     };
 
+    // The fourteen engines OBJECTIVE7 to 10 count, which are a separate pool set from the bays.
+    private static readonly string[] Engines =
+    {
+        "leng11", "leng12", "leng21", "leng22", "leng31", "leng32", "leng42",
+        "reng11", "reng12", "reng21", "reng22", "reng31", "reng32", "reng42",
+    };
+
+    // The three objectives that count INVALID deploy definitions, COMPLETION_COUNT 1, 3 and 5.
+    private static readonly int[] HatchLadder = { 11, 12, 13 };
+
     [Suite("gemini-gasbag-bays",
         "killing C2B/M04's Gemini by its gasbags leaves every cannon bay destroyed, whichever " +
         "three gasbags went (BL-694). Each torpedoed gasbag's authored gmzep_gasbagtorpedoN " +
@@ -69,6 +79,130 @@ internal static class GeminiGasbagBaySuites
             "a bay shot first, so its own section goes before the gasbags do");
 
         ctx.WriteArtifact("test-gemini-gasbag-bays.txt", report.ToString());
+    }
+
+    [Suite("gemini-engines-leave-the-bays",
+        "the Gemini's fourteen engines all shot off leaves every cannon bay alive and the hatch " +
+        "ladder where it stood. C2B/M04's OBJECTIVE11, 12 and 13 count deploy_gmzep_lbroadNN " +
+        "definitions reading INVALID, and the only writer of that latch is a bay's own destruction " +
+        "slot, so an engine kill can never move them however many engines go. This runs the shape a " +
+        "sortie log reads as ambiguous, engine deaths with the hull still flying, and pins the " +
+        "hatch ladder at zero against it")]
+    internal static void GeminiEnginesLeaveTheBays(TestContext ctx)
+    {
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
+        string chapterZrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, Chapter);
+        ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
+        ctx.RequireData(chapterZrdr, $"{Chapter} zrdr");
+
+        var report = new StringBuilder();
+        var script = ObjectiveScript.Load(missionZrdr);
+        ctx.WithWorld(Chapter, collision: false, mission: Mission, world =>
+        {
+            var runtime = world.Runtime;
+            var defs = Zeppelins.Load(missionZrdr);
+            var nets = AiNets.Load(chapterZrdr);
+            ZeppelinRuntime? zeps = null;
+            try
+            {
+                zeps = new ZeppelinRuntime(defs,
+                    name => runtime.FindNodes(name) is { Count: > 0 } hits ? hits[0] : null, nets);
+                zeps.WireDamage(runtime);
+                RunEnginesOnly(ctx, runtime, zeps, script, report);
+            }
+            finally
+            {
+                zeps?.Free();
+            }
+        });
+
+        ctx.WriteArtifact("test-gemini-engines-leave-the-bays.txt", report.ToString());
+    }
+
+    private static void RunEnginesOnly(TestContext ctx, AnimRuntime runtime, ZeppelinRuntime zeps,
+        ObjectiveScript script, StringBuilder report)
+    {
+        var hull = runtime.FindNodes(Hull).FirstOrDefault();
+        ctx.Check(hull != null, $"the {Hull} world node resolves in the {Chapter}/{Mission} world");
+        if (hull == null)
+        {
+            return;
+        }
+
+        ctx.Check(zeps.Wake(Hull), $"{Hull} starts dormant on its record and the mission wake puts its pools in play");
+        for (int i = 0; i < 30; i++)
+        {
+            runtime.Advance(Tick);
+        }
+
+        var engines = new Dictionary<string, DestructibleRegistry.Instance>();
+        foreach (string engine in Engines)
+        {
+            var node = runtime.FindNodes(engine, hull).FirstOrDefault();
+            if (node != null && runtime.Destructibles.PoolsOn(node).FirstOrDefault() is { } pool)
+            {
+                engines[engine] = pool;
+            }
+        }
+
+        ctx.Same(Engines.Length, engines.Count,
+            $"each of the {Hull}'s fourteen engines carries its own HEALTH pool pooled={engines.Count}");
+
+        foreach (var pool in engines.Values)
+        {
+            runtime.DamageAt(pool.Anchor, 10_000f);
+        }
+
+        // Long enough for every engine's own death sequence and for anything it calls to settle, so a
+        // zero here is a state nothing was still on its way to writing.
+        for (int i = 0; i < (int)(AfterKillSeconds / Tick); i++)
+        {
+            runtime.Advance(Tick);
+            zeps.SimStep(Tick);
+        }
+
+        int dead = engines.Values.Count(p => p.Status == DestructibleRegistry.State.Destroyed);
+        report.AppendLine($"engines destroyed {dead} of {Engines.Length}, {Hull} alive={!zeps.IsDead(Hull)}, " +
+            $"gasbag survivors {zeps.SurvivorsOf(Hull)}");
+        ctx.Same(Engines.Length, dead, $"every engine pool is destroyed dead={dead} of {Engines.Length}");
+
+        // The premise the whole check rests on: gasbag zones are a separate pool set and an engine
+        // death spends none of them, so the hull is still flying under a dead engine deck.
+        ctx.Check(!zeps.IsDead(Hull),
+            $"…with the {Hull} still flying, since no gasbag zone was spent (survivors {zeps.SurvivorsOf(Hull)})");
+
+        foreach (string bay in LeftBays)
+        {
+            var node = runtime.FindNodes(bay, hull).FirstOrDefault();
+            var pool = node == null ? null : runtime.Destructibles.PoolsOn(node).FirstOrDefault();
+            report.AppendLine($"{bay}: hp={pool?.Health ?? -1f:0.##} status={pool?.Status.ToString() ?? "unpooled"} " +
+                $"deploy_gmzep_{bay}={runtime.AnimStateOf($"deploy_gmzep_{bay}")}");
+            ctx.Check(pool != null && pool.Status != DestructibleRegistry.State.Destroyed,
+                $"{bay} is untouched by the engine kills status={pool?.Status.ToString() ?? "unpooled"}");
+        }
+
+        int invalid = InvalidDeploys(runtime);
+        ctx.Same(0, invalid,
+            $"no deploy_gmzep_lbroad definition reads INVALID after fourteen engine deaths invalid={invalid}");
+
+        foreach (int number in HatchLadder)
+        {
+            var def = script.ByNumber(number);
+            ctx.Check(def is { AnimStates.Count: > 0 },
+                $"OBJECTIVE{number} carries the ANIM_STATE condition this suite is about");
+            if (def is not { AnimStates.Count: > 0 })
+            {
+                continue;
+            }
+
+            int matched = def.AnimStates.Count(e => runtime.AnimStateOf(e.Name) == e.State);
+            int required = def.AnimStateCount ?? def.AnimStates.Count;
+            report.AppendLine($"OBJECTIVE{number}: {matched} of {def.AnimStates.Count} authored states met, COMPLETION_COUNT {required}");
+            ctx.Check(matched < required,
+                $"OBJECTIVE{number}'s authored ANIM_STATE count is NOT met by engine kills matched={matched} required={required}");
+        }
+
+        ctx.Note($"{Chapter}/{Mission}: {dead} engine(s) shot off a flying {Hull} leaves {invalid} of {LeftBays.Length} deploy_gmzep_lbroad definition(s) INVALID, so the hatch ladder does not move");
     }
 
     private static void Leg(TestContext ctx, string missionZrdr, string chapterZrdr,

@@ -120,6 +120,17 @@ two pairs to four and three pairs to six against thresholds of 1, 3 and 5. It al
 `INVALID` states run ahead of the pools: three bay deaths latch all six while their three sister
 pools are still waiting on the +1 s and +8 s burns.
 
+⚠ **The ladder moves on bays alone, and a sortie log is easy to misread here.** An engine's destroy
+definition invalidates its own name and its propeller and nothing else, so however many engines go
+the bay count stays where it was. The two ladders are independent and interleave in the same log:
+the engine ladder counts `geminizep/<engine>/healthy` going inactive, the hatch ladder counts
+`deploy_gmzep_lbroadNN` going `INVALID`, and the `engines N/14` lines are poll snapshots rather
+than one line per kill. So an `engines 11/14` standing next to a hatch objective's completion is
+one section's demolition being read twice, not the hatch objective reading the engine count. The
+arithmetic is the check: two `INVALID` deploys never cost fewer than four engines, and the third
+primary's five never fewer than twelve. The hull survives all of it, since the section chain spends
+bay, engine and turret pools and never touches a gasbag zone.
+
 ### Units and the load-time pitch clamp
 
 `yaw`, `pitch`, `accel_pitch`, `accel_yaw`, `max_rate_yaw`, `max_rate_pitch` and

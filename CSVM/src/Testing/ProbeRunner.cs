@@ -118,6 +118,7 @@ public sealed class ProbeRunner
         // sequences in one frame; the framed object is what the screenshot needs. Loud when it bites.
         const int cap = 64;
         int killed = 0;
+        var refused = new List<string>();
         bool haveBounds = false;
         foreach (var target in targets.Values)
         {
@@ -141,11 +142,23 @@ public sealed class ProbeRunner
             // Spend more than the whole health pool so a single call kills it outright (DamageAt runs
             // the death sequence at zero). Feeding the anchor node is exactly how --damage-hd drives it.
             runtime.DamageAt(target.Anchor, target.MaxHealth + 1f);
-            killed++;
+            // ⚠ Count what died, never what was asked to die. A pool whose owner is still deactivated
+            // is Dormant and refuses the hit, and a probe that reports those as kills hands the reader
+            // an empty log to explain (a deactivated zeppelin's parts are the whole authored case).
+            if (target.Status == Mech3.DestructibleRegistry.State.Destroyed)
+            {
+                killed++;
+            }
+            else
+            {
+                refused.Add(target.Def.Name);
+            }
         }
         var c = bounds.GetCenter();
         string at = haveBounds ? Log.Format($" near ({c.X:0}, {c.Y:0}, {c.Z:0})") : "";
-        Log.Info("core", $"--destroy='{name}': destroyed {killed} object(s){at} ({string.Join(", ", targets.Values.Take(killed).Select(t => t.Def.Name).Distinct())})");
+        string held = refused.Count == 0 ? ""
+            : $"; {refused.Count} refused the hit, out of the world until something wakes them ({string.Join(", ", refused.Distinct())})";
+        Log.Info("core", $"--destroy='{name}': destroyed {killed} object(s){at} ({string.Join(", ", targets.Values.Where(t => t.Status == Mech3.DestructibleRegistry.State.Destroyed).Select(t => t.Def.Name).Distinct())}){held}");
         return killed;
     }
 

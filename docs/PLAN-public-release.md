@@ -175,7 +175,7 @@ and the code before any list took it.
 so this item adds no A-wave item and moves no entry out of `backlog.md`. `BL-694` itself is
 confirmed still open: its `git log --grep` returns the filing commit `3af41b84`, `PT-103`'s
 retirement and this plan's own opening commit, with no landing among them, and its entry is already
-out of `backlog.md`, which now carries only cross-references to it from `BL-698` and `BL-695`.
+out of `backlog.md`, which now carries only a cross-reference to it from `BL-698`.
 
 The candidates that came closest, and why each failed the bar rather than being talked past
 it. `BL-717`, the Pandora's own turrets firing on the Balmoral CM02 wants captured, reads like it
@@ -273,8 +273,7 @@ check on a 14-engine hull, so a green suite is no evidence about this ship. Ther
 recovery for a player already stuck: `--debug-objective=N` drives `INACTIVEn` conditions only and
 cannot satisfy an `ANIM_STATE` objective, and the campaign's four-attempt skip offer needs four
 RECORDED failures, which an unwinnable-and-unlosable mission never produces. Do not clamp bags to
-`y = 0`; `BL-668` tuned no constant and this should not either. `BL-695` is the mirror-image defect
-(the ladder crediting with no cannon touched) and stays its own item. *Cross-refs:* `BL-695`,
+`y = 0`; `BL-668` tuned no constant and this should not either. *Cross-refs:*
 `BL-698`, `BL-639`, `BL-640`, `BL-668`, `CAP-55`.
 
 **Verified.** The open question first, because it is the whole item. The fifth and sixth
@@ -329,10 +328,8 @@ that carry bays. The 8-chapter `--freecam` regression exits 0 in every chapter w
 and the complete `.\RunTests.ps1` is green: 3,450 units, 257 engine suites with engine errors
 clean, 18 goldens hash-identical, exit 0. The one thing a headless run
 cannot sign off is the sortie itself, so the two flights this item's Verify names are `PT-119`, and
-`CAP-55` still owes the original's own answer to (b) and (d) there. `BL-695`'s and `BL-698`'s traps
-are corrected in `backlog.md`: both were waiting on this open question, and `BL-695`'s central
-evidence needs re-reading, since a bay killed by another
-definition's call writes no `[anim] damage:` line at all.
+`CAP-55` still owes the original's own answer to (b) and (d) there. `BL-698`'s trap is corrected in
+`backlog.md`: it was waiting on this open question.
 
 # Wave B, What the package says about itself
 
@@ -1044,13 +1041,6 @@ Anything A2 or a later wave closes comes off this list.
 
 ## Campaign missions
 
-- **In the CM14 attack on the Gemini, the cannon-hatch objectives can tick over from engine kills
-  rather than from hatch hits, so the third primary sometimes completes without a hatch destroyed.**
-  No workaround is needed, since the mission still reaches its end. (`BL-695`; ⚠ **E42 should drop
-  this entry unless it is re-flown first.** A2's decode shows a gasbag section owns its four bays
-  and its four engines together, so the two counts moving together is the authored chain, and a
-  ladder completing with no hatch shot is what the hull's own death does. The entry's log was taken
-  on a build without `KillCalledDestructible`, and its trap in `backlog.md` now says so.)
 - **The Gemini's gasbags burn without ever finishing, so fire alone never brings the zeppelin
   down.** Shoot the gasbags directly instead of waiting for the fire, since three of the five kill
   it. (`BL-639`; no landing commit, and it is blocked on unfilmed reference footage, `CAP-47`.)

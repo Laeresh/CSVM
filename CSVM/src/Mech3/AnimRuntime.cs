@@ -1679,9 +1679,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 DestructibleKilled?.Invoke(healthyNode);
             RunDeathSequence(inst);
         }
-        if (_damagesLogged < 12)
+        // ⚠ Never let the ceiling swallow a death. It exists to keep a firefight's chip hits out of
+        // the log, and which parts died is what a sortie is read back for.
+        if (destroyed || _damagesLogged < 12)
         {
-            _damagesLogged++;
+            if (!destroyed)
+                _damagesLogged++;
             Log.Info("anim", $"damage: -{healthDamage:0.##} on {NameOf(inst.Anchor)} HP {before:0.##}→{inst.Health:0.##}{(destroyed ? " DESTROYED, death sequence run" : $" [stage {inst.DamageStage}]")}");
         }
         return true;
@@ -3698,6 +3701,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             return own;
         own.Health = 0f;
         own.Status = DestructibleRegistry.State.Destroyed;
+        // In the `damage:` family on purpose: this kill spends no HP, so without a line of its own
+        // a sweep for what died reads a demolished part as a part nobody ever touched.
+        Log.Info("anim", $"damage: {NameOf(own.Anchor)} DESTROYED by a call to '{target.AnimName ?? target.Name}', death sequence run");
         if (HealthyNodeNameOf(own.Def) is { } healthyNode)
             DestructibleKilled?.Invoke(healthyNode);
         RunDeathSequence(own);
