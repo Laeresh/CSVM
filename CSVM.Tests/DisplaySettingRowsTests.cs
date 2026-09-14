@@ -7,7 +7,8 @@ namespace CSVM.Tests;
 /// <summary>The row rules the two Options screens share for the four display settings: a label per
 /// vocabulary entry, the forgiving reads (an unknown word reads as the setting's own default, a
 /// size the screen does not offer reads as the screen's own size, a size row borderless owns reads
-/// the screen's own whatever is saved) and the wrap a sideways step takes. Engine-free, so the
+/// the screen's own whatever is saved), the size the options file names standing in the picker as
+/// an entry of its own, and the wrap a sideways step takes. Engine-free, so the
 /// multi-screen and other-screen cases this machine cannot show are proved by handing the rules a
 /// list.</summary>
 public class DisplaySettingRowsTests
@@ -68,7 +69,7 @@ public class DisplaySettingRowsTests
     [Theory]
     [InlineData("3840x2160")]
     [InlineData(null)]
-    [InlineData("800x600")]
+    [InlineData("1280x960")]
     public void ASizeTheScreenDoesNotOfferReadsAsTheScreensOwnSize(string? saved)
     {
         var offered = ResolutionSetting.SizesUnder(1600, 900);
@@ -122,6 +123,96 @@ public class DisplaySettingRowsTests
 
         Assert.Equal("2560x1440", wide.Words[DisplaySettingRows.ResolutionIndex(wide, "2560x1440", DisplayWords.Windowed)]);
         Assert.Equal(small.Fallback, small.Words[DisplaySettingRows.ResolutionIndex(small, "2560x1440", DisplayWords.Windowed)]);
+    }
+
+    /// <summary>The standard table carries a 4:3 ladder rather than one rung, the original game's own
+    /// frame being 4:3, and every rung is offered where the screen holds it.</summary>
+    [Theory]
+    [InlineData("800x600")]
+    [InlineData("1024x768")]
+    [InlineData("1280x960")]
+    [InlineData("1600x1200")]
+    public void TheStandardSizesCarryTheFourByThreeLadder(string size)
+    {
+        Assert.Contains(size, ResolutionSetting.Unknown.Words);
+        Assert.Contains(size, ResolutionSetting.SizesUnder(3840, 2160).Words);
+    }
+
+    /// <summary>The listed sizes ascend by width then height, which is the order a custom entry has to
+    /// sort into.</summary>
+    [Fact]
+    public void TheOfferedSizesAscend()
+    {
+        var words = ResolutionSetting.SizesUnder(3840, 2160).Words;
+
+        for (int i = 1; i < words.Count; i++)
+        {
+            Assert.True(OptionsStore.TryParseResolution(words[i - 1], out int width, out int height));
+            Assert.True(OptionsStore.TryParseResolution(words[i], out int nextWidth, out int nextHeight));
+            Assert.True(width < nextWidth || (width == nextWidth && height < nextHeight));
+        }
+    }
+
+    /// <summary>A size written into the options file by hand stands in the picker as an entry of its
+    /// own, where it sorts among the listed ones, and is what the row reads and the apply takes. The
+    /// row's own word is the saved one, so a page that shows it and saves writes it back unchanged
+    /// rather than replacing it with the nearest listed size.</summary>
+    [Theory]
+    [InlineData("640x480", 0)]
+    [InlineData("1152x864", 2)]
+    public void ASizeWrittenIntoTheFileStandsWhereItSorts(string custom, int at)
+    {
+        var screen = ResolutionSetting.SizesUnder(1920, 1080);
+        var offered = screen.Including(custom);
+
+        Assert.Equal(screen.Words.Count + 1, offered.Words.Count);
+        Assert.Equal(custom, offered.Words[at]);
+        Assert.Equal(at, DisplaySettingRows.ResolutionIndex(offered, custom, DisplayWords.Windowed));
+        Assert.Equal(custom, offered.Words[DisplaySettingRows.ResolutionIndex(offered, custom, DisplayWords.Windowed)]);
+        Assert.Equal(custom, ResolutionSetting.Resolve(custom, screen, DisplayWords.Windowed).Word);
+        Assert.Equal("options.json", ResolutionSetting.Resolve(custom, screen, DisplayWords.Windowed).Source);
+    }
+
+    /// <summary>A listed size, a word that is not a size and nothing saved at all each leave the list
+    /// as it stands, so the picker never doubles an entry or offers a word no window could take.</summary>
+    [Theory]
+    [InlineData("1024x768")]
+    [InlineData("1152 x 864")]
+    [InlineData("")]
+    [InlineData(null)]
+    public void AListedOrMalformedSizeLeavesThePickerAsItIs(string? word)
+    {
+        var screen = ResolutionSetting.SizesUnder(1920, 1080);
+
+        Assert.Equal(screen.Words, screen.Including(word).Words);
+    }
+
+    /// <summary>The screen filter holds over a hand-written size too: one the screen cannot hold is
+    /// not offered and falls back to the screen's own size, the same reading a listed size the screen
+    /// lost gets. A window larger than the screen would put its own controls off the edge.</summary>
+    [Fact]
+    public void ASizeTheScreenCannotHoldIsNotOfferedHoweverItWasSaved()
+    {
+        var screen = ResolutionSetting.SizesUnder(1920, 1080);
+
+        Assert.Equal(screen.Words, screen.Including("2560x1440").Words);
+        Assert.Equal(screen.Fallback, screen.Words[DisplaySettingRows.ResolutionIndex(screen, "2560x1440", DisplayWords.Windowed)]);
+        Assert.Equal(screen.Fallback, ResolutionSetting.Resolve("2560x1440", screen, DisplayWords.Windowed).Word);
+    }
+
+    /// <summary>The display mode decides what a hand-written size means as it decides a listed one:
+    /// borderless owns the size, so the row reads the screen's own and the apply takes it, while
+    /// windowed and exclusive fullscreen both take the file's.</summary>
+    [Theory]
+    [InlineData(DisplayWords.Windowed, "1152x864")]
+    [InlineData(DisplayWords.Fullscreen, "1152x864")]
+    [InlineData(DisplayWords.Borderless, "1920x1080")]
+    public void TheDisplayModeDecidesWhatAHandWrittenSizeMeans(string mode, string expected)
+    {
+        var offered = ResolutionSetting.SizesUnder(1920, 1080).Including("1152x864");
+
+        Assert.Equal(expected, offered.Words[DisplaySettingRows.ResolutionIndex(offered, "1152x864", mode)]);
+        Assert.Equal(expected, ResolutionSetting.Resolve("1152x864", offered, mode).Word);
     }
 
     /// <summary>A monitor index no screen answers to reads as the screen the window already stands

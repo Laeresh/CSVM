@@ -464,6 +464,10 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     // what lets every page's apply do that.
     private string? _monitorIndex;
     private string? _resolution;
+    // The size the options file named when the pages last read it, which the size row offers as an
+    // entry of its own (Sizes). Held apart from the stepped choice so a hand-written size stays in
+    // the list after a step lands elsewhere, and a step back reaches it again.
+    private string? _savedResolution;
     private string? _displayMode;
     private string? _vsync;
     // The four saved volume levels, carried for the same reason: the AUDIO page shows them and the
@@ -506,8 +510,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     public string? OpenVideoOption => _vpOpen;
 
     /// <summary>The sizes the resolution row offers, which is what the window's own screen can
-    /// hold. Every other row's words are a fixed vocabulary; this one's are enumerated per screen,
-    /// so a shell with no screen to ask offers every candidate size instead.</summary>
+    /// hold, plus the size the options file names where that is not among them. Every other row's
+    /// words are a fixed vocabulary; this one's are enumerated per screen, so a shell with no
+    /// screen to ask offers every candidate size instead.</summary>
     public IReadOnlyList<string> ResolutionWords => Sizes.Words;
 
     /// <summary>The screens the monitor row offers, one label per screen in index order. Enumerated
@@ -889,6 +894,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         _nearestAfterKill = saved?.NearestAfterKill;
         _monitorIndex = saved?.MonitorIndex;
         _resolution = saved?.Resolution;
+        _savedResolution = saved?.Resolution;
         _displayMode = saved?.DisplayMode;
         _vsync = saved?.VSync;
         _audioMaster = saved?.AudioMaster;
@@ -1573,10 +1579,12 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     }
 
     // The screen's sizes and the one a saved size it lacks falls back to, read through the reader
-    // on every access like the screens below. The row's value falls back through this list's own
-    // fallback, the same word ResolutionSetting.Resolve lands on, so the row cannot name a size the
-    // window would not be standing at.
-    private CSVM.Utils.SizeList Sizes => _screenSizes?.Invoke() ?? CSVM.Utils.ResolutionSetting.Unknown;
+    // on every access like the screens below, widened with the size the options file named so a
+    // hand-written one stands on the row where it sorts. The row's value falls back through this
+    // list's own fallback, the same word ResolutionSetting.Resolve lands on, so the row cannot name
+    // a size the window would not be standing at.
+    private CSVM.Utils.SizeList Sizes =>
+        (_screenSizes?.Invoke() ?? CSVM.Utils.ResolutionSetting.Unknown).Including(_savedResolution);
 
     // The machine's screens and the one a saved index that names none falls back to. Read through
     // the reader on every access, since a monitor can be plugged in while the page stands open. The

@@ -197,6 +197,10 @@ public sealed partial class LaunchMenu : CanvasLayer
     // monitor stopped offering is answered by the resolver's own forgiving read rather than by a
     // stale position.
     private string? _monitorChoice, _resolutionChoice, _displayModeChoice, _vsyncChoice;
+    // The size the options file named when this screen opened, which the size row offers as an entry
+    // of its own (ResolutionSizes). Held apart from the stepped choice so a hand-written size stays
+    // in the list after a step lands elsewhere, and a step back reaches it again.
+    private string? _savedResolution;
     // The four volume levels as saved. This screen shows none of them and hands them back untouched,
     // so its apply cannot clear a level the Original presentation's AUDIO page wrote.
     private int? _audioMasterChoice, _audioMusicChoice, _audioEffectsChoice, _audioVoiceChoice;
@@ -2517,6 +2521,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         _graphicsChoice = saved.GraphicsMode ?? GraphicsMode.Default;
         _monitorChoice = saved.MonitorIndex;
         _resolutionChoice = saved.Resolution;
+        _savedResolution = saved.Resolution;
         _displayModeChoice = saved.DisplayMode;
         _vsyncChoice = saved.VSync;
         _audioMasterChoice = saved.AudioMaster;
@@ -2842,9 +2847,15 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     private string ResolutionChoiceLabel()
     {
-        var sizes = ResolutionSetting.ScreenSizes();
+        var sizes = ResolutionSizes();
         return sizes.Words[DisplaySettingRows.ResolutionIndex(sizes, _resolutionChoice, _displayModeChoice)];
     }
+
+    // The sizes the resolution row offers: the standing screen's own list, widened with the size the
+    // options file named when the screen opened. A size written in by hand therefore stands in the
+    // row where it sorts for as long as the page is open, so a step off it can step back onto it,
+    // and only a step the player makes replaces it.
+    private SizeList ResolutionSizes() => ResolutionSetting.ScreenSizes().Including(_savedResolution);
 
     private string DisplayModeChoiceLabel() =>
         DisplaySettingRows.DisplayModeLabels[DisplaySettingRows.WordIndex(DisplayWords.DisplayModes, _displayModeChoice, DisplayModeSetting.Default)];
@@ -2872,7 +2883,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             return;
         }
 
-        var sizes = ResolutionSetting.ScreenSizes();
+        var sizes = ResolutionSizes();
         int at = DisplaySettingRows.ResolutionIndex(sizes, _resolutionChoice, _displayModeChoice);
         _resolutionChoice = sizes.Words[DisplaySettingRows.Step(at, dir, sizes.Words.Count)];
     }

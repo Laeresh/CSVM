@@ -235,14 +235,14 @@ is the borderless window, `ExclusiveFullscreen` the exclusive mode. Nothing here
 which keeps `project.godot`'s windowed 1280x720 viewport, so the borderless default never reaches a golden.
 
 ## src/Utils/ResolutionSetting.cs
-The size the game draws at, whose meaning the display mode sets. Godot exposes no video-mode list, only a screen's own
-size, so `Sizes` builds the per-screen `SizeList` as the standard desktop sizes that fit inside `ScreenGetSize` plus that
-size, the list's fallback; `Unknown` is the engine-free list, `SavedWord` the `--det` guard. `Resolve` layers the saved
-`resolution` over the list, a size the screen does not offer falling back to that fallback and never to the nearest, which
-would hand the player an aspect ratio they did not pick; a `Pinned` mode, which borderless is, takes the fallback whatever
-is saved, and both Options screens draw the size row dead under it. `Apply` sizes only a windowed window and re-centres
-it, a resize growing off-screen; Godot's exclusive fullscreen keeps the screen's size on Windows and switches no display
-mode, so the chosen size becomes the render target through `Window.ContentScaleSize`. The log line reports what resulted.
+The size the game draws at, whose meaning the display mode sets. Godot exposes no video-mode list, only a screen's own size, so `Sizes` builds the
+per-screen `SizeList` as the standard desktop sizes that fit inside `ScreenGetSize` plus that size, the list's fallback; the standard table's 4:3 ladder
+carries four rungs, that being the original's own shape. `SizeList.Including` widens a list with the size `options.json` names where the table lacks it and
+the screen holds it, which is how a hand-written size is shown, picked and saved back rather than replaced; `Unknown` is the engine-free list, `SavedWord`
+the `--det` guard. `Resolve` layers the saved `resolution` over the list, a size the screen cannot hold falling back to that fallback and never to the
+nearest, which would hand the player an aspect ratio they did not pick; a `Pinned` mode, which borderless is, takes the fallback whatever is saved, and both
+Options screens draw the size row dead under it. `Apply` sizes only a windowed window and re-centres it, a resize growing off-screen; Godot's exclusive
+fullscreen keeps the screen's size on Windows and switches no display mode, so the chosen size becomes the render target through `Window.ContentScaleSize`.
 
 ## src/Utils/MonitorSetting.cs
 The screen the window sits on. `Screens` labels the machine's screens one per index, "Screen 0 (1920x1080)"

@@ -227,6 +227,16 @@ a switch, a JSON boolean, so a value of any other kind is what gets dropped ther
 Shape is all the store can prove. Whether that screen is plugged in and whether it offers that mode
 are questions for the caller holding an engine, which owns the fallback.
 
+`resolution` is the one field a player is meant to be able to set by hand. Both presentations' size
+rows offer the standard sizes the screen can hold (a 4:3 ladder of 800x600, 1024x768, 1280x960 and
+1600x1200 among them), and a `resolution` the table does not carry stands beside them as an entry of
+its own, where it sorts: the row opens on it, a step can leave it and step back onto it while the
+page is open, and an accepted page writes it back unchanged. The screen still has to be able to hold
+it, so a size larger than the screen reads as never set and the row shows the screen's own size. What
+the size then means is the display mode's to say, for a hand-written size as for a listed one:
+windowed takes it as the window's size, exclusive fullscreen as the size the game draws at inside a
+screen-sized window, and borderless ignores it and runs at the desktop's own size.
+
 **An option is a store field plus a row in each presentation's Options screen.** Adding one means
 a nullable field on `OptionsDef` with its accepted-value set (or its shape check, and the canonical
 form beside it so the writing and validating sides cannot drift), the two writes in `Serialize` and

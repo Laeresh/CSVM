@@ -1763,17 +1763,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   screen. *Cross-refs:* `CSVM/src/Flight/IaWrapupBoard.cs`,
   `CSVM/src/UI/Menu/Original/OriginalInstantActionScreen.cs`, `BL-892`'s closing commit,
   `docs/formats/instant-action/wrap-up.md` ("The hold after the ending", which the board follows).
-- `BL-913` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **The resolution
-  picker offers one 4:3 size and snaps a hand-written size back to its list.** *Evidence:*
-  `ResolutionSetting.Standard` carries 1024x768 as the only 4:3 entry, filtered by what the screen
-  holds; `options.json` stores the size as a width-by-height word. *Fix shape:* add 800x600,
-  1280x960 and 1600x1200 to the table, and let a size written by hand into `options.json` survive
-  as its own entry in the picker (shown where it sorts, kept on save) instead of being replaced by
-  the nearest listed one. No custom-size dialog. *⚠ Traps:* the display mode decides what the
-  saved size means (`BL-896`'s closing commit); a custom size follows the same rule.
-  A new 4:3 or 5:4 size needs no HUD work: any pane narrower than 16:9 already brings the gauge
-  columns to the border (`GaugeCluster.ColumnAnchors`).
-  *Cross-refs:* `CSVM/src/Utils/ResolutionSetting.cs`, `BL-896`'s closing commit.
 - `BL-919` `[Fidelity]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: feel]` **The Ammo
   Selection screen offers a rocket row for a pylon the build never bought; the original hides
   it.** *Evidence:* the rows come from the airframe's stock fit, and since `BL-841` a pick on an

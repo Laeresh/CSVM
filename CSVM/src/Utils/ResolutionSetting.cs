@@ -8,22 +8,64 @@ namespace CSVM.Utils;
 /// named so a log line can say which layer the run is obeying.</summary>
 public readonly record struct ResolutionPlan(int Width, int Height, string Word, string Source);
 
-/// <summary>The sizes a resolution picker can offer for one screen, ascending, and the word a
-/// saved size the list does not hold falls back to: the screen's own size, which the list always
-/// holds.</summary>
-public readonly record struct SizeList(IReadOnlyList<string> Words, string Fallback);
+/// <summary>The sizes a resolution picker can offer for one screen, ascending, the word a saved
+/// size the list does not hold falls back to (the screen's own size, which the list always holds),
+/// and that screen's own pixels, the ceiling <see cref="Including"/> keeps a size under. A list
+/// built with no screen to ask carries a zero ceiling, which filters nothing.</summary>
+public readonly record struct SizeList(IReadOnlyList<string> Words, string Fallback, int ScreenWidth, int ScreenHeight)
+{
+    /// <summary>This list with <paramref name="word"/> standing as an entry of its own where it
+    /// sorts, which is what lets a size written into <c>options.json</c> by hand be shown, picked
+    /// and saved back rather than replaced by a listed one. A word the list already holds, one that
+    /// is not a size, and one the screen cannot hold each leave the list as it is, so what the
+    /// picker offers is still what the screen can hold.</summary>
+    public SizeList Including(string? word)
+    {
+        if (word == null || !OptionsStore.TryParseResolution(word, out int width, out int height)
+            || (ScreenWidth > 0 && (width > ScreenWidth || height > ScreenHeight)))
+        {
+            return this;
+        }
+
+        var widened = new List<string>(Words.Count + 1);
+        bool placed = false;
+        for (int i = 0; i < Words.Count; i++)
+        {
+            if (Words[i] == word)
+            {
+                return this;
+            }
+
+            if (!placed && OptionsStore.TryParseResolution(Words[i], out int listed, out int listedHeight)
+                && (width < listed || (width == listed && height < listedHeight)))
+            {
+                widened.Add(word);
+                placed = true;
+            }
+
+            widened.Add(Words[i]);
+        }
+
+        if (!placed)
+        {
+            widened.Add(word);
+        }
+
+        return this with { Words = widened };
+    }
+}
 
 /// <summary>
 /// The window's size, and which display modes honour it. The words are sizes in
-/// <see cref="OptionsStore.FormatResolution"/>'s spelling rather than a vocabulary, and the list a
-/// picker offers is built per screen by <see cref="Sizes"/>, so the row cannot offer a size the
-/// monitor cannot hold. The sources layer as <see cref="MonitorSetting"/>'s do, the saved size then
-/// the screen's own, with the display mode over both: borderless pins the size to the screen
-/// (<see cref="Pinned"/>) and exclusive fullscreen takes it as a render size, Godot's window there
-/// owning its own. <see cref="Apply"/> is the only place <see cref="DisplayServer.WindowSetSize"/>
-/// is called, and it runs after the mode. ⚠ Godot exposes no video-mode list, only the screen's own
-/// size (<see cref="DisplayServer.ScreenGetSize"/>), so "what the monitor offers" is that size and
-/// the standard sizes that fit inside it, not a list the driver handed us.
+/// <see cref="OptionsStore.FormatResolution"/>'s spelling rather than a vocabulary; a picker's list
+/// is built per screen by <see cref="Sizes"/> and widened by <see cref="SizeList.Including"/> with
+/// the size the options file names. The sources layer as <see cref="MonitorSetting"/>'s do, the
+/// saved size then the screen's own, with the display mode over both: borderless pins the size to
+/// the screen (<see cref="Pinned"/>) and exclusive fullscreen takes it as a render size, Godot's
+/// window there owning its own. <see cref="Apply"/> is the only place
+/// <see cref="DisplayServer.WindowSetSize"/> is called, and it runs after the mode. ⚠ Godot exposes
+/// no video-mode list, only the screen's own size (<see cref="DisplayServer.ScreenGetSize"/>), so
+/// "what the monitor offers" is that size and the standard sizes inside it, not the driver's list.
 /// </summary>
 public static class ResolutionSetting
 {
@@ -37,17 +79,21 @@ public static class ResolutionSetting
     /// no screen to ask (<see cref="Unknown"/>).</summary>
     public static readonly string ProjectSize = OptionsStore.FormatResolution(ProjectWidth, ProjectHeight);
 
-    // The sizes a picker offers where the screen holds them, ascending, one entry per shape a
-    // desktop monitor is actually sold in: 4:3, 16:9, 16:10, 21:9 and 32:9. A ceiling filter over
-    // this is the whole of the per-monitor list, Godot having no mode enumeration to ask.
+    // The sizes a picker offers where the screen holds them, ascending, over the shapes a desktop
+    // monitor is sold in: 4:3, 16:9, 16:10, 21:9 and 32:9. The 4:3 ladder carries four rungs rather
+    // than one because the original game's own frame is 4:3, so that shape is the one a player is
+    // most likely to want a choice within. A ceiling filter over this is the whole of the
+    // per-monitor list, Godot having no mode enumeration to ask, and a size the table lacks reaches
+    // the picker through the options file (SizeList.Including).
     private static readonly (int Width, int Height)[] Standard =
     {
-        (1024, 768), (1280, 720), (1280, 800), (1600, 900), (1680, 1050), (1920, 1080), (1920, 1200),
-        (2560, 1080), (2560, 1440), (3440, 1440), (3840, 2160), (5120, 1440),
+        (800, 600), (1024, 768), (1280, 720), (1280, 800), (1280, 960), (1600, 900), (1600, 1200),
+        (1680, 1050), (1920, 1080), (1920, 1200), (2560, 1080), (2560, 1440), (3440, 1440),
+        (3840, 2160), (5120, 1440),
     };
 
     // Initialised after Standard, which it is built from; static fields initialise in textual order.
-    private static readonly SizeList UnfilteredList = new(Format(Standard), ProjectSize);
+    private static readonly SizeList UnfilteredList = new(Format(Standard), ProjectSize, 0, 0);
 
     /// <summary>Every candidate size unfiltered with the project size as the fallback, what a caller
     /// with no screen to ask can offer. A shell composed without an engine (an engine-free test) is
@@ -93,7 +139,8 @@ public static class ResolutionSetting
         }
 
         fits.Sort(static (a, b) => a.Width != b.Width ? a.Width.CompareTo(b.Width) : a.Height.CompareTo(b.Height));
-        return new SizeList(Format(fits), OptionsStore.FormatResolution(screenWidth, screenHeight));
+        return new SizeList(
+            Format(fits), OptionsStore.FormatResolution(screenWidth, screenHeight), screenWidth, screenHeight);
     }
 
     /// <summary>Whether <paramref name="displayModeWord"/> pins the size to the screen's own,
@@ -105,10 +152,10 @@ public static class ResolutionSetting
 
     /// <summary>The size the three sources resolve to: the screen's own where
     /// <paramref name="displayModeWord"/> pins it, else <paramref name="savedWord"/> where
-    /// <paramref name="offered"/> holds it, else that list's fallback, the screen's own size.
-    /// ⚠ A saved size the screen does not offer falls back to the screen's size, never to the
-    /// nearest offered one. A nearest match needs a distance over sizes with no right answer.
-    /// docs/architecture/Utils.md has the rest of the reasoning.</summary>
+    /// <paramref name="offered"/> holds it or the screen can hold it
+    /// (<see cref="SizeList.Including"/>), else that list's fallback, the screen's own size.
+    /// ⚠ A saved size the screen cannot hold falls back to the screen's size, never to the nearest
+    /// offered one, a distance over sizes having no right answer. docs/architecture/Utils.md.</summary>
     public static ResolutionPlan Resolve(string? savedWord, SizeList offered, string? displayModeWord)
     {
         if (Pinned(displayModeWord))
@@ -118,7 +165,7 @@ public static class ResolutionSetting
                 : new ResolutionPlan(ProjectWidth, ProjectHeight, ProjectSize, DisplayWords.Borderless);
         }
 
-        if (savedWord != null && Offers(offered.Words, savedWord)
+        if (savedWord != null && Offers(offered.Including(savedWord).Words, savedWord)
             && OptionsStore.TryParseResolution(savedWord, out int width, out int height))
         {
             return new ResolutionPlan(width, height, savedWord, "options.json");

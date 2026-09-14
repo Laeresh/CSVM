@@ -24,6 +24,15 @@ namespace CSVM.Testing;
 /// which logs the line a run owes and moves nothing.</summary>
 internal static class DisplaySettingsSuites
 {
+    // The size the custom-entry checks write into the options file: the original game's own frame,
+    // absent from the standard table and small enough that no screen this runs on can fail to hold
+    // it, so the check reads the same on the hidden test desktop and at the controls.
+    private const string CustomSize = "640x480";
+
+    // Where the size row stands on the built-in Options screen, under difficulty, the targeting
+    // switch, the presentation, the graphics mode and the monitor.
+    private const int BuiltInResolutionRow = 5;
+
     // Every field OptionsDef carries, with a value the store validates and whether it is a display
     // setting, which is what makes it something no deterministic run may read. The list is compared
     // against the def by reflection, so a field added there and not here fails display-det-guard.
@@ -172,9 +181,12 @@ internal static class DisplaySettingsSuites
 
     [Suite("display-resolution",
         "The resolution setting: the list a screen offers holds that screen's own size as its "
-        + "fallback and no size larger than the screen, a saved size the list offers beats the "
-        + "fallback, a saved size it does not offer and nothing saved both fall back to the screen's "
-        + "own size rather than to the nearest or to project.godot's, windowed and exclusive "
+        + "fallback, a 4:3 ladder of four rungs and no size larger than the screen, a saved size the "
+        + "list offers beats the fallback, a saved size it does not offer and nothing saved both "
+        + "fall back to the screen's "
+        + "own size rather than to the nearest or to project.godot's, a size the file names by hand "
+        + "stands in the list where it sorts and is what both presentations' size rows draw, step "
+        + "off and back onto, and save back unchanged, windowed and exclusive "
         + "fullscreen both take the saved size while borderless pins it to the screen's own, a --det "
         + "launch reads no saved size while a plain one does, and the VIDEO page opens on the saved "
         + "size and carries it on what ACCEPT CHANGES applies, or draws it dead at the screen's own "
@@ -185,6 +197,16 @@ internal static class DisplaySettingsSuites
         ctx.Check(offered.Words.Contains("1920x1080") && offered.Fallback == "1920x1080"
             && offered.Words.Contains(ResolutionSetting.ProjectSize) && !offered.Words.Contains("2560x1440"),
             $"a 1920x1080 screen offers its own size as the fallback and the sizes under it, nothing larger ({string.Join(" ", offered.Words)})");
+        ctx.Check(offered.Words.Contains("800x600") && offered.Words.Contains("1024x768")
+            && offered.Words.Contains("1280x960") && !offered.Words.Contains("1600x1200"),
+            $"with the 4:3 rungs it can hold among them and the one it cannot left out ({string.Join(" ", offered.Words)})");
+        var byHand = offered.Including("1152x864");
+        ctx.Check(byHand.Words.Count == offered.Words.Count + 1 && byHand.Words[2] == "1152x864"
+            && offered.Words.SequenceEqual(offered.Including("2560x1440").Words),
+            $"a size the file names by hand stands where it sorts, one the screen cannot hold not at all ({string.Join(" ", byHand.Words)})");
+        var custom = ResolutionSetting.Resolve("1152x864", offered, DisplayWords.Windowed);
+        ctx.Check(custom is { Width: 1152, Height: 864, Source: "options.json" },
+            $"and it is the size the apply takes, not the nearest listed one ({Describe(custom)})");
         var narrow = ResolutionSetting.SizesUnder(800, 600);
         ctx.Check(narrow.Words.Contains("800x600") && narrow.Fallback == "800x600"
             && !narrow.Words.Contains(ResolutionSetting.ProjectSize),
@@ -225,6 +247,7 @@ internal static class DisplaySettingsSuites
             $"this screen's list fits inside the {screen.X}x{screen.Y} the engine reports and falls back to it ({string.Join(" ", here.Words)})");
 
         ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
         var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
         ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
         if (layout == null)
@@ -251,6 +274,9 @@ internal static class DisplaySettingsSuites
             AppliedSizeRow(ctx, layout);
             OptionsStore.UserOptions().Save(new OptionsDef { Resolution = "1024x768", DisplayMode = DisplayWords.Borderless });
             PinnedSizeRow(ctx, layout);
+            OptionsStore.UserOptions().Save(new OptionsDef { Resolution = CustomSize, DisplayMode = DisplayWords.Windowed });
+            CustomSizeRow(ctx, layout);
+            BuiltInCustomSizeRow(ctx);
         }
         finally
         {
@@ -518,6 +544,64 @@ internal static class DisplaySettingsSuites
         var plan = ResolutionSetting.Resolve(applied?.Resolution, screen, applied?.DisplayMode);
         ctx.Check(plan.Word == screen.Fallback && plan.Source == DisplayWords.Borderless,
             $"and the apply takes the screen's own size, the mode beating the file ({Describe(plan)})");
+    }
+
+    // The same row over a size the standard table does not carry, written into the options file by
+    // hand: the page opens on it, offers it in the list where it sorts, and ACCEPT CHANGES hands it
+    // back unchanged, so a hand-written size survives a visit to the page rather than being replaced
+    // by the nearest listed one.
+    private static void CustomSizeRow(TestContext ctx, MenuLayout layout)
+    {
+        var shell = new OriginalShell(layout, new FreeFlightFeature(), new PlayerSetupFeature(),
+            _ => null, options: () => OptionsStore.UserOptions().Load(), screenSizes: ResolutionSetting.ScreenSizes);
+        shell.Options.OpenVideo();
+        var screen = ResolutionSetting.ScreenSizes();
+        var words = shell.Options.ResolutionWords;
+        ctx.Check(shell.Options.ResolutionChoice == CustomSize
+            && Label(shell, OriginalOptionsScreen.ResolutionKey) == CustomSize,
+            $"the VIDEO page opens on a hand-written size and draws it ({Label(shell, OriginalOptionsScreen.ResolutionKey)})");
+        ctx.Check(words.Count == screen.Words.Count + 1 && words[0] == CustomSize && words.Contains(screen.Fallback),
+            $"which stands in the list where it sorts, beside every size the screen holds ({string.Join(" ", words)})");
+        var applied = Accept(shell);
+        ctx.Check(applied?.Resolution == CustomSize,
+            $"and ACCEPT CHANGES writes it back unchanged ({applied?.Resolution ?? "no exit"})");
+        var plan = ResolutionSetting.Resolve(applied?.Resolution, screen, applied?.DisplayMode);
+        ctx.Check(plan.Word == CustomSize && plan.Source == "options.json",
+            $"the apply taking the file's own size rather than the nearest listed one ({Describe(plan)})");
+    }
+
+    // The built-in presentation's size row over the same file: its list is widened the same way, so
+    // the hand-written size stands on the row, a sideways step leaves it for a listed size, and a
+    // step back reaches it again, the file's size holding its place for as long as the page is open.
+    private static void BuiltInCustomSizeRow(TestContext ctx)
+    {
+        var host = MenuSuiteHost.Bare(new List<MenuExit>(), ctx.DataRoot, out var seat);
+        var menu = CSVM.UI.LaunchMenu.Build(ctx.ZrdrPath, ctx.DataRoot, host, seat.Input);
+        ctx.Host.AddChild(menu);
+        try
+        {
+            menu.ShowMenu("options");
+            for (int i = 0; i < BuiltInResolutionRow; i++)
+            {
+                menu.Drive(new MenuCommands { MoveY = 1 });
+            }
+
+            ctx.Check(menu.ShownRowText == $"Resolution: {CustomSize}",
+                $"the built-in Options screen draws the hand-written size on its size row ({menu.ShownRowText})");
+            menu.Drive(new MenuCommands { MoveX = 1 });
+            string stepped = menu.ShownRowText;
+            ctx.Check(stepped != $"Resolution: {CustomSize}"
+                && stepped.StartsWith("Resolution: ", StringComparison.Ordinal),
+                $"a sideways step leaves it for a size the standard table carries ({stepped})");
+            menu.Drive(new MenuCommands { MoveX = -1 });
+            ctx.Check(menu.ShownRowText == $"Resolution: {CustomSize}",
+                $"and a step back reaches it again, its place in the list being the file's ({menu.ShownRowText})");
+        }
+        finally
+        {
+            ctx.Host.RemoveChild(menu);
+            menu.QueueFree();
+        }
     }
 
     // The display-mode row driven: the page opens on the saved word and ACCEPT CHANGES hands it back
