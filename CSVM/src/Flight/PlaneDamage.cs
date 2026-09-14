@@ -198,8 +198,9 @@ public sealed class PlaneDamage
     // 1:1; the leftovers are written back into the damage pair. Quirks kept on purpose: armor
     // standing against a hit with NO armor damage nulls the health damage outright, and the
     // health leftover is measured against the full magnitude, so the armor-shielded share
-    // re-enters the wrapper loop rather than vanishing.
-    private static void Spend(ref float dmgA, ref float dmgH, ref float poolA, ref float poolH)
+    // re-enters the wrapper loop rather than vanishing. Internal because the steady-hand roll's
+    // own leftover loop shrinks its copy of the pools through this arithmetic, not a second one.
+    internal static void Spend(ref float dmgA, ref float dmgH, ref float poolA, ref float poolH)
     {
         float covered = 0f;
         if (poolA > 0f)

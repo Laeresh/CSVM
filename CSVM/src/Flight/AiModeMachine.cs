@@ -119,6 +119,16 @@ public sealed class AiModeMachine
     /// this, not clamped to zero (<c>FUN_004201a0</c>, <c>0x00420607</c>).</summary>
     public const float MinSelectionWeight = 0.1f;
 
+    /// <summary>The base of the log that turns an authored <c>steady_hand_chance</c> into
+    /// <see cref="SteadyHandExponent"/>, decoded (<c>0x00608020</c>, read at <c>0x0047d00a</c>).
+    /// ⚠ The authored 0.5-to-0.08 pair is this log's argument, never a probability a roll is
+    /// compared against (docs/org/aiControlLaw.md, "The roll itself").</summary>
+    public const float SteadyHandLogBase = 0.7f;
+
+    /// <summary>The vehicle constructor's own steady-hand exponent (<c>0x004b03f4</c>), carried
+    /// by a pilot whose spawn resolved no rating.</summary>
+    public const float DefaultSteadyHandExponent = 1.03f;
+
     /// <summary>Invented: a pursuing human this far behind has "fallen behind", pursue eases
     /// into lay off past this gap. The mode and the intent are decoded; the distance is not.</summary>
     public const float LayOffEnterRangeM = 350f;
@@ -161,13 +171,12 @@ public sealed class AiModeMachine
     /// activation radius.</summary>
     public float ReturnRange = 1200f;
 
-    /// <summary>Probability that a hit's steady-hand test FAILS and the pilot evades,
-    /// <c>steady_hand_chance</c> (0.5 → 0.08 over the pair). The default is the pair's raw low
-    /// endpoint, not the rating-1 value (see <see cref="AiSkills.At"/>). ⚠ Flat is wrong twice over
-    /// and BL-728 owns the fix: the original weights the roll by the bite the hit takes out of the
-    /// remaining pool, and a higher rating evades MORE
-    /// (../../../docs/org/aiControlLaw.md, "The roll itself").</summary>
-    public float SteadyHandChance = 0.5f;
+    /// <summary>The steady-hand exponent, the original's <c>+0x968</c>: a hit passes with
+    /// probability <c>(1 - bite/pool)</c> raised to this, so the same round evades far more often
+    /// out of a worn-down pool than a fresh one. Spawn writes <see cref="ExponentFor"/> of the
+    /// rating's <c>steady_hand_chance</c>, which RISES with the rating, so the better pilot evades
+    /// more (docs/org/aiControlLaw.md, "The roll itself").</summary>
+    public float SteadyHandExponent = DefaultSteadyHandExponent;
 
     /// <summary>Probability that the sixth-sense test PASSES (the pilot follows the target's
     /// maneuver), <c>sixth_sense_chance</c> (0.45 → 0.71 over the pair). A failure stuns.</summary>
@@ -209,6 +218,17 @@ public sealed class AiModeMachine
     /// <c>FlightController.AvoidCrashBlocksLine</c>; a null delegate means no world data and the
     /// mode is never entered.</summary>
     public Func<Vector3, Vector3, string?>? ProbeBlocked;
+
+    /// <summary>Whether a nitro-flagged library entry may be drawn at all: the injector installed
+    /// and the engine alive (<c>FUN_004201a0</c>, <c>0x004202d5</c>-<c>0x004202ea</c>). The host
+    /// wires <c>FlightController</c>'s pair. ⚠ A null delegate is a pilot with no injector, so
+    /// <c>nitro_evade</c> is culled: difficulty 0 makes it eligible for everyone, and without the
+    /// boost its single step is six seconds of wings-level flight.</summary>
+    public Func<bool>? NitroUsable;
+
+    // The log's argument is floored so a chance of zero cannot hand the exponent an infinity.
+    // The shipped 0.5-to-0.08 pair never reaches it; an authored rating floors at 0.5.
+    private const double MinSteadyHandChance = 1e-6;
 
     private readonly Random _rng;
 
@@ -268,6 +288,27 @@ public sealed class AiModeMachine
 
     /// <summary>Lay off's altitude order, metres: the entry altitude.</summary>
     public float LayOffAltitude { get; private set; }
+
+    /// <summary>The spawn-side conversion, decoded (<c>FUN_0047c210</c>, <c>0x0047d00a</c>):
+    /// <c>e = ln(chance) / ln(0.7)</c> over the rating's resolved <c>steady_hand_chance</c>.
+    /// Falling chances give rising exponents, which is where "a better pilot evades more" comes
+    /// from.</summary>
+    public static float ExponentFor(float chance) => (float)(
+        Math.Log(Math.Max(chance, MinSteadyHandChance)) / Math.Log(SteadyHandLogBase));
+
+    /// <summary>The decoded pass probability for one hit (<c>FUN_004b1160</c>): the complement of
+    /// the fraction this hit bites out of the victim's pre-hit pool, raised to
+    /// <paramref name="exponent"/>. A bite covering the pool returns 0, which never passes.</summary>
+    public static double PassChance(float bite, float pool, float exponent) =>
+        pool <= 0f || bite >= pool ? 0d : Math.Pow(1d - (bite / (double)pool), exponent);
+
+    /// <summary>The armour-then-health slice this hit takes of the pre-hit pair
+    /// (<c>FUN_004b1160</c>, <c>+0x2c8</c> and <c>+0x2d0</c>): the armour damage while the armour
+    /// pool covers it, else that pool plus the health damage, else the whole pair.</summary>
+    public static float BiteOf(float armorDamage, float healthDamage, float armorPool, float healthPool) =>
+        armorDamage < armorPool ? armorDamage
+        : healthDamage < healthPool ? armorPool + healthDamage
+        : armorPool + healthPool;
 
     /// <summary>The engine's own name for a mode, the debug-readout vocabulary, verbatim.</summary>
     public static string NameOf(AiMode mode) => mode switch
@@ -386,33 +427,42 @@ public sealed class AiModeMachine
         return Mode;
     }
 
-    /// <summary>The hit path's entry (decoded: <c>FUN_004b9bc0</c>, <c>0x004b9f1e</c> onward):
-    /// rolls the steady-hand test on the absorbed damage, and a FAILED test sets the evade flag
-    /// and picks a library maneuver. A pilot with nothing eligible does not break off at all; it
-    /// keeps its engagement with the flag set. No player-health condition is modelled on this
-    /// roll, and no second roll is taken while the flag already stands.</summary>
-    public void NotifyDamage(float absorbed)
+    /// <summary>The hit path's entry (decoded: <c>FUN_004b9bc0</c>, <c>0x004b9f1e</c> onward), the
+    /// hit's two halves against the victim's PRE-hit pools: rolls the steady-hand test, and a
+    /// FAILED test sets the evade flag and picks a library maneuver whatever mode was running. A
+    /// pilot with nothing eligible does not break off at all; it keeps its engagement with the flag
+    /// set. Leftover damage re-enters as the wrapper loop's later passes do, so one impact can take
+    /// several rolls against a shrinking pool. No second roll while the flag already stands.</summary>
+    public void NotifyDamage(float armorDamage, float healthDamage, float armorPool, float healthPool)
     {
-        if (Mode is AiMode.Stunned or AiMode.AvoidCrash or AiMode.NavigatingDangerZone)
-        {
-            // no controls / emergency override / on rails, nothing to react with
-            LogNoRoll(absorbed, NameOf(Mode));
-            return;
-        }
         if (Evading)
         {
-            LogNoRoll(absorbed, "already evading"); // the original restamps here and rolls nothing
+            // the original restamps here and rolls nothing
+            LogNoRoll(armorDamage + healthDamage, "already evading");
             return;
         }
-        bool failed = _rng.NextDouble() < SteadyHandChance;
-        RollLogged?.Invoke(FormattableString.Invariant(
-            $"absorbed {absorbed:0.0} damage; steady hand test ")
-            + (failed ? "failed. Evading." : "passed. Not evading."));
-        if (!failed)
-            return;
-        Evading = true;
-        RememberReturnMode();
-        StartReaction("steady hand test failed");
+        float dmgA = armorDamage, dmgH = healthDamage, poolA = armorPool, poolH = healthPool;
+        while (true)
+        {
+            float bite = BiteOf(dmgA, dmgH, poolA, poolH);
+            bool failed = _rng.NextDouble() >= PassChance(bite, poolA + poolH, SteadyHandExponent);
+            RollLogged?.Invoke(FormattableString.Invariant(
+                $"absorbed {dmgA + dmgH:0.0} damage; steady hand test ")
+                + (failed ? "failed. Evading." : "passed. Not evading."));
+            if (failed)
+            {
+                Evading = true;
+                RememberReturnMode();
+                StartReaction("steady hand test failed");
+                return;
+            }
+            // The wrapper's own loop condition (FUN_004b9b30): both halves still unspent and the
+            // victim alive. The zone's share of the first pass is not modelled here, so this pool
+            // is the whole-vehicle pair throughout.
+            PlaneDamage.Spend(ref dmgA, ref dmgH, ref poolA, ref poolH);
+            if (dmgA <= 0f || dmgH <= 0f || poolH <= 0f)
+                return;
+        }
     }
 
     /// <summary>The position-update entry (decoded vocabulary: "AI has been evaded"): rolls the
@@ -645,8 +695,8 @@ public sealed class AiModeMachine
         Transition(AiMode.AvoidCrash, reason);
     }
 
-    // One weighted seeded draw over the entries that pass the natural-touch cull; null when no
-    // library is set or nothing passes. The weight is the entry's own selection bias plus one,
+    // One weighted seeded draw over the entries that pass the natural-touch and injector culls;
+    // null when no library is set or nothing passes. The weight is the entry's own bias plus one,
     // penalised for the last two flown and multiplied up for a signature entry, floored last.
     // The original's remaining term, a point for a maneuver whose simulated end helps the
     // aircraft toward its preferred altitude, needs the flown-out program and is not modelled.
@@ -659,6 +709,8 @@ public sealed class AiModeMachine
         foreach (var m in library)
         {
             if (!m.EligibleFor(NaturalTouch))
+                continue;
+            if (m.Nitro && NitroUsable?.Invoke() != true)
                 continue;
             float weight = m.Bias + 1f;
             if (m.Name == _lastManeuver)

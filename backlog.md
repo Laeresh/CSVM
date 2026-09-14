@@ -2006,48 +2006,6 @@ usual.
   *Cross-refs:* `BL-434` (the per-viewport splitscreen cost the same pass profiled), `BL-657`
   (CM18's generator launching at the wrong time, which is where the measured case is flown).
 
-- `BL-728` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **The steady-hand roll is a flat
-  probability where the original weights it by the fraction of the victim's remaining pool the hit
-  takes.** *Evidence:* the count says the roll fires often enough and the *shape* is wrong, in both
-  directions at once. Nine scripted sorties through the probe harness with the AI trace on (two AI
-  fighters on the empty stage at pinned ratings, three seeds each, plus three C1-style Instant
-  Action waves): at rating 2, 49 `NotifyDamage` calls, 22 rolls, 11 failures, observed 0.500 against
-  the resolved `steady_hand_chance` of 0.407; at rating 8, 39 calls, 19 rolls, 3 failures, observed
-  0.158 against 0.127; across the three IA waves 537 calls, 173 rolls, 46 failures. CSVM's roll
-  therefore behaves exactly as its own flat model says, which is the problem. `FUN_004b1160` is now
-  decoded (`docs/org/aiControlLaw.md`, "The roll itself"): the original computes
-  `p_pass = (1 - bite/pool) ^ e` with `bite` the armour-then-health slice this hit takes of the
-  **pre-hit** pool (`+0x2c8` plus `+0x2d0`), a lethal bite failing outright, and
-  `e = ln(steady_hand_chance(rating)) / ln(0.7)` written once at spawn into `+0x968` at `0x0047d00a`.
-  The authored 0.5-to-0.08 pair is the base of that log, not a failure chance, so `e` rises with the
-  rating (1.94 at 0, 3.71 at 5, 7.08 at 9) and the **better** pilot evades more, the opposite of
-  CSVM's `failed = rng < SteadyHandChance` and of that field's own doc comment. For a `wep_130`
-  round on a hostile Fury at Normal the original evades on 2.7% / 5.1% / 9.4% of hits at rating
-  0 / 5 / 9 at full health, and on 42.5% / 65.3% at rating 5 / 9 with a tenth of the pool left;
-  CSVM is flat at 0.500 / 0.267 / 0.080 regardless of damage. So CSVM over-evades a fresh enemy by
-  five to fifteen times and under-evades a wounded one by two to eight, and the reported feel is the
-  second half: a cornered enemy that should be thrashing flies on. Ratings in use: 380 of the
-  campaign's 414 roster blocks author `-1` and fall through to the airframe def's `steady_hand`
-  (0 to 7, mostly 3 to 7), the remaining 34 author 0, 5, 6, 7, 8 or 9; the IA personalities are
-  {1,5,6,2,4} with the ace at 9. Resolved chances 0 to 9: 0.500, 0.453, 0.407, 0.360, 0.313, 0.267,
-  0.220, 0.173, 0.127, 0.080. *Fix shape:* replace `AiModeMachine.SteadyHandChance` and its
-  `_rng.NextDouble() < SteadyHandChance` with the power law, which means `NotifyDamage` has to
-  receive the armour and health halves of the hit and the victim's two current pools separately
-  rather than one summed `absorbed` float (`FlightController.cs:1647`), and the spawn side has to
-  carry `e` instead of the raw chance. Three smaller divergences ride along: CSVM early-returns
-  `NotifyDamage` on `Stunned`/`AvoidCrash`/`NavigatingDangerZone`, which the original's handler does
-  not (it gates only on `+0xf8`, the class and the flag, and a failure overwrites whatever mode was
-  running), accounting for 37 of the 411 suppressed hits measured; the original loops leftover
-  damage back through the handler so one impact can take several rolls against a shrinking pool,
-  while CSVM rolls once; and `nitro_evade` was picked 9 of 60 times but flies six seconds
-  wings-level because `ManeuverExecutor` never consumes the step's `Nitro` flag, which reads at the
-  controls as no evade at all. *⚠ Traps:* do not restore a flat threshold under a new constant, the
-  fault is that the roll ignores damage, not that the number is off. `already evading` accounts for
-  374 of the 411 suppressed hits and is correct, the original restamps and rolls nothing there;
-  count the flag, not the mode. The counting is a scratch script rather than a suite: it costs nine
-  sorties of 60 to 90 seconds each, which does not fit the engine budget.
-  *Cross-refs:* `docs/org/aiControlLaw.md`.
-
 
 
 ## Tooling, platform & docs

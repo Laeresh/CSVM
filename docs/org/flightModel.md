@@ -3554,7 +3554,10 @@ call and must survive from the arm that raises them to the reader at the end of 
 `NitroSystem.BeginStep` is where they are cleared, at the top of `FlightController.AdvanceNitro`
 and nowhere later; clearing them in the tank update deletes the engage, which costs the boost its
 animation, its shake and its loop sound while the aircraft still accelerates. The plan's Decision 3 widens the player-only arms (the human command path, the shake) to
-every human pilot. The force couplings are `FlightModel.BoostLever` 1.8 and `BoostDragFactor` 0.8,
+every human pilot. The selection-side gate is `AiModeMachine.NitroUsable`, wired to the flown
+aircraft's injector and engine: a nitro-flagged entry is culled from the picker's draw without it,
+which is what keeps a pilot that cannot boost from answering a hit with six wings-level seconds.
+The force couplings are `FlightModel.BoostLever` 1.8 and `BoostDragFactor` 0.8,
 reached through `FlightInput.Boost`; the far-field cruise target reads the lever, not the boost,
 so a distant AI's `nitro_evade` changes nothing there, which is the decode
 (`0x48c5a0` reads `[obj+0x128]`). The injector flag is the hangar engine pick's nitrous bit for a

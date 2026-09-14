@@ -692,8 +692,9 @@ internal static class CampaignRosterSuites
 
             ctx.Check(plain.Machine.NaturalTouch == shifted,
                 $"the hostile '{SkillPlainBlock}' flies its authored natural touch {PlainNaturalTouch} shifted to {shifted} at Normal: {plain.Machine.NaturalTouch}");
-            ctx.Check(Mathf.IsEqualApprox(plain.Machine.SteadyHandChance, flooredChance),
-                $"…and its authored steady hand of {PlainSteadyHand} floors at rating 0 rather than going negative: {plain.Machine.SteadyHandChance:0.000} vs {flooredChance:0.000}");
+            float flooredExponent = AiModeMachine.ExponentFor(flooredChance);
+            ctx.Check(Mathf.IsEqualApprox(plain.Machine.SteadyHandExponent, flooredExponent),
+                $"…and its authored steady hand of {PlainSteadyHand} floors at rating 0 rather than going negative: exponent {plain.Machine.SteadyHandExponent:0.000} vs {flooredExponent:0.000} off chance {flooredChance:0.000}");
 
             ctx.Check(ace.Machine.NaturalTouch == AceNaturalTouch,
                 $"the ace '{SkillAceBlock}' flies its authored natural touch unshifted: {ace.Machine.NaturalTouch} vs {AceNaturalTouch} (a shifted ace would read {AceNaturalTouch + DifficultyStep})");
@@ -1194,8 +1195,8 @@ internal static class CampaignRosterSuites
             {
                 // A certain steady-hand failure, which is the worst the roll can do: the reaction
                 // runs rather than being rolled away, and the aircraft must still hold its net.
-                hit.SteadyHandChance = 1f;
-                hit.NotifyDamage(20f);
+                // A bite that covers the whole pool, which the decoded roll fails outright.
+                hit.NotifyDamage(0f, 20f, 0f, 20f);
                 wasHit = hit.Mode != AiMode.Patrol || hit.Evading;
                 report.AppendLine($"t={i * StepDt:0}s hit {bombers[1].Name}: mode={AiModeMachine.NameOf(hit.Mode)}");
             }

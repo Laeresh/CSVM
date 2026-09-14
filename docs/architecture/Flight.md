@@ -413,13 +413,13 @@ makes the hold a weave rather than a tight join. Engine-free and deterministic; 
 `AiPilot.Escort`. Decode: [../org/aiPilot.md](../org/aiPilot.md) "The escort law".
 
 ## src/Flight/AiModeMachine.cs
-The nine-mode AI state machine, owned by `AiPilot.Machine` and stepped from its `Next`: the mode list
-and vocabulary are the engine's own debug-readout dispatch. Decoded and wired are the activation into
-pursue inside the shipped distances, the steady-hand roll a hit provokes (`RollLogged` reports every
-hit reaching the pilot, rolls taken and skipped alike, so its line count is the hit count), the
-`Evading` flag a failed test sets and the weighted library draw it enters, chaining a fresh maneuver
-each time one plays to `ManeuverExecutor.Done` until the pursuer's nose falls off the aircraft, the
-sixth-sense roll and its stun, the `Stun` entry every stun source shares, the rubber-band `lay off` mode `--no-assist` disables, and `avoid crash`'s three altitude bands. Engine-free, inventions marked where declared.
+The nine-mode AI state machine, owned by `AiPilot.Machine` and stepped from its `Next`: the mode list and
+vocabulary are the engine's own debug-readout dispatch. Decoded and wired are the activation into pursue
+inside the shipped distances, the steady-hand roll a hit provokes as a power law over the bite it takes of
+the pre-hit pools, looping on the leftover (`RollLogged` reports every hit reaching the pilot, rolls taken
+and skipped alike, so its line count is the hit count), the `Evading` flag a failed test sets and the
+weighted library draw it enters under the natural-touch and injector culls, chaining a fresh maneuver until
+the pursuer's nose falls off, the sixth-sense roll and its stun, the `Stun` entry, the rubber-band `lay off` `--no-assist` disables, and `avoid crash`'s bands. Engine-free, inventions marked where declared.
 Decode: [../org/aiPilot.md](../org/aiPilot.md), [../org/aiControlLaw.md](../org/aiControlLaw.md).
 
 ## src/Flight/ManeuverExecutor.cs

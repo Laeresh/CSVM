@@ -1611,6 +1611,9 @@ public partial class FlightController : Node3D
         var pose = new Transform3D(_model.Attitude, _model.Position);
         var localImpact = pose.AffineInverse() * impact;
         string dataPart = PlaneDamage.MapStruckPart(colliderPart, localImpact);
+        // The steady-hand roll reads the pools the hit arrives at, so they are taken before the
+        // spend moves them (docs/org/aiControlLaw.md, "The roll itself").
+        float poolArmorBefore = Damage.WholeArmor, poolHealthBefore = Damage.WholeHealth;
         // Apply's answer is the struck zone, not the geometric guess: it may redirect a dead-zone
         // hit to a survivor (docs/org/vehicleDamage.md).
         var state = Damage.Apply(dataPart,
@@ -1646,8 +1649,8 @@ public partial class FlightController : Node3D
         DamageApplied?.Invoke(this);
         if (!IsHumanPiloted && Pilot?.Machine is { } machine)
         {
-            machine.NotifyDamage(
-                ((weapon.HealthDamage ?? 0f) + (weapon.ArmorDamage ?? 0f)) * damageScale);
+            machine.NotifyDamage((weapon.ArmorDamage ?? 0f) * damageScale,
+                (weapon.HealthDamage ?? 0f) * damageScale, poolArmorBefore, poolHealthBefore);
         }
         _pilotHud.Flash(state != null
             ? $"⚠ HIT {struckPart.ToUpperInvariant()} {state.Fraction * 100f:0}%"
@@ -3542,11 +3545,16 @@ public partial class FlightController : Node3D
     // then the AI may immediately request full power without erasing the visible settling ramp.
     internal FlightInput NextPilotInput(float dt)
     {
-        // The mode machine's obstacle probe (D11 avoid crash) is this node's world-and-aircraft
-        // ray; wired lazily so a machine assigned after spawn still gets it, and never
-        // overwriting a probe a test injected.
-        if (Pilot!.Machine is { ProbeBlocked: null } machine && IsInsideTree())
-            machine.ProbeBlocked = AvoidCrashBlocksLine;
+        // The mode machine's two host seams, the obstacle probe (D11 avoid crash) and the nitro
+        // cull, are this node's own state; wired lazily so a machine assigned after spawn still
+        // gets them, and never overwriting what a test injected.
+        if (Pilot!.Machine is { } machine && IsInsideTree())
+        {
+            machine.ProbeBlocked ??= AvoidCrashBlocksLine;
+            // The maneuver picker's injector cull: a nitro-flagged entry is drawable only on an
+            // aircraft that can actually boost.
+            machine.NitroUsable ??= () => Nitro.Installed && !_model.EngineDead;
+        }
         var input = Pilot!.Next(_model, dt);
         _throttle = Mathf.MoveToward(_throttle, input.Throttle, ThrottleRate * dt);
         input.Throttle = _throttle;

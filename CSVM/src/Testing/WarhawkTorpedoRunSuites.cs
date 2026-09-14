@@ -83,7 +83,7 @@ internal static class WarhawkTorpedoRunSuites
                 ActivationRange = skills.MinAiActiveDist,
                 AttackRange = stats.AiAttackRange,
                 ReturnRange = stats.AiReturnRange,
-                SteadyHandChance = 0f,
+                SteadyHandExponent = 0f,
                 ProbeBlocked = (_, _) => null,
             };
             pilot.Machine = machine;

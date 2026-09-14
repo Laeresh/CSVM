@@ -8,9 +8,10 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The decoded mode machine's transition table, engine-free: the nine modes under fixed
-/// rolls (chances pinned to 0/1) and seeded rngs. Pins activation into pursue, the return-range
-/// exit, the steady-hand and sixth-sense reactions in the engine's own vocabulary, the evasive
+/// The decoded mode machine's transition table, engine-free: the nine modes under fixed rolls
+/// (a pool-covering bite, a zero exponent) and seeded rngs. Pins activation into pursue, the
+/// return-range exit, the steady-hand power law and the sixth-sense roll in the engine's own
+/// vocabulary, the evasive
 /// maneuver playing to Done and returning, the avoid-crash override on an injected probe, the
 /// signature-maneuver weighting, the D15 lay-off entry/exit (a chasing human fallen behind,
 /// gated by the AssistEnabled switch), and seed determinism.
@@ -82,29 +83,130 @@ public class AiModeMachineTests
     [Fact]
     public void FailedSteadyHandEvadesAndAPassedOneDoesNot()
     {
-        // Chance pinned to 1: the roll always fails, in the decoded vocabulary. With no library
-        // there is nothing to fly, so the flag stands over the engagement and nothing breaks off.
+        // A bite covering the whole pool fails outright whatever the exponent, in the decoded
+        // vocabulary. With no library there is nothing to fly, so the flag stands over the
+        // engagement and nothing breaks off.
         var m = Machine();
         string? logged = null;
         m.RollLogged += line => logged = line;
         PursueFrom(m, Home + new Vector3(500f, 0f, 0f));
-        m.SteadyHandChance = 1f;
-        m.NotifyDamage(12f);
+        m.NotifyDamage(0f, 12f, 0f, 12f);
         Assert.True(m.Evading);
         Assert.Equal(AiMode.Evade, m.Mode);
         Assert.Contains("steady hand test failed. Evading.", logged);
         Assert.Contains("absorbed 12.0 damage", logged);
 
-        // Chance pinned to 0: the roll always passes and nothing moves.
+        // A zero exponent passes every roll, whatever the bite, so nothing moves.
         var m2 = Machine();
         string? logged2 = null;
         m2.RollLogged += line => logged2 = line;
         PursueFrom(m2, Home + new Vector3(500f, 0f, 0f));
-        m2.SteadyHandChance = 0f;
-        m2.NotifyDamage(5f);
+        m2.SteadyHandExponent = 0f;
+        m2.NotifyDamage(0f, 5f, 0f, 100f);
         Assert.Equal(AiMode.Pursue, m2.Mode);
         Assert.False(m2.Evading);
         Assert.Contains("steady hand test passed. Not evading.", logged2);
+    }
+
+    /// <summary>The roll is the decoded power law over the bite, not a flat chance: the same round
+    /// evades far more often out of a worn-down pool than a fresh one, and the exponent a higher
+    /// rating resolves to evades MORE rather than less.</summary>
+    [Fact]
+    public void TheSteadyHandRollRisesWithTheBiteAndWithTheRating()
+    {
+        // The decoded spawn conversion, over the shipped 0.5-to-0.08 pair's endpoints.
+        Assert.Equal(1.9434f, AiModeMachine.ExponentFor(0.5f), 3);
+        Assert.Equal(3.7058f, AiModeMachine.ExponentFor(0.2666667f), 3);
+        Assert.Equal(7.0813f, AiModeMachine.ExponentFor(0.08f), 3);
+
+        // A wep_130 round (1.5 armour, 1.5 health) on a hostile Fury at Normal: 108 of pool at
+        // full health, a tenth of that worn down to.
+        float e0 = AiModeMachine.ExponentFor(0.5f), e9 = AiModeMachine.ExponentFor(0.08f);
+        double fresh0 = 1d - AiModeMachine.PassChance(1.5f, 108f, e0);
+        double fresh9 = 1d - AiModeMachine.PassChance(1.5f, 108f, e9);
+        double worn9 = 1d - AiModeMachine.PassChance(1.5f, 10.8f, e9);
+        Assert.Equal(0.027, fresh0, 3);
+        Assert.Equal(0.094, fresh9, 3);
+        Assert.Equal(0.653, worn9, 3);
+        Assert.True(fresh9 > fresh0, "the better pilot evades more often at the same bite");
+        Assert.True(worn9 > fresh9, "and the same round evades more out of a worn-down pool");
+
+        // The bite is armour-then-health against the pre-hit pair, and one covering the pool
+        // never passes.
+        Assert.Equal(2f, AiModeMachine.BiteOf(2f, 5f, 10f, 20f));
+        Assert.Equal(15f, AiModeMachine.BiteOf(12f, 5f, 10f, 20f));
+        Assert.Equal(30f, AiModeMachine.BiteOf(12f, 25f, 10f, 20f));
+        Assert.Equal(0d, AiModeMachine.PassChance(30f, 30f, e0));
+    }
+
+    /// <summary>One impact takes several rolls when the pair outlives the pools it meets: the
+    /// wrapper's leftover loop, each pass against a pool the last one shrank.</summary>
+    [Fact]
+    public void LeftoverDamageTakesAFurtherRollAgainstAShrunkPool()
+    {
+        var m = Machine();
+        var rolls = new List<string>();
+        m.RollLogged += rolls.Add;
+        PursueFrom(m, Home + new Vector3(500f, 0f, 0f));
+        m.SteadyHandExponent = 0f; // every roll passes, so the loop is what the count shows
+
+        // Armour 10 against 20 of armour damage: half the health damage is shielded, the rest
+        // spends, and both leftovers re-enter against what is left of the pair.
+        m.NotifyDamage(20f, 40f, 10f, 100f);
+        Assert.True(rolls.Count >= 2, $"the leftover re-entered rolls={rolls.Count}");
+        Assert.False(m.Evading);
+
+        // A hit the first pass swallows whole takes exactly one roll.
+        var m2 = Machine();
+        var single = new List<string>();
+        m2.RollLogged += single.Add;
+        PursueFrom(m2, Home + new Vector3(500f, 0f, 0f));
+        m2.SteadyHandExponent = 0f;
+        m2.NotifyDamage(2f, 2f, 50f, 100f);
+        Assert.Single(single);
+    }
+
+    /// <summary>The picker's injector cull: <c>nitro_evade</c> is difficulty 0, so only the
+    /// injector keeps a pilot that cannot boost from flying six wings-level seconds as its
+    /// evade.</summary>
+    [Fact]
+    public void ANitroFlaggedManeuverIsDrawnOnlyWithTheInjector()
+    {
+        var target = Home + new Vector3(500f, 0f, 0f);
+        var library = new[] { NitroManeuver("nitro_evade"), QuickManeuver("bank_turn", 2) };
+
+        var m = Machine();
+        m.NaturalTouch = 9;
+        m.Library = library;
+        PursueFrom(m, target);
+        m.NotifyDamage(0f, 8f, 0f, 8f);
+        Assert.Equal("bank_turn", m.Executor!.Maneuver.Name);
+
+        bool usable = true;
+        var m2 = Machine();
+        m2.NaturalTouch = 9;
+        m2.Library = library;
+        m2.NitroUsable = () => usable;
+        int nitroPicks = 0;
+        for (int seed = 0; seed < 40; seed++)
+        {
+            var run = Machine(seed);
+            run.NaturalTouch = 9;
+            run.Library = library;
+            run.NitroUsable = () => usable;
+            PursueFrom(run, target);
+            run.NotifyDamage(0f, 8f, 0f, 8f);
+            if (run.Executor!.Maneuver.Nitro)
+                nitroPicks++;
+        }
+
+        Assert.True(nitroPicks > 0, "the injector puts the flagged entry back in the draw");
+
+        // The engine dying mid-fight takes it out again, the same cull on the same delegate.
+        usable = false;
+        PursueFrom(m2, target);
+        m2.NotifyDamage(0f, 8f, 0f, 8f);
+        Assert.False(m2.Executor!.Maneuver.Nitro);
     }
 
     /// <summary>The evade flag's own life: nothing times it out, the pursuer's nose alignment is
@@ -116,8 +218,7 @@ public class AiModeMachineTests
         var target = Home + new Vector3(500f, 0f, 0f);
         var noseOn = new Vector3(-1f, 0f, 0f); // from the pursuer, straight at this aircraft
         PursueFrom(m, target);
-        m.SteadyHandChance = 1f;
-        m.NotifyDamage(8f);
+        m.NotifyDamage(0f, 8f, 0f, 8f);
         Assert.True(m.Evading);
 
         // Twenty seconds with the nose held on, well past any plausible timeout: still set.
@@ -130,7 +231,7 @@ public class AiModeMachineTests
         // silent, so a trace can tell a pilot that is never hit from one hit while already evading.
         string? logged = null;
         m.RollLogged += line => logged = line;
-        m.NotifyDamage(8f);
+        m.NotifyDamage(0f, 8f, 0f, 8f);
         Assert.Equal("absorbed 8.0 damage; no steady hand test (already evading)", logged);
 
         // The nose falls past the 0.85 cosine: the flag clears and the engagement resumes.
@@ -141,8 +242,7 @@ public class AiModeMachineTests
         // The target gone instead: the flag clears and the pilot is back on patrol.
         var m2 = Machine();
         PursueFrom(m2, target);
-        m2.SteadyHandChance = 1f;
-        m2.NotifyDamage(8f);
+        m2.NotifyDamage(0f, 8f, 0f, 8f);
         m2.Update(Home, Level, null, null, 1f / 60f);
         Assert.False(m2.Evading);
         Assert.Equal(AiMode.Patrol, m2.Mode);
@@ -164,8 +264,7 @@ public class AiModeMachineTests
         Assert.False(m.Evading);
 
         // The roll the flag would have swallowed is taken, and it is what sets the flag.
-        m.SteadyHandChance = 1f;
-        m.NotifyDamage(8f);
+        m.NotifyDamage(0f, 8f, 0f, 8f);
         Assert.Contains("steady hand test failed. Evading.", logged);
         Assert.True(m.Evading);
 
@@ -193,8 +292,7 @@ public class AiModeMachineTests
             m.NaturalTouch = 9;
             m.Library = new[] { QuickManeuver("bank_turn", 2), QuickManeuver("split_s", 8) };
             PursueFrom(m, target);
-            m.SteadyHandChance = 1f;
-            m.NotifyDamage(8f);
+            m.NotifyDamage(0f, 8f, 0f, 8f);
             Assert.Equal(AiMode.EvasiveManeuver, m.Mode);
             string first = m.Executor!.Maneuver.Name;
 
@@ -233,8 +331,7 @@ public class AiModeMachineTests
         var m = Machine();
         var noseOn = new Vector3(0f, 0f, -1f); // the chaser, pointed along its own closure
         PursueFrom(m, Astern600);
-        m.SteadyHandChance = 1f;
-        m.NotifyDamage(8f);
+        m.NotifyDamage(0f, 8f, 0f, 8f);
         Assert.Equal(AiMode.Evade, m.Mode);
 
         for (int i = 0; i < 300; i++)
@@ -315,8 +412,7 @@ public class AiModeMachineTests
         m2.NaturalTouch = 2;
         m2.Library = new[] { QuickManeuver("bank_turn", 2, duration: 5f) };
         PursueFrom(m2, target);
-        m2.SteadyHandChance = 1f;
-        m2.NotifyDamage(8f);
+        m2.NotifyDamage(0f, 8f, 0f, 8f);
         Assert.Equal(AiMode.EvasiveManeuver, m2.Mode);
         m2.Stun(0.5f);
         Assert.Equal(AiMode.Stunned, m2.Mode);
@@ -388,20 +484,26 @@ public class AiModeMachineTests
     }
 
     /// <summary>The stun cannot strand a pilot: an external mode override during it releases the
-    /// controls, and a stunned pilot takes no reaction rolls that could pile a second timer on.</summary>
+    /// controls. The damage handler gates on the evade flag alone, so a hit taken while stunned
+    /// still rolls and a failure overwrites the stun; the sixth-sense roll is the one a stunned
+    /// pilot does not take, because its trigger needs pursue or lay off.</summary>
     [Fact]
-    public void AStunnedPilotIsReleasedByAnOverrideAndTakesNoRolls()
+    public void AStunnedPilotStillRollsOnAHitAndIsReleasedByAnOverride()
     {
         var m = Machine();
         var target = Home + new Vector3(500f, 0f, 0f);
         PursueFrom(m, target);
         m.Stun(5f);
-        m.SteadyHandChance = 1f;
-        m.NotifyDamage(10f);
-        Assert.Equal(AiMode.Stunned, m.Mode); // no controls to break off with
         m.SixthSenseChance = 0f;
         m.NotifyTargetEvaded();
         Assert.Equal(AiMode.Stunned, m.Mode);
+        Assert.Equal(5f, m.StunRemainingS, 3); // no second timer piled on
+
+        // The hit's own roll is not gated on the mode: a failure writes the reaction over it.
+        m.NotifyDamage(0f, 10f, 0f, 10f);
+        Assert.True(m.Evading);
+        Assert.Equal(AiMode.Evade, m.Mode);
+        Assert.Equal(0f, m.StunRemainingS);
 
         m.Enter(AiMode.Patrol, "scripted");
         Assert.Equal(AiMode.Patrol, m.Mode);
@@ -416,10 +518,9 @@ public class AiModeMachineTests
         m.Library = new[] { QuickManeuver("bank_turn", 2), QuickManeuver("split_s", 8), Stub("high_yo_yo") };
         var target = Home + new Vector3(500f, 0f, 0f);
         PursueFrom(m, target);
-        m.SteadyHandChance = 1f;
         string? reason = null;
         m.ModeChanged += (_, to, why) => { if (to == AiMode.EvasiveManeuver) reason = why; };
-        m.NotifyDamage(8f);
+        m.NotifyDamage(0f, 8f, 0f, 8f);
 
         // Only the entry inside the natural-touch cull is playable; the stub never is.
         Assert.Equal(AiMode.EvasiveManeuver, m.Mode);
@@ -448,8 +549,7 @@ public class AiModeMachineTests
             m.Library = new[] { QuickManeuver("loop", 7), QuickManeuver("split_s", 8) };
             m.SignatureManeuvers = new[] { "split_s" };
             PursueFrom(m, Home + new Vector3(500f, 0f, 0f));
-            m.SteadyHandChance = 1f;
-            m.NotifyDamage(8f);
+            m.NotifyDamage(0f, 8f, 0f, 8f);
             if (m.Executor!.Maneuver.Name == "split_s")
                 signaturePicks++;
         }
@@ -636,7 +736,7 @@ public class AiModeMachineTests
         {
             var m = new AiModeMachine(new Random(7))
             {
-                SteadyHandChance = 0.5f,
+                SteadyHandExponent = AiModeMachine.ExponentFor(0.5f),
                 SixthSenseChance = 0.5f,
                 StunRecoveryIntervalS = 1f,
             };
@@ -652,7 +752,7 @@ public class AiModeMachineTests
             for (int i = 0; i < 600; i++)
             {
                 if (i % 90 == 0)
-                    m.NotifyDamage(6f);
+                    m.NotifyDamage(0f, 6f, 0f, 40f);
                 if (i % 240 == 120)
                     m.NotifyTargetEvaded();
                 m.Update(Home, Level, target, null, 1f / 60f);
@@ -682,6 +782,15 @@ public class AiModeMachineTests
             Difficulty = difficulty,
             Steps = new[] { new ManeuverStep(duration, 10f, 0f, 0f, Array.Empty<float>()) },
         };
+
+    // The library's one nitro-flagged shape: difficulty 0, so only the injector cull keeps it out.
+    private static Maneuver NitroManeuver(string name) => new()
+    {
+        Name = name,
+        Difficulty = 0,
+        Nitro = true,
+        Steps = new[] { new ManeuverStep(0.05f, 0f, 0f, 0f, Array.Empty<float>()) },
+    };
 
     private static Maneuver Stub(string name) => new()
     {

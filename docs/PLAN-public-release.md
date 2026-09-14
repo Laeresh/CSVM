@@ -1069,9 +1069,6 @@ Anything A2 or a later wave closes comes off this list.
   by tens of kilometres.** Target a straggler and fly out to it, since an objective waiting on one
   will not complete on its own. (`BL-523` and `BL-565`; no landing commit for either, and
   `AiModeMachine.ActivationRange` still rests at the 2,000 m floor while `DedgMet` only counts.)
-- **Aircraft under fire rarely break off to evade.** No workaround; it makes them easier to shoot
-  down than they should be. (`BL-728`; no landing commit. The reaction a failed steady-hand roll
-  produces is decoded and faithful, so what is open is how often the roll fails.)
 - **A zeppelin's turrets can shoot the player through the hull they are mounted on.** Break away
   from the hull rather than flying along it, since the fire stops once the ring loses its bearing.
   (`BL-714`; a probe confirmed a parked hull blocks its own rings correctly, so the item stayed

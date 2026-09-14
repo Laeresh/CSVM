@@ -2110,12 +2110,18 @@ internal static class AiSuites
                 ActivationRange = skills.MinAiActiveDist,
                 AttackRange = stats.AiAttackRange,
                 ReturnRange = stats.AiReturnRange,
-                SteadyHandChance = 0f, // scripted per phase; approach fire reactions off
+                // Scripted per phase at the power law's two limits: a zero exponent passes every
+                // roll whatever the bite, an infinite one fails every roll that bites at all.
+                SteadyHandExponent = 0f,
                 SixthSenseChance = 1f,
                 StunRecoveryIntervalS = skills.At("stun_recovery_interval", 5),
                 NaturalTouch = 1,
                 Library = library,
                 ProbeBlocked = (_, _) => terrainBlocked ? "suite/terrain" : null,
+                // The injector cull is injected too, open: these phases are about the mode
+                // vocabulary, and culling the library's nitro entry would only change which
+                // maneuver the seeded draw flies. The cull itself is covered by nitro-ai-edges.
+                NitroUsable = () => true,
             };
             var transitions = new List<string>();
             machine.ModeChanged += (from, to, _) =>
@@ -2178,7 +2184,7 @@ internal static class AiSuites
 
             // --- a scripted FAILED steady-hand roll on a real projectile hit: the decoded
             // reaction, through the same TakeProjectileHit the pool calls.
-            machine.SteadyHandChance = 1f;
+            machine.SteadyHandExponent = float.PositiveInfinity;
             ai.TakeProjectileHit(gun, ai.WorldPosition + new Vector3(2f, 0f, 0f), "fuselage", 0);
             ctx.Check(lastRoll != null && lastRoll.Contains("steady hand test failed. Evading."),
                 $"the hit rolls steady hand in the engine's vocabulary roll={lastRoll}");
@@ -2188,7 +2194,7 @@ internal static class AiSuites
             var flown = machine.Executor?.Maneuver;
             ctx.Check(flown != null && flown.EligibleFor(machine.NaturalTouch),
                 $"…an eligible library entry name={flown?.Name} difficulty={flown?.Difficulty}/{machine.NaturalTouch}");
-            machine.SteadyHandChance = 0f; // stray hits must not re-trigger mid-phase
+            machine.SteadyHandExponent = 0f; // stray hits must not re-trigger mid-phase
 
             // --- the hostile is parked facing away, so its nose is nowhere near the 0.85 cosine.
             // The program still plays to Done (the clear cannot cut one short) and the flag is
@@ -2205,9 +2211,9 @@ internal static class AiSuites
             // --- the same hit with the hostile's nose held on: the flag survives the end of the
             // program and chains straight into the next one instead of releasing.
             target.PlaceHeld(targetPos, ai.WorldPosition);
-            machine.SteadyHandChance = 1f;
+            machine.SteadyHandExponent = float.PositiveInfinity;
             ai.TakeProjectileHit(gun, ai.WorldPosition + new Vector3(2f, 0f, 0f), "fuselage", 0);
-            machine.SteadyHandChance = 0f;
+            machine.SteadyHandExponent = 0f;
             var firstProgram = machine.Executor;
             ctx.Check(machine.Evading && firstProgram != null,
                 $"a nose-on pursuer leaves the flag set mode={AiModeMachine.NameOf(machine.Mode)}");
@@ -2232,9 +2238,9 @@ internal static class AiSuites
             ctx.Check(machine.Mode == AiMode.Evade && !machine.Evading,
                 $"an ordered evade sets no flag evading={machine.Evading}");
             lastRoll = null;
-            machine.SteadyHandChance = 1f;
+            machine.SteadyHandExponent = float.PositiveInfinity;
             ai.TakeProjectileHit(gun, ai.WorldPosition + new Vector3(2f, 0f, 0f), "fuselage", 0);
-            machine.SteadyHandChance = 0f;
+            machine.SteadyHandExponent = 0f;
             ctx.Check(lastRoll != null && lastRoll.Contains("steady hand test failed. Evading."),
                 $"…so a hit taken there still rolls steady hand roll={lastRoll}");
             ctx.Check(machine.Evading,
@@ -2252,7 +2258,7 @@ internal static class AiSuites
             machine.Library = null;
             target.PlaceHeld(targetPos, ai.WorldPosition);
             lastRoll = null;
-            machine.SteadyHandChance = 1f;
+            machine.SteadyHandExponent = float.PositiveInfinity;
             ai.TakeProjectileHit(gun, ai.WorldPosition + new Vector3(2f, 0f, 0f), "fuselage", 0);
             ctx.Check(machine.Mode == AiMode.Evade && machine.Evading,
                 $"a hit with nothing eligible enters evade with the flag set mode={AiModeMachine.NameOf(machine.Mode)}");
@@ -2265,7 +2271,7 @@ internal static class AiSuites
                 $"…held over a second of nose-on engagement mode={AiModeMachine.NameOf(machine.Mode)}");
             lastRoll = null;
             ai.TakeProjectileHit(gun, ai.WorldPosition + new Vector3(2f, 0f, 0f), "fuselage", 0);
-            machine.SteadyHandChance = 0f;
+            machine.SteadyHandExponent = 0f;
             ctx.Check(lastRoll != null && lastRoll.Contains("no steady hand test (already evading)"),
                 $"…and takes no second steady-hand roll, saying so roll={lastRoll}");
             target.PlaceHeld(targetPos, targetPos + Vector3.Forward);

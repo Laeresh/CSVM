@@ -399,6 +399,19 @@ on the same aircraft with a tenth of its pool left bites 0.139 of it, for 42.5% 
 65.3% at 9. The reaction is a **wounded-animal** response whose rate climbs as the victim is worn
 down, and the rating tilts the whole curve rather than setting a level.
 
+**What CSVM implements.** `AiModeMachine.NotifyDamage` takes the hit's two halves and the victim's
+two pools separately, `FlightController` reading the pools before the spend moves them, and rolls
+`PassChance` over `BiteOf` exactly as above; `SteadyHandExponent` carries `e`, written at spawn
+through `ExponentFor`, so no chance is stored and no threshold is compared. The leftover loop runs
+inside that call over `PlaneDamage.Spend`, the same arithmetic the pools themselves spend through.
+The only thing that suppresses a roll is the evade flag, as above: a stunned pilot, one climbing out
+of a crash and one on a danger-zone rail all still roll, and a failure writes its reaction over
+whatever they were doing.
+⚠ **The remake's loop shrinks the whole-vehicle pair only.** The original's first pass spends
+against the struck zone, so its second roll meets a pair the zone already took a bite out of, while
+CSVM's meets the whole pair alone. The difference shows only on a hit big enough to survive its
+first pass, since armour that covers the armour damage ends the hit there.
+
 ### What the flag itself changes
 
 Every read of `+0xBA` in the image, with what it decides. The set is closed.

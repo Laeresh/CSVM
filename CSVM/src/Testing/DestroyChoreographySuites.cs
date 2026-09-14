@@ -1467,9 +1467,11 @@ internal static class DestroyChoreographySuites
                 // nitro-flagged maneuver: the subject here is the engage, not the selection.
                 var machine = new AiModeMachine(new System.Random(11))
                 {
-                    SteadyHandChance = 1f,
                     NaturalTouch = 9,
                     Library = new[] { nitroEvade },
+                    // The injector cull, which the live rig wires off its own aircraft: this one
+                    // carries the injector, so the flagged entry is drawable.
+                    NitroUsable = () => true,
                 };
                 var pilot = AiPilot.HoldingCourse(spawn, spawn + Vector3.Forward);
                 pilot.Machine = machine;
@@ -1504,7 +1506,8 @@ internal static class DestroyChoreographySuites
                 }
                 rig.ManualAdvance = true;
 
-                machine.NotifyDamage(10f);
+                // A bite covering the whole pool, which the decoded roll fails outright.
+                machine.NotifyDamage(0f, 10f, 0f, 10f);
                 bool armed = machine.Executor is { Maneuver.Nitro: true };
                 ctx.Check(armed,
                     $"the mode machine is flying '{machine.Executor?.Maneuver.Name ?? "-"}', a nitro-flagged maneuver");

@@ -434,8 +434,8 @@ internal sealed class AiFlightAssembler
             pilot.Machine = new AiModeMachine(Rng.NewSystemRandom(Rng.Ai))
             {
                 ActivationRange = _aiSkills.MinAiActiveDist,
-                SteadyHandChance = _aiSkills.At("steady_hand_chance",
-                    SkillFor(defSkills.SteadyHand, rating, roster.SteadyHand)),
+                SteadyHandExponent = AiModeMachine.ExponentFor(_aiSkills.At("steady_hand_chance",
+                    SkillFor(defSkills.SteadyHand, rating, roster.SteadyHand))),
                 SixthSenseChance = _aiSkills.At("sixth_sense_chance", sixthSense),
                 SixthSenseFactor = _aiSkills.At("sixth_sense_factor", sixthSense),
                 StunRecoveryIntervalS = _aiSkills.At("stun_recovery_interval",
