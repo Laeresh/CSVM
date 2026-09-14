@@ -1063,8 +1063,8 @@ internal static class MenuInstantActionSuites
         }
     }
 
-    // How many seat-strip lines the composed screen carries, the strip being the overlay whose
-    // lines are named for their player.
+    // How many seat-strip chips the composed screen carries, the strip being the overlay whose
+    // lines are the player tags alone.
     private static int StripLines(OriginalShell shell)
     {
         int lines = 0;
@@ -1072,7 +1072,7 @@ internal static class MenuInstantActionSuites
         {
             foreach (var line in overlay.Lines)
             {
-                if (line.Text.StartsWith("P1  ", StringComparison.Ordinal) || line.Text.StartsWith("P2  ", StringComparison.Ordinal))
+                if (line.Text == SplitScreen.PlayerTag(0) || line.Text == SplitScreen.PlayerTag(1))
                 {
                     lines++;
                 }

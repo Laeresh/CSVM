@@ -1635,21 +1635,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `pdpanel4`/`pdpanel6`) targets any node inside `gauges`, and no runtime binds a plane's own
   subtree apart from the crash rig's narrow subset, so nothing animates the panel per frame.
 
-- `BL-751` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Original's seat
-  strip is a monochrome device list on the left where Built-in's is a colourised P1 to P4 chip row
-  on the right.** *Evidence:* reported at the controls over `PLAN-M5-polish-12`'s closing sortie,
-  "the strip showing the players should be the same as in Built-in, colorized P1 P2 P3 P4 on the
-  right side". `CampaignSeatPanel` (`CSVM/src/UI/Menu/Original/OriginalSeats.cs:165-187`) draws
-  `P<n>  <device>` rows at the top left over a scrim, focused row in `BoardInk.RowFocused` and the
-  rest in `BoardInk.Detail`; Built-in's chip strip draws `SplitScreen.PlayerTag(i)` in
-  `SplitScreen.PlayerColor(i)` at the top right (`CSVM/src/UI/LaunchMenu.cs:272`, `:2860-2885`).
-  *Fix shape:* Original's strip takes the same tags, the same per-player colours and the same
-  top-right corner. *⚠ Traps:* the strip's left-top band was chosen because no campaign board
-  puts a plaque there (`OriginalSeats.cs:49-55`); moving it right has to clear the book tab at
-  x 558 and the Instant Action screen's own paper. The `onPaper` light-scrim case exists because
-  the Instant Action palette swallows the dark one, so keep a ground behind coloured text there.
-  *Cross-refs:* `BL-703`'s landing (`git log --grep=BL-703`), which added the strip.
-
 - `BL-755` `[Bug]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The ammo screen's two
   description panes trade the cursor's words instead of each holding its own subject.** *Evidence:*
   reported at the controls over `PLAN-M5-polish-13`'s closing sortie, "the description can be

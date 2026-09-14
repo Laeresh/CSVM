@@ -388,6 +388,10 @@ public sealed partial class ComposedBoardView : Control
         BoardInk.DialogPressed => Colors.Black,
         BoardInk.Secret => Colors.Yellow,
         BoardInk.Alarm => Colors.Red,
+        BoardInk.Seat1 => SplitScreen.PlayerColor(0),
+        BoardInk.Seat2 => SplitScreen.PlayerColor(1),
+        BoardInk.Seat3 => SplitScreen.PlayerColor(2),
+        BoardInk.Seat4 => SplitScreen.PlayerColor(3),
         _ => _palette.Row,
     };
 

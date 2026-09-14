@@ -111,10 +111,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     private const float ControlsLabelEms = 11f;
     private const float ControlsValueEms = 20f;
     private const float ControlsExtraWidth = 260f;
-    // The chip strip's own font size and corner inset, in authored board points, scaled through
-    // the same BoardFit the board itself draws at, so the chips read like part of that screen.
-    private const float ChipFont = 16f;
-    private const float ChipInset = 14f;
+    // The chip strip's separation, in authored board points like the rest of its shape, scaled
+    // through the same BoardFit the board itself draws at so the chips read like part of that
+    // screen. The face, the corner inset and the colours are SeatStrip's, shared with Original's
+    // own strip; the separation is Built-in's alone, since only this row measures its own text.
+    private const float ChipSeparation = 10f;
 
     // The three top-level modes, in MenuMode's ordinal order so the row index doubles as the
     // enum value. The enum member stays named Stunt (SessionSpec.cs) though this row reads
@@ -3021,15 +3022,15 @@ public sealed partial class LaunchMenu : CanvasLayer
 
         var size = GetViewport().GetVisibleRect().Size;
         var fit = BoardFit.For(size.X, size.Y);
-        float inset = fit.Length(ChipInset);
+        float inset = fit.Length(SeatStrip.Inset);
         _chipStrip.OffsetRight = -inset;
         _chipStrip.OffsetLeft = _chipStrip.OffsetRight;
         _chipStrip.OffsetTop = inset;
         _chipStrip.OffsetBottom = _chipStrip.OffsetTop;
-        _chipStrip.AddThemeConstantOverride("separation", Mathf.RoundToInt(fit.Length(10f)));
+        _chipStrip.AddThemeConstantOverride("separation", Mathf.RoundToInt(fit.Length(ChipSeparation)));
         for (int i = 0; i < _slots.Count; i++)
         {
-            _chipStrip.AddChild(Label(SplitScreen.PlayerTag(i), Mathf.RoundToInt(fit.Length(ChipFont)),
+            _chipStrip.AddChild(Label(SplitScreen.PlayerTag(i), Mathf.RoundToInt(fit.Length(SeatStrip.Font)),
                 SplitScreen.PlayerColor(i), HorizontalAlignment.Center));
         }
     }

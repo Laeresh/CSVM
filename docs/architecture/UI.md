@@ -289,6 +289,14 @@ their background, and [../org/campaign-board.md](../org/campaign-board.md) says 
 `EscapeBlackboard` is the one crossing, the load screen's own chalk under the near-black labels the
 escape strips' light plates need, which an Instant Action pause is the only screen to want both of.
 
+## src/UI/SeatStrip.cs
+The shape both presentations' player chip strip shares, so the two corners cannot drift apart: the
+face, the inset from the top-right corner, the cell a chip centres in where a strip cannot measure
+its own text, the ground's margin and height, and the `BoardInk` a seat's chip takes. The tag and
+the colour themselves stay `SplitScreen`'s, and `ComposedBoardView` is what resolves a seat ink to
+that colour. Built-in builds its chips as Godot labels (`LaunchMenu.cs`); Original composes them as
+a board overlay (`Menu/Original/OriginalSeats.cs`).
+
 ## src/UI/BoardMenu.cs
 A board's cursor and item list, engine-free so the selection rules test off engine. Holds no input
 source: the board polls its owner through `MenuInput` and feeds one frame to `Handle`, which is what
@@ -949,7 +957,7 @@ joined seat then picks on its own screen (`OriginalSeatPlane.cs`). FLY is enable
 gate is met and leaves as the mode's own typed exit, which the walk's last confirm reaches for it.
 `JoiningOpen` is the per-screen joining rule the presentation reads, and `CampaignSeatPanel` the
 seat strip the campaign boards and the Instant Action screen take as an overlay once a second seat
-has joined. Remake-only by design: [../org/menu-inventory.md](../org/menu-inventory.md).
+has joined, Built-in's chip row on `SeatStrip`'s shared shape. Remake-only by design: [../org/menu-inventory.md](../org/menu-inventory.md).
 
 ## src/UI/Menu/Original/OriginalSeatPlane.cs
 The remake-only per-seat aircraft screen, a shell partial: once seat 0 has picked on a sortie

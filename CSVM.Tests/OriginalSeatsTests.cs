@@ -86,7 +86,7 @@ public class OriginalSeatsTests
         Assert.Contains(board.Lines, l => l.Text == "PLANE SELECTION");
         Assert.Contains(board.Lines, l => l.Text == "P2  scripted   choose your aircraft");
         Assert.Contains(board.Overlays.SelectMany(o => o.Lines), l => l.Text == "Hellhound");
-        Assert.Contains(board.Overlays.SelectMany(o => o.Lines), l => l.Text == "P2  scripted" && l.Ink == BoardInk.RowFocused);
+        Assert.Contains(board.Overlays.SelectMany(o => o.Lines), l => l.Text == "P2" && l.Ink == SeatStrip.Ink(1));
         Assert.Equal(new[] { OriginalShell.SeatPlaneFieldKey, "AcceptSelections", "CancelSelections" },
             shell.Rows.Where(r => !r.Key.StartsWith("ENTRY:", StringComparison.Ordinal)).Select(r => r.Key));
 
@@ -400,7 +400,7 @@ public class OriginalSeatsTests
         shell.InstantAction.OpenInstantAction();
         Assert.DoesNotContain(shell.Compose().Overlays.SelectMany(o => o.Lines), l => l.Text.StartsWith("P1", StringComparison.Ordinal));
         var second = setup.Join(new ScriptedMenuSeat())!;
-        Assert.Contains(shell.Compose().Overlays.SelectMany(o => o.Lines), l => l.Text == "P2  scripted");
+        Assert.Contains(shell.Compose().Overlays.SelectMany(o => o.Lines), l => l.Text == "P2" && l.Ink == SeatStrip.Ink(1));
 
         var fly = shell.Rows.Single(r => r.Key == OriginalInstantActionScreen.FlyMissionKey);
         Assert.Null(Click(shell, fly.X + 4f, fly.Y + 4f).Exit);

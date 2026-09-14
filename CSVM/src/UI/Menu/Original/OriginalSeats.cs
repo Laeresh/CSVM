@@ -46,13 +46,15 @@ public sealed partial class OriginalShell
     private const float AirframeBarWidth = 6f;
     private const float AirframeThumbMin = 20f;
 
-    // The campaign boards' seat strip, in the desk margin above every board's clipboard. The top
-    // left is the one band no campaign screen puts a plaque in: the book's tab sits at x 558 and
-    // the briefing's buttons and every ACCEPT/FLY row sit at the bottom. Built-in's hint band
-    // already claims the same rows for remake chrome. Four seats end at y 62.
-    private const float CampaignStripX = 8f;
-    private const float CampaignStripY = 6f;
-    private const float CampaignStripPad = 3f;
+    // The focused chip's lit cell over the strip's ground, the one state the chips carry that
+    // Built-in's row has no use for: which seat's flight check is the one on show.
+    private const byte CampaignStripLit = 0xFF;
+    private const float CampaignStripLitAlpha = 0.22f;
+
+    // The strip's ground: dark under every chip, since the four identity colours are light. The
+    // Instant Action paper needs a more opaque plate than a painted panel does to hold them.
+    private const float CampaignStripGround = 0.45f;
+    private const float CampaignStripGroundOnPaper = 0.72f;
 
     private int _pickedVersusChapter = -1;
     private int _airframeTop;
@@ -160,11 +162,12 @@ public sealed partial class OriginalShell
         return seat.Confirmed ? $"{name}  READY" : seat.Locked ? name : "choosing";
     }
 
-    // The seat strip over a campaign board, drawn only once a second seat has joined so a solo
-    // campaign shows the authored screen alone. No pick status: the campaign's picks are the
-    // flight field's, so the strip says who is seated and, on the flight check, whose check shows.
-    // ⚠ Pass onPaper on the Instant Action screen: its palette is one dark paper ink, which the
-    // black scrim would swallow, so that strip needs a light ground instead.
+    // Built-in's chip row in the Original presentation's own space, drawn over a campaign board
+    // only once a second seat has joined so a solo campaign shows the authored screen alone. No
+    // device and no pick status: the campaign's picks are the flight field's, and the sortie
+    // screens' own strip names the devices.
+    // ⚠ Pass onPaper on the Instant Action screen: its background is light, and a chip's colour
+    // reads only over a ground dark enough to hold it.
     private BoardPanel? CampaignSeatPanel(bool onPaper = false)
     {
         var seats = _setup.Seats;
@@ -174,19 +177,30 @@ public sealed partial class OriginalShell
         }
 
         int current = StripFocus;
+        float width = seats.Count * SeatStrip.Pitch;
+        float left = BoardFit.AuthoredWidth - SeatStrip.Inset - width;
+        float top = SeatStrip.Inset - SeatStrip.Pad;
+        var fills = new List<BoardFill>(2)
+        {
+            new BoardFill(left - SeatStrip.Pad, top, width + (2f * SeatStrip.Pad), SeatStrip.Ground,
+                0, 0, 0, onPaper ? CampaignStripGroundOnPaper : CampaignStripGround),
+        };
+
         var lines = new List<BoardLine>(seats.Count);
         for (int i = 0; i < seats.Count; i++)
         {
-            lines.Add(new BoardLine($"P{i + 1}  {seats[i].Source.DeviceLabel}", CampaignStripX,
-                CampaignStripY + (i * SeatStripPitch), SeatStripWidth, SeatFont,
-                i == current ? BoardInk.RowFocused : BoardInk.Detail));
+            float x = left + (i * SeatStrip.Pitch);
+            if (i == current)
+            {
+                fills.Add(new BoardFill(x, top, SeatStrip.Pitch, SeatStrip.Ground,
+                    CampaignStripLit, CampaignStripLit, CampaignStripLit, CampaignStripLitAlpha));
+            }
+
+            lines.Add(new BoardLine(SplitScreen.PlayerTag(i), x, SeatStrip.Inset, SeatStrip.Pitch,
+                SeatStrip.Font, SeatStrip.Ink(i), -1, false, BoardJustify.Center));
         }
 
-        byte tone = onPaper ? (byte)235 : (byte)0;
-        var scrim = new BoardFill(CampaignStripX - CampaignStripPad, CampaignStripY - CampaignStripPad,
-            SeatStripWidth + (2f * CampaignStripPad), (seats.Count * SeatStripPitch) + (2f * CampaignStripPad),
-            tone, tone, tone, onPaper ? 0.82f : 0.45f);
-        return new BoardPanel(new[] { scrim }, Array.Empty<BoardPicture>(), lines);
+        return new BoardPanel(fills, Array.Empty<BoardPicture>(), lines);
     }
 
     // The sortie screen's rows: the chapters and BACK in column 0, the aircraft window and FLY in

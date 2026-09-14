@@ -69,6 +69,20 @@ public enum BoardInk
     /// which is what the plane-construction script's own <c>0xffff0000</c> says
     /// (<c>docs/org/hangar.md</c>, "The two red figures"), so it takes no palette.</summary>
     Alarm,
+
+    /// <summary>Player 1's chip on a seat strip, <c>SplitScreen.PlayerColor(0)</c>. An identity
+    /// colour is the same in both presentations and on every background, so it takes no
+    /// palette; <see cref="SeatStrip"/> is what maps a seat to one of these four.</summary>
+    Seat1,
+
+    /// <summary>Player 2's chip, <c>SplitScreen.PlayerColor(1)</c>.</summary>
+    Seat2,
+
+    /// <summary>Player 3's chip, <c>SplitScreen.PlayerColor(2)</c>.</summary>
+    Seat3,
+
+    /// <summary>Player 4's chip, <c>SplitScreen.PlayerColor(3)</c>.</summary>
+    Seat4,
 }
 
 /// <summary>Which edge of its <see cref="BoardLine.Width"/> a text widget's words sit against,

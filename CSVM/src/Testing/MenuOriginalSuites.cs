@@ -22,6 +22,10 @@ internal static class MenuOriginalSuites
 {
     private const float Dt = 1f / 60f;
 
+    // The scrapbook's Current Mission tab, the one plaque a campaign board puts in the top band:
+    // its art starts at authored x 558 and is 114 wide, so a chip row in the corner clears this.
+    private const float BookTabRight = 672f;
+
     private static readonly MenuCommands Accept = new() { Accept = true };
     private static readonly MenuCommands Down = new() { MoveY = 1 };
     private static readonly MenuCommands Up = new() { MoveY = -1 };
@@ -44,7 +48,8 @@ internal static class MenuOriginalSuites
         + "activating what the click stood over, and the contents arrows still step it, seat 0 steering with a "
         + "pad claims it so it can never join as another seat, joining is open on the Instant Action "
         + "screen and a second seat joined there stays seated, the campaign flight check carries the "
-        + "seat strip with two seats and none with one, a switch to Built-in "
+        + "seat strip with two seats and none with one, drawn as Built-in's own chip row in the "
+        + "top-right corner clear of the book tab, a switch to Built-in "
         + "from mid-setup discards the pick and shows Built-in's Mode screen, a switch back starts "
         + "Original fresh, Built-in's Options route steps the difficulty, the targeting setting on "
         + "and back off, the two other choices and "
@@ -363,6 +368,8 @@ internal static class MenuOriginalSuites
         ctx.Check(shell.Screen == OriginalScreen.CampaignFlightCheck && shell.JoiningOpen,
             $"the flight check opens joining too ({shell.Screen}, open={shell.JoiningOpen})");
         ctx.Check(StripSeats(shell) == 2, $"its board carries the seat strip naming both seats ({StripSeats(shell)} lines)");
+        ctx.Check(StripIsChipRow(shell, out string chips),
+            $"drawn as Built-in's chip row, tags in their own seat inks in the top-right corner clear of the book tab ({chips})");
         Press(host, s2, Back);
         ctx.Check(host.Seats.Count == 1, $"the second seat's Back unjoins it ({host.Seats.Count})");
         ctx.Check(StripSeats(shell) == 0, $"and the strip goes with it, leaving the authored board alone ({StripSeats(shell)} lines)");
@@ -385,6 +392,36 @@ internal static class MenuOriginalSuites
         }
 
         return count;
+    }
+
+    // Whether the strip is the chip row Built-in draws: the player tags alone, each in its own
+    // seat's ink, on one line of the corner and beginning right of the book tab.
+    private static bool StripIsChipRow(OriginalShell shell, out string report)
+    {
+        var chips = new List<BoardLine>();
+        foreach (var panel in shell.Compose().Overlays)
+        {
+            foreach (var line in panel.Lines)
+            {
+                if (line.Text.Length == 2 && line.Text[0] == 'P' && char.IsDigit(line.Text[1]))
+                {
+                    chips.Add(line);
+                }
+            }
+        }
+
+        bool ok = chips.Count > 0;
+        float left = BoardFit.AuthoredWidth;
+        for (int i = 0; i < chips.Count; i++)
+        {
+            ok &= chips[i].Text == SplitScreen.PlayerTag(i) && chips[i].Ink == SeatStrip.Ink(i)
+                && chips[i].Y == SeatStrip.Inset;
+            left = System.Math.Min(left, chips[i].X);
+        }
+
+        ok &= left > BookTabRight;
+        report = $"{chips.Count} chips from x {(int)left}, first {(chips.Count > 0 ? chips[0].Ink.ToString() : "none")}";
+        return ok;
     }
 
     // The switch, as the launcher performs it after an Options exit: from mid-setup on the Free

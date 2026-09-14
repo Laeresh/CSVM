@@ -153,8 +153,12 @@ open), and `FlightPads`, the binding a launch carries per seat. Both presentatio
 `OriginalShell.JoiningOpen` is false), so the pad seat 0 steers with is seat 0's for good and can
 never join as a further seat. Original opens joining on the four screens that launch a flight
 (Free Flight, Dogfight, Instant Action and the campaign flight check) and, once a second seat has
-joined, draws the sortie screens' seat strip over every campaign board and over the Instant Action
-screen as an overlay in the desk margin; a solo campaign shows the authored board alone. A
+joined, draws a seat strip over every campaign board and over the Instant Action screen as an
+overlay; a solo campaign shows the authored board alone. That strip is Built-in's own chip row, the
+player tags alone in the top-right corner each in its seat's identity colour over a dark ground
+(`CSVM/src/UI/SeatStrip.cs` holds the shape the two share, and the Instant Action screen asks for
+the more opaque ground its light paper needs). The sortie screens keep their own strip lower down,
+where the device and the pick status stand beside the tag. A
 presentation with a pointer maps the window-pixel pointer into its own space; Original does it
 through the same `BoardFit` its board view draws with. Built-in reads no `MenuPointer` at all: its rows are Godot
 `Control`s, so player 1's rows take Godot's own hit test through `gui_input` (`LaunchMenu.Pointable`)
