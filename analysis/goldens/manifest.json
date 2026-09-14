@@ -127,8 +127,8 @@
     {
       "name": "campaign-4p-grid",
       "frame": 120,
-      "hash": "fcae8dfd81a6acae63fad9e50f73baea",
-      "exercises": "Four humans launch a co-op campaign mission on StartGrid with no profile on the machine to load, so no director: four render targets, HUDs and gauges, the mission table's target label per pane, the lit C1 world; frame-sensitive 73.79%.",
+      "hash": "381cf0412b8b2756cb75f330358c0a3e",
+      "exercises": "Four humans launch a co-op campaign mission on StartGrid with no profile to load, so no director: four render targets, HUDs, gauges and target labels, the lit C1 world, the player-shaped shadow under each pane's own pilot; frame-sensitive 73.79%.",
       "args": ["--campaign=csvm-golden:6", "--players=4", "--plane=player_bhawk,player_bhawk,player_bhawk,player_bhawk", "--det", "--mute"]
     },
     {

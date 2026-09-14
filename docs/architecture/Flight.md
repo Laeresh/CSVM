@@ -1317,11 +1317,13 @@ suites pin a shape no ellipse can satisfy. Decode: [../org/shadows.md](../org/sh
 
 ## src/Flight/GroundShadowPass.cs
 The drawing half: one modulating quad per live aircraft, rebuilt from the rule each rendered frame,
-with the surface height coming from a single downward ray and the roster, the players and the
-authored sunlight read fresh through delegates `GameSession` supplies. Built in original graphics
-mode only. It owns a `GroundShadowSilhouette` per caster and binds its texture to the quad's
-shader. The quad is flat where the original modulates the ground's own polygons, which the decode
-page records. Read [../org/shadows.md](../org/shadows.md) next.
+with the surface height coming from a single downward ray and the roster, the players, the
+session's rigs and the authored sunlight read fresh through delegates `GameSession` supplies. The
+player's three exemptions belong to the pane whose pilot flies that aeroplane, so an aeroplane a
+human flies carries a second quad on that pane's own visual layer. Built in original graphics mode
+only. It owns a `GroundShadowSilhouette` per caster and binds its texture to the quad's shader. The
+quad is flat where the original modulates the ground's own polygons, which the decode page records.
+Read [../org/shadows.md](../org/shadows.md) next.
 
 ## src/Flight/GodotWorldQuery.cs
 The only adapter over Godot's `DirectSpaceState`, implementing `IWorldQuery`. It resolves the

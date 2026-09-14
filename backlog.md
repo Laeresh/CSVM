@@ -1607,16 +1607,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   shield's docs page.
   *Cross-refs:* `BL-826`'s closing commit, `docs/verification.md` SRC-7, `BL-389` (the
   splitscreen weapon mix, the same family).
-- `BL-838` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The ground shadow's forward
-  skew, threefold growth and fade exemption key on any human-piloted aeroplane, so a four-pilot
-  launch draws four player-shaped shadows in every pane.** *Decision:* each pane's own viewer
-  takes the player shape, the decoded intent read per viewer; the other pilots' aeroplanes draw
-  ordinary shadows in that pane. *Evidence:*
-  `CSVM/src/Flight/GroundShadowPass.cs:228` (at `7d2e9881`) tests `IsHumanPiloted`; the decode
-  (`docs/org/shadows.md`) keys the skew on the one local player. *Fix shape:* key the skew on the
-  pane's viewer instead of `IsHumanPiloted`, pinned in the `ground-shadow` suite over a two-pane
-  session where each pane shows both aeroplanes. *Cross-refs:* `docs/org/shadows.md`, `git log --grep=BL-331` (the shadow's landed
-  placement and silhouette, and the halves dropped with it), `docs/verification.md` SRC-12.
 
 
 ## Splitscreen

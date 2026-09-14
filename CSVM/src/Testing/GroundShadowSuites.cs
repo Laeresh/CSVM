@@ -13,14 +13,19 @@ namespace CSVM.Testing;
 /// <summary>The aircraft ground shadow over the flat empty stage and over C1's real terrain: that
 /// one lands under the aircraft it belongs to, that it takes the surface height the probe reads,
 /// that the player's own runs 1.5 times its altitude ahead while an AI aircraft's sits directly
-/// beneath, that the player's own footprint alone grows with altitude, that the texture carries
-/// the airframe's own silhouette rather than any symmetric blob, and that it is absent exactly
-/// where the decode says nothing is drawn (over the cutoff altitude, past the far range, and in
-/// enhanced graphics mode). Decode: docs/org/shadows.md.</summary>
+/// beneath, that the player's own footprint alone grows with altitude, that in two panes each
+/// pane's own pilot is the one taking that shape, that the texture carries the airframe's own
+/// silhouette rather than any symmetric blob, and that it is absent exactly where the decode says
+/// nothing is drawn (over the cutoff altitude, past the far range, and in enhanced graphics
+/// mode). Decode: docs/org/shadows.md.</summary>
 internal static class GroundShadowSuites
 {
     // The empty stage's ground plane, which the shadow must land on rather than on y=0 by luck.
     private const float StageGroundY = 0f;
+
+    // How far apart the two panes' aeroplanes sit, well inside the distance fade so both are drawn
+    // in both panes and far enough apart that neither shadow can be read for the other's.
+    private const float PaneSeparation = 60f;
 
     // Altitudes either side of the ramp, and a range inside and outside the distance fade.
     private const float LowAltitude = 40f;
@@ -58,9 +63,10 @@ internal static class GroundShadowSuites
     [Suite("ground-shadow",
         "The projected aircraft ground shadow: under the aircraft on the flat stage and on C1's " +
         "own terrain height, running 1.5 times its altitude ahead of the player while an AI " +
-        "aircraft's sits beneath, the player's footprint alone doubling by 155 m, the airframe's " +
-        "own silhouette in the texture turning with it, and absent over 250 m of altitude, past " +
-        "200 m of range and under enhanced graphics")]
+        "aircraft's sits beneath, the player's footprint alone doubling by 155 m, that shape " +
+        "belonging to each pane's own pilot in a two-pane session, the airframe's own silhouette " +
+        "in the texture turning with it, and absent over 250 m of altitude, past 200 m of range " +
+        "and under enhanced graphics")]
     internal static void GroundShadow(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -78,6 +84,7 @@ internal static class GroundShadowSuites
             // than inheriting whatever the run was launched in; the run's own mode is restored.
             GraphicsMode.Resolve(GraphicsMode.Default);
             FlatStage(ctx, planesGamez, textures, report);
+            Panes(ctx, planesGamez, textures, report);
             Turning(ctx, planesGamez, textures, report);
             Terrain(ctx, planesGamez, textures, report);
             Gate(ctx, report);
@@ -121,6 +128,12 @@ internal static class GroundShadowSuites
         ctx.Host.AddChild(rig);
         return rig;
     }
+
+    // One pane as the pass reads the session's rigs: whose aeroplane it is, and the visual layer
+    // this pane's camera alone draws (0 outside splitscreen, where one camera draws everything).
+    private static PlayerRig Pane(int index, FlightController? flying, uint layer,
+        Camera3D? camera = null) =>
+        new() { Index = index, Camera = camera!, Controller = flying, VisualLayer = layer };
 
     // The rasterised silhouette as text, for the artifact: one row per texel row of the mask.
     private static void Mask(GroundShadowPass pass, FlightController rig, string who,
@@ -260,7 +273,8 @@ internal static class GroundShadowSuites
             player = Rig(ctx, planesGamez, textures, human: true, new Vector3(0f, LowAltitude, 0f));
             ai = Rig(ctx, planesGamez, textures, human: false, new Vector3(InRange, LowAltitude, 0f));
             var rigs = new List<FlightController> { player, ai };
-            pass = GroundShadowPass.Build(ctx.Host, () => rigs, () => players,
+            var panes = new List<PlayerRig> { Pane(0, player, 0u) };
+            pass = GroundShadowPass.Build(ctx.Host, () => rigs, () => players, () => panes,
                 () => WeatherRig.DefaultSunlightRgb);
             ctx.Check(pass != null, $"original graphics mode builds the ground-shadow pass");
             if (pass == null)
@@ -340,6 +354,124 @@ internal static class GroundShadowSuites
         }
     }
 
+    // What one pane sees under its own pilot's aeroplane: the skew, on layers this pane's camera
+    // draws and the other pane's does not.
+    private static void Pilot(TestContext ctx, GroundShadowPass pass, List<PlayerRig> panes,
+        FlightController rig, int pane, float x, StringBuilder report)
+    {
+        var drawn = pass.QuadFor(rig, pane);
+        ctx.Check(drawn != null, $"P{pane + 1}'s pane draws a shadow under the aeroplane it is flying");
+        if (drawn is not { } quad)
+            return;
+        var at = quad.GlobalPosition;
+        float lead = -GroundShadowLaw.PlayerSkew * LowAltitude;
+        report.AppendLine($"P{pane + 1}'s pane, its own aeroplane at x={x:0}: shadow ({at.X:0.00}, {at.Y:0.00}, {at.Z:0.00}), expected z {lead:0.00}");
+        ctx.Check(Mathf.Abs(at.X - x) <= PlaceTolerance && Mathf.Abs(at.Z - lead) <= PlaceTolerance,
+            $"and it runs 1.5x its altitude ahead of it there z={at.Z:0.00} expected={lead:0.00}");
+        ctx.Check((quad.Layers & panes[pane].Camera.CullMask) != 0,
+            $"on a layer this pane's own camera draws 0x{quad.Layers:X5} against 0x{panes[pane].Camera.CullMask:X5}");
+        ctx.Check((quad.Layers & panes[1 - pane].Camera.CullMask) == 0,
+            $"and on none the other pane's draws, so no second pane sees the skew");
+    }
+
+    // And what a pane sees under the other pilot's aeroplane: an ordinary shadow directly beneath
+    // it, which is what every pane but its own pilot's draws.
+    private static void Other(TestContext ctx, GroundShadowPass pass, List<PlayerRig> panes,
+        FlightController rig, int pane, float x, StringBuilder report)
+    {
+        var drawn = pass.QuadFor(rig, pane);
+        ctx.Check(drawn != null, $"P{pane + 1}'s pane draws one under the other pilot's aeroplane too");
+        if (drawn is not { } quad)
+            return;
+        var at = quad.GlobalPosition;
+        report.AppendLine($"P{pane + 1}'s pane, the other pilot's aeroplane at x={x:0}: shadow ({at.X:0.00}, {at.Y:0.00}, {at.Z:0.00})");
+        ctx.Check(Mathf.Abs(at.X - x) <= PlaceTolerance && Mathf.Abs(at.Z) <= PlaceTolerance,
+            $"directly beneath it rather than skewed ({at.X:0.00}, {at.Z:0.00})");
+        ctx.Check((quad.Layers & panes[pane].Camera.CullMask) != 0
+            && (quad.Layers & panes[1 - pane].Camera.CullMask) == 0,
+            $"on a layer this pane draws and that aeroplane's own pilot's does not 0x{quad.Layers:X5}");
+    }
+
+    // One shadow's footprint across, or zero where that pane draws none.
+    private static float Width(GroundShadowPass pass, FlightController rig, int pane) =>
+        pass.QuadFor(rig, pane)?.GlobalTransform.Basis.Scale.X ?? 0f;
+
+    // Two panes over one world, each pilot flying his own aeroplane and both aeroplanes in both
+    // panes. The player's skew and growth belong to the pane whose pilot is at those controls, so
+    // one aeroplane carries two shadows at once, kept apart by the layers each pane's camera draws.
+    private static void Panes(TestContext ctx, GameZ planesGamez, TextureArchive textures,
+        StringBuilder report)
+    {
+        Node3D? stage = null;
+        FlightController? one = null;
+        FlightController? two = null;
+        Camera3D? camera1 = null;
+        Camera3D? camera2 = null;
+        GroundShadowPass? pass = null;
+        try
+        {
+            stage = EmptyStage.Build(collision: true).Root;
+            ctx.Host.AddChild(stage);
+            one = Rig(ctx, planesGamez, textures, human: true, new Vector3(0f, LowAltitude, 0f));
+            two = Rig(ctx, planesGamez, textures, human: true,
+                new Vector3(PaneSeparation, LowAltitude, 0f));
+            camera1 = SuiteViewers.Camera(ctx, one.GlobalPosition);
+            camera2 = SuiteViewers.Camera(ctx, two.GlobalPosition);
+            camera1.CullMask = UI.SplitScreen.PlayerCullMask(0);
+            camera2.CullMask = UI.SplitScreen.PlayerCullMask(1);
+            var panes = new List<PlayerRig>
+            {
+                Pane(0, one, UI.SplitScreen.PlayerVisualLayer(0), camera1),
+                Pane(1, two, UI.SplitScreen.PlayerVisualLayer(1), camera2),
+            };
+            var rigs = new List<FlightController> { one, two };
+            var players = new List<Vector3> { one.GlobalPosition, two.GlobalPosition };
+            pass = GroundShadowPass.Build(ctx.Host, () => rigs, () => players, () => panes,
+                () => WeatherRig.DefaultSunlightRgb);
+            ctx.Check(pass != null, $"a two-pane session builds the ground-shadow pass");
+            if (pass == null)
+                return;
+            pass.Tick();
+            ctx.Same(4, pass.Drawn,
+                $"two aeroplanes over two panes draw four shadows, a pilot's own and an ordinary one each");
+
+            Pilot(ctx, pass, panes, one, 0, 0f, report);
+            Pilot(ctx, pass, panes, two, 1, PaneSeparation, report);
+            Other(ctx, pass, panes, two, 0, PaneSeparation, report);
+            Other(ctx, pass, panes, one, 1, 0f, report);
+
+            // The growth is the asking pane's as well. Climbing both aeroplanes at once, each
+            // footprint follows the ramp in its own pilot's pane and stays put in the other's.
+            float oneOwn = Width(pass, one, 0);
+            float oneSeen = Width(pass, one, 1);
+            float twoOwn = Width(pass, two, 1);
+            float twoSeen = Width(pass, two, 0);
+            one.GlobalPosition = new Vector3(0f, MidAltitude, 0f);
+            two.GlobalPosition = new Vector3(PaneSeparation, MidAltitude, 0f);
+            players[0] = one.GlobalPosition;
+            players[1] = two.GlobalPosition;
+            pass.Tick();
+            report.AppendLine($"at {MidAltitude:0} m: P1's aeroplane {oneOwn:0.00} -> {Width(pass, one, 0):0.00} m across in its own pane and {oneSeen:0.00} -> {Width(pass, one, 1):0.00} in P2's, P2's {twoOwn:0.00} -> {Width(pass, two, 1):0.00} in its own and {twoSeen:0.00} -> {Width(pass, two, 0):0.00} in P1's");
+            ctx.Check(Mathf.Abs(Width(pass, one, 0) - (2f * oneOwn)) <= 0.2f,
+                $"P1's own footprint doubles in P1's pane {oneOwn:0.00} -> {Width(pass, one, 0):0.00} m across");
+            ctx.Check(Mathf.Abs(Width(pass, one, 1) - oneSeen) <= 0.2f,
+                $"and the same aeroplane does not grow at all in P2's {oneSeen:0.00} -> {Width(pass, one, 1):0.00} m");
+            ctx.Check(Mathf.Abs(Width(pass, two, 1) - (2f * twoOwn)) <= 0.2f,
+                $"P2's own footprint doubles in P2's pane {twoOwn:0.00} -> {Width(pass, two, 1):0.00} m across");
+            ctx.Check(Mathf.Abs(Width(pass, two, 0) - twoSeen) <= 0.2f,
+                $"and does not grow in P1's {twoSeen:0.00} -> {Width(pass, two, 0):0.00} m");
+        }
+        finally
+        {
+            pass?.Free();
+            camera1?.Free();
+            camera2?.Free();
+            one?.Free();
+            two?.Free();
+            stage?.Free();
+        }
+    }
+
     // How many texels of one aircraft's mask move when only its blur discs turn. The aircraft is
     // not touched between the two rasters, so the difference can have come from nothing else.
     private static int Turned(GroundShadowPass pass, FlightController rig, float seconds)
@@ -405,7 +537,8 @@ internal static class GroundShadowSuites
             parked = Rig(ctx, planesGamez, textures, human: false,
                 new Vector3(80f, LowAltitude, 0f), RotorPlane);
             var rigs = new List<FlightController> { rotor, propeller };
-            pass = GroundShadowPass.Build(ctx.Host, () => rigs, () => players,
+            var panes = new List<PlayerRig> { Pane(0, null, 0u) };
+            pass = GroundShadowPass.Build(ctx.Host, () => rigs, () => players, () => panes,
                 () => WeatherRig.DefaultSunlightRgb);
             if (pass == null)
                 return;
@@ -487,7 +620,8 @@ internal static class GroundShadowSuites
                 ai = Rig(ctx, planesGamez, textures, human: false, at);
                 var rigs = new List<FlightController> { ai };
                 var players = new List<Vector3> { at };
-                pass = GroundShadowPass.Build(ctx.Host, () => rigs, () => players,
+                var panes = new List<PlayerRig> { Pane(0, null, 0u) };
+                pass = GroundShadowPass.Build(ctx.Host, () => rigs, () => players, () => panes,
                     () => WeatherRig.DefaultSunlightRgb);
                 pass?.Tick();
                 var quad = pass?.QuadFor(ai);
@@ -516,12 +650,13 @@ internal static class GroundShadowSuites
     {
         var none = new List<FlightController>();
         var nobody = new List<Vector3>();
+        var unwatched = Array.Empty<PlayerRig>();
         GraphicsMode.Resolve(GraphicsMode.EnhancedWord);
-        var absent = GroundShadowPass.Build(ctx.Host, () => none, () => nobody,
+        var absent = GroundShadowPass.Build(ctx.Host, () => none, () => nobody, () => unwatched,
             () => WeatherRig.DefaultSunlightRgb);
         ctx.Check(absent == null, $"enhanced graphics mode builds no ground-shadow pass");
         GraphicsMode.Resolve(GraphicsMode.Default);
-        var present = GroundShadowPass.Build(ctx.Host, () => none, () => nobody,
+        var present = GroundShadowPass.Build(ctx.Host, () => none, () => nobody, () => unwatched,
             () => WeatherRig.DefaultSunlightRgb);
         ctx.Check(present != null, $"and original graphics mode builds one");
         report.AppendLine($"graphics gate: enhanced={(absent == null ? "no pass" : "a pass")}, original={(present == null ? "no pass" : "a pass")}");

@@ -2220,10 +2220,10 @@ public partial class GameSession : Node3D
         _worldRoot!.AddChild(projectiles);
         _projectiles = projectiles;
 
-        // The original's per-frame ground shadow, one quad under every aircraft. It reads the
-        // roster fresh, so waves and generator spawns are covered; enhanced graphics mode builds
-        // nothing here and casts real shadow maps instead.
-        GroundShadowPass.Build(_worldRoot!, AllAircraft, PlayerPositionsSnapshot,
+        // The original's per-frame ground shadow, one quad under every aircraft. Roster and rigs
+        // are read fresh, so waves are covered and each pane's own pilot takes the player's shape
+        // there; enhanced graphics mode builds nothing here and casts real shadow maps instead.
+        GroundShadowPass.Build(_worldRoot!, AllAircraft, PlayerPositionsSnapshot, () => _rigs,
             () => _weatherRig?.SunlightRgb ?? WeatherRig.DefaultSunlightRgb);
 
         // The smoke screens' own smoke, wired here rather than at their construction because the

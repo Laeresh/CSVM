@@ -10,11 +10,17 @@ namespace CSVM.Flight;
 /// sized, coloured and dropped by <see cref="GroundShadowLaw"/>, with the aircraft's own
 /// silhouette rasterised into its texture by <see cref="GroundShadowSilhouette"/>. Original
 /// graphics mode only, enhanced mode casting real shadow maps instead (docs/architecture/Root.md).
+/// The player's own shape belongs to the pane whose pilot is flying that aeroplane, so an
+/// aeroplane a human flies carries two quads in a multi-pane session, told apart by visual layer.
 /// ⚠ The quad is flat where the original modulates the ground's own polygons, so the shadow
 /// rides over a steep enough slope. Decode: docs/org/shadows.md.
 /// </summary>
 public sealed partial class GroundShadowPass : Node3D
 {
+    // Godot's default visual layer, which every camera in the port draws: where a shadow that
+    // every pane sees alike goes, and where a single-pane session's shadows all stay.
+    private const uint SharedLayer = 1;
+
     // The quad is a separate surface lying over ground the original never separates from: it
     // modulates the terrain's own polygons. Lifting it clear is this stand-in's own constant,
     // decoded from nothing, and is why the shadow rides visibly over a steep enough slope.
@@ -39,18 +45,26 @@ public sealed partial class GroundShadowPass : Node3D
         }
         """;
 
-    private readonly Dictionary<ulong, Caster> _casters = new();
-    private readonly List<ulong> _retired = new();
+    private readonly Dictionary<(ulong Rig, bool Own), Caster> _casters = new();
+    private readonly List<(ulong Rig, bool Own)> _retired = new();
+    private readonly HashSet<(ulong Rig, bool Own)> _live = new();
     private readonly Func<IReadOnlyList<FlightController>> _aircraft;
     private readonly Func<IReadOnlyList<Vector3>> _players;
+    private readonly Func<IReadOnlyList<PlayerRig>> _panes;
     private readonly Func<(Vector3 Diffuse, Vector3 Ambient)> _sunlight;
     private readonly Mesh _quad;
 
+    // The pane set as the last pass read it, so a suite or a caller asking what one pane sees
+    // reads the same ownership the quads were built against.
+    private IReadOnlyList<PlayerRig> _seen = Array.Empty<PlayerRig>();
+
     private GroundShadowPass(Func<IReadOnlyList<FlightController>> aircraft,
-        Func<IReadOnlyList<Vector3>> players, Func<(Vector3 Diffuse, Vector3 Ambient)> sunlight)
+        Func<IReadOnlyList<Vector3>> players, Func<IReadOnlyList<PlayerRig>> panes,
+        Func<(Vector3 Diffuse, Vector3 Ambient)> sunlight)
     {
         _aircraft = aircraft;
         _players = players;
+        _panes = panes;
         _sunlight = sunlight;
         _quad = new PlaneMesh { Size = Vector2.One };
         Name = "ground_shadows";
@@ -75,10 +89,12 @@ public sealed partial class GroundShadowPass : Node3D
     }
 
     /// <summary>Build the pass under a session's world root, or nothing at all in enhanced
-    /// graphics mode, which lights and shadows the world itself.</summary>
+    /// graphics mode, which lights and shadows the world itself. <paramref name="panes"/> is the
+    /// session's own rig list, read fresh: it says which aeroplane each pane's pilot flies and
+    /// which visual layer that pane alone draws.</summary>
     public static GroundShadowPass? Build(Node3D worldRoot,
         Func<IReadOnlyList<FlightController>> aircraft, Func<IReadOnlyList<Vector3>> players,
-        Func<(Vector3 Diffuse, Vector3 Ambient)> sunlight)
+        Func<IReadOnlyList<PlayerRig>> panes, Func<(Vector3 Diffuse, Vector3 Ambient)> sunlight)
     {
         if (GraphicsMode.Enhanced)
         {
@@ -86,40 +102,102 @@ public sealed partial class GroundShadowPass : Node3D
             return null;
         }
 
-        var pass = new GroundShadowPass(aircraft, players, sunlight);
+        var pass = new GroundShadowPass(aircraft, players, panes, sunlight);
         worldRoot.AddChild(pass);
         Log.Info("world", $"ground shadows: on, to {GroundShadowLaw.CutoffAltitude:0} m of altitude and {GroundShadowLaw.FarDistance:0} m of range");
         return pass;
     }
 
-    /// <summary>The shadow quad under one aircraft, or null when that aircraft casts none. The
-    /// suites read its transform; nothing else has a reason to.</summary>
-    public MeshInstance3D? QuadFor(FlightController rig) =>
-        _casters.TryGetValue(rig.GetInstanceId(), out var caster) && caster.Quad.Visible
-            ? caster.Quad : null;
+    /// <summary>The shadow quad pane <paramref name="pane"/> sees under one aircraft, or null when
+    /// none is drawn for it there. The suites read its transform; nothing else has a reason
+    /// to.</summary>
+    public MeshInstance3D? QuadFor(FlightController rig, int pane = 0) =>
+        _casters.TryGetValue((rig.GetInstanceId(), OwnIn(rig, pane)), out var caster)
+            && caster.Quad.Visible ? caster.Quad : null;
 
-    /// <summary>The silhouette behind one aircraft's shadow, as the last pass rasterised it. The
-    /// suites read its coverage; nothing else has a reason to.</summary>
-    public GroundShadowSilhouette? ShapeFor(FlightController rig) =>
-        _casters.TryGetValue(rig.GetInstanceId(), out var caster) ? caster.Shape : null;
+    /// <summary>The silhouette behind that shadow, as the last pass rasterised it. The suites read
+    /// its coverage; nothing else has a reason to.</summary>
+    public GroundShadowSilhouette? ShapeFor(FlightController rig, int pane = 0) =>
+        _casters.TryGetValue((rig.GetInstanceId(), OwnIn(rig, pane)), out var caster)
+            ? caster.Shape : null;
 
     public override void _Process(double delta) => Tick();
 
-    /// <summary>One pass over the roster: place, colour or drop every aircraft's shadow. Driven
-    /// per rendered frame, and called directly by the suites, which pump no frames.</summary>
+    /// <summary>One pass over the roster: place, colour or drop every aircraft's shadow. An
+    /// aeroplane a pane's own pilot flies takes a second quad, the player-shaped one that pane
+    /// alone draws. Driven per rendered frame, and called directly by the suites, which pump no
+    /// frames.</summary>
     public void Tick()
     {
         var aircraft = _aircraft();
         var players = _players();
         var (diffuse, ambient) = _sunlight();
+        _seen = _panes();
+        _live.Clear();
         foreach (var rig in aircraft)
         {
             if (!GodotObject.IsInstanceValid(rig) || rig.PlaneModel is not { } model)
                 continue;
-            Place(rig, model, CasterFor(rig, model), players, diffuse, ambient);
+            int pilot = PaneOf(rig);
+            if (pilot >= 0)
+                Draw(rig, model, true, LayerOf(_seen[pilot]), players, diffuse, ambient);
+            uint audience = Audience(pilot);
+            if (audience != 0)
+                Draw(rig, model, false, audience, players, diffuse, ambient);
         }
 
-        Retire(aircraft);
+        Retire();
+    }
+
+    // Which pane's own pilot is flying this aeroplane, or -1 when nobody at a pane is. The
+    // original's three player exemptions are that one viewer's, so every other pane draws the
+    // aeroplane an ordinary shadow.
+    private int PaneOf(FlightController rig)
+    {
+        for (int i = 0; i < _seen.Count; i++)
+        {
+            if (ReferenceEquals(_seen[i].Controller, rig))
+                return i;
+        }
+
+        return -1;
+    }
+
+    // The visual layers an aeroplane's ordinary shadow is drawn on: every pane's when nobody at a
+    // pane flies it, the other panes' when somebody does. Zero means the only pane watching is its
+    // own pilot's, which is the single-pane session and where no ordinary quad is built at all.
+    private uint Audience(int pilot)
+    {
+        if (pilot < 0)
+            return SharedLayer;
+        uint layers = 0;
+        for (int i = 0; i < _seen.Count; i++)
+        {
+            if (i != pilot)
+                layers |= LayerOf(_seen[i]);
+        }
+
+        return layers;
+    }
+
+    // One pane's own visual layer, or the shared one outside splitscreen, where the rigs carry no
+    // layer of their own and one camera draws everything.
+    private uint LayerOf(PlayerRig pane) => pane.VisualLayer != 0 ? pane.VisualLayer : SharedLayer;
+
+    // Whether the aeroplane one pane is asked about is that pane's own, which is what picks
+    // between the two shadows an aeroplane can carry.
+    private bool OwnIn(FlightController rig, int pane) =>
+        pane >= 0 && pane < _seen.Count && ReferenceEquals(_seen[pane].Controller, rig);
+
+    // One of an aeroplane's shadows for this frame, on the layers its audience draws.
+    private void Draw(FlightController rig, Node3D model, bool own, uint layers,
+        IReadOnlyList<Vector3> players, Vector3 diffuse, Vector3 ambient)
+    {
+        var key = (rig.GetInstanceId(), own);
+        var caster = CasterFor(key, model);
+        caster.Quad.Layers = layers;
+        _live.Add(key);
+        Place(rig, model, caster, own, players, diffuse, ambient);
     }
 
     // The surface under one aircraft: the highest collider at or below it, which is what the
@@ -140,14 +218,13 @@ public sealed partial class GroundShadowPass : Node3D
         return true;
     }
 
-    // One aircraft's shadow, built on first sight of it. Its shape is read once here: an airframe
-    // swap rebuilds the rig and with it this entry.
-    private Caster CasterFor(FlightController rig, Node3D model)
+    // One of an aircraft's shadows, built on first sight of it. Its shape is read once here: an
+    // airframe swap rebuilds the rig and with it this entry.
+    private Caster CasterFor((ulong Rig, bool Own) key, Node3D model)
     {
-        ulong id = rig.GetInstanceId();
-        if (_casters.TryGetValue(id, out var known))
+        if (_casters.TryGetValue(key, out var known))
             return known;
-        var shape = GroundShadowSilhouette.For(model, rig.IsHumanPiloted);
+        var shape = GroundShadowSilhouette.For(model, key.Own);
         var material = new ShaderMaterial { Shader = new Shader { Code = ShaderCode } };
         material.SetShaderParameter("coverage", shape.Texture);
         var quad = new MeshInstance3D
@@ -156,18 +233,19 @@ public sealed partial class GroundShadowPass : Node3D
             MaterialOverride = material,
             TopLevel = true, // placed in world coordinates, not under the pass's own frame
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            Name = $"shadow_{id}",
+            Name = key.Own ? $"shadow_{key.Rig}_own" : $"shadow_{key.Rig}",
             Visible = false,
         };
         AddChild(quad);
         var caster = new Caster(quad, material, shape);
-        _casters[id] = caster;
+        _casters[key] = caster;
         return caster;
     }
 
-    // One aircraft's shadow for this frame. The law decides everything except whether there is
-    // ground under it at all.
-    private void Place(FlightController rig, Node3D model, Caster caster,
+    // One aircraft's shadow for this frame, as one audience sees it. The law decides everything
+    // except whether there is ground under it at all. ⚠ isPlayer is the asking pane's own pilot,
+    // never "a human is flying it": in splitscreen the other panes see an ordinary shadow there.
+    private void Place(FlightController rig, Node3D model, Caster caster, bool isPlayer,
         IReadOnlyList<Vector3> players, Vector3 diffuse, Vector3 ambient)
     {
         var quad = caster.Quad;
@@ -178,7 +256,6 @@ public sealed partial class GroundShadowPass : Node3D
         }
 
         var pose = model.GlobalTransform;
-        bool isPlayer = rig.IsHumanPiloted;
         float distance = isPlayer ? 1f : NearestPlayerFactor(pose.Origin, players);
         if (distance <= 0f || !Ground(pose.Origin, out float groundY))
         {
@@ -237,30 +314,21 @@ public sealed partial class GroundShadowPass : Node3D
     }
 
     // A shadow outlives its aircraft by one frame at most: the original frees the object the
-    // moment its strength reaches zero, and a retired rig never reports one again.
-    private void Retire(IReadOnlyList<FlightController> aircraft)
+    // moment its strength reaches zero, and a retired rig never reports one again. A quad whose
+    // audience has emptied goes the same way, which is what a pane leaving takes with it.
+    private void Retire()
     {
         _retired.Clear();
-        foreach (var id in _casters.Keys)
+        foreach (var key in _casters.Keys)
         {
-            bool live = false;
-            foreach (var rig in aircraft)
-            {
-                if (GodotObject.IsInstanceValid(rig) && rig.GetInstanceId() == id)
-                {
-                    live = true;
-                    break;
-                }
-            }
-
-            if (!live)
-                _retired.Add(id);
+            if (!_live.Contains(key))
+                _retired.Add(key);
         }
 
-        foreach (var id in _retired)
+        foreach (var key in _retired)
         {
-            _casters[id].Quad.QueueFree();
-            _casters.Remove(id);
+            _casters[key].Quad.QueueFree();
+            _casters.Remove(key);
         }
     }
 

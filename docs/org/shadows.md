@@ -280,6 +280,13 @@ from this page and where it departs:
 - Taken verbatim: the straight-down projection and the player's forward skew, the 1/200 horizontal
   distance fade, the 60/250 altitude ramp, the player's 3× growth, the colour formula with its zero
   guard, and the spread and ramp the coverage texture is built through.
+- **"The player" above is the pane's own viewer.** The original has one local player and CSVM has
+  up to four panes over one world, so the three exemptions (the skew, the growth and the exemption
+  from the distance fade) are read per pane: an aeroplane draws the player shape in the pane whose
+  pilot is flying it and an ordinary shadow in every other pane. That costs such an aeroplane a
+  second quad, the two kept apart by the per-player visual layers (`UI/SplitScreen.cs`), and it
+  chooses the silhouette node per pane with them, the `geometry` child for the pane's own pilot and
+  the whole model root elsewhere.
 - The silhouette is rasterised per frame from the aircraft's own triangles, off the node this page
   names (the `geometry` child for the player's own aircraft, the whole model root for every other),
   through the same texel mapping, spread and ramp. The triangles are read off the model once, on
