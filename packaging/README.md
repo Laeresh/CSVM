@@ -155,7 +155,8 @@ CSVM has written; your Crimson Skies install is never modified.
 - `LICENSE-thirdparty.txt` carries the copyright notices for the software built into those
   two binaries: the Godot engine and its own third-party components, the bundled .NET
   runtime, and the Rust libraries inside `tools\unzbd.exe`. It also carries the notice for
-  `pl_mpeg`, the MIT-licensed library CSVM's video decoder is ported from.
+  `pl_mpeg`, the MIT-licensed library CSVM's video decoder is ported from, and the SIL Open
+  Font License for PromptFont, the font the controller button pictures are drawn from.
 - `BUILD-INFO.txt` records which commit each of the two shipped binaries was built from.
   Quote it in a bug report when you are not sure which build you have.
 
