@@ -1081,8 +1081,8 @@ public sealed class WorldBuilder
     }
 
     // Extends the deck sheet with a flat untextured rim so its edge does not read as a hard step
-    // near the horizon. ⚠ Keep `TargetHalfSpan` under the zone2 dome's 21.85 km render distance;
-    // do not re-derive it from a camera-anchored ceiling, that mechanism is gone (`BL-328`).
+    // near the horizon. `TargetHalfSpan` is a picked constant inside the smallest flown dome (C1's
+    // zone2, 21.86 km); ⚠ do not re-derive it from a camera-anchored ceiling, that mechanism is gone.
     // ⚠ Build it as a picture frame, never a full plane, which would z-fight the tiles.
     // ⚠ Add it as a CHILD of `deck`, never a sibling, nesting alone makes the rim follow the
     // camera and flip regime with the sheet.

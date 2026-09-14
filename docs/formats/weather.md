@@ -329,13 +329,14 @@ own frames show no such gradient near the horizon**, `C1 IA1 Fog river.png` is d
 (per-row sd 0.00) for 36 px above its horizon, so whatever hides it in the original is *not* a wall
 painting rule. Do not "fix" the wall's colours.
 
-⚠ **Engine-side consequence, landed:** this ring's own colours and gradient are untouched,
-what changed is how far out the below-band CEILING reaches before it hands off to them. The rim sits
-at `f·K/halfSpan` px; extending the ceiling sheet's half-span from 6144 m (its 144
-textured tiles) to 20,480 m (a plain fog-saturated annulus around them, `WorldBuilder.AddDeckAnnulus`)
-pushes the rim from 13 px to ~4 px, where this ring has lost only ~2 units of its own gradient,
-invisible, and every deck chapter (C1/C1C/C2B/C4) gets the same extension since `K` and the camera
-projection are shared constants.
+⚠ **Engine-side consequence:** this ring's own colours and gradient are untouched, what differs
+is how far out the deck sheet reaches before it hands off to them. The sheet's 144 textured tiles
+end at 6,144 m and a plain fog-saturated annulus (`WorldBuilder.AddDeckAnnulus`) extends it to a
+20,480 m half-span, a picked constant that sits inside the smallest flown dome. The floor is
+world-fixed at the tiles' authored altitude, so the rim's edge sits at `f·(cameraY − floorY)/20480`
+px below the horizon and grows with altitude: a few pixels at deck height, where this ring has
+lost only ~2 units of its own gradient, invisible. Every deck chapter (C1/C1C/C2B/C4) gets the same
+extension.
 
 #### Deck chapters use `zone2` at the documented camera state
 

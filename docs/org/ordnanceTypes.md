@@ -1239,6 +1239,11 @@ So the torpedo is the heaviest thing you can launch and the stick says so, and a
 kicks from behind. This is the only behaviour `TORPEDO` selects; everything else about the aerial
 torpedo comes from its other keys.
 
+CSVM does not reproduce this effect, by decision: Godot's joystick vibration carries no direction,
+so the front/rear split cannot be ported and `TORPEDO` is a no-op flag in the remake. The remake's
+own pad rumble is a separate feature that takes this table as a seed for magnitudes only
+(`BL-922`), not a port of the Immersion path.
+
 ⚠ **This corrects an earlier claim on this page that `TORPEDO` had no reader at all.** That claim
 rested on three instruction sweeps, and the gap between them was exactly this instruction form:
 `TEST <memory>, 0x8` covered memory operands, `AND <memory>, 0x8` and `AND <register>, 0x8` covered

@@ -112,6 +112,8 @@ landing gate for any change under `CSVM/`.
   commit's message, found later with `git log --grep=<ID>`. The dated
   `### ⚠ … — RETIRED (yyyy-mm-dd)` headings in `docs/org/*.md` are the record of superseded
   readings, and are the only place a date belongs; do not extend the pattern elsewhere.
+  `backlog.md` entries written before this rule keep their dated clauses until the entry closes or
+  an edit reshapes its body, at which point the rule applies; there is no sweep of the old entries.
 - Comments explain why. Length caps and what belongs in one are in
   [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md)'s coding conventions; the terms to use are in
   [`CONTEXT.md`](CONTEXT.md).

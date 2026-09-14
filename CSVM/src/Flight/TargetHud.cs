@@ -322,7 +322,8 @@ public sealed partial class TargetHud : Control
     /// intercept, accept only inside the weapon's authored <paramref name="range"/>. No intercept
     /// (a target outrunning the round) is no brackets, at any distance.
     /// ⚠ Measure the reach along the MUZZLE VELOCITY: the round's speed along the intercept
-    /// direction PLUS the plane's. The assist's own range gate uses the round speed alone.</summary>
+    /// direction PLUS the plane's. The assist's own range gate uses the round speed alone.
+    /// ⚠ Brackets UNDER the gun's reach, never past it; the inverse was proposed and declined, do not flip it.</summary>
     public static bool GunReaches(Vector3 muzzle, Vector3 shooterVel, float speed, float range,
         Vector3 targetPos, Vector3 targetVel)
     {

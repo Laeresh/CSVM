@@ -45,8 +45,9 @@ public sealed partial class OriginalShell
     private const string AboutPrefix = "MA";
 
     // The box's words: langui 1301 over the product identification number. The original reads that
-    // number out of the installer's registry key and falls back to this when the key is absent,
-    // which is every machine here, since nothing in this port reads the registry.
+    // number out of the installer's registry key and falls back to this when the key is absent.
+    // This port never reads that key, by decision: the fallback is faithful on every machine and
+    // a registry dependency is not worth a retail installer's id, so do not add one.
     private const int AboutStringId = 1301;
     private const string AboutProductId = "???";
 

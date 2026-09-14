@@ -379,7 +379,7 @@ internal static class WorldAndToolSuites
         }
     }
 
-    // The authored panel driven off live readings (BL-431): the needles take an absolute angle and
+    // The authored panel driven off live readings (PLAN-cockpit-panel): the needles take an absolute angle and
     // the two lamps follow the cluster's own blink state. Able to fail: a needle left at its modeled
     // rest rotation, a lamp still parked while its condition holds, or a drive that moves the panel
     // geometry around the needle instead of the needle itself.
@@ -432,7 +432,7 @@ internal static class WorldAndToolSuites
             ctx.Check(Mathf.Abs(Mathf.AngleDifference(speed.Transform.Basis.GetEuler().Z, wantSpeed)) < 0.01f,
                 $"a second frame writes the same absolute angle rather than turning again");
 
-            // The horizon (BL-431 B12): N = Rz(-roll) . Rx(pitch), no gain/offset/clamp. A zero
+            // The horizon (PLAN-cockpit-panel B12): N = Rz(-roll) . Rx(pitch), no gain/offset/clamp. A zero
             // attitude first, since that has to equal the authored rest basis exactly.
             ctx.Check(horizon != null && horizonRest != null, $"the interior carries pfhorizon");
             if (horizon != null && horizonRest != null)
@@ -498,7 +498,7 @@ internal static class WorldAndToolSuites
         }
     }
 
-    // The belt lights take the loadout's colour tier (BL-431). A pristine plane reads all-green,
+    // The belt lights take the loadout's colour tier (PLAN-cockpit-panel). A pristine plane reads all-green,
     // which proves nothing, so this drives a spent belt and reads the material back. Able to fail:
     // a drive that recolours nothing, or one that writes the shared built material and so repaints
     // every indicator at once instead of the one position. Binds through CockpitGauges.Bind(builder),
