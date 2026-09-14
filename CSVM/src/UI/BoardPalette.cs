@@ -7,6 +7,8 @@ namespace CSVM.UI;
 /// painted art: the same grey the flight check's forms use is invisible on the cabin's dark hangar.
 /// The flight check and ammo values are the layout rows' own ARGB fields; the rest are chosen to
 /// read on their background, and <c>docs/org/campaign-board.md</c> says which is which.
+/// ⚠ <c>Focus</c> tints the field the cursor is on where the original marks nothing, by decision:
+/// pad and keyboard navigation needs a visible focus. Do not file the tint as a fidelity bug.
 /// </summary>
 public sealed record BoardPalette(
     Color Row, Color Focus, Color Heading, Color Detail,
