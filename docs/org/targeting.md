@@ -210,6 +210,46 @@ the two flags' keys reach the same point rule only as a guard. Nine objectives i
 a `TRAVELERS` point, and two of them name a target: C3/M01's `OBJECTIVE5` (the village trucks) and
 its `OBJECTIVE9` (`grasshut2`), both on the `objective` half.
 
+#### The campaign's Non-Aircraft list, mission by mission
+
+Read through the same loader the flight uses, the list each campaign mission STARTS with is below.
+Thirteen missions start with exactly one entry, nine start empty, CM08 starts with four and CM03
+with twelve. CM06 is the one mission that ships no `targets.zrd` of its own and takes C1C's chapter
+table, which flags nothing, so its Non-Aircraft key reaches nothing at all until its script adds
+three airships. Not one mission's list holds a gun emplacement, in the install or in CSVM.
+
+| Mission | Starts with | The script then |
+|---|---|---|
+| CM01 C3/M01 | `piratezep/rock_zeppelin` | nothing |
+| CM02 C3/M05 | `piratezep/rock_zeppelin` | nothing |
+| CM03 C3/M02 | `g_tower1`-`3`, `unit01`-`07`, `dock2`, `piratezep/rock_zeppelin` | removes the eleven camp structures as their objectives complete |
+| CM04 C3/M03 | `piratezep/rock_zeppelin` | nothing |
+| CM05 C3/M04 | `shipwreck` | nothing |
+| CM06 C1C/M01 | nothing (C1C's chapter table) | adds `piratezep/rock_zeppelin`, `blackswanzep`, `workersvoyagezep` |
+| CM07 C1/M02 | `trcargo01` | adds `ftank01` and two fuel trucks, then removes all four |
+| CM08 C1B/M03 | `tanker`, `piratezep/rock_zeppelin`, `vostokzep`, `slhouse` | adds `lifeboat`, then removes the lifeboat, Klondike, `vostokzep` and the tanker |
+| CM09 C1/M04 | `piratezep/rock_zeppelin` | adds and later removes Klondike |
+| CM10 C1/M05 | `piratezep/rock_zeppelin` | nothing |
+| CM11 C2/M02 | nothing | adds then removes `kidnapcar` |
+| CM12 C2/M01 | nothing | nothing |
+| CM13 C2/M03 | nothing | adds `piratezep/rock_zeppelin` |
+| CM14 C2B/M04 | nothing | adds `piratezep/rock_zeppelin` |
+| CM15 C2/M05 | `cargozep2` | removes `cargozep2` |
+| CM16 C4/M01 | `piratezep/rock_zeppelin` | nothing |
+| CM17 C4/M02 | `piratezep/rock_zeppelin` | nothing |
+| CM18 C4/M03 | `piratezep/rock_zeppelin` | adds and later removes Klondike |
+| CM19 C4/M04 | `piratezep/rock_zeppelin` | adds and later removes Klondike |
+| CM20 C4/M05 | nothing | nothing |
+| CM21 C5/M01 | `piratezep/rock_zeppelin` | nothing |
+| CM22 C5/M02 | nothing | nothing |
+| CM23 C5/M03 | nothing | nothing |
+| CM24 C5/M04 | nothing | adds `piratezep/rock_zeppelin` and `blackswanzep` |
+
+⚠ **A table entry offers nothing where the world builds no node of that name.** CM14 is the worked
+case: the chapter's script adds Klondike, and what stands in C2B/M04's world decides whether the key
+resolves. The `target-mission-list` suite flies CM01, CM06 and CM07 over their real worlds and pins
+the cycle to the flagged keys those worlds resolve.
+
 **A roster block that flags itself is its own candidate, not a second one.** `objectiveTarget` is a
 field ON the entity, so an aeroplane whose `aiv` block authors slot 37 is offered once, as the
 aeroplane, with the flag set: the block's slot-20 name on line 2, its slots 38 and 39 as the two
@@ -974,7 +1014,7 @@ there.
 |---|---|---|
 | Who picks the target | the player, from eleven bound actions | the pilot, from the same eleven, each a named action the Controls door rebinds (`Bindings/DefaultBindings.cs`, dispatched in `FlightController.StepTargeting`). The keys differ: the original's three class letters and their Shift and Ctrl forms are all spent on flight here, and a binding is one control, so the five class and class-less actions ship on `T`/`Y`/`U`/`I`/`O` and the six per-class Previous and Nearest on the digit row above them (`../controls.md`) |
 | Selection state | sticky in plane `+0x948`, survives everything except death and an explicit clear | the same, in `TargetSelection`, one instance per pane and owned by that pane's `FlightController` |
-| Candidate pool | four typed pools, rebuilt and re-sorted every frame | `TargetPool`, rebuilt every frame off `AimCandidateSet`'s same four lists |
+| Candidate pool | four typed pools, rebuilt and re-sorted every frame | `TargetPool`, rebuilt every frame off `AimCandidateSet`'s aeroplanes and live ordnance plus two curated feeds, the mission's flagged sites and the zeppelin sub-parts. The structure and turret lists are never walked, since a mission's table is what decides |
 | Classes | Enemy / Ally / Non-Aircraft, plus an Objective companion flag | the same three, `TargetClass`, with the objective flag on the ref (`TargetRef.Classify`) |
 | Team space | one space for everything: `0` neutral, `1` ally, enemy index `N` = `N + 2`, stored at `+0x8` on every combat object | the same space; an authored id is the runtime id |
 | Hostility test | one predicate over raw ids: differ, and neither is `0` | `AimAssist.Hostile`, asked by both the gun assist and the turret gunner rather than restated at each gate |
@@ -984,7 +1024,7 @@ there.
 | A mission structure's team | the node's own ownership slot for the mission being flown, inherited from the parent chain where it authors none | the same: `SceneBuilder` resolves the slot for the built mission (`GameZ.WorldObjectTeam`, `SceneBuilder.MissionSlot`) and stamps it, and `DestructibleRegistry.Register` reads it onto the pool, so C1/M05's hospital ship is the player's and a zeppelin's zones are the enemy's |
 | Splitscreen pilots | no per-pilot ladder exists | a remake-only rule: pilot 0 is the player's side, further pilots land in `AimAssist.VersusTeamBand` so a `--vs` player cannot inherit the id the no-`TEAM` emplacements default to |
 | World objects | neutral until a scene node authors two-bit ownership, and untargetable while neutral | the same: `AimCandidateSet.AddStructures` falls a pool with no authored team through to `AimAssist.NeutralTeam`. Two sources author one, a zeppelin record and the flagged node a pool stands on |
-| Turrets and structures | selectable **only** when the mission flags them `otherTarget` / `objectiveTarget` | the same in every flown mission: `ObjectiveSites.CollectFlagged` reads that mission's own `targets.zrd` and puts each `other_target` entry on the Non-Aircraft cycle, while a world emplacement and a zeppelin sub-part stand in for the flag nothing authors for them. A loose destructible never reaches a cycle. Instant Action and the multiplayer modes take the same feed with no director behind it |
+| Turrets and structures | selectable **only** when the mission flags them `otherTarget` / `objectiveTarget` | the same in every flown mission: `ObjectiveSites.CollectFlagged` reads that mission's own `targets.zrd` and puts each `other_target` entry on the Non-Aircraft cycle. A gun emplacement reaches no cycle at all, alive and hostile or not, because no shipped table names one; a loose destructible never reaches one either. The zeppelin sub-parts are the one stand-in for a flag nothing authors, a deliberate divergence. Instant Action and the multiplayer modes take the same feed with no director behind it |
 | Cycle order | objectives first, then ahead / behind / left / right, nearest inside each sector | the same, `TargetSelection.SectorKey` and its sort |
 | "Nearest" | head of that order, not a global nearest | `TargetSelection.Nearest`, on one key per class (`TargetNearestEnemy`, `TargetNearestAlly`, `TargetNearestNonAircraft`) and reachable through `--target=nearest` |
 | Nearest-crosshairs | 15° nose cone, nearest inside it, 2000 m cap, friend or foe | the same, `TargetSelection.NearestCrosshairs`, on `TargetNearest` |

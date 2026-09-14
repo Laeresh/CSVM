@@ -25,8 +25,8 @@ public sealed class TargetPool
     /// <summary>The Ally cycle: the same team, or either side unaffiliated.</summary>
     public IReadOnlyList<TargetRef> Ally => _ally;
 
-    /// <summary>The Non-Aircraft cycle: turret emplacements, zeppelin sub-parts, and the structures
-    /// the mission's own <c>targets.zrd</c> flags <c>other_target</c>.</summary>
+    /// <summary>The Non-Aircraft cycle: the structures the mission's own <c>targets.zrd</c> flags
+    /// <c>other_target</c>, plus the zeppelin sub-parts. Never a gun emplacement.</summary>
     public IReadOnlyList<TargetRef> NonAircraft => _nonAircraft;
 
     /// <summary>Everything selectable, across all three cycles.</summary>
@@ -50,10 +50,10 @@ public sealed class TargetPool
 
     /// <summary>Rebuilds all three cycles through <see cref="TargetRef.Classify"/>, dropping
     /// <paramref name="self"/> by reference. Structures reach it through
-    /// <paramref name="subParts"/> and the mission's <c>targets.zrd</c> SITES through
-    /// <paramref name="objectives"/>, each under its own record's flag; a marker-carrying aeroplane
-    /// arrives on its own vehicle candidate, never twice. ⚠ Never walk
-    /// <see cref="AimCandidateSet.Structures"/>: every crate lands on a cycle. ⚠ <paramref name="ownTeam"/> is the <c>FlightController.Team</c> FIELD.</summary>
+    /// <paramref name="subParts"/> and the mission's SITES through <paramref name="objectives"/>,
+    /// each under its own record's flag. ⚠ Never walk <see cref="AimCandidateSet.Structures"/> or
+    /// its turret list: every crate and gun would land on a cycle, and the table decides what does.
+    /// ⚠ <paramref name="ownTeam"/> is the <c>FlightController.Team</c> FIELD.</summary>
     public void Rebuild(AimCandidateSet scan, IReadOnlyList<AimCandidate>? subParts, int ownTeam,
         object? self, IReadOnlyList<AimCandidate>? objectives = null)
     {
@@ -61,11 +61,6 @@ public sealed class TargetPool
         foreach (var c in scan.Vehicles)
         {
             Offer(c, AimTargetKind.Vehicle, ownTeam, self);
-        }
-
-        foreach (var c in scan.Turrets)
-        {
-            Offer(c, AimTargetKind.Turret, ownTeam, self);
         }
 
         // The fourth pool. Its collector lists every round the engine wraps, fused or TARGETABLE;
@@ -166,11 +161,11 @@ public sealed class TargetPool
     }
 
     /// <summary>Whether a turret candidate stands in the world rather than being carried by an
-    /// aircraft. Only emplacements are selectable: a carried gunner's host is already a target in
-    /// its own right, and offering both would put two entries on one silhouette. An emplacement is
-    /// the one with a placement <see cref="TurretController.Site"/>. Internal rather than private:
-    /// <see cref="FlightController.AddRankedNonAircraft"/> shares this same guard for the AI's
-    /// ranked pool, rather than growing a second carried/emplacement check.</summary>
+    /// aircraft. An emplacement is the one with a placement <see cref="TurretController.Site"/>.
+    /// The AI's ranked pool takes only emplacements: a carried gunner's host is already ranked in
+    /// its own right, and offering both would put two entries on one silhouette. Lives here rather
+    /// than on the AI's own path so the carried/emplacement split is written once; the PLAYER's
+    /// cycle asks nothing of it, since no turret reaches that cycle at all.</summary>
     internal static bool IsEmplacement(object? source) =>
         source is TurretController { Site: not null };
 
@@ -259,14 +254,9 @@ public sealed class TargetPool
             || (kind == AimTargetKind.Vehicle && c.Source is FlightController { ObjectiveTarget: true });
 
         // ⚠ Plumb objectiveTarget, never fake it through otherTarget: that lands an objective site
-        // on the Non-Aircraft cycle instead of the Enemy one. A flagged site brings its own
-        // otherTarget; an emplacement and a sub-part stand in for a flag nothing authors for them.
-        bool otherTarget = !objective && kind switch
-        {
-            AimTargetKind.Turret => IsEmplacement(c.Source),
-            AimTargetKind.Structure => true,
-            _ => false,
-        };
+        // on the Non-Aircraft cycle instead of the Enemy one. A zeppelin sub-part stands in for a
+        // flag nothing authors for it; a gun gets no such stand-in (docs/org/targeting.md).
+        bool otherTarget = !objective && kind == AimTargetKind.Structure;
         if (TargetRef.Classify(kind, c.Live, c.Team, ownTeam, otherTarget, objective)
             is not { } cls)
         {

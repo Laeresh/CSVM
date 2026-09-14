@@ -3346,7 +3346,10 @@ public partial class FlightController : Node3D
             _targetScan.Clear();
             Projectiles.CollectAircraft(_targetScan);
             SurfaceVehicles?.CollectVehicles(_targetScan);
-            Projectiles.CollectTurrets(_targetScan);
+            // No turret pass. A gun reaches the pilot's cycle only where a targets.zrd record
+            // names its node, and it then arrives on the site feed below as any structure does.
+            // No shipped table names one, so collecting them would be unread work.
+
             // The fourth pool (E19): a TARGETABLE round in flight is selectable, which is why a
             // torpedo can be locked and shot at. The pool itself reads the admission byte.
             Projectiles.CollectFusedOrdnance(_targetScan);

@@ -41,9 +41,10 @@ internal static class TargetClassCycleSuites
     [Suite("target-class-cycle",
         "the nine class keys over C3/M01, which carries all three classes at once: the "
         + "Enemy/Objective key walks the hostile aeroplanes and wraps, the Ally key the friendly "
-        + "ones, and the Non-Aircraft key the live zeppelin's own parts together with the "
-        + "chapter's switched-on gun emplacements, every entry of it a structure or a turret and "
-        + "never an aeroplane; each class's Previous key walks that same order backwards and wraps "
+        + "ones, and the Non-Aircraft key the live zeppelin's own parts, every entry of it a "
+        + "structure and never an aeroplane, while the chapter's switched-on gun emplacements are "
+        + "alive and hostile beside it and reach no cycle at all; each class's Previous key walks "
+        + "that same order backwards and wraps "
         + "off the head onto the tail, and its Nearest key restarts the cycle at the head from "
         + "wherever the pilot had reached; a class change lands on the head of the cycle it changes to; "
         + "Target Nothing stays cleared through a rebuild until a class key; two panes "
@@ -118,8 +119,10 @@ internal static class TargetClassCycleSuites
                 }
 
                 int liveGuns = emplacements.Emplacements.Count(t => t.Alive);
-                ctx.Check(liveGuns > 0,
-                    $"{Chapter} places gun emplacements the pilot can lock onto once their sites are on, alive={liveGuns} of {emplacements.Count}");
+                int hostileGuns = emplacements.Emplacements
+                    .Count(t => t.Alive && AimAssist.Hostile(AimAssist.PlayerTeam, t.Team));
+                ctx.Check(liveGuns > 0 && hostileGuns > 0,
+                    $"CONTROL: {Chapter} places gun emplacements that are alive and hostile to the pilot once their sites are on, alive={liveGuns} hostile={hostileGuns} of {emplacements.Count}");
 
                 // The two panes and the aeroplanes around them, anchored on the zeppelin the
                 // non-aircraft cycle is built from so every class sits in one piece of airspace.
@@ -141,11 +144,11 @@ internal static class TargetClassCycleSuites
 
                 var p1 = new Pane(scan, parts, p1Self, p1Pose);
                 var p2 = new Pane(scan, parts, p2Self, p2Pose);
-                report.AppendLine($"{Chapter}/{Mission}: {parts.Count} zeppelin part(s), {liveGuns} emplacement(s), "
+                report.AppendLine($"{Chapter}/{Mission}: {parts.Count} zeppelin part(s), {liveGuns} live emplacement(s) ({hostileGuns} hostile, none selectable), "
                     + $"cycles enemy={p1.Selection.Pool.Enemy.Count} ally={p1.Selection.Pool.Ally.Count} "
                     + $"nonAircraft={p1.Selection.Pool.NonAircraft.Count}");
 
-                CheckCycleMembership(ctx, p1, parts.Count + liveGuns, hostileA, hostileB, p2Self, wingman);
+                CheckCycleMembership(ctx, p1, parts.Count, hostileA, hostileB, p2Self, wingman);
                 CheckEachKeyWalksItsClass(ctx, p1);
                 CheckPreviousWalksItBack(ctx, p1);
                 CheckNearestRestartsTheCycle(ctx, p1);
@@ -154,7 +157,7 @@ internal static class TargetClassCycleSuites
                 CheckPanesAreIndependent(ctx, p1, p2);
                 CheckTheCuratedListPicksTheCycle(ctx, world,
                     new Curated(mission, script, missionTargets, messages, scan, parts, p1Self,
-                        p1Pose, parts.Count + liveGuns),
+                        p1Pose, parts.Count),
                     report);
                 ctx.Note($"{Chapter}/{Mission}: three class cycles of {p1.Selection.Pool.Enemy.Count}/{p1.Selection.Pool.Ally.Count}/{p1.Selection.Pool.NonAircraft.Count}, each walked forward, back and restarted by its own three keys");
             }
@@ -179,8 +182,8 @@ internal static class TargetClassCycleSuites
         ctx.WriteArtifact($"test-target-class-cycle-{Chapter}-{Mission}.txt", report.ToString());
     }
 
-    // Each cycle holds its own class and nothing else. The non-aircraft one is the claim the item
-    // was filed on: the zeppelin's parts and the world's guns, and never an aeroplane.
+    // Each cycle holds its own class and nothing else. The non-aircraft one is the zeppelin's own
+    // parts, never an aeroplane and never one of the live guns standing in the same world.
     private static void CheckCycleMembership(TestContext ctx, Pane pane, int nonAircraftCount,
         object hostileA, object hostileB, object otherPane, object wingman)
     {
@@ -190,12 +193,11 @@ internal static class TargetClassCycleSuites
         ctx.Check(pool.Ally.Count == 2 && Holds(pool.Ally, otherPane) && Holds(pool.Ally, wingman),
             $"the Ally cycle holds the wingman and the other pane's own aeroplane, count={pool.Ally.Count}");
         ctx.Check(pool.NonAircraft.Count == nonAircraftCount,
-            $"the Non-Aircraft cycle holds every zeppelin part and every live emplacement, count={pool.NonAircraft.Count} of {nonAircraftCount}");
-        ctx.Check(pool.NonAircraft.All(t => t.Kind is AimTargetKind.Structure or AimTargetKind.Turret),
-            $"…each one a structure or a turret, never an aeroplane");
-        ctx.Check(pool.NonAircraft.Any(t => t.Kind == AimTargetKind.Structure)
-                  && pool.NonAircraft.Any(t => t.Kind == AimTargetKind.Turret),
-            $"…and the one key reaches both kinds, the airship's parts and the guns on the ground");
+            $"the Non-Aircraft cycle holds every zeppelin part, count={pool.NonAircraft.Count} of {nonAircraftCount}");
+        ctx.Check(pool.NonAircraft.All(t => t.Kind == AimTargetKind.Structure),
+            $"…each one a structure, never an aeroplane");
+        ctx.Check(!pool.NonAircraft.Any(t => t.Kind == AimTargetKind.Turret),
+            $"…and never a gun emplacement, though the scan lists every one of this chapter's and they are switched on");
     }
 
     // One key per class, each walking the whole of its own cycle and wrapping. This is what the
@@ -280,7 +282,7 @@ internal static class TargetClassCycleSuites
             $"Target Nothing empties the pool and STAYS empty through a rebuild, which is what keeps the clear cleared");
         pane.Press(TargetClass.NonAircraft);
         ctx.Check(pane.Selection.ActiveClass == TargetClass.NonAircraft
-                  && pane.Selection.Current is { Kind: AimTargetKind.Structure or AimTargetKind.Turret },
+                  && pane.Selection.Current is { Kind: AimTargetKind.Structure },
             $"…and a class key is the way back in, on that key's own cycle");
     }
 
@@ -345,7 +347,7 @@ internal static class TargetClassCycleSuites
                   && site.DisplayName.Length > 0 && site.CategoryLine.Length > 0,
             $"…labelled off the table's own description and category, and not sorting ahead of the sectors");
         ctx.Same(curated.Baseline + 1, pool.NonAircraft.Count,
-            $"…joining the zeppelin's parts and the world's guns rather than replacing them");
+            $"…joining the zeppelin's parts rather than replacing them, and bringing no gun with it");
 
         foreach (string key in new[] { UnflaggedTank, UnflaggedPoint })
         {

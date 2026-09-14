@@ -677,23 +677,25 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   The original's own Hoplite special-plane template is 1/1, which says nothing about a stock fit.
   *Cross-refs:* `docs/formats/saved-games.md` ("A cell names a pylon only against the fit"),
   `CSVM/src/UI/Menu/HangarFeature.cs`.
-- `BL-918` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **The original's
-  Non-Aircraft target cycle offers only the mission's curated entries and never a turret.**
-  Compared at the controls: in the original's CM01 the Non-Aircraft class selects the Pandora and
-  nothing else, in CM06 it selects a "[Destroy] Cargo Train" marker the player had not noticed,
-  and in neither mission can a turret be selected with it. *Evidence:* the user's comparison
-  sortie in the original; `BL-400` closed the list as the mission's own `targets.zrd`, which
-  agrees with the two observations, but whether CSVM admits anything beyond that list (a turret,
-  a destructible with an authored team) has not been checked mission by mission. *Fix shape:*
-  cycle Non-Aircraft in every campaign mission in CSVM and record the list per mission; any turret
-  or structure outside the mission's `targets.zrd` is a wrong admission, find the path that adds
-  it (`AimCandidateSet`, the turret pool, `TargetPool`) and close it. Where the lists agree the
-  item closes as an answer with the per-mission table in the commit. *⚠ Traps:* the AI pilot's own
-  acquisition admits turrets by design, and its structure pool is already the narrower
-  mission-structure set (`AimCandidateSet.AddMissionStructures`) while the player's cycle keeps
-  `AddStructures`; do not narrow the AI's pool further while fixing the player's. *Cross-refs:* `BL-400`'s closing
-  commit, `BL-839`'s closing commit (the profile-less campaign launch binds the same table),
-  `docs/org/targeting.md`.
+- `BL-920` `[Bug]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **A zeppelin's
+  gasbags, engines and cannons reach the player's Non-Aircraft cycle although no mission table
+  flags them, which is the one remaining entry on that cycle the original does not offer.**
+  *Evidence:* `ZeppelinRuntime.CollectTargetParts` feeds `TargetPool.Rebuild`'s `subParts`
+  argument, and `TargetPool.Offer` gives every structure candidate a stand-in `other_target` flag,
+  so each part is selectable wherever an airship flies. The decode is that a gasbag is an
+  `MStructList` entry selectable only when its own record carries a flag, and that there is no
+  sub-part enumeration anywhere in the targeting path ([`docs/org/targeting.md`](docs/org/targeting.md),
+  "The curated list is `targets.zrd`, and it is small"). The original's CM14 flags no dreadnought
+  part at all, so its Non-Aircraft key reaches nothing there while CSVM's reaches every part.
+  *Fix shape:* decide whether the remake keeps the divergence or drops the channel, then either
+  write the decision into the code's own prohibition or remove `subParts` from the rebuild.
+  *⚠ Traps:* the channel carries an explicit "deliberate divergence, not a port" comment on
+  `CollectTargetParts`, so this is a judgement at the controls and not a correctness fix; dropping
+  it removes a player capability, since a LOCK_ON torpedo steers to `Targeting?.Current?.Source`
+  and a zeppelin part is how a pilot aims one at an airship; and the `subParts` argument reaches
+  about 35 `Rebuild` call sites, most of them in suites that pin the part list. *Cross-refs:*
+  `BL-918`'s closing commit (the per-mission list and the turret half), `CSVM/src/Flight/TargetPool.cs`,
+  `CSVM/src/Session/ZeppelinRuntime.cs`.
 
 
 ## Flight model & collision physics

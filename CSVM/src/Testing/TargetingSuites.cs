@@ -644,8 +644,8 @@ internal static class TargetingSuites
         + "AimCandidateSet.Structures is, an ordnance entry with the admission byte clear is "
         + "refused (the TARGETABLE half is the shootable-flyout suite's), and a zeppelin "
         + "contributes one entry per gasbag/engine/cannon with its hull's velocity; plus C1's "
-        + "real emplacements, every site dead as ia1.gw leaves it and the five aaguns landing "
-        + "on the Non-Aircraft cycle once their sites are switched on")]
+        + "real emplacements, where the five aaguns switched on are live and hostile to the "
+        + "player and still reach no cycle, since only a mission's target table puts a gun on one")]
     internal static void TargetPoolModel(TestContext ctx)
     {
         var self = new FlightController { PlayerIndex = 1, Team = AimAssist.PlayerTeam };
@@ -763,6 +763,10 @@ internal static class TargetingSuites
                         $"C1's whole emplacement census reaches the scan turrets={worldScan.Turrets.Count} of {emplacements.Count}");
                     ctx.Check(aliveAtBuild == 0 && worldPool.NonAircraft.Count == 0,
                         $"every site ia1.gw switched off is listed by the scan but dead, and none is selectable alive={aliveAtBuild} nonAircraft={worldPool.NonAircraft.Count}");
+                    var hostileGuns = worldScan.Turrets
+                        .Where(c => AimAssist.Hostile(AimAssist.PlayerTeam, c.Team)).ToList();
+                    ctx.Check(hostileGuns.Count > 0,
+                        $"CONTROL: C1's census carries guns registered HOSTILE to the player, so a team test is not what keeps them off the cycle hostile={hostileGuns.Count} of {worldScan.Turrets.Count}");
 
                     var aaguns = emplacements.Emplacements
                         .Where(t => t.Label.StartsWith("MSG_TUR_AAA@aagun", System.StringComparison.Ordinal))
@@ -777,15 +781,11 @@ internal static class TargetingSuites
                     worldPool.Rebuild(worldScan, null, AimAssist.PlayerTeam, null);
                     ctx.Check(aaguns.Count == 5 && aaguns.All(t => t.Alive),
                         $"switching the five aagun sites on brings their gunners alive alive={aaguns.Count(t => t.Alive)} of {aaguns.Count}");
-                    ctx.Check(worldPool.NonAircraft.Count == aaguns.Count
-                              && worldPool.NonAircraft.All(t => t.Kind == AimTargetKind.Turret
-                                  && aaguns.Any(a => ReferenceEquals(a, t.Source)))
-                              && worldPool.Enemy.Count == 0 && worldPool.Ally.Count == 0,
-                        $"every live emplacement lands on the NON-AIRCRAFT cycle, never Enemy or Ally, whatever its team, and a switched-off one stays out nonAircraft={worldPool.NonAircraft.Count}");
-                    ctx.Check(worldPool.NonAircraft.All(t => t.Health == null && t.Armor == null
-                                  && t.Name.Length > 0),
-                        $"…each with its TITLE@site label and no health figure at all (the retail loaders read no HEALTH key)");
-                    ctx.Note($"C1 target pool: {worldPool.NonAircraft.Count} selectable emplacements of {emplacements.Count} placed once the aagun sites are on, {aliveAtBuild} alive as ia1.gw leaves them");
+                    int liveHostile = worldScan.Turrets.Count(c => c.Live
+                        && AimAssist.Hostile(AimAssist.PlayerTeam, c.Team));
+                    ctx.Check(liveHostile == aaguns.Count && worldPool.Count == 0,
+                        $"a LIVE emplacement hostile to the player still reaches no cycle: the mission's target table is the only thing that puts a gun on one, and C1/IA1's names none live={liveHostile} pool={worldPool.Count}");
+                    ctx.Note($"C1 target pool: {liveHostile} live hostile emplacement(s) of {emplacements.Count} placed once the aagun sites are on, and none of them selectable");
                 }
                 finally
                 {
