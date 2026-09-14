@@ -69,6 +69,26 @@ The gun/rocket paths pass `0x40000` (bit 18) as the exclusion mask. **No shipped
 bit**: mech3ax's CS node reader asserts every flag outside its known-variable set is absent and the
 install round-trips byte-identically, so the mask excludes nothing in practice.
 
+## The aircraft reach the polygon loop, and the bounding-box arm is also a pre-test
+
+**No aircraft node carries `INTERSECT_BBOX`.** Across the twenty-two airframe subtrees in the
+planes archive, the eleven flyable `player_*` roots and the eleven AI airframes, every
+mesh-bearing node is `intersect_surface: true` except the four `piece1`-`piece4` wreck fragments,
+and `intersect_bbox` is false on every node in the file. The flag is live elsewhere in the same
+install: 341 nodes carry it across the eight chapter `gamez` trees, on gun mounts, turret hulls
+and destructible `healthy` variants. A round fired at an aeroplane therefore runs `FUN_0055c9c0`'s
+polygon loop against that aeroplane's own triangles, so the original's aircraft hit geometry is
+the model and not a box. Searching `extracted/planes/nodes.json` for `"intersect_bbox": true`
+returns nothing, which is the whole of the evidence.
+
+`FUN_004cc010` serves twice inside `FUN_004c9a00`, and only one of the two is the flag's doing.
+Before the polygon loop, and before descending a group or a LOD node, the recursion calls it
+whenever the node has at least one sibling: the parent passes its own child count down as the
+second argument and the gate is `1 < param_2`. A nonzero return there ends that node and its
+subtree, so the box is a broadphase reject and never an answer. Only with `INTERSECT_BBOX` set
+does the box hit become the answer, recorded by `FUN_004c7f50`. An only child skips the pre-test
+and goes straight to its polygons.
+
 ## The polygon test reads vertices, never texels
 
 `FUN_0055c9c0` walks the model's polygon array (stride `0x28`), and for each one calls a ray-vs-
@@ -123,3 +143,10 @@ Two real divergences the same decode does expose, neither of them about alpha:
   not, so we present the wider high-detail geometry where the original presents the coarser one.
 - **The water pass-through is unimplemented.** `Projectile` retires on the first hit, so a round that
   clips water in front of a target stops there where the original would carry on to the target.
+- **An aircraft is a convex decomposition here and a polygon set there.** `PlaneCollider` gives each
+  airframe up to eight convex hulls, and a hull bridges every concavity the mesh has: the gap
+  between wing and tailplane, the notch behind a canard, the air either side of a fin. The
+  `airframe-collider-hit-rate` suite measures what that costs, firing a raster of rays and a real
+  gun burst at each of the eleven airframes from a fixed standoff and counting both instruments.
+  The hulls never fall inside the silhouette, so no hit is lost; they present more of it than the
+  mesh does, so hits are invented, and the excess is far larger head-on than side-on.

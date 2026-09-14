@@ -24,6 +24,7 @@
     "ai-net-follow": 0.313,
     "ai-plane-defs": 0.425,
     "ai-pursues-structure": 0.339,
+    "airframe-collider-hit-rate": 3.21,
     "airframe-hull-coverage": 0.938,
     "air-to-air": 0.766,
     "ai-spawn-jitter": 0.473,

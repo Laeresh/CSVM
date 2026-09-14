@@ -49,6 +49,10 @@ member, and it does not go here.
   input back while that press is still down, so a check that presses only after the hand-back
   cannot see the new owner read its tail.** The click that skipped a campaign film fired the
   plaque under the pointer on its release, and the hand-off's tests pressed after the stop.
+- **METHOD-31**, **A convex collider is never the conservative reading of a mesh: it can only add
+  hit area, so settle a hit-rate question by rastering rays over the silhouette and counting both
+  geometries, never with a kill-time stopwatch that folds rate into damage.** The airframe hulls
+  present 1.16 to 4.39 times the model's own silhouette and lose none of it.
 
 ## DIAG, chasing a symptom
 

@@ -202,3 +202,22 @@ three, so it is difficulty 0 and takes the `0.875` scale.
 A campaign played on Normal therefore meets enemies with 14.3 % more armour and health in CSVM than
 in the original, in every mission. That makes the missing scale the broadest of the confirmed causes
 and the one to fix first, ahead of the roster overrides, which push time to kill the other way.
+
+## Collision geometry: the direction is measured, and it shortens the kill
+
+The ranking above lists collision geometry as "plausible but direction unmeasured". It is measured
+now, and it cannot be a cause of a slow kill: it makes CSVM's guns land *more* often than the
+original's would.
+
+The original polygon-tests an aeroplane. No node in the planes archive carries `INTERSECT_BBOX`, so
+the bounding-box arm of the segment query is never the answer for an airframe
+([`docs/org/weaponRay.md`](../../docs/org/weaponRay.md)). CSVM tests up to eight convex hulls
+instead, and the `airframe-collider-hit-rate` suite counts both over the same bearings, 14641 rays
+plus a 698-round gun burst per airframe and aspect from a 120 m standoff. The hulls never fall
+inside the model's silhouette, so no round is lost; they present 1.16 to 1.82 times the silhouette
+side-on and 1.62 to 4.39 times it head-on, so rounds are invented. `BL-561` carries the per-airframe
+table and the fix shape.
+
+The reading rule: a collider is not automatically conservative. A convex decomposition of a concave
+airframe is strictly wider than the mesh, and that widens a hit rate rather than narrowing it, so it
+belongs on the "too easy" side of any time-to-kill argument, never the "too hard" side.
