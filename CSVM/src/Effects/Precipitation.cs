@@ -224,8 +224,6 @@ public sealed partial class Precipitation : Node3D
             // custom AABB to never be frustum-culled. One draw call, always drawn: correct here.
             CustomAabb = new Aabb(new Vector3(-40000f, -40000f, -40000f), new Vector3(80000f, 80000f, 80000f)),
         });
-        GD.Print($"precipitation: {p.Kind.ToString().ToLowerInvariant()} — {count} particles, " +
-                 $"fall {fallSpeed:0.0} m/s, tint {p.Color.R * 255:0}/{p.Color.G * 255:0}/{p.Color.B * 255:0}, " +
-                 $"alpha {peakAlpha:0.00}");
+        Log.Info("world", $"precipitation: {p.Kind.ToString().ToLowerInvariant()} — {count} particles, fall {fallSpeed:0.0} m/s, tint {p.Color.R * 255:0}/{p.Color.G * 255:0}/{p.Color.B * 255:0}, alpha {peakAlpha:0.00}");
     }
 }

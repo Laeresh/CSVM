@@ -526,9 +526,7 @@ public sealed class WorldEffectsFactory
                 ? $"{size}× {names.Count} root(s)"
                 : $"{size}× {string.Join("/", names)}");
         }
-        GD.Print($"world-effects runtime: {staged}/{wanted} effect template(s) staged over "
-                 + $"{depth} pool slot(s) for {players} player(s) [{string.Join(", ", sizes)}], "
-                 + $"{bound.Count} effect name(s) bound");
+        Log.Info("anim", $"world-effects runtime: {staged}/{wanted} effect template(s) staged over {depth} pool slot(s) for {players} player(s) [{string.Join(", ", sizes)}], {bound.Count} effect name(s) bound");
         foreach (var unknown in _pools.UnknownRoots(roots))
             Log.Warn("anim", $"effect pools: '{unknown}' is not an effect stage root — it sizes nothing");
         return effects;
@@ -844,8 +842,7 @@ public sealed class WorldEffectsFactory
                 Log.Warn("anim", $"effect pools: crash root '{unknown}' is staged by no rig kind — it sizes nothing");
             }
             if (_verbose)
-                GD.Print($"data-crash: {_effectRoots} effect template cop(ies) over {_factory._pools.CrashDepthFor(_rootNames)} pool slot(s) "
-                         + $"+ {_restPoses.Count} wreck node(s) — crash runtime bound (scoped, no auto-start)");
+                Log.Info("anim", $"data-crash: {_effectRoots} effect template cop(ies) over {_factory._pools.CrashDepthFor(_rootNames)} pool slot(s) + {_restPoses.Count} wreck node(s) — crash runtime bound (scoped, no auto-start)");
         }
     }
 }
