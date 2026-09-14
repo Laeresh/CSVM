@@ -297,6 +297,13 @@ leave a networked player permanently invulnerable.
 Nothing else reads the block. `+0x910`, `+0x918` and `+0x91c` have no readers outside the
 constructor, this tick and this arm, so the intensity feeds no HUD and no AI decision.
 
+**CSVM reads that rule by splitscreen mode, since it has no network sessions.** Solo flight is the
+original's own case and is shielded unchanged. A co-op pane is shielded too, on every human seat:
+the AI's warning shots are the event the block exists for, and the pilots are on one side. A
+Dogfight pane carries no shield at all, which is where the `Network` rule lands, since one that ate
+the other pilot's gunfire would decide the fight. Only the discard is gated: a Dogfight round still
+counts toward the interval, so the canopy cadence runs in every mode.
+
 ⚠ **There is no near-miss geometry anywhere in the image.** `DAT_0071c488` has exactly one read,
 `0x004b9ea9` above, and the projectile module has none of the player global's 640 references (every
 one lies between `0x0041xxxx` and `0x004cxxxx`), so the round stepper `FUN_005af720` cannot measure

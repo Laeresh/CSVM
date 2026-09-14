@@ -1192,8 +1192,8 @@ internal static class CombatSuites
     // gunner from the high rear quarter, the target parked. The cues are counted off the `weapons`
     // log, which carries the variant the group drew, so a count proves an archive read, and the
     // ledger is read either side of saturation so the discard is measured. Running it twice is about
-    // the view: the bullethole defs gate their VISUAL on PLAYER_1ST_PERSON and not their SOUND, so a
-    // chase-view count of zero would be this build inventing a gate the data does not author.
+    // the view: the bullethole defs gate their VISUAL on PLAYER_1ST_PERSON and not their SOUND. The
+    // last phase is the splitscreen rule, which needs a second human pane rather than a flag read.
     [Suite("incoming-fire-cues",
         "the incoming-fire shield and its two cues on real AI gunnery: while the shipped "
         + "warning_shot_* accumulator is armed a gun round landing on the player's own aeroplane "
@@ -1202,7 +1202,9 @@ internal static class CombatSuites
         + "snd_ricochet1-4; the canopy cue window_hit_sg follows the decoded hole cadence (an "
         + "interval that closed with a hit, below the closed-hole health share, on the shipped 0.3 "
         + "draw), all of it sounds in Chase and in Cockpit since the defs gate only the decal on "
-        + "PLAYER_1ST_PERSON, and neither a non-CANNON round nor a collision hit rings anything")]
+        + "PLAYER_1ST_PERSON, and neither a non-CANNON round nor a collision hit rings anything; "
+        + "the shield is the SESSION's, so over two human panes a co-op pair both absorb their "
+        + "first round while a Dogfight pair both spend it and ring the ricochet")]
     internal static void IncomingFireCues(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -1228,6 +1230,7 @@ internal static class CombatSuites
         using var archive = new SoundArchive(ctx.SoundsPath);
         ProjectilePool? pool = null;
         FlightController? target = null;
+        FlightController? wing = null;
         FlightController? ai = null;
         try
         {
@@ -1271,8 +1274,8 @@ internal static class CombatSuites
                 Log.Configure("weapons:debug");
                 using var sink = Log.PushConsoleSink(line =>
                 {
-                    if (line.Contains("warning shot P1") || line.Contains("bullet hit P1")
-                        || line.Contains("canopy hole P1"))
+                    if (line.Contains("warning shot P") || line.Contains("bullet hit P")
+                        || line.Contains("canopy hole P"))
                         hits.Add(line);
                 });
 
@@ -1354,6 +1357,44 @@ internal static class CombatSuites
                 target.TakeCollisionHit(5f, 5f, target.GlobalPosition, ai.PlayerIndex);
                 ctx.Same(0, hits.Count,
                     $"a contact rings nothing either — a scrape is not being shot at");
+
+                // Who the shield covers is the SESSION's rule, not the airframe's, so it is measured
+                // on TWO human panes in both modes: a co-op pair both absorb, a Dogfight pair
+                // neither do. One round per pane, the mode gate being all that is under test.
+                var wingPos = targetPos + new Vector3(60f, 0f, 0f);
+                wing = BuildParkedRig(ctx, planesGamez, textures, stats, 1,
+                    wingPos, wingPos + Vector3.Forward, live, stock, weapons, null);
+                var wingAudio = new FlightAudio();
+                wingAudio.Setup(archive, soundDefs, stats, weapons, soundGroups);
+                wing.Audio = wingAudio;
+                wing.AddChild(wingAudio);
+                float Pool(FlightController r) => r.Damage!.Parts.Values.Sum(p => p.Hp + p.Armor);
+                foreach (bool dogfight in new[] { false, true })
+                {
+                    // The session's own notion of the mode, the one GameSession hands every rig:
+                    // a live match outside --vs does not exist, and a Dogfight rig always has one.
+                    var match = dogfight ? new VersusMatch(2, killTarget: 0, timeLimit: 0f) : null;
+                    string mode = dogfight ? "dogfight" : "co-op";
+                    foreach (var pane in new[] { target, wing })
+                    {
+                        pane.Match = match;
+                        pane.Respawn();
+                        pane.PlaceHeld(pane.GlobalPosition, pane.GlobalPosition + Vector3.Forward);
+                        hits.Clear();
+                        float was = Pool(pane);
+                        pane.TakeProjectileHit(gun.Weapon, pane.GlobalPosition, "fuselage",
+                            ai.PlayerIndex);
+                        float now = Pool(pane);
+                        string tag = $"P{pane.PlayerIndex + 1}";
+                        bool shielded = hits.Any(l => l.Contains($"warning shot {tag}"));
+                        bool rang = hits.Any(l => l.Contains($"bullet hit {tag}"));
+                        ctx.Check(shielded == !dogfight && rang == dogfight,
+                            $"{mode}: {tag}'s first gun round answers with {(dogfight ? "the ricochet" : "the pass cue")} line={hits.FirstOrDefault() ?? "-"}");
+                        ctx.Check(dogfight ? now < was : Mathf.IsEqualApprox(now, was),
+                            $"{mode}: {tag}'s ledger {(dogfight ? "spends" : "holds")} on that round ({was:0.0} → {now:0.0})");
+                    }
+                }
+                target.Match = null;
             }
             finally
             {
@@ -1368,6 +1409,7 @@ internal static class CombatSuites
         {
             ai?.Free();
             target?.Free();
+            wing?.Free();
             pool?.Free();
             textures.Dispose();
         }

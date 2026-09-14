@@ -1593,20 +1593,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   scripts are the decode for positions, the film only for the look. *Cross-refs:* `CAP-52`,
   `docs/org/menu-inventory.md`, `docs/formats/menu-layout.md` (`SCRAPBOOK.CSV`).
 
-- `BL-834` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The warning-shot shield
-  arms on every human-piloted aeroplane, where the original ticks it only for the player vehicle
-  while the `Network` key is zero.** *Decision:* by splitscreen mode. In a co-op session every
-  human pilot carries the shield, the AI's warning shots are what it exists for; in a dogfight
-  session nobody does, matching the original's networked-session rule, since a shield against the
-  other pilot's fire would decide the fight. *Evidence:* `BL-826`'s decode: the world tick calls the
-  accumulator only for the player vehicle and only while `*DAT_0064f750` is zero, so a
-  multiplayer session shields nobody; `CSVM/src/Flight/FlightController.cs:3708` (at `7d2e9881`)
-  gates on `IsHumanPiloted` alone, so all four splitscreen pilots carry it, and no doc records the
-  difference. *Fix shape:* one condition at the gate reading the session's splitscreen mode
-  beside `IsHumanPiloted`, a two-mode case in the shield's suite, and the rule written on the
-  shield's docs page.
-  *Cross-refs:* `BL-826`'s closing commit, `docs/verification.md` SRC-7, `BL-389` (the
-  splitscreen weapon mix, the same family).
 
 
 ## Splitscreen

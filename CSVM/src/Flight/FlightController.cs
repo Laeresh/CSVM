@@ -4272,7 +4272,10 @@ public partial class FlightController : Node3D
     {
         _canopyRng ??= Rng.NewSystemRandom(Rng.Weapons);
         _warningShots?.RegisterHit();
-        if (_warningShots is { Absorbs: true })
+        // ⚠ A Dogfight pane carries no shield, which is the original's own networked-session rule:
+        // one that ate the other pilot's gunfire would decide the fight. Co-op keeps it on every
+        // human pane, the AI's warning shots being what it exists for. docs/org/weaponFire.md.
+        if (Match == null && _warningShots is { Absorbs: true })
         {
             string? pass = Audio?.OnWarningShot();
             // The breadcrumb the cue otherwise leaves only in the speakers: which pilot, how full
