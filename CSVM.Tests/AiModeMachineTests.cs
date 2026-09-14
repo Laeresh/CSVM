@@ -126,11 +126,12 @@ public class AiModeMachineTests
         Assert.True(m.Evading);
         Assert.Equal(AiMode.Evade, m.Mode);
 
-        // A second hit rolls nothing at all while the flag stands.
+        // A second hit rolls nothing at all while the flag stands, and says so rather than falling
+        // silent, so a trace can tell a pilot that is never hit from one hit while already evading.
         string? logged = null;
         m.RollLogged += line => logged = line;
         m.NotifyDamage(8f);
-        Assert.Null(logged);
+        Assert.Equal("absorbed 8.0 damage; no steady hand test (already evading)", logged);
 
         // The nose falls past the 0.85 cosine: the flag clears and the engagement resumes.
         m.Update(Home, Level, target, null, 1f / 60f, targetNose: new Vector3(0f, 0f, -1f));

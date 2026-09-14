@@ -162,10 +162,11 @@ public sealed class AiModeMachine
     public float ReturnRange = 1200f;
 
     /// <summary>Probability that a hit's steady-hand test FAILS and the pilot evades,
-    /// <c>steady_hand_chance</c> (0.5 → 0.08 over the pair; lower is the better pilot). The
-    /// default here is the pair's raw low endpoint, not the rating-1 value (rating/9 interpolation
-    /// puts rating 1 partway toward the high endpoint already, see <see cref="AiSkills.At"/>).
-    /// The design's damage weighting on this roll is undecoded and not modelled.</summary>
+    /// <c>steady_hand_chance</c> (0.5 → 0.08 over the pair). The default is the pair's raw low
+    /// endpoint, not the rating-1 value (see <see cref="AiSkills.At"/>). ⚠ Flat is wrong twice over
+    /// and BL-728 owns the fix: the original weights the roll by the bite the hit takes out of the
+    /// remaining pool, and a higher rating evades MORE
+    /// (../../../docs/org/aiControlLaw.md, "The roll itself").</summary>
     public float SteadyHandChance = 0.5f;
 
     /// <summary>Probability that the sixth-sense test PASSES (the pilot follows the target's
@@ -234,7 +235,8 @@ public sealed class AiModeMachine
     public event Action<AiMode, AiMode, string>? ModeChanged;
 
     /// <summary>Every steady-hand / sixth-sense roll's outcome, phrased in the engine's own
-    /// vocabulary (pass and fail alike, so a quiet run is distinguishable from a lucky one).</summary>
+    /// vocabulary (pass and fail alike, so a quiet run is distinguishable from a lucky one), plus
+    /// every hit that took no roll at all, so the line count is the hit count.</summary>
     public event Action<string>? RollLogged;
 
     /// <summary>The current mode. Transitions go through the machine; <see cref="Enter"/> is the
@@ -392,9 +394,16 @@ public sealed class AiModeMachine
     public void NotifyDamage(float absorbed)
     {
         if (Mode is AiMode.Stunned or AiMode.AvoidCrash or AiMode.NavigatingDangerZone)
-            return; // no controls / emergency override / on rails, nothing to react with
+        {
+            // no controls / emergency override / on rails, nothing to react with
+            LogNoRoll(absorbed, NameOf(Mode));
+            return;
+        }
         if (Evading)
-            return; // the original only refreshes its stamp here, and rolls nothing
+        {
+            LogNoRoll(absorbed, "already evading"); // the original restamps here and rolls nothing
+            return;
+        }
         bool failed = _rng.NextDouble() < SteadyHandChance;
         RollLogged?.Invoke(FormattableString.Invariant(
             $"absorbed {absorbed:0.0} damage; steady hand test ")
@@ -436,6 +445,12 @@ public sealed class AiModeMachine
         _stunRemaining = seconds;
         Transition(AiMode.Stunned, reason);
     }
+
+    // A hit that reached the pilot but took no roll. Without it the trace cannot separate an AI
+    // that is never hit from one that is hit constantly while a reaction is already running.
+    private void LogNoRoll(float absorbed, string why) =>
+        RollLogged?.Invoke(FormattableString.Invariant(
+            $"absorbed {absorbed:0.0} damage; no steady hand test ({why})"));
 
     // Where an interruption hands back to. A run in progress resumes as an approach to the
     // cursor's current point: the original keeps the run record (+0x9bc) through a stun or a

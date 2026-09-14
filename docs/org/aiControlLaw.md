@@ -24,6 +24,7 @@ law; the port is plan item `E41`.
 | `FUN_0041c080` | The autogyro steering law (class 1), a different channel set |
 | `FUN_00460be0` | The quadratic intercept solver the law aims with |
 | `FUN_004200d0` | The stun handler, which zeroes the channels |
+| `FUN_004b1160` | The steady-hand test the damage handler rolls, a damage-weighted power law |
 
 ## Where in the frame it runs
 
@@ -351,6 +352,52 @@ and the step deadline `+0x89c` set to the clock. Mode 1 is the maneuver executor
 only case in which it does not is an empty candidate list: with nothing past the natural-touch cull
 the picker returns having written no mode at all, and the aircraft keeps flying its engagement with
 the flag set.
+
+### The roll itself, `FUN_004b1160`
+
+The test the handler calls at `0x004b9f1e` is **not a flat probability**. It asks what fraction of
+the victim's *remaining* pool this one hit takes, and raises the complement to an exponent the
+pilot's `steady_hand` rating sets. Return 1 is a pass, return 0 is the evade.
+
+```
+armourCur = vehicle+0x2c8 ; healthCur = vehicle+0x2d0        read before the hit is spent
+bite = armourDmg < armourCur ? armourDmg
+     : healthDmg < healthCur ? armourCur + healthDmg
+     : armourCur + healthCur
+pool = armourCur + healthCur
+if (bite >= pool)                       return 0             0x004b11bc, a lethal hit always evades
+p_pass = (1 - bite / pool) ^ e                               0x004b11ca-0x004b11d6, 1.0f at 0x006032dc,
+                                                             _CIpow at 0x005f7016
+return rand() * (1/32768) < p_pass                           the 1/32768 at 0x00603598
+```
+
+The pair of damage figures is the handler's own armour/health split
+([vehicleDamage.md](vehicleDamage.md#taking-a-hit)), and because `FUN_004b9b30` loops leftover
+damage back through `FUN_004b9bc0`, one weapon impact can take several of these rolls, each against
+a smaller pool than the last.
+
+The exponent `e` is `vehicle+0x968`, written once at spawn at `0x0047d00a` inside `FUN_0047c210` as
+
+```
+e = ln(v) / ln(0.7)        C = double 0.7 at 0x00608020; the constructor's default e is 1.03
+                           (0x004b03f4), i.e. the value of v that log maps to 1 is 0.7 itself
+v = lo + (hi - lo) * rating / 9
+```
+
+with `lo` and `hi` the `steady_hand_chance` globals `[0x0071c4c0]` = 0.5 and `[0x0071c4c4]` = 0.08,
+written by `FUN_004735b0` at `0x00474948`/`0x00474954` off the key string at `0x00627a8c`. So the
+authored pair is **not a probability the engine compares a roll against**; it is only the base of a
+log that produces the exponent. `v` falls with the rating, `ln 0.7` is negative, so `e` *rises* with
+the rating: 1.9434 at 0, 2.8644 at 3, 3.7058 at 5, 4.9135 at 7, 7.0813 at 9. A larger exponent means
+a smaller `p_pass` for the same bite, so **the better pilot evades more often, not less**, and the
+authored 0.5-to-0.08 pair reads backwards if taken as a failure chance.
+
+Two consequences the flat reading misses. A pilot at full health almost never evades: a `wep_130`
+round (1.5 armour, 1.5 health) on a hostile Fury at Normal (pool 108 after the 0.75 hostile scale)
+bites 0.0139 of the pool, for P(evade) of 2.7% at rating 0, 5.1% at 5 and 9.4% at 9. The same round
+on the same aircraft with a tenth of its pool left bites 0.139 of it, for 42.5% at rating 5 and
+65.3% at 9. The reaction is a **wounded-animal** response whose rate climbs as the victim is worn
+down, and the rating tilts the whole curve rather than setting a level.
 
 ### What the flag itself changes
 
