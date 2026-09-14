@@ -549,9 +549,9 @@ window height over the reference, damped by `PaneFactor`, the square root of pan
 window height, inside a splitscreen pane. `hud.statusTextScale` and `hud.markerTextScale` multiply
 only their matching flight-HUD text within a clamp, leaving arrows and layout at the base scale.
 `ReadingBox` is the placement half: the reference frame's 16:9 at the pane's full height, centred,
-which a pane at or under that aspect equals exactly. Anchoring horizontally to it rather than to
-the pane keeps a column within reading width on an ultrawide screen and on a stacked 2-player
-pane, numerically the same case. One module, so a sizing or anchoring change lands in one place.
+which a pane at or under that aspect equals exactly, so a column anchored to it stays within
+reading width on an ultrawide screen and on a stacked 2-player pane. `ColumnOutdent` is the narrow
+half, a pane under that aspect giving its columns all but a minimal border back. One module.
 
 ## src/Flight/HudFont.cs
 The game's own HUD bitmap font, rebuilt from `extracted/rimage/5pointhud.png` and the brighter
@@ -1141,12 +1141,12 @@ gauge and the pause chart's icons share. Rendering model: [../formats/hud.md](..
 ## src/Flight/GaugeCluster.cs
 The original's cockpit dials as a screen-space HUD: altimeter, speedometer, damage display, the
 gun and missile weapon gauges and the nitro dial, all geometry extracted from the plane's own
-`gauges` subtree, drawn by data priority, bottom-anchored so splitscreen panes keep them on screen
-and side-anchored through `HudMetrics.ReadingBox`. `HeadingDeg` carries the nose heading
-`CompassTape` and `CockpitGauges` both read, computed once. `DamageZoneColor` bands the damage
-dial off the combined armour and health fraction against thresholds mined from the data's own
-green, yellow and red `injure_anims`. The arrow sweep and stall lamp are plain structs needing
-no `Control`, so `CSVM.Tests` drives them directly. Scales: [../formats/hud.md](../formats/hud.md).
+`gauges` subtree, drawn by data priority and bottom-anchored so splitscreen panes keep them on
+screen. `ColumnAnchors` places the two columns: `HudMetrics.ReadingBox`'s edges, handed back to
+the borders on a pane narrower than the reference frame. `HeadingDeg` carries the nose heading
+`CompassTape` and `CockpitGauges` both read; `DamageZoneColor` bands the damage dial off combined
+armour and health against thresholds mined from the data's own `injure_anims`. The sweep and lamp
+structs need no `Control`, so `CSVM.Tests` drives them. [../formats/hud.md](../formats/hud.md).
 
 ## src/Flight/CustomPlaneDef.cs
 A custom-built plane as a pure model: exactly the decoded 204-byte record's chosen fields

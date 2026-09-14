@@ -38,6 +38,11 @@ public sealed partial class GaugeCluster : Control
     public const float AltThousandsDegPerFt = 0.036f;   // 0x00607700, 10,000 ft per revolution
     public const float SpeedDegPerMph = 0.7199957f;     // 0x006076e8 with the mph factor at 0x006076e4
 
+    // Each column's outer edge in the reference frame: the outermost dial centre less the shared
+    // radius. Public so CSVM.Tests can assert the placement against the border a pane offers.
+    public const float LeftColumnMargin = 340.5f;       // altimeter/rockets centre 425.5 less R 85
+    public const float RightColumnMargin = 335f;        // speedometer/guns/nitro 420 less R 85
+
     // ---- state fed by the FlightController ----
     public float AltitudeFt;               // above sea level (the dial is in feet)
     public float AglMeters = float.MaxValue; // above ground (physics ray), LOW ALT
@@ -322,6 +327,15 @@ public sealed partial class GaugeCluster : Control
         return Mathf.Abs(delta) <= maxStep ? target : current + Mathf.Sign(delta) * maxStep;
     }
 
+    /// <summary>The x each dial column measures its offsets from: the reading box's own edges on a
+    /// pane at the reference aspect or wider, pushed outward on a narrower one so each column
+    /// keeps only <see cref="HudMetrics.MinimumColumnMargin"/> of border rather than a 16:9
+    /// frame's margin. Public so CSVM.Tests can assert the placement without a live
+    /// Control.</summary>
+    public static (float Left, float Right) ColumnAnchors(Rect2 box, float scale) => (
+        box.Position.X - (HudMetrics.ColumnOutdent(box.Size, LeftColumnMargin) * scale),
+        box.End.X + (HudMetrics.ColumnOutdent(box.Size, RightColumnMargin) * scale));
+
     /// <summary>The long altimeter needle's angle, clockwise degrees from the top. Wraps every
     /// 1,000 ft; the short needle wraps every 10,000.</summary>
     public static float AltHundredsAngleDeg(float altitudeFt) =>
@@ -466,12 +480,13 @@ public sealed partial class GaugeCluster : Control
 
     public override void _Draw()
     {
-        // Every x here anchors to the READING BOX, not the pane: on a pane wider than the
-        // reference frame the two columns would otherwise stand a screen apart. The box is the
-        // pane itself at 16:9 and under, so this is the same arithmetic there as before.
+        // Every x here anchors to a column's own edge, not the pane's: on a wider pane the two
+        // columns would otherwise stand a screen apart, and on a narrower one they would hold a
+        // 16:9 frame's margin in from a border that is nearer than that (ColumnAnchors).
         var box = HudMetrics.ReadingBox(this);
-        float left = box.Position.X, right = box.End.X, bottom = box.End.Y;
         float s = HudMetrics.Scale(this);
+        (float left, float right) = ColumnAnchors(box, s);
+        float bottom = box.End.Y;
 
         // altimeter: long needle 360°/1,000 ft, short 360°/10,000 ft, 0 at the top
         var altC = new Vector2(left + (AltCenter.X * s), FromBottom(AltCenter.Y, s, bottom));

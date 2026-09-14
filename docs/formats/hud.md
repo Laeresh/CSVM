@@ -211,6 +211,12 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   ⚠ Those left and right edges are the reference frame's, so the port measures
   them from `HudMetrics.ReadingBox` (that frame's 16:9 centred in the pane), not
   from the pane, which on an ultrawide screen is far wider than the frame.
+  ⚠ A pane NARROWER than that frame has no room for these margins: they are a
+  16:9 frame's, and at 4:3 they take a far larger share of a narrower width, which
+  reads as the columns pulled in off the border. Each column keeps only
+  `HudMetrics.MinimumColumnMargin` there (`GaugeCluster.ColumnAnchors`). That
+  minimum is a placement choice, not a measurement: the reference captures run
+  through dgVoodoo at 16:9, so there is no 4:3 still to measure.
 - **The artificial horizon is decoded and driven as a node rotation, on the ball mesh named
   `pfhorizon`, never `horizn`.** Neither `horizn`, the plain `horiz` some airframes use instead,
   nor `comp` ever appears in `crimson.exe`; the binary's own names are `pfhorizon` (the ball) and

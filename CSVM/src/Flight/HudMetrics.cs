@@ -10,7 +10,9 @@ namespace CSVM.Flight;
 /// returns the plain height ratio unchanged. Damped sizes stay on screen only if positions anchor
 /// to a pane EDGE, not the top-left, and a horizontal edge means
 /// <see cref="ReadingBox(Vector2)"/>'s, not the pane's own, so a pane wider than the reference
-/// frame does not push the left and right columns apart.</summary>
+/// frame does not push the left and right columns apart. A NARROWER pane has the opposite
+/// problem, a column holding a 16:9 frame's margin in from a border that is nearer than 16:9,
+/// which <see cref="ColumnOutdent"/> hands back.</summary>
 public static class HudMetrics
 {
     /// <summary>The reference viewport height every HUD metric was measured at (HUD.png).</summary>
@@ -19,6 +21,12 @@ public static class HudMetrics
     /// <summary>The aspect the reference frame was measured at: HUD.png is 2556x1440, 16:9 to
     /// within its own bezel scans, and every edge-anchored constant is an offset from its edges.</summary>
     public const float ReferenceAspect = 16f / 9f;
+
+    /// <summary>The border an edge-anchored gauge column keeps on a pane narrower than the
+    /// reference frame, in reference pixels. The reference placement's own margins are a 16:9
+    /// frame's worth of room that a 4:3 pane does not have, so there the column gives all but this
+    /// back and sits at the border.</summary>
+    public const float MinimumColumnMargin = 16f;
 
     /// <summary>The lowest allowed HUD text multiplier.</summary>
     public const float MinimumTextScale = 0.5f;
@@ -76,6 +84,20 @@ public static class HudMetrics
 
     /// <summary>This control's reading box, in its own local space.</summary>
     public static Rect2 ReadingBox(Control control) => ReadingBox(control.GetViewportRect().Size);
+
+    /// <summary>How far outward, in reference pixels, an edge-anchored column slides on a box this
+    /// wide. <paramref name="referenceMargin"/> is the column's outer edge measured from the
+    /// reference frame's own edge; on a box narrower than that frame it collapses to
+    /// <see cref="MinimumColumnMargin"/>, which is what puts a column at the border of a 4:3
+    /// screen. Zero on a box at the reference aspect, which is every pane 16:9 and wider, so no
+    /// ordinary screen and no splitscreen pane moves.</summary>
+    public static float ColumnOutdent(Vector2 boxSize, float referenceMargin)
+    {
+        // ⚠ The same one-pixel allowance ReadingBox makes, for the same reason: a 4P grid's
+        // nominally 16:9 pane is a fraction narrow, and that must not read as a narrow screen.
+        float width = boxSize.Y * ReferenceAspect;
+        return width - boxSize.X >= 1f ? Mathf.Max(0f, referenceMargin - MinimumColumnMargin) : 0f;
+    }
 
     /// <summary>Constrain a user-selected HUD text multiplier to its supported range.</summary>
     public static float ClampTextScale(float scale) => Mathf.Clamp(scale, MinimumTextScale, MaximumTextScale);

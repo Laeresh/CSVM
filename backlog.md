@@ -1763,16 +1763,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   screen. *Cross-refs:* `CSVM/src/Flight/IaWrapupBoard.cs`,
   `CSVM/src/UI/Menu/Original/OriginalInstantActionScreen.cs`, `BL-892`'s closing commit,
   `docs/formats/instant-action/wrap-up.md` ("The hold after the ending", which the board follows).
-- `BL-912` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **At 4:3 the HUD gauge
-  columns sit too far in from the screen edges.** *Evidence:* `HudMetrics.ReadingBox` is the whole
-  pane at or under 16:9, and `GaugeCluster` places each dial at a fixed pixel offset from the box
-  edges scaled by height only, so a 4:3 frame, narrower at the same height, gives the same offset a
-  larger share of the width and the columns read as pulled inward. `OriginalScreenshots` holds no
-  4:3 reference (the captures run through dgVoodoo at 16:9). *Fix shape:* at 4:3 place both
-  columns at a minimal offset from the left and right borders, no measurement owed; wider panes
-  keep their placement. *⚠ Traps:* the 16:9 goldens must not move; add a 4:3 shot if the
-  placement gets a golden. *Playtest after fix:* 1024x768, the gauges hug the borders.
-  *Cross-refs:* `CSVM/src/Flight/GaugeCluster.cs`, `CSVM/src/Flight/HudMetrics.cs`, `BL-913`.
 - `BL-913` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **The resolution
   picker offers one 4:3 size and snaps a hand-written size back to its list.** *Evidence:*
   `ResolutionSetting.Standard` carries 1024x768 as the only 4:3 entry, filtered by what the screen
@@ -1781,7 +1771,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   as its own entry in the picker (shown where it sorts, kept on save) instead of being replaced by
   the nearest listed one. No custom-size dialog. *⚠ Traps:* the display mode decides what the
   saved size means (`BL-896`'s closing commit); a custom size follows the same rule.
-  *Cross-refs:* `CSVM/src/Utils/ResolutionSetting.cs`, `BL-896`'s closing commit, `BL-912`.
+  A new 4:3 or 5:4 size needs no HUD work: any pane narrower than 16:9 already brings the gauge
+  columns to the border (`GaugeCluster.ColumnAnchors`).
+  *Cross-refs:* `CSVM/src/Utils/ResolutionSetting.cs`, `BL-896`'s closing commit.
 - `BL-919` `[Fidelity]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: feel]` **The Ammo
   Selection screen offers a rocket row for a pylon the build never bought; the original hides
   it.** *Evidence:* the rows come from the airframe's stock fit, and since `BL-841` a pick on an
