@@ -213,11 +213,18 @@ the lagged speed on `DAT_009ad744`, which `0059c0c0` builds from a `GetTickCount
 seconds, so the rate is per wall second and the clips' raw 0.90 is directly comparable to it. The
 sim-converted 0.65 that `k` produces compares the wrong pair of numbers: verification `DET-11`'s
 conversion applies to a duration read off a world that runs fast, not to an easing rate the engine
-itself denominates in wall time. CSVM's own sim clock advances by the wall frame delta
-in realtime mode and replays that same axis under `--det`, so the authored 1.0 goes in unconverted.
+itself denominates in wall time. So the authored 1.0 goes in unconverted.
 
-The radius still advances once per SIM step and never per render frame, so the lag sees one cadence
-and a halted or crashed sim freezes the radius with everything else.
+The radius advances once per SIM step and never per render frame, so the lag sees one cadence and a
+halted or crashed sim freezes the radius with everything else. **That sim step is Godot's 60 Hz
+physics tick, and it carries exactly one wall second per wall second in a realtime session**, so the
+per-real-second rate is applied per real second and the easing is left on the sim clock: measured
+over a flown C1 chase and over a C2/M02 flight with the mission's generators and zeppelins, the
+tick held 60 steps per wall second at about 115 fps, and the transient took 2.15 seconds to fall
+to 1/e on either clock. Godot drops sim time only when a rendered frame needs more than its
+eight-step catch-up budget, which is below 7.5 fps. ⚠ Under `--det` the cadence is instead one
+1/60 s step per rendered frame, so the transient plays at the render rate over 60 in wall terms and
+a scripted capture pins its shape and not its pacing (verification `DET-15`).
 
 ⚠ **The look-behind inversion is not ported.** The original multiplies the transient by the view
 direction factor, which the look-behind arm hard-codes to `−1`, so a slam pushes that view's camera

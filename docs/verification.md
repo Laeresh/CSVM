@@ -226,6 +226,10 @@ member, and it does not go here.
   strip was recorded as confirming a rotation the binary says never happens.
 - **DET-14**, **A golden sweep cannot see a `--det` drop fail while a second guard stands in front
   of it, so test the drop where it is written and not by its pixels.**
+- **DET-15**, **A rate denominated in real seconds runs at the render rate over 60 under `--det`, so
+  a scripted capture pins its shape and never its pacing; judge pacing in a `--no-det` run.** The
+  chase camera's throttle transient fell to 1/e in 2.15 sim seconds either way, which was 1.11 wall
+  seconds under `--det` at 114 fps against 2.15 wall seconds without it.
 
 ## PERF, performance
 

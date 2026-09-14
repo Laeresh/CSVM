@@ -1232,16 +1232,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-455` (the page this mirrors), `PLAN-audio-preferences`,
   `git log --grep=BL-783` (the same gap for the display settings, closed by four rows on this
   screen), `docs/menu-presentations.md`.
-- `BL-837` `[Fidelity]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: decoded]` **The chase camera's throttle
-  transient is authored per real second but is stepped on the sim clock, and the two clocks were
-  never measured against each other.** *Evidence:* `BL-816`'s decode has the easing dt as
-  `GetTickCount` wall time per rendered frame; `CSVM/src/Flight/CameraController.cs:526` (at
-  `7d2e9881`) runs from `FlightController.cs:1743`'s sim step, so `dist_catch_up` is applied per
-  sim second. Under `--det` and on a rig where the sim clock lags wall time the settle is slower
-  than authored. *Fix shape:* log both clocks over the flown C1 chase shot; if they diverge, step
-  the easing on the engine's wall clock (the pinned goldens hold under `--det` only if the
-  deterministic clock is what the easing reads, so decide that first). *Cross-refs:* `BL-816`'s
-  closing commit, `docs/verification.md` DET-11, `docs/formats/camparam.md`.
 
 ## Cameras & views
 
