@@ -18,12 +18,19 @@ toggle a gamez node of the same name active for one frame:
 
 | Animation | Bound by | What |
 |---|---|---|
-| `muzzle_burst_slug` / `_dum` / `_ap` / `_mag` | the four ammo types (`wep_X0`–`X3`) | LOD-gated `CALL_ANIMATION muzzleburst_effects AT_NODE` (offset y −0.2), then a random `mb_spinflame` roll (30° / 80° / 140°) |
+| `muzzle_burst_slug` / `_dum` / `_ap` / `_mag` | the four ammo types (`wep_X0`–`X3`) | LOD-gated `CALL_ANIMATION muzzleburst_effects AT_NODE` (offset 0, −0.2, −1.0), then a random `mb_spinflame` roll (30° / 80° / 140°) |
 | `muzzle_burst` | the base guns / turret guns | the fuller flash: ejects `gunshell`, runs the `muzzlepuffer` `PUFFER_STATE` (smoke101–103, 0.05 s interval), and picks 1st- vs 3rd-person muzzle lights (`muzzle_lt`, `bigmuzzle_lt`) by `PLAYER_1ST_PERSON` |
 | `muzzle_burst2` | the heavy mounts | a larger flash with `muzzle_lt2` (range up to 16 m) |
 
 The flash animation and the flash *node* share a name; the reader animates the prototype node
 listed under [Projectile prototypes](#ordnance-effects-and-projectile-prototypes).
+
+**Only the secondaries carry a forward offset.** The flash node itself (`muzzle_burst_slug` and its
+`mb_spinflame` child) is toggled active at the firing node with no displacement, while the
+`CALL_ANIMATION muzzleburst_effects` above carries `AT_NODE` (0, −0.2, −1.0), so the casing, the
+`muzzlepuffer` smoke and every muzzle light sit **1 m ahead of the gun and 0.2 m below it**. Inside
+`muzzleburst_effects` the `3rdperson_lts` light is `AT_NODE muzzle_burst` (0, 0, 0), i.e. at that
+displaced root, and the `1stperson_lts` pair a further (±11, −1, −5) from it.
 
 ### Engine wiring (M3), casing, muzzle smoke, muzzle light
 
@@ -43,8 +50,13 @@ already-live gate would drop every ejection but one per 2 s window):
 - **Muzzle light**, a pooled `OmniLight3D` per shot using the `3rdperson_lts` 3-way
   `RANDOM_WEIGHT` variants' range/colour verbatim (1–2 / 1.25–3.25 / 2–3.75 m; 0.88–0.93,
   0.78, 0.36); the def deactivates it on the next event tick, rendered as a ~2-frame flash.
-  The `PLAYER_1ST_PERSON` `bigmuzzle_lt` branch (range up to 21 m, ±11 offsets) is unbuilt,
-  there is no first-person view yet.
+  The `PLAYER_1ST_PERSON` branch is the `bigmuzzle_lt`/`muzzle_lt` pair at `AT_NODE` (±11, −1, −5)
+  (range 21.25 / 18.25 m), lit while a pilot holds a first-person view.
+  Every one of them is **anchored to the firing muzzle node** and re-placed on that node's drawn
+  pose each frame, the way the flash quads are: a light left at the world point it was lit at ends
+  a frame of travel astern of the muzzle, ~1.7 m at 100 m/s over the two frames it lives.
+  The casing, the smoke and the lights all still spawn at the node itself, so the authored
+  (0, −0.2, −1.0) displacement of the effects root above is **unbuilt** (`BL-921`).
 
 The **white puff cluster** the retail captures show riding each ejected casing matches **no
 shipped effect def** (only `muzzle_burst` references `gunshell`, and the `gunshell` def carries

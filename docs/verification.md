@@ -664,6 +664,13 @@ member, and it does not go here.
   the same frame under `--det` reads 125/126/112. Shoot a session start with `--det` (which is the
   default for `--screenshot`), or past the fade, and read `[ui] start cover:` in the log to see how
   long it held.
+- **INSTR-81**, **An effect that lives a couple of frames is judged by the gap between its node
+  and the node that spawned it, never by eye in a still.** A muzzle light placed once in world
+  space ends 1.65 m and 1.71 m astern of its own firepoint over its two drawn frames at 100 m/s,
+  and the same flash anchored to that node ends 0.00 m from it; on a `--view=4` flank frame the
+  whole difference is 472 pixels on a 1280×720 shot, easily read as the burst's own shape. Log
+  the distance at the moment the effect expires, which is where the drift has accumulated, rather
+  than the per-frame correction, which reads the same in both builds.
 
 ## SRC, sources and documents
 

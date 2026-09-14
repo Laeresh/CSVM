@@ -402,6 +402,7 @@ public sealed partial class ProjectilePool : Node3D
     private int _sfxNext;
     private bool _flyoutPoseLogged;
     private int _muzzleBasisLogs;
+    private int _muzzleLightLogs;
     private int _impactsLogged;
     private int _soundGainsLogged;               // D31 one-shot gain breadcrumb, first 8
     private int _decaysLogged;                   // launch-velocity decay breadcrumb, first 4
@@ -1053,7 +1054,7 @@ public sealed partial class ProjectilePool : Node3D
         {
             SpawnCasing(muzzle);
             SpawnMuzzleSmoke(muzzle);
-            FlashMuzzleLight(muzzle);
+            FlashMuzzleLight(muzzle, muzzleAnchor);
         }
     }
 
@@ -1250,6 +1251,7 @@ public sealed partial class ProjectilePool : Node3D
             RenderSprites(_muzzleMm[i], _muzzle[i]);
         RenderSprites(_impactMm, _impact);
         RenderSprites(_smokeMm, _smoke);
+        PlaceAnchoredLights();
     }
 
     /// <summary>Deactivates every live round (R / respawn: no tracers hang in the air).</summary>
@@ -1277,6 +1279,7 @@ public sealed partial class ProjectilePool : Node3D
         {
             l.InUse = false;
             l.Light.Visible = false;
+            l.Anchor = null;
         }
         foreach (var f in _impactFx)
             f.Model.QueueFree();
@@ -1640,6 +1643,20 @@ public sealed partial class ProjectilePool : Node3D
         var x = b.X * c + b.Y * s;
         var y = b.Y * c - b.X * s;
         return new Basis(x, y, b.Z);
+    }
+
+    // Where a flash's anchor puts it right now. False when it carries no anchor, or the node that
+    // fired it has been freed or unparented mid-flash, which leaves the light where it last stood
+    // for its remaining frames rather than snapping it to the world origin.
+    private static bool MuzzleFrame(LightFlash flash, out Vector3 world)
+    {
+        world = Vector3.Zero;
+        if (flash.Anchor is not { } anchor
+            || !GodotObject.IsInstanceValid(anchor) || !anchor.IsInsideTree())
+            return false;
+        var xf = anchor.GlobalTransform;
+        world = xf.Origin + (xf.Basis.Orthonormalized() * flash.Local);
+        return true;
     }
 
     private static void RenderSprites(MultiMesh mm, List<Sprite> sprites)
@@ -2668,7 +2685,7 @@ public sealed partial class ProjectilePool : Node3D
     // ⚠ A LIGHT_STATE RANGE is a falloff PAIR, not a band to roll in (WorldLights.Add): the outer
     // value is where the pool reaches zero, which is what an OmniLight3D's range means. The
     // first-person pair takes it fixed; a rolled range is what made the old flash pulse per shot.
-    private void FlashMuzzleLight(Transform3D muzzle)
+    private void FlashMuzzleLight(Transform3D muzzle, Node3D? anchor)
     {
         // A pre-tree volley (the weapon lab engages while still building) has no world transform
         // to place a light in, skip the flash rather than set GlobalPosition out of tree.
@@ -2676,15 +2693,12 @@ public sealed partial class ProjectilePool : Node3D
             return;
         if (FirstPersonView?.Invoke() == true)
         {
-            // testfp's PLAYER_1ST_PERSON branch: bigmuzzle_lt and muzzle_lt, one either side of the
-            // gun line, big enough to reach the pilot, this is how the original lights the cockpit
-            // interior from a shot, strongest on the canopy struts overhead.
-            var basis = muzzle.Basis.Orthonormalized();
-            // AT_NODE's trailing offset, in the muzzle node's own frame verbatim: the extracted
-            // coordinates ARE Godot's, no axis swap (docs/formats/gotchas.md's census).
-            EmitLight(muzzle.Origin + (basis * new Vector3(11f, -1f, -5f)),
+            // testfp's PLAYER_1ST_PERSON branch: bigmuzzle_lt and muzzle_lt at the def's own
+            // AT_NODE offsets, one either side of the gun line, big enough to light the cockpit
+            // interior from a shot, strongest on the canopy struts (docs/formats/weapon-effects.md).
+            EmitLight(muzzle, anchor, new Vector3(11f, -1f, -5f),
                 21.25f, new Color(0.88f, 0.78f, 0.36f));
-            EmitLight(muzzle.Origin + (basis * new Vector3(-11f, -1f, -5f)),
+            EmitLight(muzzle, anchor, new Vector3(-11f, -1f, -5f),
                 18.25f, new Color(0.93f, 0.78f, 0.36f));
             return;
         }
@@ -2708,12 +2722,14 @@ public sealed partial class ProjectilePool : Node3D
             range = RandRange(2.0f, 3.75f);
             color = new Color(0.93f, 0.78f, 0.36f);
         }
-        EmitLight(muzzle.Origin, range, color);
+        EmitLight(muzzle, anchor, Vector3.Zero, range, color);
     }
 
-    // Lights one pooled OmniLight3D at a world position for MuzzleLightLife. Silently drops the
-    // flash when the pool is at cap, which is what a volley past MaxMuzzleLights costs.
-    private void EmitLight(Vector3 pos, float range, Color color)
+    // Lights one pooled OmniLight3D at the given offset in the muzzle frame for MuzzleLightLife.
+    // An anchor node keeps it there while the flash lives; without one the light stays where it
+    // was lit. Silently drops the flash when the pool is at cap, which is what a volley past
+    // MaxMuzzleLights costs.
+    private void EmitLight(Transform3D muzzle, Node3D? anchor, Vector3 local, float range, Color color)
     {
         LightFlash? slot = null;
         foreach (var l in _lights)
@@ -2742,10 +2758,13 @@ public sealed partial class ProjectilePool : Node3D
         }
         slot.Light.OmniRange = range;
         slot.Light.LightColor = color;
-        slot.Light.GlobalPosition = pos;
+        slot.Light.GlobalPosition = muzzle.Origin + (muzzle.Basis.Orthonormalized() * local);
         slot.Light.Visible = true;
         slot.Age = 0f;
         slot.InUse = true;
+        slot.Anchor = anchor;
+        slot.Local = local;
+        slot.Frames = 0;
     }
 
     private void AgeCasings(float dt)
@@ -2787,7 +2806,32 @@ public sealed partial class ProjectilePool : Node3D
             {
                 l.InUse = false;
                 l.Light.Visible = false;
+                // Two low-volume breadcrumbs per session: how far the expiring light ended up from
+                // the muzzle that lit it, 0.00 m once anchored. Held back two seconds, since a
+                // plane still at its spawn speed reports a gap it shows in metres once up to speed.
+                if (_muzzleLightLogs < 2 && l.Frames > 0 && (GameClock.Current?.Time ?? 0.0) >= 2.0
+                    && MuzzleFrame(l, out var at))
+                {
+                    _muzzleLightLogs++;
+                    float gap = l.Light.GlobalPosition.DistanceTo(at);
+                    Log.Info("weapons", $"muzzle light: {l.Frames} drawn frame(s), ended {gap:0.00} m from the muzzle");
+                }
+                l.Anchor = null;
             }
+        }
+    }
+
+    // Re-places every anchored muzzle light on the DRAWN pose of the node that fired it, the same
+    // per-frame resolve RenderSprites makes for the flash quads. A light left where it was lit
+    // hangs in world space, and at 100 m/s the aeroplane is metres past it before it goes out.
+    private void PlaceAnchoredLights()
+    {
+        foreach (var l in _lights)
+        {
+            if (!l.InUse || !MuzzleFrame(l, out var want))
+                continue;
+            l.Frames++;
+            l.Light.GlobalPosition = want;
         }
     }
 
@@ -3272,5 +3316,10 @@ public sealed partial class ProjectilePool : Node3D
         public OmniLight3D Light = null!;
         public float Age;
         public bool InUse;
+        public Node3D? Anchor;  // the node that fired: Local resolves against it every drawn frame,
+                                // so the flash rides the aeroplane. Null leaves the light in world
+                                // space, which is right only for a muzzle with no node behind it
+        public Vector3 Local;   // the light's placement in the anchor's own frame
+        public int Frames;      // drawn frames this flash has lived, for the placement breadcrumb
     }
 }
