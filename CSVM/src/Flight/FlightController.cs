@@ -560,8 +560,9 @@ public partial class FlightController : Node3D
     private Basis _spawnAttitude;
     private float _spawnThrottle = FallbackSpawnThrottle;
     private float _spawnSpeed = FallbackSpawnSpeed;
-    private float _throttle;
-    private float _keyPitch;                     // the three keyboard axes' own deflection, ramped
+    private float _throttle;                     // the live lever (+0x128), slewing toward the next
+    private float _throttleSetting;              // the commanded lever (+0x124) the controls write
+    private float _keyPitch;                    // the three keyboard axes' own deflection, ramped
     private float _keyRoll;                      // by StickRamp; a gamepad's analogue axis adds on
     private float _keyYaw;                       // top and is never ramped
     private double _sinceTelemetry;
@@ -1202,7 +1203,7 @@ public partial class FlightController : Node3D
         // ⚠ An INERT airframe must stay off-screen and off the aircraft layer through a respawn too.
         // Setup() calls Respawn before _Ready builds the body, so this is also that first assertion.
         ApplyPresence();
-        _throttle = _spawnThrottle;
+        SetLever(_spawnThrottle);
         _keyPitch = _keyRoll = _keyYaw = 0f;  // a fresh airframe spawns with the stick centred
         // The original tops the tank up where it places the aircraft, from the def-derived capacity.
         Fuel.Capacity = Stats?.FuelCapacity ?? 0f;
@@ -1294,7 +1295,7 @@ public partial class FlightController : Node3D
         float? lever = carrierDrop ? CarrierDropThrottle : launchThrottle;
         if (lever is { } opened)
         {
-            _throttle = opened;
+            SetLever(opened);
             _model.Throttle = opened;
             if (Pilot != null)
                 Pilot.Throttle = opened;
@@ -1334,7 +1335,7 @@ public partial class FlightController : Node3D
     {
         Held = false;
         _model.SetVelocity(velocity);
-        _throttle = throttle;
+        SetLever(throttle);
         _model.Throttle = throttle;
         if (Pilot != null)
             Pilot.Throttle = throttle;
@@ -1357,7 +1358,7 @@ public partial class FlightController : Node3D
         _heldPos = pos;
         _heldPinned = true;
         _model.Reset(_heldPos, _heldAttitude, 0f, 0f);
-        _throttle = 0f;
+        SetLever(0f);
         _simPrev = _simCurr = _renderPose = new Transform3D(_model.Attitude, _model.Position);
         GlobalTransform = _simCurr;
         // A held airframe is re-placed rather than flown, so the pair above is collapsed and the
@@ -1800,7 +1801,7 @@ public partial class FlightController : Node3D
                 _heldPinned = true;
             }
             _model.Reset(_heldPos, _heldAttitude, 0f, 0f);
-            _throttle = 0f;      // the throttle ramp is input-driven and no input is read while held
+            SetLever(0f);        // the throttle ramp is input-driven and no input is read while held
             _lastInput = default; // control surfaces sit neutral
         }
         else
@@ -3556,7 +3557,8 @@ public partial class FlightController : Node3D
             machine.NitroUsable ??= () => Nitro.Installed && !_model.EngineDead;
         }
         var input = Pilot!.Next(_model, dt);
-        _throttle = Mathf.MoveToward(_throttle, input.Throttle, ThrottleRate * dt);
+        _throttleSetting = input.Throttle;
+        _throttle = Mathf.MoveToward(_throttle, _throttleSetting, ThrottleRate * dt);
         input.Throttle = _throttle;
         return input;
     }
@@ -4081,22 +4083,22 @@ public partial class FlightController : Node3D
         if (AllowLiveRespawn && _keyActions.Held(InputAction.Respawn))
             Respawn();
 
-        // The burn reads the lever as it stands entering this tick, and a dry tank skips the step
-        // below, so the lever freezes rather than closing. A crashed airframe burns nothing and
-        // still moves its lever, which is the arm the original's crashed-flag test takes.
-        bool leverFree = Crashed || Fuel.Step(dt, _throttle);
-        if (leverFree)
-            _throttle = Mathf.Clamp(
-                _throttle
-                + (_keyActions.Axis(InputAction.ThrottleUp, InputAction.ThrottleDown) + padThrottle)
-                    * ThrottleRate * dt,
-                0f, 1f);
+        // The commanded lever, as FUN_00487460 writes it: the up and down keys move it at 0.5/s, a
+        // digit puts it on its eighth, and it stays there once the key is up. The handler never
+        // reads the tank, so a dry engine still takes the command.
+        _throttleSetting = Mathf.Clamp(
+            _throttleSetting
+            + (_keyActions.Axis(InputAction.ThrottleUp, InputAction.ThrottleDown) + padThrottle)
+                * ThrottleRate * dt,
+            0f, 1f);
+        if (RequestedThrottle() is { } requested)
+            _throttleSetting = requested;
 
-        // The digit row's nine absolute settings (the original's Throttle page). A requested eighth
-        // is the DESIRED lever and the live one traverses to it at the same rate the up and down
-        // keys move it, which is the original's own desired/live split rather than a jump.
-        if (leverFree && RequestedThrottle() is { } requested)
-            _throttle = Mathf.MoveToward(_throttle, requested, ThrottleRate * dt);
+        // A dry tank skips the slew, so the lever freezes rather than closing; a crashed airframe
+        // still moves it (the original's crashed-flag arm). ⚠ Slew every tick, not only while a key
+        // is down: stepping it inside the digit test left a tapped setting barely moved.
+        if (Crashed || Fuel.Step(dt, _throttle))
+            _throttle = Mathf.MoveToward(_throttle, _throttleSetting, ThrottleRate * dt);
 
         // pull = S/Down, push = W/Up; bank/yaw left = A/Left/Q
         _keyPitch = StickRamp.Step(
@@ -4225,6 +4227,11 @@ public partial class FlightController : Node3D
 
         return requested;
     }
+
+    // Both levers on one value, for the writers that place an aircraft rather than fly it, as the
+    // original's spawn and launch writers set +0x124 and +0x128 together. A stale command left
+    // behind would slew a respawned lever away from where it was placed.
+    private void SetLever(float lever) => _throttle = _throttleSetting = lever;
 #pragma warning restore SA1202
 
     // This plane's state entering a contact, as the resolver's per-call half.
