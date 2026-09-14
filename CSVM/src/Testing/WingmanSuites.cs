@@ -87,6 +87,37 @@ internal static class WingmanSuites
     // that no aeroplane flew. Fail on the descent instead of averaging the jump.
     private const float FlownFloorM = 200f;
 
+    // The asymmetric leg's clock: the formation is settled by 40 s, so the command goes in at 45 s
+    // and the baseline is the ten seconds before it. The leader then holds its straight line past
+    // the cutoff, because the gap keeps opening while it sheds the boost. The burn is not timed
+    // here at all: it ends on the tank's own 5 % cutoff, 30 units burned at a net 3/s.
+    private const float NitroEngageAtS = 45f;
+    private const float NitroBaselineS = 10f;
+    private const float NitroStraightS = 63f;
+
+    // ⚠ The asymmetric leg spawns the pair on the cruise it holds, not on the spawn lever the other
+    // legs use. Accelerating from 55 m/s opens a transient of its own, which would be read as the
+    // injector's term; the question here is what the burn adds to a settled formation.
+    private const float NitroSpawnThrottle = 1f;
+
+    // The turns after the burn, and how long the whole leg runs. ⚠ Two aircraft at one fd_speed
+    // close no straight-line gap, so the corner a turn offers is the only way back to the station
+    // and a leg with no turns in it measures a permanent loss.
+    private const int NitroTurnCycles = 5;
+    private const float NitroLevelS = 3f;
+    private const float NitroRunS = 140f;
+
+    // What the burn has to cost the station for the leg to have measured anything, and how long
+    // after the cutoff the escort has to be back inside the symmetric legs' leash. Both are floors
+    // under the run's own figures, not targets: the burn opens about 390 m and it is back inside
+    // the leash about 15 s after the cutoff.
+    private const float NitroLossM = 200f;
+    private const float NitroReformCapS = 30f;
+
+    // How close to its pre-burn separation the escort has to be back by the end of the leg. The run
+    // settles within single metres of it, so this is slack, not a target.
+    private const float NitroReformM = 100f;
+
     // The engagement leg's stage. The bandit flies the same course as the pair from this far
     // ahead, so it sits in the wingman's own forward gun cone without the wingman maneuvering:
     // the leg then answers what the guns do while the station is held, not what the flight law
@@ -125,9 +156,12 @@ internal static class WingmanSuites
         "the D34 campaign wingman (BL-362): the decoded netless mode-wingman escort law as " +
         "geometry (both body-frame stations, the rolled-leader frame, the 106.68/259.08 m " +
         "target station, the 80 m separation push, the 700 m and 20.576 m/s join gates) and " +
-        "then flown against a scripted leader, a live wingman joining from 1200 m abeam, " +
-        "staying with the leader for the rest of the run, and riding the aft station behind " +
-        "a player leader where it rides the forward one behind an AI leader")]
+        "then flown, the flown legs covering one pairing each: neither aircraft carrying a " +
+        "nitrous injector, on the campaign airframe and on the suite's default, and then the " +
+        "leader carrying one against an escort that carries none, where the burn costs the " +
+        "escort its station and the leader's turns give it back; plus a live wingman joining " +
+        "from 1200 m abeam and riding the aft station behind a player leader where it rides " +
+        "the forward one behind an AI leader")]
     internal static void WingmanStation(TestContext ctx)
     {
         StationGeometry(ctx);
@@ -143,11 +177,13 @@ internal static class WingmanSuites
         var textures = new TextureArchive(texturesPath);
         try
         {
-            // Twice, and the pair is the point: the campaign's own airframe is the case that
-            // matters, and the suite's default is the same leg with the mechanism eighteen times
-            // larger. ⚠ A number off the default describes the mechanism, never the campaign.
+            // Twice, and the pair is the point: the symmetric pairing on the campaign's own
+            // airframe, then the same leg on the suite's default, where the mechanism is eighteen
+            // times larger. ⚠ A number off the default describes the mechanism, never the campaign.
             FlyFlownLeaderLeg(ctx, planesGamez, textures, FlownPlaneNode);
             FlyFlownLeaderLeg(ctx, planesGamez, textures, ctx.PlaneName);
+            // …and then the asymmetric pairing, the leader's injector against an escort with none.
+            FlyNitroLeaderLeg(ctx, planesGamez, textures);
             var behindPlayer = FlyLeg(ctx, planesGamez, textures, stats, playerLeader: true);
             var withAi = FlyLeg(ctx, planesGamez, textures, stats, playerLeader: false);
 
@@ -752,6 +788,170 @@ internal static class WingmanSuites
         }
     }
 
+    // The asymmetric leg's stick: the cruise both aircraft spawn on, held straight through the burn
+    // so nothing but the injector opens the gap, and then the symmetric leg's own turn, alternating
+    // hand, for as long as the recovery is watched.
+    private static (FlightInput Input, float Duration, bool UntilLevel)[] NitroLeaderProfile()
+    {
+        var segments = new System.Collections.Generic.List<(FlightInput, float, bool)>
+        {
+            (new FlightInput { Throttle = 1f }, NitroStraightS, false),
+        };
+        for (int cycle = 0; cycle < NitroTurnCycles; cycle++)
+        {
+            float roll = cycle % 2 == 0 ? 0.6f : -0.6f;
+            segments.Add((new FlightInput { Throttle = 1f, Roll = roll }, RollInS, false));
+            segments.Add((new FlightInput { Throttle = 1f, Pitch = 0.35f }, TurnPullS, false));
+            segments.Add((new FlightInput { Throttle = 1f, Roll = -roll }, RollInS, false));
+            segments.Add((new FlightInput { Throttle = 1f, Pitch = -0.35f }, TurnLevelCapS, true));
+            segments.Add((new FlightInput { Throttle = 1f }, NitroLevelS, false));
+        }
+
+        segments.Add((new FlightInput { Throttle = 1f }, 0f, false));
+        return segments.ToArray();
+    }
+
+    // The asymmetric pairing, which the symmetric legs above never reach: the leader's injector
+    // installed and the wingman's not, the shape a bought injector makes against a wingman block
+    // that authors no nitro slot. The escort commands no matching term at any lever, so the leg
+    // measures what the burn costs the station and what the leader's turns give back.
+    private static void FlyNitroLeaderLeg(TestContext ctx, GameZ planesGamez, TextureArchive textures)
+    {
+        var stats = PlaneStats.Load(ctx.ZrdrPath, FlownPlaneNode);
+        var aiStats = PlaneStats.LoadForAi(ctx.ZrdrPath, FlownPlaneNode);
+        ProjectilePool? pool = null;
+        FlightController? leader = null;
+        FlightController? wing = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            var leaderPos = new Vector3(0f, FlownLeaderAltitudeM, 0f);
+            FlightController? flying = null;
+            var stick = new LevellingLeaderStick(NitroLeaderProfile(),
+                () => flying?.WorldVelocity.Y ?? 0f);
+            leader = Rig(ctx, planesGamez, textures, stats, live, leaderPos, true, null,
+                FlightRoster.ShooterIdBase, null, null, out _, FlownPlaneNode, stick,
+                NitroSpawnThrottle, stats.FdSpeed);
+            flying = leader;
+            leader.Nitro.Installed = true;
+
+            var wingPos = AiEscort.FormationStation(leaderPos, Basis.Identity, playerLeader: true);
+            var escort = new AiEscort { Leader = leader };
+            var pilot = AiPilot.HoldingCourse(wingPos, wingPos + Vector3.Forward);
+            pilot.Escort = escort;
+            pilot.Machine = new AiModeMachine(new System.Random(7));
+            var leaderRig = leader;
+            var humans = new Vector3[1];
+            wing = Rig(ctx, planesGamez, textures, aiStats, live, wingPos, false, pilot,
+                FlightRoster.ShooterIdBase + 1, null,
+                () => { humans[0] = leaderRig.WorldPosition; return humans; }, out _,
+                FlownPlaneNode, null, NitroSpawnThrottle, aiStats.FdSpeed);
+
+            float baseline = 0f, peak = 0f, peakAtS = 0f, burnS = 0f, burnEndS = -1f;
+            float burnPeakSpeed = 0f, cruisePeakSpeed = 0f, rangeAtBurnEnd = 0f;
+            float reformS = -1f, lowest = float.MaxValue, settled = 0f;
+            bool everCrashed = false, leftStation = false, burned = false;
+            int baselineSamples = 0, settledSamples = 0;
+            for (int i = 0; i < (int)(NitroRunS / StepDt); i++)
+            {
+                float t = i * StepDt;
+                if (t >= NitroEngageAtS && burnEndS < 0f)
+                {
+                    leader.AutoNitro = true;
+                }
+
+                live.SimStep(StepDt);
+                leader.SimStep(StepDt);
+                wing.SimStep(StepDt);
+                float range = wing.WorldPosition.DistanceTo(leader.WorldPosition);
+                float leaderSpeed = leader.WorldVelocity.Length();
+                everCrashed |= wing.Crashed || leader.Crashed;
+                leftStation |= escort.State != EscortState.Station;
+                lowest = Mathf.Min(lowest, Mathf.Min(wing.WorldPosition.Y, leader.WorldPosition.Y));
+
+                if (leader.Nitro.Boosting)
+                {
+                    burned = true;
+                    burnS += StepDt;
+                    burnPeakSpeed = Mathf.Max(burnPeakSpeed, leaderSpeed);
+                }
+                else
+                {
+                    if (t < NitroEngageAtS)
+                        cruisePeakSpeed = Mathf.Max(cruisePeakSpeed, leaderSpeed);
+                    // One burn, not a tank that refills and re-engages: the command is a held key
+                    // and the original's cutoff is what ends it.
+                    if (burned && burnEndS < 0f)
+                    {
+                        burnEndS = t;
+                        rangeAtBurnEnd = range;
+                        leader.AutoNitro = false;
+                    }
+                }
+
+                if (t >= NitroEngageAtS - NitroBaselineS && t < NitroEngageAtS)
+                {
+                    baselineSamples++;
+                    baseline += range;
+                }
+
+                if (t >= NitroEngageAtS && range > peak)
+                {
+                    peak = range;
+                    peakAtS = t;
+                }
+
+                if (burnEndS >= 0f && reformS < 0f && t > burnEndS && range < FlownLeashM)
+                {
+                    reformS = t - burnEndS;
+                }
+
+                if (t >= NitroRunS - SettledWindowS)
+                {
+                    settledSamples++;
+                    settled += range;
+                }
+
+                if (i % 300 == 0)
+                {
+                    ctx.Note($"[flown nitro] t={t:0}s range={range:0} escort={escort.State} boost={leader.Nitro.Boosting} charge={leader.Nitro.Charge:0.0} leadV={leaderSpeed:0} wingV={wing.WorldVelocity.Length():0} dY={wing.WorldPosition.Y - leader.WorldPosition.Y:0} lever={pilot.Throttle:0.00}");
+                }
+            }
+
+            baseline /= Mathf.Max(1, baselineSamples);
+            settled /= Mathf.Max(1, settledSamples);
+            ctx.Note($"[flown nitro] burn {burnS:0.0} s ending at t={burnEndS:0.0} s, leader peak {burnPeakSpeed:0.0} m/s boosting against {cruisePeakSpeed:0.0} m/s on the lever alone");
+            ctx.Note($"[flown nitro] station: baseline {baseline:0} m, {rangeAtBurnEnd:0} m at the cutoff, peak {peak:0} m at t={peakAtS:0} s, back inside {FlownLeashM:0} m after {reformS:0.0} s, settled {settled:0} m");
+            ctx.Check(!everCrashed && lowest > FlownFloorM,
+                $"[flown nitro] neither aircraft goes in or drops through the backstop: lowest {lowest:0} m of {FlownFloorM:0}");
+            ctx.Check(leader.Nitro.Installed && !wing.Nitro.Installed,
+                $"…the leader carries the injector and its escort carries none, the asymmetry the roster allows");
+            ctx.Check(burnS > 0f && burnEndS > 0f,
+                $"…the leader's burn ends on the tank's own cutoff rather than a clock: {burnS:0.0} s");
+            ctx.Check(burnPeakSpeed > cruisePeakSpeed,
+                $"…and it is a thrust term no lever reaches: {burnPeakSpeed:0.0} m/s against {cruisePeakSpeed:0.0} m/s");
+            ctx.Check(peak - baseline > NitroLossM,
+                $"…the escort loses station while it runs, commanding nothing to match it: {baseline:0} m out to {peak:0} m, {peak - baseline:0} m of {NitroLossM:0}");
+            ctx.Check(peak > FlownLeashM,
+                $"…far enough out to break the leash the symmetric legs hold: {peak:0} m of {FlownLeashM:0}");
+            ctx.Check(!leftStation,
+                $"…without ever falling out of the formation state, which has no exit");
+            ctx.Check(reformS >= 0f && reformS < NitroReformCapS,
+                $"…and is back inside that leash {reformS:0.0} s after the cutoff, of {NitroReformCapS:0} s");
+            ctx.Check(settled < baseline + NitroReformM,
+                $"…and re-forms on the separation it started from once the leader turns: settled {settled:0} m against the baseline's {baseline:0} m, of {NitroReformM:0} m");
+        }
+        finally
+        {
+            wing?.Free();
+            leader?.Free();
+            pool?.Free();
+        }
+    }
+
     // One leader/wingman pair, flown, reporting the mean COMMANDED offset in the leader's frame.
     // The leader is scripted: no pilot at all and the stick centred, so it holds a straight course.
     // IsHumanPiloted on it is the one thing that picks which decoded station the wingman flies.
@@ -889,7 +1089,8 @@ internal static class WingmanSuites
         PlaneStats stats, ProjectilePool live, Vector3 pos, bool human, AiPilot? pilot, int shooterId,
         (FlightInput Input, float Duration)[]? holdSegments,
         System.Func<System.Collections.Generic.IReadOnlyList<Vector3>>? humanPositions,
-        out FlightModel plant, string? planeNode = null, IFlightInputSource? stick = null)
+        out FlightModel plant, string? planeNode = null, IFlightInputSource? stick = null,
+        float throttle = LeaderThrottle, float speedMps = LeaderSpeedMps)
     {
         var model = new PlaneBuilder(planesGamez, textures).Build(planeNode ?? ctx.PlaneName);
         var rig = new FlightController();
@@ -911,7 +1112,7 @@ internal static class WingmanSuites
         });
         plant = new FlightModel(stats, aiForcePath: pilot != null);
         rig.Setup(plant, null, new CamParams(), pos, pos + Vector3.Forward,
-            LeaderThrottle, LeaderSpeedMps);
+            throttle, speedMps);
         ctx.Host.AddChild(rig);
         return rig;
     }

@@ -1624,24 +1624,6 @@ usual.
 
 ## Missions, modes & campaign
 
-- `BL-469` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **An escort cannot hold station on a leader using nitro, and nothing measures
-  the case.** *Decision:* the escort does nothing special. It holds full throttle, falls behind
-  while the leader's nitro runs, and re-forms once it ends; no matching thrust term and no
-  installed injector. What remains is the measurement leg that pins that behaviour. *Evidence:* the two injectors are independent switches, so the asymmetry is reachable
-  in a real game: a wingman gets one only when its own `aiv` block authors `nitro` slot 34
-  (`AiFlightAssembler.cs:112` through `AiSkills.RosterNitro`, and only three shipped blocks author
-  1), while the player's comes from their own customised aircraft
-  (`HumanFlightAdapter.cs:138`, `CustomPlaneBuild.HasNitrous`). A player who has bought an injector,
-  escorted by a wingman whose block authors none, gives the leader a thrust term the escort cannot
-  command at any lever, so no desired-speed ceiling can keep it in place. `wingman-station` measures
-  the symmetric no-nitro case on both sides, which is the right default and the one the reported
-  symptom came from, but its comment does not say so. *Fix shape:* a second `[flown]` leg in
-  `wingman-station` with the leader's `Nitro.Installed` true and the wingman's false, asserting
-  that the escort loses station during the burn and is back within the symmetric leg's tolerance
-  a bounded time after it ends, and the suite comment saying which case each leg covers. *⚠ Traps:* do not fold this into `BL-457`: that
-  item's numbers are the symmetric case and are sound; this is a different pairing. Do not "fix" it
-  by installing nitro on every wingman, which would contradict the roster data.
-
 - `BL-314` `[Feature]` `[Blocked: PT-45]` `[L]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` **Race countdown, a rolling start on rails before the run clock
   opens.** The abreast starting grid landed 2026-08-08 (`StartGrid`), so every pilot in a splitscreen
   stunt race now begins on one line, on one heading, at one altitude. What is still missing is the

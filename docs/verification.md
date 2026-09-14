@@ -702,6 +702,13 @@ member, and it does not go here.
   whole difference is 472 pixels on a 1280×720 shot, easily read as the burst's own shape. Log
   the distance at the moment the effect expires, which is where the drift has accumulated, rather
   than the per-frame correction, which reads the same in both builds.
+- **INSTR-82**, **A formation leg flown in a straight line can measure a loss but never a recovery:
+  two aircraft on one airframe share a top speed, so whatever gap opens between them stays open.**
+  A leader's nitro burn opens 383 m on its escort and the pair then holds 805 m apart, unchanged,
+  for as long as the leader flies straight at full throttle; the gap falls back inside the 700 m
+  leash 15.3 s after the cutoff and to within 7 m of the pre-burn separation only once the leader
+  turns, because a turn is the only corner an escort capped at its own `fd_speed` can take back.
+  Script the leader turns before reading a re-form time, or the leg reports a permanent loss.
 
 ## SRC, sources and documents
 
