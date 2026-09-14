@@ -2266,7 +2266,8 @@ internal static class AiSuites
             lastRoll = null;
             ai.TakeProjectileHit(gun, ai.WorldPosition + new Vector3(2f, 0f, 0f), "fuselage", 0);
             machine.SteadyHandChance = 0f;
-            ctx.Check(lastRoll == null, $"…and takes no second steady-hand roll roll={lastRoll}");
+            ctx.Check(lastRoll != null && lastRoll.Contains("no steady hand test (already evading)"),
+                $"…and takes no second steady-hand roll, saying so roll={lastRoll}");
             target.PlaceHeld(targetPos, targetPos + Vector3.Forward);
             Step(1);
             ctx.Check(!machine.Evading && machine.Mode != AiMode.Evade,
