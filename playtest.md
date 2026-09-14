@@ -124,7 +124,7 @@ draws its authored 800x600 space one-to-one.
 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
-| `CAP-39` | Cockpit view while firing | In the original, hold the guns for a second or two IN the cockpit view (mode 6), ideally at dusk or against a dark cliff so a light flash reads. A sweep of all 130 existing clips found no cockpit-view firing footage: every gun clip is nose or chase view. *Look for:* how bright and how warm the flash reads inside the canopy, and where it lands, CSVM implements `muzzle_burst`'s authored first-person lights (`testfp`'s `PLAYER_1ST_PERSON` branch: `bigmuzzle_lt` + `muzzle_lt` at the authored offsets, ranges and colour), so the clip CALIBRATES their look rather than settling whether the interior lights at all. Energy is a declared TUNE (the data carries none, so both lights start at the third-person stand-in's 2.5), and the emphasis to match is the canopy struts above the head, which is where the original puts it at the controls; the windshield bullet-hole decals on taking window hits ride the same sortie if one happens | `BL-436` (the muzzle-light energy TUNE) |
+| `CAP-39` | Cockpit view while firing | In the original, hold the guns for a second or two IN the cockpit view (mode 6), ideally at dusk or against a dark cliff so a light flash reads. A sweep of all 130 existing clips found no cockpit-view firing footage: every gun clip is nose or chase view. *Look for:* how bright and how warm the flash reads inside the canopy, and where it lands, CSVM implements `muzzle_burst`'s authored first-person lights (`testfp`'s `PLAYER_1ST_PERSON` branch: `bigmuzzle_lt` + `muzzle_lt` at the authored offsets, ranges and colour), so the clip CALIBRATES their look rather than settling whether the interior lights at all. Energy is a declared TUNE (the data carries none, so both lights start at the third-person stand-in's 2.5), and the emphasis to match is the canopy struts above the head, which is where the original puts it at the controls; the windshield bullet-hole decals on taking window hits ride the same sortie if one happens | `BL-286` (the first-person light energy, judged much dimmer than the original's) |
 | `CAP-27` | Does the original spark on the airframe at all? | Take damage in the original, a light scrape is enough, with the aircraft in frame (external/chase fine), and look for a **spark burst on the airframe itself**, distinct from smoke at the contact point. ⚠ This capture can **delete** a feature rather than tune one: our per-impact spark burst is driven by a 0.99 `injure_anims` entry that exists on **1 of 11** aircraft (the Devastator), plausibly an authoring leftover (was `BL-090` item 2, closed, `git log --grep=BL-090`). If the original never sparks, our implementation goes. If it does, `BL-281`'s ricochet mix can be judged | `BL-281` |
 | `CAP-30` | Firing-wobble amplitude across calibers and airframes | Dead-astern external/chase clips, level flight, guns held 3 s+: **(a)** one plane with two well-separated calibers (30 vs 70), **(b)** one caliber on a light vs a heavy plane, **(c)**, added 2026-08-07, a **Bloodhawk 40-cal** clip framed and fire-rate-matched to `Gun Wobble and animation.mp4`, giving a *second independent amplitude measurement* of the same case the law was derived from. (c) is what lets this capture serve as `BL-266`(a)'s fallback instrument: (a)/(b) alone ask only whether caliber and plane weight enter the law, and **cannot** settle the uniform ~2–4× shortfall our render shows against the reference clip. ⚠ Dead-astern framing is load-bearing: it makes the on-screen roll angle the world roll angle with no projection model (`analysis/gun-wobble-shake/FINDINGS.md`, capture spec there). Confirms or refutes the pure-caliber magnitude law (7e-5 × caliber, measured on one 40-cal clip) and whether plane model/weight enter; a being-hit clip on the same sortie also pins the impact sources' stand-in quantities | `BL-266` |
 | `CAP-38` | Beeper and seeker hits ON an aircraft, **with audio** | In the original, fire the beeper (`wep_10`) and the seeker (`wep_11`) at an aircraft and film the hit itself, external/chase, close enough to read the burst on the airframe. Both weapons author `ANIMATION large_fireball` on their aircraft `IMPACT` row and ours plays exactly that on a struck plane; a fused burst reads the `default` row in the original and in ours (`docs/org/ordnanceTypes.md` "Which row a burst reads"), so the beeper's near miss draws nothing and the seeker's draws its white flare at the round. The ground-side look is already signed off, so this clip is only the on-plane half. *Look for:* whether a direct strike shows the large fireball on the plane, something smaller, or nothing beyond the paint; whether a near miss shows nothing (beeper) or the flare (seeker); and the per-type impact sound on the same take (`snd_missile_beeper` / `snd_missile_seeker`) | Nothing tracks the outcome; a mismatch with our on-plane burst mints a new `BL` |
@@ -309,34 +309,6 @@ reasons that have nothing to do with any of these checks.
   A/B'd our dive whine against the original and reported it "close, but could be a bit louder",
   which read as a mix problem. The original has no whine at all, so what the ear was matching in
   that dive was the engine slot's own movement, and these terms are what produces it.
-
-- `PT-123` `[A/B: OriginalScreenshots/Videos/CAP-14 Graze and CAP 15 wing to red.mp4]` **Breakup
-  scatter magnitude in flight (`BL-121`).** The contact constants this item used to carry are
-  retired against the decoded response, and the staged panel burn landed with `BL-259`. One feel
-  judgement is left: how far the pieces throw when an airframe comes apart. *Look for:*
-  - (a) the scatter reads as the original's, pieces leaving the airframe at a believable spread
-    rather than pluming out or dropping straight down;
-  - (b) the panel flip stays a skin swap at chase distance (charred outer wing, no large flapping
-    geometry), which is what the original's own footage shows;
-  - (c) the trail off a damaged panel stages fire, then black smoke, then a sputter, rather than one
-    continuous flame.
-  *Blocks:* `BL-121`.
-
-- `PT-124` `[A/B: OriginalScreenshots/Videos/CAP-16.mp4 + CAP-14 Building crash Balmoral.mp4]`
-  **The data-driven crash, judged whole against the original (`BL-122`).** The arc decode is
-  settled and no scalar is left to fit, so what is owed is the look of the whole crash on both
-  surfaces, plus its sound. ⚠ The two surfaces are deliberately different and must not be tuned to
-  one look. *Look for:*
-  - (a) a dirt crash reads as one big fireball at the original's intensity, its smokeball dark
-    red-brown rather than black;
-  - (b) the dirt burst reads as a separate, lower, ground-coloured cluster under it;
-  - (c) the pieces hold their orientation and stay where they blew rather than scattering along
-    travel, which is what the decode says and what an additive stack can easily disguise;
-  - (d) a building strike against `CAP-14 Building crash Balmoral.mp4`: a spread of small discrete
-    orange puffs, no large fireball, no dark halo;
-  - (e) the sound, `snd_exp_ground_a`'s level and whether layering it over `plane_destroy_sg` reads
-    as one impact or two.
-  *Blocks:* `BL-122`.
 
 - `PT-126` `[A/B: OriginalScreenshots/Videos/CAP-10.mp4 + Bloodhawk Dive Sound.mp4]` **What plays
   past the plane's own top speed, and how loud (`BL-252`).** The gating is settled and needs no
