@@ -440,7 +440,7 @@ internal static class OrdnanceSuites
             var effects = new List<(string Name, Vector3 At)>();
             var live = new ProjectilePool(textures, null, null)
             {
-                EffectSink = (name, at, orient, ttl) => effects.Add((name, at)),
+                EffectSink = (name, at, orient, ringOrient, ttl) => effects.Add((name, at)),
             };
             pool = live;
             ctx.Host.AddChild(live);
@@ -656,7 +656,7 @@ internal static class OrdnanceSuites
             var effects = new List<(string Name, Vector3 At)>();
             var live = new ProjectilePool(textures, null, null)
             {
-                EffectSink = (name, at, orient, ttl) => effects.Add((name, at)),
+                EffectSink = (name, at, orient, ringOrient, ttl) => effects.Add((name, at)),
             };
             pool = live;
             ctx.Host.AddChild(live);
@@ -1641,14 +1641,17 @@ internal static class OrdnanceSuites
         }
     }
 
-    // C12's SURFACE_ANIMATION orientation on a live pool: the same rocket into a 30° slope and into
+    // The SURFACE_ANIMATION orientation on a live pool: the same rocket into a 30° slope and into
     // flat ground, and the choker (whose default row is a plain ANIMATION) into the slope, with the
-    // effect sink recording the basis each play was handed.
+    // effect sink recording the two bases each play was handed. The second half is the enhanced
+    // presentation's upper ring, which is a remake-only rule and must leave the first half alone.
     [Suite("impact-orientation",
         "the IMPACT row's SURFACE_ANIMATION is placed with world up rotated onto the struck " +
-        "normal while the plain ANIMATION keeps its fixed axis (C12): a wep_06 into a 30° slope " +
+        "normal while the plain ANIMATION keeps its fixed axis: a wep_06 into a 30° slope " +
         "hands he_ground_effect a basis whose Y is the slope normal, the same round into flat " +
-        "ground hands identity, and a wep_12's scatter_effect on the slope stays identity")]
+        "ground hands identity, and a wep_12's scatter_effect on the slope stays identity; the " +
+        "faithful presentation hands the upper ring no basis at all, and Enhanced Graphics hands " +
+        "it one facing back along the round's own flight direction, the ground effect unchanged")]
     internal static void ImpactOrientation(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
@@ -1671,10 +1674,10 @@ internal static class OrdnanceSuites
         var bodies = new List<StaticBody3D>();
         try
         {
-            var plays = new List<(string Name, Vector3 At, Basis Orient)>();
+            var plays = new List<(string Name, Vector3 At, Basis Orient, Basis? Ring)>();
             var live = new ProjectilePool(textures, null, null)
             {
-                EffectSink = (name, at, orient, ttl) => plays.Add((name, at, orient)),
+                EffectSink = (name, at, orient, ringOrient, ttl) => plays.Add((name, at, orient, ringOrient)),
             };
             pool = live;
             ctx.Host.AddChild(live);
@@ -1691,10 +1694,13 @@ internal static class OrdnanceSuites
             ctx.Host.AddChild(flat);
             bodies.Add(flat);
 
-            (string Name, Vector3 At, Basis Orient)? Drop(WeaponDef weapon, Vector3 above)
+            (string Name, Vector3 At, Basis Orient, Basis? Ring)? Drop(WeaponDef weapon, Vector3 above,
+                Vector3? along = null)
             {
                 plays.Clear();
-                live.Spawn(weapon, new Transform3D(Basis.LookingAt(Vector3.Down, Vector3.Forward), above), Vector3.Zero);
+                var dir = along ?? Vector3.Down;
+                var up = Mathf.Abs(dir.Normalized().Dot(Vector3.Up)) > 0.99f ? Vector3.Forward : Vector3.Up;
+                live.Spawn(weapon, new Transform3D(Basis.LookingAt(dir, up), above), Vector3.Zero);
                 for (int i = 0; i < 120 && plays.Count == 0; i++)
                     live.SimStep(1f / 60f);
                 live.Clear();
@@ -1703,8 +1709,8 @@ internal static class OrdnanceSuites
             static float DegreesBetween(Vector3 a, Vector3 b) =>
                 Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(a.Normalized().Dot(b.Normalized()), -1f, 1f)));
 
-            static string Describe((string Name, Vector3 At, Basis Orient)? play) =>
-                play is { } p ? $"fx={p.Name} Y={p.Orient.Y}" : "no play";
+            static string Describe((string Name, Vector3 At, Basis Orient, Basis? Ring)? play) =>
+                play is { } p ? $"fx={p.Name} Y={p.Orient.Y} ring={(p.Ring is { } r ? r.Y.ToString() : "-")}" : "no play";
 
             var onSlope = Drop(he, origin + new Vector3(0f, 20f, 0f));
             ctx.Check(onSlope is { Name: "he_ground_effect" } s1 && DegreesBetween(s1.Orient.Y, slopeNormal) < 0.5f
@@ -1721,6 +1727,50 @@ internal static class OrdnanceSuites
             var chokerOnSlope = Drop(choker, origin + new Vector3(0f, 20f, 0f));
             ctx.Check(chokerOnSlope is { Name: "scatter_effect" } c1 && c1.Orient.IsEqualApprox(Basis.Identity),
                 $"wep_12's plain ANIMATION scatter_effect keeps its fixed axis on the slope ({Describe(chokerOnSlope)})");
+            ctx.Check(onSlope is { Ring: null } && onFlat is { Ring: null } && chokerOnSlope is { Ring: null },
+                $"the faithful presentation hands the upper ring no basis on any of the three, so it keeps the decoded fixed axis");
+
+            // The pure decision, either presentation, before the live half: a null answer is what
+            // leaves the ring on the axis the original spawns it on.
+            var down30 = new Vector3(0f, -1f, -0.577f).Normalized();
+            ctx.Check(ProjectilePool.UpperRingOrient(down30) is null
+                      && ProjectilePool.UpperRingOrient(Vector3.Zero) is null,
+                $"UpperRingOrient answers null in the faithful presentation");
+
+            // Enhanced Graphics from the setting itself, restored before this suite returns: the
+            // faithful path is what every pinned golden renders and nothing may leave it flipped.
+            GraphicsMode.Resolve(GraphicsMode.EnhancedWord);
+            try
+            {
+                ctx.Check(GraphicsMode.Enhanced, $"the graphics setting resolves to enhanced");
+                ctx.Check(ProjectilePool.UpperRingOrient(down30) is { } pure
+                          && DegreesBetween(pure.Y, -down30) < 0.5f
+                          && Mathf.IsEqualApprox(pure.Determinant(), 1f),
+                    $"UpperRingOrient turns world up onto the reverse of the flight direction ({ProjectilePool.UpperRingOrient(down30)?.Y.ToString() ?? "-"} against {-down30})");
+                ctx.Check(ProjectilePool.UpperRingOrient(Vector3.Zero) is null,
+                    $"a round with no usable velocity still gets no basis");
+
+                // Fired down the slope's own -X lean at 45°, so the ring basis, the slope normal and
+                // world up are three different directions and no two of them can be confused.
+                var slanted = new Vector3(-1f, -1f, 0f).Normalized();
+                var enhancedOnSlope = Drop(he, origin + new Vector3(20f, 20f, 0f), slanted);
+                ctx.Check(enhancedOnSlope is { Name: "he_ground_effect", Ring: not null } e1
+                          && DegreesBetween(e1.Ring!.Value.Y, -slanted) < 15f
+                          && DegreesBetween(e1.Ring!.Value.Y, Vector3.Up) > 20f
+                          && DegreesBetween(e1.Ring!.Value.Y, slopeNormal) > 20f,
+                    $"Enhanced hands the upper ring a basis facing back along the round's flight direction ({Describe(enhancedOnSlope)} launched along {slanted})");
+                ctx.Check(enhancedOnSlope is { Ring: not null } e2
+                          && Mathf.IsEqualApprox(e2.Ring!.Value.Determinant(), 1f)
+                          && e2.Ring!.Value.Y.IsEqualApprox(e2.Ring!.Value * Vector3.Up),
+                    $"the ring basis is a pure rotation");
+                ctx.Check(enhancedOnSlope is { } e3 && DegreesBetween(e3.Orient.Y, slopeNormal) < 0.5f,
+                    $"the ground effect under it is untouched, still world up rotated onto the struck normal ({Describe(enhancedOnSlope)} normal={slopeNormal})");
+            }
+            finally
+            {
+                GraphicsMode.Resolve(GraphicsMode.Default);
+            }
+            ctx.Check(!GraphicsMode.Enhanced, $"the graphics setting is back on the faithful presentation");
         }
         finally
         {
@@ -1729,6 +1779,8 @@ internal static class OrdnanceSuites
                 b.Free();
             textures.Dispose();
         }
+
+        UpperRingPlacement(ctx);
     }
 
     // A fused burst reads the default IMPACT row, never the fused aircraft's (FUN_005ac3a0's hit
@@ -1784,7 +1836,7 @@ internal static class OrdnanceSuites
             var effects = new List<(string Name, Vector3 At)>();
             var live = new ProjectilePool(textures, null, null)
             {
-                EffectSink = (name, at, orient, ttl) => effects.Add((name, at)),
+                EffectSink = (name, at, orient, ringOrient, ttl) => effects.Add((name, at)),
             };
             pool = live;
             ctx.Host.AddChild(live);
@@ -1884,7 +1936,7 @@ internal static class OrdnanceSuites
                     flyoutGamez: world.Gamez, flyoutScene: world.Session.Builder.Scene,
                     flyoutAnims: world.Session.Program)
                 {
-                    EffectSink = (name, at, orient, ttl) => plays.Add(name),
+                    EffectSink = (name, at, orient, ringOrient, ttl) => plays.Add(name),
                     // The production predicate (AnimRuntime.Handles over the bound subset).
                     EffectHandles = name => sub.ByAnimName(name).Count > 0,
                 };
@@ -2524,6 +2576,60 @@ internal static class OrdnanceSuites
 
     // One staged root's own `sonic_emit1`, or null: the burst stages three copies of the emitter
     // rig and the whole question is which of them a definition drives.
+    // The far end of the seam the pool's basis travels: the effects runtime placing the named
+    // callee with it. Worth its own world because a name the catalogue and the data disagree on
+    // would leave the ring on its authored axis and report nothing at all.
+    private static void UpperRingPlacement(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            const string anim = "he_ground_effect";
+            var stage = StageBurstRoots(ctx, world, anim, 1);
+            var runtime = AnimRuntime.ForEffects(
+                AnimRuntime.NewTemplateStage(pooled: true, shown: true, placesCalled: true),
+                1, new CountingEmitterFactory(), false, SuiteConstants.BurstTtl,
+                () => ctx.Camera.GlobalPosition);
+            runtime.ManualAdvance = true;
+            runtime.OrientedCallAnimNames = new HashSet<string>(
+                EffectCatalogue.ImpactUpperRingAnimNames, System.StringComparer.OrdinalIgnoreCase);
+            ctx.Host.AddChild(stage);
+            ctx.Host.AddChild(runtime);
+            try
+            {
+                runtime.Bind(stage, world.Session.Program.Subset(anim));
+                var slot0 = stage.GetNode<Node3D>("pool0");
+                var site = ctx.Camera.GlobalPosition;
+                static float Degrees(Vector3 a, Vector3 b) =>
+                    Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(a.Normalized().Dot(b.Normalized()), -1f, 1f)));
+
+                ctx.Check(runtime.PlayEffectAt(anim, site), $"the faithful burst played");
+                var upper = slot0.GetNodeOrNull<Node3D>("he_ring1");
+                var ground = slot0.GetNodeOrNull<Node3D>("he_ring");
+                ctx.Check(upper != null && ground != null,
+                    $"the burst's two ring roots are staged (upper={upper != null}, ground={ground != null})");
+                ctx.Check(upper != null && Degrees(upper.GlobalBasis.Y, Vector3.Up) < 0.5f,
+                    $"handed no basis, the upper ring keeps the fixed axis (Y={upper?.GlobalBasis.Y})");
+
+                // The same burst with a basis in: the one the pool would build for a round coming
+                // down at 45°, which is nothing like the axis the faithful play just left it on.
+                // ⚠ A second burst at the SAME point is refused as already live, so move it.
+                var handed = ProjectilePool.SurfaceUpBasis(new Vector3(1f, 1f, 0f).Normalized());
+                ctx.Check(runtime.PlayEffectAt(anim, site + new Vector3(80f, 0f, 0f), callOrient: handed),
+                    $"the enhanced burst played");
+                ctx.Check(upper != null && Degrees(upper.GlobalBasis.Y, handed.Y) < 0.5f
+                          && Degrees(upper.GlobalBasis.Y, Vector3.Up) > 40f,
+                    $"handed one, it takes it (Y={upper?.GlobalBasis.Y} against {handed.Y})");
+                ctx.Check(ground != null && Degrees(ground.GlobalBasis.Y, Vector3.Up) < 0.5f,
+                    $"the ground ring under it is left on its own axis (Y={ground?.GlobalBasis.Y})");
+            }
+            finally
+            {
+                runtime.Free();
+                stage.Free();
+            }
+        });
+    }
+
     private static Node3D? EmitIn(Node3D slot, string rootName)
     {
         if (slot.GetNodeOrNull<Node3D>(rootName) is not { } root)

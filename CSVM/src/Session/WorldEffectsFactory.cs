@@ -282,7 +282,12 @@ public sealed class WorldEffectsFactory
         }
         if (projectiles != null && projectiles.EffectSink == null)
         {
-            projectiles.EffectSink = (name, pt, orient, ttl) => effects.PlayEffectAt(name, pt, null, ttl, orient);
+            projectiles.EffectSink = (name, pt, orient, ringOrient, ttl) =>
+                effects.PlayEffectAt(name, pt, null, ttl, orient, callOrient: ringOrient);
+            // The one callee a burst may re-base, and only when the pool hands a basis in, which is
+            // the enhanced presentation alone (ProjectilePool.UpperRingOrient).
+            effects.OrientedCallAnimNames = new HashSet<string>(
+                EffectCatalogue.ImpactUpperRingAnimNames, StringComparer.OrdinalIgnoreCase);
             // The sink's own carrier test, so an IMPACT name that is both a bound def and a gamez
             // root (ballflare.flt) plays the def rather than a static instance of its template.
             projectiles.EffectHandles = effects.Handles;

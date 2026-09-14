@@ -103,6 +103,13 @@ public static class EffectCatalogue
         // vector, so WorldEffectAnimNames appends whichever slots the bound program can play.
     };
 
+    // The rocket impact's upper ring, the one callee `AnimRuntime.OrientedCallAnimNames` lets a
+    // burst re-base. `he_ground_effect` calls it 12 m over the hit while its ground ring
+    // (`call_he_ring`) stays on the surface, so only this one is free to face the incoming round.
+    // ⚠ Enhanced Graphics only, and a remake-only rule: the original spawns it on a fixed axis
+    // whatever the flight path (docs/org/ordnanceTypes.md).
+    public static readonly string[] ImpactUpperRingAnimNames = { "call_he_ring1" };
+
     // The bailed pilot under his canopy. He is not a piece of the wreck, he is a man stepping out
     // of it, so he takes neither its momentum nor its attitude. The momentum half needs no list any
     // more: `chuteman` authors no `impact_force`, so the authored gate excludes him by data.

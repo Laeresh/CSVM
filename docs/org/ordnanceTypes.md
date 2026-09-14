@@ -687,6 +687,27 @@ and sound a row binds and how rows are filled. It does not cover what a detonati
   surface. CSVM: `ProjectilePool.SurfaceUpBasis` on the slot `ImpactOutcome.SurfaceOriented` names,
   handed to `AnimRuntime.PlayEffectAt` and the gamez-model spawn as the template's basis.
 
+### The upper ring in Enhanced Graphics
+
+⚠ **Remake-only, and Enhanced Graphics only. The faithful presentation is the decoded rule above and
+nothing here touches it.** The rocket burst's second ring is not a slot the `IMPACT` row names at
+all: `he_ground_effect` reaches it through `CALL_ANIMATION call_he_ring1 AT_NODE he_ring, 0, 12, 0`,
+twelve metres over the hit, while its ground ring (`call_he_ring`) is called at the hit itself. The
+ring definitions carry scale and opacity and no rotation of any kind
+([`../formats/weapon-effects.md`](../formats/weapon-effects.md)), so the original draws the upper
+ring on the fixed world axis whatever the round's flight path, and `Crimson Skies 1.02 2026-07-31
+23-27-53.mp4` shows exactly that. A ring seen edge-on reads as a bright line rather than a ring,
+which is what the enhanced presentation changes and the faithful one keeps.
+
+Under Enhanced Graphics the remake places that one callee with world up rotated onto the reverse of
+the round's own flight direction, so the ring faces back up the path the rocket came down. Nothing
+else moves: the ground ring, the fireball, the trail columns and the `SURFACE_ANIMATION` rule above
+all keep their decoded placement, and the switch is the ordinary `graphics.mode` setting
+(`GraphicsMode.Enhanced`), so the faithful path is bit-identical with or without this rule. CSVM:
+`ProjectilePool.UpperRingOrient` decides and hands the basis through `EffectSink`;
+`AnimRuntime.OrientedCallAnimNames` (from `EffectCatalogue.ImpactUpperRingAnimNames`) is the one
+callee name it may re-base; the `impact-orientation` suite pins both presentations.
+
 ### Which row a burst reads
 
 The surface id `FUN_005ac7a0` indexes the table with comes off the hit record it is handed

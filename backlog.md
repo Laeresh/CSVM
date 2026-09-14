@@ -978,27 +978,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-656`'s closing commit, `PT-111`, `docs/org/targeting.md` "Where a mission
   structure is".
 
-- `BL-293` `[Tuning]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **Rocket impact rings: the fixed-axis upper ring is faithful but reads
-  poorly** (PT-35). *Decision:* the faithful presentation keeps the decoded fixed axis; Enhanced
-  Graphics orients the upper ring against the rocket's flight direction. *Fix shape:* in
-  `ProjectilePool`, when the presentation is Enhanced, give the `CALL_ANIMATION` ring a basis
-  facing back along the rocket's velocity instead of the fixed axis, leave `SurfaceUpBasis` and
-  the ground ring alone, and extend the `impact-orientation` suite with an Enhanced case; goldens
-  are pinned on the faithful path so none move. The decode behind the faithful axis: the original
-  (`Crimson Skies 1.02 2026-07-31 23-27-53.mp4`) shows the second (upper) HE ring always oriented
-  on the same fixed axis, matching our behaviour, so ours is CORRECT as-is and this is not a bug.
-  The rule behind it is decoded: `FUN_005ac7a0` spawns the `IMPACT` row's `SURFACE_ANIMATION`
-  rotated from world up onto the struck surface's normal and the row's plain `ANIMATION` on the
-  fixed axis ([`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md), "Half one, the direct
-  impact"), and the remake follows it (`ProjectilePool.SurfaceUpBasis`, the `impact-orientation`
-  suite): the ground effect (the `default` row's `SURFACE_ANIMATION` on every rocket) lies on a
-  slope, while the upper ring, reached through a `CALL_ANIMATION` inside it, keeps its fixed axis
-  because that is what the data authors. The ring anims carry no rotation data (scale/opacity
-  only, `docs/formats/weapon-effects.md`), so the Enhanced orientation is engine-side, a
-  remake-only rule over a decoded one, and must not leak into the faithful path.
-  Cross-link: `BL-292` (crash-splash orientation, different spawn path; scheduled in
-  `PLAN-m3-polish-10` A3).
-
 - `BL-535` `[Bug]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: data]` **A repeat sonic burst pays a 10 to 14 ms slot re-reset once the pool recycles a still-live slot.** With every emitter pre-built at bind (`AnimRuntime.PrewarmEmitters`), the weapon-lab probe (`--chapter=C1 --weapon-lab=wep_08 --weapon-fire --infinite-ammo --weapon-surface=default --weapon-standoff=90 --no-det --no-vsync --seed=1 --no-pads --frames=1200 --screenshot=<path>`) with `hitchMonitor.floorMs` 10 and `medianMultiple` 1.2 in `CSVM/config.json` records `effect_checkout` samples of 15.6 ms and 12.2 ms in `.hitches.jsonl`; under the stock monitor it never trips. `AnimRuntime.ResetCheckedOutCopies`'s own def/anchor loop is cheap and constant (17 defs, 17 matched anchors every burst); the cost sits inside `RESET_STATE`'s `ObjectOpacityState` dispatch on the ring defs, `PoseChannel.SetSubtreeOpacity` → `ApplyOpacity`'s recursive subtree walk plus `WorldCollision.SetFaded` → `SyncSubtree`/`FadedAbove`, and lands exactly at the pool wrap (a per-burst `Stopwatch` shows burst 4 cheap, then the log's own `anim: effect pool for 'sonic_ground_effect' recycled slot 0 of 4 while it was still live` line, then burst 5 onward expensive), not two bursts before it as first measured.
   *Where to look:* isolate `ApplyOpacity`'s material/shader-param cost from `SetFaded`'s collider-resync cost before changing either, `EnsureOpacityPath`'s own `Shader.Code.Contains` scan is measured NOT to be the bottleneck (under 0.1 ms typically). Both are shared machinery well beyond the sonic burst; `WorldCollision._fadedRoots` is a single process-wide counter, so `FadedAbove`'s ancestor walk degrades for every currently-faded object in the world, not just this one, once more than one is faded at a time.
   *Cross-refs:* `BL-231` (closed; the pool-size judgement this was measured under), the `effect-pool-reset` suite (the pose contract the re-reset keeps).

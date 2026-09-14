@@ -56,11 +56,11 @@ public sealed partial class ProjectilePool : Node3D
 
     /// <summary>Plays a named IMPACT effect (its puffer half) at a hit point through the world-effects
     /// runtime: the gun/rocket smoke and fireballs whose <c>ANIMATION</c> is an ON_CALL effect
-    /// def rather than a gamez model. Null in views with no anim runtime. The basis is the
-    /// template's orientation at the point (<see cref="SurfaceUpBasis"/> for a
-    /// <c>SURFACE_ANIMATION</c>, identity for an <c>ANIMATION</c>); the last argument is the
-    /// instance's time bound in seconds (0 = the runtime's own), <see cref="GunEffectTtl"/> for guns.</summary>
-    public System.Action<string, Vector3, Basis, float>? EffectSink;
+    /// def rather than a gamez model. Null in views with no anim runtime. After the point come the
+    /// template's own basis (<see cref="EffectOrient"/>), the basis the burst's upper ring takes
+    /// (<see cref="UpperRingOrient"/>, null leaving it on its authored axis), and the instance's
+    /// time bound in seconds (0 = the runtime's own, <see cref="GunEffectTtl"/> for guns).</summary>
+    public System.Action<string, Vector3, Basis, Basis?, float>? EffectSink;
 
     /// <summary>Whether the world-effects runtime binds a def of this name (<c>AnimRuntime.Handles</c>).
     /// Asked before the gamez-model impact spawn: an IMPACT name can be BOTH a gamez root and an
@@ -597,6 +597,15 @@ public sealed partial class ProjectilePool : Node3D
         var axis = Vector3.Up.Cross(to).Normalized();
         return new Basis(axis, Mathf.Acos(Mathf.Clamp(dot, -1f, 1f)));
     }
+
+    /// <summary>Enhanced Graphics only: the basis the impact burst's upper ring is placed with, world
+    /// up rotated onto the reverse of the round's flight direction, so the ring faces back up the
+    /// path the rocket came down. Null in the faithful presentation and for a round with no usable
+    /// velocity, which leaves the ring on the fixed axis the original spawns it on
+    /// (docs/org/ordnanceTypes.md, "The upper ring in Enhanced Graphics").</summary>
+    public static Basis? UpperRingOrient(Vector3 velocity) =>
+        GraphicsMode.Enhanced && velocity.LengthSquared() > 1e-6f
+            ? SurfaceUpBasis(-velocity.Normalized()) : null;
 
     /// <summary>Whether a candidate lies inside an authored proximity-fuse forward cone.</summary>
     public static bool FuseDotAllows(float? minimumDot, Vector3 velocity, Vector3 towardTarget)
@@ -1151,7 +1160,7 @@ public sealed partial class ProjectilePool : Node3D
             // (FUN_005afd50 returning to FUN_005af720's alive test).
             if (EndConditionMet(in p, out bool detonates, out bool targetFused))
             {
-                EndRound(ref p, prev, detonates, targetFused ? RegisteredBodyOf(p.Target) : null);
+                EndRound(ref p, prev, vel, detonates, targetFused ? RegisteredBodyOf(p.Target) : null);
                 continue;
             }
 
@@ -1201,7 +1210,7 @@ public sealed partial class ProjectilePool : Node3D
 
                 if (hitDistSq < float.PositiveInfinity)
                 {
-                    Impact(p.Weapon, hitPoint, hitCollider, hitNormal, hitShape, p.Shooter, p.Team, p.Owner);
+                    Impact(p.Weapon, hitPoint, hitCollider, hitNormal, vel, hitShape, p.Shooter, p.Team, p.Owner);
                     RetireRound(ref p);
                     continue;
                 }
@@ -1213,7 +1222,7 @@ public sealed partial class ProjectilePool : Node3D
                 {
                     var fuseNormal = towardHull.LengthSquared() > 1e-8f
                         ? towardHull.Normalized() : Vector3.Zero;
-                    Impact(p.Weapon, fusePoint, fused, fuseNormal, -1, p.Shooter, p.Team, p.Owner);
+                    Impact(p.Weapon, fusePoint, fused, fuseNormal, vel, -1, p.Shooter, p.Team, p.Owner);
                     RetireRound(ref p);
                     continue;
                 }
@@ -1428,7 +1437,8 @@ public sealed partial class ProjectilePool : Node3D
     }
 
     // The template basis an IMPACT effect is placed with: the SURFACE_ANIMATION slot takes the
-    // struck normal's rotation, the ANIMATION slot the fixed world axis (BL-293's parked half).
+    // struck normal's rotation, the ANIMATION slot the fixed world axis. ⚠ Keep this on the
+    // decoded rule in both presentations; the enhanced deviation is UpperRingOrient's alone.
     private static Basis EffectOrient(in ImpactOutcome outcome, Vector3 normal) =>
         outcome.SurfaceOriented ? SurfaceUpBasis(normal) : Basis.Identity;
 
@@ -1968,8 +1978,9 @@ public sealed partial class ProjectilePool : Node3D
         return true;
     }
 
-    private void Impact(WeaponDef weapon, Vector3 point, Node? collider, Vector3 normal, int shapeIdx = -1,
-        int shooter = NoShooter, int team = AimAssist.NeutralTeam, Godot.Collections.Array<Rid>? owner = null)
+    private void Impact(WeaponDef weapon, Vector3 point, Node? collider, Vector3 normal, Vector3 velocity,
+        int shapeIdx = -1, int shooter = NoShooter, int team = AimAssist.NeutralTeam,
+        Godot.Collections.Array<Rid>? owner = null)
     {
         // A cannon round only ever reaches Impact through the direct-hit ray, so this one guard
         // covers the decode's three hit sites without distinguishing them.
@@ -2007,7 +2018,7 @@ public sealed partial class ProjectilePool : Node3D
             _impactsLogged++;
             Log.Info("weapons", $"impact: {weapon.Id} ({weapon.Name}) -> {surface}/{SurfaceRegistry.NameForId(surface) ?? "?"} at ({point.X:0},{point.Y:0},{point.Z:0}) on {collider?.GetParent()?.Name}/{collider?.Name} fx={outcome.EffectName ?? "-"} snd={outcome.Sound ?? "-"} standin={outcome.StandIn}");
         }
-        Apply(weapon, surface, outcome, point, collider, normal, shapeIdx, shooter, team, owner);
+        Apply(weapon, surface, outcome, point, collider, normal, velocity, shapeIdx, shooter, team, owner);
     }
 
     // Perform a resolved impact: the effect, the stand-in burst, the sound and the damage.
@@ -2016,7 +2027,7 @@ public sealed partial class ProjectilePool : Node3D
     // the spark's tint (a `Color`, which the engine-free ImpactOutcome cannot
     // carry). `team` is the round's own stamp, which the beeper's tag gate tests the victim against.
     private void Apply(WeaponDef weapon, int surface, in ImpactOutcome outcome, Vector3 point,
-        Node? collider, Vector3 normal, int shapeIdx = -1, int shooter = NoShooter,
+        Node? collider, Vector3 normal, Vector3 velocity, int shapeIdx = -1, int shooter = NoShooter,
         int team = AimAssist.NeutralTeam, Godot.Collections.Array<Rid>? owner = null)
     {
         // The impact sprites face the struck surface (SurfaceBasis(normal)) rather than a fixed world
@@ -2026,7 +2037,8 @@ public sealed partial class ProjectilePool : Node3D
         // which no-ops on a name it does not carry. Gun hits are throttled (GunEffectInterval/Ttl).
         if (outcome.StandIn != ImpactStandIn.None && outcome.EffectName is { } fxName
             && (!weapon.IsGun || GunEffectDue(fxName)))
-            EffectSink?.Invoke(fxName, point, EffectOrient(outcome, normal), weapon.IsGun ? GunEffectTtl : 0f);
+            EffectSink?.Invoke(fxName, point, EffectOrient(outcome, normal), UpperRingOrient(velocity),
+                weapon.IsGun ? GunEffectTtl : 0f);
         switch (outcome.StandIn)
         {
             case ImpactStandIn.Explosion:
@@ -2304,13 +2316,13 @@ public sealed partial class ProjectilePool : Node3D
     // aircraft already gets, the beeper's tag and the blast's anchor, not for the row; every other
     // end strikes nothing and the impact sprite falls back to the world-facing quad. The shooter
     // rides along so the blast's aircraft pass attributes its kills.
-    private void EndRound(ref Proj p, Vector3 at, bool detonate, AircraftBody? fused = null)
+    private void EndRound(ref Proj p, Vector3 at, Vector3 velocity, bool detonate, AircraftBody? fused = null)
     {
         if (detonate)
         {
             var toHull = fused != null ? fused.GlobalPosition - at : Vector3.Zero;
             var normal = toHull.LengthSquared() > 1e-8f ? toHull.Normalized() : Vector3.Zero;
-            Impact(p.Weapon, at, fused, normal, shooter: p.Shooter, team: p.Team, owner: p.Owner);
+            Impact(p.Weapon, at, fused, normal, velocity, shooter: p.Shooter, team: p.Team, owner: p.Owner);
         }
         RetireRound(ref p);
     }
@@ -2347,7 +2359,7 @@ public sealed partial class ProjectilePool : Node3D
     {
         if (p.Weapon.DestroyAnimation is { } anim)
         {
-            EffectSink?.Invoke(anim, p.Pos, Basis.Identity, 0f);
+            EffectSink?.Invoke(anim, p.Pos, Basis.Identity, null, 0f);
             if (_flyoutDestroysLogged < 2)
             {
                 _flyoutDestroysLogged++;
@@ -2357,7 +2369,7 @@ public sealed partial class ProjectilePool : Node3D
             return;
         }
 
-        EndRound(ref p, p.Pos, detonate: true);
+        EndRound(ref p, p.Pos, p.Vel, detonate: true);
     }
 
     // The admission byte and the health pair leave with the round: a selection held on a dead

@@ -387,8 +387,10 @@ public sealed class TemplateStage<TNode>
     /// <summary>Moves an effect template's own root(s) to a call site so its puffers emit there
     /// instead of at the template's gamez origin, the remake's stand-in for the original's
     /// per-call template copy. Pooled, only the call's own slot moves. With <paramref name="follow"/>
-    /// the root keeps riding the site (<see cref="PlaceFollowing"/>). Docs: architecture.md.</summary>
-    public void PlaceAt(AnimDefinition callee, TNode site, Vector3 offset, bool follow = false)
+    /// the root keeps riding the site (<see cref="PlaceFollowing"/>), which keeps the basis it has,
+    /// so <paramref name="orient"/> applies to the held placement alone. Docs: architecture.md.</summary>
+    public void PlaceAt(AnimDefinition callee, TNode site, Vector3 offset, bool follow = false,
+        Basis? orient = null)
     {
         // An airframe-scoped NAME is a live scene node, never a staged template, placing it
         // would TopLevel-pin the aircraft itself (see _placeExempt). Resolution is untouched:
@@ -400,7 +402,7 @@ public sealed class TemplateStage<TNode>
         if (follow)
             PlaceFollowing(RootsFor(callee, site), site, origin, _levels(callee));
         else
-            PlaceOn(RootsFor(callee, site), origin, _levels(callee));
+            PlaceOn(RootsFor(callee, site), origin, _levels(callee), orient);
     }
 
     /// <summary>Places the given root(s) at an absolute world origin, with <paramref name="orient"/>

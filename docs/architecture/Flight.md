@@ -285,15 +285,15 @@ Decode: [../org/weaponImpact.md](../org/weaponImpact.md), [../formats/weapons.md
 `ProjectilePool`, the shared-world weapon-fire subsystem: a fixed pool of rounds integrated off the
 weapon data (launch and inherited velocity with its decay, acceleration, gravity, the steering step,
 the two fuses and the three end conditions), the swept hit ray over world and aircraft, and the
-impact that follows: the struck material's `IMPACT` row for a ray hit, the `default` row for a
+impact that follows, the struck material's `IMPACT` row for a ray hit and the `default` row for a
 self-ended round ([../org/ordnanceTypes.md](../org/ordnanceTypes.md), "Which row a burst reads").
 Visuals: tracers and tip discs, the muzzle flash triad, the per-surface `IMPACT` effect, sound and
 stand-in burst, and the water splash. Damage and presentation leave through the sinks a session
 assigns (`DamageSink` behind `WorldDamageGate`, `EffectSink`, `WashSink`, `BeeperTags`); a burst
-gathers world bodies and aircraft into one nearest-first, cover-tested list; the `Collect*` methods
-are the seams the aim assist and a scripted run read the pool through. Remake-own rules, recorded
-where they bind: the inherited-velocity decay ignores the held target (`InheritedFraction`); the
-tracer's pixel floor draws rounds the LOD would cut ([../org/tracers.md](../org/tracers.md)).
+gathers bodies and aircraft into one nearest-first, cover-tested list, read through `Collect*`.
+Remake-own rules: the inherited-velocity decay ignores the held target (`InheritedFraction`); the
+tracer's pixel floor draws rounds the LOD would cut ([../org/tracers.md](../org/tracers.md));
+Enhanced Graphics alone faces a burst's upper ring back along the round's flight (`UpperRingOrient`).
 
 ## src/Flight/ProjectileFlyoutAnim.cs
 The `FLYOUT` `MODEL_ANIMATION` half of `ProjectilePool`, a partial-class file. Every ordnance round

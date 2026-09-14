@@ -134,6 +134,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <c>EffectCatalogue.CrashSurfaceLevelAnimNames</c> + <c>BailoutAnimNames</c>, docs/architecture.md.</summary>
     public HashSet<string>? LevelPlacedTemplateNames;
 
+    /// <summary>Named CALL_ANIMATION callees whose relocated copy takes the basis a
+    /// <see cref="PlayEffectAt"/> hands in, instead of the axis it stands on, keyed by
+    /// <c>AnimName ?? Name</c>. Set once by the world-effects rig, from
+    /// <c>EffectCatalogue.ImpactUpperRingAnimNames</c>. ⚠ Never make it blanket: a callee outside
+    /// this set is authored against a fixed axis and re-basing it moves choreography.</summary>
+    public HashSet<string>? OrientedCallAnimNames;
+
     /// <summary>Callers whose unresolvable CALL_ANIMATION target is worth one warning each, keyed by
     /// <c>AnimName ?? Name</c>, and the airframe that warning names. Injected like
     /// <see cref="LevelPlacedTemplateNames"/> above: the per-plane crash rig sets both to the damage
@@ -616,6 +623,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // Nonzero while an explicit mission trigger starts. Its call closure has the same right to
     // summon authored library roots as a range trigger, without widening ordinary Play calls.
     private int _missionCallDepth;
+
+    // The basis the play now dispatching wants its OrientedCallAnimNames callees placed with, null
+    // outside such a play. Held here rather than passed down because the dispatch that places a
+    // callee sits several event-walk frames below PlayEffectAt's own Start.
+    private Basis? _callPlacementOrient;
 
     private EmitterDirector? _emitters;
 
@@ -1527,56 +1539,67 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     public IReadOnlyList<AnimDefinition> CallClosureOf(string animName) =>
         _program.Subset(animName).Defs;
 
-    /// <summary>Stages the named effect at a world point: relocates each matching template root
-    /// onto it (<paramref name="orient"/> as the basis when given) and starts the definition.
-    /// <paramref name="inputNode"/> is the callee's INPUT_NODE (a damage sputter emits on the damaged
-    /// object, whose <c>NodeActive</c> gate reads it); with <paramref name="follow"/> the placed copy
-    /// keeps riding that node (a death's call on a carried site). ⚠ Give an input-governed def no
-    /// TTL; its lifetime is authored. Others take <paramref name="ttl"/>, or <see cref="EffectTtl"/> at 0.</summary>
+    /// <summary>Stages the named effect at a world point: relocates each matching template root onto
+    /// it (<paramref name="orient"/> as its basis when given, <paramref name="callOrient"/> as the one
+    /// its <see cref="OrientedCallAnimNames"/> callees take) and starts the definition.
+    /// <paramref name="inputNode"/> is the callee's INPUT_NODE, which its <c>NodeActive</c> gate reads;
+    /// with <paramref name="follow"/> the placed copy keeps riding that node. ⚠ Give an input-governed
+    /// def no TTL, its lifetime is authored; others take <paramref name="ttl"/> or <see cref="EffectTtl"/>.</summary>
     public bool PlayEffectAt(string animName, Vector3 worldPoint, Node3D? inputNode = null,
-        float ttl = 0f, Basis? orient = null, bool follow = false)
+        float ttl = 0f, Basis? orient = null, bool follow = false, Basis? callOrient = null)
     {
         float bound = ttl > 0f ? ttl : EffectTtl;
         bool matched = false;
-        // The checkout (TakeNextSlot) plus the Start it feeds, coarse over
-        // the (usually one) def this anim name resolves to, not per particle.
-        using (PerfSample.Scope(PerfSite.EffectCheckout))
+        // Restored rather than cleared: a nested play (a callee that plays an effect of its own)
+        // must hand its caller's orientation back, not leave the runtime unoriented.
+        var outerCallOrient = _callPlacementOrient;
+        _callPlacementOrient = callOrient;
+        try
         {
-            foreach (var def in _program.ByAnimName(animName))
+            // The checkout (TakeNextSlot) plus the Start it feeds, coarse over
+            // the (usually one) def this anim name resolves to, not per particle.
+            using (PerfSample.Scope(PerfSite.EffectCheckout))
             {
-                // Anchor on the def's own template root when it resolves, since its at_node and
-                // motion targets live under it; null falls back to global name resolution. Pooled,
-                // that root is this call's own slot, and only that copy moves onto the site.
-                var roots = _templateStage.TakeNextSlot(def);
-                if (follow && inputNode != null && IsInstanceValid(inputNode))
-                    _templateStage.PlaceFollowing(roots, inputNode, worldPoint, LevelsTemplate(def));
-                else
-                    _templateStage.PlaceOn(roots, worldPoint, LevelsTemplate(def), orient);
-                // ⚠ Before Start, every play: the copy is a reused node tree, not the fresh one
-                // the original instances per call, and its last run left it in its END pose.
-                ResetCheckedOutCopies(animName, roots);
-                var anchor = roots.FirstOrDefault();
-                bool governed = inputNode != null && IsInstanceValid(inputNode)
-                                && DefConditionsOnInputNode(def);
-                if (governed)
+                foreach (var def in _program.ByAnimName(animName))
                 {
-                    Stop(def.AnimName, anchor);
-                    _inputNodes[(def, anchor)] = inputNode!;
-                }
-                Start(def, anchor);
-                // After Start, not with the placement: a governed def's Stop above hides the root
-                // again, and this must be the last word on it for the instance now running.
-                _templateStage.Reveal(def, anchor, visible: true);
-                matched = true;
-                if (!governed && bound > 0f)
-                {
-                    // One deadline per (def, anchor): a replay restarts the instance, so an older
-                    // entry left in place would stop the NEW instance at the OLD deadline, a second
-                    // gun hit 0.2 s after the first would emit for 0.1 s.
-                    _effectTtls.RemoveAll(t => t.Def == def && t.Anchor == anchor);
-                    _effectTtls.Add((def, anchor, _effectClock + bound));
+                    // Anchor on the def's own template root when it resolves, since its at_node and
+                    // motion targets live under it; null falls back to global name resolution. Pooled,
+                    // that root is this call's own slot, and only that copy moves onto the site.
+                    var roots = _templateStage.TakeNextSlot(def);
+                    if (follow && inputNode != null && IsInstanceValid(inputNode))
+                        _templateStage.PlaceFollowing(roots, inputNode, worldPoint, LevelsTemplate(def));
+                    else
+                        _templateStage.PlaceOn(roots, worldPoint, LevelsTemplate(def), orient);
+                    // ⚠ Before Start, every play: the copy is a reused node tree, not the fresh one
+                    // the original instances per call, and its last run left it in its END pose.
+                    ResetCheckedOutCopies(animName, roots);
+                    var anchor = roots.FirstOrDefault();
+                    bool governed = inputNode != null && IsInstanceValid(inputNode)
+                                    && DefConditionsOnInputNode(def);
+                    if (governed)
+                    {
+                        Stop(def.AnimName, anchor);
+                        _inputNodes[(def, anchor)] = inputNode!;
+                    }
+                    Start(def, anchor);
+                    // After Start, not with the placement: a governed def's Stop above hides the root
+                    // again, and this must be the last word on it for the instance now running.
+                    _templateStage.Reveal(def, anchor, visible: true);
+                    matched = true;
+                    if (!governed && bound > 0f)
+                    {
+                        // One deadline per (def, anchor): a replay restarts the instance, so an older
+                        // entry left in place would stop the NEW instance at the OLD deadline, a second
+                        // gun hit 0.2 s after the first would emit for 0.1 s.
+                        _effectTtls.RemoveAll(t => t.Def == def && t.Anchor == anchor);
+                        _effectTtls.Add((def, anchor, _effectClock + bound));
+                    }
                 }
             }
+        }
+        finally
+        {
+            _callPlacementOrient = outerCallOrient;
         }
         return matched;
     }
@@ -3009,6 +3032,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                                 // moves with the hull (the pieces integrate in the root's frame,
                                 // docs/org/sequences.md). Other relocating calls hold their placement.
                                 bool rides = _deathCallDepth > 0;
+                                // Null for every callee the play did not name, which is the whole
+                                // faithful path: those keep the axis their template stands on.
+                                var placeOrient = OrientedCall(target);
                                 if (ownCopy != null)
                                 {
                                     // Level a repeat call's copy exactly as PlaceAt would level the
@@ -3017,11 +3043,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                                     if (rides)
                                         _templateStage.PlaceFollowing(new[] { (Node3D?)ownCopy }, callAnchor!, wantSite, level);
                                     else
-                                        _templateStage.PlaceOn(new[] { (Node3D?)ownCopy }, wantSite, level);
+                                        _templateStage.PlaceOn(new[] { (Node3D?)ownCopy }, wantSite, level, placeOrient);
                                 }
                                 else
                                 {
-                                    _templateStage.PlaceAt(target, callAnchor!, siteOffset, follow: rides);
+                                    _templateStage.PlaceAt(target, callAnchor!, siteOffset, follow: rides, orient: placeOrient);
                                 }
                             }
                             Start(target, startAnchor);
@@ -3453,6 +3479,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // inherit its caller's rotation.
     private bool LevelsTemplate(AnimDefinition def) =>
         LevelPlacedTemplateNames != null && LevelPlacedTemplateNames.Contains(def.AnimName ?? def.Name);
+
+    // The basis this callee's relocated copy takes, when the play now dispatching carries one and
+    // named this callee (OrientedCallAnimNames); null is "leave the copy on the axis it stands on".
+    private Basis? OrientedCall(AnimDefinition def) =>
+        _callPlacementOrient is { } basis && OrientedCallAnimNames != null
+        && OrientedCallAnimNames.Contains(def.AnimName ?? def.Name) ? basis : null;
 
     // Whether any live motion is still driving something inside a template copy: the hold that
     // keeps a finished effect's root revealed, since a reveal is paired with the EFFECT's life and

@@ -132,7 +132,7 @@ public sealed partial class ProjectilePool : ISequenceHost
             case "CallAnimation":
                 // A world effect the def calls at the round; placed where the round is now.
                 if (!instant && ev.Data.Str("name") is { } effect)
-                    EffectSink?.Invoke(effect, p.Pos, Basis.Identity, 0f);
+                    EffectSink?.Invoke(effect, p.Pos, Basis.Identity, null, 0f);
                 return true;
 
             case "Loop":
