@@ -268,6 +268,13 @@ internal static class CutsceneAiParkSuites
                 $"and parks without opening an episode: the original's park is imperative, not a code");
             ctx.Same(0, cutscene.Codes.Count,
                 $"no callback code was raised to park it (codes: [{string.Join(",", cutscene.Codes)}])");
+            int present = InstantActionDirector.WaveMembersPresent(wave, zeppelinRun: false);
+            ctx.Same(wave.Count, present,
+                $"the wave-clear walk still counts every parked member, so the park is not a cleared wave");
+            var sequencer = new InstantActionWaves(new[] { WaveSize, 0, 0, 0 });
+            sequencer.Start();
+            ctx.Check(sequencer.Step(present) == 0 && !sequencer.Finished,
+                $"and the sequencer holds wave 1 through the park instead of finishing the mission");
 
             cutscene.Tick();
             report.AppendLine($"after the first step: AiParked={cutscene.AiParked}");

@@ -121,6 +121,16 @@ public sealed class InstantActionDirector
         return new StuntSummary(run, run.Elapsed, prevBest, newBest);
     }
 
+    /// <summary>The wave-clear walk's "still alive" count over one wave's roster.
+    /// ⚠ A member still waiting in the zeppelin's bay COUNTS as present, as the decoded walk counts
+    /// a still-deactivated enemy (docs/formats/instant-action.md). So does a member under the
+    /// mission-start cutscene park, which is inert but still in the mission: reading
+    /// <see cref="FlightController.InPlay"/> alone clears wave 1 on the first step.</summary>
+    internal static int WaveMembersPresent(IEnumerable<FlightController> roster, bool zeppelinRun) =>
+        zeppelinRun
+            ? roster.Count(fc => !fc.Crashed)
+            : roster.Count(fc => fc.InPlay || (fc.Parked && !fc.Crashed));
+
     /// <summary>The mission's actor build: the chapter's patrol net, the ace (dogfight_ace), the
     /// wingmen, and every wave's inert roster, one contiguous phase of GameSession's
     /// BuildFlightRigs, called at the same point in its build order. Returns the build-summary
@@ -450,13 +460,7 @@ public sealed class InstantActionDirector
         {
             return;
         }
-        var waveRoster = _waveRosters![waves.CurrentWave - 1];
-        // ⚠ A wave member still waiting in the zeppelin's bay COUNTS as present, as the decoded walk
-        // counts a still-deactivated enemy, or a credited wave reads as cleared in the frames
-        // before its first launch (docs/formats/instant-action.md).
-        int alive = ia.IsZeppelinRun
-            ? waveRoster.Count(fc => !fc.Crashed)
-            : waveRoster.Count(fc => fc.InPlay);
+        int alive = WaveMembersPresent(_waveRosters![waves.CurrentWave - 1], ia.IsZeppelinRun);
         int next = waves.Step(alive);
         if (next != 0)
         {

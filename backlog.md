@@ -133,179 +133,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   only the trail shows; and the DISTANCE interval hides behind an inverted flag
   (`has_interval_value` false, key off `interval_type`).
 
-- `BL-121` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Damage (Run-2 item 10)**, breakup scatter, and whether
-  the 10c panel-flip and smoke-trail look right in real flight. ⚠ The invented contact constants
-  this item used to name are gone: the crash speed, the stop speed, the graze friction and the
-  fitted kick are retired against the decoded response and the decoded death rule
-  (`git log --grep=BL-271`, `git log --grep=BL-381`), and the graze feel is judged at the controls
-  as matching (`git log --grep=BL-120`), so nothing contact-side remains here. What is this item's
-  own is the breakup-scatter feel judgement.
-  Rendering at real spawns is verified (the `TopLevel` anchor fix, the archived development log,
-  2026-08-03 entry, `trail-world-anchor` suite); this item is a magnitude/feel judgement. Tree softness is retired dead code
-  (the archived development log, 2026-07-23 entry), not a TUNE, do not re-add it here.
-  **`CAP-15` analysed 2026-08-05** (the burn-down half of `CAP-14 Graze and CAP 15 wing to
-  red.mp4`, 37.45 s Bloodhawk chase clip; stills + per-frame fire counts in `playtest/CAP-15/`;
-  times are wall-clock PTS, sim-s = ×1.390). The 10c look verdict, part by part:
-  (a) **Panel flip matches.** The original's visible damage stage is a skin swap, the outer
-  third of the right wing turns charred black at the threshold (all-red before contact), with no
-  large flapping geometry readable at chase distance; our torn-`pdpN`-shown/`_h`-hidden swap is
-  the same mechanism. Ignition is on the contact frame itself (t = 5.886).
-  (b) **Trail staging does NOT match.** The original streams `short_firetrail`'s full
-  three-puffer stack from the damaged panel, fire_f01–06 flipbook + orange-born smoke + a
-  pure-black smoke puffer, deactivating at the authored 4/6/8 s `EVENT_OFFSET`s and
-  sputter-looping while the panel is active. On film: fire-dominant ~12.4 wall-s (peak 9,418
-  orange px at t = 6.82), then two pure-black wing plumes, then thinning, sputtering smoke still
-  going ≥ 31.5 wall-s after contact at clip end. Our per-panel trails are four bare `firepuffer`s
-  (`FlightRigAssembler.cs`), fire flipbook only: no black-smoke phase, no staged burn-out, no
-  sputter. **That gap is closed**, `BL-259` landed 2026-08-05: the panels play the authored
-  staged burn (fire → black → sputter), census-matched to this clip's 8/6/4/2 sim-s cascade.
-  (c) **Gauge timing confirmed:** the damage silhouette's right-wing segment goes RED (nose
-  YELLOW) on the first lit blink ≤ 0.25 s after contact, then blinks lit/dim persistently.
-  (d) The clip contains **no nose-anchored trail** even with the wing red-critical for 30 s,
-  moot in code since `BL-259` landed (2026-08-05): nothing anchors at a synthetic nose offset
-  any more; the heavy stage plays `player_damage_trail` at `prop1`. *When* is settled by the decode
-  (`FUN_004b3800`, `docs/org/vehicleDamage.md` "Damage staging"): the whole-vehicle health fraction
-  at 10%, which a graze that leaves the hull healthy never reaches, so this clip showing no
-  whole-plane trail is expected, not a puzzle.
-  *Cross-refs:* `PT-123` (the flight that judges the scatter).
-
-- `BL-122` `[Tuning]` `[Owed-playtest]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Data-driven crash (PLAN-data-driven-crash, default since Wave 4)**, several playtest-gated TUNEs,
-  all needing the original at the controls: the **debris-arc trajectory** (the executable decode is settled, `translation_range` gives
-  `dirY = elevation/90` and horizontal `1 − |elevation|/90`, `initial` the launch speed, `delta` an
-  acceleration, `PLAN-object-motion-decode`, 2026-08-13; the former `DebrisTune.LaunchScale` footage
-  fit is deleted with no replacement scalar, and the arc's *look* is settled too: the unscaled arc
-  reads like the original at the controls; the `fly_trailN` anchor being invisible means only the
-  trail's rough scale reads); the **overall crash intensity** (the fireball, the cluster, the debris
-  fire and the wreck fire are all additive, so a dirt crash can read as one big fireball, judge the
-  whole against the original); and `snd_exp_ground_a` mix level + whether it should layer over
-  `plane_destroy_sg` (the dirt def's only Sound is `snd_exp_ground_a`; we keep both). The retired
-  bespoke crash on branch `bespoke-crash-animation` is the A/B reference for these.
-  **`CAP-16` analysed 2026-08-04** (`CAP-16.mp4`, 2560×1440, 13.49 s; corroborated by
-  `C1 IA1 Crash.mp4` and `CAP-14 Crash.mp4`, two further ground crashes with the same signature;
-  stills in `playtest/CAP-16/`). ⚠ All times below are **wall-clock** off container PTS, multiply
-  by k = 1.390 for sim-seconds before comparing against any authored `run_time`.
-  - **The crash pieces barely turn, and the decode since 2026-08-13 says they do not turn at all.**
-    A wing panel detaches at ignition and stays legible for 8 sampled frames, t = 6.13 → 6.60
-    (0.47 s wall / 0.65 sim-s; `wing-tumble-strip-6.13-6.60.png`). Its long axis rotates only
-    **~10–15° over that span**, order 20–30 °/s wall-clock, against the ~150 °/s the ÷`run_time`
-    reading of the day predicted. `FORWARD_ROTATION` is now decoded (`PLAN-object-motion-decode`
-    C10): the crash `pieceN` fly the vector `TRANSLATION` form, which fills none of the launch
-    direction cache the tumble multiplies through, so they hold their orientation and what the strip
-    shows is the piece's path plus camera motion. Recorded as agreement, not as evidence, the
-    footage is one piece, near edge-on under camera motion, and no measurement off it decides a
-    decode.
-  - **Wreck momentum on a ground crash, there is none, and the owed judgement is the look of that.**
-    No fraction is authored or applied: the `player_crash_*` defs this path plays inherit nothing
-    (`player_crash_dirt` authors `impact_force` false, `player_crash_default` never arms the
-    instance), and the original scales the inheritance nowhere in any case
-    (`docs/org/objectMotion.md`). The pieces therefore stay where they blew rather than scattering
-    along travel. ⚠ `CAP-16` shows a panel travelling down-and-forward and chunks scattered
-    laterally at rest, which reads as inheritance; it is one piece near edge-on under camera motion,
-    with no known impact speed, and no measurement off it decides a decode. What this item still
-    owes is the whole crash judged at the controls, not a number.
-  - **Overall crash intensity, "one big fireball" is correct for ground, and is surface-dependent.**
-    The dirt crash genuinely reads as a single dominant fireball: granular yellow sprite cluster at
-    ignition (t = 6.27), white-hot core with orange body by t = 7.40, still at full intensity at
-    t = 12.50 when the clip ends. The concern that the additive stack over-reads is **not supported
-    for ground crashes**, the original looks like that. ⚠ But `CAP-14 Building crash Balmoral.mp4`
-    (t ≈ 5.0) shows a *building* strike as a spread of small discrete orange puffs with **no** large
-    fireball and **no** dark halo. Do not tune the two surfaces to one look.
-  - **The smokeball is dark red-brown, not black** (t = 8.00–12.50), in all three ground crashes.
-  - **Dirt burst reads as a separate, lower, ground-coloured cluster**, three distinct pale-cream
-    puffs sitting at the ground line beneath the fireball at t = 7.40, clearly not fire-tinted.
-  - **Audio: the two sounds are sequential, not stacked.** Two spectrally distinct onsets, one at
-    t = 6.15 (+4.5 dB, spectral centroid **958 Hz**, mid-band dominant 55.8%: the airborne breakup)
-    and a deeper one at t = 7.09 (+5.3 dB, centroid **711 Hz**, low-band dominant 55.7%: the ground
-    explosion, coincident with the dirt burst appearing). They are **0.94 s apart wall-clock
-    (1.31 sim-s)**, with near-equal peaks (−15.1 / −15.2 dBFS). So layering both is right, but they
-    should be **offset ~1.3 sim-s**, not triggered together. Mix level is modest: the crash peaks
-    only **~+5 dB over the engine bed** (bed −19.1 dBFS median) and never clips. ⚠ Sound *identity*
-    is inferred from timing against the visuals, not decoded, the footage cannot prove which onset
-    is `snd_exp_ground_a` vs `plane_destroy_sg`.
-  - **Duration: the effect never visibly ends, and it never can, the game takes the scene away.**
-    A fatal crash returns the original to the menu, so there is no single-player vantage from which
-    the fire burns out on screen. `CAP-16` catches that cut: mean frame luma holds *flat* at 50 from
-    impact until **t = 12.65**, then fades to black by t = 13.00 (a ~0.35 s fade, the return to
-    menu). The fireball is at **full intensity when the fade starts**, it is not decaying. So the
-    number to build against is not a burn-out time but a **hold time: 6.52 s wall / 9.06 sim-s from
-    ignition to the fade**, during which the effect must not visibly thin out. The other two ground
-    clips have no black frame at all (recording simply stopped while lit), so `CAP-16` is the only
-    one that captures the cut.
-  - **Crash audio ends naturally at 5.47 s wall / 7.60 sim-s after ignition**, i.e. ~1.1 s *before*
-    the visual fade begins, so the last second of the burning wreck is silent. The envelope decays
-    smoothly (−20 → −25 → −32 → −41 dBFS across t = 9.1 → 11.55) and reaches digital zero at
-    t = 11.60; an interrupted recording would have truncated at a non-trivial level instead.
-  - **Fireball SIZE, measured against the plane as an in-frame ruler, our burst is ~2.5–3× too
-    big, and the `SizeScaleDefault` ×4 stand-in is the reason.** ⚠ Estimate, not a decode. Method:
-    the Bloodhawk (`player_bhawk`, the plane in `CAP-16.mp4`) has no wingspan field anywhere in
-    data, so the reference is the mesh-AABB figure recorded in `PlaneCollider.cs:31-34,56-60`,
-    **full span ≈ 11.6 m** (half-span 5.8 m, cross-checked off `WingBandFrac 0.35` × half-span =
-    2.03 m). At t = 6.27 (0.14 s wall / 0.19 sim-s after ignition) the *still-attached* wing and the
-    fireball are in the same frame at the same camera depth, so no cross-frame distance assumption
-    is needed: wing root→tip ≈ 215.6 px for 5.8 m ⇒ **≈ 37 px/m**; the fireball's fire-keyed pixel
-    span is 380 × 342 px ⇒ **diameter ≈ 361 px ≈ 9.7 m**. Sources of imprecision: the "root" point
-    is the visible fuselage seam, not the true centreline (under-measures half-span, so the 9.7 m
-    is if anything a slight over-estimate), and it is one sample from one frame.
-    - Against our build, simulating `flame_ball_01-large_fireball`'s `fierypuffer` verbatim
-      (SIZE_RANGE 2–4, GROWTH 1→3, ±65 m/s, friction 9, number 18, 2 bursts, life 0.8–1.0) through
-      `Puffer.SpawnBatch`/`_Process` at dt = 1/60: the **particle cloud** (centres only) is **8.9 m**
-      across at t = 0.14 and settles at ~12.7 m, i.e. the authored velocity/friction spread matches
-      the footage almost exactly, and needs no change.
-    - What does not match is the **sprite size**. `Puffer.SizeScaleDefault` is **4**, explicitly a
-      judged stand-in for a missing engine constant, not a decode (`Puffer.cs:276-281`, TUNE settled
-      at the controls 2026-08-01), and the quad side is that size in metres (`QuadMesh` 1×1 scaled
-      by it, `EmitterRenderer.cs:134,150-156`). At ×4 the mean sprite is 15.8 m across at t = 0.14
-      and the whole burst spans **27 m**, reaching **54 m** by end of life. At ×1 (authored verbatim)
-      it is **13.2 m** at t = 0.14, within ~35% of the footage's 9.7 m, and the gap closes further
-      once the fire sprite's soft alpha edge is allowed for (visible fire is well inside the quad).
-      **So the footage puts the missing constant near 1, not 4**, for the crash burst at least.
-    - ⚠ Tension, not a verdict: ×4 was chosen because at ×1 the emitters "read as a thin scatter of
-      specks against the original's volume." Both observations can be true, the deficit at ×1 may
-      be *density* (18 sprites) or sprite alpha rather than size, in which case the fix is more/
-      denser particles at authored size, not bigger ones. The knob is per-path, so this bears only
-      on **`puffer.burstSizeScale`**, not on the trail/sustain scales that were judged alongside it.
-    - **2026-08-09 update, superseding the ×4/×1 analysis above:** `PLAN-puffer-engine-deltas` traced
-      `SizeScaleDefault` to an exact decoded constant, `FUN_0057c5c0` hands `SIZE_RANGE` to the
-      sprite draw as a screen-space HALF-extent, so the quad side is `2 × SIZE_RANGE`, not `1 ×`,
-      and separately found `DEVIATION_DISTANCE` was scattering `±d` where the engine draws `±0.5·d`
-      (A2). Re-running this same measurement (`RecordingEmitterRenderer`, `fierypuffer` verbatim,
-      `Puffer.Burst`/`_Process` at dt = 1/60 to t = 0.14) on the unchanged build read **mean sprite
-      4.10 m, cloud span (centres) 12.52 m, whole burst span 16.62 m**, already past the footage's
-      9.7 m at the old ×1 default, not under it as the analysis above concluded (that analysis used
-      an analytic estimate, not this instrumented one; the two are not directly comparable). At the
-      landed A1+A2 constants (`SizeScaleDefault` 2, deviation halved) the same measurement reads
-      **mean sprite 8.20 m, cloud span 12.53 m, whole burst span 20.73 m**, cloud span is
-      unchanged (`fierypuffer` authors no meaningful `DEVIATION_DISTANCE`; its spread is almost
-      entirely the ±65 m/s random velocity, so A2 does not move this particular puffer), and mean
-      sprite doubled exactly with the constant, confirming the intervention took effect. **The
-      decode makes the crash burst read larger against the footage, not smaller, the opposite of
-      what the ×1 analysis above expected.** Per `PLAN-puffer-engine-deltas`'s explicit instruction,
-      the decode lands anyway and this is recorded as a finding, not split against the footage: the
-      corrected sim's sprite may still be reading too big against `CAP-16` for a reason A1/A2 do not
-      touch (sprite alpha falloff inside the quad, or the fire-keyed pixel measurement in the
-      original bullet finding less than the full additive quad), that is now a live open question
-      for whoever next tunes `puffer.burstSizeScale` or the fire family's TUNE pair (D10), not
-      something A1/A2 should absorb by picking a different constant than the one the disassembly
-      settles.
-    - ⚠ **The 9.7 m figure is a video frame measurement and is not evidence about this constant.**
-      That governs every comparison in this entry: a frame-derived length cannot confirm a decode
-      (`docs/verification.md` DET-12), and the sim disagreed with it at the old `×1` default too
-      (16.6 m vs 9.7 m), so **no value of `SizeScaleDefault` ever reconciled the two**. Treat the
-      gap as a note about sprite alpha or particle density, not as an open question hanging over
-      the decode, and do **not** re-open A1 on the strength of it. Qualitative reads from the clip
-      (is there a fireball, does it persist) remain useful; a measured span from it does not, and
-      no re-measurement of the footage is owed.
-    - Limit: the ruler only exists near ignition (the airframe is gone within ~0.5 s and no known
-      length survives in frame), so this is an *early-frame* comparison. Our burst is dead by ~1.0 s
-      while the original is still at full intensity 9 sim-s later, that gap is the hold time above,
-      a separate matter from size.
-  *Residual.* The player's **own** crash can never show the burn-out, the game cuts to menu, so do
-  not re-film one hoping for it. The one untried vantage is an **enemy** plane crashing while the
-  player stays alive, which would keep the scene up; worth a capture only if the hold time above
-  turns out to be the binding constraint when tuning. Otherwise what remains is the **A/B against
-  our build at the controls**, with the reference numbers above to judge against.
-  *Cross-refs:* `PT-124` (the flight that judges it, both surfaces and the sound).
-
 - `BL-297` `[Research]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **Panel-damage semantics: what the original actually
   shows when a part is damaged, the user's re-test verdict is that our authored-data reading has
   the feature wrong.** User at the controls 2026-08-06, after `BL-288`'s pooling fix landed
@@ -443,7 +270,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   a bound group's window the same way. Launch rates are worth tuning from here, and the
   `DAMAGES_ZEPPELIN` rule is exercisable in the cockpit rather than only in `AiRocketeerTests`.
 
-
 - `BL-639` `[Bug]` `[Blocked: CAP-47]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: data]` `[CM14]` **CM14 (C2B/M04): the Gemini's gasbags do not burn out
   completely, so the zeppelin never dies by its gasbags.** *Evidence:* reported at the controls and
   re-confirmed on the merged build. The authored death is a count:
@@ -491,7 +317,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (b) a world-armed fuse re-detonates every rocket 15–50 m short of terrain (the 2026-08-02
   failure), never widen the mask to world bodies.
 
-- `BL-286` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **Muzzle-flash residues after the `BL-263` pick (triad kept, 2026-08-05)**, one
+- `BL-286` `[Tuning]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Muzzle-flash residues after the `BL-263` pick (triad kept, 2026-08-05)**, one
   small open. (a) closed 2026-08-06: the muzzle-light stand-in magnitudes (was `BL-200`, rode
   `BL-261`/`BL-263`; `MuzzleLightEnergy` 2.5, 2-frame `MuzzleLightLife` 0.03 s, the def carries
   range/colour only) are signed off, judged in `--weapon-lab`; static, so the sign-off covers
@@ -513,8 +339,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   The same sortie carries the effects root's displacement, since the casing, the smoke and both
   first-person lights now spawn a metre ahead of the gun and 0.2 m below it: from the cockpit a
   shot lights the interior from a metre further forward, which only your eyes can judge.
+  *Decision:* judged in flight, three things. (1) The flash falls back too fast: it is drawn for
+  one frame and sits behind the muzzle on the next, so the burst does not read as coming out of
+  the gun. (2) The original shows no muzzle flash at all from the cockpit view, so hide the quads
+  there. (3) The first-person shot light is much dimmer than the original's; raise the energy, and
+  `CAP-39` is the clip that calibrates how bright. The 30/80/140° triad question stays a note for
+  any later shape revisit.
 
-- `BL-289` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Gun-impact looks (A2/`BL-203`, landed 2026-08-01)**,
+- `BL-289` `[Tuning]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: footage]` **Gun-impact looks (A2/`BL-203`, landed 2026-08-01)**,
   ⚠ **The six `DirtDebris*` constants left this entry: the dirt-chip effect they tuned was deleted
   2026-08-15 (`BL-313`, closed), so there is nothing to A/B.** Dirt now takes the single spark.
   What remains here is the building ricochet:
@@ -525,6 +357,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   2026-08-06 with the fades in (`BL-265` closed, the authored quad is 5 cm wide, sub-pixel past
   ~30 m; the reference ticks measure ~0.35 m, which 8× matches). A/B the rest against
   `Dirt Splash.png` at the controls; the splash *height/timing* curves are authored data, not TUNE.
+  *Decision:* judged on C1's movie-studio buildings against `30 Slu building.mp4`: no burst plays
+  at all where the original throws debris off the wall, so the five stand-in constants are not
+  what is wrong. Decode what the original spawns on a building hit (and why nothing of ours
+  reaches those buildings) before any of them moves; `PT-128` stays the flight that judges the
+  result.
+
   *Cross-refs:* `PT-128` (the flight that judges the ricochet).
 
 - `BL-693` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The rebinding screen's three axis-capture constants are
@@ -579,7 +417,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   clear and the hull does not (CM13's dbase arch on dzpath2) in both games; if the original passes,
   sweep the player's probes too. *Cross-refs:* `PlaneStats.CollisionProbes`, `docs/formats/vehicle.md`.
 
-
 - `BL-920` `[Bug]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **A zeppelin's
   gasbags, engines and cannons reach the player's Non-Aircraft cycle although no mission table
   flags them, which is the one remaining entry on that cycle the original does not offer.**
@@ -602,7 +439,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the part list, which now need the selected weapon in their fixture. *Cross-refs:*
   `BL-918`'s closing commit (the per-mission list and the turret half), `CSVM/src/Flight/TargetPool.cs`,
   `CSVM/src/Session/ZeppelinRuntime.cs`.
-
 
 ## Flight model & collision physics
 
@@ -912,7 +748,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `CSVM/src/Mech3/SceneBuilder.cs` (the shaded branch), `BL-804` (the water terms beside it),
   `docs/org/textures.md` (`SHADEMODE`).
 
-
 ## Effects & animation runtime
 
 - `BL-674` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: data]` `[CM10]` **CM10's attack-balloon wave flies from 990 m down to water level and back up
@@ -961,8 +796,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   therefore its cursor, and `TemplateStage.TakeNextSlot`'s liveness test is per definition, so a
   crate's ten-second fire can still wrap onto a live thirty-second one; that hole is untouched here
   and is what to suspect if the symptom survives with the pool deep enough. *Playtest:* `PT-139`.
-  *Cross-refs:* `BL-231` (the pool's tuning entry), `BL-121` (the `trail-world-anchor` suite),
-  `BL-700` (the same zeppelin family's wreck rest).
+  *Cross-refs:* `BL-231` (the pool's tuning entry), the `trail-world-anchor` suite (rendering at
+  real spawns), `BL-700` (the same zeppelin family's wreck rest).
 
 - `BL-867` `[Tuning]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **The speed cue's wisps read more opaque than the
   original's, and crowd the centre of a 16:9 view.** *Decision:* stills cannot judge the opacity,
@@ -987,10 +822,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ahead of the aircraft, never by texture. *Cross-refs:* [`docs/formats/effects.md`](docs/formats/effects.md)
   (the cue's data), `docs/org/puffer.md`.
 
-
 ## Audio
 
-- `BL-252` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Overspeed-whine volume** (`prop_sound`). `CAP-10` plus a
+- `BL-252` `[Tuning]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: footage]` **Overspeed-whine volume** (`prop_sound`). `CAP-10` plus a
   live cross-check incidentally confirmed the **gating** of the original's dive/overspeed sound and
   left only its level open.
   ⚠ **This entry's SUBJECT is now wrong, and its observation is the valuable part.** There is no
@@ -1021,13 +855,22 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   loudness, and the mix ratio differs by view because the original's **cockpit** engine is damped
   while ours is not, so it cannot be read across. **Needs a level match by ear against the
   original, not another measurement** (user, 2026-08-04: "the only tune parameter would be volume").
+  *Decision:* judged at the controls, whatever our build plays past top speed is almost
+  inaudible, and this entry has tuned the wrong slot once already. Decode what the original plays
+  at the `1.0× fd_speed` foot and at what level (the rattle's `snd_planeshake` curve is the
+  candidate to confirm or refute in `crimson.exe`) before any mix constant moves; `PT-126` then
+  confirms the port by ear.
   *Cross-refs:* `PT-126` (the flight that names the sound and matches its level).
 
-- `BL-269` `[Tuning]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The 3D sound falloff curve between the authored `RANGE` radii is an admitted
+- `BL-269` `[Tuning]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **The 3D sound falloff curve between the authored `RANGE` radii is an admitted
   approximation** (`WorldSounds.cs:159-161`, endpoints authored, curve "an approximation of
   the original's, hence TUNE"). Low stakes per sound but global: every positional sound's
-  audible footprint. A calibrated fly-past recording of one loud fixed emitter (the C1
-  refinery flare is a candidate) would trace the real curve.
+  audible footprint. A calibrated fly-past recording of one loud fixed emitter would trace the
+  real curve. *Decision:* judged on fly-pasts of the police car and the train, the falloff drops
+  too fast: a sound goes quiet closer to its emitter than the original's does. Flatten the curve
+  between the authored radii so the level holds longer before it dies, then re-judge on the same
+  two emitters. ⚠ The C1 refinery flare is not a candidate emitter: neither
+  `refinery_fire_always` nor `refinery_fire.zrd` authors a sound.
 
 - `BL-281` `[Tuning]` `[Blocked: CAP-27]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The ricochet sounds are audible but very faint.** `PT-25` (c), 2026-08-05:
   `snd_ricochet1–4` play under the per-impact spark burst but sit too low to read. A mix-gain
@@ -1036,7 +879,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   entry that drives it "plausibly an authoring leftover", present on 1 of 11 aircraft, so the
   capture may delete the feature rather than tune it.
 
-- `BL-285` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Engine start/stop residues from `BL-267` (landed 2026-08-05)**, two constants
+- `BL-285` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **Engine start/stop residues from `BL-267` (landed 2026-08-05)**, two constants
   pending the user, both in the same cockpit sitting. (a) `ThrottleSlamSmoke.SlamThreshold`
   0.25: the CAP-21 footage only bounds the slam gate to "a single 1/8 step never fires,
   idle→5/8 fires", the 2/8–4/8 band is unobserved, so 0.25 is the smallest threshold
@@ -1050,16 +893,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   judgement is unaffected, but a splitscreen listen must judge it at whatever `N` the pilot is
   testing, not assume the 1P level. `snd_propstart` (the other half of this A/B) is unchanged,
   D32 kept it raw, "your prop" on respawn stays loud on purpose.
+  *Decision:* judged in the cockpit sitting: (b) passes, the start ramp and the wind-down read
+  right against the two clips. (a) is a bug, not a threshold judgement: the slam smoke never
+  fires, not even on an idle-to-full slam. Find why `ThrottleSlamSmoke` does not trigger from the
+  human throttle before `SlamThreshold` moves at all; `PT-127` (b) then judges the gate.
   *Cross-refs:* `PT-127` (the cockpit sitting that judges both).
-
-- `BL-391` `[Tuning]` `[S]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` **Own-ship engine loop reads too loud, including single-player.** Found
-  2026-08-15 at the `BL-126` splitscreen chrome playtest, a 4-player Dogfight session flagged the
-  stacked engines as too loud, but the user confirmed on a follow-up single-player listen that the
-  base engine level itself, not just the splitscreen stacking, is too hot. Not a splitscreen item:
-  `FlightAudio.MixGain` is `1` in 1P (no attenuation applies), so this is the vehicle.json
-  `engine_sound` mix level (or the detuned dual-voice stack's combined gain, `EngineDetuneRatio`)
-  read too loud on its own terms. *Fix shape:* a level match by ear against the reference video,
-  the same method `BL-269` already used for this signal chain.
 
 - `BL-782` `[Feature]` `[Blocked: BL-455]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Built-in's Options screen carries no audio
   levels, so the mix is settable in the Original presentation alone.** *Evidence:*
@@ -1085,185 +923,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Cameras & views
 
-- `BL-150` `[Research]` `[Owed-playtest]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The numpad camera scheme is the head-look controller,
-  and it is built; what is left is the footage's own limits.** The nine "fixed views" are not
-  authored poses: the chase placement `FUN_0042c7f0` runs the same head-look state machine the
-  cockpit views run, floored at `−π/2` instead of level, and the pad cluster is that controller's
-  own snap input. CSVM builds it that way, one `HeadLook` per pilot swung onto the chase offset by
-  `CameraController.ChaseSwing`, so the entries below are now this scheme's *evidence* rather than
-  its specification. The measurements stand and the reconciliation against them is recorded here.
-
-  (a) **Layout, MEASURED 2026-08-04 from the `CAP-07` scripted re-take, all nine keys**, read off
-  nine settled stills (method and confidence below). The snap table's angles, swung by
-  `ChaseSwing`, reproduce every one of the nine:
-
-  | key | camera sits | reproduced by the snap table |
-  |---|---|---|
-  | `Kp1` | **ahead + starboard, below** | elevation 45° up, azimuth 135° left ✓ |
-  | `Kp2` | **dead ahead, level** | azimuth 180°, at the rig's own base elevation (`BL-885`) |
-  | `Kp3` | **ahead + port, below** | elevation 45° up, azimuth 135° right ✓ |
-  | `Kp4` | **starboard flank, level** | azimuth 90° left, at the base elevation (`BL-885`) |
-  | `Kp5` | **the centre key, a no-op from base** | `LookCenter`, which recentres the head |
-  | `Kp6` | **port flank, level** | azimuth 90° right, at the base elevation (`BL-885`) |
-  | `Kp7` | **astern + starboard, below** | elevation 45° up, azimuth 45° left ✓ |
-  | `Kp8` | **directly below (belly plan view)** | elevation 90° up, azimuth 0 ✓ |
-  | `Kp9` | **astern + port, below** | elevation 45° up, azimuth 45° right ✓ |
-
-  A pilot looking LEFT is what carries the camera to starboard, which is why the labels and the
-  positions read mirrored. The four corners come out below the aircraft and carry the fore/aft term
-  the stills show (bottom row forward, top row aft) with no fore/aft term in the table at all: it
-  falls out of composing a 45° elevation with a 45°/135° azimuth. The three "level" entries are level
-  only up to the chase rig's own base elevation, 15.7° in CSVM against the authored 0.29° the
-  original places at, which is `BL-885` and not this item.
-
-  *How it was measured.* Nose-in-image direction plus which surface is visible fixes the quadrant
-  analytically: with image-right = `u × d`, the nose projects with horizontal component ∝ sin φ and
-  vertical ∝ −sin ε · cos φ (φ = azimuth from dead astern toward starboard, ε = camera elevation
-  *below*). The level side views calibrate the sign, a camera to starboard must show the nose
-  pointing image-right, and `Kp4` does. The four corners all show belly, underwing ordnance and the
-  ventral skull fin, so ε > 0 for each; their nose directions are up-right / up-left / down-right /
-  down-left for 1 / 3 / 7 / 9, giving the four quadrants above.
-  ⚠ **Read the limits.** These are *quadrants and signs, not degrees.* Getting degrees needs the
-  render's field of view, and **a self-calibration attempt on this clip failed, do not repeat it.**
-  The method was sound in principle: the night sky's stars are world-fixed points, they are
-  detectable (200 per frame at ≥55 counts over a 25 px local background), they are genuinely sky
-  rather than screen artefacts (when the camera returns to base after a hold, **181 of 200** base
-  points come back within 3 px, while at +2 s / +4 s / +10 s into a hold almost none survive), and a
-  pure-rotation homography `K R K⁻¹` fitted across a large swing would pin `f`. It fails on the
-  *size* of the swing: base and hold frames share essentially no sky, so the fit needs the rotation
-  chained frame-to-frame through the transition, and the chain loses the fast core. Frame-to-frame
-  star displacement is 0.01 px settled but 17 px median and 255 px peak while slewing, and in those
-  few fastest frames the matcher locks onto a spurious near-identity consensus instead of the true
-  shift. The residual-vs-`f` curve is consequently flat above ~1300 px (1.759 → 1.732 px rms out to
-  `f` → ∞), so `f` is bounded from below only: **wider than ~84° vertical is excluded, nothing
-  else.** *What would fix it:* a slower slew is not available (it is the thing being measured), so
-  either a capture that pans the camera slowly across the sky once for calibration, or a
-  known-geometry object in frame, the aircraft's own wingspan from the mesh at the known shipped
-  `dist` would do it directly, which is the cheaper route and needs no new footage.
-  `Kp8` is the weakest of the nine: at a near-vertical elevation the azimuth is degenerate, so
-  "directly below" rests on the plan-form silhouette being unforeshortened plus visible underwing
-  ordnance (occluded from above), not on the nose-direction solve. One take, one aircraft, the
-  layout is a per-key constant so that is fine for the table, but do not read distances off it.
-  ⚠ **Correction, 2026-08-04: `Kp0` is rudder-left, not a camera view.** The 2026-07-30 cockpit
-  session read it as a second 45°-underside-front view alongside 7 and concluded "the original binds
-  0; we bind none", that was a misattribution, and the *camera* half of it is withdrawn. Our
-  omission of `Kp0` from `Views[]` is therefore **correct** and needs no change; the camera set is
-  `Kp1`–`Kp9`. (Whether `Kp0`/`Kp.` should drive rudder at all is a separate input question this
-  entry does not own.) The underside-front position stands for 7 on its own.
-  (b) **Motion is an exponential ease, and the decoded rate is what CSVM runs.** **Measured
-  2026-08-04 from the `CAP-07` scripted re-take, 16 transitions (a press and a release for each of
-  the eight moving keys).** The measurement corroborates the decode rather than setting the rate:
-  the head's azimuth smoothing is a decoded **5.0/s** (`docs/org/cameraViews.md`) against the
-  **≈ 5.4/s** in sim seconds fitted below, so the constant no longer waits on an FOV calibration.
-  ⚠ **The "ease reads linear" claim this entry carried is WRONG, the ease is exponential.** Sky
-  travel was tracked as the cumulative frame-to-frame displacement of matched star points, which is
-  a monotone proxy for camera rotation and needs no FOV. Normalised, the profile is heavily
-  front-loaded: **33% of the travel in the first 10% of the move, 93% by the halfway point.** Fitting
-  `v(t) = 1 − e^(−kt)` gives rms **0.012–0.080** against **0.37–0.50** for a linear ramp, the wrong
-  model by a factor of 6–40, on every one of the 16 transitions. A smoothstep is worse than linear.
-  - **Rate `k` = 7.50 ± 1.62 /s on the press, 7.70 ± 3.20 /s on the release** (wall seconds), the
-    two agree well inside their spread, so **the ease is symmetric out and back**, which is the one
-    part of this entry's original claim that survives. 90% of the way in ~0.30 s wall.
-  - ⚠ **Those are WALL seconds and the original's clock runs fast (k = 1.390, `FINDINGS.md`).** In
-    sim seconds the constant is **≈ 5.4 /s**, 90% in ≈ 0.43 s. Implementing 7.5 would run the ease
-    39% quick, the same trap `BL-148` documents for the stall blink.
-  - **The form is exactly the head's own smoothing**, `shown += (target − shown)·k·dt`, which is the
-    law `HeadLook.Approach` runs at the decoded 5.0/s in azimuth and 3.0/s in elevation. The camera's
-    own offset lerp (`CamSmooth` 8 /s, `CamRotSmooth` 7 /s) then sits on top of it.
-  - ⚠ **`k` is a lower bound, the shape is not.** The tracker undercounts the fastest 1–2 frames of
-    each slew (see the calibration note in (a)), and undercounting the early, fast part biases `k`
-    *down* and makes the curve look *less* front-loaded than it is. The exponential-vs-linear verdict
-    therefore only strengthens under the bias; the constant itself wants a re-measure once an FOV
-    calibration exists and the rotation can be integrated as an angle rather than a pixel proxy.
-  (c) Distance: resolved, a snapped chase view takes the per-plane shipped distance with the chase
-  camera (`CameraController`).
-  (d) **Combined keys ADD as numpad-direction vectors, MEASURED 2026-08-04 from the `CAP-08`
-  scripted combo sweep, 14 staggered combinations.** Landed, and not as a rule of its own: the
-  bindings put `Kp7`/`Kp8`/`Kp9` on Look Up and `Kp7`/`Kp4`/`Kp1` on Look Left, so several keys down
-  compose one direction, which is the summed offset this measurement found.
-  - **The second key is never ignored.** In all 14 steps the silhouette after adding the second key
-    differs from the first key's own settled silhouette at mask IoU **0.096–0.530**, against a
-    repeatability floor of **0.833–0.978** measured from the same key held alone in two different
-    steps (7 such pairs, up to 90 s of hand-flown drift apart). Nothing is close to the floor, so
-    "the first key wins while it is down" is refuted outright.
-  - **The four OPPOSITE pairs return the camera to the base chase view**: `1+9`, `3+7`, `2+8`, `4+6`
-    give IoU **0.992 / 0.986 / 0.995 / 0.988** against that step's own settled base frame, at or
-    above the floor, i.e. *the same view*. Independently corroborated on two of them: releasing
-    `2+8` and `4+6` produced no camera motion at all (0.7 and 3.2 MAD of silhouette rate, against
-    33.6–102.1 for the 14 unambiguous press-alone slews), because the camera was already at base.
-  - **The two TRIPLES collapse onto their middle key**: `7+8+9` matches `Kp8` at IoU **0.891** and
-    `1+2+3` matches `Kp2` at **0.955**, both inside the floor band, and both confirmed by eye
-    (`7+8+9` is Kp8's unforeshortened belly plan-form; `1+2+3` is Kp2's nose-on).
-  - **The eight ADJACENT pairs are genuine third positions**: their best match to *any* single-key
-    view or to base runs only **0.077–0.445**, far under the floor. So `blend` is the answer to (d)'s
-    question, not `replace` and not `ignore`.
-  - **One law explains all fourteen with no exceptions.** Treat each key as its 2-D offset from `Kp5`
-    on the numpad grid (`Kp8`=(0,+1), `Kp6`=(+1,0), `Kp9`=(+1,+1), …); **sum the offsets of the held
-    keys; the resultant's direction selects the camera position, and a zero resultant is the default
-    chase camera.** Opposite pairs sum to (0,0) → base ✓ (4/4). `7+8+9` sums to (0,+3) ∥ `Kp8` ✓ and
-    `1+2+3` to (0,−3) ∥ `Kp2` ✓. Adjacent pairs sum to directions halfway between two keys, which
-    are not any key ✓ (8/8).
-  - **The route does not pass through base**, confirming the claim this entry already carried: across
-    each add-second-key transition the silhouette's distance from the settled base view never dips
-    below the nearer endpoint. The camera goes straight from the old combined position to the new one.
-  - **The combined position is a settled position, not a moment in transit.** Median silhouette rate
-    over the last 1.2 s of each hold is **2.1–19.6 px/s** against a no-key baseline of **6.1** and
-    slew peaks in the hundreds; the elevation over baseline is the pilot's own manoeuvring, which
-    moves the A-alone windows just as much (4.5–38.2).
-  ⚠ **Read the limits.** (i) **The law is confirmed where it is testable and merely unfalsified
-  elsewhere.** Mask IoU certifies *identity* but saturates into noise once two views differ by more
-  than roughly a quadrant, so it cannot say *which* intermediate position an adjacent pair reaches,
-  the 8 blends confirm only "not any key, not base". What carries the law is its six *exact*
-  predictions (four cancellations, two triples), all six of which hold. Pinning a blend's actual
-  azimuth needs the FOV calibration (a) is still missing. (ii) **Mid-ease interrupt on RELEASE is
-  still untested**, the rig leaves a 3.5 s gap, so every ease-back completes before the next press.
-  What *is* tested is a mid-ease *press*: the triples' third key lands 15 ms after the second, while
-  the camera is still slewing, and the endpoint is exactly the held-set's resultant, so an arriving
-  key re-targets rather than restarting. (iii) One take, one aircraft; the layout is a per-key
-  constant so that is fine, but do not read distances or degrees off it.
-  *Method:* `analysis/numpad-combo-views/` (`pass1` → `sync` → `events` → `decide` → `match` →
-  `settle` → `stills`). The clip is VFR (frame intervals 16.67–41.70 ms), so everything is placed on
-  PTS, never `frame/fps`. The rig's tooltip did not survive the capture, so the log was aligned to the
-  video by detecting slews and matching the schedule's asymmetric cadence: **video_t = log_t + 3.978 s**,
-  26/28 anchors within 350 ms at sd 27 ms, against 15/28 at sd 54 ms for the press/release alias.
-  Both clocks are wall clocks, so the sim-clock factor does not enter.
-  (e) **No gamepad binding existed in the original** (a right-stick/right-stick+modifier scheme would
-  be invention) and **`Kp5` moves the camera nowhere, measured 2026-08-04, not assumed.** Held for
-  3.5 s in the `CAP-07` re-take, the frame deviation from its own pre-press baseline is **0.310**,
-  *below* the 0.348–0.360 a no-key stretch of the same length scores, and against 2.5–10.5 for every
-  key that does move the camera. ⚠ **That is not evidence the key is unbound**: `Kp5` is the
-  controller's centre slot, labelled "Look Forward" in the original's own binding menu, and the
-  camera was already at base when it was held, where recentring is a no-op. CSVM binds it to
-  `LookCenter` for that reason.
-  (f) **Numpad + / − trim camera distance slightly**: landed as the decoded External Camera Zoom
-  axis (`BL-433`), not as a trim of this scheme's own.
-  *What is left:* the pieces the footage cannot settle. (i) The exact azimuths and elevations of the
-  eight blended two-key positions, which mask IoU only bounds; the implementation reaches them by
-  composition and nothing measured contradicts it. (ii) (b)'s fitted constant as an independent
-  check on the decoded 5.0/s, which wants the FOV calibration (a) is missing. (iii) The feel of the
-  whole scheme at the controls, which is what `[Owed-playtest]` is for.
-  ⚠ **`CAP-07` took two takes; the first is rejected and must not be re-analysed.** In
-  `CAP-07 Numpad 1,2,3,6,9,8,7,4.mp4` the presses overlap: 10 camera transitions for 8 keys in
-  20.9 s, with direct position-to-position lerps that never pass through base, so only 6–7 of the 8
-  holds come to rest and the filename's key order cannot be mapped onto them one-to-one. The usable
-  take is `CAP-07 scripted Run.mp4`, driven by `analysis/capture-rigs/NumpadViewSweep.ahk`, one key
-  held alone at a time with a return to base between, and a `sweep-log.txt` that timestamps every
-  press, so key windows are read from the log rather than inferred from motion.
-  All nine holds *do* settle: frame-to-frame motion over the last 1.2 s of each is 0.055–0.278
-  against a 0.090 baseline.
-  ⚠ **Traps.** (a) **Only `--view=` is machine-verifiable**, live held-key input cannot be scripted
-  here, so the built scheme is correct-by-construction until it is played; do not close this off a
-  passing `--view=` capture alone. (b) The table above is quadrants, not degrees, so the exact
-  azimuth/elevation still wants an FOV-calibrated solve, and the "level" rows are level only up to
-  the chase rig's base elevation (`BL-885`). (c) Don't retune the chase radius here in isolation, a
-  snapped view and the chase camera share one number in `CameraController` by design; a fix landing
-  only in one place desyncs the two cameras again. (d) The combination law is pinned by six exact
-  predictions but the eight blended positions are only bounded, so **do not quote a blend's azimuth**
-  as if it had been measured; the four cancellations and the two triples are the cases with a right
-  answer to check against.
-
-- `BL-266` `[Research]` `[Owed-playtest]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **Plane wobble: residual decode questions after the
-  wiring landed.** The oscillators are wired (`ShakeDefs`/`PlaneShake`, visual-only roll on the
+- `BL-266` `[Research]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **Plane wobble: residual decode questions after the
+  wiring landed.** *Decision:* judged at the controls against two new clips,
+  `OriginalScreenshots/Videos/Dive Wobble.mkv` and `Nitro Wobble.mkv`: the dive rattle and the
+  nitro wobble are both too small and janky next to the original's. Decode `high_speed` and
+  `nitro`'s drive (the (d) accumulator and the block that carries nitro) and port the mechanism
+  before wiring any magnitude; the sawtooth is not the mechanism, as (d) and (e) below already
+  say. The oscillators are wired (`ShakeDefs`/`PlaneShake`, visual-only roll on the
   plane node; law and measurement in [`docs/formats/shakes.md`](docs/formats/shakes.md) and
   `analysis/gun-wobble-shake/`). The dressing behind the shake is a decoded camera
   random-walk (`crimson.exe`), not the remake's dated sawtooth, details below.
@@ -1351,35 +1017,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Evidence:* ghidra-mcp read of the open `crimson.exe` (`/crimson.exe`): `FUN_0049fb00` (player render; draws `cockpit1` `DAT_0071c314` only when mode==6 via `FUN_004cca30(x,1/0)` around the interior draw), `FUN_0042b660` (mode gate), `FUN_00602508` (60° H-FOV; writes `_DAT_00a1eff0`/`_DAT_00a1eff4`), `FUN_006024d9` (80° H-FOV, mode 6), `FUN_0042b570` (frustum/projection, contains `0.5235987755982` = 30° = 60°/2), plus the 60°/80°/50.0/2.5 constants side-by-side at the data table `0060409c`. FOV is stored in radians (anim loader `FUN_00502da0` converts degrees→radians via `0.017453292`). The `0x3f860a92` 60° literal is also used by `FUN_0049d940` (player aim camera) and `FUN_004a0220`. Camera object is `DAT_0064ef78`. Placing the camera: both first-person modes run the same placement `FUN_0042d980`, which sets the camera to `plane_pos + plane_rot · (DAT_0071c328,32c,330)`, i.e. the plane's `cockpit_camera` marker offset (bound in `FUN_00473480` from the `cockpit_camera` node; default fallback `DAT_0075d1b8/bc/c0` = `(0,0,0)`). Plane-model `cockpit_camera` node translations (decoded from `extracted/C1/... planes/nodes.json`) put the camera on the fuselage centerline a bit above the local origin, default fighter `player_pfighter`: `(0, +0.75, −0.2)`, with +Y up, ±X the wingspan (ailerons at ±63, elevators/tail at −Z ≈ −37), so +Z = nose/forward and the marker is centered, ~0.75 up, marginally aft of the origin. There is **no `nose_camera` node or per-mode offset**, mode 7 reuses the cockpit_camera point. The `cam_anim` ZAN cockpit sequence (`player-gi_1stperson`) carries no FOV (it shows the interior/hides the plane via `cockpit1`/`camera1`), so the base FOV is not authored in `.ani` data.
   *Fix shape:* **the decoded facts landed as [`docs/org/cameraViews.md`](org/cameraViews.md) (2026-08-18), and the mode-6/mode-7 first-person half of the model landed in code** (`PLAN-cockpit-view` A3): `CameraController.HorizontalToVerticalFovDeg` renders Cockpit at 80° H and Nose at 60° H, both aspect-corrected off the live viewport, deliberately scoped to those two new modes only (Decision 3, "new modes only") and never touching the engine's 62° global. **What remains is the EXTERNAL half.** `GameSession.cs:475`/`:2624` and `Launcher.cs:490` still write the single 62° vertical global to every chase/fixed-numpad/back/pad-look/crash camera. Migrating those three sites to the decoded 60° horizontal base (with the aspect-corrected 46.8° vertical this page already pins) is the remaining work, and it unsettles two judgements made against the current 62°: `PLAN-overcast-match` line 1463's overcast sky match and `docs/org/tracers.md:258`'s tracer calibration. Carry that warning into whichever session does the migration, both need re-judging after the base FOV moves, not just re-measuring against the same footage.
   *⚠ Traps:* (i) **The two `CAMERA_STATE`/`CAMERA_FROM_TO` functions (`FUN_00502da0`, `FUN_00503e70`) are animated/in-script FOV changes only (`.ani` H/V_FOV events), not the base per-view FOV; do not wire the engine's base FOV to them.** (ii) **The 80° is attached to camera mode 6 specifically, not "first person" generally**, mode 7 is also first-person but is 60°, so gating on "is first person" alone would read the mode-7 number wrong. (iii) The `Virtual Cockpit` string is a HUD/perf/zoning label (`FUN_0059c340`), not a view, ruled out. (iv) ~~Which of cockpit vs nose is mode 6 (80°) vs mode 7 (60°) was not pinned~~, **resolved**: the `FUN_0049fb00` render gate (`cockpit1` drawn only when mode==6) pins mode 6 = Cockpit (80°) and mode 7 = Nose (60°). The remaining subtlety is that **both modes share the same `cockpit_camera` position** (no separate nose offset exists), so "nose" is a render/head-look/FOV variant of the same camera point, not a physically different marker. (v) "62°" invariants elsewhere are the assumption being corrected, not corroboration.
-  *Cross-refs:* `docs/org/cameraViews.md` (the landed Nose view shares the Cockpit camera point but uses the 60° base), `BL-150` (numpad fixed-view FOV calibration is still missing, a documented 60°/80° base + the aspect conversion is the calibration input it needs), `docs/formats/camparam.md` (chase/tuning only; does not cover FOV), `PLAN-overcast-match` line 1463 and `docs/org/tracers.md:258` (the 62° assumption to correct), `PLAN-cockpit-view` A3 (landed the mode-6/7 half of this model).
-
-- `BL-436` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The cockpit view's whole feel is unjudged at the controls,
-  one sitting owes eight separate decisions `PLAN-cockpit-view` made without one.** (a)
-  `PlaneBuilder.InteriorScale` (B11) is a declared TUNE, framed static (0.04, "the panel ~0.7 m
-  ahead of the eye") and never flown. (b) Head-look feel (C21): the snap directions, the 2 rad/s
-  free-look pan rate, and the elevation/azimuth smoothing rates (3.0/5.0 per second) are all
-  decoded constants, none flown. (c) The azimuth-sign port decision (C21): the original's two input
-  paths disagree on sign and CSVM picked one convention for both (positive = left), confirm it
-  reads right rather than backwards. (d) The autohead sub-cap port decision (C22): only the
-  plane-local X/Y velocity drives the lean, the forward (Z) component dropped before scaling, a
-  port choice made without decoded evidence either way. (e) The damaged-over-cockpit engine-sound
-  precedence (D31): when both the damage swap and the cockpit swap are live, damaged wins, an
-  evidence-gapped port decision, no shipped def authors the conflicting case. (f) Wobble in first
-  person against the original: the cockpit camera inherits the plane node's wobble by riding the
-  drawn pose (A2, `docs/org/shakes.md`), compare amplitude and character in the cockpit at the
-  controls against the original's own cockpit view. (g) The Nose head-look confirm:
-  `PLAN-cockpit-view`'s ⚠ table row 2 retired `docs/org/cameraViews.md`'s old "head fixed in
-  Nose" reading in favour of "head-look runs, only autohead is gated", fly Nose and confirm the
-  free-look is really there, since the retired reading may have been a live impression rather than
-  a misread decompile. (h) The parked head after a mouse pan: a pan writes `HeadLook`'s smooth
-  look mode, and that mode leaves a frame with no look input alone, so the head stays where it was
-  pointed until `K`, `numpad 5` or a numpad direction moves it. That is the decoded state-`1` rule
-  and it is a real change to how the cockpit feels, so judge whether it reads as the original's
-  smooth look or as a head that got stuck.
-  *Fix shape:* one cockpit sitting across a couple of airframes covers all eight; each is a
-  judgement call, not a re-decode.
-  *Cross-refs:* `PLAN-cockpit-view` (every decision above, by wave: B11, C21, C22, D31), `BL-391`
-  (engine level, kept separate from (f)).
+  *Cross-refs:* `docs/org/cameraViews.md` (the landed Nose view shares the Cockpit camera point but uses the 60° base), the numpad views (their nine positions read right at the controls, `git log --grep=BL-150`; a documented 60°/80° base plus the aspect conversion is what an FOV-calibrated solve of their exact angles would need), `docs/formats/camparam.md` (chase/tuning only; does not cover FOV), `PLAN-overcast-match` line 1463 and `docs/org/tracers.md:258` (the 62° assumption to correct), `PLAN-cockpit-view` A3 (landed the mode-6/7 half of this model).
 
 - `BL-885` `[Fidelity]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]` **The chase camera's base elevation is authored
   (`thirdp_pitch`), where CSVM holds a hand-picked 15.7°.** The chase placement builds its direction
@@ -1401,10 +1039,25 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   camera level with the aeroplane sees less ground and more sky, and the original's own footage is
   the reference. ⚠ **Do not read the 15.7° as wrong-by-construction**: it was picked to look right
   and has never been judged against the authored figure side by side.
-  *Cross-refs:* `BL-150` (its measured "level" rows are level only up to this angle),
-  `docs/formats/camparam.md` (`thirdp_pitch`, and the Known limits paragraph this corrects),
+  *Cross-refs:* the numpad views' three level keys (`Kp2`/`Kp4`/`Kp6`), which sit at this same
+  base elevation (`git log --grep=BL-150`), `docs/formats/camparam.md` (`thirdp_pitch`, and the Known limits paragraph this corrects),
   `docs/org/cameraViews.md` (head-look controller, the chase placement's own elevation).
 
+- `BL-924` `[Fidelity]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: feel]` **The cockpit view does not turn the head with the
+  aeroplane's motion, and the original's does.** *Evidence:* judged at the controls on the cockpit
+  sitting that closed the view's other seven decisions (`git log --grep=BL-436`): panel scale,
+  head-look feel and sign, the lean's sub-cap, engine-sound precedence, wobble and free-look in
+  Nose all read right, and the automatic head turn is what is missing. CSVM has C22's autohead
+  built (`HeadLook.AutoheadTarget`, fed by `FlightController.AutoheadTarget` with the def's
+  `autohead_turn_*` values) and gated behind `headLook.autohead`, default off because the
+  original's cockpit footage read as a pixel-frozen sight through manoeuvres (`Config.cs`,
+  `docs/formats/vehicle/player-globals.md`'s autohead row). *Decide:* whether the default is
+  simply wrong, or whether what the original does at the controls is a different turn from the
+  velocity lean the port implements. Fly with `headLook.autohead` true first; if that is the
+  original's turn, the fix is the default and the Game Options row (`BL-784` (c)). If it is not,
+  the turn wants a decode of what drives the head in mode 6 beyond the lean. *⚠ Traps:* the
+  forward-velocity drop in the lean is C22's port decision and reads right; do not widen the lean
+  to fake a turn. *Cross-refs:* `BL-784` (c), `PLAN-cockpit-view` C22, `docs/org/cameraViews.md`.
 
 ## HUD & UI
 
@@ -1483,9 +1136,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`MSG_OPT_3RD_PERSON`), "cockpit" (`MSG_OPT_COCKPIT`) and "default view" (`MSG_OPT_DEF_VIEW`),
   which is a lead and not `GO_D_VIEW`'s item list, and this port's own views are Chase, Cockpit and
   Nose. (c) A row does not settle autohead's port decision: its default is off because the original's
-  cockpit footage reads that way, and the sub-cap choice behind it is still unjudged at the controls
-  under `BL-436`(d).
-  *Cross-refs:* `BL-436` (the cockpit sitting that judges autohead), `BL-782` (the same
+  cockpit footage reads that way, while `BL-924` records that at the controls the original's cockpit
+  view does turn the head and ours does not.
+  *Cross-refs:* `BL-924` (the missing automatic head turn), `BL-782` (the same
   both-presentations gap for the audio levels), `git log --grep=BL-783` (the display settings' half,
   closed with four rows on Built-in's screen), `docs/org/menu-inventory.md`,
   `docs/org/cameraViews.md`.
@@ -1505,8 +1158,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   montage goes in front of them before anything is parked on a distance; `SCRAPBOOK.CSV` and the
   scripts are the decode for positions, the film only for the look. *Cross-refs:* `CAP-52`,
   `docs/org/menu-inventory.md`, `docs/formats/menu-layout.md` (`SCRAPBOOK.CSV`).
-
-
 
 ## Splitscreen
 
@@ -1567,17 +1218,17 @@ usual.
   to 4P moves draws 5.7x (697 to 3972, more than the 4x pane count) while `render_cpu_ms`/`gpu_ms`
   stay flat, so the draw-count growth outpaces panes and has not yet been isolated to the cockpit
   subtree specifically vs. the rest of the per-pane rig. (b) **The per-pilot `cockpit_engine_sound`
-  swap against splitscreen's `MixGain` term is unjudged at the controls**, `BL-391`'s "own-ship
-  engine loop too loud" finding predates the cockpit swap and never isolated the `_cp` def
-  specifically. (c) **Today's hiding mechanism is node visibility on a shared plane node, not a
+  swap against splitscreen's `MixGain` term is unjudged at the controls**; the single-player
+  engine level is judged matching (`git log --grep=BL-391`), a listen that never isolated the
+  `_cp` def specifically. (c) **Today's hiding mechanism is node visibility on a shared plane node, not a
   per-viewport render flag**: `CockpitVisibility` hides the OWN rig's `healthy` body node, so a
   pilot sitting in the cockpit hides THAT AIRCRAFT'S body in every pane that can see it, not just
   their own, a cross-pane effect unjudged at `N > 1`.
   *Fix shape:* isolate the draw-count growth's split between the cockpit subtree and the rest of a
   4P rig; a splitscreen listen for the cockpit-swap/`MixGain` interaction; confirm or fix the
   cross-pane body-hide visually at the controls with 2+ cockpit-view pilots in the same session.
-  *Cross-refs:* `PLAN-cockpit-view` B11 ("Splitscreen posture"), `BL-391` (base engine level,
-  the audio half of (b)), `BL-389` (splitscreen weapon mix, same playtest family).
+  *Cross-refs:* `PLAN-cockpit-view` B11 ("Splitscreen posture"), `BL-389` (splitscreen weapon
+  mix, same playtest family).
 
 ## Missions, modes & campaign
 
@@ -1785,8 +1436,6 @@ usual.
   without a stutter, and the seconds between waves too.
   *Cross-refs:* `BL-434` (the per-viewport splitscreen cost the same pass profiled), `BL-657`
   (CM18's generator launching at the wrong time, which is where the measured case is flown).
-
-
 
 ## Tooling, platform & docs
 

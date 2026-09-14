@@ -20,14 +20,14 @@ public readonly record struct GlyphKey(ControlKind Kind, int Index, int Sign)
 /// </summary>
 public static class ControlGlyphs
 {
-    private static ControlGlyphSet _set = new PadVectorGlyphs();
+    private static ControlGlyphSet _set = new PromptFontGlyphs();
 
     /// <summary>The set every control line draws through. Assigning a different one changes every
     /// prompt and board hint at once; null puts the shipped set back.</summary>
     public static ControlGlyphSet Set
     {
         get => _set;
-        set => _set = value ?? new PadVectorGlyphs();
+        set => _set = value ?? new PromptFontGlyphs();
     }
 
     /// <summary>The glyph that stands for <paramref name="control"/>, or null where the set draws
@@ -59,21 +59,28 @@ public abstract class ControlGlyphSet
 }
 
 /// <summary>
-/// The shipped set: pad controls as plain vector shapes built in code, a ring for a face button, a
-/// cross with one arm filled for a d-pad direction, a ring with a deflection arrow for a stick and
-/// a bordered plaque for everything that reads as letters. It declines keys, mouse buttons and
-/// hats, so those seats keep the words <see cref="BindingLabels.Describe"/> gives them.
+/// The shipped set: pad controls as characters of PromptFont (SIL OFL 1.1), whose controller-neutral
+/// glyphs draw a face button as the four-button cluster with the pressed one filled, a d-pad direction
+/// as the cross with one arm filled and a stick direction as the stick with its arrow. Shoulders and
+/// triggers use the font's Xbox-lettered glyphs, the font having no neutral ones. A button with no
+/// glyph, or every control when the font is missing, draws as a lettered plaque. It declines keys,
+/// mouse buttons and hats, so those seats keep the words <see cref="BindingLabels.Describe"/> gives.
 /// </summary>
-public sealed class PadVectorGlyphs : ControlGlyphSet
+public sealed class PromptFontGlyphs : ControlGlyphSet
 {
-    // Shape metrics as fractions of the glyph's height, so one set scales with the line it sits on.
+    /// <summary>The font file. Named with an extension Godot does not import, so an export's import
+    /// step leaves no untracked <c>.import</c> beside it; the export's include filter packs it.</summary>
+    public const string FontPath = "res://data/promptfont.ttf.bin";
+
+    // Metrics as fractions of the glyph's height, so the set scales with the line it sits on.
     // All TUNE: nothing in the original fixes them.
-    private const float RingRadius = 0.40f;
+    private const float GlyphScale = 1.0f;
     private const float Stroke = 0.09f;
     private const float LetterHeight = 0.52f;
-    private const float ArrowHalf = 0.16f;
     private const float PlaquePad = 0.30f;
-    private const int RingSegments = 24;
+
+    private static FontFile? _face;
+    private static bool _loaded;
 
     /// <inheritdoc/>
     public override bool Draws(GlyphKey key) => key.Kind is ControlKind.Button or ControlKind.Axis;
@@ -81,12 +88,12 @@ public sealed class PadVectorGlyphs : ControlGlyphSet
     /// <inheritdoc/>
     public override float Width(Font font, GlyphKey key, float height)
     {
-        if (Label(key) is not { } label)
+        if (Face() is { } face && Glyph(key) is { } glyph)
         {
-            return height;
+            return face.GetStringSize(glyph, HorizontalAlignment.Left, -1f, GlyphSize(height)).X;
         }
 
-        float text = font?.GetStringSize(label, HorizontalAlignment.Left, -1f, LetterSize(height)).X ?? 0f;
+        float text = font?.GetStringSize(Label(key), HorizontalAlignment.Left, -1f, LetterSize(height)).X ?? 0f;
         return Mathf.Max(height, text + (height * PlaquePad * 2f));
     }
 
@@ -98,152 +105,139 @@ public sealed class PadVectorGlyphs : ControlGlyphSet
             return;
         }
 
-        if (key.Kind == ControlKind.Axis)
+        if (Face() is { } face && Glyph(key) is { } glyph)
         {
-            Stick(into, font, key, box, color);
+            // Centred on the font's line box, which is what keeps a glyph level with the words.
+            int size = GlyphSize(box.Size.Y);
+            var at = new Vector2(
+                box.Position.X,
+                box.Position.Y + ((box.Size.Y - face.GetHeight(size)) / 2f) + face.GetAscent(size));
+            into.DrawString(face, at, glyph, HorizontalAlignment.Left, -1f, size, color);
             return;
         }
 
-        switch ((JoyButton)key.Index)
-        {
-            case JoyButton.A:
-            case JoyButton.B:
-            case JoyButton.X:
-            case JoyButton.Y:
-                Face(into, font, FaceLetter(key.Index), box, color);
-                break;
-            case JoyButton.DpadUp:
-            case JoyButton.DpadDown:
-            case JoyButton.DpadLeft:
-            case JoyButton.DpadRight:
-                Dpad(into, (JoyButton)key.Index, box, color);
-                break;
-            case JoyButton.LeftStick:
-            case JoyButton.RightStick:
-                Face(into, font, key.Index == (int)JoyButton.LeftStick ? "L" : "R", box, color, doubled: true);
-                break;
-            default:
-                Plaque(into, font, Label(key) ?? "?", box, color);
-                break;
-        }
+        Plaque(into, font, Label(key), box, color);
     }
 
-    // The face buttons carry their own letters, which is what the player is looking at.
-    private static string FaceLetter(int index) => (JoyButton)index switch
+    // Loaded once, as bytes: a res:// path read through FileAccess reaches the file in the project
+    // folder and inside the exported pck alike, with no import step in either.
+    private static FontFile? Face()
     {
-        JoyButton.A => "A",
-        JoyButton.B => "B",
-        JoyButton.X => "X",
-        _ => "Y",
-    };
+        if (!_loaded)
+        {
+            _loaded = true;
+            if (FileAccess.FileExists(FontPath))
+            {
+                _face = new FontFile { Data = FileAccess.GetFileAsBytes(FontPath) };
+            }
+            else
+            {
+                GD.PushWarning($"control glyphs: {FontPath} not found, pad controls draw as lettered plaques");
+            }
+        }
 
-    // The controls this set writes as letters on a plaque rather than as a shape, and null for the
-    // ones it draws. A pad button no name is known for falls back to its index, so an unusual
-    // controller still reads as something a player can look for.
-    private static string? Label(GlyphKey key)
+        return _face;
+    }
+
+    // The PromptFont character for a control, or null where the font has none. Godot's stick Y axis
+    // is negative upward, so a negative sign on a Y axis is the "up" glyph.
+    private static string? Glyph(GlyphKey key)
     {
+        char c = key.Kind == ControlKind.Axis
+            ? (JoyAxis)key.Index switch
+            {
+                JoyAxis.LeftX => key.Sign < 0 ? '↼' : key.Sign > 0 ? '⇀' : '⇄',
+                JoyAxis.LeftY => key.Sign < 0 ? '↾' : key.Sign > 0 ? '⇂' : '⇅',
+                JoyAxis.RightX => key.Sign < 0 ? '↽' : key.Sign > 0 ? '⇁' : '⇆',
+                JoyAxis.RightY => key.Sign < 0 ? '↿' : key.Sign > 0 ? '⇃' : '⇵',
+                JoyAxis.TriggerLeft => '↖',
+                JoyAxis.TriggerRight => '↗',
+                _ => '\0',
+            }
+            : (JoyButton)key.Index switch
+            {
+                JoyButton.A => '↧',
+                JoyButton.B => '↦',
+                JoyButton.X => '↤',
+                JoyButton.Y => '↥',
+                JoyButton.Back => '⇷',
+                JoyButton.Guide => '⇹',
+                JoyButton.Start => '⇸',
+                JoyButton.LeftStick => '↺',
+                JoyButton.RightStick => '↻',
+                JoyButton.LeftShoulder => '↘',
+                JoyButton.RightShoulder => '↙',
+                JoyButton.DpadUp => '↟',
+                JoyButton.DpadDown => '↡',
+                JoyButton.DpadLeft => '↞',
+                JoyButton.DpadRight => '↠',
+                _ => '\0',
+            };
+        return c == '\0' ? null : c.ToString();
+    }
+
+    // The plaque's letters. A pad button no name is known for falls back to its index, so an
+    // unusual controller still reads as something a player can look for.
+    private static string Label(GlyphKey key)
+    {
+        string index = key.Index.ToString(CultureInfo.InvariantCulture);
         if (key.Kind == ControlKind.Axis)
         {
-            return key.Index is (int)JoyAxis.TriggerLeft ? "LT"
-                : key.Index is (int)JoyAxis.TriggerRight ? "RT" : null;
+            string dir = key.Sign < 0 ? "-" : key.Sign > 0 ? "+" : string.Empty;
+            return (JoyAxis)key.Index switch
+            {
+                JoyAxis.TriggerLeft => "LT",
+                JoyAxis.TriggerRight => "RT",
+                JoyAxis.LeftX => "LS X" + dir,
+                JoyAxis.LeftY => "LS Y" + dir,
+                JoyAxis.RightX => "RS X" + dir,
+                JoyAxis.RightY => "RS Y" + dir,
+                _ => "AXIS " + index + dir,
+            };
         }
 
         return (JoyButton)key.Index switch
         {
-            JoyButton.A or JoyButton.B or JoyButton.X or JoyButton.Y => null,
-            JoyButton.DpadUp or JoyButton.DpadDown or JoyButton.DpadLeft or JoyButton.DpadRight => null,
-            JoyButton.LeftStick or JoyButton.RightStick => null,
+            JoyButton.A => "A",
+            JoyButton.B => "B",
+            JoyButton.X => "X",
+            JoyButton.Y => "Y",
             JoyButton.LeftShoulder => "LB",
             JoyButton.RightShoulder => "RB",
+            JoyButton.LeftStick => "L3",
+            JoyButton.RightStick => "R3",
             JoyButton.Back => "BACK",
             JoyButton.Start => "START",
             JoyButton.Guide => "GUIDE",
-            _ => "#" + key.Index.ToString(CultureInfo.InvariantCulture),
+            JoyButton.DpadUp => "UP",
+            JoyButton.DpadDown => "DOWN",
+            JoyButton.DpadLeft => "LEFT",
+            JoyButton.DpadRight => "RIGHT",
+            _ => "#" + index,
         };
     }
+
+    private static int GlyphSize(float height) => Mathf.Max(1, Mathf.RoundToInt(height * GlyphScale));
 
     private static int LetterSize(float height) => Mathf.Max(1, Mathf.RoundToInt(height * LetterHeight));
 
-    // A letter centred on the box's own middle, which is where every shape here puts its text.
-    private static void Letter(CanvasItem into, Font font, string text, Rect2 box, Color color)
-    {
-        if (font == null)
-        {
-            return;
-        }
-
-        int size = LetterSize(box.Size.Y);
-        var span = font.GetStringSize(text, HorizontalAlignment.Left, -1f, size);
-        var at = box.Position + new Vector2(
-            (box.Size.X - span.X) / 2f,
-            ((box.Size.Y - span.Y) / 2f) + font.GetAscent(size));
-        into.DrawString(font, at, text, HorizontalAlignment.Left, -1f, size, color);
-    }
-
-    // A face button: a ring with its own letter inside. The doubled stroke is the stick click, a
-    // ring pressed rather than a button pressed, and the only difference between the two shapes.
-    private static void Face(CanvasItem into, Font font, string letter, Rect2 box, Color color,
-        bool doubled = false)
-    {
-        float h = box.Size.Y;
-        var centre = box.Position + (box.Size / 2f);
-        into.DrawArc(centre, h * RingRadius, 0f, Mathf.Tau, RingSegments, color,
-            h * Stroke * (doubled ? 2f : 1f));
-        Letter(into, font, letter, box, color);
-    }
-
-    // A d-pad direction: the whole cross in outline with the named arm filled, so the shape says
-    // which way and the fill says which arm.
-    private static void Dpad(CanvasItem into, JoyButton button, Rect2 box, Color color)
-    {
-        float h = box.Size.Y;
-        var centre = box.Position + (box.Size / 2f);
-        float arm = h * RingRadius;
-        float half = h * 0.13f;
-        into.DrawRect(new Rect2(centre.X - half, centre.Y - arm, half * 2f, arm * 2f), color, false, h * Stroke);
-        into.DrawRect(new Rect2(centre.X - arm, centre.Y - half, arm * 2f, half * 2f), color, false, h * Stroke);
-        var filled = button switch
-        {
-            JoyButton.DpadUp => new Rect2(centre.X - half, centre.Y - arm, half * 2f, arm - half),
-            JoyButton.DpadDown => new Rect2(centre.X - half, centre.Y + half, half * 2f, arm - half),
-            JoyButton.DpadLeft => new Rect2(centre.X - arm, centre.Y - half, arm - half, half * 2f),
-            _ => new Rect2(centre.X + half, centre.Y - half, arm - half, half * 2f),
-        };
-        into.DrawRect(filled, color);
-    }
-
-    // A stick direction: the stick's ring with its own letter, and a filled arrow just outside the
-    // ring on the side the binding's sign names. A trigger is a plaque instead, having no travel to
-    // point at.
-    private static void Stick(CanvasItem into, Font font, GlyphKey key, Rect2 box, Color color)
-    {
-        if (Label(key) is { } trigger)
-        {
-            Plaque(into, font, trigger, box, color);
-            return;
-        }
-
-        bool right = key.Index is (int)JoyAxis.RightX or (int)JoyAxis.RightY;
-        Face(into, font, right ? "R" : "L", box, color);
-        bool vertical = key.Index is (int)JoyAxis.LeftY or (int)JoyAxis.RightY;
-        float h = box.Size.Y;
-        var centre = box.Position + (box.Size / 2f);
-        var along = vertical ? new Vector2(0f, key.Sign) : new Vector2(key.Sign, 0f);
-        var across = new Vector2(-along.Y, along.X);
-        var tip = centre + (along * h * 0.5f);
-        var baseAt = centre + (along * h * (RingRadius + (Stroke * 1.5f)));
-        into.DrawColoredPolygon(
-            new[] { tip, baseAt + (across * h * ArrowHalf), baseAt - (across * h * ArrowHalf) }, color);
-    }
-
-    // Everything that reads as letters: a bordered plaque sized to its own label, which is how a
-    // shoulder, a trigger and the two menu buttons appear on a pad's own artwork.
+    // A bordered plaque sized to its own label, which is how a shoulder, a trigger and the menu
+    // buttons appear on a pad's own artwork.
     private static void Plaque(CanvasItem into, Font font, string label, Rect2 box, Color color)
     {
         float h = box.Size.Y;
         var frame = new Rect2(box.Position + new Vector2(0f, h * 0.12f), box.Size.X, h * 0.76f);
         into.DrawRect(frame, color, false, h * Stroke);
-        Letter(into, font, label, box, color);
+        if (font == null)
+        {
+            return;
+        }
+
+        int size = LetterSize(h);
+        var span = font.GetStringSize(label, HorizontalAlignment.Left, -1f, size);
+        var at = box.Position + new Vector2(
+            (box.Size.X - span.X) / 2f,
+            ((box.Size.Y - span.Y) / 2f) + font.GetAscent(size));
+        into.DrawString(font, at, label, HorizontalAlignment.Left, -1f, size, color);
     }
 }
-

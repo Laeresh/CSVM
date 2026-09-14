@@ -9,7 +9,8 @@
     obligations that CSVM's own LICENSE and LICENSE-unzbd do not cover, so the assembled
     file is what discharges them. A fourth obligation is not a payload at all: CSVM's
     managed MPEG-1 decoder is a port of pl_mpeg, and MIT requires the notice to travel
-    with the derived source.
+    with the derived source. A fifth is the PromptFont file packed into the export, whose
+    SIL Open Font License wants its copyright notice and licence carried with it.
 
     The three payload sources are read from the artefacts themselves rather than from a
     copy of upstream's website:
@@ -32,6 +33,11 @@
       out of the registry checkout it was built from. Texts are deduplicated by content,
       so the identical Apache-2.0 sixty crates ship appears once.
 
+    PromptFont follows the same rule. Its copyright statement is read out of the shipped
+    font's own name table, and its licence is the LICENSE.txt from the PromptFont release,
+    kept byte-identical as packaging/LICENSE-promptfont because that text carries no
+    copyright line to read.
+
     pl_mpeg is the exception to that rule, and cannot be anything else: upstream declares
     MIT through an SPDX-License-Identifier line in its header and publishes no licence
     file, so there is no upstream text to read. The terms are therefore kept in this
@@ -41,9 +47,10 @@
     ExportRelease.ps1 checks the three version stamps this script writes into the file's
     header against what it is actually packaging, and refuses an export whose notice was
     assembled for a different engine, runtime or fork commit. That check is what makes a
-    stale notice a build failure rather than a silent shipping mistake. pl_mpeg carries no
-    such stamp because it is source this project derives from rather than a binary the zip
-    carries: it moves with CSVM's own history, which BUILD-INFO.txt already records.
+    stale notice a build failure rather than a silent shipping mistake. pl_mpeg and
+    PromptFont carry no such stamp because both live in this repository rather than in a
+    separately built binary: they move with CSVM's own history, which BUILD-INFO.txt
+    already records.
 
 .EXAMPLE
     .\packaging\BuildThirdPartyNotices.ps1
@@ -64,6 +71,8 @@ $GodotExe     = Join-Path $RepoRoot "tools\godot\Godot_v4.7-stable_mono_win64\Go
 $Mech3axRepo  = Join-Path $RepoRoot "tools\mech3ax"
 $OutFile      = Join-Path $PSScriptRoot "LICENSE-thirdparty.txt"
 $PlMpegFile   = Join-Path $PSScriptRoot "LICENSE-plmpeg"
+$PromptFontLicense = Join-Path $PSScriptRoot "LICENSE-promptfont"
+$PromptFontFile    = Join-Path $RepoRoot "CSVM\data\promptfont.ttf.bin"
 $PackRoot     = Join-Path $env:USERPROFILE ".nuget\packages\microsoft.netcore.app.runtime.win-x64"
 
 $Rule = "=" * 78
@@ -75,7 +84,7 @@ $Thin = "-" * 78
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 function Read-Utf8([string] $Path) { return [System.IO.File]::ReadAllText($Path) }
 
-foreach ($required in @($GodotExe, $Mech3axRepo, $PackRoot)) {
+foreach ($required in @($GodotExe, $Mech3axRepo, $PackRoot, $PromptFontFile, $PromptFontLicense)) {
     if (-not (Test-Path $required)) {
         throw "Not found: $required -- see PROJECT_CONTEXT.md for the tools/ setup."
     }
@@ -244,6 +253,43 @@ none.
 $($plmpegLicense.TrimEnd())
 "@
 
+# ---------------------------------------------------------------- PromptFont
+
+# WPF's GlyphTypeface throws on the shipped .bin name and reads the same bytes under .ttf,
+# so the name table is read from a TEMP copy.
+Add-Type -AssemblyName PresentationCore
+$fontCopy = Join-Path $env:TEMP "csvm-notices-promptfont-$PID.ttf"
+Copy-Item $PromptFontFile $fontCopy -Force
+try {
+    $typeface = New-Object System.Windows.Media.GlyphTypeface([Uri] $fontCopy)
+    $fontCopyright = $typeface.Copyrights[[System.Globalization.CultureInfo] "en-US"]
+} finally {
+    Remove-Item $fontCopy -Force -ErrorAction SilentlyContinue
+}
+if (-not $fontCopyright) {
+    throw "$PromptFontFile carries no en-US copyright string in its name table."
+}
+$fontCopyrightLines = (($fontCopyright -split "`r?`n") | Where-Object { $_.Trim() } |
+    ForEach-Object { "  " + $_.Trim() }) -join "`n"
+$promptFontLicenseText = Read-Utf8 $PromptFontLicense
+
+$promptFontIntro = @"
+The controller button pictures CSVM draws in its prompts are characters of
+PromptFont by Yukari "Shinmera" Hafner, published at
+https://github.com/Shinmera/promptfont. The font file is packed unmodified inside
+the exported .pck as data\promptfont.ttf.bin; only the file name differs from
+upstream's promptfont.ttf.
+
+The font's copyright statement, as its own name table carries it:
+
+$fontCopyrightLines
+
+The licence text follows, byte-identical to the LICENSE.txt in the PromptFont
+release and kept in this project as packaging\LICENSE-promptfont.
+
+$($promptFontLicenseText.TrimEnd())
+"@
+
 # ---------------------------------------------------------------- assembly
 
 function Section([string] $Number, [string] $Title, [string] $Body) {
@@ -279,8 +325,9 @@ against what it packages before it will build a zip:
   mech3ax cs-anim commit: $forkCommit
 
 Regenerate with packaging\BuildThirdPartyNotices.ps1, which reads every text in
-sections 1 to 6 out of the shipped artefacts themselves. Section 7 is the one
-exception and says so in its own text: pl_mpeg publishes no licence file to read.
+sections 1 to 6 and 8 out of the shipped artefacts themselves. Section 7 is the
+one exception and says so in its own text: pl_mpeg publishes no licence file to
+read.
 
 Sections
 --------
@@ -292,6 +339,7 @@ Sections
   5. .NET runtime third-party notices
   6. Rust crates linked into tools\unzbd.exe
   7. pl_mpeg, the MPEG-1 decoder CSVM's video code is ported from
+  8. PromptFont, the font the controller button pictures are drawn from
 
 "@
 
@@ -322,6 +370,7 @@ $document = @(
     (Section "5" ".NET runtime third-party notices" $dotnetNotices)
     (Section "6" "Rust crates linked into tools\unzbd.exe" $crateIntro)
     (Section "7" "pl_mpeg, the MPEG-1 decoder CSVM's video code is ported from" $plmpegIntro)
+    (Section "8" "PromptFont, the font the controller button pictures are drawn from" $promptFontIntro)
 ) -join "`n"
 
 # Godot 4.7 embeds the FreeType licence with its copyright sign ALREADY double-encoded --
@@ -332,7 +381,7 @@ $document = @(
 # second occurrence turning up here is something to go and look at, not to wave through.
 # Written as regex escapes, not as the characters themselves: a BOM-less .ps1 carrying
 # non-ASCII is mangled by PowerShell 5.1's own interpreter before it runs (CLAUDE.md).
-$repairPattern = '\u00C2([\u00A0-\u00BF])'
+$repairPattern = 'Â([ -¿])'
 $repaired = [regex]::Matches($document, $repairPattern).Count
 $document = [regex]::Replace($document, $repairPattern, '$1')
 
@@ -346,3 +395,4 @@ Write-Host "Wrote $OutFile" -ForegroundColor Green
 Write-Host "  Godot $godotBuild, .NET runtime $RuntimeVersion, $($crates.Count) crates, $($texts.Count) distinct crate licence texts"
 Write-Host "  Repaired $repaired double-encoded character(s) in upstream text (expected 1, Godot's FreeType notice)"
 Write-Host "  pl_mpeg's MIT terms taken from packaging\LICENSE-plmpeg (upstream ships no licence file)"
+Write-Host "  PromptFont's copyright read from its name table, its OFL text from packaging\LICENSE-promptfont"
