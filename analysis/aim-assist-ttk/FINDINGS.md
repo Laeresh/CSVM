@@ -211,12 +211,12 @@ original's would.
 
 The original polygon-tests an aeroplane. No node in the planes archive carries `INTERSECT_BBOX`, so
 the bounding-box arm of the segment query is never the answer for an airframe
-([`docs/org/weaponRay.md`](../../docs/org/weaponRay.md)). CSVM tests up to eight convex hulls
-instead, and the `airframe-collider-hit-rate` suite counts both over the same bearings, 14641 rays
-plus a 698-round gun burst per airframe and aspect from a 120 m standoff. The hulls never fall
-inside the model's silhouette, so no round is lost; they present 1.16 to 1.82 times the silhouette
-side-on and 1.62 to 4.39 times it head-on, so rounds are invented. `BL-561` carries the per-airframe
-table and the fix shape.
+([`docs/org/weaponRay.md`](../../docs/org/weaponRay.md)). CSVM tests a convex decomposition of the
+airframe instead, and the `airframe-collider-hit-rate` suite counts both over the same bearings,
+14641 rays plus a 698-round gun burst per airframe and aspect from a 120 m standoff. The hulls never
+fall inside the model's silhouette, so no round is lost; they present more of it than the mesh does,
+so rounds are invented. That page carries the per-airframe table and what the decomposition still
+bridges.
 
 The reading rule: a collider is not automatically conservative. A convex decomposition of a concave
 airframe is strictly wider than the mesh, and that widens a hit rate rather than narrowing it, so it

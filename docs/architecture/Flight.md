@@ -1013,14 +1013,14 @@ body from its pylon immediately rather than queueing it, so the weapon lab's reb
 leave the old ordnance hanging beside the new. `--fly` only.
 
 ## src/Flight/PlaneCollider.cs
-Derives up to eight plane-frame convex hulls from the built model's mesh triangles alone, with no
-per-plane data: region-clipped geometry (tail, wing, fuselage out to the wing band), greedy
-volume-guided refinement cutting one or two parallel planes per axis (the double cut separates
-bilateral pairs such as twin fins), then one `ConvexHull` per refined piece. The refinement and the
-part order are judged on the pieces' boxes, so a hull is only the emitted shape and never moves a
-cut or a name. Single-sourced: the terrain sweep casts these hulls and `AircraftBody` mounts the
-same `ConvexPolygonShape3D` resources as the plane's hittable body. `Layout` is the engine-free half
-the `airframe-hull-coverage` suite measures, `Build` wraps it in shapes, `PartLine` its census line.
+Derives up to sixteen plane-frame convex hulls from the built model's mesh triangles alone, with no
+per-plane data: region clipping partitioning the airframe on x and z (fuselage out to the wing band,
+tail inside that band and aft, wing outboard), greedy volume-guided refinement cutting one or two
+parallel planes per axis (the double cut separates bilateral pairs such as twin fins), then one
+`ConvexHull` per refined piece, judged on the pieces' boxes so a hull never moves a cut or a name.
+Single-sourced: the terrain sweep casts these hulls and `AircraftBody` mounts the same
+`ConvexPolygonShape3D` resources as the plane's hittable body. `Layout` is the engine-free half the
+`airframe-hull-coverage` suite measures; `docs/org/weaponRay.md` holds what they present over the mesh.
 
 ## src/Flight/ConvexHull.cs
 A convex hull over a point cloud with no engine dependency: vertices, outward faces, edges, bounds

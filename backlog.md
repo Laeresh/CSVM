@@ -516,44 +516,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   hangar costs in rockets), `docs/formats/destructibles.md` (the anchor-claim rule and its stow
   limit), `docs/org/weaponRay.md`.
 
-- `BL-561` `[Fidelity]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **Our aircraft hit volumes invent hits the original's polygon
-  test would not register, by 16 to 82 per cent side-on and 63 to 339 per cent head-on.**
-  *Evidence:* the original reaches the polygon loop for every aeroplane. No node in
-  `extracted/planes/nodes.json` carries `INTERSECT_BBOX`; across the eleven flyable `player_*`
-  roots and the eleven AI airframes every mesh-bearing node is `intersect_surface: true` except
-  the four `piece1`-`piece4` wreck fragments, and the flag is live elsewhere in the install, with
-  341 chapter nodes carrying it. A convex decomposition is therefore an approximation of the
-  original's rule and not a spelling of it ([`docs/org/weaponRay.md`](docs/org/weaponRay.md)).
-  The `airframe-collider-hit-rate` suite measures the approximation: 14641 rays plus a 698-round
-  gun burst per airframe and aspect, from a 120 m standoff inside the `nearest` LOD band, counted
-  against `PlaneCollider`'s hulls and against the model's own triangles. The hulls never fall
-  inside the silhouette (lost hits 0.0 per cent on 21 of the 22 cells and 0.1 per cent on the
-  twenty-second), and they present more of it everywhere. Hull-to-mesh presented-area ratio,
-  side-on / head-on: Bloodhawk 1.27 / 1.62, Devastator 1.17 / 4.39, Fury 1.40 / 2.78, Warhawk
-  1.35 / 1.84, Hoplite 1.82 / 2.41, Hellhound 1.32 / 2.60, Balmoral 1.19 / 2.35, Brigand
-  1.16 / 2.07, Firebrand 1.25 / 2.21, Kestrel 1.32 / 1.87, Peacemaker 1.18 / 1.80. The real burst
-  landed within 2 points of the raster's hull rate in all 22 cells, so this is what the gun path
-  registers rather than a property of the instrument.
-  *Fix shape:* narrow the decomposition; do not re-tune the existing `TUNE` constants. The suite
-  attributes every invented ray to the hull that presents it: side-on it is the `fuselage` hull on
-  eight airframes (73 to 99 per cent) and the `tail` hull on the other three, head-on it moves to
-  `wing` and `canard`. Three candidates: raise `MaxParts` above eight so a swept wing and a
-  tapered fuselage stop being one convex piece each; cut on the spans the airframe itself authors
-  (the `leftwing`/`rightwing`/`tail` node boxes) rather than on the geometric `WingBandFrac` and
-  `TailStartFrac` bands; and allow a region more than one hull where a single one bridges a real
-  notch. Keep the suite's "loses no hit" check as the invariant, since no later tuning recovers a
-  round a too-narrow hull dropped.
-  *⚠ Traps:* this is a hit-RATE question, not a damage-per-hit one; do not chase it with a TTK
-  stopwatch, which cannot separate the two. Do not reach for the damage pools, `AimAssist` or
-  `AiGunner`. `MinThickness` is not the main offender: the excess sits where a hull bridges a
-  concavity, not where a thin fin is padded out to the floor.
-  *Honest limit:* the census stands at 120 m, inside every airframe's `nearest` LOD band, so it
-  compares the hulls against the triangles they were derived from. The original intersects
-  whichever level it is drawing, and past 150 m that is a coarser mesh, so the ratio beyond that
-  range is unmeasured and will not be the same.
-  *Cross-refs:* `CSVM/src/Flight/PlaneCollider.cs`, `CSVM/src/Testing/AirframeColliderSuites.cs`,
-  `docs/org/weaponRay.md`, `analysis/aim-assist-ttk/FINDINGS.md`.
-
 - `BL-639` `[Bug]` `[Blocked: CAP-47]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: data]` `[CM14]` **CM14 (C2B/M04): the Gemini's gasbags do not burn out
   completely, so the zeppelin never dies by its gasbags.** *Evidence:* reported at the controls and
   re-confirmed on the merged build. The authored death is a count:

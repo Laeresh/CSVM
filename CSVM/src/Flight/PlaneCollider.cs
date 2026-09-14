@@ -15,9 +15,9 @@ namespace CSVM.Flight;
 /// tree walk), transformed into FlightController's frame; hidden subtrees and the nose prop's
 /// blur discs are excluded, but the autogyro's overhead rotor discs stay in, that plane's wing.
 /// Each hull is the convex hull of one clipped region's triangles, so it hugs the silhouette
-/// where a box bridged air. ⚠ Hulls still overlap where regions share clipped triangles; the
-/// earliest in <see cref="Parts"/> order is what a caller reports.
-/// All threshold consts below are TUNE, see <c>CONTEXT.md</c>.
+/// where a box bridged air. The four regions partition the airframe on x and z. ⚠ Hulls still
+/// overlap where regions share clipped triangles; the earliest in <see cref="Parts"/> order is
+/// what a caller reports. All threshold consts below are TUNE, see <c>CONTEXT.md</c>.
 /// </summary>
 public sealed class PlaneCollider
 {
@@ -29,7 +29,11 @@ public sealed class PlaneCollider
     private const float WingSplitGap = 2f;           // m of empty chord between wing clusters ⇒ split (canards)
     private const float MinThickness = 0.3f;         // m, floor per hull dimension (thin fins/slabs)
     private const float VolumeSplitFrac = 0.3f;      // a cut must remove ≥ this share of a region's box volume
-    private const int MaxParts = 8;                  // total hull budget per plane
+    // Total hull budget per plane. Every hull is a shape the terrain sweep casts each physics
+    // frame, so the budget buys silhouette fidelity at a per-frame cost; the gain is large up to
+    // here and small above it, and the measured ratios are in docs/org/weaponRay.md.
+    private const int MaxParts = 16;
+
     private const float MinCutWidth = 0.35f;         // m, cut planes keep this far from the cluster rim
     private const int Bins = 64;                     // cut-plane candidates per axis (bin edges)
 
@@ -84,11 +88,16 @@ public sealed class PlaneCollider
         float wingBand = WingBandFrac * halfSpan;
 
         // Clipped geometry, not vertex picks: a triangle is cut at each boundary so
-        // a giant wing-root triangle can't drag the wing region past the split. Outboard
-        // tail pieces are RELABELLED wing afterwards (see Relabel).
-        var tail = ClipAxis(tris, 2, tailStartZ, keepGreater: true);
+        // a giant wing-root triangle can't drag the wing region past the split.
         var wing = ClipAxis(tris, 0, wingBand, keepGreater: true);
         wing.AddRange(ClipAxis(tris, 0, -wingBand, keepGreater: false));
+        // ⚠ Keep the tail's two x clips. Bounded on z alone it reaches tip to tip and one hull
+        // over it bridges the whole wing gap (docs/org/weaponRay.md); the outboard aft geometry
+        // it gives up is wing region at every z, so a wingtip strike is wing and never tail.
+        var tail = ClipAxis(
+            ClipAxis(ClipAxis(tris, 2, tailStartZ, keepGreater: true),
+                0, wingBand, keepGreater: false),
+            0, -wingBand, keepGreater: true);
         // The fuselage region runs out to the wing band, so the inboard chord, the canard roots
         // and the gear are inside some hull; refinement cuts the bridged air back out.
         var fuselage = ClipAxis(
@@ -103,7 +112,7 @@ public sealed class PlaneCollider
             clusters.Add(("tail", tail));
         clusters.AddRange(WingClusters(wing));
         foreach (var (name, cluster) in Refine(clusters))
-            AddHull(regions, Relabel(name, cluster, wingBand), cluster);
+            AddHull(regions, name, cluster);
         return regions;
     }
 
@@ -139,21 +148,6 @@ public sealed class PlaneCollider
             else
                 Collect(child, xf, tris);
         }
-    }
-
-    // Corrects a refined `tail` piece that is really wing geometry (tail is
-    // clipped on z alone, so a swept plane's outboard trailing edge lands there): a piece wholly
-    // one side of the centerline, centred outboard of WingBandFrac, is relabelled wing so
-    // PlaneDamage's localImpact-blind "tail" arm never sees a wingtip strike. The half-span is
-    // known here, do not side-split in PlaneDamage instead. Applied AFTER refinement so each
-    // final piece is judged on its own extent.
-    private static string Relabel(string name, List<Triangle> tris, float wingBand)
-    {
-        if (name != "tail" || tris.Count == 0)
-            return name;
-        var box = Enclose(tris);
-        bool oneSide = box.Position.X > 0f || box.End.X < 0f;
-        return oneSide && Mathf.Abs(box.GetCenter().X) > wingBand ? "wing" : name;
     }
 
     // Splits the wing triangles at the widest chord (z) gap: a canard

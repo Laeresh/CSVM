@@ -151,7 +151,7 @@ internal static class AirframeColliderSuites
         var regions = PlaneCollider.Layout(tris);
         watch.Stop();
         ctx.Note($"{display}: layout of {tris.Count} triangles took {watch.Elapsed.TotalMilliseconds:0.0} ms");
-        ctx.Check(regions.Count is >= 1 and <= 8, $"{display}: {regions.Count} hulls within the budget");
+        ctx.Check(regions.Count is >= 1 and <= 16, $"{display}: {regions.Count} hulls within the budget");
         ctx.Check(regions.Count > 0 && regions[0].Name == "fuselage", $"{display}: the fuselage hull leads the part order");
 
         float boxTotal = 0f, hullTotal = 0f;

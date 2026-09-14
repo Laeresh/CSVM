@@ -88,8 +88,8 @@ public sealed class PlaneDamage
     /// "center") + the impact point in the PLANE's local frame to the data's part name: wings
     /// split by side (x &lt; 0 = left, verified against the planes.zbd node boxes), the fuselage
     /// fore/aft between nose and tail. ⚠ The <c>tail</c> arm ignores <paramref name="localImpact"/>
-    ///, only correct because <see cref="PlaneCollider"/>'s relabelling hands it no outboard boxes.
-    /// Do not "fix" tail sidedness here.</summary>
+    ///, only correct because <see cref="PlaneCollider"/> clips its tail region to the wing band, so
+    /// no outboard box reaches here. Do not "fix" tail sidedness here.</summary>
     public static string MapStruckPart(string colliderPart, Vector3 localImpact) => colliderPart switch
     {
         "wing" or "canard" => localImpact.X < 0f ? "leftwing" : "rightwing",

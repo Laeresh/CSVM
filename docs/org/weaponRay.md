@@ -144,9 +144,22 @@ Two real divergences the same decode does expose, neither of them about alpha:
 - **The water pass-through is unimplemented.** `Projectile` retires on the first hit, so a round that
   clips water in front of a target stops there where the original would carry on to the target.
 - **An aircraft is a convex decomposition here and a polygon set there.** `PlaneCollider` gives each
-  airframe up to eight convex hulls, and a hull bridges every concavity the mesh has: the gap
-  between wing and tailplane, the notch behind a canard, the air either side of a fin. The
+  airframe up to sixteen convex hulls, and a hull bridges the concavities that survive the cut: the
+  gap between wing and tailplane, the notch behind a canard, the air either side of a fin. The
   `airframe-collider-hit-rate` suite measures what that costs, firing a raster of rays and a real
   gun burst at each of the eleven airframes from a fixed standoff and counting both instruments.
   The hulls never fall inside the silhouette, so no hit is lost; they present more of it than the
-  mesh does, so hits are invented, and the excess is far larger head-on than side-on.
+  mesh does, so hits are invented, and the excess is larger head-on than side-on.
+
+  **The four regions partition the airframe, and the tail is bounded on x as well as z.** A tail
+  region cut on z alone reaches from wingtip to wingtip, and one convex hull over it bridges the
+  whole wing gap, which was most of the head-on excess: the Devastator presented 4.39 times its
+  mesh head-on with that region and 1.72 with it bounded and the budget at sixteen. The outboard
+  aft geometry the tail gives up is wing region at every z, so the silhouette stays covered and no
+  hit is lost. The hull budget is the other half: every hull is a shape the terrain sweep casts
+  each physics frame, and the ratios improve sharply up to sixteen hulls and little above it.
+  Presented-area ratio by airframe, side-on / head-on: Bloodhawk 1.08 / 1.38, Devastator
+  1.08 / 1.72, Fury 1.39 / 1.62, Warhawk 1.01 / 1.51, Hoplite 1.81 / 2.23, Hellhound 1.30 / 2.23,
+  Balmoral 1.12 / 1.44, Brigand 1.15 / 1.24, Firebrand 1.15 / 1.81, Kestrel 1.08 / 1.48,
+  Peacemaker 1.18 / 1.69. The autogyro is the outlier: its rotor stands clear above the body on a
+  mast, and a convex hull over that region bridges the air under the disc whatever the budget.
