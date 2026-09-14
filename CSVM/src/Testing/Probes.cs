@@ -825,10 +825,10 @@ public static class Probes
             row.Destroyed = target.Status == DestructibleRegistry.State.Destroyed;
             row.StagesFired = fired.Count;
 
-            // Walk-up resolution check: resolving from a deep descendant of the anchor, the kind of
-            // node a projectile's raycast actually strikes (a collider sits under the mesh under the
-            // anchor), must land back on this same destructible.
-            Node3D deep = target.Anchor;
+            // Walk-up resolution check: resolving from a deep descendant of the DAMAGE NODE, the
+            // kind of node a raycast actually strikes, must land back on this destructible. A
+            // descendant of the anchor outside the damage node belongs to it no more than scenery.
+            Node3D deep = target.DamageNode;
             while (deep.GetChildCount() > 0 && deep.GetChild(0) is Node3D child)
             {
                 deep = child;

@@ -1223,8 +1223,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 continue;
             foreach (var a in Anchors(def))
                 if (a != null && (a == subtree || subtree.IsAncestorOf(a)))
-                    pools.Add(_destructibles.Register(def, a, def.Health, DamageNodeOf(def, a),
-                        HealthyBodyOf(def, a)));
+                    pools.Add(_destructibles.Register(def, a, def.Health, DamageNodeOf(def, a)));
         }
         ApplyResetStatesWithin(subtree);
         return pools;
@@ -2327,8 +2326,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             if (def.Destructible)
                 foreach (var anchor in anchors)
                     if (anchor != null)
-                        _destructibles.Register(def, anchor, def.Health, DamageNodeOf(def, anchor),
-                            HealthyBodyOf(def, anchor));
+                        _destructibles.Register(def, anchor, def.Health, DamageNodeOf(def, anchor));
             if (def.ResetState != null)
                 foreach (var anchor in anchors)
                     ApplyInstant(def.ResetState.Events, def, anchor);
@@ -4445,18 +4443,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             return anchor.IsAncestorOf(bound) ? bound : anchor;
         var found = FindAll(root, anchor);
         return found.Count > 0 ? found[0] : anchor;
-    }
-
-    // The group's healthy body, the node its own death switches off, resolved strictly within the
-    // anchor like the damage node. The registry compares the two to tell a pool that stands for
-    // the whole object from one that stands for a part of it. Null where the def authors no
-    // healthy/destroyed pair, which most destructibles do not.
-    private Node3D? HealthyBodyOf(AnimDefinition def, Node3D anchor)
-    {
-        if (HealthyNodeNameOf(def) is not { Length: > 0 } name)
-            return null;
-        var found = FindAll(name, anchor);
-        return found.Count > 0 ? found[0] : null;
     }
 
     // The world nodes one event targets. Reader-sourced events may carry a parent→child path;

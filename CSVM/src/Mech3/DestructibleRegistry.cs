@@ -66,15 +66,14 @@ public sealed class DestructibleRegistry
     /// <c>(def, anchor)</c> returns the existing instance without resetting its HP, so a second
     /// bootstrap pass or a re-index cannot silently heal a damaged object.
     /// <paramref name="damageNode"/> is the definition's own animation-root node, which a weapon
-    /// hit resolves through (null means the anchor), and <paramref name="healthyBody"/> the group's
-    /// healthy-role node; together they decide <see cref="Instance.RootsOnAPart"/>.</summary>
+    /// hit resolves through, along with everything under it (null means the anchor).</summary>
     public Instance Register(AnimDefinition def, Node3D anchor, float maxHealth,
-        Node3D? damageNode = null, Node3D? healthyBody = null)
+        Node3D? damageNode = null)
     {
         var key = (def, anchor.GetInstanceId());
         if (_byKey.TryGetValue(key, out var existing))
             return existing;
-        var inst = new Instance(def, anchor, maxHealth, damageNode, healthyBody);
+        var inst = new Instance(def, anchor, maxHealth, damageNode);
         _byKey[key] = inst;
         _all.Add(inst);
         ulong aid = anchor.GetInstanceId();
@@ -133,10 +132,11 @@ public sealed class DestructibleRegistry
     }
 
     /// <summary>The destructible instance a struck world node belongs to: climbs the parent chain
-    /// from the raycast-hit collider to a registered anchor, nearest compiled anchor first, then
+    /// from the raycast-hit collider to a node a pool claims, nearest compiled claim first, then
     /// nearest reader (docs/formats/destructibles.md). Null off the destructible chain entirely.
-    /// A live pool that stands for one part of its group and is reached only through its anchor
-    /// answers just for a strike inside that part, since the rest of the group is not its HP.</summary>
+    /// A pool answers for its own damage node and everything under it, which is what the original
+    /// stamps its handler over; its anchor answers only for a strike on the anchor itself, or on
+    /// the group around a wreck, whose own death hid the node the pool stands for.</summary>
     public Instance? Resolve(Node? struck)
     {
         Instance? nearestReader = null;
@@ -146,18 +146,10 @@ public sealed class DestructibleRegistry
             ulong id = n.GetInstanceId();
             if (!_authoritative.TryGetValue(id, out var inst))
                 continue;
-            if (climbed && _fallbackClaim.Contains(id))
-            {
-                // ⚠ Stop rather than climb on. The next claim up is the airship's gasbag, and
-                // letting a hatch round through to it would trade one wrong pool for a worse one.
-                if (Stowed(inst))
-                    return nearestReader;
-                // The pool's own part is in the world and the round missed it, so the rest of the
-                // group is scenery to that round: pass the claim by and let an owner above answer.
-                if (inst.RootsOnAPart && inst.Status != State.Destroyed
-                    && !Covers(inst.DamageNode, struck))
-                    continue;
-            }
+            // A claimed anchor heads a group, and attribution never crosses out of one: the
+            // original registers nothing there, so the round belongs to this group or to nothing.
+            if (climbed && _fallbackClaim.Contains(id) && inst.Status != State.Destroyed)
+                return nearestReader;
             if (inst.Def.Archive != null)
                 return inst;               // compiled = authoritative, take the nearest
             nearestReader ??= inst;        // fallback if no compiled anchor is found up the chain
@@ -175,19 +167,6 @@ public sealed class DestructibleRegistry
         _ownClaim.Clear();
         _fallbackClaim.Clear();
     }
-
-    // A live pool whose own damage node is out of the world: a broadside cannon retracted behind
-    // its shut hatch, whose deploy RESET_STATE switches the gun off. The housing around it stays
-    // solid, so a round meets that and must not find the pool. A destroyed pool is exempt: its
-    // death hid the same node, and a hit on the wreck still belongs to it.
-    private static bool Stowed(Instance inst) =>
-        inst.Status != State.Destroyed && !inst.DamageNode.Visible;
-
-    // Whether the struck node is the pool's own piece or sits inside it. A raycast strikes a body
-    // under the mesh, so the damage node is normally an ancestor rather than the node itself.
-    private static bool Covers(Node3D damageNode, Node? struck) =>
-        struck != null
-        && (ReferenceEquals(damageNode, struck) || damageNode.IsAncestorOf(struck));
 
     // Who answers a hit resolved at this node. Compiled beats reader, and a def whose own damage
     // node this is beats one merely anchored above it; otherwise the first claimant keeps it.
@@ -220,34 +199,23 @@ public sealed class DestructibleRegistry
     /// binds to, and the HP that actually falls as it takes fire.</summary>
     public sealed class Instance
     {
-        public Instance(AnimDefinition def, Node3D anchor, float maxHealth, Node3D? damageNode = null,
-            Node3D? healthyBody = null)
+        public Instance(AnimDefinition def, Node3D anchor, float maxHealth, Node3D? damageNode = null)
         {
             Def = def;
             Anchor = anchor;
             MaxHealth = maxHealth;
             Health = maxHealth;
             DamageNode = damageNode ?? anchor;
-            RootsOnAPart = healthyBody != null
-                && !ReferenceEquals(DamageNode, healthyBody)
-                && healthyBody.IsAncestorOf(DamageNode);
         }
 
         public AnimDefinition Def { get; }
         public Node3D Anchor { get; }
 
-        /// <summary>The node a weapon hit resolves through: this definition's own animation-root
-        /// node inside <see cref="Anchor"/>, or the anchor where the def names none
-        /// (docs/formats/destructibles.md). The piece the pool's HP stands for, which is why
-        /// <see cref="Resolve"/> refuses a hit on the housing while it is switched off.</summary>
+        /// <summary>The node a weapon hit resolves through, with everything under it: this
+        /// definition's own animation-root node inside <see cref="Anchor"/>, or the anchor where
+        /// the def names none (docs/formats/destructibles.md). The piece the pool's HP stands for,
+        /// which is why <see cref="Resolve"/> refuses the rest of the group around it.</summary>
         public Node3D DamageNode { get; }
-
-        /// <summary>Whether this pool's damage node is a PART of the group's healthy body rather
-        /// than the body itself, the shape C3/M03's Barracuda has (`sub_destruction` roots on the
-        /// hangar block `subgen_doors` inside `subhealthy`). Its HP then stands for that part
-        /// alone, so <see cref="Resolve"/> refuses the rest of the group while it lives
-        /// (docs/formats/destructibles.md).</summary>
-        public bool RootsOnAPart { get; }
 
         public float MaxHealth { get; private set; }
         public float Health { get; set; }

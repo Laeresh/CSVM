@@ -110,26 +110,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Damage & destruction
 
-- `BL-672` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The remake attributes a weapon hit by climbing the node-parent chain;
-  the original attributes it only to the struck node's own handler.** *Evidence:* `FUN_005abcf0`
-  reads the hit record's struck node at `+0x24`, reads that node's handler at `+0xbc`, and returns
-  0 when it is null. There is no parent walk at all. `DestructibleRegistry.Resolve` instead climbs
-  to the nearest node a pool claims, which is the deliberate remake rule recorded in
-  `docs/formats/destructibles.md` under "Remake node resolution". Two visible consequences: a round
-  on the Gemini's *open* hatch still damages the cannon behind it, where the original's
-  `upper_br_door` registers no handler and the hit does nothing; and a round on `turret`
-  (model 865, under `gunback`) damages the cannon where the original ignores it. *Decision:* narrow
-  to the decode, a hit is attributed to the struck node's own handler and nothing else. *Fix shape:*
-  run the per-chapter census of which pools stop answering once the climb is gone, then rewrite
-  `Probes.cs`'s deep-descendant walk-up assertion and drop the climb from
-  `DestructibleRegistry.Resolve`, updating `docs/formats/destructibles.md` "Remake node resolution"
-  to state the decode rule. *⚠ Traps:* the climb is what makes most destructibles hittable at all,
-  so the census comes before the narrowing, and any pool it shows going silent is a claim to fix
-  in the pool's node list, not a reason to keep the climb. `BL-640`'s stowed-cannon
-  fix already carves out the one case that mattered (a fallback claim to a live pool whose damage
-  node is hidden), so this entry is the remaining, wider question, not that one again.
-  *Cross-refs:* `BL-640`'s closing commit, `docs/formats/destructibles.md` "Which node takes the
-  hit".
 - `BL-060` `[Feature]` `[L]` `[Next: decide]` `[Impact: low]` `[Evidence: feel]` **Improve on the original crash, the bespoke "breaking apart" (branch `bespoke-crash-animation`).**
   User's call (2026-07-23): the retired bespoke `CrashBreakup` wreck-scatter looked *better* than the
   faithful data-driven crash, so it was preserved on that branch rather than deleted. **The A/B playtest

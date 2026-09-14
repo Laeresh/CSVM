@@ -243,10 +243,16 @@ inside the definition's own subtree, falling back to `def+0x48` (the `NAME` anch
 name is absent or resolves to nothing ([../org/sequences.md](../org/sequences.md), "The two roots are
 different fields"). `FUN_005abb20` hangs the handler off a list on the node itself (`node+0xbc`), so
 several definitions can register on one object without displacing each other, each on its own node.
+Registration does not stop at that one node. `FUN_005abaa0` passes the animation root to
+`FUN_005abad0`, which recurses over the root's subtree and writes the new handler into `+0xbc` on
+every descendant still carrying the value the root itself held, so a descendant a deeper definition
+already registered keeps its own handler and shields everything under it.
 The impact dispatcher `FUN_005abcf0` reads that list off the **struck** node alone: it takes the
 hit record's node (`hit+0x24`, written by `FUN_004c7f50` for whichever node's model the ray met) and
-returns 0 when `node+0xbc` is null. The original never walks a parent chain to find an owner, so a
-round on a piece that registered no handler does nothing at all to the group around it.
+returns 0 when `node+0xbc` is null. The dispatcher never walks a parent chain, the load-time stamp
+did that work already, so a hit is answered by the nearest registering ancestor-or-self of the
+struck node, the registering node is always an animation root, and a round on a piece outside every
+animation root's subtree does nothing at all to the group around it.
 
 > **A hit belongs to the definition whose animation root covers the piece that was struck**, not to
 > the definition that happens to name the group. Two destructible defs anchored on one node are told
@@ -313,56 +319,64 @@ loop of 13 iterations on the `splashbase` texture (`PUFFER_STATE` schema in
 
 ## Remake node resolution (`DestructibleRegistry`)
 
-A raycast hit lands on a collider deep under an anchor's subtree, so resolving it climbs the whole
-parent chain rather than stopping at the first registered anchor: a compiled def and a reader
-wildcard can anchor to *different* nodes of one object. The water tower's compiled def roots on
-`ap_h2otwr1` while its reader def's `*` also grabs the inner `ap_h2otwr.flt`, which sits nearer the
-collider, and the compiled def is the authoritative one, since its `DAMAGE_SEQUENCE` and death
-sequence are the real ones. The nearest **compiled** anchor up the chain wins; failing any compiled
-anchor, the nearest reader one.
+`Resolve` puts the rule above into the scene tree: a pool answers for its **damage node** (the
+animation root) and everything under it, and for nothing else. A raycast hit lands on a collider two
+levels below the mesh node it was carved from, so resolving one climbs the parent chain from the
+struck collider and takes the first claim it meets, which is the remake's reading of the load-time
+stamp, the nearest registering ancestor-or-self.
 
-Each pool claims two nodes on the way in: its **damage node** (the animation root above) outright,
-and its anchor only as a fallback, which is what separates the ten two-pool objects. The anchor
-claim is kept rather than dropped for the original's one-node-only rule, because most defs root on a
-node their own death then hides and a hit on the wreck must still find the pool that owns it; an
-own-root claim outranks an anchor claim whichever order the two defs register in. `Instance.Anchor`
-stays the animation anchor, so `ANIM_HEALTH` evaluation, the objective marker layer and the AI
-target pool are unaffected by which node the hit resolves through.
+Each pool claims two nodes on the way in: its damage node outright, and its **anchor** only as a
+fallback. An anchor claim is an addressing convenience rather than a registration, since the
+original registers nothing on `def+0x48`, so a climb that arrives at a live pool through its anchor
+alone answers with nothing and goes no further up. Ending the climb there rather than passing it on
+is what keeps a round off pools the original carries no handler for: the zeppelin zone pools below
+are remake modelling, and the next claim above a cannon or an engine nacelle is the airship's
+gasbag. C2B/M04's Gemini is the worked case. The deploy definition's `RESET_STATE` holds `gunback`
+and `gun1` inactive and `upper_br_door` shut, so the hatch is the only solid geometry over a stowed
+broadside cannon; a round on it answers nothing instead of draining the cannon's HP through
+`lbroad11`. The cannon's `turret` and `gun1` sit *inside* `gunback`, the def's own animation root,
+so they belong to the cannon whenever they carry a collider at all, which is once it deploys.
 
-The anchor claim reaches only as far as the pool's own piece, and only while the pool lives. Two
-limits hold it there, and a destroyed pool is exempt from both: its own death hid the same node, and
-a hit on the wreck still belongs to it, which is the reason the anchor claim exists at all. Both
-limits apply to the climb only, a strike on the anchor node itself still answers, which is what the
-probes and the objective layer ask for.
+Three things qualify the anchor rule:
 
-**While the damage node is switched off, the climb stops at the anchor.** A climb that arrives at a
-live pool through its anchor alone answers with nothing and goes no further up. C2B/M04's Gemini is
-the case: the deploy definition's `RESET_STATE` holds `gunback` and `gun1` inactive and
-`upper_br_door` shut, so the hatch is the only solid geometry over a stowed broadside cannon, and a
-round on it would otherwise drain the cannon's HP through `lbroad11`. Climbing on is worse than
-stopping, since the next claim up is the airship's gasbag.
+- **A strike on the anchor node itself still answers.** The probes, the objective marker layer and
+  the AI target pool address a destructible by its anchor; only a climb that crossed at least one
+  parent is a hit on geometry the pool does not stand for.
+- **A destroyed pool is exempt**, and its anchor claim answers through the climb again. Its own
+  death hid the node the pool stands for, and a round into the wreck still belongs to it. C3/M03's
+  Barracuda is the case: `sub_destruction` `HEALTH 200` anchors on the whole `barracuda` group but
+  roots on `subgen_doors`, so the hull meshes under `subhealthy` cost the submarine nothing and the
+  hangar mouth alone takes fire, and the whole group answers once the boat is dead. That also
+  decides what a blast spends, since `Projectile.ApplyDamage` gives one splash share per world
+  object: a `wep_07` FLAK burst over the boat has one recipient on it rather than six, and the
+  pool's 200 HP takes the authored six hits.
+- **Compiled beats reader.** A compiled def and a reader wildcard can anchor to *different* nodes of
+  one object: the water tower's compiled def roots on `ap_h2otwr1` while its reader def's `*` also
+  grabs the inner `ap_h2otwr.flt`. The nearest compiled claim up the chain wins, and failing any
+  compiled claim the nearest reader one, since the compiled def's `DAMAGE_SEQUENCE` and death
+  sequence are the real ones. `Instance.Anchor` stays the animation anchor either way, so
+  `ANIM_HEALTH` evaluation and the marker layer do not care which node a hit resolved through.
 
-**While a pool that roots on a part of its own body is in the world, the anchor claim answers only
-for a strike on that part or inside it.** The qualifier is the whole of the rule's reach. Most defs
-root on the healthy body itself (`root=healthy` on crates, buildings, water towers, boats, engines,
-turrets), their HP stands for that whole body, and the climb is the only thing that makes them
-hittable at all; narrowing those would take most of the world's destructibles out of the game. The
-registry separates the two by resolving the def's healthy-role node inside the anchor next to the
-damage node: a damage node strictly under that body is a part, anything else is the body. For a part
-pool, the rest of the group is geometry the HP does not stand for, so the climb passes the claim by
-and carries on, and a real owner higher up can still answer.
+Resolving every collider of the eight chapter worlds plus C2B/M04 and C3/M03 through this rule, 814
+of the 6,146 colliders a ray can actually meet answer a pool, against 1,038 when an anchor claim is
+allowed to catch a climb. The 224 that stop answering are geometry no animation root covers: wreck
+parts under a `destroy` group, `shadow` and `dbase` planes, the lighthouse base beside
+`litehshealthy`, the strut group beside a zeppelin engine's `healthy`, and the rest of the
+suspension bridge beside `rope1`, the seven-HP rope the whole span hangs on. Eight pools stop
+answering outright, and each is a second registration of one def on an outer wrapper node
+(`mineshack` inside `mineshack.flt`, `grasshut1`..`grasshut3` around a `grasshut`) whose twin pool
+own-claims the same damage node and still answers for the object. One pool starts answering, the
+water tower's reader def, whose model-less `h2twr_healthy` carries the whole tower below it.
 
-C3/M03's Barracuda is the case the rule was written for: `sub_destruction` `HEALTH 200` anchors on
-the whole `barracuda` group but roots on `subgen_doors`, the hangar block that is a sibling of the
-five hull meshes under `subhealthy`, so the flight deck, the conning tower and the doors cost the
-submarine nothing and only the hangar mouth reaches its pool. This also decides what a blast spends:
-`Projectile.ApplyDamage` gives one splash share per world object, so a `wep_07` FLAK burst over the
-boat has one recipient on it rather than six, and the pool's 200 HP takes the authored six hits.
-Six more pools have the same shape and take the same limit, each of them a hit target modelled
-inside a larger body: C2's `ramses_ruin` roots on `trigger` inside the ruin's `healthy`, so the ruin
-shell and `tomb_statues` no longer answer, and C5/M04's six support-beam sites (`smash_lsprt1..3`,
-`smash_sprt4..6`) root on each site's `spprt`, so the masonry around a beam no longer answers and
-the beam itself does. Whether the climb should exist at all is a separate question, BL-672.
+Two limits of the modelling:
+
+- A def with `HEALTH 0` and `ACTIVATION WeaponHit` stamps its subtree in the original but registers
+  no pool here, so its nodes resolve to whatever claims them higher up rather than to a pool with no
+  HP to lose. Every `gasbag*` def has that shape.
+- A zeppelin's zone HP comes from its `zeppelins.json` record rather than an animation definition,
+  and `ZeppelinRuntime.WireDamage` gives those zones registry pools so that one hit path serves
+  both. Those pools claim nodes the original registers nothing on, which is the reason an anchor
+  claim must not answer through a climb.
 
 Two death-sequence shapes the registry's per-instance state has to track beyond the swap above:
 
