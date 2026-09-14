@@ -26,6 +26,7 @@ public sealed class SpawnPicker : IFlightStarts
     /// the cutscene lets go (docs/cli.md's <c>--pos=</c> entry).</summary>
     public bool WithholdOverrideForCutscene;
 
+
     // Splitscreen: fan the players out abreast so they don't spawn inside each other.
     private const float SpawnAbreast = 60f;
 
@@ -38,6 +39,35 @@ public sealed class SpawnPicker : IFlightStarts
     public SpawnPicker(SessionSpec spec)
     {
         _spec = spec;
+    }
+
+    /// <summary>Whether <see cref="LoadSpawnList"/> answered with a multiplayer mission's
+    /// <c>net.zrd</c> table rather than with an <c>ia.json</c> scenario list. It changes the
+    /// logged tag and <see cref="StartState"/>, which then opens on the original's own
+    /// multiplayer throttle and speed (docs/formats/net-spawns.md).</summary>
+    public bool NetSpawns { get; private set; }
+
+    /// <summary>The one spawn list the session walks: the mission's <c>ia.json</c> entries for
+    /// <paramref name="scenario"/>, else a Dogfight launch's <c>net.zrd</c> free-for-all block,
+    /// else null, which leaves <see cref="ChooseSpawn"/> on PLAYER_INIT. Sets
+    /// <see cref="NetSpawns"/> for the rest of the session, so call it once per launch.</summary>
+    public List<SpawnPoint>? LoadSpawnList(string missionZrdrPath, string scenario)
+    {
+        NetSpawns = false;
+        // The empty stage has no mission, so there is nothing to read: ChooseSpawn takes the
+        // --pos/default override placed over the grid origin.
+        if (_spec.EmptyStage)
+            return null;
+        var ia = SpawnPoints.LoadIa(missionZrdrPath, scenario);
+        if (ia is { Count: > 0 })
+            return ia;
+        // Dogfight on a multiplayer map: an MP mission ships no ia.json, and its own table is
+        // what the original opens a deathmatch on. ⚠ Only this mode may read it; every campaign
+        // mission ships a placeholder table the original never looks at.
+        if (!_spec.Versus || SpawnPoints.LoadNetFreeForAll(missionZrdrPath) is not { Count: > 0 } net)
+            return ia;
+        NetSpawns = true;
+        return net;
     }
 
     /// <summary>The spawn index player 1 starts from: --spawn=N if given, else a random pick per
@@ -81,6 +111,14 @@ public sealed class SpawnPicker : IFlightStarts
     public (float ThrottleFrac, float SpeedMps) StartState(IReadOnlyList<SpawnPoint>? spawns,
         string missionZrdrPath)
     {
+        // A multiplayer opening spawn reads neither field of the record: the original hands its
+        // own constants to the same placement call every other mode reaches through PLAYER_INIT.
+        if (NetSpawns)
+        {
+            Log.Info("flight", $"start [{_spec.Chapter}/{_spec.Mission} net.zrd] throttle={SpawnPoints.MultiplayerThrottleFrac:0.00} speed={SpawnPoints.MultiplayerSpeedMps:0.#}m/s ({SpawnPoints.MultiplayerSpeedMps * 2.2369363f:0}mph)");
+            return (SpawnPoints.MultiplayerThrottleFrac, SpawnPoints.MultiplayerSpeedMps);
+        }
+
         // A present ia.json spawn list is what makes this an instant-action launch, the same test
         // ChooseSpawn already selects the position source on.
         bool instantAction = spawns is { Count: > 0 };
@@ -128,7 +166,8 @@ public sealed class SpawnPicker : IFlightStarts
         if (spawns is { Count: > 0 })
         {
             int i = (spawnBase + playerIndex) % spawns.Count;
-            return LogSpawn($"{tag}{ScenarioOverride ?? _spec.Scenario} #{i} of {spawns.Count}", spawns[i]);
+            string list = NetSpawns ? "net.zrd" : ScenarioOverride ?? _spec.Scenario;
+            return LogSpawn($"{tag}{list} #{i} of {spawns.Count}", spawns[i]);
         }
         // No instant-action spawns (only IA1 folders have ia.json), use the story-mission
         // spawn from objectives.json PLAYER_INIT (position + heading; StartState takes the rest).

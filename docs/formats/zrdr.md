@@ -35,6 +35,7 @@ be scanned across all three:
 | `dzones.json` (per-mission zone overrides) | [missions.md](missions.md) |
 | `zeppelins.json`, `egen.json` (mission entities) | [mission-entities.md](mission-entities.md) |
 | `ne0NNNNN.zrd` patrol nets + `neindex.zrd` (the chapter AI waypoint graphs) | [ai-nets.md](ai-nets.md) |
+| `net.zrd` (the per-mission multiplayer spawn table, unrelated to the patrol nets) | [net-spawns.md](net-spawns.md) |
 | `aiv.zrd` (AI rosters), `maneuvers.zrd`, `player.zrd`'s `ai_skill_parameters` | [ai-rosters.md](ai-rosters.md) |
 | `ai.zrd` (turrets and AA emplacements) | [turrets.md](turrets.md) |
 | `voice.zrd` (the `accentID` → pilot-voice table) | [combat-voice.md](combat-voice.md) |

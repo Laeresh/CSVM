@@ -51,14 +51,14 @@ only when neither is authored. Instant Action enemies are the exception, for the
 `InstantActionRuntime.cs` gives. Paint decode: [../org/paint.md](../org/paint.md).
 
 ## src/Session/SpawnPicker.cs
-Resolves each player's flight spawn: `ChooseSpawnBase` (the shared `--spawn=`-or-random list
-index), `ChooseSpawn` (a player's position and look-at from that list, `objectives.json`'s
-`PLAYER_INIT`, or the `--spawn-at=` debug override) and `LogSpawn`. Constructed once per session
-build, the same lifetime as `LiveryResolver`. Also the plain `IFlightStarts`: `ChooseStarts`
-loops its own `ChooseSpawn`, which is the placement every session flies except a splitscreen
-race or a co-op campaign mission. `StartGrid` takes its anchor from here, and the weapon lab and
-the freecam spectator call it directly, so this type stays the single owner of spawn resolution.
-Spawn data: [../formats/spawns.md](../formats/spawns.md).
+Resolves each player's flight spawn: `LoadSpawnList` (which list the session walks, the mission's
+`ia.json` scenario or a Dogfight launch's `net.zrd` block), `ChooseSpawnBase` (the shared
+`--spawn=`-or-random list index), `ChooseSpawn` (a player's position and look-at from that list,
+`objectives.json`'s `PLAYER_INIT`, or the `--spawn-at=` debug override), `StartState` (the field's
+throttle and speed) and `LogSpawn`. Constructed once per session build. Also the plain
+`IFlightStarts`: `ChooseStarts` loops its own `ChooseSpawn`, the placement every session flies
+except a splitscreen race or a co-op campaign mission. `StartGrid` takes its anchor from here, so
+this type owns it. Data: [spawns](../formats/spawns.md), [net](../formats/net-spawns.md).
 
 ## src/Session/IFlightStarts.cs
 Where every pilot in a session starts: `ChooseStarts(spawns, missionZrdrPath, spawnBase,

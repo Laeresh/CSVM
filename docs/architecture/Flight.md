@@ -510,11 +510,13 @@ curves, `destroyable_parts` as `DestroyablePart` records with the def-level inju
 
 ## src/Flight/SpawnPoints.cs
 Reads the flight spawn from a mission's OWN zrdr, a different archive than the shared `--zrdr`, in
-two schemas both yielding `SpawnPoint(Position, HeadingDeg)`: `LoadIa` for the instant-action
-`spawn_points` per scenario, which only some folders carry and the original picks one of at random
-per launch, and `LoadPlayerInit` for the story objectives' `PLAYER_INIT` position and yaw. A
-spawn's `Forward` is the nose axis its heading yaws to, so every placement reads one look-at point
-rather than restating the conversion. Schema: [../formats/spawns.md](../formats/spawns.md).
+three schemas: `LoadIa` for the instant-action `spawn_points` per scenario, which only some folders
+carry and the original picks one of at random per launch, `LoadNetFreeForAll` for a multiplayer
+mission's `net.zrd` table, and `LoadPlayerInit` for the story objectives' `PLAYER_INIT`. The first
+two yield `SpawnPoint(Position, HeadingDeg)`, the third a whole `PlayerStart`. A spawn's `Forward`
+is the nose axis its heading yaws to, so every placement reads one look-at point rather than
+restating the conversion. Schema: [../formats/spawns.md](../formats/spawns.md) and
+[../formats/net-spawns.md](../formats/net-spawns.md).
 
 ## src/Flight/MissionTargets.cs
 A mission's `targets.json` as one table: target key to its objective display keys

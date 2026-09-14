@@ -38,7 +38,9 @@ magnitudes and the consumer that rocks the plane, behind [shakes.md](shakes.md) 
 [music.md](../org/music.md) (the music channel's routing, variant choice, battle timer and fades,
 behind [sounds.md](sounds.md)'s `MUSIC` groups),
 [craters.md](../org/craters.md) (the terrain-carving subsystem behind [weapons.md](weapons.md)'s
-`CRATER` key) and
+`CRATER` key),
+[multiplayer-spawn.md](../org/multiplayer-spawn.md) (the opening and respawn placements behind
+[net-spawns.md](net-spawns.md)) and
 [debrief.md](../org/debrief.md) (the pass that fills the attempt half of the mission-result record
 in [saved-games.md](saved-games.md), and the skip-this-mission offer it carries).
 
@@ -67,7 +69,7 @@ in [saved-games.md](saved-games.md), and the skip-this-mission offer it carries)
 
 ### Missions and AI
 
-- [spawns.md](spawns.md), [missions.md](missions.md), [objectives.md](objectives.md), [mission-entities.md](mission-entities.md), and [instant-action.md](instant-action.md).
+- [spawns.md](spawns.md), [net-spawns.md](net-spawns.md), [missions.md](missions.md), [objectives.md](objectives.md), [mission-entities.md](mission-entities.md), and [instant-action.md](instant-action.md).
   - [Enemy generators](mission-entities/enemy-generators.md), host, launch cycle, and capacity rules.
   - [Instant Action wrap-up](instant-action/wrap-up.md), scoring and friendly-fire rules.
 - [ai-nets.md](ai-nets.md), [ai-rosters.md](ai-rosters.md), and [combat-voice.md](combat-voice.md).

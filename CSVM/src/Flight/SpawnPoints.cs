@@ -20,11 +20,12 @@ public readonly record struct SpawnPoint(Vector3 Position, float HeadingDeg)
 public readonly record struct PlayerStart(SpawnPoint Spawn, float ThrottleFrac, float SpeedMps);
 
 /// <summary>
-/// Reads the player spawn from a mission's own zrdr. Two schemas: <c>LoadIa</c>
+/// Reads the player spawn from a mission's own zrdr. Three schemas: <c>LoadIa</c>
 /// (instant-action <c>ia.json</c> <c>spawn_points</c> per scenario, one picked at random per
-/// launch) yields <see cref="SpawnPoint"/>s, and <c>LoadPlayerInit</c> (story
+/// launch) and <c>LoadNetFreeForAll</c> (the multiplayer <c>net.zrd</c> table) yield
+/// <see cref="SpawnPoint"/>s, and <c>LoadPlayerInit</c> (story
 /// <c>objectives.json</c> <c>PLAYER_INIT</c>) yields a whole <see cref="PlayerStart"/>.
-/// Schema and the decode behind it: docs/formats/spawns.md.</summary>
+/// Schema and the decode behind them: docs/formats/spawns.md and docs/formats/net-spawns.md.</summary>
 public static class SpawnPoints
 {
     /// <summary>What the original multiplies PLAYER_INIT's speed field by on the way in
@@ -42,6 +43,19 @@ public static class SpawnPoints
     /// original's mode-3 branch hard-sets 1.0 (<c>0047f3fb</c>) and reads PLAYER_INIT's throttle
     /// not at all, while still taking its speed from the same record as every other mode.</summary>
     public const float InstantActionThrottleFrac = 1f;
+
+    /// <summary>How many <c>net.zrd</c> entries belong to one block: the original adds
+    /// <c>team × 16</c> to a pilot's own index before walking the table, so an un-teamed
+    /// deathmatch reads the first block and nothing else (docs/formats/net-spawns.md).</summary>
+    public const int NetBlock = 16;
+
+    /// <summary>The throttle a multiplayer opening spawn takes. ⚠ Not PLAYER_INIT's: the
+    /// original's multiplayer placement passes this and <see cref="MultiplayerSpeedMps"/> as
+    /// constants and never reads the mission's record (docs/formats/net-spawns.md).</summary>
+    public const float MultiplayerThrottleFrac = 0.85f;
+
+    /// <summary>See <see cref="MultiplayerThrottleFrac"/>.</summary>
+    public const float MultiplayerSpeedMps = 25.7f;
 
     /// <summary>Loads the spawn list for <paramref name="scenario"/> from the mission's
     /// ia.json (a zrdr zip or unpacked dir). Null if the file or scenario is absent.</summary>
@@ -66,6 +80,41 @@ public static class SpawnPoints
             if (p is List<object?> a && a.Count >= 4
                 && a[0] is float x && a[1] is float y && a[2] is float z && a[3] is float h)
                 spawns.Add(new SpawnPoint(new Vector3(x, y, z), h));
+        return spawns.Count > 0 ? spawns : null;
+    }
+
+    /// <summary>Loads the free-for-all block of a multiplayer mission's <c>net.zrd</c> spawn
+    /// table: up to <see cref="NetBlock"/> <c>[x, y, z, heading°]</c> entries, the same record
+    /// <c>ia.json</c> authors. Null when the file is absent or holds no entries, which is every
+    /// campaign mission (their copies are an unread placeholder).</summary>
+    public static List<SpawnPoint>? LoadNetFreeForAll(string missionZrdrPath)
+    {
+        if (string.IsNullOrEmpty(missionZrdrPath))
+            return null;
+
+        List<object?> root;
+        try
+        {
+            root = Zrdr.LoadFile(missionZrdrPath, "net.json");
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+
+        // One flat group, or a bare null where the mission authors no table at all.
+        if (root.Count == 0 || root[0] is not List<object?> nodes)
+            return null;
+
+        var spawns = new List<SpawnPoint>();
+        foreach (var n in nodes)
+        {
+            if (spawns.Count >= NetBlock)
+                break;
+            if (n is List<object?> a && a.Count >= 4
+                && a[0] is float x && a[1] is float y && a[2] is float z && a[3] is float h)
+                spawns.Add(new SpawnPoint(new Vector3(x, y, z), h));
+        }
         return spawns.Count > 0 ? spawns : null;
     }
 

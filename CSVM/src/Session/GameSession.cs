@@ -2157,14 +2157,12 @@ public partial class GameSession : Node3D
         // as null and each pane flies the aircraft its pilot selected.
         string? iaOverride = PlaneRoster.InstantActionOverride(_spec, iaPlayerNode);
         // One spawn list for the session; each player takes the next index (wrapping).
-        // The empty stage has no mission, so nothing to read: ChooseSpawn takes the
-        // --pos/default override placed over the grid origin.
         _spawnPicker.ScenarioOverride = iaRt != null ? iaScenario : null;
         // The world build (above) has already run the intro's own animation bootstrap, so
         // _cutscene.Playing is settled before the player's spawn is chosen. Only a campaign intro
         // withholds --pos=; every other --pos= flight keeps landing on it immediately.
         _spawnPicker.WithholdOverrideForCutscene = _campaign != null && _cutscene is { Playing: true };
-        var spawnList = _spec.EmptyStage ? null : SpawnPoints.LoadIa(state.MissionZrdrPath, iaScenario);
+        var spawnList = _spawnPicker.LoadSpawnList(state.MissionZrdrPath, iaScenario);
         int spawnBase = _spawnPicker.ChooseSpawnBase(spawnList);
 
         // The weapons catalogue and stock loadouts, loaded once, and ONE shared projectile pool

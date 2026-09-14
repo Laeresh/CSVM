@@ -19,6 +19,7 @@ internal static class VersusSpawnSuites
     private const float StepDt = 1f / 60f;
     private const float RespawnDelay = 3f;
     private const string Scenario = "dogfight_ace";
+    private const string MpMission = "MP1";
 
     [Suite("versus-spawn-rotation",
         "a downed dogfight seat does not come back to the point it was camped at: with no "
@@ -133,6 +134,65 @@ internal static class VersusSpawnSuites
             pool.Free();
             textures.Dispose();
         }
+    }
+
+    [Suite("versus-spawn-net-table",
+        "Dogfight on a multiplayer map opens on that map's own net.zrd spawn table: the picker "
+        + "answers with the free-for-all block instead of falling back to the mission's single "
+        + "PLAYER_INIT pose, all four seats land on distinct table entries at the original's own "
+        + "multiplayer throttle and speed, the rotation's opening ledger is that same walk, and "
+        + "the identical launch without --vs still reads no table")]
+    internal static void VersusNetSpawnTable(TestContext ctx)
+    {
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, ctx.Chapter, MpMission);
+        ctx.RequireData(missionZrdr, $"{ctx.Chapter}/{MpMission} zrdr");
+
+        var spec = SessionSpec.Parse(new[]
+        {
+            "--vs", $"--chapter={ctx.Chapter}", $"--mission={MpMission}", "--players=4", "--spawn=0",
+        });
+        var picker = new SpawnPicker(spec);
+        var table = picker.LoadSpawnList(missionZrdr, spec.Scenario);
+        if (table is not { Count: > 0 })
+        {
+            throw new SuiteSkippedException($"{ctx.Chapter}/{MpMission} authors no net.zrd table");
+        }
+        ctx.Check(picker.NetSpawns && table.Count == SpawnPoints.NetBlock,
+            $"the picker answers {MpMission} with the net table's free-for-all block: {table.Count} entries, net={picker.NetSpawns}");
+
+        var starts = picker.ChooseStarts(table, missionZrdr, picker.ChooseSpawnBase(table), 4);
+        var seen = new List<int>();
+        foreach (var start in starts)
+            seen.Add(EntryAt(table, start.Pos));
+        ctx.Check(seen.TrueForAll(i => i >= 0),
+            $"every seat opens on a table point (entries {string.Join(", ", seen)})");
+        ctx.Check(new HashSet<int>(seen).Count == seen.Count,
+            $"and no two seats share one (entries {string.Join(", ", seen)})");
+
+        var (throttle, speed) = picker.StartState(table, missionZrdr);
+        ctx.Check(Mathf.IsEqualApprox(throttle, SpawnPoints.MultiplayerThrottleFrac)
+                && Mathf.IsEqualApprox(speed, SpawnPoints.MultiplayerSpeedMps),
+            $"on the original's multiplayer opening state, not PLAYER_INIT's: throttle={throttle:0.00} speed={speed:0.#}m/s");
+
+        // The rotation is handed this list unchanged, so its opening ledger has to be the same
+        // walk the seats were just placed by; nothing about its respawn rule moves for this mode.
+        var rotation = VersusSpawnRotation.For(table, 0, 4, new Random(1))!;
+        bool ledger = true;
+        for (int seat = 0; seat < 4; seat++)
+            ledger &= rotation.IndexOf(seat) == seen[seat];
+        ctx.Check(ledger && rotation.PointCount == table.Count,
+            $"the rotation opens on that same walk over all {rotation.PointCount} points");
+
+        // ABLE-TO-FAIL CONTROL: the table is the Dogfight mode's alone, which is what keeps every
+        // campaign mission's unread placeholder table out of every other launch.
+        var flyPicker = new SpawnPicker(SessionSpec.Parse(new[]
+        {
+            "--fly", $"--chapter={ctx.Chapter}", $"--mission={MpMission}",
+        }));
+        ctx.Check(flyPicker.LoadSpawnList(missionZrdr, Scenario) == null && !flyPicker.NetSpawns,
+            $"ABLE-TO-FAIL CONTROL: the same mission without --vs reads no table and falls back");
+
+        ctx.Note($"{ctx.Chapter}/{MpMission}: {table.Count}-entry free-for-all block, seats on entries {string.Join(", ", seen)}");
     }
 
     // The placement closure GameSession installs: the living field read fresh at the respawn, so a

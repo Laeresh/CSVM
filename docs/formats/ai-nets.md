@@ -252,10 +252,10 @@ lobe and about a kilometre away through the other.
 
 ## Scope limit
 
-- **`<Cx>/<mission>/zrdr/net.zrd` is a different, unnamed, edgeless file**, node counts
-  quantised by mission type (8/48/80), payloads shared across missions, coordinates
-  sometimes outside the mission world. Shape says *spawn table*, not route. Undecoded,
-  do not build patrol behaviour on it.
+- **`<Cx>/<mission>/zrdr/net.zrd` is a different, unnamed, edgeless file**: the mission's
+  multiplayer spawn table, decoded in [net-spawns.md](net-spawns.md). It shares only the word
+  "net" with these graphs, carries no edges, and is read by nothing outside a network match.
+  Do not build patrol behaviour on it.
 - The danger-zone route ribbons (`dzpathN` gamez meshes, [missions.md](missions.md)) are not
   nets: a net node's tag hands the flier to one, which it then flies as a spline on rails
   ([`org/aiPilot.md`](../org/aiPilot.md) "The danger-zone run"), and `--debug-dzpaths` draws it.

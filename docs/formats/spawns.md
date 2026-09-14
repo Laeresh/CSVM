@@ -24,6 +24,10 @@ identical across scenarios (analysis in [anim-definitions.md](anim-definitions.m
 `ia.json` also carries the stunt-mode `dzones` (fly-through Danger Zone) list, see
 [missions.md](missions.md).
 
+**A multiplayer mission (`MP1`–`MP3`) has no `ia.json`.** Its spawn list is `net.zrd`, which uses
+this same `[x, y, z, heading°]` record and is documented in [net-spawns.md](net-spawns.md). It
+also overrides the `PLAYER_INIT` throttle and speed those folders still ship.
+
 ## Instant Action configuration
 
 The setup and wrap-up **UI** built around this data, the screen's dropdowns and their option
@@ -138,6 +142,10 @@ the branches differ only in position, rotation and throttle.
 | override spawn (byte at `0071daca` set) | `0071dad0`…`0071dae4` | 0 (`0047f3d2`) | field [4] |
 | `apply == 0`, grounded | unchanged | 0 (`0047f313`) | 0 |
 | `apply == 0`, airborne reset | altitude `+= 100.0` (`006032e4`) | 0.4 (`0047f28b`) | 20 m/s (`00608040`) |
+
+⚠ **A multiplayer match does not end on the row that names it.** `FUN_0047f1f0` applies
+`PLAYER_INIT` on load as the table says, and the network session init then re-places the pilot off
+`net.zrd` on its own throttle and speed ([net-spawns.md](net-spawns.md)).
 
 The mode test is `FUN_004639b0`, a one-line comparison of the mission object's `+0x700`
 against 3, called at `0047f3e8`. Instant Action therefore ignores the authored throttle
