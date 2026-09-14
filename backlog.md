@@ -1769,25 +1769,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   session. *Cross-refs:* `docs/org/shadows.md`, `git log --grep=BL-331` (the shadow's landed
   placement and silhouette, and the halves dropped with it), `docs/verification.md` SRC-12.
 
-- `BL-878` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Every control prompt
-  names its control in words, where a pad player would read a glyph, and the pause and results boards
-  carry no control hint at all.** *Evidence:* both flight prompts compose off the seat's own bindings
-  and its active device, the auto-dock offer and the crashed pilot's respawn line
-  (`FlightHud.ComposeAutoLandPrompt` and `ComposeRespawnPrompt` over
-  `CSVM/src/Bindings/ActiveDevice.cs`), and each fills a `%1` slot with `BindingLabels.Describe`'s
-  words, so a pad seat reads "Pad Y" and "Pad Left Stick" rather than the button it is looking at; the
-  boards (`PauseBoard`, `OriginalPauseBoard`, the two results boards) name no control anywhere, so a
-  pad-only seat guesses at the menu. *Fix shape:* a per-control texture set keyed the way
-  `BindingControl` is (kind, index, sign), and a text-with-icon line that draws the glyph in the slot
-  the control name fills today, so the composition seam itself does not move; then the boards' own
-  hints over that same seam. *⚠ Traps:* the `%1` placeholder is what makes the glyph a drop-in, so do
-  not compose a prompt by concatenation. A seat names ONE device at a time
-  (`ActiveDevice.PromptBinding`'s `readsKeyboard` gate), so a sheet that puts a key cap and a pad
-  button in one line brings back what the device gate removed. The original ships no such art, so the
-  set is this port's own and its look is the user's call at the controls, not a luminance distance.
-  *Cross-refs:* `CSVM/src/Flight/PromptLine.cs`, `CSVM/src/Bindings/BindingLabels.cs`,
-  `docs/controls.md`.
-
 
 ## Splitscreen
 

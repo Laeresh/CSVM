@@ -66,6 +66,11 @@ public sealed class MenuInput
     /// <summary>Backspace pressed this frame (edge), the deletion half of <see cref="Typed"/>.</summary>
     public bool Erase;
 
+    /// <summary>Whether this poll moved the seat from one device to the other, a board hint's cue to
+    /// recompose. The rule and the counting are <see cref="ActiveDevice"/>'s, the same handover the
+    /// flight prompts follow.</summary>
+    public bool DeviceMoved;
+
     public bool Accept;     // pressed this frame (edge)
     public bool Back;       // pressed this frame (edge)
     /// <summary>Back on the pad alone, without Escape, for a reader whose Escape is already spoken
@@ -121,11 +126,19 @@ public sealed class MenuInput
     // (SeatCaptureDevices) from the identity that context's rows sit on.
     private readonly SeatDeviceState _devices;
 
+    // The same seat with its pads muted, which is the only way to read the keyboard half on its own:
+    // a reader over the live state sees both halves at once and could never say which one moved.
+    private readonly SeatDeviceState _padMuted;
+
     // The seat read three ways on one tick: keyboard live, keyboard minus the typeable keys, and
     // the pad alone. Three seats over two maps rather than one, because the pad-only twins and the
     // text-entry aliasing are both narrower readings of the same bindings.
     private readonly PlayerActions _keys;
     private readonly PlayerActions _padOnly;
+
+    // The keyboard half alone, over the pad-muted state, and which side the hints name.
+    private readonly PlayerActions _keysOnly;
+    private readonly ActiveDevice _device = new();
 
     private PlayerActions _typingKeys;
 
@@ -143,6 +156,7 @@ public sealed class MenuInput
     public MenuInput()
     {
         _devices = new SeatDeviceState(SeatPads, () => Pads);
+        _padMuted = new SeatDeviceState(SeatPads, () => Pads, readsPads: false);
         var map = DefaultBindings.MapFor(InputContext.Menu, SeatPads);
 
         // The keyboard gate follows the Keyboard field per tick (ReadDevices), not the value it
@@ -150,6 +164,7 @@ public sealed class MenuInput
         _keys = new PlayerActions(map, true);
         _typingKeys = new PlayerActions(TypingMap(map), true);
         _padOnly = new PlayerActions(map, false);
+        _keysOnly = new PlayerActions(map, true);
         _live = _keys;
     }
 
@@ -166,6 +181,10 @@ public sealed class MenuInput
     /// <summary>The single pad this player is bound to, or −1 when it has none or several
     /// (player 1's unclaimed set), for logging and the join bookkeeping.</summary>
     public int Pad => Pads is { Length: 1 } ? Pads[0] : -1;
+
+    /// <summary>Which side of this seat's hardware a control hint names, moved by the seat's own
+    /// last real input. A seat with no keyboard reads the pad for the whole session.</summary>
+    public DeviceSide Device => _device.Side;
 
     /// <summary>A short description of what drives this player, for the menu's join strip.</summary>
     public string DeviceLabel
@@ -275,6 +294,13 @@ public sealed class MenuInput
     /// </summary>
     public void RebindsApplied() => _typingStale = true;
 
+    /// <summary>One control hint for this seat: <paramref name="template"/>'s <c>%1</c> slot filled
+    /// with whichever of <paramref name="action"/>'s bindings the seat's own device can reach, as
+    /// words or as a glyph. Empty where this seat reaches none, which leaves the hint off rather
+    /// than naming a control the player does not have.</summary>
+    public ControlLine Hint(string template, InputAction action) =>
+        ControlLine.For(template, Map, action, _device.Side, Keyboard);
+
     /// <summary>Puts this seat on the menu keymap <paramref name="player"/> saved, in place, so the
     /// map this poller's readers hold is the one that changed. Anything the file does not carry
     /// stays at its shipped default, and under the launch gate no file is read at all
@@ -289,6 +315,7 @@ public sealed class MenuInput
     public void Poll(float dt)
     {
         ReadDevices();
+        DeviceMoved = _device.Observe(_keysOnly.Current, _padOnly.Current, Keyboard);
         Move = StepAxis(RawDir(), ref _dirPrev, _repeat, dt);
         MoveX = StepAxis(RawDirX(), ref _dirXPrev, _repeatX, dt);
         PadMove = StepAxis(RawPadDir(), ref _dirPadPrev, _repeatPad, dt);
@@ -349,7 +376,10 @@ public sealed class MenuInput
         MoveX = 0;
         PrimePadAxes();
         PrimeText();
-        Accept = Back = PadBack = Start = Loadout = Presets = false;
+        // Seeds the handover's own counts too, so a button still held from whatever raised this
+        // screen is not read as the press that hands the hints to the other device.
+        _device.Observe(_keysOnly.Current, _padOnly.Current, Keyboard);
+        Accept = Back = PadBack = Start = Loadout = Presets = DeviceMoved = false;
     }
 
     // The Key enum's letter, digit and punctuation values ARE their ASCII codes, so the character
@@ -450,10 +480,13 @@ public sealed class MenuInput
 
         _keys.ReadsKeyboard = Keyboard;
         _typingKeys.ReadsKeyboard = Keyboard;
+        _keysOnly.ReadsKeyboard = Keyboard;
         _devices.Refresh();
+        _padMuted.Refresh();
         _live = TextEntry ? _typingKeys : _keys;
         _live.Poll(_devices);
         _padOnly.Poll(_devices);
+        _keysOnly.Poll(_padMuted);
     }
 
     private int RawPadDir() => Dir(_padOnly, InputAction.MenuUp, InputAction.MenuDown);

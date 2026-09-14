@@ -703,8 +703,8 @@ the original's auto-dock offer on the HUD layer, and the port's respawn prompt o
 the one the crash camera leaves up. `FlightHud` owns when each shows and what it reads; this owns
 only where it sits, as `LineAnchor` over a pane size, static so a suite asserts the placement with no
 `Control`. The fraction is of the pane, never of `HudMetrics`' reading box, so each splitscreen pane
-centres its own. Decode: [../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md)
-"The prompt's own placement".
+centres its own. `Prompt` is a `UI/ControlLine.cs`, not a string, so a pad seat's control draws as a
+glyph where the words go; `Line` is still the words. Decode: [../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md) "The prompt's own placement".
 
 ## src/Flight/TargetHud.cs
 The per-pane targeting HUD, built on every human pane in every flight session: the pilot's own
@@ -755,10 +755,7 @@ The Original presentation's pause screen, on `PauseBoard`'s own seam: built once
 over a `PauseSheet` its mission resolves, following `PauseState.Changed`, driven by the pausing
 player's reader alone. What it draws is `PauseScreens`' composition through `ComposedBoardView`, so
 the screen tests off engine and this node owns the cursor, the pointer and the five actions. An Instant Action sortie's sheet is the blackboard, which it writes in `BoardPalette.EscapeBlackboard` rather than the campaign sheet's ink. That
-seat's pointer shares the cursor: a hover moves it, a press holds the strip, the release on it
-fires, and the OS pointer gives way to the dialog's own. Its readout is a delegate, since the
-objectives follow the running mission. Preferences stands `PausePreferences` over the held world and
-`Reprime`s on its close, and photo mode does the same over the frozen world. Decode: [../org/pause-screen.md](../org/pause-screen.md).
+seat's pointer shares the cursor: a hover moves it, a press holds the strip, the release on it fires, and the OS pointer gives way to the dialog's own. Its readout is a delegate, since the objectives follow the running mission. Preferences stands `PausePreferences` over the held world and `Reprime`s on its close, and photo mode does the same over the frozen world. Its control hint is a `ControlHintBar` child drawn after the composed screen, placed by `PauseScreens.HintBox` and worded by `BoardMenuView.Legend`, so both pause boards teach the same three controls; a glyph is neither a picture nor text the composition carries, which is why it is a control of its own. Decode: [../org/pause-screen.md](../org/pause-screen.md).
 
 ## src/Flight/PausePreferences.cs
 The Preferences leaf over a paused mission: an `OriginalShell` of its own opened on the Options
@@ -1086,7 +1083,7 @@ the cockpit interior on screen the dials, tape and text block come off (`SetCock
 carrying them; the pipper, marker, message and prompt HUDs stay, the respawn prompt on the message layer the
 crash camera leaves up. `Draw(in FlightHudState)`, the per-frame entry, takes a struct of aircraft STATE, so
 text, dials and gates compose and assert here with no `Control` (`ComputeStallWarning`, `ComputeAgl`,
-`ComposeTextLines`, and both prompt gates and composers).
+`ComposeTextLines`, and both prompt gates and composers). Both composers return a `UI/ControlLine.cs` filled through the message table's own `%1` slot, so the seat's control reaches the line as words or as a glyph without either composer knowing which.
 
 ## src/Flight/FlightController.cs
 The flying-aircraft node: input through `FlightModel` to a transform (or, for an AI pilot publishing

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using CSVM.Bindings;
 using CSVM.Mech3;
+using CSVM.UI;
 using Godot;
 
 namespace CSVM.Flight;
@@ -161,13 +162,13 @@ public sealed class FlightHud
     /// passes, from <see cref="ComposeAutoLandPrompt"/> over the seat's own bindings, recomposed
     /// whenever the seat's active device moves. Empty draws no line, which is what an unbound
     /// auto-land reads as. <see cref="AutoDock"/> is where it lands, never the text block.</summary>
-    public string AutoLandPrompt = AutoLandFallback;
+    public ControlLine AutoLandPrompt = ControlLine.Plain(AutoLandFallback);
 
     /// <summary>The respawn line this pane draws while its pilot sits at the crash, from
     /// <see cref="ComposeRespawnPrompt"/> over the seat's own bindings, recomposed on the same
     /// handover. Empty until a seat composes it, and for a seat whose active device has no
     /// <c>Respawn</c> binding at all. <see cref="CrashPrompt"/> is where it lands.</summary>
-    public string RespawnPrompt = string.Empty;
+    public ControlLine RespawnPrompt = ControlLine.Empty;
 
     // The pipper's placement and smoothing are decoded (docs/org/aim-assist.md "What the pipper
     // follows"); no TUNE left in them.
@@ -180,6 +181,7 @@ public sealed class FlightHud
     // What the prompt reads when messages.json is absent, so a data-less rig still says the offer
     // is live. Plain English, not the shipped wording, which only the message table carries.
     private const string AutoLandFallback = "AUTO-LAND AVAILABLE";
+    private const string AutoLandFallbackTemplate = AutoLandFallback + " - %1";
     private const string AutoLandPressKey = "MSG_PRESS_AUTOLAND";  // "Press %1 to autodock"
     private const string AutoLandClickKey = "MSG_CLICK_AUTOLAND";  // the mouse-button wording
     // The respawn prompt's own wording. Respawn is this port's action, so the install's table
@@ -277,19 +279,19 @@ public sealed class FlightHud
     /// table's own wording with the control of the seat's active <paramref name="side"/> in the
     /// <c>%1</c> slot, "Click" for a mouse button and "Press" otherwise, and empty when nothing is
     /// bound (docs/formats/anim-definitions/cutscenes.md). Which binding a side names, and the
-    /// fallback to the other side, belong to <see cref="ActiveDevice.PromptBinding"/>.</summary>
-    public static string ComposeAutoLandPrompt(Messages? strings, IReadOnlyList<Binding> bindings,
+    /// fallback to the other side, belong to <see cref="ActiveDevice.PromptBinding"/>; what draws in
+    /// the slot, words or a glyph, belongs to <see cref="ControlLine"/>.</summary>
+    public static ControlLine ComposeAutoLandPrompt(Messages? strings, IReadOnlyList<Binding> bindings,
         bool readsKeyboard, DeviceSide side)
     {
         if (ActiveDevice.PromptBinding(bindings, side, readsKeyboard) is not { } binding)
         {
-            return string.Empty;
+            return ControlLine.Empty;
         }
 
-        string control = BindingLabels.Describe(binding);
         string key = binding.Control.Kind == ControlKind.Mouse ? AutoLandClickKey : AutoLandPressKey;
         string template = strings?.Get(key) ?? key;
-        return template == key ? AutoLandFallback + " - " + control : Messages.Fill(template, control);
+        return ControlLine.Compose(template == key ? AutoLandFallbackTemplate : template, binding);
     }
 
     /// <summary>The respawn prompt for a seat holding <paramref name="bindings"/>: the port's own
@@ -297,18 +299,17 @@ public sealed class FlightHud
     /// "Click" for a mouse button and "Press" otherwise, and empty when nothing that side can reach
     /// is bound. Which binding a side names, and the fallback to the other side, belong to
     /// <see cref="ActiveDevice.PromptBinding"/>.</summary>
-    public static string ComposeRespawnPrompt(IReadOnlyList<Binding> bindings, bool readsKeyboard,
+    public static ControlLine ComposeRespawnPrompt(IReadOnlyList<Binding> bindings, bool readsKeyboard,
         DeviceSide side)
     {
         if (ActiveDevice.PromptBinding(bindings, side, readsKeyboard) is not { } binding)
         {
-            return string.Empty;
+            return ControlLine.Empty;
         }
 
-        string template = binding.Control.Kind == ControlKind.Mouse
-            ? RespawnClickTemplate
-            : RespawnPressTemplate;
-        return Messages.Fill(template, BindingLabels.Describe(binding));
+        return ControlLine.Compose(
+            binding.Control.Kind == ControlKind.Mouse ? RespawnClickTemplate : RespawnPressTemplate,
+            binding);
     }
 
     /// <summary>The gun gauge's selected-slot readout: the SELECTED firable group's ammo and short
@@ -463,11 +464,11 @@ public sealed class FlightHud
         UpdateReticle(in state);
         if (AutoDock != null)
         {
-            AutoDock.Line = ShowsAutoLandPrompt(in state) ? AutoLandPrompt : string.Empty;
+            AutoDock.Prompt = ShowsAutoLandPrompt(in state) ? AutoLandPrompt : ControlLine.Empty;
         }
         if (CrashPrompt != null)
         {
-            CrashPrompt.Line = ShowsRespawnPrompt(in state) ? RespawnPrompt : string.Empty;
+            CrashPrompt.Prompt = ShowsRespawnPrompt(in state) ? RespawnPrompt : ControlLine.Empty;
         }
         UpdateTextBlock(in state, mph, ft);
     }

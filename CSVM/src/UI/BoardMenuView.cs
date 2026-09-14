@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using CSVM.Bindings;
 using Godot;
 
 namespace CSVM.UI;
@@ -7,13 +9,14 @@ namespace CSVM.UI;
 /// highlighted one gold behind a ▶) inside the board style every board already uses. One renderer
 /// for all five boards, so the cursor reads the same wherever it appears and a layout fix lands
 /// once. Drop it in a board's body VBox and call <see cref="Refresh"/> when the menu reports the
-/// highlight moved.
+/// highlight moved. Its footer is the seat's own control hints, which follow that seat's device.
 /// </summary>
 public sealed partial class BoardMenuView : VBoxContainer
 {
     // Base metrics at 720p, matching the boards' own row/footer sizes. All TUNE.
     private const int RowFont = 20;
     private const int LegendFont = 15;
+    private const float LegendGap = 28f;
 
     private static readonly Color RowColor = new(0.55f, 0.62f, 0.72f);
     private static readonly Color RowFocusColor = new(1f, 0.86f, 0.38f);
@@ -21,14 +24,19 @@ public sealed partial class BoardMenuView : VBoxContainer
 
     private BoardMenu _menu = null!;
     private CursorRow[] _rows = System.Array.Empty<CursorRow>();
+    private ControlHintBar? _legend;
+    private float _scale = 1f;
 
     /// <summary>Builds the rows and the button legend for <paramref name="menu"/>, scaled by the
-    /// board's own <paramref name="s"/> so a menu matches the panel it sits in.</summary>
-    public static BoardMenuView Build(BoardMenu menu, float s)
+    /// board's own <paramref name="s"/> so a menu matches the panel it sits in.
+    /// <paramref name="input"/> is the seat driving the cursor, whose own bindings and device the
+    /// legend names.</summary>
+    public static BoardMenuView Build(BoardMenu menu, float s, MenuInput input)
     {
         var view = new BoardMenuView
         {
             _menu = menu,
+            _scale = s,
             MouseFilter = MouseFilterEnum.Ignore,
             SizeFlagsHorizontal = SizeFlags.ExpandFill,
         };
@@ -42,15 +50,42 @@ public sealed partial class BoardMenuView : VBoxContainer
         }
         view._rows = rows;
 
-        var legend = Row(Legend(menu.Dismissable), (int)(LegendFont * s));
-        legend.AddThemeColorOverride("font_color", LegendColor);
+        view._legend = ControlHintBar.Build(
+            Legend(menu.Dismissable, input), (int)(LegendFont * s), LegendColor, LegendGap * s);
+        view._legend.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         var spacer = new Control { CustomMinimumSize = new Vector2(0f, 8f * s) };
         view.AddChild(spacer);
-        view.AddChild(Centered(legend));
+        view.AddChild(view._legend);
 
         view.Refresh();
         return view;
     }
+
+    /// <summary>What a board's footer teaches, over the seat's OWN bindings rather than the shipped
+    /// defaults, since nothing else on a board names the cursor's controls. Three separate hints and
+    /// not one sentence: a seat names one device at a time, and each item is composed through that
+    /// gate. A board with no way back advertises none, which is every results board. Public so the
+    /// Original sheet, which draws its own footer, says the same thing this one does.</summary>
+    public static IReadOnlyList<ControlLine> Legend(bool dismissable, MenuInput input)
+    {
+        var items = new List<ControlLine>(3)
+        {
+            input.Hint("%1  Select", InputAction.MenuDown),
+            input.Hint("%1  Confirm", InputAction.MenuAccept),
+        };
+        if (dismissable)
+        {
+            items.Add(input.Hint("%1  Resume", InputAction.MenuBack));
+        }
+
+        return items;
+    }
+
+    /// <summary>Rewrites the footer for <paramref name="input"/>'s device, the seat's cue when a key
+    /// or a pad press hands the hints over mid-board.</summary>
+    public void Relegend(MenuInput input) =>
+        _legend?.Show(Legend(_menu.Dismissable, input), (int)(LegendFont * _scale), LegendColor,
+            LegendGap * _scale);
 
     /// <summary>Recolours the rows from the menu's current highlight. Cheap enough to call every
     /// time the cursor moves, since it touches only the label overrides.</summary>
@@ -63,29 +98,4 @@ public sealed partial class BoardMenuView : VBoxContainer
         }
     }
 
-    // What the player can press, since nothing else on a board teaches the cursor. A results board
-    // has no way back, so it advertises none.
-    private static string Legend(bool dismissable) =>
-        dismissable
-            ? "↕ Select        A / Enter — Confirm        B / Esc — Resume"
-            : "↕ Select        A / Enter — Confirm";
-
-    private static Label Row(string text, int fontSize)
-    {
-        var l = new Label { Text = text, HorizontalAlignment = HorizontalAlignment.Center };
-        l.AddThemeFontSizeOverride("font_size", fontSize);
-        l.AddThemeColorOverride("font_color", RowColor);
-        l.AddThemeColorOverride("font_shadow_color", new Color(0f, 0f, 0f, 0.7f));
-        l.AddThemeConstantOverride("shadow_offset_x", 1);
-        l.AddThemeConstantOverride("shadow_offset_y", 1);
-        return l;
-    }
-
-    private static CenterContainer Centered(Control c)
-    {
-        var cc = new CenterContainer { MouseFilter = MouseFilterEnum.Ignore };
-        cc.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        cc.AddChild(c);
-        return cc;
-    }
 }

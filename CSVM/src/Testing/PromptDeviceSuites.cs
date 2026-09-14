@@ -21,9 +21,10 @@ internal static class PromptDeviceSuites
 
     [Suite("bindings-prompt-device",
         "the auto-dock prompt follows the device the seat last took input from: a seat that has "
-        + "touched nothing names its key, a pad button hands the line to the stick button, a tick "
-        + "with nothing held leaves it alone, a key press takes it back, and an auto-land the pad "
-        + "has no binding for falls back to naming the key")]
+        + "touched nothing names its key in words, a pad button hands the line to the stick button "
+        + "and gives the slot a glyph, a tick with nothing held leaves it alone, a key press takes "
+        + "it back to words, and an auto-land the pad has no binding for falls back to naming the "
+        + "key")]
     internal static void BindingsPromptDevice(TestContext ctx)
     {
         ctx.RequireData(ctx.MessagesPath, $"the install's message table");
@@ -39,23 +40,26 @@ internal static class PromptDeviceSuites
         try
         {
             rig.UseMessages(strings);
-            ctx.Check(rig.PilotHud.AutoLandPrompt == onKey,
-                $"a seat that has touched nothing names its key: '{rig.PilotHud.AutoLandPrompt}'");
+            ctx.Check(rig.PilotHud.AutoLandPrompt.Text == onKey && rig.PilotHud.AutoLandPrompt.Glyph == null,
+                $"a seat that has touched nothing names its key in words: '{rig.PilotHud.AutoLandPrompt.Text}'");
 
             var padButton = OnPad(JoyButton.LeftStick);
             rig.ObserveDeviceForTest(new OneSide(), padButton);
-            ctx.Check(rig.ActiveDeviceSide == DeviceSide.Pad && rig.PilotHud.AutoLandPrompt == onPad,
-                $"the pad button hands the line to the pad control: '{rig.PilotHud.AutoLandPrompt}'");
+            ctx.Check(rig.ActiveDeviceSide == DeviceSide.Pad && rig.PilotHud.AutoLandPrompt.Text == onPad,
+                $"the pad button hands the line to the pad control: '{rig.PilotHud.AutoLandPrompt.Text}'");
+            ctx.Check(rig.PilotHud.AutoLandPrompt.Glyph is { Kind: ControlKind.Button },
+                $"…and that control draws as a glyph rather than as words: {rig.PilotHud.AutoLandPrompt.Glyph}");
 
             rig.ObserveDeviceForTest(new OneSide(), new OneSide());
-            ctx.Check(rig.ActiveDeviceSide == DeviceSide.Pad && rig.PilotHud.AutoLandPrompt == onPad,
-                $"…and a tick with nothing held leaves it there: '{rig.PilotHud.AutoLandPrompt}'");
+            ctx.Check(rig.ActiveDeviceSide == DeviceSide.Pad && rig.PilotHud.AutoLandPrompt.Text == onPad,
+                $"…and a tick with nothing held leaves it there: '{rig.PilotHud.AutoLandPrompt.Text}'");
 
             var key = new OneSide();
             key.Keys.Add((int)Key.A);
             rig.ObserveDeviceForTest(key, new OneSide());
-            ctx.Check(rig.ActiveDeviceSide == DeviceSide.Keyboard && rig.PilotHud.AutoLandPrompt == onKey,
-                $"a key press takes the line back to the keyboard: '{rig.PilotHud.AutoLandPrompt}'");
+            ctx.Check(rig.ActiveDeviceSide == DeviceSide.Keyboard && rig.PilotHud.AutoLandPrompt.Text == onKey
+                && rig.PilotHud.AutoLandPrompt.Glyph == null,
+                $"a key press takes the line back to the keyboard's words: '{rig.PilotHud.AutoLandPrompt.Text}'");
 
             Fallback(ctx, rig, onKey);
         }
@@ -110,8 +114,10 @@ internal static class PromptDeviceSuites
     [Suite("hud-crash-prompt",
         "the respawn prompt a crashed pilot reads: it stands on a centred line of its own, parented "
         + "to the MESSAGE layer the crash camera leaves up rather than the HUD layer it hides, it "
-        + "names the seat's own Respawn control and follows a handover to the pad, the readout "
-        + "block carries none of it, and a flying, halted or spectating frame leaves it empty")]
+        + "names the seat's own Respawn control and follows a handover to the pad, a pad seat "
+        + "drawing that control as a glyph in the slot the words fill while a keyboard seat keeps "
+        + "the words, the readout block carries none of it, and a flying, halted or spectating "
+        + "frame leaves it empty")]
     internal static void HudCrashPrompt(TestContext ctx)
     {
         var canvas = new CanvasLayer { Name = "hud" };
@@ -137,6 +143,7 @@ internal static class PromptDeviceSuites
             {
                 Crashed(ctx, hud, prompt);
                 CrashHandover(ctx, rig, hud, prompt);
+                OneDevice(ctx, rig, hud, prompt);
             }
         }
         finally
@@ -186,6 +193,22 @@ internal static class PromptDeviceSuites
         hud.Draw(new FlightHudState { Crashed = true, RespawnOffered = true });
         ctx.Check(rig.ActiveDeviceSide == DeviceSide.Pad && prompt.Line == "Press Pad Y to respawn",
             $"a handover to the pad moves the respawn line with it: '{prompt.Line}'");
+        ctx.Check(prompt.Prompt.Glyph is { Kind: ControlKind.Button, Index: (int)JoyButton.Y }
+            && prompt.Prompt.Prefix == "Press " && prompt.Prompt.Suffix == " to respawn",
+            $"…the pad button drawing as its own glyph in the slot the words fill: {prompt.Prompt.Glyph}");
+    }
+
+    // The two halves of a line the seat's device gate decides: a keyboard seat keeps words and no
+    // glyph, so one line cannot show a key cap and a pad button at once.
+    private static void OneDevice(TestContext ctx, FlightController rig, FlightHud hud, PromptLine prompt)
+    {
+        var key = new OneSide();
+        key.Keys.Add((int)Key.A);
+        rig.ObserveDeviceForTest(key, new OneSide());
+        hud.Draw(new FlightHudState { Crashed = true, RespawnOffered = true });
+        ctx.Check(rig.ActiveDeviceSide == DeviceSide.Keyboard && prompt.Prompt.Glyph == null
+            && prompt.Prompt.Words == "Backspace",
+            $"a keyboard seat keeps the key's words and takes no glyph: '{prompt.Line}'");
     }
 
     // The decoded anchor, a fraction of the PANE in every pane shape: a wide pane centres the
@@ -262,8 +285,9 @@ internal static class PromptDeviceSuites
         }
 
         rig.ObserveDeviceForTest(new OneSide(), OnPad(JoyButton.B));
-        ctx.Check(rig.ActiveDeviceSide == DeviceSide.Pad && rig.PilotHud.AutoLandPrompt == onKey,
-            $"an auto-land the pad has no binding for names the key: '{rig.PilotHud.AutoLandPrompt}'");
+        ctx.Check(rig.ActiveDeviceSide == DeviceSide.Pad && rig.PilotHud.AutoLandPrompt.Text == onKey
+            && rig.PilotHud.AutoLandPrompt.Glyph == null,
+            $"an auto-land the pad has no binding for names the key: '{rig.PilotHud.AutoLandPrompt.Text}'");
     }
 
     // One pad button held, on the placeholder identity a seat's pad rows sit on.

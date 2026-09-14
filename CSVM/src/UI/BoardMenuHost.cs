@@ -26,7 +26,7 @@ public sealed class BoardMenuHost
     public static BoardMenuHost Build(BoardMenu menu, MenuInput input, float s)
     {
         input.Prime();
-        return new BoardMenuHost(menu, BoardMenuView.Build(menu, s), input);
+        return new BoardMenuHost(menu, BoardMenuView.Build(menu, s, input), input);
     }
 
     /// <summary>One frame of the owner's menu input. ⚠ Pass wall time, not sim time: the clock this
@@ -38,5 +38,9 @@ public sealed class BoardMenuHost
         _input.Poll(dt);
         if (Menu.Handle(_input.Move, _input.Accept, _input.PadBack))
             View.Refresh();
+        // A player who reaches for the other device mid-board is shown that device's controls, the
+        // same handover the flight prompts follow.
+        if (_input.DeviceMoved)
+            View.Relegend(_input);
     }
 }

@@ -1,3 +1,4 @@
+using CSVM.UI;
 using Godot;
 
 namespace CSVM.Flight;
@@ -26,25 +27,30 @@ public sealed partial class PromptLine : Control
     // 0x0045da08), R 255 G 255 B 64, so the line is a flat pale yellow rather than a graded one.
     private static readonly Color LineColor = new(1f, 1f, 64f / 255f);
 
-    private string _line = string.Empty;
+    private ControlLine _prompt = ControlLine.Empty;
 
     /// <summary>The line to draw, or empty for none, which is what a pane being offered nothing and
-    /// a seat with no binding for the prompt's action both read as.</summary>
-    public string Line
+    /// a seat with no binding for the prompt's action both read as. A pad seat's control draws as a
+    /// glyph in the slot the words fill, which is why this is a line and not a string.</summary>
+    public ControlLine Prompt
     {
-        get => _line;
+        get => _prompt;
 
         set
         {
-            string next = value ?? string.Empty;
-            if (_line == next)
+            var next = value ?? ControlLine.Empty;
+            if (_prompt == next)
             {
                 return;
             }
-            _line = next;
+            _prompt = next;
             QueueRedraw();
         }
     }
+
+    /// <summary>What the line reads as in words, the glyph's slot included, for a suite or a log
+    /// that has no font to measure with.</summary>
+    public string Line => _prompt.Text;
 
     /// <summary>Where the line is anchored in a pane of <paramref name="paneSize"/>: the horizontal
     /// centre, three tenths of the way down, the line centred on that x.
@@ -65,7 +71,7 @@ public sealed partial class PromptLine : Control
     {
         // Same zero-size guard as the other pane HUDs: a draw can land before _Process has sized
         // this pane.
-        float s = _line.Length == 0 || Size.Y <= 0f ? 0f : HudMetrics.Scale(this);
+        float s = _prompt.IsEmpty || Size.Y <= 0f ? 0f : HudMetrics.Scale(this);
         if (s <= 0f)
         {
             return;
@@ -73,10 +79,9 @@ public sealed partial class PromptLine : Control
         var font = GetThemeDefaultFont();
         int fontSize = Mathf.Max(1, Mathf.RoundToInt(RefFontSize * s * HudMetrics.StatusTextScale));
         var at = LineAnchor(Size);
-        float width = font.GetStringSize(_line, HorizontalAlignment.Left, -1f, fontSize).X;
+        float width = _prompt.Width(font, fontSize);
         // No drop shadow, unlike every marker and the message stack: the `autoland` font def sets
         // shadow false, and the text object is drawn once (FUN_005c7f70).
-        DrawString(font, new Vector2(at.X - (width / 2f), at.Y + font.GetAscent(fontSize)), _line,
-            HorizontalAlignment.Left, -1f, fontSize, LineColor);
+        _prompt.Draw(this, font, fontSize, new Vector2(at.X - (width / 2f), at.Y), LineColor);
     }
 }

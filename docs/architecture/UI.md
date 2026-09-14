@@ -335,7 +335,7 @@ objectives parchment, the memento, and the labelled button strips, the block's f
 pause: its memento is the seated profile's own picture, `Rows` marks a note line by the runtime's answer for that line's own objective number, and
 `Icon` turns one world pose into the chart icon a session and a suite place alike, through the
 shared `MissionMap`, which draws nothing for a pose off the window. `RowAt` is the pointer's hit
-test over the five 132x28 plates, and a pointer draws the dialog's own cursor; an unreadable extraction leaves the pause to the Built-in board. Decode: [../org/pause-screen.md](../org/pause-screen.md).
+test over the five 132x28 plates, and a pointer draws the dialog's own cursor; an unreadable extraction leaves the pause to the Built-in board. `HintBox` is where a control hint stands, across the strips' own span and clear of them above or below, read off the sheet so a dialog that puts its strips anywhere still leaves the hint off them. Decode: [../org/pause-screen.md](../org/pause-screen.md).
 
 ## src/UI/MissionMap.cs
 The one chart drawer every screen showing a mission's map shares, engine-free: the sheet as a
@@ -359,17 +359,40 @@ screens, its per-player aircraft panes, and every board menu through `BoardMenuV
 a cell of its own with a mirror cell opposite it, which is what puts a label on the panel's centre
 line whether or not its row is selected; the rule and its failure mode sit on the marker itself.
 
+## src/UI/ControlGlyphs.cs
+The per-control picture set, keyed the way `BindingControl` is: `GlyphKey` is a control's kind, its
+index inside that kind and the sign an axis binding names, with deadzone and modifiers left out
+because they decide when a control fires rather than what it looks like. `ControlGlyphSet` is the
+swappable set (which controls it draws, how wide one is at a line's height, how to draw one) and
+`ControlGlyphs.Set` the one holder every composing site reads, so replacing the whole look is one
+assignment. The shipped `PadVectorGlyphs` builds pad controls as vector shapes in code, a ring with its letter for a face button, a cross with one arm filled for a d-pad direction, a ring with a deflection arrow for a stick and a bordered plaque for anything that reads as letters; it declines keys, mouse buttons and hats, which is how a keyboard seat keeps `BindingLabels`' words. The original ships no such art, so every metric in it is a judgement at the controls, not a decode.
+
+## src/UI/ControlLine.cs
+One prompt line with one control in it, and the row of them a board's footer is. `Compose` fills the
+message table's `%1` slot through `Messages.Fill` with a sentinel, then splits the filled line, so
+the halves either side of the control are exactly what a real fill would have written and no prompt
+is ever built by concatenation; `Text` is the whole line in words, which is what a suite or a log
+reads. `For` picks the binding through `ActiveDevice.PromptBinding`, so one seat names one device.
+`Draw` writes a glyph-less line as a single string, the way a plain label always drew it, and only a
+line carrying a glyph is drawn in parts. `ControlHintBar` lays several lines out in a row and
+centres them in its own box; its items are composed one at a time so the device gate holds per item.
+
 ## src/UI/BoardMenuView.cs
 Draws a `BoardMenu`'s rows as `CursorRow`s inside the board style all five boards share, so the
 cursor reads the same wherever it appears and a layout fix lands once. `Refresh` recolours from the
-current highlight, touching only label overrides. The footer is the button legend, since nothing
-else on a board teaches the cursor, and a results board's names no back key.
+current highlight, touching only label overrides. The footer is a `ControlHintBar` over `Legend`,
+the seat's own Select, Confirm and (where the board can be dismissed) Resume, composed off that
+seat's bindings and device rather than off the shipped defaults, since nothing else on a board
+teaches the cursor. `Legend` is public because the Original pause sheet draws its own footer and
+must say the same three things; `Relegend` rewrites the row when the seat changes device.
 
 ## src/UI/BoardMenuHost.cs
 `BoardMenu` plus `BoardMenuView` plus the reader, kept together so a board wires a menu in two lines
 rather than restating the poll, handle and repaint order five times. `Build` primes the reader, so a
 button still held from whatever raised the board is not read as a fresh press. It reads the pad's
-back button alone, Escape and Start reaching the pause toggle through `FlightController` instead.
+back button alone, Escape and Start reaching the pause toggle through `FlightController` instead. A
+poll that reports the seat moved device relegends the view, which is the one seam that gives the
+pause board and every results board its control hint.
 
 ## src/UI/MenuInput.cs
 One player's menu input source: the keyboard flag, a `Pads` binding and the edge and auto-repeat
@@ -378,8 +401,7 @@ context (`src/Bindings/`) from three readings of one seat: keyboard live, keyboa
 typeable keys, and the pad alone. Its pad rows sit on the seat-local `SeatPads` identity, since a
 seat reads a set of pads and no binding may hold a connection index. `Typed` and `Erase` serve a
 text field, `PadMove`/`PadMoveX` are the axes such a screen reads instead, since W, A, S and D
-are letters there. `TypeableKeys` is deliberately wider than any box's accept rule. Wrapped by
-`Menu/BuiltIn/BuiltInSeat.cs`, bound by `MenuSeatDevices`; it also serves the in-flight boards.
+are letters there. `TypeableKeys` is deliberately wider than any box's accept rule. `Device` and `DeviceMoved` come from an `ActiveDevice` over a fourth reading, the keyboard half alone, so a board hint names the side the seat last used and knows the tick it changed; `Hint` composes one such line. Wrapped by `Menu/BuiltIn/BuiltInSeat.cs`, bound by `MenuSeatDevices`; it also serves the in-flight boards.
 
 ## src/UI/HudLayers.cs
 The canvas-layer ordering for everything drawn over the 3D view, in one place, so "does the collider

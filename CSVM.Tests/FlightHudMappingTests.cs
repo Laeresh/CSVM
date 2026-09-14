@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using CSVM.Bindings;
 using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.UI;
 using Godot;
 using Xunit;
 
@@ -269,7 +270,7 @@ public class FlightHudMappingTests
     [Fact]
     public void TheTextBlockNeverCarriesTheAutoLandPrompt()
     {
-        var hud = new FlightHud { AutoLandPrompt = "Press F9 to autodock" };
+        var hud = new FlightHud { AutoLandPrompt = ControlLine.Plain("Press F9 to autodock") };
         var offered = new FlightHudState { AutoLandOffered = true };
         // The return is the reused instance list, so the offered lines are copied before the
         // second compose overwrites them.
@@ -288,7 +289,7 @@ public class FlightHudMappingTests
         var strings = AutoLandMessages();
         var keyboardAndPad = new[] { KeyBinding(Key.F9), PadBinding(JoyButton.LeftStick) };
         Assert.Equal("Press F9 to autodock",
-            FlightHud.ComposeAutoLandPrompt(strings, keyboardAndPad, true, DeviceSide.Keyboard));
+            FlightHud.ComposeAutoLandPrompt(strings, keyboardAndPad, true, DeviceSide.Keyboard).Text);
     }
 
     [Fact]
@@ -297,7 +298,7 @@ public class FlightHudMappingTests
         var strings = AutoLandMessages();
         var keyboardAndPad = new[] { KeyBinding(Key.F9), PadBinding(JoyButton.LeftStick) };
         Assert.Equal("Press Pad Left Stick to autodock",
-            FlightHud.ComposeAutoLandPrompt(strings, keyboardAndPad, false, DeviceSide.Pad));
+            FlightHud.ComposeAutoLandPrompt(strings, keyboardAndPad, false, DeviceSide.Pad).Text);
     }
 
     [Fact]
@@ -306,7 +307,7 @@ public class FlightHudMappingTests
         var strings = AutoLandMessages();
         var keyboardAndPad = new[] { KeyBinding(Key.F9), PadBinding(JoyButton.LeftStick) };
         Assert.Equal("Press Pad Left Stick to autodock",
-            FlightHud.ComposeAutoLandPrompt(strings, keyboardAndPad, true, DeviceSide.Pad));
+            FlightHud.ComposeAutoLandPrompt(strings, keyboardAndPad, true, DeviceSide.Pad).Text);
     }
 
     [Fact]
@@ -315,16 +316,40 @@ public class FlightHudMappingTests
         var strings = AutoLandMessages();
         var mouseOnly = new[] { MouseBinding(MouseButton.Middle) };
         Assert.Equal("Click Mouse Middle to autodock",
-            FlightHud.ComposeAutoLandPrompt(strings, mouseOnly, true, DeviceSide.Keyboard));
+            FlightHud.ComposeAutoLandPrompt(strings, mouseOnly, true, DeviceSide.Keyboard).Text);
     }
 
     [Fact]
     public void AnUnboundActionComposesNoPromptAndAMissingTableStillNamesTheControl()
     {
         Assert.Equal("", FlightHud.ComposeAutoLandPrompt(
-            AutoLandMessages(), System.Array.Empty<Binding>(), true, DeviceSide.Keyboard));
+            AutoLandMessages(), System.Array.Empty<Binding>(), true, DeviceSide.Keyboard).Text);
         Assert.Equal("AUTO-LAND AVAILABLE - F9",
-            FlightHud.ComposeAutoLandPrompt(null, new[] { KeyBinding(Key.F9) }, true, DeviceSide.Keyboard));
+            FlightHud.ComposeAutoLandPrompt(null, new[] { KeyBinding(Key.F9) }, true, DeviceSide.Keyboard).Text);
+    }
+
+    // ---- the slot the control fills: a glyph for a pad control, the words for a key or a mouse ----
+
+    [Fact]
+    public void APadControlFillsTheSlotWithItsOwnGlyphAndTheHalvesAreTheTemplatesOwn()
+    {
+        var keyboardAndPad = new[] { KeyBinding(Key.F9), PadBinding(JoyButton.LeftStick) };
+        var line = FlightHud.ComposeAutoLandPrompt(AutoLandMessages(), keyboardAndPad, true, DeviceSide.Pad);
+        Assert.Equal(new GlyphKey(ControlKind.Button, (int)JoyButton.LeftStick, 0), line.Glyph);
+        Assert.Equal("Press ", line.Prefix);
+        Assert.Equal("Pad Left Stick", line.Words);
+        Assert.Equal(" to autodock", line.Suffix);
+    }
+
+    [Theory]
+    [InlineData(true, DeviceSide.Keyboard)]
+    [InlineData(true, DeviceSide.Pad)]
+    public void AKeyboardSeatKeepsItsWordsAndTakesNoGlyph(bool readsKeyboard, DeviceSide side)
+    {
+        var keyAndMouse = new[] { KeyBinding(Key.F9), MouseBinding(MouseButton.Middle) };
+        var line = FlightHud.ComposeAutoLandPrompt(AutoLandMessages(), keyAndMouse, readsKeyboard, side);
+        Assert.Null(line.Glyph);
+        Assert.Equal("F9", line.Words);
     }
 
     [Fact]
@@ -374,16 +399,16 @@ public class FlightHudMappingTests
     public void TheRespawnPromptNamesTheShippedControlOfTheSeatsActiveSide(
         bool readsKeyboard, DeviceSide side, string expected)
     {
-        Assert.Equal(expected, FlightHud.ComposeRespawnPrompt(RespawnDefaults(), readsKeyboard, side));
+        Assert.Equal(expected, FlightHud.ComposeRespawnPrompt(RespawnDefaults(), readsKeyboard, side).Text);
     }
 
     [Fact]
     public void APadOnlySeatIsNeverNamedAKeyAndAnUnboundRespawnComposesNoPrompt()
     {
         var keyOnly = new[] { KeyBinding(Key.Backspace) };
-        Assert.Equal("", FlightHud.ComposeRespawnPrompt(keyOnly, readsKeyboard: false, DeviceSide.Pad));
+        Assert.Equal("", FlightHud.ComposeRespawnPrompt(keyOnly, readsKeyboard: false, DeviceSide.Pad).Text);
         Assert.Equal("", FlightHud.ComposeRespawnPrompt(
-            System.Array.Empty<Binding>(), readsKeyboard: true, DeviceSide.Keyboard));
+            System.Array.Empty<Binding>(), readsKeyboard: true, DeviceSide.Keyboard).Text);
     }
 
     [Fact]
@@ -391,10 +416,10 @@ public class FlightHudMappingTests
     {
         var rebound = new[] { KeyBinding(Key.Delete), MouseBinding(MouseButton.Middle) };
         Assert.Equal("Press Delete to respawn",
-            FlightHud.ComposeRespawnPrompt(rebound, readsKeyboard: true, DeviceSide.Keyboard));
+            FlightHud.ComposeRespawnPrompt(rebound, readsKeyboard: true, DeviceSide.Keyboard).Text);
         // A mouse button takes the click wording, the same split the auto-dock line makes.
         Assert.Equal("Click Mouse Middle to respawn", FlightHud.ComposeRespawnPrompt(
-            new[] { MouseBinding(MouseButton.Middle) }, readsKeyboard: true, DeviceSide.Keyboard));
+            new[] { MouseBinding(MouseButton.Middle) }, readsKeyboard: true, DeviceSide.Keyboard).Text);
     }
 
     [Theory]
