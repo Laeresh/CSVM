@@ -327,7 +327,7 @@ public sealed partial class PausePreferences : Control
             return;
         }
 
-        Input.MouseMode = _mouseMode;
+        Input.MouseMode = MouseCapture.Restorable(_mouseMode);
         _tookCursor = false;
     }
 

@@ -166,4 +166,14 @@ public class MouseCaptureTests
         Assert.Equal(Vector2.Zero, capture.TakeLook());
         Assert.Equal(new Vector2(400f, 300f), capture.StepCursor(new Vector2(800f, 600f)));
     }
+
+    /// <summary>A board's close never puts the seat's capture back: the pause sheet saves it on the
+    /// frame the seat still holds, and restores it after EXIT has already raised the menu.</summary>
+    [Fact]
+    public void Restorable_NeverHandsBackACapture()
+    {
+        Assert.Equal(Input.MouseModeEnum.Visible, MouseCapture.Restorable(Input.MouseModeEnum.Captured));
+        Assert.Equal(Input.MouseModeEnum.Visible, MouseCapture.Restorable(Input.MouseModeEnum.Visible));
+        Assert.Equal(Input.MouseModeEnum.Hidden, MouseCapture.Restorable(Input.MouseModeEnum.Hidden));
+    }
 }
