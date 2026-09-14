@@ -386,7 +386,10 @@ internal sealed class PoseChannel
         bool collidable = alpha > OpacityCollisionEpsilon;
         if (WorldCollision.SetFaded(node, !collidable))
         {
-            Utils.Log.Info("anim", $"anim: fade {(collidable ? "restored" : "dropped")} colliders under '{node.Name}'");
+            // ⚠ Debug, never Info: this sits on the frame path, a console line costs about 1.9 ms,
+            // and one effect checkout crosses once per faded root, so the sonic burst's six rings
+            // bought an 11 ms frame (PERF-35). The file sink takes it at Debug regardless.
+            Utils.Log.Debug("anim", $"anim: fade {(collidable ? "restored" : "dropped")} colliders under '{node.Name}'");
         }
 
         int applied = ApplyOpacity(node, alpha);

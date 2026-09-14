@@ -2212,19 +2212,33 @@ internal static class OrdnanceSuites
                 runtime.Bind(stage, world.Session.Program.Subset(anim));
                 var slot0 = stage.GetNode<Node3D>("pool0");
                 var readings = new List<List<RingReading>>();
-                for (int play = 1; play <= plays; play++)
+                // A burst crosses the fade threshold once per ring, and a console line costs about
+                // 1.9 ms on the frame path (PERF-35), so the report must stay off the console tier.
+                // Vacuous when a filter has turned `anim` up.
+                bool animTurnedUp = Utils.Log.ConsoleShows("anim", Utils.Log.Level.Debug);
+                var consoleFades = new List<string>();
+                using (Utils.Log.PushConsoleSink(line =>
                 {
-                    ctx.Check(runtime.PlayEffectAt(anim, ctx.Camera.GlobalPosition), $"play {play} started");
-                    // Three frames in: the rings' opening motions have taken their FROM poses.
-                    for (int i = 0; i < 3; i++)
-                        runtime.Advance(1f / 60f);
-                    readings.Add(RingReadingsIn(slot0));
-                    // Play the burst out; the next play must find its slot idle, not recycled.
-                    int steps = Mathf.RoundToInt(SuiteConstants.BurstSeconds * 60f);
-                    for (int i = 0; i < steps; i++)
-                        runtime.Advance(1f / 60f);
+                    if (line.Contains("colliders under", System.StringComparison.Ordinal))
+                        consoleFades.Add(line);
+                }))
+                {
+                    for (int play = 1; play <= plays; play++)
+                    {
+                        ctx.Check(runtime.PlayEffectAt(anim, ctx.Camera.GlobalPosition), $"play {play} started");
+                        // Three frames in: the rings' opening motions have taken their FROM poses.
+                        for (int i = 0; i < 3; i++)
+                            runtime.Advance(1f / 60f);
+                        readings.Add(RingReadingsIn(slot0));
+                        // Play the burst out; the next play must find its slot idle, not recycled.
+                        int steps = Mathf.RoundToInt(SuiteConstants.BurstSeconds * 60f);
+                        for (int i = 0; i < steps; i++)
+                            runtime.Advance(1f / 60f);
+                    }
                 }
 
+                ctx.Check(animTurnedUp || consoleFades.Count == 0,
+                    $"the fade-crossing report stayed off the console over {plays} plays ({consoleFades.Count} line(s) reached it{(animTurnedUp ? ", filter turned anim up so this is not read" : "")})");
                 ctx.Same(0, runtime.PoolRecycles, $"no play wrapped onto a live copy: each burst ended before the pool came round");
                 var first = readings[0];
                 var fifth = readings[plays - 1];

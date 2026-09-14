@@ -323,6 +323,16 @@ member, and it does not go here.
   in one of those terms, and the term differs from run to run; each carries `gc=1/1/0` and a pause
   equal to the step, so the reading is the collector rather than the code the bracket names. This is
   PERF-33 one level down, and PERF-20 says what sets the rate.
+- **PERF-35**, **A console-tier log line costs about 1.9 ms on the frame path, so count the lines
+  ONE event emits before crediting the work the lines describe.** Edge-triggering a report is not
+  the same as making it rare: the fade channel reports a collider crossing once per faded subtree
+  root, and a single sonic-burst checkout crosses six of them, which is 11.3 ms of `GD.Print` in a
+  scope whose actual work (the opacity walk and the collider resync together) measures 0.15 ms.
+  Split the log call out of the timed region before naming the mechanism, and demote a frame-path
+  report to `Debug`, which keeps the file-sink record and drops the console write. The same
+  measurement also inflates the instrument reading it: with `hitchMonitor.floorMs` low enough to
+  trip most frames, every `[perf] hitch` line is itself a console write on the frame that follows.
+  PERF-23 is the per-frame form of this.
 
 ## LOG, logs, error censuses, and exit codes
 
