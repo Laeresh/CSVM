@@ -58,7 +58,8 @@ public sealed class AircraftStage
     /// the hangar floor while the pilot parachutes in (<c>anim_bloodhawk</c>, under <c>world1</c>)
     /// and the undercarriage the flown aeroplane wears on the lift (<c>bloodhawk_gear</c>, under
     /// <c>player</c>). Both ship <c>INACTIVE</c> and parentless, built the way
-    /// <see cref="ChuteNode"/> is: the drop's own legs add, activate and detach them.</summary>
+    /// <see cref="ChuteNode"/> is: the drop's own legs add, activate and detach them. Neither is
+    /// painted, by decision: they carry no logo placeholder and neither reads on screen.</summary>
     public static readonly string[] PropNodes = { "anim_bloodhawk", "bloodhawk_gear" };
 
     /// <summary>Which aeroplane each staged prop wears the paint of. A node named here still keeps

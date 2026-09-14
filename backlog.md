@@ -705,7 +705,15 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Environment & world
 
-- `BL-070` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]` `[C5]` **C5's `poleflare` clutter renders with the wrong billboard axis** (one of two residuals
+- `BL-070` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` `[C5]` **C5's `poleflare` clutter renders with the wrong billboard axis.**
+  *Decision:* the A/B is settled, fix it. The original's C5 nadirs (`C5 IA1 Terrain.png`,
+  `C5 IA1 Terrain3.png`) string the street lamps along the roads as small round dots; CSVM at the
+  same nadir shows a hairline per lamp, and at ground level the `poleflare` glow is a card lying
+  flat on the pavement at the pole's foot (the round dots a CSVM nadir does show survive
+  `--no-clutter`, so they are base-world lights, not the flares). Give `ClutterBuilder.Kind` a
+  billboard mode so `SphericalY` kinds face the camera, and re-pin the C5 goldens with that
+  change only. The frames are under `.scratch/montage/BL-070/` while they last, poses in its
+  README. (one of two residuals
   from polish-3 item 5, 2026-07-22; the other, the static collider probe's off-by-6/11, closed
   2026-08-04, the archived development log's "M3 polish-6 C22" entry, with a rewritten probe now committed at
   `analysis/collider-probe/`). The `cblock*` templates ship `lightpole` (`CylindricalY`) posts
@@ -853,11 +861,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   replaced; `git log --grep=BL-305`. Do not reopen either ID; IDs are never reused, per this
   file's own rule).
 
-- `BL-508` `[Research]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The original never alpha-tests, so every alpha texture we scissor is an
-  invention rather than a reproduction.** *Decision:* judged per texture family at the controls,
-  not globally; the owed step is a montage of each family (tree cards, fence and railing cards,
-  the coastline sheets, any other family the census names) blended against scissored, in the
-  same shot, and the user picks per family from the montage. *Evidence:* decoded from `crimson.exe`
+- `BL-508` `[Research]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The original never alpha-tests, so every alpha texture we scissor is an
+  invention rather than a reproduction.** *Decision:* the user picked blended for all three
+  families the montage showed, trees (tree, bush and brush cards, 13 textures), rails (fence,
+  railing, ladder, stair and grate, 20) and lattice (tower lattice, girder, support and cable,
+  23), each judged shipped-against-blended in one shot (C1 tree line, C4 Jimmy's camp, C2 Eiffel
+  replica). Land those three as the family table; a scissored texture the census names outside
+  them is not decided and stays scissored until shown. ⚠ The switch must reach `Clutter` as well
+  as `TextureArchive`: `Clutter`'s sprite shader hardcodes its own 0.5 scissor and never reads the
+  archive's alpha class, and C1's whole tree population is clutter, so a `TextureArchive`-only
+  table leaves every scattered tree card scissored. *Evidence:* decoded from `crimson.exe`
   (`analysis/alpha-classification/FINDINGS.md`, "The original has no cutout path"). The renderer is
   `zvid_ddd3d.c` over `IDirect3DDevice3`, and `D3DRENDERSTATE_ALPHATESTENABLE` is set nowhere in
   the whole `0x0059e000–0x005ab000` layer, nor are `ALPHAREF` and `ALPHAFUNC`, so alpha test holds
@@ -922,10 +935,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Playtest after fix:* any chapter under Enhanced Graphics, still and moving, over water and over
   ground. *Cross-refs:* `docs/architecture/Utils.md` (`GraphicsMode`).
 
-- `BL-905` `[Fidelity]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` **Aircraft read
-  too glossy under sunlight beside the original's screenshots.** *Decision:* settled by the sweep
-  montage and the user's pick, the decode follows as the record behind the picked value, not as
-  a gate on it. *Evidence:* every aircraft
+- `BL-905` `[Fidelity]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Aircraft read
+  too glossy under sunlight beside the original's screenshots.** *Decision:* the user picked
+  specular 0.25 at roughness 0.85 off the sweep montage against `OriginalScreenshots/Fury from
+  above.png` (0.50, 0.10, 0.00 and roughness 1.0 were the other tiles); land it as the one
+  constant in `GetBiasShader`'s shaded branch and re-pin the goldens listed below, the decode
+  follows as the record behind the picked value, not as a gate on it. *Evidence:* every aircraft
   surface (skin, canopy, props, cockpit interior) takes one procedural shader from
   `SceneBuilder.GetBiasShader`'s shaded branch with roughness 0.85, metallic 0.0, specular 0.5,
   the same in Original and Enhanced mode; terrain deliberately sets specular 0.0 with a comment
@@ -945,19 +960,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Effects & animation runtime
 
-- `BL-796` `[Bug]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: data]` `[CM01]` **The two hangar hand-over props cannot take the player's livery: their subtrees carry no decal placeholder.**
-  *Evidence:* `anim_bloodhawk`, the Bloodhawk standing on the hangar floor in CM01's drop, and
-  `bloodhawk_gear`, the undercarriage the flown aeroplane wears on the lift, are both the player's own
-  aeroplane and should wear the player's skins. `BL-690` built the route that dresses a staged prop in
-  its aeroplane's livery, and it cannot reach these two: `PlanePainter.PrefixFor` reads the skin prefix
-  off a subtree's own materials, and measured across the staged set only `balmoral` (`bal`) and
-  `piratefighter` (`dev`) carry one. *Fix shape:* resolve the prefix some other way for these two, a
-  node-name to prefix mapping or a read off the airframe the prop stands for, then hand them through
-  the same `AircraftStage.Paint`. *⚠ Traps:* judge it at the controls first. The gear rides a painted
-  aeroplane and the wrong-livery gear may not read on screen at all, in which case the mapping is
-  not worth carrying. Do not invent a prefix for a subtree that has none: check what its materials
-  actually name before mapping anything. *Cross-refs:* `BL-690`'s closing commit,
-  `docs/formats/anim-definitions/cutscenes.md` "What a staged prop is painted in".
 - `BL-674` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: data]` `[CM10]` **CM10's attack-balloon wave flies from 990 m down to water level and back up
   during its scripted entrance.** *Evidence:* driving C1/M05's shipped `OBJECTIVE10` wake and
   sampling the assembly every 0.1 s for 70 s traces its world Y from 990 m (the hidden entrance
@@ -1031,8 +1033,17 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-231` (the pool's tuning entry), `BL-121` (the `trail-world-anchor` suite),
   `BL-700` (the same zeppelin family's wreck rest).
 
-- `BL-867` `[Tuning]` `[S]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` **The speed cue's wisps read more opaque than the
-  original's.** *Evidence:* reported at the controls against mission recordings: the pale wisps
+- `BL-867` `[Tuning]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **The speed cue's wisps read more opaque than the
+  original's, and crowd the centre of a 16:9 view.** *Decision:* stills cannot judge the opacity,
+  the only original frame with wisps (CM02.mkv at about 58 m, chase over water) has a different
+  background from any CSVM render, and no recording shows wisps above 500 ft (CAP-11 C1B never
+  runs the cue at any altitude). What the user asks for first is to spread the wisps out
+  sideways: the authored deviation is a cube (`Puffer.SpawnSustained`, ±0.5·d on every axis)
+  sized for the original's 4:3 view, so at 16:9 the puffs sit in the middle of the frame. Land
+  a cue-only remake rule that widens the emitter-frame lateral half-width by the viewport's
+  aspect over 4:3 (so 1.33 at 16:9), leaving the generic puffer's cube alone since that
+  re-scatters `c1-waterfall`; then re-judge the opacity at the controls with the spread in.
+  *Evidence:* reported at the controls against mission recordings: the pale wisps
   each chapter's `speed_cue.zrd` emits ahead of the player (`Flight/SpeedCue.cs`, three authored
   `cuepufferN` states selected by altitude) are far more prominent than in the footage; size reads
   right, opacity does not. The alpha comes from the authored state, so a halved constant would be
@@ -1484,9 +1495,25 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
-- `BL-113` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Compass tape**, `TileOverscan` / `RimGain` / the nearest-tick look remain TUNE
-  (north = −Z is now confirmed against the original, 2026-07-30, do not reopen).
-  *Cross-refs:* `PT-121` (the flight that judges the three).
+- `BL-113` `[Tuning]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **Compass tape**: the bar-end
+  caps, the tick height and the tape's edges do not read like the original's. *Decision:* judged
+  on a sweep montage against `HUD.png`, `Targeting HUD Kestrel.png` (the renders' own 5120x1440
+  viewport) and `C1 IA1 whiteout at height.png`; five things land together, then the goldens
+  carrying the tape (`c1-flight-kill`, `c1-cockpit`) re-pin once. (1) No rim cap: all three
+  originals have dark bar ends, the "~192 at the very edge" the hud doc reads as a cap is
+  `HUD.png`'s sky value, so the two rim draws in `CompassTape._Draw`, `RimGain`, and the hud
+  doc's cap sentence go. (2) `TileOverscan` 1.0. (3) The sides darker: the original's outer
+  quarter of the bar is close to black, so the plain `cos(Δ)` fade is too gentle at the edges,
+  a steeper falloff, judged on a follow-up montage. (4) A black hem under the ticks: the
+  original's comb stops about three rows above the bar's bottom edge, ours runs lit to the last
+  row. (5) Whether the octant labels foreshorten with the drum: ours are drawn at full width on
+  `LabelLayer` ("billboarded upright"), which the hud doc records as verified on one edge `W`,
+  and the user reads the originals' edge letters as turning with the card. Measured at 3x on the
+  Kestrel shot the edge `E` (Δ about 44°) is about 0.8 of the centre `E` and the edge `S` is
+  full width, so the stills do not settle it; render the labels with the ticks' horizontal
+  `cos(Δ)` squeeze as one more tile on the follow-up montage and let the user pick. North = −Z
+  is confirmed against the original, do not reopen. The nearest-tick look stays as shipped.
+  *Cross-refs:* `PT-121` (the flight that judges the result).
 
 - `BL-181` `[Tuning]` `[Blocked: a shared type scale]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: feel]` **Marker HUD + scoreboard layout is a provisional pass, not a
   fidelity sign-off.** Playtested 2026-07-30
@@ -1501,21 +1528,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   menu-hub milestone was standing in for. Blocked on that surface, not on data.
   *Fix shape:* re-review `StuntRunHud.cs`/`TargetHud.cs`/`StuntScoreboard.cs` placement once such a type scale exists,
   against it rather than in isolation. *Cross-refs:* `BL-449`, whose landing prompted this wording.
-
-- `BL-755` `[Bug]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The ammo screen's two
-  description panes trade the cursor's words instead of each holding its own subject.** *Evidence:*
-  reported at the controls over `PLAN-M5-polish-13`'s closing sortie, "the description can be
-  displayed on both parts. Currently it switches depending on what is selected". Both authored panes
-  are filled on every repaint (`CSVM/src/UI/CampaignBoards.cs:343-359`), but the half the cursor is
-  not in falls back to the first armed gun group or the first fitted pylon (`CampaignAmmoPage`
-  `DetailRow`, `CSVM/src/UI/CampaignAmmoPage.cs:314-327`), so moving the cursor between the halves
-  moves which pane answers it and leaves the other on a default that is empty when nothing is armed
-  or fitted. *Fix shape:* settle what the idle pane holds against
-  `OriginalScreenshots/Campaign Ammo Selection.png`, which carries Slugs over High-Explosive Rockets
-  with the pointer in neither half, then make the rule match. *⚠ Traps:* the two panes are authored
-  and their y is pinned four pixels over the shipped row, so do not move them while changing what
-  they say. An empty pane is the fallback finding nothing armed, not a missing pane.
-  *Cross-refs:* `BL-658`'s landing (`git log --grep=BL-658`), which filled the lower pane.
 
 - `BL-765` `[Bug]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The inventory writes
   the plane's name and its airframe as one line at the airframe's row, leaving the name's own row

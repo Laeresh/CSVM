@@ -314,7 +314,9 @@ public sealed class CampaignAmmoPage : CampaignPage
     /// <summary>Both panes are filled at once: the upper one describes the gun group the cursor is
     /// on and the lower the pylon, and the half the cursor is not in keeps the first armed group's
     /// or first fitted pylon's words, which is what <c>gui_init</c> writes into them on entry.
-    /// ACCEPT and CANCEL are in neither half, so their own hint reaches the shell's band.</summary>
+    /// ⚠ That fallback is the rule by decision, an empty pane means nothing is armed or fitted;
+    /// do not make the idle pane follow the cursor. ACCEPT and CANCEL are in neither half, so
+    /// their own hint reaches the shell's band.</summary>
     public override int DetailRow(BoardDetailPane pane, int row)
     {
         EnsureLoaded();

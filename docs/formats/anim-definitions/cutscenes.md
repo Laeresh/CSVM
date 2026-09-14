@@ -419,7 +419,11 @@ A staged prop is a second model of an aeroplane the mission already flies, so it
 aeroplane's livery rather than the archive's shipped skins. Two of the staged nodes carry aircraft
 skins at all, which is what a livery needs: `balmoral` (prefix `bal`) and `piratefighter` (`dev`).
 `chuteman`, `rope_ladder`, `pickup_cpilot`, `anim_bloodhawk` and `bloodhawk_gear` carry no decal
-placeholder to read a prefix off, so no scheme can reach them.
+placeholder to read a prefix off, so no scheme can reach them. The two hangar hand-over props stay
+in their shipped skins by decision: the floor Bloodhawk is a few dozen pixels in shadow, and the
+aeroplane the gear rides on the lift is rebuilt without a scheme, so the gear has no livery to
+disagree with. `anim_bloodhawk` does carry `blo_*` skins, but its one decal texture is
+`bldhwk_decal.tif`, not a logo placeholder; `bloodhawk_gear` is skinned from `hollybomber01.tif`.
 
 Where each of the two takes its scheme from differs, and only one of them rests on authored data:
 
