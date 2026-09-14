@@ -460,24 +460,58 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   a bound group's window the same way. Launch rates are worth tuning from here, and the
   `DAMAGES_ZEPPELIN` rule is exercisable in the cockpit rather than only in `AiRocketeerTests`.
 
-- `BL-515` `[Research]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: feel]` `[CM04]` **CM04 (C3/M03): the Barracuda takes damage from every side, and the original may
-  only accept hits inside its hangar.** *Evidence:* reported at the controls as a question: the
-  submarine can be damaged from any angle, where the recollection is that the original demands
-  shooting into the open hangar. Not decoded either way. *Fix shape:* read the Barracuda's
-  destructible data in C3 (`barracuda`, activated by `sub_movement`, `docs/formats/gamez.md`): which
-  node carries the HP pool and whether that node is the hull or an interior hangar volume. If the
-  pool sits on an interior node, our hit resolution is landing on the hull's collider instead and
-  that is the bug. If the pool is on the hull, the original behaves as we do and this closes as an
-  answer. The lead is the mission's own voice line, which tells the player to shoot into the
-  Barracuda's hangar; that is a hint about where the weak point is, not proof the hull is immune.
-  *⚠ Traps:* the report is a question prompted by that voice line, not a memory of the original's
-  hit rule; do not build a hangar-only rule from it. If the data shows one pool on the hull, the
-  voice line is flavour and this closes. A second report from the controls: three flak rockets
-  on the hull killed it, which reads too easy if the hull takes hits at all and right if only
-  the hangar does, so the count is the same question and not a second item. A third report from the
-  controls, a CM04 campaign sortie: the Barracuda died to about six to eight flak hits on
-  the hull. *Cross-refs:*
-  `CAP-57` (the original filmed taking three flak rockets on the hull).
+- `BL-515` `[Bug]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: data]` `[CM04]` **CM04 (C3/M03): the Barracuda's hit points sit on its hangar-door node, and our hit
+  resolution answers a hull hit with them.** *Evidence:* the submarine carries exactly one pool, the
+  compiled def `barracuda` / `sub_destruction`
+  (`extracted/C3/M03/mis_anim/barracuda-sub_destruction-subgen_doors.json`, and the same def again
+  in `C3/IA1`): `health 200`, `activation WeaponHit`, `anim_root_name subgen_doors`, with
+  `DAMAGE_SEQUENCE` stages at `ANIM_HEALTH` 175, 135, 95 and 50. The reader source agrees
+  (`extracted/C3/M03/zrdr/submarine.zrd.json`: `NAME barracuda`, `ANIMATION_NAME sub_destruction`,
+  `ANIMATION_ROOT_NAME subgen_doors`, `HEALTH 200`). `subgen_doors` is not the hull: it is a sibling
+  of the hull meshes under `subhealthy` (C3 gamez node 5401 `subhealthy` over 5402 `sub_body`,
+  5403 `sub_body2`, 5404 `sub_tower`, 5405 `sub_runway`, 5406 `subgen_doors`, 5407 `sub_doors`), a
+  30 x 5 x 21 m block sitting at the inboard end of the 122 m flight deck and directly under the
+  conning tower, which is the hangar mouth the mission's voice line points at, against a hull 54 m
+  wide and 276 m long. No other def with `health > 0` anchors anywhere under `subhealthy`; the sub's own
+  guns are separate pools hanging off `dbase` (`aagun98` and `aagun99` at 30 each, `8igun01` at 60).
+  The original registers the weapon-hit handler on the animation-root node alone, and the impact
+  dispatcher reads the handler list off the struck node without ever walking a parent chain
+  ([`docs/formats/destructibles.md`](docs/formats/destructibles.md), "Which node takes the hit"),
+  while the struck node is whichever node's own polygons the ray met
+  ([`docs/org/weaponRay.md`](docs/org/weaponRay.md)), so a round on `sub_body`, `sub_body2`,
+  `sub_tower`, `sub_runway` or `sub_doors` does nothing to the sub at all. Ours does the opposite:
+  `DestructibleRegistry.Register` claims `subgen_doors` outright and the def's `barracuda` anchor as
+  a fallback, and `Resolve` climbs the struck collider's parent chain up to that anchor, so every one
+  of the five hull meshes answers with the 200 HP pool from the moment `sub_movement`'s
+  `subgen_doors_on` switches the damage node on.
+  *Fix shape:* while a pool is alive, its fallback anchor claim answers only for a struck node inside
+  its own damage node's subtree, and a climb that reaches the anchor any other way carries on past it
+  rather than stopping. A destroyed pool keeps the anchor claim exactly as it is, which is what a hit
+  on a wreck needs, and the Gemini stow rule already in `Resolve` is the same idea for a different
+  reason. Pin it with an engine suite over C3/M03 asserting that `Resolve` answers nothing for
+  `sub_body` and the pool for `subgen_doors`, and that the pool still answers for `sub_body` once it
+  is destroyed.
+  *The flak count, against the data:* `wep_07` FLAK authors `HEALTH_DAMAGE 35`
+  (`extracted/zrdr/weapons.zrd.json`), and a destructible spends the health term only, so 200 HP is
+  **six** clean hits on the pool. That is the six-to-eight sortie, and it needs no other explanation.
+  The three-hit report needs more than one share per rocket, which the same anchor fallback allows:
+  the flak carries `IMPACT_PROXIMITY 100`, `Projectile.ApplyDamage` deduplicates its splash shares
+  per mesh node (`WorldCollision.OwnerOf`), and up to six of the sub's meshes are separate recipients
+  that all resolve to the one pool. Narrowing the resolution leaves exactly one of them, so the count
+  falls out of the same fix.
+  *⚠ Traps:* do not give the hull a pool of its own to "balance" it; the data authors one pool and
+  one only, and inventing a second is a divergence. Do not reach for the difficulty scale either: it
+  is a vehicle-spawn rule and a destructible never takes it
+  ([`docs/org/vehicleDamage.md`](docs/org/vehicleDamage.md)). The sub is untouchable before the
+  hangar doors come up, and that is correct in both engines: `sub_movement`'s `RESET_STATE` leaves
+  every node but `sub_tower` inactive and only turns `subgen_doors` on at the end of the surfacing,
+  which ours refuses through the stow rule and the original refuses through the ray's `ACTIVE` gate,
+  so a sortie that fires into the surfacing hull and sees nothing is not this bug. And `CAP-57` is
+  still unfilmed, so no count from the original has been measured at all: the three-hit and
+  six-to-eight figures are both reports against our build.
+  *Cross-refs:* `CAP-57` (still owed: whether the original's hull takes damage at all, and what the
+  hangar costs in rockets), `docs/formats/destructibles.md` (the anchor-claim rule and its stow
+  limit), `docs/org/weaponRay.md`.
 
 - `BL-561` `[Research]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: decoded]` **Aircraft projectile hit volumes are tuned convex decompositions, and the
   original's hit geometry is untraced.** *Evidence:* `PlaneCollider` builds an aircraft's hit boxes

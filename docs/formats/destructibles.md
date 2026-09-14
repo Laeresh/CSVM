@@ -252,6 +252,13 @@ round on a piece that registered no handler does nothing at all to the group aro
 > the definition that happens to name the group. Two destructible defs anchored on one node are told
 > apart by nothing else.
 
+The root is not always the piece a shooter would aim at. C3's Barracuda authors `sub_destruction`
+`HEALTH 200` with `ANIMATION_ROOT_NAME subgen_doors`, the hangar-door block at the inboard end of the
+flight deck under the conning tower. That node is a sibling of the hull meshes (`sub_body`,
+`sub_body2`, `sub_tower`, `sub_runway`, `sub_doors`) under `subhealthy`, not their parent, and no
+other def with `health > 0` anchors under `subhealthy` at all, so only a round that strikes the
+hangar mouth itself reaches the submarine's pool.
+
 That matters wherever one object authors two independent deaths. Across the whole install, 10 of the
 2,603 destructible defs' `NAME` groups carry defs with **different** animation roots:
 
