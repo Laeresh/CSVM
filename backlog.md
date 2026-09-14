@@ -558,8 +558,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   interaction with the right-stick free look (`BL-372`). `L` is reserved in `docs/controls.md` but
   bound to nothing. `PLAN-cockpit-view`'s head-look decode names the mechanism this camera would
   ride: the look-state byte the controller reads (`DAT_0064ef68`) has a third value, `2`, for
-  padlock, sitting beside the `0`/`1` snap/free-look states `BL-432`'s selector keys pick between,
-  so `L`'s camera is this same state machine's third mode, not a bolt-on. Building it needs
+  padlock, sitting beside the `0`/`1` snap/free-look states the `K` and `J` selector keys already
+  pick between, so `L`'s camera is this same state machine's third mode, not a bolt-on. Building it needs
   `TargetSelection.Current` plumbed into `HeadLook`'s target so the padlock state aims the head at
   the current target instead of reading player input.
   *Fix shape:* decode the padlock branch of the head-look controller (what state `2` does with
@@ -567,8 +567,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   chase camera follows the head or the aircraft), then plumb `TargetSelection.Current` into
   `HeadLook` and bind `L`. No change to the targeting module itself, which already exposes
   `TargetSelection.Current` cleanly for a camera to read.
-  *Cross-refs:* `BL-372` (right-stick free look), `BL-432` (the `K`/`J` mode selectors, the byte's
-  other two states), `docs/org/targeting.md` "Track Target", `docs/controls.md`,
+  *Cross-refs:* `BL-372` (right-stick free look), `HeadLook.LookMode` and its `SelectMode` writers,
+  which state `2` enters and leaves through, `docs/org/targeting.md` "Track Target", `docs/controls.md`,
   `PLAN-cockpit-view` (`HeadLook`, `src/Flight/HeadLook.cs`).
 
 - `BL-922` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **Controller haptics: a
@@ -1378,30 +1378,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *⚠ Traps:* (i) **The two `CAMERA_STATE`/`CAMERA_FROM_TO` functions (`FUN_00502da0`, `FUN_00503e70`) are animated/in-script FOV changes only (`.ani` H/V_FOV events), not the base per-view FOV; do not wire the engine's base FOV to them.** (ii) **The 80° is attached to camera mode 6 specifically, not "first person" generally**, mode 7 is also first-person but is 60°, so gating on "is first person" alone would read the mode-7 number wrong. (iii) The `Virtual Cockpit` string is a HUD/perf/zoning label (`FUN_0059c340`), not a view, ruled out. (iv) ~~Which of cockpit vs nose is mode 6 (80°) vs mode 7 (60°) was not pinned~~, **resolved**: the `FUN_0049fb00` render gate (`cockpit1` drawn only when mode==6) pins mode 6 = Cockpit (80°) and mode 7 = Nose (60°). The remaining subtlety is that **both modes share the same `cockpit_camera` position** (no separate nose offset exists), so "nose" is a render/head-look/FOV variant of the same camera point, not a physically different marker. (v) "62°" invariants elsewhere are the assumption being corrected, not corroboration.
   *Cross-refs:* `docs/org/cameraViews.md` (the landed Nose view shares the Cockpit camera point but uses the 60° base), `BL-150` (numpad fixed-view FOV calibration is still missing, a documented 60°/80° base + the aspect conversion is the calibration input it needs), `docs/formats/camparam.md` (chase/tuning only; does not cover FOV), `PLAN-overcast-match` line 1463 and `docs/org/tracers.md:258` (the 62° assumption to correct), `PLAN-cockpit-view` A3 (landed the mode-6/7 half of this model).
 
-- `BL-432` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The original selects head-look behaviour by key; CSVM infers it from which
-  device moved, a recorded behavioural difference.** *Decision:* both. `K` and `J` set the mode
-  byte explicitly as the original does, and a move on the other device still switches it, so the
-  key is a default the player can state and the device inference stays live over it.
-  `OriginalScreenshots/Keybinds Views 1.png`
-  binds `K` **Access Snap Look Mode** and `J` **Access Smooth Look Mode**, both free in CSVM's
-  flight scheme today. The look-state byte the head-look controller reads (`DAT_0064ef68`,
-  `PLAN-cockpit-view`'s decode of `FUN_0042d010`) is a mode selector with three values, `0`
-  snap, `1` free-look, `2` padlock (`BL-399`), that the original's player flips explicitly with
-  these two keys. `PLAN-cockpit-view` C21 instead infers the mode from the input source: the
-  numpad snap cluster snaps, the mouse/right stick pans smoothly, and both are live at once rather
-  than one active mode at a time. That is a genuine behavioural difference, not just an unbound key:
-  the original's player cannot free-look while snap is the active mode (or vice versa), and CSVM's
-  player always can.
-  *Fix shape:* bind `K`/`J` in the flight scheme to write `HeadLook`'s mode (`0` snap, `1`
-  free-look), and keep the device inference as a second writer of the same mode rather than a
-  parallel path, so `HeadLook.Step` honours exactly one mode per frame and the last writer wins.
-  Build beside `BL-399`, it is the same byte's third state and the padlock must leave through the
-  same writers.
-  *Cross-refs:* `BL-399` (padlock, the byte's third state), `PLAN-cockpit-view` C21 (`HeadLook`,
-  `src/Flight/HeadLook.cs`).
-
 - `BL-436` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The cockpit view's whole feel is unjudged at the controls,
-  one sitting owes seven separate decisions `PLAN-cockpit-view` made without one.** (a)
+  one sitting owes eight separate decisions `PLAN-cockpit-view` made without one.** (a)
   `PlaneBuilder.InteriorScale` (B11) is a declared TUNE, framed static (0.04, "the panel ~0.7 m
   ahead of the eye") and never flown. (b) Head-look feel (C21): the snap directions, the 2 rad/s
   free-look pan rate, and the elevation/azimuth smoothing rates (3.0/5.0 per second) are all
@@ -1418,8 +1396,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `PLAN-cockpit-view`'s ⚠ table row 2 retired `docs/org/cameraViews.md`'s old "head fixed in
   Nose" reading in favour of "head-look runs, only autohead is gated", fly Nose and confirm the
   free-look is really there, since the retired reading may have been a live impression rather than
-  a misread decompile.
-  *Fix shape:* one cockpit sitting across a couple of airframes covers all seven; each is a
+  a misread decompile. (h) The parked head after a mouse pan: a pan writes `HeadLook`'s smooth
+  look mode, and that mode leaves a frame with no look input alone, so the head stays where it was
+  pointed until `K`, `numpad 5` or a numpad direction moves it. That is the decoded state-`1` rule
+  and it is a real change to how the cockpit feels, so judge whether it reads as the original's
+  smooth look or as a head that got stuck.
+  *Fix shape:* one cockpit sitting across a couple of airframes covers all eight; each is a
   judgement call, not a re-decode.
   *Cross-refs:* `PLAN-cockpit-view` (every decision above, by wave: B11, C21, C22, D31), `BL-391`
   (engine level, kept separate from (f)).

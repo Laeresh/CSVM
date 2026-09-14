@@ -125,4 +125,10 @@ public enum InputAction
     ThrottleSet6,
     ThrottleSet7,
     ThrottleSet8,
+
+    // The two look-mode selectors of the original's Views 1 page, which state which head-look
+    // behaviour is live instead of leaving it to whichever device moved. Appended for the reason
+    // every member above the throttle run is: the enum is positional and indexed by value.
+    SnapLookMode,
+    SmoothLookMode,
 }

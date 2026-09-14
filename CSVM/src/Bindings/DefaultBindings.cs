@@ -173,6 +173,12 @@ public static class DefaultBindings
         // The first-person free look is the held right mouse button (docs/controls.md), the same
         // control the freecam look posture reads (SpectatorCamera).
         b.Mouse(InputAction.FreeLook, MouseButton.Right);
+
+        // The two look-mode selectors on the original's own keys, which its keybind page calls
+        // Access Snap Look Mode and Access Smooth Look Mode. Keyboard only, as the original has
+        // them: neither reaches a joystick button there and the pad has no free control here.
+        b.Keys(InputAction.SnapLookMode, Key.K);
+        b.Keys(InputAction.SmoothLookMode, Key.J);
         return b;
     }
 

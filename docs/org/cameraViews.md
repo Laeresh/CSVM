@@ -367,7 +367,21 @@ authored pitch, `0.29°` on every plane but Balmoral's `0.2°`, not at the `15.7
 the back flag set the routine never calls `FUN_0042d010` at all and writes the fixed direction
 `(0, 0, 1)` instead.
 
-- **State byte** `DAT_0064ef68`: `0` snap, `1` free-look, `2` padlock (`BL-399`, `BL-432`).
+- **State byte** `DAT_0064ef68`: `0` snap, `1` free-look, `2` padlock (the padlock is `BL-399`).
+  CSVM carries the first two as `HeadLook.LookMode`, written by the same two keys and by the device
+  that moved, one mode to a frame with the last writer winning.
+- **Mode writers.** Three command handlers own the byte, and every change passes through one of
+  them: `0x00489450` writes `0` (its keybind page's "Access Snap Look Mode", key `K`);
+  `0x00489460` zeroes the targets and the shown angles (`DAT_0064ef60/64/58/5c`) and then writes
+  `1` ("Access Smooth Look Mode", key `J`); `0x004894a0` writes `mode = (mode == 2) ? 0 : 2`, the
+  padlock toggle (Track Target, key `L`). Camera init `FUN_0042b730` writes `0` and zeroes the
+  shown angles at `0042b747`, so a level load starts in snap. A snap direction pressed while
+  padlocked writes `0` through the first of these, which is how state `2` leaves by the writers it
+  arrived through.
+- **A frame with no look input** reads differently per state, which is the modes' real
+  behavioural difference: state `0` zeroes both angles, so a released snap direction returns the
+  head, while state `1` leaves them untouched, so a pan parks the head where it was pointed until
+  the centre slot `0x3e` or a state `0` writer moves it.
 - **Angles.** `DAT_0064ef60` is elevation above level (`0` = level, `π/2` = straight up, clamped to
   `[0, π/2]` in the input paths, the original's head never looks below level in front of the
   clamp; the caller-supplied floor above is a SEPARATE, per-caller bound); `DAT_0064ef64` is
@@ -386,8 +400,10 @@ the back flag set the routine never calls `FUN_0042d010` at all and writes the f
   `e^(−x)` for `x < 0.1`): elevation rate **3.0/s**, azimuth rate **5.0/s** (τ ≈ 0.33 s / 0.20 s).
   The external camera's zoom value smooths at 1.5/s, moves at `2·dt` on keys `0x43`/`0x44`,
   clamped `[0, 1]`, the section above has its direction and what it feeds.
-- **Autohead** (idle velocity-follow, the gated tail block): with the option byte `DAT_0071dacc`
-  set and no look input, the plane's velocity transforms into the plane frame, scales by
+- **Autohead** (idle velocity-follow, the gated tail block): the gate is
+  `(mode == 2 && no target) || (mode == 0 && no direction)`, so it never runs in free-look. With
+  that met and the option byte `DAT_0071dacc`
+  set, the plane's velocity transforms into the plane frame, scales by
   `autohead_turn_time`, caps in magnitude at `autohead_turn_max`, and the head aims along it,
   elevation floored at `autohead_turn_min_pitch` (below the input paths' own `0` floor). All three
   are `player.json` keys (loader `FUN_004735b0`, globals `0071c464/468/46c`): shipped `0.75`,
@@ -410,7 +426,7 @@ the back flag set the routine never calls `FUN_0042d010` at all and writes the f
 | **Death camera** | mode `8`: one spot from the `death_*` fields when the player is destroyed, held while the wreck falls | landed as `StaticCameras`, entered by the player's own destruction |
 | Static-camera terrain clearance | `crash_chord_y`/`crash_elev`, taken by the crash cut, the death camera and the flyby alike | landed as `StaticCameras.LiftClearOfWorld`, taken by all three |
 | Camera position | per-plane authored `cockpit_camera` offset, read from the model (`player_pfighter` `(0,0.75,−0.2)`) | landed: `MarkerRig.FindNamedMarker` / `PlaneBuilder.CockpitCameraOffset` (A2) |
-| Head-look controller | snap, free-look, center key, autohead, one shared state machine, three callers (first person + chase) | landed as `HeadLook`, one head for every view: the snap cluster, the centre key and the mouse aim the cockpit and swing the chase camera alike, each frame floored by the view that places it |
+| Head-look controller | snap, free-look, center key, autohead, one shared state machine, three callers (first person + chase) | landed as `HeadLook`, one head for every view: the snap cluster, the centre key and the mouse aim the cockpit and swing the chase camera alike, each frame floored by the view that places it, and `K`/`J` state the mode the original's two selectors state |
 | Chase base elevation | the head's elevation plus the authored `thirdp_pitch`, i.e. dead astern at `0.29°` with the head settled | a hand-picked `15.7°` from `BaseUp`/`BaseBack` (`BL-885`) |
 
 The camera is placed faithfully today: the plane's `cockpit_camera` offset read from the model (no

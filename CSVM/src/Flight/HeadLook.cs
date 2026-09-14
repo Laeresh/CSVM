@@ -3,28 +3,44 @@ using Godot;
 
 namespace CSVM.Flight;
 
+/// <summary>Which of the head's behaviours is live, the original's own look-state byte
+/// (docs/org/cameraViews.md, head-look controller). Snap returns the head to straight ahead the
+/// moment its direction is released and is where autohead runs; free-look pans the head and leaves
+/// it wherever it was pointed. The byte's third value is the padlock, which this enum does not
+/// carry yet: it joins here and is written by the same writers <see cref="HeadLook.Step"/> already
+/// runs, not by a path of its own.</summary>
+public enum LookMode
+{
+    /// <summary>The original's state 0, and the mode a head starts in.</summary>
+    Snap,
+
+    /// <summary>The original's state 1, its "smooth look".</summary>
+    FreeLook,
+}
+
 /// <summary>One frame of look input, in the head's own conventions: a snap direction as a
 /// composed (x, y) with +x right and +y forward, a free-look direction with +right and +up, the
-/// center key, the pad's absolute aim with the same +right/+up signs, and whether the free-look
-/// control is held. The snap and free-look directions are read for DIRECTION only, so a
-/// half-deflected input pans exactly as fast as a full one, which is what the original's
-/// hat-switch input does. That rule does NOT bind <paramref name="PadRight"/>/<paramref
+/// center key, the pad's absolute aim with the same +right/+up signs, whether the free-look
+/// control is held, and the two mode keys. The snap and free-look directions are read for
+/// DIRECTION only, so a half-deflected input pans exactly as fast as a full one, which is what the
+/// original's hat-switch input does. That rule does NOT bind <paramref name="PadRight"/>/<paramref
 /// name="PadUp"/>: those carry a MAGNITUDE, because the pad aims absolutely (docs/controls.md).
 /// <paramref name="Looking"/> claims the free-look arm on its own, so a held control over a still
 /// mouse holds the pose rather than reading as idle. Defaulted, so a caller forcing one of the
 /// other paths cannot leave a stale deflection on the frame.</summary>
 public readonly record struct HeadLookInput(
     float SnapX, float SnapY, float FreeRight, float FreeUp, bool Center,
-    float PadRight = 0f, float PadUp = 0f, bool Looking = false);
+    float PadRight = 0f, float PadUp = 0f, bool Looking = false,
+    bool SelectSnapMode = false, bool SelectFreeLookMode = false);
 
 /// <summary>
 /// The pilot's head, in the two first-person views and on the chase camera alike: where it is
-/// being told to look (the TARGET angles, set by a snap direction, integrated by free-look, or
-/// zeroed by the center key) and where it is actually looking (the SHOWN angles, chasing the
-/// targets exponentially at the decoded rates). Elevation is 0 at level and +π/2 straight up,
-/// clamped to <see cref="ElevationFloor"/>..π/2, the floor the placing view sets; azimuth is 0
-/// straight ahead, positive to the left, and CLAMPED to ±π, the head stops at dead astern and
-/// never pans past it, the original's own stop confirmed at its controls. Both bounds bind the
+/// being told to look (the TARGET angles, set through whichever <see cref="LookMode"/> is live)
+/// and where it is actually looking (the SHOWN angles, chasing the targets exponentially at the
+/// decoded rates). Elevation is 0 at level and +π/2 straight up, clamped to
+/// <see cref="ElevationFloor"/>..π/2, the floor the placing view sets; azimuth is 0 straight
+/// ahead, positive to the left, and CLAMPED to ±π, the head stops at dead astern and never pans
+/// past it, the original's own stop confirmed at its controls. Both bounds bind the
 /// relative paths (snap, free-look, center); the absolute pad aim carries its own envelope, see
 /// <see cref="PadAimTargets"/>. Engine-free apart from <see cref="Mathf"/>: the shown angles become
 /// a basis in <see cref="CameraController.FirstPersonPose"/> and a chase offset in <see cref="CameraController.ChaseSwing"/>.
@@ -76,18 +92,30 @@ public sealed class HeadLook
     // How near centre counts as at rest, 0.1°: the window Settled reads.
     private const float SettledWindowRad = 0.001745f;
 
+    // The two mode keys as they stood last frame. The mode is written on the PRESS EDGE, as the
+    // original's command handlers fire, so a key held down does not pin the mode against the
+    // device inference that runs after it.
+    private bool _snapKeyDown;
+
+    private bool _smoothKeyDown;
+
     /// <summary>The floor this head starts on; the placing view sets it per frame afterwards.
     /// </summary>
     public HeadLook(float elevationFloor = FirstPersonElevationFloor) =>
         ElevationFloor = elevationFloor;
 
-    /// <summary>Consulted on any frame with no look input at all, and its answer
-    /// becomes the targets directly. It sets elevation past <see cref="ElevationFloor"/> on
+    /// <summary>Consulted on a <see cref="LookMode.Snap"/> frame with no look input at all, and its
+    /// answer becomes the targets directly. It sets elevation past <see cref="ElevationFloor"/> on
     /// purpose, autohead's own floor is below level, so the value is taken as given and only the
-    /// azimuth is clamped. Null (the default) returns the idle head to straight ahead, the
-    /// original's own idle rule in its default snap-look mode; a head that stays where it was
-    /// parked is the J smooth-look mode, filed, not this.</summary>
+    /// azimuth is clamped. Null (the default) returns the idle head to straight ahead, which is
+    /// what that mode does with a released direction. ⚠ Never consulted in
+    /// <see cref="LookMode.FreeLook"/>: the original gates autohead on the snap state.</summary>
     public Func<(float Elevation, float Azimuth)?>? IdleAim { get; set; }
+
+    /// <summary>Which behaviour this frame runs, and the only thing that decides it: exactly one
+    /// mode is live per frame. Written by the two mode keys and then by whichever device moved, so
+    /// the key states a default and a device still takes it back.</summary>
+    public LookMode Mode { get; private set; }
 
     /// <summary>The lowest elevation this head may be told to look at:
     /// <see cref="FirstPersonElevationFloor"/> in the cockpit and <see cref="ChaseElevationFloor"/>
@@ -189,53 +217,34 @@ public sealed class HeadLook
     /// so free-look cannot wind past the tail and come round the other side.</summary>
     public static float ClampAzimuth(float angle) => Mathf.Clamp(angle, -Mathf.Pi, Mathf.Pi);
 
-    /// <summary>One frame: pick this frame's target from the input, then chase it. The center key
-    /// beats a snap, a snap beats the pad's absolute aim, that beats free-look, and a frame with
-    /// none of them is the idle frame <see cref="IdleAim"/> owns; a held free-look control counts
-    /// as free-look with no motion on it. A centred pad claims no frame, so a plugged-in stick
-    /// blocks neither the mouse nor autohead. The chase runs whatever the input was, so every path
-    /// (snap, pad, free-look, center, autohead) reaches the eye through the same law.</summary>
+    /// <summary>One frame: settle <see cref="Mode"/>, pick this frame's target through that mode
+    /// alone, then chase it. The center key beats everything in both modes. Snap then runs the
+    /// direction table, the pad's absolute aim, or the idle frame <see cref="IdleAim"/> owns;
+    /// free-look runs the pad, the pan, or nothing at all, holding where the head was pointed. A
+    /// centred pad claims no frame, so a plugged-in stick blocks neither the mouse nor autohead.</summary>
     public void Step(float dt, in HeadLookInput input)
     {
         var snap = SnapTargets(input.SnapX, input.SnapY);
+        bool panning = input.Looking || input.FreeRight != 0f || input.FreeUp != 0f;
+        SelectMode(input, snap != null, panning);
+
         if (input.Center)
         {
             SetTargets(0f, 0f);
         }
-        else if (snap != null)
+        else if (Mode == LookMode.Snap)
         {
-            SetTargets(snap.Value.Elevation, snap.Value.Azimuth);
+            SnapFrame(snap, input);
         }
         else if (input.PadRight != 0f || input.PadUp != 0f)
         {
-            // Above free-look and below the discrete commands: an absolute aim is a standing
-            // instruction, so a momentary snap or center press still overrides it while held.
-            // Assigned rather than SetTargets'd, since this path owns its own bounds.
-            var (elevation, azimuth) = PadAimTargets(input.PadRight, input.PadUp);
-            TargetElevation = elevation;
-            TargetAzimuth = azimuth;
+            PadAim(input);
         }
-        else if (input.Looking || input.FreeRight != 0f || input.FreeUp != 0f)
+        else if (panning)
         {
             // A held control claims this arm with no motion on it, so a still mouse holds the pose
-            // instead of falling through to the idle arm and its return to centre.
+            // rather than reading as idle. An idle frame holds it too, so the two agree.
             FreeLook(input.FreeRight, input.FreeUp, dt);
-        }
-        else
-        {
-            // No look input at all: autohead owns the frame when enabled, else the head returns
-            // to straight ahead, the original's idle rule in its default snap-look mode, for
-            // snap and free-look alike. The smoothing below makes it a swing, not a cut.
-            var idle = IdleAim?.Invoke();
-            if (idle != null)
-            {
-                TargetElevation = idle.Value.Elevation;
-                TargetAzimuth = ClampAzimuth(idle.Value.Azimuth);
-            }
-            else
-            {
-                SetTargets(0f, 0f);
-            }
         }
 
         Elevation = Approach(Elevation, TargetElevation, ElevationSmoothRate, dt);
@@ -244,13 +253,82 @@ public sealed class HeadLook
         Azimuth = Approach(Azimuth, TargetAzimuth, AzimuthSmoothRate, dt);
     }
 
-    /// <summary>Put the head straight ahead at once, targets and shown angles together, what a
-    /// fresh spawn wants, as against the center key's smoothed return.</summary>
+    /// <summary>Put the head straight ahead at once, targets and shown angles together, and back in
+    /// <see cref="LookMode.Snap"/>, which is what a fresh spawn wants and what the original's own
+    /// camera init writes. As against the center key's smoothed return, which leaves the mode
+    /// alone.</summary>
     public void Reset()
     {
         SetTargets(0f, 0f);
         Elevation = 0f;
         Azimuth = 0f;
+        Mode = LookMode.Snap;
+    }
+
+    // This frame's mode, in writer order: the two keys on their press edge first, then whichever
+    // device moved, so a key states a default and a device still takes it back. Of the two
+    // inferences the snap direction is written last, which is what decides a frame carrying a
+    // direction and a pan at once.
+    private void SelectMode(in HeadLookInput input, bool snapping, bool panning)
+    {
+        if (input.SelectSnapMode && !_snapKeyDown)
+        {
+            Mode = LookMode.Snap;
+        }
+
+        if (input.SelectFreeLookMode && !_smoothKeyDown)
+        {
+            // The original's own handler centres the head, shown angles included, before entering
+            // the mode, so smooth look always starts from straight ahead.
+            Reset();
+            Mode = LookMode.FreeLook;
+        }
+
+        _snapKeyDown = input.SelectSnapMode;
+        _smoothKeyDown = input.SelectFreeLookMode;
+        if (panning)
+        {
+            Mode = LookMode.FreeLook;
+        }
+
+        if (snapping)
+        {
+            Mode = LookMode.Snap;
+        }
+    }
+
+    // The snap mode's frame: the direction table, else the pad's standing aim, else the idle rule.
+    // A released direction returns the head to straight ahead, which is this mode's whole
+    // difference from free-look, and the frame autohead is allowed to own.
+    private void SnapFrame((float Elevation, float Azimuth)? snap, in HeadLookInput input)
+    {
+        if (snap != null)
+        {
+            SetTargets(snap.Value.Elevation, snap.Value.Azimuth);
+        }
+        else if (input.PadRight != 0f || input.PadUp != 0f)
+        {
+            PadAim(input);
+        }
+        else if (IdleAim?.Invoke() is { } idle)
+        {
+            TargetElevation = idle.Elevation;
+            TargetAzimuth = ClampAzimuth(idle.Azimuth);
+        }
+        else
+        {
+            SetTargets(0f, 0f);
+        }
+    }
+
+    // The pad's absolute aim, this port's own path: a standing instruction, so it sits below the
+    // discrete commands and above the pan. Assigned rather than SetTargets'd, since it owns its
+    // own bounds.
+    private void PadAim(in HeadLookInput input)
+    {
+        var (elevation, azimuth) = PadAimTargets(input.PadRight, input.PadUp);
+        TargetElevation = elevation;
+        TargetAzimuth = azimuth;
     }
 
     // Integrate the targets at the fixed pan rate along the input direction. The direction is

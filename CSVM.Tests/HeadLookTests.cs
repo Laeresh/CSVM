@@ -23,6 +23,13 @@ public class HeadLookTests
 
     private static HeadLookInput Idle => default;
 
+    // The original's two mode keys, K and J, as the frame they are pressed on.
+    private static HeadLookInput SnapKey =>
+        new(0f, 0f, 0f, 0f, false, 0f, 0f, false, true);
+
+    private static HeadLookInput SmoothKey =>
+        new(0f, 0f, 0f, 0f, false, 0f, 0f, false, false, true);
+
     // The eight direction slots as the original's own key-binding menu labels them
     // (OriginalScreenshots/Keybinds Views 2.png), each read as the composed direction its key
     // contributes: the head must land where its label says. Kp1/Kp3 are "Up/…/Rear", which is what
@@ -266,21 +273,108 @@ public class HeadLookTests
         Assert.InRange(head.Azimuth, -Mathf.Pi, Mathf.Pi);
     }
 
-    // The original's idle rule in its default snap-look mode: any look input released, snap and
-    // free-look alike, returns the head to straight ahead (a stay-parked head is the filed
-    // smooth-look mode). With no IdleAim hook the idle frame targets (0, 0).
+    // The two modes differ exactly here, which is the whole reason the original carries the state
+    // byte: a released pan holds the head where it was pointed in free-look, and the snap key puts
+    // the head back on the mode whose released direction returns it to straight ahead.
     [Fact]
-    public void ReleasingFreeLookReturnsTheHeadToStraightAhead()
+    public void AReleasedPanHoldsTheHeadInFreeLookAndTheSnapKeyBringsItBack()
     {
         var head = new HeadLook();
         for (int i = 0; i < 10; i++)
         {
             head.Step(0.1f, Free(-1f, 1f));
         }
-        Assert.NotEqual(0f, head.TargetAzimuth);
+        Assert.Equal(LookMode.FreeLook, head.Mode);
+        float elevation = head.TargetElevation, azimuth = head.TargetAzimuth;
+        Assert.NotEqual(0f, azimuth);
+
         head.Step(0.1f, Idle);
+        Assert.Equal(elevation, head.TargetElevation, Tol);
+        Assert.Equal(azimuth, head.TargetAzimuth, Tol);
+
+        head.Step(0.1f, SnapKey);
+        Assert.Equal(LookMode.Snap, head.Mode);
         Assert.Equal(0f, head.TargetElevation, Tol);
         Assert.Equal(0f, head.TargetAzimuth, Tol);
+    }
+
+    // The mode keys, the original's Access Snap Look Mode and Access Smooth Look Mode: each states
+    // which behaviour is live, and the smooth one centres the head on the way in, targets and shown
+    // angles together, as its own handler does.
+    [Fact]
+    public void TheModeKeysStateTheModeAndTheSmoothOneCentresTheHead()
+    {
+        var head = new HeadLook();
+        Assert.Equal(LookMode.Snap, head.Mode);
+
+        head.Step(0.5f, Free(-1f, 1f));
+        Assert.NotEqual(0f, head.Azimuth);
+        head.Step(0.1f, SmoothKey);
+        Assert.Equal(LookMode.FreeLook, head.Mode);
+        Assert.Equal(0f, head.TargetAzimuth, Tol);
+        Assert.Equal(0f, head.Azimuth, Tol);
+        Assert.Equal(0f, head.Elevation, Tol);
+
+        head.Step(0.1f, SnapKey);
+        Assert.Equal(LookMode.Snap, head.Mode);
+    }
+
+    // The device inference stays live over the key, in both directions: the key states a default
+    // and the next device to move takes the mode back off it.
+    [Fact]
+    public void AMouseMoveAfterTheSnapKeyAndASnapAfterTheSmoothKeyBothSwitchTheMode()
+    {
+        var head = new HeadLook();
+        head.Step(0.1f, SnapKey);
+        head.Step(0.5f, Free(0f, 1f));
+        Assert.Equal(LookMode.FreeLook, head.Mode);
+        Assert.Equal(HeadLook.FreeLookRate * 0.5f, head.TargetElevation, Tol);
+
+        head = new HeadLook();
+        head.Step(0.1f, SmoothKey);
+        head.Step(0.1f, Snap(-1f, 0f));
+        Assert.Equal(LookMode.Snap, head.Mode);
+        Assert.Equal(Mathf.Pi / 2f, head.TargetAzimuth, Tol);
+    }
+
+    // One mode owns the frame, so a numpad direction and a mouse pan arriving together do not both
+    // move the head: the snap direction decides, and the pan is not integrated on top of it.
+    [Fact]
+    public void OneModeOwnsTheFrameWhenBothDevicesMoveAtOnce()
+    {
+        var both = new HeadLook();
+        var snapOnly = new HeadLook();
+        var input = new HeadLookInput(-1f, 0f, 1f, 1f, false);
+        both.Step(0.5f, input);
+        snapOnly.Step(0.5f, Snap(-1f, 0f));
+
+        Assert.Equal(LookMode.Snap, both.Mode);
+        Assert.Equal(snapOnly.TargetElevation, both.TargetElevation, Tol);
+        Assert.Equal(snapOnly.TargetAzimuth, both.TargetAzimuth, Tol);
+
+        // ABLE-TO-FAIL CONTROL: the same pan without the direction is the free-look frame it was
+        // held out of, so the assertion above is about the mode and not about an inert input.
+        var panOnly = new HeadLook();
+        panOnly.Step(0.5f, Free(1f, 1f));
+        Assert.Equal(LookMode.FreeLook, panOnly.Mode);
+        Assert.NotEqual(0f, panOnly.TargetElevation);
+    }
+
+    // Autohead is gated on the snap state in the original, so the idle hook is not consulted at all
+    // while free-look owns the head: that mode's idle frame holds the pose instead.
+    [Fact]
+    public void TheIdleHookIsSilentInFreeLookMode()
+    {
+        int calls = 0;
+        var head = new HeadLook { IdleAim = () => { calls++; return (0.5f, 0.5f); } };
+        head.Step(0.1f, SmoothKey);
+        head.Step(0.1f, Idle);
+        Assert.Equal(0, calls);
+
+        // Back in snap, both frames consult it: the key's own frame carries no look input either.
+        head.Step(0.1f, SnapKey);
+        head.Step(0.1f, Idle);
+        Assert.Equal(2, calls);
     }
 
     // The held control is its own claim on the free-look arm: a mouse that has stopped moving is
@@ -306,20 +400,28 @@ public class HeadLookTests
         Assert.Equal(elevation, head.Elevation, 1e-3f);
     }
 
-    // ABLE-TO-FAIL CONTROL for the hold above: the same still mouse with the control RELEASED is
-    // the idle frame, and the head returns to straight ahead.
+    // Releasing the control leaves the head where the mouse put it, the free-look mode it entered
+    // when the mouse first moved, and the centre key is what brings it back there: the original's
+    // state 1 zeroes the angles on that key alone and on nothing else.
     [Fact]
-    public void ReleasingTheHeldControlReturnsTheHeadToStraightAhead()
+    public void ReleasingTheHeldControlHoldsTheLookAndTheCentreKeyBringsItBack()
     {
         var head = new HeadLook();
         for (int i = 0; i < 10; i++)
         {
             head.Step(0.1f, Looking(-1f, 1f));
         }
-        Assert.NotEqual(0f, head.TargetAzimuth);
+        float azimuth = head.TargetAzimuth;
+        Assert.NotEqual(0f, azimuth);
+
         head.Step(0.1f, Idle);
+        Assert.Equal(LookMode.FreeLook, head.Mode);
+        Assert.Equal(azimuth, head.TargetAzimuth, Tol);
+
+        head.Step(0.1f, new HeadLookInput(0f, 0f, 0f, 0f, true));
         Assert.Equal(0f, head.TargetElevation, Tol);
         Assert.Equal(0f, head.TargetAzimuth, Tol);
+        Assert.Equal(LookMode.FreeLook, head.Mode);
     }
 
     // The head still takes the delta while the control is held: the flag decides who owns the

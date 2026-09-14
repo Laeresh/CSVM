@@ -235,10 +235,10 @@ and does the aiming. Decode: [../formats/camparam.md](../formats/camparam.md).
 The pilot's head, decoded from the original's shared look controller and shared by every view: it
 aims the two first-person views and swings the chase camera, floored per frame by whoever places
 the frame (level in first person, straight down on the chase camera, the original's own two literals). It holds the TARGET angles the input sets and the SHOWN angles chasing them exponentially, 3.0/s in elevation and 5.0/s in azimuth, and `Step` picks this frame's target before always chasing it, so
-the snap, free-look, the centre key and autohead all reach the eye through one law. The three input
-paths are the original's: a snap direction mapped through `SnapTargets`, free-look integrating the
-targets at a fixed 2 rad/s along the normalised input direction, and the centre key zeroing both.
-`HeadLookInput.Looking` claims the free-look arm with no motion on it, so a held control over a still mouse holds the pose; `IdleAim` is the no-input hook `AutoheadTarget` fills.
+the snap, free-look, the centre key and autohead all reach the eye through one law. The three input paths are the original's: a snap direction mapped through `SnapTargets`, free-look integrating the targets at a fixed 2 rad/s along the normalised input direction, and the centre key zeroing both.
+`LookMode` is the original's own mode byte (0 snap, 1 free-look) and `SelectMode` writes it exactly once a frame: the `K` and `J` selectors on their press edge, then the device that moved, so the last writer wins and the padlock state can later arrive and leave through the same writers.
+A snap frame with no direction zeroes the targets and is the only kind that consults `IdleAim`, the no-input hook `AutoheadTarget` fills; a free-look frame holds the pose the pan reached until a selector, a snap direction or the centre key moves it.
+`HeadLookInput.Looking` claims the free-look arm with no motion on it, so a held control over a still mouse holds the pose.
 Engine-free apart from `Mathf`; owned by `CameraController` as `Head`, stepped by `FlightController` on the sim clock.
 
 ## src/Flight/CockpitVisibility.cs

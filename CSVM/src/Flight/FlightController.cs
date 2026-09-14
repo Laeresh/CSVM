@@ -4526,7 +4526,8 @@ public partial class FlightController : Node3D
         // stays on the decoded relative path. `lookY` is the stick's +down, HeadLook wants +up. The
         // held control rides along so a still mouse holds the look instead of reading as idle.
         return new HeadLookInput(snapX, snapY, freeRight, freeUp, _actions.Held(InputAction.LookCenter),
-            lookX, -lookY, FreeLookHeld());
+            lookX, -lookY, FreeLookHeld(),
+            _actions.Held(InputAction.SnapLookMode), _actions.Held(InputAction.SmoothLookMode));
     }
 
     // C22's IdleAim delegate: HeadLook.Step calls this only on a frame with no look input at all.

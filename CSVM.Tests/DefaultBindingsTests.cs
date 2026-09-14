@@ -27,7 +27,7 @@ public class DefaultBindingsTests
 
     /// <summary>The original's shipped keyboard rows, action by action, for
     /// <see cref="TheFlightKeys_AreTheOriginalsOwnTable"/>. The rows it binds that this port has no
-    /// action for (level off, bail out, the external cameras, the look modes) are absent rather than
+    /// action for (level off, bail out, the external cameras, Track Target) are absent rather than
     /// approximated, and the two actions it has no row for are pinned separately.</summary>
     public static TheoryData<InputAction, Key, KeyModifiers> TheOriginalsKeys => new()
     {
@@ -61,6 +61,8 @@ public class DefaultBindingsTests
         { InputAction.CycleCockpitViews, Key.F8, KeyModifiers.None },
         { InputAction.LookCenter, Key.Kp5, KeyModifiers.None },
         { InputAction.LookBack, Key.Kp0, KeyModifiers.None },
+        { InputAction.SnapLookMode, Key.K, KeyModifiers.None },
+        { InputAction.SmoothLookMode, Key.J, KeyModifiers.None },
         { InputAction.Nitro, Key.N, KeyModifiers.None },
         { InputAction.AutoLand, Key.A, KeyModifiers.None },
         { InputAction.Pause, Key.Escape, KeyModifiers.None },
@@ -385,6 +387,23 @@ public class DefaultBindingsTests
             new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.S, KeyModifiers.Shift)), bound);
         Assert.Contains(new Binding(Pad, BindingControl.Button((int)JoyButton.Misc1)), bound);
         Assert.Equal(2, bound.Count);
+    }
+
+    /// <summary>The two look-mode selectors are the original's own K and J, and keyboard only, as
+    /// its Views 1 page has them: neither row carries a joystick button there. Recorded so neither
+    /// drifts onto a pad control, where it would state a mode a pad player cannot state back.
+    /// </summary>
+    [Fact]
+    public void TheTwoLookModeSelectors_AreTheOriginalsKeysAndKeyboardOnly()
+    {
+        var map = DefaultBindings.MapFor(InputContext.Flight, Pad);
+
+        Assert.Equal(
+            new[] { new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.K)) },
+            map.Bindings(InputAction.SnapLookMode));
+        Assert.Equal(
+            new[] { new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.J)) },
+            map.Bindings(InputAction.SmoothLookMode));
     }
 
     /// <summary>Free look is the held right mouse button, the one action the model had no kind for

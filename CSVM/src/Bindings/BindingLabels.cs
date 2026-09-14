@@ -126,6 +126,8 @@ public static class BindingLabels
         InputAction.FlybyView => "Access Chase View",
         InputAction.LookCenter => "Look Forward",
         InputAction.LookBack => "Look Back",
+        InputAction.SnapLookMode => "Access Snap Look Mode",
+        InputAction.SmoothLookMode => "Access Smooth Look Mode",
         InputAction.Nitro => "Use Nitro-Booster",
         InputAction.AutoLand => "Auto-Dock",
         InputAction.Pause => "Pause/Quit/Objectives",
