@@ -29,6 +29,14 @@ public sealed class MouseCapture
     public static bool Allowed(bool realDisplay, bool det, bool scripted) =>
         realDisplay && !det && !scripted;
 
+    /// <summary>The mode a board that swapped in its own drawn pointer puts back on its close.
+    /// ⚠ Never <c>Captured</c>: the pause sheet opens inside the seat's own poll, a frame before the
+    /// seat lets go, so it saves the seat's capture, and its close runs at the session's deferred free,
+    /// after the menu is already up. Restoring that capture leaves a menu nobody can point at. A resume
+    /// needs no capture restored, since the seat takes it again on its next unhalted frame.</summary>
+    public static Input.MouseModeEnum Restorable(Input.MouseModeEnum saved) =>
+        saved == Input.MouseModeEnum.Captured ? Input.MouseModeEnum.Visible : saved;
+
     /// <summary>Takes the mouse, seeding the virtual cursor where the real one stood, so the stick
     /// reads the same deflection on the frame the capture starts as on the frame before it.</summary>
     public void Take(Vector2 cursor)

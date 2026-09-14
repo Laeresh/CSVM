@@ -913,9 +913,9 @@ The mouse a flight seat takes from the desktop while it flies, under either mous
 pointer reports one frozen position, so this accumulates relative motion into a virtual cursor
 confined to the pane, which `MouseFlight.Offset` then reads exactly as it read the real one, and
 banks the same travel separately for head-look's relative law. `Allowed` is the guard: a real display
-with somebody at the controls, which is what keeps the hidden test desktop and every `--det` run on
-the mouse mode their harness set. Pure arithmetic, no device and no display, so a unit drives the
-whole law; `FlightController` owns the mode write, the per-frame decision and the release, and
+with somebody at the controls, which keeps the hidden test desktop and every `--det` run on their
+harness's mouse mode. `Restorable` is what a board drawing its own pointer puts back on close, never
+a capture. `FlightController` owns the mode write, the per-frame decision and the release, and
 `Session/FlightRosterInputs.cs` resolves the guard once per session. Read `MouseFlight.cs` next.
 
 ## src/Flight/NitroSystem.cs
