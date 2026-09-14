@@ -789,7 +789,7 @@ operations both presentations walk, one build at a time. `Open` takes a `CustomP
 optional `IHangarWallet` (what `CampaignWallet` implements: funds, affordability, airframe
 availability, the owned builds, purchase and sale); the three starts pick how the scratch plane
 begins, the per-tab operations clamp and report change, and `Refusal`, `CanCommit`, `Bill` and
-`Commit` are the purchase gate and the write. It also owns every label the screens write, the wallet
+`Commit` are the purchase gate and the write. `LoadStockWeapons` seeds an airframe at rest from its stock fit, whose per-wing pylon counts come off the rig through `Loadout.WingCounts`, so a stock plane's cells are the ones it hangs. It also owns every label the screens write, the wallet
 line, the would-be cost behind the mark on an over-priced row, the name rules, and `Discard`, which
 drops the build and touches nothing saved. Economy and strings: [../org/hangar.md](../org/hangar.md).
 

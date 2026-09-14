@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using CSVM.Flight;
 using Xunit;
@@ -115,6 +116,76 @@ public class LoadoutTests
         Assert.Equal(new[] { 1, 5, 2, 6, 3, 7, 4, 8 }, Loadout.PylonFillOrder);
     }
 
+    [Theory]
+    [InlineData(1, 1, 0)]   // pylon 1
+    [InlineData(2, 2, 0)]   // pylons 1 and 5, both port
+    [InlineData(3, 2, 1)]   // 1, 5 | 2
+    [InlineData(4, 2, 2)]   // 1, 5 | 2, 6
+    [InlineData(5, 3, 2)]   // 1, 3, 5 | 2, 6
+    [InlineData(6, 4, 2)]   // 1, 3, 5, 7 | 2, 6
+    [InlineData(7, 4, 3)]   // 1, 3, 5, 7 | 2, 4, 6
+    [InlineData(8, 4, 4)]
+    public void WingCountsSplitAFitOddToPortAndEvenToStarboard(int count, int left, int right)
+    {
+        // The rig pairs pylons across the centreline, so a fit's per-wing counts come off the
+        // numbers it hangs, not off the fill order's halves, which would say 1/1 at count 2.
+        var fit = new HardpointSpec { Count = count, Stock = Filled(count) };
+        Assert.Equal((left, right), Loadout.WingCounts(fit));
+    }
+
+    [Fact]
+    public void EveryWingCellNamesAPylonTheFitHangs()
+    {
+        // The counts and the cell join are one walk: every cell inside a wing's count resolves to
+        // a pylon on that wing, and the first cell past the count resolves to none.
+        for (int count = 1; count <= Loadout.PylonFillOrder.Length; count++)
+        {
+            var fit = new HardpointSpec { Count = count, Stock = Filled(count) };
+            var (left, right) = Loadout.WingCounts(fit);
+            for (int cell = 0; cell < left; cell++)
+            {
+                Assert.Contains(Loadout.PylonForCell(cell, fit), Loadout.LeftWingPylons);
+            }
+            for (int cell = 0; cell < right; cell++)
+            {
+                Assert.Contains(Loadout.PylonForCell(4 + cell, fit), Loadout.RightWingPylons);
+            }
+            if (left < Loadout.LeftWingPylons.Length)
+            {
+                Assert.Equal(0, Loadout.PylonForCell(left, fit));
+            }
+            Assert.Equal(0, Loadout.PylonForCell(4 + right, fit));
+        }
+    }
+
+    [Fact]
+    public void TheHopliteHangsBothPylonsToPortAndTheFirebrandFourToTwo()
+    {
+        // The two airframes whose stock count the fill-order halves used to split wrongly; the
+        // totals, and so the prices, are the authored counts either way.
+        var loadouts = Load();
+        var hoplite = loadouts.For("pautogyro")!.Hardpoints;
+        var firebrand = loadouts.For("pfirebrand")!.Hardpoints;
+
+        Assert.Equal((2, 0), Loadout.WingCounts(hoplite));
+        Assert.Equal((4, 2), Loadout.WingCounts(firebrand));
+        Assert.Equal(hoplite!.Count, 2 + 0);
+        Assert.Equal(firebrand!.Count, 4 + 2);
+    }
+
+    [Fact]
+    public void EveryStockFitsWingCountsAddUpToWhatItAuthors()
+    {
+        foreach (var (def, loadout) in Load().All)
+        {
+            var (left, right) = Loadout.WingCounts(loadout.Hardpoints);
+            Assert.True(left + right == loadout.Hardpoints!.Count,
+                $"{def}: {left}+{right} against {loadout.Hardpoints.Count} authored pylons");
+            Assert.InRange(left, 0, Loadout.LeftWingPylons.Length);
+            Assert.InRange(right, 0, Loadout.RightWingPylons.Length);
+        }
+    }
+
     [Fact]
     public void ArmedIsTheOneSpellingAndHonoursInfiniteAmmo()
     {
@@ -135,4 +206,12 @@ public class LoadoutTests
     }
 
     private static StockLoadouts Load() => StockLoadouts.Load(ConfigPath);
+
+    // A fit of N pylons, every one carrying the stock high explosive the hangar writes.
+    private static string[] Filled(int count)
+    {
+        var stock = new string[count];
+        Array.Fill(stock, Loadout.StockOrdnance);
+        return stock;
+    }
 }

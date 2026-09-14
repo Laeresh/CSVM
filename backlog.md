@@ -677,24 +677,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   sweep the player's probes too. *Cross-refs:* `PlaneStats.CollisionProbes`, `docs/formats/vehicle.md`.
 
 
-- `BL-877` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **A stock fit of two or six pylons is split
-  between the wings by a count heuristic that disagrees with the rig, so the Hoplite's ammo screen
-  offers a right-wing pylon the aeroplane does not have.** *Evidence:* `HangarFeature.StockWingCounts`
-  groups a fit's pylons as 1-4 against 5-8, while the rig pairs them across the centreline, odd to
-  port and even to starboard ([`docs/formats/markers.md`](docs/formats/markers.md), "Pylons"). The two
-  agree for counts 1, 3, 4, 5, 7 and 8, and disagree for the Hoplite's 2 (the heuristic says 1/1,
-  the rig hangs pylons 1 and 5, both port) and the Firebrand's 6 (3/3 against 4/2). The counts are
-  what the flight check and the ammo screen bound their per-wing cells by, so on those two airframes
-  a stock-fit plane shows a cell whose pylon `Loadout.PylonForCell` cannot find, and the pick is
-  dropped. *Decision:* derive the counts from the rig's odd-to-port, even-to-starboard split, the
-  heuristic goes. *Fix shape:* one function in `Loadout` that both the cell join and
-  `HangarFeature.StockWingCounts` read, so the flight check, the ammo screen and the stock build
-  all bound their cells by the pylons the airframe hangs. *⚠ Traps:* the same counts seed a fresh
-  hangar build (`LoadStockWeapons`), so this moves the Hoplite's default build to 2/0 and the
-  Firebrand's to 4/2, which is intended; the total, and therefore the price, is unchanged.
-  The original's own Hoplite special-plane template is 1/1, which says nothing about a stock fit.
-  *Cross-refs:* `docs/formats/saved-games.md` ("A cell names a pylon only against the fit"),
-  `CSVM/src/UI/Menu/HangarFeature.cs`.
 - `BL-920` `[Bug]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **A zeppelin's
   gasbags, engines and cannons reach the player's Non-Aircraft cycle although no mission table
   flags them, which is the one remaining entry on that cycle the original does not offer.**

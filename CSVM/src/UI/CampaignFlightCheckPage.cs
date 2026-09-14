@@ -621,7 +621,7 @@ public sealed class CampaignFlightCheckPage : CampaignPage
     }
 
     // A plane's per-wing hardpoint counts, same build-or-stock precedence as the guns; the stock
-    // half reuses HangarFlow's own fill-order-to-wing split rather than re-deriving it.
+    // half reuses HangarFlow's own count off the rig's wing split rather than re-deriving it.
     private (int Left, int Right) ResolveHardpoints(OwnedPlane plane)
     {
         if (BuildFor(plane) is { } custom)

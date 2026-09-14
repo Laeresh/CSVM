@@ -276,6 +276,30 @@ public sealed class Loadout
         }
     }
 
+    /// <summary>The pylons one wing hangs on <paramref name="fit"/>, outboard to inboard: that
+    /// wing's physical numbers filtered by what the fit actually carries. Every per-wing bound in
+    /// the build reads this one walk, so a wing's cell count and its Nth cell cannot disagree.
+    /// ⚠ Never count a fit by its fill-order halves: 1-4 against 5-8 crosses the centreline, and
+    /// puts a starboard cell on an airframe hanging both its pylons to port.</summary>
+    public static int[] WingPylons(HardpointSpec? fit, bool port)
+    {
+        var hung = new List<int>(LeftWingPylons.Length);
+        foreach (int pylon in port ? LeftWingPylons : RightWingPylons)
+        {
+            if (Hangs(fit, pylon))
+            {
+                hung.Add(pylon);
+            }
+        }
+
+        return hung.ToArray();
+    }
+
+    /// <summary>How many pylons each wing hangs on <paramref name="fit"/>, the bound the flight
+    /// check, the ammo screen and a fresh hangar build all draw their per-wing cells inside.</summary>
+    public static (int Left, int Right) WingCounts(HardpointSpec? fit) =>
+        (WingPylons(fit, port: true).Length, WingPylons(fit, port: false).Length);
+
     /// <summary>The physical pylon a saved record's ordnance cell names on <paramref name="fit"/>:
     /// cells 0-3 are the left wing and 4-7 the right, each naming that wing's own pylons outboard
     /// to inboard and bounded by what the wing carries (docs/formats/saved-games.md). 0, which no
@@ -285,22 +309,14 @@ public sealed class Loadout
     public static int PylonForCell(int cell, HardpointSpec? fit)
     {
         int half = LeftWingPylons.Length;
-        if (cell < 0 || cell >= half + RightWingPylons.Length || fit == null)
+        if (cell < 0 || cell >= half + RightWingPylons.Length)
         {
             return 0;
         }
 
+        var hung = WingPylons(fit, port: cell < half);
         int want = cell < half ? cell : cell - half;
-        int seen = 0;
-        foreach (int pylon in cell < half ? LeftWingPylons : RightWingPylons)
-        {
-            if (Hangs(fit, pylon) && seen++ == want)
-            {
-                return pylon;
-            }
-        }
-
-        return 0;
+        return want < hung.Length ? hung[want] : 0;
     }
 
     /// <summary>Whether <paramref name="fit"/> hangs <paramref name="pylon"/> at all: its

@@ -360,8 +360,8 @@ public class HangarAirframePageTests : IDisposable
     }
 
     /// <summary>E41: the Hoplite's stock fit authors one twin thirty-cal and two pylons, whose
-    /// fill order (1, 5) puts one on each wing; the Kestrel's slot 1 is the one single-barrel
-    /// stock mount, so its default is NOT a twin.</summary>
+    /// fill order (1, 5) hangs both to port, since the rig pairs odd pylons there; the Kestrel's
+    /// slot 1 is the one single-barrel stock mount, so its default is NOT a twin.</summary>
     [Fact]
     public void DefaultsReadTheStockFitPerAirframe()
     {
@@ -371,7 +371,7 @@ public class HangarAirframePageTests : IDisposable
         flow.LoadAirframeDefaults(0); // Hoplite
         Assert.Equal(new GunChoice(0, true), flow.Scratch.Guns[0]);
         Assert.True(flow.Scratch.Guns[1].IsEmpty);
-        Assert.Equal((1, 1), (flow.Scratch.LeftHardpoints, flow.Scratch.RightHardpoints));
+        Assert.Equal((2, 0), (flow.Scratch.LeftHardpoints, flow.Scratch.RightHardpoints));
 
         flow.LoadAirframeDefaults(8); // Kestrel
         Assert.Equal(new GunChoice(3, false), flow.Scratch.Guns[0]);

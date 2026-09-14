@@ -22,7 +22,7 @@ Two layers over `CSVM/data/stock_loadouts.json`. `StockLoadouts.Load` parses the
 muzzle `Node3D`s and its caliber plus ammo to a `WeaponDef`, and each hardpoint to its `pylon`,
 yielding `GunGroup`s with their own ammo counters and `Hardpoint`s. Turret slots bind but stay inert.
 `Loadout.ForRig` synthesizes a lab loadout covering the airframe's whole rig rather than only what
-stock names, and runs it through the same `Bind`, so there is exactly one bind path. `Hangs` and `PylonForCell` read a fit the other way, which pylons it carries and which one a saved ordnance cell names, so an Ammo Selection screen draws no field for a hardpoint the aeroplane does not carry. Inspect with
+stock names, and runs it through the same `Bind`, so there is exactly one bind path. `Hangs`, `WingPylons`, `WingCounts` and `PylonForCell` read a fit the other way, which pylons it carries, how many each wing hangs and which one a saved ordnance cell names, off the rig's odd-to-port split rather than a count heuristic, so the flight check, the ammo screen and a fresh hangar build all bound their cells alike. Inspect with
 `--dump-loadout`. Slot-to-firepoint binding: [../formats/markers.md](../formats/markers.md); schema:
 [../formats/loadouts.md](../formats/loadouts.md). Read `LoadoutChoice.cs` next.
 

@@ -214,31 +214,10 @@ public sealed class HangarFeature : IMenuFeature
         || NamePunctuation.IndexOf(c) >= 0;
 
     /// <summary>D32's wing rule read backwards: the stock fit's authored pylons counted per wing
-    /// through <see cref="Loadout.PylonFillOrder"/>'s interleaved halves (pylons 1-4 one wing, 5-8
-    /// the other).</summary>
-    public static (int Left, int Right) StockWingCounts(HardpointSpec? stock)
-    {
-        int left = 0, right = 0;
-        for (int i = 0; stock != null && i < Loadout.PylonFillOrder.Length; i++)
-        {
-            if (i >= stock.Count || i >= stock.Stock.Length
-                || string.Equals(stock.Stock[i], LoadoutChoice.None, StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            if (Loadout.PylonFillOrder[i] <= 4)
-            {
-                left++;
-            }
-            else
-            {
-                right++;
-            }
-        }
-
-        return (left, right);
-    }
+    /// off the rig's own split, odd to port and even to starboard (<see cref="Loadout.WingCounts"/>),
+    /// so a stock-fit plane bounds its cells by the pylons the airframe hangs.</summary>
+    public static (int Left, int Right) StockWingCounts(HardpointSpec? stock) =>
+        Loadout.WingCounts(stock);
 
     /// <summary>Writes an airframe's stock guns and per-wing hardpoint counts onto
     /// <paramref name="def"/>, leaving every other field alone: stock caliber 30..70 is calibre row
