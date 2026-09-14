@@ -111,7 +111,7 @@ public sealed class OriginalAssetManifest
     /// <summary>The manifest schema. Bump it when the derivation changes what Original needs: the
     /// composed-section table, the rows Original does not draw or draws optionally, the
     /// script-named files, or what <see cref="Check"/> accepts as a readable file.</summary>
-    public const int Schema = 7;
+    public const int Schema = 8;
 
     /// <summary>The extraction stamp schema Original refuses to read a tree below: the loaders'
     /// own expectation, which the decoded menu layout's first reader raised, so a tree extracted
@@ -123,7 +123,7 @@ public sealed class OriginalAssetManifest
     public static readonly IReadOnlyList<string> ComposedSections = new[]
     {
         "MainMenu", "Preferences", "GameOptions", "Audio", "Video", "ControlsPrefs", "Keys", "Credits",
-        "InstantAction", "Campaign",
+        "InstantAction", "IA_WrapUp", "Campaign",
         "PassengerCabin", "MomentoSelection", "FlightCheck", "PlaneSelection", "OrdinanceLayout", "ScrapBook", "ScrapBook_TOC",
         "ScrapbookZoom", "Hangar", "PlaneName", "PlaneConstruction", "AirFrame", "Engine", "Armor", "Guns",
         "HardPoints", "Paint", "Purchase", "MessageBox",

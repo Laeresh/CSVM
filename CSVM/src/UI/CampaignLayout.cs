@@ -45,6 +45,9 @@ public sealed class CampaignLayout
     /// <summary>A scrap's detail view.</summary>
     public const string ZoomSection = "ScrapbookZoom";
 
+    /// <summary>The Instant Action wrap-up page, <c>IA_WRAPUP.SCRIPT</c>'s.</summary>
+    public const string WrapupSection = "IA_WrapUp";
+
     /// <summary>The message box every campaign screen's dialog is composed from.</summary>
     public const string DialogSection = "MessageBox";
 

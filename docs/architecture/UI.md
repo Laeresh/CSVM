@@ -213,6 +213,14 @@ half-way. `For(dataRoot)` reads the extracted layout once per data root and keep
 unreadable file is the `Fallback` instance with its reason logged once. The file's own sections and
 keys: [../formats/menu-layout.md](../formats/menu-layout.md).
 
+## src/UI/InstantActionWrapupPage.cs
+The Instant Action wrap-up page's own content, engine-free over `CampaignLayout`: the heading, the four title/value pairs at `[@IA_WrapUp@]`'s authored rows, the magazine spread and the four
+brushstrokes, the CONTINUE plaque's art and corner, and the further lines the shipped page has no row for (the outcome headline, the context naming the chapter and the mission type, and the stunt
+run's splits). Every value is read off the `IaWrapupSnapshot` the ending froze and never recomputed, so the page shows the mission's own numbers however long it stands. `ExtraBox` measures the free
+pad off the page's own rows, from under the last value row to the plaque's foot and clear of its left edge, so a layout that spaces its rows differently moves the band with them rather than drawing
+over one. `Sample` is the stand-in run the `--menu=` aids and the coverage walk stand the page on. What the four numbers count:
+[../formats/instant-action/wrap-up.md](../formats/instant-action/wrap-up.md).
+
 ## src/UI/ComposedBoardView.cs
 The Godot half of the campaign boards: draws one `ComposedBoard` over the whole window through
 `BoardFit`, with texture filtering pinned to Nearest so the authored pixel grid stays hard. Owns the
@@ -963,6 +971,15 @@ and `<build name> <airframe>`), re-read on every entry and on the hangar's retur
 diagram frames, the description pane and the snapshot CANCEL and Back restore, over seat 0's fit or the wingmen's shared one by the radio pair, or the per-seat picker's own `PlayerSeat.Fit`, which is what
 decides the screen its exit returns to. It is one `IOriginalScreenModule` and reaches `OriginalShell` only through the shared `IOriginalScreenHost` seam (`OriginalScreenHost.cs`), so `OriginalInstantActionTests` drives it over a hand-written host with no shell at all; the shell still owns `Rows`/`Compose`/`ApplyFrame` dispatch, routes to whichever module owns the screen showing and exposes this one whole as `InstantAction`. Its `Back` answers false where nothing is open and nothing is to cancel, which is how Instant Action's own Exit is left to the shell. Remake-only is the Lives box, which the section authors no row for: it takes the mission dropdown's column and item height on the first clear line the setup stack leaves (read off the gaps between the authored boxes, never written down as a Y), and steps the shared `InstantActionFeature.StepLives`, reading Unlimited at zero and the count to nine. Option sets: [../formats/instant-action.md](../formats/instant-action.md); what the fit means at launch: `src/Flight/LoadoutChoice.cs`.
 
+## src/UI/Menu/Original/OriginalWrapupScreen.cs
+The Original Instant Action wrap-up page, one standalone module over the decoded `[@IA_WrapUp@]` section and `InstantActionWrapupPage.cs`'s content. It stands only while it holds a snapshot, which
+arrives as `InstantActionWrapupReturn` when a flown mission's hold ends and the session hands the menu its frozen numbers; `ShowWrapup` takes that run and opens the page. Its one row is the CONTINUE
+plaque at its authored corner, and both CONTINUE and Back drop the run and reopen the Instant Action screen through that screen's own door, so the sortie's roster and environment are re-read on the
+way. `Compose` is the magazine spread as the backdrop, the four brushstrokes, the heading and the eight row lines, the further lines as one shrinking `BoardNote` on the free pad, and the plaque. The
+built-in presentation keeps its in-flight `Flight/IaWrapupBoard.cs` instead and has no page here, which is why its own return lands on the Instant Action screen. It is one `IOriginalScreenModule`
+reaching the shell only through `IOriginalScreenHost` (`OriginalScreenHost.cs`); the shell exposes it as `Wrapup`. The page's own decode:
+[../formats/instant-action/wrap-up.md](../formats/instant-action/wrap-up.md).
+
 ## src/UI/Menu/Original/OriginalHangarScreen.cs
 The Original hangar, a standalone module over the shared `HangarFeature` and the decoded hangar
 sections: the PLANE NAME screen, the Plane Construction hub with one of six tab sections on its
@@ -1047,11 +1064,13 @@ arrives as one jump. The four device reads are injected delegates, so the seat i
 Built-in ignores the pointer; Original maps it into its authored space; a later pad seat has none.
 
 ## src/UI/Menu/MenuReturnDestination.cs
-Where the menu stands when it comes back, said semantically: `TopLevel`, `InstantAction`, `CabinReturn(profile)` and `DebriefReturn(profile, missionSeq)`. The host names the destination and the
+Where the menu stands when it comes back, said semantically: `TopLevel`, `InstantAction`, `InstantActionWrapupReturn(snapshot)`, `CabinReturn(profile)` and `DebriefReturn(profile, missionSeq)`. The host names the destination and the
 active presentation maps it into its own graph at `Activate`, so no presentation-specific screen id crosses the seam. `ForLaunch(exit)` reads off a launch's own exit the screen it came from, which is
 where a flight left early lands; the exit and not the session's spec, since a spec inherits the command line's `--campaign=` and would call a Free Flight launched afterwards a campaign mission. A
 destination names where the player stands and never a store: the two campaign returns name a profile, the store it is re-read from is the presentation's own, and an Instant Action return names
-nothing, the sortie's setup being the feature's. The `--menu=` aid is not a destination either, reaching the cold start alone, so a return is always one of these four. The namespace seam this whole
+nothing, the sortie's setup being the feature's. The one exception is the wrap-up return, which carries `IaWrapupSnapshot` (declared here, so nothing outside the shared namespace crosses the seam):
+the session that counted an ended Instant Action mission's numbers is freed before any page can draw them. The `--menu=` aid is not a destination either, reaching the cold start alone, so a return is
+always one of these five. The namespace seam this whole
 folder is held to, and the two scans that enforce it, are in [../menu-presentations.md](../menu-presentations.md).
 
 ## src/UI/Menu/MenuChapters.cs

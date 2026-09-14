@@ -131,6 +131,9 @@ public partial class GameSession : Node3D
     // outside a menu-driven process (a --campaign= run from the command line has no cabin to
     // return to and simply stays in the flown world).
     private readonly Action<string, CampaignMissionResult>? _campaignMissionEnded;
+    // Where an ended Instant Action mission's frozen numbers go on a presentation with a wrap-up
+    // page of its own, routed by the Launcher; null leaves the ending to the in-flight board.
+    private readonly Action<UI.Menu.IaWrapupSnapshot>? _instantActionWrapup;
     // The process's music channel, owned by the Launcher so one channel outlives every session.
     // Handed to CampaignDirector, which is what routes the mission's own music cues into it.
     private readonly MusicPlayer? _music;
@@ -365,6 +368,7 @@ public partial class GameSession : Node3D
         _restartSession = ctx.RestartSession;
         _pauseOptionsFactory = ctx.PauseOptions;
         _campaignMissionEnded = ctx.CampaignMissionEnded;
+        _instantActionWrapup = ctx.InstantActionWrapup;
         _music = ctx.Music;
     }
 
@@ -3074,6 +3078,10 @@ public partial class GameSession : Node3D
             MenuInputFor = MenuInputFor,
             EnterPhotoMode = EnterPhotoMode,
             RegisterBoard = _boards.Add,
+            // Only the Original presentation has a wrap-up page to go to; everywhere else, and on a
+            // command-line launch with no menu behind it, the in-flight board takes the ending.
+            WrapupToMenu = _menuDriven && _presentation == UI.Menu.PresentationId.Original
+                ? _instantActionWrapup : null,
         });
 
         // World AA emplacements: the standalone ai.zrd family, placed against this chapter's built

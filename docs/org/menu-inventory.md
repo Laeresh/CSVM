@@ -65,7 +65,7 @@ own callbacks and economy are [`hangar.md`](hangar.md), the mission-end book
 | Distinct `IDS_*` symbols `LAYOUT.CSV` names | **152**, of which **149** resolve to text |
 | UI sound files | **8** |
 | Original screens in this plan's scope | **28** of the 34 single-player screens (25 built; the 3 remaining Preferences pages stand behind doors drawn disabled) |
-| Layout-stated navigation edges in the original | **46** (30 driven by Original, 2 realised as the wingman slot's row, 3 drawn disabled, 11 out of scope; see [Coverage](#coverage)) |
+| Layout-stated navigation edges in the original | **46** (31 driven by Original, 2 realised as the wingman slot's row, 3 drawn disabled, 10 out of scope; see [Coverage](#coverage)) |
 
 ## Part 1: Built-in as it stands
 
@@ -429,12 +429,13 @@ families (pointer clicks on the rows' rectangles, keyboard cursor commands walki
 pad cursor commands walking up and left), once over the hand-authored fixture layout and once over
 the install's own `menu_layout.json` and art. Every `ScriptToExe` edge of an in-scope section must
 have an entry saying how Original realises it, and the entry is checked against the shell. The
-tally over the install: 32 screens (every `OriginalScreen`) reached and left with no open campaign,
-build or dialog behind; 55 journeys by 3 families; 46 edges of which **42 are driven** (the row is
+tally over the install: 33 screens (every `OriginalScreen`) reached and left with no open campaign,
+build or dialog behind; 56 journeys by 3 families; 46 edges of which **43 are driven** (the row is
 pressed and the target screen shows), **2 are realised as the wingman slot's row** (`FC_B_CHANGEPLANEW`
 and `FC_B_CHANGEAMMOW` are the pilot's plaques at the wingman's slot, present exactly when the
-mission flies a wingman), **1 is drawn disabled** (`MM_B_MULTIPLAYER`) and **1 is out of scope**
-(`IAWU_B_CONTINUE`); 0 dead ends. The exits are checked too: Quit as a `QuitExit`, ACCEPT CHANGES as a
+mission flies a wingman) and **1 is drawn disabled** (`MM_B_MULTIPLAYER`); 0 dead ends. The wrap-up
+page is reached the way a flown mission reaches it, by handing the shell one ended mission's frozen
+numbers, since no row anywhere opens it. The exits are checked too: Quit as a `QuitExit`, ACCEPT CHANGES as a
 `OptionsApplyExit`, FLY on Free Flight and Fly Mission on Instant Action as a `LaunchExit`,
 FLY MISSION as a `CampaignMissionExit`, and Purchase Now returning to the top level with the plane
 saved. Keyboard and pad share one semantic command vocabulary at the seat seam (Decision 25), so
@@ -444,17 +445,20 @@ device mapping behind them is the seats' own tests.
 ### In scope and out of scope
 
 Decision 5 puts everything `LaunchMenu` hosts in scope. Mapping that onto the original's 34
-single-player screens leaves **29 in and 5 out**, before the 22 multiplayer screens, which are all
+single-player screens leaves **30 in and 4 out**, before the 22 multiplayer screens, which are all
 out (CSVM's Dogfight is splitscreen on `dogfight_ace` spawns, not the original's network play).
 
-**In scope (29):** MainMenu; Preferences, GameOptions, Audio, Video, ControlsPrefs, Keys; Credits;
-InstantAction; Campaign, PassengerCabin, MomentoSelection, FlightCheck, PlaneSelection,
+**In scope (30):** MainMenu; Preferences, GameOptions, Audio, Video, ControlsPrefs, Keys; Credits;
+InstantAction, IA_WrapUp; Campaign, PassengerCabin, MomentoSelection, FlightCheck, PlaneSelection,
 OrdinanceLayout, ScrapBook, ScrapBook_TOC, ScrapbookZoom; Hangar, PlaneName, PlaneConstruction,
 AirFrame, Engine, Armor, Guns, HardPoints, Paint, Purchase; MessageBox.
 
-**Out of scope (5):** CampaignIntro and FinalCinema (MPG playback, `BL-446`); Save and Load (no
-savegame system here, and the `LOAD` branch is unreachable in the shipped build);
-IA_WrapUp (a flight board, excluded by Decision 5).
+**Out of scope (4):** CampaignIntro and FinalCinema (MPG playback, `BL-446`); Save and Load (no
+savegame system here, and the `LOAD` branch is unreachable in the shipped build).
+
+IA_WrapUp is a menu screen in this presentation rather than a flight board: an ended Instant Action
+mission leaves the world for it, and its CONTINUE returns to the Instant Action screen. Built-in has
+no page for it and shows its own board inside the flight instead.
 
 All five Preferences leaves are built. GameOptions, Audio and Video carry the shared options: the
 difficulty and the presentation stand on the first, the four volume levels on the second, the
@@ -487,6 +491,7 @@ behaviour: what a press does, what a rollover changes, what is disabled when.
 | Credits | (none: Built-in has no counterpart) | 3 rows | this page | **none** | `CREDITS.SCRIPT` decoded: the background pane, ABOUT, and the DONE plaque whose `ScriptToExe` is MainMenu; `gui_char` ends the script and runs `mainmenu.script` on Escape. **Built as Original's credits screen** from the full-screen pane the credit names are painted into, the two buttons over it, and both ways back landing on the top level. `CR_B_Exit` wears MomentoSelection's `MS_B_Done.png`; there is no `CR_B_Exit.png`. **ABOUT** raises the one-button box the press asks for: setting `@globals@OR.XR` switches the messagebox to the `ma_` widget set over `CR_AboutMessageBox.png` (505x416, centred at 147,92) and takes the skull icon, which stays `mb_p_icon` at its own place whatever the set. Its words are `uiData` 2108 (`0x0040a2cb`), langui 1301 formatted over the product id `FUN_004073d0` reads from `HKLM\SOFTWARE\Microsoft\Microsoft Games\Crimson Skies\1.0`, value `PID`, which falls back to `???` when the key or the value is absent, and `???` is what this port always shows, reading no registry. That row's `&&` is drawn as authored: every other langui row spells a literal ampersand singly (`Pratt & Whitney`), so the text widgets eat no `&`. **The right-button line** is read: `rbutton_update` activates a text widget at 288,308 in `0xffffff00` while the right button is held inside 287..353 by 313..333, its line built by shifting each character of an obfuscated literal down by three (`CREDITS.SCRIPT:63-72`), and the transitions count only inside that region, so a hold carried out of it leaves the line standing |
 | InstantAction | Environment, MissionType, Waves, WaveEdit, Wingmen, Plane, Presets | 48 rows | [`instant-action.md`](../formats/instant-action.md) | **none** | option sets, the ace's control hiding and the paged enemy rows are script-proven; the screen itself has never been seen. **Built as Original's Instant Action screen** from the section's rows over the shared feature: `IA_BackGround`, the `T` rows, the contents list in its 14-row window with its own scroll arrows and slider, the dropdowns on their authored lines, the enemy rows paged by `IA_B_UP`/`IA_B_DOWN`, the radio pair, View Story, Fly Mission and Exit; `IA_B_BUILD` opens the wallet-free hangar and `IA_B_CHANGEWEAPONS` the Weapon Loadout screen for the seat the radio pair names (both destinations remake readings, no layout row stating either edge). Remake-only: the Lives box, which the section authors no row for, a dropdown in the screen's own idiom standing with its own title on the clear line the layout leaves between the Wingmen and Mission rows (the line is found in the gaps between the authored boxes, never written down), reading Unlimited at zero and the count to nine over the same `InstantActionFeature.StepLives` the Built-in stepper writes, live where the ace duel blanks the enemy boxes and untouched by a contents row, no preset carrying a lives value. What the data does not settle is listed under Part 4 for `CAP-50` |
 | OrdinanceLayout (as Instant Action's Weapon Loadout) | `WingmanLoadout`, the plane pane's loadout | 31 rows | same | same | **Built as Original's Instant Action loadout screen** over the same section: the ammunition fields for the airframe's firable gun slots and the rocket fields for its pylons (left column pylons 1 to 4, right 5 to 8), each over the stock table's option list, the two diagram panes on the airframe's frame, `OL_T_PLANEINFO` naming the fitted aircraft, the focused field's description in its pane, `OL_B_ACCEPT` keeping the picks and `OL_B_CANCEL` or Back restoring the picks the screen opened on. Remake-only: the original reaches this section from the flight check alone |
+| IA_WrapUp | (none: Built-in shows `IaWrapupBoard` inside the flight) | 15 rows | [`instant-action/wrap-up.md`](../formats/instant-action/wrap-up.md) | `Instant Action End Screen Stunt Flight.png`, `Instant Action End Screen Fail.png` | the four value rows, their brushstrokes and the CONTINUE edge are layout- and script-proven. **Built as Original's wrap-up page**, where a flown Instant Action mission's hold lands: `IAWU_BACKGROUND`, the heading, the four title/value pairs at their authored rows over `IAWU_LINE0..3`, and `IAWU_B_CONTINUE` back to the Instant Action screen. The page carries no row of its own beyond that plaque, and holds one ended mission's frozen numbers, never a live read. Remake-only are the further lines under the four rows: the complete or failed headline, the context naming the chapter and the mission type, and a stunt run's splits, all of which Built-in's board shows and the shipped page authors no row for. The original clips each row text to its authored box; the whole string is drawn here |
 | Campaign (profile) | `CampaignScreen.Roster` | 6 rows | [`campaign-screens.md`](../formats/campaign-screens.md) | `Campaign Player Profile.png` | full: roster fill, name validator, all four exits. **Built as Original's profile screen** over the shared campaign feature and the shared board component: the name box pre-filled with the last player seated, `CM_B_START` / Enter in the box / a second click on the filled roster row starting, a first click filling the box and a click in the box itself taking the caret and nothing else, the list sub-script's own selection bar and pointer frame, the four refusals as the one-button messagebox, `CM_B_DELETEPLAYER` asking with langui 201 as the two-button box whose answers read Yes and No (langui 102 and 103, the words `MESSAGEBOX.SCRIPT` gives a `0x4` box), `CM_B_CANCEL` leaving. The box opens on Yes, the left button `MESSAGEBOX.SCRIPT` focuses for the plain `0x4` mask the campaign passes. **The hidden pilot name is built**: `crashcheat!` typed into the box and started is read before the name validator sees its punctuation, and it sets the unlock-everything mode (the wallet filled to $250000, the eleven stock airframes in slots 2 to 12, every airframe threshold bypassed for the rest of the session) while the screen stays standing with the previous player's name back in the box. Remake-only: the caret |
 | PassengerCabin | `Cabin` | 16 rows | same | `Campaign CAP-44 Cabin.png` | full for the six buttons; whether anything on the screen animates is open. **Built as Original's cabin**: the five plaques the board component draws, `PC_B_NEWMISSION` disabled once the campaign is complete, `PC_B_PLANEX` into the name screen over the profile's wallet with the cabin as the hangar's return, `PC_B_CHANGEMOMENTO` into the memento chooser, `PC_B_PREVIOUS` and `PC_B_RETURNMM` on their layout edges. **The typed cheat is built**: a left click inside the authored region 5,336 to 85,479 gives the keyboard to the word matcher, `idaho` activates `PC_D_MISSIONS` (the pull-down the script creates deactivated, 24 rows opened on the campaign's own position), and NEXT MISSION then launches the picked row while anything stands in the matcher's buffer |
 | MomentoSelection | `MementoSelection` | 7 rows | same | **none** | full: `MOMENTOSELECTION.SCRIPT` and the award table behind `uiData` 2150 are decoded. **Built as Original's memento chooser** through the shared page: the scrapbook photograph under its reflection, the two arrows stepping the pictures the profile holds, ACCEPT writing the chosen name into the profile and CANCEL leaving the cabin's wall as it was |

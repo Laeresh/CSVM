@@ -622,29 +622,39 @@ public sealed class InstantActionDirector
         // The wrap-up board, shared over the WHOLE window like the race and dogfight boards,
         // never per pane: the mission ends for every human at once. ⚠ Danger Zones Completed
         // and Shot % are summed across every human seat, never picked from one pane.
-        var wrapupBoard = IaWrapupBoard.Build(
-            $"{_spec.Chapter}   ·   {InstantAction.MissionTypeLabel(iaEnd.Def.MissionType)}",
-            exitsToMenu: inputs.ExitsToMenu,
-            inputs.PauseState, inputs.MenuInputFor);
-        wrapupBoard.Restart = inputs.RestartSession;
-        wrapupBoard.Exit = inputs.ExitSession;
-        // Player 1, for the same reason the race and dogfight boards are.
-        wrapupBoard.PhotoMode = () => inputs.EnterPhotoMode(0);
-        inputs.RegisterBoard(wrapupBoard);
-        var wrapupLayer = new CanvasLayer { Name = "ia_wrapup_board", Layer = UI.HudLayers.Board };
-        wrapupLayer.AddChild(wrapupBoard);
-        inputs.WorldRoot.AddChild(wrapupLayer);
-        // The four counters are read at the ENDING, not when the board appears: the mission is over
-        // at the first, and whatever the world does through the hold (a wave member flying into a
-        // hill, a round still in the air) is no longer this mission's score.
-        (bool Won, float Elapsed, int Kills, int Zones, int Shot, StuntSummary? Stunt)? ended = null;
+        string context = $"{_spec.Chapter}   ·   {InstantAction.MissionTypeLabel(iaEnd.Def.MissionType)}";
+        // The Original presentation takes the ending onto its own menu page instead, so the board is
+        // not built at all there: one wrap-up shows, never two.
+        IaWrapupBoard? wrapupBoard = null;
+        if (inputs.WrapupToMenu == null)
+        {
+            wrapupBoard = IaWrapupBoard.Build(
+                context, exitsToMenu: inputs.ExitsToMenu, inputs.PauseState, inputs.MenuInputFor);
+            wrapupBoard.Restart = inputs.RestartSession;
+            wrapupBoard.Exit = inputs.ExitSession;
+            // Player 1, for the same reason the race and dogfight boards are.
+            wrapupBoard.PhotoMode = () => inputs.EnterPhotoMode(0);
+            inputs.RegisterBoard(wrapupBoard);
+            var wrapupLayer = new CanvasLayer { Name = "ia_wrapup_board", Layer = UI.HudLayers.Board };
+            wrapupLayer.AddChild(wrapupBoard);
+            inputs.WorldRoot.AddChild(wrapupLayer);
+        }
+
+        // The four counters are read at the ENDING, not when the board appears: what the world does
+        // through the hold is no longer this mission's score. The splits are flattened to text here
+        // too, the menu page outliving the zones they are read off.
+        (UI.Menu.IaWrapupSnapshot Snapshot, StuntSummary? Stunt)? ended = null;
         iaEnd.MissionEnded += outcome =>
         {
-            ended = (outcome == InstantActionOutcome.Won, iaEnd.Elapsed, enemiesShotDown,
-                _rigs!.Sum(r => r.Controller?.Stunt?.CompletedCount ?? 0),
-                InstantActionRuntime.ShotPercent(
-                    inputs.Projectiles?.CannonHits ?? 0, inputs.Projectiles?.CannonRoundsFired ?? 0),
-                StuntSummary());
+            var stunt = StuntSummary();
+            ended = (
+                new UI.Menu.IaWrapupSnapshot(
+                    outcome == InstantActionOutcome.Won, context, iaEnd.Elapsed, enemiesShotDown,
+                    _rigs!.Sum(r => r.Controller?.Stunt?.CompletedCount ?? 0),
+                    InstantActionRuntime.ShotPercent(
+                        inputs.Projectiles?.CannonHits ?? 0, inputs.Projectiles?.CannonRoundsFired ?? 0),
+                    stunt is { } run ? StuntSplits.Lines(run) : null),
+                stunt);
             // A win is flown out: the original leaves the stick live for the whole hold, so only
             // the discrete commands go. A loss holds the seat whole, standing in for the crash
             // animation the original waits out there.
@@ -657,11 +667,20 @@ public sealed class InstantActionDirector
             // Released before the board is up, so the board's own menu primes over whatever is
             // still down and its Restart row answers the first press after it appears.
             HoldPilotControls(FlightControlHold.None);
-            if (ended is { } final)
+            if (ended is not { } final)
             {
-                wrapupBoard.Present(final.Won, final.Elapsed, final.Kills, final.Zones,
-                    final.Shot, final.Stunt);
+                return;
             }
+
+            if (inputs.WrapupToMenu is { } toMenu)
+            {
+                toMenu(final.Snapshot);
+                return;
+            }
+
+            var shown = final.Snapshot;
+            wrapupBoard!.Present(shown.Won, shown.Elapsed, shown.EnemiesShotDown, shown.ZonesCompleted,
+                shown.ShotPercent, final.Stunt);
         };
     }
 
@@ -870,5 +889,8 @@ public sealed class InstantActionDirector
         public Func<int, UI.MenuInput> MenuInputFor = null!;
         public Action<int> EnterPhotoMode = null!;
         public Action<Control> RegisterBoard = null!;
+        // Where the ending goes on a presentation with a wrap-up page of its own: the frozen numbers
+        // leave for the menu and no board is built. Null keeps the in-flight board.
+        public Action<UI.Menu.IaWrapupSnapshot>? WrapupToMenu;
     }
 }

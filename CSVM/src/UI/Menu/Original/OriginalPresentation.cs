@@ -89,6 +89,15 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// count a further <c>:n</c> names, and at Unlimited when it names none.</summary>
     public const string InstantActionLivesAid = "lives";
 
+    /// <summary>The aid value that opens the Instant Action wrap-up page on a sample completed run,
+    /// the page a flown mission's ending lands on. Original's own: Built-in shows a board inside
+    /// the flight instead and has no menu page to open.</summary>
+    public const string InstantActionWrapupAid = "instant-action-wrapup";
+
+    /// <summary>The wrap-up aid's argument that shows the failed outcome instead of the complete
+    /// one, the two headlines being the page's only difference between them.</summary>
+    public const string InstantActionWrapupFailedAid = "failed";
+
     /// <summary>The aid value that opens the hangar's name screen on a fresh build.</summary>
     public const string PlaneNameAid = "plane-name";
 
@@ -349,6 +358,12 @@ public sealed class OriginalPresentation : IMenuPresentation
             // stands on them again; the roster re-read is the door's own.
             _shell.InstantAction.OpenInstantAction();
         }
+        else if (destination is InstantActionWrapupReturn wrapup)
+        {
+            // The numbers were frozen at the ending and travel with the destination; the session
+            // that counted them is already gone by the time this page draws.
+            _shell.Wrapup.ShowWrapup(wrapup.Snapshot);
+        }
         else if (destination is DebriefReturn debrief)
         {
             _shell.Campaign.OpenCampaign();
@@ -447,6 +462,12 @@ public sealed class OriginalPresentation : IMenuPresentation
                     // above one is a state a plain shot of it can show.
                     _shell.InstantAction.OpenInstantAction();
                     _shell.InstantAction.PoseLives(AidLives(lives));
+                    break;
+                case InstantActionWrapupAid:
+                    _shell.Wrapup.ShowWrapup(InstantActionWrapupPage.Sample(won: true));
+                    break;
+                case InstantActionWrapupAid + ":" + InstantActionWrapupFailedAid:
+                    _shell.Wrapup.ShowWrapup(InstantActionWrapupPage.Sample(won: false));
                     break;
                 case PlaneNameAid:
                     _shell.OpenHangar();
@@ -924,7 +945,8 @@ public sealed class OriginalPresentation : IMenuPresentation
             // Paper pages write in authored black, the loadout in the ammo form's palette, the hub
             // in its own inks, the three options pages in the Preferences page's, a campaign screen
             // in its shared board component's palette, and the rest in the file-wide inks.
-            var palette = _shell.Screen is OriginalScreen.InstantAction or OriginalScreen.HangarInventory ? _paperPalette
+            var palette = _shell.Screen is OriginalScreen.InstantAction or OriginalScreen.InstantActionWrapup
+                    or OriginalScreen.HangarInventory ? _paperPalette
                 : _shell.Screen == OriginalScreen.InstantActionLoadout ? BoardPalette.Paper
                 : _shell.Screen is OriginalScreen.Options or OriginalScreen.GameOptions or OriginalScreen.Audio
                     or OriginalScreen.Video or OriginalScreen.ControlsPrefs or OriginalScreen.Keys ? _preferencesPalette

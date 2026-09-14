@@ -179,8 +179,20 @@ are swallowed (`FlightController.ControlHold`). The result was settled at the en
 inside the hold spends no life, takes no pane and leaves the board reporting the win, with the wreck
 falling for the rest of the hold. A death takes the same hold with the seat held whole, the stick
 neutral over the lever the pilot left, standing in for the crash animation the original waits out.
-The 1.0 s freeze and the 2.0 s fade are not reproduced: the board simply takes the screen when the
+The 1.0 s freeze and the 2.0 s fade are not reproduced: the ending simply takes the screen when the
 hold ends.
+
+Where that ending goes depends on the presentation. Built-in keeps its own board inside the flight
+(`src/Flight/IaWrapupBoard.cs`), which is also where Restart, Exit and photo mode live. Original
+leaves the world instead and lands on this page in the menu shell, `src/UI/Menu/Original/`
+`OriginalWrapupScreen.cs` over `src/UI/InstantActionWrapupPage.cs`: the magazine spread, the notepad
+carrying the heading and the four decoded rows at their authored positions, and CONTINUE back to the
+Instant Action screen in place of the board's Restart. The remake also writes the lines the shipped
+page has no row for onto the free pad under the four rows, so the Original path loses nothing the
+built-in board shows: the outcome headline, the context line naming the chapter and the mission type,
+and a stunt run's split table. The four numbers travel as `IaWrapupSnapshot`, read once at the ending
+(`src/UI/Menu/MenuReturnDestination.cs`) and never re-read, since the session that counted them is
+freed before the page draws.
 
 ### What the launcher maps
 

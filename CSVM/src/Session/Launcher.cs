@@ -248,6 +248,10 @@ public partial class Launcher : Node3D
     // the mission ends inside the session's own physics step, which is no place to free it.
     private (string Profile, CampaignMissionResult Result)? _pendingDebrief;
 
+    // The numbers an ended Instant Action mission froze, acted on at the top of the next frame for
+    // the same reason the debrief is: the ending arrives inside the session's own step.
+    private IaWrapupSnapshot? _pendingWrapup;
+
     // The load screen and the deferred build behind it (BeginLaunch → _Process). A build is one
     // synchronous block, so the screen has to be DRAWN before it starts: _launchFramesWaited counts
     // the frames since the request and the build runs on the first one that proves a frame rendered.
@@ -973,6 +977,14 @@ public partial class Launcher : Node3D
             OpenDebrief(debrief.Profile, debrief.Result);
         }
 
+        // The same handover for an Instant Action mission whose presentation carries a wrap-up page.
+        if (_pendingWrapup is { } wrapup)
+        {
+            _pendingWrapup = null;
+            Log.Info("core", $"ia: {(wrapup.Won ? "COMPLETE" : "FAILED")}: arrived at the menu's wrap-up page");
+            ReturnToMenu(new InstantActionWrapupReturn(wrapup));
+        }
+
         // An Options apply, one frame after the exit that asked for it.
         if (_pendingApply is { } applied)
         {
@@ -1434,6 +1446,7 @@ public partial class Launcher : Node3D
             CampaignMissionEnded = _menuDriven
                 ? (profile, result) => _pendingDebrief = (profile, result)
                 : null,
+            InstantActionWrapup = _menuDriven ? snapshot => _pendingWrapup = snapshot : null,
             Music = _music,
         });
         AddChild(_session);
@@ -2315,6 +2328,11 @@ public sealed class LauncherContext
     /// intact from <c>MissionEnded</c>. Null when this process was not launched into the menu,
     /// where there is no menu to return to.</summary>
     public System.Action<string, CampaignMissionResult>? CampaignMissionEnded { get; init; }
+
+    /// <summary>Frees the session and shows the menu at the Instant Action wrap-up, carrying the
+    /// numbers frozen at the ending. Null when this process was not launched into the menu, and
+    /// unused by a presentation whose own board takes the ending inside the flight.</summary>
+    public System.Action<IaWrapupSnapshot>? InstantActionWrapup { get; init; }
 
     /// <summary>The process's music channel, so a mission's own cues reach the one player that
     /// outlives every session. Null when the sound archive or the sound definitions would not

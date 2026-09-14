@@ -56,6 +56,9 @@ public sealed class BuiltInPresentation : IMenuPresentation
         switch (destination)
         {
             case InstantActionReturn:
+            // Built-in has no wrap-up page: its own board took the screen inside the flight, so the
+            // nearest screen this graph has is the one that board's Exit already lands on.
+            case InstantActionWrapupReturn:
                 _menu.OpenInstantAction();
                 break;
             case CabinReturn cabin:

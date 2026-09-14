@@ -38,6 +38,10 @@ public class OriginalCoverageTests : IDisposable
     private const string ScrapStep = "*scrap";
     private const string JoinStep = "*join";
 
+    // The wrap-up page is opened by a flown mission's ending, not by any row, so the walk hands the
+    // shell a frozen run the way the presentation's return does.
+    private const string WrapupStep = "*wrapup";
+
     private static readonly MenuCommands Accept = new() { Accept = true };
     private static readonly MenuCommands Back = new() { Back = true };
     private static readonly MenuCommands Erase = new() { Erase = true };
@@ -47,7 +51,7 @@ public class OriginalCoverageTests : IDisposable
     private static readonly string[] InScopeSections =
     {
         "MainMenu", "Preferences", "GameOptions", "Audio", "Video", "ControlsPrefs", "Keys", "Credits",
-        "InstantAction", "Campaign",
+        "InstantAction", "IA_WrapUp", "Campaign",
         "PassengerCabin", "MomentoSelection", "FlightCheck",
         "PlaneSelection", "OrdinanceLayout", "ScrapBook", "ScrapBook_TOC", "ScrapbookZoom", "Hangar", "PlaneName",
         "PlaneConstruction", "AirFrame", "Engine", "Armor", "Guns", "HardPoints", "Paint", "Purchase", "MessageBox",
@@ -98,6 +102,8 @@ public class OriginalCoverageTests : IDisposable
         new("instant-action-loadout-accept", OriginalScreen.InstantAction,
             new[] { "MM_B_INSTANTACTION", OriginalInstantActionScreen.WingmanRadioKey, OriginalInstantActionScreen.WeaponLoadoutKey, OriginalInstantActionScreen.LoadoutAcceptKey },
             new[] { OriginalInstantActionScreen.ExitKey }),
+        new("instant-action-wrapup", OriginalScreen.InstantActionWrapup, new[] { "MM_B_INSTANTACTION", WrapupStep },
+            new[] { OriginalWrapupScreen.ContinueKey, OriginalInstantActionScreen.ExitKey }),
         new("campaign-roster", OriginalScreen.CampaignRoster, new[] { OriginalShell.CampaignKey }, new[] { "CancelProfile" }),
         new("campaign-cabin", OriginalScreen.CampaignCabin, Cabin, new[] { "ReturnToMainMenu" }),
         new("campaign-memento", OriginalScreen.CampaignMemento, Then(Cabin, "ChangeMemento"), new[] { "CancelMemento", "ReturnToMainMenu" }),
@@ -209,6 +215,7 @@ public class OriginalCoverageTests : IDisposable
         ["ScrapBook_TOC.SBTOC_B_RETURN"] = Edge.Driven("campaign-previous", "ReturnToCabin"),
         ["ScrapBook.SB_B_RETURNPC"] = Edge.Driven("campaign-scrapbook", "ReturnToCabin"),
         ["InstantAction.IA_B_Exit"] = Edge.Driven("instant-action", OriginalInstantActionScreen.ExitKey),
+        ["IA_WrapUp.IAWU_B_CONTINUE"] = Edge.Driven("instant-action-wrapup", OriginalWrapupScreen.ContinueKey),
     };
 
     private readonly ITestOutputHelper _output;
@@ -480,6 +487,10 @@ public class OriginalCoverageTests : IDisposable
             else if (step == JoinStep)
             {
                 _setup!.Join(new ScriptedMenuSeat());
+            }
+            else if (step == WrapupStep)
+            {
+                shell.Wrapup.ShowWrapup(InstantActionWrapupPage.Sample(won: true));
             }
             else
             {

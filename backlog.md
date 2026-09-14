@@ -1748,23 +1748,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   set is this port's own and its look is the user's call at the controls, not a luminance distance.
   *Cross-refs:* `CSVM/src/Flight/PromptLine.cs`, `CSVM/src/Bindings/BindingLabels.cs`,
   `docs/controls.md`.
-- `BL-908` `[Feature]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: data]` **The Original UI
-  ends an Instant Action on the `IA_WRAPUP` notepad page, not on the in-flight board.** After the
-  3 s hold the original leaves the world for the menu shell's wrap-up page: the Air Spicy Tales
-  magazine art, a notepad titled with the mission name, the four decoded rows and a Continue
-  button (`Z:\CSVM\OriginalScreenshots\Instant Action End Screen Stunt Flight.png` and
-  `... End Screen Fail.png`). CSVM draws the four rows as `IaWrapupBoard` over the world in both
-  presentations. *Evidence:* `docs/formats/instant-action/wrap-up.md` (the `LAYOUT.CSV` panes and
-  the four value texts), the two stills. *Fix shape:* in the Original UI the ending goes from the
-  hold to a shell page built from `LAYOUT.CSV`'s `IAWU_*` rows, in the shape of the other Original
-  screen modules; it carries the built-in board's extra lines (the complete or failed title, the
-  context line and the stunt splits) as further lines on the same pad, and Continue returns to the
-  Instant Action screen. The built-in UI keeps its board. *⚠ Traps:* the four values are the
-  frozen snapshot `InstantActionRuntime.MissionEnded` takes, never re-read live. *Playtest after
-  fix:* Original UI, fly an Instant Action to its end: the notepad page, then Continue back to the
-  screen. *Cross-refs:* `CSVM/src/Flight/IaWrapupBoard.cs`,
-  `CSVM/src/UI/Menu/Original/OriginalInstantActionScreen.cs`, `BL-892`'s closing commit,
-  `docs/formats/instant-action/wrap-up.md` ("The hold after the ending", which the board follows).
 - `BL-919` `[Fidelity]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: feel]` **The Ammo
   Selection screen offers a rocket row for a pylon the build never bought; the original hides
   it.** *Evidence:* the rows come from the airframe's stock fit, and since `BL-841` a pick on an

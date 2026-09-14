@@ -1,11 +1,24 @@
+using System.Collections.Generic;
+
 namespace CSVM.UI.Menu;
+
+/// <summary>
+/// The frozen numbers one ended Instant Action mission hands the menu: the outcome, the context
+/// line naming the chapter and mission type, the four counters the wrap-up screen draws, and the
+/// stunt run's split table already flattened to text. Every field is read at the ending and never
+/// again, so the record can outlive the session node that made it; the splits are strings rather
+/// than a <c>StuntSummary</c> for the same reason, that summary holding a live mission object.
+/// </summary>
+public sealed record IaWrapupSnapshot(
+    bool Won, string Context, float Elapsed, int EnemiesShotDown, int ZonesCompleted, int ShotPercent,
+    IReadOnlyList<string>? StuntLines = null);
 
 /// <summary>
 /// Where the menu should stand when it comes back, said semantically so the host never names a
 /// screen. Each presentation maps a destination into its own graph on
 /// <see cref="IMenuPresentation.Activate"/>: two presentations may land the same destination on
 /// entirely different screens, and a destination a graph lacks maps to the nearest one it has.
-/// The hierarchy is closed: only these four destinations exist.
+/// The hierarchy is closed: only these five destinations exist.
 /// </summary>
 public abstract record MenuReturnDestination
 {
@@ -42,6 +55,13 @@ public sealed record TopLevelReturn : MenuReturnDestination;
 /// the feature rather than in the destination, so nothing about the screen crosses the seam. Use
 /// <see cref="MenuReturnDestination.InstantAction"/>.</summary>
 public sealed record InstantActionReturn : MenuReturnDestination;
+
+/// <summary>Back to the Instant Action wrap-up, carrying one ended mission's frozen numbers: the
+/// outcome, the four counters and the stunt splits as they stood at the ending. The numbers travel
+/// with the destination because the session that counted them is freed before the page draws. A
+/// presentation with no wrap-up page of its own lands on the Instant Action screen instead, which
+/// is where this page's CONTINUE goes.</summary>
+public sealed record InstantActionWrapupReturn(IaWrapupSnapshot Snapshot) : MenuReturnDestination;
 
 /// <summary>Back to the campaign hub for the named profile, after leaving a campaign screen or
 /// abandoning a mission.</summary>

@@ -297,6 +297,25 @@ IA_D_EGROUP3=D,<SLIDER>,<UP>,<DOWN>,PI_B_Up.png,PI_B_Down.png,550,<LINE5>,0,180,
 IA_D_DIFFICULTY3=D,<SLIDER>,<UP>,<DOWN>,PI_B_Up.png,PI_B_Down.png,490,<LINE6>,0,90,<DROPH>,4
 IA_D_PLANEE3=D,<SLIDER>,<UP>,<DOWN>,PI_B_Up.png,PI_B_Down.png,600,<LINE6>,0,130,<DROPH>,11
 
+;The wrap-up page a flown Instant Action mission's ending lands on: the shipped section's keys, row
+;types and lines, on invented art names.
+[@IA_WrapUp@]
+IAWU_BACKGROUND=P,PI_IAWU_Back.jpg,0,0,1,1,0,1,1
+IAWU_LINE0=P,PI_IAWU_Line.png,489,173,3,1,0,1,1
+IAWU_LINE1=P,PI_IAWU_Line.png,489,226,3,1,0,1,1
+IAWU_LINE2=P,PI_IAWU_Line.png,489,297,3,1,0,1,1
+IAWU_LINE3=P,PI_IAWU_Line.png,489,359,3,1,0,1,1
+IAWU_B_CONTINUE=B,PM_B_Continue.png,600,449,0,0,InstantAction,0x1000,1,,,,,,
+IAWU_T_TITLE=T,IDS_IAWU_TITLE,467,98,4,180,40,0xff281B0C,0
+IAWU_T_TIMETITLE=T,IDS_IAWU_TIME_TITLE,480,154,4,180,20,0xff281B0C,0
+IAWU_T_DESTROYEDTITLE=T,IDS_IAWU_DESTROYED_TITLE,480,210,4,162,20,0xff281B0C,0
+IAWU_T_ZONESTITLE=T,IDS_IAWU_ZONES_TITLE,480,280,4,162,20,0xff281B0C,0
+IAWU_T_SHOTSTITLE=T,IDS_IAWU_SHOTS_TITLE,480,345,4,162,20,0xff281B0C,0
+IAWU_T_TIME=T,IDS_IA_TABLE_TITLE,533,185,4,162,50,0xff281B0C,0
+IAWU_T_DESTROYED=T,IDS_IA_TABLE_TITLE,533,235,4,162,50,0xff281B0C,0
+IAWU_T_ZONES=T,IDS_IA_TABLE_TITLE,533,306,4,162,50,0xff281B0C,0
+IAWU_T_SHOTS=T,IDS_IA_TABLE_TITLE,533,369,4,162,50,0xff281B0C,0
+
 ;The hangar: the name screen, the construction hub, its six tab sections, the totals page and
 ;the inventory, with the shipped file's keys and row types on invented lines and art names.
 [@PlaneName@]

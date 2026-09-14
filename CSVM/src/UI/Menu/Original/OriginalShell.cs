@@ -60,6 +60,10 @@ public enum OriginalScreen
     /// chrome over the fit of the seat the radio pair names.</summary>
     InstantActionLoadout,
 
+    /// <summary>The decoded <c>[@IA_WrapUp@]</c> page: one ended Instant Action mission's frozen
+    /// numbers on the notepad, with CONTINUE back to the Instant Action screen.</summary>
+    InstantActionWrapup,
+
     /// <summary>The decoded <c>[@Campaign@]</c> player profile screen: the name box, the roster,
     /// CONTINUE, DELETE PLAYER and CANCEL.</summary>
     CampaignRoster,
@@ -381,9 +385,10 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         Campaign = new OriginalCampaignScreen(
             campaign, _setup, planes, _campaignLayout, this, profiles, _stock, _flightDevices, dataRoot);
         Hangar = hangar != null ? new OriginalHangarScreen(hangar, planes, layout, measure, this) : null;
+        Wrapup = new OriginalWrapupScreen(_campaignLayout, measure, this, InstantAction.OpenInstantAction);
         _modules = Hangar != null
-            ? new IOriginalScreenModule[] { InstantAction, Options, Campaign, Hangar }
-            : new IOriginalScreenModule[] { InstantAction, Options, Campaign };
+            ? new IOriginalScreenModule[] { InstantAction, Options, Campaign, Hangar, Wrapup }
+            : new IOriginalScreenModule[] { InstantAction, Options, Campaign, Wrapup };
         var plaqueRow = layout.Screen("FlightCheck")?.Widget("FC_B_CHANGEPLANE");
         _plaque = plaqueRow is { Art.Count: > 0 } ? new BoardArt(BoardArtLibrary.Ui, plaqueRow.Art[0], plaqueRow.Frames) : null;
         Inks = ReadInks(layout, plaqueRow);
@@ -496,6 +501,10 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     /// pages it composes. It stands on a shell built without a campaign feature too, with its
     /// Campaign row disabled and every door inside it shut.</summary>
     public OriginalCampaignScreen Campaign { get; }
+
+    /// <summary>The module behind the Instant Action wrap-up page, holding the frozen numbers one
+    /// ended mission handed over. It stands empty until a session hands one in.</summary>
+    public OriginalWrapupScreen Wrapup { get; }
 
     /// <summary>Which campaign board the screen showing wears, or null when it wears none; what
     /// the presentation picks the board's palette by. The campaign's own screens answer for
