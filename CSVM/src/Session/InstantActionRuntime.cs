@@ -389,12 +389,17 @@ public sealed class InstantActionRuntime
     public void RegisterPilot(int playerIndex) => _lives[playerIndex] = Def.Lives;
 
     /// <summary>One human death: spends a life and answers whether that pilot flies again. False
-    /// means it is out, and the mission is lost once every registered pilot is out.
-    /// <c>lives 0</c> is unlimited and always answers true, the same disabled-end-condition shape
-    /// <see cref="Flight.VersusMatch"/>'s 0 kill target has. An unregistered pilot also answers
-    /// true.</summary>
+    /// means it is out, and the mission is lost once every registered pilot is out. <c>lives 0</c>
+    /// is unlimited and always answers true, the disabled-end-condition shape
+    /// <see cref="Flight.VersusMatch"/>'s 0 kill target has; an unregistered pilot answers true too.
+    /// ⚠ A death after the mission has ENDED spends nothing and answers false: the result was
+    /// settled at the ending, and the hold before the board is not the sortie.</summary>
     public bool NotifyPilotDown(int playerIndex)
     {
+        if (Ended)
+        {
+            return false;
+        }
         if (Def.Lives == 0 || !_lives.TryGetValue(playerIndex, out int left))
         {
             return true;

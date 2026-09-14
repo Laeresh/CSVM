@@ -173,10 +173,14 @@ screen there is the crash animation itself, whose RESET is what reaches this cas
 delay of its own.
 
 **What CSVM does with this.** `InstantActionRuntime.WrapupHoldS` is the decoded 3.0 s and the world
-runs through it, with the pilots' controls held (`FlightController.ControlsHeld`) so the ending is
-watched rather than flown. The 1.0 s freeze and the 2.0 s fade are not reproduced: the board simply
-takes the screen when the hold ends. The same hold is taken on a death, where it stands in for the
-crash animation the original waits out.
+runs through it. A win leaves the stick and the throttle live, so the player flies the ending out as
+the original does, and only the discrete commands (the two triggers, the weapon selectors, respawn)
+are swallowed (`FlightController.ControlHold`). The result was settled at the ending, so a hull lost
+inside the hold spends no life, takes no pane and leaves the board reporting the win, with the wreck
+falling for the rest of the hold. A death takes the same hold with the seat held whole, the stick
+neutral over the lever the pilot left, standing in for the crash animation the original waits out.
+The 1.0 s freeze and the 2.0 s fade are not reproduced: the board simply takes the screen when the
+hold ends.
 
 ### What the launcher maps
 

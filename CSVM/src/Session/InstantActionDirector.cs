@@ -601,6 +601,13 @@ public sealed class InstantActionDirector
             pilot.AllowLiveRespawn = false;
             pilot.Downed += (victim, _) =>
             {
+                // ⚠ Ahead of the ledger: the ending settled the result, so a hull lost inside the
+                // hold spends no life and takes no pane. It just falls, and the board still
+                // reports what the ending decided.
+                if (iaEnd.Ended)
+                {
+                    return;
+                }
                 if (iaEnd.NotifyPilotDown(victim))
                 {
                     Log.Info("core", $"ia: P{victim + 1} down — {(iaEnd.Def.Lives == 0 ? "unlimited lives" : Log.Format($"{iaEnd.LivesLeft(victim)} life/lives left"))}, respawning in {inputs.RespawnDelay:0.#} s");
@@ -638,13 +645,18 @@ public sealed class InstantActionDirector
                 InstantActionRuntime.ShotPercent(
                     inputs.Projectiles?.CannonHits ?? 0, inputs.Projectiles?.CannonRoundsFired ?? 0),
                 StuntSummary());
-            HoldPilotControls(true);
+            // A win is flown out: the original leaves the stick live for the whole hold, so only
+            // the discrete commands go. A loss holds the seat whole, standing in for the crash
+            // animation the original waits out there.
+            HoldPilotControls(outcome == InstantActionOutcome.Won
+                ? FlightControlHold.CommandsOnly
+                : FlightControlHold.All);
         };
         iaEnd.WrapupDue += _ =>
         {
-            // Released before the board is up: R and pad Y reach its Restart row through the same
-            // read the held stick went through, and the board halts the clock itself.
-            HoldPilotControls(false);
+            // Released before the board is up, so the board's own menu primes over whatever is
+            // still down and its Restart row answers the first press after it appears.
+            HoldPilotControls(FlightControlHold.None);
             if (ended is { } final)
             {
                 wrapupBoard.Present(final.Won, final.Elapsed, final.Kills, final.Zones,
@@ -653,9 +665,9 @@ public sealed class InstantActionDirector
         };
     }
 
-    // The hold's input half: the pilots watch the ending out rather than flying through it. The
-    // world, the cameras and every wreck carry on, so only the seats stop answering.
-    private void HoldPilotControls(bool held)
+    // The hold's input half. The world, the cameras and every wreck carry on either way, so only
+    // the seats change: a win keeps flying and loses its commands, a loss loses the stick too.
+    private void HoldPilotControls(FlightControlHold hold)
     {
         if (_rigs is not { } rigs)
         {
@@ -665,7 +677,7 @@ public sealed class InstantActionDirector
         {
             if (rig.Controller is { } pilot)
             {
-                pilot.ControlsHeld = held;
+                pilot.ControlHold = hold;
             }
         }
     }

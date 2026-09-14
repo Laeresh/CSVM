@@ -103,7 +103,7 @@ the handed world root. `TryCreate` takes the wizard's def or `--ia=<path>`; `Bui
 contiguous actor phase (the chapter's first patrol net, the ace, the wingman fan and its escort
 chain, every configured wave built inert at the world origin); `Step` ticks the sequencer and
 activates what it returns; `WireEndConditions` routes each mode's own win signal, the lives
-ledger and the whole-window wrap-up board, snapshotting the four counters at the ending and holding the pilots' seats (not the world, not the cameras) until the hold runs out and the board is due. The decoded rules stay engine-free in
+ledger and the whole-window wrap-up board, snapshotting the four counters at the ending and holding the pilots' seats (not the world, not the cameras) until the hold runs out and the board is due: a win keeps the stick and loses the commands, a loss loses both, and a hull lost inside the hold spends no life and takes no pane. The decoded rules stay engine-free in
 `InstantActionRuntime.cs` and `InstantActionWaves.cs`; this class owns every `ia:` log line.
 
 ## src/Session/SpectateHandoff.cs

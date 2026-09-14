@@ -10,6 +10,26 @@ using Godot;
 
 namespace CSVM.Flight;
 
+/// <summary>How far a seat's controls are held back while the world flies on around an ending the
+/// player watches out. The two settings differ only in the stick: both swallow the discrete
+/// flight commands, and only <see cref="All"/> also takes the aeroplane's attitude away.
+/// ⚠ Neither is a freeze. Physics, the wreck's fall, weapons already in the air and the cameras
+/// all carry on, which is the point.</summary>
+public enum FlightControlHold
+{
+    /// <summary>Nothing is held; the seat answers everything.</summary>
+    None,
+
+    /// <summary>Every discrete flight command (the two triggers, the weapon selectors, respawn)
+    /// is swallowed and no crash-cam timer brings the pilot back, while the stick and the throttle
+    /// still fly the aeroplane.</summary>
+    CommandsOnly,
+
+    /// <summary>The above, and the stick reads neutral over the lever the pilot left, so the
+    /// aeroplane flies on as trimmed.</summary>
+    All,
+}
+
 /// <summary>
 /// The flying aircraft: polls keyboard + gamepad into a <see cref="FlightModel"/>, applies the
 /// result to this node's transform, and drives the chase camera plus a minimal text HUD.
@@ -438,13 +458,10 @@ public partial class FlightController : Node3D
     /// "put me back at the spawn". Pinned by the session's own director, never from here.</summary>
     public bool AllowLiveRespawn = true;
 
-    /// <summary>Whether this seat's controls are held back while the world flies on: the stick
-    /// reads neutral over the lever the pilot left, and every discrete flight command (the two
-    /// triggers, the selectors, respawn) is swallowed. Set by the session's own director around an
-    /// ending the player watches out, never from here; an aircraft nobody holds is unaffected.
-    /// ⚠ Not a freeze. Physics, the wreck's fall, weapons already in the air and the cameras all
-    /// carry on, which is the point.</summary>
-    public bool ControlsHeld;
+    /// <summary>How far this seat's controls are held back while the world flies on, see
+    /// <see cref="FlightControlHold"/>. Set by the session's own director around an ending the
+    /// player watches out, never from here; an aircraft nobody holds is unaffected.</summary>
+    public FlightControlHold ControlHold;
 
     private const float ThrottleRate = 0.5f;    // full sweep in 2 s
     // Spawn throttle/speed come from the mission's PLAYER_INIT via Setup (docs/formats/spawns.md).
@@ -937,6 +954,10 @@ public partial class FlightController : Node3D
     // The decoded contact rules, over the same seam: what a contact costs, whether this plane
     // survives it, and how far out of the surface it has to be pushed.
     private AircraftContactResolver Contacts => _contacts ??= new AircraftContactResolver(World);
+
+    // Both holds swallow the discrete commands, so every command read tests this rather than one
+    // named setting; only the stick asks which of the two it is.
+    private bool CommandsHeld => ControlHold != FlightControlHold.None;
 
     // Which stick flies this aircraft: set in Bind, and lazy here too so a bare test rig that
     // never binds still gets one, off whichever of _holdSegments/Pilot it already set (Decision 8,
@@ -1746,9 +1767,10 @@ public partial class FlightController : Node3D
 
         if (Crashed)
         {
-            // ⚠ Out of lives, neither R nor AutoRespawnAfter's timer may bring the pilot back;
-            // check this ahead of both rather than by clearing AutoRespawnAfter, which R overrides.
-            if (Spectating)
+            // ⚠ Out of lives, or held through an ending, neither R nor AutoRespawnAfter's timer
+            // may bring the pilot back; checked here rather than by clearing AutoRespawnAfter,
+            // which R overrides. A hull that dies inside a hold falls for the rest of it.
+            if (Spectating || CommandsHeld)
             {
                 StepWreckFall(dt);
                 return;
@@ -1780,9 +1802,10 @@ public partial class FlightController : Node3D
         }
         else
         {
-            // A held seat commands nothing: the stick centres over the lever it was left on, so the
-            // aeroplane flies on as trimmed instead of being frozen or cut to idle.
-            var input = ControlsHeld
+            // A wholly held seat commands nothing: the stick centres over the lever it was left on,
+            // so the aeroplane flies on as trimmed instead of being frozen or cut to idle. The
+            // narrower hold leaves the stick and the throttle exactly as the pilot works them.
+            var input = ControlHold == FlightControlHold.All
                 ? new FlightInput { Throttle = _throttle }
                 : InputSource.Read(dt);
             // Read AFTER the input: R respawns inside it, and a sweep from the pose before that
@@ -2430,7 +2453,7 @@ public partial class FlightController : Node3D
     private bool ReadLatched(InputAction action)
     {
         bool down = _reentryLatch.Read(action, _actions.Held(action));
-        return down && !ControlsHeld;
+        return down && !CommandsHeld;
     }
 
     // The same read over the keyboard and mouse half alone, for an action whose pad half is
@@ -2440,7 +2463,7 @@ public partial class FlightController : Node3D
     private bool ReadLatchedKeys(InputAction action)
     {
         bool down = _reentryLatch.Read(action, _keyActions.Held(action));
-        return down && !ControlsHeld;
+        return down && !CommandsHeld;
     }
 
     // Called at flight's own resume/skip re-entry points (the Inert setter above, and
@@ -2537,7 +2560,7 @@ public partial class FlightController : Node3D
     // (above the speedometer) and ROCKETS in the left, so pressing away from the dial reads as a
     // mis-binding at the controls.
     private bool PadSelectorHeld(InputAction action) =>
-        !ControlsHeld && _padActions.Held(action);
+        !CommandsHeld && _padActions.Held(action);
 
     // This tick's four selector readings, each side on its own field. One call per tick: the two
     // key-half reads go through the re-entry latch, which answers once.
@@ -2589,7 +2612,7 @@ public partial class FlightController : Node3D
             AvailableLoadFactor = _model.AvailableLoadFactor,
             Stalled = _model.isStalled(),
             AutoLandOffered = AutoLandOffered,
-            RespawnOffered = !Spectating && !ControlsHeld,
+            RespawnOffered = !Spectating && !CommandsHeld,
             WallDt = wallDt,
             SimDt = simDt,
             DamageSummary = _pilotHud.DrawsTextBlock ? Damage?.Summary() : null,

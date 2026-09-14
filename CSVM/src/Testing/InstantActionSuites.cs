@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using CSVM.Bindings;
 using CSVM.Effects;
 using CSVM.Flight;
 using CSVM.Mech3;
@@ -616,8 +617,13 @@ internal static class InstantActionSuites
         "later and the solo mission is LOST; plus the hold between the ending and the board: a " +
         "win presents nothing, nothing is due a fifth of a second short of the decoded hold, the " +
         "whole hold spent presents it exactly once and never again, the mission clock stays at " +
-        "the ending throughout, and a held seat flying a full-deflection scripted stick commands " +
-        "nothing over the lever it was left on until the hold is released")]
+        "the ending throughout, and a death reported inside the hold spends no life and leaves " +
+        "the win standing; the two holds on a real seat flying a full-deflection scripted stick: " +
+        "a death's holds the stick neutral over the lever it was left on, a win's leaves the same " +
+        "stick and throttle flying while both triggers and all four selectors stay swallowed, a " +
+        "crash inside a win's hold stays down with R held and the crash cam armed, and each has " +
+        "its able-to-fail control at the release; plus the handover, where the hold offers no " +
+        "menu at all and the board that follows answers the first press on its Restart row")]
     internal static void InstantActionEnd(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -689,6 +695,7 @@ internal static class InstantActionSuites
             heldAce.Downed += (_, _) => holdMission.ReportObjective(InstantActionObjective.AceDown);
             var boardsDue = new List<InstantActionOutcome>();
             holdMission.WrapupDue += outcome => boardsDue.Add(outcome);
+            holdMission.RegisterPilot(0);
             holdMission.Advance(12.5f);
             heldAce.DebugForceCrash();
             float clockAtEnd = holdMission.Elapsed;
@@ -701,6 +708,14 @@ internal static class InstantActionSuites
             }
             ctx.Check(boardsDue.Count == 0 && holdMission.HoldingWrapup,
                 $"…still none 0.2 s short of the {InstantActionRuntime.WrapupHoldS:0.#} s hold (the able-to-fail control)");
+            // A hull lost inside the hold is not the sortie: the result and the four counters were
+            // settled at the ending. The same call on a RUNNING mission spends the life and loses
+            // it, two blocks below, which is this one's able-to-fail control.
+            int livesAtEnd = holdMission.LivesLeft(0);
+            bool fliesOnAfterWin = holdMission.NotifyPilotDown(0);
+            ctx.Check(!fliesOnAfterWin && holdMission.Outcome == InstantActionOutcome.Won
+                    && holdMission.LivesLeft(0) == livesAtEnd && !holdMission.IsSpectating(0),
+                $"a death reported inside the hold spends no life and leaves the win standing: {holdMission.Outcome}, {holdMission.LivesLeft(0)} of {livesAtEnd} life/lives, spectating={holdMission.IsSpectating(0)}");
             holdMission.Advance(0.25f);
             ctx.Check(boardsDue.Count == 1 && boardsDue[0] == InstantActionOutcome.Won
                     && !holdMission.HoldingWrapup,
@@ -818,22 +833,108 @@ internal static class InstantActionSuites
                 new Vector3(0f, 2000f, 2000f), new Vector3(0f, 2000f, 1900f), SeatLever, 80f);
             ctx.Host.AddChild(seat);
             spawned.Add(seat);
-            seat.ControlsHeld = true;
-            for (int i = 0; i < 60; i++)
+            // The four selector readings with each selector action held down or let go, through the
+            // seat's own production reads.
+            FireInputs Selectors(bool down)
             {
-                seat.SimStep(1f / 60f);
+                seat.HoldActionForTest(InputAction.SelectGunGroup, down);
+                seat.HoldActionForTest(InputAction.SelectGunGroupPrev, down);
+                seat.HoldActionForTest(InputAction.SelectOrdnance, down);
+                seat.HoldActionForTest(InputAction.SelectOrdnancePrev, down);
+                return seat.SelectorInputsForTest();
             }
+
+            void StepSeat(int frames)
+            {
+                for (int i = 0; i < frames; i++)
+                {
+                    seat.SimStep(1f / 60f);
+                }
+            }
+
+            seat.ControlHold = FlightControlHold.All;
+            StepSeat(60);
             var held = seat.LastCommand;
             ctx.Check(held.Pitch == 0f && held.Roll == 0f && held.Yaw == 0f
                     && Mathf.Abs(held.Throttle - SeatLever) < 0.01f,
-                $"a held seat commands nothing over the lever it was left on: pitch={held.Pitch:0.00} roll={held.Roll:0.00} throttle={held.Throttle:0.00}");
-            seat.ControlsHeld = false;
-            for (int i = 0; i < 60; i++)
-            {
-                seat.SimStep(1f / 60f);
-            }
+                $"a wholly held seat commands nothing over the lever it was left on: pitch={held.Pitch:0.00} roll={held.Roll:0.00} throttle={held.Throttle:0.00}");
+
+            // The win's hold: the original flies on through it, so the stick and the throttle are
+            // the pilot's and only the discrete commands go.
+            seat.ControlHold = FlightControlHold.CommandsOnly;
+            StepSeat(60);
+            var flown = seat.LastCommand;
+            ctx.Check(flown.Pitch > 0.5f && flown.Roll > 0.5f && flown.Throttle > SeatLever,
+                $"the win's hold leaves the SAME stick flying it: pitch={flown.Pitch:0.00} roll={flown.Roll:0.00} throttle={flown.Throttle:0.00}");
+            var swallowed = Selectors(true);
+            ctx.Check(!seat.GunTriggerReadsForTest(true) && !seat.RocketTriggerReadsForTest(true)
+                    && !swallowed.GunSelectHeld && !swallowed.RocketSelectHeld
+                    && !swallowed.GunSelectBackHeld && !swallowed.RocketSelectBackHeld
+                    && !swallowed.GunSelectPadHeld && !swallowed.RocketSelectPadHeld,
+                $"…and both triggers and all four selectors are still swallowed under it: guns={swallowed.GunSelectHeld}/{swallowed.GunSelectBackHeld}/{swallowed.GunSelectPadHeld} rockets={swallowed.RocketSelectHeld}/{swallowed.RocketSelectBackHeld}/{swallowed.RocketSelectPadHeld}");
+            seat.ControlHold = FlightControlHold.None;
+            var answered = Selectors(true);
+            ctx.Check(seat.GunTriggerReadsForTest(true) && seat.RocketTriggerReadsForTest(true)
+                    && answered.GunSelectHeld && answered.RocketSelectHeld
+                    && answered.GunSelectBackHeld && answered.RocketSelectBackHeld
+                    && answered.GunSelectPadHeld && answered.RocketSelectPadHeld,
+                $"…the same controls answering the moment the hold ends, the able-to-fail control: guns={answered.GunSelectHeld}/{answered.GunSelectBackHeld}/{answered.GunSelectPadHeld} rockets={answered.RocketSelectHeld}/{answered.RocketSelectBackHeld}/{answered.RocketSelectPadHeld}");
+            Selectors(false);
+            seat.GunTriggerReadsForTest(false);
+            seat.RocketTriggerReadsForTest(false);
+            StepSeat(60);
             ctx.Check(seat.LastCommand.Pitch > 0.5f && seat.LastCommand.Roll > 0.5f,
-                $"…and the SAME stick flies it the moment the hold ends, the able-to-fail control: pitch={seat.LastCommand.Pitch:0.00} roll={seat.LastCommand.Roll:0.00}");
+                $"…and the stick still flies it with nothing held at all: pitch={seat.LastCommand.Pitch:0.00} roll={seat.LastCommand.Roll:0.00}");
+
+            // A hull lost inside the win's hold falls for the rest of it: R is swallowed and the
+            // armed crash cam is held off with it, so nothing comes back before the board.
+            seat.AutoRespawnAfter = 0.5f;
+            seat.ControlHold = FlightControlHold.CommandsOnly;
+            seat.HoldActionForTest(InputAction.Respawn, true);
+            seat.DebugForceCrash();
+            StepSeat((int)(InstantActionRuntime.WrapupHoldS * 60f) + 60);
+            ctx.Check(seat.Crashed,
+                $"a crash inside the win's hold stays down for the whole hold with R held: crashed={seat.Crashed}");
+            seat.ControlHold = FlightControlHold.None;
+            StepSeat(2);
+            ctx.Check(!seat.Crashed,
+                $"…and the same still-held R brings it back the moment the hold ends, the able-to-fail control: crashed={seat.Crashed}");
+            seat.HoldActionForTest(InputAction.Respawn, false);
+
+            // ---- the hold's handover to the board ---------------------------------------------
+            // The real board over the real hold, wired as the director wires it: no menu exists
+            // while the world flies, and the menu built with the board answers its first press.
+            var handover = new InstantActionRuntime(EndDef(ctx, "handover", "dogfight_ace"));
+            var boardState = new PauseState();
+            var board = IaWrapupBoard.Build("ia-end handover", exitsToMenu: true, boardState,
+                _ => new MenuInput());
+            ctx.Host.AddChild(board);
+            try
+            {
+                int restarts = 0;
+                board.Restart = () => restarts++;
+                handover.MissionEnded += _ => seat.ControlHold = FlightControlHold.CommandsOnly;
+                handover.WrapupDue += outcome =>
+                {
+                    seat.ControlHold = FlightControlHold.None;
+                    board.Present(outcome == InstantActionOutcome.Won, handover.Elapsed, 1, 0, 50);
+                };
+                handover.ReportObjective(InstantActionObjective.AceDown);
+                ctx.Check(!board.Visible && board.StandardMenu == null
+                        && seat.ControlHold == FlightControlHold.CommandsOnly,
+                    $"through the hold there is no board and no menu to press: visible={board.Visible} hold={seat.ControlHold}");
+                handover.Advance(InstantActionRuntime.WrapupHoldS);
+                ctx.Check(board.Visible && restarts == 0
+                        && seat.ControlHold == FlightControlHold.None,
+                    $"the board takes the screen with the seats already released: visible={board.Visible} hold={seat.ControlHold} restarts={restarts}");
+                board.StandardMenu!.Handle(1, accept: true, back: false);
+                ctx.Check(restarts == 1 && !board.Visible,
+                    $"…and its Restart row answers the first press after it appears: restarts={restarts} visible={board.Visible}");
+            }
+            finally
+            {
+                board.Free();
+            }
         }
         finally
         {

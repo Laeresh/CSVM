@@ -1762,7 +1762,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   fix:* Original UI, fly an Instant Action to its end: the notepad page, then Continue back to the
   screen. *Cross-refs:* `CSVM/src/Flight/IaWrapupBoard.cs`,
   `CSVM/src/UI/Menu/Original/OriginalInstantActionScreen.cs`, `BL-892`'s closing commit,
-  `BL-911`.
+  `docs/formats/instant-action/wrap-up.md` ("The hold after the ending", which the board follows).
 - `BL-912` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **At 4:3 the HUD gauge
   columns sit too far in from the screen edges.** *Evidence:* `HudMetrics.ReadingBox` is the whole
   pane at or under 16:9, and `GaugeCluster` places each dial at a fixed pixel offset from the box
@@ -2178,20 +2178,6 @@ usual.
   *Cross-refs:* `CSVM/src/Session/Launcher.cs`, `CSVM/src/UI/MissionEndFade.cs`,
   `CSVM/src/Session/CutsceneController.cs`, `BL-812`'s closing commit (the load screen's own
   motion).
-- `BL-911` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **During the 3 s after
-  an Instant Action win the stick is live in the original; CSVM holds the controls.** Flown in the
-  original: the player keeps flying through the hold. *Evidence:* `BL-892` landed the hold with
-  `FlightController.ControlsHeld`, which synthesises a throttle-only input and swallows every
-  discrete command, filed as the change's one judgement with the evidence owed as `PT-145`, which
-  this verdict settles. *Fix shape:* through the win's hold the stick and throttle read the real
-  input; fire, selectors and respawn stay swallowed; a crash inside the hold does not turn the win
-  into a loss (the result is frozen at the ending, the wreck falls, the board still reports the
-  win). The death path keeps its hold as it is. *⚠ Traps:* the board's Restart row must still
-  answer the first press after it appears, no press left over from the hold. *Playtest after
-  fix:* Instant Action ace duel with 1 life, win it and roll during the 3 s, then win again and
-  fly into the ground during the 3 s: the board reports the win both times. *Cross-refs:*
-  `BL-892`'s closing commit, `CSVM/src/Session/InstantActionDirector.cs`,
-  `docs/formats/instant-action/wrap-up.md` ("The hold after the ending"), `BL-908`.
 
 
 
