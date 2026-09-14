@@ -258,6 +258,10 @@ public partial class Launcher : Node3D
     // is carried out one step a frame with the screen still up, which is what makes the screen a
     // real yield of several frames. -1 means nothing is owed.
     private int _loadStepsRun = -1;
+    // The cover that bridges the load screen and the session's first real frame: raised with the
+    // screen (or, on a CLI launch, with the build), held opaque until the session says that frame
+    // is ready, then faded up from dark. Null under --det and once it has finished.
+    private UI.SessionStartFade? _startFade;
 
     private double _perfClock;
     private int _perfFrames;
@@ -808,6 +812,11 @@ public partial class Launcher : Node3D
             ShowMenu(MenuReturnDestination.TopLevel);
             return;
         }
+
+        // A CLI launch has no load screen, so the cover is the whole of what stands between the
+        // build and the session's first real frame. Same rule as the interactive paths: a session
+        // starts from dark, whatever opened it.
+        RaiseStartCover();
         LaunchSession();
     }
 
@@ -971,6 +980,13 @@ public partial class Launcher : Node3D
             ApplyOptions(applied);
         }
 
+        // Dropped here rather than by the cover itself, so one node owns both screens a launch
+        // raises. It ticks after this node, so what is read is the state it last painted.
+        if (_startFade is { Finished: true })
+        {
+            DropStartCover();
+        }
+
         // Last in the frame, where the build used to happen anyway: the launchscreen and the boards
         // are children, so they process AFTER this node, and a build they asked for landed here.
         RunOwedLaunch();
@@ -1118,6 +1134,13 @@ public partial class Launcher : Node3D
             return;
         }
         HideLoadScreen();
+        if (!built)
+        {
+            // Nothing to uncover: the cover would otherwise hold over whatever the failure left on
+            // screen for the whole of its cap.
+            DropStartCover();
+        }
+
         if (built || !_menuDriven)
         {
             return; // a CLI launch leaves the log to tell the story, as it always did
@@ -1138,8 +1161,35 @@ public partial class Launcher : Node3D
         // score stops. What plays next is the mission's own business: a campaign mission cues
         // prebattle from its objectives graph, and Instant Action ships silent (docs/org/music.md).
         _music?.Stop();
+        RaiseStartCover();
         ShowLoadScreen(_spec.CampaignProfile != null, _spec.IaDef?.MissionType);
         _launchFramesWaited = 0;
+    }
+
+    // The cover, up before the load screen that hides it, so the frame the screen comes down on is
+    // already covered and no frame between the two shows the world. Replacing a cover still up (a
+    // relaunch straight out of a session) starts the hold again, which is what a fresh build wants.
+    private void RaiseStartCover()
+    {
+        DropStartCover();
+        _startFade = UI.SessionStartFade.Build(
+            _spec.Det, () => _session is { InSession: true, FirstFrameReady: true });
+        if (_startFade != null)
+        {
+            AddChild(_startFade);
+        }
+    }
+
+    private void DropStartCover()
+    {
+        if (_startFade == null)
+        {
+            return;
+        }
+
+        RemoveChild(_startFade);
+        _startFade.QueueFree();
+        _startFade = null;
     }
 
     // The load screen over the whole window, on the board layer. A campaign launch takes the
@@ -2004,6 +2054,10 @@ public partial class Launcher : Node3D
             _session.QueueFree();
             _session = null;
         }
+
+        // The menu is not a session start, so a cover left over from one (a mission exited inside
+        // its own fade) has nothing left to uncover.
+        DropStartCover();
         // Same reason as the build in LaunchSession: a teardown legitimately stalls the loop.
         _hitchSidecar.Flush();
         _hitchMonitor.Rearm();

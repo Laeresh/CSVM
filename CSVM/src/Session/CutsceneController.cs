@@ -207,6 +207,12 @@ public sealed partial class CutsceneController : Node
     /// <summary>Whether the chrome is hidden and the view is off the aircraft (code 2).</summary>
     public bool Presenting { get; private set; }
 
+    /// <summary>Has an episode's camera been handed to the rigs at least once? The session's start
+    /// cover holds until this, so an intro's first shot and not the chase view is the first frame
+    /// of a mission. Latched for the process: a later episode starts from gameplay, which is
+    /// already a frame the player was meant to see.</summary>
+    public bool CameraPosed { get; private set; }
+
     /// <summary>Whether this episode is being kept past its own definition's end because the
     /// mission ended under it (<see cref="EndingLanded"/>). The shot the leaving fade ramps over
     /// is the film's while this is true.</summary>
@@ -1180,6 +1186,7 @@ public sealed partial class CutsceneController : Node
         foreach (var rig in _rigs)
         {
             rig.Camera.GlobalTransform = pose;
+            CameraPosed = true;
         }
     }
 

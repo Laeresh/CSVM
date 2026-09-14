@@ -42,6 +42,13 @@ internal static class HudLayers
     /// <see cref="SunWash"/>: the instruments the picture is judged with stay readable through it.</summary>
     public const int MissionEndFade = 3;
 
+    /// <summary>The cover a session starts under (<c>UI.SessionStartFade</c>). Shares
+    /// <see cref="MissionEndFade"/>'s tier, and for the same reasons: one opens a mission and the
+    /// other ends one, so they never coexist, and both have to darken the HUD and the wash while
+    /// leaving the instruments above them readable. Under <see cref="Board"/>, so the load screen
+    /// it takes over from keeps drawing on top of it.</summary>
+    public const int SessionStartFade = MissionEndFade;
+
     /// <summary>The debug overlays: node labels (T), class overlay, AI nets, markers (K),
     /// colliders (C), the selection gizmo and the tile grid.</summary>
     public const int Debug = 4;

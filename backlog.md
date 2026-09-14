@@ -2141,24 +2141,6 @@ usual.
   from the store's history) or accepting the loss; the converter is one reader plus the existing
   v3 writer. *⚠ Traps:* not a path fault, and a worktree shares the main checkout's `user://`.
   *Cross-refs:* `BL-662` (the v3 store), `BL-675`'s closing commit.
-- `BL-909` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **The frames between
-  the load screen and the cutscene or the flight show the world assembling and the chase view;
-  the original cuts straight in and fades up from dark.** *Evidence:* `Launcher.RunOwedLaunch`
-  tears the load screen down in the tick the build returns and the next rendered frame is the
-  world, with no overlay bridging the two; the first frames show the world still building and the
-  player plane in the chase view before the cutscene takes over. In the original the load screen
-  goes directly into the cutscene's first frame (or the Instant Action flight) with a short fade
-  from dark, not black. No fade exists at any session start (the only fades are the campaign's
-  mission-end blackout and the cutscene's leaving fade). *Fix shape:* keep an opaque cover up
-  until the session's first real frame is ready (the cutscene camera bound, or the plane placed
-  and the HUD live), then fade that cover up from dark over about 1 s, in the shape of
-  `MissionEndFade`; every session start, cutscene or not. *⚠ Traps:* the cover must not delay the
-  `--det` frame count or move the goldens (`--frames=N` counts from the first world frame); gate
-  it off under `--det`, and say so. *Playtest after fix:* start a campaign mission and an Instant
-  Action: no assembling frame, no chase view before the cutscene, a fade up from dark.
-  *Cross-refs:* `CSVM/src/Session/Launcher.cs`, `CSVM/src/UI/MissionEndFade.cs`,
-  `CSVM/src/Session/CutsceneController.cs`, `BL-812`'s closing commit (the load screen's own
-  motion).
 
 
 

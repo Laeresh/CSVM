@@ -383,6 +383,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/MissionMap.cs`, the one chart drawer every screen showing a mission's map shares: the sheet at its crop, the reveal's pins, and an icon placed by world position.
 - `src/UI/ObjectivesHud.cs`, the campaign mission's objectives readout, drawn on the pause screen alone, one instance per rig.
 - `src/UI/MissionEndFade.cs`, the mission-end black-out, painting `CampaignDirector.LeavingFade` onto a full-screen rect every frame, one instance per rig.
+- `src/UI/SessionStartFade.cs`, the cover a session starts under, painting `StartCover`'s ramp over the HUD and the world until the session's first real frame, then up from dark.
 - `src/UI/ScreenFlash.cs`, the full-screen wash, two channels per pane: the proximity-routed burst ramp and the victim-routed blend, composited at paint time.
 - `src/UI/BlendWash.cs`, one pane's victim-routed wash: the sonic, flash and smoke blend rule and its attack, sustain and release envelope.
 - `src/UI/LiveryLab.cs`, the `--viewer` livery editor (L): squadron, colour and decal steppers, a live repaint and copy-CLI-args.
@@ -444,6 +445,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/ScriptedWindow.cs`, Win32-only window hiding for scripted runs; `ScriptedWindow.Hide()` uses `ShowWindow(SW_HIDE)` on the native window.
 - `src/Utils/ShaderTime.cs`, the `csky_time` global uniform: the clock's GPU twin, replacing `TIME` in every generated shader; wraps at 3600 s.
 - `src/Utils/LoadProgress.cs`, the load screen's progress under a blocking build: the authored milestone table, the monotonic setter and the throttled repaint pump.
+- `src/Utils/StartCover.cs`, the session-start cover's ramp: the dark tone, the hold until the first real frame, the one-second fade, and nothing at all under `--det`.
 - `src/Utils/StartupProfile.cs`, the always-on `[perf] startup …` line: every session build split into the phases it spends its time in.
 - `src/Utils/TapHoldButton.cs`, one button carrying two actions split by how long it is held; the caller feeds it the button level and switches on the answer.
 - `src/Utils/WallCostBank.cs`, one `--perf` cost meter (bracket, banked milliseconds, worst span, count, tally) and the bracket node; the three cost facades are instances of it.

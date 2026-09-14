@@ -658,6 +658,12 @@ member, and it does not go here.
   would have the engine warp the pointer from a window on another desktop, which reaches the user's
   own cursor, so a capture on a real display stays a judgement at the controls and the suite reads
   the decision instead.
+- **INSTR-80**, **A `--no-det` screenshot taken near a session start photographs the start cover,
+  not the world.** The cover holds opaque from the load screen until the session's first real frame
+  and then fades over a second, so a `--no-det --frames=3` shot of C1 reads mean RGB 27/28/31 where
+  the same frame under `--det` reads 125/126/112. Shoot a session start with `--det` (which is the
+  default for `--screenshot`), or past the fade, and read `[ui] start cover:` in the log to see how
+  long it held.
 
 ## SRC, sources and documents
 

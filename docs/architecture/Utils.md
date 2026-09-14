@@ -82,6 +82,15 @@ Engine-free: `FillPixels` and `FrameAt` are the bar's pixel clip and the propell
 `UI/LoadBoard.cs` is what turns them into a drawn frame. Decode:
 [../org/loading-screen.md](../org/loading-screen.md).
 
+## src/Utils/StartCover.cs
+The ramp behind the cover a session starts under: opaque while the world is still assembling, then
+up from a dark tone over about a second once the session reports the first frame the player is
+meant to see. Owns the tone, the fade length, the clamp on the huge delta a blocking build hands
+the frame that closes over it, and the hold cap that releases a cover no session ever answers. A
+`--det` run builds a disabled ramp that covers nothing, so no pinned golden and no `--frames=N`
+shot sees it. Engine-free; `UI/SessionStartFade.cs` paints it and `Session/Launcher.cs` owns when
+one is raised.
+
 ## src/Utils/HitchMonitor.cs
 The always-on frame-hitch detector, ticked from `Launcher._Process` in every mode: a frame costing
 far more than its recent neighbours gets a `HitchRecord` assembled for it, describing the frame's

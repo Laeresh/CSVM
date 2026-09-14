@@ -372,6 +372,12 @@ public partial class GameSession : Node3D
     /// launchscreen only once a world is actually up).</summary>
     public bool InSession { get; private set; }
 
+    /// <summary>Has the session drawn the first frame the player is meant to see: an intro's
+    /// camera posed onto the rigs, or the flown aeroplane on its spawn under its own HUD. Latched
+    /// at the end of the frame that reaches it, and what the start cover holds for, so no frame
+    /// between the load screen and the mission shows the world still assembling.</summary>
+    internal bool FirstFrameReady { get; private set; }
+
     /// <summary>The session's per-player rigs, the Launcher's F11 placement print reads them.</summary>
     internal List<PlayerRig> Rigs => _rigs;
 
@@ -821,6 +827,10 @@ public partial class GameSession : Node3D
         // itself must never reach this, so that it always reads the simulation pose
         // (docs/architecture.md, src/Utils/RenderPoses.cs).
         RenderPoses.Draw();
+        // After the pose draw, because that is the state this frame renders: the cover the launcher
+        // holds over the start comes off on what the player is meant to see, not on the build
+        // finishing.
+        FirstFrameReady = FirstFrameReady || ShowsFirstRealFrame();
     }
 
     /// <summary>The realtime clock adapter: request one complete session-simulation step from
@@ -1018,6 +1028,24 @@ public partial class GameSession : Node3D
 
         Log.Info("core", $"campaign: {result.Outcome} — handing '{profile}' back to the menu's debrief");
         _campaignMissionEnded(profile, result);
+    }
+
+    // What the start cover waits for. An intro owns the eye, so its camera having posed the rigs is
+    // the frame; otherwise it is the flown aeroplane placed under a live rig. A mode with no rig at
+    // all (viewer, freecam) has nothing to wait for beyond the built world's first processed frame.
+    private bool ShowsFirstRealFrame()
+    {
+        if (!InSession)
+        {
+            return false;
+        }
+
+        if (_cutscene is { Playing: true })
+        {
+            return _cutscene.CameraPosed;
+        }
+
+        return _rigs.Count == 0 || _rigs[0].Controller != null;
     }
 
     // Places every rig at the --pos= placement BuildFlightRigs withheld while the intro owned

@@ -421,6 +421,15 @@ hold already stops the sim clock underneath it. Self-mounting, one per rig's `Hu
 until the director's fade leaves 0. Decode: [../formats/objectives.md](../formats/objectives.md),
 "The mission-end path, and what the player sees after it".
 
+## src/UI/SessionStartFade.cs
+A full-screen `ColorRect` on a `CanvasLayer` at `HudLayers.SessionStartFade`, raised with the load
+screen and painting `Utils/StartCover.cs`'s alpha until that ramp is spent. It shares
+`MissionEndFade`'s tier, so it covers the flight HUD, the world and the sun wash while the world
+assembles and while an intro's camera is still being posed, and the load screen on `Board` keeps
+drawing over it. `Build` returns null under `--det`, which is the one gate: nothing stands over a
+frame a golden hashes. The launcher builds it, drops it once `Finished`, and hands it the session's
+own first-frame answer; `Tick` is public because a suite never yields a frame.
+
 ## src/UI/LiveryLab.cs
 The `--viewer` livery editor (key L): a squadron stepper that loads the whole squadron livery,
 per-slot RGB sliders, decal steppers, a random livery and copy-CLI-args.
