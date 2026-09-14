@@ -750,20 +750,42 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Flight model & collision physics
 
-- `BL-562` `[Perf]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: data]` `[CM11]` **CM11 (C2/M02) still spends single physics ticks of 45 to 51 ms in flight and
-  about 124 ms on the first tick after the world build.** *Evidence (traced):* the bracketed
-  instrument (`PhysicsTickCost`, `--perf`'s `phys_tick_ms` / `phys_tick_max_ms` / `phys_hz`) over 82
-  windows of a flown CM11, with the recurring telemetry burst removed, leaves three residual terms,
-  each attributed by a temporary sub-scope breakdown inside the tick. (a) The FIRST tick after the
-  build costs about 124 ms, 95 ms of it the 20 animation runtimes' first `Advance` (46,355 index rows
-  walked over five cold `FindAll` misses, plus a 29 ms first sim step); it reproduces on every run to
-  within 2 ms and is the world-build settling regime, not flight. (b) One tick in a sortie reaches
-  46 ms inside `FlightController`'s AI collision sweep (`SweepProbes` + `CenterRayContact`, 45.1 ms
-  in a single aircraft's step). (c) One reaches 50 ms inside a single `AnimRuntime.Advance`. Nothing
-  else exceeds 16.7 ms and the tick rate holds at a median 60.0. *Fix shape:* (b) first, since it is
-  the one a player meets mid-flight: log which collider the sweep struck on the spiking step and
-  whether the cost is the query or the report it fills. (a) is worth a separate look only if a
-  cutscene handoff or a mid-mission stage build repeats it. *⚠ Traps:* **the cap-exhaustion premise
+- `BL-562` `[Perf]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: data]` `[CM11]` **CM11 (C2/M02) still spends single physics ticks of 33 to 57 ms in flight and
+  about 130 to 138 ms on the first tick after the world build.** *Evidence (traced):* the bracketed
+  instrument (`PhysicsTickCost`, `--perf`'s `phys_tick_ms` / `phys_tick_max_ms` / `phys_hz`), with a
+  temporary sub-scope Stopwatch splitting one whole `FlightController.SimStep`, over three
+  78-sim-second `--no-det` runs of 150 windows each, one aeroplane and nobody at the controls with
+  17 AI aircraft alive. Median `phys_hz` is 60.0 in every run and 4 to 10 windows of 150 exceed
+  16.7 ms. (a) The FIRST tick after the build costs 130 to 138 ms, 95 ms of it the 20 animation
+  runtimes' first `Advance` (46,355 index rows walked over five cold `FindAll` misses, plus a 29 ms
+  first sim step); it is the world-build settling regime, not flight. (b) **The collision sweep is
+  ruled out.** The 36 to 43 ms tick a player meets in flight is the sortie's FIRST part destruction:
+  on the step where the pilot's right wing reaches 0 % against `g1176/col_buildings` the whole step
+  costs 36.1 / 36.6 / 37.0 ms across the three runs, of which `AircraftContactResolver.Resolve`
+  holds 35.6 / 36.2 / 36.4, `IContactEffects.SpendDamage` 29.1 / 29.5 / 29.7 and `ShatterStruck`
+  4.6 / 4.7 / 4.8, while the sweep costs 0.35 to 0.41 ms and `UnEmbed`'s single `Overlaps` 0.04 ms,
+  with no collection anywhere across the step. What that `SpendDamage` does is start the damage
+  presentation for the first time (`rightwing_damage_effects`, the `pdpanel6` / `pdpanel1` /
+  `pdpanel2` swaps, `player_fuelleak`); an earlier graze in the same sortie that destroyed no part
+  spends 0.73 ms there. Only one part destruction happens per unattended run, so whether the second
+  costs the same or the first is paying a warm-up is unmeasured. The sweep's own worst step over the
+  three runs is 2.9 / 5.3 / 2.9 ms: the 2.9 ms is the session's first sweep and is managed
+  first-call cost (0.4 ms of it in the physics server), and the 5.3 ms is one `CenterRayContact` ray
+  that struck nothing, so no collider is answerable for it and the report the query fills never
+  reads above 0.00 ms. (c) One reaches 50 ms inside a single `AnimRuntime.Advance`. A fourth class
+  is not a term of the code: 33 to 36 ms steps carrying `gc=1/1/0` and a GC pause equal to the whole
+  step, landing in the preamble, the ground-blow probe, the flight model or the tail on different
+  runs (PERF-34). Window 240, two seconds in, reads 49 to 57 ms with only about 21 ms of it named by
+  any simulation phase, and sits inside the first GC window's 211 ms of pause over 16 gen-0, 15
+  gen-1 and 7 gen-2 collections, so it belongs with (a). *Fix shape:* (c) next. (b) is now a
+  question about the damage presentation rather than about collision: decide whether the first
+  damage-stage start is spread off the contact tick, which touches `SpendDamage` and the damage
+  pools, not the sweep. (a) is worth a separate look only if a cutscene handoff or a mid-mission
+  stage build repeats it. *⚠ Traps:* **the sweep premise is dead**: the sweep is under 2 % of the
+  step it sits in on the spiking tick, so do not re-derive a sweep cost from a tick maximum or from
+  the `HumanAircraft` phase maximum that holds it. A gen-1 GC pause lands inside whichever
+  sub-scope of a bracket happens to be open, so read the GC counters across the same span before
+  naming the term a bracket reports (`docs/verification.md` PERF-34). **The cap-exhaustion premise
   is dead**, the entry used to claim 72, 102 and 177 ms ticks discarding about six sim steps each
   against Godot's default `max_physics_steps_per_frame` of 8; over four paired 83-second runs on the
   current build no window's worst tick reaches 133 ms, so nothing exhausts the cap. **Do not chase
@@ -777,7 +799,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   raise `max_physics_steps_per_frame`, which deepens the catch-up spiral rather than recovering
   lost steps. The per-sim-step query objects those ray casts build are now reused rather than made
   fresh (`GodotWorldQuery`), so a re-measurement of the tick meets a different allocator than C22's.
-  *Cross-refs:* `PLAN-M5-polish-6` C22, `docs/verification.md` PERF-1, PERF-20 and PERF-23.
+  *Cross-refs:* `PLAN-M5-polish-6` C22, `docs/verification.md` PERF-1, PERF-19, PERF-20, PERF-23
+  and PERF-34.
 
 ## Environment & world
 

@@ -316,6 +316,13 @@ member, and it does not go here.
   carrying.** In the wave-launch window the one launch frame over 40 ms is the one with
   `GC.CollectionCount(0)` incremented, and the same launch without a collection costs 18 ms; a bar
   set from the collected frame measures the allocator, not the launch.
+- **PERF-34**, **A GC pause lands inside whichever sub-scope of a bracket happens to be open, so
+  read `GC.CollectionCount` and `GC.GetTotalPauseDuration` across the same span before naming the
+  term a bracket reports.** Splitting one physics step of CM11 into preamble, ground-blow probe,
+  flight model, sweep, contact resolution and tail produces 33 to 36 ms steps whose whole cost sits
+  in one of those terms, and the term differs from run to run; each carries `gc=1/1/0` and a pause
+  equal to the step, so the reading is the collector rather than the code the bracket names. This is
+  PERF-33 one level down, and PERF-20 says what sets the rate.
 
 ## LOG, logs, error censuses, and exit codes
 
