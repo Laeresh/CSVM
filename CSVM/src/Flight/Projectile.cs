@@ -240,6 +240,13 @@ public sealed partial class ProjectilePool : Node3D
     private static readonly Color RicochetTint = new(1f, 0.95f, 0.6f); // white-hot spark yellow
     private static readonly Color MuzzleSmokeTint = new(0.85f, 0.85f, 0.85f);
 
+    // Where a gun shot's three secondaries sit, in the firing muzzle node's own frame, -Z forward.
+    // The casing, the muzzlepuffer smoke and the muzzle lights hang off the muzzleburst_effects
+    // root, which muzzle_burst_slug's CallAnimation places at AT_NODE (0, -0.2, -1.0). The
+    // first-person lights' own (+-11, -1, -5) composes on top of it. The flash quads carry no
+    // displacement and stay at the node. docs/formats/weapon-effects.md, "Muzzle flashes".
+    private static readonly Vector3 MuzzleSecondaryOffset = new(0f, -0.2f, -1.0f);
+
     // Muzzle-flash sprite tint, unrelated to the tracer tint below, which is a separate,
     // uniform overbright multiplier so each ammo's own tracer texture colour shows through unshifted.
     private static readonly Color SlugTint = new(1.0f, 0.85f, 0.35f);   // warm yellow
@@ -2639,7 +2646,7 @@ public sealed partial class ProjectilePool : Node3D
             // Direction is drawn in the MUZZLE's frame, not the world's, so a rolling plane throws
             // its brass out sideways rather than at the ground.
             slot.Basis = muzzle.Basis.Orthonormalized();
-            slot.Start = muzzle.Origin;
+            slot.Start = muzzle.Origin + (slot.Basis * MuzzleSecondaryOffset);
             var dir = Mech3.Anim.MotionRuntime.RangeLaunchDirection(
                 RandRange(spec.XzMin, spec.XzMax), RandRange(spec.YMin, spec.YMax));
             // The tumble turns about THIS draw's horizontal perpendicular, in the same muzzle frame
@@ -2653,13 +2660,14 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    // The authored muzzlepuffer smoke: a few short-lived puffs at the muzzle with
-    // the def's aft velocity, size, lifetime and deviation, the aircraft flies out of them, so
-    // they read as the smoke the shot leaves behind.
+    // The authored muzzlepuffer smoke: a few short-lived puffs at the effects root ahead of the
+    // muzzle with the def's aft velocity, size, lifetime and deviation, the aircraft flies out of
+    // them, so they read as the smoke the shot leaves behind.
     private void SpawnMuzzleSmoke(Transform3D muzzle)
     {
         var aft = muzzle.Basis.Z.Normalized(); // Godot forward is -Z; the puffer drifts aft
         var orient = muzzle.Basis.Orthonormalized();
+        var origin = muzzle.Origin + (orient * MuzzleSecondaryOffset);
         for (int i = 0; i < MuzzleSmokePuffs && _smoke.Count < MaxSmoke; i++)
         {
             var dev = new Vector3(_rng.Randf() - 0.5f, _rng.Randf() - 0.5f, _rng.Randf() - 0.5f)
@@ -2668,7 +2676,7 @@ public sealed partial class ProjectilePool : Node3D
                 _rng.Randf() - 0.5f, _rng.Randf() - 0.5f, _rng.Randf() - 0.5f) * (2f * MuzzleSmokeRandVel);
             _smoke.Add(new Sprite
             {
-                Pos = muzzle.Origin + dev,
+                Pos = origin + dev,
                 Life = RandRange(MuzzleSmokeLifeMin, MuzzleSmokeLifeMax),
                 Size = RandRange(MuzzleSmokeSizeMin, MuzzleSmokeSizeMax),
                 Tint = MuzzleSmokeTint,
@@ -2680,11 +2688,11 @@ public sealed partial class ProjectilePool : Node3D
     }
 
     // The dynamic muzzle-light flash: pooled OmniLight3Ds set from the muzzle_burst def's testfp
-    // branch, shown for a couple of frames, the two big 1stperson_lts lights while a pilot is in a
-    // first-person view, otherwise one of the three small 3rdperson_lts variants at the muzzle.
+    // branch, shown for a couple of frames, the two big 1stperson_lts lights in a first-person
+    // view, otherwise one of the three small 3rdperson_lts variants. Both branches sit at
+    // MuzzleSecondaryOffset, the displaced effects root, rather than at the muzzle node.
     // ⚠ A LIGHT_STATE RANGE is a falloff PAIR, not a band to roll in (WorldLights.Add): the outer
-    // value is where the pool reaches zero, which is what an OmniLight3D's range means. The
-    // first-person pair takes it fixed; a rolled range is what made the old flash pulse per shot.
+    // value is where the pool reaches zero, the OmniLight3D range. A rolled range pulsed per shot.
     private void FlashMuzzleLight(Transform3D muzzle, Node3D? anchor)
     {
         // A pre-tree volley (the weapon lab engages while still building) has no world transform
@@ -2696,9 +2704,9 @@ public sealed partial class ProjectilePool : Node3D
             // testfp's PLAYER_1ST_PERSON branch: bigmuzzle_lt and muzzle_lt at the def's own
             // AT_NODE offsets, one either side of the gun line, big enough to light the cockpit
             // interior from a shot, strongest on the canopy struts (docs/formats/weapon-effects.md).
-            EmitLight(muzzle, anchor, new Vector3(11f, -1f, -5f),
+            EmitLight(muzzle, anchor, MuzzleSecondaryOffset + new Vector3(11f, -1f, -5f),
                 21.25f, new Color(0.88f, 0.78f, 0.36f));
-            EmitLight(muzzle, anchor, new Vector3(-11f, -1f, -5f),
+            EmitLight(muzzle, anchor, MuzzleSecondaryOffset + new Vector3(-11f, -1f, -5f),
                 18.25f, new Color(0.93f, 0.78f, 0.36f));
             return;
         }
@@ -2722,7 +2730,7 @@ public sealed partial class ProjectilePool : Node3D
             range = RandRange(2.0f, 3.75f);
             color = new Color(0.93f, 0.78f, 0.36f);
         }
-        EmitLight(muzzle, anchor, Vector3.Zero, range, color);
+        EmitLight(muzzle, anchor, MuzzleSecondaryOffset, range, color);
     }
 
     // Lights one pooled OmniLight3D at the given offset in the muzzle frame for MuzzleLightLife.

@@ -606,7 +606,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   measured 1.65/1.71 m astern before and 0.00 m after over its two drawn frames. The flash quads
   were already anchored, and the def places them at the node with no displacement: the authored
   forward offset belongs to the effects root (`AT_NODE` 0, −0.2, −1.0), which carries the casing,
-  the smoke and the lights, and is unbuilt (`BL-921`). (b) The user's engine-semantics
+  the smoke and the lights, and is now built. (b) The user's engine-semantics
   hypothesis, open: the def's 3-way `RANDOM_WEIGHT` roll (30/80/140°) may be rendered
   concurrently (all branches) by the original engine rather than pick-one, which would make the
   authored form itself a triad at those exact angles. Our triad uses 120° spacing with one
@@ -617,6 +617,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Playtest after fix:* (c)'s anchoring, judged in flight rather than in the lab: the flash sits on
   the muzzle at speed and the light travels with the plane over its two frames. An instrument can
   only say the gap is 0.00 m; whether the burst now reads as coming out of the gun is yours.
+  The same sortie carries the effects root's displacement, since the casing, the smoke and both
+  first-person lights now spawn a metre ahead of the gun and 0.2 m below it: from the cockpit a
+  shot lights the interior from a metre further forward, which only your eyes can judge.
 
 - `BL-289` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Gun-impact looks (A2/`BL-203`, landed 2026-08-01)**,
   ⚠ **The six `DirtDebris*` constants left this entry: the dirt-chip effect they tuned was deleted
@@ -743,27 +746,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   about 35 `Rebuild` call sites, most of them in suites that pin the part list. *Cross-refs:*
   `BL-918`'s closing commit (the per-mission list and the turret half), `CSVM/src/Flight/TargetPool.cs`,
   `CSVM/src/Session/ZeppelinRuntime.cs`.
-
-- `BL-921` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **A gun shot's
-  secondaries are authored 1 m ahead of the gun and 0.2 m below it, and CSVM spawns all three at
-  the gun instead.**
-  *Evidence:* `muzzle_burst_slug`'s LOD-gated `CallAnimation muzzleburst_effects` carries
-  `AtNode {node: muzzle_burst_slug, position: (0, -0.2, -1.0)}`
-  (`extracted/C1/cam_anim/muzzle_burst_slug-muzzle_burst_slug.json`), and everything
-  `muzzleburst_effects` holds hangs off that displaced root: the `gunshell` casing, the
-  `muzzlepuffer` smoke, and the `3rdperson_lts`/`1stperson_lts` lights, whose own `AtNode`
-  offsets are (0, 0, 0) and (±11, −1, −5) relative to it
-  ([`docs/formats/weapon-effects.md`](docs/formats/weapon-effects.md), "Muzzle flashes"). The
-  flash node itself carries no displacement, so this is about the three secondaries only.
-  `SpawnCasing`, `SpawnMuzzleSmoke` and `FlashMuzzleLight` all take the bare muzzle transform.
-  *Fix shape:* one offset in the muzzle frame, applied at the three spawn sites in
-  `CSVM/src/Flight/Projectile.cs`; the light already carries a per-flash local offset the anchor
-  resolves, so for that one it is a constant, not new machinery.
-  *⚠ Traps:* the offset is in the muzzle node's own frame, where −Z is forward
-  ([`docs/formats/gotchas.md`](docs/formats/gotchas.md)'s axis census); and moving the light a
-  metre forward changes what a first-person shot lights, which is a look judgement, not a
-  correctness one. *Cross-refs:* `BL-286` (c)'s closing commit, which anchored the lights and
-  measured the placement.
 
 
 ## Flight model & collision physics

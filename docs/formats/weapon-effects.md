@@ -55,8 +55,9 @@ already-live gate would drop every ejection but one per 2 s window):
   Every one of them is **anchored to the firing muzzle node** and re-placed on that node's drawn
   pose each frame, the way the flash quads are: a light left at the world point it was lit at ends
   a frame of travel astern of the muzzle, ~1.7 m at 100 m/s over the two frames it lives.
-  The casing, the smoke and the lights all still spawn at the node itself, so the authored
-  (0, −0.2, −1.0) displacement of the effects root above is **unbuilt** (`BL-921`).
+  All three secondaries spawn at the authored (0, −0.2, −1.0) displacement of the effects root
+  above, taken in the muzzle node's own frame, and the first-person pair's (±11, −1, −5) composes
+  on top of it, so those two lights sit at (±11, −1.2, −6) from the gun.
 
 The **white puff cluster** the retail captures show riding each ejected casing matches **no
 shipped effect def** (only `muzzle_burst` references `gunshell`, and the `gunshell` def carries
