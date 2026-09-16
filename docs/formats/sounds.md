@@ -165,13 +165,20 @@ with no trigger at all, is [`org/music.md`](../org/music.md).
 
 ## Player curves
 
-All are clamped two-point ramps `(inStart→inEnd maps outStart→outEnd)`:
+The first two are clamped two-point ramps `(inStart→inEnd maps outStart→outEnd)`; the third is
+authored as one but does not run as one:
 
 | Block | Meaning |
 |---|---|
 | `engine_sound` | pitch 0.6→1.0 over throttle 0.1→1.0; volume flat 1.0 |
 | `prop_sound` | the **overspeed dive whine**: volume 0→0.5 over speed 1.0→1.1× `fd_speed`, pitch 0.65→1.25 over 1.0→1.2×. Drives the engine audio's second slot, whose definition is the vehicle def's own `prop_sound` key |
-| `rattle` | `snd_planeshake`: volume 0→1 over speed 1.0→1.2× `fd_speed` |
+| `rattle` | `snd_planeshake`, the airframe rattle: authored as volume 0→1 over speed 1.0→1.2× `fd_speed`, **run as a gate**. Only `speed_range`'s first value reaches a reader; the loop is silent below `1.0× fd_speed` and at full level, the engine slot's own, from there upward |
+
+⚠ **The rattle's ramp is authoring the game ignores, and re-adding it silences the loop.** The
+`volume_range` pair and `speed_range`'s second value are parsed into globals with no read xref
+anywhere in `crimson.exe`, so a port that evaluates the ramp plays the rattle at a few percent of
+level through every speed a dive reaches. Addresses, the gate's own three conditions and the
+hardcoded call gain: [`org/shakes.md`](../org/shakes.md#the-rattle-sound-is-a-gate-at-full-level-not-the-authored-ramp).
 
 ⚠ **The whine never sounds in the retail install, and `snd_enginewhine` is not its WAV.** The
 second slot's definition comes from the vehicle def's `prop_sound` string key; no shipped def

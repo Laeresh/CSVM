@@ -1914,7 +1914,9 @@ internal static class CombatSuites
         "it by the +3.0 % that item measured because the term is a MAGNITUDE, a 4 rad/s roll " +
         "moves it not at all because the nose-axis component is dropped, a climb reads the " +
         "opposite sign to a dive off a real attitude, neither term is audible on the shipped " +
-        "flat volume curve, and the authored 1.5 parameter clamp holds a tumble")]
+        "flat volume curve, the authored 1.5 parameter clamp holds a tumble, and the airframe " +
+        "rattle beside the slot is a GATE at the shipped 1.0x fd_speed rather than a ramp: " +
+        "silent a hair under it, full level at it and no louder a fifth of the way past")]
     internal static void EngineNote(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -1989,6 +1991,8 @@ internal static class CombatSuites
         float spun = Pitch(new EngineDrive(1f, 50f, 0f));
         ctx.Check(Mathf.IsEqualApprox(spun, stats.EnginePitch.Remap(1.5f)),
             $"an absurd 50 rad/s tumble clamps at the authored 1.5 parameter: {spun:0.0000}");
+
+        CheckRattleGate(ctx, stats);
     }
 
     // The air-to-air hit chain on two real flight rigs driven by manual sim steps: body strike,
@@ -2594,6 +2598,33 @@ internal static class CombatSuites
             enemy?.Free();
             textures.Dispose();
         }
+    }
+
+    // The rattle loop that sits beside the engine slot, on the same speed fraction the whine's
+    // curves read. ⚠ A ramp here is the regression: the block's volume_range is parsed into a global
+    // no instruction reads, so a 0→1 lift over 1.0→1.2x fd_speed leaves the loop inaudible through
+    // the speeds anyone actually flies. Decode: docs/org/shakes.md.
+    private static void CheckRattleGate(TestContext ctx, PlaneStats stats)
+    {
+        ctx.Check(Mathf.IsEqualApprox(stats.RattleSpeedGate, 1f),
+            $"the shipped rattle gate is {stats.RattleSpeedGate:0.###}x fd_speed (want 1)");
+        ctx.Check(stats.RattleSound == "snd_planeshake",
+            $"…on the definition the rattle block names, {stats.RattleSound}");
+
+        float below = EngineAudioCurves.Rattle(stats, 0.999f);
+        float at = EngineAudioCurves.Rattle(stats, 1f);
+        float over = EngineAudioCurves.Rattle(stats, 1.2f);
+        ctx.Check(below == 0f, $"a hair under the gate the rattle is silent: {below:0.0000}");
+        ctx.Check(Mathf.IsEqualApprox(at, 1f),
+            $"…and reaches FULL level the moment speed meets it: {at:0.0000}");
+        ctx.Check(Mathf.IsEqualApprox(over, at),
+            $"…with no ramp above it, {over:0.0000} a fifth of the way past against {at:0.0000}");
+
+        // Level with the engine slot, which is the relation the decode fixes: both loops take the
+        // same 1.0 into the mix, so nothing about the rattle is quieter than the engine beside it.
+        float engine = EngineAudioCurves.Engine(stats, new EngineDrive(1f, 0f, 0f), 1f).Volume;
+        ctx.Check(Mathf.IsEqualApprox(at, engine),
+            $"…and sits level with the engine slot's own gain, {at:0.0000} against {engine:0.0000}");
     }
 
     // A parked, stock-armed rig with its own airframe, collider and damage ledger. ⚠ The loadout

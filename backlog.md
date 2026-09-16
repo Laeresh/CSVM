@@ -766,43 +766,40 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Audio
 
-- `BL-252` `[Tuning]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: footage]` **Overspeed-whine volume** (`prop_sound`). `CAP-10` plus a
-  live cross-check incidentally confirmed the **gating** of the original's dive/overspeed sound and
-  left only its level open.
-  ⚠ **This entry's SUBJECT is now wrong, and its observation is the valuable part.** There is no
-  whine: no shipped def names `prop_sound`, so slot 1 is unassigned install-wide, and
-  `WhineMixGain` no longer exists to tune. What the entry actually recorded is that the original
-  plays *something* starting exactly at `1.0× fd_speed`, and that is still true and still
-  unexplained by the engine slot, whose two non-throttle terms read turn rate and attitude and know
-  nothing about speed (`docs/formats/vehicle.md`). **The open candidate is the RATTLE**, whose
-  shipped curve is volume 0→1 over `1.0`→`1.2× fd_speed`, i.e. the same foot the entry measured, and
-  which unlike the whine IS assigned on every def (`snd_planeshake`). ⚠ Settle what the sound is
-  before tuning any level; this entry has already tuned the wrong slot once.
+- `BL-252` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The airframe rattle past
+  `1.0× fd_speed`** (`snd_planeshake`). The sound is now named and its law read out of
+  `crimson.exe`, and the fix that follows from the decode has landed; what is left is one listen.
 
-  **The gate is the plane's own maximum level speed, not a fixed number.** User test 2026-08-04
-  (Hoplite and autogyro): hold straight and level at 100% throttle, which by definition settles at
-  max speed, then dive, and the sound starts exactly as the speed goes past it. That is `1.0×
-  `fd_speed``, i.e. precisely the foot of the shipped `prop_sound` curve (volume 0→0.5 over 1.0→1.1×
-  `fd_speed`), so **the gating needs no change**. ⚠ **Do not read a threshold off the airspeed dial:
-  the gauge art, including its red arc and its `300` mark, is the same for every plane** and so
-  cannot express a per-plane limit, a trap this entry walked into once already.
+  *Evidence:* `FUN_0048c470`'s second overspeed block (`0x0048d209`) starts and per-frame refreshes
+  the `snd_planeshake` loop under exactly three conditions: the vehicle is the one the camera is
+  watching, the definition resolved at startup, and `speed_range[0] × fd_speed <= speed`
+  (`0x0048d227`–`0x0048d242`), which on the shipped data is `1.0× fd_speed`, the foot this entry
+  measured at the controls. The call passes no volume of its own, so the loop plays at the
+  hardcoded `1.0` of the keep-alive helper times the definition's `VOLUME`, which `snd_planeshake`
+  does not author. That is the same number the engine slot's flat volume curve hands the same gain
+  chain, so **the rattle and the engine sit level**.
+  ⚠ **The `rattle` block's ramp is authoring the game ignores.** `volume_range` and `speed_range`'s
+  second value land in globals with a write xref and no read anywhere in the image
+  (`0x0071c33c`/`0x0071c340`/`0x0071c348`); only `0x0071c344` is read. The loop is a hard on/off,
+  not a `0→1` lift over `1.0`→`1.2× fd_speed`. Full addresses: `docs/org/shakes.md`.
 
-  `CAP-10`'s Bloodhawk footage times the edges and agrees: the 400–900 Hz band steps up at t≈5.2 s
-  and back down at t≈11.7 s in `CAP-10.mp4`, while the needle crosses the corresponding dial position
-  at t≈5.0–5.5 and t≈11.5–12.0, both edges inside ~0.3 s, and sharp rather than a continuous swell,
-  as a ramp band crossed in well under a second should look. `CAP-10 2.mp4` repeats it (audio on
-  t≈7.5, off t≈17.0).
+  *Fix shape:* landed. Ours evaluated the unread ramp, so at the `1.02`–`1.05×` a dive actually
+  reaches the rattle played at a few percent of level, which is the "almost inaudible" this entry
+  recorded. `PlaneStats.RattleSpeedGate` now carries the one number the original reads,
+  `EngineAudioCurves.Rattle` is the gate, and the `engine-note` suite pins it. No mix constant
+  moved and none should: `1.0` is decoded, not chosen.
 
-  What is *not* settled is the volume: the +2 dB measured here is a band-limited figure, not a
-  loudness, and the mix ratio differs by view because the original's **cockpit** engine is damped
-  while ours is not, so it cannot be read across. **Needs a level match by ear against the
-  original, not another measurement** (user, 2026-08-04: "the only tune parameter would be volume").
-  *Decision:* judged at the controls, whatever our build plays past top speed is almost
-  inaudible, and this entry has tuned the wrong slot once already. Decode what the original plays
-  at the `1.0× fd_speed` foot and at what level (the rattle's `snd_planeshake` curve is the
-  candidate to confirm or refute in `crimson.exe`) before any mix constant moves; `PT-126` then
-  confirms the port by ear.
-  *Cross-refs:* `PT-126` (the flight that names the sound and matches its level).
+  ⚠ **Do not read a threshold off the airspeed dial: the gauge art, including its red arc and its
+  `300` mark, is the same for every plane** and so cannot express a per-plane limit, a trap this
+  entry walked into once already. ⚠ The subject was the `prop_sound` whine for a long time and that
+  was wrong: no shipped def names `prop_sound`, so slot 1 is unassigned install-wide and the whine
+  never sounds for anybody. Anything this entry once said about a whine level is void.
+
+  *Playtest after fix:* `PT-126`, which now only has to confirm the port by ear: whether the
+  rattle at full level reads like the original's at the same foot, and whether the cockpit case
+  differs, since the original's cockpit engine is damped where ours is not so the ratio cannot be
+  read across from the outside view.
+  *Cross-refs:* `PT-126`; `docs/org/shakes.md` (the decode), `docs/formats/sounds.md` (the block).
 
 - `BL-269` `[Tuning]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **The 3D sound falloff curve between the authored `RANGE` radii is an admitted
   approximation** (`WorldSounds.cs:159-161`, endpoints authored, curve "an approximation of

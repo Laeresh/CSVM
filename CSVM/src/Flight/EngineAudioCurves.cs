@@ -64,6 +64,12 @@ public static class EngineAudioCurves
     private const float BoostVolumeParam = 1.17f;
     private const float BoostPitchParam = 1.25f;
 
+    // The gain the rattle loop plays at once its gate opens, hardcoded by the original's own
+    // keep-alive call rather than read from the rattle block. ⚠ Not a mix constant to tune: it is
+    // the same 1.0 the engine slot's flat volume curve gives that slot, so the two sit level.
+    // Decode: docs/org/shakes.md, "The rattle SOUND is a gate at full level".
+    private const float RattleGain = 1f;
+
     /// <summary>Whether the engine slot takes <c>damaged_engine_sound</c>: the original tests its
     /// whole disabled-systems mask for nonzero, and the two bits this engine models are the
     /// health-threshold one and engine-out. <paramref name="worstHealthFraction"/> is
@@ -152,4 +158,11 @@ public static class EngineAudioCurves
     /// this is reached only if one ever does.</summary>
     internal static (float Pitch, float Volume) Whine(PlaneStats stats, float speedFrac) =>
         (Mathf.Max(MinPitch, stats.WhinePitch.Eval(speedFrac)), stats.WhineVolume.Eval(speedFrac));
+
+    /// <summary>The airframe rattle's gain, on speed / fd_speed like the whine but as a GATE: full
+    /// level from <see cref="PlaneStats.RattleSpeedGate"/> upward and silence below it, with no ramp
+    /// between. The caller still applies the definition's own VOLUME and any mix gain, so the loop
+    /// reaches the mix at the engine slot's own level once it opens.</summary>
+    internal static float Rattle(PlaneStats stats, float speedFrac) =>
+        speedFrac < stats.RattleSpeedGate ? 0f : RattleGain;
 }

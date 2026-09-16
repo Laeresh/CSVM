@@ -322,20 +322,23 @@ reasons that have nothing to do with any of these checks.
   which read as a mix problem. The original has no whine at all, so what the ear was matching in
   that dive was the engine slot's own movement, and these terms are what produces it.
 
-- `PT-126` `[A/B: OriginalScreenshots/Videos/CAP-10.mp4 + Bloodhawk Dive Sound.mp4]` **What plays
-  past the plane's own top speed, and how loud (`BL-252`).** The gating is settled and needs no
-  change: something starts exactly at `1.0× fd_speed`, the plane's own maximum level speed. Two
-  things are not. There is no whine (no shipped def names `prop_sound`), so the open candidate is
-  the RATTLE, `snd_planeshake`, whose curve runs 0 to 1 over `1.0` to `1.2× fd_speed`. ⚠ Settle
-  what the sound is before judging any level: this item has already tuned the wrong slot once.
+- `PT-126` `[A/B: OriginalScreenshots/Videos/CAP-10.mp4 + Bloodhawk Dive Sound.mp4]` **The airframe
+  rattle past the plane's own top speed (`BL-252`).** Both the sound and its level are decoded and
+  landed, so this is a confirmation, not a tuning pass: the original plays `snd_planeshake` from
+  exactly `1.0× fd_speed`, the plane's own maximum level speed, at full level and with no ramp
+  above it, level with the engine slot's own gain. Ours now does the same. ⚠ Judge whether the
+  port READS right, not whether a number should move: `1.0` is read out of the executable, and
+  `docs/verification.md`'s rule that a recording may not contest a decode covers the ear too.
   *Look for:*
-  - (a) hold straight and level at 100% throttle to settle at max speed, then dive: name what our
-    build plays, and whether it is the same sound the original plays at that foot;
-  - (b) the level, matched by ear against the original rather than measured, in the same view;
+  - (a) hold straight and level at 100% throttle to settle at max speed, then dive: the rattle
+    should come in at the crossing, sharply rather than swelling, and hold steady however deep
+    the dive goes;
+  - (b) whether it reads like the original's at the same foot, in the same view;
   - (c) the cockpit case separately, since the original's cockpit engine is damped where ours is
     not, so the ratio cannot be read across from the outside view.
   *Blocks:* `BL-252`. ⚠ Do not read the threshold off the airspeed dial: the gauge art, its red arc
-  and its `300` mark are the same for every plane and cannot express a per-plane limit.
+  and its `300` mark are the same for every plane and cannot express a per-plane limit. ⚠ There is
+  no whine to listen for: no shipped def names `prop_sound`, so that slot never sounds at all.
 
 - `PT-127` `[A/B: OriginalScreenshots/Videos/CAP-21 0 to 100 Full.mp4 + CAP-21 100 to 0 Full.mp4]`
   **The throttle-slam smoke gate (`BL-285`).** One constant pending one sortie:

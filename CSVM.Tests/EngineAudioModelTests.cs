@@ -43,6 +43,44 @@ public class EngineAudioModelTests
         Assert.True(named.Count == 0, string.Join("\n", named));
     }
 
+    /// <summary>The airframe rattle, unlike the whine, IS assigned on every airframe, and its whole
+    /// law is one number: the speed fraction it starts at. The shipped block puts that at 1.0, the
+    /// plane's own rated maximum, so every airframe rattles from rated max upward.
+    /// <c>volume_range</c> is deliberately absent from <see cref="PlaneStats"/>: the original parses
+    /// it into a global no instruction reads (docs/org/shakes.md).</summary>
+    [ExtractedDataFact]
+    public void EveryAirframeRattlesFromItsOwnRatedMaximum()
+    {
+        foreach (var node in AllPlaneNodeNames)
+        {
+            var stats = PlaneStats.Load(SharedZrdr, node);
+            Assert.Equal("snd_planeshake", stats.RattleSound);
+            Assert.Equal(1f, stats.RattleSpeedGate, 4);
+        }
+    }
+
+    /// <summary>The rattle is a GATE, not a ramp: silent below the authored fraction of fd_speed and
+    /// at full level from it upward, however far past it the dive goes. A ramp here is what left the
+    /// loop inaudible at the speeds a dive actually reaches, so the flat top is the pin that
+    /// matters, not just the edge.</summary>
+    [Fact]
+    public void RattleGainIsAGateAtFullLevelRatherThanARamp()
+    {
+        var stats = new PlaneStats { EngineSound = "snd_normal", RattleSpeedGate = 1f };
+
+        Assert.Equal(0f, EngineAudioCurves.Rattle(stats, 0f));
+        Assert.Equal(0f, EngineAudioCurves.Rattle(stats, 0.999f));
+        Assert.Equal(1f, EngineAudioCurves.Rattle(stats, 1f));
+        Assert.Equal(1f, EngineAudioCurves.Rattle(stats, 1.05f));
+        Assert.Equal(1f, EngineAudioCurves.Rattle(stats, 1.2f));
+        Assert.Equal(1f, EngineAudioCurves.Rattle(stats, 3f));
+
+        // The gate moves with the authored fraction rather than being pinned at 1.
+        var late = new PlaneStats { EngineSound = "snd_normal", RattleSpeedGate = 1.5f };
+        Assert.Equal(0f, EngineAudioCurves.Rattle(late, 1.2f));
+        Assert.Equal(1f, EngineAudioCurves.Rattle(late, 1.5f));
+    }
+
     /// <summary>The damaged engine is a DEFINITION SWAP on slot 0 with a pitch multiplier drawn once
     /// per swap, never a second loop blended over the healthy one. The install authors exactly one
     /// entry, inherited from basic_airplane by every plane, and its flag byte is set with the range

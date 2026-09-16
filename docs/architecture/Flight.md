@@ -802,12 +802,12 @@ cue from `WeaponAudioCues`; `MixGain` is the only own-ship scale left, for split
 ## src/Flight/EngineAudioCurves.cs
 The engine-audio slot maths both audio paths read: whether an airframe counts as damaged, which
 definition the slot then holds and the swap's one-off pitch draw, each slot's pitch and gain off
-the `PlaneStats` curves, the drive parameter and the cull distance. It exists because the original
-runs one per-frame routine for the player and every AI vehicle. The slot's parameter is not the
-throttle lever alone: the drive adds a turn rate and a climb attitude to each curve's normalised
-parameter under a clamp with headroom above 1, which is why `SoundCurve` exposes its steps
-separately from a plain evaluation. `AdvanceDamagedRearm` is the pure re-arm timer only
-`AiEngineAudio` reaches. Decode: [../formats/vehicle.md](../formats/vehicle.md).
+the `PlaneStats` curves, the rattle gate, the drive parameter and the cull distance. It exists
+because the original runs one per-frame routine for the player and every AI vehicle. The slot's
+parameter is not the throttle lever alone: the drive adds a turn rate and a climb attitude to each
+curve's normalised parameter under a clamp with headroom above 1, which is why `SoundCurve` exposes
+its steps separately from a plain evaluation. `AdvanceDamagedRearm` is the pure re-arm timer only
+`AiEngineAudio` reaches. Decode: [../formats/vehicle.md](../formats/vehicle.md), [../org/shakes.md](../org/shakes.md).
 
 ## src/Flight/AiEngineAudio.cs
 The positional twin of `FlightAudio` an AI-flown aircraft carries instead of it: the same two engine

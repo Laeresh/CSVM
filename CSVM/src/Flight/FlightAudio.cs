@@ -11,7 +11,7 @@ namespace CSVM.Flight;
 /// while the airframe is hurt and for 'cockpit_engine_sound' while the pilot's SELECTED view is
 /// Cockpit or Nose, <see cref="EngineAudioCurves.EngineDefFor"/> is the one precedence rule both
 /// swaps share), the overspeed whine ('prop_sound', which no shipped def names), the
-/// airframe rattle (player.json 'rattle' block), plus the prop start/stop one-shots
+/// airframe rattle (player.json 'rattle', a gate at full level past fd_speed), plus the one-shots
 /// (snd_propstart/snd_propstop). Non-positional players: these are what the pilot hears, and
 /// <see cref="AiEngineAudio"/> is the positional twin every other aircraft carries (own-ship only,
 /// an AI rig has no selected view, so it never reads 'cockpit_engine_sound').
@@ -227,7 +227,7 @@ public partial class FlightAudio : Node
             var (pitch, volume) = EngineAudioCurves.Whine(_stats, speedFrac);
             UpdateLoop(_whine, volume * _whineVol * MixGain, pitch);
         }
-        UpdateLoop(_rattle, _stats.RattleVolume.Eval(speedFrac) * _rattleVol * MixGain, 1f);
+        UpdateLoop(_rattle, EngineAudioCurves.Rattle(_stats, speedFrac) * _rattleVol * MixGain, 1f);
     }
 
     /// <summary>Holds (or releases) the own-plane loops where they are, for the sim-clock halt:

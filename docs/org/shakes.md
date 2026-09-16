@@ -304,6 +304,48 @@ port takes and their grounds:
   and the authored `0.05` exactly as parsed; the amount of roll that reaches the screen is
   whatever the integrator makes of them.
 
+## The rattle SOUND is a gate at full level, not the authored ramp
+
+The wobble above has an audio twin in the same per-frame function, and the two are separate
+mechanisms that happen to share a speed regime. `FUN_0048c470` ends with a second overspeed block at
+**`0x0048d209`**, thirty instructions past the `high_speed` kick, that starts and holds the
+`snd_planeshake` loop. Three conditions stand over it and nothing else does:
+
+- `0x0048d20e`, the vehicle is the one the camera is watching, `camera+0x150` (`DAT_0064ef78+0x150`).
+  Not the player pointer `DAT_0071c298`, so a spectated aircraft rattles and the spectator's own
+  does not;
+- `0x0048d21a`, the rattle definition resolved at startup, `DAT_0071c334`;
+- `0x0048d227`–`0x0048d242`, the speed test: `FLD [obj+0x934]` (true airspeed),
+  `FLD [0x0071c344]` (the `rattle` block's `speed_range[0]`), `FMUL [obj+0x668]` (`fd_speed`),
+  then `FCOMPP`, continuing only while **`speed_range[0] × fd_speed <= speed`**. On the shipped data
+  that fraction is `1.0`, the airframe's own rated maximum.
+
+Inside, `FUN_004a6330` wraps the vehicle as the emitter and `FUN_0045e470(emitter, token, def, 0.0,
+0, 0)` at `0x0048d272` keeps the loop alive for this frame. That helper is a shared keep-alive
+registry: it starts a sound the registry has no live handle for with `FUN_00593590(def, 1.0)` and
+refreshes the entry's expiry to `now + param_4`, which here is `0.0`. `FUN_0045e410`, the per-frame
+sweeper, stops every entry whose expiry has fallen behind the clock, so the loop dies within a frame
+of the gate closing. **The call passes no volume of its own**, and `FUN_00593b80` resolves what
+reaches the mixer as `def.VOLUME × masterSfxGain × callGain`, with `callGain` the hardcoded `1.0`.
+
+⚠ **The `rattle` block's `volume_range` and its second speed are parsed and never read.**
+`FUN_004735b0` reads the block at `0x00473a66`–`0x00473b65`: `volume_range` into `0x0071c33c` /
+`0x0071c340` (defaults `0.25` / `1.0` at `0x00473a77` / `0x00473a81`, the shipped file writing `0.0`
+/ `1.0`) and `speed_range` into `0x0071c344` / `0x0071c348` (defaults `1.0` / `2.0` at `0x00473a8b` /
+`0x00473a95`, the shipped file writing `1.0` / `1.2`). Of those four globals only `0x0071c344` has a
+reader anywhere in the executable, the `FLD` at `0x0048d22d` above; the other three carry a single
+write xref each and no read. So the "volume 0→1 over `1.0`→`1.2× fd_speed`" the data invites is not a
+law the game runs: the loop is **off below `1.0× fd_speed` and at full level from it upward**,
+however deep the dive goes.
+
+That full level is the engine slot's level. `snd_planeshake` authors no `VOLUME` field, so its base
+gain is `1.0`, and the `engine_sound` volume curve is flat `1.0`, so both loops hand the same number
+to the same gain chain. The rattle is a 3D definition (`RANGE 130`/`420`) emitted from the plane the
+camera is watching, which sits inside the inner radius, so distance attenuation takes nothing off it.
+**Ported** as `EngineAudioCurves.Rattle` against `PlaneStats.RattleSpeedGate`, driven by
+`FlightAudio` on the pilot's own non-positional loop; the port keeps the per-player mix gain that
+every own-ship loop takes in splitscreen, and gates on each human pilot rather than on one camera.
+
 ## `nitro`, one kick per engage, the raw authored `magnitude`
 
 The nitro source has no computed law at all. `FUN_004b2131`, the engage path, plays the AI twin
