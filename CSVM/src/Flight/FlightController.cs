@@ -2127,6 +2127,11 @@ public partial class FlightController : Node3D
             // Numpad +/- (BL-433): only here, never while orbiting, since the weapon lab's held
             // orbit reads the same two keys for its own dolly (OrbitInput above).
             _cam.UpdateZoom(simDt);
+            // The enhanced presentation's chase cues, stepped whichever view draws this frame so
+            // a view change never springs a stale lag. Rated max speed is the airframe's own
+            // fd_speed, the scale every authored speed figure is quoted on.
+            _cam.StepEnhancedCues(simDt, _renderPose.Basis,
+                _model.Speed / Mathf.Max(1f, _model.Stats.FdSpeed));
             // Default to the external FOV global; the FirstPerson arm below overrides it, so a
             // look-behind while SELECTED Cockpit/Nose gets the first-person FOV back on release.
             _cam.RestoreExternalFov();

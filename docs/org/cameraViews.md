@@ -445,6 +445,31 @@ which is why a single-pass renderer says the same thing by mounting the subtree 
 head-pitch tilt: that tilt is what puts the gunsight on the guns, and head-look is deliberately not
 applied to the mount.
 
+## The enhanced presentation's own chase cues (remake-only)
+
+Nothing on this page changes under `--graphics=enhanced`: the distance law, its transient, the
+FOV constants and the head-look rates are the decoded ones in both presentations, and the faithful
+path writes the same camera pose and the same FOV to the bit. The enhanced presentation adds two
+cues that the original has no counterpart for, both TUNE and both living in
+`CameraController.StepEnhancedCues`:
+
+- **The chase pose trails the nose.** A lagged copy of the aircraft's attitude eases toward the
+  live one at 4/s (a 0.25 s time constant) through the same exponential shape `dist_catch_up`
+  uses, and the chase rig, its offset direction, its image up and its look-ahead point, is built
+  from that lagged attitude, so a roll or a yaw leaves the camera behind and it springs back. The
+  distance law keeps reading the live speed, so the radius is unchanged; the look-behind view,
+  which hard-codes its own direction, stays out of the lag entirely.
+- **The external FOV widens with speed.** `RestoreExternalFov` adds up to 6° to the external
+  angle, zero at and below 0.6 of the airframe's rated max speed (`fd_speed`, `PlaneStats`),
+  rising linearly to the full 6° at rated max and held there in a dive past it. The first-person
+  views take their own decoded FOV as before, and the crash, death and flyby cuts take the
+  built-in angle through `ApplyDecodedExternalFov`, because a cut holds a framing rather than
+  riding the aeroplane.
+
+Both rates are per real second, the rule the rest of this page states for the decoded easings: the
+camera is stepped on the sim clock, which runs one step per rendered frame at the wall delta in
+play and a fixed step per frame only under `--det`, where a capture must be reproducible.
+
 ## Not resolved
 
 - **The non-selectable modes (`1`, `2`, `3`, `4`) still have no friendly name or

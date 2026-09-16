@@ -194,7 +194,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave E, the feel of speed
 
 41. ☐ Wind streaks past the camera, keyed to speed and G, over the authored speed cue
-42. ☐ The chase camera lags the nose through a roll and widens its FOV with speed
+42. ☑ The chase camera lags the nose through a roll and widens its FOV with speed
 
 ### Wave D, the net and the reading
 
@@ -824,7 +824,48 @@ Streaks through the cockpit glass read wrong at the near plane: keep the near fa
 `BL-867` or edit the wisps' opacity from here. Split screen needs the field per pane, as the
 speed cue's `decorate` hook does.
 
-## E42 ☐ The chase camera lags the nose through a roll and widens its FOV with speed
+## E42 ☑ The chase camera lags the nose through a roll and widens its FOV with speed
+
+**Landed.** Under Enhanced the chase camera's pose is built from a lagged copy of the aircraft's
+attitude, so a roll or a yaw leaves it trailing the nose before it springs back, and the external
+FOV widens with speed. The whole arm enters `Flight/CameraController.cs` through one new call,
+`StepEnhancedCues(dt, attitude, speedFraction)`: it eases the lagged attitude toward the live one
+at `TrailRate` through the exponential shape `dist_catch_up` uses, and stores what `SpeedFovWiden`
+returns. `Chase` builds its offset direction, its image up and its look-ahead point from that
+lagged attitude under Enhanced and from the live attitude otherwise; `RestoreExternalFov` adds the
+widening, while the crash, death and flyby cuts take the built-in angle through the new private
+`ApplyDecodedExternalFov`, since a cut holds a framing rather than riding the aeroplane. `Snap`
+re-seeds both, so a respawn opens on the settled pose. `FlightController` makes the one call per
+flown frame whichever view draws, handing it `_model.Speed / _model.Stats.FdSpeed`: `fd_speed` on
+`PlaneStats` is where the flight model carries rated max speed, the airframe-independent scale the
+authored figures are quoted on. `ExternalRadius`, `UpdateDynamics`, `DistTransient` and the
+look-behind arm are untouched. The three TUNE constants sit in one block with their reasons: a
+lag rate of 4/s (a 0.25 s time constant), 6° of widening at rated max, and nothing at or below 0.6
+of it, held rather than growing in a dive past the rating. `Testing/ChaseTrailSuites.cs`
+(`chase-trail`) and `CSVM.Tests/CameraControllerTrailTests.cs` pin it; `docs/org/cameraViews.md`
+carries a remake-only subsection and `docs/architecture/Flight.md` the entry line.
+
+**Verified.** On the item worktree the complete `RunTests.ps1` passes: build warning-free, units
+4574 passed 0 failed 2 skipped of 4576, engine **350 suites passed 0 failed** with engine errors
+clean, goldens **19 shots hash-identical, zero movers**. `CheckCommentCaps.ps1`,
+`CheckDocEntries.ps1` and `CheckEncoding.ps1` are clean. The `chase-trail` suite flies one
+90°/s roll per presentation and reads the camera it left: under the faithful presentation the cue
+step moves **0 of 60** frames of camera pose and the external FOV is 75.0000° at rated max, at
+cruise and at the crash cut, while the enhanced arm moves all 60, trails the nose by 8.33° against
+the faithful 2.8° at the end of the roll, converges to 1.45° after half a second and 0.0037° after
+two, and carries 81.0000° at rated max, 75.0000° at cruise and 75.0000° through the crash cut.
+`CameraControllerTrailTests` pins the easing as a per-real-second time constant (the same second
+leaves the same angle at 60 and at 240 frames a second) and the ramp's ends. Headless evidence for
+the user is in `.scratch/eg2/E42/`: `montage_roll.png` (the same C1 sortie mid-roll, faithful left
+and enhanced right, from `--hold=0,0,0,1@2.5;0,1,0,1@2 --frames=170 --shots=16`) and
+`montage_speed.png` (the same pose at 302 MPH, the airframe's rated max, with the widening open),
+plus the 38 raw frames they were cut from. Not verified here: the judgement itself, whether a
+0.25 s lag and 6° read right at the controls, which is the user's flight. Also seen: the first
+battery run failed `ai-wave-launch-hitch` on a 220 ms four-pane launch frame against its 110 ms
+bar and passed on the re-run, a timing suite on a loaded machine rather than anything this item
+touches.
+
+**Original approach (kept for reference).**
 
 **Goal.** Under Enhanced the chase camera's orientation trails the aircraft's nose on a roll or
 yaw and springs back, and its FOV widens a few degrees toward rated max speed; the decoded
