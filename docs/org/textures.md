@@ -162,8 +162,14 @@ Nothing else in 881 textures carries it, and every member is a glow or emissive 
 same set minus `bigflare01/02` and the impact rings. That correlation is what identifies the bit;
 it is not an inference from the extractor's field name.
 
-**Sprites that do NOT carry it**, which is every sprite any puffer names: `fire_f01`, `fire_f02`,
-`fire_f06`, `smoke101`, `smoke102`, `smoke103`, `exp_yel01`, `thickblksmoke`. All alpha-mixed.
+**Sprites that do NOT carry it**, which is every sprite any puffer names. The 145 `zrdr` files
+that define a `PUFFER_STATE` name 26 distinct textures between them, and the census above holds
+none of them: `bit01` … `bit04`, `cloud1`, `cloud2`, `exp_gre01`, `exp_red01`, `exp_yel01`,
+`fire_f01` … `fire_f06`, `fireflare1`, `magnesiumtip`, `poleflare`, `smoke101` … `smoke103`,
+`splashbase`, `thickblksmoke01` … `thickblksmoke03`, `watersquirt`. All alpha-mixed (the words
+seen are 0, 3 for `splashbase` and 8 for the two clouds). The additive `fire101` … `fire112`
+flipbook belongs to `effects.zrd`'s `EFFECTS` table, which installs on gamez mesh materials
+rather than on a puffer, so nothing in an install reaches the particle path's additive branch.
 
 ## What this means for particles
 
@@ -363,6 +369,17 @@ the sorted transparent pass's additive and so the one that applies to particles.
 split path is reachable only by a frame list nothing authors. The flagged textures are consumed by
 mesh polygons and the HUD instead: the `fire101`…`fire112` flipbook, the lens flares, the impact
 rings and the HUD hilites. Those draw through `SceneBuilder`, which does not read the word yet.
+
+Because blend cannot tell a flame from smoke here, Enhanced Graphics selects the sprites that
+bloom by name instead: `MultiMeshEmitterRenderer.IsFireSprite` names `fire_f01` … `fire_f06`, the
+flipbook every explosion puffer sequences, and that column's `ALBEDO` is multiplied by 2.0 so its
+hottest texels cross the 1.0 glow threshold `Launcher.EnableGlowAndTonemap` sets. The multiplier
+is uniform and the flipbook's own authored falloff decides which frames halo: alpha-weighted
+linear peaks run 0.814, 0.714, 0.540, 0.429, 0.292, 0.268 across the six frames, so the first two
+clear 1.0 and the tail stays under it. The sprites deliberately left out reach 1.0 unaided and
+would halo on every gun strike or pole lamp (`magnesiumtip` 1.000, `poleflare` 1.000, `exp_yel01`
+0.981, `fireflare1` 0.911), and luminance alone cannot be the gate because `smoke101` peaks at
+1.000 against `fire_f03`'s 0.540. The faithful presentation compiles the shader with no gain term.
 
 ⚠ **The word is per archive, not per name.** `bigflare01`, `ring_he` and `beflare5` are flagged in
 some chapters and not in others, so an install-wide name table would answer wrongly for whichever

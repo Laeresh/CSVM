@@ -1715,6 +1715,55 @@ internal static class PufferSuites
         }
     }
 
+    [Suite("puffer-fire-glow",
+        "Enhanced Graphics only: a fire-flipbook column carries an ALBEDO gain into the glow pass "
+        + "and a smoke column beside it carries none, over the chapter's shipped archive; the "
+        + "faithful presentation compiles a shader with no gain term at all and writes a gain of "
+        + "one on every column, and no shipped puffer sprite carries the additive bit that would "
+        + "have selected the fireball by blend")]
+    internal static void PufferFireGlow(TestContext ctx)
+    {
+        string texturePath = SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter);
+        ctx.RequireData(texturePath, $"{ctx.Chapter} texture archive");
+        using var textures = new TextureArchive(texturePath);
+
+        // The premise this arm was written on: no puffer sprite is additive, so blend cannot
+        // separate the fireball from the smoke and the fire flipbook is named instead.
+        foreach (var name in new[]
+                 {
+                     "fire_f01", "fire_f02", "fire_f03", "fire_f04", "fire_f05", "fire_f06",
+                     "smoke101", "smoke102", "smoke103", "thickblksmoke01", "magnesiumtip",
+                     "exp_yel01", "poleflare", "fireflare1", "splashbase", "watersquirt",
+                     "cloud1", "cloud2", "bit01",
+                 })
+        {
+            ctx.Check(!textures.IsAdditive(name),
+                $"{name} alpha-mixes, so the additive layer never selects a fireball frame");
+        }
+
+        ctx.Check(MultiMeshEmitterRenderer.IsFireSprite("fire_f01")
+                  && MultiMeshEmitterRenderer.IsFireSprite("FIRE_F06"),
+            $"the fire flipbook is the set the enhanced glow pass lifts, case-insensitively");
+        foreach (var name in new[] { "smoke101", "thickblksmoke01", "magnesiumtip", "poleflare" })
+        {
+            ctx.Check(!MultiMeshEmitterRenderer.IsFireSprite(name),
+                $"{name} is outside the lifted set, so smoke, soot and the gun-hit spark stay under the threshold");
+        }
+
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        try
+        {
+            GraphicsMode.Resolve(GraphicsMode.EnhancedWord);
+            FireGlowColumns(ctx, textures, enhanced: true);
+            GraphicsMode.Resolve(GraphicsMode.Default);
+            FireGlowColumns(ctx, textures, enhanced: false);
+        }
+        finally
+        {
+            GraphicsMode.Resolve(wasEnhanced ? GraphicsMode.EnhancedWord : GraphicsMode.Default);
+        }
+    }
+
     // A flipbook whose column rises with age, so the written column says how old each particle is:
     // column 0 is the young bright frame, the last column the dying dark one.
     private static void PufferDrawOrderRow(TestContext ctx)
@@ -1964,6 +2013,47 @@ internal static class PufferSuites
                 }
             }
             ctx.Same(2, lists, $"a split column set builds one draw list per blend to check");
+        }
+        finally
+        {
+            owner.QueueFree();
+        }
+    }
+
+    // One renderer per mode over a two-column atlas, fire then smoke, read back off the MultiMesh
+    // the way a frame reaches the GPU rather than off a field the renderer could report wrongly.
+    private static void FireGlowColumns(TestContext ctx, TextureArchive textures, bool enhanced)
+    {
+        string mode = enhanced ? "enhanced" : "faithful";
+        var atlas = textures.Find("fire_f01");
+        ctx.Check(atlas != null, $"the archive decodes fire_f01");
+        if (atlas == null)
+            return;
+        var renderer = new MultiMeshEmitterRenderer(atlas, 2, new[] { false, false },
+            softParticles: false, fireFrames: new[] { true, false });
+        var owner = new Node3D();
+        ctx.Host.AddChild(owner);
+        try
+        {
+            renderer.Attach(owner, 4, cullMargin: 1f);
+            renderer.Write(0, Vector3.Zero, 1f, 0f, 1f, Colors.White);
+            renderer.Write(1, Vector3.Zero, 1f, 1f, 1f, Colors.White);
+            renderer.Show(2);
+            foreach (var child in owner.GetChildren())
+            {
+                if (child is not MultiMeshInstance3D mmi || mmi.Multimesh is not { } mm
+                    || mmi.MaterialOverride is not ShaderMaterial mat || mat.Shader == null)
+                    continue;
+                float fire = mm.GetInstanceCustomData(0).B;
+                float smoke = mm.GetInstanceCustomData(1).B;
+                float want = enhanced ? 2f : 1f;
+                ctx.Check(Mathf.IsEqualApprox(fire, want),
+                    $"{mode}: the fire column's ALBEDO gain is {fire:0.###}, expected {want:0.###}");
+                ctx.Check(Mathf.IsEqualApprox(smoke, 1f),
+                    $"{mode}: the smoke column's ALBEDO gain is {smoke:0.###}, expected 1");
+                ctx.Check(mat.Shader.Code.Contains("v_gain") == enhanced,
+                    $"{mode}: the compiled shader carries the per-column gain term only under enhanced");
+            }
         }
         finally
         {

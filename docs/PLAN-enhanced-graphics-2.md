@@ -68,6 +68,7 @@ exception, a display setting like V-Sync, and it is ignored under `--det` so no 
 | 1 | "FSR super-resolution can render above native for a GPU with headroom." | Godot's `scaling_3d_scale` above 1.0 is bilinear only; FSR 1.0 and 2.2 accept scales at or below 1.0, and FSR 2.2 disables Godot's TAA in favour of its own temporal pass. Supersampling here is bilinear, and FSR 2.2 is an alternative AA, not an upscaler for this plan. |
 | 2 | "The BL-803 dither is a deliberate dither somewhere in the enhanced stack." | `backlog.md`'s own entry: nothing in `SetupLighting` asks for one, debanding is off, and the clutter fade dithers only its own fragments. |
 | 3 | "The BL-803 pattern is temporal screen-space noise (SSAO, soft-shadow sampling) that TAA will integrate away." | The user's two C3 freecam stills (`.scratch/eg2/A3/`, freecam at x -6675 y 70 z -3037, 5120x1440, sun pitch -25 yaw 135): the pattern is a set of fine, evenly spaced, parallel bands with one world direction, still while the camera is still, present on the flat lit water where no occluder exists, and its spacing changes across straight seams on the hillside, which are the shadow cascade borders. That is the sun's shadow map self-shadowing a grazing surface (acne, smeared into bands by the 2.0 degree penumbra and the blur), a stable pattern TAA cannot remove. A3 is the bias/penumbra fix, not a wait on A1. |
+| 4 | "The fireball's atlas frames are additive, so the additive emitter shader variant is where a bloom gain goes." | B12's census: 145 zrdr files name 26 puffer sprite textures and none carries the additive bit in any chapter's manifest; the install's additive textures are mesh materials, flares, rings and HUD hilites. The additive emitter layer is never built for a shipped effect. The bloom is gated by the `fire_f01`..`fire_f06` flipbook name instead, and the `puffer-fire-glow` suite pins the premise. |
 
 | Confidence | Items | What that means for you |
 |---|---|---|
@@ -178,7 +179,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B, lit explosions
 
 11. ☑ A burst omni light at each fireball, from the enhanced pool, flickering down over the burst
-12. ☐ The additive fireball frames bloom
+12. ☑ The additive fireball frames bloom
 13. ☐ Sun-shaded smoke billboards
 14. ☐ Heat shimmer over a fireball
 15. ☐ Scorch decals at a hit
@@ -492,7 +493,43 @@ hit beside a hangar: the hangar wall and the ground flash and settle. Faithful g
 fireball reads as a bug; tie the life to the emitter's, not a timer. Do not touch the fireball's
 own sprite here; that is B12.
 
-## B12 ☐ The additive fireball frames bloom
+## B12 ☑ The additive fireball frames bloom
+
+**Landed.** The item's premise is wrong and the disproof is part of the change. An inventory of
+every `PUFFER_STATE` block in the install (145 `zrdr` files, 26 distinct sprite textures) against
+each chapter's texture manifest shows **not one puffer sprite carries the additive bit**, so
+`MultiMeshEmitterRenderer`'s additive layer is never built for any shipped effect and a gain on
+the additive variant would have moved nothing. The additive `fire101`…`fire112` flipbook that the
+census does hold belongs to `effects.zrd`'s `EFFECTS` table, which `EffectCycles` installs on mesh
+materials rather than on a puffer. The item's own trap sanctions the alternative, so the gate is
+the texture name: `MultiMeshEmitterRenderer.IsFireSprite` names `fire_f01`…`fire_f06`, the flipbook
+every explosion puffer sequences, and `Puffer.Create` resolves it per atlas column beside the blend
+verdict, keeping this seam free of `TextureArchive`. The column's gain rides `INSTANCE_CUSTOM.z`
+into a new `v_gain` varying and multiplies `ALBEDO` before the fog mix, so a fogged fireball dims
+instead of blooming through the wall. `EnhancedFireGain` is 2.0, a TUNE: the flipbook's
+alpha-weighted linear peaks run 0.814, 0.714, 0.540, 0.429, 0.292, 0.268, so at 2.0 the first two
+frames cross the 1.0 threshold and the tail stays under it, and the flipbook's own authored falloff
+decides which frames halo. Luminance cannot be the gate (`smoke101` peaks at 1.000 against
+`fire_f03`'s 0.540), and the sprites left out of the set reach 1.0 unaided, so a wider set would
+halo every gun strike and pole lamp. The shader-variant key gained the mode, so the faithful path
+compiles text with no gain term at all rather than a gain of one.
+
+**Verified.** On the item worktree: rebuild warning-free; the new `puffer-fire-glow` engine suite
+PASSes over the shipped C1 archive (no puffer sprite additive, the named set case-insensitive and
+exclusive, the fire column's gain 2.0 and the smoke column's 1.0 read back off the MultiMesh under
+Enhanced, both 1.0 and no `v_gain` in the compiled shader on the faithful path); the full battery
+runs `4568 passed, 0 failed, 2 skipped of 4570` units, `350 passed, 0 failed` engine suites and goldens
+**19 shots hash-identical, zero movers**; comment caps, doc entries and encoding checks clean.
+Headless captures under `.scratch/eg2/B12/` (`b12-c1-tarmac.png`, `b12-c5-night.png`) put faithful,
+enhanced without the gain and enhanced with it side by side on a rocket hit. Measured on the C1
+tarmac hit: the fireball core's peak linear luminance rises 0.4365 to 0.6398 and the flame above it
+0.4205 to 0.5986, the halo reaches about 80 px past the sprite, and the smoke plume and the HUD are
+bit-identical between the two enhanced runs. The C5 night hit measures 0.3861 to 0.5726 in the core
+with 9 pixels of the neighbouring smoke moving by 1/255 of bloom bleed. Owed to the user at the
+controls: whether 2.0 is the right lift, whether the halo should reach further, and whether the
+first two frames alone crossing the threshold reads as a flash or as a sustained glow.
+
+**Original approach (kept for reference).**
 
 **Goal.** The fireball's additive frames exceed the glow threshold and bloom under Enhanced; smoke
 and every mix-blend frame stay below it.

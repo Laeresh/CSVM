@@ -1610,6 +1610,8 @@ public partial class Launcher : Node3D
     // colour buffer, values can exceed 1.0 and clip instead of rolling off, and C21's glow-arm
     // sprites are the only surfaces meant to bloom. The cockpit pass duplicates this Environment
     // at build time (CockpitOverlay.NewOverlay), so its own tonemap matches the world pass exactly.
+    // Under Enhanced the puffer fire flipbook joins them: MultiMeshEmitterRenderer lifts the
+    // fire_f01-fire_f06 columns alone over this threshold, and no other particle sprite crosses it.
     private void EnableGlowAndTonemap(Godot.Environment env)
     {
         env.GlowEnabled = true;

@@ -41,7 +41,8 @@ public interface IEmitterRenderer
 /// column rather than one per emitter. A column set that disagrees draws as two MultiMeshes, one
 /// per blend, and each particle goes to the one its current column names. The verdict itself is
 /// read off the texture header in <c>Puffer.Create</c>, which is what keeps this seam free of
-/// <c>TextureArchive</c>.
+/// <c>TextureArchive</c>. Enhanced Graphics adds one per-column ALBEDO gain so the fire flipbook
+/// blooms (<see cref="IsFireSprite"/>); the faithful path compiles the shader text it always did.
 /// </summary>
 public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
 {
@@ -58,6 +59,7 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         varying flat float v_frame;
         varying flat float v_alpha;
         varying flat vec4 v_color;
+        GAIN_DECL
 
         void vertex() {
             // Billboard the instance quad toward the camera, keeping its per-instance scale
@@ -70,6 +72,7 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
             v_frame = INSTANCE_CUSTOM.x;
             v_alpha = INSTANCE_CUSTOM.y;
             v_color = COLOR;
+            GAIN_SET
         }
 
         void fragment() {
@@ -91,7 +94,7 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
             // The COLORS ramp is authored in DX7 framebuffer bytes, the same gamma-space
             // modulate every fullbright pass linearises (csky_srgb.gdshaderinc); multiplied in
             // raw it draws two shades too pale. White, the ramp-less case, is a fixed point.
-            ALBEDO = t.rgb * csky_srgb_to_linear(v_color.rgb);
+            ALBEDO = t.rgb * csky_srgb_to_linear(v_color.rgb)GAIN_MUL;
             // The mission's own distance fog, the cylinder every world surface takes. FOG_TARGET is
             // what this blend leaves at full fog: the sky's colour where the quad replaces the
             // background, nothing where it only adds to one already fogged (org/puffer.md).
@@ -101,10 +104,27 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         }
         """;
 
-    // One compiled Shader per code variant (blend × soft), shared by every renderer. A Shader per
-    // emitter cost about 6 ms to compile, paid by every live miss and by each of the couple of
-    // hundred emitters a crash rig builds ahead.
-    private static readonly Dictionary<(bool Mix, bool Soft), Shader> ShaderVariants = new();
+    // Enhanced mode only: what a fire-flipbook column's ALBEDO is multiplied by, so its hot texels
+    // clear the 1.0 glow threshold Launcher.EnableGlowAndTonemap sets. Godot discards EMISSION on
+    // an `unshaded` material, so this arm reaches the HDR buffer by scaling colour, as
+    // SceneBuilder's glow arms do. TUNE, owed the user's eye. The gain is uniform and the
+    // flipbook's own authored brightness falloff decides which frames halo (docs/org/textures.md).
+    private const float EnhancedFireGain = 2.0f;
+
+    // The original's fire flipbook, the only puffer sprites the enhanced glow pass lifts.
+    // ⚠ The additive bit cannot select them: no puffer sprite in any chapter archive carries it
+    // (docs/org/textures.md), so blend says nothing about which sprite is a flame. Do not widen
+    // this to the white-hot or flare sprites (magnesiumtip, poleflare, exp_yel01, fireflare1);
+    // their texels already reach 1.0, so every gun strike and pole lamp would halo.
+    private static readonly HashSet<string> FireFlipbook = new(System.StringComparer.OrdinalIgnoreCase)
+    {
+        "fire_f01", "fire_f02", "fire_f03", "fire_f04", "fire_f05", "fire_f06",
+    };
+
+    // One compiled Shader per code variant (blend × soft × enhanced), shared by every renderer. A
+    // Shader per emitter cost about 6 ms to compile, paid by every live miss and by each of the
+    // couple of hundred emitters a crash rig builds ahead.
+    private static readonly Dictionary<(bool Mix, bool Soft, bool Enhanced), Shader> ShaderVariants = new();
 
     // One quad for every layer in the process: the mesh is a unit billboard and the per-instance
     // scale lives in the MultiMesh transforms, so nothing about it is per emitter. The material
@@ -117,6 +137,11 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
     // One verdict per atlas column, so a flipbook that crosses from a flagged frame to an
     // unflagged one changes blend mid-life exactly as the original does.
     private readonly bool[] _additiveFrames;
+    // One ALBEDO multiplier per atlas column, 1.0 everywhere on the faithful path. Resolved once at
+    // construction, with the atlas and the blend verdict, so one emitter cannot draw half its life
+    // under a mode the menu changed mid-session.
+    private readonly float[] _columnGain;
+    private readonly bool _enhanced;
     private readonly bool _softParticles;
 
     // The mixed list and the additive one. Only the blends the column set actually uses are built,
@@ -127,9 +152,12 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
     /// <summary>Builds the renderer for an already-packed <paramref name="atlas"/> of
     /// <paramref name="frameCount"/> side-by-side frames. <paramref name="additiveFrames"/> is one
     /// flag per atlas column, true where the texture's render-flags word carries the additive bit
-    /// (<c>docs/org/textures.md</c>); <paramref name="softParticles"/> enables the depth fade.</summary>
+    /// (<c>docs/org/textures.md</c>); <paramref name="softParticles"/> enables the depth fade.
+    /// <paramref name="fireFrames"/> is one flag per column, true where <see cref="IsFireSprite"/>
+    /// named the frame, and null where the caller has no names to read (every test path).</summary>
     public MultiMeshEmitterRenderer(ImageTexture atlas, int frameCount,
-        IReadOnlyList<bool> additiveFrames, bool softParticles)
+        IReadOnlyList<bool> additiveFrames, bool softParticles,
+        IReadOnlyList<bool>? fireFrames = null)
     {
         _atlas = atlas;
         _frameCount = frameCount;
@@ -137,6 +165,11 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         for (int i = 0; i < _additiveFrames.Length && i < additiveFrames.Count; i++)
             _additiveFrames[i] = additiveFrames[i];
         _softParticles = softParticles;
+        _enhanced = GraphicsMode.Enhanced;
+        _columnGain = new float[_additiveFrames.Length];
+        for (int i = 0; i < _columnGain.Length; i++)
+            _columnGain[i] = _enhanced && fireFrames != null && i < fireFrames.Count && fireFrames[i]
+                ? EnhancedFireGain : 1f;
     }
 
     /// <summary>True when the column set spans both blends, so this emitter draws two MultiMeshes
@@ -169,6 +202,11 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         }
     }
 
+    /// <summary>Whether a puffer frame belongs to the original's fire flipbook, the sprites the
+    /// enhanced glow pass lifts over its threshold. Public because <c>Puffer.Create</c> reads the
+    /// frame names and this seam deliberately never sees a <c>TextureArchive</c>.</summary>
+    public static bool IsFireSprite(string frameName) => FireFlipbook.Contains(frameName);
+
     public void Attach(Node3D owner, int capacity, float cullMargin)
     {
         // Runtime shader/material build, not load-time, a new Puffer's first draw. Usually
@@ -193,7 +231,7 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         // draws the frame it is actually showing.
         int col = Mathf.Clamp(Mathf.FloorToInt(frame + 0.5f), 0, _additiveFrames.Length - 1);
         var layer = _additiveFrames[col] ? _add : _mix;
-        layer?.Write(position, size, frame, alpha, color);
+        layer?.Write(position, size, frame, alpha, color, _columnGain[col]);
     }
 
     public void Show(int liveCount)
@@ -202,9 +240,9 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         _add?.Publish();
     }
 
-    private static Shader ShaderFor(bool mix, bool soft)
+    private static Shader ShaderFor(bool mix, bool soft, bool enhanced)
     {
-        if (!ShaderVariants.TryGetValue((mix, soft), out var shader))
+        if (!ShaderVariants.TryGetValue((mix, soft, enhanced), out var shader))
         {
             // A mixed quad stands in for the background, so full fog leaves the sky's fog colour,
             // the world's own answer. An additive one only brightens a background that already
@@ -212,8 +250,14 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
             var code = ShaderCode
                 .Replace("BLEND_MODE", mix ? "blend_mix" : "blend_add")
                 .Replace("FOG_TARGET", mix ? "csky_fog_color" : "vec3(0.0)")
-                .Replace("SOFT_EXPR", soft ? "clamp((VERTEX.z - scene_z) / 1.5, 0.0, 1.0)" : "1.0");
-            ShaderVariants[(mix, soft)] = shader = new Shader { Code = code };
+                .Replace("SOFT_EXPR", soft ? "clamp((VERTEX.z - scene_z) / 1.5, 0.0, 1.0)" : "1.0")
+                // The faithful text carries no gain at all, not a gain of one: the presentation
+                // this project delivers must compile the shader it always compiled. GAIN_MUL sits
+                // before the fog mix, so a fogged fireball dims instead of blooming through the wall.
+                .Replace("GAIN_DECL", enhanced ? "varying flat float v_gain;" : "")
+                .Replace("GAIN_SET", enhanced ? "v_gain = INSTANCE_CUSTOM.z;" : "")
+                .Replace("GAIN_MUL", enhanced ? " * v_gain" : "");
+            ShaderVariants[(mix, soft, enhanced)] = shader = new Shader { Code = code };
         }
         return shader;
     }
@@ -231,7 +275,10 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         public static Layer Build(MultiMeshEmitterRenderer owner, Node3D parent, int capacity,
             float cullMargin, bool additive)
         {
-            var mat = new ShaderMaterial { Shader = ShaderFor(!additive, owner._softParticles) };
+            var mat = new ShaderMaterial
+            {
+                Shader = ShaderFor(!additive, owner._softParticles, owner._enhanced),
+            };
             mat.SetShaderParameter("atlas", owner._atlas);
             mat.SetShaderParameter("frame_count", (float)owner._frameCount);
             var layer = new Layer();
@@ -272,14 +319,15 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
             }
         }
 
-        public void Write(Vector3 position, float size, float frame, float alpha, Color color)
+        public void Write(Vector3 position, float size, float frame, float alpha, Color color,
+            float gain)
         {
             if (_mm == null || _written >= _mm.InstanceCount)
                 return;
             int index = _written++;
             _mm.SetInstanceTransform(index,
                 new Transform3D(Basis.Identity.Scaled(new Vector3(size, size, size)), position));
-            _mm.SetInstanceCustomData(index, new Color(frame, alpha, 0f, 0f));
+            _mm.SetInstanceCustomData(index, new Color(frame, alpha, gain, 0f));
             _mm.SetInstanceColor(index, color);
         }
 
