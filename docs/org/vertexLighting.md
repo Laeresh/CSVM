@@ -343,6 +343,19 @@ honouring the flag with a flat multiply, which is what `SceneBuilder` does today
 `cloudparent` cluster) and wrong about the value on all of them. Acting on that is a look change on
 a visible population and is owed a verdict at the controls, not a luminance distance.
 
+⚠ **A city wall is the same miss as a card, and C5 is where it is measurable.** The collapse's 0.46
+stands for the world's mean `N·L`, so any surface whose own `N·L` is far from it is rendered at the
+wrong value, and a vertical facade turned toward the sun is as far from the mean as a billboard is.
+C5 authors `SUNLIGHT_DIFFUSE` 1.5 with `SUNLIGHT_AMBIENT` 0.5 in both zones, so `FUN_005688a0`
+computes 0.5 to 2.0 per vertex where `WorldLightFactor` returns `clamp(0.5 + 1.5 × 0.46, 0.15, 1)`,
+a flat 1.0 that also throws 0.19 away at the clamp. The ratio ours/theirs on a lit wall is then
+`1 / (0.5 + 1.5 N·L)`, which is 1.0 at `N·L` = 1/3, 0.88 on a roof under C5's sun 25° up, and 0.545
+at the most a vertical wall can reach. `CAP-11`'s C5 night facades measure in that range, at 0.66
+and 0.58. The capture is not the cause: the five HUD gauge discs, the same 2D art at the same
+pixels in both frames, read 0.97. C4 authors the identical pair and shows no such deficit on the
+surfaces `CAP-12` measured, which are the cloud deck, `lighting: false` there and so lit by neither
+engine. What a reproduction of the term needs decided first is on `BL-322`.
+
 ⚠ **The PNG alpha channel is not a substitute for the field.** It distinguishes `Full` from `None`
 but loses the one to ten `Simple` textures per chapter, which carry the bit too, so the pixel
 classification `TextureArchive` already had for the blend/scissor choice cannot answer that

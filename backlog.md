@@ -485,20 +485,43 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   capture swallows them entirely, while ours are plainly visible in the same scene
   (`playtest/CAP-11/csvm-c2b-low.png`). Streak width is the first constant to revisit.
 
-- `BL-322` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` `[C5]` **C5's lit facades render ×0.58–0.66 of the original with WorldLight already at
-  clamp 1.0** (split out of `BL-303` at its close, 2026-08-08; measured `CAP-11`: tower faces 10.2
-  vs 15.5, low-rise 21.7 vs 37.6). Explicitly NOT fog, `BL-303`'s own adjunct note, and the Wave
-  B fog work moved none of it.
-  *Decoded, and the item's own premise is refuted:* the original's surface lighting is written up in
-  `docs/org/vertexLighting.md`. On the hardware draw every retail capture shows (`FUN_00554550`) the
-  one gate is the model's `lighting` flag (`FUN_00552020`), and **the measured facades are on the
-  lit side of it**, so the original modulates them exactly as we do. Asking "should these facades be
-  modulated at all" therefore answers yes, and no exemption is available to close the measured
-  ratio. The texture's alpha bit exempts a polygon in the software draw alone (`FUN_005524d0`),
-  which no capture shows, so the overlays drawn on top of those facades (`buildingspotlighted`,
-  `nypd`, `clock`, `fadedsign01`–`03`, `lightpole`, `lite_out`, `bliteon`/`bliteoff`,
-  `traffic_sign1`) are lit in the original as they are here, and offer no lever either. The
-  residual is unexplained and not predicted by any decoded lighting term.
+- `BL-322` `[Research]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: decoded]` `[C5]` **C5's lit facades render ×0.58–0.66 of the original, and collapsing the
+  original's per-vertex sun term to one clamped scalar predicts that band** (split out of `BL-303`
+  at its close; measured `CAP-11`: tower faces 10.2 vs 15.5, low-rise 21.7 vs 37.6). Explicitly NOT
+  fog, `BL-303`'s own adjunct note, and the Wave B fog work moved none of it.
+  *The exemption premise is refuted, the residual is not:* `docs/org/vertexLighting.md` decodes the
+  hardware draw's one gate (`FUN_00552020`), and **the measured facades are on the lit side of it**,
+  so no exemption can close the ratio; the texture alpha bit is software-only (`FUN_005524d0`) and
+  offers no lever on the overlays either. What closes it is the *value*. C5 IA1 authors
+  `SUNLIGHT_DIFFUSE` 1.5 and `SUNLIGHT_AMBIENT` 0.5 in both its zones
+  (`extracted/C5/IA1/zrdr/weather.zrd.json`, ZONE1 and ZONE3), so `FUN_005688a0`'s per-vertex
+  `ambient + diffuse × max(N·L, 0)` runs 0.5 to 2.0, while `Weather.WorldLightFactor` collapses the
+  pair to `clamp(0.5 + 1.5 × 0.46, 0.15, 1)` = **1.0**, discarding 0.19 at the clamp. On a wall the
+  ratio ours/theirs is `1 / (0.5 + 1.5 N·L)`: 1.0 at `N·L` = 1/3, and 0.545 at the most a vertical
+  wall reaches under a sun 25° above the horizon (`SUNLIGHT_ORIENTATION` −25/−135). The measured
+  0.66 and 0.58 sit inside that range at `N·L` 0.68 and 0.82, walls within 26° to 42° of the sun's
+  azimuth; a roof, whose `N·L` under that sun is 0.42, predicts 0.88.
+  *Frame-wide is ruled out, so this is a surface term, not exposure or gamma:* the five HUD gauge
+  discs are the same 2D art at the same pixels in both frames and read ours/orig **0.97** (rockets
+  0.97, ALT 1.07, damage 0.80, guns 1.03, MPH 1.00; the "2400" readout box 0.96). Nothing ×0.6
+  survives into the capture or onto the composite.
+  ⚠ **The `CAP-11` C5 pair is not a matched pose.** `t0.5-c5-spawn-night-city.png` looks north over
+  midtown from altitude and `csvm-c5-night-city.png` sits over water, so 10.2/15.5 and 21.7/37.6
+  compare *different buildings*. The band is the right order and the wrong precision; a re-measure
+  wants a pose pinned by `--pos`/`--direction` on both sides. C5's sky dome cannot serve as the
+  in-world control either: at a level view its rows read 0.83, 0.69 and 0.43 of the original's from
+  zenith to horizon, a gradient mismatch of its own rather than one scalar.
+  *The decode still owed, before any code:* (1) `SUNLIGHT_BICOLORED` is 1 in both C5 zones and is
+  decoded nowhere, so which of the light class-data colour triples (`+0xa4` diffuse, `+0xb0`
+  ambient) it selects between, and whether `FUN_00472ea0` writes a second, decides whether the term
+  is the scalar above or a two-colour blend; (2) whether a single sun really leaves exactly
+  `ambient + diffuse × max(N·L, 0)` once C5's `LIGHT_STATE` point lights populate `FUN_00568790`'s
+  other two lists, given `FUN_00568830` seeds the accumulator to 1.0 and each light contributes
+  `× colour − 1`; (3) which regime the measured walls are in, since 65.0 % of C5's 113,926 authored
+  polygon vertex colours are 255 and the rest run below it, and where `V × F` passes 255 the
+  original saturates and the ratio becomes `V/255` instead of `1/F`.
+  ⚠ Reproducing the per-vertex term is a look change on every lit surface of every chapter, so it
+  is owed a verdict at the controls and not a luminance distance.
   *Playtest after fix:* the C5 night poses in `playtest/CAP-11/README.md`.
 
 - `BL-325` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` `[C1B]` **Night cloud sprites are directionally moonlit in the original; ours are
