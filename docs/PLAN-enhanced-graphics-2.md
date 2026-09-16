@@ -66,7 +66,8 @@ exception, a display setting like V-Sync, and it is ignored under `--det` so no 
 | # | The wrong claim | How it died |
 |---|---|---|
 | 1 | "FSR super-resolution can render above native for a GPU with headroom." | Godot's `scaling_3d_scale` above 1.0 is bilinear only; FSR 1.0 and 2.2 accept scales at or below 1.0, and FSR 2.2 disables Godot's TAA in favour of its own temporal pass. Supersampling here is bilinear, and FSR 2.2 is an alternative AA, not an upscaler for this plan. |
-| 2 | "The BL-803 dither is a deliberate dither somewhere in the enhanced stack." | `backlog.md`'s own entry: nothing in `SetupLighting` asks for one, debanding is off, and the clutter fade dithers only its own fragments. The candidate is Godot's temporal noise in SSAO and the soft shadow pass, which TAA integrates. Still a hypothesis until A1 lands and the user flies it. |
+| 2 | "The BL-803 dither is a deliberate dither somewhere in the enhanced stack." | `backlog.md`'s own entry: nothing in `SetupLighting` asks for one, debanding is off, and the clutter fade dithers only its own fragments. |
+| 3 | "The BL-803 pattern is temporal screen-space noise (SSAO, soft-shadow sampling) that TAA will integrate away." | The user's two C3 freecam stills (`.scratch/eg2/A3/`, freecam at x -6675 y 70 z -3037, 5120x1440, sun pitch -25 yaw 135): the pattern is a set of fine, evenly spaced, parallel bands with one world direction, still while the camera is still, present on the flat lit water where no occluder exists, and its spacing changes across straight seams on the hillside, which are the shadow cascade borders. That is the sun's shadow map self-shadowing a grazing surface (acne, smeared into bands by the 2.0 degree penumbra and the blur), a stable pattern TAA cannot remove. A3 is the bias/penumbra fix, not a wait on A1. |
 
 | Confidence | Items | What that means for you |
 |---|---|---|
@@ -170,7 +171,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☐ TAA on every 3D viewport under Enhanced
 2. ☐ Render Scale, a VIDEO page row applied to every 3D viewport, ignored under `--det`
-3. ☐ BL-803 closes on the flight after A1, or the bisect doors land and find the pass
+3. ☐ BL-803: the shadow-map bands on grazing surfaces under Enhanced
 4. ☐ Alpha-to-coverage on the cutout surfaces under Enhanced
 5. ☐ FSR 2.2 tried once as the alternative temporal pass, kept or parked on the user's verdict
 
@@ -233,7 +234,7 @@ faithful path is unchanged.
 **Evidence (confidence: direction-sound).** `project.godot` sets 4x MSAA for both modes, and
 `CockpitOverlay.cs:133`, `SpyglassView.cs:45` and `SplitScreen.cs:259` copy that setting onto their
 SubViewports; nothing reads `use_taa`. Godot's TAA is a `Viewport` property, so the same four sites
-carry it. That it also removes the BL-803 pattern is the hypothesis A3 settles.
+carry it. It does not remove the BL-803 bands, which are a stable shadow-map pattern (A3).
 
 **Approach.** Read `GraphicsMode.Enhanced` once where each viewport is built (the root viewport in
 `Launcher` after `Resolve`, the three SubViewports at construction) and set `UseTaa = true` there;
@@ -283,29 +284,49 @@ titles and round-trip the store); at the controls, 200% on C5 visibly sharpens t
 scale them the same way or the panes disagree in sharpness. The row is a display setting and is
 NOT under the Enhanced switch (decision 3).
 
-## A3 ☐ BL-803 closes on the flight after A1, or the bisect doors land and find the pass
+## A3 ☐ BL-803: the shadow-map bands on grazing surfaces under Enhanced
 
-**Goal.** The whole-screen dithering reported under Enhanced is gone, and its closing record names
-what it was.
+**Goal.** The world-aligned banding over lit terrain and water under Enhanced is gone at C1's
+25 degree sun without dissolving a hangar's or an aircraft's cast shadow, and `BL-803`'s closing
+record names the mechanism and the lever.
 
-**Evidence (confidence: lead-only).** `backlog.md` `BL-803`: reported at the controls, no chapter,
-view or window size recorded; nothing in the enhanced Environment asks for a dither; the shadow
-blur's own comment records that raising it "dithered the lit water"; Godot's SSAO and soft-shadow
-passes resolve with screen-space noise. `<TODO: re-verify still-open against git log --grep=BL-803, git log -S and the code>`
+**Evidence (confidence: direction-sound).** The user's two freecam stills on C3 (x -6675, y 70,
+z -3037, 5120x1440, copies under `.scratch/eg2/A3/`; C3's authored sun is pitch -25, yaw 135,
+the same elevation as C1's, on which the bias pair was tuned; the user confirms the bands on
+C1 too, much finer, which fits a texel footprint: the enhanced shadow distance follows each
+zone's fog ramp, so a longer fog range hands a cascade more ground per texel and the bands
+widen): fine, evenly spaced, parallel bands with
+one world direction, still while the camera is still, on the flat lit water where nothing can
+cast a shadow, and changing spacing across straight seams on the hillside that match the four
+cascade borders. `Launcher.cs`'s bias comment already records that lower bias values "put
+dithered acne over every terrain triangle at C1's 25 degree sun" and that the pair trades against
+hangar shadows; the shadow blur comment records that raising it "dithered the lit water". So
+this is shadow-map self-occlusion of grazing surfaces, smeared into bands by the 2.0 degree
+angular distance (PCSS blocker search) and the blur. It is stable, not temporal, so A1 cannot
+remove it. `<TODO: re-verify still-open against git log --grep=BL-803, git log -S and the code>`
 
-**Approach.** After A1 lands the user flies Enhanced, still and moving, over water and ground. If
-the pattern is gone, close `BL-803` on that verdict with A1 as the fix. If it persists, add
-`--no-ssao`, `--no-ssr`, `--no-shadow-blur` inspection doors beside `--no-fog` in `SessionSpec`,
-bisect at the controls, and fix the one pass (a half-resolution buffer or a resolution scale is the
-usual cause).
+**Approach.** Reproduce headless first: a `--freecam --chapter=C3 --pos=-6675,70,-3037` still
+under `--graphics=enhanced` at the user's pose (the `_00` frame is un-jittered) shows the bands;
+take the same pose on C1 to confirm the elevation, not the chapter, is the condition. Then the levers, in
+order, each judged on that still and on the C1 hangar/aircraft shadow control: (1) the angular
+distance back from 2.0 toward 1.0 or 0.5 (E48 of the first plan picked 2.0 for softness, so this
+is a trade the user judges); (2) the normal bias up and the constant bias down (flat water at a
+grazing sun is the normal-bias case); (3) `directional_shadow/size` and a tighter first split, so
+a texel covers less ground; (4) if the bands persist only on water, the water arm's own
+`ShadowCasterSetting.Off` or receive-shadow off, since the water plane is flat and a shadow on it
+reads through SSR anyway. Add `--no-shadow` style inspection doors only if the still cannot
+discriminate. Do not touch SSAO or SSR for this item.
 
-**Model recommendation.** high if the bisect runs: it is judgement over four interacting passes.
+**Model recommendation.** high: a four-way TUNE trade judged against two controls.
 
-**Verify.** The user's flight; if bisected, the door that clears it named in the closing commit,
-and the doors documented in `docs/cli.md` (600-character bullet cap).
+**Verify.** The user's freecam pose still and moving, over water and ground, plus the hangar and
+aircraft shadow control at the same sun; the faithful goldens zero movers (shadows are off on the
+faithful path).
 
-**⚠ Traps.** Do not bisect on `--shots` frames. Debanding is off and is not the cause. Do not
-widen the fix to the faithful path, which is not reported to show it.
+**⚠ Traps.** `--shots` bursts carry the previous frame; use the `_00` frame or judge at the
+controls. Debanding, SSAO and SSR are not the cause. Do not widen anything to the faithful
+path, which casts no shadow map. A fix that only raises the constant bias detaches the aircraft's
+shadow from its wheels (peter-panning); check the parked-aircraft shadow before accepting one.
 
 ## A4 ☐ Alpha-to-coverage on the cutout surfaces under Enhanced
 
