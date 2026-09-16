@@ -708,6 +708,26 @@ all keep their decoded placement, and the switch is the ordinary `graphics.mode`
 `AnimRuntime.OrientedCallAnimNames` (from `EffectCatalogue.ImpactUpperRingAnimNames`) is the one
 callee name it may re-base; the `impact-orientation` suite pins both presentations.
 
+### The burst light in Enhanced Graphics
+
+The HE burst authors a point light of its own. `he_ground_effect` runs `he_light_seq`, which sets
+`LIGHT_STATE he_light` ACTIVE at the `he_ring` node with `RANGE (4, 20)` and
+`COLOR (1.0, 0.86, 0.29)`, then walks six signed `LIGHT_ANIMATION` range deltas that grow the max
+from 20 m to 420 m over 0.41 s and switches the light INACTIVE again; the same definition's `FBFX`
+frame-buffer wash runs 1.2 s. ⚠ CSVM does not render that authored light: the effects runtime is
+built with no `WorldLights` of its own, so every `LIGHT_STATE` a played effect declares is a
+no-op there, and the faithful presentation shows the fireball sprite alone.
+
+⚠ **Remake-only, and Enhanced Graphics only.** Under `GraphicsMode.Enhanced` a played fireball
+effect registers a short-lived light with the world's `WorldLights` instead
+([`../architecture/Mech3.md`](../architecture/Mech3.md)), so a detonation lights the terrain,
+buildings and aircraft around it. It borrows the authored colour above and takes the ignition end
+of the authored range; its peak, decay and flicker are a remake envelope with no counterpart in
+the data, and it ends with the fireball it came from rather than on a clock. CSVM:
+`EffectCatalogue.BurstLightAnimNames` names which effects throw one,
+`WorldEffectsFactory.RegisterBurstLight` decides, `WorldLights.AddBurst` holds the envelope, and
+the `burst-light` suite pins both presentations.
+
 ### Which row a burst reads
 
 The surface id `FUN_005ac7a0` indexes the table with comes off the hit record it is handed

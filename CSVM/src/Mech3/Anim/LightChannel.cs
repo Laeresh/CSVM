@@ -131,7 +131,9 @@ internal sealed class LightChannel
     {
         if (_worldLights() is not { } lights)
             return;
-        lights.Begin();
+        // The step goes in so the enhanced burst lights age on the sim clock the rest of this tick
+        // runs on, never on a wall-clock one of their own.
+        lights.Begin(dt);
         foreach (var light in _lights.Values)
         {
             if (light.TweenLeft > 0f)

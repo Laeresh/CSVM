@@ -427,13 +427,13 @@ is `UI/SplitScreen.cs`'s per-pane model; `SetListeners` feeds `--debug-anim`. Ne
 
 ## src/Mech3/WorldLights.cs
 Packs the animated world's `LIGHT_STATE` point lights into the 2xN RGBAF texture the fullbright
-world shader reads as spill (`csky_light_data`, its loop bounded by `csky_light_count`). The
-uniform is session-global, so a lit light is lit for every pane, but `Commit`'s distance fade and
-its `MaxActive`-slot significance rank both answer to the NEAREST of every viewer position handed
-in rather than one camera, which is why a light beside player four stays lit with player one far
-away (`AnimRuntime.LightViewerPositions`, fed from `GameSession`'s `ViewerSet`); one position
-reduces to the single-viewer rule exactly. Given a parent `Node3D` and enhanced mode, `Commit` also
-mirrors the committed lights onto pooled `OmniLight3D` nodes. Enhanced mode: [Root.md](Root.md).
+world shader reads as spill (`csky_light_data`, its loop bounded by `csky_light_count`). The uniform
+is session-global, so a lit light is lit for every pane, but `Commit`'s distance fade and its
+`MaxActive`-slot significance rank both answer to the NEAREST of every viewer position handed in
+rather than one camera, which is why a light beside player four stays lit with player one far away
+(`AnimRuntime.LightViewerPositions`, from `GameSession`'s `ViewerSet`). Given a parent `Node3D` and
+enhanced mode, `Commit` mirrors the committed set onto pooled `OmniLight3D` nodes, and `AddBurst`
+adds an explosion flash aged on `Begin`'s dt that dies with its fireball. [Root.md](Root.md).
 
 ## src/Mech3/MissionSetup.cs
 Parses + applies the per-mission `.gw` interp script that decides which world entities a mission

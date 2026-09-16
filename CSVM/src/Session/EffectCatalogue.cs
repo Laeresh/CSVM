@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using CSVM.Mech3;
+using Godot;
 
 namespace CSVM.Session;
 
@@ -109,6 +110,22 @@ public static class EffectCatalogue
     // ⚠ Enhanced Graphics only, and a remake-only rule: the original spawns it on a fixed axis
     // whatever the flight path (docs/org/ordnanceTypes.md).
     public static readonly string[] ImpactUpperRingAnimNames = { "call_he_ring1" };
+
+    // The impact effects whose fireball is big enough to light what stands around it, the HE
+    // rocket/bomb ground burst, the torpedo's, and the two fireball defs the heaviest ordnance
+    // binds. ⚠ Enhanced Graphics only, and a remake-only rule (WorldLights.AddBurst); the faithful
+    // path registers no light. The gun-hit family and the fireless bursts (choker, sonic, flash,
+    // beeper) are excluded because they carry no fireball, and `ap_ground_effect`/`flak_effect`
+    // because their burst is a spark rather than a fireball.
+    public static readonly string[] BurstLightAnimNames =
+        { "he_ground_effect", "torpedo_ground_effect", "large_fireball", "small_fireball" };
+
+    // The burst light's colour: the authored `he_light` LIGHT_STATE colour that
+    // `he_ground_effect`'s `he_light_seq` ramps over an HE detonation, which this install ships
+    // verbatim and the original renders as a real point light
+    // (docs/org/ordnanceTypes.md, "The burst light in Enhanced Graphics"). The other three defs
+    // author no light of their own, so they borrow it.
+    public static readonly Color BurstLightColor = new(1.0f, 0.86f, 0.29f);
 
     // The bailed pilot under his canopy. He is not a piece of the wreck, he is a man stepping out
     // of it, so he takes neither its momentum nor its attitude. The momentum half needs no list any
@@ -227,6 +244,13 @@ public static class EffectCatalogue
     // ⚠ Never list a def's own NAME here; an anchor belongs in the closure. A name here is staged
     // only where a bound def really names it and the gamez pair carries it as a root.
     public static readonly string[] CrashActivatedRoots = { "cpilot" };
+
+    /// <summary>Whether a played impact effect throws a fireball that lights the world around it
+    /// (<see cref="BurstLightAnimNames"/>). Enhanced Graphics only; the faithful presentation
+    /// never registers a light, so it never asks.</summary>
+    public static bool IsBurstLight(string animName) =>
+        Array.Exists(BurstLightAnimNames,
+            name => string.Equals(name, animName, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>The crash-def vector this program can play, built over the whole surface registry
     /// with <see cref="CrashDefPrefix"/>, what <c>BuildFlightCrashRuntime</c> binds and what

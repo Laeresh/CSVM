@@ -177,7 +177,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B, lit explosions
 
-11. ☐ A burst omni light at each fireball, from the enhanced pool, flickering down over the burst
+11. ☑ A burst omni light at each fireball, from the enhanced pool, flickering down over the burst
 12. ☐ The additive fireball frames bloom
 13. ☐ Sun-shaded smoke billboards
 14. ☐ Heat shimmer over a fireball
@@ -405,7 +405,35 @@ likely the deciding defect, so look for it first.
 
 # Wave B, lit explosions
 
-## B11 ☐ A burst omni light at each fireball, from the enhanced pool, flickering down over the burst
+## B11 ☑ A burst omni light at each fireball, from the enhanced pool, flickering down over the burst
+
+**Landed.** `WorldLights.AddBurst` registers a short-lived light at a fireball, and `Begin(dt)` ages
+the live ones on the sim step `LightChannel.Tick` already has, submits them into `_pending` before
+the frame's `LIGHT_STATE` lights and drops each one the frame its fireball stops burning. They ride
+the existing distance fade, `MaxActive` rank and `OmniLight3D` pool with nothing new added to any of
+the three. The decision point is `WorldEffectsFactory.RegisterBurstLight` at the effect sink, which
+asks `EffectCatalogue.IsBurstLight` (the four fireball-throwing impact effects) and `GraphicsMode`,
+so the faithful path registers nothing and asks for nothing. Liveness is the effect's own
+`ANIM_STATE`, not a timer. The envelope is one TUNE block next to `OmniAttenuationTune`: a 3.0
+ignition gain, a 0.29 s e-fold that is spent by the 1.2 s the authored frame-buffer wash runs, a
+4 m to 180 m range and the authored `he_light` colour, flickering at 9 Hz against a 1.73x second
+sine with a per-burst phase stride so a salvo does not pulse in lockstep. The `burst-light` engine
+suite drives a live rocket into a plate and pins one light under Enhanced, none on the faithful
+path, none for a gun hit, a decayed energy 30 frames on, and the light gone with its fireball.
+
+**Verified.** On the item worktree: rebuild warning-free; the new `burst-light` engine suite and
+its three neighbours PASS (the faithful path commits 0 lights, an enhanced gun hit registers 0, an
+enhanced rocket exactly 1 committed light and 1 pooled omni, below half energy after 30 frames,
+dropped the frame the fireball's liveness goes false, the mode restored at the end); goldens
+**19 shots hash-identical, zero movers**; comment caps, doc entries and encoding checks clean. The
+C5 night captures under `.scratch/eg2/B11/` show the tower facades lit warm around two fireballs
+under Enhanced and dark on the faithful path; C1 daylight cannot separate the flash from the mode's
+other differences. Owed to the user at the controls: fire or lamp (peak 3.0, 9 Hz flicker depth,
+0.29 s decay, 180 m reach), and whether a salvo into a city block reads as several bursts. C1's
+airfield already fills the 16-light budget, so a burst there evicts the least significant beacon.
+The branch battery runs again at the wave's end.
+
+**Original approach (kept for reference).**
 
 **Goal.** A rocket or bomb burst lights the terrain, buildings and aircraft around it for the
 fireball's life, brightest at ignition and flickering down; the faithful path draws no light.

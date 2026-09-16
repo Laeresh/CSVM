@@ -48,10 +48,48 @@ public sealed class WorldLights : IDisposable
     // reading comparably soft at the controls.
     private const float OmniAttenuationTune = 1.0f;
 
+    // ---- the enhanced-only burst light (AddBurst), one TUNE block ----
+    // The range a burst lights to, in metres, both off the authored `he_light` ramp in
+    // `he_ground_effect` (docs/org/ordnanceTypes.md): the min is its ignition inner radius and the
+    // max its reach one step in, where the fireball is at its brightest. The ramp's own 420 m end
+    // value is the dying light's last frame and would flood a whole chapter for the burst's life.
+    private const float BurstRangeMin = 4f;
+    private const float BurstRangeMax = 180f;
+
+    // What the burst colour is multiplied by at ignition. OmniEnergyScale above is anchored on a
+    // beacon, and a detonation must read far brighter than one. It drives the fullbright spill add
+    // as well as the omni, which is what bounds it: much above this the ground clips to white.
+    private const float BurstPeakGain = 3.0f;
+
+    // The decay's e-folding time in seconds, chosen so the envelope is spent (under BurstFloor) at
+    // the 1.2 s the same burst's authored frame-buffer wash runs for, which is the original's own
+    // statement of how long a detonation owns the picture.
+    private const float BurstDecay = 0.29f;
+
+    // The gain a burst is retired at. Below it the light moves no pixel and only holds a slot the
+    // distance fade and the MaxActive rank would rather give a light that does.
+    private const float BurstFloor = 0.05f;
+
+    // The flicker's rate in Hz and its depth about the decay curve. Slow enough that a 60 Hz frame
+    // samples several points per cycle, since a faster one aliases into noise, and shallow enough
+    // never to reach zero, since a light that goes dark mid-burst reads as a strobe, not as fire.
+    private const float BurstFlickerHz = 9f;
+    private const float BurstFlickerDepth = 0.25f;
+
+    // The second flicker sine's rate as a multiple of the first. Deliberately not a whole number,
+    // so the pair does not repeat inside one burst and the flicker reads as fire rather than as a
+    // regular pulse.
+    private const float BurstFlickerBeat = 1.73f;
+
+    // Cycles of flicker phase between one burst and the next. A salvo landing in the same frame
+    // would otherwise pulse in lockstep and read as one light rather than several.
+    private const float BurstPhaseStride = 0.618f;
+
     private readonly List<Entry> _pending = new();
     private readonly byte[] _buffer = new byte[MaxActive * FloatsPerLight * sizeof(float)];
     private readonly List<Vector3> _committedPositions = new();
     private readonly List<OmniLight3D> _omniPool = new();
+    private readonly List<Burst> _bursts = new();
 
     // Non-null only in enhanced mode with a parent given; null keeps original mode's spill path
     // the only consumer and creates not one node, per the mode's zero-footprint contract.
@@ -60,6 +98,7 @@ public sealed class WorldLights : IDisposable
     private ImageTexture? _texture;
     private int _lastCount = -1;
     private int _loggedSubmitted = -1;
+    private int _burstsRegistered;
 
     /// <summary>Enhanced mode only: mirrors the same committed set onto real
     /// <see cref="OmniLight3D"/> nodes under <paramref name="parent"/>, so the lit world and the
@@ -95,8 +134,30 @@ public sealed class WorldLights : IDisposable
     }
 
     /// <summary>Starts a frame's submission. Lights are re-submitted every frame because they
-    /// ride moving hosts (a muzzle flash on a turret, the train's firebox).</summary>
-    public void Begin() => _pending.Clear();
+    /// ride moving hosts (a muzzle flash on a turret, the train's firebox). <paramref name="dt"/>
+    /// is the sim step the live <see cref="AddBurst"/> lights age by; a caller with no burst
+    /// lights may leave it 0.</summary>
+    public void Begin(float dt = 0f)
+    {
+        _pending.Clear();
+        SubmitBursts(dt);
+    }
+
+    /// <summary>Enhanced mode only: a short-lived light at an explosion, brightest at ignition and
+    /// flickering down to nothing over the TUNE envelope above. It is submitted like any other
+    /// light, so the distance fade, the <see cref="MaxActive"/> rank and the omni pool treat it
+    /// exactly as they treat a beacon. <paramref name="stillBurning"/> is the fireball's own
+    /// liveness, read every frame: the light is dropped the frame it goes false, so no burst light
+    /// can outlive the fireball that threw it.</summary>
+    public void AddBurst(Vector3 pos, Color color, Func<bool> stillBurning)
+    {
+        if (!GraphicsMode.Enhanced)
+            return;
+        // Linearised once here rather than per frame, and the envelope is applied to the linear
+        // value: scaling the sRGB value instead would bend both the decay and the flicker.
+        _bursts.Add(new Burst(pos, color.SrgbToLinear(), stillBurning,
+            _burstsRegistered++ * BurstPhaseStride));
+    }
 
     /// <summary>Submits one active light. <paramref name="color"/> is the data's own sRGB
     /// value; it is linearised here, since the world shader works in linear space (the same
@@ -202,6 +263,7 @@ public sealed class WorldLights : IDisposable
     public void Dispose()
     {
         _pending.Clear();
+        _bursts.Clear();
         _committedPositions.Clear();
         RenderingServer.GlobalShaderParameterSet(CountParam, 0);
         _lastCount = 0;
@@ -242,10 +304,42 @@ public sealed class WorldLights : IDisposable
         }
     }
 
+    // Ages the live burst lights, retires the ones whose fireball has ended or whose envelope is
+    // spent, and submits the rest as ordinary lights. Done at Begin rather than at Commit so a
+    // burst is in _pending before the frame's LIGHT_STATE lights are, i.e. it competes for the
+    // MaxActive slots on the same terms instead of being appended after the budget is decided.
+    private void SubmitBursts(float dt)
+    {
+        for (int i = _bursts.Count - 1; i >= 0; i--)
+        {
+            var burst = _bursts[i];
+            burst.Age += dt;
+            float gain = BurstGain(burst.Age, burst.Phase);
+            if (gain < BurstFloor || !burst.StillBurning())
+            {
+                _bursts.RemoveAt(i);
+                continue;
+            }
+            // Straight into _pending rather than through Add: the colour is already linear and the
+            // ranges are constants, so neither of Add's two conversions applies.
+            _pending.Add(new Entry(burst.Pos, burst.Color * gain, BurstRangeMin, BurstRangeMax));
+        }
+    }
+
     // Kept beside Commit and UpdateOmnis, the two instance methods that call them, rather than
     // hoisted above every instance member for SA1204's sake (same local-suppression precedent as
     // CameraController.FirstPersonPose).
 #pragma warning disable SA1204
+    // The burst envelope: an ignition peak, an exponential decay and a flicker that never reaches
+    // zero. The flicker is two sines rather than one so it does not read as a regular pulse, and
+    // each burst carries its own phase so a salvo does not flash in lockstep.
+    private static float BurstGain(float age, float phase)
+    {
+        float wave = Mathf.Tau * ((BurstFlickerHz * age) + phase);
+        float flicker = 1f + (BurstFlickerDepth * 0.5f * (Mathf.Sin(wave) + Mathf.Sin(wave * BurstFlickerBeat)));
+        return BurstPeakGain * Mathf.Exp(-age / BurstDecay) * flicker;
+    }
+
     // Angular size of the light's pool, scaled by its (already fade-applied) intensity, the
     // cheapest honest proxy for "how much of this frame does it change". Distance is to the
     // nearest viewer, matching Commit's own fade rule.
@@ -285,5 +379,25 @@ public sealed class WorldLights : IDisposable
         /// <summary>The same light dimmed by the distance fade, the colour is the intensity,
         /// so scaling it is how a light leaves the set without popping.</summary>
         public Entry Faded(float f) => new(Pos, Color * f, Min, Max);
+    }
+
+    // One live burst light. A class rather than a struct because Age is written every frame, and
+    // the colour is held already linearised (see AddBurst).
+    private sealed class Burst
+    {
+        public Burst(Vector3 pos, Color color, Func<bool> stillBurning, float phase)
+        {
+            Pos = pos; Color = color; StillBurning = stillBurning; Phase = phase;
+        }
+
+        public Vector3 Pos { get; }
+
+        public Color Color { get; }
+
+        public Func<bool> StillBurning { get; }
+
+        public float Phase { get; }
+
+        public float Age { get; set; }
     }
 }

@@ -26,6 +26,11 @@ public sealed class WorldEffectsFactory
     // fire, so it completes), then tears its puffers down.
     private const float EffectRuntimeTtl = 32f;
 
+    // ANIM_STATE RUNNING in the mission script's own numbering (AnimRuntime.AnimStateOf): the
+    // effect name still has a live instance. This is what a burst light reads as "the fireball is
+    // still burning", so the light ends when the fireball does and not on a clock of its own.
+    private const int AnimStateRunning = 2;
+
     // ⚠ TUNE, not decoded, the original copies templates per call and has no such number.
     // Sizes live in `CSVM/data/effect_pools.json` (EffectPools), not here: per root, scaled by
     // player count. AnimRuntime.PoolRecycles counts wraps onto a live slot.
@@ -283,7 +288,14 @@ public sealed class WorldEffectsFactory
         if (projectiles != null && projectiles.EffectSink == null)
         {
             projectiles.EffectSink = (name, pt, orient, ringOrient, ttl) =>
-                effects.PlayEffectAt(name, pt, null, ttl, orient, callOrient: ringOrient);
+            {
+                if (!effects.PlayEffectAt(name, pt, null, ttl, orient, callOrient: ringOrient))
+                    return;
+                // Unconditional: the whole rule, the mode gate included, lives in the helper, so
+                // there is one place a burst light is decided rather than two that can disagree.
+                RegisterBurstLight(worldRuntime.Lights, name, pt,
+                    () => effects.AnimStateOf(name) == AnimStateRunning);
+            };
             // The one callee a burst may re-base, and only when the pool hands a basis in, which is
             // the enhanced presentation alone (ProjectilePool.UpperRingOrient).
             effects.OrientedCallAnimNames = new HashSet<string>(
@@ -320,6 +332,20 @@ public sealed class WorldEffectsFactory
         GameZ? planesGamez = null) =>
         new CrashRigBuild(this, controller, planeBuilder, planeName, gamez, worldScene, textures,
             crashProgram, verbose, worldSounds, planesGamez);
+
+    /// <summary>The effect sink's burst-light rule, the one place it is decided: under Enhanced
+    /// Graphics a played fireball effect (<see cref="EffectCatalogue.IsBurstLight"/>) registers a
+    /// short-lived light with the world's own <see cref="WorldLights"/>, so it rides the same
+    /// per-frame commit and the same omni pool. <paramref name="stillBurning"/> is the fireball's
+    /// liveness. The faithful presentation registers nothing at all, and neither does a view with
+    /// no lights (a lab, the static viewer).</summary>
+    internal static void RegisterBurstLight(WorldLights? lights, string animName, Vector3 at,
+        Func<bool> stillBurning)
+    {
+        if (lights == null || !GraphicsMode.Enhanced || !EffectCatalogue.IsBurstLight(animName))
+            return;
+        lights.AddBurst(at, EffectCatalogue.BurstLightColor, stillBurning);
+    }
 
     // Every template root either rig kind stages, for the pool-config drift check alone. Derived
     // the same way the live one is, so a root this rig does not stage still counts as known.

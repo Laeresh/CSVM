@@ -1783,6 +1783,134 @@ internal static class OrdnanceSuites
         UpperRingPlacement(ctx);
     }
 
+    // The enhanced burst light, driven end to end: a wep_06 dropped onto a plate, the effect sink
+    // composed the way WorldEffectsFactory composes it, and a real WorldLights behind it, so what
+    // is measured is the committed set and the omni pool rather than a flag. The fireball's
+    // liveness is a local the suite owns, which is the only way to step past the fireball's end.
+    [Suite("burst-light",
+        "Enhanced Graphics only: a wep_06 rocket burst registers exactly one short-lived " +
+        "WorldLights burst light at the hit, which commits as an ordinary light, mirrors onto one " +
+        "shadowless OmniLight3D from the same pool, decays as it burns and is gone the frame its " +
+        "fireball stops burning; the faithful presentation registers none at all, and a gun hit " +
+        "registers none in either presentation")]
+    internal static void BurstLight(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        if (!weapons.TryGet("wep_06", out var he))
+        {
+            ctx.Check(false, $"wep_06 resolves");
+            return;
+        }
+        ctx.Check(EffectCatalogue.IsBurstLight("he_ground_effect")
+                  && !EffectCatalogue.IsBurstLight("3040slug_gunhit"),
+            $"the catalogue calls wep_06's he_ground_effect a fireball and a gun hit not one");
+
+        const float Dt = 1f / 60f;
+        var origin = new Vector3(900f, 4000f, 900f);
+        var viewers = new[] { origin };
+        var textures = new TextureArchive(texturesPath);
+        var omniParent = new Node3D();
+        ProjectilePool? pool = null;
+        StaticBody3D? plate = null;
+        WorldLights? lights = null;
+        bool burning = true;
+        try
+        {
+            ctx.Host.AddChild(omniParent);
+            plate = CombatSuites.Plate("burst-light-plate", new Vector3(60f, 0.2f, 60f), origin);
+            ctx.Host.AddChild(plate);
+            var plays = new List<string>();
+            var live = new ProjectilePool(textures, null, null)
+            {
+                EffectSink = (name, at, orient, ringOrient, ttl) =>
+                {
+                    plays.Add(name);
+                    WorldEffectsFactory.RegisterBurstLight(lights, name, at, () => burning);
+                },
+            };
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            bool Drop()
+            {
+                plays.Clear();
+                live.Spawn(he, new Transform3D(Basis.LookingAt(Vector3.Down, Vector3.Forward),
+                    origin + new Vector3(0f, 20f, 0f)), Vector3.Zero);
+                for (int i = 0; i < 120 && plays.Count == 0; i++)
+                    live.SimStep(Dt);
+                live.Clear();
+                return plays.Contains("he_ground_effect");
+            }
+
+            // The faithful presentation first: it is what every pinned golden renders, and the
+            // able-to-fail control for everything below.
+            lights = new WorldLights(omniParent);
+            ctx.Check(Drop(), $"the rocket reaches the plate and plays he_ground_effect");
+            lights.Begin(Dt);
+            lights.Commit(viewers);
+            ctx.Same(0, lights.CommittedPositions.Count,
+                $"ABLE-TO-FAIL CONTROL: the faithful presentation registers no burst light for the same hit");
+            ctx.Same(0, omniParent.GetChildCount(), $"and spawns no omni");
+            lights.Dispose();
+
+            GraphicsMode.Resolve(GraphicsMode.EnhancedWord);
+            try
+            {
+                lights = new WorldLights(omniParent);
+                WorldEffectsFactory.RegisterBurstLight(lights, "3040slug_gunhit", origin, () => burning);
+                lights.Begin(Dt);
+                lights.Commit(viewers);
+                ctx.Same(0, lights.CommittedPositions.Count,
+                    $"a gun hit carries no fireball and registers nothing even under Enhanced");
+
+                ctx.Check(Drop(), $"the same rocket plays the same effect under Enhanced");
+                lights.Begin(Dt);
+                lights.Commit(viewers);
+                ctx.Same(1, lights.CommittedPositions.Count, $"the burst registers exactly one light");
+                ctx.Same(1, omniParent.GetChildCount(), $"which mirrors onto one pooled omni");
+                var omni = omniParent.GetChild(0) as OmniLight3D;
+                ctx.Check(omni is { ShadowEnabled: false, Visible: true } && omni.LightEnergy > 0f,
+                    $"the omni is lit and shadowless (energy={(omni?.LightEnergy ?? 0f):0.00})");
+                float ignition = omni?.LightEnergy ?? 0f;
+                for (int i = 0; i < 30; i++)
+                {
+                    lights.Begin(Dt);
+                    lights.Commit(viewers);
+                }
+                float halfSecond = omni?.LightEnergy ?? 0f;
+                ctx.Check(halfSecond < ignition * 0.5f && halfSecond > 0f,
+                    $"the envelope decays over the burst ({ignition:0.00} at ignition → {halfSecond:0.00} half a second on)");
+
+                burning = false;
+                lights.Begin(Dt);
+                lights.Commit(viewers);
+                ctx.Same(0, lights.CommittedPositions.Count,
+                    $"the light is gone the frame its fireball stops burning");
+                ctx.Check(omni is { Visible: false },
+                    $"and its omni is hidden rather than left lit");
+                ctx.Same(1, omniParent.GetChildCount(),
+                    $"the pool keeps the node for the next burst rather than freeing and respawning it");
+            }
+            finally
+            {
+                GraphicsMode.Resolve(GraphicsMode.Default);
+            }
+            ctx.Check(!GraphicsMode.Enhanced, $"the graphics setting is back on the faithful presentation");
+        }
+        finally
+        {
+            lights?.Dispose();
+            pool?.Free();
+            plate?.Free();
+            ctx.Host.RemoveChild(omniParent);
+            omniParent.Free();
+            textures.Dispose();
+        }
+    }
+
     // A fused burst reads the default IMPACT row, never the fused aircraft's (FUN_005ac3a0's hit
     // record carries surface id 0; docs/org/ordnanceTypes.md "Which row a burst reads"): a flak
     // fused on a rig draws flak_effect, a beeper fused on the same rig draws its empty default
