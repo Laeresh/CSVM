@@ -900,6 +900,138 @@ internal static class CombatSuites
         }
     }
 
+    // The muzzle flash's own anchoring, in the two halves that decide it. The placement half is
+    // measured here: the quad's pinned corner against the muzzle node's live pose, over the frames
+    // the flash is drawn while the aeroplane flies on. The ORDER half cannot be measured by a
+    // hand-stepped harness, which poses the carrier itself before it draws, so the pool's draw
+    // priority is asserted instead: at the default priority it drew before the flight rigs wrote
+    // this frame's interpolated pose and every effect sat a frame astern of the gun.
+    [Suite("muzzle-flash-rides-muzzle",
+        "the flash quads and the shot light sit on the firing muzzle on every drawn frame of their life while the aeroplane flies on, and the pool draws after the flight rigs rather than before them")]
+    internal static void MuzzleFlashRidesMuzzle(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var gun = weapons.All.FirstOrDefault(w => w.IsGun);
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        Node3D? carrier = null;
+        try
+        {
+            ctx.Check(gun != null, $"a gun weapon loaded from the catalogue");
+            if (gun == null)
+            {
+                return;
+            }
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+            ctx.Check(live.ProcessPriority > 0,
+                $"the pool draws after the default-priority flight rigs priority={live.ProcessPriority}");
+
+            // The C1 spawn's pose: heading well off -Z and 9 km from the world origin, so a basis
+            // dropped anywhere in the chain shows up as metres rather than as rounding.
+            var attitude = new Basis(Vector3.Up, Mathf.DegToRad(132f));
+            var start = new Vector3(-7065f, 326f, -5519f);
+            carrier = new Node3D();
+            ctx.Host.AddChild(carrier);
+            carrier.GlobalTransform = new Transform3D(attitude, start);
+            var muzzle = new Node3D();
+            muzzle.SetMeta(AnimRuntime.NameMeta, "muzzle");
+            carrier.AddChild(muzzle);
+            muzzle.Position = new Vector3(2.4f, -0.3f, -3.1f);   // a wing gun, off all three axes
+
+            // One frame of level flight at 100 m/s, the speed the gap was reported at.
+            const float Dt = 1f / 60f;
+            var step = -attitude.Z * (100f * Dt);
+            live.Spawn(gun, muzzle.GlobalTransform, Vector3.Zero, shooterId: 0, muzzleAnchor: muzzle);
+
+            for (int frame = 1; frame <= 2; frame++)
+            {
+                carrier.GlobalTransform = new Transform3D(attitude, start + (step * frame));
+                live._Process(Dt);
+                var at = muzzle.GlobalPosition;
+                int drawn = 0;
+                float worst = 0f;
+                foreach (var pinned in live.DrawnMuzzleFlashAnchors())
+                {
+                    drawn++;
+                    worst = Mathf.Max(worst, pinned.DistanceTo(at));
+                }
+                float flown = step.Length() * frame;
+                ctx.Same(3, drawn, $"drawn frame {frame}: the flash triad is on screen");
+                ctx.Check(worst < 0.01f,
+                    $"drawn frame {frame}: flash-to-muzzle gap {worst:0.00} m after {flown:0.0} m of flight");
+                float lightGap = 0f;
+                int lights = 0;
+                foreach (var (position, _, _, _) in live.ActiveMuzzleLights())
+                {
+                    lights++;
+                    lightGap = Mathf.Max(lightGap,
+                        position.DistanceTo(at + (attitude * new Vector3(0f, -0.2f, -1.0f))));
+                }
+                ctx.Check(lights > 0, $"drawn frame {frame}: the shot light is lit count={lights}");
+                ctx.Check(lightGap < 0.01f,
+                    $"drawn frame {frame}: shot light to its effects-root offset {lightGap:0.00} m");
+                live.SimStep(Dt);
+            }
+        }
+        finally
+        {
+            pool?.Free();
+            carrier?.Free();
+            textures.Dispose();
+        }
+    }
+
+    // The Cockpit view's rule, which is per shooter and not per session: the pilot in the canopy
+    // draws no flash on their own guns, an aeroplane ahead of them still does, and the shot light
+    // that lights the interior fires either way.
+    [Suite("muzzle-flash-cockpit-hidden",
+        "a pilot flying the Cockpit view draws no muzzle flash quads from their own guns while the shot light still fires, and another shooter's flash is untouched")]
+    internal static void MuzzleFlashCockpitHidden(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var gun = weapons.All.FirstOrDefault(w => w.IsGun);
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        try
+        {
+            ctx.Check(gun != null, $"a gun weapon loaded from the catalogue");
+            if (gun == null)
+            {
+                return;
+            }
+            // Player 1 sits in the cockpit, player 2 does not; Nose is deliberately not covered,
+            // so a nose-view pilot reads false here exactly as an external one does.
+            var live = new ProjectilePool(textures, null, null) { CockpitViewOfPilot = id => id == 0 };
+            pool = live;
+            ctx.Host.AddChild(live);
+            var muzzle = new Transform3D(Basis.Identity, new Vector3(-7065f, 326f, -5519f));
+
+            live.Spawn(gun, muzzle, Vector3.Zero, shooterId: 0);
+            live._Process(1f / 60f);
+            ctx.Same(0, live.DrawnMuzzleFlashAnchors().Count(),
+                $"the cockpit pilot's own shot draws no flash quad");
+            ctx.Check(live.ActiveMuzzleLights().Any(), $"…and its shot light still fires");
+
+            live.Spawn(gun, muzzle, Vector3.Zero, shooterId: 1);
+            live._Process(1f / 60f);
+            ctx.Same(3, live.DrawnMuzzleFlashAnchors().Count(),
+                $"the other pilot's shot keeps its triad");
+        }
+        finally
+        {
+            pool?.Free();
+            textures.Dispose();
+        }
+    }
+
     // Trail-world-anchor's own shape, for a death fire: PUFFER_STATE anchored on
     // TurretController.Site, the node a real destroy sequence targets. Site sits under a carrier
     // posed off-axis and translated between two ticks, the ZeppelinRuntime.Place shape (a plain

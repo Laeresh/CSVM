@@ -2213,6 +2213,9 @@ public partial class GameSession : Node3D
             // muzzle_burst's PLAYER_1ST_PERSON: the same closure the world runtime gets, so the
             // shot's lights pick the same testfp branch the anim data would.
             FirstPersonView = AnyPilotFirstPerson,
+            // The Cockpit view's own rule, per shooter rather than per session: the pilot in the
+            // canopy loses their own flash quads, every other aeroplane keeps theirs.
+            CockpitViewOfPilot = PilotInCockpitView,
             BeeperTags = _beeperTags,
             WashSink = _screenFlash != null ? _screenFlash.PlayBlend : null,
             EngineDeadBounds = TanglerChoke.EngineDeadBounds(weaponDefs),
@@ -3615,6 +3618,17 @@ public partial class GameSession : Node3D
     {
         for (int i = 0; i < _rigs.Count; i++)
             if (_rigs[i].Controller is { FirstPersonView: true })
+                return true;
+        return false;
+    }
+
+    // Whether the pilot this shooter id names is flying the full Cockpit view, which draws no
+    // muzzle flash on that pilot's own guns. Keyed on the controller's own PlayerIndex, the id
+    // every round is stamped with, so another aeroplane's flash is untouched.
+    private bool PilotInCockpitView(int shooterId)
+    {
+        for (int i = 0; i < _rigs.Count; i++)
+            if (_rigs[i].Controller is { CockpitView: true } c && c.PlayerIndex == shooterId)
                 return true;
         return false;
     }

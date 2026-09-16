@@ -725,6 +725,16 @@ member, and it does not go here.
   19 shots, and both logs carried a hash, one of them identical to the pinned one; the same two
   shots hashed normally on the next pass. Compare the logged hash against the manifest to tell a
   real move from a lost line, since the report cannot tell you which it was.
+- **INSTR-85**, **Reading an effect's placement against its anchor on the simulation step reports
+  one frame of travel whether or not the effect rode anything, because the effect was placed on the
+  interpolated DRAWN pose and the anchor now stands on the simulation pose; take both readings at
+  the same instant or measure travel, never the difference.** A muzzle-light breadcrumb that read
+  0.00 m under `--det` printed 1.11 m at 158 mph on the wall clock with nothing wrong.
+- **INSTR-86**, **An effect anchored to a node is drawn from the pose that node holds when the
+  effect's OWN frame callback runs, so its draw must be ordered after every node that writes a
+  drawn pose in its callback; a hand-stepped suite poses the anchor before it draws and can never
+  see the lag, so assert the `ProcessPriority` as well as the placement.** `ProjectilePool` drew
+  before the flight rigs, and every anchored flash and shot light sat a frame astern of the gun.
 
 ## SRC, sources and documents
 

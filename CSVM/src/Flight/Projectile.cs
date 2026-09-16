@@ -160,6 +160,12 @@ public sealed partial class ProjectilePool : Node3D
 
     private const int MaxProjectiles = 1024;
     private const int MaxFlashes = 128;
+    // ⚠ Keep this above every flight rig's priority (they draw at the default 0). Each anchored
+    // effect is placed on the pose its anchor NODE holds when this pool's frame callback runs, and
+    // an aeroplane writes its interpolated drawn pose inside its own callback. Drawing first read
+    // the previous frame's pose, so at speed the flash and the shot light sat a frame astern of the
+    // gun. A suite cannot see this: a hand-stepped harness poses the anchor before it draws.
+    private const int DrawPriority = 100;
     // ⚠ No rocket streak constants here any more. `he_rocket`/`ap_rocket` and every other ordnance
     // FLYOUT prototype are LOD-wrapped missile BODIES, no `rabbit_blur` streak child, no tip disc
     // (measured, docs/org/tracers.md). An ordnance round's visible trail is its MODEL_ANIMATION
@@ -438,6 +444,7 @@ public sealed partial class ProjectilePool : Node3D
         _flyoutScene = flyoutScene;
         _flyoutAnims = flyoutAnims;
         Name = "projectiles";
+        ProcessPriority = DrawPriority;
     }
 
     /// <summary>Every camera that can see this pool's tracers, feeding the
@@ -467,6 +474,12 @@ public sealed partial class ProjectilePool : Node3D
     /// big first-person lights that light the cockpit, or the small third-person one. Null outside a
     /// session (the weapon bench, suite labs), where the third-person light is the answer.</summary>
     public Func<bool>? FirstPersonView { get; set; }
+
+    /// <summary>Whether the pilot with this shooter id has the full Cockpit view (mode 6) on
+    /// screen, which draws no muzzle flash quads for that pilot's own guns. Per shooter, not per
+    /// session: an aeroplane ahead still flashes while the player sits in the canopy. Nose (mode 7)
+    /// is not covered, and a null closure (the weapon bench, the suite labs) draws every flash.</summary>
+    public Func<int, bool>? CockpitViewOfPilot { get; set; }
 
     /// <summary>The session's surface hulls, so <see cref="CollectVehicleList"/> can offer the
     /// whole of the engine's <c>VehicleList</c> rather than its aircraft half. Null in every build
@@ -866,13 +879,18 @@ public sealed partial class ProjectilePool : Node3D
 
     /// <summary>The muzzle flashes lit this frame, as world position, range, colour and energy.
     /// A second world drawing the cockpit interior (<see cref="CockpitOverlay"/>) has no view of
-    /// these nodes and mirrors them from this list instead.</summary>
+    /// these nodes and mirrors them from this list instead. The position is resolved off the firing
+    /// muzzle at the moment of the call, not read back off the pooled light: the caller is a pilot's
+    /// own frame callback, which runs before this pool places them.</summary>
     public IEnumerable<(Vector3 Position, float Range, Color Color, float Energy)> ActiveMuzzleLights()
     {
         foreach (var l in _lights)
         {
             if (l.InUse && l.Light.Visible)
-                yield return (l.Light.GlobalPosition, l.Light.OmniRange, l.Light.LightColor, l.Light.LightEnergy);
+            {
+                var at = MuzzleFrame(l, out var world) ? world : l.Light.GlobalPosition;
+                yield return (at, l.Light.OmniRange, l.Light.LightColor, l.Light.LightEnergy);
+            }
         }
     }
 
@@ -1025,7 +1043,11 @@ public sealed partial class ProjectilePool : Node3D
 
         int ammoIdx = MuzzleAmmoIndex(weapon);
         var muzzleSprites = _muzzle[ammoIdx];
-        if (muzzleSprites.Count + MuzzleFlashCount <= MaxFlashes)
+        // The original draws no muzzle flash on the pilot's own guns while the Cockpit view is on
+        // the screen, so the quads are skipped rather than drawn behind the canopy. The shot light
+        // still fires: that is what lights the interior.
+        bool ownCockpit = CockpitViewOfPilot?.Invoke(shooterId) == true;
+        if (!ownCockpit && muzzleSprites.Count + MuzzleFlashCount <= MaxFlashes)
         {
             // The triad's base orientation is the muzzle's world basis, so it rolls with the
             // aircraft rather than a fixed world plane (a world-fixed flash was flown through at
@@ -1303,6 +1325,22 @@ public sealed partial class ProjectilePool : Node3D
     }
 
     internal void UnregisterAircraft(AircraftBody body) => _aircraft.Remove(body);
+
+    /// <summary>Where each muzzle-flash quad drawn this frame is pinned, in world space: the
+    /// texture's left edge, which <see cref="RenderSprites"/> keeps on the muzzle as the quad
+    /// shrinks. The instrument behind the flash-to-muzzle gap suite.</summary>
+    internal IEnumerable<Vector3> DrawnMuzzleFlashAnchors()
+    {
+        var toWorld = GlobalTransform;
+        foreach (var mm in _muzzleMm)
+        {
+            for (int i = 0; i < mm.VisibleInstanceCount; i++)
+            {
+                var xf = toWorld * mm.GetInstanceTransform(i);
+                yield return xf.Origin - (xf.Basis.X * 0.5f);
+            }
+        }
+    }
 
     /// <summary>The splash cover test itself, naming what it met so an instrument reports the
     /// occluder rather than a bare verdict (INSTR-3: the census and the damage path share one
@@ -2788,6 +2826,7 @@ public sealed partial class ProjectilePool : Node3D
         slot.InUse = true;
         slot.Anchor = anchor;
         slot.Local = local;
+        slot.LitAt = slot.Light.GlobalPosition;
         slot.Frames = 0;
     }
 
@@ -2830,15 +2869,14 @@ public sealed partial class ProjectilePool : Node3D
             {
                 l.InUse = false;
                 l.Light.Visible = false;
-                // Two low-volume breadcrumbs per session: how far the expiring light ended up from
-                // the muzzle that lit it, 0.00 m once anchored. Held back two seconds, since a
-                // plane still at its spawn speed reports a gap it shows in metres once up to speed.
+                // Two breadcrumbs per session: the metres the expiring light rode with the muzzle.
+                // ⚠ Never difference the light against the muzzle here; this runs on the simulation
+                // step and the light was placed on the drawn pose (docs/verification.md).
                 if (_muzzleLightLogs < 2 && l.Frames > 0 && (GameClock.Current?.Time ?? 0.0) >= 2.0
                     && MuzzleFrame(l, out var at))
                 {
                     _muzzleLightLogs++;
-                    float gap = l.Light.GlobalPosition.DistanceTo(at);
-                    Log.Info("weapons", $"muzzle light: {l.Frames} drawn frame(s), ended {gap:0.00} m from the muzzle");
+                    Log.Info("weapons", $"muzzle light: {l.Frames} drawn frame(s), rode the muzzle over {l.LitAt.DistanceTo(at):0.00} m of flight");
                 }
                 l.Anchor = null;
             }
@@ -3344,6 +3382,7 @@ public sealed partial class ProjectilePool : Node3D
                                 // so the flash rides the aeroplane. Null leaves the light in world
                                 // space, which is right only for a muzzle with no node behind it
         public Vector3 Local;   // the light's placement in the anchor's own frame
+        public Vector3 LitAt;   // where the muzzle stood when it was lit, for the placement breadcrumb
         public int Frames;      // drawn frames this flash has lived, for the placement breadcrumb
     }
 }

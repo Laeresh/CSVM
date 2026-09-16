@@ -765,6 +765,12 @@ public partial class FlightController : Node3D
     /// the anim data's <c>PLAYER_1ST_PERSON</c> condition (id 120).</summary>
     public bool FirstPersonView => PilotView.IsFirstPerson(ViewMode);
 
+    /// <summary>Whether this pilot has the full Cockpit view (mode 6) selected, the half of
+    /// <see cref="FirstPersonView"/> that draws an interior. Nose (mode 7) reads false. A held
+    /// look-behind leaves a first-person selection where it is, so the effective view is the
+    /// selected one (<see cref="PilotView.Effective"/>).</summary>
+    public bool CockpitView => ViewMode == PilotViewMode.Cockpit;
+
     /// <summary>The one head every view of this pilot's aircraft is placed by, or null on an AI rig,
     /// which has no camera. Read by the suites: the angles it has settled at and the elevation floor
     /// the last placed frame handed it are what say which view's law ran.</summary>

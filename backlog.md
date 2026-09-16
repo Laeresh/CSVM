@@ -317,34 +317,29 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (b) a world-armed fuse re-detonates every rocket 15–50 m short of terrain (the 2026-08-02
   failure), never widen the mask to world bodies.
 
-- `BL-286` `[Tuning]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Muzzle-flash residues after the `BL-263` pick (triad kept, 2026-08-05)**, one
-  small open. (a) closed 2026-08-06: the muzzle-light stand-in magnitudes (was `BL-200`, rode
-  `BL-261`/`BL-263`; `MuzzleLightEnergy` 2.5, 2-frame `MuzzleLightLife` 0.03 s, the def carries
-  range/colour only) are signed off, judged in `--weapon-lab`; static, so the sign-off covers
-  magnitudes only, not motion. (c) closed: the muzzle light now rides the firing muzzle node,
-  measured 1.65/1.71 m astern before and 0.00 m after over its two drawn frames. The flash quads
-  were already anchored, and the def places them at the node with no displacement: the authored
-  forward offset belongs to the effects root (`AT_NODE` 0, −0.2, −1.0), which carries the casing,
-  the smoke and the lights, and is now built. (b) The user's engine-semantics
-  hypothesis, open: the def's 3-way `RANDOM_WEIGHT` roll (30/80/140°) may be rendered
+- `BL-286` `[Tuning]` `[Blocked: CAP-39]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The first-person muzzle-light energy is picked, not
+  measured, and reads much dimmer inside the canopy than the original's.**
+  *Evidence:* `MuzzleLightEnergy` **2.5** (`CSVM/src/Flight/Projectile.cs`) is the one figure both
+  `muzzle_burst` light branches take, because no def carries an energy at all: the two big
+  `PLAYER_1ST_PERSON` lights (`bigmuzzle_lt` + `muzzle_lt`, at the authored offsets, ranges and
+  colour) start at the third-person stand-in's brightness. The magnitudes were signed off in
+  `--weapon-lab`, a static A/B that settles the third-person look only, and at the controls the
+  interior lights far more weakly than the original's.
+  *Fix shape:* one constant. With `CAP-39` in hand, read the lit interior's frame luminance at the
+  light's peak against the unlit frame on both sides at a matched pose, and fit the energy to the
+  measured ratio.
+  *⚠ Traps:* **`CAP-39` is not filmed, so do not raise the energy on an estimate.** The only
+  cockpit-view clips under `OriginalScreenshots/` are `CAP-02 Cockpit Second10.mp4` and
+  `CAP-02 Second12 cockpit with head turn.mp4`, canyon runs from the flight-model capture with no
+  gunfire in them, so there is no frame to fit against. The pick-one single-quad flash reading
+  (+ `_muzzle1`→`_muzzle2` flip) was implemented and rejected at the controls; do not re-land it
+  without new footage evidence.
+  *Note, the flash shape:* the def's 3-way `RANDOM_WEIGHT` roll (30/80/140°) may be rendered
   concurrently (all branches) by the original engine rather than pick-one, which would make the
-  authored form itself a triad at those exact angles. Our triad uses 120° spacing with one
-  continuous roll; a 30/80/140° triad is one constant away and could be A/B'd against
-  `MuzzleFlash1-3.png` if the flash shape is ever revisited.
-  ⚠ Trap: the pick-one single-quad reading (+ `_muzzle1`→`_muzzle2` flip) was implemented and
-  rejected at the controls, do not re-land it without new footage evidence.
-  *Playtest after fix:* (c)'s anchoring, judged in flight rather than in the lab: the flash sits on
-  the muzzle at speed and the light travels with the plane over its two frames. An instrument can
-  only say the gap is 0.00 m; whether the burst now reads as coming out of the gun is yours.
-  The same sortie carries the effects root's displacement, since the casing, the smoke and both
-  first-person lights now spawn a metre ahead of the gun and 0.2 m below it: from the cockpit a
-  shot lights the interior from a metre further forward, which only your eyes can judge.
-  *Decision:* judged in flight, three things. (1) The flash falls back too fast: it is drawn for
-  one frame and sits behind the muzzle on the next, so the burst does not read as coming out of
-  the gun. (2) The original shows no muzzle flash at all from the cockpit view, so hide the quads
-  there. (3) The first-person shot light is much dimmer than the original's; raise the energy, and
-  `CAP-39` is the clip that calibrates how bright. The 30/80/140° triad question stays a note for
-  any later shape revisit.
+  authored form itself a triad at those exact angles. Ours uses 120° spacing with one continuous
+  roll; a 30/80/140° triad is one constant away and could be A/B'd against `MuzzleFlash1-3.png` if
+  the flash shape is ever revisited.
+  *Cross-refs:* `CAP-39` (the clip that calibrates the brightness).
 
 - `BL-289` `[Tuning]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Gun-impact looks (A2/`BL-203`)**,
   ⚠ **The six `DirtDebris*` constants left this entry: the dirt-chip effect they tuned was deleted

@@ -244,6 +244,8 @@
     "mission-radio": 1.501,
     "motor-acceleration": 0.011,
     "music-states": 0.267,
+    "muzzle-flash-cockpit-hidden": 0.1,
+    "muzzle-flash-rides-muzzle": 0.02,
     "nitro-ai-edges": 0.45,
     "nitro-boost-anchors": 0.25,
     "nitro-boost-flown-rig": 0.495,

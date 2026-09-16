@@ -54,7 +54,10 @@ already-live gate would drop every ejection but one per 2 s window):
   (range 21.25 / 18.25 m), lit while a pilot holds a first-person view.
   Every one of them is **anchored to the firing muzzle node** and re-placed on that node's drawn
   pose each frame, the way the flash quads are: a light left at the world point it was lit at ends
-  a frame of travel astern of the muzzle, ~1.7 m at 100 m/s over the two frames it lives.
+  a frame of travel astern of the muzzle, ~1.7 m at 100 m/s over the two frames it lives. The pool
+  draws at a `ProcessPriority` above every flight rig's so that the pose it reads off the anchor is
+  the one this frame's interpolation wrote, not the previous frame's (`docs/verification.md`
+  INSTR-86).
   All three secondaries spawn at the authored (0, −0.2, −1.0) displacement of the effects root
   above, taken in the muzzle node's own frame, and the first-person pair's (±11, −1, −5) composes
   on top of it, so those two lights sit at (±11, −1.2, −6) from the gun.
@@ -349,6 +352,12 @@ recoverable from the data. The pick-one reading (one rolled quad playing the
 `BL-263`)**: it does not reproduce the stills, and what stands is a documented remake-only rule.
 The `_muzzle2` frame is not played by the flash; the impact stand-in spark keeps reusing it
 through its own separate pool.
+
+The quads are **not drawn for the guns of a pilot whose own view is the full Cockpit (mode 6)**,
+which is what the retail captures show from inside the canopy: no flash at all, only the interior
+lit by the shot. Nose (mode 7) and every other aeroplane on screen keep theirs, so the rule is per
+shooter (`ProjectilePool.CockpitViewOfPilot`), not per session. The `PLAYER_1ST_PERSON` light pair
+is unaffected and is the thing doing the lighting.
 
 ## Unresolved bindings
 
