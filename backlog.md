@@ -877,29 +877,64 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Cameras & views
 
-- `BL-266` `[Research]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **Plane wobble: residual decode questions after the
-  wiring landed.** *Decision:* judged at the controls against two new clips,
-  `OriginalScreenshots/Videos/Dive Wobble.mkv` and `Nitro Wobble.mkv`: the dive rattle and the
-  nitro wobble are both too small and janky next to the original's. Decode `high_speed` and
-  `nitro`'s drive (the (d) accumulator and the block that carries nitro) and port the mechanism
-  before wiring any magnitude; the sawtooth is not the mechanism, as (d) and (e) below already
-  say. The oscillators are wired (`ShakeDefs`/`PlaneShake`, visual-only roll on the
-  plane node; law and measurement in [`docs/formats/shakes.md`](docs/formats/shakes.md) and
+- `BL-266` `[Research]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **Plane wobble: residual decode questions after the
+  wiring landed.** *Decision:* the dive rattle and the nitro wobble both read too small and janky
+  next to the original's, and the mechanism was the reason rather than any magnitude. Both now run
+  the original's own component block. **Owed sortie:** fly the merged build against
+  `OriginalScreenshots/Videos/Dive Wobble.mkv` and `OriginalScreenshots/Videos/Nitro Wobble.mkv`,
+  a dive past rated max for the first and a nitro engage for the second, and judge the ported
+  amplitude and rate before touching `DiveRattleKickScale` or `NitroWobbleKickScale` (both default
+  to the faithful step). The oscillators are wired (`ShakeDefs`/`PlaneShake`, visual-only roll on
+  the plane node; law and measurement in [`docs/formats/shakes.md`](docs/formats/shakes.md) and
   `analysis/gun-wobble-shake/`). The dressing behind the shake is a decoded camera
   random-walk (`crimson.exe`), not the remake's dated sawtooth, details below.
-  **Resolved (landed on `main`):**
-  - **(a) made faithful**, 2026-08-19 the fire source now IS the original's random-walk
-    accumulator (`PlaneShake.FireBullet` steps `Walk += (rand−0.5)×2·(factor×caliber)·2.0·6.2832·1.2`
-    = uniform ±7.54·(factor×caliber)/shot, wep40 ±2.11e-2 rad, decoded from `FUN_0042be10`; decayed
+  **Resolved:**
+  - **(a) made faithful:** the fire source IS a random-walk accumulator
+    (`PlaneShake.FireBullet` steps `Walk += (rand−0.5)×2·(factor×caliber)·7.54`
+    = uniform ±7.54·(factor×caliber)/shot, wep40 ±2.11e-2 rad; decayed
     by the authored `damp` τ≈80 ms). Merged to `main` (`eba69782`, branch experiment `bl266-random-walk`).
     **`GunBuzzKickScale` (default 1.0 = faithful) is the one tune knob, dial it, never
-    `magnitude_factor`.** The `camera+0x24` consumer traced NEGATIVE (2026-08-19), that negative is
-    the FIRE block only; the high_speed finding below (same `FUN_0042be10` writer on block 4,
-    `camera+0xd4/+0xd8/+0xdc`) shows the mechanism is live, so the fire gap is a **mechanism/law
-    mismatch, not a render-pipeline loss**, this port is the first real feel of the kick law.
+    `magnitude_factor`.** So the fire gap was a **mechanism/law mismatch, not a render-pipeline
+    loss**, and this port is the first real feel of the kick law.
     (The old approach-(B) suspects are also settled: fire-rate is one round per tick at authored
     `FIRE_RATE` (8.0 for wep_40), the "12–13/s" was a redraw-window artifact, and 60 fps
     pose-interpolated render loss tested NEGATIVE.)
+    ⚠ **The (d)/(e) decode says that step is the wrong size and the wrong kind, so (a) is not
+    closed for fidelity.** The `7.54` came from the camera constructor's *defaults*, a `2.0` gain
+    and the `6.2832` waveform branch, which `FUN_0042bc10` overwrites for every authored source.
+    `fire_bullet` authors `sawtooth 1` and `frequency 15.0`, so the original's step is
+    `mag × 15 × 4 × 1.2` and the kick is a **velocity** of ±36·mag rad/s into block 0's `[3]`, not
+    a displacement. A displacement walk at ±36 would render roughly forty times the original's
+    angle, so the number cannot simply be swapped; `_fire` keeps its landed step until (a)'s own
+    look decides, and the choice is between the whole component block (as (d)/(e) took) and the
+    envelope it has. `docs/org/shakes.md`, "`fire_bullet`, per-shot roll".
+  - **(d) the dive rattle now runs the original's component block, ported.** The per-frame player
+    updater `FUN_0048c470` reads block 4's `min_speed`/`magnitude_quotient` and calls the same
+    `FUN_0042c070`/`FUN_0042be10` dispatcher the `fire_bullet` path uses on component index 4
+    (`camera+0xd4/+0xd8/+0xdc`), every frame the excess-over-gate law
+    (`(speedRatio − min_speed)/magnitude_quotient`, `PlaneShake.SetSpeedRatio`) is positive. What
+    the kick adds to is a **velocity**, and the rendered angle is the position `FUN_0042bec0`
+    integrates out of it on the block's `sawtooth 1` branch, so `PlaneShake` now carries the pair
+    rather than an envelope: a per-tick kick of ±36·magnitude rad/s and the two-branch integrator
+    at the original's `1/150` substep. `DiveRattleKickScale` (default 1 = the faithful step) is the
+    one knob; `magnitude_quotient` is decode. Trace:
+    `analysis/gun-wobble-shake/FINDINGS.md` (high_speed section) and
+    [`docs/org/shakes.md`](docs/org/shakes.md).
+  - **(e) the nitro wobble runs the same block, ported.** `FUN_004b2131` kicks block 6 with the raw
+    authored `magnitude` 0.05 once per engage, player only, and the block's authored
+    `frequency 4.0, damp 3.0, sawtooth 1` turns that into a velocity kick of ±0.48 rad/s that
+    renders as a decaying triangle over about a second and a half. `NitroWobbleKickScale`
+    (default 1) is the knob. The judgement that drove this ("janky at the beginning, larger but
+    very fast, then too small but still very fast") was three complaints the mechanism explains at
+    once, and none of them was a magnitude. ⚠ **The plane wobbling is the decode, not the defect**
+    ([`docs/org/shakes.md`](docs/org/shakes.md), "Two oscillators, one mechanism"): a plane-mounted
+    camera inherits the roll, and `PT-86` asked for a *camera* shake it should not have. The
+    contradiction this clause flagged is settled from the binary: `[3]/[4]/[5]` are the velocities
+    and `[6]/[7]/[8]` the positions the consumer sums, `docs/org/shakes.md` had it right and
+    `analysis/gun-wobble-shake/FINDINGS.md` had it reversed twice; the findings page is corrected.
+    The `sawtooth` branch constant `4.0` is a literal at `0x00603514` and genuinely separate from
+    the authored `frequency 4.0`, so that coincidence is not one.
+    *Still unanswered:* whether the original's engage moves the nose or only the roll.
   **Still open, all data/fidelity questions:**
   - (b) the impact sources' `magnitude_factor` constants are decoded (`bullet_impact` 5e-4,
     `missile_impact` 1e-3 plus `he_factor` 2.0 on HE rounds, both read at `FUN_004b9bc0`'s block
@@ -919,49 +954,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
     component blocks and every kicker"). The nitro engage is wired
     (`FlightController.AdvanceNitro`); a round fired, a round taken, the overspeed arm and a
     collision contact are decoded and still unwired.
-  - **(d) `high_speed` drives the same random-walk accumulator as the gun, decoded; the engine
-    port is owed.** The per-frame player updater `FUN_0048c470` reads block 4's `min_speed`/
-    `magnitude_quotient` fields and calls the identical `FUN_0042c070`/`FUN_0042be10` dispatcher the
-    `fire_bullet` path uses, just on component index 4 (`camera+0xd4/+0xd8/+0xdc`) instead of 0,
-    every frame the excess-over-gate law (`(speedRatio − min_speed)/magnitude_quotient`,
-    `PlaneShake.SetSpeedRatio`) is positive. CSVM's `_speed` oscillator is a deterministic damped
-    sawtooth, a different mechanism from the original's random walk, and next to the gun buzz now
-    ported to its own random-walk step, the sawtooth dive rattle reads muted; in the Cockpit view
-    at full speed it is too small to see at all, while the firing wobble reads. **Open/fidelity
-    action:** give `_speed` a random-walk accumulator on the pattern of `_fire` (a
-    `GunBuzzKickScale`-equivalent tune knob), fed by the existing `SetSpeedRatio` law, then playtest
-    the dive against the original clip to judge the ported magnitude. Trace:
-    `analysis/gun-wobble-shake/FINDINGS.md` (high_speed section) and
-    [`docs/org/shakes.md`](docs/org/shakes.md).
-  - **(e) `nitro` is the third source with the same modelling gap.** Judged at the controls on a
-    nitro engage: "it wobbles the plane, amplitude and frequency not quite right". ⚠ **The plane
-    wobbling is the decode, not the defect**, [`docs/org/shakes.md`](docs/org/shakes.md):17-22 has
-    the plane wobble with a plane-mounted camera inheriting it, so only the magnitude and rate are
-    in question, and `PT-86` asked for a *camera* shake it should not have. `shakes.zrd` authors
-    `nitro` as `frequency 4.0, damp 3.0, sawtooth 1, magnitude 0.05`, read unchanged, and
-    `PlaneShake` renders it as a sawtooth under an envelope, the same envelope-versus-random-walk
-    mismatch as (a) and (d), which is why this is a clause here and not its own item.
-    **Judged at the controls, and the answer settles the shape rather than the scale:** "Janky at
-    the beginning (larger but very fast) and then too small but still very fast." That is three
-    facts at once, the opening kick is too big, the decay to too-small is too quick, and the RATE
-    is wrong for the whole duration. A magnitude constant cannot produce that; it is the sawtooth
-    standing in for a random walk, which reads as a fast regular buzz where the original wanders.
-    So the mechanism is the fix here, exactly as in (a) and (d), and the factor-of-two ambiguity in
-    the magnitude is secondary, do not spend another pass on it before the walk lands.
-    ⚠ **Still do not wire a number:** two repo sources contradict each other on which triple is
-    position and which is velocity (`docs/org/shakes.md`:168-173 against
-    `analysis/gun-wobble-shake/FINDINGS.md`:168-182, which says the reverse twice), and the
-    `sawtooth 1` branch constant coincides with the authored `frequency` of 4.0, which is exactly
-    the coincidence the trap below warns about.
-    *Still unanswered:* whether the original's engage moves the nose or only the roll.
-  - **(fidelity) judge the port, then dial.** Playtest owed: fly the merged build and judge
-    `GunBuzzKickScale` (1.0 default = faithful step) against the original clip before touching it.
-    Two honest caveats: the random-walk **decay model (τ≈80 ms) is an engineering guess, not a
-    decode** (the original `camera+0x24` consumer is negative, but that negative is the FIRE block
-    only; `high_speed`'s accumulator is at `camera+0xd4/+0xd8/+0xdc`, a different block, see (d) above);
-    and with the buzz now ~7× louder, the quiet `554edcee` dive rattle reads ~6× softer than the gun
-    because the engine's `_speed` is a sawtooth where the original is a random-walk, track the (d)
-    engine-port + playtest.
+  - **(fidelity) judge the port, then dial.** Playtest owed on all three knobs, each defaulting to
+    its faithful step: `GunBuzzKickScale` against the firing clip, and `DiveRattleKickScale` and
+    `NitroWobbleKickScale` on the sortie named at the top of this entry. Two honest caveats: the
+    fire source's **decay model (τ≈80 ms) is an engineering guess, not a decode**, and its step is
+    the one (a) now flags as wrong-sized; and the ported dive rattle is about 1.1× the replaced
+    sawtooth's RMS but 2.2× its peak, so the mechanism alone only partly answers "too small" and
+    the look is what decides whether a knob moves.
   ⚠ Traps: `SHAKES_CAMERA` is NOT the fire-path shake mechanism, its sole carrier among all
   48 weapons is `wep_26` "FW", a zero-damage scripted fake weapon (a scripted detonation-shake
   marker); the fire path is the unflagged `fire_bullet` source. And the near-match trap: several

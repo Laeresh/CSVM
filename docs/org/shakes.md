@@ -21,16 +21,27 @@ plane-mounted camera inherits the motion, mirroring how the `damage_shakes` defs
 rigidly attached). The engine implements exactly this: `PlaneShake` rolls a pivot the plane model
 hangs under; physics and the camera never see it.
 
-**The shake sources are the same 3-axis random-walk accumulator.** `fire_bullet` (per shot) and
-`high_speed` (per frame) both run through `FUN_0042be10`, a random-walk that kicks three
-camera-relative block accumulators `Δroll/pitch = (rand01−0.5)·fVar·1.2`, `Δyaw = …·2.5`. They
-differ only in component block (0 vs 4), magnitude law, and cadence:
+**Every shake source is the same 3-axis random-walk accumulator.** `fire_bullet` (per shot),
+`high_speed` (per frame) and `nitro` (per engage) all run through `FUN_0042be10`, a random walk
+that kicks three camera-relative block accumulators. Its step is built from the block's own
+authored law, not from a fixed gain (`0042be10`–`0042be60`): `W = 6.2832` when the block's
+`sawtooth` word is clear and `4.0` when it is set (`0x006040b0` / `0x00603514`), then
+`step = magnitude × frequency × W` and `Δroll/pitch = (rand01−0.5)·step·1.2`,
+`Δyaw = (rand01−0.5)·step·2.5` (`0x006040ac`, `0x006040a8`). The three sources differ only in
+component block, magnitude law, and cadence:
 
-| | `fire_bullet` | `high_speed` |
-|---|---|---|
-| component block | 0 (`camera+0x24/+0x28/+0x2c` roll/pitch/yaw) | 4 (`camera+0xd4/+0xd8/+0xdc`) |
-| magnitude law | `magnitude_factor × CALIBER` per shot | `(speedRatio − min_speed)/magnitude_quotient` per frame |
-| cadence | once per shot at 8/s | every frame while over the gate |
+| | `fire_bullet` | `high_speed` | `nitro` |
+|---|---|---|---|
+| component block | 0 (`camera+0x24/+0x28/+0x2c` roll/pitch/yaw) | 4 (`camera+0xd4/+0xd8/+0xdc`) | 6 (`camera+0x12c/+0x130/+0x134`) |
+| magnitude law | `magnitude_factor × CALIBER` per shot | `(speedRatio − min_speed)/magnitude_quotient` per frame | the authored `magnitude` 0.05 |
+| cadence | once per shot at 8/s | every frame while over the gate | once per engage |
+| step per unit magnitude | ±36 (freq 15, sawtooth) | ±36 (freq 15, sawtooth) | ±9.6 (freq 4, sawtooth) |
+
+⚠ **The kicked triple is a VELOCITY, and the authored `frequency` is inside the step.** Neither is
+what an envelope reading expects: the rendered angle is the position the integrator below builds
+out of that velocity, a fraction of it, and a source's step scales with its own authored rate. A
+reading that takes `camera+0x1c`'s `2.0` for a gain is reading the constructor default over the
+top of the authored `fire_bullet` frequency 15.0 (the ⚠ at the end of the block table).
 
 ## Where the wobble STATE lives vs. where it displaces, and the CONSUMER
 
@@ -43,8 +54,9 @@ blocks" below). Each block's `[3]/[4]/[5]` (roll/pitch/yaw) are the **velocities
 to; `[6]/[7]/[8]` are the **positions** that integrate from them and that the consumer sums.
 
 The render consumer is **`FUN_0042c0e0`**: it walks the camera's **seven** component blocks
-(0xb dwords = 0x2c bytes apart), runs the per-block spring-damper `FUN_0042bec0`, **sums all
-blocks**' accumulated roll/pitch/yaw, transforms the total through the quaternion helpers
+(0xb dwords = 0x2c bytes apart), runs the per-block integrator `FUN_0042bec0`, **sums all
+blocks' positions** `[6]/[7]/[8]` (the walk starts at `camera+0x30`, which is block 0's `[6]`, and
+strides `0xb` dwords), transforms the total through the quaternion helpers
 (`FUN_0053fbf0/f850/fa40/df30`) and applies it to the **plane node** `DAT_0071c304` via
 `FUN_004d1a30`. Its only caller, the per-view render handler **`FUN_0042e5e0`**, calls it **first,
 unconditionally, every frame, with no branch on the live mode byte `camera+0x14c`**. The mode
@@ -52,10 +64,27 @@ byte is used elsewhere only for FOV (mode 6→80°, `FUN_0042b660`), head-lock (
 interior draw, and hiding scene nodes, **never to scale the wobble**. So **there is no per-view
 dampening**: cockpit(6)/nose(7) inherit the full undampened wobble 1:1 from the plane node.
 
-  *The "dampening" is per-**source**, not per-**view**: `FUN_0042bec0` runs a small damped-spring
-  integrator per block, position `[6]/[7]/[8]` integrates from velocity `[3]/[4]/[5]` at dt=1/150,
-  and velocity decays through `[1]`=frequency and `[2]`=damping, smoothing each random-walk
-  source into a bounded wobble. Identical for every camera view.*
+  *The "dampening" is per-**source**, not per-**view**: `FUN_0042bec0` integrates each block on
+  its own authored law, at a fixed `1/150` s substep (`0x3bda740e` at `0042beda`) with the last
+  substep of a frame cut short, and the position it builds is what renders. Identical for every
+  camera view. The two laws are these:*
+
+- **A block with `sawtooth` clear is a damped spring** (`0042bf20`–`0042bf90`):
+  `v -= (damp·v + (2π·freq)²·x)·h` per substep, `freq` and `damp` the block's `[1]` and `[2]`.
+  A kick therefore rings down at the authored rate, which is the reading `PlaneShake`'s envelope
+  sources approximate.
+- **A block with `sawtooth` set is a ramp with a reversal test** (`0042bfd8`–`0042c000`): when
+  position and velocity share a sign and `|v| < |x|·freq·4.0`, velocity is replaced outright by
+  `v = -4.0·freq·e^(-damp/(2·freq))·x` (the exponential is `FUN_00460410` called at `0042c000`,
+  a Taylor series under `0.1` and the table in `FUN_0053e2e0` above it; constants `0.5` at
+  `0x006032e0` and `-4.0` at `0x006040b4`). Otherwise velocity is left alone. Either way
+  `x += v·h` closes the substep at `0042c025`.
+
+  *The reversal makes a sawtooth block coast in a straight line until it has travelled far enough,
+  then snap to the opposite heading at a speed proportional to how far out it is, so an untouched
+  block draws a decaying triangle wave and a block re-kicked every frame wanders. Both of the
+  sources this page owns, `high_speed` and `nitro`, author `sawtooth 1`, and so does
+  `fire_bullet`.*
 
   *`camera+0x24` is therefore **not** a cockpit dampener, it is block 0's roll accumulator
   `[3]` (base `camera+0x18`). The earlier "static-trace NEGATIVE" on it (`BL-266`, `7f8881a0`)
@@ -207,21 +236,23 @@ match.
 (sawtooth duty × damp envelope decay), so the engine renders ~0.28× the law's literal number
 regardless of the clip (decoded: ~8e-4 rad RMS / ~0.20 px/frame at the ±205 px lever).
 
-⚠ **The ×CALIBER multiplicand is confirmed, but the original's downstream gain is not yet
-reconciled.** `FUN_0042be10` scales the `2.8e-3` product by the camera-shake-component gain (×2.0
-at `camera+0x1c`) and the waveform factor, whose selector `*this == 0` takes the **`6.2832`**
-branch (not the 4.0 sawtooth branch), so `fVar1 = mag × 2.0 × 6.2832 = 3.518e-2` and the per-shot
-input is `(rand01−0.5) × fVar1 × 1.2`, **Δroll uniform in ±2.11e-2 rad/shot** for wep40, an order
-larger than the raw law (the decode is closed-form from the binary, `FUN_0042be10` kicks the
-`camera+0x24` accumulator, and its render-layer consumer is `FUN_0042c0e0` above, called
-unconditionally by `FUN_0042e5e0` with **no camera-mode gate**, so there is **no per-view
-dampening**; no live instrument needed).
+⚠ **The ×CALIBER multiplicand is confirmed; the downstream step is the block's own authored law.**
+`FUN_0042be10` builds the step from the *parsed* block, and `shakes.zrd` authors `fire_bullet`
+with `sawtooth 1` and `frequency 15.0`, so the waveform selector takes the **`4.0`** branch
+(`0x00603514`) and `step = mag × 15 × 4 = 60·mag`, giving a per-shot velocity kick uniform in
+**±36·mag rad/s** into `camera+0x24` (`(rand01−0.5) × step × 1.2`). For wep40 that is ±0.101 rad/s,
+and what renders is the position the sawtooth integrator builds out of it, not the kick.
+An earlier reading of this line took `camera+0x1c`'s `2.0` for a gain and the `6.2832` branch for
+the waveform, which is the constructor's uninitialised block rather than the parsed one; both are
+corrected here. The engine's landed `_fire` source is still a displacement walk of ±7.54 per shot,
+a *different* mechanism from the velocity kick above, and reconciling it is `BL-266(a)`'s question
+rather than this page's.
 
 ⚠ **That consumer is shared**, `high_speed` drives the IDENTICAL `FUN_0042be10` random-walk
 accumulator (a second component, block index 4, at `camera+0xd4/+0xd8/+0xdc`) through the same
 `FUN_0042c0e0`, and visibly wobbles in the clips, so the mechanism is live for both. Whether
-`magnitude_factor` needs a ~3.5× decode correction to match the original is the clip/fidelity
-judgment, not the decode, see `analysis/gun-wobble-shake/FINDINGS.md`.
+`magnitude_factor` reads right against the original is the clip/fidelity judgment rather than the
+decode, see `analysis/gun-wobble-shake/FINDINGS.md`.
 
 **Unmeasured residue:** whether plane model/weight also enter (single-plane, single-gun clip,
 owed capture in `playtest.md`), and the impact sources' own quantities (the engine stands in
@@ -235,7 +266,7 @@ firing clip shows a motionless idle floor (~0.01 px/frame), which an absolute-sp
 a gate at 1.0 m/s could not produce.
 
 **The magnitude is the EXCESS over the gate, `(speedRatio − min_speed)/magnitude_quotient`**, not
-the whole ratio (`PlaneShake.SetSpeedRatio`, decode correction 2026-08-18): the gate value is
+the whole ratio (`PlaneShake.SetSpeedRatio`): the gate value is
 *subtracted* from the numerator, so the rattle is zero at rated max (speedRatio 1.0, `min_speed`)
 and ramps gently with overspeed, landing in the same order as the gun buzz in a dive. Reading it
 as the whole `speedRatio/quotient` instead, the earlier wiring, snapped on at `1.0/70` rad the
@@ -243,18 +274,51 @@ moment you crossed rated max, 5× the entire 40-cal gun buzz, and barely ramped 
 the envelope); that is what the whole-ratio read did wrong. The overspeed audio layer
 (`prop_sound`) engages in the same regime.
 
-**`high_speed` shares the SAME random-walk accumulator as the gun** (decode 2026-08-19, from
-`crimson.exe`: `FUN_0048c470`, the per-frame player updater, reads `camera+0xec` (`min_speed`) and
+**`high_speed` shares the SAME random-walk accumulator as the gun**
+(`FUN_0048c470`, the per-frame player updater, reads `camera+0xec` (`min_speed`) and
 `camera+0xf0` (`magnitude_quotient`), and when the gate trips calls `FUN_0042c070(4, mag)`, the
 exact same dispatcher/accumulator the `fire_bullet` path uses, just component index 4 instead of 0:
 `this = camera + 4·0x2c + 0x18`, kicking the three block-4 accumulators `camera+0xd4/+0xd8/+0xdc`
 roll/pitch/yaw per frame). So in the original both sources are the same 3-axis random-walk; they
 differ only in block (0 vs 4), magnitude law (per-shot `magnitude_factor×CALIBER` vs per-frame
 `(speedRatio−min_speed)/magnitude_quotient`), and cadence (fire once per shot @8/s; `high_speed`
-every frame while over the gate). The engine's current `PlaneShake._speed` (deterministic damped
-sawtooth) is therefore a *different mechanism* from the original, the root cause of `BL-266(d)`'s
-"6× muted dive." The fidelity fix is a second random-walk accumulator (a `_fire` clone) fed by the
-existing excess-over-gate `SetSpeedRatio` law. Full trace: `analysis/gun-wobble-shake/FINDINGS.md`.
+every frame while over the gate). Full trace: `analysis/gun-wobble-shake/FINDINGS.md`.
+
+**Ported as the original's own component block.** `PlaneShake` runs `high_speed` and `nitro`
+through a private `Block` that carries the decoded pair, the velocity kick of `FUN_0042be10` and
+the two-branch integrator of `FUN_0042bec0` at the same `1/150` substep, and renders the block's
+roll *position*. The deterministic damped sawtooth these two sources used before was a different
+mechanism, and the reason a dive read as a muted buzz instead of a rattle. Three readings this
+port takes and their grounds:
+
+- **Roll is the first of the kicked triple**, the `×1.2` axis, not the `×2.5` yaw axis. The block
+  layout `[3]/[4]/[5]` is roll/pitch/yaw throughout this page, and the engine renders roll only,
+  so the roll weight is the one that applies. Reading it as the yaw axis instead would be about
+  2.08× larger.
+- **The kick is per frame, as the original's is.** The original's frame rate therefore sets the
+  drive, and so does ours, which is a rate dependence the original has too rather than one the
+  port introduces. `PlaneShake.DiveRattleKickScale` and `NitroWobbleKickScale` both default to
+  `1`, the faithful step, and are the only knobs to dial. `magnitude_quotient` and the authored
+  `magnitude` are decode, not tuning.
+- **Nothing scales the decoded magnitude.** The engine wires `(speedRatio − min_speed)/quotient`
+  and the authored `0.05` exactly as parsed; the amount of roll that reaches the screen is
+  whatever the integrator makes of them.
+
+## `nitro`, one kick per engage, the raw authored `magnitude`
+
+The nitro source has no computed law at all. `FUN_004b2131`, the engage path, plays the AI twin
+`FUN_00473430(1)` at `0x4b21b2`, then for the player only kicks block 6 with the value the parser
+stored, `FUN_0042c070(6, *(camera+0x144))` at `0x4b21ce`, which is the authored `magnitude` `0.05`
+unscaled by speed, plane or boost duration. There is one kick per engage rather than a per-frame
+drive, so the whole wobble is the block ringing down on its own law afterwards.
+
+That law is `frequency 4.0`, `damp 3.0`, `sawtooth 1`, so the step is `0.05 × 4 × 4 = 0.2` and the
+kick is a roll velocity uniform in **±0.48 rad/s** (`±9.6` per unit magnitude). Under the sawtooth
+integrator that renders as a decaying triangle wave, reversing roughly every ten ticks at 60 Hz
+and losing about a third of its amplitude per swing, so an engage reads as a wobble of about a
+second and a half whose size differs from engage to engage because the kick is a single random
+draw. `PlaneShake.NitroEngaged` wires it on every human pilot rather than a single player pointer,
+the same widening the contact kick takes.
 
 ## Camera-attachment rule for our port
 

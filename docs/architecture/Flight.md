@@ -1050,14 +1050,14 @@ no-ops it. Schema: [../formats/shakes.md](../formats/shakes.md); decode:
 [../org/shakes.md](../org/shakes.md).
 
 ## src/Flight/PlaneShake.cs
-The plane-wobble oscillators: the gunfire buzz (`fire_bullet`), the overspeed rattle (`high_speed`),
-the being-hit rocks (`bullet_impact`/`missile_impact`/`explosion`) and the nitro engage (`nitro`,
-one kick of its absolute authored magnitude, human pilots only), summed each sim tick into `Roll`,
-the radians the controller writes to `ShakePivot`. Engine-free on purpose, so the pivot write is the
-controller's one line. `high_speed`'s input is speed over the plane's `fd_speed`, so its authored
-`min_speed` gate means "beyond rated max" and the magnitude is the excess over that gate, silent at
-cruise. `ContactHit` is the one oscillator no def authors: it runs on the constructor's own law and
-takes its magnitude from `CollisionDamage.ContactShake`. See [../org/shakes.md](../org/shakes.md).
+The plane-wobble oscillators, summed each sim tick into `Roll`, the radians the controller writes to
+`ShakePivot`; engine-free on purpose, so the pivot write is the controller's one line. The gunfire
+buzz (`fire_bullet`), the being-hit rocks (`bullet_impact`/`missile_impact`/`explosion`) and
+`ContactHit` (the oscillator no def authors, magnitude from `CollisionDamage.ContactShake`) are
+decaying envelopes. The overspeed rattle (`high_speed`, per tick on the excess over its gate, which
+sits at rated max) and the nitro engage (`nitro`, one kick, human pilots only) instead run the
+original's own component block, a velocity kick into a two-branch integrator whose position renders;
+`DiveRattleKickScale`/`NitroWobbleKickScale` are their only knobs. [../org/shakes.md](../org/shakes.md).
 
 ## src/Flight/FlightControllerBuild.cs
 The internal construction handoff from `FlightRoster` to `FlightController`: one resolved

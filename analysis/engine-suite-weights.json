@@ -263,6 +263,7 @@
     "perf-hud-layout": 0.009,
     "persist-chain-kill": 2.07,
     "plane-shader-reuse": 0.252,
+    "plane-wobble-walk": 1.43,
     "player-destroy-choreography": 1.737,
     "prop-slot-edges": 4.5,
     "puffer-distance-fade": 0.005,
