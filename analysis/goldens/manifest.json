@@ -71,35 +71,35 @@
     {
       "name": "viewer-bhawk",
       "frame": 30,
-      "hash": "874bd450471abfa4889ba2a047363239",
+      "hash": "7b8f5416a5b4bb6880a2dc11dd9cd6e0",
       "exercises": "one aircraft built and painted: PlaneBuilder with the cockpit interior subtree the viewer lab builds, the default Fortune Hunters livery and decals, the orbit camera's framing, the launcher-default light; static by construction, 0 px at 30 vs 360.",
       "args": ["--viewer", "--plane=player_bhawk", "--det", "--mute"]
     },
     {
       "name": "empty-stage",
       "frame": 120,
-      "hash": "e23dd26d8ab1ba5f19232535805dec78",
+      "hash": "55afe1fe2e09b89b8bce06ec9ba48569",
       "exercises": "Synthetic no-gamez flight: code-drawn grid, default sky and sun, quaternion attitude integration, chase camera and HUD; frame-sensitive 12.21 %, and still renders with extracted/ absent.",
       "args": ["--stage=empty", "--plane=player_bhawk", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
     {
       "name": "c1-flight-kill",
       "frame": 280,
-      "hash": "91a753686c6a9bf9654ace9024ac9c68",
+      "hash": "47f4d747724a413aa9a614c11232bc22",
       "exercises": "Chase-camera flight firing at two AIs then banking: one shot down 3 s earlier, its fireball and kill line up, the live one bracketed, the gun's smoke and light at their authored offset ahead of the muzzle, exhaust, shadow; frame-sensitive 78.07 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_kestrel,player_fury", "--ai-damage=0.02", "--target=ai2_player_fury", "--debug-markers", "--fire", "--hold=0,0,0,1@2.5;0.05,0.1,0,1", "--det", "--mute"]
     },
     {
       "name": "c1-cockpit",
       "frame": 120,
-      "hash": "cac893ef1c8e54e151f6f88fc4be19c9",
+      "hash": "e612784a24a4d91f6f5d9042adb831cb",
       "exercises": "Held pitch-and-roll flight seen from the pilot's seat: the cockpit1 interior in the pass's own SubViewport world under its re-aimed sun, needles, drum, belts and readouts, canopy frame and gunsight over world-lit C1; frame-sensitive 43.35 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--view=cockpit", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "1e41836336998036074d14d63ec6bb4e",
+      "hash": "feeec476d55e0fe8d9b7c799dac86083",
       "exercises": "Neutral-control player flight beside a killed ap_radiotwr: great_balls_of_fire on the world-effects stage riding its death site, flight-state-dependent SpeedCue, seeded puffers, world-lit alpha scenery over water; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
@@ -120,14 +120,14 @@
     {
       "name": "c1-stunt-marker",
       "frame": 90,
-      "hash": "34b6ce8894c6c0abc3bd280d901b4639",
+      "hash": "c9c6629bf60ba219cf392220ba897678",
       "exercises": "A stunt run's Danger Zone off screen on the pilot's own target cycle: the spyglass disc at the marker anchor, the shaft leaving its rim under the 20-by-10 head, the label in the objective's blue, the run clock, the plane's ground shadow below.",
       "args": ["--chapter=C1", "--stunt", "--plane=player_fury", "--pos=-5300,300,-6300", "--direction=0,0,-1", "--det", "--mute"]
     },
     {
       "name": "campaign-4p-grid",
       "frame": 120,
-      "hash": "b6d3b32dc32b4f8b35f8a3437e26436a",
+      "hash": "1586ee612b815bd42f4bd490a6426f01",
       "exercises": "Four humans launch a co-op campaign mission on StartGrid with no profile to load, so no director: four render targets, HUDs, gauges and target labels, the lit C1 world, the player-shaped shadow under each pane's own pilot; frame-sensitive 73.79%.",
       "args": ["--campaign=csvm-golden:6", "--players=4", "--plane=player_bhawk,player_bhawk,player_bhawk,player_bhawk", "--det", "--mute"]
     },

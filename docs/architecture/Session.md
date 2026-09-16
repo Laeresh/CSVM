@@ -501,11 +501,11 @@ land on one frame, and `BuildFlightCrashRuntime` is the one-call form. The names
 Applies the flown mission's weather, driving each rig's skydome, whiteout, deck regime and zone gate
 every frame. `ApplyZone` writes the zone's authored fog and its `SUNLIGHT` pair through one arm per
 graphics mode, mirrored onto every registered extra (sun, env) pair so a cockpit overlay crosses
-zones too; `ApplyFogState` is the animation runtime's `FOG_STATE` sink, writing only the fields the
-event carries under the same last-writer order. Enhanced mode also caps a night zone, paints the sky
-the zone's own fog colour and pushes the fog range out, which the sun's shadow distance follows.
-`SunlightRgb` publishes the applied pair itself, scaled by its authored colours, for the reader that
-needs the light rather than an energy. Decode: [../org/weather.md](../org/weather.md), authored side [../formats/weather.md](../formats/weather.md).
+zones too; both arms put the ambient half through `WriteColorAmbient`, colour-sourced and never a sky
+contribution, so a night zone's aircraft fill is darker than a day zone's. `ApplyFogState` is the
+animation runtime's `FOG_STATE` sink, writing only the fields the event carries under the same
+last-writer order. Enhanced mode also caps a night zone, paints the sky the zone's own fog colour and
+pushes the fog range out, which the sun's shadow distance follows. `SunlightRgb` publishes the applied pair scaled by its authored colours, for the reader that needs the light rather than an energy. Decode: [../org/weather.md](../org/weather.md), authored side [../formats/weather.md](../formats/weather.md).
 
 ## src/Session/LensFlareRig.cs
 The sun's lens flare: four screen-space sprites strung along the sun-to-screen-centre vector, plus a

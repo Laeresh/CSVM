@@ -1133,7 +1133,7 @@ internal static class WorldAndToolSuites
     // ⚠ C1B against C1C is the install's OWN night/day pair. Do not fold this onto one mission:
     // two zones of one mission differ by cloud layer, which is not the difference under test.
     [Suite("sun-energy",
-        "the world's light takes its energy from the flown zone's authored SUNLIGHT, so C1B's night mission lights an aircraft dimmer than C1C's daylight, and a zone change carries the new energy (BL-332)")]
+        "the world's light takes its energy from the flown zone's authored SUNLIGHT, so C1B's night mission lights an aircraft dimmer than C1C's daylight, the ambient fill is colour-sourced from the zone's own SUNLIGHT_COLOR_AMBIENT rather than the sky, and a zone change carries the new energy (BL-332)")]
     internal static void SunEnergy(TestContext ctx)
     {
         string nightZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1B", "IA1");
@@ -1143,18 +1143,26 @@ internal static class WorldAndToolSuites
         ctx.RequireData(dayZrdr, $"C1C/M01 mission zrdr");
         ctx.RequireData(edgeZrdr, $"C1C/MP1 mission zrdr");
 
-        var (nightSun, nightAmbient) = ZoneEnergies(ctx, "C1B", "IA1", nightZrdr);
-        var (daySun, dayAmbient) = ZoneEnergies(ctx, "C1C", "M01", dayZrdr);
+        var night = ZoneEnergies(ctx, "C1B", "IA1", nightZrdr);
+        var day = ZoneEnergies(ctx, "C1C", "M01", dayZrdr);
+        (float nightSun, float nightAmbient) = (night.Sun, night.Ambient);
+        (float daySun, float dayAmbient) = (day.Sun, day.Ambient);
         ctx.Note($"C1B/IA1 night sun {nightSun:0.000} ambient {nightAmbient:0.000}; C1C/M01 day sun {daySun:0.000} ambient {dayAmbient:0.000}");
         ctx.Check(nightSun < daySun * 0.5f,
             $"C1B's night zone lights the aircraft under half as hard as C1C's day zone");
         ctx.Check(nightAmbient < dayAmbient * 0.5f,
             $"and its ambient fill is under half of C1C's too");
+        // The energy counts only where the renderer reads it, which is a colour-sourced ambient:
+        // on the sky source Godot takes the fill off the procedural cubemap and both the colour
+        // and the energy written here are ignored (docs/verification.md WORLD-32).
+        ctx.Check(night.Source == Godot.Environment.AmbientSource.Color,
+            $"the zone apply leaves the Environment's ambient colour-sourced (got {night.Source})");
+        ctx.Check(night.Color.IsEqualApprox(night.Authored),
+            $"and carries the zone's own authored SUNLIGHT_COLOR_AMBIENT {night.Authored.ToHtml(false)} (got {night.Color.ToHtml(false)})");
         if (!CSVM.Utils.GraphicsMode.Enhanced)
         {
             // The faithful mapping's own numbers, so a drifting factor is caught here and not only
-            // by a moved golden. ⚠ The ambient reaches the Environment but the renderer ignores it
-            // while the ambient is sky-sourced (docs/architecture.md).
+            // by a moved golden.
             ctx.Check(Mathf.IsEqualApprox(nightSun, 0.64f) && Mathf.IsEqualApprox(daySun, 1.6f),
                 $"the faithful mapping resolves 0.64 at C1B and 1.6 at C1C (got {nightSun:0.000}/{daySun:0.000})");
         }
@@ -1822,11 +1830,13 @@ internal static class WorldAndToolSuites
         return (meshes, merged);
     }
 
-    // One mission's ZONE1 energies, off a rig of its own so the two missions cannot share state.
-    // The Environment is a bare one: what is asserted is the value the zone apply wrote.
+    // One mission's ZONE1 lighting, off a rig of its own so the two missions cannot share state:
+    // the two energies, the ambient as the renderer will read it (source and colour), and the
+    // authored colour it should be, read straight off the file for comparison. The Environment is
+    // a bare one, so every field returned is a value the zone apply itself wrote.
     // ⚠ --sky-zone=zone1 on purpose. The default request is zone2, the ABOVE-cloud zone, and
     // comparing two missions' cloud tops is not the night-against-day question.
-    private static (float Sun, float Ambient) ZoneEnergies(
+    private static (float Sun, float Ambient, Godot.Environment.AmbientSource Source, Color Color, Color Authored) ZoneEnergies(
         TestContext ctx, string chapter, string mission, string zrdr)
     {
         var sun = new DirectionalLight3D { Name = $"sun-energy-{chapter}-{mission}" };
@@ -1838,7 +1848,9 @@ internal static class WorldAndToolSuites
                 new[] { $"--chapter={chapter}", $"--mission={mission}", "--sky-zone=zone1" });
             var weatherRig = new WeatherRig(spec, ctx.Host, sun, env: env);
             weatherRig.Build(zrdr, System.Array.Empty<PlayerRig>(), System.Array.Empty<HorizonZone>(), _ => { });
-            return (sun.LightEnergy, env.AmbientLightEnergy);
+            var authored = WeatherState.Load(zrdr)?.Zone("zone1").SunColorAmbient ?? Colors.White;
+            return (sun.LightEnergy, env.AmbientLightEnergy, env.AmbientLightSource,
+                env.AmbientLightColor, authored);
         }
         finally
         {

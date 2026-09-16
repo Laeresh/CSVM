@@ -628,24 +628,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   replaced; `git log --grep=BL-305`. Do not reopen either ID; IDs are never reused, per this
   file's own rule).
 
-- `BL-683` `[Bug]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **The faithful path's aircraft ambient cannot be driven by the mission, because
-  `AmbientLightEnergy` never reaches the shader.** *Decision:* the faithful Environment takes the
-  mission's authored `SUNLIGHT_AMBIENT` as a colour-sourced ambient, so a night chapter's
-  aircraft get a dark fill and both halves of the authored pair are visible. *Evidence (traced and measured):* the faithful
-  arm writes the zone's authored `SUNLIGHT_AMBIENT` onto the Environment, but
-  `AmbientLightSource.Sky` at full sky contribution makes Godot take the ambient off the sky
-  cubemap scaled by the background energy multiplier, so the value is inert. Taking the launcher's
-  0.9 to 0.0 left all 18 goldens byte-identical, while the same experiment on the sun, 1.6 to 0.5,
-  moved 7 ([`docs/verification.md`](docs/verification.md) `WORLD-32`). So an aircraft's fill light
-  is a daytime procedural sky at night as well as by day, and only the sun half of the authored
-  pair is visible. *Fix shape:* on the faithful arm set `AmbientLightSource.Color` with the
-  authored `SUNLIGHT_AMBIENT` colour and its energy, leave the sky contribution to the Enhanced arm,
-  and re-pin the goldens the aircraft fill moves; the fullbright world is untouched because it
-  does not read the Environment's ambient. *⚠ Traps:* this is a rendering-design question and not a bug to patch by turning the
-  energy up, since the energy is not read at all. Do not reach for `csky_world_light`, which is the
-  fullbright world's scalar and is `CAP-11`-calibrated on terrain, not on the aircraft. The sun half
-  is landed and works; only the ambient half is inert. *Cross-refs:* `BL-332`'s closing record in
-  `PLAN-M5-polish-10` `B13`, `CAP-54`.
 
 - `BL-803` `[Bug]` `[S]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **Enhanced Graphics lays a
   dithering pattern over the whole screen.** *Evidence:* reported at the controls under Enhanced

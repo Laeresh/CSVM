@@ -1523,15 +1523,16 @@ public partial class Launcher : Node3D
         {
             BackgroundMode = Godot.Environment.BGMode.Sky,
             Sky = new Sky { SkyMaterial = new ProceduralSkyMaterial() },
-            AmbientLightSource = Godot.Environment.AmbientSource.Sky,
-            // ⚠ Inert as built, and measured so: with the ambient taken from the sky at full
-            // contribution the renderer ignores this energy. Zeroing it moves no golden pixel;
-            // WeatherRig.ApplyZone rewrites it per zone regardless (docs/architecture.md).
+            // ⚠ Colour-sourced in BOTH modes, never AmbientSource.Sky: a sky ambient fills a night
+            // chapter's aircraft off the same daylight gradient a day one gets, and ignores the
+            // pair written here. Per-zone values: WeatherRig.ApplyZone (docs/architecture.md).
+            AmbientLightSource = Godot.Environment.AmbientSource.Color,
+            AmbientLightColor = Colors.White,
             AmbientLightEnergy = WeatherRig.DefaultEnergies.Ambient,
         };
-        // Enhanced mode alone: SSAO reads ambient light, which the faithful path never has, so
-        // it has nothing to modulate there. The cockpit pass duplicates this Environment at build
-        // time (CockpitOverlay.NewOverlay), so its 100 m interior inherits the same settings.
+        // Enhanced mode alone: SSAO darkens ambient light where geometry occludes it, and the
+        // faithful path's world is fullbright, so it would find nothing to occlude. The cockpit
+        // pass duplicates this Environment (CockpitOverlay.NewOverlay) and inherits the settings.
         if (GraphicsMode.Enhanced)
         {
             UseMissionSky(_env);
@@ -1551,14 +1552,11 @@ public partial class Launcher : Node3D
     // Enhanced mode alone: the sky a reflection reads is the mission's own colour, not Godot's
     // procedural gradient. The dome is gamez geometry drawn over the background, so this is
     // normally unseen; what it feeds is the glossy water's specular. WeatherRig.WriteSkyColor
-    // writes the flown zone's own FOG_COLOR over the default here on every zone apply.
-    // ⚠ Do not leave the ambient on the sky: enhanced mode drives it from the zone's authored
-    // SUNLIGHT_AMBIENT, and a flat sky would override that with one colour.
+    // writes the flown zone's own FOG_COLOR over the default here on every zone apply. The ambient
+    // is colour-sourced already, built that way above, so a flat panorama reaches reflection alone.
     private void UseMissionSky(Godot.Environment env)
     {
         env.Sky = new Sky { SkyMaterial = new PanoramaSkyMaterial() };
-        env.AmbientLightSource = Godot.Environment.AmbientSource.Color;
-        env.AmbientLightColor = Colors.White;
         WeatherRig.WriteSkyColor(env, EnhancedDefaultSkyColor);
     }
 

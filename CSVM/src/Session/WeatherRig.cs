@@ -572,8 +572,17 @@ public sealed class WeatherRig
         // this rather than a placeholder gradient, so a night zone mirrors its own sky.
         WriteSkyColor(env, skyColor);
         env.ReflectedLightSource = Godot.Environment.ReflectionSource.Bg;
-        // ⚠ Take the ambient off the sky: AmbientSource.Sky reads the placeholder procedural sky,
-        // not the mission's authored ambient colour, and would ignore both values written here.
+        WriteColorAmbient(env, ambientColor, ambientEnergy);
+    }
+
+    // One Environment's ambient as a colour and an energy, the write both lighting arms share.
+    // ⚠ The source is written on every apply and never left on AmbientSource.Sky: Godot then takes
+    // the fill off the sky cubemap scaled by the background energy, which is a daylight procedural
+    // gradient at night as well as by day, and ignores both values passed here.
+    private static void WriteColorAmbient(Godot.Environment? env, Color ambientColor, float ambientEnergy)
+    {
+        if (env == null)
+            return;
         env.AmbientLightSource = Godot.Environment.AmbientSource.Color;
         env.AmbientLightColor = ambientColor;
         env.AmbientLightEnergy = ambientEnergy;
@@ -829,22 +838,18 @@ public sealed class WeatherRig
                 fog.SunColorAmbient, fog.FogColor);
     }
 
-    // The faithful path's half of the zone apply: the authored SUNLIGHT drives the one light the
-    // aircraft is shaded by. The world takes csky_world_light instead, being fullbright.
-    // ⚠ The ambient write is inert while the Environment takes its ambient from the sky at full
-    // contribution, which is what the faithful path builds. Zeroing it moves no golden pixel;
-    // whose colour that ambient should be is a separate question (docs/architecture.md).
+    // The faithful path's half of the zone apply: the authored SUNLIGHT pair drives the sun the
+    // aircraft is shaded by and the ambient that fills its shaded side. The world takes
+    // csky_world_light instead, being fullbright, and does not read this ambient at all.
     private void ApplyFaithfulLighting(WeatherState.ZoneWeather fog)
     {
         (float sunEnergy, float ambientEnergy) = FaithfulEnergies(fog);
         _sun.LightEnergy = sunEnergy;
-        if (_env != null)
-            _env.AmbientLightEnergy = ambientEnergy;
+        WriteColorAmbient(_env, fog.SunColorAmbient, ambientEnergy);
         foreach (var (sun, env) in _extraLighting)
         {
             sun.LightEnergy = sunEnergy;
-            if (env != null)
-                env.AmbientLightEnergy = ambientEnergy;
+            WriteColorAmbient(env, fog.SunColorAmbient, ambientEnergy);
         }
     }
 

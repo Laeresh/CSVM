@@ -97,7 +97,7 @@ public sealed partial class CockpitOverlay : CanvasLayer
             return;
         }
         // The attitude stays and only the translation goes: a rotation at the origin rounds far
-        // below a pixel, and keeping it means the sun, the sky ambient and the flashes all sit
+        // below a pixel, and keeping it means the sun, the sky radiance and the flashes all sit
         // where the main world has them, with nothing re-aimed.
         var attitudeOnly = attitude.Orthonormalized();
         _interior.Transform = new Transform3D(attitudeOnly * WobbledMount(_mount, shakeRoll), Vector3.Zero);
@@ -136,8 +136,8 @@ public sealed partial class CockpitOverlay : CanvasLayer
         if (env != null)
         {
             // The sky stays: a transparent viewport never paints its background, and clearing it
-            // stopped the sky radiance the ambient reads, which darkened the panel and lost its
-            // blue. Duplicated so the pass owns its copy rather than the world's resource.
+            // leaves the pass's reflected light with no radiance map. Duplicated so the pass owns
+            // its copy, whose ambient RegisterExtraLighting then keeps on the flown zone's value.
             view.World3D.Environment = (Godot.Environment)env.Duplicate();
         }
         var camera = new Camera3D { Name = "interior_camera", Near = 0.01f, Far = 100f, Current = true };

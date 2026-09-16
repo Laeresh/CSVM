@@ -397,7 +397,10 @@ member, and it does not go here.
   own reflected light gave Godot no radiance map, and the vanished specular read as a success.
 - **WORLD-32**, **A Godot property that accepts a write is not a property the renderer reads:
   prove a lighting knob is live by driving it to an extreme and watching the goldens move.**
-  `AmbientLightEnergy` 0.9 to 0.0 moved no golden; `LightEnergy` 1.6 to 0.5 moved 7.
+  `LightEnergy` 1.6 to 0.5 moved 7 shots while `AmbientLightEnergy` 0.9 to 0.0 moved none, because
+  a sky-sourced ambient takes its fill off the sky cubemap and reads neither the energy nor the
+  colour written beside it. On the colour-sourced ambient both lighting arms write today, the same
+  zeroing moves the same 7 aircraft shots.
 - **WORLD-33**, **An upward ray reports open air under a one-sided collider, so read a column
   DOWNWARD from above instead.** A downward ray answers in 1,376 of 1,376 partition cells and an
   upward one in 24.
