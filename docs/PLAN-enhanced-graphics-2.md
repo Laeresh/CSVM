@@ -69,6 +69,7 @@ exception, a display setting like V-Sync, and it is ignored under `--det` so no 
 | 2 | "The BL-803 dither is a deliberate dither somewhere in the enhanced stack." | `backlog.md`'s own entry: nothing in `SetupLighting` asks for one, debanding is off, and the clutter fade dithers only its own fragments. |
 | 3 | "The BL-803 pattern is temporal screen-space noise (SSAO, soft-shadow sampling) that TAA will integrate away." | The user's two C3 freecam stills (`.scratch/eg2/A3/`, freecam at x -6675 y 70 z -3037, 5120x1440, sun pitch -25 yaw 135): the pattern is a set of fine, evenly spaced, parallel bands with one world direction, still while the camera is still, present on the flat lit water where no occluder exists, and its spacing changes across straight seams on the hillside, which are the shadow cascade borders. That is the sun's shadow map self-shadowing a grazing surface (acne, smeared into bands by the 2.0 degree penumbra and the blur), a stable pattern TAA cannot remove. A3 is the bias/penumbra fix, not a wait on A1. |
 | 4 | "The fireball's atlas frames are additive, so the additive emitter shader variant is where a bloom gain goes." | B12's census: 145 zrdr files name 26 puffer sprite textures and none carries the additive bit in any chapter's manifest; the install's additive textures are mesh materials, flares, rings and HUD hilites. The additive emitter layer is never built for a shipped effect. The bloom is gated by the `fire_f01`..`fire_f06` flipbook name instead, and the `puffer-fire-glow` suite pins the premise. |
+| 5 | "The BL-803 bands are shadow-map acne from the bias pair, smeared by the 2.0 degree angular distance and the blur." | A3's headless sweep at the user's pose: a 32-bit map is bit-identical, every bias move deepens the pattern, halving the blur sharpens it, and the angular distance at 0.5 clears C3 but not C1's water while lightening real cast shadows. The bands are Godot's directional soft-shadow filter at its default Soft Low quality; Soft High halves them and leaves the cast-shadow control untouched. |
 
 | Confidence | Items | What that means for you |
 |---|---|---|
@@ -172,7 +173,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ TAA on every 3D viewport under Enhanced
 2. ☑ Render Scale, a VIDEO page row applied to every 3D viewport, ignored under `--det`
-3. ☐ BL-803: the shadow-map bands on grazing surfaces under Enhanced
+3. ◐ BL-803: the shadow-map bands on grazing surfaces under Enhanced
 4. ☐ Alpha-to-coverage on the cutout surfaces under Enhanced
 5. ☐ FSR 2.2 tried once as the alternative temporal pass, kept or parked on the user's verdict
 
@@ -340,7 +341,39 @@ titles and round-trip the store); at the controls, 200% on C5 visibly sharpens t
 scale them the same way or the panes disagree in sharpness. The row is a display setting and is
 NOT under the Enhanced switch (decision 3).
 
-## A3 ☐ BL-803: the shadow-map bands on grazing surfaces under Enhanced
+## A3 ◐ BL-803: the shadow-map bands on grazing surfaces under Enhanced
+
+**Landed.** The pattern is the sun's soft-shadow filter, not the bias pair, and not a cascade
+artefact: with `sun.ShadowEnabled = false` it vanishes from lit ground and water, and it never
+appears on sky. Godot filters a PCSS directional shadow at the project-wide
+`directional_shadow/soft_shadow_filter_quality`, which ships at Godot's default (Soft Low, measured
+bit-identical to the shipped build), and at a 25 degree sun that filter resolves the shadow map's
+own self-occlusion into a fine screen-space lattice over every grazing lit surface rather than
+dissolving it. `Session/Launcher.cs`'s `EnableSunShadows` now ends with
+`RenderingServer.DirectionalSoftShadowFilterSetQuality(EnhancedSoftShadowFilter)`, a new TUNE
+constant set to `RenderingServer.ShadowQuality.SoftHigh`. The call is renderer-global state, which
+is why it sits inside the enhanced-only `EnableSunShadows`; nothing on the faithful path reaches it.
+No other constant moved: `EnhancedShadowAngularDistance` stays at 2.0 so E48's soft edge survives,
+and the bias and blur comments now state what that pair does and does not control.
+
+**Verified.** Measured headless at the user's own C3 pose and the same pose on C1, plus a C1 town
+pose as the cast-shadow control, as the band-limited RMS of the 1.6 to 4 px screen-space component
+(8-bit luminance, 2560x1421, TAA off to expose the source). C3 water: shadows off 0.19, shipped
+0.76, Soft High 0.42, Soft Ultra 0.39. C3 hillside: 0.30 / 1.07 / 0.58 / 0.56. C1 water at the same
+pose: 0.25 / 1.04 / 0.60 / 0.47. In the shipped configuration, with A1's TAA on, Soft High still
+takes C3 water 0.24 to 0.19, the hillside 0.44 to 0.30 and C1 water 0.33 to 0.25. The cast-shadow
+control does not move (C1 town 5th/20th percentile and mean luminance 55.29/68.20/78.57 shipped
+against 55.31/68.20/78.55). Cost on the C1 town pose at the shipped 1280x720, RTX 5080:
+`gpu_ms` 0.94-0.99 shipped, 1.69-1.75 at Soft High, 2.02-2.04 at Soft Ultra, with `frame_ms` pinned
+at the 120 fps cap throughout; Soft Ultra was rejected because it buys nothing measurable over Soft
+High once TAA is on. The complete `RunTests.ps1` PASS: units 4568 passed 0 failed 2 skipped of
+4570, engine 348 passed 0 failed 0 skipped errors clean, goldens **19 shots hash-identical**;
+`CheckCommentCaps.ps1`, `CheckDocEntries.ps1` and `CheckEncoding.ps1` clean. Montages and the full
+lever table are under `.scratch/eg2/A3/`. Not verified here: the user's own eyes at the controls,
+which is what decides whether the residue that Soft High leaves still reads as banding, and whether
+the softer edge is worth the GPU cost on their rig. `BL-803` stays open until then.
+
+**Original approach (kept for reference).**
 
 **Goal.** The world-aligned banding over lit terrain and water under Enhanced is gone at C1's
 25 degree sun without dissolving a hangar's or an aircraft's cast shadow, and `BL-803`'s closing
@@ -359,7 +392,9 @@ dithered acne over every terrain triangle at C1's 25 degree sun" and that the pa
 hangar shadows; the shadow blur comment records that raising it "dithered the lit water". So
 this is shadow-map self-occlusion of grazing surfaces, smeared into bands by the 2.0 degree
 angular distance (PCSS blocker search) and the blur. It is stable, not temporal, so A1 cannot
-remove it. `<TODO: re-verify still-open against git log --grep=BL-803, git log -S and the code>`
+remove it. Re-verified open before the work: no commit closes `BL-803`, and no commit in the
+repository has ever touched `DirectionalSoftShadowFilterSetQuality` or
+`soft_shadow_filter_quality`, so the filter the Landed paragraph names was untried.
 
 **Approach.** Reproduce headless first: a `--freecam --chapter=C3 --pos=-6675,70,-3037` still
 under `--graphics=enhanced` at the user's pose (the `_00` frame is un-jittered) shows the bands;

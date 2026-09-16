@@ -65,7 +65,9 @@ public partial class Launcher : Node3D
 
     // TUNE, judged at the controls, and the pair trades against each other: lower values put
     // dithered acne over every terrain triangle at C1's 25° sun, higher ones dissolve a hangar's
-    // shadow along with it. These keep the building and aircraft silhouettes with no acne left.
+    // shadow along with it. These keep the building and aircraft silhouettes. The faint dither
+    // left on grazing lit ground and water belongs to the soft-shadow filter, not to this pair,
+    // and raising either one only deepens it; the filter quality below is the lever on that.
     private const float EnhancedShadowBias = 0.05f;
     private const float EnhancedShadowNormalBias = 1.25f;
 
@@ -91,10 +93,18 @@ public partial class Launcher : Node3D
     // into a visibly soft ~18 px transition.
     private const float EnhancedShadowAngularDistance = 2.0f;
 
-    // TUNE, judged at the controls: Godot's own default. Raising it alongside the angular
-    // distance above widened the edge further, but it also dithered the lit water beside it.
-    // Kept here rather than trading a hard line for banding.
+    // TUNE, judged at the controls: Godot's own default. Raising it alongside the angular distance
+    // above widens the edge further but dithers the lit water beside it, and halving it sharpens
+    // that dither rather than removing it (headless measure of the 2 px component, 1.6x base).
     private const float EnhancedShadowBlur = 1.0f;
+
+    // TUNE, measured headless. The filter the sun's soft shadow is sampled with. At the project
+    // default (SoftLow) a 25° sun's own self-occlusion resolves into a fine screen-space lattice
+    // over grazing lit terrain and water, at about half the amplitude of the shadow map's acne;
+    // SoftHigh halves that amplitude again for 0.8 ms of GPU at 720p, and SoftUltra buys nothing
+    // measurable beyond it. This is renderer-global state, set only on the enhanced path here.
+    private const RenderingServer.ShadowQuality EnhancedSoftShadowFilter =
+        RenderingServer.ShadowQuality.SoftHigh;
 
     // TUNE, judged at the controls on C2/C5. Godot's own default (1.0 m) reads a building's own
     // trim but misses the wider contact shading a street canyon wants at this world's scale
@@ -1591,6 +1601,7 @@ public partial class Launcher : Node3D
         sun.ShadowNormalBias = EnhancedShadowNormalBias;
         sun.LightAngularDistance = EnhancedShadowAngularDistance;
         sun.ShadowBlur = EnhancedShadowBlur;
+        RenderingServer.DirectionalSoftShadowFilterSetQuality(EnhancedSoftShadowFilter);
     }
 
     // Screen-space reflection, for the one glossy population in the world: the water surfaces
