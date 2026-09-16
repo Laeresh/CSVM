@@ -1459,15 +1459,6 @@ usual.
 
 ## Misc
 
-- `BL-077` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **Visual prop spin-down** (`startprops`/`stopprops` disc crossfade), spawning mid-air
-  already turning is by design. *Decision:* built on engine-out and death, not on a landing flow:
-  the `stopprops` crossfade to the still disc plays on the same event `FlightAudio.OnEngineStop`
-  already takes for the audio half (engine damage, the crash, the death), so the two halves
-  cannot disagree. *Fix shape:* drive the disc crossfade off that event in the prop's visual, a
-  suite case that an engine-out aircraft shows the still disc, and `startprops` left unused until
-  a flow starts an engine from cold. *⚠ Traps:* a stopped prop on a crashed aeroplane must not
-  restart on respawn without the crossfade resetting to the spinning disc.
-
 - `BL-284` `[Bug]` `[Blocked: CAP-34]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Wing-light flare: soft round glow vs the original's sharp star burst; view-dependence
   unproven.** Follow-up from `BL-119` (landed 2026-08-05): with the authored one-sided quad restored
   and the blink at the measured ~1 frame, the flare reads as a compact soft amber glow, much closer

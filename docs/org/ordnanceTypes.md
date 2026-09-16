@@ -1208,6 +1208,19 @@ through `HumanFlightAdapter.Assemble` or `AiFlightAssembler`, which replay the s
 already. CSVM plays `startprops` there where the original plays `spinprops`, a divergence in the
 spawn sound rather than in the choke.
 
+**The death runs it from the once-per-death shutdown, beside the cue.** `EndFlightSystems` is the
+one site that ends a spent aircraft's flight systems, so `FlightAudio.OnEngineStop` and the
+`stopprops` call stand on consecutive lines there and the wind-down's two halves cannot be raised
+apart: the discs fade to the still blade wherever `snd_propstop` sounds, whether the aircraft was
+shot down, rammed or flown into the world, and whether or not its airframe def binds a destroy def.
+That is also the original's order, the death routine's own `stopprops` call standing ahead of the
+def's destroy anim, so the destroy choreography deactivates the healthy hull's propeller nodes over
+a wind-down that has already run rather than being undone by it. A wreck's ground contact raises
+nothing further, its death having already spent the slot. `Respawn` takes `stopprops` off the slot
+before it replays `startprops`, or a hull that went down with its propellers stopped would fly again
+with the stop definition still fading `staticpropN` in under the start one fading it out. The suite
+is `prop-slot-edges`.
+
 ## Two answers this routine gives to other items
 
 **Blast knockback is authored, and it is ground-vehicle code no shipped def reaches.** Late in

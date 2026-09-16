@@ -1214,6 +1214,11 @@ public partial class FlightController : Node3D
         // The original tops the tank up where it places the aircraft, from the def-derived capacity.
         Fuel.Capacity = Stats?.FuelCapacity ?? 0f;
         Fuel.Fill();
+        // ⚠ Off the slot before the spawn choreography goes on it: a hull that went down with its
+        // propellers stopped would otherwise fly again with the stop definition still fading
+        // staticpropN in under the start one fading it back out.
+        _crashRuntime?.Stop("stopprops");
+
         // ⚠ The backing field here, never CrashRuntime: a still-armed rig has played nothing, so
         // there is nothing to replay, and asking would build the whole rig on the placement frame.
         // First setup precedes adapter construction, so the adapter replays startprops after attachment.
@@ -3056,7 +3061,6 @@ public partial class FlightController : Node3D
             using (PerfSample.Scope(PerfSite.PartDetach))
             {
                 CrashRuntime.Play(destroyDef, CrashAnchor, applyReset: false);
-                PlayStopProps();
             }
         }
         else if (PlaneModel != null)
@@ -3093,6 +3097,10 @@ public partial class FlightController : Node3D
         // The engine wind-down cue layers over the explosion, replacing the loops' abrupt cut with
         // snd_propstop.
         Audio?.OnEngineStop();
+        // ⚠ Keep the visual wind-down beside the cue: they are two halves of one event, and a
+        // caller raising one alone would spin a dead aeroplane's propeller over snd_propstop. The
+        // original's death routine runs it here too (docs/org/ordnanceTypes.md).
+        PlayStopProps();
         // No plume survives a dead engine.
         ThrottleSmoke?.Reset(_throttle);
         SpeedCue?.Reset();
@@ -3223,10 +3231,6 @@ public partial class FlightController : Node3D
             using (PerfSample.Scope(PerfSite.PartDetach))
             {
                 CrashRuntime.Play(crashDef, CrashAnchor, applyReset: false);
-                // The prop wind-down (staticpropN fades back in as prop1..3 fade out), inert the
-                // instant PlaneModel above hides, but it keeps the def's own state consistent for
-                // whatever plays next. A choked aircraft already holds the slot and is refused.
-                PlayStopProps();
             }
         }
         // ⚠ Not on a wreck landing: the cut and the report both belong to the kill, seconds

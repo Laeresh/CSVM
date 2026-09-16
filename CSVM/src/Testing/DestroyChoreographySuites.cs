@@ -1229,14 +1229,14 @@ internal static class DestroyChoreographySuites
         });
     }
 
-    // Both edges of the original's disabled-systems mask bit 2, on the rig a session builds, reached
-    // through the flight step: the choke puts the wind-down on the slot and the timer expiring puts
-    // the silent restart back. The AI arm runs beside the human one because the original's choker
-    // branch has no player guard, so a port that reached only one rig would be half a port.
+    // Every edge that reaches the original's two prop anim slots, on the rig a session builds and
+    // through the flight step: the disabled-systems mask's bit-2 pair (the choke puts the wind-down
+    // on the slot, the timer expiring puts the silent restart back), the death, and the respawn.
+    // The AI arm runs beside the human one because the original's choker branch has no player guard.
     // ⚠ The third arm is the pair's only interaction: a choked aircraft that then crashes must not
     // replay the wind-down, which is why it asserts an EXECUTED state stays EXECUTED.
-    [Suite("choke-prop-edges",
-        "a choked engine's propeller on a session-built rig, over both of the mask's bit-2 edges and on the human rig and the AI one alike: the choke plays stopprops, which cross-fades the blur discs out to the still blade and holds the slot for as long as the engine is out, the timer expiring plays the silent spinprops back with its endless XYZ_ROTATION suppressed so PropAnimator stays the only writer on those discs, and a crash on a already choked aircraft leaves the wind-down where it is instead of playing a second one")]
+    [Suite("prop-slot-edges",
+        "an aircraft's two propeller slots on a session-built rig, on the human rig and the AI one alike: the choke plays stopprops, which cross-fades the blur discs out to the still blade and holds the slot for as long as the engine is out, the timer expiring plays the silent spinprops back with its endless XYZ_ROTATION suppressed so PropAnimator stays the only writer on those discs, a crash on an already choked aircraft leaves the wind-down where it is instead of playing a second one, a kill winds the discs down on the same once-per-death event the engine-stop cue rides, and a respawn taken inside that wind-down puts the spinning discs back rather than flying the still blade")]
     internal static void ChokePropEdges(TestContext ctx)
     {
         const string model = "player_warhawk";
@@ -1415,6 +1415,75 @@ internal static class DestroyChoreographySuites
                     rig.DebugForceCrash();
                     ctx.Check(rig.PropsStopped && rig.CrashRuntime!.AnimStateOf("stopprops") == Executed,
                         $"{rig.Name}: the crash on a choked aeroplane left that wind-down where it was rather than playing a second state={rig.CrashRuntime!.AnimStateOf("stopprops")}");
+                }
+
+                // Back in the air off the stopped presentation the crash above left behind, which is
+                // the spawn choreography's own job: nothing else writes those opacities back.
+                foreach (var rig in built)
+                {
+                    rig.Respawn();
+                }
+
+                float spun = FlyUntil(() => Shown(human, "prop1") && !Shown(human, "staticprop1")
+                                            && Shown(ai, "prop1") && !Shown(ai, "staticprop1"), 4f);
+                foreach (var rig in built)
+                {
+                    ctx.Check(!rig.PropsStopped && Shown(rig, "prop1") && !Shown(rig, "staticprop1"),
+                        $"{rig.Name}: the respawn put the blur discs back on a hull that went down stopped prop1={Shown(rig, "prop1")} staticprop1={Shown(rig, "staticprop1")} after={spun:0.00} s");
+                }
+
+                // The fourth arm, the death: a kill with no choke anywhere near it winds the discs
+                // down, because the visual half rides the same once-per-death shutdown that plays
+                // snd_propstop (docs/org/ordnanceTypes.md). Read on the kill's own frame.
+                foreach (var rig in built)
+                {
+                    if (rig.Damage is not { } ledger)
+                    {
+                        ctx.Check(false, $"{rig.Name}: the session rig carries a damage ledger");
+                        continue;
+                    }
+
+                    float overkill = (ledger.WholeHealthMax + ledger.WholeArmorMax) * 4f;
+                    rig.TakeCollisionHit(overkill, overkill, rig.GlobalPosition, 0);
+                    ctx.Check(rig.Destroyed && rig.PropsStopped
+                              && rig.CrashRuntime!.AnimStateOf("stopprops") == Running,
+                        $"{rig.Name}: the kill put stopprops on the slot on its own frame destroyed={rig.Destroyed} stopped={rig.PropsStopped} state={rig.CrashRuntime!.AnimStateOf("stopprops")}");
+                }
+
+                // ⚠ Read the kill's cross-fade as OPACITY, never as visibility: the destroy def
+                // plays over the wind-down and deactivates the healthy hull's own nodes, so a dead
+                // aeroplane carries no propeller of either kind to look at.
+                static float DiscAlpha(FlightController rig, string node) =>
+                    Find(rig.PlaneModel!, node) is { } found ? Alpha(found) : -9f;
+
+                // The definition's own ends rather than a count of frames: propN is authored to
+                // zero over 1.5 s and staticpropN to one over 2.0 s.
+                float dead = FlyUntil(
+                    () => DiscAlpha(human, "prop1") <= 0.01f && DiscAlpha(human, "staticprop1") >= 0.99f
+                          && DiscAlpha(ai, "prop1") <= 0.01f && DiscAlpha(ai, "staticprop1") >= 0.99f, 2.5f);
+                foreach (var rig in built)
+                {
+                    ctx.Check(DiscAlpha(rig, "prop1") <= 0.01f && DiscAlpha(rig, "staticprop1") >= 0.99f,
+                        $"{rig.Name}: …and the kill's wind-down ran the authored cross-fade to its ends prop1={DiscAlpha(rig, "prop1"):0.00} staticprop1={DiscAlpha(rig, "staticprop1"):0.00} after={dead:0.00} s");
+                }
+
+                // The fifth arm, the respawn taken INSIDE the wind-down rather than after it: the
+                // two definitions would otherwise write the same discs at once, one fading
+                // staticpropN in while the other fades it out.
+                foreach (var rig in built)
+                {
+                    ctx.Same(Running, rig.CrashRuntime!.AnimStateOf("stopprops"),
+                        $"{rig.Name}: the wind-down is still on the slot as the respawn lands state={rig.CrashRuntime!.AnimStateOf("stopprops")}");
+                    rig.Respawn();
+                }
+
+                float restored = FlyUntil(() => Shown(human, "prop1") && !Shown(human, "staticprop1")
+                                                && Shown(ai, "prop1") && !Shown(ai, "staticprop1"), 4f);
+                foreach (var rig in built)
+                {
+                    ctx.Check(!rig.PropsStopped && Shown(rig, "prop1") && !Shown(rig, "staticprop1")
+                              && rig.CrashRuntime!.AnimStateOf("stopprops") != Running,
+                        $"{rig.Name}: the respawn took the wind-down off the slot and put the blur discs back prop1={Shown(rig, "prop1")} staticprop1={Shown(rig, "staticprop1")} stop={rig.CrashRuntime!.AnimStateOf("stopprops")} after={restored:0.00} s");
                 }
             }
             finally
