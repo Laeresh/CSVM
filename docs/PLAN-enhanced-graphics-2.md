@@ -185,7 +185,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C, lit clouds
 
-21. ☐ Lit cloud cards: sun tint, transmission rim, shadowed undersides, soft depth fade
+21. ☑ Lit cloud cards: sun tint, transmission rim, shadowed undersides, soft depth fade
 22. ☐ FogVolume banks from the authored fvol slabs
 23. ☐ A rendered puff sprite set under Enhanced, picked by montage
 
@@ -552,7 +552,53 @@ Alpha-to-coverage (A4) does not apply to decals.
 
 # Wave C, lit clouds
 
-## C21 ☐ Lit cloud cards: sun tint, transmission rim, shadowed undersides, soft depth fade
+## C21 ☑ Lit cloud cards: sun tint, transmission rim, shadowed undersides, soft depth fade
+
+**Landed.** `FogVolumeClutter.ShaderCode` takes a third argument, `enhanced`, passed
+`GraphicsMode.Enhanced` at the one `Build` call site. Every enhanced hole in the shader template is
+empty and at end of line on the faithful path, so the faithful shader text is byte for byte the one
+it emitted before. The enhanced arm grades the shipped colour by four terms: a sun tint from
+`dot(view_dir, csky_sun_dir)`, a transmission rim from the mask's blurred alpha sampled one step
+toward the sun in billboard UV space (brightening the thin sun-side edge, darkening texels behind
+the card's own bulk), an underside darkening from the card's authored face normal on a half-lambert
+ramp, and the soft-particle depth fade copied from `EmitterRenderer.cs`. The graded albedo is
+clamped to 0.98 so it never crosses the enhanced glow threshold reserved for the glow-arm sprites.
+The sun direction arrives as one new global shader uniform, `csky_sun_dir`, declared in
+`CSVM/shaders/csky_sun.gdshaderinc`, registered in `Launcher` beside `csky_world_light` in both
+graphics modes, and written by `WeatherRig.WriteSunDirection` at lighting setup and on every zone
+apply. B13 reuses it unchanged.
+
+Shadow-map darkening is **skipped**. The field is `unshaded` with `shadows_disabled`, so Godot's
+`light()` path is unreachable from it, and dropping `unshaded` would put a billboard that exists to
+match the faithful field through the whole PBR pipeline. That is not cheap, so the item's own
+condition for including it is not met.
+
+The amplitudes are gentle on purpose. The scatter lays one repeated card on a staggered lattice, so
+a strong per-card grade paints that lattice as a visible grid of identical puffs on the near deck;
+that shows plainly at tint 0.15 / rim 0.30 / core 0.70 and is already visible at 0.10 / 0.20 / 0.45.
+The shipped pair is tint 0.10, rim 0.15, core shadow 0.25, underside 0.35, rim offset 0.2 UV at mip
+3, fade 12 m.
+
+The night cards do **not** read directional, and `BL-325` stays open. C1B ships no `fvol*` volumes
+at all, so its night clouds are the placed `cloudparent` facades, a different population this
+shader never reaches. C5's fvol field is a low ground-haze population (its instance bounds run from
+about -24 m to 250 m altitude) of upward-facing cards, and the authored angled clutter fade drops
+them at any near-level view, so no C5 night pose found here draws one. The item's shader is correct
+and lands; the night measurement `BL-325` records is about a population it does not touch.
+
+**Verified.** On the item worktree: build warning-free; units 127 passed 0 failed over the
+FogVolume, Clutter and Weather filters; engine suites 348 passed 0 failed; goldens **19 shots
+hash-identical, zero movers** (`c1-cloud-field` and `c5-city-night` unchanged); comment caps, doc
+entries and encoding checks clean. Grade isolation at the C1 poses (enhanced with the grade
+neutralised against enhanced as shipped) moves about a quarter of the pixels by at most 13 levels,
+a soft reshaping rather than a wash. The soft depth fade is wired (confirmed by instrumenting the
+scene depth) but fires at no pose found, since the cards sit against sky or fog. The night cards do
+not read directional: C1B ships no fvol volumes and C5's fvol field is ground haze the angled fade
+drops at level views, so `BL-325` stays open and this item does not reach its population. Owed to
+the user: the strength (shipped, medium or strong, from the sweep under `.scratch/eg2/C21/`) and
+the look in flight. The branch battery runs again at the wave's end.
+
+**Original approach (kept for reference).**
 
 **Goal.** Under Enhanced the fvol cloud cards read as lit puffs: brighter toward the sun, a bright
 rim on the sun side, darker on the underside and where the shadow map covers them, and no hard cut

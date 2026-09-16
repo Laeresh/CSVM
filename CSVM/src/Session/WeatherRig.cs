@@ -279,6 +279,17 @@ public sealed class WeatherRig
         panorama.Panorama = ImageTexture.CreateFromImage(image);
     }
 
+    /// <summary>Publishes <paramref name="sun"/>'s bearing as the <c>csky_sun_dir</c> global, the
+    /// unit world direction TOWARD the sun (a Godot light shines down its local -Z, so that is its
+    /// +Z). Called at lighting setup and on every zone apply, so a shader reading it never grades
+    /// against a bearing the light no longer has. Public because <c>Launcher</c> builds the
+    /// light.</summary>
+    public static void WriteSunDirection(DirectionalLight3D sun)
+    {
+        var basis = sun.IsInsideTree() ? sun.GlobalBasis : sun.Basis;
+        RenderingServer.GlobalShaderParameterSet("csky_sun_dir", basis.Z.Normalized());
+    }
+
     /// <summary>Registers a second (sun, env) pair, a cockpit overlay's cloned copies, so every
     /// future zone change reaches it too, not only the zone live when it was built. Both lighting
     /// arms mirror the LEVELS and COLOURS they resolve. <paramref name="env"/> may be null (a suite
@@ -795,6 +806,9 @@ public sealed class WeatherRig
         // It shades aircraft only; the world is fullbright and casts no shadow from it.
         // ⚠ One light for the whole session: in splitscreen both panes wear rig 0's zone.
         _sun.Rotation = fog.SunOrientation;
+        // Republished off the light just rotated, for the enhanced billboard arms that grade
+        // themselves by the sun and take no shading from it (csky_sun.gdshaderinc).
+        WriteSunDirection(_sun);
         // The authored pair itself, published for the ground shadow, which derives its darkness
         // from the light rather than from either mode's energies.
         SunlightRgb = (Scaled(fog.SunDiffuse, fog.SunColorDiffuse),

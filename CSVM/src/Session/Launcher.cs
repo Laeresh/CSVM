@@ -639,6 +639,11 @@ public partial class Launcher : Node3D
         // overrides it from WeatherState.WorldLight below.
         RenderingServer.GlobalShaderParameterAdd("csky_world_light",
             RenderingServer.GlobalShaderParameterType.Float, 1.0f);
+        // The world direction toward the sun, read by the enhanced billboard arms that grade a
+        // hand-billboarded sprite by it (csky_sun.gdshaderinc, which has the decode). Registered in
+        // both modes, because the global must exist before a shader declaring it compiles.
+        RenderingServer.GlobalShaderParameterAdd("csky_sun_dir",
+            RenderingServer.GlobalShaderParameterType.Vec3, Vector3.Up);
         // The world sampler's mip LOD bias. 0 is the original's own device default, so a chapter
         // authoring no MipBias renders exactly as it did (docs/org/textures.md).
         RenderingServer.GlobalShaderParameterAdd("csky_mip_bias",
@@ -1515,6 +1520,9 @@ public partial class Launcher : Node3D
         if (GraphicsMode.Enhanced)
             EnableSunShadows(_sun);
         AddChild(_sun);
+        // After the AddChild, so the bearing published is the one the light wears in the tree. A
+        // session with no weather.json never reaches ApplyZone, and this is the only write it gets.
+        WeatherRig.WriteSunDirection(_sun);
 
         _env = new Godot.Environment
         {
