@@ -366,8 +366,9 @@ public class OriginalOptionsTests
         Assert.Null(host.Module.VSyncChoice);
         Assert.Equal(GraphicsMode.Default, host.Module.GraphicsChoice);
 
-        // Three steps, not four: the size row is dead under the borderless default, which owns the
+        // Four steps, not five: the size row is dead under the borderless default, which owns the
         // size, and a dead row is out of the walk.
+        Down(host);
         Down(host);
         Down(host);
         Down(host);
@@ -390,6 +391,7 @@ public class OriginalOptionsTests
         Assert.Null(exit.Resolution);
         Assert.Null(exit.DisplayMode);
         Assert.Null(exit.VSync);
+        Assert.Null(exit.RenderScale);
         Assert.Equal(PresentationId.Original, exit.Presentation);
         Assert.Equal("normal", exit.Difficulty);
     }
@@ -424,6 +426,7 @@ public class OriginalOptionsTests
         StepX(host, -1);
         Assert.Equal(DisplayWords.Windowed, host.Module.DisplayModeChoice);
 
+        Down(host);
         Down(host);
         Down(host);
         Down(host);
@@ -557,6 +560,9 @@ public class OriginalOptionsTests
         StepX(host, 1);
         Assert.Equal("60", host.Module.VSyncChoice);
         Down(host);
+        StepX(host, 1);
+        Assert.Equal("125", host.Module.RenderScaleChoice);
+        Down(host);
         Accept(host);
         Assert.Equal(GraphicsMode.EnhancedWord, host.Module.GraphicsChoice);
         Down(host);
@@ -567,8 +573,10 @@ public class OriginalOptionsTests
         Assert.Equal(GraphicsMode.Default, host.Module.GraphicsChoice);
         Assert.Null(host.Module.DisplayModeChoice);
         Assert.Null(host.Module.VSyncChoice);
+        Assert.Null(host.Module.RenderScaleChoice);
 
         host.Module.OpenVideo();
+        Down(host);
         Down(host);
         Down(host);
         Down(host);
@@ -732,6 +740,7 @@ public class OriginalOptionsTests
         Assert.False(resolution.Enabled);
         Assert.Equal((260f, 335f, 70f, 17f), Rect(Row(host, OriginalOptionsScreen.DisplayModeKey)));
         Assert.Equal((260f, 380f, 70f, 17f), Rect(Row(host, OriginalOptionsScreen.VSyncKey)));
+        Assert.Equal((260f, 402f, 70f, 17f), Rect(Row(host, OriginalOptionsScreen.RenderScaleKey)));
         Assert.Equal((260f, 420f, 16f, 16f), Rect(Row(host, OriginalOptionsScreen.GraphicsKey)));
         Assert.Equal((500f, 470f, 240f, 50f), Rect(Row(host, OriginalOptionsScreen.VideoAcceptKey)));
         Assert.Equal((500f, 520f, 240f, 50f), Rect(Row(host, OriginalOptionsScreen.VideoCancelKey)));
@@ -756,17 +765,20 @@ public class OriginalOptionsTests
         Assert.Contains(board.Lines, l => l.Text == "V-Sync" && l.X == 130f && l.Y == 380f && l.Width == 130f);
         Assert.Contains(board.Lines, l => l.Text.StartsWith("Select the frame pacing.", StringComparison.Ordinal)
             && l.X == 340f && l.Y == 380f && l.Width == 310f);
+        Assert.Contains(board.Lines, l => l.Text == "Render Scale" && l.X == 130f && l.Y == 402f && l.Width == 130f);
+        Assert.Contains(board.Lines, l => l.Text.StartsWith("Render the world above native", StringComparison.Ordinal)
+            && l.X == 340f && l.Y == 402f && l.Width == 310f);
         Assert.Contains(board.Lines, l => l.Text == "Enhanced Graphics" && l.X == 130f && l.Y == 425f && l.Width == 130f);
         Assert.Contains(board.Lines, l => l.Text.StartsWith("Select the lit world.", StringComparison.Ordinal)
             && l.X == 340f && l.Y == 425f && l.Width == 160f);
-        Assert.Equal(11, board.Lines.Count(l => l.Row < 0));
+        Assert.Equal(13, board.Lines.Count(l => l.Row < 0));
         // The checkbox draws unchecked and unfocused, the page opening on the monitor row above it:
         // the second of its eight frames.
         Assert.Equal(1, board.Plaques.Single(p => p.Art.Name == "PP_B_Check8.png").Frame);
 
         // The box marks the focused dropdown and no other, and it follows the cursor past the dead
-        // size row onto the display mode's. Three rows down it stands on the checkbox, a plaque
-        // strip that takes no box at all, so the page draws none.
+        // size row onto the display mode's. Three rows further down it stands on the checkbox, a
+        // plaque strip that takes no box at all, so the page draws none.
         Assert.Equal(
             new[] { (260f, 245f, 70f, 15f) },
             board.Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));
@@ -774,6 +786,7 @@ public class OriginalOptionsTests
         Assert.Equal(
             new[] { (260f, 335f, 70f, 17f) },
             Compose(host).Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));
+        Down(host);
         Down(host);
         Down(host);
         Assert.Equal(OriginalOptionsScreen.GraphicsKey, host.FocusedKey);
@@ -1105,11 +1118,11 @@ public class OriginalOptionsTests
             new[]
             {
                 OriginalOptionsScreen.MonitorKey, OriginalOptionsScreen.ResolutionKey, OriginalOptionsScreen.DisplayModeKey,
-                OriginalOptionsScreen.VSyncKey, OriginalOptionsScreen.GraphicsKey,
+                OriginalOptionsScreen.VSyncKey, OriginalOptionsScreen.RenderScaleKey, OriginalOptionsScreen.GraphicsKey,
                 OriginalOptionsScreen.VideoAcceptKey, OriginalOptionsScreen.VideoCancelKey,
             },
             rows.Select(r => r.Key));
-        RowsAreClearOfEachOther(host, rows, "VIDEO", 10);
+        RowsAreClearOfEachOther(host, rows, "VIDEO", 12);
     }
 
     // The CONTROLS page's rows, the same rule over its own plate, with the scheme chooser pinned to

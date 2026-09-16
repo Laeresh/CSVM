@@ -50,6 +50,7 @@ internal static class DisplaySettingsSuites
         ("Resolution", "1920x1080", true),
         ("DisplayMode", DisplayWords.Borderless, true),
         ("VSync", "144", true),
+        ("RenderScale", "200", true),
         ("AudioMaster", 0, false),
         ("AudioMusic", 100, false),
         ("AudioEffects", 50, false),
@@ -111,6 +112,73 @@ internal static class DisplaySettingsSuites
             ctx.Check(VSyncSetting.SavedWord(det: true) == null,
                 $"and a --det launch reads no saved display setting at all ({VSyncSetting.SavedWord(det: true) ?? "unset"})");
             AppliedRow(ctx, layout);
+        }
+        finally
+        {
+            OptionsStore.DirectoryOverride = previous;
+        }
+    }
+
+    [Suite("display-render-scale",
+        "The render-scale setting: the saved word beats the graphics.renderScale config key, the key "
+        + "beats the default, the default is native and a config key spelling native reads as the "
+        + "default, a word the vocabulary does not know reads as never set, a --det launch reads no "
+        + "saved word while a plain one does, this deterministic run therefore renders at native, "
+        + "the VIDEO page opens on the saved word and carries it on what ACCEPT CHANGES applies, and "
+        + "ViewportQuality writes a bilinear 2.0 on a viewport at a saved 200 percent while native "
+        + "leaves the viewport exactly as Godot built it")]
+    internal static void DisplayRenderScale(TestContext ctx)
+    {
+        // The process's own scale, which every later suite's SubViewport would take: this suite
+        // resolves other scales to measure them, so the run is put back on native in the finally.
+        ctx.Check(RenderScaleSetting.Scale == RenderScaleSetting.Native,
+            $"a deterministic run renders at native, no saved word reaching it ({RenderScaleSetting.Scale})");
+        try
+        {
+            var saved = RenderScaleSetting.Resolve("150", "200");
+            ctx.Check(saved.Scale == 1.5f && saved.Word == "150" && saved.Source == "options.json",
+                $"the saved word beats the config key ({Describe(saved)})");
+            var key = RenderScaleSetting.Resolve(null, "125");
+            ctx.Check(key.Scale == 1.25f && key.Word == "125" && key.Source == RenderScaleSetting.Key,
+                $"with nothing saved the config key decides ({Describe(key)})");
+            var fallback = RenderScaleSetting.Resolve(null, RenderScaleSetting.Default);
+            ctx.Check(fallback.Scale == RenderScaleSetting.Native && fallback.Source == "default",
+                $"and a key spelling native reads as the default, which is what an absent key means ({Describe(fallback)})");
+            var unknown = RenderScaleSetting.Resolve("400", "high");
+            ctx.Check(unknown.Scale == RenderScaleSetting.Native && unknown.Source == fallback.Source,
+                $"a word the vocabulary does not know reads as never set rather than as a choice ({Describe(unknown)})");
+            ViewportScale(ctx);
+        }
+        finally
+        {
+            RenderScaleSetting.Resolve(null, RenderScaleSetting.Default);
+        }
+
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        string dir = Path.Combine(ctx.ScratchDir, "display-render-scale");
+        if (Directory.Exists(dir))
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+
+        Directory.CreateDirectory(dir);
+        string? previous = OptionsStore.DirectoryOverride;
+        OptionsStore.DirectoryOverride = dir;
+        try
+        {
+            OptionsStore.UserOptions().Save(new OptionsDef { RenderScale = "200" });
+            ctx.Check(RenderScaleSetting.SavedWord(det: false) == "200",
+                $"a plain launch reads the saved word ({RenderScaleSetting.SavedWord(det: false) ?? "unset"})");
+            ctx.Check(RenderScaleSetting.SavedWord(det: true) == null,
+                $"and a --det launch reads no saved display setting at all ({RenderScaleSetting.SavedWord(det: true) ?? "unset"})");
+            AppliedScaleRow(ctx, layout);
         }
         finally
         {
@@ -656,6 +724,52 @@ internal static class DisplaySettingsSuites
         }
     }
 
+    // The render-scale row driven: the page opens on the saved word, draws its percentage label and
+    // hands the word back on the exit. Nothing is applied to a viewport here; the setting resolves
+    // once at launch, so what the apply owes is the saved word and the next start does the rest.
+    private static void AppliedScaleRow(TestContext ctx, MenuLayout layout)
+    {
+        var shell = new OriginalShell(layout, new FreeFlightFeature(), new PlayerSetupFeature(),
+            _ => null, options: () => OptionsStore.UserOptions().Load());
+        shell.Options.OpenVideo();
+        ctx.Check(shell.Screen == OriginalScreen.Video && shell.Options.RenderScaleChoice == "200",
+            $"the VIDEO page opens showing the saved scale ({shell.Screen}, {shell.Options.RenderScaleChoice ?? "unset"})");
+        ctx.Check(Label(shell, OriginalOptionsScreen.RenderScaleKey) == "200%",
+            $"with the row drawing it as a percentage of native ({Label(shell, OriginalOptionsScreen.RenderScaleKey)})");
+        var applied = Accept(shell);
+        ctx.Check(applied?.RenderScale == "200",
+            $"ACCEPT CHANGES carries it on the apply exit ({applied?.RenderScale ?? "no exit"})");
+        ctx.Check(RenderScaleSetting.TryParseWord(applied?.RenderScale, out float scale) && scale == 2.0f,
+            $"and the word the exit carries is the factor the next start's viewports take ({applied?.RenderScale ?? "no exit"})");
+    }
+
+    // What ViewportQuality writes, read back off a viewport rather than trusted. The control is an
+    // untouched SubViewport: native has to leave the subject reading exactly what Godot built, since
+    // the pinned goldens are faithful --det runs and those drop the saved word.
+    private static void ViewportScale(TestContext ctx)
+    {
+        var control = new SubViewport();
+        var atNative = new SubViewport();
+        var at200 = new SubViewport();
+        try
+        {
+            RenderScaleSetting.Resolve(null, RenderScaleSetting.Default);
+            ViewportQuality.Apply(atNative);
+            ctx.Check(atNative.Scaling3DScale == control.Scaling3DScale && atNative.Scaling3DMode == control.Scaling3DMode,
+                $"at native the viewport reads back what Godot built it with ({atNative.Scaling3DMode}, {atNative.Scaling3DScale})");
+            RenderScaleSetting.Resolve("200", RenderScaleSetting.Default);
+            ViewportQuality.Apply(at200);
+            ctx.Check(at200.Scaling3DScale == 2.0f && at200.Scaling3DMode == Viewport.Scaling3DModeEnum.Bilinear,
+                $"a saved 200 percent renders the viewport at twice its size, bilinear being the one mode that supersamples ({at200.Scaling3DMode}, {at200.Scaling3DScale})");
+        }
+        finally
+        {
+            control.QueueFree();
+            atNative.QueueFree();
+            at200.QueueFree();
+        }
+    }
+
     // Walks the page's focus onto ACCEPT CHANGES and presses it, the keyboard's own way out.
     private static OptionsApplyExit? Accept(OriginalShell shell)
     {
@@ -690,6 +804,9 @@ internal static class DisplaySettingsSuites
 
     private static string Describe(ResolutionPlan plan) =>
         $"{plan.Width}x{plan.Height} word={plan.Word} source={plan.Source}";
+
+    private static string Describe(RenderScalePlan plan) =>
+        $"scale {plan.Scale} word={plan.Word} source={plan.Source}";
 
     private static string Describe(VSyncPlan plan) =>
         $"vsync {(plan.Enabled ? "on" : "off")} max_fps={plan.MaxFps} source={plan.Source}";

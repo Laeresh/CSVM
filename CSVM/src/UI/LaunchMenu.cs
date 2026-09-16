@@ -38,7 +38,7 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     /// <summary>The row that opens the Options screen, the last on the Mode screen. Options hold
     /// the process-wide choices (the difficulty, the targeting setting, the menu presentation, the
-    /// graphics mode and the four display settings), and every presentation exposes them so a
+    /// graphics mode and the five display settings), and every presentation exposes them so a
     /// player can always get back to Built-in.</summary>
     public const string OptionsRow = "Options";
 
@@ -102,10 +102,10 @@ public sealed partial class LaunchMenu : CanvasLayer
     private const int ControlsFooterRows = 3;
     // The Options screen's stepper rows, above the Controls door and the apply row. The screen is a
     // form the cursor walks top to bottom: the three gameplay settings, the presentation and the
-    // graphics mode, then the four display settings in the order the Original presentation's VIDEO
-    // page draws them, then the two doors. Eleven rows fit the band without a window, which is why
+    // graphics mode, then the five display settings in the order the Original presentation's VIDEO
+    // page draws them, then the two doors. Twelve rows fit the band without a window, which is why
     // this screen has no paging rule of its own.
-    private const int OptionsStepperRows = 9;
+    private const int OptionsStepperRows = 10;
     // The Controls list's two column widths and the extra band width they need, in ems of the row
     // font and in 720p points. TUNE: measured against the longest shipped action name and the
     // longest four-control row, not decoded from anything.
@@ -196,11 +196,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     private bool? _rumbleChoice;
     private string _presentationChoice = PresentationId.BuiltIn.Value;
     private string _graphicsChoice = GraphicsMode.Default;
-    // The four display settings, stepped by the four rows under the graphics one. Each is stored as
+    // The five display settings, stepped by the five rows under the graphics one. Each is stored as
     // the word the options file carries, never as a row index, so a screen unplugged or a size the
     // monitor stopped offering is answered by the resolver's own forgiving read rather than by a
     // stale position.
-    private string? _monitorChoice, _resolutionChoice, _displayModeChoice, _vsyncChoice;
+    private string? _monitorChoice, _resolutionChoice, _displayModeChoice, _vsyncChoice, _renderScaleChoice;
     // The size the options file named when this screen opened, which the size row offers as an entry
     // of its own (ResolutionSizes). Held apart from the stepped choice so a hand-written size stays
     // in the list after a step lands elsewhere, and a step back reaches it again.
@@ -1566,7 +1566,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         switch (_screen)
         {
             case Screen.Options:
-                // The nine choice rows are steppers; the doors under them have nothing to step.
+                // The ten choice rows are steppers; the doors under them have nothing to step.
                 switch (_optionsIndex)
                 {
                     case 0: StepDifficultyChoice(dir); return true;
@@ -1578,6 +1578,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                     case 6: StepResolutionChoice(dir); return true;
                     case 7: StepDisplayModeChoice(dir); return true;
                     case 8: StepVSyncChoice(dir); return true;
+                    case 9: StepRenderScaleChoice(dir); return true;
                     default: return false;
                 }
             case Screen.Chapter:
@@ -1676,8 +1677,9 @@ public sealed partial class LaunchMenu : CanvasLayer
                     // standing for the host to hide.
                     _host.Exit(new OptionsApplyExit(new PresentationId(_presentationChoice), _graphicsChoice,
                         Difficulty.Word(_difficultyChoice), _monitorChoice, _resolutionChoice,
-                        _displayModeChoice, _vsyncChoice, _audioMasterChoice, _audioMusicChoice,
-                        _audioEffectsChoice, _audioVoiceChoice, _nearestAfterKillChoice, _rumbleChoice));
+                        _displayModeChoice, _vsyncChoice, _renderScaleChoice, _audioMasterChoice,
+                        _audioMusicChoice, _audioEffectsChoice, _audioVoiceChoice, _nearestAfterKillChoice,
+                        _rumbleChoice));
                 }
 
                 break;
@@ -2598,6 +2600,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         _savedResolution = saved.Resolution;
         _displayModeChoice = saved.DisplayMode;
         _vsyncChoice = saved.VSync;
+        _renderScaleChoice = saved.RenderScale;
         _audioMasterChoice = saved.AudioMaster;
         _audioMusicChoice = saved.AudioMusic;
         _audioEffectsChoice = saved.AudioEffects;
@@ -2943,7 +2946,10 @@ public sealed partial class LaunchMenu : CanvasLayer
     private string VSyncChoiceLabel() =>
         DisplaySettingRows.VSyncLabels[DisplaySettingRows.WordIndex(DisplayWords.VSyncChoices, _vsyncChoice, VSyncSetting.Default)];
 
-    // The four display steppers. Each writes back the word the options file carries rather than the
+    private string RenderScaleChoiceLabel() =>
+        DisplaySettingRows.RenderScaleLabels[DisplaySettingRows.WordIndex(DisplayWords.RenderScaleChoices, _renderScaleChoice, RenderScaleSetting.Default)];
+
+    // The five display steppers. Each writes back the word the options file carries rather than the
     // row's position, since the apply hands the word to the setting's own resolver; a step off a
     // value the machine no longer offers therefore starts from the forgiving read, not from -1.
     private void StepMonitorChoice(int dir)
@@ -2980,6 +2986,13 @@ public sealed partial class LaunchMenu : CanvasLayer
         var words = DisplayWords.VSyncChoices;
         int at = DisplaySettingRows.WordIndex(words, _vsyncChoice, VSyncSetting.Default);
         _vsyncChoice = words[DisplaySettingRows.Step(at, dir, words.Count)];
+    }
+
+    private void StepRenderScaleChoice(int dir)
+    {
+        var words = DisplayWords.RenderScaleChoices;
+        int at = DisplaySettingRows.WordIndex(words, _renderScaleChoice, RenderScaleSetting.Default);
+        _renderScaleChoice = words[DisplaySettingRows.Step(at, dir, words.Count)];
     }
 
     // The size row's detail says what the size does under the mode standing with it, since it does
@@ -3505,7 +3518,8 @@ public sealed partial class LaunchMenu : CanvasLayer
                 6 => $"Resolution: {ResolutionChoiceLabel()}",
                 7 => $"Display mode: {DisplayModeChoiceLabel()}",
                 8 => $"V-Sync: {VSyncChoiceLabel()}",
-                9 => ControlsRow,
+                9 => $"Render scale: {RenderScaleChoiceLabel()}",
+                10 => ControlsRow,
                 _ => "Apply and restart the menu",
             },
             Screen.Controls => $"{ControlsRowLabel(index)}   {ControlsRowValue(index)}",
@@ -3834,7 +3848,8 @@ public sealed partial class LaunchMenu : CanvasLayer
             6 => ResolutionDetail(),
             7 => "Select how the window sits on the screen. Borderless leaves the desktop beneath it.",
             8 => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap.",
-            9 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
+            9 => "Render the world above native and sample it back down. Takes effect on the next start.",
+            10 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
             _ => "Saves every choice and restarts the menu at its top level; unfinished setup is discarded.",
         },
         Screen.Controls => ControlsDetail(focus),

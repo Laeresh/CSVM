@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace CSVM.UI.Menu;
 
 /// <summary>
-/// How the four display settings read as rows, shared by the two Options screens so they cannot
+/// How the five display settings read as rows, shared by the two Options screens so they cannot
 /// disagree about a saved value. The labels are one per <see cref="CSVM.Utils.DisplayWords"/> entry
 /// and in that order, since a row reads and writes the store word by index; the two index rules are
 /// the forgiving reads the resolvers already make (a never-set row shows the setting's own default,
@@ -23,6 +23,10 @@ public static class DisplaySettingRows
     /// <summary>The V-Sync labels. A word that parses as a number is a cap in frames per second
     /// with V-Sync off, which is why the caps read as rates rather than as bare numbers.</summary>
     public static readonly IReadOnlyList<string> VSyncLabels = new[] { "On", "Off", "60 FPS", "120 FPS", "144 FPS" };
+
+    /// <summary>The render-scale labels. Each store word is a percentage of the viewport's own size,
+    /// so the label is that word with a sign on it.</summary>
+    public static readonly IReadOnlyList<string> RenderScaleLabels = new[] { "100%", "125%", "150%", "175%", "200%" };
 
     /// <summary>Where a saved word sits among a row's own values: a word the vocabulary does not
     /// know, or none saved at all, shows as <paramref name="fallback"/>, the setting's own default

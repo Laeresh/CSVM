@@ -85,8 +85,8 @@ AP_S_VVOLUME=Z,130,441,100,1,100,50,PP_B_SliderSlot.png,PP_B_Slider.png,0,-10,1,
 
 ;The VIDEO page behind the Preferences page's third door: the shipped section's keys and both
 ;return edges on invented lines and art, with the rows the page carries on the authored Viewing
-;Range, Effects Level and Shadows lines and its own on the authored Resolution line, so each row's
-;shape is read off the section rather than hard-coded.
+;Range, Effects Level, Objects Detail and Shadows lines and its own on the authored Resolution
+;line, so each row's shape is read off the section rather than hard-coded.
 [@Video@]
 V1=TCOLOR,0xFFFFDDC4
 VP_BACKGROUND=P,PP_VpBack.png,100,200,0,1,0,1,0
@@ -106,6 +106,9 @@ VP_D_View=D,PP_B_ScrollBar.png,PP_B_ScrollUp.png,PP_B_ScrollDown.png,PP_B_DropUp
 VP_T_EffectsTitle=T,IDS_VP_EFFECTS_TITLE,130,380,50,162,20,<TCOLOR>,0
 VP_T_EffectsDESC=T,IDS_VP_EFFECTS_DESC,340,380,50,310,40,<TCOLOR>,0
 VP_D_Effects=D,PP_B_ScrollBar.png,PP_B_ScrollUp.png,PP_B_ScrollDown.png,PP_B_DropUp.png,PP_B_DropDown.png,260,380,0,70,17,4
+VP_T_ObjectsTitle=T,IDS_VP_OBJECTS_TITLE,130,402,50,162,20,<TCOLOR>,0
+VP_T_ObjectsDESC=T,IDS_VP_OBJECTS_DESC,340,402,50,310,40,<TCOLOR>,0
+VP_D_Objects=D,PP_B_ScrollBar.png,PP_B_ScrollUp.png,PP_B_ScrollDown.png,PP_B_DropUp.png,PP_B_DropDown.png,260,402,0,70,17,4
 VP_T_ShadowsTitle=T,IDS_VP_SHADOWS_TITLE,130,425,50,162,20,<TCOLOR>,0
 VP_T_ShadowsDESC=T,IDS_VP_SHADOWS_DESC,340,425,50,0,0,<TCOLOR>,0
 

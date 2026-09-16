@@ -150,6 +150,7 @@
     "display-det-guard": 0.021,
     "display-mode": 0.027,
     "display-monitor": 0.029,
+    "display-render-scale": 0.03,
     "display-resolution": 0.06,
     "display-vsync": 0.044,
     "dropoff-chuteman-stage": 0.829,

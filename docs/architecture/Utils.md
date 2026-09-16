@@ -224,13 +224,14 @@ warns and falls back. `--det` drops both machine-state layers and keeps only an 
 itself is written up as a divergence in `docs/architecture/Root.md`.
 
 ## src/Utils/ViewportQuality.cs
-The render flags `GraphicsMode` writes on a 3D viewport, gathered here because there are four
-viewports to write them on: the root viewport `Session/Launcher.cs` owns, and the SubViewports
-`Flight/CockpitOverlay.cs`, `Flight/SpyglassView.cs` and `UI/SplitScreen.cs` build. `Apply` runs
-once per viewport at construction, after `GraphicsMode.Resolve`, and today writes only Godot's
-temporal anti-aliasing, on under Enhanced and off under the faithful presentation. MSAA is not
-its business: `project.godot` carries that for both presentations and the three SubViewports copy
-the project setting themselves. Read `GraphicsMode.cs` for the switch above it.
+The render flags `GraphicsMode` and `RenderScaleSetting` write on a 3D viewport, gathered here
+because there are four viewports to write them on: the root viewport `Session/Launcher.cs` owns, and
+the SubViewports `Flight/CockpitOverlay.cs`, `Flight/SpyglassView.cs` and `UI/SplitScreen.cs` build.
+`Apply` runs once per viewport at construction, after both resolvers, and writes two things: Godot's
+temporal anti-aliasing, on under Enhanced alone, and a bilinear `Scaling3DScale` above native, which
+is written whichever presentation won because the scale is a display setting. Nothing is written at
+native or under the faithful mode, so a `--det` run reads back Godot's own defaults; Godot
+supersamples in bilinear mode alone, the FSR modes being upscalers. MSAA stays `project.godot`'s.
 
 ## src/Utils/VSyncSetting.cs
 The frame pacing, one setting carrying both whether the loop waits for the screen and the cap it
@@ -272,17 +273,27 @@ moved nothing) leaves a window where the player is looking. `SavedWord` holds th
 the one place `DisplayServer.WindowSetCurrentScreen` is called and skips a window already there; both of
 `Launcher`'s call sites make it before the mode and the size, a mode applied first filling the old screen.
 
+## src/Utils/RenderScaleSetting.cs
+The render scale, a VIDEO page display setting: the multiple of its own size a 3D viewport renders at before the image is
+resampled down to it, so a machine with GPU headroom spends it on edges. The words are `DisplayWords.RenderScaleChoices`,
+percentages of native from 100 to 200, the list stopping there because the quality flattens off well before the cost does.
+`Resolve` layers the way `VSyncSetting` does with one layer fewer, there being no flag: the saved `renderScale` word, then
+the `graphics.renderScale` config key, then native; an unknown word reads as never set and a key spelling native reads as
+the default. `SavedWord` holds the `--det` guard. The resolve runs once at launch beside `GraphicsMode.Resolve` and lands
+in the static `Scale`, whose one reader is `ViewportQuality.Apply`, so a choice made in Options reaches the image on the
+next start; `Launcher`'s `[world] graphics mode:` line announces it.
+
 ## src/Utils/ScriptedWindow.cs
 Win32-only window hiding for scripted runs: `ScriptedWindow.Hide()` calls `ShowWindow(SW_HIDE)` on
 the native window handle. Fully static, one call site in `Launcher._Ready` right after the `--det`
 block, where the same predicate drives both window hiding and the interactive run's focus request.
 
 ## src/Utils/OptionsStore.cs
-Process-wide, version-tolerant JSON persistence for `OptionsDef`: the menu presentation, graphics mode and difficulty words, the four
-display settings (monitor index, resolution, display mode, V-Sync), the four volume levels and the nearest-after-a-kill targeting switch. One file, `user://options.json`,
+Process-wide, version-tolerant JSON persistence for `OptionsDef`: the menu presentation, graphics mode and difficulty words, the five
+display settings (monitor index, resolution, display mode, V-Sync, render scale), the four volume levels and the nearest-after-a-kill targeting switch. One file, `user://options.json`,
 independent of `Session/CampaignProfileStore.cs`. A missing or malformed file reads as empty, an unknown version invalidates it, an
 unknown value drops only that field, and a field the file does not carry reads as never set, which is why adding a field does not bump
-`Version`. Four reads hold that one contract: a word set (`DisplayWords` holds the two display vocabularies), a shape predicate for the
+`Version`. Four reads hold that one contract: a word set (`DisplayWords` holds the three display vocabularies), a shape predicate for the
 monitor index and the canonical `1920x1080` resolution, `AudioMix`'s 0..100 range for a level, which is `int?` so a saved mute stays
 distinct from never set, and a JSON-kind check for the switch, `bool?` for the same reason. `Save` writes a sibling temp file and renames it. Under `--run-tests`, `UserOptions()` uses an emptied scratch
 directory (`DirectoryOverride`), so no suite touches the player's file; `Launcher.ApplyOptions` is the only writer.

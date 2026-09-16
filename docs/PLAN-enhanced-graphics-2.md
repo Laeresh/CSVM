@@ -170,7 +170,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A, the temporal pass and the render scale
 
 1. ☑ TAA on every 3D viewport under Enhanced
-2. ☐ Render Scale, a VIDEO page row applied to every 3D viewport, ignored under `--det`
+2. ☑ Render Scale, a VIDEO page row applied to every 3D viewport, ignored under `--det`
 3. ☐ BL-803: the shadow-map bands on grazing surfaces under Enhanced
 4. ☐ Alpha-to-coverage on the cutout surfaces under Enhanced
 5. ☐ FSR 2.2 tried once as the alternative temporal pass, kept or parked on the user's verdict
@@ -229,8 +229,8 @@ it depends on the halted one.
 
 **Landed.** Godot's temporal anti-aliasing is on under Enhanced on all four 3D viewports and off on
 the faithful path. The four sites write it through one helper, `Utils/ViewportQuality.cs`:
-`public static void Apply(Viewport viewport)`, which today sets `UseTaa` from
-`GraphicsMode.Enhanced` and is where A2's render-scale write goes beside it. Called from
+`public static void Apply(Viewport viewport)`, which sets `UseTaa` from
+`GraphicsMode.Enhanced` and carries A2's render-scale write beside it. Called from
 `Session/Launcher.cs` on the root viewport right after `GraphicsMode.Resolve` and its log line,
 from `Flight/CockpitOverlay.cs`, `Flight/SpyglassView.cs` and `UI/SplitScreen.cs` at SubViewport
 construction. MSAA is untouched and `project.godot` is unchanged, so nothing reaches the faithful
@@ -278,7 +278,38 @@ duplicates the Environment but not the viewport flags, so its SubViewport needs 
 `--det` runs keep the flag (it is under the mode, and D31 pins enhanced goldens through it), so an
 enhanced golden must be pinned with TAA settled, not before.
 
-## A2 ☐ Render Scale, a VIDEO page row applied to every 3D viewport, ignored under `--det`
+## A2 ☑ Render Scale, a VIDEO page row applied to every 3D viewport, ignored under `--det`
+
+**Landed.** `Utils/RenderScaleSetting.cs` resolves the scale once at launch beside
+`GraphicsMode.Resolve`: the saved `renderScale` option, then the `graphics.renderScale` config key,
+then native, with `SavedWord(bool det)` holding the `--det` drop the other display settings hold.
+The words are `DisplayWords.RenderScaleChoices` (100/125/150/175/200), the field is
+`OptionsDef.RenderScale` with its own validation set, and the value rides `OptionsApplyExit` like
+every other setting so `Launcher.PersistOptions` stays the file's one writer. The viewport write is
+one branch in `Utils/ViewportQuality.Apply`, so all four 3D viewports (root, cockpit pass, spyglass
+picture, split-screen panes) take it: `Scaling3DMode = Bilinear` and `Scaling3DScale` above native,
+and nothing written at native, which is what leaves a faithful `--det` run on Godot's own defaults.
+`msaa_3d` is untouched. The row is a display setting rather than the Enhanced switch's, so it is
+written whichever presentation won. Original's VIDEO page carries it on the authored Objects Detail
+line (`VP_T_ObjectsTitle` / `VP_D_Objects` / `VP_T_ObjectsDESC`), between V-Sync and Enhanced
+Graphics; Built-in carries it as the tenth stepper row. The `[world] graphics mode:` line now ends
+`render_scale=<word>% source=<layer>`.
+
+**Verified.** The complete `RunTests.ps1` on the item worktree: build PASS, units **4568 passed, 0
+failed, 2 skipped of 4570**, engine **349 suites passed, 0 failed** (the new `display-render-scale`
+among them), goldens **19 shots hash-identical**, exit 0. `CheckCommentCaps.ps1`,
+`CheckDocEntries.ps1` and `CheckEncoding.ps1` clean. The new suite resolves the precedence, proves
+`SavedWord` drops a saved 200 under `--det`, drives the VIDEO row's round trip, and reads the
+viewport back: at native an `Apply`-ed SubViewport matches an untouched control, at a saved 200 it
+reads `Bilinear` and `2.0`. Headless empty-stage probes (`RunProbe.ps1 --stage=empty --no-det
+--perf`) measure the render resolution through `[perf] gpu_ms`: **0.11 ms at 100% on two separate
+runs, 0.29 ms at 200%**, roughly the 4x pixel count, with the log line reading
+`render_scale=200% source=graphics.renderScale`. The same config key under an implied-`--det`
+`--screenshot` run renders at native (`render_scale=100% source=default`, `gpu_ms` back to 0.11),
+which is the drop proven end to end rather than only in the suite. **Owed to the user at the
+controls:** whether 200% on C5 visibly sharpens the skyline, the item's own look judgement.
+
+**Original approach (kept for reference).**
 
 **Goal.** A "Render Scale" row on the VIDEO page of both presentations (100% to 200%) renders the
 3D viewports above native and downsamples bilinearly; the setting is saved with the other display

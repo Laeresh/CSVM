@@ -35,11 +35,11 @@ public sealed record QuitExit : MenuExit;
 /// then ends the active presentation, re-selects on <paramref name="Presentation"/>, and shows it
 /// at its top level. <paramref name="Graphics"/> is a <see cref="Utils.GraphicsMode"/> word, saved
 /// and no more (the mode resolves once at launch); <paramref name="Difficulty"/> is a
-/// <see cref="Flight.Difficulty.Word"/> the next launch reads. The targeting switch, the four
+/// <see cref="Flight.Difficulty.Word"/> the next launch reads. The targeting switch, the five
 /// display values and the four volume levels (<see cref="Utils.AudioMix"/>'s 0..100) are
 /// <see cref="Utils.OptionsDef"/>'s own, null where never set; a screen that shows none of them
 /// hands back what it read, since the consumer writes every field it is given.
-/// ⚠ All thirteen ride the exit rather than being saved by the screen, so the options file keeps one
+/// ⚠ All fourteen ride the exit rather than being saved by the screen, so the options file keeps one
 /// writer and no driven screen can write it. None of them is defaulted here on purpose: a defaulted
 /// level would let a page that never read one hand back a null and wipe a saved mix.</summary>
 public sealed record OptionsApplyExit(
@@ -50,6 +50,7 @@ public sealed record OptionsApplyExit(
     string? Resolution,
     string? DisplayMode,
     string? VSync,
+    string? RenderScale,
     int? AudioMaster,
     int? AudioMusic,
     int? AudioEffects,

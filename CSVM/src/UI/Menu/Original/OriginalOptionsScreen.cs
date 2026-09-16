@@ -90,6 +90,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     /// <summary>The VIDEO page's V-Sync dropdown.</summary>
     public const string VSyncKey = "VSYNC";
 
+    /// <summary>The VIDEO page's render-scale dropdown.</summary>
+    public const string RenderScaleKey = "RENDERSCALE";
+
     /// <summary>The VIDEO page's enhanced-graphics checkbox.</summary>
     public const string GraphicsKey = "GRAPHICS";
 
@@ -379,6 +382,11 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
             OriginalRowKind.Dropdown, _ => DisplaySettingRows.VSyncLabels,
             s => DisplaySettingRows.WordIndex(CSVM.Utils.DisplayWords.VSyncChoices, s._vsync, CSVM.Utils.VSyncSetting.Default),
             (s, i) => s._vsync = CSVM.Utils.DisplayWords.VSyncChoices[i]),
+        new(RenderScaleKey, "Render Scale", "VP_T_ObjectsTitle", "VP_D_Objects", "VP_T_ObjectsDESC",
+            _ => "Render the world above native and sample it back down. Takes effect on the next start.",
+            OriginalRowKind.Dropdown, _ => DisplaySettingRows.RenderScaleLabels,
+            s => DisplaySettingRows.WordIndex(CSVM.Utils.DisplayWords.RenderScaleChoices, s._renderScale, CSVM.Utils.RenderScaleSetting.Default),
+            (s, i) => s._renderScale = CSVM.Utils.DisplayWords.RenderScaleChoices[i]),
         new(GraphicsKey, "Enhanced Graphics", "VP_T_ShadowsTitle", "VP_B_SHADOWS", "VP_T_ShadowsDESC",
             s => s.GraphicsDescription(), OriginalRowKind.Radio, _ => GraphicsWords,
             s => s._graphics == CSVM.Utils.GraphicsMode.EnhancedWord ? 1 : 0,
@@ -470,7 +478,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     // The haptics setting as saved, held the same way but read the other way round: null is "never
     // set", which the consumer reads as ON, since the original ships force feedback on.
     private bool? _rumble;
-    // The four display settings as they were saved. A page that shows a setting still has to hand
+    // The five display settings as they were saved. A page that shows a setting still has to hand
     // back the ones it does not, or the one writer's save would clear them; carrying them here is
     // what lets every page's apply do that.
     private string? _monitorIndex;
@@ -481,6 +489,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     private string? _savedResolution;
     private string? _displayMode;
     private string? _vsync;
+    private string? _renderScale;
     // The four saved volume levels, carried for the same reason: the AUDIO page shows them and the
     // other pages do not, and every page's apply hands back the settings it does not show.
     private int? _audioMaster;
@@ -577,6 +586,11 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     /// <summary>The V-Sync word (<see cref="CSVM.Utils.DisplayWords.VSyncChoices"/>) the VIDEO page
     /// would apply, or null while nothing has been saved and no row has been touched.</summary>
     public string? VSyncChoice => _vsync;
+
+    /// <summary>The render-scale word (<see cref="CSVM.Utils.DisplayWords.RenderScaleChoices"/>) the
+    /// VIDEO page would apply, or null while nothing has been saved and no row has been
+    /// touched.</summary>
+    public string? RenderScaleChoice => _renderScale;
 
     /// <summary>The Master level (<see cref="CSVM.Utils.AudioMix"/>'s 0..100) the AUDIO page would
     /// apply, or null while nothing has been saved and no row has been touched.</summary>
@@ -913,6 +927,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         _savedResolution = saved?.Resolution;
         _displayMode = saved?.DisplayMode;
         _vsync = saved?.VSync;
+        _renderScale = saved?.RenderScale;
         _audioMaster = saved?.AudioMaster;
         _audioMusic = saved?.AudioMusic;
         _audioEffects = saved?.AudioEffects;
@@ -924,7 +939,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     // is what keeps Launcher.ApplyOptions the options file's one writer.
     private OptionsApplyExit AppliedOptions() =>
         new(new PresentationId(_choice), _graphics, CSVM.Flight.Difficulty.Word(_difficulty),
-            _monitorIndex, _resolution, _displayMode, _vsync,
+            _monitorIndex, _resolution, _displayMode, _vsync, _renderScale,
             _audioMaster, _audioMusic, _audioEffects, _audioVoice, _nearestAfterKill, _rumble);
 
     // Back from a page: the saved settings are read again, so an edit the player declined is gone.

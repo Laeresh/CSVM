@@ -658,7 +658,14 @@ public partial class Launcher : Node3D
         // option either: options.json is one machine's state (docs/cli.md's --graphics bullet).
         string? savedGraphics = _spec.Det ? null : OptionsStore.UserOptions().Load().GraphicsMode;
         bool graphicsEnhanced = Utils.GraphicsMode.Resolve(_spec.GraphicsMode, savedGraphics);
-        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={(graphicsEnhanced ? "enhanced" : "original")}");
+        // The render scale is a display setting rather than the mode's, so it layers on its own and
+        // is written whichever presentation won. It rides this line because both reach the same
+        // viewports, and a run that looks softer or slower than expected is read off one line.
+        var renderScale = Utils.RenderScaleSetting.Resolve(
+            Utils.RenderScaleSetting.SavedWord(_spec.Det),
+            Config.GetString(Utils.RenderScaleSetting.Key, Utils.RenderScaleSetting.Default));
+        string graphicsWord = graphicsEnhanced ? "enhanced" : "original";
+        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={graphicsWord} render_scale={renderScale.Word}% source={renderScale.Source}");
         // The window's own viewport takes the mode's render flags here, the moment the mode is
         // known and before any scene builds; the three SubViewports take them at construction.
         Utils.ViewportQuality.Apply(GetViewport());
@@ -1814,8 +1821,9 @@ public partial class Launcher : Node3D
 
     // The options file's one writer, shared by the menu's apply above and by the pause leaf's:
     // every choice the screen took saved, then the display settings and the mix applied now.
-    // ⚠ The graphics word is saved and nothing more. GraphicsMode resolves once at launch, so the
-    // choice reaches the world on the next start; do not rebuild the world here.
+    // ⚠ The graphics word and the render scale are saved and nothing more. Both resolve once at
+    // launch and reach a viewport as it is built, so the choice takes hold on the next start; do
+    // not rebuild the world here.
     private void PersistOptions(OptionsApplyExit applied)
     {
         var requested = applied.Presentation;
@@ -1830,6 +1838,7 @@ public partial class Launcher : Node3D
         options.Resolution = applied.Resolution;
         options.DisplayMode = applied.DisplayMode;
         options.VSync = applied.VSync;
+        options.RenderScale = applied.RenderScale;
         options.AudioMaster = applied.AudioMaster;
         options.AudioMusic = applied.AudioMusic;
         options.AudioEffects = applied.AudioEffects;

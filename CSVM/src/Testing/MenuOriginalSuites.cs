@@ -53,14 +53,14 @@ internal static class MenuOriginalSuites
         + "from mid-setup discards the pick and shows Built-in's Mode screen, a switch back starts "
         + "Original fresh, Built-in's Options route steps the difficulty, the targeting setting on "
         + "and back off, the rumble toggle off, the two other choices and "
-        + "its four display rows over the machine's own screens and sizes, the two vocabularies and "
-        + "a wrap onto the last frame cap, "
+        + "its five display rows over the machine's own screens and sizes, the three vocabularies "
+        + "and a wrap onto the last frame cap and onto the last render scale, "
         + "opens and leaves the rebinding screen behind its Controls door and emits the apply exit "
-        + "carrying all nine, Original's VIDEO door opens the decoded page on its Display Mode dropdown "
+        + "carrying all ten, Original's VIDEO door opens the decoded page on its Display Mode dropdown "
         + "which fits its authored window and draws no bar, over the V-Sync one whose five words "
         + "window into four with the arrows and the thumb inside the box's right edge and the fifth "
         + "kept for the walk but unseen and unhit, that list wheeling and dragging like any other "
-        + "and picking a frame cap, and the Enhanced Graphics checkbox "
+        + "and picking a frame cap, over the Render Scale row and the Enhanced Graphics checkbox "
         + "that flips, whose CANCEL CHANGES drops them all with no exit and whose ACCEPT CHANGES "
         + "leaves as one more apply exit carrying them, Original's AUDIO door opens the decoded page "
         + "on its Master slider over four thumbs, a sideways step moves a level and clamps at "
@@ -448,7 +448,7 @@ internal static class MenuOriginalSuites
 
     // Built-in's Options route: the last Mode row opens Options, Right steps the difficulty to
     // Hard, Right on the row under it steps the presentation to Original, Right on the next steps
-    // the graphics mode, the four display rows under those step over the machine's own screens and
+    // the graphics mode, the five display rows under those step over the machine's own screens and
     // sizes, and the apply row's Accept leaves as the one exit the launcher persists every choice
     // from.
     private static void BuiltInOptionsRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, List<MenuExit> exits)
@@ -462,8 +462,8 @@ internal static class MenuOriginalSuites
         Press(host, seat, Up);
         ctx.Check(menu.ShownRowText == LaunchMenu.OptionsRow, $"Up from Free Flight wraps onto Options ({menu.ShownRowText})");
         Press(host, seat, Accept);
-        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 11 && menu.ShownRowText == "Difficulty: Normal",
-            $"Accept opens the Options screen with its eleven rows, the difficulty stepper first ({menu.ShownScreen}, {menu.ShownRowCount}, {menu.ShownRowText})");
+        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 12 && menu.ShownRowText == "Difficulty: Normal",
+            $"Accept opens the Options screen with its twelve rows, the difficulty stepper first ({menu.ShownScreen}, {menu.ShownRowCount}, {menu.ShownRowText})");
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == "Difficulty: Hard", $"Right steps the difficulty to Hard ({menu.ShownRowText})");
         Press(host, seat, Down);
@@ -495,7 +495,7 @@ internal static class MenuOriginalSuites
         string graphics = menu.ShownRowText.EndsWith("Enhanced", System.StringComparison.Ordinal) ? "enhanced" : "original";
         var display = BuiltInDisplayRows(ctx, host, seat, menu);
         Press(host, seat, Down);
-        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow, $"the tenth row is the Controls door ({menu.ShownRowText})");
+        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow, $"the eleventh row is the Controls door ({menu.ShownRowText})");
         Press(host, seat, Accept);
         ctx.Check(menu.ShownScreen == "Controls" && menu.ShownRowCount > 2,
             $"which opens the rebinding screen over a seat's own keymap ({menu.ShownScreen}, {menu.ShownRowCount} rows)");
@@ -512,8 +512,9 @@ internal static class MenuOriginalSuites
                 && applied.NearestAfterKill == false && applied.Rumble == false,
                 $"carrying every stepped choice, the targeting setting stepped back off and the rumble turned off among them ({applied.Presentation}, {applied.Graphics}, {applied.Difficulty}, {applied.NearestAfterKill}, {applied.Rumble})");
             ctx.Check(applied.MonitorIndex == display.Monitor && applied.Resolution == display.Resolution
-                && applied.DisplayMode == display.DisplayMode && applied.VSync == display.VSync,
-                $"and all four display settings the rows stepped ({applied.MonitorIndex}, {applied.Resolution}, {applied.DisplayMode}, {applied.VSync})");
+                && applied.DisplayMode == display.DisplayMode && applied.VSync == display.VSync
+                && applied.RenderScale == display.RenderScale,
+                $"and all five display settings the rows stepped ({applied.MonitorIndex}, {applied.Resolution}, {applied.DisplayMode}, {applied.VSync}, {applied.RenderScale})");
             var plan = MonitorSetting.Resolve(applied.MonitorIndex, MonitorSetting.Screens());
             ctx.Check(plan.Source == "options.json" && ResolutionSetting.Resolve(applied.Resolution,
                     ResolutionSetting.ScreenSizes(), applied.DisplayMode).Source == "options.json",
@@ -523,12 +524,12 @@ internal static class MenuOriginalSuites
         ctx.Check(!host.Shown, $"and the presentation is hidden for the launcher to act (shown={host.Shown})");
     }
 
-    // The four display rows, walked from the graphics row: each steps in the store's own words, the
+    // The five display rows, walked from the graphics row: each steps in the store's own words, the
     // monitor row over the machine's screens (one step wraps within a single-screen list, which is
     // why its label is checked against the enumeration rather than for a change), the resolution row
     // over the sizes the standing screen offers once the mode leaves borderless, which pins it, and
-    // the mode and pacing rows over their vocabularies. Returns the four words the apply carries.
-    private static (string? Monitor, string? Resolution, string? DisplayMode, string? VSync) BuiltInDisplayRows(
+    // the mode, pacing and scale rows over their vocabularies. Returns the words the apply carries.
+    private static (string? Monitor, string? Resolution, string? DisplayMode, string? VSync, string? RenderScale) BuiltInDisplayRows(
         TestContext ctx, MenuHost host, ScriptedSeat seat, LaunchMenu menu)
     {
         var screens = MonitorSetting.Screens();
@@ -581,7 +582,14 @@ internal static class MenuOriginalSuites
         ctx.Check(menu.ShownRowText == "V-Sync: 144 FPS",
             $"and one more Left wraps onto the last cap rather than stopping ({menu.ShownRowText})");
 
-        return (MonitorSetting.Word(stepped), size, DisplayWords.Fullscreen, "144");
+        Press(host, seat, Down);
+        ctx.Check(menu.ShownRowText == "Render scale: 100%",
+            $"the eighth row is the render scale, unsaved showing native ({menu.ShownRowText})");
+        Press(host, seat, Left);
+        ctx.Check(menu.ShownRowText == "Render scale: 200%",
+            $"one Left wraps onto the last scale the list offers ({menu.ShownRowText})");
+
+        return (MonitorSetting.Word(stepped), size, DisplayWords.Fullscreen, "144", "200");
     }
 
     private static bool Offers(IReadOnlyList<string> sizes, string word)
@@ -693,10 +701,11 @@ internal static class MenuOriginalSuites
         int titles = 0;
         foreach (var line in board.Lines)
         {
-            titles += line.Text is "VIDEO" or "Monitor" or "Resolution" or "Display Mode" or "V-Sync" or "Enhanced Graphics" ? 1 : 0;
+            titles += line.Text is "VIDEO" or "Monitor" or "Resolution" or "Display Mode" or "V-Sync"
+                or "Render Scale" or "Enhanced Graphics" ? 1 : 0;
         }
 
-        ctx.Check(titles == 6, $"drawing the section's own tab title over the five row titles ({titles} of 6)");
+        ctx.Check(titles == 7, $"drawing the section's own tab title over the six row titles ({titles} of 7)");
         bool box = false;
         foreach (var plaque in board.Plaques)
         {

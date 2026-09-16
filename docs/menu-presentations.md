@@ -272,7 +272,11 @@ nearest, since every other option falls through to its own default and a nearest
 the player an aspect ratio they did not pick. The screen is `MonitorSetting.Resolve`, the one setting
 whose saved value can name something that is not there: an index no screen answers to is dropped like an
 unknown word and the window stays on the screen it already stands on, which is the primary on a launch
-that has moved nothing. A display setting is also the case where the apply does
+that has moved nothing. The render scale is `RenderScaleSetting.Resolve`, the saved word over the
+`graphics.renderScale` config key over native, and it is the one display setting that reaches no
+window: the scale is written on each 3D viewport as it is built, so it takes hold at the next start
+the way the graphics mode does, which is what the row's own description says. Every other display
+setting is the case where the apply does
 more than save, since `Launcher.ApplyOptions` puts the chosen pacing, mode and size on the window
 there and then rather than at the next start. Those calls run in the order the window needs them: the
 screen the window sits on first, since a mode applied before the move would fill the screen the
@@ -312,7 +316,8 @@ page behind its Preferences page's first door (`--menu=game-options` under
 `--menu=keys` for the KEYS AND BUTTONS page behind its own door). Built-in's one screen carries
 every setting Original spreads over those pages bar the volume levels, its rows in its own stepper
 convention: the difficulty and the nearest-after-a-kill targeting switch, the presentation and the
-graphics mode, then the monitor, the window size, the display mode and the V-Sync choice. The two presentations read those four through one rule
+graphics mode, then the monitor, the window size, the display mode, the V-Sync choice and the render
+scale. The two presentations read those five through one rule
 set (`CSVM/src/UI/Menu/DisplaySettingRows.cs`) over the same per-machine enumerations, so a saved
 value cannot read one way on the VIDEO page and another on Built-in's screen. Every option page reads the saved options from the store on entry and leaves
 through an `OptionsApplyExit` carrying every choice, whichever page it was sent from, so the store
@@ -415,7 +420,7 @@ consumed by `Launcher.OnMenuExit`. The hierarchy is closed:
 | `LaunchExit` | chapter, one `MenuSeatChoice` per seat, `MenuMode`, an `InstantActionDef` for Instant Action, a `VersusRules` for Dogfight | derive the session spec from the CLI plus the payload, bind the seats' pads, build |
 | `CampaignMissionExit` | the profile name, the `cm_sequence` position, one `MenuSeatChoice` per joined human | the same, over the campaign's story position |
 | `QuitExit` | nothing | quit the process |
-| `OptionsApplyExit` | the requested `PresentationId`, the graphics-mode and difficulty words, the four display settings, the nearest-after-a-kill switch and the controller-rumble toggle | save every one of them, then the three-call switch one frame later |
+| `OptionsApplyExit` | the requested `PresentationId`, the graphics-mode and difficulty words, the five display settings, the nearest-after-a-kill switch and the controller-rumble toggle | save every one of them, then the three-call switch one frame later |
 
 `MenuSeatChoice` is the plane node, the pad devices the seat claimed, the fit and, for a saved
 custom plane, its resolved `CustomPlaneDef`; the consumer never reads a store. The features build
