@@ -45,6 +45,9 @@ public sealed partial class SpyglassView : SubViewport
             Msaa3D = (Msaa)(int)ProjectSettings.GetSetting(
                 "rendering/anti_aliasing/quality/msaa_3d", 0).AsInt32(),
         };
+        // The picture is the pane's own view through a longer lens, so it takes the mode's render
+        // flags as the pane does rather than reading sharper or softer than the view around it.
+        Utils.ViewportQuality.Apply(view);
         view._pane = pane;
         view._ownLayer = ownLayer;
         view._camera = new Camera3D { Name = "spyglass_camera", Current = true };

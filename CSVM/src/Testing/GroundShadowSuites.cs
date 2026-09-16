@@ -17,7 +17,9 @@ namespace CSVM.Testing;
 /// pane's own pilot is the one taking that shape, that the texture carries the airframe's own
 /// silhouette rather than any symmetric blob, and that it is absent exactly where the decode says
 /// nothing is drawn (over the cutoff altitude, past the far range, and in enhanced graphics
-/// mode). Decode: docs/org/shadows.md.</summary>
+/// mode). That last gate carries the other half of the mode with it: the temporal pass a 3D
+/// viewport takes under enhanced and not under the faithful presentation.
+/// Decode: docs/org/shadows.md.</summary>
 internal static class GroundShadowSuites
 {
     // The empty stage's ground plane, which the shadow must land on rather than on y=0 by luck.
@@ -66,7 +68,8 @@ internal static class GroundShadowSuites
         "aircraft's sits beneath, the player's footprint alone doubling by 155 m, that shape " +
         "belonging to each pane's own pilot in a two-pane session, the airframe's own silhouette " +
         "in the texture turning with it, and absent over 250 m of altitude, past 200 m of range " +
-        "and under enhanced graphics")]
+        "and under enhanced graphics, the mode that drops it being the same switch that puts a 3D " +
+        "viewport on the temporal pass")]
     internal static void GroundShadow(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -661,6 +664,33 @@ internal static class GroundShadowSuites
         ctx.Check(present != null, $"and original graphics mode builds one");
         report.AppendLine($"graphics gate: enhanced={(absent == null ? "no pass" : "a pass")}, original={(present == null ? "no pass" : "a pass")}");
         present?.Free();
+        TemporalPass(ctx, report);
+    }
+
+    // The same switch read on the other side of the mode: a 3D viewport takes the temporal pass
+    // under enhanced and Godot's own default under original, which is what keeps the pinned
+    // goldens on an untouched faithful image. A bare SubViewport stands for all four construction
+    // sites, since every one of them writes through the same ViewportQuality.Apply.
+    private static void TemporalPass(TestContext ctx, StringBuilder report)
+    {
+        var view = new SubViewport { Name = "quality_probe" };
+        try
+        {
+            ctx.Check(!view.UseTaa, $"a fresh viewport carries no temporal pass, so the writes below are measured and not assumed");
+            GraphicsMode.Resolve(GraphicsMode.EnhancedWord);
+            ViewportQuality.Apply(view);
+            bool enhanced = view.UseTaa;
+            GraphicsMode.Resolve(GraphicsMode.Default);
+            ViewportQuality.Apply(view);
+            bool original = view.UseTaa;
+            ctx.Check(enhanced && !original,
+                $"and the viewport quality write follows the mode (enhanced={enhanced}, original={original})");
+            report.AppendLine($"temporal pass: enhanced={enhanced}, original={original}");
+        }
+        finally
+        {
+            view.Free();
+        }
     }
 
     // Where to look for C1 ground: a coarse grid over the map rather than one named spot, so the

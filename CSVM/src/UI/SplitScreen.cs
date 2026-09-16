@@ -263,6 +263,9 @@ public sealed partial class SplitScreen : CanvasLayer
                 // pane is nearest it (Godot maxes the listeners per channel), not from P1.
                 AudioListenerEnable3D = true,
             };
+            // A pane is the whole of what its pilot sees, so it takes the mode's render flags the
+            // way the single-player root viewport does.
+            ViewportQuality.Apply(view);
             pane.AddChild(view);
             _root.AddChild(pane);
             _panes.Add(pane);

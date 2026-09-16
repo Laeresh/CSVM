@@ -133,6 +133,10 @@ public sealed partial class CockpitOverlay : CanvasLayer
             Msaa3D = (Viewport.Msaa)(int)ProjectSettings.GetSetting(
                 "rendering/anti_aliasing/quality/msaa_3d", 0).AsInt32(),
         };
+        // The Environment this pass duplicates below carries the mode's lighting but none of its
+        // viewport flags, so the pass asks for those itself or the panel is the one surface the
+        // temporal pass misses.
+        Utils.ViewportQuality.Apply(view);
         if (env != null)
         {
             // The sky stays: a transparent viewport never paints its background, and clearing it

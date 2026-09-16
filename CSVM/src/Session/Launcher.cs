@@ -654,6 +654,9 @@ public partial class Launcher : Node3D
         string? savedGraphics = _spec.Det ? null : OptionsStore.UserOptions().Load().GraphicsMode;
         bool graphicsEnhanced = Utils.GraphicsMode.Resolve(_spec.GraphicsMode, savedGraphics);
         Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={(graphicsEnhanced ? "enhanced" : "original")}");
+        // The window's own viewport takes the mode's render flags here, the moment the mode is
+        // known and before any scene builds; the three SubViewports take them at construction.
+        Utils.ViewportQuality.Apply(GetViewport());
         // The graphics EffectsLevel's one global: the clutter fade's squared distance scale, 0 when
         // the fade is off. Enhanced mode pushes the fade out by the fog range's own factor (the
         // scale shrinks) so clutter reaches the pushed haze; original mode's factor is identity.

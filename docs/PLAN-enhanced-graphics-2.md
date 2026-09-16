@@ -169,7 +169,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A, the temporal pass and the render scale
 
-1. ☐ TAA on every 3D viewport under Enhanced
+1. ☑ TAA on every 3D viewport under Enhanced
 2. ☐ Render Scale, a VIDEO page row applied to every 3D viewport, ignored under `--det`
 3. ☐ BL-803: the shadow-map bands on grazing surfaces under Enhanced
 4. ☐ Alpha-to-coverage on the cutout surfaces under Enhanced
@@ -225,7 +225,31 @@ it depends on the halted one.
 
 # Wave A, the temporal pass and the render scale
 
-## A1 ☐ TAA on every 3D viewport under Enhanced
+## A1 ☑ TAA on every 3D viewport under Enhanced
+
+**Landed.** Godot's temporal anti-aliasing is on under Enhanced on all four 3D viewports and off on
+the faithful path. The four sites write it through one helper, `Utils/ViewportQuality.cs`:
+`public static void Apply(Viewport viewport)`, which today sets `UseTaa` from
+`GraphicsMode.Enhanced` and is where A2's render-scale write goes beside it. Called from
+`Session/Launcher.cs` on the root viewport right after `GraphicsMode.Resolve` and its log line,
+from `Flight/CockpitOverlay.cs`, `Flight/SpyglassView.cs` and `UI/SplitScreen.cs` at SubViewport
+construction. MSAA is untouched and `project.godot` is unchanged, so nothing reaches the faithful
+path. `Testing/GroundShadowSuites.cs`'s graphics-mode gate gained the assertion that a built
+viewport takes the pass under Enhanced and Godot's default under original; `docs/architecture.md`
+and `docs/architecture/Utils.md` carry the helper's entry.
+
+**Verified.** The item's tree is the first code on the plan branch, so its battery run is the
+merged tree's run; the branch battery runs again at the wave's end. On the item worktree: `dotnet build` warning-free, the
+complete `RunTests.ps1` PASS (units 4568 passed 0 failed, engine 348 suites passed 0 failed,
+goldens **19 shots hash-identical, zero movers**), `CheckCommentCaps.ps1` / `CheckDocEntries.ps1` /
+`CheckEncoding.ps1` clean. An `--graphics=enhanced` empty-stage probe renders and quits with the
+flag on. Not verified here: the image itself, which is the user's flight (the goal's edge, water
+specular and SSAO/penumbra stability, and whether the billboard populations ghost), and A3's
+question of whether the `BL-803` pattern is gone. Also seen: an enhanced `--fly --chapter=C1`
+screenshot probe does not quit inside 150 s while the faithful one takes 6.6 s, and it hangs the
+same way with the TAA write forced off, so it is the enhanced chapter stack rather than this item.
+
+**Original approach (kept for reference).**
 
 **Goal.** Under Enhanced the world, cockpit, spyglass and split-screen panes are temporally
 anti-aliased; edges, specular on water and the SSAO/penumbra noise are stable frame to frame. The

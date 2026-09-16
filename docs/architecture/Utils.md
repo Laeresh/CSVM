@@ -223,6 +223,15 @@ warns and falls back. `--det` drops both machine-state layers and keeps only an 
 `--graphics=`, which is how a golden or a deterministic capture pins the mode on purpose. The mode
 itself is written up as a divergence in `docs/architecture/Root.md`.
 
+## src/Utils/ViewportQuality.cs
+The render flags `GraphicsMode` writes on a 3D viewport, gathered here because there are four
+viewports to write them on: the root viewport `Session/Launcher.cs` owns, and the SubViewports
+`Flight/CockpitOverlay.cs`, `Flight/SpyglassView.cs` and `UI/SplitScreen.cs` build. `Apply` runs
+once per viewport at construction, after `GraphicsMode.Resolve`, and today writes only Godot's
+temporal anti-aliasing, on under Enhanced and off under the faithful presentation. MSAA is not
+its business: `project.godot` carries that for both presentations and the three SubViewports copy
+the project setting themselves. Read `GraphicsMode.cs` for the switch above it.
+
 ## src/Utils/VSyncSetting.cs
 The frame pacing, one setting carrying both whether the loop waits for the screen and the cap it
 runs to without it, since a cap only means anything with V-Sync off. `Resolve` layers the sources
