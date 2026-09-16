@@ -180,20 +180,26 @@ public sealed partial class WorldSounds : Node3D
         if (stream == null)
             return null;
 
-        // RANGE is [full-volume distance, audible distance]. Godot's inverse-distance curve is
-        // ~unattenuated inside UnitSize and clipped silent past MaxDistance, which is the same
-        // shape; the curve between them is an approximation of the original's, hence TUNE.
+        // ⚠ Do not restore an engine attenuation model or a MaxDistance; Tick drives the level from
+        // SoundFalloff. Godot measures from the emitter and fades linearly to nothing at
+        // MaxDistance, silencing a sound well inside the authored audible radius.
         var player = new AudioStreamPlayer3D
         {
             Stream = stream,
-            UnitSize = def.RangeMin,
-            MaxDistance = def.RangeMax,
-            VolumeDb = Mathf.LinearToDb(Mathf.Max(def.Volume, 0.0001f)),
-            AttenuationModel = AudioStreamPlayer3D.AttenuationModelEnum.InverseDistance,
+            VolumeDb = SoundFalloff.VolumeDb(def.Volume),
+            AttenuationModel = AudioStreamPlayer3D.AttenuationModelEnum.Disabled,
             Bus = AudioBuses.Effects,
         };
         AddChild(player);
-        var emitter = new Emitter { Name = name, Player = player, Looped = def.Looped };
+        var emitter = new Emitter
+        {
+            Name = name,
+            Player = player,
+            Looped = def.Looped,
+            RangeMin = def.RangeMin,
+            RangeMax = def.RangeMax,
+            Volume = def.Volume,
+        };
         _emitters.Add(emitter);
         return emitter;
     }
@@ -274,9 +280,10 @@ public sealed partial class WorldSounds : Node3D
     }
 
     /// <summary>Where the session's audio listeners are, one camera per pane, since every pane is
-    /// listener-enabled (UI.SplitScreen). For the debug log's distance column only: the engine reads
-    /// the listeners itself, and reports the NEAREST one here because that is the pane whose volume
-    /// wins the mix.</summary>
+    /// listener-enabled (UI.SplitScreen). The NEAREST of them is what every emitter's level is
+    /// measured to, because that is the pane whose volume wins the mix; the engine still does the
+    /// panning from its own listeners. Also the debug log's distance column. Without this the
+    /// emitters stay at their authored level, which is what a harness pumping no world sees.</summary>
     public void SetListeners(Func<IReadOnlyList<Vector3>> listeners) => _listeners = listeners;
 
     /// <summary>
@@ -287,6 +294,9 @@ public sealed partial class WorldSounds : Node3D
     /// </summary>
     public void Tick()
     {
+        // One call for the whole pass: every emitter's level is a distance to the nearest of these.
+        var ears = _listeners?.Invoke();
+
         // Sweep finished one-shots. A stopped player past the start grace is done; free it. A
         // source-following one rides its source's pose; a freed source leaves it at its last spot.
         for (int i = _oneShots.Count - 1; i >= 0; i--)
@@ -315,6 +325,7 @@ public sealed partial class WorldSounds : Node3D
                     shot.Source = null;   // finish where the source last was
                 }
             }
+            ApplyFalloff(shot.Player, ears, shot.RangeMin, shot.RangeMax, shot.Volume);
         }
 
         for (int i = _emitters.Count - 1; i >= 0; i--)
@@ -345,6 +356,7 @@ public sealed partial class WorldSounds : Node3D
                 continue;
             }
             e.Player.GlobalPosition = pos;
+            ApplyFalloff(e.Player, ears, e.RangeMin, e.RangeMax, e.Volume);
             // A LOOPED stream is marked as a forward loop by SoundArchive, so one Play() runs
             // forever; the one non-looping SOUND_NODE name in the data (snd_freighter) fires once
             // and is deliberately not restarted here.
@@ -354,7 +366,21 @@ public sealed partial class WorldSounds : Node3D
                 e.Player.Play();
             }
         }
-        LogOnce();
+        LogOnce(ears);
+    }
+
+    // Drives one player's level off the decoded curve (SoundFalloff), measured to the nearest
+    // listener because that is the pane whose volume wins the mix. A caller that supplied no
+    // listeners leaves the player at its authored level rather than guessing a distance.
+    private static void ApplyFalloff(AudioStreamPlayer3D player, IReadOnlyList<Vector3>? ears,
+        float rangeMin, float rangeMax, float volume)
+    {
+        if (ears == null || ears.Count == 0 || !IsInstanceValid(player))
+        {
+            return;
+        }
+        float range = NearestEar(ears, player.GlobalPosition).Range;
+        player.VolumeDb = SoundFalloff.GainDb(range, rangeMin, rangeMax, volume);
     }
 
     // Range from the closest listener to `at`, or -1 with no listeners,
@@ -409,17 +435,25 @@ public sealed partial class WorldSounds : Node3D
         var player = new AudioStreamPlayer3D
         {
             Stream = stream,
-            UnitSize = def.RangeMin,
-            MaxDistance = def.RangeMax,
-            VolumeDb = Mathf.LinearToDb(Mathf.Max(def.Volume, 0.0001f)),
-            AttenuationModel = AudioStreamPlayer3D.AttenuationModelEnum.InverseDistance,
+            VolumeDb = SoundFalloff.VolumeDb(def.Volume),
+            AttenuationModel = AudioStreamPlayer3D.AttenuationModelEnum.Disabled,
             Bus = bus,
             PitchScale = Mathf.Max(0.01f, pitch),
         };
         AddChild(player);
         player.GlobalPosition = worldPos;
         // Swept when it stops (Tick), no reliance on the Finished signal.
-        _oneShots.Add(new OneShot { Player = player, Source = source });
+        var shot = new OneShot
+        {
+            Player = player,
+            Source = source,
+            RangeMin = def.RangeMin,
+            RangeMax = def.RangeMax,
+            Volume = def.Volume,
+        };
+        // Set here as well as in Tick: a short cue can finish before the next frame's pass.
+        ApplyFalloff(player, _listeners?.Invoke(), shot.RangeMin, shot.RangeMax, shot.Volume);
+        _oneShots.Add(shot);
         player.Play();
         OneShotsStarted++;
         if (Debug)
@@ -439,7 +473,7 @@ public sealed partial class WorldSounds : Node3D
         return 1;
     }
 
-    private void LogOnce()
+    private void LogOnce(IReadOnlyList<Vector3>? listeners)
     {
         if (!Debug)
             return;
@@ -447,7 +481,7 @@ public sealed partial class WorldSounds : Node3D
         if (_logClock < 1f)
             return;
         _logClock = 0f;
-        var ears = _listeners?.Invoke() ?? Array.Empty<Vector3>();
+        var ears = listeners ?? Array.Empty<Vector3>();
         // Names the reference of the dist column: it is the nearest LISTENER (pane camera), which is
         // the one whose volume the engine's per-channel max keeps, not player one's.
         var where = new System.Text.StringBuilder();
@@ -461,7 +495,7 @@ public sealed partial class WorldSounds : Node3D
                 : "UNATTACHED";
             bool hidden = e.Host is { } hv && IsInstanceValid(hv) && !hv.IsVisibleInTree();
             var near = NearestEar(ears, e.Player.GlobalPosition);
-            Log.Info("sound", $"sound: {e.Name} @ {host}{(hidden ? " (host hidden)" : "")} pos {e.Player.GlobalPosition.Snapped(Vector3.One)} dist {near.Range:0} m (P{near.Index + 1}) max {e.Player.MaxDistance:0} m {(e.Player.Playing ? "PLAYING" : e.Active ? "silent" : "off")}");
+            Log.Info("sound", $"sound: {e.Name} @ {host}{(hidden ? " (host hidden)" : "")} pos {e.Player.GlobalPosition.Snapped(Vector3.One)} dist {near.Range:0} m (P{near.Index + 1}) range {e.RangeMin:0}-{e.RangeMax:0} m gain {e.Player.VolumeDb:0.0} dB {(e.Player.Playing ? "PLAYING" : e.Active ? "silent" : "off")}");
         }
     }
 
@@ -472,6 +506,9 @@ public sealed partial class WorldSounds : Node3D
         public AudioStreamPlayer3D Player = null!;
         public float Age;
         public Node3D? Source;
+        public float RangeMin;    // RANGE's full-volume distance, m
+        public float RangeMax;    // RANGE's audible distance, m
+        public float Volume;      // VOLUME's linear gain
     }
 
     // One live emitter: the player plus the world node whose pose it rides.
@@ -483,5 +520,8 @@ public sealed partial class WorldSounds : Node3D
         public Vector3 Offset;    // in the host's own frame
         public bool Active;       // OBJECT_ACTIVE_STATE / the compiled event's active_state
         public bool Looped;
+        public float RangeMin;    // RANGE's full-volume distance, m
+        public float RangeMax;    // RANGE's audible distance, m
+        public float Volume;      // VOLUME's linear gain
     }
 }

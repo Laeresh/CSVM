@@ -801,15 +801,24 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   read across from the outside view.
   *Cross-refs:* `PT-126`; `docs/org/shakes.md` (the decode), `docs/formats/sounds.md` (the block).
 
-- `BL-269` `[Tuning]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **The 3D sound falloff curve between the authored `RANGE` radii is an admitted
-  approximation** (`WorldSounds.cs:159-161`, endpoints authored, curve "an approximation of
-  the original's, hence TUNE"). Low stakes per sound but global: every positional sound's
-  audible footprint. A calibrated fly-past recording of one loud fixed emitter would trace the
-  real curve. *Decision:* judged on fly-pasts of the police car and the train, the falloff drops
-  too fast: a sound goes quiet closer to its emitter than the original's does. Flatten the curve
-  between the authored radii so the level holds longer before it dies, then re-judge on the same
-  two emitters. ⚠ The C1 refinery flare is not a candidate emitter: neither
-  `refinery_fire_always` nor `refinery_fire.zrd` authors a sound.
+- `BL-269` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The 3D sound falloff between the authored `RANGE`
+  radii is the original's own curve now, and wants one pass by ear.** The approximation is gone:
+  `SoundFalloff.cs` computes the decoded law and `WorldSounds` drives every emitter's level from it,
+  so the players carry no engine attenuation model. The curve holds full volume one eighth of the
+  way into the band, then loses 10 dB per doubling of the reach past that shelf, reaching 30 dB down
+  at the audible radius and running straight to silence over the next tenth. For the police siren
+  (`RANGE [200, 1200]`) that is 0 dB to 325 m, -10 at 450, -20 at 700, -25.8 at 950, -30 at 1200 and
+  silent at 1320; for the train (`RANGE [600, 1200]`) 0 dB to 675 m, -10 at 750, -20 at 900, -25.8
+  at 1050, -30 at 1200. The old curve was 6 dB per doubling measured from the emitter, multiplied by
+  Godot's linear fade to nothing at `MaxDistance`, which is what dropped it early: the train was
+  already 6 dB down at its own full-volume radius and silent at 1200 where the original is 30 down
+  and still audible. *Playtest:* `PT-150`, the same two fly-pasts that produced the complaint.
+  ⚠ The C1 refinery flare is not a candidate emitter: neither `refinery_fire_always` nor
+  `refinery_fire.zrd` authors a sound. ⚠ Do not tune this by taste without re-reading
+  `docs/formats/sounds.md`: every number above is decoded, so a change is a change away from the
+  original. If the fly-past says it is still wrong, the suspect is the world scale or the other
+  positional sites (`AiWeaponAudio`, `WeaponAudioCues`, the turret voices) which still use Godot's
+  own inverse-distance model with a 1.1x cull, not this curve.
 
 - `BL-281` `[Tuning]` `[Blocked: CAP-27]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The ricochet sounds are audible but very faint.** `PT-25` (c), 2026-08-05:
   `snd_ricochet1–4` play under the per-impact spark burst but sit too low to read. A mix-gain

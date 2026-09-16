@@ -331,6 +331,7 @@
     "world-emitter-ambience": 2.65,
     "world-lights-nearest-viewer": 0.002,
     "world-query-reuse": 0.005,
+    "world-sound-falloff": 0.05,
     "world-turrets": 3.756,
     "zeppelin-breakup": 8.333,
     "zeppelin-broadside": 7.799,

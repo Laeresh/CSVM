@@ -418,11 +418,20 @@ unchanged. Two entries exist install-wide (`fire1.flt` 12@10, `fire2.flt` 6@5).
 `SOUND_NODE` ambient looping 3D emitters: one pooled `AudioStreamPlayer3D` per live emitter,
 following its host's pose each frame. `PlayOneShot(name, worldPos, rng, bus)` is the one-shot
 `SOUND` half, fire-and-forget destruction and impact audio resolving a `SOUND_GROUPS` name to a
-member first; the overload taking a `Node3D` rides that source's pose per Tick instead. `bus`
-defaults to Effects and is read per play, because combat voice (`Session/AiVoiceRuntime.cs`) is
-the one caller passing Voice on a path those one-shots share. `HasStream` answers availability
-after the prewarm; `OneShotsStarted` asserts a cue fired without a log grep. Who hears an emitter
-is `UI/SplitScreen.cs`'s per-pane model; `SetListeners` feeds `--debug-anim`. Next: `SoundArchive.cs`.
+member first; the overload taking a `Node3D` rides that source's pose per Tick. `bus` is read per
+play, because combat voice (`Session/AiVoiceRuntime.cs`) is the one caller not on Effects.
+`HasStream` answers availability after the prewarm, `OneShotsStarted` that a cue fired. Who hears
+an emitter is `UI/SplitScreen.cs`'s per-pane model, fed by `SetListeners`: `Tick` measures to the
+nearest and levels every player from `SoundFalloff.cs`, never Godot's. Next: `SoundFalloff.cs`.
+
+## src/Mech3/SoundFalloff.cs
+The original's positional gain law, engine-free and pure: what a listener distance, a definition's
+`RANGE` pair and its `VOLUME` come to in decibels. `AttenuationDb` is the distance term alone,
+`VolumeDb` the linear-gain conversion (ten decibels per doubling, not `20 log10`), `GainDb` the sum
+with the silence floor. It exists as its own module because no Godot attenuation model expresses
+the shape: the ramp is measured from the full-volume radius rather than from the emitter, and the
+band past the audible radius is a tail rather than a cut. The decode, its addresses and the table
+are [../formats/sounds.md](../formats/sounds.md). Read `WorldSounds.cs` for the only caller.
 
 ## src/Mech3/WorldLights.cs
 Packs the animated world's `LIGHT_STATE` point lights into the 2xN RGBAF texture the fullbright

@@ -245,6 +245,39 @@ draws its authored 800x600 space one-to-one.
   - (d) flying level inside the band, no popping as a sprite's own band swings across the cull.
   *Blocks:* nothing tracks the outcome; a fail mints a new `BL` naming which of (a)-(d) failed.
 
+### C1 · Bloodhawk, the police car and the train, sound on
+
+```powershell
+./RunGame.ps1 --chapter=C1 --plane=player_bhawk --volume=1.0 --no-det --debug-anim --log=sound
+```
+
+⚠ `--volume=1.0` is not optional: the default master volume is 0, so a run without it is silent for
+reasons that have nothing to do with this check. `--debug-anim --log=sound` prints one line per
+emitter each second carrying its distance, its authored range and the gain the curve put it at, so
+a disagreement can be read off numbers instead of guessed.
+
+- `PT-150` `[Own]` **The positional falloff, re-judged on the two emitters that produced the
+  complaint (`BL-269`).** The curve is no longer an approximation: it is the original's own law,
+  computed per frame from the definition's `RANGE` pair. The police chase car (`RANGE [200, 1200]`)
+  is now unattenuated out to 325 m, 10 dB down at 450, 20 at 700 and 30 at 1200, then silent at
+  1320; the track train (`RANGE [600, 1200]`) is unattenuated to 675 m, 10 down at 750, 20 at 900
+  and 30 at 1200. The previous curve was 6 dB per doubling from the emitter times a linear fade to
+  nothing at the audible radius, so the train was already 6 dB down where it should have been at
+  full volume and silent where it should still have been audible. No instrument can say whether the
+  new level reads right at the controls.
+  *Look for:*
+  - (a) flying past the police car at chase height, the siren stays at a steady full level while it
+    is close rather than dropping the moment you pass, and it fades out over the approach to a
+    kilometre instead of cutting;
+  - (b) the train on its track, heard from well out and holding its level through the near pass,
+    the earlier "quiet too soon" being gone;
+  - (c) neither emitter is now too loud too far out, which is the failure the other way: at the
+    authored audible radius both should be faint, not merely quieter;
+  - (d) circling one of them at a fixed radius, the level holds steady rather than pumping, since
+    the level is recomputed every frame from the nearest pane.
+  *Blocks:* `BL-269`. A fail on (a) or (b) alone is a scale question, not a curve one; quote the
+  `sound` log's distance and gain for the foot you judged it at.
+
 ### C1 · Bloodhawk vs AI, the kill sequence, sound on
 
 ```powershell

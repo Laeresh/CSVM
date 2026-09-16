@@ -98,6 +98,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/WavFile.cs`, pure-C# WAV parser + MS ADPCM→PCM16 decoder (the game's format; Godot can't load it).
 - `src/Mech3/WavCues.cs`, a WAV's RIFF `cue ` chunk as ascending times in seconds, the marker clock the briefing narration's reveal script waits on.
 - `src/Mech3/SoundArchive.cs`, WAV lookup over a sounds extraction → cached `AudioStreamWav` (forward loop when LOOPED).
+- `src/Mech3/SoundFalloff.cs`, the original's positional gain law: a distance, a `RANGE` pair and a `VOLUME` to decibels, pure and engine-free.
 - `src/Mech3/MusicPlayer.cs`, the state-driven score: one 2D streaming channel for menu, cabin and mission, with the decoded battle hold.
 - `src/Mech3/MissionRadio.cs`, the mission radio queue: the non-positional voice channel the campaign's objective callouts and VO dialogue chains speak on.
 - `src/Mech3/SoundDefs.cs`, sounds.json parser: SETS `snd_*` → `SoundDef`; `LoadGroups` → the weighted-random `SOUND_GROUPS` + their dialogue chains.
