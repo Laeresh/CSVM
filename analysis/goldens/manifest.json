@@ -15,56 +15,56 @@
     {
       "name": "c1-waterfall",
       "frame": 120,
-      "hash": "e33e04b7099dd7369c72039e4f6300c5",
+      "hash": "ba05b93a796fcb4b635912d3aad20035",
       "exercises": "UV scroll on the falls sheet, the mist puffer carried on the mission wind and drawn farthest-first, and the alpha-textured spray under the zone's world light; frame-sensitive 1.28 % at 120 vs 121.",
       "args": ["--freecam", "--chapter=C1", "--pos=-7720,60,-3380", "--lookat=-7868,40,-3449", "--det", "--mute"]
     },
     {
       "name": "c1b-night-sea",
       "frame": 120,
-      "hash": "7d19876678eedebf567c8770359adb4d",
+      "hash": "574c43703a3363b8ccc1f333282e6fed",
       "exercises": "night lighting, skydome, islands, coastline sheets dimmed by the 0.426 world light like every lit surface, the ambient cloud-puff field; static at 120 vs 121, 0.13 % at 120 vs 360 (puff drift).",
       "args": ["--freecam", "--chapter=C1B", "--pos=-6748,300,-8885", "--direction=0.242,-0.25,0.970", "--det", "--mute"]
     },
     {
       "name": "c1c-rain",
       "frame": 120,
-      "hash": "7adedc7062834e7ff5acb3feaffccad5",
+      "hash": "f519185a993e94fd0236f7d020dcfecf",
       "exercises": "rain precipitation (seeded field on the sim clock), cloud deck, heavy fog; frame-sensitive 2.50 %.",
       "args": ["--freecam", "--chapter=C1C", "--pos=-3843,700,-1101", "--direction=-0.052,-0.25,-0.999", "--det", "--mute"]
     },
     {
       "name": "c2-city",
       "frame": 120,
-      "hash": "fbe54bfca3169be36629522418c3e4c0",
+      "hash": "142611a096bbdf385d723fc0ad24bb10",
       "exercises": "C2's solid 3D city blocks, backlot geometry, daylight fog, the boat anims' harbour wake spray with its far puffs culled, alpha sprites lit like the rest, and two mesh point lights that author no fade band; near-static, 51 px at 120 vs 121.",
       "args": ["--freecam", "--chapter=C2", "--pos=-5722,186,-3457", "--direction=-0.438,-0.15,-0.899", "--det", "--mute"]
     },
     {
       "name": "c3-island",
       "frame": 120,
-      "hash": "d930eb85fd9d64edbc57b00d72176773",
+      "hash": "03b4f04920767872d1c9953a900ec544",
       "exercises": "coastline, surf edge and open water at close range, the blended surf sheets taking the world light with the water, and the distant spray and smoke puffs culled past their authored far band; static, 9 px at 120 vs 360.",
       "args": ["--freecam", "--chapter=C3", "--pos=-4518,400,-2015", "--direction=-0.35,-0.35,-1", "--det", "--mute"]
     },
     {
       "name": "c4-snow",
       "frame": 120,
-      "hash": "aeb0d1b4b7f02d6760ceb56f2fa50eae",
+      "hash": "d846c5f17c0b633bdf5b475e8ddf378e",
       "exercises": "snow precipitation plus the chapter carrying 6 UV-scroll models, with a stack plume culled past its authored far band and its near puffs on the mission wind; frame-sensitive 3.74 %, the largest of the freecam set.",
       "args": ["--freecam", "--chapter=C4", "--pos=-3330,958,-9181", "--direction=-0.682,-0.2,0.731", "--det", "--mute"]
     },
     {
       "name": "c5-city-night",
       "frame": 120,
-      "hash": "00e47aab6a231a4b112c7a157e8f2d93",
-      "exercises": "the night city: LIGHT_STATE point lights in csky_light_data, 51 beacons on their authored periods, lit window skins, moon and stars, the -0.8 mip LOD bias on every sampling arm, and torch puffs culled past their far band; one beacon toggles.",
+      "hash": "fb6f0765eeca1a9858ec7cb08cb33b70",
+      "exercises": "the night city: LIGHT_STATE point lights in csky_light_data, 51 beacons on their authored periods, lit window skins, the star field, the -0.8 mip LOD bias on every sampling arm, and torch puffs culled past their far band; one beacon toggles.",
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute"]
     },
     {
       "name": "c1-cloud-field",
       "frame": 120,
-      "hash": "9b84a361114d2b56c68687dbaec4fcdd",
+      "hash": "ac8ed6383bf02df8e142dc5086859982",
       "exercises": "the fvol cloud field along its own deck: sprites laid on the staggered lattice of each authored polygon face, each fading between both far_fade_range pairs against its own face's normal, the card colour, and the deck sheet past the field's edge.",
       "args": ["--freecam", "--chapter=C1", "--pos=-6144,1208,-6144", "--direction=0,0,-1", "--det", "--mute"]
     },
@@ -78,14 +78,14 @@
     {
       "name": "empty-stage",
       "frame": 120,
-      "hash": "7cfae70e93bd1e438b52e44ddee57f76",
+      "hash": "e5f1db5638403d596f0611a0de0e34ec",
       "exercises": "Synthetic no-gamez flight: code-drawn grid, default sky and sun, quaternion attitude integration, chase camera and HUD; frame-sensitive 12.21 %, and still renders with extracted/ absent.",
       "args": ["--stage=empty", "--plane=player_bhawk", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
     {
       "name": "c1-flight-kill",
       "frame": 280,
-      "hash": "e8dc1d60f70dc955aa1614e753d55aff",
+      "hash": "4d0f5c6cc68b03d182ee4c88bd89f708",
       "exercises": "Chase-camera flight firing at two AIs then banking: one shot down 3 s earlier, its fireball and kill line up, the live one bracketed, the gun's smoke and light at their authored offset ahead of the muzzle, exhaust, shadow; frame-sensitive 78.07 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_kestrel,player_fury", "--ai-damage=0.02", "--target=ai2_player_fury", "--debug-markers", "--fire", "--hold=0,0,0,1@2.5;0.05,0.1,0,1", "--det", "--mute"]
     },
@@ -99,35 +99,35 @@
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "57b457a7f72886972f2a2aff731c271a",
+      "hash": "bd6c1f6d54c2ff5573ea343538209cb9",
       "exercises": "Neutral-control player flight beside a killed ap_radiotwr: great_balls_of_fire on the world-effects stage riding its death site, flight-state-dependent SpeedCue, seeded puffers, world-lit alpha scenery over water; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "abb93b6831bd5498e9f02f94c410f247",
+      "hash": "6d7d1556e6857a05716031c2f3725e4c",
       "exercises": "player_crash_default five steps in: corrected pre-crash attitude, crash rig and airframe, texture-flag puffers, ranged tumble, vector pieces, flydirt delta, pooled repeats, the crash notice and respawn prompt over the hidden HUD, on lit C1 scenery.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
     {
       "name": "c1-debris-rest",
       "frame": 360,
-      "hash": "a0d87025f8727f3f525cb7b309f4363a",
+      "hash": "741eaa2d629651a152497153627decbc",
       "exercises": "the two-ray column ground-contact tier: a killed hangar's flung debris tested against terrain, one piece resting with its landing's own spark puffer, on the mission wind, as the visible signal, over C1 ground and cutouts under one world light.",
       "args": ["--freecam", "--chapter=C1", "--collision", "--destroy=m_build03", "--pos=-6104,230,-4200", "--direction=0,-0.55,-0.83", "--det", "--mute"]
     },
     {
       "name": "c1-stunt-marker",
       "frame": 90,
-      "hash": "f5d7e3ea7f73a750b77e66e69117dc1f",
+      "hash": "8bd94d776e02819edfa6e041271a4bd5",
       "exercises": "A stunt run's Danger Zone off screen on the pilot's own target cycle: the spyglass disc at the marker anchor, the shaft leaving its rim under the 20-by-10 head, the label in the objective's blue, the run clock, the plane's ground shadow below.",
       "args": ["--chapter=C1", "--stunt", "--plane=player_fury", "--pos=-5300,300,-6300", "--direction=0,0,-1", "--det", "--mute"]
     },
     {
       "name": "campaign-4p-grid",
       "frame": 120,
-      "hash": "381cf0412b8b2756cb75f330358c0a3e",
+      "hash": "4f2ad6b1c57ce0464da3803d5b7402b3",
       "exercises": "Four humans launch a co-op campaign mission on StartGrid with no profile to load, so no director: four render targets, HUDs, gauges and target labels, the lit C1 world, the player-shaped shadow under each pane's own pilot; frame-sensitive 73.79%.",
       "args": ["--campaign=csvm-golden:6", "--players=4", "--plane=player_bhawk,player_bhawk,player_bhawk,player_bhawk", "--det", "--mute"]
     },

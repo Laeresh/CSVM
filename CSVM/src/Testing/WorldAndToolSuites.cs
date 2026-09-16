@@ -344,6 +344,14 @@ internal static class WorldAndToolSuites
             ctx.Check(Mathf.Abs(CameraController.FirstPersonFovDeg(PilotViewMode.Cockpit)
                     - CameraController.HorizontalToVerticalFovDeg(80f)) < 0.001f,
                 $"the pass's FOV law is the camera's own per-mode law");
+            // The other half of that table: every pose outside the interior takes the one decoded
+            // base, whatever FOV the camera arrived carrying, so no caller writes its own number
+            // beside the camera and expects the controller to hand it back.
+            var probeCam = new Camera3D { Fov = 12f };
+            host.AddChild(probeCam);
+            new CameraController(probeCam, new CamParams(), _ => false, -1).RestoreExternalFov();
+            ctx.Check(Mathf.Abs(probeCam.Fov - CameraController.ExternalFovDeg) < 0.001f,
+                $"an external pose takes the decoded base fov={probeCam.Fov:0.##}");
             // The wobble the interior inherited below the shake pivot has to reach the pass. The
             // mount's tilt is about X, so its Right axis is the witness: a Z roll of r turns it by
             // exactly r, and a pass that forgot the wobble leaves it at 0.

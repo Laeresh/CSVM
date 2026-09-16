@@ -31,9 +31,9 @@ Two findings will not be guessed correctly:
   camera offset** anywhere. Mode 7 (nose) is the same physical position as mode 6 (cockpit); it
   differs in *rendering* (the cockpit interior and some plane nodes are hidden), runs player
   head-look without the Cockpit-only autohead, and uses the narrower 60° FOV.
-- **The 62° vertical FOV the engine currently assumes does not exist in the binary.** The
-  62°-in-radians constant `1.082104` (`63 82 8a 3f`) is absent. The correct base is **60° horizontal
-  FOV**, with the single **80°** first-person cockpit exception.
+- **A single 62° vertical FOV, which the port assumed before this decode, does not exist in the
+  binary.** The 62°-in-radians constant `1.082104` (`63 82 8a 3f`) is absent. The base is **60°
+  horizontal FOV**, with the single **80°** first-person cockpit exception.
 
 ## How the per-view FOV is gated
 
@@ -418,8 +418,8 @@ the back flag set the routine never calls `FUN_0042d010` at all and writes the f
 
 | | Original | CSVM today |
 |---|---|---|
-| Per-view base FOV | two horizontal constants: **60°** base and **80°** only for cockpit mode 6 | Cockpit/Nose use the decoded 60°/80° base (`CameraController.HorizontalToVerticalFovDeg`); every external view still assumes a single **62° vertical** (`GameSession.cs`, `docs/org/tracers.md:258`, migration tracked by `BL-420`) |
-| FOV axis | stored/ported as **horizontal** half-angle, converted at the 4:3 it ran | matches for Cockpit/Nose, whose vertical is then held at every viewport shape; external views still store/assume vertical |
+| Per-view base FOV | two horizontal constants: **60°** base and **80°** only for cockpit mode 6 | matched: `CameraController.HorizontalToVerticalFovDeg` drives Cockpit from the 80° and every other view, first-person Nose and external alike, from the 60° base (`CameraController.ExternalFovDeg`, written by `GameSession` and `Launcher` onto every world camera) |
+| FOV axis | stored/ported as **horizontal** half-angle, converted at the 4:3 it ran | matches: one horizontal base converted once, the vertical then held at every viewport shape |
 | First-person pair | modes 6/7 share the `cockpit_camera` position; differ in interior render, head-look, FOV | `PilotViewMode` implements Cockpit/Nose as camera modes |
 | Cockpit interior gate | drawer (`FUN_0049fb00`) draws `cockpit1` only in mode 6 | `CockpitVisibility` enforces the same mode gate |
 | **Flyby** ("Access Chase View") | world-fixed, re-siting camera (mode `9`): holds a world point, re-aims at the plane, re-sites on `camparam` flyby trigger | landed as `StaticCameras`, on `F7` and `--view=flyby` |
@@ -432,7 +432,17 @@ the back flag set the routine never calls `FUN_0042d010` at all and writes the f
 The camera is placed faithfully today: the plane's `cockpit_camera` offset read from the model (no
 hardcoded 0.75), both first-person views sitting at it, the interior drawn + head-look + 80° for
 Cockpit, the interior hidden + head-look with autohead off + 60° for Nose, and 60° for every
-3rd-person mode except the still-unmigrated external 62° global.
+3rd-person mode, the chase and the nine fixed numpad poses, look-behind, the pad look-around, the
+crash and death cuts and the flyby, plus the debug freecam and animation lab that draw the same
+world. The static model viewer keeps its own 50° framing: it shows a model on a stage, not one of
+the original's views.
+
+⚠ **Two fits made against the old 62° assumption are owed a re-judgement, not a re-measurement.**
+The overcast sky match and the tracer screen-size floor (`docs/org/tracers.md`, "How the floor
+itself is computed") were each settled by eye or by arithmetic against a 62° vertical frustum, and
+a 46.8° one magnifies the same world by 1.39× at the same distance. Re-fitting either against the
+same footage without re-judging what it should look like would carry the old base forward inside a
+new number.
 
 **The interior is authored in its own space, and the two spaces are not a similarity apart.** The
 eye sits at `cockpit1`'s origin looking down −Z (`extracted/zrdr/instruments.zrd.json` places the

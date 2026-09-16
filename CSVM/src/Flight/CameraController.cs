@@ -94,10 +94,10 @@ public sealed class CameraController
     private const float ChaseLogInterval = 0.25f; // sim-s between chase-distance breadcrumb lines
 
     // The decoded per-mode BASE horizontal FOV, in degrees (org/cameraViews.md, "FOV constants
-    // and aspect correction": 1.0471976 rad / 1.3962634 rad, exactly 60°/80°). Only Cockpit and
-    // Nose ever read this table; every external view keeps GameSession's own 62° vertical global
-    // untouched; external-view FOV calibration remains separate from this table.
-    private const float NoseHorizontalFovDeg = 60f;
+    // and aspect correction": 1.0471976 rad / 1.3962634 rad, exactly 60°/80°). The 60° is the
+    // base every camera mode takes; the 80° is the single exception the cockpit interior view
+    // (mode 6) gets. Nose and every external view alike read the base.
+    private const float BaseHorizontalFovDeg = 60f;
     private const float CockpitHorizontalFovDeg = 80f;
 
     // The original ran 4:3 only, so the bases above are its horizontal angles at 4:3
@@ -139,12 +139,6 @@ public sealed class CameraController
     // separate nose marker (docs/org/cameraViews.md).
     private readonly Vector3 _cockpitCameraOffset;
 
-    // The FOV the owned camera carried at construction, GameSession's own 62° vertical global
-    // for every external pose (chase, fixed, back, pad-look, crash). Captured once rather than
-    // read back from GameSession, so this class restores exactly what it found and never reaches
-    // into that global's own home.
-    private readonly float _externalFovDeg;
-
     // The dynamic chase radius: `dist` + `dist_factor`·V + the throttle transient. Advanced by
     // UpdateDynamics on the sim clock, and read by both the chase camera and the fixed views:
     // they are one number, so a numpad snap changes the angle and nothing else.
@@ -177,10 +171,16 @@ public sealed class CameraController
         _camParams = cam;
         _radius = cam.Dist;
         _cockpitCameraOffset = cockpitCameraOffset;
-        _externalFovDeg = camera.Fov;
         Statics = new StaticCameras(cam, staticDraw ?? Rng.Stream(Rng.Camera).Randf);
         FlybyActive = pinnedView == PinnedFlybyView;
     }
+
+    /// <summary>The vertical FOV every camera outside the cockpit interior draws at: the decoded
+    /// 60° horizontal base through <see cref="HorizontalToVerticalFovDeg"/>, 46.8° at the 4:3 the
+    /// original ran, and held at every viewport shape. Public because a session builds its cameras
+    /// before any controller owns them, so both take the angle from this one place rather than from
+    /// a number written beside the camera.</summary>
+    public static float ExternalFovDeg => HorizontalToVerticalFovDeg(BaseHorizontalFovDeg);
 
     /// <summary>Which view this pilot has SELECTED, Chase, Cockpit or Nose. State, not a held
     /// key: it survives until the cycle key or another selection changes it, and a held look-behind
@@ -393,14 +393,14 @@ public sealed class CameraController
     /// cref="CockpitOverlay"/>).</summary>
     public static float FirstPersonFovDeg(PilotViewMode mode) =>
         HorizontalToVerticalFovDeg(
-            mode == PilotViewMode.Cockpit ? CockpitHorizontalFovDeg : NoseHorizontalFovDeg);
+            mode == PilotViewMode.Cockpit ? CockpitHorizontalFovDeg : BaseHorizontalFovDeg);
 #pragma warning restore SA1204
 
-    /// <summary>Put the camera back on the vertical FOV it carried at construction, GameSession's
-    /// own 62° global. Every non-first-person pose calls this (a held numpad key or look-behind
-    /// while the SELECTION is Cockpit/Nose is an external pose and gets the external FOV while
-    /// held, back to first-person FOV on release, same as any other override).</summary>
-    public void RestoreExternalFov() => _camera.Fov = _externalFovDeg;
+    /// <summary>Put the camera back on <see cref="ExternalFovDeg"/>, the base every view but the
+    /// cockpit interior draws at. Every non-first-person pose calls this (a held numpad key or
+    /// look-behind while the SELECTION is Cockpit/Nose is an external pose and gets the external
+    /// FOV while held, back to first-person FOV on release, same as any other override).</summary>
+    public void RestoreExternalFov() => _camera.Fov = ExternalFovDeg;
 
     /// <summary>The death camera: a spot chosen once from the <c>death_*</c> fields on the frame
     /// the pilot's aircraft is destroyed, held for the whole fall while the view re-aims at the

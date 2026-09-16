@@ -754,7 +754,13 @@ public partial class Launcher : Node3D
                 Log.Info("core", $"gamepad: device {p} \"{Input.GetJoyName(p)}\" guid={Input.GetJoyGuid(p)} info={Input.GetJoyInfo(p)}");
 
         SetupLighting();
-        _camera = new Camera3D { Fov = _spec.Fly || _spec.Freecam || _spec.AnimLab ? 62 : 50, Far = 40000f };
+        // The same two framings GameSession re-applies per launch: the decoded world base for
+        // every camera that draws the world, the viewer's own 50 for a model on a stage.
+        _camera = new Camera3D
+        {
+            Fov = _spec.Fly || _spec.Freecam || _spec.AnimLab ? CameraController.ExternalFovDeg : 50f,
+            Far = 40000f,
+        };
         AddChild(_camera);
         _orbit = new OrbitCamera(_camera);
         if (_spec.Yaw is { } argYaw) _orbit.Yaw = argYaw;
