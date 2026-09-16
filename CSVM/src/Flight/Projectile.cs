@@ -2007,9 +2007,13 @@ public sealed partial class ProjectilePool : Node3D
         // A chapter gamez node name instances at the hit point and skips the spark; a reader-def
         // or unresolved name leaves the spark to stand in. A name the effects runtime binds plays
         // there instead (Apply's sink), even when a same-named gamez template exists (ballflare.flt).
-        if (outcome.EffectName is { } fxName && !(EffectHandles?.Invoke(fxName) ?? false)
-            && SpawnImpactModel(fxName, point, EffectOrient(outcome, normal)))
-            outcome = ImpactOutcome.Resolve(weapon, surface, modelResolved: true, hasEffectsRuntime, suppression, cratered);
+        bool effectBound = outcome.EffectName is { } bound && (EffectHandles?.Invoke(bound) ?? false);
+        bool modelled = !effectBound && outcome.EffectName is { } fxName
+            && SpawnImpactModel(fxName, point, EffectOrient(outcome, normal));
+        // The second resolve now also carries whether the runtime renders the row's own name, which
+        // is what takes the ricochet burst off a `buildings` hit that already plays something.
+        if (modelled || effectBound)
+            outcome = ImpactOutcome.Resolve(weapon, surface, modelled, hasEffectsRuntime, suppression, cratered, effectBound);
 
         // Verification breadcrumb: the first few impacts confirm hit detection and surface
         // classification without needing a lucky screenshot; then it goes quiet.

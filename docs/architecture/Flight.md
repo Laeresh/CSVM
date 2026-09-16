@@ -277,8 +277,8 @@ authored-rotation rule and the per-airframe name variants: [../formats/hud.md](.
 `Resolve` is the whole decision, with no Godot type, no scene and no sound archive behind it, so a
 unit test reaches the dispatch directly; `ImpactSuppression` is the mask a weapon's impact hook
 returns. `ProjectilePool.Impact` reads the struck surface id and calls it, `Apply` performs the
-answer and decides nothing, and `ProjectilePool.HasBlastDamage` is the weapon-level spelling of the
-same rule. The stand-in ladder and the `default`-row backfill are decoded at their own members.
+answer and decides nothing. The stand-in ladder (whose `effectBound` arm keeps a burst off a row the
+effects runtime renders) and the `default`-row backfill are decoded at their own members.
 Decode: [../org/weaponImpact.md](../org/weaponImpact.md), [../formats/weapons.md](../formats/weapons.md).
 
 ## src/Flight/Projectile.cs

@@ -61,11 +61,11 @@ public readonly record struct ImpactOutcome
     /// touches no scene, sink or sound archive (docs/org/weaponImpact.md). <c>default</c> already
     /// backfills ids the weapon names no block for (<see cref="WeaponDefs.InheritDefaultRow"/>), so
     /// do not re-add a fallback here, it would also fire on ids a weapon names and leaves empty,
-    /// like <c>player</c>(6). The last four parameters are caller facts, <paramref name="cratered"/>
-    /// being whether the round's carve landed.</summary>
+    /// like <c>player</c>(6). The last parameters are caller facts: whether the round's carve landed,
+    /// and whether the effects runtime carries a def of the name selected.</summary>
     public static ImpactOutcome Resolve(WeaponDef weapon, int surfaceId, bool modelResolved,
         bool hasEffectsRuntime, ImpactSuppression suppression = ImpactSuppression.None,
-        bool cratered = false)
+        bool cratered = false, bool effectBound = false)
     {
         // The struck id's IMPACT row, already carrying `default`'s binding if the weapon named no
         // block for this id (WeaponDefs.InheritDefaultRow).
@@ -85,7 +85,7 @@ public readonly record struct ImpactOutcome
             Sound = (suppression & ImpactSuppression.Sound) != 0 ? null : effect?.Sound,
             StandIn = cratered
                 ? ImpactStandIn.None
-                : StandInFor(weapon, surfaceId, modelResolved, hasEffectsRuntime),
+                : StandInFor(weapon, surfaceId, modelResolved, hasEffectsRuntime, effectBound),
             Damage = weapon.HealthDamage ?? 0f,
             BlastRadius = weapon.ImpactProximity ?? 0f,
         };
@@ -95,14 +95,16 @@ public readonly record struct ImpactOutcome
     // explosion; a gun on `buildings` gets ricochet sparks; everything else gets the single spark.
     // Ground has no arm of its own (backlog.md `BL-289`) but must still return non-`None`
     //, `ProjectilePool` gates the `EffectSink` call on that, and the `blacksmokepuffer` rides it.
+    // ⚠ The ricochet arm covers for the install-missing `bld_damage.flt`, so an `effectBound` name
+    // takes it away again: `wep_02`'s `large_fireball` is the one that renders, and plays alone.
     private static ImpactStandIn StandInFor(WeaponDef weapon, int surfaceId, bool modelResolved,
-        bool hasEffectsRuntime)
+        bool hasEffectsRuntime, bool effectBound)
     {
         if (modelResolved)
             return ImpactStandIn.None;
         if (!weapon.IsGun && !hasEffectsRuntime)
             return ImpactStandIn.Explosion;
-        if (surfaceId == SurfaceRegistry.Buildings && weapon.IsGun)
+        if (surfaceId == SurfaceRegistry.Buildings && weapon.IsGun && !effectBound)
             return ImpactStandIn.Ricochet;
         return ImpactStandIn.Spark;
     }

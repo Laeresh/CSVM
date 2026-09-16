@@ -111,10 +111,15 @@ common case and false of three quarters of the family; a reader that generalises
 gets the other one wrong. The slug def's only other authored bound is its debris `OBJECT_MOTION`
 `RUN_TIME` (1–2 s), which does not gate emission.
 
-⚠ **A gun's `buildings` entry is not a `gunhit`.** Every gun but `wep_02` (50slug) routes
-`buildings` → `bld_damage.flt`, which is absent from the install, so a gun round on a building
-draws the engine's ricochet stand-in and no smoke. The `gunhit` family is reached through
-`default`, i.e. terrain. Verify gun-impact work by strafing **dirt**, not a hangar.
+⚠ **A gun's `buildings` entry is not a `gunhit`, but almost nothing is `buildings`.** Every gun but
+`wep_02` (50slug, `ANIMATION large_fireball`) routes `buildings` → `bld_damage.flt`, which is absent
+from the install, so a round on that surface draws the engine's ricochet stand-in and no smoke. The
+surface is the struck material's `soil` byte, not what the geometry looks like
+([../org/weaponImpact.md](../org/weaponImpact.md)), and in the shipped data id 11 is reached only by
+C1's four `aphagar0N` hangar materials (61 colliders). **Hollywood's film-lot buildings are `soil`
+`Default`**, so strafing a studio wall or the `nycity` skyscraper plays the authored
+`<caliber><ammo>_gunhit` exactly as a dirt hit does. Verify gun-impact work by strafing **dirt or a
+C2 wall**; a C1 hangar is the one place the `gunhit` family is not what plays.
 
 ### Engine wiring (M3)
 
@@ -137,9 +142,11 @@ effect **animation**, splits by what the bound name resolves to:
   so the impact-puffer wiring folds into D32. The per-class stand-ins these names fall to:
   dirt → the single spark, i.e. no arm of its own (the tumbling chips on the `bit01–04` textures
   were **deleted, `BL-313`**, see the `PLAYER_RANGE 200` note above; ground still
-  resolves to a non-`None` stand-in because the world-effects sink is gated on it); a gun round on a
-  buildings-classed surface → a ricochet spark burst + flash (judged by eye, `bld_damage.flt`
-  and the `rcochet1` `EFFECT` are both install-missing, see the unresolved-names table).
+  resolves to a non-`None` stand-in because the world-effects sink is gated on it); a gun round on
+  `buildings`(11) whose bound name reaches neither a gamez root nor the world-effects runtime → a
+  ricochet spark burst + flash (judged by eye, `bld_damage.flt` and the `rcochet1` `EFFECT` are both
+  install-missing, see the unresolved-names table). A name the runtime **does** carry, which on
+  `buildings` means only `wep_02`'s `large_fireball`, renders and takes no stand-in on top.
 
 ### Water splash defs, `splash1.zrd.json` / `bsplsh.zrd.json`
 

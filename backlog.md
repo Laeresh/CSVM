@@ -346,24 +346,29 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `CAP-39` is the clip that calibrates how bright. The 30/80/140° triad question stays a note for
   any later shape revisit.
 
-- `BL-289` `[Tuning]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: footage]` **Gun-impact looks (A2/`BL-203`, landed 2026-08-01)**,
+- `BL-289` `[Tuning]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Gun-impact looks (A2/`BL-203`)**,
   ⚠ **The six `DirtDebris*` constants left this entry: the dirt-chip effect they tuned was deleted
-  2026-08-15 (`BL-313`, closed), so there is nothing to A/B.** Dirt now takes the single spark.
+  (`BL-313`, closed), so there is nothing to A/B.** Dirt now takes the single spark.
   What remains here is the building ricochet:
   `RicochetSparks` **8**, `RicochetSparkSize` **0.55 m**,
   `RicochetSparkLife` **0.55 s**, `RicochetSparkSpeed` **22 m/s**, `RicochetSpreadDeg` **90°** (a
   stand-in, both authored assets are missing from the install). The water-splash column width
-  is settled and out of this entry: `SplashColumnWidthScale` **8×** confirmed at the controls
-  2026-08-06 with the fades in (`BL-265` closed, the authored quad is 5 cm wide, sub-pixel past
-  ~30 m; the reference ticks measure ~0.35 m, which 8× matches). A/B the rest against
-  `Dirt Splash.png` at the controls; the splash *height/timing* curves are authored data, not TUNE.
-  *Decision:* judged on C1's movie-studio buildings against `30 Slu building.mp4`: no burst plays
-  at all where the original throws debris off the wall, so the five stand-in constants are not
-  what is wrong. Decode what the original spawns on a building hit (and why nothing of ours
-  reaches those buildings) before any of them moves; `PT-128` stays the flight that judges the
-  result.
+  is settled and out of this entry (`SplashColumnWidthScale` **8×**, `BL-265` closed).
+  *Decoded:* the original indexes the `IMPACT` table with the struck material's `soil` byte and
+  with nothing else (`FUN_005ac7a0` at `0x005ac7a9`, [docs/org/weaponImpact.md](docs/org/weaponImpact.md)
+  carries the three effect slots with their addresses and gates); there is no building table and no
+  structure arm. **The Hollywood studio blocks carry `soil` `default`, not `buildings`(11).** That
+  chapter has no collider with id 11 at all, so a round on a studio wall reads `default` and plays
+  the authored `3040slug_gunhit`, which is the effect the footage's wall debris comes from, and the
+  five constants are unreachable there. `buildings`(11) belongs to C1's four `aphagar0N` hangar
+  materials, where every gun but `wep_02` binds the install-missing `bld_damage.flt` and the
+  ricochet burst stands in for it. The suite `impact-building-surface` holds both halves, and the
+  one defect the decode localised is fixed: a row the effects runtime does render (`wep_02`'s
+  `large_fireball`) no longer draws the invented burst on top of it.
+  *Remaining:* the five constants are a look question and still unjudged, and the only place that
+  can judge them is a strafing run on a **C1 hangar**; `PT-128` is that flight.
 
-  *Cross-refs:* `PT-128` (the flight that judges the ricochet).
+  *Cross-refs:* `PT-128` (the flight that judges the ricochet), `docs/org/weaponImpact.md`.
 
 - `BL-693` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The rebinding screen's three axis-capture constants are
   picked, not measured.** *Evidence:* `ControlCapture.RestBand` **0.25**, `MoveThreshold` **0.6** and

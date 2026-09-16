@@ -356,8 +356,11 @@ reasons that have nothing to do with any of these checks.
   takes the single spark, and the water column width is settled. What remains is the building
   ricochet, whose five constants are stand-ins because both authored assets are missing from the
   install: `RicochetSparks` 8, `RicochetSparkSize` 0.55 m, `RicochetSparkLife` 0.55 s,
-  `RicochetSparkSpeed` 22 m/s, `RicochetSpreadDeg` 90°. *Look for:*
-  - (a) strafe a building: the burst's count and spark size against the original's own impact spray;
+  `RicochetSparkSpeed` 22 m/s, `RicochetSpreadDeg` 90°.
+  ⚠ **Strafe a C1 airport hangar, not a Hollywood studio block.** The surface that reaches these
+  constants is the `soil` byte `buildings`(11), which only C1's `aphagar0N` hangar materials carry;
+  the film lot is `default` and plays the authored `3040slug_gunhit` instead (`BL-289`). *Look for:*
+  - (a) strafe a hangar: the burst's count and spark size against the original's own impact spray;
   - (b) how long a spark lives and how far it travels before it goes;
   - (c) the spread, where 90° is a stand-in: whether the burst reads as coming off the surface or as
     a sphere around the hit.

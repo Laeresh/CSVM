@@ -191,6 +191,7 @@
     "hud-auto-dock-line": 0.06,
     "hud-crash-prompt": 0.06,
     "hud-kill-line": 1.31,
+    "impact-building-surface": 1.63,
     "impact-orientation": 0.058,
     "inert-aircraft": 0.451,
     "instant-action": 0.71,
