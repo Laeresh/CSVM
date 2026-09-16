@@ -462,9 +462,10 @@ confirm opens the book at slot 0 instead. `CampaignScrapbookPage` is the book, r
 three ways the original reaches it: a mission ending, a row picked in the table of contents, and
 either bookmark, all through `CampaignFlow.OpenScrapbook`, which is `uiData` 2405 mode 1. The cabin's
 PREVIOUS MISSIONS button still opens the table of contents alone, never the book.
-The one thing the pages carry that the original's data cannot fill is the capture slots: `BL-256`,
-the capture writer, is deferred, so a `Snap_` row is skipped and its photo-corner mount draws
-alone.
+The one thing the pages carry that the original's data cannot fill is the capture slots: nothing
+writes a profile `Snap_` scrap, so such a row is skipped and its photo-corner mount draws alone
+(`BL-929`). A stunt run's own Danger Zone photographs are not these: they land under
+`screenshots/stunts/` beside the saves, named by chapter, marker and run clock.
 
 ## What the debrief does not write
 

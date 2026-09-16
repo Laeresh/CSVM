@@ -351,6 +351,7 @@
     "death-camera": 2.320,
     "flyby-camera": 1.890,
     "stunt-target-cycle": 2.57,
+    "stunt-capture": 0.52,
     "target-class-cycle": 2.17,
     "mode-target-table": 3.49,
     "world-node-active-depth": 3.540,

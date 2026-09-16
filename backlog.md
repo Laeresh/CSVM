@@ -1237,23 +1237,6 @@ usual.
   Copying the grid over is the wrong reflex: four dogfighters 60 m apart on one heading is an
   instant head-on merge every round.
 
-- `BL-256` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Stunt screenshot feature, triggered off `DzRadius`.**
-  *Decision:* designed now, no longer parked. *Fix shape:* when the player's aircraft first
-  crosses within `DzRadius` of a `dzN` marker in a stunt run, latch one screenshot of the current
-  pane on that frame, play `snd_dangerzone_camera` once per marker, write the image to a
-  `screenshots/stunts/` folder beside the saves named by chapter, marker and time, and show a
-  thumbnail strip of the run's shots on the stunt scoreboard; one latch per marker per run, no
-  re-trigger while the aircraft stays inside the radius. *Playtest after fix:* a C4 stunt run
-  through every marker, the sting once each, the strip on the scoreboard, and the files on disk.
-  `DzRadius` (15 m, user-hand-tuned) is settled
-  as the **marker-centre radius**: scoring crosses the authored `dzpathN` gate pair
-  (the archived development log, 2026-08-01 entry "M3 Wave C C9"), and the constant's remaining roles are the `dzN`
-  marker centre and the trigger for this screenshot latch.
-  The latch plays `snd_dangerzone_camera` (`dangerzone_camera.wav`, a
-  data-orphan SFX named by no `SOUND_GROUPS` entry and no world data; the user confirms it is
-  the automatic-screenshot sting, not a zone-cleared cue, formerly `BL-090` item 5, closed).
-  ⚠ Do not retune or delete `DzRadius` as dead code, it is reserved, and the 15 m is the user's.
-
 - `BL-523` `[Bug]` `[L]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **The AI's patrol/pursue/lay-off cycle does not match the original: CM05's
   second patrol never pursues, CM07's friendly flights hold their net while enemies attack them,
   and CM09's enemies fly up to 80 km away.** *Evidence:* three
@@ -1369,6 +1352,23 @@ usual.
   place re-breaks it. The entry gate `min(activation, attack)` is a separate question and is
   deliberately left alone. *Cross-refs:* `BL-565`, `BL-523` (the mode cycle this gate feeds),
   `BL-789`'s closing commit.
+
+- `BL-929` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The campaign
+  scrapbook's `Snap_` capture slots are still unfilled.** *Evidence:* 167 of the scrapbook's 461
+  rows are `Snap_<mission>_<objective>` player captures resolved against the profile directory,
+  gated on that objective, forced to a 164×123 region and mounted under a `DZ_generic_corners`
+  photo-corner row ([`docs/formats/campaign-screens.md`](docs/formats/campaign-screens.md), "The
+  danger-zone slot"). Nothing writes one, so every such row is skipped and its mount draws alone.
+  *Fix shape:* have a campaign mission's own Danger Zone latch write a second copy into the
+  profile directory under the `Snap_<mission>_<objective>` name the row names, then let the
+  scrapbook draw it. *⚠ Traps:* the stunt camera's photographs are not these. It writes
+  `screenshots/stunts/<chapter>_<dzN>_<clock>.png` beside the saves, which no scrapbook row names,
+  and a stunt run is Instant Action, where no mission objective exists to gate the row on. Reusing
+  those file names, or pointing the scrapbook at that folder, fills the page with pictures the
+  original's data never asked for. The objective a campaign danger zone belongs to comes from the
+  mission's own graph, not from the `dzones` list, which carries no objective id.
+  *Cross-refs:* [`docs/org/debrief.md`](docs/org/debrief.md) (the page these rows sit on),
+  `src/Flight/StuntCapture.cs` (the writer that exists).
 
 ## Tooling, platform & docs
 

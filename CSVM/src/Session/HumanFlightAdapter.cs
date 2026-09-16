@@ -398,6 +398,15 @@ internal sealed class HumanFlightAdapter
             // rather than through FlightRoster's roster-wide channel: each pane races its own copy
             // of the run, and a shared feed would put one pilot's cleared zones on another's HUD.
             controller.TargetObjectives = into => run.CollectTargets(into);
+            // This pane's Danger Zone camera. The photographed pixels are this seat's own pane, so
+            // in splitscreen the shot is the SubViewport that crossed the marker, never the window.
+            var pane = rig.Viewport;
+            var capture = new StuntCapture(run, _policy.Chapter,
+                () => (pane ?? (controller.IsInsideTree() ? controller.GetViewport() : null))
+                    ?.GetTexture()?.GetImage());
+            capture.Sting = () => controller.Audio?.OnDangerZoneCamera();
+            controller.StuntShots = capture;
+
             // The run HUD, one per pane: clock, zones cleared, banners. The zone MARKER is the
             // targeting HUD's, since a zone is an objective like any other.
             var runHud = StuntRunHud.Build(run);
@@ -428,6 +437,7 @@ internal sealed class HumanFlightAdapter
                     ScoreStore.Load(), scoreKey, _human.ExitsToMenu, _human.PauseState, _human.MenuInputFor);
                 scoreboard.Restart = controller.Rerun;
                 scoreboard.Exit = _human.ExitSession;
+                scoreboard.Shots = capture;
                 controller.Scoreboard = scoreboard;
                 Log.Info("flight", $"stunt scoreboard: splits + best time (key '{scoreKey}')");
             }

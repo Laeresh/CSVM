@@ -50,6 +50,8 @@ public partial class FlightAudio : Node
     private float _grazeGroundVol = 1f, _grazeWaterVol = 1f;
     private AudioStreamPlayer? _propStart, _propStop;
     private float _propStartVol = 1f, _propStopVol = 1f;
+    private AudioStreamPlayer? _dzCamera;
+    private float _dzCameraVol = 1f;
     private float _engineRamp = 1f; // 0→1 gain envelope while the engine catches after a start
 
     // Gun firing: kept references so the looped firing sound + empty-clip cue can be built
@@ -109,6 +111,10 @@ public partial class FlightAudio : Node
         // wind-down for a future landing/shutdown (see OnEngineStop).
         _propStart = MakeOneShot(archive, defs, "snd_propstart", out _propStartVol);
         _propStop = MakeOneShot(archive, defs, "snd_propstop", out _propStopVol);
+
+        // The stunt run's camera sting, a flat SFX definition no SOUND_GROUPS entry and no world
+        // data names: what the Danger Zone photograph sounds like.
+        _dzCamera = MakeOneShot(archive, defs, "snd_dangerzone_camera", out _dzCameraVol);
 
         // Crash explosions: the game defines snd_exp_plane1..4 as a set; pick one at
         // random per crash, like the original.
@@ -320,6 +326,16 @@ public partial class FlightAudio : Node
     /// <summary>A canopy hole opened: one draw from <c>window_hit_sg</c>. The cadence is
     /// <see cref="CanopyHoleCue"/>'s, and the caller has already decided.</summary>
     public string? OnWindowHit() => PlayGroupCue(_windowHit, _windowHitGroup);
+
+    /// <summary>The Danger Zone camera sting, one shot as the run latches that marker's
+    /// photograph (<see cref="StuntCapture"/>). Takes MixGain like the other own-ship cues, so four
+    /// racing pilots crossing markers at once do not sum into one wall of shutter.</summary>
+    public void OnDangerZoneCamera()
+    {
+        float gain = _dzCameraVol * MixGain;
+        PlayOneShot(_dzCamera, gain);
+        Log.Info("sound", $"stunt capture: snd_dangerzone_camera MixGain={MixGain:0.00} vol={gain:0.000}");
+    }
 
     /// <summary>Engine wind-down: plays snd_propstop and kills the loops. Layers over the crash
     /// explosion one-shot (<see cref="OnCrash"/>) rather than replacing it, FlightController

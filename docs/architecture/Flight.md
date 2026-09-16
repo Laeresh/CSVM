@@ -624,11 +624,22 @@ shell, since a held clock is not an ended run.
 
 ## src/Flight/StuntScoreboard.cs
 Stunt Flying's end-of-run results overlay on `ResultsBoard`'s shell: the plane and chapter heading
-over a `StuntSplits` section of per-zone splits, total and best-time comparison. Wakes on
-`StuntMission.RunCompleted`, records through `ScoreStore.RecordIfBest` and logs the split table so
-a headless run is reviewable. The one per-pane board among the results boards, which is why it
-overrides the shell's whole-window placement. Read `ResultsBoard` for the shared shell and its
-halt contract, and `IaWrapupBoard` for the board Instant Action carries the splits on instead.
+over a `StuntSplits` section of per-zone splits, total and best-time comparison, and under it the
+`StuntCapture` thumbnail strip, which is in marker order where the splits are in the order flown.
+Wakes on `StuntMission.RunCompleted`, records through `ScoreStore.RecordIfBest` and logs the split
+table so a headless run is reviewable. The one per-pane board among the results boards, which is
+why it overrides the shell's whole-window placement. Read `ResultsBoard` for the shared shell and
+its halt contract, and `IaWrapupBoard` for the board Instant Action carries the splits on instead.
+
+## src/Flight/StuntCapture.cs
+The Danger Zone camera: one photograph of the pilot's own pane per `dzN` marker per stunt run.
+`Update` tests the plane against each marker centre at `StuntMission.DzRadius` every physics frame
+and latches on the frame it first crosses inside, writing a PNG named by chapter, marker and run
+clock into `screenshots/stunts/` beside the saves, firing the `snd_dangerzone_camera` sting and
+keeping a thumbnail for the scoreboard strip. A marker already photographed is not photographed
+again in the run, and a pass that lingers inside a radius latches once. Where the pixels come from
+is the caller's delegate, which is what lets a splitscreen seat photograph its own SubViewport and
+a suite photograph a synthetic frame. `DirectoryOverride` points the writes at a scratch directory.
 
 ## src/Flight/StuntSplits.cs
 The stunt run's split section, shared by `StuntScoreboard` and `IaWrapupBoard`: the per-zone rows
@@ -791,8 +802,8 @@ Schema: [../formats/weather.md](../formats/weather.md); runtime: [../org/weather
 
 ## src/Flight/FlightAudio.cs
 The own plane's non-positional audio: the engine, overspeed whine and rattle loops, plus the
-one-shots a crash, a ground or water explosion, a survivable graze and an engine stop fire, each
-drawing the sound the chosen crash or touchdown definition itself authors rather than a fixed name.
+one-shots a crash, a ground or water explosion, a survivable graze, an engine stop and a stunt
+run's Danger Zone camera fire, most drawing the sound their own definition authors, not a fixed name.
 The three incoming-fire cues are group draws, flat as the original plays them: `OnWarningShot`,
 `OnBulletHit` and `OnWindowHit`, rate-limited by `FlightController`. The engine is one voice on one
 slot whose pitch, gain and definition all come from `EngineAudioCurves`, and the gun loop and dry

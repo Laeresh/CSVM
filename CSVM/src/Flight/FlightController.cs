@@ -245,6 +245,11 @@ public partial class FlightController : Node3D
     /// Null in free flight.</summary>
     public StuntMission? Stunt;
 
+    /// <summary>This pane's Danger Zone camera: one latched photograph per marker per run, stepped
+    /// from <see cref="SimStep"/> beside the run itself. Null in free flight and on every rig with
+    /// no pane of its own to photograph.</summary>
+    public StuntCapture? StuntShots;
+
     /// <summary>The end-of-run results overlay: splits + total + best-time on
     /// AllComplete. Added to the HUD canvas last (drawn over the marker/dials); wakes itself on
     /// the run's RunCompleted. Null in free flight.</summary>
@@ -1159,6 +1164,7 @@ public partial class FlightController : Node3D
     public void Rerun()
     {
         Stunt?.Reset();
+        StuntShots?.Reset();
         Respawn();
     }
 
@@ -2004,6 +2010,10 @@ public partial class FlightController : Node3D
 
         // Stunt run: flew-through-a-danger-zone test against this frame's committed position.
         Stunt?.Update(_model.Position);
+
+        // The camera latch reads the same committed position, after the run's own test, so a
+        // photograph and the zone it completes land on one frame.
+        StuntShots?.Update(_model.Position);
 
         // height over ground for the altimeter's LOW ALT warning: one ray straight
         // down per physics frame (world + map-edge extension colliders)

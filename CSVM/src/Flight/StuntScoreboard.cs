@@ -14,16 +14,30 @@ namespace CSVM.Flight;
 /// docs/architecture.md.</summary>
 public sealed partial class StuntScoreboard : ResultsBoard
 {
+    /// <summary>The thumbnail strip container's node name, so a suite can read the strip's own
+    /// cells rather than pattern-matching the labels of the split table above it.</summary>
+    internal const string StripName = "shot_strip";
+
     // Base metrics at 720p (the default window); scaled up on taller viewports so the board reads
     // at 1080p/1440p/4K without ballooning. All TUNE.
     private const int TitleFont = 26;
     private const int ContextFont = 15;
+    private const int StripFont = 12;
+
+    // How wide the whole thumbnail strip may grow at 720p, and the gap between two shots. A long
+    // course shrinks each frame to fit rather than pushing the panel off the pane. TUNE.
+    private const float StripWidth = 560f;
+    private const float StripGap = 6f;
 
     private StuntMission _mission = null!;
     private ScoreStore _store = null!;
     private string _scoreKey = "";
     private string _planeDisplay = "";
     private string _context = "";
+
+    /// <summary>This pilot's Danger Zone photographs, drawn as a thumbnail strip in marker order
+    /// under the splits. Null, or a run that latched none, draws no strip at all.</summary>
+    public StuntCapture? Shots { get; set; }
 
     // A rerun (StuntMission.Reset) clears AllComplete, which the shell's _Process turns into the
     // hide and the release.
@@ -90,8 +104,47 @@ public sealed partial class StuntScoreboard : ResultsBoard
         body.AddChild(Separator(s));
 
         StuntSplits.Add(body, run, s, separatorBeforeTotal: true);
+        AddStrip(body, s);
 
         body.AddChild(Separator(s));
         AddStandardMenu(body, s);
+    }
+
+    // The run's Danger Zone photographs, in marker order rather than the flown order the splits
+    // above use: the strip is the course, and a pilot reads it against the markers they know.
+    private void AddStrip(VBoxContainer body, float s)
+    {
+        if (Shots is not { Count: > 0 } shots)
+        {
+            return;
+        }
+
+        var strip = new HBoxContainer { Name = StripName };
+        strip.AddThemeConstantOverride("separation", Mathf.RoundToInt(StripGap * s));
+        float width = Mathf.Min(StuntCapture.ThumbWidth * s,
+            ((StripWidth * s) - (StripGap * s * (shots.Count - 1))) / shots.Count);
+        foreach (var shot in shots.InMarkerOrder())
+        {
+            if (shot.Thumb is not { } thumb)
+            {
+                continue;
+            }
+            var cell = new VBoxContainer();
+            float height = width * thumb.GetHeight() / Mathf.Max(1, thumb.GetWidth());
+            cell.AddChild(new TextureRect
+            {
+                Texture = ImageTexture.CreateFromImage(thumb),
+                CustomMinimumSize = new Vector2(width, height),
+                ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
+                StretchMode = TextureRect.StretchModeEnum.Scale,
+            });
+            var caption = Label(shot.DzName, Mathf.Max(8, (int)(StripFont * s)), HeaderColor);
+            caption.HorizontalAlignment = HorizontalAlignment.Center;
+            cell.AddChild(caption);
+            strip.AddChild(cell);
+        }
+
+        body.AddChild(Separator(s));
+        body.AddChild(Centered(strip));
     }
 }

@@ -678,7 +678,9 @@ profile directory instead of `assets\graphics\`, is skipped when the file is not
 to a 164×123 region, and is drawn at 25% on the page but full size in the zoom. 167 of the 461 rows
 are these, named `Snap_<mission>_<objective>` and gated on that objective, with a
 `DZ_generic_corners` row at identical coordinates one step higher in draw order supplying the
-photo-corner mount. This is the read half of `BL-256`.
+photo-corner mount. This is the read half of the player capture; CSVM's stunt camera writes its
+photographs to `screenshots/stunts/` beside the saves rather than as profile `Snap_` scraps, so
+these rows stay unfilled (`BL-929`).
 
 ### The grime
 

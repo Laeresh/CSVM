@@ -3918,7 +3918,12 @@ public partial class GameSession : Node3D
         Log.Info("flight", $"stunt race: rematch — fresh clocks and zones for every pilot");
         race.Restart();
         foreach (var rig in _rigs)
+        {
+            // The race owns every pilot's zones and clock, but each pane's own camera is the
+            // controller's, so the rematch clears the photographs seat by seat.
+            rig.Controller?.StuntShots?.Reset();
             rig.Controller?.Respawn();
+        }
     }
 
     // Rematch from the dogfight results board (R): every score and the clock reset, then every

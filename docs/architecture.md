@@ -177,7 +177,8 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/MarkerDraw.cs`, the world marker's drawing primitives: reticle, edge arrow, centred text block and its clamped variant, marker blue and shadow.
 - `src/Flight/StuntRunHud.cs`, the stunt run's readouts: clock and zones cleared, intro banner, cleared flash, completion or race placing; one per player.
 - `src/Flight/ResultsBoard.cs`, the shared shell every results board is built on: backdrop and panel, the palette, the halt contract, and the standard menu.
-- `src/Flight/StuntScoreboard.cs`, end-of-run results overlay: a per-pane panel of per-zone splits, total, and the persisted best time.
+- `src/Flight/StuntScoreboard.cs`, end-of-run results overlay: a per-pane panel of per-zone splits, total, the persisted best time, and the run's photo strip.
+- `src/Flight/StuntCapture.cs`, the Danger Zone camera: one latched pane photograph per marker per run, written beside the saves with its sting.
 - `src/Flight/StuntSplits.cs`, the stunt run's split table, shared by the scoreboard and the wrap-up board: per-zone rows, the total, and the best comparison.
 - `src/Flight/StuntRace.cs`, splitscreen stunt race bookkeeping: one `Racer` per player, finish placings, standings, rematch reset.
 - `src/Flight/StuntRaceBoard.cs`, the race's shared ranked results overlay, on its own full-window CanvasLayer above the splitscreen panes.
