@@ -516,6 +516,9 @@ internal static class CampaignSquadWakeSuites
 
         if (shooter.Pilot.Machine is { } machine)
         {
+            // The picker's reach is the ATTACK radius (docs/org/aiPilot.md); the activation one
+            // goes with it so the pursue entry gate agrees with what the ranking admits.
+            machine.AttackRange = ScanRangeM;
             machine.ActivationRange = ScanRangeM;
         }
         ctx.Check(near.Team == human.Team && shooter.Team != human.Team,

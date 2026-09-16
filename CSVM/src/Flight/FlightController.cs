@@ -3753,20 +3753,20 @@ public partial class FlightController : Node3D
         // ⚠ The withdrawal argument is CSVM's layer, not the decode. Evaluated last, and only for a
         // structure target, so the aircraft walk costs nothing on the ordinary aeroplane duel.
         return AiTargetRanking.KeepsStandingTarget(WorldPosition, NoseDirection,
-            Pilot?.Machine?.ActivationRange ?? 2000f, AiScorer.Jet,
+            Pilot?.Machine?.AttackRange ?? 2000f, AiScorer.Jet,
             AiTargetRanking.AircraftFirst && rank.IsStructureClass && EnemyAircraftRanks(gunner),
             rank);
     }
 
     // Whether one live enemy aeroplane is in reach, the withdrawal's test, over the aircraft roster
     // alone: a hull is neither class the preference suppresses. Ranking is the reach test in
-    // AiTargetRanking.SelectBest, so this asks the same two things it does, the activation radius
+    // AiTargetRanking.SelectBest, so this asks the same two things it does, the attack radius
     // and an authored hard exclusion, rather than a second reading of "in reach".
     private bool EnemyAircraftRanks(AiGunner gunner)
     {
         if (Projectiles == null)
             return false;
-        float activation = Pilot?.Machine?.ActivationRange ?? 2000f;
+        float attack = Pilot?.Machine?.AttackRange ?? 2000f;
         var ownPos = WorldPosition;
         _rescoreScan.Clear();
         Projectiles.CollectAircraft(_rescoreScan);
@@ -3775,7 +3775,7 @@ public partial class FlightController : Node3D
             if (!c.Live || c.Source is not FlightController fc || ReferenceEquals(fc, this))
                 continue;
             if (!AimAssist.Hostile(Team, c.Team)
-                || ownPos.DistanceSquaredTo(c.Position) > activation * activation)
+                || ownPos.DistanceSquaredTo(c.Position) > attack * attack)
                 continue;
             float bias = AiTargetRanking.ObjectiveBiasFor(
                 fc.IsHumanPiloted ? AiTargetRanking.PlayerRole : TargetPool.NameOf(c.Source),
@@ -3940,7 +3940,10 @@ public partial class FlightController : Node3D
             _gunnerScan.AddMissionStructures(Destructibles);
         }
         int ownTeam = Team;
-        float activation = Pilot?.Machine?.ActivationRange ?? 2000f; // min_ai_active_dist fallback
+        // ⚠ The attack volume, not the activation one: both decoded scorers admit on the attack
+        // cylinder and the activation volume is the engine's awake test alone, so a DEDG widening
+        // never reaches acquisition (docs/org/aiPilot.md).
+        float attack = Pilot?.Machine?.AttackRange ?? 2000f;
         var ownPos = WorldPosition;
         var ownFwd = NoseDirection;
         _rankCandidates.Clear();
@@ -3959,7 +3962,7 @@ public partial class FlightController : Node3D
             // are properties of an aeroplane simply do not apply to it.
             var fc = c.Source as FlightController;
             if (gunner.PrimaryTargetName is { Length: > 0 } wanted
-                && ownPos.DistanceSquaredTo(c.Position) <= activation * activation)
+                && ownPos.DistanceSquaredTo(c.Position) <= attack * attack)
             {
                 if (primary == null
                     && string.Equals(TargetPool.NameOf(c.Source), wanted, StringComparison.OrdinalIgnoreCase))
@@ -4025,7 +4028,7 @@ public partial class FlightController : Node3D
             // Log the assigned pick with its own rank inputs (informational, rank not consulted).
             int idx = _rankSources.IndexOf(primary);
             if (idx >= 0)
-                score = AiTargetRanking.Score(ownPos, ownFwd, activation, AiScorer.Jet,
+                score = AiTargetRanking.Score(ownPos, ownFwd, attack, AiScorer.Jet,
                     _rankCandidates[idx]);
             how = byRole ? "primary target: nearest human" : "primary target";
             return primary;
@@ -4034,7 +4037,7 @@ public partial class FlightController : Node3D
         // ⚠ Jet is asserted, not derived: the engine picks the scorer off the SHOOTER's own mode,
         // so a mode plane or heli aeroplane should take Other. Deriving it here would change what
         // those aircraft target, which is a behaviour claim wanting its own evidence.
-        int best = AiTargetRanking.SelectBest(ownPos, ownFwd, activation, AiScorer.Jet,
+        int best = AiTargetRanking.SelectBest(ownPos, ownFwd, attack, AiScorer.Jet,
             AiTargetRanking.AircraftFirst, _rankCandidates, out score);
         if (best < 0)
             return null;

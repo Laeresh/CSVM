@@ -1328,33 +1328,6 @@ usual.
   the automatic-screenshot sting, not a zone-cleared cue, formerly `BL-090` item 5, closed).
   ⚠ Do not retune or delete `DzRadius` as dead code, it is reserved, and the 15 m is the user's.
 
-- `BL-789` `[Research]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: decoded]` **Which vehicle volume gates AI target admission: CSVM reads the activation radius where the original reads the attack cylinder.**
-  *Decision:* faithful by default. Re-read the decode first (every reader of the attack and
-  activation triples, offsets mapped), then align each consumer to the volume the original reads,
-  which on the current reading puts `AiTargetRanking` on the attack cylinder and takes
-  `BL-565`'s widening out of acquisition. *Evidence:* `FlightController.cs:3344` hands `AiModeMachine.ActivationRange` to
-  `AiTargetRanking.Score`, which refuses a candidate beyond it (`AiTargetRanking.cs:156`), while the
-  original admits candidates on the cylinder `FUN_00421ad0` reads at
-  `+0x328`/`+0x32c`/`+0x330`, the fields the roster map assigns to the ATTACK volume; the activation
-  triple `+0x318` to `+0x320` is read by the AI state update `FUN_004897c0`. Both volumes ship at
-  2,000 m, so the mapping never showed until `BL-565` landed the `DEDG` widening: a watched member
-  now admits candidates out to 9,000 m where the original would still admit only inside its attack
-  cylinder. Engaging is unchanged, `AiModeMachine.cs:321` gating that on
-  `min(ActivationRange, AttackRange)`, so what is at stake is selection and pursuit range, not
-  firing range. *Fix shape:* the re-read names the volume each consumer reads, then each CSVM
-  consumer is aligned to it; the re-read's answer is what decides whether `BL-565`'s widening
-  reaches acquisition at all. **It also decides
-  half of `BL-565`'s own goal:** the pursue ENTRY gate is `min(activation, attack)` and no `DEDG`
-  widens the 2,000 m attack radius, so the widening keeps an engaged member engaged and does not make
-  one parked 8 km away set off, which is what "a watched group comes to the player from anywhere on
-  the map" asked for. Whether the original's own entry gate reads the widened triple is the same
-  question about `FUN_004897c0`.
-  *⚠ Traps:* the negative half of this decode is the weak half. `FUN_00421ad0` was read as the only
-  admission path and `FUN_004897c0` as the only reader of the activation triple; re-read both writers
-  and map their offsets before acting, since a second reader would change the answer.
-  `docs/org/aiPilot.md` has been corrected on the field identity, but no code moved on it.
-  *Cross-refs:* `BL-565`'s closing commit, which found this and left it; `BL-523`, the mode cycle
-  this range feeds.
 - `BL-523` `[Bug]` `[L]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **The AI's patrol/pursue/lay-off cycle does not match the original: CM05's
   second patrol never pursues, CM07's friendly flights hold their net while enemies attack them,
   and CM09's enemies fly up to 80 km away.** *Evidence:* three
@@ -1436,6 +1409,40 @@ usual.
   without a stutter, and the seconds between waves too.
   *Cross-refs:* `BL-434` (the per-viewport splitscreen cost the same pass profiled), `BL-657`
   (CM18's generator launching at the wrong time, which is where the measured case is flown).
+- `BL-926` `[Fidelity]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **A surface
+  gunner admits targets on its def's `activation` radius where the original's scorer admits on the
+  hull's attack cylinder.** *Evidence:* both decoded scorers refuse a candidate outside the SCORING
+  vehicle's attack triple `+0x328`/`+0x32c`/`+0x330` (`docs/org/aiPilot.md` "Every reader of the
+  attack and activation triples"), the non-jet scorer `FUN_00421950` included, and that is the one a
+  boat, truck or tank hull runs. `SurfaceGunner` hands the ranking the def's `activation` value
+  instead, 2,500 m for `patrolboat`, so a hull picks up targets on the wrong volume. The aircraft
+  pickers were moved onto the attack radius and this one was left, because CSVM has no attack volume
+  to move it to: `vehicle.zrd` gives `patrolboat` and `t_truck` an `activation` and no `attack` and
+  no `kind_of`, so the number arrives in the original from the mission roster block or the net, not
+  from the def. *Fix shape:* decode where a hull's attack triple is written at spawn
+  (`SET_AI_ATTACK_RADIUS` is `FUN_00469f70`, and the roster/net writers are the other candidates),
+  then resolve the same value in CSVM and hand it to the ranking. *⚠ Traps:* do not simply swap the
+  key. A hull with no resolved attack radius falls to a 0 m reach and every boat and truck in the
+  game goes silent, which no suite would catch as a failure since a gunner that never fires still
+  passes a scan-shaped check. Add the case that a hull refuses a target past its attack radius and
+  still takes one inside it. *Cross-refs:* `BL-789`'s closing commit, which moved the aircraft
+  pickers and left this one.
+- `BL-927` `[Fidelity]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: decoded]` **The AI
+  disengage gate ANDs the activation radius with the return range where the original reverts on the
+  return cylinder alone.** *Evidence:* the engine's task revert (`FUN_0041d9f0` at `0x0041e6aa`)
+  tests the return triple `+0x334`/`+0x338`/`+0x33c` measured from the anchor `+0x348` that
+  `FUN_0041f040` writes when the pursuit begins, and it ORs that with the dwell and validity tests;
+  it never reads the activation triple, which is the simulation gate measured to the player.
+  `AiModeMachine` requires a pursuer to be outside BOTH `ActivationRange` and `ReturnRange` before
+  it lays off, and measures from the spawn pose rather than from where the chase started, so a
+  `DEDG`-widened member holds a pursuit far past the point the original would recall it.
+  *Fix shape:* record the pursuit anchor when pursue is entered, test the return cylinder from it,
+  and drop the activation term from the disengage condition. *⚠ Traps:* `BL-565`'s surviving goal
+  ("a watched group comes to the player from anywhere on the map") currently rests on the widened
+  activation radius keeping an engaged member engaged, so removing that term without the anchor in
+  place re-breaks it. The entry gate `min(activation, attack)` is a separate question and is
+  deliberately left alone. *Cross-refs:* `BL-565`, `BL-523` (the mode cycle this gate feeds),
+  `BL-789`'s closing commit.
 
 ## Tooling, platform & docs
 

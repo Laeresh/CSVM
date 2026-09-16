@@ -242,11 +242,72 @@ The admission test is a **cylinder**, not a radius: horizontal `d.x² + d.z²` a
 picked. `FUN_00421ad0` also returns `1e21` when the candidate object's `+0x04` field is 3 or more,
 and `FUN_00422890` is a validity check whose failure scores the same.
 
-⚠ **That cylinder is the ATTACK volume, not the activation volume**, on the field map the
-net-assignment section below records: activation is `+0x318`/`+0x31c`/`+0x320`, and its only reader
-in the executable is the state update `FUN_004897c0`. Both volumes ship at 2,000 m, so the two
-readings part company only where something moves one of them, and `DEDG`'s widening moves the
-activation volume alone ([../formats/objectives.md](../formats/objectives.md)).
+⚠ **That cylinder is the ATTACK volume and it is the SCORER's own.** The base of all three loads
+is `*(param_1 + 0x18)`, the scoring vehicle, so the volume belongs to the pilot doing the looking
+and never to what is being looked at. The field map the net-assignment section below records puts
+activation at `+0x318`/`+0x31c`/`+0x320` and attack at `+0x328`/`+0x32c`/`+0x330`.
+
+### Every reader of the attack and activation triples
+
+Each of the six fields was swept for by displacement across the whole image (648,780 instructions),
+so these lists are complete for a direct `[reg + disp]` access; the only sites that take a triple's
+ADDRESS instead are the two copy-and-clamp ones named below.
+
+**The attack triple, `+0x328` / `+0x32c` / `+0x330`.** Three readers, and all three are the same
+admission test:
+
+| Where | Function | The condition it applies under |
+|---|---|---|
+| `0x00421b47`–`0x00421b67` | `FUN_00421ad0` | the `jet`/`wingman` scorer: outside the cylinder the rank is `1e21`, so the candidate is never picked |
+| `0x004219ac`–`0x004219cc` | `FUN_00421950` | the scorer every OTHER `mode` runs, the same three fields, the same `1e21` |
+| `0x0041cb5d`–`0x0041cb7d` and `0x0041cf2a`–`0x0041cf4a` | `FUN_0041c470` | the debug overlay, duplicating both scorers for the readout |
+
+⚠ **The non-`jet` scorer admits on the attack cylinder too.** `FUN_00421950` drops the three
+geometry terms, not the admission, so a `ship`, `plane`, `heli` or `tank` is bounded by the same
+volume an aeroplane is.
+
+Its writers are the constructor's zero (`FUN_004aff80`, `0x004b0106`), the def copy
+(`FUN_00475820`, `0x00475a62`), the net assignment (`FUN_00475fc0`, `0x00476128`), the roster block
+(`FUN_0047c210`, `0x0047c888`), and the script command **`SET_AI_ATTACK_RADIUS`** (`FUN_00469f70`,
+`0x00469f93`), which stores r² into `+0x328` and ∓r into `+0x32c`/`+0x330`.
+
+**The activation triple, `+0x318` / `+0x31c` / `+0x320`.** One reader that decides anything:
+
+| Where | Function | The condition it applies under |
+|---|---|---|
+| `0x00489a28`–`0x00489a48` | `FUN_004897c0` | the world tick's AWAKE test, cylinder measured to the player |
+
+⚠ **The activation volume is the simulation gate, not a targeting range.** The offset it tests is
+the player's position (`DAT_0071c298`) minus this vehicle's, and what the test writes is the awake
+byte `+0x944`: an asleep vehicle gets neither the AI update `FUN_0041c270` nor its physics that
+frame. The cylinder is the last of five disjuncts. Byte `+0x91f` set wakes the vehicle outright;
+otherwise `+0x354` must be zero, and then the AI-suppressed byte `+0xcc`, a default task `+0x2f4`
+of 2, a `primary_target` at `+0x2fc` whose own vtable `+0x14` test fails, byte `+0x324`, or the
+cylinder each wake it on their own.
+
+Its writers are the constructor's zero (`FUN_004aff80`, `0x004b00ee`), the def copy
+(`FUN_00475820`, `0x00475a4b`, through the copier at `0x004830e0`), the net assignment
+(`FUN_00475fc0`, `0x004760d7`), the roster block (`FUN_0047c210`, `0x0047c81d`), the
+`min_ai_active_dist` clamp, which reads the field back to compare (`FUN_00476250`, `0x004763fe`;
+`FUN_0047c210`, `0x0047c922`), and the `DEDG` widening (`FUN_00465850`, `0x0046586c` read,
+`0x0046587f` write, raise-only). **No script command writes it**: `SET_AI_ATTACK_RADIUS` has no
+activation counterpart anywhere in the image.
+
+⚠ **So a `DEDG` widening never reaches acquisition.** Both volumes ship at 2,000 m and the widening
+raises the activation triple alone ([../formats/objectives.md](../formats/objectives.md)), so a
+watched group is SIMULATED out to 9,000 m while every member still admits candidates only inside
+its own 2,000 m attack cylinder. A net or a roster block that authors the two volumes differently
+parts them the same way.
+
+### The third volume, and where the leash is read
+
+For contrast, the return triple `+0x334` / `+0x338` / `+0x33c` also has exactly one reader: the
+pursue behaviour `FUN_0041d9f0` at `0x0041e6aa`–`0x0041e6ca`. It is measured from the vehicle's own
+position to the point at `+0x348`–`+0x350`, which the promotion `FUN_0041f040` writes (`0x0041f0a6`)
+when it sets the task to pursue, so the anchor is where the pursuit began. The tail reverts the task
+to the default `+0x2f4` when the dwell timestamp `+0x300` has passed, OR the target's own validity
+virtual `+0x14` reports it gone, OR the aeroplane has left that cylinder. The three are an OR, and
+none of them reads the activation volume.
 
 ### `rating_biases` returns rank units directly
 
@@ -397,10 +458,24 @@ the bare decoded hold with it, and the order is then the two biases' alone.
 `Session/SurfaceGunner` never takes the preference, since it
 drops non-aircraft candidates anyway.
 
-Unmodelled, named rather than guessed: the activation volume is scored as a sphere where the engine
-tests a cylinder (`+0x328`, `+0x32c`–`+0x330`); `TargetProjectile` is not part of the acquisition
-sweep at all; and `FUN_00421ad0`'s `1e21` on a
-candidate object whose `+0x04` reads 3 or more.
+The admission volume comes out as the attack one. `AiTargetRanking.Score` refuses a candidate past
+the `attackRange` it is handed, and `FlightController.SelectRankedTarget`, its re-score
+`HoldsStandingTarget` and the withdrawal's reach test all hand it `AiModeMachine.AttackRange`, so a
+member whose activation volume a `DEDG` widened keeps its own attack radius for what it may pick up.
+`AiModeMachine.ActivationRange` is left where the spawn seeds it and reaches the ranking nowhere.
+
+⚠ **`Session/SurfaceGunner` is the one picker still admitting on the wrong volume.** It hands
+`AiTargetRanking.SelectBest` the def's `activation` (2,500 m on both shipped surface defs) where
+`FUN_00421950` reads the hull's attack cylinder, and moving it wants the hull's attack volume, which
+nothing in CSVM resolves for a hull: `patrolboat` and `t_truck` author no `attack` and no `kind_of`,
+so in the original that volume arrives from the mission's own roster block or net.
+
+Unmodelled, named rather than guessed: the attack volume is scored as a sphere where the engine
+tests a cylinder (`+0x328`, `+0x32c`–`+0x330`), so the altitude band is unported on both the
+acquisition and the awake test; the awake test itself, `FUN_004897c0`'s use of the activation
+volume, has no CSVM counterpart at all, since every rig ticks every frame; `TargetProjectile` is not
+part of the acquisition sweep; and `FUN_00421ad0`'s `1e21` on a candidate object whose `+0x04` reads
+3 or more.
 
 ## The chapter's net table, and what "the first net" means
 

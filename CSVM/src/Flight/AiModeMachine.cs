@@ -158,17 +158,22 @@ public sealed class AiModeMachine
 
     /// <summary>Activation radius, metres, player.json's <c>min_ai_active_dist</c> (2000 shipped),
     /// the fallback for every roster whose own volume slots are unauthored (all of them).
-    /// A target outside it is not ranked at all (the engine scores it 1e21).</summary>
+    /// ⚠ Decoded, this volume gates whether the engine SIMULATES a vehicle at all, measured to the
+    /// player, and it reaches target admission nowhere (docs/org/aiPilot.md "Every reader of the
+    /// attack and activation triples"). The engagement gates below are CSVM's own reading of it.
+    /// A <c>DEDG</c> widening raises it and must not widen what a pilot may pick up.</summary>
     public float ActivationRange = 2000f;
 
     /// <summary>Attack radius, metres, vehicle.json's <c>attack</c> (2000 shipped, on
-    /// <c>basic_airplane</c>, inherited install-wide). Pursue is entered when a target sits
-    /// inside both this and <see cref="ActivationRange"/>.</summary>
+    /// <c>basic_airplane</c>, inherited install-wide). The decoded admission volume: both scorers
+    /// refuse a candidate outside it, so it is what <see cref="AiTargetRanking"/> is handed. Pursue
+    /// is entered when a target sits inside both this and <see cref="ActivationRange"/>.</summary>
     public float AttackRange = 2000f;
 
-    /// <summary>Chase leash, metres, vehicle.json's <c>return_range</c> (1200 shipped). Our
-    /// reading (the anchor is undecoded): pursuit is abandoned when the aircraft has strayed
-    /// farther than this from where the pursuit began AND the target sits outside the
+    /// <summary>Chase leash, metres, vehicle.json's <c>return_range</c> (1200 shipped). The anchor
+    /// is decoded as where the pursuit began (<c>FUN_0041f040</c> writes <c>+0x348</c>), and the
+    /// engine reverts the task on the leash ALONE. Our reading: pursuit is abandoned when the
+    /// aircraft has strayed farther than this from the anchor AND the target sits outside the
     /// activation radius.</summary>
     public float ReturnRange = 1200f;
 
