@@ -76,14 +76,14 @@ every sector. Pure data, no Godot node; pinned by the `target-ref` suite. Decode
 [../org/targeting.md](../org/targeting.md). Read `TargetPool.cs` next.
 
 ## src/Flight/TargetPool.cs
-The player's classed candidate pool: three lists of `TargetRef` (`Enemy`, `Ally`, `NonAircraft`,
-reachable through `Of(TargetClass)`), rebuilt from scratch on every `Rebuild`, the original's own
-contract and why a runtime spawn appears and a death disappears with no extra plumbing. It walks the
-aim assist's aeroplanes and live ordnance only; the mission's sites arrive through `objectives` under
-their own record's flag, an `objective` one riding the Enemy cycle and an `other_target` one the
-Non-Aircraft, and an aeroplane whose roster block flags itself carries the marker on its own
-candidate. The zeppelin sub-parts arrive through `subParts`, offered only while `selectedWeapon`
-carries `LOCK_ON`; a gun emplacement is on no cycle at all. Read `TargetSelection.cs`; decode: [../org/targeting.md](../org/targeting.md).
+The player's classed candidate pool: three lists of `TargetRef` (`Enemy`, `Ally`, `NonAircraft`, reached through
+`Of(TargetClass)`), rebuilt from scratch on every `Rebuild`, the original's own contract and why a spawn appears and a
+death disappears with no extra plumbing. It walks the aim assist's aeroplanes and live ordnance only; the mission's
+sites arrive through `objectives` under their record's flag, `objective` on the Enemy cycle and `other_target` on the
+Non-Aircraft, and a roster block's own flag marks its aeroplane's candidate. Sub-parts arrive through `subParts` only
+while `selectedWeapon` carries `LOCK_ON`; a gun emplacement is on no cycle. The gamez ancestor chain `CollectOwners`
+hands the `rating_biases` match is cached per destructible instance: each name read allocates a finalizable
+`StringName`. Read `TargetSelection.cs`; decode: [../org/targeting.md](../org/targeting.md).
 
 ## src/Flight/TargetSelection.cs
 One pilot's target selection: the sticky choice, the eleven actions and the lifecycle. One instance

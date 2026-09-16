@@ -158,13 +158,14 @@ whole-frame differential. The plane count rides the bank's tally slot, so `ai_pl
 same bracket as `ai_ms`, which divides its total by FRAMES rather than walks.
 
 ## src/Utils/PhaseCost.cs
-A row of named WallCostBank slots, one per phase of a pass, where only one slot is open at a time
-and opening the next closes the one before it. SimPhaseCost is the row SessionSimulation.Enter
-and AnimRuntime's physics advance feed, one slot per phase, printed as sim_ms= divided by the
-window's TICKS so it reads beside phys_tick_ms; ProcessSiteCost is the row a using scope at the
-projectile pool's, animation runtime's, aircraft's, emitters' and session's _Process feeds, as
-proc_sites_ms= divided by FRAMES beside proc_ms. Each slot prints mean/max, the max being the
-longest single span, so a stall names its slot. The gap to the whole-pass term is everything unnamed.
+A row of named WallCostBank slots, one per phase of a pass: only one is open at a time, and opening the next closes
+the one before it. SimPhaseCost is the row SessionSimulation.Enter and AnimRuntime's physics advance feed, one slot
+per phase, printed as sim_ms= divided by the window's TICKS so it reads beside phys_tick_ms; ProcessSiteCost is the
+row a using scope at the projectile pool's, animation runtime's, aircraft's, emitters' and session's _Process feeds,
+as proc_sites_ms= divided by FRAMES beside proc_ms. Each slot prints mean/max, the max the longest single span, so a
+stall names its slot; the gap to the whole-pass term is unnamed. Each slot also banks the BYTES allocated inside it,
+drained by the same TakeRow and printed by AllocRow as sim_alloc_b=, since a millisecond figure names where a GC pause
+landed and never what earned it (verification PERF-34).
 
 ## src/Utils/GcTrace.cs
 The `--perf` GC readout: one `[perf] gc` line per ten wall seconds carrying the pause the process

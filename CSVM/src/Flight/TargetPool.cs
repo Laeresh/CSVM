@@ -154,12 +154,7 @@ public sealed class TargetPool
             return;
         }
 
-        // The gamez tree, by the node's ORIGINAL name: Godot sanitizes and de-duplicates Name, and
-        // an authored pattern names the node the mission data named.
-        for (var n = inst.Anchor.GetParent(); n is Node3D up; n = n.GetParent())
-        {
-            into.Add(AnimRuntime.NameOf(up));
-        }
+        into.AddRange(OwnerTreeOf(inst));
     }
 
     /// <summary>Whether a turret candidate stands in the world rather than being carried by an
@@ -179,6 +174,32 @@ public sealed class TargetPool
     // to the selection, so a part must be pickable before the launch.
     private static bool PartsSelectable(WeaponDef? selectedWeapon) =>
         selectedWeapon != null && ProjectilePool.CarriesLockOn(selectedWeapon);
+
+    // The gamez tree, by the node's ORIGINAL name: Godot sanitizes and de-duplicates Name, and an
+    // authored pattern names the node the mission data named. ⚠ Held on the instance rather than
+    // walked per ask: every AI shooter asks every ranked structure candidate for this chain on
+    // every physics tick, and each ancestor's name comes back out of Godot as a fresh string and a
+    // fresh finalizable StringName wrapper, which is the rate the collector's pause follows
+    // (docs/verification.md PERF-20). The walk repeats only when the anchor's own parent changes.
+    private static List<string> OwnerTreeOf(DestructibleRegistry.Instance inst)
+    {
+        var parent = inst.Anchor.GetParent();
+        ulong parentId = parent != null ? parent.GetInstanceId() : 0UL;
+        if (inst.CachedOwnerTree is { } cached && inst.CachedOwnerTreeParent == parentId)
+        {
+            return cached;
+        }
+
+        var names = new List<string>();
+        for (var n = parent; n is Node3D up; n = n.GetParent())
+        {
+            names.Add(AnimRuntime.NameOf(up));
+        }
+
+        inst.CachedOwnerTree = names;
+        inst.CachedOwnerTreeParent = parentId;
+        return names;
+    }
 
     /// <summary>Wraps one classed candidate as a <see cref="TargetRef"/>. The KIND picks the shape
     /// (which is why an unrecognised source still lands in the right cycle with an empty name rather

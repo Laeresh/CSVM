@@ -2271,6 +2271,7 @@ public partial class Launcher : Node3D
         // The split of the two whole-pass terms above by what ran: the sim step per TICK beside
         // phys_tick_ms, the named _Process consumers per FRAME beside proc_ms (src/Utils/PhaseCost.cs).
         string simRow = SimPhaseCost.TakeRow(physTicks);
+        string simAllocRow = SimPhaseCost.AllocRow();
         string procSites = ProcessSiteCost.TakeRow(n);
         double draws = _perfDraws / n;
         double prims = _perfPrims / n;
@@ -2281,6 +2282,10 @@ public partial class Launcher : Node3D
         double maxMs = _perfFrameMsSorted[PerfWindowFrames - 1];
         double p95Ms = _perfFrameMsSorted[Perf95Index];
         Log.Info("perf", $"window sim_frame={simFrame} frames={_perfFrames} wall_ms={wallMs:0.00} fps={fps:0.0} frame_ms={frameMs:0.00} script_ms={scriptMs:0.00} proc_ms={procMs:0.000} proc_max_ms={procMaxMs:0.000} proc_passes={procPasses} ai_ms={aiMs:0.000} ai_planes={aiPlanes:0.0} render_cpu_ms={renderCpuMs:0.00} gpu_ms={gpuMs:0.00} physics_ms={physicsMs:0.00} phys_tick_ms={physTick:0.000} phys_tick_max_ms={physTickMaxMs:0.000} phys_hz={physHz:0.0} draws={draws:0.0} prims={prims:0.0} nodes={nodes:0.0} mem_mb={memMb:0.00} max_ms={maxMs:0.00} p95_ms={p95Ms:0.00} sim_ms={simRow} proc_sites_ms={procSites}");
+        // Its own line, not another term on the window above: the BYTE figure answers a different
+        // question from the millisecond one (which phase feeds the collector, rather than which
+        // phase the pause landed in, PERF-34), and the two are read side by side.
+        Log.Info("perf", $"alloc sim_frame={simFrame} sim_alloc_b={simAllocRow}");
         _perfClock = 0; _perfFrames = 0; _perfProcess = _perfGpu = _perfCpuRender = _perfPhysics = 0;
         _perfDraws = _perfPrims = _perfNodes = _perfMem = 0;
     }

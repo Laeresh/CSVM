@@ -435,8 +435,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Flight model & collision physics
 
-- `BL-562` `[Perf]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: data]` `[CM11]` **CM11 (C2/M02) still spends single physics ticks of 33 to 57 ms in flight and
-  about 130 to 138 ms on the first tick after the world build.** *Evidence (traced):* the bracketed
+- `BL-562` `[Perf]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: data]` `[CM11]` **CM11 (C2/M02) still spends a single physics tick of about 36 ms on the sortie's
+  first part destruction, and about 130 to 138 ms on the first tick after the world build.** *Evidence (traced):* the bracketed
   instrument (`PhysicsTickCost`, `--perf`'s `phys_tick_ms` / `phys_tick_max_ms` / `phys_hz`), with a
   temporary sub-scope Stopwatch splitting one whole `FlightController.SimStep`, over three
   78-sim-second `--no-det` runs of 150 windows each, one aeroplane and nobody at the controls with
@@ -457,12 +457,33 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   three runs is 2.9 / 5.3 / 2.9 ms: the 2.9 ms is the session's first sweep and is managed
   first-call cost (0.4 ms of it in the physics server), and the 5.3 ms is one `CenterRayContact` ray
   that struck nothing, so no collider is answerable for it and the report the query fills never
-  reads above 0.00 ms. (c) One reaches 50 ms inside a single `AnimRuntime.Advance`. A fourth class
-  is not a term of the code: 33 to 36 ms steps carrying `gc=1/1/0` and a GC pause equal to the whole
-  step, landing in the preamble, the ground-blow probe, the flight model or the tail on different
-  runs (PERF-34). Window 240, two seconds in, reads 49 to 57 ms with only about 21 ms of it named by
-  any simulation phase, and sits inside the first GC window's 211 ms of pause over 16 gen-0, 15
-  gen-1 and 7 gen-2 collections, so it belongs with (a). *Fix shape:* (c) next. (b) is now a
+  reads above 0.00 ms. (c) **The 33 to 36 ms steps carrying `gc=1/1/0` were the AI target ranking
+  reading the world's node names on every tick, and that is fixed.** A per-phase allocation meter
+  (`--perf`'s `[perf] alloc` line, `sim_alloc_b=`, now permanent) puts 98 % of a settled tick's
+  allocation in `SimPhase.CapturedAiAircraft` at about 309,000 B per tick, and a temporary bisect
+  inside it lands on `TargetPool.CollectOwners` (251,904 B per tick over 164 calls, 81 % of the
+  tick) and `TargetPool.NameOf` (about 36 KB per tick over 197 calls, 12 %). Both are Godot
+  node-name reads: every AI shooter asks every ranked structure candidate for its whole gamez
+  ancestor chain on every physics tick, and each ancestor's name comes back as a fresh string, a
+  finalizable `StringName` wrapper and a `DisposablesTracker` entry, which is the finalization rate
+  the pause follows (PERF-20). Measured and ruled out in the same pass: the AI pilot decision (15 to
+  21 B per tick), the collision sweep (308 B), the ray casts (about 2.9 KB) and the whole `_Process`
+  pass except `Flight` (about 13.8 KB per frame). The ancestor chain is now cached on the
+  destructible instance, keyed by the anchor's parent so an authored re-parent re-walks. Two before
+  and three after runs on the same rig (78 sim seconds, `--no-det`, one aeroplane, nobody at the
+  controls): `CapturedAiAircraft` 309,000 to 57,100 B per tick, `alloc_mb_s` 19.2 to 19.7 down to
+  4.1 to 5.6, `fin_per_s` about 60,500 down to about 9,300, per-10-wall-second collections gc0=4
+  gc1=4 down to gc0=1 gc1=1 (gc2=0 in the settled regime both ways), `pause_per_s_ms` 25 to 41 down
+  to 3.5 to 8.5. Worst tick per window over the last 60 windows: mean 31.7 and 36.7 ms down to 8.3,
+  9.5 and 15.6; windows over 16.7 ms 20 and 21 of 60 down to 3, 3 and 9 of 60; maximum 116 and 123
+  ms down to 55, 72 and 91. Median `phys_hz` stays 60.0. The spread across the three after-runs is
+  fight variance under `--no-det`, so the GC terms are the stable measure (PERF-20). What is left on
+  the tick is `TargetPool.NameOf` at about 42 KB per tick over 220 calls, then
+  `Enumerator[AiRatingBias]` boxing in `AiTargetRanking.MatchedBias`'s `foreach` over an
+  `IReadOnlyList`. The 50 ms `AnimRuntime.Advance` step is not a fourth class: window 240, two
+  seconds in, reads 49 to 57 ms with only about 21 ms of it named by any simulation phase, and sits
+  inside the first GC window's 211 ms of pause over 16 gen-0, 15 gen-1 and 7 gen-2 collections, so
+  it belongs with (a). *Fix shape:* (b) next. (b) is now a
   question about the damage presentation rather than about collision: decide whether the first
   damage-stage start is spread off the contact tick, which touches `SpendDamage` and the damage
   pools, not the sweep. (a) is worth a separate look only if a cutscene handoff or a mid-mission

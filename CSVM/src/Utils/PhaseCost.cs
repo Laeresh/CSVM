@@ -72,6 +72,10 @@ public static class SimPhaseCost
     /// <summary>Drains the window into the <c>sim_ms=</c> row, per tick.</summary>
     public static string TakeRow(double ticks) => Row.TakeRow(ticks);
 
+    /// <summary>The same phases in allocated BYTES per tick, the <c>sim_alloc_b=</c> row. Read after
+    /// <see cref="TakeRow"/>, which drains the window both rows report.</summary>
+    public static string AllocRow() => Row.AllocRow();
+
     /// <summary>The per-tick figure the last drain printed for <paramref name="phase"/>.</summary>
     public static double LastMs(SimPhase phase) => Row.LastMs((int)phase);
 
@@ -128,6 +132,16 @@ public sealed class PhaseCost
     private readonly double[] _drained;
     private readonly double[] _drainedMax;
     private readonly StringBuilder _row = new();
+
+    // The same slots in allocated bytes. A phase's wall cost names where a GC pause LANDED, never
+    // what earned it: the pause falls into whichever slot happens to be open (verification PERF-34),
+    // so the allocation has to be banked per phase too or the reader has only the whole process's
+    // rate to go on.
+    private readonly long[] _bytes;
+    private readonly long[] _bytesMax;
+    private readonly double[] _drainedBytes;
+    private readonly long[] _drainedBytesMax;
+    private long _openedBytes;
     private int _open = -1;
 
     /// <summary>Builds one bank per label. <paramref name="now"/> is the test-only clock source
@@ -138,6 +152,10 @@ public sealed class PhaseCost
         _slots = new WallCostBank[labels.Length];
         _drained = new double[labels.Length];
         _drainedMax = new double[labels.Length];
+        _bytes = new long[labels.Length];
+        _bytesMax = new long[labels.Length];
+        _drainedBytes = new double[labels.Length];
+        _drainedBytesMax = new long[labels.Length];
         for (int i = 0; i < labels.Length; i++)
         {
             _slots[i] = new WallCostBank(labels[i], now);
@@ -153,6 +171,7 @@ public sealed class PhaseCost
     {
         CloseOpen();
         _slots[slot].Open();
+        _openedBytes = GC.GetAllocatedBytesForCurrentThread();
         _open = slot;
     }
 
@@ -163,6 +182,12 @@ public sealed class PhaseCost
         {
             return;
         }
+        long grew = GC.GetAllocatedBytesForCurrentThread() - _openedBytes;
+        _bytes[_open] += grew;
+        if (grew > _bytesMax[_open])
+        {
+            _bytesMax[_open] = grew;
+        }
         _slots[_open].Close();
         _open = -1;
     }
@@ -170,7 +195,8 @@ public sealed class PhaseCost
     /// <summary>Drains every slot and formats the row as <c>label:mean/max,label:mean/max</c>: each
     /// slot's banked total divided by <paramref name="per"/> (the window's frames or ticks), then its
     /// longest single span, which is what names the slot a stall landed in. Zero-cost slots print
-    /// too, so a reader always finds every phase.</summary>
+    /// too, so a reader always finds every phase. The allocation figures are drained here as well,
+    /// so <see cref="AllocRow"/> reads the same window this row does.</summary>
     public string TakeRow(double per)
     {
         double divisor = per > 0 ? per : 1;
@@ -181,12 +207,36 @@ public sealed class PhaseCost
             var (ms, maxMs, _, _) = _slots[i].Take();
             _drained[i] = ms / divisor;
             _drainedMax[i] = maxMs;
+            _drainedBytes[i] = _bytes[i] / divisor;
+            _drainedBytesMax[i] = _bytesMax[i];
+            _bytes[i] = 0;
+            _bytesMax[i] = 0;
             if (i > 0)
             {
                 _row.Append(',');
             }
             _row.Append(_labels[i]).Append(':').Append(_drained[i].ToString("0.000", culture));
             _row.Append('/').Append(maxMs.ToString("0.0", culture));
+        }
+        return _row.ToString();
+    }
+
+    /// <summary>The same slots as <paramref name="TakeRow"/>'s last drain, in allocated BYTES:
+    /// <c>label:mean/max</c>, the slot's bytes divided by the window's frames or ticks, then the
+    /// worst single span. Call it after <see cref="TakeRow"/>, which is where the window drains.
+    /// </summary>
+    public string AllocRow()
+    {
+        var culture = System.Globalization.CultureInfo.InvariantCulture;
+        _row.Clear();
+        for (int i = 0; i < _labels.Length; i++)
+        {
+            if (i > 0)
+            {
+                _row.Append(',');
+            }
+            _row.Append(_labels[i]).Append(':').Append(_drainedBytes[i].ToString("0", culture));
+            _row.Append('/').Append(_drainedBytesMax[i].ToString(culture));
         }
         return _row.ToString();
     }
@@ -205,6 +255,8 @@ public sealed class PhaseCost
         {
             slot.Reset();
         }
+        Array.Clear(_bytes);
+        Array.Clear(_bytesMax);
         _open = -1;
     }
 }
