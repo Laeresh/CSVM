@@ -193,7 +193,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave E, the feel of speed
 
-41. ☐ Wind streaks past the camera, keyed to speed and G, over the authored speed cue
+41. ☑ Wind streaks past the camera, keyed to speed and G, over the authored speed cue
 42. ☑ The chase camera lags the nose through a roll and widens its FOV with speed
 
 ### Wave D, the net and the reading
@@ -786,7 +786,47 @@ size.
 
 # Wave E, the feel of speed
 
-## E41 ☐ Wind streaks past the camera, keyed to speed and G, over the authored speed cue
+## E41 ☑ Wind streaks past the camera, keyed to speed and G, over the authored speed cue
+
+**Landed.** `Effects/WindStreaks.cs` draws a camera-local streak field under Enhanced only, over the
+authored wisps, which are untouched. It follows `Precipitation`: one MultiMesh of 1400 thin quads
+whose positions come out of a per-instance seed and `CAMERA_POSITION_WORLD`, wrapped into a
+camera-centred 45 m box, with the same near fade (6 m, which is what keeps a streak off the cockpit
+glass at the near plane) and rim fade. Each quad is an axial billboard whose long axis is the
+aircraft's world velocity, and the sprite is procedural, a gaussian across the quad tapering to
+nothing at both ends, so there is no texture. `Create` returns null unless `GraphicsMode.Enhanced`;
+`HumanFlightAdapter` builds one per player pane beside the speed cue and stamps the pane's visual
+layer on it, and `FlightController` drives it from the same block that drives the cue, resets it on
+respawn and on the crash cut, and frees it at teardown. `Update` writes four uniforms a frame:
+opacity is zero at or below a TUNE 0.80 of `PlaneStats.FdSpeed`, ramps to a 0.45 master over the
+rest of the envelope, and adds 0.6 × the excess of `FlightModel.LoadFactorDemand` over 1 G scaled
+to 5 G; length is airspeed × 0.035 s, at least 1.5 m; and the field's drift along the flight path
+(a 0.25 exaggeration of the aircraft's own motion past a world-fixed field) is accumulated on the
+CPU and wrapped into the box cell. That accumulation is deliberate and is the one place this
+diverges from the rain: the drift RATE changes with airspeed, so any `rate × clock` form, `TIME`
+or `csky_time` alike, teleports the whole population the moment the throttle moves. `Rng.WindStreaks`
+is its own stream so no faithful draw depends on which presentation ran, and
+`WindStreaks.AuthoredWispAlphaScale` (1, no dimming) is where the wisp-dimming TUNE would go.
+
+**Verified.** The complete `RunTests.ps1` on the item worktree: build PASS, units **4568 passed, 0
+failed, 2 skipped of 4570**, engine **351 passed, 0 failed, 0 skipped**, errors clean, goldens **19
+shots hash-identical**, 227.1 s total, exit 0. `CheckCommentCaps.ps1`, `CheckDocEntries.ps1` and
+`CheckEncoding.ps1` clean. The new `wind-streaks` engine suite proves the gate and the drive: the
+faithful presentation builds no field and the enhanced one does, the shader reads no clock at all,
+cruise at 0.76 of rated max writes zero alpha and leaves the draw off while full throttle raises
+both, alpha never falls as the speed fraction rises, a 4 G pull at one speed thickens the field
+while the same pull below the cruise gate still draws nothing, the streak axis tracks the velocity,
+the length grows with airspeed, and 100 s at 1.3× rated max leaves the accumulated drift inside the
+90 m cell. C1 probes at `--pos=-6144,1100,-6144` under `--graphics=enhanced` confirm it renders:
+nothing at 228 mph (0.76 of the Bloodhawk's 135 m/s `fd_speed`) in all three views, and streaks in
+chase, cockpit and nose at 326 mph in a shallow dive, with the wisps emitting in both.
+**Owed to the user:** the look at the controls, where the motion is most of the cue a still cannot
+show; the density and length pick off the four pairs in `.scratch/eg2/E41/`; and whether Enhanced
+should dim the wisps, which ships as no dimming. A cockpit-view `--screenshot` composites a black
+world through the cockpit pass, so those two shots carry `--no-cockpit-pass`; that is a capture
+artifact of the pass, not of this item.
+
+**Original approach (kept for reference).**
 
 **Goal.** Under Enhanced, faint streaks stream past the camera along the aircraft's velocity,
 invisible at cruise, rising with speed toward rated max and thickening in a hard turn or a dive,

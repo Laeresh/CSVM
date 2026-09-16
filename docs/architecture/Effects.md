@@ -54,3 +54,13 @@ SNOW flutters as flakes; RAIN streaks along the data's world fall velocity. The 
 procedural (`MakeFlakeTexture`/`MakeStreakTexture`), the original having drawn untextured
 primitives no archive carries. Schema and the data-to-look TUNE mapping:
 [../formats/weather.md](../formats/weather.md).
+
+## src/Effects/WindStreaks.cs
+Remake-only wind streaks, a layer OVER the authored speed cue (`Flight/SpeedCue.cs`) rather than a
+replacement: one MultiMesh of thin procedural quads in a camera-centred wrap box on
+`Precipitation`'s pattern, aligned to the aircraft's world velocity, with the same near and rim
+fades. `Create` returns null unless `GraphicsMode.Enhanced`; `HumanFlightAdapter` gives each player
+pane its own and `FlightController` drives it. `Update` is the whole law: opacity zero below a
+cruise fraction of `PlaneStats.FdSpeed`, rising with the speed fraction plus a term on
+`FlightModel.LoadFactorDemand`, length growing with airspeed, and the drift accumulated on the CPU
+rather than off a clock, since the rate changes with airspeed. Every constant is TUNE.

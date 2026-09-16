@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Effects;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.UI;
@@ -511,6 +512,17 @@ internal sealed class HumanFlightAdapter
             controller.SpeedCue = SpeedCue.Build(_world.ChapterZrdrPath, _aircraft.Textures, _worldRoot,
                 _world.Ambience,
                 rig.VisualLayer == 0 ? null : node => SplitScreen.SetVisualLayer(node, rig.VisualLayer));
+        }
+
+        // The enhanced streak field rides the same per-pane path for the same reason, and it
+        // centres on whichever camera renders it, so each pilot needs a private one. It builds on
+        // the empty stage too, being remake-only rather than chapter data.
+        if (WindStreaks.Create() is { } streaks)
+        {
+            if (rig.VisualLayer != 0)
+                SplitScreen.SetVisualLayer(streaks, rig.VisualLayer);
+            _worldRoot.AddChild(streaks);
+            controller.WindStreaks = streaks;
         }
 
         controller.Name = $"player{pi + 1}";

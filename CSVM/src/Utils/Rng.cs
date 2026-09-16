@@ -41,6 +41,10 @@ public static class Rng
     // chapter totals and the golden shots stand on.
     public const string CloudBands = "cloudbands";
     public const string Precip = "precip";
+    // The enhanced wind-streak field's per-instance seeds (Effects.WindStreaks). Its own stream,
+    // not Rng.Precip: the field is built only under the enhanced presentation, and sharing a
+    // stream would make the faithful path's rain scatter depend on which graphics mode ran.
+    public const string WindStreaks = "windstreaks";
     // The mission's global wind gust (Effects.WorldWind). Its own stream, not Puffer's: the wind
     // is one random walk for the whole world, stepped once per frame by WeatherRig, while
     // Rng.Puffer is drawn per emitter at spawn, sharing one would make every puffer's scatter a

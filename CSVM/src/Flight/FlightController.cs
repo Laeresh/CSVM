@@ -109,6 +109,10 @@ public partial class FlightController : Node3D
     /// instance per rendered player view.</summary>
     public SpeedCue? SpeedCue;
 
+    /// <summary>The enhanced presentation's wind streaks around this pane's camera, drawn over the
+    /// authored wisps above; null on the faithful path. One instance per rendered player view.</summary>
+    public WindStreaks? WindStreaks;
+
     /// <summary>Deflects the plane's ailerons/elevators/rudders with stick input;
     /// advanced each frame. Null if the model has no control-surface nodes.</summary>
     public ControlSurfaceAnimator? Surfaces;
@@ -1225,6 +1229,7 @@ public partial class FlightController : Node3D
         Nitro.Reset();
         _aiNitroArmed = false;
         SpeedCue?.Reset();
+        WindStreaks?.Reset();
         _model.Reset(_spawnPos, _spawnAttitude, _spawnSpeed, _throttle);
         _simPrev = _simCurr = _renderPose = new Transform3D(_model.Attitude, _model.Position);
         GlobalTransform = _simCurr;
@@ -2244,6 +2249,10 @@ public partial class FlightController : Node3D
                 SpeedCue.Update(simDt, _model.Position, _model.Attitude, cameraPos.Y,
                     HeightAboveWorldGround(cameraPos));
             }
+            // The enhanced streak field over those wisps. LoadFactorDemand is the pre-clamp
+            // demand, an instrument reading with no force term behind it, which is what this is.
+            WindStreaks?.Update(simDt, _model.VelocityDir * _model.Speed, speedFrac,
+                _model.LoadFactorDemand);
         }
 
         // Spin the propeller/rotor blur discs: they keep turning even at idle (windmilling)
@@ -2280,6 +2289,12 @@ public partial class FlightController : Node3D
         }
         SpeedCue?.Dispose();
         SpeedCue = null;
+        if (WindStreaks is { } streaks)
+        {
+            streaks.GetParent()?.RemoveChild(streaks);
+            streaks.QueueFree();
+            WindStreaks = null;
+        }
         Race?.Remove(PlayerIndex);
         Race = null;
         SmokeScreens = null;
@@ -3101,6 +3116,7 @@ public partial class FlightController : Node3D
         // No plume survives a dead engine.
         ThrottleSmoke?.Reset(_throttle);
         SpeedCue?.Reset();
+        WindStreaks?.Reset();
     }
 
     // The authored crash camera: hard-cut to the static elevated vantage and hide the HUD, both
