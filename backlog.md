@@ -628,43 +628,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   replaced; `git log --grep=BL-305`. Do not reopen either ID; IDs are never reused, per this
   file's own rule).
 
-- `BL-508` `[Research]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The original never alpha-tests, so every alpha texture we scissor is an
-  invention rather than a reproduction.** *Decision:* the user picked blended for all three
-  families the montage showed, trees (tree, bush and brush cards, 13 textures), rails (fence,
-  railing, ladder, stair and grate, 20) and lattice (tower lattice, girder, support and cable,
-  23), each judged shipped-against-blended in one shot (C1 tree line, C4 Jimmy's camp, C2 Eiffel
-  replica). Land those three as the family table; a scissored texture the census names outside
-  them is not decided and stays scissored until shown. ⚠ The switch must reach `Clutter` as well
-  as `TextureArchive`: `Clutter`'s sprite shader hardcodes its own 0.5 scissor and never reads the
-  archive's alpha class, and C1's whole tree population is clutter, so a `TextureArchive`-only
-  table leaves every scattered tree card scissored. *Evidence:* decoded from `crimson.exe`
-  (`analysis/alpha-classification/FINDINGS.md`, "The original has no cutout path"). The renderer is
-  `zvid_ddd3d.c` over `IDirect3DDevice3`, and `D3DRENDERSTATE_ALPHATESTENABLE` is set nowhere in
-  the whole `0x0059e000–0x005ab000` layer, nor are `ALPHAREF` and `ALPHAFUNC`, so alpha test holds
-  its Direct3D default of FALSE for the entire run. Blending is one per-texture mode field
-  (`tex+0x10 == 4`, `FUN_005a4210`) against a fixed `SRCALPHA`/`INVSRCALPHA` pair, and the
-  archive's `TextureAlpha` class decides pixel PRECISION only (`FUN_005a27e0`: colour key for
-  `Simple`, 8888 → 4444 → 1555-at-128 for `Full` depending on the card). Ours scissors 388 of the
-  604 alpha textures, tree and fence cards included. *Fix shape:* a per-family switch in
-  `TextureArchive` (the `SoftAlphaCoastline` list widened into a family table) so a montage can
-  flip one family at a time; after the look, each family the user picks as blended joins the
-  table, and if every family goes, `AlphaIsSoft` and its 0.45 threshold become dead code and the
-  census script goes with them. *⚠ Traps:* blending moves a surface into the
-  transparent pass with no depth write and per-object sorting, which is a real risk on the
-  thousands of coplanar foliage and railing cards a hard cutout currently keeps in the opaque pass,
-  the coastline sheets were safe because they are few and flat, and that does not generalise.
-  A period video card without a 4444 or 8888 texture format collapsed `Full` alpha to 1 bit at
-  threshold 128, so a 1-bit look in reference footage may be the hardware and not the intent; check
-  which the shot is before treating it as the target. *Playtest after fix:* a low pass over C1's
-  tree lines and C2's Eiffel replica, where the erosion this rule was written to prevent would show
-  first. *Cross-refs:* `analysis/alpha-classification/FINDINGS.md`, which carries the decode and the
-  install-wide census; the coastline commit that filed this (`git log --grep=SoftAlphaCoastline`).
-  The sort those cards would join is Godot's own per-camera transparent-object pass, already
-  carrying every particle emitter, and it costs nothing per object; what it does NOT do is order two
-  interpenetrating objects' polygons against each other, which is the risk named above and is
-  unchanged by the particle work ([`docs/org/textures.md`](docs/org/textures.md), "The depth order,
-  and where ours stops being the original's").
-
 - `BL-683` `[Bug]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **The faithful path's aircraft ambient cannot be driven by the mission, because
   `AmbientLightEnergy` never reaches the shader.** *Decision:* the faithful Environment takes the
   mission's authored `SUNLIGHT_AMBIENT` as a colour-sourced ambient, so a night chapter's
@@ -719,8 +682,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   tree card's mesh spans y from 0 up while its `.flt` node's Y is the ground; that drop is right
   and is not this defect. Do not raise the card by editing its mesh either, since the same mesh is
   what the `--viewer` path draws through `SceneBuilder`, where the chain's transform is already
-  honoured. *Cross-refs:* `BL-508` owns the `Clutter` sprite shader's hardcoded 0.5 alpha scissor,
-  which currently eats all but the core of the glow, so the two land their look together.
+  honoured. *Cross-refs:* the `Clutter` sprite shader now takes its blend-or-scissor verdict from
+  the texture archive, so the glow's soft ramp survives the draw and its placement is what is left.
 
 ## Effects & animation runtime
 

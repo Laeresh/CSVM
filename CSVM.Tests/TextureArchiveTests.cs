@@ -51,6 +51,28 @@ public class TextureArchiveTests
     }
 
     [Fact]
+    public void TheNamedFamiliesBlendWhateverTheirPixelsMeasure()
+    {
+        // One member per family, each measured above the binary-ness threshold and so scissored by
+        // the pixel rule alone (analysis/alpha-classification/).
+        Assert.True(TextureArchive.IsNamedSoftAlpha("firtree1"));      // trees
+        Assert.True(TextureArchive.IsNamedSoftAlpha("shouse_rail01")); // rails
+        Assert.True(TextureArchive.IsNamedSoftAlpha("eiffel1.tif"));   // lattice
+        Assert.True(TextureArchive.IsNamedSoftAlpha("shore1_end"));    // coastline
+    }
+
+    [Fact]
+    public void ATextureOutsideTheFamiliesIsLeftToThePixelRule()
+    {
+        // ⚠ A family is a name list, not a prefix: the Spruce Goose skins share four letters with
+        // the `spruce` tree card and are not foliage.
+        Assert.False(TextureArchive.IsNamedSoftAlpha("sprucegoose6"));
+        Assert.False(TextureArchive.IsNamedSoftAlpha("cblock1"));
+        // Already soft by its own pixels; naming it would decide nothing.
+        Assert.False(TextureArchive.IsNamedSoftAlpha("eiffel2"));
+    }
+
+    [Fact]
     public void AnUndrawnTextureIsOnlyUndrawnWhereTheArchiveCannotResolveIt()
     {
         // C3's skydome names cloud1/cloud2 and C3 ships neither, so its two cards draw nothing.

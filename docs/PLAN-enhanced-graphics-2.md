@@ -59,7 +59,7 @@ exception, a display setting like V-Sync, and it is ignored under `--det` so no 
 | 10 | Wave order and pacing? | **A, B, C, E, D. A wave halts on the user's flight, and the next wave starts as soon as it has no dependency on the halted one.** B, C and E need A1 landed (they are judged through the same temporal filter) but not A's verdict; D needs everything. |
 | 11 | The feel of speed and of direction changes (Wave E)? | **Wind streaks past the camera and a chase camera that lags the nose and widens its FOV with speed, both under Enhanced.** Wingtip vapour is out (too much for a prop plane); radial motion blur is out (it competes with the temporal pass for sharpness). |
 | 12 | What happens to the authored speed-cue wisps under Enhanced? | **They stay; the streaks are added over them.** The wisps are data (`speed_cue.zrd`) and `BL-867` tunes them on the faithful path; whether Enhanced dims them under the streaks is a TUNE the user judges in E41's montage, not a decision made here. |
-| 13 | Does `BL-508` (blend, not scissor, for trees, rails and lattice) change the plan? | **Yes: A4 waits for it and covers only what stays scissored afterwards**, possibly nothing. Blended surfaces have no coverage edge to fix. |
+| 13 | Do the trees, rails and lattice that now blend rather than scissor change the plan? | **Yes: A4 covers only what stays scissored beside them**, which is 332 of the census's 388 cut names. Blended surfaces have no coverage edge to fix. |
 
 ## ⚠ Read this before implementing anything
 
@@ -204,9 +204,9 @@ A1 lands before any look item is judged, since B and C are seen through the same
 B and C do not wait for A's verdict (A3, A5). A1 and A2 both touch the four viewport construction
 sites (`Launcher`, `CockpitOverlay`, `SpyglassView`, `SplitScreen`), so they run in sequence, not in
 parallel worktrees; A4 touches shader code in `SceneBuilder`/`Clutter` and can run beside A2. A3
-depends on A1's flight. A5 depends on A1 and A2 and is judged against them. A4 waits for
-`BL-508` to land on main (session `orch-7`), since that item removes most of A4's population; do
-not start A4 in a worktree forked before it.
+depends on A1's flight. A5 depends on A1 and A2 and is judged against them. A4 needs a tree forked
+after the tree, rail and lattice families went from scissor to blend, since that change removes
+most of A4's population.
 
 B12 and B13 both edit `EmitterRenderer.cs`'s one shader: sequential. B11 touches `WorldLights.cs`
 and the effect sink, B14 adds its own material, B15 touches the crater/decal path; those three can
@@ -315,20 +315,21 @@ through the MSAA samples instead of a hard 1-bit edge, under Enhanced only.
 **Evidence (confidence: direction-sound).** MSAA does nothing for an alpha-scissored edge; Godot's
 `alpha_to_coverage` render mode hands the alpha to the coverage mask. `SceneBuilder.GetBiasShader`
 and `Clutter.ShaderCode` build their shader keys with an Enhanced bit already (`SceneBuilder.cs:1528`,
-`:1724`, `:1819`), so an Enhanced-only render mode is one more key bit. ⚠ `BL-508` (queued in
-session `orch-7`) lands the decoded finding that the original never alpha-tests, and switches the
-tree, rail and lattice families (56 textures) from scissor to blend in both `TextureArchive` and
-`Clutter`; those families then leave this item's population. What stays scissored after `BL-508`
-is whatever its census names outside the three families, and only that is A4's.
-`<TODO: after BL-508 lands, list the textures still scissored; if none, A4 closes ❌ as moot>`
+`:1724`, `:1819`), so an Enhanced-only render mode is one more key bit. ⚠ The tree, rail and
+lattice families (56 textures) blend rather than scissor, in `TextureArchive` and `Clutter` alike,
+because the original never alpha-tests; they have left this item's population, and so have the
+coastline sheets. A4 is not moot: 332 of the census's 388 scissored names are outside those
+families (`analysis/alpha-classification/`), among them the crane girders (`crane05`,
+`cranesteel3`), `rope_bridge`, `lightpole` and the sign cards.
 
 **Approach.** Add `alpha_to_coverage` (or `alpha_to_coverage_and_one`) to the cutout arms of those
 shaders when `GraphicsMode.Enhanced`, through the existing key bits so the faithful shader text is
-byte-identical. Judge on C1's fences and the lattice radio tower.
+byte-identical. Judge on a surface that still cuts, the C5 lamp posts and C4's crane, not on a
+fence or a tree.
 
 **Model recommendation.** medium.
 
-**Verify.** Enhanced flight past the C1 radio tower and a fence line; faithful goldens zero movers;
+**Verify.** Enhanced flight past a C5 lamp line and C4's crane; faithful goldens zero movers;
 the alpha-cutout ray suites still pass (they test the collider, not the pixel, so they must not
 move).
 

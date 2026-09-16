@@ -368,16 +368,34 @@ rings and the HUD hilites. Those draw through `SceneBuilder`, which does not rea
 some chapters and not in others, so an install-wide name table would answer wrongly for whichever
 chapter it was not built from.
 
-`TextureArchive.LastAlphaIsSoft` calls a texture's alpha **soft** when fewer than 45% of its ink
-texels (alpha >= 32) are truly opaque (alpha >= 200), measured install-wide in
-`analysis/alpha-classification/`. Soft ink must not scissor: a 1-bit cut at 0.5 both erases
-sub-threshold ink and solidifies the partial alpha above it, so only essentially-binary ink
-(fences, trees) survives the cut. `SoftAlphaCoastline` names the five waterline sheets the ratio
-misreads, whose solid dry-land half outvotes the feathered ramp that is the point of the texture;
-the inland transition sheets measure 0.81 to 0.93 binary and are genuine cutouts. This is a
-different question from `LastAlphaClass`, the extractor's own `None`/`Simple`/`Full` field, which
-is the header bit itself and the only reader that sees the `Simple` textures; no lighting decision
-keys on it, since the original's hardware draw has none ([vertexLighting.md](vertexLighting.md)).
+`TextureArchive.LastAlphaIsSoft` calls a texture's alpha **soft**, meaning it blends instead of
+scissoring, on two grounds. The pixel rule answers for a name nothing else covers: soft when fewer
+than 45% of its ink texels (alpha >= 32) are truly opaque (alpha >= 200), measured install-wide in
+`analysis/alpha-classification/`. A 1-bit cut at 0.5 both erases sub-threshold ink and solidifies
+the partial alpha above it, so only essentially-binary ink survives it.
+
+The other ground is a named family table, and it exists because the original has no cutout path at
+all: its whole D3D layer never sets `ALPHATESTENABLE`, so every alpha surface it draws is blended
+and every scissor here is our own invention
+([FINDINGS](../../analysis/alpha-classification/FINDINGS.md)). Four families are named. The five
+coastline waterline sheets are the ones the ratio misreads, their solid dry-land half outvoting the
+feathered ramp that is the point of the texture. The 13 tree, 20 rail and 23 lattice cards are the
+opposite case: the ratio reads them correctly as binary, and they blend because the original
+blended them. The names are the currently-scissored family members from the census, one list per
+family so a family can be flipped back to the pixel rule on its own. A scissored texture outside
+the four is undecided and keeps that rule, the inland transition sheets (0.81 to 0.93 binary) among
+them.
+
+The verdict reaches the scattered decorations too: `Clutter`'s billboard shader emits its
+`ALPHA_SCISSOR_THRESHOLD` only for a card the archive calls hard, so a clutter tree blends exactly
+as the same texture does on a world surface. Soft also suppresses `ScissorMipsKeepCoverage`, whose
+only job is to stop a cutout thinning at distance, leaving a blended card the plain box-filtered
+mip chain the original sampled.
+
+All of that is a different question from `LastAlphaClass`, the extractor's own
+`None`/`Simple`/`Full` field, which is the header bit itself and the only reader that sees the
+`Simple` textures; no lighting decision keys on it, since the original's hardware draw has none
+([vertexLighting.md](vertexLighting.md)).
 
 `TextureArchive` carries two absent-name sets rather than one, because the retail data lacks
 textures for two different reasons. `KnownAbsentFromGameData` (`pir_spinner`, `barngrill`) draws a

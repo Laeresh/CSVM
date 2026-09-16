@@ -38,6 +38,11 @@ public sealed class ClutterBuilder
         + "    float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);\n"
         + "    ALBEDO = mix(ALBEDO, csky_fog_color, csky_fog_on * fog_amt);\n";
 
+    // The cutout the scissor variant applies, at Godot's own default threshold. ⚠ Emit it only when
+    // the archive calls the card's alpha hard: a cut through soft ink both erases what sits under
+    // the threshold and solidifies what sits above it, and the original cuts nothing at all.
+    private const string ScissorLine = "    ALPHA_SCISSOR_THRESHOLD = 0.5;\n";
+
     // The seed of the substitute/scale stream: the constant the original seeds its own world
     // build with, borrowed as a label rather than as a claim, our PRNG, traversal and draw count
     // all differ, so the sequences cannot and do not agree. What IS reproduced is the property
@@ -646,12 +651,12 @@ public sealed class ClutterBuilder
     }
 
     // A billboard card, turned toward the camera by FaceBasisLines because the source decorations
-    // are one-sided quads that would vanish edge-on. Fullbright, scissor cutout, and SceneBuilder's
-    // cylindrical fog. `lit` and `fogged` are the decoration model's own authored flags, emitted as
-    // variants so a lit, fogged kind gets the base form.
-    private static string ShaderCode(bool lit, bool fogged, bool clampUv, bool spherical) => $$"""
+    // are one-sided quads that would vanish edge-on. Fullbright, SceneBuilder's cylindrical fog, and
+    // the archive's own blend-or-scissor verdict. `lit` and `fogged` are the decoration model's own
+    // authored flags, emitted as variants so a lit, fogged kind gets the base form.
+    private static string ShaderCode(bool lit, bool fogged, bool clampUv, bool spherical, bool blend) => $$"""
         shader_type spatial;
-        render_mode skip_vertex_transform, unshaded, cull_disabled, shadows_disabled;
+        render_mode skip_vertex_transform, unshaded, cull_disabled, shadows_disabled{{(blend ? ", blend_mix, depth_draw_never" : "")}};
 
         uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, {{(clampUv ? "repeat_disable" : "repeat_enable")}};
 
@@ -688,8 +693,7 @@ public sealed class ClutterBuilder
             ALBEDO = col.rgb{{(lit ? " * csky_world_light" : "")}};
         {{(fogged ? FogLines : "")}}{{SceneBuilder.TintLine}}
             ALPHA = col.a;
-            ALPHA_SCISSOR_THRESHOLD = 0.5;
-        }
+        {{(blend ? "" : ScissorLine)}}}
         """;
 
     // The camera-facing basis one card's vertices are turned by, the rendering half of its
@@ -1031,11 +1035,11 @@ public sealed class ClutterBuilder
 
     // ---------------------------------------------------------------- rendering
 
-    private Shader SpriteShader(bool lit, bool fogged, bool clampUv, bool spherical)
+    private Shader SpriteShader(bool lit, bool fogged, bool clampUv, bool spherical, bool blend)
     {
-        int key = (lit ? 1 : 0) | (fogged ? 2 : 0) | (clampUv ? 4 : 0) | (spherical ? 8 : 0);
+        int key = (lit ? 1 : 0) | (fogged ? 2 : 0) | (clampUv ? 4 : 0) | (spherical ? 8 : 0) | (blend ? 16 : 0);
         if (!_shaders.TryGetValue(key, out var shader))
-            _shaders[key] = shader = new Shader { Code = ShaderCode(lit, fogged, clampUv, spherical) };
+            _shaders[key] = shader = new Shader { Code = ShaderCode(lit, fogged, clampUv, spherical, blend) };
         return shader;
     }
 
@@ -1043,6 +1047,10 @@ public sealed class ClutterBuilder
     private MultiMeshInstance3D BuildKindInstance(Kind kind)
     {
         var tex = _textures.Find(kind.Label);
+        // ⚠ Read the verdict straight off the Find above and nowhere else; it is what sets the
+        // archive's Last* fields. A card whose alpha the archive calls soft blends, exactly as the
+        // same texture does on a world surface, so foliage and glow are not cut here alone.
+        bool blend = tex != null && _textures.LastHadAlpha && _textures.LastAlphaIsSoft;
         // Clamp when the card's UVs never leave the unit square, the same data-driven rule as
         // SceneBuilder's world surfaces; wrapping bleeds the texture's opposite edge in at the
         // UV border (the hairline-seam / tracer-tail artifact).
@@ -1050,7 +1058,7 @@ public sealed class ClutterBuilder
         var mat = new ShaderMaterial
         {
             Shader = SpriteShader(kind.Lit, kind.Fogged, clampUv,
-                kind.Billboard == SceneBuilder.BillboardKind.Spherical),
+                kind.Billboard == SceneBuilder.BillboardKind.Spherical, blend),
         };
         if (tex != null)
             mat.SetShaderParameter("albedo_tex", tex);

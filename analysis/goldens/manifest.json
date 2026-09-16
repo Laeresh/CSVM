@@ -15,8 +15,8 @@
     {
       "name": "c1-waterfall",
       "frame": 120,
-      "hash": "ba05b93a796fcb4b635912d3aad20035",
-      "exercises": "UV scroll on the falls sheet, the mist puffer carried on the mission wind and drawn farthest-first, and the alpha-textured spray under the zone's world light; frame-sensitive 1.28 % at 120 vs 121.",
+      "hash": "3712964f77a21f3029466176cb8e7cc6",
+      "exercises": "UV scroll on the falls sheet, the mist puffer carried on the mission wind and drawn farthest-first, the alpha-textured spray under the zone's world light, and the ridge's conifer cards blended rather than cut; frame-sensitive 1.28 % at 120 vs 121.",
       "args": ["--freecam", "--chapter=C1", "--pos=-7720,60,-3380", "--lookat=-7868,40,-3449", "--det", "--mute"]
     },
     {
@@ -36,8 +36,8 @@
     {
       "name": "c2-city",
       "frame": 120,
-      "hash": "142611a096bbdf385d723fc0ad24bb10",
-      "exercises": "C2's solid 3D city blocks, backlot geometry, daylight fog, the boat anims' harbour wake spray with its far puffs culled, alpha sprites lit like the rest, and two mesh point lights that author no fade band; near-static, 51 px at 120 vs 121.",
+      "hash": "8c23fcf677d0cf5a74917362a5efbbd8",
+      "exercises": "C2's solid 3D city blocks, backlot geometry, daylight fog, wake spray with far puffs culled, alpha sprites lit like the rest, Eiffel lattice and bridge cables blended not cut, two mesh point lights, no fade band; near-static, 51 px at 120 vs 121.",
       "args": ["--freecam", "--chapter=C2", "--pos=-5722,186,-3457", "--direction=-0.438,-0.15,-0.899", "--det", "--mute"]
     },
     {
@@ -50,14 +50,14 @@
     {
       "name": "c4-snow",
       "frame": 120,
-      "hash": "d846c5f17c0b633bdf5b475e8ddf378e",
+      "hash": "dc5e35918a1155c3b2b013c4d01bc0a8",
       "exercises": "snow precipitation plus the chapter carrying 6 UV-scroll models, with a stack plume culled past its authored far band and its near puffs on the mission wind; frame-sensitive 3.74 %, the largest of the freecam set.",
       "args": ["--freecam", "--chapter=C4", "--pos=-3330,958,-9181", "--direction=-0.682,-0.2,0.731", "--det", "--mute"]
     },
     {
       "name": "c5-city-night",
       "frame": 120,
-      "hash": "fb6f0765eeca1a9858ec7cb08cb33b70",
+      "hash": "1bb2269735c4962a6934a9d408ee9a28",
       "exercises": "the night city: LIGHT_STATE point lights in csky_light_data, 51 beacons on their authored periods, lit window skins, the star field, the -0.8 mip LOD bias on every sampling arm, and torch puffs culled past their far band; one beacon toggles.",
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute"]
     },
@@ -85,28 +85,28 @@
     {
       "name": "c1-flight-kill",
       "frame": 280,
-      "hash": "e61e49bd7f0dff13cbd8c022478f9cc1",
+      "hash": "91a753686c6a9bf9654ace9024ac9c68",
       "exercises": "Chase-camera flight firing at two AIs then banking: one shot down 3 s earlier, its fireball and kill line up, the live one bracketed, the gun's smoke and light at their authored offset ahead of the muzzle, exhaust, shadow; frame-sensitive 78.07 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_kestrel,player_fury", "--ai-damage=0.02", "--target=ai2_player_fury", "--debug-markers", "--fire", "--hold=0,0,0,1@2.5;0.05,0.1,0,1", "--det", "--mute"]
     },
     {
       "name": "c1-cockpit",
       "frame": 120,
-      "hash": "ea1f4175a3d8a1654411eebf633790f1",
+      "hash": "cac893ef1c8e54e151f6f88fc4be19c9",
       "exercises": "Held pitch-and-roll flight seen from the pilot's seat: the cockpit1 interior in the pass's own SubViewport world under its re-aimed sun, needles, drum, belts and readouts, canopy frame and gunsight over world-lit C1; frame-sensitive 43.35 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--view=cockpit", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "b3377abe98e0a4c8e3b8382f8a3fb24f",
+      "hash": "1e41836336998036074d14d63ec6bb4e",
       "exercises": "Neutral-control player flight beside a killed ap_radiotwr: great_balls_of_fire on the world-effects stage riding its death site, flight-state-dependent SpeedCue, seeded puffers, world-lit alpha scenery over water; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "6d7d1556e6857a05716031c2f3725e4c",
+      "hash": "99ae2179624c7d199e32fa3f4e7cc061",
       "exercises": "player_crash_default five steps in: corrected pre-crash attitude, crash rig and airframe, texture-flag puffers, ranged tumble, vector pieces, flydirt delta, pooled repeats, the crash notice and respawn prompt over the hidden HUD, on lit C1 scenery.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
@@ -120,21 +120,21 @@
     {
       "name": "c1-stunt-marker",
       "frame": 90,
-      "hash": "d1c1e88d533a08e27e34e9e396d6a023",
+      "hash": "34b6ce8894c6c0abc3bd280d901b4639",
       "exercises": "A stunt run's Danger Zone off screen on the pilot's own target cycle: the spyglass disc at the marker anchor, the shaft leaving its rim under the 20-by-10 head, the label in the objective's blue, the run clock, the plane's ground shadow below.",
       "args": ["--chapter=C1", "--stunt", "--plane=player_fury", "--pos=-5300,300,-6300", "--direction=0,0,-1", "--det", "--mute"]
     },
     {
       "name": "campaign-4p-grid",
       "frame": 120,
-      "hash": "d3ed08c4d213b16bb5e9ebd26c5ca740",
+      "hash": "b6d3b32dc32b4f8b35f8a3437e26436a",
       "exercises": "Four humans launch a co-op campaign mission on StartGrid with no profile to load, so no director: four render targets, HUDs, gauges and target labels, the lit C1 world, the player-shaped shadow under each pane's own pilot; frame-sensitive 73.79%.",
       "args": ["--campaign=csvm-golden:6", "--players=4", "--plane=player_bhawk,player_bhawk,player_bhawk,player_bhawk", "--det", "--mute"]
     },
     {
       "name": "campaign-intro-fill",
       "frame": 120,
-      "hash": "31293f10182949ad3f7bf41e7f7b0970",
+      "hash": "03093728a93502261d59893b201e45c2",
       "exercises": "A campaign mission's intro cutscene fills the whole window at four human players: one pane at the full rect, the film fitted by the card's height with the bars stretched across it, the rest hidden, the lit C1 scene behind; frame-sensitive 3.89%.",
       "args": ["--campaign=csvm-golden:0", "--players=4", "--plane=player_bhawk,player_bhawk,player_bhawk,player_bhawk", "--det", "--mute"]
     },

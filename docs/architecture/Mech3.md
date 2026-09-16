@@ -20,9 +20,9 @@ Fields: [../formats/gamez.md](../formats/gamez.md), [../formats/world-structure.
 Texture lookup over an unzbd texture extraction, a zip or an unpacked PNG dir. It absorbs the
 stored-name quirks (20-char truncation prefix match, legacy `.-N` renames, the fork's trailing
 doubled period) and classifies each texture's alpha twice, for two unrelated readers:
-`LastHadAlpha`/`LastAlphaIsSoft` from the decoded pixels, which scissor-versus-blend keys on, and
-`LastAlphaClass` from the extractor's manifest, the one reader that sees the `Simple` textures. The
-same manifest supplies `RenderFlags`, whose bit 2 (`IsAdditive`) is the whole sprite-blend rule.
+`LastHadAlpha`/`LastAlphaIsSoft`, off the decoded pixels and the named soft-alpha families (`IsNamedSoftAlpha`), which scissor-versus-blend keys on, and `LastAlphaClass` from the extractor's
+manifest, the one reader that sees the `Simple` textures. That manifest also supplies
+`RenderFlags`, whose bit 2 (`IsAdditive`) is the whole sprite-blend rule.
 `Build` is the one construction path (decode, classify, drop-in, mip chain), `Find` caches it, `BuildMipped` hands it to `--dump-mips` un-cached, and `MipBias` reads the chapter's authored LOD
 bias for `Launcher`. [../org/textures.md](../org/textures.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../formats/gamez.md](../formats/gamez.md).
 
@@ -186,9 +186,8 @@ measurements: [../formats/world-structure.md](../formats/world-structure.md). Re
 Stamps the boot-script clutter templates across placed polygons carrying the template's ground texture,
 one stamp per integer UV repeat of the polygon's UV lattice: sprites become one fullbright billboard
 MultiMesh per kind, turned toward the camera as that kind's own `FacadeMode` says, solids go through
-`SceneBuilder.SharedMesh`, `ClassifyBillboard` the split. Every stamp carries its far fade as MultiMesh
-custom data under `EffectsLevel`, and samples through `SceneBuilder.SampleAlbedo` for the chapter's mip
-bias. `TemplateNames` reads `AddClutterTemplates` unfiltered, the per-polygon `no_clutter` gate deciding
+`SceneBuilder.SharedMesh`, `ClassifyBillboard` the split. A card blends or scissors on the archive's own alpha verdict, one shader variant each. Every stamp carries its far fade as MultiMesh custom
+data under `EffectsLevel`, and samples through `SceneBuilder.SampleAlbedo` for the chapter's mip bias. `TemplateNames` reads `AddClutterTemplates` unfiltered, the per-polygon `no_clutter` gate deciding
 which patch a district dresses; `OverrideTemplateNames` is `--clutter-templates=`'s replacement.
 Placement runtime: [../org/clutter.md](../org/clutter.md); authored side: [../formats/clutter.md](../formats/clutter.md), [../formats/templates.md](../formats/templates.md).
 

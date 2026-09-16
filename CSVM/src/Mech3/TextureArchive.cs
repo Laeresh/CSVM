@@ -673,17 +673,51 @@ public sealed class TextureArchive : IDisposable
     // The coastline sheets: the waterline where a land tile meets water, authored as a wide
     // feathered alpha ramp. Their dry-land half is solid, which carries the whole-sheet
     // opaque/ink ratio above the cutout threshold even though the waterline itself is
-    // translucent, so the pixel rule alone scissors that ramp to a 1-bit sawtooth. Named because
-    // no per-texture statistic separates them; the inland transition sheets (`cliff*_trans*`,
-    // `terpat*_trans*`) measure 0.81-0.93 binary and are genuine cutouts.
-    private static readonly HashSet<string> SoftAlphaCoastline = new(StringComparer.OrdinalIgnoreCase)
+    // translucent, so the pixel rule alone scissors that ramp to a 1-bit sawtooth. The inland
+    // transition sheets (`cliff*_trans*`, `terpat*_trans*`) measure 0.81-0.93 binary and are
+    // genuine cutouts.
+    private static readonly string[] SoftAlphaCoastline =
     {
-        "beach1",     // C2
-        "shore1",     // C3, C4
-        "shore1_end", // C4
-        "shore2",     // C3
+        "beach1",      // C2
+        "shore1",      // C3, C4
+        "shore1_end",  // C4
+        "shore2",      // C3
         "shore_trans", // C3
     };
+
+    // Tree, bush and brush cards. Blended rather than cut because the original alpha-tests nothing,
+    // so a 1-bit edge here is ours and not a reproduction (docs/org/textures.md). Every name is a
+    // currently-scissored member of the family from the install-wide census in
+    // analysis/alpha-classification/; a card the census already calls soft is absent, since naming
+    // it would change nothing.
+    private static readonly string[] SoftAlphaTrees =
+    {
+        "brush1", "brush2", "brush3", "brush4", "bush1", "bush2", "dougfirtree1",
+        "firtree1", "firtree2", "palm1", "palm2", "palm3", "spruce",
+    };
+
+    // Fence, railing, ladder, stair and grate cards, the same decision as the tree family. Densest
+    // over C4's Jimmy's camp, which is where the choice was judged.
+    private static readonly string[] SoftAlphaRails =
+    {
+        "dockrails1", "gantry_tracks2", "gantry_tracks3", "grate01", "irongate", "jim_rail1",
+        "ladder1", "ladder_01", "rail01", "rail02", "rail03", "rail1", "rail2", "scaffold1",
+        "scaffold2", "scafolding1", "scafolding2", "shouse_rail01", "stair01", "steps",
+    };
+
+    // Tower lattice, girder, support and cable cards, the same decision again. Judged over C2's
+    // Eiffel replica, with the radio mast and the suspension bridge's cables in frame.
+    private static readonly string[] SoftAlphaLattice =
+    {
+        "bhf_ibeam", "brace01", "bridge_cables", "bridgesupport", "bsupport64", "cable_insulator",
+        "cgcable1", "cgcable12", "cnine_wire1", "cranechain1", "eiffel1", "inthangbeam", "jim_sup1",
+        "jim_sup2", "jim_sup3", "roofjoists01", "spar", "support1", "woodlegs01", "woodsupport2",
+        "z_support01", "zepsupport01", "zepsupport03",
+    };
+
+    // The four families above as one lookup. Kept as separate lists so a family can be flipped back
+    // to the pixel rule on its own; a name outside every list keeps that rule.
+    private static readonly HashSet<string> SoftAlphaNamed = NamedSoftAlphaSet();
 
     private readonly ZipArchive? _zip;
     private readonly string? _dir;
@@ -834,6 +868,12 @@ public sealed class TextureArchive : IDisposable
     public static bool IsKnownAbsent(string materialTextureName) =>
         KnownAbsentFromGameData.Contains(Path.GetFileNameWithoutExtension(materialTextureName));
 
+    /// <summary>True if the name is in the soft-alpha family table, the coastline, tree, rail and
+    /// lattice cards that blend whatever their pixels measure (docs/org/textures.md). The named
+    /// half of the classification only; the pixel rule decides every other texture.</summary>
+    public static bool IsNamedSoftAlpha(string materialTextureName) =>
+        SoftAlphaNamed.Contains(Path.GetFileNameWithoutExtension(materialTextureName));
+
     /// <summary>The chapter's authored mip LOD bias, read from the interp extraction's
     /// <c>MipBias</c> lines and clamped like the original's own command. 0 when the chapter authors
     /// none, which is every chapter but C5 (docs/org/textures.md).
@@ -982,6 +1022,17 @@ public sealed class TextureArchive : IDisposable
         archiveBaseName.Length > 2 && archiveBaseName[^2] == '_' && archiveBaseName[^1] is '1' or '2'
             ? archiveBaseName[^1] - '0'
             : 0;
+
+    private static HashSet<string> NamedSoftAlphaSet()
+    {
+        var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var family in new[] { SoftAlphaCoastline, SoftAlphaTrees, SoftAlphaRails, SoftAlphaLattice })
+        {
+            set.UnionWith(family);
+        }
+
+        return set;
+    }
 
     // Fraction of ink texels (a >= 32) that are truly opaque (a >= 200); below the threshold is
     // soft (the value and the census are on docs/org/textures.md).
@@ -1166,9 +1217,9 @@ public sealed class TextureArchive : IDisposable
         // ⚠ Read the class off the RESOLVED archive name, never the material's: a truncated or
         // renamed material name is not a manifest key (see Resolve).
         LastAlphaClass = AlphaClassOf(Path.GetFileNameWithoutExtension(name!), LastHadAlpha);
-        // Before mipmaps: raw pixels only. The named coastline sheets are soft whatever the
-        // pixel rule says about them (see SoftAlphaCoastline).
-        LastAlphaIsSoft = LastHadAlpha && (AlphaIsSoft(img) || SoftAlphaCoastline.Contains(baseName) || baseName.Contains("trans"));
+        // Before mipmaps: raw pixels only. A texture in the family table is soft whatever the pixel
+        // rule says about it (see SoftAlphaNamed).
+        LastAlphaIsSoft = LastHadAlpha && (AlphaIsSoft(img) || SoftAlphaNamed.Contains(baseName) || baseName.Contains("trans"));
         // The drop-in instruments repaint the RGB flat and keep everything else, size, format,
         // alpha channel, so the alpha class read just above (and with it the blend/scissor choice
         // and the cutout silhouette) is unchanged.
