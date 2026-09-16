@@ -21,8 +21,8 @@ integrates away, so TAA is the first attempt at it and the bisect is the fallbac
 Out of scope: any change to the faithful presentation, which stays bit-identical and keeps every
 existing golden (the switch is the one gate on every item here); FSR 1.0/2.2 as an upscaler for
 weak GPUs (this plan spends GPU headroom, it does not save it); the parked 4x texture upscaling
-(branch `upscaling`); `BL-322`'s C5 facade brightness and `BL-905`'s aircraft gloss, both cited as
-context and left to their own items; menu presentation work beyond the one new VIDEO row.
+(branch `upscaling`); `BL-322`'s C5 facade brightness, cited as context and left to its own item;
+the aircraft specular constant; menu presentation work beyond the one new VIDEO row.
 Backlog items drawn in: `BL-803` was read in `backlog.md` this session and not re-verified against
 the record or the code; `BL-325` (moonlit night clouds) is cited by C21 and not closed by it.
 

@@ -275,6 +275,12 @@ void fragment() {
     // flicker, because it blurs a lost ray across its neighbours instead of dimming the water.
     private const float WaterRoughness = 0.25f;
     private const float WaterSpecular = 0.5f;
+    // What every aircraft surface reflects: skin, canopy, props and the cockpit interior all take
+    // the shaded arm, in both graphics modes. The original draws an aircraft with no specular term
+    // at all (docs/org/vertexLighting.md), so any highlight here is the remake's own, and this is
+    // the value picked by eye against the original's screenshots: sunlight reads as a sheen rather
+    // than as gloss. Judged at the controls, not by a luminance distance.
+    private const float AircraftSpecular = 0.25f;
     // ⚠ Format every scale invariantly; a comma decimal separator emits shader text that will not
     // compile. Godot discards EMISSION on an `unshaded` material and the glow pass reads the HDR
     // colour buffer, so these arms reach it by scaling the colour rather than by writing EMISSION.
@@ -286,6 +292,9 @@ void fragment() {
 
     private static readonly string WaterSpecularLiteral =
         WaterSpecular.ToString("0.0##", System.Globalization.CultureInfo.InvariantCulture);
+
+    private static readonly string AircraftSpecularLiteral =
+        AircraftSpecular.ToString("0.0##", System.Globalization.CultureInfo.InvariantCulture);
 
     // ⚠ Process-wide, not per builder: Godot compiles a Shader the first time a material takes it,
     // and each generated text is a pure function of its key, so a per-builder memo made every later
@@ -1641,7 +1650,7 @@ void fragment() {{");
         {
             sb.AppendLine("    ROUGHNESS = 0.85;");
             sb.AppendLine("    METALLIC = 0.0;");
-            sb.AppendLine("    SPECULAR = 0.5;");
+            sb.AppendLine($"    SPECULAR = {AircraftSpecularLiteral};");
         }
         else if (waterLit)
         {

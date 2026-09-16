@@ -716,6 +716,12 @@ member, and it does not go here.
   throttle gate driven per frame read the lever flat on every other frame and could never see a
   rise larger than one step's slew, a thirtieth of what it was watching for (INSTR-14 is the same
   seam one level up).
+- **INSTR-84**, **A golden shot reported as "the run printed no pixel hash" is a scrape that lost
+  the race, not proof the render broke: open the shot's own `.scratch/goldens/<name>.log` and look
+  for the `shot pixmd5=` line before believing it.** One four-worker pass reported that on two of
+  19 shots, and both logs carried a hash, one of them identical to the pinned one; the same two
+  shots hashed normally on the next pass. Compare the logged hash against the manifest to tell a
+  real move from a lost line, since the report cannot tell you which it was.
 
 ## SRC, sources and documents
 

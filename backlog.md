@@ -702,28 +702,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Playtest after fix:* any chapter under Enhanced Graphics, still and moving, over water and over
   ground. *Cross-refs:* `docs/architecture/Utils.md` (`GraphicsMode`).
 
-- `BL-905` `[Fidelity]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Aircraft read
-  too glossy under sunlight beside the original's screenshots.** *Decision:* the user picked
-  specular 0.25 at roughness 0.85 off the sweep montage against `OriginalScreenshots/Fury from
-  above.png` (0.50, 0.10, 0.00 and roughness 1.0 were the other tiles); land it as the one
-  constant in `GetBiasShader`'s shaded branch and re-pin the goldens listed below, the decode
-  follows as the record behind the picked value, not as a gate on it. *Evidence:* every aircraft
-  surface (skin, canopy, props, cockpit interior) takes one procedural shader from
-  `SceneBuilder.GetBiasShader`'s shaded branch with roughness 0.85, metallic 0.0, specular 0.5,
-  the same in Original and Enhanced mode; terrain deliberately sets specular 0.0 with a comment
-  that any sheen there is invented. No decode says how the original lights an aircraft (no
-  material specular power is recorded in `docs/org`), so the 0.5 is a remake default, not a
-  reading. *Fix shape:* a specular sweep on the viewer lab, the same plane at specular 0.5, 0.25,
-  0.1 and 0.0 at roughness 0.85 plus one at roughness 1.0, rendered beside an original screenshot
-  of that plane in sun, for the user to pick by eye; then a decode of the original's aircraft
-  material (the D3D material the plane draw sets, and whether it is lit with a specular term at
-  all) so the picked value has a reading behind it. *⚠ Traps:* do not settle it on a luminance
-  distance; the pick is the user's. Water's roughness and specular are `BL-804`'s and stay. The
-  change moves `viewer-bhawk`, `c1-flight-kill`, `c1-cockpit`, `c1-destroy-effects` and
-  `empty-stage`; re-pin them with the picked value only. *Cross-refs:*
-  `CSVM/src/Mech3/SceneBuilder.cs` (the shaded branch), `BL-804` (the water terms beside it),
-  `docs/org/textures.md` (`SHADEMODE`).
-
 - `BL-925` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: data]` `[C5]` **A clutter sprite is
   planted at its decoration node's own origin, so C5's lamp glow sits on the pavement instead of on
   the lamp head.** *Evidence:* a template decoration is a two-node chain, the `.flt` node the

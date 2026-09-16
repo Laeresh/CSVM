@@ -49,7 +49,9 @@ else; `soil` never reaches the lighting code.
 | `FUN_00552020` | Hardware draw, the per-model decision: the same three flag-word bits, plus `FUN_00567060` asking whether any gathered light reaches the model's bound sphere |
 | `FUN_00568830` | Hardware draw: seeds every vertex's light accumulator to 1.0 before the evaluation |
 | `FUN_005688a0` | Hardware draw: the per-vertex light evaluation. Adds each directional light's `ambient + diffuse × max(N·L, 0)` times its colour, minus one, into the accumulator. Reads positions, normals, the accumulator and the polygon flags; never the texture |
-| `FUN_005a0e00` | Direct3D device set-up: stage 0 colour op MODULATE (texture × diffuse), alpha op SELECTARG1 (texture alpha) |
+| `FUN_005a0e00` | Direct3D device set-up: stage 0 colour op MODULATE (texture × diffuse), alpha op SELECTARG1 (texture alpha), and `SPECULARENABLE` off for the life of the process |
+| `FUN_005a2f70` | The fog enable, and the only kind of `SetLightState` the engine ever issues |
+| `FUN_005a4430` | The model batch drain: `DrawPrimitive` with FVF `0x1c4`, the pre-transformed vertex every draw in the layer submits |
 | `0x005a6160` | The hardware transparent-queue drain (no function boundary in the database): per polygon sets shade mode, alpha blend, z-write off, the alpha op and the destination blend, then draws with FVF `0x1c4`, which carries diffuse. Never touches the colour op |
 | `FUN_00566e00` | Per model, selects which of the gathered lights reach it and writes each one's scalar intensity into the accumulator |
 | `FUN_00567150` | The per-vertex light evaluation for a **textured** polygon: `N·L` against each selected light's direction, plus its ambient |
@@ -231,6 +233,44 @@ routing: it sends the polygon through the sorted transparent queue (`0x005a6160`
 blending on and z-write off, and it excludes the polygon from the projected-shadow and lightmap
 passes. The two globals the submit reads beside it, the opacity `DAT_00a06f98` (default 1.0, set by
 `FUN_0054e0e0`) and the overwrite flag `DAT_00a06f94`, are routing too and never a brightness term.
+
+## Specular: the device turns it off and no material exists to turn it back on
+
+⚠ **Nothing in the original carries a specular term, on an aircraft or on anything else.** Four
+independent readings agree, and the first is the whole answer on its own:
+
+1. **The device disables it at creation and nothing re-enables it.** `FUN_005a0e00` calls
+   `SetRenderState(D3DRENDERSTATE_SPECULARENABLE, 0)` at `0x005a12f8`-`0x005a12fc` (the call
+   reports through `zvid_ddd3d.c` line 523 on failure), and that is the **only** write of render
+   state `0x1d` in the shipped image: one `push 0x1d` in the whole 0x0059e000-0x005ab000 video
+   layer, against 110 `SetRenderState` call sites.
+2. **The D3D lighting pipeline never runs, so a material could not apply anyway.** Every submit in
+   the layer draws with FVF `0x1c4`, which is `XYZRHW | DIFFUSE | SPECULAR | TEX1` (23 sites; the
+   model batch drains through `FUN_005a4430` at `0x005a4530`). `XYZRHW` is a pre-transformed,
+   pre-lit vertex, so the device's own transform and lighting stages are bypassed entirely.
+3. **No material is ever set.** The interface is `IDirect3DDevice3`, where a material is installed
+   with `SetLightState(D3DLIGHTSTATE_MATERIAL, handle)` at vtable `+0x60`. Every `+0x60` call in
+   the video layer passes a fog state instead, `4` `FOGMODE` (`FUN_005a2f70`), `5` `FOGSTART`
+   (`0x005a2fe5`, `0x005a30a4`) and `6` `FOGEND` (`0x005a30ba`); light state `1` appears nowhere.
+4. **The specular slot the FVF declares is a fog carrier, not a colour.** The vertex is 32 bytes,
+   diffuse at `+0x10` and specular at `+0x14`, and every writer stores the constant `0xFF000000`
+   into `+0x14`: the model polygon packer at `0x005a3ff8` (one instruction after it assembles the
+   diffuse from the per-vertex colour bytes at `0x005a3ff1`), and the sprite, clutter and UI
+   packers at `0x00558da7`, `0x0056baca`, `0x005a5b34` and `0x005c1432`. RGB zero, alpha 255,
+   which is the no-fog end of the fog-factor slot pre-transformed vertices carry.
+
+The per-vertex evaluation above agrees: `FUN_005688a0` accumulates `ambient + diffuse × max(N·L, 0)`
+per light and has no half-vector, no view direction and no exponent. An aircraft in the original is
+its texture times a Lambert term, and nothing else.
+
+### What CSVM does with that
+
+The remake shades aircraft through Godot's PBR material, which has no zero-gloss setting that also
+keeps the diffuse response, so the faithful reading is a floor rather than a value to copy. The
+shaded arm of `SceneBuilder.GetBiasShader` therefore carries `SPECULAR = 0.25` (`AircraftSpecular`)
+at roughness 0.85 and metallic 0.0, which is the remake's own choice: the value the user picked by
+eye off a sweep against `OriginalScreenshots/Fury from above.png`, low enough that sunlight reads as
+a sheen instead of gloss. The decode is the record behind it, not its source.
 
 ## Facades: the same gate, a different `N`
 
