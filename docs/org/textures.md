@@ -381,6 +381,28 @@ would halo on every gun strike or pole lamp (`magnesiumtip` 1.000, `poleflare` 1
 0.981, `fireflare1` 0.911), and luminance alone cannot be the gate because `smoke101` peaks at
 1.000 against `fire_f03`'s 0.540. The faithful presentation compiles the shader with no gain term.
 
+The same seam names the sprites Enhanced Graphics grades by the sun:
+`MultiMeshEmitterRenderer.IsSmokeSprite` names `smoke101` … `smoke103` and
+`thickblksmoke01` … `thickblksmoke03`, the six the puffer states use for smoke, and the mix
+variant alone grades those columns across the quad by `csky_sun_dir` projected into the
+billboard's own right and up. The graded value is clamped under the glow threshold, since
+`smoke101` already reaches 1.0 and a lift without the clamp would bloom smoke that the fire
+flipbook is meant to have to itself. The measured effect is small: at a C1 rocket plume with the
+sun 25° up and to one side, a gradient amplitude of 0.2 lifts one puff's sun-side against its
+far-side luminance from ratio 1.046 to 1.061 and moves no pixel by more than 7 of 255 levels, and
+0.45 reaches 1.075 and 12 levels. The reason is that a plume is a stack of overlapping quads, so
+one quad's gradient is averaged against its neighbours' rather than summed with them.
+
+⚠ **The cloud cards' transmission rim does not transfer to these masks, do not add it back.**
+Measured on the same plume with the gradient off, the rim of
+[`Effects/FogVolumeClutter.cs`](../../CSVM/src/Effects/FogVolumeClutter.cs) (gain 0.12, core
+shadow 0.20, three taps toward the sun) moves at most 3 levels of 255 with the sun to one side and
+4 at the backlit pose it exists for, for three extra texture samples per smoke fragment. The
+sprite masks are smooth blobs, so the rim's brightening lands exactly where the alpha is too low
+to reach the frame. A second reason applies to the sample itself: the puffer atlas packs its
+frames side by side with no mip chain, so the reference technique's blurred level would read the
+neighbouring frame rather than a blur of this one.
+
 ⚠ **The word is per archive, not per name.** `bigflare01`, `ring_he` and `beflare5` are flagged in
 some chapters and not in others, so an install-wide name table would answer wrongly for whichever
 chapter it was not built from.

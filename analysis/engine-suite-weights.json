@@ -360,6 +360,7 @@
     "ground-shadow": 3.32,
     "menu-original-controls": 0.1,
     "target-mission-list": 4.96,
-    "puffer-fire-glow": 0.05
+    "puffer-fire-glow": 0.05,
+    "puffer-smoke-sun": 0.05
   }
 }

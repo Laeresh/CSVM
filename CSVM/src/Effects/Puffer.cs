@@ -507,15 +507,18 @@ public sealed partial class Puffer : Node3D
         // Which columns the enhanced glow pass lifts. Named, not read off a texture flag, because
         // no puffer sprite carries the additive bit (MultiMeshEmitterRenderer.IsFireSprite).
         var fire = new bool[frameNames.Count];
+        // Which columns the enhanced sun grade shades, named for the same reason.
+        var smoke = new bool[frameNames.Count];
         for (int i = 0; i < frameNames.Count; i++)
         {
             additive[i] = textures.IsAdditive(frameNames[i]);
             fire[i] = MultiMeshEmitterRenderer.IsFireSprite(frameNames[i]);
+            smoke[i] = MultiMeshEmitterRenderer.IsSmokeSprite(frameNames[i]);
         }
 
         var puffer = new Puffer();
         puffer.Init(state, new MultiMeshEmitterRenderer(atlas, frameNames.Count, additive,
-            softParticles ?? !(state.Colors.Count > 0 || diesDark), fire),
+            softParticles ?? !(state.Colors.Count > 0 || diesDark), fire, smoke),
             activeDuration, sustained, ambience);
         return puffer;
     }

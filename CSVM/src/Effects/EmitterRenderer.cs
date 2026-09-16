@@ -42,7 +42,8 @@ public interface IEmitterRenderer
 /// per blend, and each particle goes to the one its current column names. The verdict itself is
 /// read off the texture header in <c>Puffer.Create</c>, which is what keeps this seam free of
 /// <c>TextureArchive</c>. Enhanced Graphics adds one per-column ALBEDO gain so the fire flipbook
-/// blooms (<see cref="IsFireSprite"/>); the faithful path compiles the shader text it always did.
+/// blooms (<see cref="IsFireSprite"/>) and one per-column mark so the smoke sprites take a sun
+/// grade (<see cref="IsSmokeSprite"/>); the faithful path compiles the shader text it always did.
 /// </summary>
 public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
 {
@@ -50,7 +51,7 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         shader_type spatial;
         render_mode BLEND_MODE, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;
         #include "res://shaders/csky_srgb.gdshaderinc"
-        #include "res://shaders/csky_atmosphere.gdshaderinc"
+        #include "res://shaders/csky_atmosphere.gdshaderinc"SUN_INCLUDE
 
         uniform sampler2D atlas : source_color, filter_linear, repeat_disable;
         uniform float frame_count = 1.0;
@@ -94,13 +95,28 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
             // The COLORS ramp is authored in DX7 framebuffer bytes, the same gamma-space
             // modulate every fullbright pass linearises (csky_srgb.gdshaderinc); multiplied in
             // raw it draws two shades too pale. White, the ramp-less case, is a fixed point.
-            ALBEDO = t.rgb * csky_srgb_to_linear(v_color.rgb)GAIN_MUL;
+            ALBEDO = t.rgb * csky_srgb_to_linear(v_color.rgb)GAIN_MUL;SHADE_BLOCK
             // The mission's own distance fog, the cylinder every world surface takes. FOG_TARGET is
             // what this blend leaves at full fog: the sky's colour where the quad replaces the
             // background, nothing where it only adds to one already fogged (org/puffer.md).
             vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
             ALBEDO = mix(ALBEDO, FOG_TARGET, csky_fog_amount(fog_world, CAMERA_POSITION_WORLD));
             ALPHA = t.a * v_alpha * v_color.a * rim.x * rim.y * soft;
+        }
+        """;
+
+    // Enhanced mode's smoke grade, emitted into the mix variant's fragment() at 4 spaces so it sits
+    // inside the function; the amplitudes below are substituted in. The whole term hangs off the
+    // per-column mark, so a mix layer drawing splashes or sparks pays one comparison and no more.
+    private const string SmokeShadeTemplate = """
+        if (v_shade > 0.0) {
+            // The billboard's right and up ARE the camera's, since vertex() built the quad from
+            // them, so the sun direction projects into the sprite's own UV with two dots. UV runs
+            // down the quad, which is what the negation answers.
+            vec2 sun_q = vec2(dot(csky_sun_dir, INV_VIEW_MATRIX[0].xyz),
+                              -dot(csky_sun_dir, INV_VIEW_MATRIX[1].xyz));
+            float across = clamp(dot(UV - vec2(0.5), sun_q) * 2.0, -1.0, 1.0);
+            ALBEDO = min(ALBEDO * (1.0 + v_shade * GRADIENT * across), vec3(CEILING));
         }
         """;
 
@@ -111,6 +127,24 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
     // flipbook's own authored brightness falloff decides which frames halo (docs/org/textures.md).
     private const float EnhancedFireGain = 2.0f;
 
+    // Enhanced mode only, and only on the columns IsSmokeSprite names: how far the sun side of a
+    // puff brightens and its far side darkens, as a fraction of the sprite's own colour. TUNE,
+    // owed the user's eye. ⚠ Do not add the cloud cards' transmission rim beside it: measured on
+    // these masks it moves 4 of 255 levels at a backlit pose and costs three texture taps a
+    // fragment (docs/org/textures.md).
+    private const float EnhancedSmokeGradient = 0.2f;
+
+    // TUNE, enhanced only: the ceiling a graded smoke texel is clamped to. smoke101's own texels
+    // already reach 1.0 (docs/org/textures.md), so a lift without this would cross the glow
+    // threshold Launcher.EnableGlowAndTonemap reserves for the fire flipbook.
+    private const float EnhancedSmokeCeiling = 0.98f;
+
+    // ⚠ Format every amplitude invariantly: a comma decimal separator emits shader text that will
+    // not compile, on a German-locale machine only.
+    private static readonly string SmokeShadeBody = SmokeShadeTemplate
+        .Replace("GRADIENT", Literal(EnhancedSmokeGradient))
+        .Replace("CEILING", Literal(EnhancedSmokeCeiling));
+
     // The original's fire flipbook, the only puffer sprites the enhanced glow pass lifts.
     // ⚠ The additive bit cannot select them: no puffer sprite in any chapter archive carries it
     // (docs/org/textures.md), so blend says nothing about which sprite is a flame. Do not widen
@@ -119,6 +153,17 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
     private static readonly HashSet<string> FireFlipbook = new(System.StringComparer.OrdinalIgnoreCase)
     {
         "fire_f01", "fire_f02", "fire_f03", "fire_f04", "fire_f05", "fire_f06",
+    };
+
+    // The original's smoke sprites, the only puffer columns the enhanced sun grade shades.
+    // ⚠ Neither blend nor darkness can select them: no puffer sprite is additive at all
+    // (docs/org/textures.md) and the fire flipbook's own tail frames are dark too. Do not widen
+    // this to the flipbook, the splashes or the flares; each of those is its own light source and
+    // reads wrong graded by a sun outside it.
+    private static readonly HashSet<string> SmokeSprites = new(System.StringComparer.OrdinalIgnoreCase)
+    {
+        "smoke101", "smoke102", "smoke103",
+        "thickblksmoke01", "thickblksmoke02", "thickblksmoke03",
     };
 
     // One compiled Shader per code variant (blend × soft × enhanced), shared by every renderer. A
@@ -141,6 +186,10 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
     // construction, with the atlas and the blend verdict, so one emitter cannot draw half its life
     // under a mode the menu changed mid-session.
     private readonly float[] _columnGain;
+    // One sun-grade amplitude per atlas column, 0 everywhere on the faithful path and on every
+    // column the smoke set does not name. Resolved once at construction beside the gain, for the
+    // same reason: one emitter must not draw half its life under a mode the menu changed.
+    private readonly float[] _columnShade;
     private readonly bool _enhanced;
     private readonly bool _softParticles;
 
@@ -150,14 +199,14 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
     private Layer? _add;
 
     /// <summary>Builds the renderer for an already-packed <paramref name="atlas"/> of
-    /// <paramref name="frameCount"/> side-by-side frames. <paramref name="additiveFrames"/> is one
-    /// flag per atlas column, true where the texture's render-flags word carries the additive bit
-    /// (<c>docs/org/textures.md</c>); <paramref name="softParticles"/> enables the depth fade.
-    /// <paramref name="fireFrames"/> is one flag per column, true where <see cref="IsFireSprite"/>
-    /// named the frame, and null where the caller has no names to read (every test path).</summary>
+    /// <paramref name="frameCount"/> side-by-side frames. <paramref name="additiveFrames"/> flags
+    /// each atlas column whose texture carries the additive bit (<c>docs/org/textures.md</c>) and
+    /// <paramref name="softParticles"/> enables the depth fade. <paramref name="fireFrames"/> and
+    /// <paramref name="smokeFrames"/> flag the columns <see cref="IsFireSprite"/> and
+    /// <see cref="IsSmokeSprite"/> named, null when the caller has no names.</summary>
     public MultiMeshEmitterRenderer(ImageTexture atlas, int frameCount,
         IReadOnlyList<bool> additiveFrames, bool softParticles,
-        IReadOnlyList<bool>? fireFrames = null)
+        IReadOnlyList<bool>? fireFrames = null, IReadOnlyList<bool>? smokeFrames = null)
     {
         _atlas = atlas;
         _frameCount = frameCount;
@@ -167,9 +216,14 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         _softParticles = softParticles;
         _enhanced = GraphicsMode.Enhanced;
         _columnGain = new float[_additiveFrames.Length];
+        _columnShade = new float[_additiveFrames.Length];
         for (int i = 0; i < _columnGain.Length; i++)
+        {
             _columnGain[i] = _enhanced && fireFrames != null && i < fireFrames.Count && fireFrames[i]
                 ? EnhancedFireGain : 1f;
+            _columnShade[i] = _enhanced && smokeFrames != null && i < smokeFrames.Count && smokeFrames[i]
+                ? 1f : 0f;
+        }
     }
 
     /// <summary>True when the column set spans both blends, so this emitter draws two MultiMeshes
@@ -207,6 +261,12 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
     /// frame names and this seam deliberately never sees a <c>TextureArchive</c>.</summary>
     public static bool IsFireSprite(string frameName) => FireFlipbook.Contains(frameName);
 
+    /// <summary>Whether a puffer frame is one of the original's smoke sprites, the columns the
+    /// enhanced sun grade shades. Public for the same reason as <see cref="IsFireSprite"/>:
+    /// <c>Puffer.Create</c> reads the frame names and this seam never sees a
+    /// <c>TextureArchive</c>.</summary>
+    public static bool IsSmokeSprite(string frameName) => SmokeSprites.Contains(frameName);
+
     public void Attach(Node3D owner, int capacity, float cullMargin)
     {
         // Runtime shader/material build, not load-time, a new Puffer's first draw. Usually
@@ -231,7 +291,7 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         // draws the frame it is actually showing.
         int col = Mathf.Clamp(Mathf.FloorToInt(frame + 0.5f), 0, _additiveFrames.Length - 1);
         var layer = _additiveFrames[col] ? _add : _mix;
-        layer?.Write(position, size, frame, alpha, color, _columnGain[col]);
+        layer?.Write(position, size, frame, alpha, color, _columnGain[col], _columnShade[col]);
     }
 
     public void Show(int liveCount)
@@ -240,10 +300,17 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         _add?.Publish();
     }
 
+    private static string Literal(float value)
+        => value.ToString("0.0##", System.Globalization.CultureInfo.InvariantCulture);
+
     private static Shader ShaderFor(bool mix, bool soft, bool enhanced)
     {
         if (!ShaderVariants.TryGetValue((mix, soft, enhanced), out var shader))
         {
+            // The sun grade is the mix variant's alone: the smoke sprites all alpha-mix, and an
+            // additive quad only brightens what is behind it, so darkening its far side would
+            // subtract nothing and lighting its near side would double the glow.
+            bool shaded = enhanced && mix;
             // A mixed quad stands in for the background, so full fog leaves the sky's fog colour,
             // the world's own answer. An additive one only brightens a background that already
             // carries that colour, so full fog leaves nothing to add.
@@ -254,9 +321,18 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
                 // The faithful text carries no gain at all, not a gain of one: the presentation
                 // this project delivers must compile the shader it always compiled. GAIN_MUL sits
                 // before the fog mix, so a fogged fireball dims instead of blooming through the wall.
-                .Replace("GAIN_DECL", enhanced ? "varying flat float v_gain;" : "")
-                .Replace("GAIN_SET", enhanced ? "v_gain = INSTANCE_CUSTOM.z;" : "")
-                .Replace("GAIN_MUL", enhanced ? " * v_gain" : "");
+                .Replace("GAIN_DECL", enhanced
+                    ? "varying flat float v_gain;" + (shaded ? "\nvarying flat float v_shade;" : "")
+                    : "")
+                .Replace("GAIN_SET", enhanced
+                    ? "v_gain = INSTANCE_CUSTOM.z;" + (shaded ? "\n    v_shade = INSTANCE_CUSTOM.w;" : "")
+                    : "")
+                .Replace("GAIN_MUL", enhanced ? " * v_gain" : "")
+                // Both holes are empty AND at end of line on every other variant, so the text
+                // those compile is byte for byte the one they compiled before this arm existed.
+                .Replace("SUN_INCLUDE", shaded
+                    ? "\n#include \"res://shaders/csky_sun.gdshaderinc\"" : "")
+                .Replace("SHADE_BLOCK", shaded ? "\n" + SmokeShadeBody : "");
             ShaderVariants[(mix, soft, enhanced)] = shader = new Shader { Code = code };
         }
         return shader;
@@ -320,14 +396,14 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         }
 
         public void Write(Vector3 position, float size, float frame, float alpha, Color color,
-            float gain)
+            float gain, float shade)
         {
             if (_mm == null || _written >= _mm.InstanceCount)
                 return;
             int index = _written++;
             _mm.SetInstanceTransform(index,
                 new Transform3D(Basis.Identity.Scaled(new Vector3(size, size, size)), position));
-            _mm.SetInstanceCustomData(index, new Color(frame, alpha, gain, 0f));
+            _mm.SetInstanceCustomData(index, new Color(frame, alpha, gain, shade));
             _mm.SetInstanceColor(index, color);
         }
 

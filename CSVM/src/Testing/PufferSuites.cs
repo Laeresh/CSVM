@@ -1764,6 +1764,44 @@ internal static class PufferSuites
         }
     }
 
+    [Suite("puffer-smoke-sun",
+        "Enhanced Graphics only: a smoke column carries the sun-grade mark into the mix shader and "
+        + "a fire column beside it carries none, over the chapter's shipped archive; the faithful "
+        + "presentation compiles a shader with no grade term at all and marks no column, and the "
+        + "additive variant is never graded whichever columns it draws")]
+    internal static void PufferSmokeSun(TestContext ctx)
+    {
+        string texturePath = SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter);
+        ctx.RequireData(texturePath, $"{ctx.Chapter} texture archive");
+        using var textures = new TextureArchive(texturePath);
+
+        ctx.Check(MultiMeshEmitterRenderer.IsSmokeSprite("smoke101")
+                  && MultiMeshEmitterRenderer.IsSmokeSprite("THICKBLKSMOKE03"),
+            $"the six smoke sprites are the set the enhanced sun grade shades, case-insensitively");
+        foreach (var name in new[]
+                 {
+                     "fire_f01", "fire_f06", "magnesiumtip", "poleflare", "fireflare1",
+                     "exp_yel01", "splashbase", "watersquirt", "cloud1", "bit01",
+                 })
+        {
+            ctx.Check(!MultiMeshEmitterRenderer.IsSmokeSprite(name),
+                $"{name} is outside the graded set, so the flipbook, the flares, the splashes and the gun spark keep their authored colour");
+        }
+
+        bool wasEnhanced = GraphicsMode.Enhanced;
+        try
+        {
+            GraphicsMode.Resolve(GraphicsMode.EnhancedWord);
+            SmokeSunColumns(ctx, textures, enhanced: true);
+            GraphicsMode.Resolve(GraphicsMode.Default);
+            SmokeSunColumns(ctx, textures, enhanced: false);
+        }
+        finally
+        {
+            GraphicsMode.Resolve(wasEnhanced ? GraphicsMode.EnhancedWord : GraphicsMode.Default);
+        }
+    }
+
     // A flipbook whose column rises with age, so the written column says how old each particle is:
     // column 0 is the young bright frame, the last column the dying dark one.
     private static void PufferDrawOrderRow(TestContext ctx)
@@ -2053,6 +2091,81 @@ internal static class PufferSuites
                     $"{mode}: the smoke column's ALBEDO gain is {smoke:0.###}, expected 1");
                 ctx.Check(mat.Shader.Code.Contains("v_gain") == enhanced,
                     $"{mode}: the compiled shader carries the per-column gain term only under enhanced");
+            }
+        }
+        finally
+        {
+            owner.QueueFree();
+        }
+    }
+
+    // One renderer per mode over a two-column atlas, fire then smoke, read back off the MultiMesh
+    // the way a frame reaches the GPU, plus an all-additive one to show the grade is the mix
+    // variant's alone.
+    private static void SmokeSunColumns(TestContext ctx, TextureArchive textures, bool enhanced)
+    {
+        string mode = enhanced ? "enhanced" : "faithful";
+        var atlas = textures.Find("smoke101");
+        ctx.Check(atlas != null, $"the archive decodes smoke101");
+        if (atlas == null)
+            return;
+        var renderer = new MultiMeshEmitterRenderer(atlas, 2, new[] { false, false },
+            softParticles: false, fireFrames: new[] { true, false },
+            smokeFrames: new[] { false, true });
+        var owner = new Node3D();
+        ctx.Host.AddChild(owner);
+        try
+        {
+            renderer.Attach(owner, 4, cullMargin: 1f);
+            renderer.Write(0, Vector3.Zero, 1f, 0f, 1f, Colors.White);
+            renderer.Write(1, Vector3.Zero, 1f, 1f, 1f, Colors.White);
+            renderer.Show(2);
+            foreach (var child in owner.GetChildren())
+            {
+                if (child is not MultiMeshInstance3D mmi || mmi.Multimesh is not { } mm
+                    || mmi.MaterialOverride is not ShaderMaterial mat || mat.Shader == null)
+                    continue;
+                float fire = mm.GetInstanceCustomData(0).A;
+                float smoke = mm.GetInstanceCustomData(1).A;
+                float want = enhanced ? 1f : 0f;
+                ctx.Check(Mathf.IsEqualApprox(smoke, want),
+                    $"{mode}: the smoke column's sun-grade mark is {smoke:0.###}, expected {want:0.###}");
+                ctx.Check(Mathf.IsEqualApprox(fire, 0f),
+                    $"{mode}: the fire column's sun-grade mark is {fire:0.###}, expected 0");
+                ctx.Check(mat.Shader.Code.Contains("v_shade") == enhanced,
+                    $"{mode}: the compiled mix shader carries the per-column grade term only under enhanced");
+                ctx.Check(mat.Shader.Code.Contains("csky_sun_dir") == enhanced,
+                    $"{mode}: the compiled mix shader reads the sun-direction global only under enhanced");
+            }
+        }
+        finally
+        {
+            owner.QueueFree();
+        }
+
+        SmokeSunAdditiveUngraded(ctx, atlas, mode);
+    }
+
+    // The additive layer draws no shipped sprite (none carries the bit), but its text is compiled
+    // from the same template, so the grade's absence there is asserted rather than assumed.
+    private static void SmokeSunAdditiveUngraded(TestContext ctx, ImageTexture atlas, string mode)
+    {
+        var renderer = new MultiMeshEmitterRenderer(atlas, 1, new[] { true },
+            softParticles: false, smokeFrames: new[] { true });
+        var owner = new Node3D();
+        ctx.Host.AddChild(owner);
+        try
+        {
+            renderer.Attach(owner, 2, cullMargin: 1f);
+            renderer.Write(0, Vector3.Zero, 1f, 0f, 1f, Colors.White);
+            renderer.Show(1);
+            foreach (var child in owner.GetChildren())
+            {
+                if (child is not MultiMeshInstance3D mmi
+                    || mmi.MaterialOverride is not ShaderMaterial mat || mat.Shader == null)
+                    continue;
+                ctx.Check(!mat.Shader.Code.Contains("v_shade"),
+                    $"{mode}: the additive variant carries no grade term even for a marked column");
             }
         }
         finally

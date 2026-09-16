@@ -181,7 +181,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☑ A burst omni light at each fireball, from the enhanced pool, flickering down over the burst
 12. ☑ The additive fireball frames bloom
-13. ☐ Sun-shaded smoke billboards
+13. ☑ Sun-shaded smoke billboards
 14. ☐ Heat shimmer over a fireball
 15. ☐ Scorch decals at a hit
 
@@ -588,7 +588,61 @@ goldens zero movers (the gain is under the mode).
 share the additive bit; check the `Puffer` population first and gate by texture if they do. Screen
 blend keeps the halo additive; do not switch the blend mode to get more glow.
 
-## B13 ☐ Sun-shaded smoke billboards
+## B13 ☑ Sun-shaded smoke billboards
+
+**Landed.** Under Enhanced the mix-blend variant of `MultiMeshEmitterRenderer`'s shader grades each
+smoke puff by the sun. `vertex()` already builds the quad from the camera's right and up, so the sun
+projects into the sprite's own UV with two dots against `INV_VIEW_MATRIX[0]` and `[1]`, and that
+vector against `UV - 0.5` is the gradient across the card. The gate is the texture name the way
+B12's fire lift is: `IsSmokeSprite` names `smoke101`…`smoke103` and `thickblksmoke01`…`03`,
+`Puffer.Create` resolves it per atlas column beside the blend and fire verdicts, and the mark rides
+`INSTANCE_CUSTOM.w` into a `v_shade` varying, so the fire flipbook, the water splashes, the flares
+and the gun sparks are untouched and the ground smokeball keeps its soft-particle exemption. The
+shader-variant key carries the mode, so the faithful path compiles text with no gradient term at
+all: the `csky_sun.gdshaderinc` include and the varying are absent as well, not neutralised.
+`EnhancedSmokeGradient` is 0.2, a TUNE: on the C1 rocket plume one puff's sun-side to far-side
+luminance ratio moves 1.046 to 1.061 for a largest pixel delta of 7 of 255, which reads as puffs
+turned toward the light, while 0.45 (ratio 1.075, 12 levels) prints the same profile visibly on
+every sprite in the stack, the lattice C21 warned about. A plume is a stack of overlapping
+quads, so a per-card amplitude that looks gentle alone accumulates through the stack.
+`EnhancedSmokeCeiling` 0.98 clamps inside the smoke branch alone, so a lifted `smoke101` (already
+1.000 linear at its peak) cannot cross the 1.0 glow threshold B12 reserved for the fire flipbook,
+and `magnesiumtip` and `poleflare` keep their unclamped 1.0. The sun-direction global the approach
+left open is `csky_sun_dir`, declared in `CSVM/shaders/csky_sun.gdshaderinc` and written by
+`WeatherRig.WriteSunDirection` off the sun light's basis; C21 added it and this item reuses it
+unchanged.
+
+**The transmission rim was tried and dropped.** The puffer atlas is baked without mipmaps and
+sampled `filter_linear`, so C21's `textureLod(…, 3.0)` blur has no chain to read and a blur that
+wide would bleed across the neighbouring atlas column. Built instead as three unblurred taps
+stepped toward the sun and clamped inside the column, it moves at most 3 of 255 levels with the sun
+to one side and 4 at the backlit pose it exists for, against three extra texture samples per smoke
+fragment. The smoke masks are smooth blobs rather than the cloud cards' ragged edges, so the
+brightening lands where alpha is already too low to reach the frame. The term is out of the shader
+and the disproof is recorded in `docs/org/textures.md` beside B12's note.
+
+**Verified.** On the item worktree: rebuild warning-free; the new `puffer-smoke-sun` engine suite
+PASSes (the named set case-insensitive and exclusive against the fire flipbook, the flares, the
+splashes, the gun bits and the cloud cards; the smoke column's mark read back off the MultiMesh as
+1 under Enhanced and 0 on the faithful path, the fire column 0 in both; `v_shade` and
+`csky_sun_dir` in the compiled mix shader under Enhanced alone, and absent from the additive
+variant even with a marked column); the full battery runs `4568 passed, 0 failed, 2 skipped of
+4570` units, `352 passed, 0 failed` engine suites and goldens `19 shot(s) hash-identical`; comment
+caps, doc entries and encoding checks clean. Headless captures under `.scratch/eg2/B13/` put
+faithful, enhanced with the term neutralised, and enhanced at 0.10, 0.20 and 0.45 side by side on a
+C1 rocket hit's standing smoke column, once with the sun to one side
+(`b13-c1-rocket-plume-sun-aside.png`) and once flying into it
+(`b13-c1-rocket-plume-into-sun.png`), with the whole frame at
+`b13-c1-rocket-full-frame.png` and the dropped rim in isolation at `b13-rim-dropped-sun-aside.png`
+and `b13-rim-dropped-into-sun.png`. Between the term off and the shipped 0.2, 3.95% of the frame
+moves and all of it is in the plume. Nose into the sun the grade reads as nothing at any amplitude
+(ratio 0.932 throughout), because the sun then projects to almost nothing in the quad's plane; that
+is a limit of grading a camera-facing card rather than a defect, and only a volumetric treatment
+would answer it. Owed to the user at the controls: whether 0.2 is the right amplitude, whether the
+stack of overlapping quads reads as a lit plume or as a lattice of identical sprites, and whether
+the backlit pose wants anything at all.
+
+**Original approach (kept for reference).**
 
 **Goal.** Mix-blend smoke reads lit by the sun: brighter on the sun side of each puff, darker on the
 far side, under Enhanced.
@@ -601,7 +655,7 @@ right/up axes; the emitter shader already has the billboard basis in `vertex()`.
 **Approach.** In the mix variant under Enhanced, a gradient across the quad from the sun direction
 projected into billboard space (a TUNE amplitude), plus the same transmission rim as C21 if it
 reads well on the smoke masks. The sun direction global is the one `WeatherRig` already writes for
-the lit world (`<TODO: name of the sun-direction global, or add one beside csky_world_light>`).
+the lit world (`csky_sun_dir`, added by C21 in `CSVM/shaders/csky_sun.gdshaderinc`).
 
 **Model recommendation.** high: shader look work judged by eye.
 
