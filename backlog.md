@@ -795,6 +795,29 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`BL-118`'s note under the cloud items): judge the wisps by altitude and by their position
   ahead of the aircraft, never by texture. *Cross-refs:* [`docs/formats/effects.md`](docs/formats/effects.md)
   (the cue's data), `docs/org/puffer.md`.
+- `BL-928` `[Fidelity]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: data]` **The faithful presentation
+  should render the authored detonation light too; today only Enhanced Graphics lights a
+  fireball.** *Evidence:* `he_ground_effect` runs `he_light_seq`, which sets `LIGHT_STATE he_light`
+  ACTIVE at the `he_ring` node with `RANGE (4, 20)` and `COLOR (1.0, 0.86, 0.29)`, then walks six
+  `LIGHT_ANIMATION` range deltas from 20 m to 420 m over 0.41 s and switches it INACTIVE
+  (`docs/org/ordnanceTypes.md`, "The burst light in Enhanced Graphics"). The original renders that
+  as a real point light; CSVM's effects runtime is built with no `WorldLights`, so every
+  `LIGHT_STATE` a played effect declares is a no-op and the faithful path shows the sprite alone.
+  The enhanced burst light (`WorldLights.AddBurst`, `WorldEffectsFactory.RegisterBurstLight`) is
+  a remake envelope that borrows the authored colour and the ignition end of the range, not the
+  authored ramp. *Fix shape:* give the effects runtime a `WorldLights` (or route its `LIGHT_STATE`
+  and `LIGHT_ANIMATION` through the world's own, the way `Mech3/Anim/LightChannel.cs` already
+  drives beacons) so the authored `he_light` sequence plays as data on both presentations; then
+  decide whether the enhanced envelope stays as a layer over it or retires. *⚠ Traps:* the
+  authored ramp ends at 420 m, and the faithful lighting path is the spill add rather than an
+  omni, so measure what 420 m does to a whole chapter before trusting the data at face value; the
+  `burst-light` suite pins the faithful path at zero committed lights and must be re-pinned, and
+  the faithful goldens will move if any golden frame holds a live burst. Only
+  `he_ground_effect` authors a light; the other fireball defs do not, so the faithful path lights
+  HE bursts alone. *Playtest after fix:* `--fly --chapter=C1 --fire-rockets` at dusk over the
+  airfield on the faithful path, the hangar wall and tarmac flash with the burst. *Cross-refs:*
+  `docs/org/ordnanceTypes.md`, `docs/architecture/Mech3.md` (`WorldLights`), PLAN-enhanced-graphics-2
+  item B11 (the enhanced-only light this item generalises).
 
 ## Audio
 
