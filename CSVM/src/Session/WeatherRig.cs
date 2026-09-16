@@ -139,6 +139,10 @@ public sealed class WeatherRig
     // and the authored fog_color (FogVolumeWhiteout). Disarmed everywhere but C5, where it costs
     // nothing: Density short-circuits on the flag before touching a volume.
     private FogVolumeWhiteout _fogWhiteout = FogVolumeWhiteout.Disarmed;
+    // The enhanced volumetric banks standing in those same volumes, whose scattering colour is the
+    // applied zone's. Null in the faithful path and in a chapter that authors no volume, so the
+    // zone apply carries no graphics-mode test of its own.
+    private FogVolumeBanks? _fogBanks;
     // The fog edge trigger: which zone's fog globals are live, and the state they were applied for.
     // Rebuilt by LoadWeather (a new mission is a new zone table); disarmed outright by an explicit
     // --sky-zone.
@@ -373,6 +377,12 @@ public sealed class WeatherRig
         _fogVolumes = volumes;
         _fogWhiteout = FogVolumeWhiteout.From(spec, volumes);
     }
+
+    /// <summary>The enhanced volumetric banks built over the same volumes
+    /// (<see cref="CSVM.Effects.FogVolumeBanks"/>), so <see cref="ApplyZone"/> can paint them the
+    /// zone's own fog colour. Null in the faithful path; never called leaves the banks unpainted,
+    /// which is what a session with no weather.json gets anyway.</summary>
+    public void SetFogBanks(FogVolumeBanks? banks) => _fogBanks = banks;
 
     /// <summary>The cloud deck's own gamez <c>zone_id</c> (<c>WorldBuilder.CloudDeckZoneId</c>),
     /// the one piece of the zone gate that cannot ride a visual layer, because the deck is a
@@ -809,6 +819,9 @@ public sealed class WeatherRig
         // Republished off the light just rotated, for the enhanced billboard arms that grade
         // themselves by the sun and take no shading from it (csky_sun.gdshaderinc).
         WriteSunDirection(_sun);
+        // The volumetric banks scatter in the zone's own fog colour, so the cards' backdrop and the
+        // haze they stand in cannot drift apart across a zone change.
+        _fogBanks?.ApplyZone(fog.FogColor);
         // The authored pair itself, published for the ground shadow, which derives its darkness
         // from the light rather than from either mode's energies.
         SunlightRgb = (Scaled(fog.SunDiffuse, fog.SunColorDiffuse),

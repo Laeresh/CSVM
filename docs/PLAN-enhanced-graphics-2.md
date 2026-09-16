@@ -188,7 +188,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C, lit clouds
 
 21. ☑ Lit cloud cards: sun tint, transmission rim, shadowed undersides, soft depth fade
-22. ☐ FogVolume banks from the authored fvol slabs
+22. ☑ FogVolume banks from the authored fvol slabs
 23. ☐ A rendered puff sprite set under Enhanced, picked by montage
 
 ### Wave E, the feel of speed
@@ -791,7 +791,70 @@ comment must say so. The transmission offset is in billboard UV space, so it nee
 right/up, which the vertex function already builds. Depth fade on a `depth_draw_never` field is
 fine, but the depth texture excludes the field itself, so cards do not fade against each other.
 
-## C22 ☐ FogVolume banks from the authored fvol slabs
+## C22 ☑ FogVolume banks from the authored fvol slabs
+
+**Landed.** A new module, `Effects/FogVolumeBanks.cs`, builds under Enhanced Graphics alone and only
+where the chapter ships `fvol*` volumes: one bank per authored volume, laid over that volume's own
+bounds, all of them sharing one `FogMaterial`. `GameSession` creates it beside the cloud field, hands
+it to `WeatherRig` so the rig's zone apply writes the scattering colour, and calls the module's
+`ApplyFroxelFog` on the one long-lived Environment either way, so a world that builds no bank
+actively clears `VolumetricFogEnabled` rather than inheriting the last chapter's. `--no-fog` covers
+the banks as it covers the zone fog and the whiteout.
+
+**Zero global density, the banks carrying all of it.** A global density is fog everywhere, including
+the metres the authored `csky_fog_*` ramp already grades, so the two would haze the same air twice;
+with `VolumetricFogDensity` at 0 the froxel pass exists only where a volume stands. `SkyAffect` stays
+at 1: Godot applies it to `FogVolume`s as well as to the background, so a lower value would fade the
+banks out exactly where this item is judged, against the sky. The froxel buffer stays at Godot's own
+64 x 64 x 64 over a 1,024 m length, which also keeps the camera-anchored horizon dome (kilometres
+out) outside the pass, so its own fog arm is never fogged a second time.
+
+**Boxes, not the volume's own mesh, and tiled.** Godot 4 has no mesh-shaped fog volume at all
+(`FogVolumeShape` is Ellipsoid, Cone, Cylinder, Box or World), so the shape is a box over the
+volume's bounds: exact for C1/C2B/C4's axis-aligned slab pieces and for C5's street prisms as boxes,
+an over-estimate for C1C's twelve tapering build-up frusta. ⚠ **Measured on this engine: a
+`FogVolume` box much wider than about 2,048 m contributes nothing to the froxel pass, silently and
+with no error.** At C1's authored 8,192 m slab pieces the frame is pixel-identical to one with no
+banks at all; at 2,048 m the bank renders whether or not the camera stands over it. So each volume's
+bounds go down as a grid of tiles no wider than that, seamlessly because the edge fade is 0: C1's
+nine pieces become 36 boxes, C5's seventeen prisms 57.
+
+**Density.** Where `fogvol.zrd` arms `fog_zone`, the bank reaches an optical depth of 1 over the same
+`interior_fog_fade_dist` metres the whiteout curtain hands off in, so the two agree instead of
+carrying two unrelated numbers: C5's 16 m gives 0.0625 per metre. Everywhere else there is no
+authored statement about the inside of a cloud and one ambient TUNE stands, shipped at **0.002 per
+metre**: a climb straight through the 120 m deck scatters out about a fifth of what is behind it and
+the cards keep their shape. At 0.004 the underside of the deck washes to a flat tint of the sun's own
+colour, which is the bank drawing itself instead of the cloud it sits in; the montage carries 0.002,
+0.004 and 0.01 at two poses for the user to overrule this.
+
+**Verified.** On the item worktree, complete `RunTests.ps1`: **goldens 19 shots hash-identical, zero
+movers**; units 4,568 passed, 0 failed, 2 skipped of 4,570; engine 351 passed, 1 failed, engine
+errors clean. The one engine failure is `ai-wave-launch-hitch`, a wall-clock hitch measurement, and
+it is not this item: it fails the same way on the untouched main tree standalone and passes on this
+tree standalone, while three other agents are building and probing on the same machine. Comment
+caps, doc entries and encoding checks clean. A new engine suite, `fogvol-banks`, pins the arm from
+both sides: C1 builds 9 banks over 36 boxes at 0.002 per metre and C5 17 over 57 at 0.0625, each
+volume's tiles union back to exactly its authored bounds with no box wider than the engine renders,
+the scattering colour follows the applied zone unless the chapter authored its own whiteout colour,
+and on the faithful presentation `Create` returns nothing and the Environment flag is left off.
+
+**Cost**, `--perf --det` at 1280x720 on the C1 into-sun pose, steady windows after warm-up: **0.42 ms
+gpu without the banks, 0.49 ms with**, so the froxel pass plus 36 boxes is about **+0.06 ms**, which
+is what D32 gets to hold against the rest of the stack.
+
+**Owed to the user: the density and the look in flight.** The montage is under
+`.scratch/eg2/C22/`, three presentations at each of four poses plus the density steps. What it can
+show: from under the deck the bank is unmistakable, it deepens the underside and puts a soft
+sun-scatter glow where the sun is, and the density steps separate cleanly there. What it cannot
+show: from above the deck the cards hide the bank almost entirely (decision 5, and the shots differ
+by about one level of 255), and no shafts appear anywhere, because the cloud cards are alpha-blended
+billboards that cast no shadow, so there is nothing to break the light into beams. ⚠ C5's bank is
+nearly a pure absorber, since the chapter's authored whiteout colour is `[16,16,16]`: through the
+armed zone at night it takes the frame mean from 25 to 14. That is the agreement the item asked for,
+and it is also the one reading most likely to be judged too strong.
+
+**Original approach (kept for reference).**
 
 **Goal.** Under Enhanced a soft volumetric bank sits under the cards inside each authored fvol
 volume, scattering the sun and casting shafts; the whiteout band in C5 reads as being inside a

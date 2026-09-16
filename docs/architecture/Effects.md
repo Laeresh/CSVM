@@ -46,6 +46,16 @@ both `far_fade_range` pairs are interpolated with into a custom-data slot, which
 `csky_clutter_fade_alpha_angled` turns into the view-angle fade; that draw takes its own `Rng.CloudBands` stream.
 `ShaderCode`'s third variant grades the cards by `csky_sun_dir` (`../../CSVM/shaders/csky_sun.gdshaderinc`) under `GraphicsMode.Enhanced` alone, leaving the faithful text byte-identical. Gating: `GameSession`/`WorldBuilder`/`WeatherRig`. Schema: [../formats/fogvol.md](../formats/fogvol.md).
 
+## src/Effects/FogVolumeBanks.cs
+Enhanced Graphics only: the soft volumetric bank standing inside each authored `fvol*` volume, under
+the cards `FogVolumeClutter` lays over the same geometry. `Create` builds one bank per volume, each
+laying its own bounds down as `FogVolume` boxes over one shared `FogMaterial`, and `ApplyFroxelFog`
+arms the Environment's froxel pass for a world that built some and clears it for one that did not,
+with zero global density so the banks carry it all and the authored `csky_fog_*` ramp is not hazed
+twice. `WeatherRig`'s zone apply calls `ApplyZone`, so the scattering colour is the zone's own, or
+the chapter's authored whiteout colour where `fogvol.zrd` arms one, which also sets the density.
+Every constant is TUNE, including the tile width, which is an engine limit. Volumes: [../formats/fogvol.md](../formats/fogvol.md).
+
 ## src/Effects/Precipitation.cs
 Rain and snow from `weather.json`'s precipitation block (`WeatherState.PrecipData`): ONE MultiMesh
 whose shader derives each quad's position from a per-instance seed, `csky_time` and

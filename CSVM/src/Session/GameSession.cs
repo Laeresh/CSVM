@@ -1577,6 +1577,20 @@ public partial class GameSession : Node3D
                 UI.SplitScreen.SetVisualLayer(cloudField, fvolLayer);
             }
 
+            // Enhanced Graphics only: the volumetric bank under those cards. --no-fog covers it as
+            // it covers the zone fog and the whiteout, and the Environment flag is cleared for a
+            // world that builds none, the froxel pass costing its buffer wherever it is left on.
+            var cloudBanks = _spec.NoFog ? null : Effects.FogVolumeBanks.Create(fogVolumes, fogVolumeSpec);
+            if (_env != null)
+            {
+                Effects.FogVolumeBanks.ApplyFroxelFog(_env, cloudBanks != null);
+            }
+            if (cloudBanks != null)
+            {
+                _worldRoot!.AddChild(cloudBanks);
+                Log.Info("world", $"fogvol banks: {cloudBanks.BankCount} volumetric bank(s) under the cards over {cloudBanks.TileCount} fog box(es) — density {cloudBanks.Density:0.####} per metre");
+            }
+
             // The sun goes in with the weather: its bearing is the zone's own SUNLIGHT_ORIENTATION,
             // applied by the same zone-apply that writes the fog. The ambience is the wind seam and
             // the viewer set carries each pane's camera pose for the puffer distance fade.
@@ -1591,6 +1605,9 @@ public partial class GameSession : Node3D
             // second consumer rather than re-loaded. Tick resolves each camera's weather state from
             // it, and its in-volume whiteout where fog_zone is armed.
             _weatherRig.SetFogVolumes(fogVolumes, fogVolumeSpec);
+            // The banks' scattering colour is the applied zone's, so the rig that owns the zone
+            // apply writes it, at build and on every later zone change.
+            _weatherRig.SetFogBanks(cloudBanks);
             // The horizon's zone children go in with the mission's weather: the zone the fog and
             // the dome share is picked from both (three chapters ship an empty zone2).
             _weatherRig.Build(state.MissionZrdrPath, _rigs, builder.HorizonZones(),
