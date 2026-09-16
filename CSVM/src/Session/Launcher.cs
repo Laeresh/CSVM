@@ -674,8 +674,13 @@ public partial class Launcher : Node3D
         var renderScale = Utils.RenderScaleSetting.Resolve(
             Utils.RenderScaleSetting.SavedWord(_spec.Det),
             Config.GetString(Utils.RenderScaleSetting.Key, Utils.RenderScaleSetting.Default));
+        // Which temporal pass the enhanced presentation runs, read here because it reaches the same
+        // viewports as the two above and a run that reads softer or ghostier is diagnosed off one
+        // line. It is inert on the faithful path.
+        string temporalWord = Utils.TemporalPassSetting.Resolve(
+            Config.GetString(Utils.TemporalPassSetting.Key, Utils.TemporalPassSetting.Default));
         string graphicsWord = graphicsEnhanced ? "enhanced" : "original";
-        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={graphicsWord} render_scale={renderScale.Word}% source={renderScale.Source}");
+        Log.Info("world", $"graphics mode: {Utils.GraphicsMode.Key}={graphicsWord} render_scale={renderScale.Word}% source={renderScale.Source} temporal={temporalWord}");
         // The window's own viewport takes the mode's render flags here, the moment the mode is
         // known and before any scene builds; the three SubViewports take them at construction.
         Utils.ViewportQuality.Apply(GetViewport());

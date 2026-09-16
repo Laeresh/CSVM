@@ -175,7 +175,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 2. ☑ Render Scale, a VIDEO page row applied to every 3D viewport, ignored under `--det`
 3. ◐ BL-803: the shadow-map bands on grazing surfaces under Enhanced
 4. ☐ Alpha-to-coverage on the cutout surfaces under Enhanced
-5. ☐ FSR 2.2 tried once as the alternative temporal pass, kept or parked on the user's verdict
+5. ◐ FSR 2.2 tried once as the alternative temporal pass, kept or parked on the user's verdict
 
 ### Wave B, lit explosions
 
@@ -448,7 +448,63 @@ move).
 clutter fade dithers alpha on purpose; coverage on a dithered alpha reads as a different pattern,
 so try it with and without the fade arm.
 
-## A5 ☐ FSR 2.2 tried once as the alternative temporal pass, kept or parked on the user's verdict
+## A5 ◐ FSR 2.2 tried once as the alternative temporal pass, kept or parked on the user's verdict
+
+**Landed.** The trial door is a `graphics.temporal` config key carrying `taa` or `fsr2`, default
+`taa`, resolved once at launch by `Utils/TemporalPassSetting.cs` beside `GraphicsMode.Resolve` and
+announced on the `[world] graphics mode:` line as `temporal=<word>`. There is no saved option and no
+menu row: one of the two passes is deleted rather than kept as a second way in. The viewport write
+is one branch in `Utils/ViewportQuality.Apply`, so all four 3D viewports take it. Under Enhanced,
+`taa` writes `UseTaa = true` as before; `fsr2` writes `UseTaa = false` with
+`Scaling3DMode = Fsr2` and `Scaling3DScale` at native, FSR 2.2 carrying a temporal pass of its own.
+FSR 2.2 applies at native alone, so A2's render scale above native keeps its bilinear supersample
+and Godot's TAA, which the comment on the write says; Godot refuses a factor above 1.0 in an FSR
+mode. `FsrSharpness` is left at Godot's own default so the trial judges FSR 2.2 as it ships. The
+faithful path writes neither pass whichever word the key carries, and a `--det` run drops the config
+file like every other key, so no golden sees any of it. `Testing/GroundShadowSuites.cs`'s
+`TemporalPass` step reads a freshly built viewport back per case and pins all three outcomes.
+
+**Verified.** The complete `RunTests.ps1` on the item worktree, exit 0: build PASS, units **4574
+passed, 0 failed, 2 skipped of 4576**, engine **352 suites passed, 0 failed**, goldens **19 shots
+hash-identical**. `CheckCommentCaps.ps1`, `CheckDocEntries.ps1`, `CheckEncoding.ps1`,
+`CheckItemIds.ps1` and `CheckGoldenProse.ps1` clean. The ground-shadow suite's own line reads
+`temporal pass: taa=True/Bilinear, fsr2=False/Fsr2, original=False/Bilinear`, each from a viewport
+built for that case, so the faithful path is measured against a fresh one rather than assumed. The
+`--det` drop is proven end to end as well as in the suite: with `graphics.temporal=fsr2` in
+`config.json`, an implied-`--det` `--screenshot` run logs `dropped_overrides=1` and
+`temporal=taa`, and the same run under `--no-det` logs `temporal=fsr2`.
+⚠ `ai-wave-launch-hitch` is a wall-clock regression bar and fails on this workstation whenever
+another session is loading it. In such a run its shard-6 neighbours read 2.5 to 2.8 times slow too
+while that shard's own total is shorter than the base commit's, which is what tells a contention
+window from a regression.
+
+**The headless evidence, and what it favours.** FSR 2.2 initialises on C1 under Enhanced with no
+Godot warning or error of any kind, at 1280x720 on an RTX 5080. It is **sharper and noisier**, and
+neither pass smears the hand-billboarded populations at a measurable distance. Mean Sobel gradient
+over matched crops of a C1 rocket run whose temporal history was built at the flight's own frame
+rate: hangar rooflines and apron seams 11.33 against TAA's 8.85 (1.28x), the whole world crop 9.77
+against 7.11 (1.37x), the fireball 11.91 against 8.46 (1.41x), the cloud cards below the deck 0.642
+against 0.531 (1.21x). The cost is **+0.06 to +0.13 ms of `gpu_ms`**, about 7 to 11 per cent, taken
+window by window over two 900-frame runs at the same pose. Against that, the FSR 2.2 frame keeps the
+clutter fade's own dither and the screen-space noise visible where Godot's TAA integrates them away,
+which is plain in the montage's apron and grass. So the headless reading **favours FSR 2.2 on
+resolve and TAA on cleanliness**, and it is a sharpness-against-stipple trade rather than the
+ghosting defect the item expected. **The flight decides**, on C1 by day and C5 at night.
+
+**What the measurement cannot show.** The two runs are `--no-det` (the config key is dropped under
+`--det`), so no two frames are the same frame: the crops are matched poses, never matched pixels,
+and every number is a texture statistic rather than a difference. A `--shots` burst writes a PNG per
+frame and so runs at about 12 fps, five times the per-frame camera motion a flight gives either
+pass, which flatters FSR 2.2 badly; the numbers above are from single shots at the real frame rate
+for that reason, and the burst montages are kept only as the motion record. Mean gradient rewards
+FSR 2.2's sharpening filter and its leftover dither alike, so it cannot separate resolved detail
+from stipple. C1's daylight deck is a low-contrast card against a bright sky, so a card ghost would
+not print there; C5's night deck is where that question is answerable. Montages:
+`.scratch/eg2/A5/A5_rate_full.png`, `A5_rate_rocket.png`, `A5_rate_cards.png` (flight frame rate),
+and `A5_fireball.png`, `A5_fireball_diff.png`, `A5_hangar_edges.png`, `A5_cloud_cards.png`,
+`A5_cloud_deck.png` (the bursts).
+
+**Original approach (kept for reference).**
 
 **Goal.** A recorded verdict on whether FSR 2.2 at scale 1.0 reads better than Godot's TAA under
 Enhanced; one of the two ships.

@@ -223,15 +223,25 @@ warns and falls back. `--det` drops both machine-state layers and keeps only an 
 `--graphics=`, which is how a golden or a deterministic capture pins the mode on purpose. The mode
 itself is written up as a divergence in `docs/architecture/Root.md`.
 
+## src/Utils/TemporalPassSetting.cs
+Which temporal pass the enhanced presentation runs: Godot's own TAA, or FSR 2.2 at native
+resolution, which carries a temporal pass of its own and replaces Godot's rather than joining it.
+The `graphics.temporal` config key (`taa` or `fsr2`, default `taa`) is the only source, with no saved
+option and no menu row, because the two are being flown against each other and the loser is deleted
+rather than kept as a second way in; an unknown word warns and falls back. `Resolve` runs once at
+launch beside `GraphicsMode.Resolve` and lands in the static `Fsr2`, whose one reader is
+`ViewportQuality.Apply`; a `--det` run drops the config file and so reads `taa`. `Launcher`'s
+`[world] graphics mode:` line announces the word that won.
+
 ## src/Utils/ViewportQuality.cs
-The render flags `GraphicsMode` and `RenderScaleSetting` write on a 3D viewport, gathered here
-because there are four viewports to write them on: the root viewport `Session/Launcher.cs` owns, and
-the SubViewports `Flight/CockpitOverlay.cs`, `Flight/SpyglassView.cs` and `UI/SplitScreen.cs` build.
-`Apply` runs once per viewport at construction, after both resolvers, and writes two things: Godot's
-temporal anti-aliasing, on under Enhanced alone, and a bilinear `Scaling3DScale` above native, which
-is written whichever presentation won because the scale is a display setting. Nothing is written at
-native or under the faithful mode, so a `--det` run reads back Godot's own defaults; Godot
-supersamples in bilinear mode alone, the FSR modes being upscalers. MSAA stays `project.godot`'s.
+The render flags `GraphicsMode`, `TemporalPassSetting` and `RenderScaleSetting` write on a 3D viewport, gathered here because
+there are four viewports to write them on: the root viewport `Session/Launcher.cs` owns, and the SubViewports
+`Flight/CockpitOverlay.cs`, `Flight/SpyglassView.cs` and `UI/SplitScreen.cs` build. `Apply` runs once per viewport at
+construction and writes the mode's temporal pass, Godot's TAA or `Scaling3DModeEnum.Fsr2` at native with Godot's own
+sharpness, plus a bilinear `Scaling3DScale` above native, which is written whichever presentation won because the scale is a
+display setting. Above native FSR 2.2 does not apply and Godot's TAA stays, Godot supersampling in bilinear mode alone.
+Nothing is written under the faithful mode, so a `--det` run reads back Godot's own defaults. MSAA stays
+`project.godot`'s.
 
 ## src/Utils/VSyncSetting.cs
 The frame pacing, one setting carrying both whether the loop waits for the screen and the cap it

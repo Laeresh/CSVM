@@ -249,6 +249,9 @@ public static class Config
             // registered here so --dump-config documents it even on a --graphics= launch, which
             // bypasses this read.
             GetString(GraphicsMode.Key, GraphicsMode.Default);
+            // The enhanced presentation's temporal pass, read once at launch beside the mode and
+            // registered here for the same reason.
+            GetString(TemporalPassSetting.Key, TemporalPassSetting.Default);
             // The start grid is constructed only by a multiplayer stunt race or a co-op campaign
             // mission, neither of which the warmup builds, register its two keys here so
             // --dump-config documents them on any launch.

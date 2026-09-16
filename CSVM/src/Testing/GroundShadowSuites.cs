@@ -17,8 +17,8 @@ namespace CSVM.Testing;
 /// pane's own pilot is the one taking that shape, that the texture carries the airframe's own
 /// silhouette rather than any symmetric blob, and that it is absent exactly where the decode says
 /// nothing is drawn (over the cutoff altitude, past the far range, and in enhanced graphics
-/// mode). That last gate carries the other half of the mode with it: the temporal pass a 3D
-/// viewport takes under enhanced and not under the faithful presentation.
+/// mode). That last gate carries the other half of the mode with it: which temporal pass a 3D
+/// viewport takes under enhanced, and that it takes none under the faithful presentation.
 /// Decode: docs/org/shadows.md.</summary>
 internal static class GroundShadowSuites
 {
@@ -69,7 +69,7 @@ internal static class GroundShadowSuites
         "belonging to each pane's own pilot in a two-pane session, the airframe's own silhouette " +
         "in the texture turning with it, and absent over 250 m of altitude, past 200 m of range " +
         "and under enhanced graphics, the mode that drops it being the same switch that puts a 3D " +
-        "viewport on the temporal pass")]
+        "viewport on Godot's TAA or on FSR 2.2 and leaves the faithful path untouched")]
     internal static void GroundShadow(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -667,25 +667,54 @@ internal static class GroundShadowSuites
         TemporalPass(ctx, report);
     }
 
-    // The same switch read on the other side of the mode: a 3D viewport takes the temporal pass
-    // under enhanced and Godot's own default under original, which is what keeps the pinned
-    // goldens on an untouched faithful image. A bare SubViewport stands for all four construction
-    // sites, since every one of them writes through the same ViewportQuality.Apply.
+    // The same switch read on the other side of the mode: a 3D viewport takes a temporal pass under
+    // enhanced and Godot's own defaults under original, which is what keeps the pinned goldens on an
+    // untouched faithful image. Enhanced picks between the two passes, and the faithful path writes
+    // neither however the key is spelled. A bare SubViewport stands for all four construction sites,
+    // since every one of them writes through the same ViewportQuality.Apply.
     private static void TemporalPass(TestContext ctx, StringBuilder report)
+    {
+        bool wasFsr2 = TemporalPassSetting.Fsr2;
+        try
+        {
+            var untouched = QualityWrite(null, TemporalPassSetting.Default);
+            var taa = QualityWrite(GraphicsMode.EnhancedWord, TemporalPassSetting.Default);
+            var fsr2 = QualityWrite(GraphicsMode.EnhancedWord, TemporalPassSetting.Fsr2Word);
+            var faithful = QualityWrite(GraphicsMode.Default, TemporalPassSetting.Fsr2Word);
+
+            ctx.Check(!untouched.Taa && untouched.Mode == Viewport.Scaling3DModeEnum.Bilinear,
+                $"a fresh viewport carries no temporal pass and Godot's own scaling ({untouched.Mode}), so the writes below are measured and not assumed");
+            ctx.Check(taa.Taa && taa.Mode == untouched.Mode && taa.Scale == untouched.Scale,
+                $"the default key puts enhanced on Godot's TAA and touches no scaling (taa={taa.Taa}, {taa.Mode} at {taa.Scale})");
+            ctx.Check(!fsr2.Taa && fsr2.Mode == Viewport.Scaling3DModeEnum.Fsr2 && fsr2.Scale == RenderScaleSetting.Native,
+                $"and {TemporalPassSetting.Fsr2Word} puts it on FSR 2.2 at native instead, Godot's own TAA off (taa={fsr2.Taa}, {fsr2.Mode} at {fsr2.Scale})");
+            ctx.Check(faithful.Taa == untouched.Taa && faithful.Mode == untouched.Mode && faithful.Scale == untouched.Scale,
+                $"while the faithful path reads back untouched whichever pass is asked for (taa={faithful.Taa}, {faithful.Mode} at {faithful.Scale})");
+            report.AppendLine($"temporal pass: taa={taa.Taa}/{taa.Mode}, fsr2={fsr2.Taa}/{fsr2.Mode}, original={faithful.Taa}/{faithful.Mode}");
+        }
+        finally
+        {
+            TemporalPassSetting.Resolve(wasFsr2 ? TemporalPassSetting.Fsr2Word : TemporalPassSetting.Default);
+        }
+    }
+
+    // What one freshly built viewport reads back after the two settings are resolved and applied,
+    // a null <paramref name="graphics"/> leaving it untouched as the control. Fresh per case because
+    // Apply writes a viewport rather than restoring one, exactly as a construction site uses it.
+    private static (bool Taa, Viewport.Scaling3DModeEnum Mode, float Scale) QualityWrite(
+        string? graphics, string temporal)
     {
         var view = new SubViewport { Name = "quality_probe" };
         try
         {
-            ctx.Check(!view.UseTaa, $"a fresh viewport carries no temporal pass, so the writes below are measured and not assumed");
-            GraphicsMode.Resolve(GraphicsMode.EnhancedWord);
-            ViewportQuality.Apply(view);
-            bool enhanced = view.UseTaa;
-            GraphicsMode.Resolve(GraphicsMode.Default);
-            ViewportQuality.Apply(view);
-            bool original = view.UseTaa;
-            ctx.Check(enhanced && !original,
-                $"and the viewport quality write follows the mode (enhanced={enhanced}, original={original})");
-            report.AppendLine($"temporal pass: enhanced={enhanced}, original={original}");
+            if (graphics != null)
+            {
+                GraphicsMode.Resolve(graphics);
+                TemporalPassSetting.Resolve(temporal);
+                ViewportQuality.Apply(view);
+            }
+
+            return (view.UseTaa, view.Scaling3DMode, view.Scaling3DScale);
         }
         finally
         {
