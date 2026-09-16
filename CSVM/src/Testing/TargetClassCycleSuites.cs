@@ -49,9 +49,11 @@ internal static class TargetClassCycleSuites
         + "wherever the pilot had reached; a class change lands on the head of the cycle it changes to; "
         + "Target Nothing stays cleared through a rebuild until a class key; two panes "
         + "4 km apart auto-acquire different hostiles, one pane's step leaving the other's pick "
-        + "and the other's class alone; and the mission's own targets.zrd puts the one node it "
+        + "and the other's class alone; the mission's own targets.zrd puts the one node it "
         + "flags other_target on the Non-Aircraft cycle while the destructibles the same table "
-        + "names with no flag reach no cycle at all")]
+        + "names with no flag reach no cycle at all; and the zeppelin's parts ride that cycle only "
+        + "while the pilot's selected ordnance carries LOCK_ON, switching off it dropping the "
+        + "selected part instead of holding it")]
     internal static void TargetClassCycle(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -66,6 +68,11 @@ internal static class TargetClassCycleSuites
         var nets = AiNets.Load(chapterZrdr);
         var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        // The Non-Aircraft cycle's torpedo gate, read off the install's own weapon table rather
+        // than a stand-in def: a zeppelin's parts reach that cycle only while the pilot's selected
+        // ordnance carries LOCK_ON, so every pane below flies one.
+        var torpedo = weapons.All.FirstOrDefault(ProjectilePool.CarriesLockOn)
+            ?? throw new SuiteSkippedException("the weapon table carries no LOCK_ON ordnance");
         if (!zepDefs.Any(d => d.Node == LiveZep))
         {
             throw new SuiteSkippedException($"{Chapter}/{Mission} carries no '{LiveZep}' record");
@@ -142,8 +149,8 @@ internal static class TargetClassCycleSuites
                 Offer(scan, wingman, p1Pose + OffTheWing);
                 pool.CollectTurrets(scan);
 
-                var p1 = new Pane(scan, parts, p1Self, p1Pose);
-                var p2 = new Pane(scan, parts, p2Self, p2Pose);
+                var p1 = new Pane(scan, parts, p1Self, p1Pose, torpedo);
+                var p2 = new Pane(scan, parts, p2Self, p2Pose, torpedo);
                 report.AppendLine($"{Chapter}/{Mission}: {parts.Count} zeppelin part(s), {liveGuns} live emplacement(s) ({hostileGuns} hostile, none selectable), "
                     + $"cycles enemy={p1.Selection.Pool.Enemy.Count} ally={p1.Selection.Pool.Ally.Count} "
                     + $"nonAircraft={p1.Selection.Pool.NonAircraft.Count}");
@@ -157,8 +164,9 @@ internal static class TargetClassCycleSuites
                 CheckPanesAreIndependent(ctx, p1, p2);
                 CheckTheCuratedListPicksTheCycle(ctx, world,
                     new Curated(mission, script, missionTargets, messages, scan, parts, p1Self,
-                        p1Pose, parts.Count),
+                        p1Pose, parts.Count, torpedo),
                     report);
+                CheckTheTorpedoGatesTheParts(ctx, p1, parts.Count);
                 ctx.Note($"{Chapter}/{Mission}: three class cycles of {p1.Selection.Pool.Enemy.Count}/{p1.Selection.Pool.Ally.Count}/{p1.Selection.Pool.NonAircraft.Count}, each walked forward, back and restarted by its own three keys");
             }
             finally
@@ -333,7 +341,7 @@ internal static class TargetClassCycleSuites
 
         var selection = new TargetSelection();
         selection.Rebuild(curated.Scan, curated.Parts, AimAssist.PlayerTeam, curated.Self,
-            curated.Pose, Basis.Identity, offered);
+            curated.Pose, Basis.Identity, offered, curated.Torpedo);
         var pool = selection.Pool;
         report.AppendLine($"curated list: {offered.Count} site(s) offered, cycles enemy={pool.Enemy.Count} "
             + $"ally={pool.Ally.Count} nonAircraft={pool.NonAircraft.Count} over a baseline of {curated.Baseline}");
@@ -359,6 +367,25 @@ internal static class TargetClassCycleSuites
 
         ctx.Check(pool.Enemy.Count(t => t.Objective) > 0,
             $"the same table's objective entries still ride the Enemy cycle they already rode");
+    }
+
+    // The torpedo gate on the sub-part channel. A zeppelin's parts stand in for a flag no mission
+    // table authors, so the cycle offers them only while the pilot has a LOCK_ON round selected.
+    private static void CheckTheTorpedoGatesTheParts(TestContext ctx, Pane pane, int partCount)
+    {
+        pane.Home(TargetClass.NonAircraft);
+        var head = pane.Selection.Current!.Value.Source;
+        ctx.Check(partCount > 0 && pane.Selection.Pool.NonAircraft.Count == partCount,
+            $"CONTROL: with the torpedo selected the cycle holds all {partCount} of the zeppelin's parts and one of them is picked");
+
+        pane.RebuildWith(null);
+        ctx.Check(pane.Selection.Pool.NonAircraft.Count == 0 && pane.Selection.Current == null,
+            $"switching off the torpedo empties the Non-Aircraft cycle and DROPS the selected part rather than holding it stale, count={pane.Selection.Pool.NonAircraft.Count}");
+
+        pane.Rebuild();
+        ctx.Check(pane.Selection.Pool.NonAircraft.Count == partCount
+                  && ReferenceEquals(pane.Selection.Current!.Value.Source, head),
+            $"…and selecting it again brings the same parts back, the cycle re-acquiring at its head");
     }
 
     private static int Named(IReadOnlyList<TargetRef> cycle, string name) =>
@@ -419,7 +446,8 @@ internal static class TargetClassCycleSuites
     // Non-Aircraft count a flagged site has to EXTEND rather than replace.
     private readonly record struct Curated(CampaignMission Mission, ObjectiveScript Script,
         MissionTargets Targets, Messages Messages, AimCandidateSet Scan,
-        IReadOnlyList<AimCandidate> Parts, object Self, Vector3 Pose, int Baseline);
+        IReadOnlyList<AimCandidate> Parts, object Self, Vector3 Pose, int Baseline,
+        WeaponDef Torpedo);
 
     // One pilot's pane: its own selection over the shared candidates, sorted against its own pose.
     // A press and the rebuild that publishes it are separate calls because the original's handler
@@ -430,20 +458,29 @@ internal static class TargetClassCycleSuites
         private readonly IReadOnlyList<AimCandidate> _parts;
         private readonly object _self;
         private readonly Vector3 _pose;
+        private readonly WeaponDef _torpedo;
 
-        public Pane(AimCandidateSet scan, IReadOnlyList<AimCandidate> parts, object self, Vector3 pose)
+        public Pane(AimCandidateSet scan, IReadOnlyList<AimCandidate> parts, object self,
+            Vector3 pose, WeaponDef torpedo)
         {
             _scan = scan;
             _parts = parts;
             _self = self;
             _pose = pose;
+            _torpedo = torpedo;
             Rebuild();
         }
 
         public TargetSelection Selection { get; } = new();
 
-        public void Rebuild() =>
-            Selection.Rebuild(_scan, _parts, AimAssist.PlayerTeam, _self, _pose, Basis.Identity);
+        // The pane flies the torpedo throughout: the sub-part channel is gated on the selected
+        // ordnance carrying LOCK_ON, and the Non-Aircraft cycle here is the zeppelin's own parts.
+        public void Rebuild() => RebuildWith(_torpedo);
+
+        // The same per-frame pass under another selected ordnance, which is what the gate splits on.
+        public void RebuildWith(WeaponDef? weapon) =>
+            Selection.Rebuild(_scan, _parts, AimAssist.PlayerTeam, _self, _pose, Basis.Identity,
+                null, weapon);
 
         // The cycle's head, whatever the pilot had reached: the per-class Nearest key, which is
         // also the setup step that makes a walk start at a known entry.

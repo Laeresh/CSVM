@@ -22,6 +22,11 @@ public class TargetCycleTests
     private static readonly Vector3 Behind = new(0f, 0f, 300f);
     private static readonly Vector3 Left = new(-250f, 0f, 0f);
 
+    // The sub-part channel's gate is the selected ordnance carrying LOCK_ON, and nothing else about
+    // the weapon, so wep_14's authored 2.5 s window on a bare def is the whole fixture.
+    private static readonly WeaponDef Torpedo = new() { Id = "wep_14", LockOn = 2.5f };
+    private static readonly WeaponDef PlainRocket = new() { Id = "wep_12" };
+
     /// <summary>Each class key steps its own cycle and nothing else: the ally key moves the ally
     /// pick while the enemy cycle's own order and the non-aircraft cycle's stand unchanged.</summary>
     [Fact]
@@ -162,6 +167,31 @@ public class TargetCycleTests
                 AimAssist.PlayerTeam, otherTarget: true));
     }
 
+    /// <summary>The zeppelin sub-parts ride the Non-Aircraft cycle only while the pilot's selected
+    /// ordnance carries <c>LOCK_ON</c>: a rocket without it and no ordnance at all both empty that
+    /// cycle and drop the selected part rather than holding it, and selecting the torpedo again
+    /// restores the same entries in the same order.</summary>
+    [Fact]
+    public void TheSubPartsNeedASelectedLockOnWeapon()
+    {
+        var world = new Fixture();
+        var sel = world.Selection();
+        world.Press(sel, TargetClass.NonAircraft);
+        Assert.Equal(world.NonAircraftOrder(), Sources(sel.Ordered));
+        var head = sel.Current!.Value.Source;
+
+        world.RebuildWith(sel, PlainRocket);
+        Assert.Empty(sel.Pool.NonAircraft);
+        Assert.Null(sel.Current);
+
+        world.RebuildWith(sel, null);
+        Assert.Empty(sel.Pool.NonAircraft);
+
+        world.Rebuild(sel);
+        Assert.Equal(world.NonAircraftOrder(), Sources(sel.Ordered));
+        Assert.Same(head, sel.Current!.Value.Source);
+    }
+
     /// <summary>The decoded death rule and the setting that departs from it, over the mission the
     /// setting exists for: a far objective heads the Enemy cycle, so with the setting off every
     /// kill sends the pilot back to it, and with the setting on the kill lands on the nearest live
@@ -278,9 +308,13 @@ public class TargetCycleTests
             return selection;
         }
 
-        public void Rebuild(TargetSelection selection) =>
+        // The zeppelin sub-parts ride the Non-Aircraft cycle only under a selected LOCK_ON round,
+        // so the fixture's ordinary pass flies the torpedo and RebuildWith switches off it.
+        public void Rebuild(TargetSelection selection) => RebuildWith(selection, Torpedo);
+
+        public void RebuildWith(TargetSelection selection, WeaponDef? weapon) =>
             selection.Rebuild(_scan, _parts, AimAssist.PlayerTeam, null, Vector3.Zero,
-                Basis.Identity);
+                Basis.Identity, null, weapon);
 
         // One press of a class key, then the per-frame pass that publishes it. Two calls because
         // the original's handler steps the list the last frame built and the next frame's rebuild

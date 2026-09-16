@@ -300,11 +300,11 @@ public sealed partial class ZeppelinRuntime : Node
         Find(node) is { Damage: { } damage } zep ? damage.Survivors(zep.ZoneAlive) : -1;
 
     /// <summary>Appends every live zeppelin's damage zones (gasbags, engines, cannons) to
-    /// <paramref name="into"/>, one candidate per part, for the player-target pool. Each part rides
-    /// its hull, so it carries the zeppelin's own velocity rather than zero. A plain list and NOT
-    /// <see cref="AimCandidateSet"/>'s <c>Structures</c>: this is the only channel by which a
-    /// structure becomes selectable. ⚠ A deliberate divergence, not a port. The decode found no
-    /// sub-part enumeration anywhere; do not "correct" it back by citing the decode.</summary>
+    /// <paramref name="into"/>, one candidate per part, each riding its hull so it carries the
+    /// airship's own velocity rather than zero. A plain list and NOT
+    /// <see cref="AimCandidateSet"/>'s <c>Structures</c>: the only channel by which a structure
+    /// becomes selectable, and the pool takes it only while the pilot's selected ordnance carries
+    /// <c>LOCK_ON</c>, which is what that divergence buys (<c>Flight.TargetPool.Rebuild</c>).</summary>
     public void CollectTargetParts(List<AimCandidate> into, int team = AimAssist.WorldTeam)
     {
         foreach (var zep in _live)

@@ -90,12 +90,12 @@ public sealed class TargetSelection
     /// <summary>Fills <see cref="Pool"/> and re-resolves, the whole per-frame pass in one call
     /// (<c>FUN_004b5fb0</c>). With the selection cleared the pool is left EMPTY rather than built and
     /// discarded, which is the original's own short-circuit and the mechanism behind the sticky
-    /// clear.</summary>
-    /// <param name="objectives">The mission's flagged sites: an objective one sorts ahead of every
-    /// sector on the Enemy cycle, and an other-target one joins the Non-Aircraft cycle.</param>
+    /// clear. <paramref name="objectives"/> is the mission's flagged sites and
+    /// <paramref name="selectedWeapon"/> the pilot's selected ordnance, which gates
+    /// <paramref name="subParts"/>; both rules are <see cref="TargetPool.Rebuild"/>'s.</summary>
     public void Rebuild(AimCandidateSet scan, IReadOnlyList<AimCandidate>? subParts, int ownTeam,
         object? self, Vector3 position, Basis basis,
-        IReadOnlyList<AimCandidate>? objectives = null)
+        IReadOnlyList<AimCandidate>? objectives = null, WeaponDef? selectedWeapon = null)
     {
         if (ActiveClass == null)
         {
@@ -104,7 +104,7 @@ public sealed class TargetSelection
             return;
         }
 
-        Pool.Rebuild(scan, subParts, ownTeam, self, objectives);
+        Pool.Rebuild(scan, subParts, ownTeam, self, objectives, selectedWeapon);
         Resolve(position, basis);
         // Verification breadcrumb, once per selector: which cycles this session has anything in.
         // It waits for the first NON-EMPTY pool because the things that fill it (AI spawns, the

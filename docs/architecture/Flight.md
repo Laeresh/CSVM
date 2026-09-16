@@ -79,11 +79,11 @@ every sector. Pure data, no Godot node; pinned by the `target-ref` suite. Decode
 The player's classed candidate pool: three lists of `TargetRef` (`Enemy`, `Ally`, `NonAircraft`,
 reachable through `Of(TargetClass)`), rebuilt from scratch on every `Rebuild`, the original's own
 contract and why a runtime spawn appears and a death disappears with no extra plumbing. It walks the
-aim assist's aeroplanes and live ordnance only; structures arrive through `subParts` and the
-mission's sites through `objectives`, each under its own record's flag, so an `objective` site rides
-the Enemy cycle and an `other_target` one the Non-Aircraft, while an aeroplane whose roster block
-flags itself carries the marker on its own candidate. A gun emplacement is on no cycle at all,
-because no shipped table names one. Read `TargetSelection.cs`; decode: [../org/targeting.md](../org/targeting.md).
+aim assist's aeroplanes and live ordnance only; the mission's sites arrive through `objectives` under
+their own record's flag, an `objective` one riding the Enemy cycle and an `other_target` one the
+Non-Aircraft, and an aeroplane whose roster block flags itself carries the marker on its own
+candidate. The zeppelin sub-parts arrive through `subParts`, offered only while `selectedWeapon`
+carries `LOCK_ON`; a gun emplacement is on no cycle at all. Read `TargetSelection.cs`; decode: [../org/targeting.md](../org/targeting.md).
 
 ## src/Flight/TargetSelection.cs
 One pilot's target selection: the sticky choice, the eleven actions and the lifecycle. One instance

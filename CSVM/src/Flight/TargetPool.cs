@@ -26,7 +26,8 @@ public sealed class TargetPool
     public IReadOnlyList<TargetRef> Ally => _ally;
 
     /// <summary>The Non-Aircraft cycle: the structures the mission's own <c>targets.zrd</c> flags
-    /// <c>other_target</c>, plus the zeppelin sub-parts. Never a gun emplacement.</summary>
+    /// <c>other_target</c>, plus the zeppelin sub-parts while a <c>LOCK_ON</c> torpedo is the
+    /// selected ordnance. Never a gun emplacement.</summary>
     public IReadOnlyList<TargetRef> NonAircraft => _nonAircraft;
 
     /// <summary>Everything selectable, across all three cycles.</summary>
@@ -49,13 +50,14 @@ public sealed class TargetPool
     }
 
     /// <summary>Rebuilds all three cycles through <see cref="TargetRef.Classify"/>, dropping
-    /// <paramref name="self"/> by reference. Structures reach it through
-    /// <paramref name="subParts"/> and the mission's SITES through <paramref name="objectives"/>,
-    /// each under its own record's flag. ⚠ Never walk <see cref="AimCandidateSet.Structures"/> or
-    /// its turret list: every crate and gun would land on a cycle, and the table decides what does.
-    /// ⚠ <paramref name="ownTeam"/> is the <c>FlightController.Team</c> FIELD.</summary>
+    /// <paramref name="self"/> by reference. The mission's SITES reach it through
+    /// <paramref name="objectives"/> under their own record's flag, and <paramref name="subParts"/>
+    /// only while <paramref name="selectedWeapon"/> carries <c>LOCK_ON</c>. ⚠ Never walk
+    /// <see cref="AimCandidateSet.Structures"/> or its turret list: every crate and gun would land
+    /// on a cycle. ⚠ <paramref name="ownTeam"/> is the <c>FlightController.Team</c> FIELD.</summary>
     public void Rebuild(AimCandidateSet scan, IReadOnlyList<AimCandidate>? subParts, int ownTeam,
-        object? self, IReadOnlyList<AimCandidate>? objectives = null)
+        object? self, IReadOnlyList<AimCandidate>? objectives = null,
+        WeaponDef? selectedWeapon = null)
     {
         Clear();
         foreach (var c in scan.Vehicles)
@@ -70,7 +72,7 @@ public sealed class TargetPool
             Offer(c, AimTargetKind.Ordnance, ownTeam, self);
         }
 
-        if (subParts != null)
+        if (subParts != null && PartsSelectable(selectedWeapon))
         {
             foreach (var c in subParts)
             {
@@ -168,6 +170,15 @@ public sealed class TargetPool
     /// cycle asks nothing of it, since no turret reaches that cycle at all.</summary>
     internal static bool IsEmplacement(object? source) =>
         source is TurretController { Site: not null };
+
+    // The torpedo gate on the zeppelin sub-part channel. No shipped mission table flags a gasbag,
+    // an engine or a cannon, so those parts stand in for a flag nothing authors, and the stand-in
+    // is offered only for the capability it exists for: aiming a LOCK_ON torpedo at an airship.
+    // Under any other selected ordnance the cycle is the original's flagged list alone
+    // (docs/org/targeting.md). ⚠ Read the SELECTED weapon, never the fired one: a torpedo steers
+    // to the selection, so a part must be pickable before the launch.
+    private static bool PartsSelectable(WeaponDef? selectedWeapon) =>
+        selectedWeapon != null && ProjectilePool.CarriesLockOn(selectedWeapon);
 
     /// <summary>Wraps one classed candidate as a <see cref="TargetRef"/>. The KIND picks the shape
     /// (which is why an unrecognised source still lands in the right cycle with an empty name rather

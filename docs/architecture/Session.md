@@ -388,10 +388,10 @@ Runs a mission's zeppelins behind `--zeppelins`: a `ZeppelinDef` whose world nod
 its hull switched on, is placed at its authored pose and flown by `ZeppelinMotion` over
 `AiNetFollower`; an animation-driven hull is neither placed nor stepped. `WireDamage` builds the
 per-part pools, `PollDamage` owns the kill, the Instant Action engine count and the generator
-disable; `CollectTargetParts` alone makes a structure selectable. A def whose net does not resolve is
-held out, zones unwired; `--zep=` grafts one on a synthetic net. Script arms: `SetStopPoint`, `Hold`,
-`Wake`, `SetNet` (nearest-node seat from where the hull stands) and `SetTeam` (one side over every
-pool and gun). Decode: [../formats/mission-entities.md](../formats/mission-entities.md).
+disable; `CollectTargetParts` alone makes a structure selectable, and only under `TargetPool`'s
+torpedo gate. A def whose net does not resolve is held out, zones unwired; `--zep=` grafts one on a
+synthetic net. Script arms: `SetStopPoint`, `Hold`, `Wake`, `SetNet` (nearest-node seat from where
+the hull stands) and `SetTeam` (one side over every pool and gun). Decode: [../formats/mission-entities.md](../formats/mission-entities.md).
 
 ## src/Session/ZeppelinRuntime.Cannons.cs
 The broadside half of `ZeppelinRuntime`, the second file of that partial class. `WireCannons`

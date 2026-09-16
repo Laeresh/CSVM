@@ -499,7 +499,8 @@ internal static class TargetingSuites
         "the --target= scripted twin: the four words mapping onto the ordinary actions "
         + "(nearest as head-of-cycle, next, crosshair, none), a name pinning an aircraft the "
         + "auto-acquire would NOT have chosen, the same one grammar reaching an ally and a "
-        + "zeppelin sub-part by writing the class back, case-insensitive matching, an unknown "
+        + "zeppelin sub-part (under a selected torpedo) by writing the class back, "
+        + "case-insensitive matching, an unknown "
         + "name leaving the selection alone, two selectors given one spec landing on the same "
         + "target, and the flag NOT pinning against later input")]
     internal static void TargetFlagModel(TestContext ctx)
@@ -527,11 +528,14 @@ internal static class TargetingSuites
             {
                 new() { Position = new Vector3(60f, 0f, -600f), Velocity = Vector3.Zero, Team = AimAssist.WorldTeam, Live = true, Source = gasbagInst },
             };
+            // The sub-part channel's gate is the SELECTED ordnance carrying LOCK_ON, so every
+            // rebuild here flies the torpedo; without it the gasbag reaches no cycle to be pinned.
+            var torpedo = new WeaponDef { Id = "wep_14", LockOn = 2.5f };
 
             TargetSelection Fresh()
             {
                 var s = new TargetSelection();
-                s.Rebuild(scan, parts, own, self, Vector3.Zero, basis);
+                s.Rebuild(scan, parts, own, self, Vector3.Zero, basis, null, torpedo);
                 return s;
             }
 
@@ -590,7 +594,7 @@ internal static class TargetingSuites
             ctx.Check(cleared.ApplyInitial("none", Vector3.Zero, basis)
                       && cleared.Current == null && cleared.ActiveClass == null,
                 $"--target=none is Target Nothing: no target and no class");
-            cleared.Rebuild(scan, parts, own, self, Vector3.Zero, basis);
+            cleared.Rebuild(scan, parts, own, self, Vector3.Zero, basis, null, torpedo);
             ctx.Check(cleared.Current == null && cleared.Pool.Count == 0,
                 $"…and stays cleared through the next rebuild, so a --screenshot run can capture the HUD with nothing selected");
 
@@ -617,7 +621,7 @@ internal static class TargetingSuites
             live.Resolve(Vector3.Zero, basis);
             ctx.Check(ReferenceEquals(live.Current?.Source, near),
                 $"a keypress after the flag moves the selection off the pinned target");
-            live.Rebuild(scan, parts, own, self, Vector3.Zero, basis);
+            live.Rebuild(scan, parts, own, self, Vector3.Zero, basis, null, torpedo);
             ctx.Check(ReferenceEquals(live.Current?.Source, near),
                 $"…and the next frame's rebuild does NOT snap back to it — the flag is spent, so an interactive session started with it still cycles");
         }
@@ -643,7 +647,9 @@ internal static class TargetingSuites
         + "absent, the destructible registry contributes nothing however full "
         + "AimCandidateSet.Structures is, an ordnance entry with the admission byte clear is "
         + "refused (the TARGETABLE half is the shootable-flyout suite's), and a zeppelin "
-        + "contributes one entry per gasbag/engine/cannon with its hull's velocity; plus C1's "
+        + "contributes one entry per gasbag/engine/cannon with its hull's velocity, but only "
+        + "while the selected ordnance carries LOCK_ON (no ordnance and a plain rocket both "
+        + "leave the cycle empty, and switching back brings the parts straight back); plus C1's "
         + "real emplacements, where the five aaguns switched on are live and hostile to the "
         + "player and still reach no cycle, since only a mission's target table puts a gun on one")]
     internal static void TargetPoolModel(TestContext ctx)
@@ -717,10 +723,14 @@ internal static class TargetingSuites
                 new() { Position = gasbag.GlobalPosition, Velocity = hullVel, Team = AimAssist.WorldTeam, Live = true, Source = gasbagInst },
                 new() { Position = deadEngine.GlobalPosition, Velocity = hullVel, Team = AimAssist.WorldTeam, Live = false, Source = engineInst },
             };
-            pool.Rebuild(scan, parts, self.Team, self);
+            // The torpedo gate. A LOCK_ON weapon is the whole predicate, so a bare def carrying it
+            // stands for wep_14 and one without stands for every gun and unguided rocket shipped.
+            var torpedo = new WeaponDef { Id = "wep_14", LockOn = 2.5f };
+            var plainRocket = new WeaponDef { Id = "wep_12" };
+            pool.Rebuild(scan, parts, self.Team, self, null, torpedo);
             ctx.Check(pool.NonAircraft.Count == 1
                       && ReferenceEquals(pool.NonAircraft[0].Source, gasbagInst),
-                $"a zeppelin contributes its live parts to Non-Aircraft count={pool.NonAircraft.Count}");
+                $"a zeppelin contributes its live parts to Non-Aircraft while a LOCK_ON torpedo is selected count={pool.NonAircraft.Count}");
             ctx.Check(!pool.NonAircraft.Any(t => ReferenceEquals(t.Source, engineInst)),
                 $"a DESTROYED engine is absent");
             var bag = pool.NonAircraft[0];
@@ -728,6 +738,20 @@ internal static class TargetingSuites
                       && bag.Name == "gasbag1"
                       && bag.Health is { } bh && Mathf.IsEqualApprox(bh, 1f) && bag.Armor == null,
                 $"…carrying its hull's velocity (never zero — the bracket gate has to lead it), its part node's name and health with no armor pool name='{bag.Name}' v={bag.Velocity}");
+
+            // Off the torpedo the cycle is the mission's flagged list alone, which here is empty.
+            // The same parts list is passed every time, so an empty cycle is the gate refusing and
+            // not a collector that stopped offering.
+            pool.Rebuild(scan, parts, self.Team, self, null, plainRocket);
+            ctx.Check(pool.NonAircraft.Count == 0,
+                $"with a rocket authoring no LOCK_ON selected the parts leave the Non-Aircraft cycle count={pool.NonAircraft.Count}");
+            pool.Rebuild(scan, parts, self.Team, self);
+            ctx.Check(pool.NonAircraft.Count == 0,
+                $"…and with no ordnance selected at all they are absent too count={pool.NonAircraft.Count}");
+            pool.Rebuild(scan, parts, self.Team, self, null, torpedo);
+            ctx.Check(pool.NonAircraft.Count == 1
+                      && ReferenceEquals(pool.NonAircraft[0].Source, gasbagInst),
+                $"…and selecting the torpedo again brings the same live part straight back, so the gate is the weapon and nothing else");
 
             // C1's real emplacements through the same pool. ia1.gw switches all 74 sites off at
             // their roots, so the built world has no live emplacement; the five aagun sites go on

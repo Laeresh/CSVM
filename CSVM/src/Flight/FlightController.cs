@@ -304,11 +304,11 @@ public partial class FlightController : Node3D
     /// marker, Track Target's camera and any later AI-order consumer are meant to read.</summary>
     public TargetSelection? Targeting;
 
-    /// <summary>Appends the mission's selectable structures (the zeppelin sub-parts) to the
-    /// targeting pool each frame, <c>ZeppelinRuntime.CollectTargetParts</c>, bound by
-    /// <c>GameSession</c> once the zeppelins exist. Null in a session with none. A delegate because
-    /// the zeppelins are BUILT AFTER the rigs, so there is no runtime to hand the assembler; the
-    /// same sink shape <see cref="CollideDamageSink"/> already uses.</summary>
+    /// <summary>Appends the zeppelin sub-parts to the targeting pool each frame,
+    /// <c>ZeppelinRuntime.CollectTargetParts</c>, bound by <c>GameSession</c> once the zeppelins
+    /// exist. Null in a session with none, and the pool takes them only under the torpedo gate
+    /// (<see cref="TargetPool.Rebuild"/>). A delegate because the zeppelins are BUILT AFTER the
+    /// rigs; the same sink shape <see cref="CollideDamageSink"/> already uses.</summary>
     public System.Action<List<AimCandidate>>? TargetSubParts;
 
     /// <summary>Appends this pilot's live objective sites to the targeting pool each frame: the
@@ -2719,6 +2719,22 @@ public partial class FlightController : Node3D
         return null;
     }
 
+    // The ordnance the hardpoint selector points at, or null with no fit, no fire control or no
+    // pylon. What the Non-Aircraft cycle's torpedo gate reads (TargetPool.Rebuild), on every
+    // per-frame rebuild, so switching off the torpedo drops the zeppelin parts from that cycle on
+    // the next pass and the re-resolve moves a selected part to the head rather than holding it.
+    // The gun selector can never open the gate: no gun in this install authors LOCK_ON.
+    private WeaponDef? SelectedOrdnance()
+    {
+        if (Loadout is not { Hardpoints.Count: > 0 } fit || _fire == null)
+        {
+            return null;
+        }
+
+        int pylon = _fire.SelectedPylon;
+        return pylon >= 0 && pylon < fit.Hardpoints.Count ? fit.Hardpoints[pylon].Weapon : null;
+    }
+
     /// <summary>A gun group's muzzle MIDPOINT: the original averages that group's live barrel
     /// attachments, which is where that group's fire converges.</summary>
     private Vector3 MuzzleMidpoint(GunGroup group)
@@ -3421,7 +3437,7 @@ public partial class FlightController : Node3D
         // coincidence and wrong for every other pane the moment a mission sets teams, the
         // wingman-in-the-marker bug (see TargetHud.OwnTeam).
         sel.Rebuild(_targetScan, _targetParts, Team, this, _model.Position, _model.Attitude,
-            _targetSites);
+            _targetSites, SelectedOrdnance());
 
         // The death prune (FUN_004a64e0). There is no session-wide Downed broadcast outside --vs,
         // so this pane prunes its own queue: a shot-down attacker must not be offered again.

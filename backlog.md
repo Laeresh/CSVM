@@ -417,29 +417,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   clear and the hull does not (CM13's dbase arch on dzpath2) in both games; if the original passes,
   sweep the player's probes too. *Cross-refs:* `PlaneStats.CollisionProbes`, `docs/formats/vehicle.md`.
 
-- `BL-920` `[Bug]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **A zeppelin's
-  gasbags, engines and cannons reach the player's Non-Aircraft cycle although no mission table
-  flags them, which is the one remaining entry on that cycle the original does not offer.**
-  *Decision:* the parts are offered only while the selected weapon is a `LOCK_ON` torpedo, since
-  aiming one at an airship is the capability the divergence exists for; with any other weapon
-  selected the cycle is the original's flagged mission-table list. *Evidence:* `ZeppelinRuntime.CollectTargetParts` feeds `TargetPool.Rebuild`'s `subParts`
-  argument, and `TargetPool.Offer` gives every structure candidate a stand-in `other_target` flag,
-  so each part is selectable wherever an airship flies. The decode is that a gasbag is an
-  `MStructList` entry selectable only when its own record carries a flag, and that there is no
-  sub-part enumeration anywhere in the targeting path ([`docs/org/targeting.md`](docs/org/targeting.md),
-  "The curated list is `targets.zrd`, and it is small"). The original's CM14 flags no dreadnought
-  part at all, so its Non-Aircraft key reaches nothing there while CSVM's reaches every part.
-  *Fix shape:* gate the `subParts` contribution in `TargetPool.Rebuild` on the local pilot's
-  selected weapon carrying `LOCK_ON`, rebuild on weapon change so the cycle drops the parts when
-  the pilot switches off the torpedo (and drops a selected part rather than holding a stale one),
-  and rewrite `CollectTargetParts`'s "deliberate divergence" comment to name the torpedo gate.
-  *⚠ Traps:* a LOCK_ON torpedo steers to `Targeting?.Current?.Source`, so the gate must be the
-  weapon selected, not the weapon fired, or the pilot cannot pick the part before launching; and
-  the `subParts` argument reaches about 35 `Rebuild` call sites, most of them in suites that pin
-  the part list, which now need the selected weapon in their fixture. *Cross-refs:*
-  `BL-918`'s closing commit (the per-mission list and the turret half), `CSVM/src/Flight/TargetPool.cs`,
-  `CSVM/src/Session/ZeppelinRuntime.cs`.
-
 ## Flight model & collision physics
 
 - `BL-562` `[Perf]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: data]` `[CM11]` **CM11 (C2/M02) still spends single physics ticks of 33 to 57 ms in flight and
