@@ -323,7 +323,7 @@ internal sealed class HumanFlightAdapter
 
         // The original's heading tape, rebuilt from the chapter's own HUD
         // textures (compassticks2/compasstxt ship in every chapter's archive).
-        pilotHud.Compass = CompassTape.Build(_aircraft.Textures);
+        pilotHud.Compass = CompassTape.Build(_aircraft.Textures, _policy.CompassSqueeze);
         if (verbose && pilotHud.Compass != null)
             Log.Info("flight", $"compass: heading tape from compassticks2/compasstxt");
 

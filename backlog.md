@@ -987,24 +987,20 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
-- `BL-113` `[Tuning]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **Compass tape**: the bar-end
-  caps, the tick height and the tape's edges do not read like the original's. *Decision:* judged
-  on a sweep montage against `HUD.png`, `Targeting HUD Kestrel.png` (the renders' own 5120x1440
-  viewport) and `C1 IA1 whiteout at height.png`; five things land together, then the goldens
-  carrying the tape (`c1-flight-kill`, `c1-cockpit`) re-pin once. (1) No rim cap: all three
-  originals have dark bar ends, the "~192 at the very edge" the hud doc reads as a cap is
-  `HUD.png`'s sky value, so the two rim draws in `CompassTape._Draw`, `RimGain`, and the hud
-  doc's cap sentence go. (2) `TileOverscan` 1.0. (3) The sides darker: the original's outer
-  quarter of the bar is close to black, so the plain `cos(Δ)` fade is too gentle at the edges,
-  a steeper falloff, judged on a follow-up montage. (4) A black hem under the ticks: the
-  original's comb stops about three rows above the bar's bottom edge, ours runs lit to the last
-  row. (5) Whether the octant labels foreshorten with the drum: ours are drawn at full width on
-  `LabelLayer` ("billboarded upright"), which the hud doc records as verified on one edge `W`,
-  and the user reads the originals' edge letters as turning with the card. Measured at 3x on the
-  Kestrel shot the edge `E` (Δ about 44°) is about 0.8 of the centre `E` and the edge `S` is
-  full width, so the stills do not settle it; render the labels with the ticks' horizontal
-  `cos(Δ)` squeeze as one more tile on the follow-up montage and let the user pick. North = −Z
-  is confirmed against the original, do not reopen. The nearest-tick look stays as shipped.
+- `BL-113` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Compass tape**: two
+  readings the reference stills cannot settle on their own. The bar-end caps are gone, the tile
+  draws at bar height, and the comb stops on a three-row black hem, all measured off `HUD.png`,
+  `Targeting HUD Kestrel.png` and `C1 IA1 whiteout at height.png`. What is left is a look call on
+  both remaining picks, on the montage at `.scratch/orch-7/BL-113/bl113-compass-montage.png`
+  (the three originals' tape crops over the port's own tape, both fade laws crossed with upright
+  and squeezed letters). (3) The rim falloff ships as `min(1, 1.35·cos(Δ)^2.1)`, fitted to the
+  stills' own luminance profile across the bar (rms 0.026 against the plain `cos(Δ)`'s 0.102),
+  which holds the inner half flat and takes the outer quarter near black; the montage carries the
+  old cosine beside it. (5) Whether the octant labels foreshorten with the drum is unsettled by
+  the stills themselves (on the Kestrel shot the edge `E` at Δ about 44° is about 0.8 of the
+  centre `E` while the edge `S` is full width), so they ship upright and `--compass-squeeze`
+  draws them with the ticks' own horizontal squeeze for the A/B. North = −Z is confirmed against
+  the original, do not reopen. The nearest-tick look stays as shipped.
   *Cross-refs:* `PT-121` (the flight that judges the result).
 
 - `BL-181` `[Tuning]` `[Blocked: a shared type scale]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: feel]` **Marker HUD + scoreboard layout is a provisional pass, not a

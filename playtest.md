@@ -217,12 +217,15 @@ draws its authored 800x600 space one-to-one.
 ./RunGame.ps1 --plane=player_bhawk --chapter=C1
 ```
 
-- `PT-121` `[A/B: HUD.png]` **The compass tape's overscan, rim and nearest-tick look
-  (`BL-113`).** `TileOverscan`, `RimGain` and the nearest-tick treatment are all still TUNE. North
-  = −Z is confirmed against the original and is not in question here. *Look for:*
-  - (a) the tick spacing, and how much of the tape shows at once, read like
-    `OriginalScreenshots/HUD.png` rather than a wider or narrower window;
-  - (b) the rim's brightness against the tape body at the same gauge size;
+- `PT-121` `[A/B: HUD.png]` **The compass tape's rim falloff and its octant letters
+  (`BL-113`).** The bar-end caps, the tile's overscan and the comb's hem are settled off the
+  stills; the edge falloff `min(1, 1.35·cos(Δ)^2.1)` and the letters' upright default are the two
+  that need eyes, the second with `--compass-squeeze` as its A/B. North = −Z is confirmed against
+  the original and is not in question here. *Look for:*
+  - (a) the outer quarter of the bar going near black while the inner half stays flat, at the
+    same gauge size as `OriginalScreenshots/HUD.png`, rather than the whole bar dimming evenly;
+  - (b) the octant letters at the bar's edges: upright as shipped, or narrowed with the drum
+    under `--compass-squeeze`, whichever reads like the original's card;
   - (c) the nearest tick under the pointer: picked and drawn the way the original's is, holding
     steady through a slow turn instead of stepping or flickering between neighbours.
   *Blocks:* `BL-113`.

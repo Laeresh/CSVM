@@ -41,20 +41,28 @@ The compass ships as two small textures in **every chapter's `texture.zbd`** (no
   its top at y=35, horizontally centered (scales with screen height).
 - **Headings increase to the left** (W renders left of SW, S right, a real
   whiskey-compass card, mirrored vs a modern heading tape).
-- Brightness falls off as **cos(Δ)** for ticks and labels alike (center tick peaks
-  ~245 = the 255 texel cores through AA; talls at Δ=40.5° ≈ 194 = 255·cos; labels
-  207 → 152 → 105 at Δ 4.5°/40.5°/49.5°). No gain/MODULATE2X, the cores are
-  already full-white in the texture.
-- The tick tile is drawn **~25% taller than the bar, bottom-aligned** (empty top rows
-  clip): talls reach 77% of bar height, minors 42%. Mapping the 16 px tile to the bar
-  height exactly leaves them visibly stubby.
+- Brightness falls off with Δ for ticks and labels alike, and the falloff is **flat across
+  the inner half of the bar and near black in the outer quarter**. The comb's mean
+  luminance over its own rows, folded about the bar centre and normalised, reads
+  1.00 / 0.93 / 0.83 / 0.69 / 0.49 / 0.28 / 0.15 at 0 / 60 / 80 / 88 / 100 / 112 / 120 px
+  from the centre, within a few percent in all three reference screenshots. A plain cos(Δ)
+  is too gentle out there (0.88 / 0.78 / 0.72 / 0.62 / 0.48 / 0.34 at the same points);
+  **min(1, 1.35·cos(Δ)^2.1)** fits the measured profile with a quarter of cos's error
+  (rms 0.026 against 0.102). No gain/MODULATE2X, the cores are already full-white in the
+  texture. Single labels peak 207 → 152 → 105 at Δ 4.5°/40.5°/49.5°, which is the same
+  curve rather than cos.
+- The tick tile is drawn **at bar height less a 3 px hem**, so the bar's own black shows
+  under the comb: the comb's last lit row is the 37th of the bar's 40 in every reference
+  screenshot, and a tall tick's lit span is then 22 rows.
 - Tick filtering is effectively **point-sampled** (the comb's hard 1–2 px edges and
   per-tick brightness lottery are minification aliasing); the labels are drawn
-  smooth (bilinear), **billboarded upright** at their drum x, label width does not
-  compress with the drum (verified: edge W same width as center letters), scaled
-  0.625× of the atlas (20 px tall at 1440p) with the box top ~3 px below the bar top.
-- Both bar ends are capped by a **bright tall rim tick** (~192 at the very edge, the
-  drum's silhouette); regular ticks fade out ~20 px before reaching the rim.
+  smooth (bilinear), **billboarded upright** at their drum x, scaled 0.625× of the atlas
+  (20 px tall at 1440p) with the box top ~3 px below the bar top. Whether the letters
+  foreshorten with the drum is unsettled: measured at 3× on the Kestrel shot the edge `E`
+  (Δ about 44°) is about 0.8 of the centre `E` while the edge `S` is full width, so
+  `--compass-squeeze` draws them at the ticks' own horizontal cos(Δ) for the A/B.
+- **Neither bar end is capped.** All three screenshots run dark to the rim; the ~192 at the
+  very edge a bright rim tick was read from is `HUD.png`'s own sky value, outside the bar.
 - Labels every 45° (octants), no numeric readout, no lubber line, the current
   heading is read from the centered, brightest label.
 

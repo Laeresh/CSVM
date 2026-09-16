@@ -40,6 +40,7 @@ internal sealed class FlightRosterPolicy
     public bool NearestAfterKill { get; init; }
     public bool AutoFire { get; init; }
     public bool AutoFireRockets { get; init; }
+    public bool CompassSqueeze { get; init; }
     public bool DebugMarkers { get; init; }
     public bool DebugScoreboard { get; init; }
     public bool EmptyStage { get; init; }
@@ -79,6 +80,7 @@ internal sealed class FlightRosterPolicy
         NearestAfterKill = spec.NearestAfterKill,
         AutoFire = spec.AutoFire,
         AutoFireRockets = spec.AutoFireRockets,
+        CompassSqueeze = spec.CompassSqueeze,
         DebugMarkers = spec.DebugMarkers,
         DebugScoreboard = spec.DebugScoreboard,
         EmptyStage = spec.EmptyStage,

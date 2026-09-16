@@ -78,14 +78,14 @@
     {
       "name": "empty-stage",
       "frame": 120,
-      "hash": "55afe1fe2e09b89b8bce06ec9ba48569",
-      "exercises": "Synthetic no-gamez flight: code-drawn grid, default sky and sun, quaternion attitude integration, chase camera and HUD; frame-sensitive 12.21 %, and still renders with extracted/ absent.",
+      "hash": "501a422d04b8ad0471a310992f45a237",
+      "exercises": "Synthetic no-gamez flight: code-drawn grid, default sky and sun, quaternion attitude integration, chase camera and HUD, including the heading tape's uncapped ends, hem and rim fade; frame-sensitive 12.21 %, and renders with extracted/ absent.",
       "args": ["--stage=empty", "--plane=player_bhawk", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
     {
       "name": "c1-flight-kill",
       "frame": 280,
-      "hash": "444c2cc40e928c04062e2d23a8e5a5b8",
+      "hash": "b2212a5ed97b5c31401a0dedad48c45b",
       "exercises": "Chase-camera flight firing at two AIs then banking: one shot down 3 s earlier, its fireball and kill line up, the live one bracketed, the gun's smoke, tracers and shot light drawn on this frame's poses, exhaust, shadow; frame-sensitive 78.07 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_kestrel,player_fury", "--ai-damage=0.02", "--target=ai2_player_fury", "--debug-markers", "--fire", "--hold=0,0,0,1@2.5;0.05,0.1,0,1", "--det", "--mute"]
     },
@@ -99,7 +99,7 @@
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "feeec476d55e0fe8d9b7c799dac86083",
+      "hash": "c5ad240aa7c550be1cc3ddd6e2635f64",
       "exercises": "Neutral-control player flight beside a killed ap_radiotwr: great_balls_of_fire on the world-effects stage riding its death site, flight-state-dependent SpeedCue, seeded puffers, world-lit alpha scenery over water; frame-sensitive.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
@@ -120,14 +120,14 @@
     {
       "name": "c1-stunt-marker",
       "frame": 90,
-      "hash": "c9c6629bf60ba219cf392220ba897678",
+      "hash": "51a844086ca1e4862d55571e0711dc0d",
       "exercises": "A stunt run's Danger Zone off screen on the pilot's own target cycle: the spyglass disc at the marker anchor, the shaft leaving its rim under the 20-by-10 head, the label in the objective's blue, the run clock, the plane's ground shadow below.",
       "args": ["--chapter=C1", "--stunt", "--plane=player_fury", "--pos=-5300,300,-6300", "--direction=0,0,-1", "--det", "--mute"]
     },
     {
       "name": "campaign-4p-grid",
       "frame": 120,
-      "hash": "1586ee612b815bd42f4bd490a6426f01",
+      "hash": "2067a09ffeac6e442e3188ab210831d7",
       "exercises": "Four humans launch a co-op campaign mission on StartGrid with no profile to load, so no director: four render targets, HUDs, gauges and target labels, the lit C1 world, the player-shaped shadow under each pane's own pilot; frame-sensitive 73.79%.",
       "args": ["--campaign=csvm-golden:6", "--players=4", "--plane=player_bhawk,player_bhawk,player_bhawk,player_bhawk", "--det", "--mute"]
     },

@@ -684,6 +684,11 @@ public sealed record SessionSpec
     /// gameplay feature.</summary>
     public bool DebugMarkers { get; private set; }
 
+    /// <summary><c>--compass-squeeze</c>: draw the heading tape's octant letters with the ticks'
+    /// own horizontal drum squeeze instead of upright. The A/B for a reading the reference stills
+    /// cannot settle, so it survives <c>--det</c> where a config key would not.</summary>
+    public bool CompassSqueeze { get; private set; }
+
     /// <summary><c>--debug-spectate</c>: build the session exactly as it would be flown, then take
     /// every human OUT of it: the aircraft goes inert (undrawn, uncollidable, and absent from
     /// every AI's live candidate list, so nothing pursues you) and the pane switches to the
@@ -944,6 +949,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--debug-pause=")) { s.DebugPauseFrame = int.Parse(arg["--debug-pause=".Length..]); }
             else if (arg.StartsWith("--debug-objective=")) { s.DebugObjective = int.Parse(arg["--debug-objective=".Length..]); }
             else if (arg.StartsWith("--debug-wash=")) { s.DebugWash = int.Parse(arg["--debug-wash=".Length..]); }
+            else if (arg == "--compass-squeeze") { s.CompassSqueeze = true; }
             else if (arg == "--debug-markers") { s.DebugMarkers = true; }
             else if (arg == "--debug-spectate") { s.DebugSpectate = true; }
             else if (arg == "--debug-livery") { s.DebugLivery ??= 0; }
