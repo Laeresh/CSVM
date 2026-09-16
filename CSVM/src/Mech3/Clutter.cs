@@ -218,14 +218,32 @@ public sealed class ClutterBuilder
     /// because it is the other half of resolving a template (with
     /// <see cref="FindTemplateRoot(GameZ, string)"/>), and the UV a decoration is stored at is
     /// only checkable against a worked example if both halves can be reached.</summary>
-    public static GameZNode? FirstWithMesh(GameZ gamez, GameZNode node, bool includeSelf = true)
+    public static GameZNode? FirstWithMesh(GameZ gamez, GameZNode node, bool includeSelf = true) =>
+        FirstWithMesh(gamez, node, includeSelf, out _);
+
+    /// <summary>The same search, also handing back the transform from <paramref name="node"/>'s
+    /// own frame down to the node that carries the mesh, identity when that is the node itself.
+    /// ⚠ A decoration model is a node chain, so take its position from here rather than from the
+    /// chain's top node alone. C5's <c>w_lightglow</c> mesh sits 4.75 m up its own
+    /// <c>w_lightglow.flt</c>, which is the height of the lamp head it belongs on.</summary>
+    public static GameZNode? FirstWithMesh(GameZ gamez, GameZNode node, bool includeSelf,
+        out Transform3D toMesh)
     {
+        toMesh = Transform3D.Identity;
         if (includeSelf && node.MeshIndex >= 0 && node.MeshIndex < gamez.Meshes.Count
             && gamez.Meshes[node.MeshIndex].Polygons.Count > 0)
             return node;
         foreach (var c in node.Children)
-            if (c >= 0 && c < gamez.Nodes.Count && FirstWithMesh(gamez, gamez.Nodes[c]) is { } found)
+        {
+            if (c < 0 || c >= gamez.Nodes.Count)
+                continue;
+            var child = gamez.Nodes[c];
+            if (FirstWithMesh(gamez, child, true, out var below) is { } found)
+            {
+                toMesh = (child.Local ?? Transform3D.Identity) * below;
                 return found;
+            }
+        }
         return null;
     }
 
@@ -456,8 +474,8 @@ public sealed class ClutterBuilder
                     {
                         // The decoration's quad UV in [0, 1), shifted to this repeat of the texture.
                         // Double for the same reason the quad map is: one extra rounding moves a golden.
-                        double cu = uInt + (double)cell.Origin.X;
-                        double cv = vInt + (double)cell.Origin.Z;
+                        double cu = uInt + (double)cell.OnQuad.Origin.X;
+                        double cv = vInt + (double)cell.OnQuad.Origin.Z;
                         if (!tri.Contains(cu, cv))
                             continue;
                         var p = tri.World(cu, cv);
@@ -501,11 +519,14 @@ public sealed class ClutterBuilder
                         // A sprite drops its basis and authored Y, since the shader re-faces it and
                         // its mesh carries the card's extent; a 3D decoration keeps both.
                         // ⚠ The scale compounds onto that basis and never replaces it.
-                        var basis = (target.Solid ? cell.Basis : Basis.Identity)
+                        var basis = (target.Solid ? cell.OnQuad.Basis : Basis.Identity)
                             .Scaled(new Vector3(scale, scale, scale));
+                        // ⚠ Both branches carry the mesh lift. It is where the decoration's own
+                        // chain puts the drawn mesh, so dropping it buries C5's lamp glow in the road.
+                        var lift = basis * cell.MeshLift;
                         target.Instances.Add(target.Solid
-                            ? new Transform3D(basis, new Vector3(p.X, p.Y + cell.Origin.Y, p.Z))
-                            : new Transform3D(basis, p));
+                            ? new Transform3D(basis, new Vector3(p.X, p.Y + cell.OnQuad.Origin.Y, p.Z) + lift)
+                            : new Transform3D(basis, p + lift));
                     }
                 }
     }
@@ -740,7 +761,7 @@ public sealed class ClutterBuilder
         foreach (var childIndex in ground.Children)
         {
             var deco = _gamez.Nodes[childIndex];
-            var decoMesh = FirstWithMesh(_gamez, deco, includeSelf: false);
+            var decoMesh = FirstWithMesh(_gamez, deco, includeSelf: false, out var toMesh);
             if (decoMesh == null)
             {
                 (skipped ??= new List<string>()).Add(deco.Name);
@@ -754,8 +775,12 @@ public sealed class ClutterBuilder
                 (offQuad ??= new List<string>()).Add(deco.Name);
                 continue;
             }
-            var cell = new Transform3D(local.Basis, new Vector3(
-                GroundQuad.Wrap(uv.X), local.Origin.Y, GroundQuad.Wrap(uv.Y)));
+            // ⚠ The UV is projected from the chain's TOP node, which is where the original casts
+            // its ray; the lift below moves the drawn mesh, never the point it is stamped at.
+            var cell = (
+                OnQuad: new Transform3D(local.Basis, new Vector3(
+                    GroundQuad.Wrap(uv.X), local.Origin.Y, GroundQuad.Wrap(uv.Y))),
+                MeshLift: toMesh.Origin);
 
             if (!kinds.TryGetValue(decoMesh.MeshIndex, out var kind))
             {
@@ -1437,11 +1462,11 @@ public sealed class ClutterBuilder
     private sealed class Kind
     {
         // Where each decoration of this kind sits on the template's ground quad, as the quad's
-        // own TEXTURE UV: Origin.X is u and Origin.Z is v, both in [0, 1), not metres, and not
-        // relative to a corner (the winding differs between templates). Origin Y and the basis
-        // are the decoration node's own, and are used by the solid path only (a sprite is
-        // planted flat on the surface and re-faced by its shader, see PlaceOnTriangle).
-        public readonly List<Transform3D> CellPlacements = new();
+        // own TEXTURE UV: OnQuad.Origin.X is u and Origin.Z is v, both in [0, 1), not metres, and
+        // not relative to a corner (the winding differs between templates). Origin Y and the basis
+        // are the decoration node's own, used by the solid path only. MeshLift is the offset from
+        // that node down to the mesh it draws, and every stamp carries it, sprite or solid.
+        public readonly List<(Transform3D OnQuad, Vector3 MeshLift)> CellPlacements = new();
         public readonly List<Transform3D> Instances = new(); // world placements
 
         // Parallel to Instances: each stamp's (near², far², 1/(far² − near²), 0) as the MultiMesh

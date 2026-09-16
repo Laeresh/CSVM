@@ -1063,6 +1063,123 @@ internal static class WorldAndToolSuites
         ctx.Note($"{chapter} bare firtree1={bareFir1} firtree2={bareFir2}; dressed firtree1={dressedFir1} firtree2={dressedFir2}; scales {lo:0.000}-{hi:0.000}");
     }
 
+    // A decoration model is a node chain, and the mesh node under its `.flt` top may translate: C5's
+    // w_lightglow sits 4.75 m up, the lamp head's height. Asserted as an A/B against the same build
+    // with that chain transform cleared, which is the state the stamp had while it dropped it, so
+    // the control both fails able and shows the move is confined to the glow.
+    [Suite("clutter-mesh-lift",
+        "C5's lamp glow stamps 4.75 m up its own decoration chain, and clearing that chain moves the glow alone")]
+    internal static void ClutterMeshLift(TestContext ctx)
+    {
+        const string chapter = "C5";
+        const string template = "cblock7";   // the district carrying lightpole and its poleflare glow
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, chapter);
+        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
+        ctx.RequireData(texturesPath, $"{chapter} textures");
+        ctx.RequireData(gamezPath, $"{chapter} gamez");
+
+        var gamez = GameZ.Load(gamezPath);
+        using var textures = new TextureArchive(texturesPath);
+        var props = ClutterTemplateSpec.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, chapter));
+
+        var root = ClutterBuilder.FindTemplateRoot(gamez, template);
+        ctx.Check(root != null, $"{chapter} carries the {template} template");
+        var ground = root == null ? null : ClutterBuilder.FirstWithMesh(gamez, root);
+        ctx.Check(ground != null, $"{template} has a ground quad node");
+        if (ground == null)
+        {
+            return;
+        }
+
+        // Every decoration of this template whose chain translates, with the mesh node it ends on.
+        var chains = new List<(GameZNode Node, Transform3D Local, string Deco)>();
+        foreach (var childIndex in ground.Children)
+        {
+            var deco = gamez.Nodes[childIndex];
+            if (ClutterBuilder.FirstWithMesh(gamez, deco, false, out var toMesh) is not { } meshNode
+                || toMesh.Origin == Vector3.Zero)
+            {
+                continue;
+            }
+            // One hop in the shipped data, which is what makes clearing the mesh node's own
+            // transform the exact control for dropping the chain.
+            ctx.Check(meshNode.Local != null && meshNode.Local.Value.Origin == toMesh.Origin,
+                $"{deco.Name}'s chain is one hop deco={toMesh.Origin} mesh={meshNode.Local?.Origin}");
+            chains.Add((meshNode, meshNode.Local ?? Transform3D.Identity, deco.Name));
+            ctx.Check(toMesh.Origin == new Vector3(0f, 4.75f, 0f),
+                $"{deco.Name} lifts its mesh to the lamp head lift={toMesh.Origin}");
+        }
+        ctx.Check(chains.Count > 0, $"{template} authors a translating decoration chain count={chains.Count}");
+
+        static Dictionary<string, List<Transform3D>> Take(ClutterBuilder builder, string name)
+        {
+            var built = builder.Build(new[] { name });
+            var byKind = new Dictionary<string, List<Transform3D>>(System.StringComparer.Ordinal);
+            foreach (var kind in builder.ExportedKinds ?? System.Array.Empty<ClutterBuilder.KindExport>())
+            {
+                if (!byKind.TryGetValue(kind.Texture, out var list))
+                {
+                    byKind[kind.Texture] = list = new List<Transform3D>();
+                }
+                list.AddRange(kind.Placements);
+            }
+            built?.Free();
+            return byKind;
+        }
+
+        var lifted = Take(new ClutterBuilder(gamez, textures, null, props), template);
+        foreach (var (node, _, _) in chains)
+        {
+            node.Local = Transform3D.Identity;
+        }
+        var dropped = Take(new ClutterBuilder(gamez, textures, null, props), template);
+        foreach (var (node, local, _) in chains)
+        {
+            node.Local = local;
+        }
+
+        ctx.Same(dropped.Count, lifted.Count, $"both builds export the same kinds");
+        int moved = 0, wrongHeight = 0, wrongGround = 0, unmoved = 0;
+        foreach (var (label, after) in lifted)
+        {
+            dropped.TryGetValue(label, out var before);
+            if (before == null || before.Count != after.Count)
+            {
+                ctx.Check(false, $"kind {label} kept its stamp count before={before?.Count ?? -1} after={after.Count}");
+                continue;
+            }
+            for (int i = 0; i < after.Count; i++)
+            {
+                var delta = after[i].Origin - before[i].Origin;
+                if (delta == Vector3.Zero)
+                {
+                    unmoved++;
+                    continue;
+                }
+                moved++;
+                // The centimetre band is float32 headroom, not slack: C5's stamps reach kilometres
+                // out, where a single-precision metre carries about a millimetre of spacing.
+                if (Mathf.Abs(delta.Y - 4.75f) > 0.01f)
+                {
+                    wrongHeight++;
+                }
+                if (delta.X != 0f || delta.Z != 0f)
+                {
+                    wrongGround++;
+                }
+            }
+        }
+
+        lifted.TryGetValue("poleflare.tif", out var glows);
+        dropped.TryGetValue("lightpole.tif", out var poles);
+        ctx.Check(glows != null && glows.Count > 0, $"the glow kind stamped something count={glows?.Count ?? 0}");
+        ctx.Same(glows?.Count ?? 0, moved, $"exactly the glow stamps moved");
+        ctx.Same(0, wrongHeight, $"every moved stamp rose the authored 4.75 m");
+        ctx.Same(0, wrongGround, $"no moved stamp changed its ground position");
+        ctx.Check(unmoved > 0, $"the other kinds stamped and stayed put count={unmoved}");
+        ctx.Note($"{chapter}/{template}: {moved} glow stamps lifted 4.75 m, {unmoved} stamps unchanged, poles={poles?.Count ?? 0}");
+    }
+
     // The DirectionalLight3D is pointed by the flown zone's authored SUNLIGHT_ORIENTATION and keeps
     // following it when the camera's weather state moves to another zone. The CSVM.Tests units pin the
     // parse and the euler-to-direction mapping; neither can see the light wired to the wrong seam, or

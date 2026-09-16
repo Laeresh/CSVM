@@ -663,26 +663,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Playtest after fix:* any chapter under Enhanced Graphics, still and moving, over water and over
   ground. *Cross-refs:* `docs/architecture/Utils.md` (`GraphicsMode`).
 
-- `BL-925` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: data]` `[C5]` **A clutter sprite is
-  planted at its decoration node's own origin, so C5's lamp glow sits on the pavement instead of on
-  the lamp head.** *Evidence:* a template decoration is a two-node chain, the `.flt` node the
-  template ground parents and the mesh node under it. `ClutterBuilder.ParseTemplate` reads
-  `deco.Local` from the `.flt` node and reaches the mesh through `FirstWithMesh`, which returns the
-  node and never its transform, so the mesh node's own local translation is dropped. In C5's
-  `cblock*` templates `w_lightglow.flt` translates by 0 and its `w_lightglow` mesh child by
-  y = 4.75 (extracted `C5/gamez/nodes.json`), the height of the lamp head on the 5 m `lightpole`
-  card beside it. The glow quad is centred on its own origin (y in [-0.684, 0.684]), so it lands
-  half-buried in the road. Every other clutter decoration in the install has an identity mesh-node
-  transform (`lightpole` reads `Initial`), so C5's lamp glow is the only placement this moves.
-  *Fix shape:* carry the mesh node's local translation into the `Kind`'s cell placement and add it
-  to the sprite's planted point, the way the solid path already adds `cell.Origin.Y`.
-  *⚠ Traps:* the sprite branch of `PlaceOnTriangle` drops `cell.Origin.Y` deliberately, because a
-  tree card's mesh spans y from 0 up while its `.flt` node's Y is the ground; that drop is right
-  and is not this defect. Do not raise the card by editing its mesh either, since the same mesh is
-  what the `--viewer` path draws through `SceneBuilder`, where the chain's transform is already
-  honoured. *Cross-refs:* the `Clutter` sprite shader now takes its blend-or-scissor verdict from
-  the texture archive, so the glow's soft ramp survives the draw and its placement is what is left.
-
 ## Effects & animation runtime
 
 - `BL-674` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: data]` `[CM10]` **CM10's attack-balloon wave flies from 990 m down to water level and back up

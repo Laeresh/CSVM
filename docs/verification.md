@@ -215,6 +215,12 @@ member, and it does not go here.
   shot byte-identical. So the 1 pixel is a shader-recompile artifact and the pinned framing
   photographs none of the sprite arms' mip levels, which the re-pin's reason has to say.
 
+- **GOLD-19**, **A decoration that fades out inside its authored `far_fade_range` is invisible to
+  every pinned shot flown above that range, so an unmoved golden set says nothing about where it
+  sits; move it in a suite and photograph it from street level.** Raising C5's lamp glow 4.75 m
+  left all 19 shots hash-identical, `c5-city-night` included, whose camera stands 178 m up while
+  the glow's authored fade closes it out by 150 m.
+
 ## DET, determinism and randomness
 
 - **DET-2**, **Disable live input during scripted runs.**
