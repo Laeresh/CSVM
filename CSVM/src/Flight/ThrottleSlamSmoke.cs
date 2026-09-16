@@ -37,12 +37,17 @@ public sealed class ThrottleSlamSmoke
     private bool _rising;
     private bool _firedThisRise;
     private float _smokeRemaining;
+    private int _slams;
 
     private ThrottleSlamSmoke(List<(Node3D, Puffer)> exhausts, float throttle)
     {
         _exhausts = exhausts;
         _lastThrottle = _riseStartThrottle = throttle;
     }
+
+    // Internal rather than private: the slam suite counts the fires, since the only other evidence
+    // a gate fired is the plume, which a headless run cannot see.
+    internal int SlamCountForTest => _slams;
 
     /// <summary>Resolves the plane's <c>exhaust1..4</c> marker nodes and builds a trail puffer per
     /// one found from <c>nitro_boost</c>'s own <c>nitropuffN</c> definition, the same authored
@@ -63,9 +68,11 @@ public sealed class ThrottleSlamSmoke
         return exhausts.Count > 0 ? new ThrottleSlamSmoke(exhausts, initialThrottle) : null;
     }
 
-    /// <summary>Per-frame drive: feed the live throttle (0-1) every frame flight is running. Not
-    /// called while crashed/paused, see <see cref="Reset"/> for what a crash/respawn needs
-    /// instead.</summary>
+    /// <summary>The flight step's drive: feed the live throttle (0-1) on every sim step. Not called
+    /// while crashed/paused, see <see cref="Reset"/> for what a crash/respawn needs instead.
+    /// ⚠ Drive this from the sim step, never from a rendered frame. The lever moves only on a sim
+    /// step, so a frame that carried none reads the throttle flat, which ends the climb; the gate
+    /// then sees one step's slew at most and no slam can ever cross the threshold.</summary>
     public void Update(float dt, float throttle)
     {
         if (throttle > _lastThrottle + RiseEpsilon)
@@ -79,6 +86,7 @@ public sealed class ThrottleSlamSmoke
             if (!_firedThisRise && throttle - _riseStartThrottle >= SlamThreshold)
             {
                 _firedThisRise = true;
+                _slams++;
                 _smokeRemaining = DurationSimSeconds;
                 Log.Info("flight", $"throttle slam: {_riseStartThrottle:0.000} -> {throttle:0.000} (Delta {throttle - _riseStartThrottle:0.000}) - exhaust smoke for {DurationSimSeconds:0.00} sim-s");
             }

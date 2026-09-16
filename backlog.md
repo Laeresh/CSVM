@@ -875,25 +875,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   entry that drives it "plausibly an authoring leftover", present on 1 of 11 aircraft, so the
   capture may delete the feature rather than tune it.
 
-- `BL-285` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **Engine start/stop residues from `BL-267` (landed 2026-08-05)**, two constants
-  pending the user, both in the same cockpit sitting. (a) `ThrottleSlamSmoke.SlamThreshold`
-  0.25: the CAP-21 footage only bounds the slam gate to "a single 1/8 step never fires,
-  idle→5/8 fires", the 2/8–4/8 band is unobserved, so 0.25 is the smallest threshold
-  consistent with both and a declared TUNE. (b) The listen A/B: `EngineStartRamp` is now the
-  `startprops` authored 2.0 s and the crash/destruction wind-down plays `snd_propstop`, judge
-  both by ear. ⚠ Trap: `BL-268` (`PLAN-m3-polish-10` C21, landed 2026-08-06) removed
-  the blanket ×0.2 mix scale on these same paths, raising the own-ship mix ~5×, judge the
-  ramp/stop cue against the new, unscaled level, not the old ×0.2 one. ⚠ Second trap, added by
-  `PLAN-splitscreen-polish` D32 (`BL-371`, landed 2026-08-15): `snd_propstop` (the wind-down
-  half of this A/B) now carries splitscreen's `MixGain` too, 1 in 1P, so this pending single-pilot
-  judgement is unaffected, but a splitscreen listen must judge it at whatever `N` the pilot is
-  testing, not assume the 1P level. `snd_propstart` (the other half of this A/B) is unchanged,
-  D32 kept it raw, "your prop" on respawn stays loud on purpose.
-  *Decision:* judged in the cockpit sitting: (b) passes, the start ramp and the wind-down read
-  right against the two clips. (a) is a bug, not a threshold judgement: the slam smoke never
-  fires, not even on an idle-to-full slam. Find why `ThrottleSlamSmoke` does not trigger from the
-  human throttle before `SlamThreshold` moves at all; `PT-127` (b) then judges the gate.
-  *Cross-refs:* `PT-127` (the cockpit sitting that judges both).
+- `BL-285` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Where between one notch and five the
+  throttle-slam plume should start: `ThrottleSlamSmoke.SlamThreshold` 0.25 is a stand-in nobody has
+  flown.** *Evidence:* the CAP-21 footage bounds the gate at its two ends only, a single 1/8 step
+  (0.125) never fires and idle to 5/8 (0.625) does, leaving the 2/8 to 4/8 band unobserved; 0.25, a
+  two-notch jump, is the smallest round number consistent with both. *Fix shape:* fly `PT-127`,
+  then move the constant to wherever the plume starts reading as a slam response, or leave it.
+  ⚠ Traps: the plume was unreachable at the controls until the gate moved onto the sim step. It was
+  driven from the rendered frame while the lever slews only inside the flight step, so at the 120
+  rendered frames a second a realtime session holds over the fixed 60 Hz step it read the throttle
+  flat on every other frame and no slam of any size could cross any threshold. Judge nothing off a
+  build that predates that fix. The gate itself is covered by the `throttle-slam-smoke` suite (an
+  idle-to-full slam fires once, a single 1/8 step fires nothing), so what is left is the number
+  alone. *Cross-refs:* `PT-127` (the sortie that judges it).
 
 - `BL-782` `[Feature]` `[Blocked: BL-455]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Built-in's Options screen carries no audio
   levels, so the mix is settable in the Original presentation alone.** *Evidence:*

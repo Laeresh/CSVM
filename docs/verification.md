@@ -709,6 +709,13 @@ member, and it does not go here.
   leash 15.3 s after the cutoff and to within 7 m of the pre-burn separation only once the leader
   turns, because a turn is the only corner an escort capped at its own `fd_speed` can take back.
   Script the leader turns before reading a re-form time, or the leg reports a permanent loss.
+- **INSTR-83**, **A consumer that compares a value between two of its own calls must run on the
+  clock that moves the value; driven from the rendered frame it is green under every scripted run
+  and dead at the controls, because those run one sim step per frame and the controls do not.** A
+  headless realtime flight holds 120 rendered frames a second over the fixed 60 Hz step, so a
+  throttle gate driven per frame read the lever flat on every other frame and could never see a
+  rise larger than one step's slew, a thirtieth of what it was watching for (INSTR-14 is the same
+  seam one level up).
 
 ## SRC, sources and documents
 

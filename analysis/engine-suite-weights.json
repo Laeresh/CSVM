@@ -304,6 +304,7 @@
     "terrain-pick-export": 1.8,
     "tex-dropin": 0.009,
     "texture-alpha-class": 0.011,
+    "throttle-slam-smoke": 0.43,
     "trail-world-anchor": 0.011,
     "turret-death-effect-world-anchor": 0.003,
     "turret-death-fire-follows-hull": 1.452,

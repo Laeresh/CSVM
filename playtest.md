@@ -338,17 +338,15 @@ reasons that have nothing to do with any of these checks.
   and its `300` mark are the same for every plane and cannot express a per-plane limit.
 
 - `PT-127` `[A/B: OriginalScreenshots/Videos/CAP-21 0 to 100 Full.mp4 + CAP-21 100 to 0 Full.mp4]`
-  **The engine start ramp, the wind-down, and the throttle-slam smoke gate (`BL-285`).** Two
-  constants pending one cockpit sitting. `EngineStartRamp` is now `startprops`'s authored 2.0 s and
-  the crash wind-down plays `snd_propstop`; `ThrottleSlamSmoke.SlamThreshold` is 0.25, the smallest
-  value consistent with footage whose 2/8 to 4/8 band is unobserved. *Look for:*
-  - (a) the start ramp and the wind-down by ear against the two clips above;
-  - (b) the slam gate walked by hand: a single 1/8 step must not fire, idle to 5/8 must, and where
-    in between it starts is the judgement;
-  - (c) whether the smoke reads as a slam response at all, rather than a puff on any throttle move.
-  *Blocks:* `BL-285`. ⚠ Judge against the current unscaled own-ship mix, not the old ×0.2 one
-  `BL-268` removed. In splitscreen `snd_propstop` carries `MixGain` and `snd_propstart` does not, so
-  judge each at the pane count being tested.
+  **The throttle-slam smoke gate (`BL-285`).** One constant pending one sortie:
+  `ThrottleSlamSmoke.SlamThreshold` is 0.25, the smallest value consistent with footage whose 2/8 to
+  4/8 band is unobserved. *Look for:*
+  - (a) the gate walked by hand from idle: a single 1/8 step must not fire, idle to 5/8 must, and
+    where in between it starts is the judgement;
+  - (b) whether the plume reads as a slam response at all, rather than a puff on any throttle move.
+  *Blocks:* `BL-285`. ⚠ The plume fires only on a build where the gate runs on the sim step: driven
+  from the rendered frame it read the lever flat on every other frame and nothing ever fired, so a
+  sortie on an older build judges an effect that never reached the screen.
 
 - `PT-128` `[A/B: OriginalScreenshots/Dirt Splash.png + Videos/30 Slu building.mp4]` **The building
   ricochet spark burst (`BL-289`).** The dirt-chip constants left this item with `BL-313`: dirt now

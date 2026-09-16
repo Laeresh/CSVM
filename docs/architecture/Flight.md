@@ -949,12 +949,12 @@ a long flight session cannot drift. `FlightController` drives it throttle-scaled
 ## src/Flight/ThrottleSlamSmoke.cs
 The throttle-slam exhaust smoke: a large sudden throttle increase streams the `nitro_boost` def's
 own `nitropuffN` puffers (AT_NODE `exhaust1..4`) from the plane's exhaust markers for a few
-sim-seconds, reused without the rest of that def, since the same trail-smoke shape shows on a plain
-throttle jump with no boost. `Update(dt, throttle)` is an edge-triggered gate: it tracks the
-throttle at the start of the current unbroken climb and fires once per climb as the cumulative rise
-crosses `SlamThreshold`, never on a flat or falling throttle, so a notch at a time evaluates fresh.
-It drives the puffers through `Puffer.Emit`/`Stop` in DISTANCE_INTERVAL mode; `Reset(throttle)`
-hard-stops the plume and re-anchors the tracker, so a crash or respawn jump never reads as a slam.
+sim-seconds, reused without the rest of that def, since the same shape shows on a plain throttle
+jump with no boost. `Update(dt, throttle)` is an edge-triggered gate driven by
+`FlightController.SimStep`, the clock the lever slews on: it tracks the throttle starting the current
+unbroken climb and fires once per climb as the rise crosses `SlamThreshold`, never on a flat or
+falling one. It emits through `Puffer.Emit`/`Stop` in DISTANCE_INTERVAL mode; `Reset(throttle)`
+hard-stops the plume and re-anchors the tracker, so a crash or respawn never slams.
 
 ## src/Flight/FuelTank.cs
 The flown aircraft's tank, engine-free so the arithmetic is testable without a scene. `Step(dt,

@@ -101,8 +101,8 @@ public partial class FlightController : Node3D
     /// each frame. Null if the model has no wing-flare nodes.</summary>
     public WingLightBlinker? WingLights;
 
-    /// <summary>The throttle-slam exhaust smoke; advanced each frame. Null if the model has no
-    /// exhaust nodes.</summary>
+    /// <summary>The throttle-slam exhaust smoke; advanced on each sim step, the clock its own
+    /// gate needs. Null if the model has no exhaust nodes.</summary>
     public ThrottleSlamSmoke? ThrottleSmoke;
 
     /// <summary>The chapter-authored pale speed wisps spawned ahead of this aircraft; one private
@@ -1912,6 +1912,11 @@ public partial class FlightController : Node3D
         // which this clock is. A crash or halt stops the calls, freezing the radius too.
         _cam?.UpdateDynamics(dt, _model.Speed);
 
+        // ⚠ The slam gate belongs on this clock, never on the rendered frame: the lever slews only
+        // inside this step, so a frame carrying none reads it flat and ends the climb it measures.
+        // Past the pose write above, so the plume emits at this step's pose.
+        ThrottleSmoke?.Update(dt, _model.Throttle);
+
         // The AI gunner: acquire/hold the target and decide this tick's trigger and lead
         // BEFORE the fire step reads them. Runs for AI pilots only; a gunner-less AI keeps the
         // released trigger it always had.
@@ -2235,9 +2240,6 @@ public partial class FlightController : Node3D
             Audio?.Update(simDt, engineDrive, speedFrac, healthFrac, _model.EngineDead,
                 ViewMode == PilotViewMode.Cockpit);
             EngineAudio?.Update(simDt, engineDrive, speedFrac, healthFrac, _model.EngineDead);
-            // The throttle-slam gate needs the live value every frame, not just while its plume
-            // is active, so it can tell a fresh climb from one already in progress.
-            ThrottleSmoke?.Update(simDt, _model.Throttle);
             if (SpeedCue != null && _viewCamera != null)
             {
                 var cameraPos = _viewCamera.GlobalPosition;
