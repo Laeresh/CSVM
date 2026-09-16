@@ -1,6 +1,6 @@
-# Static collider probe rewrite, and the off-by-6/11 gap (`BL-070`)
+# Static collider probe rewrite, and the off-by-6/11 gap
 
-**Question.** `backlog.md`'s `BL-070` (second bullet) recorded that a now-deleted probe
+**Question.** A now-deleted probe
 (`.scratch/probe_exempt.py`, swept by `CleanScratch.ps1` — `.scratch/` is gitignored, and it has
 no copy anywhere including git history: `git log --all -- **/probe_exempt*` returns nothing)
 reproduced the runtime world-collider count exactly in 6 of 8 chapters but predicted **6 too few**

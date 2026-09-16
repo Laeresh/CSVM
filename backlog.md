@@ -473,30 +473,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Environment & world
 
-- `BL-070` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` `[C5]` **C5's `poleflare` clutter renders with the wrong billboard axis.**
-  *Decision:* the A/B is settled, fix it. The original's C5 nadirs (`C5 IA1 Terrain.png`,
-  `C5 IA1 Terrain3.png`) string the street lamps along the roads as small round dots; CSVM at the
-  same nadir shows a hairline per lamp, and at ground level the `poleflare` glow is a card lying
-  flat on the pavement at the pole's foot (the round dots a CSVM nadir does show survive
-  `--no-clutter`, so they are base-world lights, not the flares). Give `ClutterBuilder.Kind` a
-  billboard mode so `SphericalY` kinds face the camera, and re-pin the C5 goldens with that
-  change only. The frames are under `.scratch/montage/BL-070/` while they last, poses in its
-  README. (one of two residuals
-  from polish-3 item 5, 2026-07-22; the other, the static collider probe's off-by-6/11, closed
-  2026-08-04, the archived development log's "M3 polish-6 C22" entry, with a rewritten probe now committed at
-  `analysis/collider-probe/`). The `cblock*` templates ship `lightpole` (`CylindricalY`) posts
-  *and* `poleflare` (`SphericalY`) glows, 33,682 of each in `cblock1` alone. `ClutterBuilder.Kind`
-  carries no per-kind billboard mode, so every kind goes through the one Y-axis shader: the glows
-  spin upright instead of facing the camera. Now *detectable* (the shared
-  `SceneBuilder.ClassifyBillboard` distinguishes the two), but fixing it means giving `Kind` a
-  billboard mode and a second material path, and it changes how 139,388 C5 sprites look with no
-  reference shot to check against, so it needs an original-game A/B.
-  *The "should be exempt from the SUNLIGHT dim" half is a data question, not a texture one.* The
-  original's hardware draw has no per-texture lighting exemption (`docs/org/vertexLighting.md`,
-  "The hardware draw"); the only exemption is the model's own `lighting` flag, and whether the
-  `poleflare` and `lightpole` decoration models carry it is read off the templates, not fitted.
-  What remains here is the billboard-axis question, and it still needs the A/B.
-
 - `BL-272` `[Tuning]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Precipitation: every unit mapping from `weather.json` to a look is invented, and
   one remake-only rule is deliberately held back** (`Precipitation.cs:29-62`, type/tint/rate/density
   are authored; fall speed, box size, particle counts, streak length/width, sway are 16 TUNE
@@ -724,6 +700,26 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `empty-stage`; re-pin them with the picked value only. *Cross-refs:*
   `CSVM/src/Mech3/SceneBuilder.cs` (the shaded branch), `BL-804` (the water terms beside it),
   `docs/org/textures.md` (`SHADEMODE`).
+
+- `BL-925` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: data]` `[C5]` **A clutter sprite is
+  planted at its decoration node's own origin, so C5's lamp glow sits on the pavement instead of on
+  the lamp head.** *Evidence:* a template decoration is a two-node chain, the `.flt` node the
+  template ground parents and the mesh node under it. `ClutterBuilder.ParseTemplate` reads
+  `deco.Local` from the `.flt` node and reaches the mesh through `FirstWithMesh`, which returns the
+  node and never its transform, so the mesh node's own local translation is dropped. In C5's
+  `cblock*` templates `w_lightglow.flt` translates by 0 and its `w_lightglow` mesh child by
+  y = 4.75 (extracted `C5/gamez/nodes.json`), the height of the lamp head on the 5 m `lightpole`
+  card beside it. The glow quad is centred on its own origin (y in [-0.684, 0.684]), so it lands
+  half-buried in the road. Every other clutter decoration in the install has an identity mesh-node
+  transform (`lightpole` reads `Initial`), so C5's lamp glow is the only placement this moves.
+  *Fix shape:* carry the mesh node's local translation into the `Kind`'s cell placement and add it
+  to the sprite's planted point, the way the solid path already adds `cell.Origin.Y`.
+  *⚠ Traps:* the sprite branch of `PlaceOnTriangle` drops `cell.Origin.Y` deliberately, because a
+  tree card's mesh spans y from 0 up while its `.flt` node's Y is the ground; that drop is right
+  and is not this defect. Do not raise the card by editing its mesh either, since the same mesh is
+  what the `--viewer` path draws through `SceneBuilder`, where the chain's transform is already
+  honoured. *Cross-refs:* `BL-508` owns the `Clutter` sprite shader's hardcoded 0.5 alpha scissor,
+  which currently eats all but the core of the glow, so the two land their look together.
 
 ## Effects & animation runtime
 

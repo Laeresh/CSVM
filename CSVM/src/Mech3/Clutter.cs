@@ -645,11 +645,11 @@ public sealed class ClutterBuilder
         return mm;
     }
 
-    // Upright billboard: the card spins about its planted point's vertical axis toward the camera,
-    // because the source decorations are one-sided quads that would vanish edge-on. Fullbright,
-    // scissor cutout, and SceneBuilder's cylindrical fog. `lit` and `fogged` are the decoration
-    // model's own authored flags, emitted as variants so a lit, fogged kind gets the base form.
-    private static string ShaderCode(bool lit, bool fogged, bool clampUv) => $$"""
+    // A billboard card, turned toward the camera by FaceBasisLines because the source decorations
+    // are one-sided quads that would vanish edge-on. Fullbright, scissor cutout, and SceneBuilder's
+    // cylindrical fog. `lit` and `fogged` are the decoration model's own authored flags, emitted as
+    // variants so a lit, fogged kind gets the base form.
+    private static string ShaderCode(bool lit, bool fogged, bool clampUv, bool spherical) => $$"""
         shader_type spatial;
         render_mode skip_vertex_transform, unshaded, cull_disabled, shadows_disabled;
 
@@ -676,14 +676,8 @@ public sealed class ClutterBuilder
             // fragments; inside the ramp the fragment stage dithers it out.
             v_alpha = csky_clutter_fade_alpha(origin, CAMERA_POSITION_WORLD, INSTANCE_CUSTOM);
             float keep = step(0.004, v_alpha);
-            vec2 to_cam = CAMERA_POSITION_WORLD.xz - origin.xz;
-            float len = length(to_cam);
-            vec2 dir = len > 1e-4 ? to_cam / len : vec2(0.0, 1.0);
-            mat3 spin = mat3(
-                vec3(dir.y, 0.0, -dir.x),
-                vec3(0.0, 1.0, 0.0),
-                vec3(dir.x, 0.0, dir.y));
-            VERTEX = (VIEW_MATRIX * vec4(origin + spin * VERTEX * keep, 1.0)).xyz;
+        {{FaceBasisLines(spherical)}}
+            VERTEX = (VIEW_MATRIX * vec4(origin + face * VERTEX * keep, 1.0)).xyz;
         }
 
         void fragment() {
@@ -697,6 +691,21 @@ public sealed class ClutterBuilder
             ALPHA_SCISSOR_THRESHOLD = 0.5;
         }
         """;
+
+    // The camera-facing basis one card's vertices are turned by, the rendering half of its
+    // decoration model's own FacadeMode (docs/org/vertexLighting.md, "Facades: the same gate, a
+    // different N"). A SphericalY glow takes the camera's whole basis and so keeps a round face
+    // from any angle, a nadir included; a CylindricalY card spins about its planted point's
+    // vertical alone, so a tree or a lamp post stays upright instead of tipping toward the eye.
+    private static string FaceBasisLines(bool spherical) => spherical
+        ? "    mat3 face = mat3(INV_VIEW_MATRIX[0].xyz, INV_VIEW_MATRIX[1].xyz, INV_VIEW_MATRIX[2].xyz);"
+        : "    vec2 to_cam = CAMERA_POSITION_WORLD.xz - origin.xz;\n"
+            + "    float len = length(to_cam);\n"
+            + "    vec2 dir = len > 1e-4 ? to_cam / len : vec2(0.0, 1.0);\n"
+            + "    mat3 face = mat3(\n"
+            + "        vec3(dir.y, 0.0, -dir.x),\n"
+            + "        vec3(0.0, 1.0, 0.0),\n"
+            + "        vec3(dir.x, 0.0, dir.y));";
 
     // A template subtree: root → ground node (first descendant with a mesh; its texture
     // + quad size define what gets decorated and the tiling period) → decoration nodes
@@ -784,6 +793,8 @@ public sealed class ClutterBuilder
                 Label = s.Texture,
                 Width = s.Width,
                 Height = s.Height,
+                Billboard = SceneBuilder.ClassifyBillboard(_gamez.Meshes[meshNode.MeshIndex])
+                    ?? SceneBuilder.BillboardKind.CylindricalY,
                 Lit = _gamez.Meshes[meshNode.MeshIndex].Lighting,
                 Fogged = _gamez.Meshes[meshNode.MeshIndex].Fog,
             };
@@ -1020,11 +1031,11 @@ public sealed class ClutterBuilder
 
     // ---------------------------------------------------------------- rendering
 
-    private Shader SpriteShader(bool lit, bool fogged, bool clampUv)
+    private Shader SpriteShader(bool lit, bool fogged, bool clampUv, bool spherical)
     {
-        int key = (lit ? 1 : 0) | (fogged ? 2 : 0) | (clampUv ? 4 : 0);
+        int key = (lit ? 1 : 0) | (fogged ? 2 : 0) | (clampUv ? 4 : 0) | (spherical ? 8 : 0);
         if (!_shaders.TryGetValue(key, out var shader))
-            _shaders[key] = shader = new Shader { Code = ShaderCode(lit, fogged, clampUv) };
+            _shaders[key] = shader = new Shader { Code = ShaderCode(lit, fogged, clampUv, spherical) };
         return shader;
     }
 
@@ -1036,7 +1047,11 @@ public sealed class ClutterBuilder
         // SceneBuilder's world surfaces; wrapping bleeds the texture's opposite edge in at the
         // UV border (the hairline-seam / tracer-tail artifact).
         bool clampUv = SceneBuilder.UvsWithinUnitSquare(_gamez.Meshes[kind.MeshIndex].Polygons, pass: 0);
-        var mat = new ShaderMaterial { Shader = SpriteShader(kind.Lit, kind.Fogged, clampUv) };
+        var mat = new ShaderMaterial
+        {
+            Shader = SpriteShader(kind.Lit, kind.Fogged, clampUv,
+                kind.Billboard == SceneBuilder.BillboardKind.Spherical),
+        };
         if (tex != null)
             mat.SetShaderParameter("albedo_tex", tex);
 
@@ -1431,6 +1446,11 @@ public sealed class ClutterBuilder
         public string Label = "";                // texture (sprites) or node name (solids)
         public bool Solid;                       // a 3D decoration, not a billboard card
         public float Width, Height;              // sprite quad extents (sprites only)
+
+        // The decoration model's own FacadeMode, which picks the sprite shader's face basis.
+        // ⚠ Never guess it from the card's shape. A legacy extraction carries no ModelType, and
+        // CylindricalY is what the whole install's clutter is apart from C5's lamp glows.
+        public SceneBuilder.BillboardKind Billboard = SceneBuilder.BillboardKind.CylindricalY;
 
         // templates.zrd's `scale_range` for THIS kind's model, (1,1) when it authors none or no
         // spec was supplied. ⚠ It is the SOURCE kind's range that scales a substituted stamp,

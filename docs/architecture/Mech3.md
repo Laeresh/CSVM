@@ -183,13 +183,13 @@ grow from `ClutterBuilder.ExportedKinds`, each keeping its source stamp's fade t
 measurements: [../formats/world-structure.md](../formats/world-structure.md). Read `Clutter.cs` next.
 
 ## src/Mech3/Clutter.cs
-Stamps the boot-script clutter templates across placed polygons carrying the template's ground
-texture, one stamp per integer UV repeat of the polygon's UV lattice: sprites become one fullbright
-Y-billboard MultiMesh per kind, solids go through `SceneBuilder.SharedMesh`, `ClassifyBillboard` the
-split. Every stamp carries its far fade as MultiMesh custom data under `EffectsLevel`, and samples
-through `SceneBuilder.SampleAlbedo` for the chapter's mip bias. `TemplateNames` reads
-`AddClutterTemplates` unfiltered, the per-polygon `no_clutter` gate deciding which patch a district
-dresses; `OverrideTemplateNames` is `--clutter-templates=`'s replacement.
+Stamps the boot-script clutter templates across placed polygons carrying the template's ground texture,
+one stamp per integer UV repeat of the polygon's UV lattice: sprites become one fullbright billboard
+MultiMesh per kind, turned toward the camera as that kind's own `FacadeMode` says, solids go through
+`SceneBuilder.SharedMesh`, `ClassifyBillboard` the split. Every stamp carries its far fade as MultiMesh
+custom data under `EffectsLevel`, and samples through `SceneBuilder.SampleAlbedo` for the chapter's mip
+bias. `TemplateNames` reads `AddClutterTemplates` unfiltered, the per-polygon `no_clutter` gate deciding
+which patch a district dresses; `OverrideTemplateNames` is `--clutter-templates=`'s replacement.
 Placement runtime: [../org/clutter.md](../org/clutter.md); authored side: [../formats/clutter.md](../formats/clutter.md), [../formats/templates.md](../formats/templates.md).
 
 ## src/Mech3/ClutterTemplates.cs
