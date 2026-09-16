@@ -417,6 +417,22 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   clear and the hull does not (CM13's dbase arch on dzpath2) in both games; if the original passes,
   sweep the player's probes too. *Cross-refs:* `PlaneStats.CollisionProbes`, `docs/formats/vehicle.md`.
 
+- `BL-930` `[Fidelity]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **A pilot is not flashed, deafened or stunned by their own
+  `SONIC`/`FLASH` burst, where the original's own guard exempts the damage pair alone.**
+  *Evidence:* the original's self-hit guard is `CMP EBX,ESI` at `0x004b9e3e`, shooter against
+  victim, and it stands BELOW the four no-damage arms of `FUN_004b9bc0`, so a `SONIC`, `FLASH`,
+  `BEEPER` or `TANGLER` burst reaches its own shooter and only the damage pair is zeroed
+  (`docs/org/ordnanceTypes.md`). CSVM instead drops the shooter one level earlier, in the blast
+  pass's aircraft gather, and `ProjectilePool.ApplyDisabling` walks that same gather, so a pilot who
+  detonates a sonic or flash round beside themselves takes neither the wash nor the stun. The
+  choker cloud is already faithful here: `SpawnTanglerCloud` excludes nobody, so flying into your
+  own cloud chokes you. *Fix shape:* pass the shooter through `ApplyDisabling` as a candidate while
+  the damage gather keeps dropping it, which is one gather flag, not a second walk. *⚠ Traps:* this
+  is not the self-blast exemption itself, which is decoded, faithful and pinned by the `air-to-air`
+  suite; only the no-damage arms are at issue. The decide is whether a self-flash a player cannot
+  see past is worth the fidelity in a two-to-four-player Dogfight. *Cross-refs:* `BL-301` (the VS
+  tuning entry the exemption settled), `ProjectilePool.GatherAircraftCandidates`.
+
 ## Flight model & collision physics
 
 - `BL-562` `[Perf]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: data]` `[CM11]` **CM11 (C2/M02) still spends single physics ticks of 33 to 57 ms in flight and
@@ -1228,12 +1244,18 @@ usual.
   `--vs-kills=`/`--vs-time=` still beating the row it names (`PlayerSetupFeature`,
   `LaunchExit.Match`, `SessionSpec.FromMenu`); Original's Dogfight screen is remake-designed with
   no authored slot for a widget, so it offers neither and launches at the defaults.
+  **The self-blast exemption holds, and it is the original's own rule rather than a balance
+  choice**: a round never damages the aircraft that fired it, by direct hit, fuse burst or splash,
+  because the original guards shooter against victim on the vehicle hit path
+  ([`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md)). CSVM drops the shooter one level
+  earlier, at the blast pass's aircraft gather, and the `air-to-air` suite pins it with a burst the
+  shooter cannot dodge: no damage and no death for it, the falloff share for a plane the same
+  distance out. The residual deviation that exemption creates is `BL-930`.
   Still open: suicide penalty and last-damager credit (0 /
   none in v1), sudden-death overtime on a drawn time-out (draw declared in v1; `PT-43`(f) found
   draw frequency fine at the 5-kills/5-min defaults, so this stays low priority),
   `dogfight_ace` vs `zeppelin_run` spawn
-  spacing, the self-blast exemption (own rockets can't hurt you, the guns invariant applied
-  consistently, not a balance call), VS HUD line/arrow sizing at 4-player panes (`PT-43`(d):
+  spacing, VS HUD line/arrow sizing at 4-player panes (`PT-43`(d):
   confirmed readable and correctly edge-flipping at both 2 and 4 players, `BL-126` chrome playtest
   2026-08-15, no retune owed; the general HUD text-scale config covers the separate font-size preference). Related,
   not absorbed: `BL-126` (splitscreen chrome, closed 2026-08-15). ⚠ The stunt race's

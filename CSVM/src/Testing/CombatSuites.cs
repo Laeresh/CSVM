@@ -2138,7 +2138,9 @@ internal static class CombatSuites
         "weapon's own values, downs it when whole-vehicle health exhausts (a lone dead critical " +
         "part no longer kills — the decoded rule, D14) with the kill attributed through the " +
         "Downed event — never hits the shooter's own geometry — a rocket fuses on a passing " +
-        "plane, blasting with falloff and attributing the kill, concentrated fire on ONE " +
+        "plane, blasting with falloff and attributing the kill, a burst beside the plane that " +
+        "fired the round costs it nothing while a plane the same distance out takes the " +
+        "falloff share, concentrated fire on ONE " +
         "bearing kills through the decoded redirect + whole-pool overflow (the 2026-08-14 " +
         "correction), and a Fury dies to a few HE rockets")]
     internal static void AirToAir(TestContext ctx)
@@ -2173,7 +2175,9 @@ internal static class CombatSuites
         FlightController? target = null;
         FlightController? shooter = null;
         FlightController? bystander = null;
+        FlightController? witness = null;
         FlightController? fury = null;
+        StaticBody3D? selfBlastPlate = null;
         try
         {
             var live = new ProjectilePool(textures, null, null);
@@ -2539,6 +2543,36 @@ internal static class CombatSuites
             ctx.Check(Combined(target) < tBefore,
                 $"…and the same round flew on to fuse on the opponent moved={tBefore - Combined(target):0.##}");
 
+            // --- the self-blast exemption, the guns invariant carried onto the blast pass: a
+            // burst the shooter cannot dodge, on a plate abeam and below it, costs it nothing
+            // while a second plane the same distance out takes the falloff share.
+            float abeam = fuseRange + 15f;
+            var burstSite = shooterPos + new Vector3(-abeam, -6f, 0f);
+            selfBlastPlate = Plate("self-blast-plate", new Vector3(4f, 0.2f, 4f), burstSite);
+            ctx.Host.AddChild(selfBlastPlate);
+            witness = BuildRig(4, burstSite + new Vector3(-abeam, 6f, 0f));
+            var burstPoint = burstSite + new Vector3(0f, 0.1f, 0f);
+            shooter.Body.NearestShape(burstPoint, out float selfRange, out _);
+            witness.Body!.NearestShape(burstPoint, out float witnessRange, out _);
+            ctx.Check(Mathf.Abs(selfRange - witnessRange) < 0.5f && witnessRange < blastRadius
+                      && selfRange > fuseRange && witnessRange > fuseRange,
+                $"precondition: both planes stand the same distance off the burst (shooter {selfRange:0.##} m, witness {witnessRange:0.##} m), inside the {blastRadius:0} m radius and outside the {fuseRange:0} m fuse");
+            float beforeSelf = Combined(shooter);
+            float beforeWitness = Combined(witness);
+            int selfKills = match.KillsOf(0), selfDeaths = match.DeathsOf(0);
+            var downMuzzle = new Transform3D(
+                Basis.LookingAt(Vector3.Down, Vector3.Forward), burstSite + new Vector3(0f, 30f, 0f));
+            FireRocket(downMuzzle, shooter.PlayerIndex, steps: 60);
+            float movedWitness = beforeWitness - Combined(witness);
+            float expectedWitness = ProjectilePool.BlastDamage(rocketDmg, blastRadius, witnessRange);
+            ctx.Check(Mathf.Abs(movedWitness - expectedWitness) < 1f,
+                $"a plane {witnessRange:0.##} m off the burst takes the falloff share moved={movedWitness:0.##} expected={expectedWitness:0.##}");
+            ctx.Check(Mathf.IsEqualApprox(Combined(shooter), beforeSelf) && !shooter.Crashed,
+                $"…while the plane that FIRED the round, the same distance out, takes nothing from its own blast");
+            ctx.Check(match.KillsOf(0) == selfKills && match.DeathsOf(0) == selfDeaths,
+                $"…and the exempt plane scores neither a death nor a kill of its own kills={match.KillsOf(0)} deaths={match.DeathsOf(0)}");
+            ctx.Note($"self-blast: {rocket.Id} burst {selfRange:0.#} m off the plane that fired it and {witnessRange:0.#} m off the witness, which took {movedWitness:0.##} of {rocketDmg:0}");
+
             // The D14 correction (docs/org/vehicleDamage.md): concentrated fire on ONE bearing kills. Once the
             // nose dies the resolver redirects its hits to surviving zones and every unabsorbed leftover drains
             // the whole-vehicle pool, so a plane immortal to one-zone fire is the regression.
@@ -2607,7 +2641,9 @@ internal static class CombatSuites
             target?.Free();
             shooter?.Free();
             bystander?.Free();
+            witness?.Free();
             fury?.Free();
+            selfBlastPlate?.Free();
             textures.Dispose();
         }
     }

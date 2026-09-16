@@ -287,12 +287,12 @@ weapon data (launch and inherited velocity with its decay, acceleration, gravity
 the two fuses and the three end conditions), the swept hit ray over world and aircraft, and the
 impact that follows, the struck material's `IMPACT` row for a ray hit and the `default` row for a
 self-ended round ([../org/ordnanceTypes.md](../org/ordnanceTypes.md), "Which row a burst reads").
-Visuals: tracers and tip discs, the flash triad (none from the firing pilot's own Cockpit view),
-the per-surface `IMPACT` effect, sound, stand-in burst and water splash. Damage and presentation
-leave through the session's sinks (`DamageSink` behind `WorldDamageGate`, `EffectSink`, `WashSink`,
-`BeeperTags`); a burst gathers bodies and aircraft nearest-first and cover-tested, via `Collect*`.
-Remake-own rules: the inherited-velocity decay ignores the held target (`InheritedFraction`); the
-tracer's pixel floor draws rounds the LOD would cut ([../org/tracers.md](../org/tracers.md));
+Visuals: tracers and tip discs, the flash triad (none from the firing pilot's Cockpit view), the
+per-surface `IMPACT` effect, sound, stand-in burst and water splash. Damage and presentation leave
+through the sinks (`DamageSink` behind `WorldDamageGate`, `EffectSink`, `WashSink`, `BeeperTags`);
+a burst gathers bodies and aircraft nearest-first and cover-tested via `Collect*`, never the firing
+plane. Remake-own rules: the inherited-velocity decay ignores the held target (`InheritedFraction`);
+the tracer's pixel floor draws rounds the LOD would cut ([../org/tracers.md](../org/tracers.md));
 Enhanced Graphics alone faces a burst's upper ring back along the round's flight (`UpperRingOrient`).
 
 ## src/Flight/ProjectileFlyoutAnim.cs

@@ -2565,7 +2565,9 @@ public sealed partial class ProjectilePool : Node3D
     // Every registered flying plane inside the radius, never the shooter's own and never one out
     // of play (same roster-walk caveat as the fuse), measured to the nearest point on its own
     // collision boxes (0 inside, the engulf clamp) and struck at that box, so part mapping and
-    // kill attribution run the exact direct-hit path.
+    // kill attribution run the exact direct-hit path. ⚠ Keep the shooter's exemption here; the
+    // original guards the same case one level lower, on the vehicle hit path, and the departure
+    // is recorded in docs/org/ordnanceTypes.md.
     private void GatherAircraftCandidates(Vector3 point, float radiusSq, int shooter)
     {
         foreach (var plane in _aircraft)
