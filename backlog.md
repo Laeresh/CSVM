@@ -293,27 +293,30 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-640` (the same zeppelin's cannons); the other prerequisite form, node state, is
   parsed on both paths and enforced at `Start` (`git log --grep=BL-575`).
 
-- `BL-931` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **A zeppelin's hull
-  opens a see-through hole where a gasbag took partial damage: the torn panel's polygons face
-  inward and the hull's back faces are culled, so the sky shows through the airship.** *Evidence:*
-  reported at the controls on a pirate zeppelin in the tarot-card livery
-  (`.scratch/orch-2/BL-931/gasbag-hole.png`): a rectangular hole in the top of the hull ahead of the
-  card art, some of its polygons turned so the inside of the envelope shows, and the hull's inner
-  faces not drawn behind them. The user also asks since when a gasbag takes partial damage at all,
-  so the first fact to establish is which animation swapped the panel: the zeppelin record authors
-  one destroy anim per gasbag and a fraction-staged anim list per cannon (`Mech3/Zeppelins.cs`),
-  and the last landings on the hit path are `BL-672` (a hit belongs to the pool whose animation
-  root covers the struck node) and `BL-741` (a roster bias reaching every node above a part).
-  *What to settle first:* the anim behind the torn panel, whether the original draws the same
-  geometry there, and whether it draws that panel two-sided. `SceneBuilder.cs` and
-  `WorldBuilder.cs` disable culling only on the materials they name, so a panel the original
-  renders two-sided needs its material in that set rather than a global cull change. *⚠ Traps:*
-  `BL-735` (closed) proved the hull mesh identical in all eight chapters and traced an earlier
-  see-through reading on the belly to a switched-off MP zeppelin, so confirm the hole is drawn
-  geometry and not a switched-off section before touching culling. *Playtest after fix:* the same
-  zeppelin, one gasbag hit with a `DAMAGES_ZEPPELIN` weapon, looked at from above and from inside
-  the arc of the turned polygons. *Cross-refs:* `BL-639` (the Gemini's gasbags not burning out),
-  `git log --grep=BL-672`, `git log --grep=BL-735`.
+- `BL-931` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` **A pirate zeppelin's
+  hull reads as a see-through hole where a gasbag section lost a panel; the culling and
+  partial-damage halves of the first reading are disproved and the state the shot was taken in is
+  still unidentified.** *Evidence:* reported at the controls on the tarot-card livery
+  (`.scratch/orch-2/BL-931/gasbag-hole.png`), a panel-shaped opening in the hull ahead of the card
+  art. Three things are settled from the shipped data and headless renders. The culling half is
+  wrong: every `panel*` polygon ships `show_backface` clear and every `burnp*` polygon ships it set,
+  the truss ships both, and `SceneBuilder` already answers each with `cull_front` or `cull_disabled`
+  per polygon rather than per named material, which the `zeppelin-panel-swap` suite pins on all
+  fifteen meshes of `gasbag1`. The partial-damage half is wrong too: a gasbag zone carries hit
+  points and one destroy anim and draws nothing until it reaches zero, and a broadside bay's own
+  `DAMAGE_SEQUENCE` draws smoke alone, so the panel swap can only come from a death. The swap is
+  `pzepleft_gasbagN` / `pzepright_gasbagN`, which a bay's death sequence calls at +1 s and +8 s;
+  its authored pairing sends `burnpl3` to the top right while `fade_outpl3` removes `panelleft3` at
+  the top left, so that one position carries no skin from about 20 s into a side's burn until the
+  finish at 36 s, with `gasbagleft` and `structureleft` switched on behind it. *What is not
+  settled:* the reported shot carries no fire, no burnt skin and no envelope behind the opening,
+  which no headless reproduction of that burn matches, so it is unknown which state produced it.
+  *⚠ Traps:* `BL-735` (closed) traced an earlier see-through reading on the belly to a switched-off
+  MP zeppelin, so a switched-off section is still the first thing to exclude. *Playtest:* shoot one
+  broadside bay off the C2B/M04 pirate zeppelin, watch that section from above and from the side
+  through the whole burn, and say whether the opening shows sky or the yellow gasbag envelope behind
+  the truss. *Cross-refs:* `BL-639` (the Gemini's gasbags not burning out),
+  `git log --grep=BL-672`, `git log --grep=BL-713`, `git log --grep=BL-735`.
 
 ## Weapons & combat
 
