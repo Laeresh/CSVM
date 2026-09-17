@@ -118,17 +118,21 @@ silent, and the emplacement file settles nothing about a hull's own weapon.
 
 `attack_dwell` parses to def `+0x5c` and `not_pursuit_dwell` to def `+0x60` (`0x00479da1`,
 `0x00479dbc`), and `FUN_00475820` copies them to vehicle `+0x304` and `+0x308`. Both feed the one
-timestamp `+0x300`, which is the earliest time a pursuit may start:
+timestamp `+0x300`, which paces a pursuit at both ends:
 
 - `FUN_0041f040` refuses to promote while `DAT_0071c470 <= +0x300`, unless the offered target
   differs from the one at `+0x2fc`, the target the last promotion took;
 - on promoting it sets `+0x300` to now plus `+0x304`, except that a `jet` or `wingman` promoting
   onto a target that is not a `TargetVehicle` gets a hardcoded 20 s instead;
-- losing a pursued target sets `+0x300` to now plus `+0x308` (step 3 above).
+- losing a pursued target sets `+0x300` to now plus `+0x308` (step 3 above);
+- the pursue behaviour's tail reverts the task the moment `+0x300` passes (`0x0041e674`), so the
+  same stamp that made the aeroplane wait before the chase is also what ends it.
 
+`basic_airplane` authors `attack_dwell 60` and `not_pursuit_dwell 5` and every aeroplane def
+inherits them, so an unassigned chase runs a minute and the next one may start five seconds later.
 ⚠ **Neither field does anything on a `ship`, a `plane` or a `heli`**, since those classes never
-reach `FUN_0041f040`. The boat's authored `attack_dwell 60` and `not_pursuit_dwell 5` are inert.
-What paces a boat's target churn is the sticky-target hold below.
+reach `FUN_0041f040`. The boat's own copies of the same two values are inert. What paces a boat's
+target churn is the sticky-target hold below.
 
 The AI mode enum lives at `+0x358` and is a different thing from the task: 1 evasive maneuver,
 2 approaching danger zone, 3 avoid crash, 4 stunned, 5 navigating danger zone, 0 otherwise.
@@ -301,13 +305,50 @@ parts them the same way.
 
 ### The third volume, and where the leash is read
 
-For contrast, the return triple `+0x334` / `+0x338` / `+0x33c` also has exactly one reader: the
-pursue behaviour `FUN_0041d9f0` at `0x0041e6aa`–`0x0041e6ca`. It is measured from the vehicle's own
-position to the point at `+0x348`–`+0x350`, which the promotion `FUN_0041f040` writes (`0x0041f0a6`)
-when it sets the task to pursue, so the anchor is where the pursuit began. The tail reverts the task
-to the default `+0x2f4` when the dwell timestamp `+0x300` has passed, OR the target's own validity
-virtual `+0x14` reports it gone, OR the aeroplane has left that cylinder. The three are an OR, and
-none of them reads the activation volume.
+The return triple `+0x334` / `+0x338` / `+0x33c` also has exactly one reader: the tail of the pursue
+behaviour `FUN_0041d9f0`, which runs on every frame the task is pursue and in every AI state but the
+danger-zone approach. It is a CYLINDER about the anchor at `+0x348`–`+0x350`, offset by the vehicle's
+own position at `+0x204`–`+0x20c`, and any one of five terms reverts the task:
+
+| Term | Where | The test |
+|---|---|---|
+| dwell | `0x0041e674`–`0x0041e68b` | the timestamp `+0x300` has passed (`DAT_0071c470` is the clock), skipped while `DAT_0064f66e` is set |
+| validity | `0x0041e68d`–`0x0041e69a` | the standing target's own virtual `+0x14` reports it gone |
+| horizontal | `0x0041e69c`–`0x0041e6b5` | `dx² + dz²` exceeds `+0x334`, which holds r² |
+| below | `0x0041e6b7`–`0x0041e6c5` | `dy` is under `+0x338`, which holds −r |
+| above | `0x0041e6c7`–`0x0041e6d5` | `dy` is over `+0x33c`, which holds +r |
+
+The revert at `0x0041e6d7` writes the default task `+0x2f4` into `+0x2f0` and re-arms `+0x300` to now
+plus `+0x308`, or plus a hardcoded 20.0 for a `jet`/`wingman` whose target is not a `TargetVehicle`.
+**None of the five reads the activation volume.** The parse fills all three fields from one token
+(`0x00479de9`–`0x00479e09`, as `r²`, `+r`, `−r`), and only a second and third token part the band from
+the radius (`0x00479e14`, `0x00479e22`); `basic_airplane` authors `return_range 1200` alone and every
+def inherits it, so every aeroplane flies a 1,200 m radius with a ±1,200 m band.
+
+**The anchor is the PURSUER's own pose, written exactly once per promotion.** `FUN_0041f040` reads
+the vehicle's own world index at `+0x2e8` through the scene accessor `FUN_00432140` and stores that
+position at `0x0041f0a6`. The per-frame update `FUN_0041c270` reaches the promotion only from the
+patrol branch (task `0` or `2`), never while the task is already pursue, and the AI state at `+0x358`
+is a separate field, so a stun, a climb-out or an evasive program leaves task and anchor standing.
+A pursuit is leashed to where the chase began, not to the spawn and not to the last maneuver.
+
+⚠ **The whole revert is skipped for an assigned `primary_target`.** The tail sits inside a guard
+(`0x0041e5fd` onward) that runs only when `+0x2fc` is null or the standing target at `+0x948` has a
+different owner, the same predicate the promotion's dwell gate uses. A vehicle chasing the target its
+roster block assigned it neither waits to promote nor ever reverts.
+
+⚠ **The dwell pair caps every other chase at 60 seconds.** `basic_airplane` authors `attack_dwell 60`
+and `not_pursuit_dwell 5`, inherited install-wide, so a promotion sets `+0x300` to now + 60 and the
+first disjunct fires when that passes: an aeroplane chasing anything but its assigned target holds
+the pursuit for a minute, reverts, and cannot promote again for five seconds. The geometry terms only
+end it sooner. Subtracting `(1 − +0x8f4) × +0x304` at `0x0041e65c` shortens the deadline while the
+quarry is the player and the player is chasing back.
+
+CSVM ports the anchor and the cylinder. `AiModeMachine.PursuitAnchor` is taken on the promotion into
+pursue and dropped when the task reverts, `ReturnRange` is tested as the cylinder above, and the
+disengage reads no activation term. Unported, named rather than guessed: the dwell pair, which would
+need the promotion's own `+0x300` refusal beside it to mean anything; the `primary_target` exemption;
+and the per-frame revert during an evasive program, which CSVM defers to the moment the program ends.
 
 ### `rating_biases` returns rank units directly
 
@@ -472,8 +513,10 @@ so in the original that volume arrives from the mission's own roster block or ne
 
 Unmodelled, named rather than guessed: the attack volume is scored as a sphere where the engine
 tests a cylinder (`+0x328`, `+0x32c`–`+0x330`), so the altitude band is unported on both the
-acquisition and the awake test; the awake test itself, `FUN_004897c0`'s use of the activation
-volume, has no CSVM counterpart at all, since every rig ticks every frame; `TargetProjectile` is not
+acquisition and the awake test (the return volume is the one triple CSVM does test as a cylinder,
+see "The third volume, and where the leash is read"); the awake test itself, `FUN_004897c0`'s use of
+the activation volume, has no CSVM counterpart at all, since every rig ticks every frame;
+`TargetProjectile` is not
 part of the acquisition sweep; and `FUN_00421ad0`'s `1e21` on a candidate object whose `+0x04` reads
 3 or more.
 

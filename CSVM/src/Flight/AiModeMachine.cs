@@ -159,9 +159,9 @@ public sealed class AiModeMachine
     /// <summary>Activation radius, metres, player.json's <c>min_ai_active_dist</c> (2000 shipped),
     /// the fallback for every roster whose own volume slots are unauthored (all of them).
     /// ⚠ Decoded, this volume gates whether the engine SIMULATES a vehicle at all, measured to the
-    /// player, and it reaches target admission nowhere (docs/org/aiPilot.md "Every reader of the
-    /// attack and activation triples"). The engagement gates below are CSVM's own reading of it.
-    /// A <c>DEDG</c> widening raises it and must not widen what a pilot may pick up.</summary>
+    /// player, and it reaches neither target admission nor the chase leash (docs/org/aiPilot.md
+    /// "Every reader of the attack and activation triples"). The pursue ENTRY floor below is
+    /// CSVM's own reading of it, and a <c>DEDG</c> widening raises that floor and nothing else.</summary>
     public float ActivationRange = 2000f;
 
     /// <summary>Attack radius, metres, vehicle.json's <c>attack</c> (2000 shipped, on
@@ -170,11 +170,11 @@ public sealed class AiModeMachine
     /// is entered when a target sits inside both this and <see cref="ActivationRange"/>.</summary>
     public float AttackRange = 2000f;
 
-    /// <summary>Chase leash, metres, vehicle.json's <c>return_range</c> (1200 shipped). The anchor
-    /// is decoded as where the pursuit began (<c>FUN_0041f040</c> writes <c>+0x348</c>), and the
-    /// engine reverts the task on the leash ALONE. Our reading: pursuit is abandoned when the
-    /// aircraft has strayed farther than this from the anchor AND the target sits outside the
-    /// activation radius.</summary>
+    /// <summary>Chase leash, metres, vehicle.json's <c>return_range</c> (1200 shipped), decoded as
+    /// a CYLINDER about the pursuit anchor: the squared horizontal radius at <c>+0x334</c> and the
+    /// vertical band <c>-r</c>/<c>+r</c> at <c>+0x338</c>/<c>+0x33c</c>, all three filled from the
+    /// one authored token. Leaving it reverts the task on its own, with no activation term
+    /// (<c>FUN_0041d9f0</c>, <c>0x0041e69c</c>–<c>0x0041e6d5</c>).</summary>
     public float ReturnRange = 1200f;
 
     /// <summary>The steady-hand exponent, the original's <c>+0x968</c>: a hit passes with
@@ -240,7 +240,12 @@ public sealed class AiModeMachine
 
     private AiMode _returnMode = AiMode.Patrol;
     private AiMode? _lastTargetMode;
-    private Vector3 _pursuitAnchor;
+
+    // The pursuit anchor: the PURSUER's own position where the promotion began the chase
+    // (FUN_0041f040, 0x0041f0a6), never rewritten while the task stands, so a lay off, a stun or a
+    // finished maneuver hands back to the same point. Null means the task is not pursue.
+    private Vector3? _pursuitAnchor;
+
     private Vector3 _lastPos;
     private Vector3 _lastVelocity;
     private Vector3? _nose;
@@ -285,6 +290,11 @@ public sealed class AiModeMachine
     /// ⚠ Do not set it on entry into a mode. The image's one setter is inside the damage routine,
     /// so an ordered evade must leave the next hit its roll.</summary>
     public bool Evading { get; private set; }
+
+    /// <summary>Where the standing pursuit began, the point <see cref="ReturnRange"/>'s cylinder is
+    /// measured from; null while the task is not pursue. Written once per promotion, so it is where
+    /// the chase started rather than where the aircraft spawned.</summary>
+    public Vector3? PursuitAnchor => _pursuitAnchor;
 
     /// <summary>Avoid-crash's climb-out altitude order (entry altitude + <see cref="ClimbOutM"/>).</summary>
     public float ClimbOutAltitude { get; private set; }
@@ -336,6 +346,10 @@ public sealed class AiModeMachine
     /// mode's own timers so a forced state behaves as if entered normally.</summary>
     public void Enter(AiMode mode, string reason = "ordered")
     {
+        // An ordered engagement anchors where it was ordered, as a promotion does: without this a
+        // scripted rejoin would be leashed to a point the aircraft left long ago.
+        if (mode is AiMode.Pursue or AiMode.LayOff)
+            _pursuitAnchor = _lastPos;
         Transition(mode, reason);
     }
 
@@ -390,7 +404,6 @@ public sealed class AiModeMachine
                 if (targetPos is { } t
                     && pos.DistanceTo(t) <= Mathf.Min(ActivationRange, AttackRange))
                 {
-                    _pursuitAnchor = pos;
                     Transition(AiMode.Pursue, FormattableString.Invariant($"target at {pos.DistanceTo(t):0} m"));
                 }
                 break;
@@ -404,10 +417,10 @@ public sealed class AiModeMachine
                 {
                     Transition(AiMode.Patrol, "target lost");
                 }
-                else if (pos.DistanceTo(tp) > ActivationRange
-                    && pos.DistanceTo(_pursuitAnchor) > ReturnRange)
+                else if (_pursuitAnchor is { } anchor && OutsideReturnCylinder(pos, anchor))
                 {
-                    Transition(AiMode.Patrol, "beyond return range");
+                    Transition(AiMode.Patrol, FormattableString.Invariant(
+                        $"{pos.DistanceTo(anchor):0} m from the pursuit anchor, beyond return range"));
                 }
                 else
                 {
@@ -565,18 +578,28 @@ public sealed class AiModeMachine
             && (pos - tp).LengthSquared() > 1e-4f
             && (pos - tp).Normalized().Dot(tn.Normalized()) >= EvadeClearAlignment;
 
-    // Where a finished reaction goes back to: the prior mode when its conditions still
-    // hold, patrol otherwise.
+    // Where a finished reaction goes back to: the engagement while the task still stands, patrol
+    // otherwise. ⚠ Do not re-anchor here. The original's state (+0x358) and task (+0x2f0) are
+    // separate, so a reaction leaves the anchor alone and a re-anchor walks the leash across the map.
     private void ReturnFromReaction(Vector3 pos, Vector3? targetPos)
     {
-        bool targetInRange = targetPos is { } t && pos.DistanceTo(t) <= ActivationRange;
-        var back = _returnMode is AiMode.Pursue or AiMode.LayOff && targetInRange
+        bool engaged = targetPos is not null && _pursuitAnchor is { } anchor
+            && !OutsideReturnCylinder(pos, anchor);
+        var back = _returnMode is AiMode.Pursue or AiMode.LayOff && engaged
             ? _returnMode
             : _returnMode == AiMode.ApproachingDangerZone ? _returnMode
             : AiMode.Patrol;
-        if (back == AiMode.Pursue || back == AiMode.LayOff)
-            _pursuitAnchor = pos;
         Transition(back, "reaction complete");
+    }
+
+    // The task revert's geometry (FUN_0041d9f0, 0x0041e69c-0x0041e6d5): a cylinder about the
+    // anchor, ReturnRange wide and the same distance up and down. ⚠ Not a sphere; the corner
+    // between radius and band is inside it, and a sphere would recall a climbing pursuer early.
+    private bool OutsideReturnCylinder(Vector3 pos, Vector3 anchor)
+    {
+        var d = pos - anchor;
+        return (d.X * d.X) + (d.Z * d.Z) > ReturnRange * ReturnRange
+            || d.Y < -ReturnRange || d.Y > ReturnRange;
     }
 
     // The rubber-band assist's transitions (decoded: the mode, its "let the player catch up"
@@ -784,6 +807,12 @@ public sealed class AiModeMachine
             return;
         var from = Mode;
         Mode = to;
+        // The task's own life: patrol and the danger-zone run drop it (FUN_00421500 nulls the
+        // target), and a promotion into an engagement takes the anchor the leash is measured from.
+        if (to is AiMode.Patrol or AiMode.ApproachingDangerZone or AiMode.NavigatingDangerZone)
+            _pursuitAnchor = null;
+        else if (to is AiMode.Pursue or AiMode.LayOff)
+            _pursuitAnchor ??= _lastPos;
         if (to != AiMode.EvasiveManeuver)
             Executor = null;
         if (from == AiMode.Stunned)

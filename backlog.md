@@ -1308,7 +1308,18 @@ usual.
   Two more sightings of the same cycle, unflown against this tree: CM08 (C1B/M03) "third wave of
   enemy fighters only patrol and don't attack" and CM20 (C4/M05) "enemies were patrolling and not
   pursuing".
-  *Cross-refs:* `BL-524`, `docs/org/aiPilot.md`, `BL-522`'s closing commit (`git log --grep=BL-522`).
+  The return rule is settled and ported: the leash is the return cylinder measured from the pursuit
+  anchor, the pursuer's own pose where the promotion began (`git log --grep=BL-927`). What remains
+  of the cycle is the promotion side and the dwell pair, which is decoded and unported.
+  `basic_airplane` authors `attack_dwell 60` and `not_pursuit_dwell 5` and every aeroplane def
+  inherits them, and `+0x300` is both the promotion's refusal (`FUN_0041f040`) and the first
+  disjunct of the pursue tail's revert (`0x0041e674`): in the original an unassigned chase runs a
+  minute, then the aeroplane waits five seconds before promoting again, while a chase on an assigned
+  `primary_target` never reverts at all (the guard at `0x0041e5fd`). ⚠ Port both ends or neither;
+  the cap alone, without the promotion's own refusal beside it, only churns the mode once a minute.
+  *Cross-refs:* `BL-524`, `docs/org/aiPilot.md` ("`attack_dwell` and `not_pursuit_dwell` are pursuit
+  timers", "The third volume, and where the leash is read"), `BL-522`'s closing commit
+  (`git log --grep=BL-522`).
 
 - `BL-699` `[Perf]` `[Owed-playtest]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: trace]` **The wave's aeroplanes are built in the
   loading screen and the launch frame binds one; whether the hitch a player feels is gone is the
@@ -1373,23 +1384,6 @@ usual.
   passes a scan-shaped check. Add the case that a hull refuses a target past its attack radius and
   still takes one inside it. *Cross-refs:* `BL-789`'s closing commit, which moved the aircraft
   pickers and left this one.
-- `BL-927` `[Fidelity]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: decoded]` **The AI
-  disengage gate ANDs the activation radius with the return range where the original reverts on the
-  return cylinder alone.** *Evidence:* the engine's task revert (`FUN_0041d9f0` at `0x0041e6aa`)
-  tests the return triple `+0x334`/`+0x338`/`+0x33c` measured from the anchor `+0x348` that
-  `FUN_0041f040` writes when the pursuit begins, and it ORs that with the dwell and validity tests;
-  it never reads the activation triple, which is the simulation gate measured to the player.
-  `AiModeMachine` requires a pursuer to be outside BOTH `ActivationRange` and `ReturnRange` before
-  it lays off, and measures from the spawn pose rather than from where the chase started, so a
-  `DEDG`-widened member holds a pursuit far past the point the original would recall it.
-  *Fix shape:* record the pursuit anchor when pursue is entered, test the return cylinder from it,
-  and drop the activation term from the disengage condition. *⚠ Traps:* `BL-565`'s surviving goal
-  ("a watched group comes to the player from anywhere on the map") currently rests on the widened
-  activation radius keeping an engaged member engaged, so removing that term without the anchor in
-  place re-breaks it. The entry gate `min(activation, attack)` is a separate question and is
-  deliberately left alone. *Cross-refs:* `BL-565`, `BL-523` (the mode cycle this gate feeds),
-  `BL-789`'s closing commit.
-
 - `BL-929` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The campaign
   scrapbook's `Snap_` capture slots are still unfilled.** *Evidence:* 167 of the scrapbook's 461
   rows are `Snap_<mission>_<objective>` player captures resolved against the profile directory,

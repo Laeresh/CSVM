@@ -414,8 +414,8 @@ makes the hold a weave rather than a tight join. Engine-free and deterministic; 
 
 ## src/Flight/AiModeMachine.cs
 The nine-mode AI state machine, owned by `AiPilot.Machine` and stepped from its `Next`: the mode list and
-vocabulary are the engine's own debug-readout dispatch. It carries the three decoded cylinders as mutable fields, and only `AttackRange` is the decoded admission volume a picker is handed; `ActivationRange` is the engine's simulation gate, so the engagement gates reading it are CSVM's own.
-Decoded and wired are the activation into pursue inside the shipped distances, the steady-hand roll a hit provokes as a power law over the bite it takes of
+vocabulary are the engine's own debug-readout dispatch. It carries the three decoded cylinders as mutable fields: `AttackRange` is the decoded admission volume a picker is handed, `ReturnRange` is the chase leash, tested as a cylinder about `PursuitAnchor` (the pursuer's own pose where the promotion began) and the only geometry that ends a pursuit, and `ActivationRange` is the engine's simulation gate, so the pursue ENTRY floor reading it is CSVM's own.
+Decoded and wired are the promotion into pursue inside the shipped distances, the steady-hand roll a hit provokes as a power law over the bite it takes of
 the pre-hit pools, looping on the leftover (`RollLogged` reports every hit reaching the pilot, rolls taken
 and skipped alike, so its line count is the hit count), the `Evading` flag a failed test sets and the
 weighted library draw it enters under the natural-touch, injector and predicted-end altitude culls (that last one vetoing a program whose predicted end falls under the floor and sweeping the predicted path below the ceiling, from the position and attitude `Update` was last handed), chaining a fresh maneuver until

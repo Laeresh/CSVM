@@ -36,10 +36,12 @@ internal static class CampaignDedgVolumeSuites
     private const string AlreadyWiderBlock = "britpeace_2";
     private const float AlreadyWiderM = 12000f;
 
-    // The disengage geometry the widening decides, in metres: pursuit is entered well inside the
-    // attack radius, then the AI is moved this far from its pursuit anchor with the target this far
-    // off, which is outside the 2,000 m floor and inside the widened radius.
+    // The disengage geometry, in metres: the chase is entered this far from the member's spawn,
+    // well inside the attack radius, then the AI strays this far from the anchor the promotion took
+    // with the target this far off, which is outside the 2,000 m floor and inside the widened one.
+    private const float FarFromSpawnM = 6000f;
     private const float EntryRangeM = 1000f;
+    private const float InsideStrayM = 900f;
     private const float StrayM = 500f;
     private const float DisengageRangeM = 3000f;
 
@@ -48,9 +50,9 @@ internal static class CampaignDedgVolumeSuites
         + "of the group it watches to a 9000 m activation radius on its first tick, groups 1 and 5 "
         + "(OBJECTIVE5 and OBJECTIVE22) being the mission's two awake clauses; a member already "
         + "wider keeps its own radius, the deactivated group-2/4 blocks behind dormant clauses and "
-        + "the group-0 aircraft nothing watches all stay at the min_ai_active_dist floor; and the "
-        + "widened radius is what keeps a pursuing member engaged where a floored one drops back "
-        + "to patrol beyond its return range")]
+        + "the group-0 aircraft nothing watches all stay at the min_ai_active_dist floor; and a "
+        + "watched member that caught its quarry 6 km from its spawn holds the chase on the return "
+        + "cylinder about that anchor, reverting when it leaves the cylinder and not before")]
     internal static void CampaignDedgVolume(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -286,9 +288,9 @@ internal static class CampaignDedgVolumeSuites
         }
     }
 
-    // What the widening buys the mission: a watched member that has chased its target away from
-    // its patrol keeps pursuing, where the same geometry on the floor reads "beyond return range"
-    // and hands the survivor back to its net with the objective still waiting on it.
+    // What holds a watched member on its quarry: the return cylinder about the anchor the promotion
+    // took, so a member that caught it 6 km from its spawn keeps chasing there and is recalled only
+    // where the original recalls it. The activation radius the DEDG widens reaches none of that.
     private static void CheckDisengage(TestContext ctx,
         IReadOnlyDictionary<string, FlightController> rigs, float floor, StringBuilder report)
     {
@@ -306,24 +308,35 @@ internal static class CampaignDedgVolumeSuites
         };
         widened.AssistEnabled = false;
 
-        var anchor = new Vector3(0f, 800f, 0f);
-        var stray = anchor + (Vector3.Right * (widened.ReturnRange + StrayM));
-        AiMode Chase(AiModeMachine machine)
+        var spawn = member.WorldPosition;
+        var chaseStart = spawn + (Vector3.Right * FarFromSpawnM);
+        AiMode Chase(AiModeMachine machine, float stray)
         {
-            machine.Update(anchor, Vector3.Forward, anchor + (Vector3.Forward * EntryRangeM), null, StepDt);
-            machine.Update(stray, Vector3.Forward, stray + (Vector3.Forward * DisengageRangeM), null, StepDt);
+            machine.Enter(AiMode.Patrol, "suite: reset");
+            machine.Update(chaseStart, Vector3.Forward, chaseStart + (Vector3.Forward * EntryRangeM),
+                null, StepDt);
+            var strayed = chaseStart + (Vector3.Right * stray);
+            machine.Update(strayed, Vector3.Forward, strayed + (Vector3.Forward * DisengageRangeM),
+                null, StepDt);
             return machine.Mode;
         }
 
-        var floored = Chase(control);
-        var wide = Chase(widened);
-        report.AppendLine($"disengage: target {DisengageRangeM:0} m off, {widened.ReturnRange + StrayM:0} m "
-            + $"from the anchor (return {widened.ReturnRange:0} m): floor {floor:0} m -> "
-            + $"{AiModeMachine.NameOf(floored)}, widened {widened.ActivationRange:0} m -> {AiModeMachine.NameOf(wide)}");
-        ctx.Check(floored == AiMode.Patrol,
-            $"on the {floor:0} m floor the same geometry drops the member back to patrol: {AiModeMachine.NameOf(floored)}");
-        ctx.Check(wide == AiMode.Pursue,
-            $"…while the widened member stays in pursuit: {AiModeMachine.NameOf(wide)}");
+        float outsideM = widened.ReturnRange + StrayM;
+        var held = Chase(widened, InsideStrayM);
+        var anchor = widened.PursuitAnchor;
+        var heldFloor = Chase(control, InsideStrayM);
+        var leftWide = Chase(widened, outsideM);
+        var leftFloor = Chase(control, outsideM);
+        report.AppendLine($"disengage: chase entered {FarFromSpawnM:0} m from the spawn, target "
+            + $"{DisengageRangeM:0} m off (return {widened.ReturnRange:0} m): {InsideStrayM:0} m from the "
+            + $"anchor -> widened {AiModeMachine.NameOf(held)} / floor {AiModeMachine.NameOf(heldFloor)}; "
+            + $"{outsideM:0} m -> widened {AiModeMachine.NameOf(leftWide)} / floor {AiModeMachine.NameOf(leftFloor)}");
+        ctx.Check(anchor is { } a && a.IsEqualApprox(chaseStart),
+            $"the anchor is where the chase began, {FarFromSpawnM:0} m from the spawn, not the spawn");
+        ctx.Check(held == AiMode.Pursue && heldFloor == AiMode.Pursue,
+            $"…and inside the cylinder the member holds its quarry {DisengageRangeM:0} m off, widened or floored: {AiModeMachine.NameOf(held)}/{AiModeMachine.NameOf(heldFloor)}");
+        ctx.Check(leftWide == AiMode.Patrol && leftFloor == AiMode.Patrol,
+            $"…and leaving it recalls both, {FarFromSpawnM + outsideM:0} m from the spawn and still inside the widened {widened.ActivationRange:0} m: {AiModeMachine.NameOf(leftWide)}/{AiModeMachine.NameOf(leftFloor)}");
         ctx.Note($"the pursue ENTRY gate is still the {widened.AttackRange:0} m attack radius, which no DEDG widens");
     }
 
