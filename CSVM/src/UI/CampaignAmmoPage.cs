@@ -93,7 +93,7 @@ public sealed class CampaignAmmoPage : CampaignPage
     private static readonly string[] AmmoFallback = { "Slug", "Dum-dum", "Armor-piercing", "Explosive", "None" };
 
     // The ordnance table (campaign-screens.md "Ammo selection"), row-for-row the same order as
-    // stock_loadouts.json's pylon_ordnance list: the mission ordinal a row unlocks at, and its
+    // stock_loadouts.json's pylon_ordnance list: the campaign ordinal a row unlocks at, and its
     // fallback label for when langui text is unavailable.
     private static readonly int[] OrdnanceThreshold = { 1, 1, 2, 8, 7, 12, 7, 7, 17, 17, 20, 1 };
 
@@ -102,7 +102,7 @@ public sealed class CampaignAmmoPage : CampaignPage
     private readonly CampaignCombo[] _pylonField = new CampaignCombo[PylonRows];
 
     // Which ordnance table row each pylon field's entries stand for. The list holds only what the
-    // mission ordinal has unlocked, so an entry index is not a table index.
+    // profile's progress has unlocked, so an entry index is not a table index.
     private readonly int[][] _pylonRows = new int[PylonRows][];
 
     private StockLoadouts? _stock;
@@ -112,7 +112,7 @@ public sealed class CampaignAmmoPage : CampaignPage
     private int[] _ammo = new int[4];
     private int[] _ordnance = new int[8];
 
-    // The mission ordinal the pylon lists were filled at. A later mission unlocks more rows, so a
+    // The campaign ordinal the pylon lists were filled at. Further progress unlocks more rows, so a
     // changed ordinal refills them.
     private int _filledOrdinal = -1;
 
@@ -329,8 +329,8 @@ public sealed class CampaignAmmoPage : CampaignPage
     }
 
     /// <summary>The closed field's own stepper, which takes the same door a picked list row does:
-    /// the entry beside the current one, wrapping. A pylon's list holds only the rows the mission
-    /// ordinal has unlocked, so the step skips the locked ones without knowing they exist.</summary>
+    /// the entry beside the current one, wrapping. A pylon's list holds only the rows the profile's
+    /// progress has unlocked, so the step skips the locked ones without knowing they exist.</summary>
     public override bool Step(int row, int dir)
     {
         EnsureLoaded();
@@ -459,9 +459,9 @@ public sealed class CampaignAmmoPage : CampaignPage
         var target = Flow.AmmoTarget();
         if (_plane != null && ReferenceEquals(target, _plane))
         {
-            // The unlocked ordnance is a statement about the mission, not about the plane, so a
-            // flow moved to another mission refills the pylon lists over the same working copy.
-            if (_filledOrdinal != MissionOrdinal())
+            // The unlocked ordnance is a statement about the campaign, not about the plane, so a
+            // profile that has progressed refills the pylon lists over the same working copy.
+            if (_filledOrdinal != ProgressOrdinal())
             {
                 FillPylons();
             }
@@ -493,12 +493,12 @@ public sealed class CampaignAmmoPage : CampaignPage
         }
     }
 
-    // The eight pylon fields, each over the ordnance rows this mission has unlocked. ⚠ The row the
+    // The eight pylon fields, each over the ordnance rows the campaign has unlocked. ⚠ The row the
     // plane already carries stays in its own list whatever the threshold says: the field draws what
     // is fitted, and a list without it would show the wrong ordnance on a replayed mission.
     private void FillPylons()
     {
-        _filledOrdinal = MissionOrdinal();
+        _filledOrdinal = ProgressOrdinal();
         for (int cell = 0; cell < PylonRows; cell++)
         {
             int current = OrdnanceTableIndex(cell);
@@ -527,8 +527,8 @@ public sealed class CampaignAmmoPage : CampaignPage
     }
 
     // Applies a pick to the working copy and to the field that made it. Nothing here can be
-    // refused, unlike the plane screen's own Take: the ordnance a mission forbids is simply not in
-    // the list, and every ammunition is legal for a mounted gun.
+    // refused, unlike the plane screen's own Take: ordnance the campaign has not unlocked is simply
+    // not in the list, and every ammunition is legal for a mounted gun.
     private bool Take(int row, int pick)
     {
         if (Combo(row) is not { } combo || pick == combo.Selected)
@@ -667,7 +667,12 @@ public sealed class CampaignAmmoPage : CampaignPage
             ? stock.Options.PylonOrdnance[table].Label
             : "None";
 
-    private int MissionOrdinal() => Math.Max(1, Flow.MissionSeq + 1);
+    // ⚠ Read the thresholds against the profile's progress, never the sortie's mission. The
+    // original filters the rocket table on its completed-mission count, which a replay of an
+    // earlier mission never lowers (docs/formats/campaign-screens.md, "Ammo selection"). A flow
+    // carrying no profile has only the sortie to go on.
+    private int ProgressOrdinal() =>
+        Math.Max(1, (Flow.Profile?.MissionsCompleted ?? Flow.MissionSeq) + 1);
 
     // The plane's gun/hardpoint shape: from its own CustomPlaneStore build when it has one (every
     // hangar-built plane), else the airframe's plain stock fit (the two profile-seeded starters,

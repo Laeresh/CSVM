@@ -1375,45 +1375,6 @@ usual.
   *Cross-refs:* `BL-434` (the per-viewport splitscreen cost the same pass profiled), `BL-657`
   (CM18's generator launching at the wrong time, which is where the measured case is flown).
 
-- `BL-936` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` **Replaying an
-  earlier campaign mission offers only what that mission's ordinal had unlocked, so the ammo and
-  plane screens hide ordnance and airframes the pilot has already earned (torpedoes on the early
-  missions).** *Evidence:* reported at the controls with the original as the reference ("if ammo
-  or plane in campaign is unlocked it should be available in replay"). `UI/CampaignAmmoPage.cs`
-  fills the pylon lists from `OrdnanceThreshold` against the ordinal the lists were filled at, so
-  a replay of an early mission shows that mission's rows. *What to settle first:* which ordinal the
-  original's ammo screen tests, the mission being flown or the profile's furthest mission
-  (`docs/formats/campaign-screens.md` "Ammo selection"), and the same for the airframe list on the
-  plane screen. *Fix shape:* fill the rows from the profile's progress ordinal rather than the
-  sortie's. *⚠ Traps:* the mission's own `stock_loadouts.json` fit and any script-forced loadout
-  stay as they are; this is the offered rows, not the default fit. *Playtest after fix:* a profile
-  past C1's torpedo missions replays C1/M01 and finds the torpedo rows on the pylons.
-  *Cross-refs:* `git log --grep=BL-788` (the guest's ammo and plane screens),
-  `docs/formats/campaign-screens.md`.
-
-- `BL-939` `[Fidelity]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The original
-  arms a kill target or a time limit, never both, while CSVM's Dogfight arms both rows at once and
-  ends on whichever lands first.** *Evidence:* `FUN_004136e0` reads the lobby's limit kind from
-  `00642f94` and arms exactly one: kind 0 writes the time limit to `0071c180` and sets the
-  score-limit-off byte `0071c1a2`, kind 1 writes the score target to `0071c17c` and sets the
-  time-limit-off byte `0071c1a1`, and each end check is gated on the other's off byte
-  ([`docs/org/multiplayer-scoring.md`](docs/org/multiplayer-scoring.md)). CSVM's map screen offers
-  a kill-target row and a time-limit row together, both defaulted non-zero (5 kills, 5 minutes),
-  and `VersusMatch` honours whichever fires first. *The decision:* which of three, none of them
-  settled by the decode, since a remake menu is not a lobby.
-  (1) Keep both armed and record the deviation as a deliberate remake choice: no code, and a
-  Dogfight can still end two ways, which is the combination the original cannot produce.
-  (2) Make the rows exclusive like the original: the map screen picks a limit kind and greys the
-  other row out. Costs a kind toggle in `PlayerSetupFeature` carried through `LaunchExit.Match`
-  and `SessionSpec.FromMenu`, plus a rule for `--vs-kills=` and `--vs-time=` passed together;
-  `VersusMatch` needs nothing, it already disables an end condition whose value is 0.
-  (3) Keep both rows but ship one disabled by default (a time limit armed, a kill target of 0):
-  one default constant, no menu work, and a player who fills both rows in is back at (1).
-  *⚠ Traps:* this is the menu's offer, not the scoring, which is faithful; a match that reaches
-  its time limit is a draw on a tie in both the original and CSVM, with no overtime.
-  *Cross-refs:* `git log --grep=BL-301` (the Dogfight tuning entry this came out of),
-  `Flight/VersusMatch.cs`, `docs/org/multiplayer-scoring.md`.
-
 ## Tooling, platform & docs
 
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: data]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in

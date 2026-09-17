@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
 using CSVM.UI;
@@ -15,7 +16,8 @@ namespace CSVM.Testing;
 /// created and one deleted, the cabin, previous missions, the briefing and its reveal, the flight
 /// check, ammo and plane selection with their writes into the store, the cabin's PLANE CONSTRUCTION
 /// into the hangar and back, FLY MISSION as a <see cref="CampaignMissionExit"/>, the debrief return
-/// landing on the scrapbook with its page turn back to the cabin, the guest check under a debug
+/// landing on the scrapbook with its page turn back to the cabin, a replay offering what the profile
+/// has earned against the narrower offer three flights in, the guest check under a debug
 /// join, and every scratch-profile aid. Every check pins what the screens do today. ⚠ Nothing here
 /// touches <c>user://Profiles</c>: the door is pointed at a scratch store and the aids read their own.
 /// </summary>
@@ -25,7 +27,20 @@ internal static class MenuCampaignSuites
     private const string Guest = "Nathan";
     private const string Filmed = "Maria";
     private const string Finished = "Paladin";
+    private const string Veteran = "Ramirez";
     private const int FlownBefore = 3;
+
+    // The rocket table's own thresholds (docs/formats/campaign-screens.md, "Ammo selection"):
+    // aerial torpedoes are the last row to unlock, three rows stand from the first mission and a
+    // fourth stands once three are flown.
+    private const int TorpedoOrdinal = 20;
+    private const int OpeningPylonRows = 3;
+    private const int PylonRowsAtFour = 4;
+
+    // The ammo screen's first pylon row and the row past its last: the four gun groups stand before
+    // the eight pylon cells.
+    private const int FirstPylon = 4;
+    private const int PastPylons = 12;
 
     private static readonly MenuCommands Accept = new() { Accept = true };
     private static readonly MenuCommands Back = new() { Back = true };
@@ -46,7 +61,9 @@ internal static class MenuCampaignSuites
         + "CANCEL writes nothing, plane selection writes the pilot's pick on ACCEPT and keeps it on "
         + "CANCEL, PLANE CONSTRUCTION opens the hangar over the profile's wallet and Back resumes the "
         + "cabin, FLY MISSION leaves as one CampaignMissionExit with the profile saved, the debrief "
-        + "return opens the scrapbook on the flown mission and turns back to the cabin, the guest "
+        + "return opens the scrapbook on the flown mission and turns back to the cabin, a replay of "
+        + "the first mission offers every ordnance and aircraft the profile has earned where the "
+        + "same screen three flights in offers only the rows those flights unlocked, the guest "
         + "check walks a debug-joined field, every scratch-profile aid opens its screen, and the two "
         + "campaign films own the frames they play and the press that ended them")]
     internal static void MenuCampaignJourney(TestContext ctx)
@@ -80,6 +97,7 @@ internal static class MenuCampaignSuites
             HangarDoor(ctx, menu, store);
             FlyMission(ctx, menu, store, exits);
             DebriefReturn(ctx, menu, store);
+            ReplayOffersEarnedRows(ctx, menu, store);
             GuestCheck(ctx, menu);
             Aids(ctx, menu);
             FilmHandBack(ctx);
@@ -390,6 +408,14 @@ internal static class MenuCampaignSuites
         ctx.Check(flow.Screen == CampaignScreen.Ammo && flow.AmmoSlot == 0 && menu.ShownHeading == "AMMO SELECTION",
             $"CHANGE AMMO opens ammo selection on the pilot's aircraft ({flow.Screen}, slot {flow.AmmoSlot})");
         ctx.Check(menu.ShownRowCount == 14, $"four gun groups, eight pylons and the two plaques ({menu.ShownRowCount})");
+        int early = FirstPylonRow(flow);
+        if (early >= 0)
+        {
+            int offered = flow.Page.Combo(early)!.Entries.Count;
+            ctx.Check(offered == PylonRowsAtFour,
+                $"whose pylon offers the rows this profile's {FlownBefore} flights have unlocked and no more, torpedoes far off ({offered} of {CampaignLoadout.PylonRows})");
+        }
+
         int group = -1;
         for (int row = 0; row < 4 && group < 0; row++)
         {
@@ -571,6 +597,86 @@ internal static class MenuCampaignSuites
         ctx.Check(flow.Screen == CampaignScreen.Roster, $"Back from the cabin behind the book returns to the roster ({flow.Screen})");
         menu.Drive(Back);
         ctx.Check(menu.ShownScreen == "Mode" && menu.Campaign == null, $"and Back once more leaves the campaign ({menu.ShownScreen})");
+    }
+
+    // A replay offers what the pilot has earned, not what the replayed mission had unlocked: both
+    // the pylon lists and the plane roster are filled from the profile's progress, which is the
+    // counter the original filters on (docs/formats/campaign-screens.md, "Ammo selection").
+    private static void ReplayOffersEarnedRows(
+        TestContext ctx, LaunchMenu menu, CampaignProfileStore store)
+    {
+        store.Save(Flown(Veteran, TorpedoOrdinal));
+        menu.ShowMenu();
+        menu.OpenCampaignCabin(Veteran);
+        var flow = menu.Campaign!;
+        var profile = flow.Profile!;
+        int late = LatestAvailability(profile);
+        ctx.Check(profile.MissionsCompleted == TorpedoOrdinal && profile.Planes.Count > 2 && late > 1,
+            $"a veteran's cabin opens past the torpedo missions with its awards in the hangar ({profile.MissionsCompleted}, {profile.Planes.Count} planes, latest availability {late})");
+        menu.Drive(Down);
+        menu.Drive(Accept);
+        ctx.Check(flow.Screen == CampaignScreen.PreviousMissions, $"previous missions opens the contents ({flow.Screen})");
+        menu.Drive(Down);
+        menu.Drive(Accept);
+        menu.Drive(Accept);
+        ctx.Check(flow.Screen == CampaignScreen.Briefing && flow.MissionSeq == 0,
+            $"a second press on the first mission row replays it ({flow.Screen}, seq {flow.MissionSeq})");
+        WalkTo(menu, "GO TO FLIGHT CHECK");
+        menu.Drive(Accept);
+        ctx.Check(flow.Screen == CampaignScreen.FlightCheck, $"whose flight check is the replay's ({flow.Screen})");
+        WalkTo(menu, "CHANGE AMMO");
+        menu.Drive(Accept);
+        int pylon = FirstPylonRow(flow);
+        ctx.Check(pylon >= 0, $"the pilot's aircraft carries a hardpoint to fit ({pylon})");
+        if (pylon >= 0)
+        {
+            int rows = flow.Page.Combo(pylon)!.Entries.Count;
+            ctx.Check(rows == CampaignLoadout.PylonRows,
+                $"and its pylon offers every earned ordnance, torpedoes included, on a mission whose own ordinal unlocks {OpeningPylonRows} ({rows} of {CampaignLoadout.PylonRows})");
+        }
+
+        WalkTo(menu, "CANCEL LOADOUT");
+        menu.Drive(Accept);
+        WalkTo(menu, "CHANGE PLANE");
+        menu.Drive(Accept);
+        ctx.Check(flow.Screen == CampaignScreen.PlaneSelection, $"CHANGE PLANE opens plane selection on the replay ({flow.Screen})");
+        int listed = flow.Page.Combo(0)?.Entries.Count ?? 0;
+        ctx.Check(listed == profile.Planes.Count,
+            $"whose combo lists every owned aircraft, the awards whose airframes unlock as late as mission {late} among them ({listed} of {profile.Planes.Count})");
+        for (int step = 0; step < 8 && menu.Campaign != null; step++)
+        {
+            menu.Drive(Back);
+        }
+
+        ctx.Check(menu.Campaign == null, $"and Back walks the replay back out of the campaign ({menu.ShownScreen})");
+    }
+
+    // The first pylon cell of the ammo screen drawing a field: a hardpoint the wing does not carry
+    // has none, and the gun groups stand on the rows before them.
+    private static int FirstPylonRow(CampaignFlow flow)
+    {
+        for (int row = FirstPylon; row < PastPylons; row++)
+        {
+            if (flow.Page.Combo(row) != null)
+            {
+                return row;
+            }
+        }
+
+        return -1;
+    }
+
+    // The highest availability threshold among the airframes a profile owns, the stat table's own
+    // column: past 1 means an airframe the campaign's first mission does not offer.
+    private static int LatestAvailability(CampaignProfileDef profile)
+    {
+        int latest = 0;
+        foreach (var plane in profile.Planes)
+        {
+            latest = Math.Max(latest, HangarEconomy.Airframes[plane.Airframe].Availability);
+        }
+
+        return latest;
     }
 
     private static void GuestCheck(TestContext ctx, LaunchMenu menu)

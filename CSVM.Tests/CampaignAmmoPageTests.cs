@@ -11,7 +11,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>The ammo selection screen: four gun-group picks and eight pylon picks derived from a
-/// plane's build (hangar-built or the airframe's stock fit), the mission-threshold ordnance
+/// plane's build (hangar-built or the airframe's stock fit), the progress-threshold ordnance
 /// filter, and the working-copy commit ACCEPT/CANCEL implement. Tests drive the page directly
 /// (not through <see cref="CampaignFlow"/>'s row dispatch) so the injected
 /// <see cref="CustomPlaneStore"/>/<see cref="StockLoadouts"/> stay engine-free.</summary>
@@ -100,7 +100,7 @@ public class CampaignAmmoPageTests
     }
 
     [Fact]
-    public void TheOrdnanceFilterHonoursTheMissionThresholdTable()
+    public void TheOrdnanceFilterHonoursTheProgressThresholdTableOnAReplay()
     {
         var (flow, page, planes) = NewFlow(out string profileDir);
         var built = new CustomPlaneDef { Name = "Built3", Airframe = 5, LeftHardpoints = 1 };
@@ -111,8 +111,11 @@ public class CampaignAmmoPageTests
         flow.SelectProfile(profile);
         flow.SetAmmoSlot(0);
 
-        // Mission 1: only AP, HE and None (thresholds 1) may ever appear on cell 0.
-        flow.SetMission(0); // seq 0 -> ordinal 1
+        // A profile that has flown nothing on the campaign's first mission: only AP, HE and None
+        // (thresholds 1) may appear on cell 0, and the torpedo row is not among them.
+        flow.SetMission(0);
+        Assert.Equal(3, page.Combo(4)!.Entries.Count);
+        Assert.DoesNotContain("Torpedo", page.Combo(4)!.Entries);
         for (int i = 0; i < 12; i++)
         {
             page.Step(4, 1);
@@ -121,8 +124,9 @@ public class CampaignAmmoPageTests
                 $"unlocked too early at ordinal 1: {label}");
         }
 
-        // Mission 20: torpedoes (threshold 20) become reachable.
-        flow.SetMission(19); // seq 19 -> ordinal 20
+        // Nineteen missions completed is ordinal 20, where torpedoes unlock. The sortie stays the
+        // campaign's first mission, so this is the replay case: the offer follows the progress.
+        profile.MissionsCompleted = 19;
         bool sawTorpedo = false;
         for (int i = 0; i < 12; i++)
         {
@@ -133,6 +137,7 @@ public class CampaignAmmoPageTests
             }
         }
 
+        Assert.Equal(0, flow.MissionSeq);
         Assert.True(sawTorpedo, "torpedoes should be reachable at ordinal 20");
 
         Directory.Delete(profileDir, true);
@@ -255,14 +260,14 @@ public class CampaignAmmoPageTests
     }
 
     // The field opens over the screen, the axis moves inside it, and the confirm is
-    // what writes the pick. The rocket list holds only what the mission ordinal has unlocked.
+    // what writes the pick. The rocket list holds only what the profile's progress has unlocked.
     [Fact]
     public void ARocketFieldOpensItsListAndTheConfirmTakesThePick()
     {
         var (flow, page, _) = NewFlow(out string profileDir);
         flow.SelectProfile(CampaignProfileDef.NewProfile("Zachary"));
         flow.SetAmmoSlot(0);
-        flow.SetMission(0); // ordinal 1: only the three threshold-1 rows are offered
+        flow.SetMission(0); // a profile that has flown nothing: only the three threshold-1 rows
 
         var field = page.Combo(4)!;
         Assert.Equal(3, field.Entries.Count);

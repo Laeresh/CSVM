@@ -524,13 +524,24 @@ empty and every other row stays where the layout put it. Both readings are this 
 deactivated widget elsewhere is evidence about that screen, not about this one.
 
 **⚠ A rocket dropdown's row index is not the ordnance id.** The rocket list is a table of twelve
-8-byte records at `0x00619efc`; an entry is offered only when its first field is at most the
-current mission number, so the list grows as the campaign progresses, and the row index is a
+8-byte records at `0x00619efc`; an entry is offered only when its first field is at most
+`0x0064b678 + 1`, so the list grows as the campaign progresses, and the row index is a
 position in the filtered list. `FUN_0040ff50` maps a row to the table index and
 `FUN_0040ffa0` maps back; the ammunition list has no such filter and its row index is the
-ammunition index directly. Three executable flags (`0x00647b5c`, `0x00647b68`, `0x00647b6c`, which
-this decode did not identify) bypass the filter and offer all twelve; the Instant Action and
-multiplayer paths are the likely users.
+ammunition index directly. Three executable flags (`0x00647b5c`, `0x00647b68`, `0x00647b6c`)
+bypass the filter and offer all twelve. The first is `fAllowAll`, the unlock-everything mode the
+hidden pilot name sets, which switches off the airframe availability thresholds in the same way
+([`org/hangar.md`](../org/hangar.md)); the other two this decode did not identify, and the Instant
+Action and multiplayer paths are their likely users.
+
+**⚠ The filter reads the profile's progress, not the mission being flown.** `0x0064b678` is the
+save's `UIData +0x338`, the completed-mission count
+([saved-games.md](saved-games.md#where-the-ammunition-and-ordnance-picks-live) for the record the
+picks live in), and the mission wrap-up `FUN_00405ce0` only ever raises it to the flown mission's
+index. Replaying an earlier mission therefore leaves it where the furthest mission put it, and the
+pylon lists keep every row the pilot has already earned. The airframe list on the plane
+construction screen is filtered against the same global by `FUN_00410120`, so one counter governs
+both screens and neither one consults the sortie.
 
 | Row | Ordnance | Available from mission |
 |---|---|---|
