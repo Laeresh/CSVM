@@ -31,15 +31,83 @@ public static class Pads
     // and For down with it.
     private static Godot.Collections.Array<int>? _noPads;
 
+    // The last raw roster Connected() deduplicated and the answer it gave. The rule reads
+    // Input.GetJoyInfo per pad, which marshals a dictionary each time, and Connected runs several
+    // times a frame; a roster that has not changed cannot change the answer.
+    private static Godot.Collections.Array<int>? _deduped;
+    private static int[] _rawSeen = Array.Empty<int>();
+
     /// <summary>Whether pad <i>input</i> is currently suppressed, the gate <see cref="For"/>
     /// applies. Not a statement about which devices exist; see <see cref="Connected"/>.</summary>
     public static bool InputBlocked => Disabled || !Focused;
 
     /// <summary>The pads that <b>exist</b>, the roster, for binding players to devices and for
-    /// noticing a disconnect. Empty when <see cref="Disabled"/>. Deliberately NOT gated on focus:
-    /// see the class remarks.</summary>
-    public static Godot.Collections.Array<int> Connected() =>
-        Disabled ? _noPads ??= new Godot.Collections.Array<int>() : Input.GetConnectedJoypads();
+    /// noticing a disconnect, one entry per physical controller (<see cref="KeepXInputView"/>).
+    /// Empty when <see cref="Disabled"/>. Deliberately NOT gated on focus: see the class remarks.
+    /// </summary>
+    public static Godot.Collections.Array<int> Connected()
+    {
+        if (Disabled)
+        {
+            return _noPads ??= new Godot.Collections.Array<int>();
+        }
+
+        var raw = Input.GetConnectedJoypads();
+        if (_deduped != null && SameRoster(raw, _rawSeen))
+        {
+            return _deduped;
+        }
+
+        _rawSeen = new int[raw.Count];
+        for (int i = 0; i < raw.Count; i++)
+        {
+            _rawSeen[i] = raw[i];
+        }
+
+        var views = new List<(int Pad, bool XInput, string Model)>(raw.Count);
+        foreach (int pad in raw)
+        {
+            views.Add((pad, IsXInputView(pad), ModelOf(pad)));
+        }
+
+        _deduped = new Godot.Collections.Array<int>();
+        foreach (int pad in KeepXInputView(views))
+        {
+            _deduped.Add(pad);
+        }
+
+        return _deduped;
+    }
+
+    /// <summary>The roster with each controller's duplicate views dropped. A pad the platform
+    /// reports through XInput and DirectInput both arrives twice (an 8BitDo Ultimate 2 arrives
+    /// three times), and the extra view answers no input while holding a roster slot, so one Start
+    /// joins two seats and a seat lands on a stick nobody is holding. Where a model has an XInput
+    /// view, only its XInput views are kept; a model with none keeps every view it has, so a
+    /// DirectInput-only stick still plays. Pure, so the rule is testable without a joypad.</summary>
+    public static int[] KeepXInputView(IReadOnlyList<(int Pad, bool XInput, string Model)> views)
+    {
+        ArgumentNullException.ThrowIfNull(views);
+        var xinput = new HashSet<string>();
+        foreach (var view in views)
+        {
+            if (view.XInput)
+            {
+                xinput.Add(view.Model);
+            }
+        }
+
+        var kept = new List<int>(views.Count);
+        foreach (var view in views)
+        {
+            if (view.XInput || !xinput.Contains(view.Model))
+            {
+                kept.Add(view.Pad);
+            }
+        }
+
+        return kept.ToArray();
+    }
 
     /// <summary>The pads a given consumer may <b>read</b>: its explicit binding when it has one
     /// (a splitscreen player owns exactly one pad), otherwise every connected pad, and nothing
@@ -117,5 +185,38 @@ public static class Pads
                 : i == 0 ? "keyboard" : "NO DEVICE (connect a pad and relaunch)";
             Log.Info("core", $"player {i + 1} input: {devices}");
         }
+    }
+
+    // Whether the platform reports this slot through XInput, which is the view that carries input.
+    // Godot passes SDL's own device info through, so the key's presence is the whole test.
+    private static bool IsXInputView(int pad) => Input.GetJoyInfo(pad).ContainsKey("xinput_index");
+
+    // What counts as one controller for the rule above: the vendor and product the platform
+    // reports, which every view of one device shares and which a Steam virtual pad inherits from
+    // the device behind it.
+    private static string ModelOf(int pad)
+    {
+        var info = Input.GetJoyInfo(pad);
+        string vendor = info.TryGetValue("vendor_id", out var v) ? v.ToString() : string.Empty;
+        string product = info.TryGetValue("product_id", out var p) ? p.ToString() : string.Empty;
+        return $"{vendor}/{product}";
+    }
+
+    private static bool SameRoster(Godot.Collections.Array<int> raw, int[] seen)
+    {
+        if (raw.Count != seen.Length)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < seen.Length; i++)
+        {
+            if (raw[i] != seen[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

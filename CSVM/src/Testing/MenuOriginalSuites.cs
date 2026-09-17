@@ -22,6 +22,9 @@ namespace CSVM.Testing;
 internal static class MenuOriginalSuites
 {
     private const float Dt = 1f / 60f;
+    // A connection index past anything the platform hands out, so a seat placed on it is off the
+    // roster whatever is plugged into the machine running the suite.
+    private const int AbsentPad = 99;
 
     // The scrapbook's Current Mission tab, the one plaque a campaign board puts in the top band:
     // its art starts at authored x 558 and is 114 wide, so a chip row in the corner clears this.
@@ -58,7 +61,8 @@ internal static class MenuOriginalSuites
         + "activating what the click stood over, and the contents arrows still step it, seat 0 steering with a "
         + "pad claims it so it can never join as another seat, a pad a guest already joined on is "
         + "not claimable and a rebind of seat 0's set drops the stale last-active reading with it, "
-        + "joining is open on the Instant Action "
+        + "a seat whose pad drops off the roster holds it through the grace and leaves once the "
+        + "device stays gone past it, joining is open on the Instant Action "
         + "screen and a second seat joined there stays seated, the campaign flight check carries the "
         + "seat strip with two seats and none with one, drawn as Built-in's own chip row in the "
         + "top-right corner clear of the book tab, a switch to Built-in "
@@ -365,6 +369,7 @@ internal static class MenuOriginalSuites
         player1.LastActivePad = -1;
         host.Tick(Dt);
         GuestPadClaim(ctx, host, setup, devices, player1);
+        PadBlipGrace(ctx, host, setup, devices, player1);
 
         WalkTo(host, seat, shell, "MM_B_INSTANTACTION");
         Press(host, seat, Accept);
@@ -407,12 +412,40 @@ internal static class MenuOriginalSuites
             $"a guest's joined pad is not claimable by seat 0, so neither seat flies the other's ({devices.P1Pad})");
 
         player1.Pads = new[] { 2 };
-        devices.Sync();
+        devices.Sync(0f);
         ctx.Check(player1.LastActivePad < 0,
             $"and rebinding seat 0's pads drops the stale reading with them ({player1.LastActivePad})");
         ctx.Check(!devices.ClaimP1Pad() && devices.P1Pad < 0,
             $"leaving the claim nothing to take from a set seat 0 no longer reads ({devices.P1Pad})");
         if (seat != null)
+        {
+            setup.Unjoin(seat);
+        }
+
+        host.Tick(Dt);
+    }
+
+    // Steam Input re-enumerates its virtual pads mid-menu, and a seat that leaves on every blip is
+    // the join flow coming apart. The roster is live here because --no-pads has none to come back
+    // to, over a pad index no real device can hold, so the grace is what decides.
+    private static void PadBlipGrace(
+        TestContext ctx, MenuHost host, PlayerSetupFeature setup, MenuSeatDevices devices, MenuInput player1)
+    {
+        bool disabled = Pads.Disabled;
+        var bound = player1.Pads;
+        Pads.Disabled = false;
+        int before = setup.Seats.Count;
+        var seat = setup.Join(new BuiltInSeat(new MenuInput { Pads = new[] { AbsentPad } }));
+        devices.Sync(MenuSeatDevices.DeviceGrace / 2f);
+        ctx.Check(seat != null && setup.Seats.Count == before + 1,
+            $"a seat whose pad drops off the roster holds it through the grace ({setup.Seats.Count} seats)");
+        devices.Sync(MenuSeatDevices.DeviceGrace);
+        ctx.Check(setup.Seats.Count == before,
+            $"and leaves once the device stays gone past it ({setup.Seats.Count} seats)");
+
+        Pads.Disabled = disabled;
+        player1.Pads = bound;
+        if (seat != null && setup.Seats.Count > before)
         {
             setup.Unjoin(seat);
         }

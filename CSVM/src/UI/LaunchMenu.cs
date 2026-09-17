@@ -733,7 +733,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             if (startScreen == "loadout")
                 _setup.OpenLoadout(_slots[0].Seat);
         }
-        _devices.Sync();
+        _devices.Sync(0f);
         _devices.PrimeJoins();
         Rebuild();
     }
@@ -922,7 +922,7 @@ public sealed partial class LaunchMenu : CanvasLayer
 
         // Device bookkeeping first: a pad that vanished must not still be driving a cursor, and a
         // pad that appeared should be joinable (or become P1's, if P1 has none).
-        bool dirty = _devices.Sync();
+        bool dirty = _devices.Sync((float)delta);
         dirty |= ScanJoins();
         SyncSlots();
 

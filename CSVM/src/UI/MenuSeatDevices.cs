@@ -10,7 +10,8 @@ namespace CSVM.UI;
 /// <summary>
 /// The pad side of the shared player setup, for any presentation: which pad seat 0 claimed by
 /// steering with it, the join gesture (Start on an unclaimed pad, edge-detected per device),
-/// hotplug (a vanished pad unjoins its seat, seat 0's poller is handed every pad nobody holds)
+/// hotplug (a pad gone past <see cref="DeviceGrace"/> unjoins its seat, one back at another index
+/// keeps it, seat 0's poller is handed every pad nobody holds)
 /// and the flight binding a seat's source carries. A joined pad becomes a
 /// <see cref="BuiltInSeat"/> over a poller bound to that one pad. The feature never sees a pad
 /// index; this is where a source's own detail is read. ⚠ Seat 0 reads every unclaimed pad until
@@ -18,11 +19,26 @@ namespace CSVM.UI;
 /// </summary>
 public sealed class MenuSeatDevices
 {
+    /// <summary>How long a seat keeps its pad, and seat 0 its claim, after the roster drops it.
+    /// Steam Input re-enumerates its virtual pads mid-menu, and without the grace every blip
+    /// unjoins the player and releases the claim, so a Start lands in a different seat each
+    /// time.</summary>
+    public const float DeviceGrace = 2f;
+
     private readonly MenuInput _player1;
     private readonly PlayerSetupFeature _setup;
     // Previous-frame Start state of every connected pad, for edge-detecting the join gesture on
     // pads that have no seat (and therefore no poller) yet.
     private readonly Dictionary<int, bool> _joinPrev = new();
+    // The pads already reported by ReportButton since joining opened, so the report is one line per
+    // pad rather than one per frame.
+    private readonly HashSet<int> _reported = new();
+    // The stable guid of the device behind each pad a seat holds, seat 0's claim included. Godot
+    // reuses a connection index the moment a pad drops, so the index alone cannot say whether the
+    // pad that came back is the one that left.
+    private readonly Dictionary<int, string> _guids = new();
+    // How long each held pad has been off the roster, entries only while one is away.
+    private readonly Dictionary<int, float> _away = new();
 
     /// <summary>Over seat 0's poller (<paramref name="player1"/>, the keyboard plus the pads it
     /// borrows) and the feature the seats live in.</summary>
@@ -80,30 +96,63 @@ public sealed class MenuSeatDevices
         return false;
     }
 
-    /// <summary>Reconciles the seats with the live pad roster: a seat whose pad disconnected
-    /// leaves, a claimed pad that vanished frees seat 0, and seat 0's poller is bound to its
-    /// claimed pad or to every unclaimed one. Returns whether anything changed.</summary>
-    public bool Sync()
+    /// <summary>Reconciles the seats with the live pad roster over <paramref name="dt"/> seconds: a
+    /// device that reappears at another connection index keeps its seat, one still missing after
+    /// <see cref="DeviceGrace"/> takes its seat with it (and frees seat 0's claim), and seat 0's
+    /// poller is bound to its claimed pad or to every unclaimed one. Returns whether anything
+    /// changed.</summary>
+    public bool Sync(float dt)
     {
         var connected = Pads.Connected();
+        var live = new Dictionary<int, string>(connected.Count);
+        foreach (int pad in connected)
+        {
+            live[pad] = Input.GetJoyGuid(pad);
+        }
+
         bool dirty = false;
         var seats = _setup.Seats;
         for (int i = seats.Count - 1; i >= 1; i--)
         {
             int pad = PadOf(seats[i].Source);
-            if (pad >= 0 && !connected.Contains(pad))
+            if (pad < 0 || Holds(pad, live))
+            {
+                continue;
+            }
+
+            int moved = Moved(pad, live);
+            if (moved >= 0)
+            {
+                Reseat(PollerOf(seats[i].Source), pad, moved);
+                Log.Info("ui", $"launchscreen: P{i + 1}'s pad is back as {moved} \"{Input.GetJoyName(moved)}\", seat kept");
+                dirty = true;
+            }
+            else if (Gone(pad, dt))
             {
                 Log.Info("ui", $"launchscreen: P{i + 1}'s pad {pad} disconnected, player left");
                 _setup.Unjoin(seats[i]);
+                Forget(pad);
                 dirty = true;
             }
         }
 
-        if (P1Pad >= 0 && !connected.Contains(P1Pad))
+        if (P1Pad >= 0 && !Holds(P1Pad, live))
         {
-            Log.Info("ui", $"launchscreen: P1's pad {P1Pad} disconnected, back to keyboard + any free pad");
-            P1Pad = -1;
-            dirty = true;
+            int moved = Moved(P1Pad, live);
+            if (moved >= 0)
+            {
+                Reseat(null, P1Pad, moved);
+                Log.Info("ui", $"launchscreen: P1's pad is back as {moved} \"{Input.GetJoyName(moved)}\", claim kept");
+                P1Pad = moved;
+                dirty = true;
+            }
+            else if (Gone(P1Pad, dt))
+            {
+                Log.Info("ui", $"launchscreen: P1's pad {P1Pad} disconnected, back to keyboard + any free pad");
+                Forget(P1Pad);
+                P1Pad = -1;
+                dirty = true;
+            }
         }
 
         var free = new List<int>(connected.Count);
@@ -144,6 +193,7 @@ public sealed class MenuSeatDevices
     public void PrimeJoins()
     {
         _joinPrev.Clear();
+        _reported.Clear();
         foreach (int pad in Pads.Connected())
         {
             _joinPrev[pad] = MenuInput.JoinPressed(pad);
@@ -160,8 +210,10 @@ public sealed class MenuSeatDevices
             bool pressed = MenuInput.JoinPressed(pad);
             _joinPrev.TryGetValue(pad, out bool prev);
             _joinPrev[pad] = pressed;
+            ReportButton(pad);
             if (!pressed || prev || IsClaimed(pad) || _setup.Seats.Count >= PlayerSetupFeature.MaxSeats)
             {
+                ReportRefusal(pad, pressed && !prev);
                 continue;
             }
 
@@ -214,5 +266,120 @@ public sealed class MenuSeatDevices
         }
 
         return true;
+    }
+
+    // Whether the device a seat was seated on is still answering at that connection index. The
+    // first sight of a held pad records its guid, so a seat that has just joined answers true and
+    // every later frame compares against what it joined on.
+    private bool Holds(int pad, Dictionary<int, string> live)
+    {
+        if (!live.TryGetValue(pad, out string? guid))
+        {
+            return false;
+        }
+
+        if (_guids.TryGetValue(pad, out string? seated) && seated != guid)
+        {
+            return false;
+        }
+
+        _guids[pad] = guid;
+        _away.Remove(pad);
+        return true;
+    }
+
+    // The connection index a seat's device answers at now, or -1 while it is off the roster or has
+    // landed on an index another seat holds. Steam Input's virtual pads come back at whichever
+    // index is free, which is why this is a guid search and not an index comparison.
+    private int Moved(int pad, Dictionary<int, string> live)
+    {
+        if (!_guids.TryGetValue(pad, out string? seated))
+        {
+            return -1;
+        }
+
+        foreach (var entry in live)
+        {
+            if (entry.Value == seated && !IsClaimed(entry.Key))
+            {
+                return entry.Key;
+            }
+        }
+
+        return -1;
+    }
+
+    // Moves a seat's poller, and the bookkeeping above, onto the index its device now answers at.
+    private void Reseat(MenuInput? poller, int from, int to)
+    {
+        if (poller != null)
+        {
+            poller.Pads = new[] { to };
+            poller.Prime();
+        }
+
+        _guids[to] = _guids[from];
+        Forget(from);
+    }
+
+    // Whether a held pad has been off the roster longer than the grace. The frame it goes missing
+    // only starts the clock, so a re-enumeration that spans a frame or two costs nothing. There is
+    // no roster to come back to under --no-pads, so the grace collapses there.
+    private bool Gone(int pad, float dt)
+    {
+        if (Pads.Disabled)
+        {
+            return true;
+        }
+
+        _away.TryGetValue(pad, out float waited);
+        waited += dt;
+        _away[pad] = waited;
+        return waited >= DeviceGrace;
+    }
+
+    private void Forget(int pad)
+    {
+        _guids.Remove(pad);
+        _away.Remove(pad);
+    }
+
+    // Which button a pad is actually sending while joining is open, one line per pad per screen. A
+    // device whose Start arrives on another index (a Steam Input or DirectInput mapping the platform
+    // has no entry for) joins nobody and leaves no other trace, which reads exactly like a refusal.
+    private void ReportButton(int pad)
+    {
+        if (_reported.Contains(pad) || Pads.InputBlocked)
+        {
+            return;
+        }
+
+        for (int button = 0; button < (int)JoyButton.SdlMax; button++)
+        {
+            if (!Input.IsJoyButtonPressed(pad, (JoyButton)button))
+            {
+                continue;
+            }
+
+            _reported.Add(pad);
+            Log.Info("ui", $"launchscreen: pad {pad} \"{Input.GetJoyName(pad)}\" sends {(JoyButton)button} ({button}) while joining is open");
+            return;
+        }
+    }
+
+    // Why a Start that could have joined did not. The join is the only thing logged otherwise, so a
+    // refused gesture and a button that never arrived are indistinguishable from the log.
+    private void ReportRefusal(int pad, bool edge)
+    {
+        if (!edge)
+        {
+            return;
+        }
+
+        string why = pad == P1Pad ? "seat 0 claimed it"
+            : IsClaimed(pad) ? "another seat holds it"
+            : _setup.Seats.Count >= PlayerSetupFeature.MaxSeats ? $"all {PlayerSetupFeature.MaxSeats} seats are taken"
+            : "the seat itself refused the claim";
+        Log.Info("ui", $"launchscreen: Start on pad {pad} \"{Input.GetJoyName(pad)}\" joined nobody, {why}");
     }
 }

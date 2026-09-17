@@ -546,7 +546,7 @@ public sealed class OriginalPresentation : IMenuPresentation
             seat.Prime();
         }
 
-        _devices!.Sync();
+        _devices!.Sync(0f);
         _devices.PrimeJoins();
         _joiningOpen = _shell.JoiningOpen;
         if (!_joiningOpen)
@@ -567,7 +567,7 @@ public sealed class OriginalPresentation : IMenuPresentation
             return;
         }
 
-        bool changed = _devices.Sync();
+        bool changed = _devices.Sync(dt);
         bool joining = _shell.JoiningOpen;
         if (joining && !_joiningOpen)
         {
