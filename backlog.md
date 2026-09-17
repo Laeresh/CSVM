@@ -603,13 +603,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   controls and not a luminance distance.
   *Playtest after fix:* the C5 night poses in `playtest/CAP-11/README.md`.
 
-- `BL-325` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` `[C1B]` **Night cloud sprites are directionally moonlit in the original; ours are
-  uniformly lit** (split out of `BL-118` at its close, PLAN-overcast-match `C24`, 2026-08-09,
-  decision 2 of that plan kept it out of a two-daytime-stills milestone). The original lights a
+- `BL-325` `[Feature]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` `[C1B]` **Night cloud sprites are directionally moonlit in the original; ours are
+  uniformly lit** (split out of `BL-118` at its close, PLAN-overcast-match `C24`, decision 2 of
+  that plan kept it out of a two-daytime-stills milestone). The original lights a
   night cloud by which side of it faces the moon; we apply one flat `WorldLight` to the whole
   population, so a moonlit frame is right on the away side and roughly half as bright on the lit
   side.
-  *Evidence:* `CAP-11` C1B (2026-08-07, `playtest/CAP-11/`): cloud cores near the moon reach
+  *Evidence:* `CAP-11` C1B (`playtest/CAP-11/`): cloud cores near the moon reach
   **p90 218** (t=16) while the away-from-moon cloud sits at **p90 70** (t=5); our uniform
   `WorldLight` 0.426 rendered **p90 102**, matching the away side and ~2× dark against the lit
   side. Re-measured on the Wave-B build (`B15`, plan `B17` Table 4): our C1B moonlit cloud tops
@@ -633,30 +633,30 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   cloud-local, the way `C22`'s deck fix was deck-local. And C1's own daytime cards were measured
   faithful at `lighting: false` (`C21`/`C23`). Nothing in the original scales a cloud card's
   colour at all (decoded, `docs/org/cloudCards.md`), so this must not become a global cloud
-  brightness knob; `FogVolumeClutter` now renders the authored 240 unscaled and carries no such
-  constant.
-  ⚠ **The `lighting: true` cards are the other half of this, and they are `fvol`, not
-  `cloudparent`.** `lighting: true` on a `Facade` card admits `AMBIENT + DIFFUSE × max(N·L, 0)`
-  per vertex on the card's own three authored normals through the billboard basis
-  (`docs/org/vertexLighting.md`), not a flat multiply. C1 and C4 author `lighting: false` so their
-  daytime plateau is untouched, but C1C, C2B and C5 author it true and we apply a flat
-  `csky_world_light` there. That is a look change on a visible population, owed a verdict at the
-  controls before any code moves, and it replaces the flat multiply rather than stacking on it.
-  Today's frame at C1C is the flat-multiply one: placed `cloudparent` facades **235.25**,
-  un-dimmed deck floor **195.8**, `fvol` cards **163.7** (measured 163.24 / 163.83; C2B 163.24),
-  cloud-population spread **71.6**.
-  *Playtest after fix:* the C1B night spawn above, against `playtest/CAP-11/`'s t5 and t16
-  frames, saying for every measured puff which side of the moon it faces.
+  brightness knob; `FogVolumeClutter` carries no such constant, and the only thing that reaches the
+  authored 240 is the original's own per-vertex term, on the cards whose chapter authors it.
+  ⚠ **The lighting gate cannot supply this item's direction, decoded, and that half is now
+  built.** Every placed `cloudparent` card in every deck chapter (C1's 626, C1B's 1,620, C1C's
+  1,056, C4's 1,453) is authored `lighting: false` and ships an EMPTY normal array, so neither the
+  gate nor the geometry the term runs on is there, and C1B carries no `fvol` volume to hold the
+  cards that do. The original's directional light therefore reaches nothing in C1B's footage and
+  the item's stated mechanism is not the one in that frame; re-check what the measured p90 above
+  is actually reading (fog mix, not the world light) before building on it. What the gate does buy
+  is a per-vertex term on the `fvol` cards, and `FogVolumeClutter` now applies it: the card carries
+  its three authored normals and a `lighting: true` chapter (C1C, C2B, C5) evaluates
+  `AMBIENT + DIFFUSE × max(N·L, 0)` per vertex through the billboard basis off the zone's
+  uncollapsed `SUNLIGHT` pair, clamping the product against the authored 240 rather than the
+  factor. C1 and C4 author false and are byte-identical. That lifts a C1C card top from the flat
+  **163.7** toward the placed facades' **235.25** while its underside drops, which narrows the
+  71.6 cloud-population spread at the top of each puff and widens it at the bottom, and C1B moves
+  by nothing at all (p90 173.0 whole frame, 165.7 moon side, 175.3 away, before and after).
+  *Playtest after fix:* two sorties, the C1B night spawn
+  (`--chapter=C1B --pos=-5406,55,-7200 --direction=-0.391,0,-0.921`) against `playtest/CAP-11/`'s
+  t5 and t16 frames, saying for every measured puff which side of the moon it faces, and one lit
+  chapter (C1C above the band) for a verdict on whether the new per-vertex shading on the `fvol`
+  cards reads like the original rather than only measuring closer.
   *Cross-refs:* `docs/formats/effects.md`'s speed-cue section (the third population),
   `docs/org/vertexLighting.md`'s facade section, `CAP-11`.
-  ⚠ **The lighting gate cannot supply this item's direction, decoded.** Every placed `cloudparent`
-  card in every deck chapter (C1's 626, C1B's 1,620, C1C's 1,056, C4's 1,453) is authored
-  `lighting: false` and carries no normal array at all, so the original's directional light reaches
-  none of them and `SceneBuilder`, which honours the flag, does not multiply them by
-  `csky_world_light` either. Re-check what the measured p90 above is actually reading (fog mix, not
-  the world light) before building on it. A directional term for this population has to come from
-  some other mechanism; the flag does buy a per-vertex `N·L` on the `fvol` cards, which C1B ships
-  none of.
 
 - `BL-329` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The D32 in-cloud flicker's rate and ramp are declared
   TUNE, not decoded** (`PLAN-weather-decompile-match` D32, 2026-08-09;

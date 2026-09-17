@@ -639,6 +639,13 @@ public partial class Launcher : Node3D
         // overrides it from WeatherState.WorldLight below.
         RenderingServer.GlobalShaderParameterAdd("csky_world_light",
             RenderingServer.GlobalShaderParameterType.Float, 1.0f);
+        // The same SUNLIGHT uncollapsed, for the camera-facing cloud cards the collapse cannot
+        // describe (docs/org/vertexLighting.md). The defaults are the no-directional-term state,
+        // ambient 1 and diffuse 0, so a view without mission weather draws a card as authored.
+        RenderingServer.GlobalShaderParameterAdd("csky_sun_dir",
+            RenderingServer.GlobalShaderParameterType.Vec3, new Vector3(0f, 1f, 0f));
+        RenderingServer.GlobalShaderParameterAdd("csky_sun_light",
+            RenderingServer.GlobalShaderParameterType.Vec2, new Vector2(1f, 0f));
         // The world sampler's mip LOD bias. 0 is the original's own device default, so a chapter
         // authoring no MipBias renders exactly as it did (docs/org/textures.md).
         RenderingServer.GlobalShaderParameterAdd("csky_mip_bias",

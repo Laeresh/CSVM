@@ -244,9 +244,10 @@ and their range-gated `0.6` opacity.
 carries three authored normals (`normal_indices [1, 1, 0, 2]`, the top two corners sharing the one
 that runs up the card and the bottom two the pair that points out of it), the billboard basis turns
 them with the camera, and the original evaluates `AMBIENT + DIFFUSE × max(N·L, 0)` per vertex on
-them. So a lit card is shaded across its face and swings with the heading, where the remake applies
-one flat `csky_world_light`; the decode and what it implies are in
-[`../org/vertexLighting.md`](../org/vertexLighting.md).
+them. So a lit card is shaded across its face and swings with the heading, which is what
+`FogVolumeClutter` builds: the authored normals reach the card mesh, the shader turns them through
+the billboard basis and evaluates the same expression per vertex off the zone's uncollapsed
+`SUNLIGHT` pair. The decode is in [`../org/vertexLighting.md`](../org/vertexLighting.md).
 
 ⚠ Every card is authored `fog: false`, the sprites are exempt from the mission distance fog and
 carry `far_fade_range` instead. That is a deliberate reversal of what `CloudPuffs` did (it fogged

@@ -228,9 +228,14 @@ underside and the walls too and place several times the field.
 
 `FogVolumeClutter` and its generated card shader carry the colour path and the alpha path above.
 
-- **The colour is the authored 240, unscaled.** There is no colour term left in the cloud path:
-  the card's own vertex colour reaches the shader as the data authors it, and a brightness gap on
-  this population is read as coverage rather than corrected as a colour.
+- **The colour is the authored 240, unscaled, and the only thing that ever multiplies it is the
+  original's own per-vertex directional term.** A chapter authoring its card `lighting: true` (C1C,
+  C2B and C5) takes `AMBIENT + DIFFUSE · max(N·L, 0)` per corner on the card's three authored
+  normals, turned into the world by the billboard basis, clamped after the multiply the way the
+  original clamps it ([`vertexLighting.md`](vertexLighting.md)); a chapter authoring it false (C1,
+  C4) reaches the shader as the data authors it. There is no other colour term and no brightness
+  constant: a brightness gap on this population is read as coverage rather than corrected as a
+  colour.
 - **The fade band is drawn per sprite.** The scatter draws one `t` per placement and hands it to
   the shader as instance custom data; the shader interpolates both authored `far_fade_range` pairs
   with it and ramps linearly in squared distance, not as a smoothstep.

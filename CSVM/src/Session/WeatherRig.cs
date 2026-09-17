@@ -804,6 +804,13 @@ public sealed class WeatherRig
         // It shades aircraft only; the world is fullbright and casts no shadow from it.
         // ⚠ One light for the whole session: in splitscreen both panes wear rig 0's zone.
         _sun.Rotation = fog.SunOrientation;
+        // The same bearing and the uncollapsed pair, for the lit cloud cards, which shade per
+        // vertex off normals that turn with the camera (docs/org/vertexLighting.md). Both modes:
+        // a card is unshaded. csky_sun_dir points toward the light, as max(N.L, 0) wants.
+        var toSun = (_sun.IsInsideTree() ? _sun.GlobalBasis : _sun.Basis).Z.Normalized();
+        RenderingServer.GlobalShaderParameterSet("csky_sun_dir", toSun);
+        RenderingServer.GlobalShaderParameterSet("csky_sun_light",
+            new Vector2(fog.SunAmbient, fog.SunDiffuse));
         // The authored pair itself, published for the ground shadow, which derives its darkness
         // from the light rather than from either mode's energies.
         SunlightRgb = (Scaled(fog.SunDiffuse, fog.SunColorDiffuse),

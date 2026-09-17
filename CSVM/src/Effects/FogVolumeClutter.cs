@@ -221,10 +221,10 @@ public sealed partial class FogVolumeClutter : Node3D
                     : stackalloc int[] { 0, i, i + 1 };
                 foreach (int corner in corners)
                 {
-                    st.SetNormal(Vector3.Back);
-                    // The authored colour, unscaled. ⚠ Never scale it: nothing in the original
-                    // touches a card's colour, the texture is a constant-RGB alpha mask, and a
-                    // brightness gap on this population is coverage (docs/org/cloudCards.md).
+                    st.SetNormal(CardNormal(mesh, poly, corner));
+                    // The authored colour, unscaled. ⚠ Never scale it here: no per-card colour term
+                    // exists and a brightness gap on this population is coverage
+                    // (docs/org/cloudCards.md). The one term the original applies is per vertex.
                     st.SetColor(poly.VertexColors != null && corner < poly.VertexColors.Count
                         ? poly.VertexColors[corner]
                         : Colors.White);
@@ -241,6 +241,24 @@ public sealed partial class FogVolumeClutter : Node3D
         return arrayMesh;
     }
 
+    // One corner's authored normal, the geometry the original's per-vertex facade light runs on
+    // (docs/org/vertexLighting.md). Every shipped card carries three under `normal_indices
+    // [1, 1, 0, 2]`: the top corners share one along the card's own +Y, the bottom two carry the
+    // pair pointing out of it along +Z. A card without them falls back to the quad's own facing,
+    // which the unlit arm never reads.
+    private static Vector3 CardNormal(GameZMesh mesh, GameZPolygon poly, int corner)
+    {
+        if (poly.NormalIndices != null && corner < poly.NormalIndices.Count)
+        {
+            int index = poly.NormalIndices[corner];
+            if (index >= 0 && index < mesh.Normals.Count && mesh.Normals[index].LengthSquared() > 1e-12f)
+            {
+                return mesh.Normals[index].Normalized();
+            }
+        }
+        return Vector3.Back;
+    }
+
     // Camera-facing billboard (hand-rolled: a MultiMesh cannot use Godot's billboard flag), plus
     // the clutter fade, whose draw distance is scaled by the viewing angle against each sprite's
     // own polygon normal. `cull` collapses the quad to a point once the fade has dropped it, so a
@@ -249,12 +267,23 @@ public sealed partial class FogVolumeClutter : Node3D
     // horizontal cylinder: a cloud overhead is as far away as one on the horizon.
     private static string ShaderCode(bool lit, bool fogged)
     {
-        string light = lit ? " * csky_world_light" : string.Empty;
+        // ⚠ A `lighting: true` card takes the original's PER-VERTEX term, never the collapsed
+        // csky_world_light: a card's authored normals turn with the camera, so no single factor
+        // describes one (docs/org/vertexLighting.md). C1 and C4 author false and take nothing.
+        string varying = lit ? "\nvarying float v_light;" : string.Empty;
+        string vertexLight = lit
+            ? "\n    v_light = csky_sun_vertex_light(mat3(INV_VIEW_MATRIX[0].xyz, "
+              + "INV_VIEW_MATRIX[1].xyz, INV_VIEW_MATRIX[2].xyz) * NORMAL);"
+            : string.Empty;
+        // The product is clamped, not the factor: the original clamps after multiplying the
+        // authored colour, and it clamps in the framebuffer's own gamma space, which is the space
+        // COLOR is still in here.
+        string vcol = lit ? "clamp(COLOR.rgb * v_light, 0.0, 1.0)" : "COLOR.rgb";
         string albedo = fogged
             ? "    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;\n"
               + "    float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);\n"
-              + $"    ALBEDO = mix(col.rgb{light}, csky_fog_color, fog_amt);"
-            : $"    ALBEDO = col.rgb{light};";
+              + "    ALBEDO = mix(col.rgb, csky_fog_color, fog_amt);"
+            : "    ALBEDO = col.rgb;";
         return $$"""
             shader_type spatial;
             render_mode blend_mix, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;
@@ -270,7 +299,7 @@ public sealed partial class FogVolumeClutter : Node3D
             // picks its level exactly as every other mip-mapped arm does.
             #include "res://shaders/csky_mip_bias.gdshaderinc"
 
-            varying flat float v_alpha;
+            varying flat float v_alpha;{{varying}}
 
             void vertex() {
                 vec3 origin = MODEL_MATRIX[3].xyz;
@@ -286,11 +315,11 @@ public sealed partial class FogVolumeClutter : Node3D
                     INV_VIEW_MATRIX[0], INV_VIEW_MATRIX[1], INV_VIEW_MATRIX[2], MODEL_MATRIX[3]);
                 MODELVIEW_MATRIX[0] *= length(MODEL_MATRIX[0].xyz) * cull;
                 MODELVIEW_MATRIX[1] *= length(MODEL_MATRIX[1].xyz) * cull;
-                MODELVIEW_MATRIX[2] *= length(MODEL_MATRIX[2].xyz);
+                MODELVIEW_MATRIX[2] *= length(MODEL_MATRIX[2].xyz);{{vertexLight}}
             }
 
             void fragment() {
-                vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * csky_sample_albedo(albedo_tex, UV);
+                vec4 col = vec4(csky_srgb_to_linear({{vcol}}), COLOR.a) * csky_sample_albedo(albedo_tex, UV);
             {{albedo}}
                 ALPHA = col.a * v_alpha;
             }

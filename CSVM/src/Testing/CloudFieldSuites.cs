@@ -21,16 +21,29 @@ internal static class CloudFieldSuites
     // are parallel, and a parallel face is still tested on its own distance.
     private const float SameNormal = 0.999f;
 
-    // Per chapter: the pinned placement counts (base, map-edge extension) and the normal tally
-    // (sprites on a face pointing straight up, sprites on a sloped one). C1's nine slab volumes
-    // author one flat top face each, so its whole field and its ring are +Y; C1C's build-ups and
-    // C5's ramped prisms carry sloped faces, which is what makes those two read as a shell. The
-    // base counts are docs/formats/fogvol.md's own.
-    private static readonly (string Chapter, int Base, int Extension, int Up, int Sloped)[] Fields =
+    // How far apart the two headings' away-side factors must land before the card counts as
+    // directionally shaded. The authored bottom normals sit about 18 degrees off the card's own
+    // +Z, so a half-turn swings them right across the light and the real gap is far wider.
+    private const float DirectionalMargin = 0.05f;
+
+    // A SUNLIGHT pair that neither flattens nor saturates the law, and below it the oblique
+    // bearing it runs on: a chapter's own numbers would make this a reading of one mission.
+    private const float ProbeAmbient = 0.6f;
+    private const float ProbeDiffuse = 0.4f;
+
+    private static readonly Vector3 ProbeSun = new Vector3(0.62f, 0.3f, 0.72f).Normalized();
+
+    // Per chapter: the pinned placement counts (base, map-edge extension), the normal tally
+    // (sprites on a face pointing straight up, sprites on a sloped one) and the authored
+    // `lighting` flag of the chapter's own cloud card. C1's nine slab volumes author one flat top
+    // face each, so its whole field and its ring are +Y; C1C's build-ups and C5's ramped prisms
+    // carry sloped faces, which is what makes those two read as a shell. The base counts are
+    // docs/formats/fogvol.md's own, the flag is docs/org/vertexLighting.md's gate.
+    private static readonly (string Chapter, int Base, int Extension, int Up, int Sloped, bool Lit)[] Fields =
     {
-        ("C1", 10524, 13176, 23700, 0),
-        ("C1C", 11452, 13176, 23386, 1242),
-        ("C5", 19197, 0, 17095, 2102),
+        ("C1", 10524, 13176, 23700, 0, false),
+        ("C1C", 11452, 13176, 23386, 1242, true),
+        ("C5", 19197, 0, 17095, 2102, true),
     };
 
     [Suite("cloud-field-fade",
@@ -39,10 +52,12 @@ internal static class CloudFieldSuites
         + "flat deck faces and its map-edge ring are +Y throughout, C1C's build-ups and C5's "
         + "ramped prisms carry sloped faces, no shipped face points down or sideways, the band "
         + "spans both authored far_fade_range pairs, the card sampler fetches through the "
-        + "chapter's mip LOD bias, and the pinned placement counts hold")]
+        + "chapter's mip LOD bias, a card authored `lighting: true` carries its three authored "
+        + "normals and reads brighter on the side it turns toward the light than on the side it "
+        + "turns away, a card authored false reads flat, and the pinned placement counts hold")]
     internal static void CloudFieldFade(TestContext ctx)
     {
-        foreach (var (chapter, expectBase, expectExtension, expectUp, expectSloped) in Fields)
+        foreach (var (chapter, expectBase, expectExtension, expectUp, expectSloped, lit) in Fields)
         {
             string zrdr = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter);
             string texturePath = SessionPaths.ChapterTextures(ctx.DataRoot, chapter);
@@ -71,6 +86,7 @@ internal static class CloudFieldSuites
                     CheckBands(ctx, chapter, field, spec!, expectUp, expectSloped);
                     CheckNormalsAreTheirOwnFaces(ctx, chapter, field, spec!, volumes);
                     CheckCardSampler(ctx, chapter, field);
+                    CheckVertexLight(ctx, chapter, field, lit);
                 }
                 finally
                 {
@@ -232,5 +248,89 @@ internal static class CloudFieldSuites
             examined++;
         }
         ctx.Check(examined > 0, $"{chapter} cloud card materials examined count={examined}");
+    }
+
+    // The lit arm, checked where the collapsed csky_world_light cannot reach: a card's authored
+    // normals turn with the camera, so one card reads down toward AMBIENT on the side it turns
+    // away from the light and up toward AMBIENT + DIFFUSE on the side it turns toward it
+    // (docs/org/vertexLighting.md). A card authored `lighting: false` takes no term at all.
+    private static void CheckVertexLight(TestContext ctx, string chapter, FogVolumeClutter field, bool lit)
+    {
+        var facing = BillboardBasis(ProbeSun);
+        var turned = BillboardBasis(-ProbeSun);
+        int examined = 0;
+        foreach (var child in field.GetChildren())
+        {
+            if (child is not MultiMeshInstance3D { MaterialOverride: ShaderMaterial { Shader: { } shader } } instance
+                || instance.Multimesh?.Mesh is not ArrayMesh card)
+            {
+                continue;
+            }
+            string code = shader.Code;
+            ctx.Check(code.Contains("csky_sun_vertex_light", System.StringComparison.Ordinal) == lit,
+                $"{chapter} {child.Name} card shader carries the per-vertex sun term: {lit}");
+            // ⚠ Never the collapsed factor on this population, in either arm: it stands for the
+            // world's mean N.L, which no camera-facing card holds.
+            ctx.Check(!code.Contains("csky_world_light", System.StringComparison.Ordinal),
+                $"{chapter} {child.Name} card shader leaves the collapsed world light alone");
+
+            var arrays = card.SurfaceGetArrays(0);
+            var normals = arrays[(int)Mesh.ArrayType.Normal].AsVector3Array();
+            var vertices = arrays[(int)Mesh.ArrayType.Vertex].AsVector3Array();
+            float toward = 0f, away = 0f, flat = 0f;
+            int corners = 0;
+            for (int v = 0; v < normals.Length && v < vertices.Length; v++)
+            {
+                // The card's lower corners carry the pair pointing out of it, the normals a turn
+                // swings across the light; its top corners carry the one along its own +Y, which a
+                // turn about the world's up axis barely moves.
+                if (vertices[v].Y < 0f)
+                {
+                    toward += VertexLight(facing * normals[v]);
+                    away += VertexLight(turned * normals[v]);
+                    corners++;
+                }
+                else
+                {
+                    flat += Mathf.Abs(VertexLight(facing * normals[v]) - VertexLight(turned * normals[v]));
+                }
+            }
+
+            ctx.Check(corners > 0, $"{chapter} {child.Name} card carries lower corners count={corners}");
+            if (corners > 0)
+            {
+                toward /= corners;
+                away /= corners;
+            }
+            if (lit)
+            {
+                ctx.Check(toward > away + DirectionalMargin,
+                    $"{chapter} {child.Name} lit side {toward:0.000} over away side {away:0.000}");
+                ctx.Check(away >= ProbeAmbient - NormalTolerance
+                          && toward <= ProbeAmbient + ProbeDiffuse + NormalTolerance,
+                    $"{chapter} {child.Name} card light stays inside its authored pair");
+            }
+            // Noted in both arms: the geometry is the same card either way, so the unlit chapters'
+            // numbers are what their authored flag is turning off, not a shortfall in the mesh.
+            ctx.Note($"{chapter} {child.Name} lighting={lit}: {toward:0.000} toward the light, {away:0.000} away, tops swing {flat:0.000}");
+            examined++;
+        }
+        ctx.Check(examined > 0, $"{chapter} cloud card meshes examined for the vertex law count={examined}");
+    }
+
+    // The basis the card is drawn through, the one the shader builds out of INV_VIEW_MATRIX's
+    // columns: local X to the camera's right, local Y to its up, local Z out of the screen toward
+    // it. A card's authored normals reach the world through this, never through a model transform.
+    private static Basis BillboardBasis(Vector3 towardCamera)
+    {
+        var back = towardCamera.Normalized();
+        var right = Vector3.Up.Cross(back).Normalized();
+        return new Basis(right, back.Cross(right).Normalized(), back);
+    }
+
+    // The decoded per-vertex term itself, on one world-space normal.
+    private static float VertexLight(Vector3 worldNormal)
+    {
+        return ProbeAmbient + (ProbeDiffuse * Mathf.Max(worldNormal.Normalized().Dot(ProbeSun), 0f));
     }
 }

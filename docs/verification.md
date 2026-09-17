@@ -472,6 +472,17 @@ member, and it does not go here.
   mesh's own material names it outright, and `--dump-debris=<name>` prints both halves of the
   product per mesh under a destructible.
 
+- **WORLD-48**, **A population authored `lighting: false` cannot show a directional light, so read
+  the flag and the normal array on the actual nodes before attributing a directional look to the
+  sun.** The report that night cloud sprites are directionally moonlit named a population that the
+  original's light never reaches: every placed `cloudparent` card in C1, C1B, C1C and C4 (626,
+  1,620, 1,056 and 1,453 nodes) is `lighting: false` AND ships an empty normal array, so both the
+  gate and the geometry the term runs on are absent, and C1B carries no `fvol` volume to hold the
+  cards that do have them. The flag and the array are per node in the chapter's own `gamez`
+  (`models.json` plus `nodes.json`), so the question is answered by a census in minutes and cannot
+  be answered by a frame. A look that survives that census comes from some other mechanism, and
+  implementing the named one moves nothing in the chapter that was complained about.
+
 ## SHELL, Windows, PowerShell, and processes
 
 - **SHELL-2**, **Identify stray Godot processes by worktree and probe flag.**

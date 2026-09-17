@@ -498,15 +498,23 @@ sprite card. `TextureArchive` still reads the extractor's `alpha` field out of t
 `manifest.json` and publishes it as an alpha class, which is the right reader for anything that
 needs the texture's own bit rather than its pixels.
 
-⚠ **On a facade the gate is reproduced and the term behind it is not.** `csky_world_light` is the
+**On the `fvol` clutter cards the term behind the gate is reproduced.** `csky_world_light` is the
 collapse `AMBIENT + DIFFUSE × 0.46` calibrated on the predominantly up-facing world
 ([`weather.md`](weather.md)), and a camera-facing card is the one surface that averaging does not
 describe: the original shades it per vertex from normals that turn with the camera, between
 `AMBIENT` where a corner faces away from the sun and `AMBIENT + DIFFUSE` where one faces it. So
-honouring the flag with a flat multiply, which is what `SceneBuilder` does today, is right about
-*which* cards are lit (C1C, C2B and C5's `fvol` field, and nothing in C1, C4 or any placed
-`cloudparent` cluster) and wrong about the value on all of them. Acting on that is a look change on
-a visible population and is owed a verdict at the controls, not a luminance distance.
+`FogVolumeClutter` builds the card with its three authored normals and, on the chapters authoring
+`lighting: true`, evaluates `AMBIENT + DIFFUSE × max(N·L, 0)` per vertex on the normal turned into
+the world by the billboard basis, clamping the product against the authored colour rather than the
+factor. `WeatherRig` publishes the zone's own `SUNLIGHT_AMBIENT`, `SUNLIGHT_DIFFUSE` and sun bearing
+uncollapsed for it; the collapsed scalar is not read on this population in either arm.
+
+⚠ **Every other camera-facing surface still takes the flat multiply.** `SceneBuilder`'s billboard
+path honours the gate and then dims a lit facade by `csky_world_light`, which is right about *which*
+surfaces are lit and wrong about the value on each. That is the remaining half of the miss, and it
+is not what a night cloud deck is made of: every placed `cloudparent` card in C1, C1B, C1C and C4 is
+`lighting: false`, so neither term reaches it and no directional look on that population can come
+from this mechanism.
 
 ⚠ **A city wall is the same miss as a card, but the sign of the miss depends on the authored
 vertex colour.** The collapse's 0.46 stands for the world's mean `N·L`, so any surface whose own
