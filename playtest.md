@@ -102,12 +102,6 @@ draws its authored 800x600 space one-to-one.
 | `CAP-52` | **Menu audio, keyboard focus and the briefing**, across screens, re-recorded **with sound** | The first take (`CAP-52.mkv`, 2:28) settled the pointer (which bitmap where, the top-left hotspot, the swap on enter and leave only), the three lettering states, the press firing on the release, the two message boxes and where every Back lands, all of which Original now draws; the findings are `docs/org/menu-inventory.md` Part 4. Its audio track is digital silence, as are `CAP-49`'s, `CAP-50`'s and `CAP-51`'s, so the recorder had no game output routed to it: **check the recorder hears the game before the take**. Then one continuous walk, main menu, Instant Action, back, Campaign, roster (type a character and a refused one), cabin, scrapbook, briefing, flight check, back out. *Look for:* (a) which sound a rollover makes and which a press makes, on a main-menu plaque, a campaign plaque, a roster row, a contents row, a scrap and a dropdown row (CSVM's Original menu plays `MOUSEOVER` on entering a button and `MOUSECLICK` on a press and nothing over a row, unconfirmed); (b) what the edit-box keystroke and reject sounds are attached to (`ENTERTEXT` per taken character, `ENTERTEXT_ERROR` per refused one, unconfirmed); (c) where the splash music starts, stops and resumes, and whether the briefing's narration ducks it; (d) **REPLAY BRIEFING pressed** mid-narration, then RETURN TO CABIN mid-narration (Original restarts the wav from its top, and ends it and lifts the duck on leaving); (e) **DELETE PLAYER pressed** and cancelled (Original opens the two-button box focused on Yes); (f) **a keyboard and a pad pressed on every screen**, arrows, Tab, Enter and the pad's stick and A, since no take has pressed a key outside an edit box and CSVM's Original focus walk is a remake equivalence with no film behind it. CSVM's Built-in menu plays **no** click, rollover or keystroke sound and draws no pointer at all, so this is the whole of the evidence for both | `A4` (the audio and menu-input contracts), `D33`, the focus walk `docs/org/menu-inventory.md` Part 4 still calls a remake equivalence |
 | `CAP-53` | The **Plane Construction tab bar out of order, Purchase, and the two refusals** | Two walks exist already, `CAP-50.mkv` t=118 to 140 from Instant Action's door and `CAP-52.mkv` t=110 to 145 from the cabin's, and they settled the name dialog, the tab art, the running total, the dropdowns, both doors' strips and scraps, SELL PLANES and its INVENTORY, and CANCEL, all of which Original now draws; the findings are `docs/org/menu-inventory.md` Part 4. Both walks ran the tabs strictly 1 to 6 and neither purchased. The langui 206 defaults ask is settled without film: `AIRFRAME.SCRIPT`'s own mailbox arms carry its gate and all three answers (`docs/org/hangar.md`, "When the airframe swap asks"). Film from the cabin: **clear** Load Default Configuration on the name dialog and read what the Airframe tab opens on; visit the tabs **out of order** (Paint, then Engine, then Airframe); enter a name the game refuses (langui 203, a duplicate or empty one); then press READY TO PURCHASE and hold the totals page, and buy. *Look for:* whether picks survive leaving a tab and whether Purchase commits them all at once, what the totals page shows, and what the refusal looks like. Sound rides `CAP-52`'s re-record | `C23` |
 
-### Camera
-
-| ID | Capture | What must be in frame | Unblocks |
-|---|---|---|---|
-| `CAP-56` | The **death camera and the flyby** in the original | Both cameras are implemented from the decode and their geometry is pinned by engine suites, so this take judges PRESENTATION only and settles no constant. (a) **Death.** Get shot down in level flight at a few hundred metres and hold the recording from the kill until the respawn prompt. *Look for:* how long the camera holds before anything else takes the screen, whether the HUD is really gone, and whether the wreck stays framed the whole way down or leaves the picture. (b) **Flyby.** In level flight press **F7** and hold it for twenty seconds without touching the stick. *Look for:* how the cut in reads (hard cut or a move), whether the aeroplane passes as close as the authored 5.5-7 m radius makes it look, and what the camera does at the moment it re-sites. Fly a chapter with terrain under you for both, so the shared clearance has something to lift over | presentation of `StaticCameras`; nothing is blocked on it |
-
 ### Audio
 
 | ID | Capture | What must be audible | Unblocks |
@@ -744,15 +738,6 @@ is a judgement on our own remake.
     hull death should already have taken it.
   *Blocks:* `BL-694`'s landing commit (`git log --grep=BL-694`). A sortie that reaches no end
   state mints a new `BL`; `CAP-55` is what the original owes against (b) and (d).
-- `PT-137` `[Own]` **A docking that wins the mission fades to black over the film's last frame,
-  never over the cockpit or chase view.** The original's code 13 parks the flying state before it
-  can present again, so the fade copies the film's frame; the episode now keeps its camera and
-  framing through the leaving hold once the result lands inside it (`git log --grep=BL-739`).
-  Dock with the objectives complete. *Look for:* the film's framing holding still through the
-  whole fade, with no flash of the pilot's own view between the film's last frame and black. A
-  loss taken under a film should fade that film the same way; a win in free flight fades the
-  pilot's own view as before. A visible cut to the cockpit before the fade mints a new `BL`.
-  *Blocks:* nothing.
 
 
 ### The exported package · a recipient's first run, no arguments
@@ -862,29 +847,6 @@ is a judgement on our own remake.
   turning onto two or three other headings, so a sign error cannot hide at one pose; (c) the
   zeppelin icon, where the mission draws one, lying along the hull's own course. *Blocks:* nothing;
   a fail mints a new `BL`.
-
-### CM24 (C5/M04) · the Dante's engine bank, external view
-
-```powershell
-./RunGame.ps1 --campaign=<profile>:23
-```
-
-- `PT-139` `[Own]` **Every engine the Dante loses keeps its own burning nacelle for the authored
-  half minute (`BL-720`).** Each engine's `destroy_dtz?engNN` calls `large_30sec_fire` WITH that
-  engine's own `supports` node, and one broadside kill works through four engines about eight
-  seconds apart, so four fires overlap for a dozen seconds and a whole bank is fourteen. The
-  world-effects stage staged four copies of that template, so the fifth burning engine took the
-  first one's copy back and its fire moved to the newest kill; the stage now carries one copy per
-  engine of the largest hull (`git log --grep=BL-720`). Kill a broadside cannon, then shoot
-  engines by hand, and watch from the chase or external view. *Look for:*
-  - (a) each dead engine holding its own fire and smoke at its own nacelle until it burns out,
-    with none of them stepping across to another engine as the next one dies;
-  - (b) an engine that has been dead a while still burning while newer ones catch, rather than
-    going dark the moment a fifth engine dies;
-  - (c) the skin fires along a burning gasbag's flank, which run through a different template
-    family (`zepskinfire_1/2/3` over eight burn points a side) and are not covered by the fix.
-  *Blocks:* `BL-720`. A fire still hopping between engines means the pool is still short of the
-  concurrency and reopens the item; (c) failing mints a new `BL` against the skin-fire roots.
 
 ## Everything else
 

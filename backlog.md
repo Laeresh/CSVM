@@ -293,6 +293,44 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-640` (the same zeppelin's cannons); the other prerequisite form, node state, is
   parsed on both paths and enforced at `Start` (`git log --grep=BL-575`).
 
+- `BL-931` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **A zeppelin's hull
+  opens a see-through hole where a gasbag took partial damage: the torn panel's polygons face
+  inward and the hull's back faces are culled, so the sky shows through the airship.** *Evidence:*
+  reported at the controls on a pirate zeppelin in the tarot-card livery
+  (`.scratch/orch-2/BL-931/gasbag-hole.png`): a rectangular hole in the top of the hull ahead of the
+  card art, some of its polygons turned so the inside of the envelope shows, and the hull's inner
+  faces not drawn behind them. The user also asks since when a gasbag takes partial damage at all,
+  so the first fact to establish is which animation swapped the panel: the zeppelin record authors
+  one destroy anim per gasbag and a fraction-staged anim list per cannon (`Mech3/Zeppelins.cs`),
+  and the last landings on the hit path are `BL-672` (a hit belongs to the pool whose animation
+  root covers the struck node) and `BL-741` (a roster bias reaching every node above a part).
+  *What to settle first:* the anim behind the torn panel, whether the original draws the same
+  geometry there, and whether it draws that panel two-sided. `SceneBuilder.cs` and
+  `WorldBuilder.cs` disable culling only on the materials they name, so a panel the original
+  renders two-sided needs its material in that set rather than a global cull change. *⚠ Traps:*
+  `BL-735` (closed) proved the hull mesh identical in all eight chapters and traced an earlier
+  see-through reading on the belly to a switched-off MP zeppelin, so confirm the hole is drawn
+  geometry and not a switched-off section before touching culling. *Playtest after fix:* the same
+  zeppelin, one gasbag hit with a `DAMAGES_ZEPPELIN` weapon, looked at from above and from inside
+  the arc of the turned polygons. *Cross-refs:* `BL-639` (the Gemini's gasbags not burning out),
+  `git log --grep=BL-672`, `git log --grep=BL-735`.
+
+- `BL-932` `[Feature]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` **The canopy
+  bullet holes are heard and never seen: the cue opens one of the five `bullethole_anims` holes and
+  sounds `window_hit_sg`, and no decal is drawn for the hole.** *Evidence:* reported at the controls
+  under the `BL-226` listen ("volume is alright but decals are not visible"). `CanopyHoleCue.cs`
+  keeps the decoded ledger and `FlightController.TickIncomingFire` renders the cue alone; the hole's
+  own visual, the cockpit-glass hole in first person against the exterior `two_bulletholes_*`,
+  `three_bulletholes_*` and `four_bulletholes` calls (`docs/org/weaponFire.md`), is not built.
+  *Fix shape:* run the opened hole's `ON_CALL` def through the animation runtime so its first
+  sequence draws (the `IF PLAYER_1ST_PERSON` branch picks the glass hole or the exterior decal, and
+  the second sequence sounds the cue either way). *⚠ Traps:* the original also stamps a bullet-hole
+  decal into a struck surface's texture at the hit UV (`docs/org/weaponRay.md`, `FUN_00558f80`);
+  that is a separate feature on world hits and not what this item covers. *Playtest after fix:*
+  take an AI burst on the nose in the cockpit view and watch for a hole in the glass; the same
+  hits in the chase view should mark the airframe. *Cross-refs:* `git log --grep=BL-226` (the
+  cue), `docs/formats/vehicle.md` (`bullethole_anims`).
+
 ## Weapons & combat
 
 - `BL-233` `[Feature]` `[Blocked: M4]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **Extend the proximity fuse to zeppelins (and any other M4 flyer) when they get
@@ -407,6 +445,28 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   suite; only the no-damage arms are at issue. The decide is whether a self-flash a player cannot
   see past is worth the fidelity in a two-to-four-player Dogfight. *Cross-refs:* `BL-301` (the VS
   tuning entry the exemption settled), `ProjectilePool.GatherAircraftCandidates`.
+
+- `BL-938` `[Research]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` **Whether the
+  original ever carves a crater in play, and what a Choker landing on the ground shows: the user
+  recalls no craters from the original and CSVM's Choker leaves a bowl with an explosion and black
+  smoke and no ground animation.** *Evidence:* the `BL-413` verdict at the controls ("In the
+  original the choker does not leave craters. Could this be a cut feature?", and "Choker has no
+  animation on ground. Explosion then black smoke"). The carve is decoded end to end
+  (`docs/org/craters.md`: the `declient.zrd` template, the weapon's `CRATER` sub-block, the build,
+  clip and tesselate path and its three failure strings), and six shipped weapons author `CRATER`,
+  so the code is in the image; what is not established is whether a shipped detonation reaches
+  `FUN_004e4a10` with a request that passes its veto hook and the terrain-cell locate, or whether
+  every carve fails on one of the three paths in play. The user's recall of the original has
+  overturned data readings before and is evidence here. *What to settle first:* the veto hook's
+  installed callback and the failure path a Choker on flat C1 ground takes, by tracing
+  `FUN_004e4890` in the debugger over one Choker drop, or by filming one (the `BL-413` closing
+  commit names the sortie: Hat Trick, Choker on a pylon, nose down over the airfield). Then the
+  ground animation: which of the Choker's detonation anims the original plays on a terrain strike,
+  since `ordnanceTypes.md` records that a successful carve suppresses one. *⚠ Traps:* the
+  performance guess ("too high for 2000") is not evidence either way; a carve that always fails on
+  its overlap or cell test leaves the feature shipped and never seen, which is a different outcome
+  from a cut. *Cross-refs:* `git log --grep=BL-413` (the carve as built), `docs/org/craters.md`,
+  `docs/org/ordnanceTypes.md` ("Detonation: the impact, then the splash").
 
 ## Flight model & collision physics
 
@@ -691,34 +751,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-537` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **Effect pools at four players, judged in play.** The pool sizes in `CSVM/data/effect_pools.json` were re-judged on a build with no first-use construction cost: rockets and the sonic burst never wrap, a four-object simultaneous death wraps `flame_ball_01` at 4 and 6 slots and is quiet at 8 (now shipped), and seven or more identical deaths in one frame wrap at the 16 ceiling and cannot be sized away. At the controls the single-player half reads right: four fireballs burn out in place, and the seven-death wrap is not visible under the debris. Still owed: a 4-player splitscreen session with everyone firing, judged for anything that reads as shared between panes, and the ceiling for many-player builds (at 16 players the default root wants 19 and gets 16). The instrument is `AnimRuntime.PoolRecycles` and the `anim: effect pool for '<name>' recycled slot` DEBUG line in the log file sink; the sizes staged print on the world-effects build line. ⚠ Raise only a root that logs a recycle, never the default; the three gun roots stay at 1; a root sized 0 clamps to 1. Each slot copies the root's subtree (155 templates at 1 player, 263 at 4).
   *Cross-refs:* `PT-129` (the four-player flight that judges it), `BL-296` (the other splitscreen-scoped item).
 
-- `BL-720` `[Bug]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: data]` `[CM24]` **The Dante's
-  engine fires moved between the engines because the effect-template pool was shorter than the
-  engine bank; the sizing is fixed and the report is owed a look.** *Evidence:* the mechanism is
-  settled from the mission data and measured headless. The Dante has its OWN engine definitions,
-  not the pirate zeppelin's: `damage1_..3_dtz?engNN` and `destroy_dtz?engNN`
-  (`extracted/C5/M04/mis_anim/`), each binding its engine's nodes by compiled pointer, so no anchor
-  ever resolved to a sibling engine. An engine death plays `dt?eng_destroyed.flt` WITH its
-  `lengNN`, `dtzep_rocks{left,right}`, `zep_engine_boom` AT that engine at 0 s and again at 5 s,
-  and `large_30sec_fire` WITH that engine's own `supports`. Only the last of those carries a
-  lasting puffer (`fire_n_smoke` at `INPUT_NODE`, half a minute with no authored stop), so the
-  concurrency is one template copy per burning engine and the bank is fourteen. `effect_pools.json`
-  sized `fire_here` at the default four, and that pool being finite at all is the remake's own
-  approximation: the original's start gate refuses a repeat call only while the concurrency bit
-  `0x100` at `+0x9c` is clear, and the per-start reset sets that bit for a template-rooted
-  definition, at which point every further call clones a whole record and deep-copies the template's
-  nodes with no cap (`docs/org/sequences.md`, which had the bit recorded as unattributed).
-  `dante-engine-fires` reads the whole bank killed in turn
-  and logged ten pool recycles with four fires alive for fourteen dead engines, the first engine's
-  fire having moved to the newest kill; the same suite is green at one copy per engine. *⚠ Traps:*
-  the hull's own `dtzep_rocks*` roll swings an engine at the ends of the hull metres per frame, so
-  a fire's fed position must be read against its `supports` node at the SAME instant; a stale
-  expected position reads as a misplaced puffer. `large_10sec_fire` shares the `fire_here` root and
-  therefore its cursor, and `TemplateStage.TakeNextSlot`'s liveness test is per definition, so a
-  crate's ten-second fire can still wrap onto a live thirty-second one; that hole is untouched here
-  and is what to suspect if the symptom survives with the pool deep enough. *Playtest:* `PT-139`.
-  *Cross-refs:* `BL-231` (the pool's tuning entry), the `trail-world-anchor` suite (rendering at
-  real spawns), `BL-700` (the same zeppelin family's wreck rest).
-
 - `BL-867` `[Tuning]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **The speed cue's wisps read more opaque than the
   original's, and crowd the centre of a 16:9 view.** *Decision:* stills cannot judge the opacity,
   the only original frame with wisps (CM02.mkv at about 58 m, chase over water) has a different
@@ -863,6 +895,64 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `BL-455` (the page this mirrors), `PLAN-audio-preferences`,
   `git log --grep=BL-783` (the same gap for the display settings, closed by four rows on this
   screen), `docs/menu-presentations.md`.
+
+- `BL-933` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **Turret guns and
+  the patrol boat's and turret truck's guns cannot be heard at all, and an AI aeroplane's guns only
+  when it fires right beside the player, where the original's guns carry.** *Evidence:* reported
+  at the controls three times, after `BL-793` landed a positional loop per mount ("cant hear guns
+  of turrets. And planes only when very near. Too much falloff perhaps?"), after `BL-820` gave the
+  hulls a voice ("Cant hear them. They fire but there is no sound") and against `BL-846` ("i can
+  only hear them if they are shooting right beside me"). The turret voice is `snd_chaingun`,
+  `RANGE [30, 200]`, silenced past 1.1x the audible distance as the decode says; the hull voice is
+  `snd_turretgun` culled at its authored 400 m; the aeroplane loops (`snd_30cal` to `snd_70cal`)
+  author `RANGE [80, 800]`. Every one of these sites maps the pair onto Godot's inverse-distance
+  curve (`GunVoice.cs` and `AiWeaponAudio.cs`: `UnitSize = RangeMin`, `MaxDistance = RangeMax`),
+  which is the mapping `BL-269` names as the remaining suspect now that its decoded curve drives
+  `WorldSounds`. *What to settle first:* the gain each site produces at 100, 200 and 400 m against
+  `SoundFalloff.cs`'s law for the same pair, and the volume term the players are built with
+  against the definition's `VOLUME`. A 200 m cull is authored, so a turret is silent from further
+  away in the original too, and the question is the level inside the band; a hull silent at a few
+  metres while its rounds leave is a second question, whether `SurfaceGunner`'s voice is renewed on
+  the tick the fire decision selects the gun in a played mission as the suite says it is.
+  *Fix shape:* level the gun voices from `SoundFalloff.cs` the way `WorldSounds.Tick` does, so
+  every 3D emitter runs one law. *⚠ Traps:* `WeaponSoundCue.CullMargin` (1.1) is decoded from the
+  compare and is not the knob; `BL-846`'s closing note says the same. *Playtest after fix:* C4
+  (turret emplacements of all three mount classes), C5/M01 (the patrol boats) and any Instant
+  Action wave, listening from the chase view at a few hundred metres. *Cross-refs:* `BL-269` and
+  `PT-150` (the decoded curve, owed a listen), `git log --grep=BL-793`, `git log --grep=BL-820`,
+  `git log --grep=BL-846`.
+
+- `BL-934` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **Enemies and allies
+  play no dynamic voice lines at all; only the scripted mission dialogue is heard.** *Evidence:*
+  reported at the controls across the current runs. The combat-voice chain is built
+  (`Mech3/CombatVoice.cs` resolves a roster `accentID` to the `voice.zrd` pool and the clip defs,
+  `Flight/AiVoiceDispatcher.cs` rolls the talker and picks the clip, `Session/AiVoiceRuntime.cs`
+  wires the damage tiers, the death cries, the patrol-to-pursue call and the sixth-sense stun, and
+  every roll prints an `ai voice:` line), and the `ai-voice` suite is green, so the break is
+  between the suite's world and a played mission. *What to settle first:* fly a mission with the
+  file sink on and read the `ai voice:` lines: no line means no trigger reaches the dispatcher (the
+  speaker registration or the wired sites), a rolled line with no clip means the resolver found no
+  stream for the mission's accents (the prewarm set), and a played line nobody hears means the
+  Voice bus or the one-shot path. *⚠ Traps:* the scripted lines ride `Mech3/MissionRadio.cs`, a
+  different channel, so their working proves nothing about this one. *Playtest after fix:* any
+  campaign dogfight with an AI wingman; damage an enemy and take hits, and listen for the tiered
+  calls. *Cross-refs:* `docs/formats/combat-voice.md`, `BL-935` (the levels, in case the Voice
+  level is the cause).
+
+- `BL-935` `[Bug]` `[S]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **A level moved on
+  the AUDIO page does not change the sound of the mission being flown; it takes hold only after
+  the game is closed and started again.** *Evidence:* reported at the controls.
+  `Launcher.PersistOptions` writes the three category buses through `AudioMix.Apply` on every
+  accept, the same call the startup path makes, and the page previews a level as it moves through
+  `MenuAudioService.PreviewMix`, so the mixer is written; what to settle is what the in-flight
+  emitters play on. *What to settle first:* whether the flight's players sit on the `Music`,
+  `Effects` and `Voice` buses that `AudioMix` writes or on the Master bus, and whether the pause
+  sheet's AUDIO page reaches `PersistOptions` at all (the sheet builds through
+  `Flight.PausePreferences`), reading the `sound` log's `mix master=` line on an accept over the
+  pause. *⚠ Traps:* bus 0 is deliberately never written by the mix, since it carries the developer
+  gain; do not fix this by writing it. *Playtest after fix:* over the pause, drop Effects to 0 and
+  resume; the guns and the engine fall silent at once. *Cross-refs:* `BL-782` (Built-in's page),
+  `PLAN-audio-preferences`, `AudioBusSuites.cs`.
 
 ## Cameras & views
 
@@ -1087,6 +1177,23 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   montage goes in front of them before anything is parked on a distance; `SCRAPBOOK.CSV` and the
   scripts are the decode for positions, the film only for the look. *Cross-refs:* `CAP-52`,
   `docs/org/menu-inventory.md`, `docs/formats/menu-layout.md` (`SCRAPBOOK.CSV`).
+
+- `BL-937` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **The load screen's
+  bar does not step through the sixteen authored fractions at the controls: it shows its first
+  stage and the next thing on screen is the mission.** *Evidence:* the `BL-812` verdict ("No
+  stepping. First stage then in mission"). The landing drives the bar from a pump inside the one
+  synchronous build (`Utils/LoadProgress.cs` holds the table and the 0.1 s throttle,
+  `UI/LoadBoard.cs` repaints and ends with `RenderingServer.ForceDraw()`), and the closing commit
+  reports the steps from the log rather than from a watched screen. *What to settle first:*
+  whether the forced draws reach the window at all on the user's rig (a `ForceDraw` from inside
+  `_Ready` or a frame that the compositor does not present shows nothing), or whether the build
+  finishes inside the first throttle window so only the 0.01 paint lands; the file sink's progress
+  lines against wall time, and a `--screenshot` taken mid-build, tell the two apart. *⚠ Traps:*
+  do not thread the build to fix this; the original does not, and `GameSession.StartSession`'s
+  try/catch is why the pump shape was chosen (`git log --grep=BL-812`). *Playtest after fix:* an
+  Instant Action launch from the menu; the bar fills in visible steps and the propeller turns
+  before the world appears. *Cross-refs:* `docs/org/loading-screen.md`, `BL-909` (the handoff after
+  the load).
 
 ## Splitscreen
 
@@ -1338,6 +1445,22 @@ usual.
   without a stutter, and the seconds between waves too.
   *Cross-refs:* `BL-434` (the per-viewport splitscreen cost the same pass profiled), `BL-657`
   (CM18's generator launching at the wrong time, which is where the measured case is flown).
+
+- `BL-936` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` **Replaying an
+  earlier campaign mission offers only what that mission's ordinal had unlocked, so the ammo and
+  plane screens hide ordnance and airframes the pilot has already earned (torpedoes on the early
+  missions).** *Evidence:* reported at the controls with the original as the reference ("if ammo
+  or plane in campaign is unlocked it should be available in replay"). `UI/CampaignAmmoPage.cs`
+  fills the pylon lists from `OrdnanceThreshold` against the ordinal the lists were filled at, so
+  a replay of an early mission shows that mission's rows. *What to settle first:* which ordinal the
+  original's ammo screen tests, the mission being flown or the profile's furthest mission
+  (`docs/formats/campaign-screens.md` "Ammo selection"), and the same for the airframe list on the
+  plane screen. *Fix shape:* fill the rows from the profile's progress ordinal rather than the
+  sortie's. *⚠ Traps:* the mission's own `stock_loadouts.json` fit and any script-forced loadout
+  stay as they are; this is the offered rows, not the default fit. *Playtest after fix:* a profile
+  past C1's torpedo missions replays C1/M01 and finds the torpedo rows on the pylons.
+  *Cross-refs:* `git log --grep=BL-788` (the guest's ammo and plane screens),
+  `docs/formats/campaign-screens.md`.
 
 ## Tooling, platform & docs
 
