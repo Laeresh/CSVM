@@ -273,7 +273,8 @@ volume an aeroplane is.
 Its writers are the constructor's zero (`FUN_004aff80`, `0x004b0106`), the def copy
 (`FUN_00475820`, `0x00475a62`), the net assignment (`FUN_00475fc0`, `0x00476128`), the roster block
 (`FUN_0047c210`, `0x0047c888`), and the script command **`SET_AI_ATTACK_RADIUS`** (`FUN_00469f70`,
-`0x00469f93`), which stores r² into `+0x328` and ∓r into `+0x32c`/`+0x330`.
+`0x00469f93`), which stores r² into `+0x328` and ∓r into `+0x32c`/`+0x330`. "Where a hull's attack
+triple comes from" below walks all five in the order a spawn runs them.
 
 **The activation triple, `+0x318` / `+0x31c` / `+0x320`.** One reader that decides anything:
 
@@ -302,6 +303,46 @@ raises the activation triple alone ([../formats/objectives.md](../formats/object
 watched group is SIMULATED out to 9,000 m while every member still admits candidates only inside
 its own 2,000 m attack cylinder. A net or a roster block that authors the two volumes differently
 parts them the same way.
+
+### Where a hull's attack triple comes from
+
+`patrolboat` and `t_truck` author neither `attack` nor `kind_of`, so what their scorer admits on is
+settled by the def record's own constructed default. Five writers touch
+`+0x328`/`+0x32c`/`+0x330`, and a roster-block spawn runs them in this order:
+
+| # | Where | Addresses | The condition it applies under | A shipped hull |
+|---|---|---|---|---|
+| 1 | vehicle constructor `FUN_004aff80` | `0x004b0106`, `0x004b010c`, `0x004b0112` | unconditional, `EBX` zeroed at `0x004affaf` | 0, then overwritten |
+| 2 | def copy `FUN_00475820` | `0x00475a5f`–`0x00475a74` | unconditional, the def record's `+0x44`/`+0x48`/`+0x4c` straight across | **160000.0 / −400.0 / +400.0** |
+| 3 | net assignment `FUN_00475fc0` | `0x00476128`, `0x00476143`, `0x0047615c` | per field, only where the net's own float is non-zero (`FCOMP` against `0x006032c8`) | no write |
+| 4 | roster block `FUN_0047c210` | `0x0047c888`, `0x0047c8a6`, `0x0047c8c2` | the same per-field non-zero gate, after the def copy, so an authored slot wins | no write |
+| 5 | `SET_AI_ATTACK_RADIUS` `FUN_00469f70` | `0x00469f93` r², `0x00469fa1` +r, `0x00469faf` −r | only where a mission script issues it, on the vehicle `FUN_004aff10` resolves by name | never reached |
+
+The spawn order inside `FUN_0047c210` is `0x0047c51d` the constructor, `0x0047c550` the def copy,
+`0x0047c77b` the `min_ai_active_dist` clamp, then the block's own volume writes from `0x0047c803`.
+`FUN_00475fc0` is not called from the block spawn at all; its callers are `FUN_004a6610`
+(`0x004a66eb`), `FUN_00476250` (`0x004763d2`) and `FUN_00475f30` (`0x00475fa9`).
+
+**The 400 m is the def record's constructed default.** With no `kind_of`, `FUN_004735b0` takes the
+no-parent branch at `0x00474c42` and builds the record through `FUN_00478a00`, which writes
+`+0x44 = 160000.0` (`0x00478a69`), `+0x48 = −400.0` (`0x00478a70`) and `+0x4c = +400.0`
+(`0x00478a77`). The def parser `FUN_00479240` overwrites those three only inside its `attack` token
+branch (`0x00479cf5`–`0x00479d5a`, the token string at `0x627e30`), which a def authoring no
+`attack` skips at the `JZ` at `0x00479d05`. A def that does name a parent inherits the parent's
+triple through the copy constructor `FUN_00477b70` (`0x00477f34`, `0x00477f37`), which is the chain
+walk `Mech3/VehicleDefs.AttackOf` performs.
+
+Nothing in the shipped data overrides it. All 23 hull blocks in the campaign (C1/M05's twelve
+`patrolboat_1..12`, C1B/M03's four, C2/M01's `patrolboat_eg0`, C5/M01's two boats and four
+`t_truck_1..4`) author roster slots 8–19 as zero, and all fourteen nets those blocks reference
+author elements 2–10 as zero. **So a shipped boat or truck ranks candidates inside 400 m**, not
+inside the 2,500 m its `activation` authors. Its `weapons` window of 1 to 500 m is the looser gate
+of the two and its far end never binds.
+
+⚠ **`SET_AI_ATTACK_RADIUS` reaches a hull in the original and does not here.** `FUN_004aff10`
+resolves the named vehicle whatever its `mode`, where `Session/CampaignDirector.SetAiAttackRadius`
+reaches aircraft rigs carrying a `Pilot.Machine`. No shipped mission authors the directive, so the
+hull half is deliberately unported rather than overlooked.
 
 ### The third volume, and where the leash is read
 
@@ -499,17 +540,15 @@ the bare decoded hold with it, and the order is then the two biases' alone.
 `Session/SurfaceGunner` never takes the preference, since it
 drops non-aircraft candidates anyway.
 
-The admission volume comes out as the attack one. `AiTargetRanking.Score` refuses a candidate past
-the `attackRange` it is handed, and `FlightController.SelectRankedTarget`, its re-score
-`HoldsStandingTarget` and the withdrawal's reach test all hand it `AiModeMachine.AttackRange`, so a
-member whose activation volume a `DEDG` widened keeps its own attack radius for what it may pick up.
-`AiModeMachine.ActivationRange` is left where the spawn seeds it and reaches the ranking nowhere.
-
-⚠ **`Session/SurfaceGunner` is the one picker still admitting on the wrong volume.** It hands
-`AiTargetRanking.SelectBest` the def's `activation` (2,500 m on both shipped surface defs) where
-`FUN_00421950` reads the hull's attack cylinder, and moving it wants the hull's attack volume, which
-nothing in CSVM resolves for a hull: `patrolboat` and `t_truck` author no `attack` and no `kind_of`,
-so in the original that volume arrives from the mission's own roster block or net.
+The admission volume comes out as the attack one in every picker. `AiTargetRanking.Score` refuses a
+candidate past the `attackRange` it is handed, and `FlightController.SelectRankedTarget`, its
+re-score `HoldsStandingTarget` and the withdrawal's reach test all hand it
+`AiModeMachine.AttackRange`, so a member whose activation volume a `DEDG` widened keeps its own
+attack radius for what it may pick up. `Session/SurfaceGunner` is handed the radius
+`SurfaceVehicleRuntime` resolves for the hull at spawn, the block's and net's attack slot over the
+def's own `attack` over the 400 m def record default, which is the engine's own order (see "Where a
+hull's attack triple comes from"). `AiModeMachine.ActivationRange` is left where the spawn seeds it
+and reaches the ranking nowhere.
 
 Unmodelled, named rather than guessed: the attack volume is scored as a sphere where the engine
 tests a cylinder (`+0x328`, `+0x32c`–`+0x330`), so the altitude band is unported on both the

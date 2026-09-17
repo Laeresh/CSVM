@@ -46,8 +46,9 @@ internal static class SurfaceVehicleGunSuites
     // Inside the def's 1-500 m window and a few degrees up: the case that must fire.
     private static readonly Vector3 InRange = new(280f, 40f, 0f);
 
-    // Inside the 2500 m activation but outside the 500 m window: acquires, never fires.
-    private static readonly Vector3 OutOfRange = new(900f, 60f, 0f);
+    // 464 m off the beam: past the hull's 400 m attack radius, inside both the 2500 m activation
+    // and the def's own 500 m weapon window, so only the attack cylinder can refuse it.
+    private static readonly Vector3 PastAttackRadius = new(460f, 60f, 0f);
 
     // 60 degrees up at 300 m: inside every range gate and outside the mount's +30 degree
     // elevation ceiling, so the guard costs the shot its aim quality.
@@ -60,10 +61,12 @@ internal static class SurfaceVehicleGunSuites
         + "with only hulls in the world no boat acquires anything, so a boat never shoots a "
         + "boat; against one hostile aeroplane 280 m off the beam a boat acquires it, traverses "
         + "both mount nodes off their rest pose, opens fire and spends rounds without damaging "
-        + "itself; and it holds fire in the three decoded cases - an aeroplane on its own team, "
-        + "one inside the activation radius but past the 500 m engagement window, and one 60 "
-        + "degrees overhead where the mount's elevation guard costs more aim quality than the "
-        + "gun's gate allows")]
+        + "itself; the ranking runs on the hull's own 400 m ATTACK radius, the def record default "
+        + "both surface defs take, not their 2500 m activation, so the boat refuses an aeroplane "
+        + "464 m off its beam that the def's 500 m weapon window would still admit and takes the "
+        + "same aeroplane back inside that radius, firing; and it holds fire against an aeroplane "
+        + "on its own team and against one 60 degrees overhead where the mount's elevation guard "
+        + "costs more aim quality than the gun's gate allows")]
     internal static void SurfaceVehicleGuns(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -136,6 +139,8 @@ internal static class SurfaceVehicleGunSuites
                 float muzzleOffset = gun.MuzzlePosition.DistanceTo(boat.Position);
                 ctx.Check(muzzleOffset > 0.5f,
                     $"the muzzle is the model's own firepoint marker, {muzzleOffset:0.##} m off the hull origin");
+                ctx.Check(Mathf.IsEqualApprox(gun.AttackRadius, VehicleDefs.DefaultAttackRadiusM),
+                    $"the ranking runs on the hull's ATTACK radius, {gun.AttackRadius:0} m, the def record default its block and net both leave unauthored, and not the def's 2500 m activation");
 
                 // ---- a boat does not shoot a boat --------------------------------------------
                 // Four hulls and nothing else: the vehicle pool is non-empty and every gunner still
@@ -171,21 +176,34 @@ internal static class SurfaceVehicleGunSuites
                 ctx.Check(Mathf.IsEqualApprox(healthBefore, boat.Health ?? 0f),
                     $"the hull took no damage from its own muzzle sitting on it: {boat.Health:0.##} of {healthBefore:0.##}");
 
-                // ---- the three holds ---------------------------------------------------------
+                // ---- the holds ---------------------------------------------------------------
+                // The team case first: it ends the 20 s hold, and the attack radius below has to be
+                // read on a FRESH acquisition, since a held target stays held wherever it flies to.
                 quarry.Team = hullTeam;
                 CheckHold(ctx, boats, gun, "an aeroplane on the boat's own team",
                     expectTarget: false);
 
+                // ---- the attack cylinder -----------------------------------------------------
                 quarry.Team = AimAssist.PlayerTeam;
-                Place(quarry, boat.Position + OutOfRange);
-                CheckHold(ctx, boats, gun, "an aeroplane past the def's 500 m engagement window",
-                    expectTarget: true);
+                Place(quarry, boat.Position + PastAttackRadius);
+                CheckHold(ctx, boats, gun,
+                    $"an aeroplane {boat.Position.DistanceTo(quarry.WorldPosition):0} m out, past the hull's {VehicleDefs.DefaultAttackRadiusM:0} m attack radius",
+                    expectTarget: false);
+
+                // Back inside it, asserting the ROUNDS: a gun that had simply stopped working
+                // would pass the refusal above, and a hull whose radius resolved to zero would
+                // refuse everything and read as a well-behaved gunner.
+                int beforeRetake = gun.ShotsFired;
+                Place(quarry, boat.Position + InRange);
+                Step(boats, FiringSteps);
+                ctx.Check(ReferenceEquals(gun.Target, quarry) && gun.ShotsFired > beforeRetake,
+                    $"…and takes the same aeroplane back inside it at {boat.Position.DistanceTo(quarry.WorldPosition):0} m, firing {gun.ShotsFired - beforeRetake} round(s)");
 
                 Place(quarry, boat.Position + Overhead);
                 CheckHold(ctx, boats, gun, "an aeroplane above the mount's +30 degree elevation guard",
                     expectTarget: true);
 
-                ctx.Note($"a patrolboat acquires, traverses and fires its own wep_29 ({gun.ShotsFired} rounds), and holds fire in all three decoded cases");
+                ctx.Note($"a patrolboat acquires, traverses and fires its own wep_29 ({gun.ShotsFired} rounds) inside its {VehicleDefs.DefaultAttackRadiusM:0} m attack radius, and refuses a target past it");
             });
         }
         finally

@@ -22,6 +22,13 @@ public sealed class VehicleDefs
     /// by the scripted-path law rather than the flight model (docs/org/flightModel.md).</summary>
     public const string ShipMode = "ship";
 
+    /// <summary>The attack radius a def authoring no <c>attack</c> anywhere up its <c>kind_of</c>
+    /// chain carries, metres: the def record's own constructed default, 160000 / -400 / +400 laid
+    /// down at <c>FUN_00478a00</c> and copied onto the vehicle unconditionally at
+    /// <c>FUN_00475820</c>. Both shipped hull defs take it, so 400 m is what a patrol boat's and a
+    /// turret truck's scorer actually tests against (docs/org/aiPilot.md).</summary>
+    public const float DefaultAttackRadiusM = 400f;
+
     private readonly Dictionary<string, ZrdrDict> _defs = new(StringComparer.OrdinalIgnoreCase);
 
     private VehicleDefs()
@@ -216,18 +223,18 @@ public sealed class VehicleDefs
         return Array.Empty<Flight.AiWeaponSlot>();
     }
 
-    /// <summary>The def's <c>activation</c>, the nearest authored one up the <c>kind_of</c> chain:
-    /// the radius its own target acquisition ranks candidates inside, metres (2500 on both surface
-    /// defs). Null when nothing up the chain authors one, leaving the caller's own floor to stand.
-    /// ⚠ The engine also floors this at spawn against a global (<c>FUN_00476250</c>), which is
-    /// unread; every authored value sits above the floor CSVM applies, so nothing turns on it
-    /// today.</summary>
-    public float? ActivationOf(string def)
+    /// <summary>The def's <c>attack</c>, the nearest authored one up the <c>kind_of</c> chain: the
+    /// radius of the target-admission cylinder BOTH scorers test a candidate against, metres.
+    /// Null when nothing up the chain authors one, which is the case for both shipped hull defs
+    /// and leaves <see cref="DefaultAttackRadiusM"/> standing.
+    /// ⚠ Never the def's <c>activation</c>, which gates whether the vehicle simulates at all and
+    /// is six times larger on a hull (docs/org/aiPilot.md).</summary>
+    public float? AttackOf(string def)
     {
         foreach (var d in Chain(def))
         {
-            if (d.TryFloat("activation", out float activation))
-                return activation;
+            if (d.TryFloat("attack", out float attack))
+                return attack;
         }
         return null;
     }

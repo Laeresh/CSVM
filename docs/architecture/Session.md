@@ -305,8 +305,8 @@ at its authored spot, its height read off the water, indexed on the world runtim
 definitions anchor on it and register its destructible pool. `GameSession` builds one lazily for
 the roster phase and the generator block; `SessionSimulation` steps it after the generators that
 may launch another hull. `CollectVehicles` offers every hull to the aim assist's vehicle list
-([../org/aim-assist.md](../org/aim-assist.md)); `Projectiles`/`Weapons`/`Voices` arm and voice its
-gun and `Strings` names it, resolving slot 20 into `MarkerName`. Read `SurfaceVehicle.cs` next.
+([../org/aim-assist.md](../org/aim-assist.md)); `Projectiles`/`Weapons`/`Voices` arm and voice its gun on the attack radius `AttackRadiusOf` resolves in the engine's own write order, the block's and net's slot over the def's `attack` over the decoded 400 m default and never a zero reach ([../org/aiPilot.md](../org/aiPilot.md)); `Strings` names it, slot 20 into `MarkerName`.
+Read `SurfaceVehicle.cs` next.
 
 ## src/Session/SurfaceVehicle.cs
 One built hull: no pilot, no flight model, no `FlightController`. Its movement is the scripted-path
@@ -326,7 +326,7 @@ sweeps the pool's three candidate lists under the team gate, ranks with the non-
 defs' class biases, holds a target for a hardcoded 20 s, aims through `Flight/SurfaceGunMount` and
 fires on the authored window, interval and magazine, dropping non-aircraft candidates so a boat does
 not shoot a boat, which is why the aircraft-first preference is not spent here. No pursue gate and no
-quick draw, neither reaching a hull. Its `GunVoice` is renewed per tick from the hull origin ([../org/weaponFire.md](../org/weaponFire.md)). Suites: `surface-vehicle-guns`, `surface-gun-voices`.
+quick draw, neither reaching a hull. `AttackRadius` is the hull's own ATTACK volume, the one both decoded scorers admit on, never its activation ([../org/aiPilot.md](../org/aiPilot.md)). Its `GunVoice` is renewed per tick from the hull origin ([../org/weaponFire.md](../org/weaponFire.md)). Suites: `surface-vehicle-guns`, `surface-gun-voices`.
 
 ## src/Session/CutsceneController.cs
 The host a story mission's intro or landings definition raises its `CALLBACK` codes to, and the
