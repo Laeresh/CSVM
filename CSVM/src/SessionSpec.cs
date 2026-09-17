@@ -405,6 +405,11 @@ public sealed record SessionSpec
     /// scripted shot. Null when the flag was absent. <c>--damage=</c> is the player's counterpart
     /// and writes per-part HP, which an AI airframe resolves none of.</summary>
     public float? AiHullDamage { get; private set; }
+    /// <summary><c>--canopy-holes[=&lt;1-5&gt;]</c>: open this many of the five canopy glass holes on
+    /// the flown aircraft as it spawns, through the same cue and the same
+    /// <c>cockpit_bulletholes</c> defs an incoming burst opens them with, so a scripted shot catches
+    /// the glass already struck. Null when the flag was absent.</summary>
+    public int? CanopyHoles { get; private set; }
     /// <summary><c>--ai-attack[=&lt;1-9&gt;]</c>: arm every AI plane this session spawns with the
     /// D14 forward-gun gunnery at the given skill rating (dead-eye/quick-draw interpolated from
     /// <c>ai_skill_parameters</c>; default 5), auto-targeting the nearest hostile aircraft.
@@ -1104,6 +1109,12 @@ public sealed record SessionSpec
                     s.AiPlanes = entries;
             }
             else if (arg.StartsWith("--ai-damage=")) { s.AiHullDamage = Math.Clamp(Flt(arg["--ai-damage=".Length..]), 0f, 1f); }
+            else if (arg == "--canopy-holes") { s.CanopyHoles = 1; }
+            else if (arg.StartsWith("--canopy-holes="))
+            {
+                s.CanopyHoles = Math.Clamp(int.Parse(arg["--canopy-holes=".Length..]),
+                    1, Flight.CanopyHoleCue.HoleCount);
+            }
             // An unknown word keeps the default rather than picking a policy, the same rule
             // --difficulty= follows: a misspelling must not quietly change what the AI fights.
             else if (arg.StartsWith("--ai-targeting="))
@@ -1856,6 +1867,13 @@ public sealed record SessionSpec
         {
             Warn("ui", "--ai-damage needs --ai=<plane> to spend on; no AI aircraft were asked for");
             AiHullDamage = null;
+        }
+        // Same rule for the canopy: the cue and its defs belong to a flown aeroplane's own rig, and
+        // a parked viewer plane has no crash rig to run them through.
+        if (CanopyHoles != null && !Fly && !Stunt)
+        {
+            Warn("ui", "--canopy-holes needs a flown aircraft (--fly/--stunt); ignoring it");
+            CanopyHoles = null;
         }
         // The two lab spec grammars live in their labs; the reject list keeps them from logging,
         // which is what lets this run with no engine under it.

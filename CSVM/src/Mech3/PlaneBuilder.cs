@@ -139,20 +139,29 @@ public sealed class PlaneBuilder
         _interiorScene?.TexturedMaterials ?? Array.Empty<(ShaderMaterial, string)>();
 
     /// <summary>A <c>cockpit1</c> node whose visibility is a STATE something else drives, so a
-    /// pristine cockpit must show none of it: <c>bulletN</c> (the <c>cockpit_bulletholes</c> defs)
-    /// and the two warning lamps, which <see cref="Flight.CockpitGauges"/> lights. Parking them
-    /// still holds: a build with no rig driving it must render pristine, and the labs are such
-    /// builds. ⚠ Everything else on the panel is always-drawn geometry that changes COLOUR, not
-    /// visibility.</summary>
+    /// pristine cockpit must show none of it: the <c>bulNx</c> hole quads the
+    /// <c>cockpit_bulletholes</c> defs light, and the two warning lamps, which
+    /// <see cref="Flight.CockpitGauges"/> lights. Parking them still holds: a build with no rig
+    /// driving it must render pristine, and the labs are such builds. ⚠ Everything else on the
+    /// panel is always-drawn geometry that changes COLOUR, not visibility.</summary>
     public static bool IsInteriorDrivenState(string name)
     {
         if (name.EndsWith("_on", StringComparison.OrdinalIgnoreCase))
             return true;
-        if (!name.StartsWith("bullet", StringComparison.OrdinalIgnoreCase)
-            || name.Length == "bullet".Length)
+        // ⚠ The QUADS, not the meshless bulletN groups above them: a parked group hides its own
+        // leaves for good, and reset_bulletholes switches exactly these off and nothing else.
+        if (!name.StartsWith("bul", StringComparison.OrdinalIgnoreCase))
             return false;
-        for (int i = "bullet".Length; i < name.Length; i++)
-            if (!char.IsDigit(name[i]))
+        int i = "bul".Length, digits = 0;
+        while (i < name.Length && char.IsDigit(name[i]))
+        {
+            i++;
+            digits++;
+        }
+        if (digits == 0 || i == name.Length)
+            return false;
+        for (; i < name.Length; i++)
+            if (!char.IsLetter(name[i]))
                 return false;
         return true;
     }

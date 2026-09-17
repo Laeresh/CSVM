@@ -108,7 +108,7 @@ plane-root to destroyed transform chain baked in, and `WingFlares`, `DamagePanel
 `CockpitDamagePanels` expose the nodes the build collected. A caller building a second aeroplane of one airframe and livery passes the
 `painter` the first composed, so those skins are composed once (PERF-22). `spinningProps` selects the flight propeller set
 (`PropParts.cs`); `Build` also reads `CockpitCameraOffset` off the `cockpit_camera` marker for `CameraController`. `cockpitInterior`
-mounts `cockpit1` hidden at that offset under `InteriorScale` and the fixed head-pitch tilt, then `ParkInteriorStates` walks it. Camera decode: [../org/cameraViews.md](../org/cameraViews.md).
+mounts `cockpit1` hidden at that offset under `InteriorScale` and the fixed head-pitch tilt, then `ParkInteriorStates` walks it, darkening exactly what `reset_bulletholes` does (the `bulNx` hole quads, never the meshless `bulletN` groups over them) plus the two warning lamps. Camera decode: [../org/cameraViews.md](../org/cameraViews.md).
 
 ## src/Mech3/PaintScheme.cs
 One aircraft livery: the pattern name, three colours and three decal indices of the `paint_*`

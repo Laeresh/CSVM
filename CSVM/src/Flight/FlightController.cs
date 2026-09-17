@@ -616,6 +616,7 @@ public partial class FlightController : Node3D
     private IReadOnlyList<(Node3D Node, bool Visible)>? _crashPlaneVisibility;
     private AnimRuntime? _crashRuntime;          // the bound rig; reached through CrashRuntime, which forces the build below
     private Node3D? _crashAnchor;                // the rig's `player` anchor, bound with it
+    private Node3D? _viewCameraProxy;            // the rig-local `camera1`; see EnsureViewCameraProxy
     private Action? _pendingCrashRig;            // a rig armed but not built yet; see ArmPendingCrashRig
     private IWorldQuery? _worldQuery;             // the sweep/ray seam; bound in Bind, lazy for bare test rigs
     private AircraftContactResolver? _contacts;   // the contact rules; lazy, over the same seam
@@ -1297,6 +1298,53 @@ public partial class FlightController : Node3D
         _lifecycle.CrashDefs = defs;
         _crashRestPoses = restPoses;
         _crashPlaneVisibility = planeVisibility;
+    }
+
+    /// <summary>Builds this rig's own <c>camera1</c>, the node the canopy-hole overlay poses
+    /// AT_NODE, and hands it back (null on an AI rig, which draws no canopy). It follows the pilot's
+    /// view camera, so each splitscreen pane's overlay sits in front of its own eye.
+    /// ⚠ Must exist before the rig binds. A crash runtime resolves a name over its bind scope alone,
+    /// so the world's <c>camera1</c> is invisible to it and <c>PoseChannel.AtNode</c> answers a miss
+    /// by posing at the origin without a word. Idempotent, so a second call is free.</summary>
+    public Node3D? EnsureViewCameraProxy()
+    {
+        if (_viewCameraProxy != null || !IsHumanPiloted)
+            return _viewCameraProxy;
+        var proxy = new Node3D { Name = CutsceneController.CameraNode };
+        proxy.SetMeta(AnimRuntime.NameMeta, CutsceneController.CameraNode);
+        AddChild(proxy);
+        _viewCameraProxy = proxy;
+        return proxy;
+    }
+
+    /// <summary>Runs one of the five <c>cockpit_bulletholes</c> defs through this plane's rig and
+    /// answers how many instances it started (docs/org/weaponFire.md for what the two sequences
+    /// draw). Public for the suites, which open a hole without a gun.
+    /// ⚠ The def's own <c>Sound</c> events are silent on a human rig (its runtime carries
+    /// <c>SoundHandledElsewhere</c>), so <c>FlightAudio.OnWindowHit</c> stays the one source and the
+    /// cue is not doubled.</summary>
+    public int OpenCanopyHole(int hole)
+    {
+        if (PlaneModel is not { } model || CrashRuntime is not { } rig)
+            return 0;
+        // applyReset: false, the same rule every rig play follows. A RESET_STATE here would put the
+        // already-open holes back behind the glass, which is reset_bulletholes' job at spawn.
+        return rig.Play($"bullet{hole}", model, applyReset: false).Count;
+    }
+
+    /// <summary><c>--canopy-holes=</c>: opens the first <paramref name="count"/> glass holes as the
+    /// aircraft spawns, through the cue's own ledger and the same defs a landed round opens them
+    /// with, so a scripted shot catches struck glass. Answers the anim instances started.</summary>
+    public int PresetCanopyHoles(int count)
+    {
+        if (!IsHumanPiloted || _canopyHoles == null)
+            return 0;
+        int drew = 0;
+        for (int hole = 1; hole <= count && hole <= CanopyHoleCue.HoleCount; hole++)
+            if (_canopyHoles.ForceOpen(hole))
+                drew += OpenCanopyHole(hole);
+        Log.Info("weapons", $"canopy holes preset P{PlayerIndex + 1} open={count} closed={_canopyHoles.ClosedCount} drew={drew}");
+        return drew;
     }
 
     /// <summary>The inverse of building inert: re-home this aircraft at <paramref name="pos"/>
@@ -2228,6 +2276,8 @@ public partial class FlightController : Node3D
             CockpitPass?.Sync(_renderPose.Basis, _cam, Shake?.Roll ?? 0f, Projectiles?.ActiveMuzzleLights());
             _cam.LogView(logged, _model.Position, _model.Attitude);
         }
+
+        SyncViewCameraProxy();
 
         // heading of the nose: 0 = north (−Z), 90 = east (+X), shared by the compass and the marker
         var nose = -_model.Attitude.Z;
@@ -4401,8 +4451,7 @@ public partial class FlightController : Node3D
     // The incoming-fire block's tick (FUN_004b1340), which the original runs for the PLAYER's own
     // aeroplane alone (0x0048985f). The shield charges on an interval that closed with a hit and
     // drains on a quiet one; the same closed interval may open one of the five canopy hole defs,
-    // and the glass sound is what that def sounds (the decal itself is not drawn yet, so this is
-    // the cue alone). The health fraction is the whole-vehicle pool, as decoded.
+    // which draws the hole and sounds the glass. The health fraction is the whole-vehicle pool.
     private void TickIncomingFire(float dt)
     {
         if (!IsHumanPiloted || Crashed)
@@ -4413,9 +4462,21 @@ public partial class FlightController : Node3D
         if (_canopyHoles.TryOpenHole(Damage.SummaryHealthFraction, _canopyRng) is not { } hole)
             return;
         string? variant = Audio?.OnWindowHit();
-        // The breadcrumb the cue otherwise leaves only in the speakers: which pilot, which hole of
-        // the five, and which of the three glass samples drew.
-        Log.Info("weapons", $"canopy hole P{PlayerIndex + 1} bullet{hole} closed={_canopyHoles.ClosedCount} snd={variant ?? "none"}");
+        int drew = OpenCanopyHole(hole);
+        // The breadcrumb the cue otherwise leaves only in the speakers and on the glass: which
+        // pilot, which hole of the five, which of the three glass samples drew, and how many anim
+        // instances the def left running.
+        Log.Info("weapons", $"canopy hole P{PlayerIndex + 1} bullet{hole} closed={_canopyHoles.ClosedCount} snd={variant ?? "none"} drew={drew}");
+    }
+
+    // The rig-local `camera1` follows the eye, so the exterior overlay's AT_NODE pose lands in front
+    // of the view this frame rather than at the world origin. Written every frame the pilot's own
+    // camera holds the view: the lab's free camera and an AI rig leave it where it stands.
+    private void SyncViewCameraProxy()
+    {
+        if (_viewCameraProxy is not { } proxy || CameraOwned || _cam == null)
+            return;
+        proxy.GlobalTransform = _cam.EyePose;
     }
 
     // The survivable scrape's authored per-surface reaction, selected exactly as

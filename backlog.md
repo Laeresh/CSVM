@@ -315,22 +315,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the arc of the turned polygons. *Cross-refs:* `BL-639` (the Gemini's gasbags not burning out),
   `git log --grep=BL-672`, `git log --grep=BL-735`.
 
-- `BL-932` `[Feature]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` **The canopy
-  bullet holes are heard and never seen: the cue opens one of the five `bullethole_anims` holes and
-  sounds `window_hit_sg`, and no decal is drawn for the hole.** *Evidence:* reported at the controls
-  under the `BL-226` listen ("volume is alright but decals are not visible"). `CanopyHoleCue.cs`
-  keeps the decoded ledger and `FlightController.TickIncomingFire` renders the cue alone; the hole's
-  own visual, the cockpit-glass hole in first person against the exterior `two_bulletholes_*`,
-  `three_bulletholes_*` and `four_bulletholes` calls (`docs/org/weaponFire.md`), is not built.
-  *Fix shape:* run the opened hole's `ON_CALL` def through the animation runtime so its first
-  sequence draws (the `IF PLAYER_1ST_PERSON` branch picks the glass hole or the exterior decal, and
-  the second sequence sounds the cue either way). *⚠ Traps:* the original also stamps a bullet-hole
-  decal into a struck surface's texture at the hit UV (`docs/org/weaponRay.md`, `FUN_00558f80`);
-  that is a separate feature on world hits and not what this item covers. *Playtest after fix:*
-  take an AI burst on the nose in the cockpit view and watch for a hole in the glass; the same
-  hits in the chase view should mark the airframe. *Cross-refs:* `git log --grep=BL-226` (the
-  cue), `docs/formats/vehicle.md` (`bullethole_anims`).
-
 ## Weapons & combat
 
 - `BL-233` `[Feature]` `[Blocked: M4]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **Extend the proximity fuse to zeppelins (and any other M4 flyer) when they get

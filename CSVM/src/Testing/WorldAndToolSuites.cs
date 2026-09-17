@@ -233,14 +233,32 @@ internal static class WorldAndToolSuites
                 ctx.Check(node != null, $"the interior carries {panel}");
                 ctx.Check(node is not { Visible: true }, $"{panel} is built hidden (torn state off)");
             }
-            // ⚠ The five windshield bullet-hole groups and the two warning lamps ship active:true,
-            // so an unparked build renders white splats across the sky on a pristine plane.
-            foreach (var state in new[]
-                     { "bullet1", "bullet2", "bullet3", "bullet4", "bullet5", "lowalt_on", "stallwarning_on" })
+            // ⚠ The windshield bullet-hole quads and the two warning lamps ship active:true, so an
+            // unparked build renders white splats across the sky on a pristine plane. The parking
+            // follows reset_bulletholes: the bulNx quads dark, the bulletN groups over them drawn.
+            foreach (var lamp in new[] { "lowalt_on", "stallwarning_on" })
             {
-                var node = FindNamed(interior, state);
-                ctx.Check(node != null, $"the interior carries {state}");
-                ctx.Check(node is not { Visible: true }, $"{state} is parked hidden on a pristine plane");
+                var node = FindNamed(interior, lamp);
+                ctx.Check(node != null, $"the interior carries {lamp}");
+                ctx.Check(node is not { Visible: true }, $"{lamp} is parked hidden on a pristine plane");
+            }
+            foreach (var group in new[] { "bullet1", "bullet2", "bullet3", "bullet4", "bullet5" })
+            {
+                var node = FindNamed(interior, group);
+                ctx.Check(node is { Visible: true }, $"the interior carries {group}, drawn");
+                if (node == null)
+                    continue;
+                int quads = 0, lit = 0;
+                foreach (var child in node.GetChildren())
+                {
+                    if (child is not Node3D quad)
+                        continue;
+                    quads++;
+                    if (quad.Visible)
+                        lit++;
+                }
+                ctx.Check(quads >= 3 && lit == 0,
+                    $"{group}'s {quads} hole quads are parked hidden on a pristine plane, lit={lit}");
             }
             // …and the panel geometry beside them is NOT parked: the states are a named set, not a
             // blanket hide, so a wrong predicate that hid the dashboard would fail here.

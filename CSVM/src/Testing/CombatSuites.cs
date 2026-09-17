@@ -1547,6 +1547,132 @@ internal static class CombatSuites
         }
     }
 
+    // What an opened hole DRAWS, on the real derivation rather than a hand-played def: the crash-rig
+    // name set, the staged template closure and the runtime's own ON_CALL path, run once per branch of
+    // the def's PLAYER_1ST_PERSON test. The sound half is incoming-fire-cues' above; this is the half
+    // BL-932 reported missing. ⚠ The rig gets its own `camera1` because a crash runtime resolves a
+    // name over its bind scope alone, and the world's copy is outside it (FlightController's own
+    // EnsureViewCameraProxy is what production builds); without it the overlay poses at the origin.
+    [Suite("canopy-hole-draws",
+        "an opened canopy hole draws: the human crash-rig name set carries bullet1..bullet5, its "
+        + "stage closure pulls the two_/three_/four_bulletholes overlay roots out of the chapter "
+        + "gamez, and playing one def leaves a live instance anchored on the aircraft that lights "
+        + "the bulNx glass quads inside the cockpit1 interior in BOTH views (sequence two, which "
+        + "the branch does not gate), while sequence one's PLAYER_1ST_PERSON test calls the "
+        + "exterior overlay only outside first person, where it poses at the rig's own camera1")]
+    internal static void CanopyHoleDraws(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            try
+            {
+                // The names an AI rig must NOT take: its airframe carries no cockpit1 interior, so a
+                // bound hole def would light nothing and stage three roots for nobody.
+                var humanNames = EffectCatalogue.CrashRigAnimNames(
+                    EffectCatalogue.CrashDefTable(world.Session.Program), null, humanPiloted: true);
+                var aiNames = EffectCatalogue.CrashRigAnimNames(
+                    EffectCatalogue.CrashDefTable(world.Session.Program), null, humanPiloted: false);
+                ctx.Check(EffectCatalogue.CanopyHoleAnims.All(humanNames.Contains)
+                          && !EffectCatalogue.CanopyHoleAnims.Any(aiNames.Contains),
+                    $"the human crash rig binds all {EffectCatalogue.CanopyHoleAnims.Length} canopy hole defs and an AI rig binds none");
+
+                foreach (var view in new[] { PilotViewMode.Cockpit, PilotViewMode.Chase })
+                {
+                    string name = PilotView.Name(view);
+                    bool firstPerson = PilotView.IsFirstPerson(view);
+                    var controller = new Node3D { Name = "controller_replica" };
+                    var runtime = AnimRuntime.ForCrashRig(
+                        WorldEffectsFactory.NewCrashTemplateStage(), 1, new CountingEmitterFactory(), false);
+                    runtime.ManualAdvance = true;
+                    runtime.FirstPersonView = () => firstPerson;
+                    try
+                    {
+                        var builder = new PlaneBuilder(planesGamez, textures, cockpitInterior: true);
+                        var planeModel = builder.Build(ctx.PlaneName);
+                        controller.AddChild(planeModel);
+                        var eye = new Node3D { Name = CutsceneController.CameraNode };
+                        eye.SetMeta(AnimRuntime.NameMeta, CutsceneController.CameraNode);
+                        controller.AddChild(eye);
+                        var crashRoot = new Node3D { Name = "player" };
+                        crashRoot.SetMeta(AnimRuntime.NameMeta, "player");
+                        crashRoot.Transform = planeModel.Transform;
+                        controller.AddChild(crashRoot);
+                        ctx.Host.AddChild(controller);
+                        ctx.Host.AddChild(runtime);
+
+                        var rootNames = WorldEffectsFactory.CrashStageRootNames(world.Session.Program,
+                            world.Gamez, controller, humanPiloted: true);
+                        var overlays = new[] { "two_bulletholes", "three_bulletholes", "four_bulletholes" };
+                        ctx.Check(overlays.All(o => rootNames.Contains(o, System.StringComparer.OrdinalIgnoreCase)),
+                            $"{name}: the stage closure asks for all three overlay roots [{string.Join(", ", overlays.Where(o => rootNames.Contains(o, System.StringComparer.OrdinalIgnoreCase)))}]");
+                        var staged = WorldEffectsFactory.StageCrashTemplates(world.Gamez,
+                            world.Session.Builder.Scene, crashRoot, rootNames, EffectPools.Load());
+                        ctx.Check(staged.Slot0 == rootNames.Count,
+                            $"{name}: every root the closure asked for built from this chapter's gamez ({staged.Slot0}/{rootNames.Count})");
+
+                        var started = new List<(string Anim, Node3D? Anchor)>();
+                        runtime.OnInstanceStarted += (def, anchor) =>
+                            started.Add((def.AnimName ?? def.Name ?? "", anchor));
+                        runtime.Bind(controller, world.Session.Program.Subset(humanNames));
+                        // The glass is pristine before the call, which is the build's own parking
+                        // (PlaneBuilder.IsInteriorDrivenState) and not something the rig did.
+                        var quads = runtime.FindNodes("bul1a").Concat(runtime.FindNodes("bul1b"))
+                            .Concat(runtime.FindNodes("bul1c")).ToList();
+                        ctx.Check(quads.Count == 3 && quads.All(q => !q.Visible),
+                            $"{name}: bullet1's {quads.Count} glass quads start parked dark");
+                        var group = runtime.FindNodes("bullet1").FirstOrDefault();
+                        ctx.Check(group is { Visible: true },
+                            $"{name}: …under a bullet1 group the build leaves drawn, or the quads could never show");
+
+                        started.Clear();
+                        var played = runtime.Play("bullet1", planeModel, applyReset: false);
+                        // Past the def's whole 1.62 s timeline (bul1a at 0, bul1b at 0.71, bul1c at 1.62).
+                        for (int i = 0; i < 120; i++)
+                        {
+                            runtime.Advance(1f / 60f);
+                        }
+
+                        int offPlane = played.Count(p => p.Anchor == null
+                                                         || (p.Anchor != controller && !controller.IsAncestorOf(p.Anchor)));
+                        ctx.Check(played.Count == 1 && offPlane == 0,
+                            $"{name}: the call left {played.Count} live bullet1 instance(s), {offPlane} of them off this aircraft");
+                        ctx.Check(quads.All(q => q.Visible),
+                            $"{name}: sequence two lit all three glass quads, which the branch does not gate ({quads.Count(q => q.Visible)}/3)");
+
+                        // Sequence one's branch: the exterior overlay is CALLED outside first person
+                        // and nowhere else, and the empty arm is why the cockpit sees only the glass.
+                        bool calledOverlay = started.Any(s => s.Anim.StartsWith("two_bulletholes",
+                            System.StringComparison.OrdinalIgnoreCase));
+                        ctx.Check(calledOverlay == !firstPerson,
+                            $"{name}: PLAYER_1ST_PERSON={firstPerson} and the exterior overlay {(calledOverlay ? "was" : "was not")} called");
+                        var copy = runtime.FindNodes("two_bulletholes").FirstOrDefault();
+                        ctx.Check(copy != null && copy.Visible == !firstPerson,
+                            $"{name}: …and its staged copy is {(copy is { Visible: true } ? "lit" : "dark")}");
+                        if (!firstPerson && copy != null)
+                        {
+                            ctx.Check(copy.GlobalPosition.DistanceTo(eye.GlobalPosition) < 1f,
+                                $"{name}: the overlay poses AT_NODE camera1, {copy.GlobalPosition.DistanceTo(eye.GlobalPosition):0.00} m off the eye");
+                        }
+
+                        ctx.Note($"{name}: {played.Count} hole instance(s), {quads.Count(q => q.Visible)}/3 quads lit, overlay called={calledOverlay}");
+                    }
+                    finally
+                    {
+                        runtime.Free();
+                        controller.Free();
+                    }
+                }
+            }
+            finally
+            {
+                textures.Dispose();
+            }
+        });
+    }
+
     // The decoded graze restitution on real contacts: a shallow dive onto a floor and a shallow scrape
     // along a vertical wall, flown by a real rig through the real collision sweep. Two things need a
     // live contact and cannot be read off FlightModel (whose arithmetic BounceRestitutionTests pins):

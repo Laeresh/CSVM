@@ -203,6 +203,11 @@ public sealed class CameraController
     /// relative to it (<see cref="CockpitOverlay"/>).</summary>
     public Vector3 EyePosition => _camera.GlobalPosition;
 
+    /// <summary>The whole eye frame, position and aim, for a caller that has to place geometry in
+    /// front of the view rather than merely measure from it. The canopy-hole overlay's
+    /// <c>AT_NODE camera1</c> reads it through <c>FlightController.EnsureViewCameraProxy</c>.</summary>
+    public Transform3D EyePose => _camera.GlobalTransform;
+
     /// <summary>The pilot's head: snap, free-look and the center key, smoothed to the angles
     /// <see cref="FirstPersonView"/> aims with and <see cref="Chase"/> swings by. ONE head for
     /// every view, as the original has (docs/org/cameraViews.md), so a bearing taken in the cockpit

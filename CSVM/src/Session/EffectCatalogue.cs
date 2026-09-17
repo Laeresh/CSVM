@@ -147,6 +147,15 @@ public static class EffectCatalogue
     // ai_nitro_* wrappers in the same file are retargeting shims the executable never references.
     public static readonly string[] NitroAnims = { "nitro_boost", "nitro_decay" };
 
+    // The canopy glass's five hole defs (cockpit_bulletholes.zrd), one per CanopyHoleCue slot.
+    // Human rigs only: the cue is the pilot's own windshield, and the bulNx quads it lights live in
+    // the cockpit1 interior an AI plane is never built with. Decode: docs/org/weaponFire.md.
+    // ⚠ Their authored NAME is `player_pfighter`, already an AirframeScopedAnchors entry, so the
+    // closure drops it and each def reaches the aircraft through Play's PlaneModel fallback. What it
+    // does pull in is the exterior overlay family, a parentless root in every chapter gamez.
+    public static readonly string[] CanopyHoleAnims =
+        { "bullet1", "bullet2", "bullet3", "bullet4", "bullet5" };
+
     // The authored player damage-stage menu: the per-panel burn, the fuel-vapor leak, and the
     // heavy prop1 trail. DamageVisuals plays these as the vehicle.zrd.json injure_anims thresholds
     // cross, the tier table is authored, nothing here invents one.
@@ -285,9 +294,9 @@ public static class EffectCatalogue
     /// shims, the prop choreography, both authored damage-stage menus and this rig's destroy def,
     /// i.e. every def that plays ON one aircraft, and therefore the name set whose anchor-root
     /// closure that rig's own template stage must satisfy (<see cref="CrashStageRoots"/>). Both
-    /// menus regardless of who is at the controls: the rig is built before its ladder is read.</summary>
+    /// menus regardless of who flies; <paramref name="humanPiloted"/> adds the canopy holes.</summary>
     public static IReadOnlyList<string> CrashRigAnimNames(SurfaceDefTable crashDefs,
-        string? destroyAnim = null)
+        string? destroyAnim = null, bool humanPiloted = false)
     {
         var names = new List<string>(crashDefs.PlayableDefs);
         names.AddRange(PlaneDamageEffectAnims);
@@ -295,6 +304,8 @@ public static class EffectCatalogue
         names.AddRange(NitroAnims);
         names.Add(AiShakeAnim);
         names.AddRange(DamageStageAnims);
+        if (humanPiloted)
+            names.AddRange(CanopyHoleAnims);
         if (!string.IsNullOrEmpty(destroyAnim))
             names.Add(destroyAnim);
         return names;
@@ -362,9 +373,9 @@ public static class EffectCatalogue
     /// no-table overload keeps the player family for callers that predate the split.</summary>
     public static IReadOnlyList<string> CrashStageRoots(AnimProgram program,
         Func<string, AnchorPlacement> resolveRoot, SurfaceDefTable crashDefs,
-        string? destroyAnim = null)
+        string? destroyAnim = null, bool humanPiloted = false)
     {
-        var names = CrashRigAnimNames(crashDefs, destroyAnim);
+        var names = CrashRigAnimNames(crashDefs, destroyAnim, humanPiloted);
         var roots = new List<string>(StageRootsFor(program, names, resolveRoot));
         foreach (var activated in ActivatedRootsIn(program, names, resolveRoot))
             if (!roots.Contains(activated, StringComparer.OrdinalIgnoreCase))
@@ -375,8 +386,8 @@ public static class EffectCatalogue
 
     /// <inheritdoc cref="CrashStageRoots(AnimProgram, Func{string, AnchorPlacement}, SurfaceDefTable)"/>
     public static IReadOnlyList<string> CrashStageRoots(AnimProgram program,
-        Func<string, AnchorPlacement> resolveRoot) =>
-        CrashStageRoots(program, resolveRoot, CrashDefTable(program));
+        Func<string, AnchorPlacement> resolveRoot, bool humanPiloted = false) =>
+        CrashStageRoots(program, resolveRoot, CrashDefTable(program), destroyAnim: null, humanPiloted);
 
     /// <summary>The anchor-root closure of <paramref name="names"/>: walks the transitive
     /// CALL_ANIMATION closure, takes each definition's NAME, and asks

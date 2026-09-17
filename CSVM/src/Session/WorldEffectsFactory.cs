@@ -173,9 +173,9 @@ public sealed class WorldEffectsFactory
     /// per-plane).</summary>
     public static IReadOnlyList<string> CrashStageRootNames(AnimProgram program, GameZ gamez,
         Node3D rigScope, SurfaceDefTable? crashDefs = null, string? destroyAnim = null,
-        GameZ? planesGamez = null) =>
+        GameZ? planesGamez = null, bool humanPiloted = false) =>
         EffectCatalogue.CrashStageRoots(program, StageRootResolver(gamez, rigScope, planesGamez),
-            crashDefs ?? EffectCatalogue.CrashDefTable(program), destroyAnim);
+            crashDefs ?? EffectCatalogue.CrashDefTable(program), destroyAnim, humanPiloted);
 
     /// <summary>Stages the crash rig's pooled effect-template copies under
     /// <paramref name="crashRoot"/>, one <c>poolN</c> container per depth level, every copy hidden.
@@ -333,7 +333,8 @@ public sealed class WorldEffectsFactory
             var destroy = EffectCatalogue.DestroyAnimFor(human, planeName);
             if (destroy != null && program.ByAnimName(destroy).Count == 0)
                 destroy = null;
-            foreach (var r in CrashStageRootNames(program, gamez, controller, defs, destroy, altGamez))
+            foreach (var r in CrashStageRootNames(program, gamez, controller, defs, destroy, altGamez,
+                         humanPiloted: human))
                 if (!both.Contains(r))
                     both.Add(r);
         }
@@ -708,8 +709,12 @@ public sealed class WorldEffectsFactory
             // session gamez IS the plane source, so the alt arm never fires there.
             var altGamez = _planesGamez != null && !ReferenceEquals(_planesGamez, _gamez) ? _planesGamez : null;
             var altScene = altGamez != null ? _factory.PlanesScene(altGamez, _textures) : null;
+            // ⚠ Before the derivation, not after: the canopy-hole overlay poses AT_NODE `camera1`,
+            // a name a rig runtime can only resolve inside its own bind scope, and the bind indexes
+            // this subtree once. A proxy added later would leave the overlay at the world origin.
+            _controller.EnsureViewCameraProxy();
             _rootNames = CrashStageRootNames(_crashProgram, _gamez, _controller, _crashDefs,
-                _destroyAnim, altGamez);
+                _destroyAnim, altGamez, _controller.IsHumanPiloted);
             // ⚠ Both kinds' roots, resolved HERE and not at the check below: once the templates are
             // staged, a staged root answers InScope instead of Stage and drops out of the derivation.
             _bothKindsRoots = BothRigKindsStageRoots(_crashProgram, _gamez, _controller, _planeName,
@@ -777,6 +782,10 @@ public sealed class WorldEffectsFactory
             crashRuntime.AnchorWarnAnimNames =
                 new HashSet<string>(EffectCatalogue.DamageStageAnims, StringComparer.OrdinalIgnoreCase);
             crashRuntime.AnchorWarnLabel = _planeName;
+            // This rig's own pilot answers PLAYER_1ST_PERSON, never a session-wide view: with
+            // splitscreen each pane's canopy takes its own branch. Unwired the condition reads
+            // false, which would run every canopy hole's exterior arm inside the cockpit.
+            crashRuntime.FirstPersonView = () => _controller.FirstPersonView;
             // Wreck pieces with `do_intersections: true` stay in the world; handing the mask over arms
             // their collider sweep. Only Fly-mode goldens exercise it, and none captures a completed
             // landing, analysis/object-motion-goldens/FINDINGS.md.
@@ -791,7 +800,8 @@ public sealed class WorldEffectsFactory
             // full ~800-def world program, its ~150 generic-named defs would mis-anchor onto this
             // plane's parts and run their reset states on it.
             crashRuntime.Bind(_controller,
-                _crashProgram.Subset(EffectCatalogue.CrashRigAnimNames(_crashDefs!, _destroyAnim)));
+                _crashProgram.Subset(EffectCatalogue.CrashRigAnimNames(_crashDefs!, _destroyAnim,
+                    _controller.IsHumanPiloted)));
             _controller.AddChild(crashRuntime);
             _controller.DestroyDef = _destroyAnim;
             // Which of the two families owns the landing, asked of the data rather than of who is

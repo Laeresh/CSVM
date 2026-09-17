@@ -72,6 +72,17 @@ public sealed class CanopyHoleCue
         return null;
     }
 
+    /// <summary>Opens a numbered hole outright, past the health gate and the draw, and answers
+    /// whether it was still closed. What <c>--canopy-holes=</c> spends so a scripted shot catches
+    /// struck glass; a round that lands goes through <see cref="TryOpenHole"/> and nothing else.</summary>
+    public bool ForceOpen(int hole)
+    {
+        if (hole < 1 || hole > HoleCount || _opened[hole - 1])
+            return false;
+        _opened[hole - 1] = true;
+        return true;
+    }
+
     /// <summary>Back to a pristine canopy, which is what the <c>reset_bulletholes</c> spawn anim
     /// does for the decals.</summary>
     public void Reset() => Array.Clear(_opened, 0, _opened.Length);

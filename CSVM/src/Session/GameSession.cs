@@ -2478,6 +2478,17 @@ public partial class GameSession : Node3D
             Log.Info("flight", $"damage lab: '{_spec.PlaneName}' has no destroyable_parts");
         }
 
+        // --canopy-holes=: struck glass from the spawn frame on, so a scripted shot of the cockpit
+        // does not wait on an AI burst and a 0.3 draw. Every human pane, a splitscreen canopy being
+        // per pilot, and through the cue's own ledger, so a later round picks up where this left off.
+        if (_spec.CanopyHoles is { } holes)
+        {
+            foreach (var rig in _rigs)
+            {
+                rig.Controller?.PresetCanopyHoles(holes);
+            }
+        }
+
         // The weapon lab in flight, bound to player 1's held aircraft inside a real chapter world.
         // ⚠ Keep it firing through the session's own fully-wired ProjectilePool, never a scene-less
         // pool of its own; --weapon-test is the parked-plane probe and never reaches here.

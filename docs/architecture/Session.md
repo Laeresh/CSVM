@@ -490,17 +490,17 @@ captured scheme and its own build are laid over that assembly, the one path a bo
 The record of which authored anims are playable effects and what their defs need staged: the name
 tables every effect producer must stay inside, static and engine-free. It owns the impact and death
 effect names, the crash rig's own def tables and the two surface-indexed def vectors, the
-damage-stage and prop-choreography menus, the destroy-def lookup, the collider overlay's surface
-colour key, and the anchor-root derivation that IS `WorldEffectsFactory`'s stage source. An
-unstageable anchor fails the build rather than leaving a def anchored on nothing. Every name
-producer carries a producer-range tripwire in `CSVM.Tests` asserting its whole range resolves inside
-these tables. Read `WorldEffectsFactory.cs` next.
+damage-stage and prop-choreography menus, the canopy-hole family a human rig alone binds, the
+destroy-def lookup, the collider overlay's surface colour key, and the anchor-root derivation that IS
+`WorldEffectsFactory`'s stage source. An unstageable anchor fails the build rather than leaving a def
+anchored on nothing. Every name producer carries a producer-range tripwire in `CSVM.Tests` asserting
+its whole range resolves inside these tables. Read `WorldEffectsFactory.cs` next.
 
 ## src/Session/WorldEffectsFactory.cs
 Builds the two effect stages a session needs and the runtimes bound to them: the world-effects
 runtime for impacts and destruction, and the per-plane crash runtime, which despite its name binds
-every def that plays ON one aircraft (the crash-def vector, the destroy def, the panel damage shims
-and the prop choreography). Both stages are built in pool slots sized from `data/effect_pools.json`
+every def that plays ON one aircraft (the crash-def vector, the destroy def, the panel damage shims,
+the prop choreography, and on a human rig the canopy holes, whose `PLAYER_1ST_PERSON` branch this rig's own pilot answers). Both stages are built in pool slots sized from `data/effect_pools.json`
 and handed to their runtime sealed, and both pre-warm their emitters after the bind so a first burst
 finds its puffers already made. `BeginFlightCrashRuntime` opens the crash build as a handle a caller
 steps a phase at a time (`CrashRigQueue.cs`), where the pre-warm itself repeats a slice at a time so a rig's two hundred emitters never

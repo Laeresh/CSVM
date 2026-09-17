@@ -220,11 +220,35 @@ plays them.
 
 ⚠ **`window_hit_sg` is not view-gated.** It is authored in the five `bullet1`..`bullet5` defs of
 `cockpit_bulletholes.zrd` rather than in `player.json`, three or four `SOUND` events apiece across
-the def's ~0.91 s timeline, and those events sit in the def's SECOND sequence. The
-`IF PLAYER_1ST_PERSON` branch is in the FIRST sequence and chooses only the visual, the cockpit
-glass holes against the exterior `two_bulletholes_*` / `three_bulletholes_*` / `four_bulletholes`
-call. A build that silences the glass outside the cockpit is inventing a gate the data does not
-author.
+the def's 1.62 s timeline, and those events sit in the def's SECOND sequence, which the
+`IF PLAYER_1ST_PERSON` branch does not reach. A build that silences the glass outside the cockpit
+is inventing a gate the data does not author.
+
+### What an opened hole draws
+
+The five defs share one shape. `player_pfighter-bullet1.json` is the worked example; the other four
+differ only in which exterior def they call and how many quads they carry (3, 4, 3, 4, 4).
+
+**Sequence two is the cockpit glass, and it runs in every view.** It rotates the `bulletN` group to
+one of three authored yaws on a `RANDOM_WEIGHT 0.3 / 0.3 / rest` pick, then switches the `bulNx`
+quads under it on one at a time: `bul1a` immediately, `bul1b` at `@Animation:0.71`, `bul1c` at
+`@Event:0.91` (1.62 s from the start), each with a `window_hit_sg` beside it. Nothing ever switches
+them back off, so a hole stays on the glass for the rest of the sortie; `reset_bulletholes` is what
+clears all eighteen quads at spawn, and it names exactly the `bulNx` leaves and never the meshless
+`bulletN` groups above them.
+
+**Sequence one is the exterior overlay, and its first-person arm is EMPTY.** The whole sequence is
+`IF PLAYER_1ST_PERSON` → nothing / `ELSE` → `CALL_ANIMATION two_bulletholes_a` / `ENDIF`. So the
+branch does not choose between two visuals: it adds an overlay outside first person and nothing
+inside it, the glass of sequence two being what a cockpit sees.
+
+⚠ **`two_bulletholes_*` / `three_bulletholes_*` / `four_bulletholes` are not airframe decals.** Each
+is a parentless gamez template root whose own first sequence poses it `AT_NODE camera1`, with
+`AT_NODE_XYZ camera1` for its basis, inside an infinite `LOOP`, re-testing `PLAYER_1ST_PERSON` every
+iteration so the overlay hides itself the moment the pilot selects the cockpit. Its second sequence
+offsets a `Nb_rotate` child and flashes the hole quads under it for a single frame each (one at
+t≈0, another at `@Animation:0.4`). It is a screen overlay in front of the eye, not a mark on the
+skin, so an external view shows the hits as a momentary flash and carries nothing afterwards.
 
 **Which interval opens a hole.** The tick `FUN_004b1340` is the `warning_shot_*` block's own:
 `+0x914` ages against `warning_shot_interval`, `+0x918` counts the CANNON hits taken since the

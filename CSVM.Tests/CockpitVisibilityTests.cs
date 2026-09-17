@@ -60,8 +60,8 @@ public class CockpitVisibilityTests
     }
 
     [Theory]
-    [InlineData("bullet1")]
-    [InlineData("bullet5")]
+    [InlineData("bul1a")]
+    [InlineData("bul5d")]
     [InlineData("lowalt_on")]
     [InlineData("stallwarning_on")]
     public void TheInteriorsDrivenStatesAreRecognisedByName(string name)
@@ -76,10 +76,21 @@ public class CockpitVisibilityTests
     [InlineData("structure")]     // canopy frame
     [InlineData("nosedamage")]    // a damage-dial zone: always drawn, RECOLOURED by health
     [InlineData("ggindicator0")]  // a belt segment: likewise
-    [InlineData("bullet")]        // the bare stem is not one of the five numbered groups
+    [InlineData("bullet")]        // the bare stem carries no quad
     [InlineData("bulletx")]
+    [InlineData("bul")]
     public void OrdinaryInteriorGeometryIsNotTreatedAsADrivenState(string name)
     {
+        Assert.False(PlaneBuilder.IsInteriorDrivenState(name));
+    }
+
+    [Theory]
+    [InlineData("bullet1")]
+    [InlineData("bullet5")]
+    public void TheMeshlessHoleGroupsAreLeftAlone(string name)
+    {
+        // Parking a bulletN group would hide the bulNx quads under it for good, so the hole an
+        // opened cockpit_bulletholes def lights would never reach the glass.
         Assert.False(PlaneBuilder.IsInteriorDrivenState(name));
     }
 
