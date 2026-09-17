@@ -677,7 +677,7 @@ public sealed class ClutterBuilder
     // authored flags, emitted as variants so a lit, fogged kind gets the base form.
     private static string ShaderCode(bool lit, bool fogged, bool clampUv, bool spherical, bool blend) => $$"""
         shader_type spatial;
-        render_mode skip_vertex_transform, unshaded, cull_disabled, shadows_disabled{{(blend ? ", blend_mix, depth_draw_never" : "")}};
+        render_mode skip_vertex_transform, unshaded, cull_disabled, shadows_disabled{{(blend ? ", blend_mix, depth_draw_never" : "")}}{{(blend || !GraphicsMode.Enhanced ? "" : SceneBuilder.CoverageMode)}};
 
         uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, {{(clampUv ? "repeat_disable" : "repeat_enable")}};
 
@@ -714,7 +714,7 @@ public sealed class ClutterBuilder
             ALBEDO = col.rgb{{(lit ? " * csky_world_light" : "")}};
         {{(fogged ? FogLines : "")}}{{SceneBuilder.TintLine}}
             ALPHA = col.a;
-        {{(blend ? "" : ScissorLine)}}}
+        {{(blend ? "" : ScissorLine)}}{{(blend || !GraphicsMode.Enhanced ? "" : SceneBuilder.CoverageLines + "\n")}}}
         """;
 
     // The camera-facing basis one card's vertices are turned by, the rendering half of its
@@ -1060,9 +1060,12 @@ public sealed class ClutterBuilder
 
     // ---------------------------------------------------------------- rendering
 
+    // Key bits: 1 lit, 2 fogged, 4 clampUv, 8 spherical, 16 blend, 32 enhanced mode, which the
+    // cutout variant spends on the coverage render mode. Next free bit is 64.
     private Shader SpriteShader(bool lit, bool fogged, bool clampUv, bool spherical, bool blend)
     {
-        int key = (lit ? 1 : 0) | (fogged ? 2 : 0) | (clampUv ? 4 : 0) | (spherical ? 8 : 0) | (blend ? 16 : 0);
+        int key = (lit ? 1 : 0) | (fogged ? 2 : 0) | (clampUv ? 4 : 0) | (spherical ? 8 : 0) | (blend ? 16 : 0)
+            | (GraphicsMode.Enhanced ? 32 : 0);
         if (!_shaders.TryGetValue(key, out var shader))
             _shaders[key] = shader = new Shader { Code = ShaderCode(lit, fogged, clampUv, spherical, blend) };
         return shader;

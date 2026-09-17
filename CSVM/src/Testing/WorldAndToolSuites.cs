@@ -119,6 +119,32 @@ internal static class WorldAndToolSuites
         }
     }
 
+    // The coverage arm is Enhanced-only, so the faithful text has to be asserted as UNCHANGED: the
+    // pinned goldens are faithful --det runs and a token leaking into that arm would repin them all.
+    // Read off a built world rather than off the generator, since what ships is the text the
+    // materials actually carry. Able to fail: dropping the mode guard puts the token in both arms.
+    [Suite("alpha-coverage-text",
+        "Enhanced Graphics only: every cutout surface of the built world, and every clutter sprite "
+        + "card, carries the alpha-to-coverage render mode with the edge built-ins that feed it, no "
+        + "blended surface carries either, and the faithful presentation compiles the same world "
+        + "with no coverage token anywhere")]
+    internal static void AlphaCoverageText(TestContext ctx)
+    {
+        bool wasEnhanced = Utils.GraphicsMode.Enhanced;
+        try
+        {
+            Utils.GraphicsMode.Resolve(Utils.GraphicsMode.EnhancedWord);
+            CoverageTextArm(ctx, enhanced: true);
+            Utils.GraphicsMode.Resolve(Utils.GraphicsMode.Default);
+            CoverageTextArm(ctx, enhanced: false);
+        }
+        finally
+        {
+            Utils.GraphicsMode.Resolve(wasEnhanced
+                ? Utils.GraphicsMode.EnhancedWord : Utils.GraphicsMode.Default);
+        }
+    }
+
     // A second aircraft build must reuse the first's Shader resources rather than generating its
     // own copies of the same text. Godot compiles a Shader the first time a material takes it, so a
     // per-builder shader memo makes every mid-flight AI spawn pay that compile again; a generated
@@ -1878,6 +1904,112 @@ internal static class WorldAndToolSuites
             ctx.Host.RemoveChild(stage);
             stage.Free();
         }
+    }
+
+    // One mode's world, counted by shader class. A private world: the mode is resolved around the
+    // build, so a cached one would hand the next suite a world compiled under the other mode.
+    private static void CoverageTextArm(TestContext ctx, bool enhanced)
+    {
+        string mode = enhanced ? "enhanced" : "faithful";
+        ctx.WithPrivateWorld(ctx.Chapter, collision: false, world =>
+        {
+            int cutouts = 0, cutoutsCovered = 0, blends = 0, blendsCovered = 0;
+            int sprites = 0, spritesCovered = 0, spriteCards = 0;
+            foreach (var (code, sprite) in ShaderTextUnder(world.Stage).Concat(ClutterShaderText(ctx, "C5")))
+            {
+                spriteCards += sprite ? 1 : 0;
+                bool blend = code.Contains("blend_mix");
+                bool cutout = code.Contains("ALPHA_SCISSOR_THRESHOLD");
+                // Both halves or neither: the render mode alone is a no-op, because the opaque pass
+                // writes alpha 1 unless the edge built-in is set (docs/org/textures.md).
+                bool covered = code.Contains(SceneBuilder.CoverageMode.TrimStart(',', ' '))
+                    && code.Contains("ALPHA_ANTIALIASING_EDGE")
+                    && code.Contains("ALPHA_TEXTURE_COORDINATE");
+                bool token = code.Contains("alpha_to_coverage") || code.Contains("ALPHA_ANTIALIASING_EDGE");
+                if (blend)
+                {
+                    blends++;
+                    blendsCovered += token ? 1 : 0;
+                }
+                else if (cutout)
+                {
+                    cutouts++;
+                    cutoutsCovered += covered ? 1 : 0;
+                    sprites += sprite ? 1 : 0;
+                    spritesCovered += sprite && covered ? 1 : 0;
+                }
+            }
+
+            ctx.Check(cutouts > 0 && blends > 0,
+                $"{mode}: {ctx.Chapter} builds both classes of alpha surface, cutout={cutouts} blended={blends}");
+            ctx.Check(sprites > 0,
+                $"{mode}: C5's clutter sprite cards are among them, cutout={sprites} of {spriteCards} card shaders");
+            ctx.Same(enhanced ? cutouts : 0, cutoutsCovered,
+                $"{mode}: cutout shaders carrying the coverage arm={cutoutsCovered} of {cutouts}");
+            ctx.Same(enhanced ? sprites : 0, spritesCovered,
+                $"{mode}: clutter sprite shaders carrying it={spritesCovered} of {sprites}");
+            ctx.Same(0, blendsCovered,
+                $"{mode}: blended shaders carrying any coverage token={blendsCovered} of {blends}");
+        });
+    }
+
+    // The clutter sprite cards' texts, from a builder of their own: the harness world is built
+    // without the stamped decorations, so their shaders are not under its stage to read.
+    private static List<(string Code, bool Sprite)> ClutterShaderText(TestContext ctx, string chapter)
+    {
+        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, chapter);
+        ctx.RequireData(gamezPath, $"{chapter} gamez");
+        ctx.RequireData(texturesPath, $"{chapter} textures");
+        ctx.RequireData(ctx.InterpPath, $"interp.json");
+        using var textures = new TextureArchive(texturesPath);
+        var builder = new ClutterBuilder(GameZ.Load(gamezPath), textures);
+        var root = builder.Build(ClutterBuilder.TemplateNames(ctx.InterpPath, chapter));
+        try
+        {
+            return root == null ? new List<(string, bool)>() : ShaderTextUnder(root);
+        }
+        finally
+        {
+            root?.Free();
+        }
+    }
+
+    // Every distinct shader text under a built world, with whether it is a clutter sprite card's.
+    // A MultiMesh draw alone does not say so: the 3D decorations are instanced the same way and
+    // take the world's own bias shader, which is the one carrying the depth-bias uniform.
+    private static List<(string Code, bool Sprite)> ShaderTextUnder(Node node)
+    {
+        var seen = new HashSet<string>();
+        var found = new List<(string Code, bool Sprite)>();
+        void Take(Material? material, bool instanced)
+        {
+            if (material is not ShaderMaterial { Shader: { } shader } || !seen.Add(shader.Code))
+            {
+                return;
+            }
+            found.Add((shader.Code, instanced && !shader.Code.Contains("uniform float depth_bias")));
+        }
+        void Walk(Node n)
+        {
+            if (n is MultiMeshInstance3D multi)
+            {
+                Take(multi.MaterialOverride, instanced: true);
+            }
+            else if (n is MeshInstance3D mesh)
+            {
+                for (int i = 0; i < mesh.GetSurfaceOverrideMaterialCount(); i++)
+                {
+                    Take(mesh.GetActiveMaterial(i), instanced: false);
+                }
+            }
+            foreach (var child in n.GetChildren())
+            {
+                Walk(child);
+            }
+        }
+        Walk(node);
+        return found;
     }
 
     // Visible map-scale meshes under a world root, the cloud deck's excepted.

@@ -431,6 +431,15 @@ as the same texture does on a world surface. Soft also suppresses `ScissorMipsKe
 only job is to stop a cutout thinning at distance, leaving a blended card the plain box-filtered
 mip chain the original sampled.
 
+Enhanced Graphics resolves the cutouts the rule leaves behind through coverage rather than a
+sharper cut: the scissored arm of every world, facade and clutter shader also takes
+`alpha_to_coverage` and writes `ALPHA_ANTIALIASING_EDGE` at the scissor's own 0.5, so the edge
+spends the project's four MSAA samples instead of stepping one bit per pixel. The render mode
+alone changes nothing, because Godot's opaque pass writes alpha 1 unless that edge built-in is
+set, and `alpha_to_coverage_and_one` hardens the result back toward the plain cut, which is why
+the plain mode ships. The faithful presentation emits none of it, so its shader text and the
+goldens pinned on it are untouched.
+
 All of that is a different question from `LastAlphaClass`, the extractor's own
 `None`/`Simple`/`Full` field, which is the header bit itself and the only reader that sees the
 `Simple` textures; no lighting decision keys on it, since the original's hardware draw has none

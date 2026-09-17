@@ -173,6 +173,21 @@ public sealed class SceneBuilder
     /// clutter MultiMesh still be forced blue per instance.</summary>
     internal const string ClutterFlagTintLine = "    ALBEDO = mix(COLOR.rgb, csky_tint.rgb, csky_tint.a);";
 
+    /// <summary>Enhanced Graphics only: the render-mode token that hands a cutout's alpha to the
+    /// MSAA coverage mask, so its edge resolves through the project's 4x samples instead of
+    /// stepping 1 bit per pixel. Appended to the CUTOUT arm alone, never to a blended one, whose
+    /// alpha already resolves in the transparent pass and would come out dithered instead.
+    /// The <c>_and_one</c> spelling hardens the resolved alpha back toward the scissor's own hard
+    /// step, so the plain mode ships (<c>docs/org/textures.md</c>).</summary>
+    internal const string CoverageMode = ", alpha_to_coverage";
+
+    /// <summary>The fragment half of <see cref="CoverageMode"/>, and not optional: the opaque pass
+    /// writes alpha 1 unless the edge built-in is set, so the render mode alone changes no pixel.
+    /// The edge sits at the scissor's own threshold, which keeps the silhouette where the faithful
+    /// cut puts it and spends the samples on the ramp around it.</summary>
+    internal const string CoverageLines = "    ALPHA_ANTIALIASING_EDGE = 0.5;\n"
+        + "    ALPHA_TEXTURE_COORDINATE = UV * vec2(textureSize(albedo_tex, 0));";
+
     /// <summary>Multiplies every depth bias this builder emits. Each is a fraction of VIEW
     /// DISTANCE, so a subtree mounted at a scale other than 1 has all of them compressed by that
     /// factor while the renderer's depth noise floor stays put; a caller mounting one passes the
@@ -1547,6 +1562,10 @@ void fragment() {
             : "render_mode skip_vertex_transform, cull_front");
         if (fullbright)
             sb.Append(", unshaded");
+        // The coverage arm samples albedo_tex for its edge derivative, so an untextured cutout
+        // (which the archive cannot produce, a verdict needs a texture) keeps the plain scissor.
+        if (scissor && textured && GraphicsMode.Enhanced)
+            sb.Append(CoverageMode);
         sb.AppendLine(";");
         sb.AppendLine("uniform float depth_bias = 0.0;");
         // The shared ordered instance-uniform block; this shader always carries instance uniforms,
@@ -1703,6 +1722,8 @@ void fragment() {{");
             sb.AppendLine($"    ALPHA = col.a{OpacityTerm};");
         if (scissor)
             sb.AppendLine("    ALPHA_SCISSOR_THRESHOLD = 0.5;");
+        if (scissor && textured && GraphicsMode.Enhanced)
+            sb.AppendLine(CoverageLines);
         sb.AppendLine("}");
 
         var shader = new Shader { Code = sb.ToString() };
@@ -1742,6 +1763,8 @@ void fragment() {{");
         sb.Append("render_mode unshaded, cull_disabled, shadows_disabled, fog_disabled");
         if (blend)
             sb.Append(", blend_mix, depth_draw_never");
+        if (scissor && GraphicsMode.Enhanced)
+            sb.Append(CoverageMode);
         sb.AppendLine(";");
         // A sprite whose UVs never leave the unit square never needs the sampler to wrap, and
         // wrapping it bleeds the texture's opposite edge in at the UV border, the same
@@ -1798,6 +1821,8 @@ void fragment() {{
         }
         if (scissor)
             sb.AppendLine("    ALPHA_SCISSOR_THRESHOLD = 0.5;");
+        if (scissor && GraphicsMode.Enhanced)
+            sb.AppendLine(CoverageLines);
         sb.AppendLine("}");
 
         var shader = new Shader { Code = sb.ToString() };
@@ -1834,6 +1859,8 @@ void fragment() {{
         sb.Append("render_mode skip_vertex_transform, unshaded, cull_disabled, shadows_disabled");
         if (blend)
             sb.Append(", blend_mix, depth_draw_never");
+        if (scissor && GraphicsMode.Enhanced)
+            sb.Append(CoverageMode);
         sb.AppendLine(";");
         // Clamp when the facade's UVs never leave the unit square, see GetBillboardShader.
         sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, "
@@ -1887,6 +1914,8 @@ void fragment() {{
         }
         if (scissor)
             sb.AppendLine("    ALPHA_SCISSOR_THRESHOLD = 0.5;");
+        if (scissor && GraphicsMode.Enhanced)
+            sb.AppendLine(CoverageLines);
         sb.AppendLine("}");
 
         var shader = new Shader { Code = sb.ToString() };

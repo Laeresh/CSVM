@@ -176,7 +176,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☑ TAA on every 3D viewport under Enhanced
 2. ☑ Render Scale, a VIDEO page row applied to every 3D viewport, ignored under `--det`
 3. ◐ BL-803: the shadow-map bands on grazing surfaces under Enhanced
-4. ☐ Alpha-to-coverage on the cutout surfaces under Enhanced
+4. ☑ Alpha-to-coverage on the cutout surfaces under Enhanced
 5. ◐ FSR 2.2 tried once as the alternative temporal pass, kept or parked on the user's verdict
 
 ### Wave B, lit explosions
@@ -421,7 +421,52 @@ controls. Debanding, SSAO and SSR are not the cause. Do not widen anything to th
 path, which casts no shadow map. A fix that only raises the constant bias detaches the aircraft's
 shadow from its wheels (peter-panning); check the parked-aircraft shadow before accepting one.
 
-## A4 ☐ Alpha-to-coverage on the cutout surfaces under Enhanced
+## A4 ☑ Alpha-to-coverage on the cutout surfaces under Enhanced
+
+**Landed.** Under Enhanced Graphics the cutout arm of every world-surface shader
+(`SceneBuilder.GetBiasShader`, and the billboard and cylindrical facade shaders that share its
+scissor) and of the clutter sprite shader (`Clutter.ShaderCode`) takes two new pieces, both held as
+`SceneBuilder.CoverageMode` and `SceneBuilder.CoverageLines` so the two call sites cannot drift: the
+render mode `alpha_to_coverage`, and the fragment pair `ALPHA_ANTIALIASING_EDGE = 0.5` with
+`ALPHA_TEXTURE_COORDINATE` set from the albedo texel size. Both halves are required, and this is the
+part the item's evidence did not have: the render mode alone changes no pixel at all, because Godot's
+opaque pass writes alpha 1 unless the edge built-in is written, so a coverage mask fed alpha 1 is a
+full mask. The edge sits at the scissor's own 0.5 threshold, which keeps the silhouette where the
+faithful cut puts it and spends the samples on the ramp around it; an edge at 0.3 visibly fattens the
+C5 vines and crane strands, which is the wrong picture. The plain mode ships rather than
+`alpha_to_coverage_and_one` by measurement, below. Nothing is a new key bit: the Enhanced bit is
+already in both shader keys, so this rides it and the faithful text is byte-identical, which is what
+the goldens pin. The untextured cutout is excluded at the world-surface site, since the coverage arm
+samples `albedo_tex` for its derivative. `Testing/WorldAndToolSuites.cs` gains `alpha-coverage-text`,
+which builds the same world and the same clutter cards under both presentations and reads the shader
+text off the built materials rather than off the generator.
+
+**Verified.** The complete `RunTests.ps1` on the item worktree, exit 0: build PASS, units **4610
+passed, 0 failed, 2 skipped of 4612**, engine **368 suites passed, 0 failed**, goldens **19 shots
+hash-identical**. `CheckCommentCaps.ps1`, `CheckDocEntries.ps1` and `CheckEncoding.ps1` clean. The
+new suite's own counts read `enhanced: cutout shaders carrying the coverage arm=14 of 14`, `clutter
+sprite shaders carrying it=1 of 1`, `blended shaders carrying any coverage token=0 of 9`, and the
+faithful arm 0 of 14, 0 of 1 and 0 of 8. `alpha-cutout-ray-census` passes unmoved, as it must, since
+it tests the collider rather than the pixel. The coverage is
+measured, not asserted. At the C5 crane pose, Enhanced with coverage against Enhanced without changes
+15150 pixels (mean |d| 12.2, max 396); at the C4 sign pose, 10093 pixels (mean |d| 32.0, max 427).
+Over an 80x80 crop of one crane edge the mean ramp width across an edge falls from 3.86 px without
+coverage to 3.60 px with, at the same 186 distinct luminance levels, and a row profile through a
+sub-pixel strut turns a run of hard black pixels into partial coverage. `alpha_to_coverage_and_one`
+was measured at the same pose and adds only 5361 pixels (mean |d| 4.3) where the plain mode adds
+7033 (mean |d| 7.4), and its row profile matches the no-coverage control almost exactly, which is
+the `_and_one` contract hardening the resolved alpha back toward the scissor's own step. The project
+carries MSAA 4x (`anti_aliasing/quality/msaa_3d=2`) for both presentations, so the samples coverage
+needs are there. The clutter fade arm changes nothing either way: the fade dither is a `discard`
+rather than a partial alpha, and with the fade on against off the crops are identical at both poses,
+so coverage stays on the clutter arm for consistency with the world surfaces. Judged with TAA on,
+which is what Enhanced ships. The cost at the C5 crane pose over `--perf --frames=240` is 3.54 ms of
+GPU time against 3.50 ms without coverage, about 0.05 ms. ⚠ Neither of the other two Enhanced doors
+could be captured: a `graphics.renderScale=200` run and a `graphics.temporal=fsr2` run both come back
+as a uniform dark frame through `--screenshot`, which predates this item and is not caused by it, so
+what coverage does above native and under FSR 2.2 is unmeasured rather than claimed.
+
+**Original approach (kept for reference).**
 
 **Goal.** Alpha-scissor edges (clutter, fences, lattice geometry, decals with cutout masks) resolve
 through the MSAA samples instead of a hard 1-bit edge, under Enhanced only.
