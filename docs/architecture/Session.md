@@ -423,11 +423,11 @@ Format and decode, including the wake ordering and the awake-by-data census:
 
 ## src/Session/AiVoiceRuntime.cs
 Wires the combat-voice dispatcher into a running flight session, built with the rigs wherever the
-world has a `WorldSounds` and ticked on the sim clock: each AI spawn is registered as a speaker on
-its own `FlightController.Team`, each human rig as a damage source, and the wired sites are
-subscribed (the hit-path damage tiers, the death cries, the patrol-to-pursue call-out, the
-sixth-sense stun and the completed reaction). `RegisterAi` also mirrors `InPlay` into the speaker's
-liveness, the only place the engine-free dispatcher and a controller meet. Clips play through
+world has a `WorldSounds` and ticked on the sim clock: an accented AI spawn is registered as a
+speaker on its own `FlightController.Team`, each human rig as a damage source, and the mode machine
+of EVERY AI handed over is watched, accented or not, because the bearing call-out and the taunt are
+spoken by an aircraft other than the one whose mode moved. `RegisterAi` also mirrors `InPlay` into
+the speaker's liveness, the only place the engine-free dispatcher and a controller meet. Clips play through
 `WorldSounds.PlayOneShot` alone, passing Voice where that path's other callers take its Effects
 default, and every roll prints an `ai voice:` line. [../formats/combat-voice.md](../formats/combat-voice.md).
 

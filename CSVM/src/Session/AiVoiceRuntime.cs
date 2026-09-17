@@ -31,6 +31,7 @@ public sealed partial class AiVoiceRuntime : Node
     private readonly Random _rng;
     private readonly Dictionary<int, FlightController> _bySpeaker = new();
     private readonly Dictionary<FlightController, float> _lastPlayerFraction = new();
+    private readonly HashSet<int> _watched = new();
     private float _now;
 
     public AiVoiceRuntime(CombatVoice voice, WorldSounds sounds, Random rng)
@@ -55,17 +56,22 @@ public sealed partial class AiVoiceRuntime : Node
     /// run on this, so a halted clock halts the chatter too). Called by SessionSimulation.</summary>
     public void Step(float dt) => _now += dt;
 
-    /// <summary>Registers an AI aircraft as a voiced speaker: resolves the accent chain to one
-    /// pilot VO id (a seeded pick over the accent's pool), then subscribes the wired event
-    /// sources above. An accent that resolves to no voiced pilot logs once and registers
-    /// nothing, a silent pilot, not an error.</summary>
-    public void RegisterAi(FlightController ai, int accentId, float talkerChance,
+    /// <summary>Takes an AI aircraft, voiced or not. ⚠ Hand over EVERY AI the session builds: the
+    /// mode machine is watched either way, because the bearing call-out and the taunt are spoken
+    /// by a different aircraft than the one whose mode changed. A null accent, or one resolving to
+    /// no voiced pilot, registers no speaker and is silent, not an error.</summary>
+    public void RegisterAi(FlightController ai, int? accentId, float talkerChance,
         float constitutionChance)
     {
-        int? voId = _voice.PilotFor(accentId, _rng);
+        WatchModes(ai);
+        if (accentId is not { } accent)
+        {
+            return;
+        }
+        int? voId = _voice.PilotFor(accent, _rng);
         if (voId is not { } vo)
         {
-            Log.Info("sound", $"ai voice: {ai.Name}: accent {accentId} resolves to no voiced pilot, silent");
+            Log.Info("sound", $"ai voice: {ai.Name}: accent {accent} resolves to no voiced pilot, silent");
             return;
         }
         var speaker = _dispatcher.Register(ai.PlayerIndex, vo, ai.Team,
@@ -75,7 +81,7 @@ public sealed partial class AiVoiceRuntime : Node
         // the dispatcher cannot see a FlightController's own aliveness.
         speaker.Alive = ai.InPlay;
         ai.InertChanged += plane => speaker.Alive = plane.InPlay;
-        Log.Info("sound", $"ai voice: {ai.Name}: accent {accentId} -> VO id {vo} (talker {talkerChance:0.00})");
+        Log.Info("sound", $"ai voice: {ai.Name}: accent {accent} -> VO id {vo} (talker {talkerChance:0.00})");
 
         ai.DamageApplied += damaged =>
         {
@@ -89,10 +95,6 @@ public sealed partial class AiVoiceRuntime : Node
             speaker.Alive = false;
             Play(_dispatcher.DeathCry(speaker.Id, onPlayersTeam: ai.Team == AimAssist.PlayerTeam, _now));
         };
-        if (ai.Pilot?.Machine is { } machine)
-        {
-            machine.ModeChanged += (from, to, why) => OnModeChanged(ai, speaker.Id, from, to, why);
-        }
     }
 
     /// <summary>Registers a human rig as a damage source only (the player never speaks AI
@@ -116,9 +118,22 @@ public sealed partial class AiVoiceRuntime : Node
         };
     }
 
-    private void OnModeChanged(FlightController ai, int speakerId, AiMode from, AiMode to,
-        string why)
+    // ⚠ Subscribed for every AI, not only for the registered speakers. Two of the sites below
+    // dispatch on ANOTHER aircraft, and the shipped rosters leave nearly every enemy on accentID
+    // -1, so watching only the voiced ones silences the player's own flight. Idempotent per
+    // aircraft, since a spawn can be handed over more than once.
+    private void WatchModes(FlightController ai)
     {
+        if (ai.Pilot?.Machine is not { } machine || !_watched.Add(ai.PlayerIndex))
+        {
+            return;
+        }
+        machine.ModeChanged += (from, to, why) => OnModeChanged(ai, from, to, why);
+    }
+
+    private void OnModeChanged(FlightController ai, AiMode from, AiMode to, string why)
+    {
+        int speakerId = ai.PlayerIndex;
         // Acquisition (our chosen dispatch point, marked in combat-voice.md): committing to an
         // attack on a human, the attacker's WA-Attack, and the flight's computed bearing
         // call-out in the warned player's own frame.

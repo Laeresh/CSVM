@@ -4452,12 +4452,12 @@ public partial class GameSession : Node3D
 
     // Gives a spawned AI aircraft its voice: each chance comes from ai_skill_parameters at its
     // own override when given, else the session's skill rating, so talker and constitution read
-    // two independent curves. A missing accent, voice runtime or skills table means a silent
-    // pilot, never an error.
+    // two independent curves. A missing accent or skills table means a silent pilot whose mode
+    // machine is still watched; no voice runtime at all means nothing, never an error.
     private void RegisterAiVoice(FlightController? ai, int? accentId, int? talkerOverride = null,
         int? constitutionOverride = null)
     {
-        if (ai == null || accentId is not { } accent || _aiVoice == null)
+        if (ai == null || _aiVoice == null)
         {
             if (accentId != null && _aiVoice == null)
             {
@@ -4466,12 +4466,18 @@ public partial class GameSession : Node3D
             return;
         }
         _aiSkills ??= _flightRoster?.AiSkills;
-        if (_aiSkills == null)
+        // ⚠ Hand over every AI, accent or none. The runtime watches an accentless aircraft's mode
+        // machine, and the shipped rosters leave nearly every enemy on accentID -1, so dropping
+        // those here silences the call-outs the player's own flight speaks about them.
+        if (_aiSkills is not { } skills)
+        {
+            _aiVoice.RegisterAi(ai, null, 0f, 0f);
             return;
+        }
         int talkerRating = talkerOverride ?? _spec.AiAttackSkill ?? 5;
         int constitutionRating = constitutionOverride ?? _spec.AiAttackSkill ?? 5;
-        _aiVoice.RegisterAi(ai, accent, _aiSkills.At("talker_chance", talkerRating),
-            _aiSkills.At("constitution_chance", constitutionRating));
+        _aiVoice.RegisterAi(ai, accentId, skills.At("talker_chance", talkerRating),
+            skills.At("constitution_chance", constitutionRating));
     }
 
     // Maps the simulation's named phases onto this session's concrete owners.

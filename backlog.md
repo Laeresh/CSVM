@@ -703,7 +703,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   replaced; `git log --grep=BL-305`. Do not reopen either ID; IDs are never reused, per this
   file's own rule).
 
-
 - `BL-803` `[Bug]` `[S]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **Enhanced Graphics lays a
   dithering pattern over the whole screen.** *Evidence:* reported at the controls under Enhanced
   Graphics as a "dithering effect over the screen"; which chapter, view and window size are not
@@ -917,22 +916,23 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   owed its own listen), `docs/formats/sounds.md` ("The gain between the two radii"), `INSTR-87`,
   `git log --grep=BL-793`, `git log --grep=BL-820`, `git log --grep=BL-846`.
 
-- `BL-934` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **Enemies and allies
-  play no dynamic voice lines at all; only the scripted mission dialogue is heard.** *Evidence:*
-  reported at the controls across the current runs. The combat-voice chain is built
-  (`Mech3/CombatVoice.cs` resolves a roster `accentID` to the `voice.zrd` pool and the clip defs,
-  `Flight/AiVoiceDispatcher.cs` rolls the talker and picks the clip, `Session/AiVoiceRuntime.cs`
-  wires the damage tiers, the death cries, the patrol-to-pursue call and the sixth-sense stun, and
-  every roll prints an `ai voice:` line), and the `ai-voice` suite is green, so the break is
-  between the suite's world and a played mission. *What to settle first:* fly a mission with the
-  file sink on and read the `ai voice:` lines: no line means no trigger reaches the dispatcher (the
-  speaker registration or the wired sites), a rolled line with no clip means the resolver found no
-  stream for the mission's accents (the prewarm set), and a played line nobody hears means the
-  Voice bus or the one-shot path. *⚠ Traps:* the scripted lines ride `Mech3/MissionRadio.cs`, a
-  different channel, so their working proves nothing about this one. *Playtest after fix:* any
-  campaign dogfight with an AI wingman; damage an enemy and take hits, and listen for the tiered
-  calls. *Cross-refs:* `docs/formats/combat-voice.md`, the saved Voice level, in case the mix rather
-  than the dispatcher is what silences them (`Utils/AudioMix.cs`, the `audio-buses` suite).
+- `BL-934` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` **The dynamic enemy and
+  ally voice lines dispatch and play again; whether they are audible at the controls is unheard.**
+  *Evidence:* the silence was the mode-machine subscription sitting inside `RegisterAi`'s voiced
+  branch, so an aircraft carrying no accent was never watched, and the shipped rosters leave nearly
+  every enemy on `accentID` -1 while voicing the player's own flight. A flown C1 session now logs
+  `ai voice: ai2_player_pfighter: trigger #8 -> snd_id7_WA-Enemy-6 (Talker test passed. Play AI
+  sound #8.)`, an accentless hostile committing to the human and a voiced ally speaking the bearing
+  call-out, and the `ai-voice-mission` suite holds the same chain over C1/M02's shipped roster
+  through to a playing stream on the Voice bus. *What to settle first:* whether the line is audible
+  from the cockpit, which no instrument here answers (`docs/verification.md`). *⚠ Traps:* the
+  scripted lines ride `Mech3/MissionRadio.cs`, a different channel, so their working proves nothing
+  about this one; the aircraft that speaks is never the enemy that was spotted, so a silent enemy
+  is not the symptom. *Playtest after fix:* fly C1/M02 from the campaign, stay in the fight beside
+  the enemy flight for a minute or two, and listen for a wingman calling an enemy's clock bearing
+  and for the tiered damage calls while you take and deal hits. *Cross-refs:*
+  `docs/formats/combat-voice.md`, `git log --grep=BL-934`, the saved Voice level (`Utils/AudioMix.cs`, the `audio-buses`
+  suite) if the lines dispatch and stay inaudible.
 
 ## Cameras & views
 

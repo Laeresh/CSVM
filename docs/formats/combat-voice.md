@@ -201,7 +201,10 @@ The rules above are represented in `CSVM/src/Flight/AiVoiceDispatcher.cs` (the g
 halving, election, DI tiers, bearing index, engine-free, seeded) and wired by
 `CSVM/src/Session/AiVoiceRuntime.cs`. Where the original's dispatch site is
 decoded, the remake uses it; where only the trigger's meaning is decoded, the chosen stand-in
-site is recorded here:
+site is recorded here. The runtime watches the mode machine of every AI the session hands it,
+whether or not that aircraft resolved a voice of its own: rows 1-12 and 25 below are spoken by an
+aircraft other than the one whose mode moved, and the shipped rosters leave nearly every enemy on
+`accentID` -1, so watching only the voiced aircraft leaves those rows silent for a whole mission.
 
 | ids | status | site / reason |
 |---|---|---|
