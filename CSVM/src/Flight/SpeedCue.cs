@@ -20,6 +20,10 @@ public sealed class SpeedCue
     public const float Cue3CeilingMeters = 1200f;
     public const float Cue2HighCeilingMeters = 1500f;
 
+    /// <summary>The viewport shape the authored <c>DEVIATION_DISTANCE</c> cube was sized for: the
+    /// original renders 4:3, so a 4:3 pane spawns every wisp exactly where the data puts it.</summary>
+    public const float AuthoredAspect = 4f / 3f;
+
     private const float SelectionIntervalSeconds = 0.1f;
 
     private readonly Puffer[] _puffers;
@@ -64,11 +68,20 @@ public sealed class SpeedCue
     public static SpeedCue CreateWith(Puffer cue1, Puffer cue2, Puffer cue3) =>
         new(new[] { cue1, cue2, cue3 });
 
+    /// <summary>How far a pane of ratio <paramref name="aspect"/> widens the cue's lateral spawn
+    /// half-width: the aspect over the authored 4:3, so 16:9 spreads 1.333 times as wide and 4:3
+    /// spawns unchanged. A remake decision, not decoded: a cube sized for 4:3 crowds the centre of a
+    /// wider frame. ⚠ Never below 1 and never on another emitter; both re-scatter authored data.</summary>
+    public static float LateralSpreadFor(float aspect) =>
+        aspect > AuthoredAspect ? aspect / AuthoredAspect : 1f;
+
     /// <summary>Advances the authored altitude menu and feeds the selected distance puffer the
     /// aircraft's current world pose. Above 1500 m the script has no ELSE events, so it preserves
-    /// whichever puffer was already active; starting there leaves the effect off.</summary>
+    /// whichever puffer was already active; starting there leaves the effect off.
+    /// <paramref name="viewportAspect"/> is the pane the wisps are being spread across, see
+    /// <see cref="LateralSpreadFor"/>; the default is the authored 4:3, which spreads nothing.</summary>
     public void Update(float dt, Vector3 playerPosition, Basis playerBasis,
-        float cameraAltitude, float cameraAgl)
+        float cameraAltitude, float cameraAgl, float viewportAspect = AuthoredAspect)
     {
         _selectionTimer -= dt;
         if (_selectionTimer <= 0f)
@@ -83,7 +96,11 @@ public sealed class SpeedCue
             }
         }
         if (IsCue(_active))
-            PufferFor(_active).Emit(playerPosition, playerBasis, dt);
+        {
+            var puffer = PufferFor(_active);
+            puffer.LateralSpreadScale = LateralSpreadFor(viewportAspect);
+            puffer.Emit(playerPosition, playerBasis, dt);
+        }
     }
 
     /// <summary>Crash/respawn lifecycle: remove every live cue and forget the previous altitude

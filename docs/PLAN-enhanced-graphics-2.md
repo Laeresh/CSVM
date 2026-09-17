@@ -123,8 +123,9 @@ worktree session here; use a local commit or a file copy.
 - **The speed cue as shipped.** `Flight/SpeedCue.cs` loads each chapter's `speed_cue.zrd`
   verbatim: three `cuepufferN` states picked by camera altitude, emitted 60 m ahead of the player
   and left in world space for the aircraft to pass (`docs/formats/effects.md` "Aircraft speed-cue
-  wisps"); off within 50 m of the ground. `BL-867` says they read too opaque and crowd a 16:9
-  frame, and is a faithful-path tuning item. The original authors no other speed cue: the
+  wisps"); off within 50 m of the ground. `BL-867` says they read too opaque and is a faithful-path
+  tuning item; their lateral spread already widens with the pane's aspect over 4:3, and the opacity
+  is what the item still owes. The original authors no other speed cue: the
   `high_speed` shake runs only above rated max speed and the `rattle` sound is speed-keyed
   volume (`docs/org/shakes.md`).
 - **The chase camera's decoded law.** `docs/org/cameraViews.md` "The external camera's distance":

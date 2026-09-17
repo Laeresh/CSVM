@@ -747,25 +747,24 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-537` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **Effect pools at four players, judged in play.** The pool sizes in `CSVM/data/effect_pools.json` were re-judged on a build with no first-use construction cost: rockets and the sonic burst never wrap, a four-object simultaneous death wraps `flame_ball_01` at 4 and 6 slots and is quiet at 8 (now shipped), and seven or more identical deaths in one frame wrap at the 16 ceiling and cannot be sized away. At the controls the single-player half reads right: four fireballs burn out in place, and the seven-death wrap is not visible under the debris. Still owed: a 4-player splitscreen session with everyone firing, judged for anything that reads as shared between panes, and the ceiling for many-player builds (at 16 players the default root wants 19 and gets 16). The instrument is `AnimRuntime.PoolRecycles` and the `anim: effect pool for '<name>' recycled slot` DEBUG line in the log file sink; the sizes staged print on the world-effects build line. ⚠ Raise only a root that logs a recycle, never the default; the three gun roots stay at 1; a root sized 0 clamps to 1. Each slot copies the root's subtree (155 templates at 1 player, 263 at 4).
   *Cross-refs:* `PT-129` (the four-player flight that judges it), `BL-296` (the other splitscreen-scoped item).
 
-- `BL-867` `[Tuning]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **The speed cue's wisps read more opaque than the
-  original's, and crowd the centre of a 16:9 view.** *Decision:* stills cannot judge the opacity,
-  the only original frame with wisps (CM02.mkv at about 58 m, chase over water) has a different
-  background from any CSVM render, and no recording shows wisps above 500 ft (CAP-11 C1B never
-  runs the cue at any altitude). What the user asks for first is to spread the wisps out
-  sideways: the authored deviation is a cube (`Puffer.SpawnSustained`, ±0.5·d on every axis)
-  sized for the original's 4:3 view, so at 16:9 the puffs sit in the middle of the frame. Land
-  a cue-only remake rule that widens the emitter-frame lateral half-width by the viewport's
-  aspect over 4:3 (so 1.33 at 16:9), leaving the generic puffer's cube alone since that
-  re-scatters `c1-waterfall`; then re-judge the opacity at the controls with the spread in.
-  *Evidence:* reported at the controls against mission recordings: the pale wisps
+- `BL-867` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` **The speed cue's wisps read
+  more opaque than the original's.** *The sortie:* fly C1 in chase view over water at about 58 m,
+  the one altitude the original is filmed at with the cue running, and judge the wisps against
+  `CM02.mkv` at that altitude. Report whether they still read too opaque now that the spread is in,
+  and if so whether the sprite reads too solid (the size stand-in or the blend) or too bright (the
+  authored alpha). *Evidence:* reported at the controls against mission recordings: the pale wisps
   each chapter's `speed_cue.zrd` emits ahead of the player (`Flight/SpeedCue.cs`, three authored
   `cuepufferN` states selected by altitude) are far more prominent than in the footage; size reads
-  right, opacity does not. The alpha comes from the authored state, so a halved constant would be
-  a departure from data; CSVM's own contribution is the puffer's judged sprite-size stand-in
-  (`Puffer.SizeScaleDefault`) and the blend the texture header names. *Fix shape:* a montage of
-  the cue beside a mission recording at matched altitude first, the user judges it, then move the
-  constant the montage names: the blend or the size stand-in before the authored alpha, a
-  cue-only alpha factor last. *⚠ Traps:* three cloud populations share textures
+  right, opacity does not. Stills cannot settle it: the only original frame with wisps has a
+  different background from any CSVM render, and no recording shows wisps above 500 ft (CAP-11's
+  C1B never runs the cue at any altitude). The lateral spread is landed: at 16:9 the cue's emitter
+  widens its lateral spawn half-width by the pane's aspect over 4:3, 9.0 m to 12.0 m on
+  `cuepuffer1`, leaving the vertical and forward halves and the generic puffer's cube where the
+  data puts them. *Fix shape:* the alpha comes from the authored state, so a halved constant would
+  be a departure from data; CSVM's own contribution is the puffer's judged sprite-size stand-in
+  (`Puffer.SizeScaleDefault`) and the blend the texture header names. Move the constant the sortie
+  names: the blend or the size stand-in before the authored alpha, a cue-only alpha factor last.
+  *⚠ Traps:* three cloud populations share textures
   (`BL-118`'s note under the cloud items): judge the wisps by altitude and by their position
   ahead of the aircraft, never by texture. *Cross-refs:* [`docs/formats/effects.md`](docs/formats/effects.md)
   (the cue's data), `docs/org/puffer.md`.

@@ -263,6 +263,7 @@ internal static class PufferSuites
             PufferTrailOffset(ctx, speedCueState);
             SpeedCueBands(ctx, speedCueState, speedCue2, speedCue3);
             SpeedCueChapterVariants(ctx);
+            SpeedCueLateralSpread(ctx);
             PufferStillSputter(ctx, trailState);
             PufferUnauthoredCadence(ctx);
             PufferStaticBurn(ctx, trailState);
@@ -905,6 +906,139 @@ internal static class PufferSuites
         {
             foreach (var p in puffer)
                 p.Free();
+        }
+    }
+
+    // The one aspect-dependent term in the effect, over a freshly loaded cuepuffer1 rather than the
+    // states the checks above blank. A 16:9 pane must spawn every wisp 4/3 as far off the flight
+    // line as the same draw puts it at 4:3, and no further up, down, ahead or astern; an emitter no
+    // SpeedCue drives must not move at all. Each population runs under a pinned RNG stream, so the
+    // three are the SAME draws and every comparison below is per particle rather than statistical.
+    internal static void SpeedCueLateralSpread(TestContext ctx)
+    {
+        const float Wide = 16f / 9f;
+        var fresh = PufferState.Load(
+            SessionPaths.ChapterZrdr(ctx.DataRoot, ctx.Chapter), "speed_cue.json", "cuepuffer1");
+        ctx.Check(fresh != null, $"{ctx.Chapter} speed_cue.json still defines cuepuffer1");
+        if (fresh == null)
+            return;
+        float half = 0.5f * fresh.DeviationDistance;
+        ctx.Check(half > 0f, $"cuepuffer1 authors a deviation cube d={fresh.DeviationDistance:0.0} m");
+
+        ctx.Check(Mathf.IsEqualApprox(1f, SpeedCue.LateralSpreadFor(SpeedCue.AuthoredAspect)),
+            $"a 4:3 pane spreads nothing, the authored cube stands exactly where the data puts it");
+        ctx.Check(Mathf.IsEqualApprox(4f / 3f, SpeedCue.LateralSpreadFor(Wide), 1e-5f),
+            $"a 16:9 pane widens the lateral half-width by 1.3333, the aspect over 4:3");
+        ctx.Check(Mathf.IsEqualApprox(1f, SpeedCue.LateralSpreadFor(1f)),
+            $"and a pane NARROWER than 4:3 never spawns inside the authored cube");
+
+        var authored = CueSpawnOffsets(ctx, fresh, Basis.Identity, SpeedCue.AuthoredAspect, true);
+        var wide = CueSpawnOffsets(ctx, fresh, Basis.Identity, Wide, true);
+        var generic = CueSpawnOffsets(ctx, fresh, Basis.Identity, Wide, false);
+        int n = authored.Count;
+        ctx.Check(n > 100 && wide.Count == n && generic.Count == n,
+            $"the pinned stream gives three populations of one size authored={n} wide={wide.Count} generic={generic.Count}");
+        if (n == 0 || wide.Count != n || generic.Count != n)
+            return;
+
+        float lateralGap = 0f, verticalGap = 0f, forwardGap = 0f, genericGap = 0f;
+        for (int i = 0; i < n; i++)
+        {
+            lateralGap = Mathf.Max(lateralGap, Mathf.Abs(wide[i].X - (authored[i].X * 4f / 3f)));
+            verticalGap = Mathf.Max(verticalGap, Mathf.Abs(wide[i].Y - authored[i].Y));
+            forwardGap = Mathf.Max(forwardGap, Mathf.Abs(wide[i].Z - authored[i].Z));
+            genericGap = Mathf.Max(genericGap, (generic[i] - authored[i]).Length());
+        }
+        ctx.Check(lateralGap < 1e-3f,
+            $"at 16:9 every wisp spawns exactly 4/3 as far off the flight line worst={lateralGap:0.000000} m");
+        ctx.Check(verticalGap < 1e-6f && forwardGap < 1e-6f,
+            $"and at exactly the same height and the same distance ahead dy={verticalGap:0.000000} dz={forwardGap:0.000000}");
+        ctx.Check(genericGap < 1e-6f,
+            $"an emitter no SpeedCue drives takes no pane at all, its cube is byte-identical worst={genericGap:0.000000} m");
+
+        var hAuthored = HalfWidths(authored);
+        var hWide = HalfWidths(wide);
+        ctx.Check(Mathf.IsEqualApprox(hAuthored.X, half, 0.2f) && Mathf.IsEqualApprox(hAuthored.Y, half, 0.2f)
+                  && Mathf.IsEqualApprox(hAuthored.Z, half, 0.2f),
+            $"the 4:3 population fills the authored cube half={half:0.00} m measured={hAuthored}");
+        ctx.Check(Mathf.IsEqualApprox(hWide.X / hAuthored.X, 4f / 3f, 1e-3f),
+            $"the 16:9 population's lateral half-width is 1.3333x the 4:3 one {hAuthored.X:0.000} m to {hWide.X:0.000} m");
+        ctx.Check(hWide.X - hAuthored.X > 1f,
+            $"ABLE-TO-FAIL CONTROL: that is a {hWide.X - hAuthored.X:0.00} m widening, far past any float noise");
+        ctx.Note($"cue spread at d={fresh.DeviationDistance:0.0} m over {n} spawns: lateral {hAuthored.X:0.000} -> {hWide.X:0.000} m, vertical {hAuthored.Y:0.000} -> {hWide.Y:0.000} m, forward {hAuthored.Z:0.000} -> {hWide.Z:0.000} m");
+
+        // Emitter frame, not world axes: a quarter turn puts the aircraft's right axis on world Z,
+        // and the widening must follow it there and leave world X alone.
+        var yawed = new Basis(Vector3.Up, Mathf.Pi / 2f);
+        var turnedAuthored = CueSpawnOffsets(ctx, fresh, yawed, SpeedCue.AuthoredAspect, true);
+        var turnedWide = CueSpawnOffsets(ctx, fresh, yawed, Wide, true);
+        float turnedForward = 0f, turnedLateral = 0f;
+        for (int i = 0; i < Mathf.Min(turnedAuthored.Count, turnedWide.Count); i++)
+        {
+            turnedForward = Mathf.Max(turnedForward,
+                Mathf.Abs(turnedWide[i].Z - (turnedAuthored[i].Z * 4f / 3f)));
+            turnedLateral = Mathf.Max(turnedLateral, Mathf.Abs(turnedWide[i].X - turnedAuthored[i].X));
+        }
+        ctx.Check(turnedForward < 1e-3f && turnedLateral < 1e-3f,
+            $"a quarter turn carries the widening onto world Z and leaves world X alone dz={turnedForward:0.000000} dx={turnedLateral:0.000000}");
+    }
+
+    // The largest offset on each axis, which for a uniform cube over hundreds of spawns is its
+    // half-width to well under a percent.
+    internal static Vector3 HalfWidths(IReadOnlyList<Vector3> offsets)
+    {
+        var worst = Vector3.Zero;
+        foreach (var o in offsets)
+            worst = new Vector3(Mathf.Max(worst.X, Mathf.Abs(o.X)),
+                Mathf.Max(worst.Y, Mathf.Abs(o.Y)), Mathf.Max(worst.Z, Mathf.Abs(o.Z)));
+        return worst;
+    }
+
+    // One cue population's spawn offsets from its own emission point, under a pinned RNG stream so
+    // two runs draw the same numbers. The aircraft is held still, which is what puts the emitter on
+    // the synthetic still-host cadence at one fixed point, and `_Process(0)` writes the spawn
+    // positions themselves rather than aged ones. `throughCue` drives the real `SpeedCue`, the only
+    // thing that applies a pane's aspect; false drives the emitter directly, the generic path.
+    internal static List<Vector3> CueSpawnOffsets(TestContext ctx, PufferState state, Basis basis,
+        float aspect, bool throughCue)
+    {
+        const float Dt = 0.1f, Altitude = 700f, Agl = 100f;
+        const int Steps = 400;
+        var at = new Vector3(0f, Altitude, 0f);
+        ulong master = Rng.Master;
+        bool pinned = Rng.Pinned;
+        Rng.Reset(20250101UL, true);
+        var gpu = new RecordingEmitterRenderer();
+        var puffers = new[]
+        {
+            Puffer.CreateWith(state, gpu),
+            Puffer.CreateWith(state, new RecordingEmitterRenderer()),
+            Puffer.CreateWith(state, new RecordingEmitterRenderer()),
+        };
+        foreach (var p in puffers)
+            ctx.Host.AddChild(p);
+        try
+        {
+            var cue = SpeedCue.CreateWith(puffers[0], puffers[1], puffers[2]);
+            for (int i = 0; i < Steps; i++)
+            {
+                if (throughCue)
+                    cue.Update(Dt, at, basis, Altitude, Agl, aspect);
+                else
+                    puffers[0].Emit(at, basis, Dt);
+            }
+            puffers[0]._Process(0f);
+            var origin = at + (basis * state.AtNodeOffset);
+            var offsets = new List<Vector3>();
+            foreach (var p in gpu.LastFrame)
+                offsets.Add(p.Position - origin);
+            return offsets;
+        }
+        finally
+        {
+            foreach (var p in puffers)
+                p.Free();
+            Rng.Reset(master, pinned);
         }
     }
 

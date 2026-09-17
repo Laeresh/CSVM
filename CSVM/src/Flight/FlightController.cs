@@ -2319,7 +2319,7 @@ public partial class FlightController : Node3D
             {
                 var cameraPos = _viewCamera.GlobalPosition;
                 SpeedCue.Update(simDt, _model.Position, _model.Attitude, cameraPos.Y,
-                    HeightAboveWorldGround(cameraPos));
+                    HeightAboveWorldGround(cameraPos), ViewportAspect(_viewCamera));
             }
         }
 
@@ -3094,6 +3094,15 @@ public partial class FlightController : Node3D
         return World.Ray(from, to, CollisionLayers.World, null, out var report)
             ? from.Y - report.Position.Y
             : float.MaxValue;
+    }
+
+    // The shape of the pane this pilot actually sees, so a splitscreen pane spreads the speed cue
+    // by its own width rather than the whole window's. A camera out of tree, or one whose viewport
+    // has no height yet, reads the authored 4:3, which spreads nothing.
+    private float ViewportAspect(Camera3D camera)
+    {
+        var size = camera.GetViewport()?.GetVisibleRect().Size ?? Vector2.Zero;
+        return size.Y > 0f ? size.X / size.Y : SpeedCue.AuthoredAspect;
     }
 
     // The explosion boom the chosen crash def authors, which FlightAudio

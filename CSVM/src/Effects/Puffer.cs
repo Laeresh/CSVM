@@ -478,6 +478,13 @@ public sealed partial class Puffer : Node3D
     /// says). Read-only in intent; nothing may write through it.</summary>
     internal PufferState State => _state;
 
+    /// <summary>Widens the emitter-frame LATERAL half-width of a sustained spawn's
+    /// <c>DEVIATION_DISTANCE</c> offset; the vertical and forward halves are untouched. 1 spawns
+    /// exactly where the authored cube puts it, and every emitter but the speed cue stays there.
+    /// ⚠ Any other value re-scatters this emitter, so write it only from
+    /// <see cref="SpeedCue.LateralSpreadFor"/>, whose remark carries the rule.</summary>
+    internal float LateralSpreadScale { get; set; } = 1f;
+
     /// <summary>The ambience handed in at construction, so a suite can ask WHICH instance an
     /// emitter reads rather than only what that instance says this frame. The wiring is what breaks
     /// silently: an emitter left on <see cref="EffectAmbience.Still"/> reads zero wind and no
@@ -1056,13 +1063,22 @@ public sealed partial class Puffer : Node3D
         // banking/turning emitter correct.
         var baseVel = worldBasis * _state.LocalVelocity + _state.WorldVelocity;
         float d = _state.DeviationDistance;
+        // The emitter's own right axis, so the widening below follows the host through a bank
+        // instead of a world axis. Skipped entirely at the default scale, where it is unused.
+        float widen = LateralSpreadScale - 1f;
+        var right = widen != 0f ? worldBasis.X.Normalized() : Vector3.Zero;
         for (int k = 0; k < _state.Number; k++)
         {
             if (_liveCount >= _particles.Length && !GrowPool())
                 break;
             // ⚠ The draw order (pos → vel → size → life) and the ±0.5·d half-width offset are both
             // load-bearing: changing either re-scatters every sustained emitter (c1-waterfall golden).
-            var pos = origin + new Vector3(Rand(-0.5f * d, 0.5f * d), Rand(-0.5f * d, 0.5f * d), Rand(-0.5f * d, 0.5f * d));
+            var offset = new Vector3(Rand(-0.5f * d, 0.5f * d), Rand(-0.5f * d, 0.5f * d), Rand(-0.5f * d, 0.5f * d));
+            // Scales the lateral component alone, after the three draws, so the draw order and the
+            // default scale's spawn point both stay exactly what they were.
+            if (widen != 0f)
+                offset += right * (right.Dot(offset) * widen);
+            var pos = origin + offset;
             var vel = baseVel + new Vector3(Rand(min.X, max.X), Rand(min.Y, max.Y), Rand(min.Z, max.Z));
             float size = Rand(_state.SizeMin, _state.SizeMax) * sizeScale * _priorityFactor;
             float life = Rand(_state.LifetimeMin, _state.LifetimeMax);

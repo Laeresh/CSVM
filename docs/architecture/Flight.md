@@ -982,11 +982,11 @@ costs no fuel, the burn reading the lever. Decode: [../org/flightModel.md](../or
 Loads `cuepuffer1..3` from the chapter's `speed_cue.zrd` and drives exactly one of them through
 `Puffer.Emit` at the aircraft pose. Camera altitude selects the authored 30/15/8/15 m density bands;
 within 50 m AGL none emits, while the script's empty branch above 1500 m keeps the current
-selection. One instance is built per player and its puffer renderers are stamped onto that rig's
-visual layer, so a splitscreen pane never sees another pilot's cue. It shares the session
-`EffectAmbience`, so the authored camera-distance fade and the wind apply. `Reset` hard-clears all
-three on crash or respawn, and `Dispose` removes every puffer node when roster assembly is rolled
-back.
+selection. `LateralSpreadFor` is the one aspect-dependent term in the effect, a remake rule widening
+the selected emitter's lateral spawn half-width by the pane's aspect over the authored 4:3. One
+instance is built per player, its renderers stamped onto that rig's visual layer, and it shares the
+session `EffectAmbience`, so the fade and the wind apply. `Reset` hard-clears all three on crash or
+respawn, and `Dispose` removes every puffer node when roster assembly is rolled back.
 
 ## src/Flight/ControlSurfaceMix.cs
 The decoded angle solver behind the control surfaces, engine-free so the arithmetic is testable
