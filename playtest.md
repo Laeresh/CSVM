@@ -475,6 +475,16 @@ reasons that have nothing to do with any of these checks.
   angle and widen horizontally like any other viewport, so a cropped cockpit in one is a new fault
   rather than a known one.
 
+- `PT-152` `[Own]` **A respawn puts a downed pilot away from whoever just killed them, without
+  becoming a place the killer can wait at.** The spawn rotation picks the point that is roomiest and
+  furthest from the killer, weighted by two constants that are judgement rather than a decode:
+  `RoomyShare` 0.6 and `KillerWeight` 2. Nobody has judged them at the controls. *Launch:* the
+  section's Dogfight launch above, two pilots. *Look for:* camp one spawn, kill the other pilot
+  there, and say whether the respawn reads as away from the camper; then repeat from the same camp
+  and say whether the sequence of spawns becomes predictable. *Blocks:* nothing; a retune is the two
+  constants, a fail mints its own `BL`. The playtest steps the item wrote are in its landing commit
+  (`git log --grep=BL-301`).
+
 ### C1 · two pilots, stunt race (splitscreen starting grid)
 
 ```powershell

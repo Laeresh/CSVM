@@ -466,6 +466,21 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   detonation reaches the carve", "What a Choker ground hit shows", "How CSVM builds it"),
   `docs/formats/gamez.md` (`flags.can_modify`), `git log --grep=BL-413` (the carve as built).
 
+- `BL-948` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **A seat rumbles a pad
+  that is merely plugged in, even while the player is flying that seat on the keyboard.**
+  *Evidence:* reported at the controls as "similar to the input dialogs rumble should only play if
+  there was a controller input". `PadRumble` sends an event to every pad the seat's device list
+  names and stands down only with the toggle off, with pad input blocked, or when the seat holds no
+  pad at all (`CSVM/src/Bindings/PadRumble.cs:157-158`), so holding a pad in the roster is enough to
+  be rumbled. The control prompts already answer the same question the other way, naming the device
+  the seat last took input from (`git log --grep=BL-853`). *Fix shape:* gate the send on that same
+  active-device reading, so a seat driven by the keyboard is silent until a pad input arrives, and
+  the first pad input hands the rumble back. *⚠ Traps:* the effect table, its bands and the Game
+  Options toggle are the original's and do not move; this is a gate in front of them. *Playtest
+  after fix:* `PT-120`'s pad sitting, plus one keyboard sortie with a pad plugged in and untouched.
+  *Cross-refs:* `git log --grep=BL-922` (the effect table as built), `PT-120`,
+  `docs/org/input.md`.
+
 ## Flight model & collision physics
 
 - `BL-562` `[Perf]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: data]` `[CM11]` **CM11 (C2/M02) still spends a single physics tick of about 36 ms on the sortie's
@@ -1161,6 +1176,134 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   scripts are the decode for positions, the film only for the look. *Cross-refs:* `CAP-52`,
   `docs/org/menu-inventory.md`, `docs/formats/menu-layout.md` (`SCRAPBOOK.CSV`).
 
+- `BL-940` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **No shifted
+  punctuation can be typed into a menu text box, so the `crashcheat!` pilot name is unreachable and
+  the unlock cheat cannot be entered at all.** *Evidence:* reported at the controls as "cant enter
+  crashcheat because the input does not take ! as a key but takes only 1".
+  `MenuInput.CharFor` builds a character by casting the `Key` itself and applies the shift state to
+  letters alone (`CSVM/src/UI/MenuInput.cs:388`), so `Shift+1` reaches the box as `1` and every
+  shifted form of the digit row and of `BuildTextKeys`'s punctuation is unreachable. The model below
+  it is already right: `CampaignTextEntry.AcceptsNext` widens the alphanumeric-and-space rule by the
+  one character `CampaignCheats.UnlockName` ends in, and only while what stands in the box is that
+  name's own prefix (`CSVM/src/UI/CampaignTextEntry.cs:43-47`), which is dead code today because no
+  `!` ever arrives. *Fix shape:* give `CharFor` the US-layout shifted row for the digits and the
+  punctuation keys `BuildTextKeys` polls, so a shifted press produces the character the key prints.
+  *⚠ Traps:* the box's accept rule stays as it is, the original's own langui 707 alphabet; widening
+  what a profile name may carry is a different item and would reach `CampaignProfileStore.DirFor`'s
+  sanitisation. *Playtest after fix:* Original presentation, new campaign, type `crashcheat!` in the
+  roster name box and confirm 250000 cash and every airframe. *Cross-refs:* `git log --grep=BL-819`
+  (the four menu cheats as built), `docs/formats/campaign-screens.md` ("The pilot name `crashcheat!`
+  is a cheat, not dead code"), `PT-152`.
+
+- `BL-941` `[Bug]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: feel]` **The cabin cheat's
+  mission pull-down is unreadable in the Original presentation: light text on a bright field, and no
+  field background at all until it is clicked.** *Evidence:* reported at the controls as "Mission
+  pulldown has white font on bright background and the combobox has no background before clicking".
+  Both presentations compose that widget through `CampaignBoards.ComposeCombo`
+  (`CSVM/src/UI/CampaignBoards.cs:595-612`), which fills the closed field with `ComboPaper`
+  (200, 212, 230) and writes it in `BoardInk.Row`, a pairing chosen for the built-in board's own
+  parchment rather than for the cabin photograph the Original shell draws it over. *Fix shape:* read
+  what `PASSENGERCABIN.SCRIPT` gives `pc_d_missions` (its LAYOUT.CSV row and the `GN_DROPDOWN`
+  family's own art) and let the Original path draw the field from that instead of the shared paper
+  fill. *⚠ Traps:* the built-in presentation's combos are unaffected and must stay where they are;
+  this is the Original shell's reading of the same widget, not a change to `CampaignCombo`.
+  *Playtest after fix:* Original presentation, campaign, click the microphone side of the cabin,
+  type `idaho`, and read the pull-down before and after opening it. *Cross-refs:*
+  `git log --grep=BL-819`, `docs/formats/campaign-screens.md` ("The mission cheat"),
+  `docs/org/menu-inventory.md`.
+
+- `BL-942` `[Bug]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: feel]` **The Original CONTROLS
+  page's Mouse row still does not line up horizontally with the Controller Type row above it.**
+  *Evidence:* judged at the controls against the before/after crops as "Better but not right,
+  horizontal alignment ist still off". The row now takes its rectangle from `CP_S_MOUSE`'s own
+  slider-slot art rather than from the dropdown beside it, 170 by 23 at 142, 381
+  (`git log --grep=BL-917`), which fixed the vertical placement and the height but left the
+  horizontal reading wrong. *Fix shape:* measure the drawn word and arrow against `CP_D_Fly`'s
+  column in a capture of the page, and say which of the three horizontal terms is off: the row's
+  `X 142` (`<DROPX>`), the text's own inset inside the region, or the arrow's offset from the right
+  edge. *⚠ Traps:* do not move the region to make the text line up; the region is the press target
+  the original authored, so a text inset is the likelier fault. *Cross-refs:*
+  `Z:\CSVM\.scratch\orch-5\BL-917\` (controls-crop-before.png, controls-crop-after.png),
+  `docs/formats/menu-layout.md` (the `Z` row's four insets), `docs/org/menu-inventory.md`.
+
+- `BL-943` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **The Instant Action
+  wrap-up page wants a post-it under the notepad rows to hold the remake's own further lines, and
+  more than one of them where a stunt run has many splits.** *Evidence:* asked for at the controls
+  as "Can we add a post-it (yellow square background) under it, the new entries should be contained
+  to it but then we have a little more space and for long stunt missions we could add multiple (new
+  york has ~16 stunts)". The page draws the outcome headline, the context line and the stunt splits
+  as bare lines under the four decoded rows, with no panel of their own
+  (`CSVM/src/UI/InstantActionWrapupPage.cs:10-13`), and the band's foot is the CONTINUE plaque, so a
+  long stunt list has nowhere to go. *Fix shape:* a remake-only post-it panel behind that band,
+  sized to the lines it holds, and a second and further post-its when one will not carry them all.
+  *⚠ Traps:* the four `IAWU_T_*` rows and the plaque are the shipped page's own and do not move;
+  everything here is remake furniture in the space below them. *Playtest after fix:* a C1 stunt run
+  and an ordinary Instant Action sortie, both in the Original presentation. *Cross-refs:* `BL-944`
+  and `BL-945` (the same page), `git log --grep=BL-908`,
+  `docs/formats/instant-action/wrap-up.md`.
+
+- `BL-944` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **The wrap-up page's
+  further lines repeat the completion time the decoded row at the top of the page already carries.**
+  *Evidence:* reported at the controls as "The time completed is already at the top". The page draws
+  `IAWU_T_TIMETITLE`/`IAWU_T_TIME` as the first of the four decoded pairs
+  (`CSVM/src/UI/InstantActionWrapupPage.cs:81`) and then the built-in board's own band under them,
+  which carries the same figure through `IaWrapupBoard`'s Time to Complete Mission cell
+  (`CSVM/src/Flight/IaWrapupBoard.cs:31,97-98`). *Fix shape:* leave the time out of the Original
+  page's further lines; the built-in board keeps its own row, since it has no decoded row above it.
+  *⚠ Traps:* the stunt splits' own total is a different figure and stays. *Cross-refs:* `BL-943`,
+  `git log --grep=BL-908`.
+
+- `BL-945` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **The wrap-up page
+  should say whether the mission was won with a large tick box above CONTINUE rather than with the
+  words mission complete or mission failed.** *Evidence:* asked for at the controls as "Instead of
+  mission complete or fail add a large \"checkbox\" above continue that is ticked when mission is
+  complete". The outcome is one of the further lines the shipped page has no row for, drawn as the
+  headline above the context line (`CSVM/src/UI/InstantActionWrapupPage.cs:12,54`). *Fix shape:* a
+  remake-only tick box on the notepad above the CONTINUE plaque, ticked on a win and empty on a
+  loss, with the headline text dropped. *⚠ Traps:* the original never lost an Instant Action, so the
+  empty state is remake-only and has no reference art; the box is the item's own, not a decode.
+  *Cross-refs:* `BL-943` (the post-it that shares the space), `git log --grep=BL-908`.
+
+- `BL-946` `[Fidelity]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The Weapon
+  Loadout screen maps rocket widget N to physical pylon N+1 where the original maps it to the saved
+  record's ordnance cell N, so a starboard pylon can draw in a port box.** *Evidence:* left open
+  deliberately when `BL-919` closed, which is where the mapping is written out: CSVM numbers the
+  boxes by physical pylon, the original numbers them by the record's cell and resolves the pylon
+  from the fit (`Loadout.PylonForCell`, resolve against the fit and never against `LeftWingPylons`
+  alone). *Fix shape:* the decision first: take the original's cell order, or keep the physical
+  order. *⚠ Traps:* the physical order is not an accident, it is what makes the rows agree with the
+  weapon gauge's belt lights, so taking the original's order contradicts that choice and the gauge
+  has to be answered in the same breath. *Cross-refs:* `git log --grep=BL-919`, `BL-947` (the other
+  half of the same screen's evidence), `docs/formats/instant-action.md`.
+
+- `BL-951` `[Feature]` `[L]` `[Next: decide]` `[Impact: high]` `[Evidence: trace]` **A local
+  multiplayer door on the main menu, opening a join board where every controller claims its seat
+  once and holds it for the whole session, instead of seats being decided implicitly on whichever
+  flight screen happens to open joining.** *Evidence:* joining today is scattered across screens
+  and has no board of its own: `OriginalSeats.JoiningOpen` opens it on Free Flight, Dogfight,
+  Instant Action, the campaign flight check and the controls page, nowhere else, so a player who
+  presses Start anywhere but those five joins nobody and gets no word back. Seat 0 meanwhile
+  borrows every unclaimed pad until it claims one by steering a screen with it
+  (`MenuSeatDevices.ClaimP1Pad`), which means who ends up on which plane is settled by who moved a
+  stick first rather than by anyone saying so, and the binding is only read out at launch
+  (`Launcher.BindMenuPads`). Two bugs came straight out of that implicitness: the claim taking a
+  pad another player had joined on (`git log --grep=BL-949`) and a device blip reshuffling the
+  seats (`git log --grep=BL-950`). *Fix shape:* a door on the top level opening a board of four
+  slots, each showing its device name and its player tag; Start on an unclaimed pad takes the next
+  free slot, Back leaves it; the resulting roster is what every later screen and the session itself
+  read, so the flight screens stop being where seats are decided. *⚠ Traps:* the original has no
+  such screen, so this is remake-only chrome and needs its own art direction decided before any of
+  it is drawn, the same call `BL-945`'s wrap-up tick box needs. The existing per-screen join must
+  become the board's own gesture rather than a second path, or the two disagree about who is
+  seated. Seat 0 keeps the keyboard whatever the board says, so a slot is a pad's claim, not a
+  player's existence. Device loss and reassignment is the part that bites (the linked thread lands
+  on it too, over batteries and devices claimed twice); `MenuSeatDevices`'s guid reconciliation and
+  its grace already carry it for the current flow and should not be reimplemented on the board.
+  *Cross-refs:* `SeatStrip.cs` (the chip row that already names seated players, the board's
+  nearest existing art), `MenuSeatDevices.cs`, `PlayerSetupFeature.cs`,
+  https://discussions.unity.com/t/local-multiplayer-player-join-config-screen-using-ui-toolkit/1701038
+  (the pattern as other local co-op games ship it, asked for by name).
+
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
@@ -1392,6 +1535,19 @@ usual.
   holds a roster position without producing input came to take the seat `AssignPads` fills by
   position; `Pads.LogPads` records the roster so the next one reads off the log rather than being
   inferred. Dropping the var also closes that divergence.
+
+- `BL-947` `[Research]` `[S]` `[Next: data]` `[Impact: none]` `[Evidence: footage]` **The
+  deactivated-box reading in `docs/formats/instant-action.md` rests on footage that carries only two
+  eight-hardpoint aircraft, so it may not generalise.** *Evidence:* reported from the film as
+  "CAP-50 only shows two planes with 8 Hardpoints". The doc states that a deactivated box keeps its
+  place on the page, blank, with its arrow in the disabled frame, citing `CAP-50.mkv` t=13.0, while
+  the Ammo Selection screen's own script deactivates a field and draws nothing at all, which
+  `BL-919` settled and left the doc's claim standing as a reading of other footage. *Fix shape:*
+  re-watch `CAP-50.mkv` for every screen where a box is deactivated, say which ones show a blank box
+  and which show nothing, and either narrow the doc's claim to the screens that prove it or drop it.
+  *⚠ Traps:* the two screens are different widgets and the answer may differ per screen; the ammo
+  screen's own decode is settled and is not reopened by this. *Cross-refs:*
+  `git log --grep=BL-919`, `docs/formats/instant-action.md`, `CAP-50`, `BL-946`.
 
 ## Misc
 
