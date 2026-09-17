@@ -367,14 +367,18 @@ authored pitch, `0.29°` on every plane but Balmoral's `0.2°`, not at the `15.7
 the back flag set the routine never calls `FUN_0042d010` at all and writes the fixed direction
 `(0, 0, 1)` instead.
 
-- **State byte** `DAT_0064ef68`: `0` snap, `1` free-look, `2` padlock (the padlock is `BL-399`).
-  CSVM carries the first two as `HeadLook.LookMode`, written by the same two keys and by the device
-  that moved, one mode to a frame with the last writer winning.
+- **State byte** `DAT_0064ef68`: `0` snap, `1` free-look, `2` padlock. CSVM carries all three as
+  `HeadLook.LookMode`, written by the same three keys and, outside padlock, by the device that
+  moved, one mode to a frame with the last writer winning.
 - **Mode writers.** Three command handlers own the byte, and every change passes through one of
   them: `0x00489450` writes `0` (its keybind page's "Access Snap Look Mode", key `K`);
   `0x00489460` zeroes the targets and the shown angles (`DAT_0064ef60/64/58/5c`) and then writes
-  `1` ("Access Smooth Look Mode", key `J`); `0x004894a0` writes `mode = (mode == 2) ? 0 : 2`, the
-  padlock toggle (Track Target, key `L`). Camera init `FUN_0042b730` writes `0` and zeroes the
+  `1` ("Access Smooth Look Mode", key `J`); `0x004894a0` writes `mode = (mode == 2) ? 0 : 2`
+  (`SUB EAX,2; NEG EAX; SBB EAX,EAX; AND EAX,2`, no recognised function there, read with
+  `disassemble_bytes`), the padlock toggle (Track Target, key `L`, command slot `0x38`,
+  `docs/org/input.md`, `MSG_CMD_PADLOCK_WATCH`, keyboard only with no joystick binding). Unlike the
+  `J` handler it zeroes nothing, so the head enters and leaves padlock from wherever it was
+  pointed. Camera init `FUN_0042b730` writes `0` and zeroes the
   shown angles at `0042b747`, so a level load starts in snap. A snap direction pressed while
   padlocked writes `0` through the first of these, which is how state `2` leaves by the writers it
   arrived through.
@@ -395,6 +399,35 @@ the back flag set the routine never calls `FUN_0042d010` at all and writes the f
 - **Free-look (state 1).** Elevation `+= 2·dt·cos(hat angle)`, azimuth `+= 2·dt·sin(hat angle)` per
   frame, a pan rate of **2 rad/s** (~114.6°/s), `DAT_009ad744` the per-frame dt (appears as
   `dt + dt`).
+- **Padlock (state 2).** `0042d016`/`0042d020` (`CMP [0x0064ef68],2` / `JNZ 0042d2d1`) make the
+  padlock arm the fall-through; it reads the local player's target wrapper at
+  `DAT_0071c298 + 0x948` (`0042d026`-`0042d033`).
+  - **With a target:** the wrapper's `+4` entity yields a position through virtual slot `0`
+    (`0042d054`-`0042d059`); the delta against the plane's `+0x204`/`+0x208`/`+0x20c`
+    (`0042d07c`-`0042d093`) is rotated into the plane's frame by the 3×3 at `+0x180`
+    (`0042d09b`-`0042d0f7`, rows `+0x180`/`+0x18c`/`+0x198`); then
+    `DAT_0064ef60 = atan2(y, sqrt(x² + z²))` (`0042d10e` `FSQRT`, `0042d119`) and
+    `DAT_0064ef64 = atan2(−x, −z)` (`0042d12b`).
+  - **The caller's floor is the only clamp** (`0042d133`-`0042d146`,
+    `if (elevation < param_1) elevation = param_1`): no ceiling, since `atan2` already bounds
+    elevation to `±π/2`, and **no azimuth limit at all**, so the head reaches dead astern.
+  - **No rate limit and no padlock-specific smoothing.** The targets snap to the bearing every
+    frame; the shared shown-angle exponential above is the whole of the lag.
+  - **No target:** `0042d035`/`0042d03f` write both targets `0.0` and `JMP 0042d14b`, skipping the
+    floor clamp, and the autohead gate below then accepts the frame, so a padlocked head with
+    nothing selected idles exactly as a released snap does.
+  - **Leaving.** The exit scan `0042d14b`-`0042d2cc` polls the POV hat (`FUN_00536c70(0)` at
+    `0042d157`, valid when `≠ 0xffff`) and the eight direction slots `0x3a`-`0x3d`, `0x3f`-`0x42`;
+    slot `0x3e` (centre) is polled and its result **discarded**, so the centre key is inert while
+    padlocked. `0042d2a1` (`OR ESI,EBX` / `JZ`) keeps the state when nothing is pressed, and
+    `0042d2c2` (`MOV [0x0064ef68],0`) makes **any** look direction leave into snap. The scan runs
+    after the bearing, so the frame a direction arrives on still aims at the target.
+- **The tail wrap.** Before the exponential, `FUN_00460b10(&target, shown − π)` wraps the azimuth
+  target onto the near side of the shown angle by `_DAT_0071b3fc` = `2π`, and `FUN_00460ab0` wraps
+  the result back to `±π`. It runs in all three states, but only padlock produces a target at the
+  `±π` seam, so a target crossing dead astern is followed **across the tail** rather than swung
+  back through the nose. CSVM scopes the same wrap to its padlock arm alone, which leaves the
+  snap and free-look paths (whose targets are clamped well inside `±π`) exactly where they were.
 - **Smoothing.** The displayed angles (`DAT_0064ef58/5c`) approach their targets exponentially,
   `shown = target + (shown − target)·e^(−rate·dt)` (`FUN_00460490`; `FUN_00460410` a cubic Taylor
   `e^(−x)` for `x < 0.1`): elevation rate **3.0/s**, azimuth rate **5.0/s** (τ ≈ 0.33 s / 0.20 s).
@@ -426,7 +459,8 @@ the back flag set the routine never calls `FUN_0042d010` at all and writes the f
 | **Death camera** | mode `8`: one spot from the `death_*` fields when the player is destroyed, held while the wreck falls | landed as `StaticCameras`, entered by the player's own destruction |
 | Static-camera terrain clearance | `crash_chord_y`/`crash_elev`, taken by the crash cut, the death camera and the flyby alike | landed as `StaticCameras.LiftClearOfWorld`, taken by all three |
 | Camera position | per-plane authored `cockpit_camera` offset, read from the model (`player_pfighter` `(0,0.75,−0.2)`) | landed: `MarkerRig.FindNamedMarker` / `PlaneBuilder.CockpitCameraOffset` (A2) |
-| Head-look controller | snap, free-look, center key, autohead, one shared state machine, three callers (first person + chase) | landed as `HeadLook`, one head for every view: the snap cluster, the centre key and the mouse aim the cockpit and swing the chase camera alike, each frame floored by the view that places it, and `K`/`J` state the mode the original's two selectors state |
+| Head-look controller | snap, free-look, padlock, center key, autohead, one shared state machine, three callers (first person + chase) | landed as `HeadLook`, one head for every view: the snap cluster, the centre key and the mouse aim the cockpit and swing the chase camera alike, each frame floored by the view that places it, and `K`/`L`/`J` state the mode the original's three selectors state |
+| Padlock (Track Target) | state `2`: the head snaps onto the selection's bearing every frame, floored by the caller and unlimited in azimuth, any look direction returning it to snap | landed as `LookMode.Padlock`, reading `TargetSelection.Current` through `HeadLook.TargetOffset` and following the same tail-crossing wrap |
 | Chase base elevation | the head's elevation plus the authored `thirdp_pitch`, i.e. dead astern at `0.29°` with the head settled | a hand-picked `15.7°` from `BaseUp`/`BaseBack` (`BL-885`) |
 
 The camera is placed faithfully today: the plane's `cockpit_camera` offset read from the model (no

@@ -1028,6 +1028,7 @@ public partial class FlightController : Node3D
         if (_cam != null)
         {
             _cam.Head.IdleAim = AutoheadTarget;
+            _cam.Head.TargetOffset = PadlockOffset;
         }
         _spawnPos = spawnPos;
         _spawnAttitude = Basis.LookingAt((spawnLookAt - spawnPos).Normalized(), Vector3.Up);
@@ -4621,7 +4622,21 @@ public partial class FlightController : Node3D
         // held control rides along so a still mouse holds the look instead of reading as idle.
         return new HeadLookInput(snapX, snapY, freeRight, freeUp, _actions.Held(InputAction.LookCenter),
             lookX, -lookY, FreeLookHeld(),
-            _actions.Held(InputAction.SnapLookMode), _actions.Held(InputAction.SmoothLookMode));
+            _actions.Held(InputAction.SnapLookMode), _actions.Held(InputAction.SmoothLookMode),
+            _actions.Held(InputAction.TrackTarget));
+    }
+
+    // HeadLook's TargetOffset: where this pilot's selection sits in the plane's own frame, the one
+    // thing the padlock state reads. Null with nothing selected, which is that state's no-target
+    // frame. Taken off the SIM pose, the pose the original's own padlock differences against.
+    private Vector3? PadlockOffset()
+    {
+        if (Targeting?.Current is not { } target)
+        {
+            return null;
+        }
+
+        return _model.Attitude.Inverse() * (target.Position - _model.Position);
     }
 
     // C22's IdleAim delegate: HeadLook.Step calls this only on a frame with no look input at all.

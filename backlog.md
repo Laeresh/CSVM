@@ -384,31 +384,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   numbers does not change that, and must not be used to try to.
   *Cross-refs:* `PT-120` (the pad sitting that judges the three), `BL-296`, `docs/org/input.md`, `docs/org/targeting.md`, `docs/controls.md`.
 
-- `BL-399` `[Feature]` `[L]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **Track Target's camera is the decoded padlock mode, the third value of the
-  head-look state byte, aimed at the current target.** *Decision:* build it faithfully as
-  `HeadLook`'s state `2`, not as a remake follow camera; snap versus smooth, the chase-camera
-  blend and the no-target and target-behind cases are read off the original's padlock handler,
-  not designed. *Evidence:* the player-targeting plan's out-of-scope call (b), 2026-08-15: the
-  original's `Views 1 → Track Target` binds `L` (free in our flight keymap; our `L` is the
-  viewer-only livery lab), decoded in `docs/org/targeting.md`, but "keep the target framed" hides a
-  pile of camera decisions that plan deliberately deferred: snap vs smooth follow, override vs
-  blend with the chase camera, behaviour with no target selected or a target behind the pilot, and
-  interaction with the right-stick free look (`BL-372`). `L` is reserved in `docs/controls.md` but
-  bound to nothing. `PLAN-cockpit-view`'s head-look decode names the mechanism this camera would
-  ride: the look-state byte the controller reads (`DAT_0064ef68`) has a third value, `2`, for
-  padlock, sitting beside the `0`/`1` snap/free-look states the `K` and `J` selector keys already
-  pick between, so `L`'s camera is this same state machine's third mode, not a bolt-on. Building it needs
-  `TargetSelection.Current` plumbed into `HeadLook`'s target so the padlock state aims the head at
-  the current target instead of reading player input.
-  *Fix shape:* decode the padlock branch of the head-look controller (what state `2` does with
-  the head angles each tick, how it leaves the state when the target is lost, and whether the
-  chase camera follows the head or the aircraft), then plumb `TargetSelection.Current` into
-  `HeadLook` and bind `L`. No change to the targeting module itself, which already exposes
-  `TargetSelection.Current` cleanly for a camera to read.
-  *Cross-refs:* `BL-372` (right-stick free look), `HeadLook.LookMode` and its `SelectMode` writers,
-  which state `2` enters and leaves through, `docs/org/targeting.md` "Track Target", `docs/controls.md`,
-  `PLAN-cockpit-view` (`HeadLook`, `src/Flight/HeadLook.cs`).
-
 - `BL-603` `[Bug]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The human rig sweeps the mesh hull where the original sweeps its def's six
   `collision` probes.** *Evidence:* decoded for `BL-601` (`git log --grep=BL-601`): `FUN_0048d7f0`
   carries the def's `collision` list as rays from the previous pose, six points on the `p*` player

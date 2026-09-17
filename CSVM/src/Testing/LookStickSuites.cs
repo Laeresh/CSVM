@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using CSVM.Bindings;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
@@ -41,6 +42,10 @@ internal static class LookStickSuites
     // readings are compared at a degree rather than at float precision.
     private const float ToleranceDeg = 1.5f;
 
+    // The padlock sortie's target, a bare identity in the pool so the acquisition can be asserted
+    // by reference rather than by name.
+    private static readonly object PadlockMark = new();
+
     // Where the stick's own swing has to land: StickX of the shared envelope.
     private static float ExpectedSwingDeg => StickX * HeadLook.PadLookYawMaxDeg;
 
@@ -52,7 +57,7 @@ internal static class LookStickSuites
     /// <summary>Flies one aircraft per view with the same pinned stick and reads what the camera
     /// did with it.</summary>
     [Suite("look-stick",
-        "the look controls flown in both views with --look= standing in for the right stick and --view= for a held numpad key: the flags parse, clamp and survive a typo, one deflection through one reader and one envelope swings the chase camera and the cockpit head the same angle to the same side of the aeroplane, and a snap pans the chase camera through the same head at the decoded azimuth rate onto the table's own direction, every path returning to its settled pose on release")]
+        "the look controls flown in both views with --look= standing in for the right stick and --view= for a held numpad key: the flags parse, clamp and survive a typo, one deflection through one reader and one envelope swings the chase camera and the cockpit head the same angle to the same side of the aeroplane, a snap pans the chase camera through the same head at the decoded azimuth rate onto the table's own direction, and L padlocks that head onto a real selection's own bearing and hands it back to snap, every path returning to its settled pose on release")]
     internal static void LookStick(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -145,6 +150,7 @@ internal static class LookStickSuites
                 // Flown on the back of this sortie rather than in its own: the aeroplane is
                 // already built, already airborne and already settled at the chase pose.
                 SnapSortie(ctx, clock, plane, report);
+                PadlockSortie(ctx, clock, plane, report);
             }
 
             return new Swing(swingDeg, sideX, releasedDeg);
@@ -196,6 +202,72 @@ internal static class LookStickSuites
         report.AppendLine($"chase snap {SnapDigit}: panned {Mathf.RadToDeg(panRad):0.##}° against " +
             $"{Mathf.RadToDeg(expectedRad):0.##}°, held dir {Fmt(held)}, released {Fmt(back)} " +
             $"against {Fmt(settled)}");
+    }
+
+    // Track Target over the shipped keymap and a real selection: L reaches the padlock state, the
+    // head holds the target's own bearing rather than any input's, a target the cockpit floor would
+    // bar still reaches the chase camera's, and L again gives the head back to the snap state.
+    private static void PadlockSortie(TestContext ctx, GameClock clock, FlightController plane,
+        StringBuilder report)
+    {
+        plane.Targeting = new TargetSelection();
+        // Offered fresh every frame off the plane's CURRENT pose, so the bearing under test stays
+        // put while the aeroplane flies: abeam to port and below, 500 m out.
+        var offset = new Vector3(-500f, -250f, 0f);
+        plane.TargetObjectives = list => list.Add(new AimCandidate
+        {
+            Position = plane.WorldPosition + (plane.GlobalBasis * offset),
+            Team = InstantActionRuntime.EnemyTeam,
+            Live = true,
+            Source = PadlockMark,
+            ConeOverride = AimAssist.NoConeOverride,
+        });
+        Step(clock, plane, 2);
+        ctx.Check(plane.Targeting.Current is { } acquired && ReferenceEquals(acquired.Source, PadlockMark),
+            $"the pilot has a real selection to padlock onto before the key is pressed ({plane.Targeting.Current?.Name})");
+
+        Press(clock, plane, InputAction.TrackTarget);
+        ctx.Check(plane.Head?.Mode == LookMode.Padlock,
+            $"L puts the one head into the decoded padlock state (read {plane.Head?.Mode})");
+
+        Step(clock, plane, SettleFrames);
+        var (elevation, azimuth) = HeadLook.PadlockTargets(offset);
+        float azDeg = Mathf.RadToDeg(Mathf.Abs((plane.Head?.Azimuth ?? 0f) - azimuth));
+        float elDeg = Mathf.RadToDeg(Mathf.Abs((plane.Head?.Elevation ?? 0f) - elevation));
+        ctx.Check(azDeg < ToleranceDeg && elDeg < ToleranceDeg,
+            $"and the head settles on the target's own bearing, {Mathf.RadToDeg(azimuth):0.#}° round and {Mathf.RadToDeg(elevation):0.#}° down, with no look input at all (off by {azDeg:0.##}°, {elDeg:0.##}°)");
+        var held = OffsetDir(ctx.Camera, plane);
+        // An orbit swings AWAY from what the head aims at, so that both the aeroplane and the thing
+        // it is watching stay in frame: a target abeam to port and below puts the camera to
+        // starboard and above, the same sign the snap sortie above reads for a leftward azimuth.
+        ctx.Check(held.X > 0.5f && held.Y > 0.3f,
+            $"the chase camera swinging with it, opposite the target so both stay in frame (dir {Fmt(held)})");
+        // The chase floor is what lets the head follow a target BELOW the aeroplane; the cockpit's
+        // level floor would hold this same bearing flat, which is the pair's whole difference.
+        ctx.Check((plane.Head?.Elevation ?? 0f) < -0.1f,
+            $"below level, which only the chase floor allows (elevation {plane.Head?.Elevation:0.###} rad)");
+
+        Press(clock, plane, InputAction.TrackTarget);
+        ctx.Check(plane.Head?.Mode == LookMode.Snap,
+            $"and a second L leaves the state for snap, never for free-look (read {plane.Head?.Mode})");
+        Step(clock, plane, SettleFrames);
+        ctx.Check(Mathf.Abs(plane.Head?.Azimuth ?? 1f) < 0.02f,
+            $"the released head returning to straight ahead as that state's own idle frame does (azimuth {plane.Head?.Azimuth:0.###} rad)");
+        report.AppendLine($"padlock: bearing {Mathf.RadToDeg(azimuth):0.##}°/{Mathf.RadToDeg(elevation):0.##}° " +
+            $"off by {azDeg:0.##}°/{elDeg:0.##}°, camera dir {Fmt(held)}");
+
+        plane.TargetObjectives = null;
+        plane.Targeting = null;
+    }
+
+    // One press and release of a bound action, each on its own frame, so the head sees the press
+    // EDGE its mode writers are stated on.
+    private static void Press(GameClock clock, FlightController plane, InputAction action)
+    {
+        plane.HoldActionForTest(action, true);
+        Step(clock, plane, 1);
+        plane.HoldActionForTest(action, false);
+        Step(clock, plane, 1);
     }
 
     // The camera's offset from the aeroplane, as a unit direction in the PLANE's frame, so the

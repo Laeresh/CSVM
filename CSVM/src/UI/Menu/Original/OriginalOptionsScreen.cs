@@ -419,7 +419,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         new[]
         {
             InputAction.ToggleSpyglass, InputAction.CycleCockpitViews, InputAction.FlybyView,
-            InputAction.SnapLookMode, InputAction.SmoothLookMode, InputAction.SelectChaseView,
+            InputAction.SnapLookMode, InputAction.TrackTarget, InputAction.SmoothLookMode,
+            InputAction.SelectChaseView,
             InputAction.LookBack, InputAction.LookCenter, InputAction.FreeLook,
         },
         new[]
