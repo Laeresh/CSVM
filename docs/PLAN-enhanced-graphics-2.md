@@ -201,7 +201,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D, the net and the reading
 
 31. ☐ An enhanced golden set under `--det`
-32. ☐ The perf reading over the finished stack, within 20% of the D31 baseline
+32. ☑ The perf reading over the finished stack, within 20% of the D31 baseline
 
 ## Dependency and parallelism notes
 
@@ -1240,7 +1240,108 @@ deterministic under `--det`; if it is not, the set pins with TAA off and the rec
 **⚠ Traps.** A burst frame carries the previous frame; the manifest's single-shot path is the
 un-jittered one. Do not append to an `exercises` field; rewrite it on a re-pin.
 
-## D32 ☐ The perf reading over the finished stack, within 20% of the D31 baseline
+## D32 ☑ The perf reading over the finished stack, within 20% of the D31 baseline
+
+**Landed.** The finished stack costs +8.2% on C4, +13.3% on C5 and +2.0% on C3 at four panes over
+the baseline, so all three budget cells sit inside the 20% envelope and no lever moves. The reading
+is paired rather than sequential: each cell alternates a baseline launch and a stack launch, one
+after the other, so a drift in the ambient GPU load lands on both arms in the same proportion
+instead of settling on whichever arm ran during the busy stretch. Every launch waits for an empty
+Godot process table first and records the ambient GPU utilisation sampled just before it, one warm
+launch per arm is discarded because a tree's first launch compiles its shaders and builds its import
+cache, each run drops its first perf window for the same reason, and the run's figure is the median
+of the windows that remain. The baseline arm is a detached worktree pinned at the pre-Wave-A commit,
+not the main checkout, because the main checkout moved twenty-eight commits forward mid-measurement
+and took the baseline draw counts with it. Both arms run under `--det`, which drops config
+overrides, so render scale is 1.0 by construction (`config=defaults dropped_overrides=0`,
+`render_scale=100% source=default`) rather than by a saved option anyone could have changed.
+
+Baseline, the pre-Wave-A tree, enhanced, three runs per cell:
+
+| Cell | Panes | frame_ms | gpu_ms | render_cpu_ms | draws |
+|---|---|---|---|---|---|
+| C4 | 4 | 14.09 | 0.72 | 1.21 | 12798 |
+| C5 | 4 | 18.41 | 2.01 | 1.31 | 15489 |
+| C3 | 4 | 12.80 | 0.58 | 0.44 | 10016 |
+| C4 | 1 | 8.33 | 0.89 | 0.94 | 1400 |
+| C5 | 1 | 8.33 | 2.54 | 1.57 | 1944 |
+| C3 | 1 | 8.33 | 0.56 | 1.20 | 1630 |
+
+The finished stack, same cells, same three runs:
+
+| Cell | Panes | frame_ms | gpu_ms | render_cpu_ms | draws |
+|---|---|---|---|---|---|
+| C4 | 4 | 15.24 | 0.81 | 1.32 | 12856 |
+| C5 | 4 | 20.86 | 2.31 | 1.40 | 15910 |
+| C3 | 4 | 13.06 | 0.67 | 0.45 | 10254 |
+| C4 | 1 | 8.33 | 1.56 | 1.00 | 1415 |
+| C5 | 1 | 8.35 | 4.05 | 1.78 | 2050 |
+| C3 | 1 | 8.33 | 0.76 | 1.34 | 1647 |
+
+The deltas, and what the envelope allows:
+
+| Cell | Panes | frame delta | frame % | 20% budget | gpu delta | draw delta |
+|---|---|---|---|---|---|---|
+| C4 | 4 | +1.15 ms | +8.2% | +2.82 ms | +0.09 ms | +58 |
+| C5 | 4 | +2.45 ms | +13.3% | +3.68 ms | +0.30 ms | +421 |
+| C3 | 4 | +0.26 ms | +2.0% | +2.56 ms | +0.09 ms | +238 |
+| C4 | 1 | pinned | pinned | outside the budget | +0.67 ms | +15 |
+| C5 | 1 | pinned | pinned | outside the budget | +1.51 ms | +106 |
+| C3 | 1 | pinned | pinned | outside the budget | +0.20 ms | +17 |
+
+The one-pane rows carry no frame delta because both arms sit on this machine's 8.33 ms external
+pacing, which survives `--no-vsync`; `gpu_ms` is the readable term there. It is also a per-viewport
+figure rather than the whole splitscreen bill, which is why the one-pane gpu gap is the larger of
+the two on every cell: at four panes `gpu_ms` reports roughly one pane's share while `frame_ms`
+reports the whole frame.
+
+The runner's own perf stage, one pane on each tree, read on `render_cpu_ms`, `gpu_ms` and `draws`
+for the same reason, both arms 6/6 PASS:
+
+| Scenario | base render_cpu / gpu / draws | stack render_cpu / gpu / draws |
+|---|---|---|
+| empty-stage | 0.27 / 0.33 / 216 | 0.28 / 0.47 / 216 |
+| c1-flight | 0.77 / 0.52 / 1077 | 0.80 / 0.82 / 1128 |
+| c2b-water | 0.44 / 0.38 / 135 | 0.60 / 0.57 / 135 |
+| c4-terrain | 0.79 / 0.66 / 1071 | 0.88 / 1.03 / 1071 |
+| c2m02-hollywood | 0.97 / 0.58 / 1299 | 1.14 / 0.74 / 1531 |
+| c5-city | 1.44 / 2.32 / 1865 | 1.66 / 3.50 / 1865 |
+
+A four-pane run builds the per-pane work per pane, not once. `SplitScreen` calls the same
+`ViewportQuality.Apply` on each SubViewport, so TAA runs four times with four independent history
+buffers, and the wind streaks report four boxes of 1400 instances against the one-pane run's single
+box. Each box is still one MultiMesh, so the streaks cost four draws rather than four times the
+per-pane price, and the four-pane draw deltas above (+58 on C4, +421 on C5, +238 on C3) are what
+four panes of new work amounts to in the draw list.
+
+The sum of the per-item deltas the landing commits recorded does not reconcile with the measured
+total, and the reason is not one outlier item. Only four items recorded a figure at all: A3 at
++0.77 ms gpu at 1280x720, C22 at +0.07 ms gpu, B14 within 0.03 ms, and A2 at zero at scale 1.0,
+with A5's FSR door off by default. A1, B11, B12, B13, B15, C21, E41 and E42 recorded none. The
+recorded figures add to roughly +0.9 ms of gpu at one pane on one chapter each, which cannot be
+compared against a four-pane frame delta in the first place; the eight items that recorded no
+number are the whole of the gap, so the reconciliation is unavailable rather than contradicted.
+
+Render scale above 1.0 is the user's own spend by decision 9 and is recorded outside the budget.
+C5 at four panes, run under `--no-det` with the render scale option at 200%: frame_ms 30.65 to
+31.09 and gpu_ms 3.56 to 3.67, against 24.02 to 24.49 and 2.69 to 2.73 for the same launch at 100%.
+That is about +6.5 ms of frame and +0.9 ms of gpu, roughly +27% and +34%, which the envelope would
+not hold and does not have to.
+
+**Verified.** The three budget cells are inside the envelope with the worst at +13.3%, so no lever
+is pulled and no file under `CSVM/src` changed for this item. `RunTests.ps1 -Hitch -Graphics
+enhanced` on the clean stack tree is silent: zero hitch lines on the clean run, one line at
+frame_ms 60.88 on the injected control, 28.1 s against the 30 s budget. The perf stage passes 6/6
+on both trees. The raw logs, the paired driver and the commands are under `.scratch/eg2/D32/`.
+⚠ The machine was not quiet for the whole item: another session's six-shard engine suite, a third
+session's probe and a foreground game on the same GPU all overlapped earlier attempts, and the
+first baseline arm drifted under the measurement. Every figure quoted above was re-taken afterwards
+through the paired driver with the quiet gate armed and ambient GPU at 0 to 1 percent. The C5
+one-pane cell is the one exception to three runs per cell: its third baseline launch hung and was
+killed at the 600 s timeout, the same failure A1 recorded for an enhanced chapter `--screenshot`
+probe, so that cell stands on two rounds whose windows agree to 0.01 ms.
+
+**Original approach (kept for reference).**
 
 **Goal.** A current frame-time table for the enhanced stack, and every new pass inside a 20%
 envelope over the re-taken baseline, or a lever recorded for the one that is not.
