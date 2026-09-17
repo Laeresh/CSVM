@@ -783,6 +783,11 @@ member, and it does not go here.
   slot the cursor's sideways travel, and gating that travel three times as wide as the same travel's
   bank left an ordinary cursor offset flying the autogyro nothing while it already banked an
   aeroplane. Ask which SOURCE a decoded threshold was measured on before keeping it.
+- **SRC-19**, **"That file carries no such id" is a claim about a file, so open the file across the
+  whole install before routing the binding through somewhere else.** A campaign danger zone's
+  objective number was written up as coming from the mission graph because `dzones.zrd` was said to
+  carry no objective id; its `objective_numbers` key carries exactly that id, and the pairs match
+  the shipped `Snap_<mission>_<objective>` scrapbook rows mission for mission.
 
 ## What this project cannot verify itself
 

@@ -54,6 +54,12 @@ public sealed class CampaignDirector
     private readonly CampaignMission _mission;
     private readonly string _missionZrdrPath;
 
+    // The objective numbers this attempt's completed danger zones stand for, the second source of
+    // the completed-objective mask (docs/org/debrief.md, "The completed-objective mask has two
+    // sources"). Kept here rather than in the graph: the numbers are dzones.zrd's, not an
+    // IDENTITY's, and no objective node carries one.
+    private readonly HashSet<int> _zonesCompleted = new();
+
     // The story position whose world state this mission opens on: the most recent EARLIER mission
     // of the same chapter, or null when this IS that chapter's first and the original's backwards
     // walk finds nothing. ⚠ Never the mission's own seq: CM07 is chapter 1's first mission, and a
@@ -100,6 +106,7 @@ public sealed class CampaignDirector
     private NetTrailerTargets? _netTrailers;
     private float _minAiActiveDist = 2000f;
     private CampaignDangerZones? _dangerZones;
+    private Func<Image?>? _playerPane;
     private DangerZoneRibbons? _ribbons;
     private Messages? _strings;
     private bool _cutsceneHold;
@@ -344,8 +351,9 @@ public sealed class CampaignDirector
 
     /// <summary>The suite/test entry: a director over an already-loaded script, mission and
     /// profile, with no profile file behind it unless one is handed in. <paramref
-    /// name="missionZrdrPath"/> is only needed to arm danger zones (its <c>dzones.zrd</c>
-    /// disable list); omitted, nothing is disabled.</summary>
+    /// name="missionZrdrPath"/> is only needed to arm danger zones (its <c>dzones.zrd</c> overrides,
+    /// which say what is disabled and which objective each zone photographs into); omitted, every
+    /// zone is armed and none is bound to an objective.</summary>
     internal static CampaignDirector Create(
         ObjectiveScript script, CampaignMission mission,
         CampaignProfileDef profile, CampaignProfileStore? store, string missionZrdrPath = "",
@@ -563,6 +571,7 @@ public sealed class CampaignDirector
         _world = new World(this, inputs);
         _beginSpectate = inputs.BeginSpectate;
         _projectiles = inputs.Projectiles;
+        _playerPane = inputs.PlayerPane;
         _paths ??= inputs.Runtime is { } animRuntime
             ? new ScriptedPathVehicles(name => animRuntime.FindNodes(name))
             : null;
@@ -648,8 +657,25 @@ public sealed class CampaignDirector
     /// advance under the movie.</summary>
     internal void HoldForCutscene(bool held) => _cutsceneHold = held;
 
-    /// <summary>A danger zone the player completed, routed into the graph's awake objectives.</summary>
-    internal void NotifyDangerZoneCompleted(string zone) => Graph?.NotifyDangerZoneCompleted(zone);
+    /// <summary>A danger zone the player completed: routed into the graph's awake objectives, then
+    /// into the scrapbook, where the zone's own objective number both records a mask bit and names
+    /// the photograph the pilot's pane is written to.</summary>
+    internal void NotifyDangerZoneCompleted(string zone)
+    {
+        Graph?.NotifyDangerZoneCompleted(zone);
+        if (_dangerZones is not { } zones
+            || !zones.TryZone(zone, out int objective, out bool snapshot)
+            || objective < 0)
+        {
+            return;
+        }
+
+        _zonesCompleted.Add(objective);
+        if (snapshot && ProfileDirectory() is { } directory)
+        {
+            CampaignSnapshot.Stage(directory, _mission.Ordinal, objective, _playerPane?.Invoke());
+        }
+    }
 
     /// <summary>What a <c>DEDG</c> over <paramref name="group"/> counts right now: the roster
     /// members of that group neither crashed nor deactivated. Null before <see cref="Attach"/> or
@@ -1052,11 +1078,12 @@ public sealed class CampaignDirector
         // No money is passed: what the mission pays is the reward table's, gated on what this
         // profile already banked, so CampaignProgression works it out (docs/org/debrief.md).
         // ⚠ Shots/Hits stay the seated pilot's alone (WireScoredShooter): a guest's never count.
+        int objectives = graph.CompletedMask | DangerZoneMask();
         var attempt = new MissionAttempt(
             _mission.Seq,
             outcome == MissionOutcome.Won
-                ? graph.CompletedMask | CampaignProgression.PrimaryObjectiveMask
-                : graph.CompletedMask & ~CampaignProgression.PrimaryObjectiveMask,
+                ? objectives | CampaignProgression.PrimaryObjectiveMask
+                : objectives & ~CampaignProgression.PrimaryObjectiveMask,
             (int)(graph.Elapsed * 1000f),
             _world?.Shots ?? 0,
             _world?.Hits ?? 0,
@@ -1077,12 +1104,52 @@ public sealed class CampaignDirector
             ? CampaignPersistLog.Capture(lostWorld)
             : null;
         _store?.Save(_profile);
+        CommitSnapshots(outcome == MissionOutcome.Won);
         SaveAwardedBuilds(recorded);
         Result = new CampaignMissionResult(
             outcome, attempt, recorded, _mission.Campaign, skipCapture);
         _leaving = LeavingHoldS;
         Log.Info("core", $"campaign: mission {_mission.Ordinal} {outcome} — mask 0x{attempt.CompletedMask:x}, {attempt.TimeMs / 1000}s, primary={recorded.PrimaryCompleted}, advanced={recorded.Advanced}, log {_profile.PersistLog.Count} object(s), attempt {CampaignProgression.ResultOf(_profile, _mission.Seq)?.Attempts ?? 0} (skip offered={recorded.SkipOffered}); holding the world {LeavingHoldS:0.#}s before leaving it");
     }
+
+    // The second source of the completed-objective mask: a bit per completed danger zone, by the
+    // objective number dzones.zrd gives that zone. ⚠ The band stops at 30, not at 31: the original
+    // reads ids 18 through 30 only, so the zone C4/M04 and C5 number 31 scores and photographs but
+    // never lights its scrapbook row (docs/org/debrief.md).
+    private int DangerZoneMask()
+    {
+        int mask = 0;
+        foreach (int objective in _zonesCompleted)
+        {
+            if (objective is >= 18 and <= 30)
+            {
+                mask |= 1 << objective;
+            }
+        }
+
+        return mask;
+    }
+
+    // Mission end: the staged photographs are kept under their scrapbook names on a win and dropped
+    // on a loss, the original's own sweep over the profile directory.
+    private void CommitSnapshots(bool won)
+    {
+        if (ProfileDirectory() is not { } directory)
+        {
+            return;
+        }
+
+        int acted = CampaignSnapshot.Commit(directory, _mission.Ordinal, won);
+        if (acted > 0)
+        {
+            Log.Info("core", $"danger zone snapshots: {acted} staged photograph(s) {(won ? "kept" : "dropped")}");
+        }
+    }
+
+    // The seated profile's own directory, where the scrapbook resolves a Snap_ capture. Null with
+    // no store bound, which is every suite that builds a director without one.
+    private string? ProfileDirectory() =>
+        _store is { } store && _profile.Name.Length > 0 ? store.DirFor(_profile.Name) : null;
 
     // The far end of the leaving hold: the world has stood still for its length and the session may
     // go. The original reaches here when its fade over the last flown frame has run out and the next
@@ -1299,6 +1366,11 @@ public sealed class CampaignDirector
         /// ping and the lost ending. One aeroplane, always P1's. A delegate rather than a value
         /// because the flight rigs are built after the world.</summary>
         public Func<FlightController?>? PlayerAircraft;
+
+        /// <summary>The scripted player's pane as an image, read fresh, for the Danger Zone
+        /// photograph. Null leaves a completed zone scored but unphotographed, which is what every
+        /// suite without a viewport gets.</summary>
+        public Func<Image?>? PlayerPane;
 
         /// <summary>The HUMAN FIELD: every joined player's aircraft, read fresh. Left unset by a
         /// solo sortie and by every suite that builds one rig, where the scripted player is the

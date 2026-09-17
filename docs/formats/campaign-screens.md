@@ -678,9 +678,22 @@ profile directory instead of `assets\graphics\`, is skipped when the file is not
 to a 164×123 region, and is drawn at 25% on the page but full size in the zoom. 167 of the 461 rows
 are these, named `Snap_<mission>_<objective>` and gated on that objective, with a
 `DZ_generic_corners` row at identical coordinates one step higher in draw order supplying the
-photo-corner mount. This is the read half of the player capture; CSVM's stunt camera writes its
-photographs to `screenshots/stunts/` beside the saves rather than as profile `Snap_` scraps, so
-these rows stay unfilled (`BL-929`).
+photo-corner mount.
+
+**Which flight writes one.** The objective half of the name is the mission's own
+`dzones.zrd` `objective_numbers` entry for a danger zone (`docs/formats/missions.md`, "Zone
+overrides"), so the zone the pilot flies through and the row that draws its photograph are named by
+the same data. Completing that zone on the campaign path photographs the pilot's pane into the
+seated profile's directory under a `.PN_` pending name; the mission end keeps the pending files as
+`Snap_<mission>_<objective>.PNG` on a win and deletes them on a loss, the original's own sweep over
+ids 10 to 31. A zone in the mission's `nosnapshot` list scores its objective and writes nothing.
+`CampaignSnapshot` is the writer and `CampaignDangerZones` the binding; the stunt camera is a
+different thing entirely and keeps its own names under `screenshots/stunts/`, since an Instant
+Action run has no mission slot and no objective to be named by.
+
+Authoring gaps stay as they are: CM18 numbers a zone 19 with no row for it, CM19 numbers one 31
+with no row, CM23 ships rows 27 and 28 for zones it disables, and every `_31` row is dead because
+the debrief's mask loop stops at 30 (`docs/org/debrief.md`).
 
 ### The grime
 

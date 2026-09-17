@@ -69,13 +69,21 @@ marked done by `FUN_004ad240`, which finds the record by number. The debrief wal
 `FUN_004ad180` (the count), `FUN_004ad1e0` (the completed byte) and `FUN_004ad200` (the number),
 and sets bit `number` for every completed entry whose number is greater than zero.
 
-**The objectives module's own vector, at `0x0064fb60`.** Records are `0x50` bytes with the
+**The danger-zone module's own vector, at `0x0064fb60`.** Records are `0x50` bytes with the
 objective id at `+0x4c`, the completed byte at `+0x40`, and the condition sub-vector at `+0x34` /
-`+0x38` (`FUN_00445ca0` resets all three per mission). The debrief looks up ids **18 through 30**
-by `FUN_00445d50` and sets bit `id` for each one that is complete.
+`+0x38` (`FUN_00445ca0` resets all three per mission). One record is one `dzpathN` zone, and its id
+is the number the mission's `dzones.zrd` `objective_numbers` gives that zone, which is why the ids
+sit in a band of their own. The debrief looks up ids **18 through 30** by `FUN_00445d50` and sets
+bit `id` for each one that is complete.
 
-So bits 1 to 17 come from the objectives that carry a debrief text line, and bits 18 to 30 from
-module objectives that have none.
+So bits 1 to 17 come from the objectives that carry a debrief text line, and bits 18 to 30 from the
+mission's completed danger zones, which carry none. ⚠ The loop ends at 30 while the authored band
+runs to 31, so a zone numbered 31 (C4/M04's and C5's) can never set a bit, and the
+`Snap_<mission>_31` scrapbook rows are unreachable in the original as much as here.
+
+Crossing such a zone also photographs the pilot's pane into the profile directory under the
+`Snap_<mission>_<objective>` name the scrapbook row carries (`FUN_004a0220` writes it, `FUN_004072a0`
+keeps or drops it at mission end); the two halves are named by the one `objective_numbers` entry.
 
 ## The four-attempt skip offer
 
@@ -462,10 +470,12 @@ confirm opens the book at slot 0 instead. `CampaignScrapbookPage` is the book, r
 three ways the original reaches it: a mission ending, a row picked in the table of contents, and
 either bookmark, all through `CampaignFlow.OpenScrapbook`, which is `uiData` 2405 mode 1. The cabin's
 PREVIOUS MISSIONS button still opens the table of contents alone, never the book.
-The one thing the pages carry that the original's data cannot fill is the capture slots: nothing
-writes a profile `Snap_` scrap, so such a row is skipped and its photo-corner mount draws alone
-(`BL-929`). A stunt run's own Danger Zone photographs are not these: they land under
-`screenshots/stunts/` beside the saves, named by chapter, marker and run clock.
+The capture slots fill from the flight: a campaign mission's own danger zone photographs the pilot's
+pane into the seated profile's directory under the `Snap_<mission>_<objective>` name the row carries
+(`CampaignSnapshot`), and a row whose file is not there is skipped with its photo-corner mount drawn
+alone. A stunt run's own Danger Zone photographs are not these: they land under
+`screenshots/stunts/` beside the saves, named by chapter, marker and run clock, since an Instant
+Action run has no mission slot or objective to be named by.
 
 ## What the debrief does not write
 
@@ -517,8 +527,9 @@ merge, not its author, and the two run in the same mission-end pass.
   undecoded `0x0071b480` overlap below. The prompt itself is `SkipOfferPrompt`, a marked
   placeholder: string 191's wording is not in the extraction. Nothing draws the offer yet: the
   original asks it in a message box, and this shell has no such screen.
-- **`ObjectiveGraph.CompletedMask` is one of the original's two mask sources.** It is the
-  objective-number half; the id 18 to 30 half comes from the module vector.
+- **Both mask sources are implemented.** `ObjectiveGraph.CompletedMask` is the objective-number
+  half; `CampaignDirector.DangerZoneMask` is the id 18 to 30 half, a bit per completed danger zone
+  by the number the mission's `dzones.zrd` gives that zone, and the two are merged at mission end.
 
 ## What is not decoded
 

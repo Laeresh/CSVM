@@ -165,12 +165,21 @@ identity for authored `player` tokens, roster leaders, and anchored net trailers
 ## src/Session/CampaignDangerZones.cs
 A campaign mission's own danger zones: the `dzpathN` names its `objectives.zrd` authors inside
 `DANGER_ZONES_COMPLETED`, narrowed by the mission's `dzones.zrd` `disable` list and resolved
-against the world's gate geometry, with `Load` answering null when a mission arms none. A zone is
+against the world's gate geometry, with `Load` answering null when a mission arms none. The same
+file's `objective_numbers` and `nosnapshot` ride on each armed zone and `TryZone` answers them: that
+number is the zone's completed-objective bit and names the scrapbook photograph it writes. A zone is
 a route ribbon plus a material-matched pair of gate polygons, crossed by a segment passing inside
-each in either order, which is the rule `Flight/StuntMission.cs` reads off `ia.json`'s zone list;
-the two differ by authoring surface, not by mechanism. Crossings are tracked per human, each with
-its own previous position. `CampaignDirector` counts what the graph's condition asks about. Gate
-decode: [../formats/missions.md](../formats/missions.md).
+each in either order, the rule `Flight/StuntMission.cs` reads off `ia.json`'s zone list; the two differ by authoring surface, not by mechanism. Crossings are tracked per human, each with its own previous position.
+Gate decode: [../formats/missions.md](../formats/missions.md).
+
+## src/Session/CampaignSnapshot.cs
+The campaign Danger Zone photograph: the pilot's pane, scaled to the 164x123 region the scrapbook
+forces, written into the flying profile's own directory under the `Snap_<mission>_<objective>` name
+a capture row resolves against. `Stage` writes one zone's still under a `.PN_` pending name during
+the flight and `Commit` sweeps ids 10 to 31 at mission end, keeping them under their scrapbook names
+on a win and deleting them on a loss, which is the original's own two-step. `Flight/StuntCapture.cs`
+is the other camera and shares nothing but the idea: an Instant Action run has no mission slot or
+objective to be named by. Rows and gate: [../formats/campaign-screens.md](../formats/campaign-screens.md).
 
 ## src/Session/ObjectiveGraph.cs
 The objectives runtime over a parsed script, pure state over `Step` calls in the shape of
@@ -189,7 +198,7 @@ class building no node of its own. `ResolveSpec` runs in `GameSession`'s constru
 the `aiv` blocks through `CampaignRoster.cs`; `Attach` arms the graph once every runtime a
 directive can touch is up; `BindCallbackHost` takes the `CALLBACK` slot ahead of the generator
 runtime's, where 801 to 803 reactivate the lowest-numbered still-deactivated Black Hat of their
-family, CM19's only launch path, and 968 takes C4/M03's escorting wingman out of the world as that mission's docking film says her name; `Step` runs the graph, the escort repair and the music. The
+family, CM19's only launch path, and 968 takes C4/M03's escorting wingman out of the world as that mission's docking film says her name; `Step` runs the graph, the escort repair, the music and the danger-zone tracker, whose completed zones both photograph into the profile through `CampaignSnapshot` and make `DangerZoneMask`, the id 18 to 30 half of the completed-objective mask. The
 nested `World` is the `IObjectiveWorld`, a directive with no seam here a named no-op, and `WidenGroupEngagement` is where an awake `DEDG` reaches its group's live members; `Memento` is the picture the flying profile hangs, which the pause sheet's own slot takes; mission end records the attempt, folds the persist log into the profile and holds before the cabin behind `LeavingFade`, the ramp `UI.MissionEndFade` paints. Debrief: [../org/debrief.md](../org/debrief.md).
 
 ## src/Session/CampaignProgression.cs

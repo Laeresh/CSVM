@@ -1384,22 +1384,6 @@ usual.
   passes a scan-shaped check. Add the case that a hull refuses a target past its attack radius and
   still takes one inside it. *Cross-refs:* `BL-789`'s closing commit, which moved the aircraft
   pickers and left this one.
-- `BL-929` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The campaign
-  scrapbook's `Snap_` capture slots are still unfilled.** *Evidence:* 167 of the scrapbook's 461
-  rows are `Snap_<mission>_<objective>` player captures resolved against the profile directory,
-  gated on that objective, forced to a 164×123 region and mounted under a `DZ_generic_corners`
-  photo-corner row ([`docs/formats/campaign-screens.md`](docs/formats/campaign-screens.md), "The
-  danger-zone slot"). Nothing writes one, so every such row is skipped and its mount draws alone.
-  *Fix shape:* have a campaign mission's own Danger Zone latch write a second copy into the
-  profile directory under the `Snap_<mission>_<objective>` name the row names, then let the
-  scrapbook draw it. *⚠ Traps:* the stunt camera's photographs are not these. It writes
-  `screenshots/stunts/<chapter>_<dzN>_<clock>.png` beside the saves, which no scrapbook row names,
-  and a stunt run is Instant Action, where no mission objective exists to gate the row on. Reusing
-  those file names, or pointing the scrapbook at that folder, fills the page with pictures the
-  original's data never asked for. The objective a campaign danger zone belongs to comes from the
-  mission's own graph, not from the `dzones` list, which carries no objective id.
-  *Cross-refs:* [`docs/org/debrief.md`](docs/org/debrief.md) (the page these rows sit on),
-  `src/Flight/StuntCapture.cs` (the writer that exists).
 
 ## Tooling, platform & docs
 
