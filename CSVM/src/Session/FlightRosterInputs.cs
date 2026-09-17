@@ -38,6 +38,10 @@ internal sealed class FlightRosterPolicy
     /// <summary>The saved targeting setting (<see cref="CSVM.Flight.TargetSelection.NearestAfterKill"/>),
     /// off by default, which is the decoded head rule.</summary>
     public bool NearestAfterKill { get; init; }
+    /// <summary>The saved automatic head turn
+    /// (<see cref="CSVM.Flight.FlightController.AutoHeadTurn"/>), null where never set, which
+    /// leaves the <c>headLook.autohead</c> config key deciding.</summary>
+    public bool? AutoHeadTurn { get; init; }
     public bool AutoFire { get; init; }
     public bool AutoFireRockets { get; init; }
     public bool CompassSqueeze { get; init; }
@@ -78,6 +82,7 @@ internal sealed class FlightRosterPolicy
         AiAttackSkillExplicit = spec.AiAttackSkillExplicit,
         Difficulty = spec.Difficulty,
         NearestAfterKill = spec.NearestAfterKill,
+        AutoHeadTurn = spec.AutoHeadTurn,
         AutoFire = spec.AutoFire,
         AutoFireRockets = spec.AutoFireRockets,
         CompassSqueeze = spec.CompassSqueeze,

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace CSVM.Flight;
 
@@ -29,6 +30,13 @@ public enum PilotViewMode
 ///, <c>PilotViewTests</c> is that test.</summary>
 public static class PilotView
 {
+    /// <summary>The three views in the order the original's Default View dropdown offers them,
+    /// which is neither the enum's order nor the cycle key's. The list is uiData 2127's, read off
+    /// the item branch at <c>0x0040d124</c> in crimson.exe: index 0 is langui 112, index 1 is
+    /// langui 136, index 2 is langui 113 (docs/org/menu-inventory.md).</summary>
+    public static readonly IReadOnlyList<PilotViewMode> Selectable =
+        new[] { PilotViewMode.Cockpit, PilotViewMode.Nose, PilotViewMode.Chase };
+
     /// <summary>Whether this mode is one of the original's two first-person views. The answer the
     /// anim data's <c>PLAYER_1ST_PERSON</c> condition (id 120) is given, and the gate every later
     /// first-person behaviour hangs off.</summary>
@@ -46,6 +54,24 @@ public static class PilotView
         _ => PilotViewMode.Cockpit,
     };
 
+    /// <summary>One step of a Default View row, <paramref name="dir"/> places along
+    /// <see cref="Selectable"/> with wrap. Separate from <see cref="Cycle"/> because that is the
+    /// flight key's own order and this is the dropdown's; a row that stepped the key's order would
+    /// walk the original's three items out of the order the original lists them in.</summary>
+    public static PilotViewMode Step(PilotViewMode mode, int dir)
+    {
+        int at = 0;
+        for (int i = 0; i < Selectable.Count; i++)
+        {
+            if (Selectable[i] == mode)
+            {
+                at = i;
+            }
+        }
+
+        return Selectable[(((at + dir) % Selectable.Count) + Selectable.Count) % Selectable.Count];
+    }
+
     /// <summary>Which view is actually in force this frame. The look-behind is a camera override
     /// outside first person only: in first person it is a head look-back that never leaves the
     /// cockpit (confirmed at the controls of the original). The numpad never appears here, in any
@@ -60,6 +86,19 @@ public static class PilotView
     /// it as one of those.</summary>
     public static PilotViewMode? Parse(string s) =>
         Named(s, PilotViewMode.Chase) ?? Named(s, PilotViewMode.Cockpit) ?? Named(s, PilotViewMode.Nose);
+
+    /// <summary>The original's own label for a view, the langui string its Default View dropdown
+    /// draws: 112 <c>IDS_VIEWCOCKPIT</c>, 136 <c>IDS_VIEWNOCOCKPIT</c>, 113 <c>IDS_VIEWCHASE</c>.
+    /// Not <see cref="Name"/>: these are the words on screen, that one is the argument spelling.
+    /// ⚠ "First Person" is the original's name for the nose view, which reads as the pair's name
+    /// rather than one of them; it is kept because it is the word the original's dropdown draws.
+    /// </summary>
+    public static string Label(PilotViewMode mode) => mode switch
+    {
+        PilotViewMode.Cockpit => "Cockpit",
+        PilotViewMode.Nose => "First Person",
+        _ => "Exterior",
+    };
 
     /// <summary>The mode's name for a log line and for <c>--view=</c>, lower case, so the
     /// breadcrumb a scripted capture reads back matches the argument that asked for it.</summary>

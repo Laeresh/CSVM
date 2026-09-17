@@ -101,11 +101,12 @@ public sealed partial class LaunchMenu : CanvasLayer
     // every category page; here they are the tail of the one list this presentation has. TUNE.
     private const int ControlsFooterRows = 3;
     // The Options screen's stepper rows, above the Controls door and the apply row. The screen is a
-    // form the cursor walks top to bottom: the three gameplay settings, the presentation and the
-    // graphics mode, then the four display settings in the order the Original presentation's VIDEO
-    // page draws them, then the two doors. Eleven rows fit the band without a window, which is why
-    // this screen has no paging rule of its own.
-    private const int OptionsStepperRows = 9;
+    // form the cursor walks top to bottom: the five gameplay settings (the three the Original
+    // presentation's GAME OPTIONS page draws, in its order, then the targeting switch and the
+    // rumble), the presentation and the graphics mode, then the four display settings in the order
+    // the Original presentation's VIDEO page draws them, then the two doors. Thirteen rows fit the
+    // band without a window, which is why this screen has no paging rule of its own.
+    private const int OptionsStepperRows = 11;
     // The Controls list's two column widths and the extra band width they need, in ems of the row
     // font and in 720p points. TUNE: measured against the longest shipped action name and the
     // longest four-control row, not decoded from anything.
@@ -194,6 +195,12 @@ public sealed partial class LaunchMenu : CanvasLayer
     private bool? _nearestAfterKillChoice;
     // The haptics setting as saved, null while never set, which the consumer reads as ON.
     private bool? _rumbleChoice;
+    // The opening view as saved, null while never set, which the flight reads as Chase. Held as the
+    // --view= word rather than the enum, the spelling the store carries.
+    private string? _defaultViewChoice;
+    // The automatic head turn as saved, null while never set, which leaves the headLook.autohead
+    // config key deciding rather than overruling it with a default of this screen's own.
+    private bool? _autoHeadTurnChoice;
     private string _presentationChoice = PresentationId.BuiltIn.Value;
     private string _graphicsChoice = GraphicsMode.Default;
     // The four display settings, stepped by the four rows under the graphics one. Each is stored as
@@ -1566,18 +1573,20 @@ public sealed partial class LaunchMenu : CanvasLayer
         switch (_screen)
         {
             case Screen.Options:
-                // The nine choice rows are steppers; the doors under them have nothing to step.
+                // The eleven choice rows are steppers; the doors under them have nothing to step.
                 switch (_optionsIndex)
                 {
                     case 0: StepDifficultyChoice(dir); return true;
-                    case 1: ToggleNearestAfterKillChoice(); return true;
-                    case 2: ToggleRumbleChoice(); return true;
-                    case 3: TogglePresentationChoice(); return true;
-                    case 4: ToggleGraphicsChoice(); return true;
-                    case 5: StepMonitorChoice(dir); return true;
-                    case 6: StepResolutionChoice(dir); return true;
-                    case 7: StepDisplayModeChoice(dir); return true;
-                    case 8: StepVSyncChoice(dir); return true;
+                    case 1: StepDefaultViewChoice(dir); return true;
+                    case 2: ToggleAutoHeadTurnChoice(); return true;
+                    case 3: ToggleNearestAfterKillChoice(); return true;
+                    case 4: ToggleRumbleChoice(); return true;
+                    case 5: TogglePresentationChoice(); return true;
+                    case 6: ToggleGraphicsChoice(); return true;
+                    case 7: StepMonitorChoice(dir); return true;
+                    case 8: StepResolutionChoice(dir); return true;
+                    case 9: StepDisplayModeChoice(dir); return true;
+                    case 10: StepVSyncChoice(dir); return true;
                     default: return false;
                 }
             case Screen.Chapter:
@@ -1677,7 +1686,8 @@ public sealed partial class LaunchMenu : CanvasLayer
                     _host.Exit(new OptionsApplyExit(new PresentationId(_presentationChoice), _graphicsChoice,
                         Difficulty.Word(_difficultyChoice), _monitorChoice, _resolutionChoice,
                         _displayModeChoice, _vsyncChoice, _audioMasterChoice, _audioMusicChoice,
-                        _audioEffectsChoice, _audioVoiceChoice, _nearestAfterKillChoice, _rumbleChoice));
+                        _audioEffectsChoice, _audioVoiceChoice, _nearestAfterKillChoice, _rumbleChoice,
+                        _defaultViewChoice, _autoHeadTurnChoice));
                 }
 
                 break;
@@ -2591,6 +2601,8 @@ public sealed partial class LaunchMenu : CanvasLayer
         _difficultyChoice = Difficulty.Parse(saved.Difficulty) ?? Difficulty.Normal;
         _nearestAfterKillChoice = saved.NearestAfterKill;
         _rumbleChoice = saved.Rumble;
+        _defaultViewChoice = saved.DefaultView;
+        _autoHeadTurnChoice = saved.AutoHeadTurn;
         _presentationChoice = saved.MenuPresentation ?? PresentationId.Original.Value;
         _graphicsChoice = saved.GraphicsMode ?? GraphicsMode.Default;
         _monitorChoice = saved.MonitorIndex;
@@ -2884,6 +2896,22 @@ public sealed partial class LaunchMenu : CanvasLayer
     // A three-way stepper with wrap, Normal / Hard / Hardest in the campaign selector's order.
     private void StepDifficultyChoice(int dir) =>
         _difficultyChoice = ((Difficulty.Clamp(_difficultyChoice) + dir) % 3 + 3) % 3;
+
+    // A three-way stepper with wrap over PilotView.Selectable, the order the original's own Default
+    // View dropdown offers. A never-set view steps from Chase, which is what its absence reads as.
+    private void StepDefaultViewChoice(int dir) =>
+        _defaultViewChoice = PilotView.Name(PilotView.Step(
+            PilotView.Parse(_defaultViewChoice ?? "") ?? PilotViewMode.Chase, dir));
+
+    private string DefaultViewChoiceLabel() =>
+        PilotView.Label(PilotView.Parse(_defaultViewChoice ?? "") ?? PilotViewMode.Chase);
+
+    // A two-way toggle over a setting the flight reads three ways: on, off, and never set, which
+    // leaves the headLook.autohead config key deciding. A first press turns it on, since the key
+    // ships off, so a press has to change something.
+    private void ToggleAutoHeadTurnChoice() => _autoHeadTurnChoice = _autoHeadTurnChoice != true;
+
+    private string AutoHeadTurnChoiceLabel() => _autoHeadTurnChoice == true ? "On" : "Off";
 
     // A two-way toggle. A never-set field steps to on, since off is what its absence already reads
     // as and a first press has to change something.
@@ -3497,15 +3525,17 @@ public sealed partial class LaunchMenu : CanvasLayer
             Screen.Options => index switch
             {
                 0 => $"Difficulty: {Difficulty.Label(_difficultyChoice)}",
-                1 => $"Nearest target after a kill: {NearestAfterKillChoiceLabel()}",
-                2 => $"Controller rumble: {RumbleChoiceLabel()}",
-                3 => $"Menu presentation: {PresentationChoiceLabel()}",
-                4 => $"Graphics: {GraphicsChoiceLabel()}",
-                5 => $"Monitor: {MonitorChoiceLabel()}",
-                6 => $"Resolution: {ResolutionChoiceLabel()}",
-                7 => $"Display mode: {DisplayModeChoiceLabel()}",
-                8 => $"V-Sync: {VSyncChoiceLabel()}",
-                9 => ControlsRow,
+                1 => $"Default View: {DefaultViewChoiceLabel()}",
+                2 => $"Auto Head Turn: {AutoHeadTurnChoiceLabel()}",
+                3 => $"Nearest target after a kill: {NearestAfterKillChoiceLabel()}",
+                4 => $"Controller rumble: {RumbleChoiceLabel()}",
+                5 => $"Menu presentation: {PresentationChoiceLabel()}",
+                6 => $"Graphics: {GraphicsChoiceLabel()}",
+                7 => $"Monitor: {MonitorChoiceLabel()}",
+                8 => $"Resolution: {ResolutionChoiceLabel()}",
+                9 => $"Display mode: {DisplayModeChoiceLabel()}",
+                10 => $"V-Sync: {VSyncChoiceLabel()}",
+                11 => ControlsRow,
                 _ => "Apply and restart the menu",
             },
             Screen.Controls => $"{ControlsRowLabel(index)}   {ControlsRowValue(index)}",
@@ -3826,15 +3856,17 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.Options => focus switch
         {
             0 => "Select the difficulty level for a solo campaign. Enemy armour and health scale with it at spawn.",
-            1 => "Take the nearest target after a kill instead of the first of the list.",
-            2 => "Rumble the gamepad for guns, launches, hits, the nitro and a dive past the rated maximum.",
-            3 => "Built-in needs no extracted menu art; Original draws the original's own screens from it.",
-            4 => GraphicsDetail(),
-            5 => "Select the monitor the game opens on. Applied on the way out, before the size.",
-            6 => ResolutionDetail(),
-            7 => "Select how the window sits on the screen. Borderless leaves the desktop beneath it.",
-            8 => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap.",
-            9 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
+            1 => "Select your default view. A --view= on the command line still outranks it.",
+            2 => "Select to turn your head automatically as your aircraft turns. Cockpit views only.",
+            3 => "Take the nearest target after a kill instead of the first of the list.",
+            4 => "Rumble the gamepad for guns, launches, hits, the nitro and a dive past the rated maximum.",
+            5 => "Built-in needs no extracted menu art; Original draws the original's own screens from it.",
+            6 => GraphicsDetail(),
+            7 => "Select the monitor the game opens on. Applied on the way out, before the size.",
+            8 => ResolutionDetail(),
+            9 => "Select how the window sits on the screen. Borderless leaves the desktop beneath it.",
+            10 => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap.",
+            11 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
             _ => "Saves every choice and restarts the menu at its top level; unfinished setup is discarded.",
         },
         Screen.Controls => ControlsDetail(focus),

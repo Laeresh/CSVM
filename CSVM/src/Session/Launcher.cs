@@ -1423,7 +1423,8 @@ public partial class Launcher : Node3D
         // The saved gameplay options, read at every launch so an Options apply reaches the next
         // flight in the same process. The flag and --det rules are the spec's own.
         var saved = OptionsStore.UserOptions().Load();
-        _spec = _spec.WithSavedDifficulty(saved.Difficulty).WithSavedNearestAfterKill(saved.NearestAfterKill);
+        _spec = _spec.WithSavedDifficulty(saved.Difficulty).WithSavedNearestAfterKill(saved.NearestAfterKill)
+            .WithSavedDefaultView(saved.DefaultView).WithSavedAutoHeadTurn(saved.AutoHeadTurn);
         LoadProgress.Report(LoadStep.RenderState);
         // Set per launch, not once at startup: a relaunch can change chapter, and the original
         // re-sources the new chapter's adjust.gw at the same point.
@@ -1808,7 +1809,9 @@ public partial class Launcher : Node3D
     // The options file's one writer, shared by the menu's apply above and by the pause leaf's:
     // every choice the screen took saved, then the display settings and the mix applied now.
     // ⚠ The graphics word is saved and nothing more. GraphicsMode resolves once at launch, so the
-    // choice reaches the world on the next start; do not rebuild the world here.
+    // choice reaches the world on the next start; do not rebuild the world here. The opening view
+    // and the automatic head turn are saved and no more for the same reason: both are read when a
+    // flight is built, so a pause-sheet change takes the next sortie rather than this one.
     private void PersistOptions(OptionsApplyExit applied)
     {
         var requested = applied.Presentation;
@@ -1819,6 +1822,8 @@ public partial class Launcher : Node3D
         options.Difficulty = applied.Difficulty;
         options.NearestAfterKill = applied.NearestAfterKill;
         options.Rumble = applied.Rumble;
+        options.DefaultView = applied.DefaultView;
+        options.AutoHeadTurn = applied.AutoHeadTurn;
         options.MonitorIndex = applied.MonitorIndex;
         options.Resolution = applied.Resolution;
         options.DisplayMode = applied.DisplayMode;

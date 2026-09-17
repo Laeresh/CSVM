@@ -207,7 +207,8 @@ The three views a pilot can SELECT, valued as the engine's own camera modes (Cha
 Nose 7), and `PilotView`, the pure rules over them: the cycle key's three-stop order, the
 first-person test the anim data's `PLAYER_1ST_PERSON` condition is answered with, the view in force
 this frame (a held look-behind is an external pose outside first person and a head look-back inside
-it), and the `--view=` spelling. Engine-free, so the decisions unit-test without a camera, while
+it), and the `--view=` spelling. It also holds the selectable list, the label and the step both Options screens draw the Default View row from, so one vocabulary serves the camera and the menus.
+Engine-free, so the decisions unit-test without a camera, while
 `CameraController` holds the state and the `Camera3D` they act on. Decode:
 [../org/cameraViews.md](../org/cameraViews.md).
 

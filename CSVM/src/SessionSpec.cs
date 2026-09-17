@@ -569,6 +569,16 @@ public sealed record SessionSpec
     /// pilot flies in and the one the cycle key changes. Dropped outside flight, like
     /// <see cref="View"/>.</summary>
     public Flight.PilotViewMode ViewMode { get; private set; }
+    /// <summary>Whether <see cref="ViewMode"/> came from a <c>--view=</c> naming a mode rather than
+    /// from the default. Held because Chase is both the default and a nameable mode, so the value
+    /// alone cannot say whether the command line asked for it, and
+    /// <see cref="WithSavedDefaultView"/> must not overrule a <c>--view=chase</c>.</summary>
+    public bool ViewModeExplicit { get; private set; }
+    /// <summary>Whether the pilot's head turns with the aircraft in the cockpit, as the options
+    /// file has it; null where never set, which leaves the <c>headLook.autohead</c> config key
+    /// deciding (<see cref="Flight.FlightController.AutoHeadTurn"/>). Dropped under
+    /// <c>--det</c> like every other saved option.</summary>
+    public bool? AutoHeadTurn { get; private set; }
     /// <summary>The <c>--look=x,y</c> right-stick deflection held for the whole
     /// run, both in [−1, 1], +x right and +y up: the scripted twin of pushing the look stick, and
     /// the only way a headless run aims it. Drives the chase camera's swing and the first-person
@@ -1327,6 +1337,7 @@ public sealed record SessionSpec
                 if (Flight.PilotView.Parse(want) is { } mode)
                 {
                     s.ViewMode = mode;
+                    s.ViewModeExplicit = true;
                 }
                 else
                 {
@@ -1447,6 +1458,30 @@ public sealed record SessionSpec
     /// flight without a restart.</summary>
     public SessionSpec WithSavedNearestAfterKill(bool? saved) =>
         Det || saved is not { } on ? this : this with { NearestAfterKill = on };
+
+    /// <summary>The saved opening view folded in, the difficulty's own rules with <c>--view=</c> in
+    /// the flag's place: a command line naming a mode beats the saved word, a word
+    /// <see cref="CSVM.Flight.PilotView.Parse"/> refuses (or null) changes nothing, and a
+    /// <c>--det</c> run reads no saved option. Not folded outside <see cref="Fly"/>, since the two
+    /// first-person views sit on a flown aircraft's camera and the other modes have cameras of
+    /// their own; it runs after <c>Validate</c>, so it keeps that rule rather than warning.</summary>
+    public SessionSpec WithSavedDefaultView(string? savedWord)
+    {
+        if (ViewModeExplicit || Det || !Fly
+            || CSVM.Flight.PilotView.Parse(savedWord ?? string.Empty) is not { } saved)
+        {
+            return this;
+        }
+
+        return this with { ViewMode = saved };
+    }
+
+    /// <summary>The saved automatic head turn folded in, on
+    /// <see cref="WithSavedNearestAfterKill"/>'s rules: nothing on the command line names it, a
+    /// never-set field leaves the <c>headLook.autohead</c> config key deciding, and a <c>--det</c>
+    /// run reads no saved option.</summary>
+    public SessionSpec WithSavedAutoHeadTurn(bool? saved) =>
+        Det || saved is not { } on ? this : this with { AutoHeadTurn = on };
 
     /// <summary>Parse <c>--plane=</c>: one node name, or a comma-separated list, one plane per
     /// player for splitscreen (the launchscreen's simultaneous pick produces the same list).</summary>

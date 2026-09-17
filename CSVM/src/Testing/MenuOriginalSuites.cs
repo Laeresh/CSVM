@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using CSVM.UI;
@@ -26,6 +27,14 @@ internal static class MenuOriginalSuites
     // its art starts at authored x 558 and is 114 wide, so a chip row in the corner clears this.
     private const float BookTabRight = 672f;
 
+    // The corner the [@GameOptions@] section authors its plate at, the art's own height, the pitch
+    // between its row panels and the line its two plaques stand on. Held here rather than read off
+    // the layout so the check has something of its own to compare the composed page against.
+    private const float AuthoredPlateY = 215f;
+    private const float AuthoredPlateHeight = 289f;
+    private const float AuthoredGameOptionPitch = 62f;
+    private const float AuthoredPlaqueY = 457f;
+
     private static readonly MenuCommands Accept = new() { Accept = true };
     private static readonly MenuCommands Down = new() { MoveY = 1 };
     private static readonly MenuCommands Up = new() { MoveY = -1 };
@@ -42,7 +51,8 @@ internal static class MenuOriginalSuites
         + "click on the door opens Free Flight, keyboard frames pick a chapter and an airframe and "
         + "FLY leaves as one LaunchExit, the return re-enters the top level, PREFERENCES and its "
         + "GAME OPTIONS door open the decoded page whose Difficulty dropdown stands first and whose "
-        + "three rows take every choice and whose CANCEL CHANGES drops them, a wheel step over the "
+        + "six rows take every choice on a plate grown a band to hold them and whose CANCEL CHANGES "
+        + "drops them, a wheel step over the "
         + "aircraft column and over Instant Action's contents window moves each one row and clamps "
         + "at the head, a drag down each thumb's track lands the window on its last row without "
         + "activating what the click stood over, and the contents arrows still step it, seat 0 steering with a "
@@ -51,12 +61,13 @@ internal static class MenuOriginalSuites
         + "seat strip with two seats and none with one, drawn as Built-in's own chip row in the "
         + "top-right corner clear of the book tab, a switch to Built-in "
         + "from mid-setup discards the pick and shows Built-in's Mode screen, a switch back starts "
-        + "Original fresh, Built-in's Options route steps the difficulty, the targeting setting on "
-        + "and back off, the rumble toggle off, the two other choices and "
+        + "Original fresh, Built-in's Options route steps the difficulty, the opening view, the "
+        + "automatic head turn, the targeting setting on and back off, the rumble toggle off, the "
+        + "two other choices and "
         + "its four display rows over the machine's own screens and sizes, the two vocabularies and "
         + "a wrap onto the last frame cap, "
         + "opens and leaves the rebinding screen behind its Controls door and emits the apply exit "
-        + "carrying all nine, Original's VIDEO door opens the decoded page on its Display Mode dropdown "
+        + "carrying all eleven, Original's VIDEO door opens the decoded page on its Display Mode dropdown "
         + "which fits its authored window and draws no bar, over the V-Sync one whose five words "
         + "window into four with the arrows and the thumb inside the box's right edge and the fifth "
         + "kept for the walk but unseen and unhit, that list wheeling and dragging like any other "
@@ -447,10 +458,10 @@ internal static class MenuOriginalSuites
     }
 
     // Built-in's Options route: the last Mode row opens Options, Right steps the difficulty to
-    // Hard, Right on the row under it steps the presentation to Original, Right on the next steps
-    // the graphics mode, the four display rows under those step over the machine's own screens and
-    // sizes, and the apply row's Accept leaves as the one exit the launcher persists every choice
-    // from.
+    // Hard, the two rows under it step the opening view and the automatic head turn, the two under
+    // those the targeting setting and the rumble, then the presentation and the graphics mode, the
+    // four display rows step over the machine's own screens and sizes, and the apply row's Accept
+    // leaves as the one exit the launcher persists every choice from.
     private static void BuiltInOptionsRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, List<MenuExit> exits)
     {
         var menu = (host.Active as BuiltInPresentation)?.Menu;
@@ -462,13 +473,25 @@ internal static class MenuOriginalSuites
         Press(host, seat, Up);
         ctx.Check(menu.ShownRowText == LaunchMenu.OptionsRow, $"Up from Free Flight wraps onto Options ({menu.ShownRowText})");
         Press(host, seat, Accept);
-        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 11 && menu.ShownRowText == "Difficulty: Normal",
-            $"Accept opens the Options screen with its eleven rows, the difficulty stepper first ({menu.ShownScreen}, {menu.ShownRowCount}, {menu.ShownRowText})");
+        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 13 && menu.ShownRowText == "Difficulty: Normal",
+            $"Accept opens the Options screen with its thirteen rows, the difficulty stepper first ({menu.ShownScreen}, {menu.ShownRowCount}, {menu.ShownRowText})");
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == "Difficulty: Hard", $"Right steps the difficulty to Hard ({menu.ShownRowText})");
         Press(host, seat, Down);
+        ctx.Check(menu.ShownRowText == "Default View: Exterior",
+            $"the second row is the opening view, unsaved showing the chase view the flight already opens in ({menu.ShownRowText})");
+        Press(host, seat, Right);
+        ctx.Check(menu.ShownRowText == "Default View: Cockpit",
+            $"Right wraps onto the first of the original's own three views ({menu.ShownRowText})");
+        Press(host, seat, Down);
+        ctx.Check(menu.ShownRowText == "Auto Head Turn: Off",
+            $"the third row is the head turn, unsaved showing the Off the headLook.autohead key ships ({menu.ShownRowText})");
+        Press(host, seat, Right);
+        ctx.Check(menu.ShownRowText == "Auto Head Turn: On",
+            $"Right turns it on ({menu.ShownRowText})");
+        Press(host, seat, Down);
         ctx.Check(menu.ShownRowText == "Nearest target after a kill: Off",
-            $"the second row is the targeting setting, unsaved showing the decoded Off ({menu.ShownRowText})");
+            $"the fourth row is the targeting setting, unsaved showing the decoded Off ({menu.ShownRowText})");
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == "Nearest target after a kill: On",
             $"Right turns it on ({menu.ShownRowText})");
@@ -477,7 +500,7 @@ internal static class MenuOriginalSuites
             $"and Right again turns it back off ({menu.ShownRowText})");
         Press(host, seat, Down);
         ctx.Check(menu.ShownRowText == "Controller rumble: On",
-            $"the third row is the rumble toggle, unsaved showing the default On ({menu.ShownRowText})");
+            $"the fifth row is the rumble toggle, unsaved showing the default On ({menu.ShownRowText})");
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == "Controller rumble: Off",
             $"Right turns the rumble off ({menu.ShownRowText})");
@@ -495,7 +518,7 @@ internal static class MenuOriginalSuites
         string graphics = menu.ShownRowText.EndsWith("Enhanced", System.StringComparison.Ordinal) ? "enhanced" : "original";
         var display = BuiltInDisplayRows(ctx, host, seat, menu);
         Press(host, seat, Down);
-        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow, $"the tenth row is the Controls door ({menu.ShownRowText})");
+        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow, $"the twelfth row is the Controls door ({menu.ShownRowText})");
         Press(host, seat, Accept);
         ctx.Check(menu.ShownScreen == "Controls" && menu.ShownRowCount > 2,
             $"which opens the rebinding screen over a seat's own keymap ({menu.ShownScreen}, {menu.ShownRowCount} rows)");
@@ -509,8 +532,10 @@ internal static class MenuOriginalSuites
         if (exits.Count == 2 && exits[1] is OptionsApplyExit applied)
         {
             ctx.Check(applied.Presentation.Value == chosen && applied.Graphics == graphics && applied.Difficulty == "hard"
-                && applied.NearestAfterKill == false && applied.Rumble == false,
-                $"carrying every stepped choice, the targeting setting stepped back off and the rumble turned off among them ({applied.Presentation}, {applied.Graphics}, {applied.Difficulty}, {applied.NearestAfterKill}, {applied.Rumble})");
+                && applied.NearestAfterKill == false && applied.Rumble == false
+                && applied.DefaultView == CSVM.Flight.PilotView.Name(CSVM.Flight.PilotViewMode.Cockpit)
+                && applied.AutoHeadTurn == true,
+                $"carrying every stepped choice, the targeting setting stepped back off, the rumble turned off, the opening view and the head turn among them ({applied.Presentation}, {applied.Graphics}, {applied.Difficulty}, {applied.NearestAfterKill}, {applied.Rumble}, {applied.DefaultView ?? "none"}, {applied.AutoHeadTurn})");
             ctx.Check(applied.MonitorIndex == display.Monitor && applied.Resolution == display.Resolution
                 && applied.DisplayMode == display.DisplayMode && applied.VSync == display.VSync,
                 $"and all four display settings the rows stepped ({applied.MonitorIndex}, {applied.Resolution}, {applied.DisplayMode}, {applied.VSync})");
@@ -535,7 +560,7 @@ internal static class MenuOriginalSuites
         int standing = MonitorSetting.Resolve(null, screens).Screen;
         Press(host, seat, Down);
         ctx.Check(menu.ShownRowText == $"Monitor: {screens.Labels[standing]}",
-            $"the fourth row is the monitor, an unsaved index showing the screen the window stands on ({menu.ShownRowText})");
+            $"the sixth row is the monitor, an unsaved index showing the screen the window stands on ({menu.ShownRowText})");
         Press(host, seat, Right);
         int stepped = DisplaySettingRows.Step(standing, 1, screens.Labels.Count);
         ctx.Check(menu.ShownRowText == $"Monitor: {screens.Labels[stepped]}",
@@ -545,7 +570,7 @@ internal static class MenuOriginalSuites
         Press(host, seat, Down);
         string opened = menu.ShownRowText;
         ctx.Check(opened == $"Resolution: {sizes.Fallback}",
-            $"the fifth row is the resolution, showing the screen's own size ({opened})");
+            $"the seventh row is the resolution, showing the screen's own size ({opened})");
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == opened,
             $"which the shipped borderless mode pins, so Right steps it nowhere ({menu.ShownRowText})");
@@ -554,7 +579,7 @@ internal static class MenuOriginalSuites
 
         Press(host, seat, Down);
         ctx.Check(menu.ShownRowText == "Display mode: Borderless",
-            $"the sixth row is the display mode, unsaved showing the shipped borderless default ({menu.ShownRowText})");
+            $"the eighth row is the display mode, unsaved showing the shipped borderless default ({menu.ShownRowText})");
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == "Display mode: Fullscreen",
             $"Right steps it one word along the vocabulary ({menu.ShownRowText})");
@@ -569,7 +594,7 @@ internal static class MenuOriginalSuites
         Press(host, seat, Down);
 
         Press(host, seat, Down);
-        ctx.Check(menu.ShownRowText == "V-Sync: Off", $"the seventh row is V-Sync, unsaved showing the shipped Off ({menu.ShownRowText})");
+        ctx.Check(menu.ShownRowText == "V-Sync: Off", $"the ninth row is V-Sync, unsaved showing the shipped Off ({menu.ShownRowText})");
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == "V-Sync: 60 FPS",
             $"Right steps it onto the first cap ({menu.ShownRowText})");
@@ -598,8 +623,9 @@ internal static class MenuOriginalSuites
     }
 
     // Original's own Options route over the install's decoded sections: PREFERENCES opens the
-    // Preferences page, its GAME OPTIONS door the decoded page, whose three rows take every choice
-    // and whose CANCEL CHANGES drops them; the walk leaves the top level as it found it.
+    // Preferences page, its GAME OPTIONS door the decoded page, whose rows take every choice and
+    // whose CANCEL CHANGES drops them; the walk leaves the top level as it found it. The first
+    // three rows are the original's own, in its order, the three after them this port's.
     private static void OriginalOptionsRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, List<MenuExit> exits)
     {
         WalkTo(host, seat, shell, "MM_B_PREFERENCES");
@@ -613,10 +639,12 @@ internal static class MenuOriginalSuites
         int titles = 0;
         foreach (var line in board.Lines)
         {
-            titles += line.Text is "GAME OPTIONS" or "Difficulty" or "Menu" or "Next Target" ? 1 : 0;
+            titles += line.Text is "GAME OPTIONS" or "Difficulty" or "Default View" or "Auto Head Turn"
+                or "Menu" or "Next Target" or "Rumble" ? 1 : 0;
         }
 
-        ctx.Check(titles == 4, $"drawing the section's own tab title over the three row titles ({titles} of 4)");
+        ctx.Check(titles == 7, $"drawing the section's own tab title over the six row titles ({titles} of 7)");
+        OriginalGameOptionsPlate(ctx, shell, board);
         Press(host, seat, Accept);
         ctx.Check(shell.Options.OpenGameOption == OriginalOptionsScreen.DifficultyKey && shell.Rows.Count == 3
             && List(shell, OriginalOptionsScreen.DifficultyKey) == null,
@@ -626,6 +654,20 @@ internal static class MenuOriginalSuites
         ctx.Check(shell.Options.DifficultyChoice == CSVM.Flight.Difficulty.Hard && shell.FocusedKey == OriginalOptionsScreen.DifficultyKey,
             $"and picking the second closes it on Hard ({shell.Options.DifficultyChoice}, {shell.FocusedKey})");
         Press(host, seat, Down);
+        Press(host, seat, Accept);
+        ctx.Check(shell.Options.OpenGameOption == OriginalOptionsScreen.DefaultViewKey && shell.Rows.Count == 3,
+            $"Accept on the Default View row under it opens the dropdown over the original's three views ({shell.Options.OpenGameOption}, {shell.Rows.Count})");
+        // The list opens on the item the row stands at, which with nothing saved is the last of the
+        // three, so one step down wraps onto the first.
+        Press(host, seat, Down);
+        Press(host, seat, Accept);
+        ctx.Check(shell.Options.DefaultViewChoice == CSVM.Flight.PilotView.Name(CSVM.Flight.PilotViewMode.Cockpit),
+            $"and a step down wraps onto the list's own first view and picks it ({shell.Options.DefaultViewChoice ?? "none"})");
+        Press(host, seat, Down);
+        Press(host, seat, Accept);
+        ctx.Check(shell.Options.AutoHeadTurnChoice == true && shell.FocusedKey == OriginalOptionsScreen.AutoHeadTurnKey,
+            $"Accept on the Auto Head Turn checkbox under it turns the head turn on ({shell.Options.AutoHeadTurnChoice})");
+        WalkTo(host, seat, shell, OriginalOptionsScreen.PresentationKey);
         Press(host, seat, Accept);
         ctx.Check(shell.Options.OpenGameOption == OriginalOptionsScreen.PresentationKey && shell.Rows.Count == 2,
             $"Accept on the Menu row under it opens the dropdown over the two shipped presentations ({shell.Options.OpenGameOption}, {shell.Rows.Count})");
@@ -640,13 +682,73 @@ internal static class MenuOriginalSuites
         WalkTo(host, seat, shell, OriginalOptionsScreen.GameOptionsCancelKey);
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.Options && shell.Options.PresentationChoice == PresentationId.Original.Value
-            && shell.Options.DifficultyChoice == CSVM.Flight.Difficulty.Normal && shell.Options.NearestAfterKillChoice == null,
-            $"CANCEL CHANGES lands back on Preferences with every edit dropped ({shell.Screen}, {shell.Options.PresentationChoice}, {shell.Options.DifficultyChoice}, {shell.Options.NearestAfterKillChoice})");
+            && shell.Options.DifficultyChoice == CSVM.Flight.Difficulty.Normal && shell.Options.NearestAfterKillChoice == null
+            && shell.Options.DefaultViewChoice == null && shell.Options.AutoHeadTurnChoice == null,
+            $"CANCEL CHANGES lands back on Preferences with every edit dropped ({shell.Screen}, {shell.Options.PresentationChoice}, {shell.Options.DifficultyChoice}, {shell.Options.NearestAfterKillChoice}, {shell.Options.DefaultViewChoice ?? "none"}, {shell.Options.AutoHeadTurnChoice})");
         WalkTo(host, seat, shell, OriginalShell.OptionsBackKey);
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.TopLevel && exits.Count == 1,
             $"and RETURN TO MAIN MENU leaves the page without an exit ({shell.Screen}, {exits.Count})");
         WalkTo(host, seat, shell, OriginalShell.FreeFlightKey);
+    }
+
+    // The grown plate and what stands on it: the page carries more rows than the section's three, so
+    // the plate is drawn as a head, the repeated row band and a tail instead of one picture, it
+    // reaches a whole band further down than the art it is cut from, the two plaques stand that same
+    // band below their authored line, and no row's own reach crosses the moved plaque line.
+    private static void OriginalGameOptionsPlate(TestContext ctx, OriginalShell shell, ComposedBoard board)
+    {
+        var plate = new List<BoardPicture>();
+        foreach (var picture in board.Backdrop)
+        {
+            if (picture.Art.Name.Equals("GO_BackGround.png", StringComparison.OrdinalIgnoreCase))
+            {
+                plate.Add(picture);
+            }
+        }
+
+        float top = float.MaxValue;
+        float bottom = 0f;
+        bool cropped = plate.Count > 0;
+        foreach (var picture in plate)
+        {
+            cropped &= picture.Crop is { } crop && crop.Height > 0f && picture.Width == 0f && picture.Height == 0f;
+            top = Math.Min(top, picture.Y);
+            bottom = Math.Max(bottom, picture.Y + (picture.Crop?.Height ?? 0f));
+        }
+
+        ctx.Check(plate.Count >= 4 && cropped,
+            $"the plate is tiled from crops of its own art rather than drawn once or stretched ({plate.Count} pieces, crops {cropped})");
+        ctx.Check(Math.Abs(top - AuthoredPlateY) < 0.5f && Math.Abs(bottom - (AuthoredPlateY + AuthoredPlateHeight + AuthoredGameOptionPitch)) < 0.5f,
+            $"standing at its authored corner and reaching one whole band further down ({top}, {bottom})");
+
+        float accept = RowY(shell, OriginalOptionsScreen.GameOptionsAcceptKey);
+        float cancel = RowY(shell, OriginalOptionsScreen.GameOptionsCancelKey);
+        ctx.Check(Math.Abs(accept - (AuthoredPlaqueY + AuthoredGameOptionPitch)) < 0.5f && Math.Abs(cancel - accept) < 0.5f,
+            $"with ACCEPT CHANGES and CANCEL CHANGES that same band below their authored line ({accept}, {cancel})");
+
+        float lowest = 0f;
+        foreach (var row in shell.Rows)
+        {
+            lowest = row.Key is OriginalOptionsScreen.GameOptionsAcceptKey or OriginalOptionsScreen.GameOptionsCancelKey
+                ? lowest : Math.Max(lowest, row.Y + row.Height);
+        }
+
+        ctx.Check(lowest > 0f && lowest <= accept,
+            $"and no option row reaching past that line, which would take one press for two rows ({lowest} of {accept})");
+    }
+
+    private static float RowY(OriginalShell shell, string key)
+    {
+        foreach (var row in shell.Rows)
+        {
+            if (row.Key == key)
+            {
+                return row.Y;
+            }
+        }
+
+        return -1f;
     }
 
     // Walks the focus down onto a row by key, the keyboard's own way there.

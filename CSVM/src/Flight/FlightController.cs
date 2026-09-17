@@ -424,6 +424,14 @@ public partial class FlightController : Node3D
     /// cycle key changes it; this field only seeds it.</summary>
     public PilotViewMode PinnedViewMode = PilotViewMode.Chase;
 
+    /// <summary>The Auto Head Turn option as the options file has it, the original's own GAME
+    /// OPTIONS checkbox: true turns the head with the aircraft in the cockpit, false leaves it
+    /// straight ahead.
+    /// ⚠ Null, the default, is "never set" and leaves the <c>headLook.autohead</c> config key
+    /// deciding, which ships OFF (<see cref="Utils.Config"/>). The row exposes that key rather than
+    /// replacing it, so a build with no options file behaves byte for byte as before.</summary>
+    public bool? AutoHeadTurn;
+
     /// <summary>The right-stick deflection held for the whole run (<c>--look=x,y</c>, +x right and
     /// +y up), the scripted twin of pushing the look stick. Zero (the default) is a centred stick,
     /// exactly today's behaviour; a live stick wins while deflected, the rule a held numpad key
@@ -4646,7 +4654,7 @@ public partial class FlightController : Node3D
     private (float Elevation, float Azimuth)? AutoheadTarget()
     {
         if (_cam == null || _cam.ViewMode != PilotViewMode.Cockpit
-            || !Config.GetBool("headLook.autohead", false))
+            || !(AutoHeadTurn ?? Config.GetBool("headLook.autohead", false)))
         {
             return null;
         }

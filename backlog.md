@@ -1041,35 +1041,32 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the one with no width, which is the shape of a short label rather than a name. *Cross-refs:*
   `BL-764`'s landing (`git log --grep=BL-764`), which settled the same screen's buttons.
 
-- `BL-784` `[Feature]` `[L]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The Game Options page drops the original's own Default View and
-  Auto Head Turn rows, and neither presentation offers either setting.** *Decision:* a taller
-  plate holding four rows, the original's three plus the remake-only Menu row, drawn from the one
-  plate image by stretching or tiling and recorded as a remake reading in
-  `docs/org/menu-inventory.md`. *Evidence:* the section
-  authors three option rows, Difficulty (`GO_D_DIFFICULTY`), Default View (`GO_T_VIEWTITLE` and
-  `GO_T_VIEWDESC` over the `GO_D_VIEW` dropdown) and Auto Head Turn (`GO_T_HEADTITLE` and
-  `GO_T_HEADDESC` over the `GO_B_HEADTURN` checkbox). The port's table carries Difficulty and the
-  remake-only Menu row alone, while `ReadGameOptionsPage` already reads both dropped rows' widgets
-  for the page's row shape (`CSVM/src/UI/Menu/Original/OriginalOptionsScreen.cs`), so the geometry is
-  present and the options are not. Both settings exist in the engine with no way to them: autohead
-  runs behind the `headLook.autohead` config key, default off
-  (`CSVM/src/Utils/Config.cs:224-227`, `CSVM/src/Flight/FlightController.cs:3796-3806`), and the
-  opening view is `PilotViewMode.Chase` seeded only by `--view=`
-  (`CSVM/src/Flight/CameraController.cs:162-185`). Built-in's Options screen shows neither.
-  *Fix shape:* two entries in the `GameOptions` table with the store fields behind them, the same two
-  rows on Built-in's Options screen in its stepper convention, and each setting read where it is
-  decided, the autohead gate and the flight's opening view.
-  *⚠ Traps:* (a) **The plate holds three rows and the port already spends two.** A fourth row at
-  the authored 62-pixel pitch from the first row's Y 283 reaches the plaque row at Y 457, so the
-  plaque row and everything under it move down by one pitch with the plate; keep the 62-pixel
-  pitch rather than squeezing four rows into three rows' height, and pick stretch or tile by which
-  survives the plate's border art (`docs/org/menu-inventory.md`'s GameOptions row). (b) **The Default View dropdown's words are not
-  decoded.** `docs/org/cameraViews.md` has the options menu labelling camera positions "external"
-  (`MSG_OPT_3RD_PERSON`), "cockpit" (`MSG_OPT_COCKPIT`) and "default view" (`MSG_OPT_DEF_VIEW`),
-  which is a lead and not `GO_D_VIEW`'s item list, and this port's own views are Chase, Cockpit and
-  Nose. (c) A row does not settle autohead's port decision: its default is off because the original's
-  cockpit footage reads that way, while `BL-924` records that at the controls the original's cockpit
-  view does turn the head and ours does not.
+- `BL-784` `[Feature]` `[Blocked: a user decision on the page's row budget]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The Game Options
+  page carries the original's Default View and Auto Head Turn rows, and holds six rows where the
+  plate holds four at the authored pitch.** *Decision:* the taller plate is built, tiled from the
+  one plate image and recorded in `docs/org/menu-inventory.md`; what is open is which rows the
+  page keeps. *Evidence:* the settings side stands. Both rows are entries in the `GameOptions`
+  table with `OptionsDef.DefaultView` and `OptionsDef.AutoHeadTurn` behind them, both rows stand
+  on Built-in's Options screen in its stepper convention, `SessionSpec.WithSavedDefaultView` and
+  `WithSavedAutoHeadTurn` fold them into a launch (a `--view=` outranking the saved word through
+  `ViewModeExplicit`, a `--det` run reading neither), and `FlightController.AutoHeadTurn` gates the
+  automatic turn with null leaving the `headLook.autohead` config key deciding, so no default
+  moves. The dropdown's words are the original's own: `uiData` 2127 at `0x0040d124` builds exactly
+  three items (`0x0040d12d`), langui 112 "Cockpit", 136 "First Person" and 113 "Exterior"
+  (`0x0040d181`, `0x0040d168`, `0x0040d14d`), and `FUN_00419160` maps those indices to camera
+  modes 6, 7 and 0 at `0x004191a4` while turning the autohead flag `DAT_0071dacc` on at
+  `0x00419180`. The plate grows one whole 62-pixel band, tiled from the band between its own
+  seams rather than stretched, and the plaques move down with it. **What is open is the row
+  budget.** `GO_BACKGROUND` stands at Y 215 and is 566x289, so its bottom sits at 504 and only one
+  62-pixel band fits inside the authored 600; the plate cannot move up either, `PF_LOGO` already
+  ending at 253 over its top. Four rows then fit at the authored 62 and the page carries six
+  (Difficulty, Default View, Auto Head Turn, Menu, Next Target, Rumble), so the pitch tightens to
+  40 and the rows no longer sit on the painted panels, which the renders beside
+  `git log --grep=BL-784` show. *Fix shape:* the user picks one of three: keep the squeeze, move
+  the remake-only Next Target and Rumble rows off this page (a second page, or the pause sheet),
+  or page the rows four at a time. *⚠ Traps:* (a) do not stretch the plate to buy room, the
+  stretch pulls the rivet holes into ovals and thins the panel edges. (b) Do not move autohead's
+  default: the row exposes the existing key, and `BL-924` is where the default itself is argued.
   *Cross-refs:* `BL-924` (the missing automatic head turn), `BL-782` (the same
   both-presentations gap for the audio levels), `git log --grep=BL-783` (the display settings' half,
   closed with four rows on Built-in's screen), `docs/org/menu-inventory.md`,

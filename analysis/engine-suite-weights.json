@@ -255,6 +255,7 @@
     "nulled-launch": 0.027,
     "options-difficulty-launch": 0.005,
     "options-targeting-launch": 0.005,
+    "options-view-launch": 0.005,
     "ordnance-burst-timeline": 0.098,
     "ordnance-end-conditions": 0.443,
     "ordnance-guidance": 0.48,

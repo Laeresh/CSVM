@@ -36,6 +36,12 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     /// <summary>The Game Options page's menu-presentation dropdown.</summary>
     public const string PresentationKey = "PRESENTATION";
 
+    /// <summary>The Game Options page's Default View dropdown, the original's own second row.</summary>
+    public const string DefaultViewKey = "DEFAULTVIEW";
+
+    /// <summary>The Game Options page's Auto Head Turn checkbox, the original's own third row.</summary>
+    public const string AutoHeadTurnKey = "AUTOHEADTURN";
+
     /// <summary>The Game Options page's next-target checkbox.</summary>
     public const string NearestAfterKillKey = "NEARESTAFTERKILL";
 
@@ -198,6 +204,18 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     private const float GameOptionTitleFont = 14f;
     private const float GameOptionDescFont = 12f;
 
+    // The plate the section authors and how many rows it holds: GO_BackGround.png draws three
+    // raised row panels at the authored pitch over one grey description window, and the section
+    // stands three rows on it. A page carrying more grows the plate by whole bands of its own art.
+    private const int GameOptionAuthoredRows = 3;
+
+    // The band a repeat takes, in the plate art's own pixels: y 116 to 178 is one whole row panel
+    // with both seams inside the dark gaps the art leaves between panels (112 to 119 and 174 to
+    // 181), so a repeat cuts no rivet, no panel edge and no window border, and the description
+    // window grows with the rows. The alternative was a vertical stretch, which smears all three.
+    private const int GameOptionPlateBandY = 116;
+    private const int GameOptionPlateBandHeight = 62;
+
     // The AUDIO page's authored row shape, used where a layout does not carry the section or one of
     // its rows: the title column and its box, the slider column and the distance from a title's line
     // down to its own slider's, and the description column and its width. Each row's own line is
@@ -290,6 +308,16 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
 
     private static readonly string[] PresentationWords = { "ORIGINAL", "BUILT-IN" };
 
+    // The Default View dropdown's own three items, the words and the order the original's list
+    // carries (CSVM.Flight.PilotView.Selectable and .Label, decoded from uiData 2127 in
+    // crimson.exe; docs/org/menu-inventory.md holds the addresses).
+    private static readonly string[] DefaultViewWords =
+    {
+        CSVM.Flight.PilotView.Label(CSVM.Flight.PilotView.Selectable[0]),
+        CSVM.Flight.PilotView.Label(CSVM.Flight.PilotView.Selectable[1]),
+        CSVM.Flight.PilotView.Label(CSVM.Flight.PilotView.Selectable[2]),
+    };
+
     // The checkbox's two words, in the order its eight-frame strip reads them: index 0 unchecked,
     // index 1 checked. Only the page with no section draws them, as a text button's label.
     private static readonly string[] NearestAfterKillWords = { "OFF", "ON" };
@@ -307,6 +335,16 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
             OriginalRowKind.Dropdown, DifficultyWords,
             s => CSVM.Flight.Difficulty.Clamp(s._difficulty),
             (s, i) => s._difficulty = CSVM.Flight.Difficulty.Clamp(i)),
+        new(DefaultViewKey, "Default View", _ => "Select your default view.",
+            OriginalRowKind.Dropdown, DefaultViewWords,
+            s => IndexOfView(s._defaultView),
+            (s, i) => s._defaultView = CSVM.Flight.PilotView.Name(
+                CSVM.Flight.PilotView.Selectable[Math.Clamp(i, 0, CSVM.Flight.PilotView.Selectable.Count - 1)])),
+        new(AutoHeadTurnKey, "Auto Head Turn",
+            _ => "Select to turn your head automatically as your aircraft turns.",
+            OriginalRowKind.Radio, NearestAfterKillWords,
+            s => s._autoHeadTurn == true ? 1 : 0,
+            (s, i) => s._autoHeadTurn = i == 1),
         new(PresentationKey, "Menu", _ => "Select the menu presentation.", OriginalRowKind.Dropdown, PresentationWords,
             s => s._choice == PresentationId.BuiltIn.Value ? 1 : 0,
             (s, i) => s._choice = i == 1 ? PresentationId.BuiltIn.Value : PresentationId.Original.Value),
@@ -471,6 +509,12 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     // The haptics setting as saved, held the same way but read the other way round: null is "never
     // set", which the consumer reads as ON, since the original ships force feedback on.
     private bool? _rumble;
+    // The opening view as saved, the --view= word, null while never set, which the flight reads as
+    // Chase. Held as the word rather than the mode for the reason the store holds one.
+    private string? _defaultView;
+    // The automatic head turn as saved, null while never set, which leaves the headLook.autohead
+    // config key deciding rather than overruling it with a default of this page's own.
+    private bool? _autoHeadTurn;
     // The four display settings as they were saved. A page that shows a setting still has to hand
     // back the ones it does not, or the one writer's save would clear them; carrying them here is
     // what lets every page's apply do that.
@@ -603,6 +647,15 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     /// <summary>The haptics setting the Game Options page would apply, or null while nothing has
     /// been saved and no row has been touched.</summary>
     public bool? RumbleChoice => _rumble;
+
+    /// <summary>The opening view the Game Options page would apply, a
+    /// <see cref="CSVM.Flight.PilotView.Name"/> word, or null while nothing has been saved and no
+    /// row has been touched.</summary>
+    public string? DefaultViewChoice => _defaultView;
+
+    /// <summary>The automatic head turn the Game Options page would apply, or null while nothing
+    /// has been saved and no row has been touched, which leaves the config key deciding.</summary>
+    public bool? AutoHeadTurnChoice => _autoHeadTurn;
 
     /// <summary>The n-th tab's own button key, which is how the layout spells the strip.</summary>
     public static string KeysTabKey(int tab) =>
@@ -909,6 +962,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         _difficulty = CSVM.Flight.Difficulty.Parse(saved?.Difficulty) ?? CSVM.Flight.Difficulty.Normal;
         _nearestAfterKill = saved?.NearestAfterKill;
         _rumble = saved?.Rumble;
+        _defaultView = saved?.DefaultView;
+        _autoHeadTurn = saved?.AutoHeadTurn;
         _monitorIndex = saved?.MonitorIndex;
         _resolution = saved?.Resolution;
         _savedResolution = saved?.Resolution;
@@ -926,7 +981,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     private OptionsApplyExit AppliedOptions() =>
         new(new PresentationId(_choice), _graphics, CSVM.Flight.Difficulty.Word(_difficulty),
             _monitorIndex, _resolution, _displayMode, _vsync,
-            _audioMaster, _audioMusic, _audioEffects, _audioVoice, _nearestAfterKill, _rumble);
+            _audioMaster, _audioMusic, _audioEffects, _audioVoice, _nearestAfterKill, _rumble,
+            _defaultView, _autoHeadTurn);
 
     // Back from a page: the saved settings are read again, so an edit the player declined is gone.
     private void BackToPreferences()
@@ -952,7 +1008,11 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     }
 
     // One of a section's own button strips as a row, at its authored corner in its measured size.
-    private void AddStrip(MenuLayoutScreen screen, List<OriginalRow> rows, string key, OriginalRowKind kind, bool enabled, int column)
+    // <paramref name="dy"/> moves it down from that corner, which is what takes a plaque standing on
+    // a grown plate's bottom band down with the plate; 0 leaves it exactly where it is authored.
+    private void AddStrip(
+        MenuLayoutScreen screen, List<OriginalRow> rows, string key, OriginalRowKind kind, bool enabled,
+        int column, float dy = 0f)
     {
         if (screen.Widget(key) is not { } widget)
         {
@@ -961,7 +1021,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
 
         var art = StripArt(widget.Art, 0, widget.Frames);
         var size = StripSize(art, FallbackButtonWidth, FallbackButtonHeight);
-        rows.Add(new OriginalRow(key, widget.Text ?? string.Empty, kind, widget.Int("X"), widget.Int("Y"),
+        rows.Add(new OriginalRow(key, widget.Text ?? string.Empty, kind, widget.Int("X"), widget.Int("Y") + dy,
             size.Width, size.Height, enabled, column, art));
     }
 
@@ -1046,6 +1106,58 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
             backdrop.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, logo.Art[0], Math.Max(1, logo.Frames)),
                 logo.Int("X"), logo.Int("Y")));
         }
+    }
+
+    // The Game Options plate, grown by whole bands of its own art rather than stretched, so a page
+    // carrying more rows than the section authors still stands on art at its authored scale: the
+    // head above the repeated band, that band once per row, then the tail from the band's bottom
+    // edge down. <paramref name="extraRows"/> of 0 draws the one authored picture and nothing else.
+    // ⚠ The band is the art's, not the row pitch a layout reads: the seams are chosen against the
+    // bitmap's own gaps, so a section authoring another pitch still repeats these 62 pixels.
+    private void ComposeGameOptionsPlate(MenuLayoutScreen screen, int extraRows, List<BoardPicture> backdrop)
+    {
+        if (screen.Widget("GO_BACKGROUND") is not { Art.Count: > 0 } plate)
+        {
+            return;
+        }
+
+        var art = new BoardArt(BoardArtLibrary.Ui, plate.Art[0], Math.Max(1, plate.Frames));
+        float x = plate.Int("X");
+        float y = plate.Int("Y");
+        if (extraRows <= 0 || _host.Measure(plate.Art[0]) is not { } size)
+        {
+            backdrop.Add(new BoardPicture(art, x, y));
+            return;
+        }
+
+        backdrop.Add(new BoardPicture(art, x, y, Crop: new BoardCrop(0f, 0f, size.Width, GameOptionPlateBandY)));
+        for (int i = 0; i <= extraRows; i++)
+        {
+            backdrop.Add(new BoardPicture(art, x, y + GameOptionPlateBandY + (i * GameOptionPlateBandHeight),
+                Crop: new BoardCrop(0f, GameOptionPlateBandY, size.Width, GameOptionPlateBandHeight)));
+        }
+
+        float below = GameOptionPlateBandY + GameOptionPlateBandHeight;
+        backdrop.Add(new BoardPicture(art, x, y + below + (extraRows * GameOptionPlateBandHeight),
+            Crop: new BoardCrop(0f, below, size.Width, size.Height - below)));
+    }
+
+    // How many whole bands the plate grows by: one per row past the three the section authors,
+    // capped at what the authored canvas still holds under the plate's own corner. A grown plate
+    // that ran off the canvas would put its bottom band and the two plaques on it out of sight, so
+    // the rows past the cap tighten instead (FitGameOptionPitch).
+    private int ExtraGameOptionRows(MenuLayoutScreen screen)
+    {
+        int wanted = Math.Max(0, GameOptions.Length - GameOptionAuthoredRows);
+        if (wanted == 0 || screen.Widget("GO_BACKGROUND") is not { Art.Count: > 0 } plate
+            || _host.Measure(plate.Art[0]) is not { } size)
+        {
+            return 0;
+        }
+
+        int room = (int)Math.Floor(
+            (BoardFit.AuthoredHeight - plate.Int("Y") - size.Height) / (float)GameOptionPlateBandHeight);
+        return Math.Clamp(room, 0, wanted);
     }
 
     private void ComposePlate(MenuLayoutScreen screen, string key, List<BoardPicture> backdrop)
@@ -1198,8 +1310,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
                 page.TitleX + page.CheckDx, page.RowY(i) + page.CheckDy, size.Width, size.Height, true, 0, page.Box));
         }
 
-        AddStrip(screen, rows, GameOptionsAcceptKey, OriginalRowKind.Button, true, 0);
-        AddStrip(screen, rows, GameOptionsCancelKey, OriginalRowKind.Button, true, 0);
+        AddStrip(screen, rows, GameOptionsAcceptKey, OriginalRowKind.Button, true, 0, page.PlaqueDy);
+        AddStrip(screen, rows, GameOptionsCancelKey, OriginalRowKind.Button, true, 0, page.PlaqueDy);
     }
 
     // The page's row shape off the section's own widgets, each falling back to the authored number
@@ -1224,8 +1336,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         float checkHeight = StripSize(checkArt, FallbackCheckSize, FallbackCheckSize).Height;
         float below = Math.Max(descDy + GameOptionDescFont,
             Math.Max(dropDy + dropHeight, checkDy + checkHeight));
+        int extraRows = ExtraGameOptionRows(screen);
         pitch = FitGameOptionPitch(pitch > 0f ? pitch : GameOptionPitch, firstY, below,
-            screen.Widget(GameOptionsAcceptKey));
+            screen.Widget(GameOptionsAcceptKey), extraRows * GameOptionPlateBandHeight);
         return new GameOptionsPage(
             titleX,
             first?.Int("Width", (int)GameOptionTitleWidth) ?? GameOptionTitleWidth,
@@ -1242,15 +1355,18 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
             descDy,
             description?.Int("Width", (int)GameOptionDescWidth) ?? GameOptionDescWidth,
             StripArt(drop?.Art ?? Array.Empty<string>(), 4),
-            checkArt);
+            checkArt,
+            extraRows);
     }
 
-    // The authored section carries three rows and this page holds more of them. The authored pitch
-    // stands while the last row still clears ACCEPT CHANGES; past that the rows tighten to fit the
-    // space between the first line and the button, which is the only room the plate has.
-    // ⚠ Never draw a row over the button. Their press regions would overlap and the pointer would
-    // take one press for two rows. <paramref name="below"/> is how far a row reaches under its line.
-    private static float FitGameOptionPitch(float authored, float firstY, float below, MenuLayoutWidget? accept)
+    // The authored section carries three rows and this page holds more. The plate grows a whole band
+    // per extra row and takes the plaques down with it, so the authored pitch stands for as many
+    // rows as the canvas holds bands; past that the rows tighten into the space between the first
+    // line and the moved button (below is how far a row reaches under its own line, plaqueDy how far
+    // the growth took the button down). ⚠ Never draw a row over the button: the press regions would
+    // overlap and one pointer press would land on two rows.
+    private static float FitGameOptionPitch(
+        float authored, float firstY, float below, MenuLayoutWidget? accept, float plaqueDy)
     {
         if (accept == null || GameOptions.Length < 2)
         {
@@ -1259,7 +1375,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
 
         // Floored to a whole point: the authored pitches are integers and a fractional one would put
         // every row below the first on a half pixel.
-        float fit = MathF.Floor((accept.Int("Y") - firstY - below) / (GameOptions.Length - 1));
+        float fit = MathF.Floor((accept.Int("Y") + plaqueDy - firstY - below) / (GameOptions.Length - 1));
         return fit > 0f && fit < authored ? fit : authored;
     }
 
@@ -1274,6 +1390,22 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         }
 
         return -1;
+    }
+
+    // Where a saved view word stands in the Default View dropdown's own list. A word the list does
+    // not carry, and a never-set field, read as Chase, which is what an unset opening view flies.
+    private static int IndexOfView(string? word)
+    {
+        var mode = CSVM.Flight.PilotView.Parse(word ?? string.Empty) ?? CSVM.Flight.PilotViewMode.Chase;
+        for (int i = 0; i < CSVM.Flight.PilotView.Selectable.Count; i++)
+        {
+            if (CSVM.Flight.PilotView.Selectable[i] == mode)
+            {
+                return i;
+            }
+        }
+
+        return 0;
     }
 
     private GameOption? GameOptionFor(string key)
@@ -1387,9 +1519,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
             return;
         }
 
-        ComposePlate(screen, "GO_BACKGROUND", backdrop);
-        ComposePageTitle(screen, "GO_T_TITLE", "GAME OPTIONS", lines);
         var page = ReadGameOptionsPage(screen);
+        ComposeGameOptionsPlate(screen, page.ExtraRows, backdrop);
+        ComposePageTitle(screen, "GO_T_TITLE", "GAME OPTIONS", lines);
         for (int i = 0; i < GameOptions.Length; i++)
         {
             var option = GameOptions[i];
@@ -2618,8 +2750,12 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         float TitleX, float TitleWidth, float CheckTitleWidth, float FirstY, float Pitch,
         float DropX, float DropDy, float DropWidth, float ItemHeight,
         float CheckDx, float CheckDy, float DescX, float DescDy, float DescWidth,
-        BoardArt? Arrow, BoardArt? Box)
+        BoardArt? Arrow, BoardArt? Box, int ExtraRows)
     {
+        // How far the plate's growth took the two plaques and everything else standing on its
+        // bottom band down from their authored line.
+        public float PlaqueDy => ExtraRows * GameOptionPlateBandHeight;
+
         public float RowY(int row) => FirstY + (row * Pitch);
 
         // A checkbox row takes the head-turn row's own narrower title box, which is what leaves the
