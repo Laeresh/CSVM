@@ -522,43 +522,52 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   capture swallows them entirely, while ours are plainly visible in the same scene
   (`playtest/CAP-11/csvm-c2b-low.png`). Streak width is the first constant to revisit.
 
-- `BL-322` `[Research]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: decoded]` `[C5]` **C5's lit facades render ×0.58–0.66 of the original, and collapsing the
-  original's per-vertex sun term to one clamped scalar predicts that band** (split out of `BL-303`
-  at its close; measured `CAP-11`: tower faces 10.2 vs 15.5, low-rise 21.7 vs 37.6). Explicitly NOT
+- `BL-322` `[Research]` `[Blocked: CAP-58]` `[L]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]` `[C5]` **The original shades a lit surface per vertex and clamps the
+  product at white, so reproducing its sun term darkens every away-facing surface of every chapter
+  and cannot darken a C5 city block at all** (split out of `BL-303` at its close). Explicitly NOT
   fog, `BL-303`'s own adjunct note, and the Wave B fog work moved none of it.
-  *The exemption premise is refuted, the residual is not:* `docs/org/vertexLighting.md` decodes the
-  hardware draw's one gate (`FUN_00552020`), and **the measured facades are on the lit side of it**,
-  so no exemption can close the ratio; the texture alpha bit is software-only (`FUN_005524d0`) and
-  offers no lever on the overlays either. What closes it is the *value*. C5 IA1 authors
-  `SUNLIGHT_DIFFUSE` 1.5 and `SUNLIGHT_AMBIENT` 0.5 in both its zones
-  (`extracted/C5/IA1/zrdr/weather.zrd.json`, ZONE1 and ZONE3), so `FUN_005688a0`'s per-vertex
-  `ambient + diffuse × max(N·L, 0)` runs 0.5 to 2.0, while `Weather.WorldLightFactor` collapses the
-  pair to `clamp(0.5 + 1.5 × 0.46, 0.15, 1)` = **1.0**, discarding 0.19 at the clamp. On a wall the
-  ratio ours/theirs is `1 / (0.5 + 1.5 N·L)`: 1.0 at `N·L` = 1/3, and 0.545 at the most a vertical
-  wall reaches under a sun 25° above the horizon (`SUNLIGHT_ORIENTATION` −25/−135). The measured
-  0.66 and 0.58 sit inside that range at `N·L` 0.68 and 0.82, walls within 26° to 42° of the sun's
-  azimuth; a roof, whose `N·L` under that sun is 0.42, predicts 0.88.
+  *Evidence, decoded:* the whole term is in `docs/org/vertexLighting.md`, "The sun's own term, and
+  where the product is clamped". `SUNLIGHT_BICOLORED` is light flag `0x400` (`FUN_004dbe80`, tested
+  once per light at `0x00568a7f`) and it selects whether the ambient half of the term carries
+  `SUNLIGHT_COLOR_AMBIENT` or reuses `SUNLIGHT_COLOR_DIFFUSE`; `FUN_00472ea0` writes both colours on
+  every zone apply, so the second one always exists and the bit only decides whether it is read. All
+  32 C5 zone blocks author white for both, so **in C5 the bit is a no-op on the value** and the term
+  is the single scalar `0.5 + 1.5 × max(N·L, 0)`. It is live elsewhere: 28 of the install's 212 zone
+  blocks are bicolored with two different colours, C4's `IA1` pairing a warm diffuse with a cool
+  ambient. C5 also places exactly one `Light` node among 11,438 and authors no `LIGHT_STATE` at all,
+  and the two point-light lists `FUN_00568790` fills add their term without the directional loop's
+  `− 1`, so nothing but the sun ever reaches the accumulator there.
+  *The measured band is refuted on the family it was read off:* `FUN_00554550` multiplies the
+  per-vertex factor by the **authored vertex colour** and clamps the product at 255 (`0x00555289`
+  then `0x005552b2`), where `Weather.WorldLightFactor` clamps its collapsed scalar to 1 *before* the
+  multiply. All 8,549 authored vertex colours on C5's `cblock1`-`cblock7` city-block skins are 255,
+  so the original's product saturates at white for every `N·L ≥ 1/3` and draws exactly what we draw,
+  and is *darker* than us below it. Only the `bldg1`-`bldg4` tower skins (51 % to 71 % at 255, tenth
+  percentile 0 to 112) stay unsaturated, and there the ratio ours/theirs is `1 / (0.5 + 1.5 N·L)`,
+  which is 0.66 at `N·L` 0.68 and 0.58 at 0.82. So the term can produce the measured band, but not
+  on the low-rise blocks a midtown frame is mostly made of.
   *Frame-wide is ruled out, so this is a surface term, not exposure or gamma:* the five HUD gauge
   discs are the same 2D art at the same pixels in both frames and read ours/orig **0.97** (rockets
   0.97, ALT 1.07, damage 0.80, guns 1.03, MPH 1.00; the "2400" readout box 0.96). Nothing ×0.6
   survives into the capture or onto the composite.
   ⚠ **The `CAP-11` C5 pair is not a matched pose.** `t0.5-c5-spawn-night-city.png` looks north over
   midtown from altitude and `csvm-c5-night-city.png` sits over water, so 10.2/15.5 and 21.7/37.6
-  compare *different buildings*. The band is the right order and the wrong precision; a re-measure
-  wants a pose pinned by `--pos`/`--direction` on both sides. C5's sky dome cannot serve as the
-  in-world control either: at a level view its rows read 0.83, 0.69 and 0.43 of the original's from
-  zenith to horizon, a gradient mismatch of its own rather than one scalar.
-  *The decode still owed, before any code:* (1) `SUNLIGHT_BICOLORED` is 1 in both C5 zones and is
-  decoded nowhere, so which of the light class-data colour triples (`+0xa4` diffuse, `+0xb0`
-  ambient) it selects between, and whether `FUN_00472ea0` writes a second, decides whether the term
-  is the scalar above or a two-colour blend; (2) whether a single sun really leaves exactly
-  `ambient + diffuse × max(N·L, 0)` once C5's `LIGHT_STATE` point lights populate `FUN_00568790`'s
-  other two lists, given `FUN_00568830` seeds the accumulator to 1.0 and each light contributes
-  `× colour − 1`; (3) which regime the measured walls are in, since 65.0 % of C5's 113,926 authored
-  polygon vertex colours are 255 and the rest run below it, and where `V × F` passes 255 the
-  original saturates and the ratio becomes `V/255` instead of `1/F`.
-  ⚠ Reproducing the per-vertex term is a look change on every lit surface of every chapter, so it
-  is owed a verdict at the controls and not a luminance distance.
+  compare *different buildings*, and the decode above says the difference between two buildings is
+  exactly what decides the ratio. C5's sky dome cannot serve as the in-world control either: at a
+  level view its rows read 0.83, 0.69 and 0.43 of the original's from zenith to horizon, a gradient
+  mismatch of its own rather than one scalar. `CAP-58` is the matched pose this needs.
+  *Fix shape:* per lit vertex, `drawn = clamp(authored_vertex_colour × (SUNLIGHT_AMBIENT +
+  SUNLIGHT_DIFFUSE × max(dot(N, L), 0)), 0, 1)` in place of `ALBEDO *= csky_world_light`. Four
+  files: `Weather.cs` stops collapsing (the uncollapsed pair is already on `ZoneWeather`),
+  `WeatherRig.cs` publishes the pair and the sun direction beside `csky_world_light`,
+  `csky_atmosphere.gdshaderinc` declares them, and `SceneBuilder.cs`'s shaded world variant reads a
+  normal instead of the flat scalar. It is not a one-uniform change: 66 % of C5's 21,577 lit
+  polygons and 57 % of C1's 16,580 carry no normal array, so `SceneBuilder` has to emit a face
+  normal per polygon for those rather than the smoothed normal `SurfaceTool` generates.
+  ⚠ **Taking it is a look change on every lit surface of every chapter, and its largest effect is a
+  darkening nobody has asked for.** A vertex authored at 255 facing away from the sun halves, and
+  most of a city at night faces away from a sun bearing −135°. That is owed a verdict at the
+  controls and not a luminance distance.
   *Playtest after fix:* the C5 night poses in `playtest/CAP-11/README.md`.
 
 - `BL-325` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` `[C1B]` **Night cloud sprites are directionally moonlit in the original; ours are
