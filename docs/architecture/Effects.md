@@ -74,3 +74,13 @@ pane its own and `FlightController` drives it. `Update` is the whole law: opacit
 cruise fraction of `PlaneStats.FdSpeed`, rising with the speed fraction plus a term on
 `FlightModel.LoadFactorDemand`, length growing with airspeed, and the drift accumulated on the CPU
 rather than off a clock, since the rate changes with airspeed. Every constant is TUNE.
+
+## src/Effects/HeatShimmer.cs
+Remake-only heat shimmer over a fireball, built only under `GraphicsMode.Enhanced` and only where
+`WorldEffectsFactory.RegisterHeatShimmer` decides: one billboard quad per burst from a fixed pool,
+all of them in ONE MultiMesh, so every live burst shares one draw and one colour-buffer copy. The
+quad samples `hint_screen_texture` at a `csky_time`-driven noise offset scaled by a radial mask and
+by the fireball's own liveness, and writes it back with no gain, so it lifts no pixel over the glow
+bar. That copy is taken before the transparent pass and holds no fire or smoke, which is why the
+quad stands clear above the flame. `Spawn` recycles the oldest slot at the cap, `Step` retires a
+quad the frame its liveness goes false, and every size, lift, decay and amplitude constant is TUNE.

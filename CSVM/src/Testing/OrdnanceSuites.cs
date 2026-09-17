@@ -1911,6 +1911,133 @@ internal static class OrdnanceSuites
         }
     }
 
+    // The enhanced heat shimmer, driven the same way as the burst light above: a wep_06 dropped
+    // onto a plate, the effect sink composed the way WorldEffectsFactory composes it, and the
+    // factory's own pool behind it, so what is measured is the live quad count and the one draw
+    // rather than a flag. The fireball's liveness is a local the suite owns, which is the only way
+    // to step past the fireball's end inside one frame.
+    [Suite("heat-shimmer",
+        "Enhanced Graphics only: a wep_06 rocket burst takes exactly one refracting quad from the " +
+        "session's heat-shimmer pool, which draws while the fireball burns and is dropped the " +
+        "frame its liveness goes false; a gun hit takes none, the pool never exceeds its cap and " +
+        "recycles the oldest quad past it, and the faithful presentation builds no pool at all")]
+    internal static void HeatShimmerBurst(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        if (!weapons.TryGet("wep_06", out var he))
+        {
+            ctx.Check(false, $"wep_06 resolves");
+            return;
+        }
+
+        const float Dt = 1f / 60f;
+        var origin = new Vector3(1500f, 4000f, 1500f);
+        var textures = new TextureArchive(texturesPath);
+        var spec = SessionSpec.Parse(System.Array.Empty<string>());
+        var worldRoot = new Node3D();
+        ProjectilePool? pool = null;
+        StaticBody3D? plate = null;
+        bool burning = true;
+        try
+        {
+            ctx.Host.AddChild(worldRoot);
+            plate = CombatSuites.Plate("heat-shimmer-plate", new Vector3(60f, 0.2f, 60f), origin);
+            ctx.Host.AddChild(plate);
+            var plays = new List<string>();
+            var factory = new WorldEffectsFactory(spec, worldRoot, () => Vector3.Zero);
+            var live = new ProjectilePool(textures, null, null)
+            {
+                EffectSink = (name, at, orient, ringOrient, ttl) =>
+                {
+                    plays.Add(name);
+                    factory.RegisterHeatShimmer(name, at, () => burning);
+                },
+            };
+            pool = live;
+            ctx.Host.AddChild(live);
+
+            bool Drop()
+            {
+                plays.Clear();
+                live.Spawn(he, new Transform3D(Basis.LookingAt(Vector3.Down, Vector3.Forward),
+                    origin + new Vector3(0f, 20f, 0f)), Vector3.Zero);
+                for (int i = 0; i < 120 && plays.Count == 0; i++)
+                    live.SimStep(Dt);
+                live.Clear();
+                return plays.Contains("he_ground_effect");
+            }
+
+            // The faithful presentation first: it is what every pinned golden renders, and the
+            // able-to-fail control for everything below.
+            ctx.Check(Drop(), $"the rocket reaches the plate and plays he_ground_effect");
+            ctx.Check(factory.Shimmer == null,
+                $"ABLE-TO-FAIL CONTROL: the faithful presentation builds no shimmer pool for the same hit");
+            ctx.Same(0, worldRoot.GetChildCount(), $"and adds no node to the world");
+
+            GraphicsMode.Resolve(GraphicsMode.EnhancedWord);
+            try
+            {
+                var enhanced = new WorldEffectsFactory(spec, worldRoot, () => Vector3.Zero);
+                enhanced.RegisterHeatShimmer("3040slug_gunhit", origin, () => burning);
+                ctx.Check(enhanced.Shimmer == null,
+                    $"a gun hit carries no fireball and builds nothing even under Enhanced");
+
+                live.EffectSink = (name, at, orient, ringOrient, ttl) =>
+                {
+                    plays.Add(name);
+                    enhanced.RegisterHeatShimmer(name, at, () => burning);
+                };
+                ctx.Check(Drop(), $"the same rocket plays the same effect under Enhanced");
+                var shimmer = enhanced.Shimmer;
+                ctx.Check(shimmer != null, $"which builds the pool on the first fireball that asks");
+                if (shimmer == null)
+                    return;
+                ctx.Same(1, shimmer.LiveCount, $"the burst takes exactly one quad");
+                ctx.Check(shimmer.Drawing, $"and the pool draws while the fireball burns");
+                ctx.Same(1, worldRoot.GetChildCount(), $"from one node under the world root");
+
+                shimmer.Step(shimmer.SimTime + (Dt * 30));
+                ctx.Same(1, shimmer.LiveCount,
+                    $"the quad is still refracting half a second into the burst");
+
+                burning = false;
+                shimmer.Step(shimmer.SimTime + Dt);
+                ctx.Same(0, shimmer.LiveCount,
+                    $"and is gone the frame its fireball stops burning");
+                ctx.Check(!shimmer.Drawing,
+                    $"with the pool's draw off, so the colour-buffer copy is off too");
+
+                // Past the cap the oldest quad is recycled rather than the pool grown: a screen
+                // read costs a buffer copy, so the count is what has to stay bounded.
+                burning = true;
+                int overfill = HeatShimmer.PoolCap + 2;
+                for (int i = 0; i < overfill; i++)
+                    enhanced.RegisterHeatShimmer("he_ground_effect",
+                        origin + new Vector3(i * 30f, 0f, 0f), () => burning);
+                ctx.Same(HeatShimmer.PoolCap, shimmer.LiveCount,
+                    $"a salvo of {overfill} bursts fills the pool to its cap and no further");
+                ctx.Same(2, shimmer.Recycles, $"the two past the cap recycled the oldest quads");
+                ctx.Same(1, worldRoot.GetChildCount(), $"and the whole salvo is still one node");
+            }
+            finally
+            {
+                GraphicsMode.Resolve(GraphicsMode.Default);
+            }
+            ctx.Check(!GraphicsMode.Enhanced, $"the graphics setting is back on the faithful presentation");
+        }
+        finally
+        {
+            pool?.Free();
+            plate?.Free();
+            ctx.Host.RemoveChild(worldRoot);
+            worldRoot.Free();
+            textures.Dispose();
+        }
+    }
+
     // A fused burst reads the default IMPACT row, never the fused aircraft's (FUN_005ac3a0's hit
     // record carries surface id 0; docs/org/ordnanceTypes.md "Which row a burst reads"): a flak
     // fused on a rig draws flak_effect, a beeper fused on the same rig draws its empty default

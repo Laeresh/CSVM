@@ -192,6 +192,7 @@
     "graze-bounce": 0.361,
     "ground-contact": 0.022,
     "hangar-door-wake": 2.614,
+    "heat-shimmer": 0.16,
     "hostile-marker-hud": 0.278,
     "hud-auto-dock-line": 0.06,
     "hud-crash-prompt": 0.06,

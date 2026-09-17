@@ -70,6 +70,8 @@ exception, a display setting like V-Sync, and it is ignored under `--det` so no 
 | 3 | "The BL-803 pattern is temporal screen-space noise (SSAO, soft-shadow sampling) that TAA will integrate away." | The user's two C3 freecam stills (`.scratch/eg2/A3/`, freecam at x -6675 y 70 z -3037, 5120x1440, sun pitch -25 yaw 135): the pattern is a set of fine, evenly spaced, parallel bands with one world direction, still while the camera is still, present on the flat lit water where no occluder exists, and its spacing changes across straight seams on the hillside, which are the shadow cascade borders. That is the sun's shadow map self-shadowing a grazing surface (acne, smeared into bands by the 2.0 degree penumbra and the blur), a stable pattern TAA cannot remove. A3 is the bias/penumbra fix, not a wait on A1. |
 | 4 | "The fireball's atlas frames are additive, so the additive emitter shader variant is where a bloom gain goes." | B12's census: 145 zrdr files name 26 puffer sprite textures and none carries the additive bit in any chapter's manifest; the install's additive textures are mesh materials, flares, rings and HUD hilites. The additive emitter layer is never built for a shipped effect. The bloom is gated by the `fire_f01`..`fire_f06` flipbook name instead, and the `puffer-fire-glow` suite pins the premise. |
 | 5 | "The BL-803 bands are shadow-map acne from the bias pair, smeared by the 2.0 degree angular distance and the blur." | A3's headless sweep at the user's pose: a 32-bit map is bit-identical, every bias move deepens the pattern, halving the blur sharpens it, and the angular distance at 0.5 clears C3 but not C1's water while lightening real cast shadows. The bands are Godot's directional soft-shadow filter at its default Soft Low quality; Soft High halves them and leaves the cast-shadow control untouched. |
+| 6 | "A heat-shimmer quad must draw after the fireball so it refracts the flame." | B14's measurement: Godot takes the `hint_screen_texture` copy once, before the whole transparent pass, so the copy holds the opaque world and no fireball or smoke; a quad over the flame painted bare terrain across it, and a quad drawn after the fireball erased the fire and smoke it covered. The quad stands 30 m over the burst and draws before the other transparents (render priority -1), so the fireball composites over it and stays pixel-identical. |
+| 7 | "The cloud cards' transmission rim transfers to the smoke sprites." | B13's measurement: the puffer atlas packs frames side by side with no mip chain, and the smoke masks are smooth blobs, so three taps toward the sun move at most 4 of 255 levels for three extra samples per fragment. Dropped; the sun grade alone ships. |
 
 | Confidence | Items | What that means for you |
 |---|---|---|
@@ -182,7 +184,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ A burst omni light at each fireball, from the enhanced pool, flickering down over the burst
 12. ☑ The additive fireball frames bloom
 13. ☑ Sun-shaded smoke billboards
-14. ☐ Heat shimmer over a fireball
+14. ☑ Heat shimmer over a fireball
 15. ☐ Scorch decals at a hit
 
 ### Wave C, lit clouds
@@ -721,7 +723,62 @@ amplitudes for the user to pick.
 **⚠ Traps.** Sequential with B12 (same shader). The smokeball sits on the ground with soft
 particles disabled; keep that arm's exemption.
 
-## B14 ☐ Heat shimmer over a fireball
+## B14 ☑ Heat shimmer over a fireball
+
+**Landed.** `Effects/HeatShimmer.cs` is a pool of eight billboard quads in ONE MultiMesh, so every
+live burst shares one draw call and, more to the point, one colour-buffer copy rather than one each.
+The spatial shader billboards each quad in the vertex stage, samples `hint_screen_texture` at a UV
+offset from two octaves of value noise scrolled by `csky_time`, and scales that offset by the quad's
+own screen half-width, so a burst two hundred metres off wobbles the few pixels it covers instead of
+the same screen fraction a near one does. The sample is written back with no tint and no gain: a
+blend between two samples of the same buffer cannot exceed the brighter of them, which is what keeps
+B12's fire flipbook from being lifted over the glow threshold a second time. The quad writes no
+depth and casts no shadow. The decision point is `WorldEffectsFactory.RegisterHeatShimmer` beside
+B11's `RegisterBurstLight`, holding the mode gate and the name gate together, and the sink calls
+both unconditionally so one place decides each. It reuses `EffectCatalogue.BurstLightAnimNames`
+rather than a sibling list, on the ground that a fireball big enough to light what stands around it
+is the fireball that heats the air over it; the reasoning sits on `IsBurstLight`. Liveness is the
+same closure the burst light reads, the fireball's own `ANIM_STATE`, so a quad is retired the frame
+the fireball ends, and the amplitude decays exponentially under it. ⚠ Godot takes the screen copy
+a transparent material reads ONCE, before the transparent pass, so it holds the opaque world and
+neither the fireball nor its smoke. That has two consequences, both measured rather than assumed.
+The quad's
+mask tapers to zero at its lower end and its centre stands 30 m over the burst, because drawn across
+the flame it paints bare terrain over it: at a 16 m lift that cost 16949 changed pixels against the
+5301 the same amplitude changed once the quad was clear. And this item's own instruction to draw the
+quad after the fireball is what the copy makes wrong, so the material carries render priority -1 and
+draws BEFORE the other transparents: the fireball and its smoke then composite over the shimmer
+instead of being erased by it, which took the changed pixels from 5845 to 2191 at the same amplitude
+and left the burst itself untouched. The `heat-shimmer` engine suite drives a live rocket into a
+plate and pins the pool, the cap and the drop.
+
+**Verified.** On the item worktree: rebuild warning-free; the complete `RunTests.ps1` runs units
+4574 passed of 4576, engine 353 of 354 and goldens **19 shots hash-identical, zero movers**, engine
+errors clean. The one engine failure is `ai-wave-launch-hitch`, which times a spawn frame on the
+wall clock and fails on a machine sharing its GPU with several other sessions; run alone on this
+tree it PASSES (median launch frame 17.7 ms at one rig, 16.6 ms at four, both under their bars). The
+new `heat-shimmer` suite PASSES (the faithful path builds no pool and adds no node, a gun hit builds
+nothing, an enhanced rocket takes exactly one quad that draws while the fireball runs and is gone
+the frame liveness goes false, a salvo of cap+2 holds `LiveCount` at 8 with 2 recycles and one node,
+and the mode is restored in a finally); comment caps, doc entries and encoding checks clean. Cost at
+the C1
+rocket-hit pose, `--perf --no-vsync`, gpu_ms per 60-frame window, shimmer off against on: one rocket
+3.00/2.00/2.35/2.61 against 2.43/2.01/2.35/2.61, a twelve-rocket salvo 2.16/1.91/2.19/2.53 against
+2.76/1.90/2.20/2.56. Over the three windows the bursts live in, the largest difference either way is
+0.03 ms, and `draws` rises by the one instanced draw the pool submits while a quad lives; the first
+window, which carries the world build and the shader compile, swings further than the effect does.
+The montage under `.scratch/eg2/B14/` stands at `--direction=0.08,-0.40,0.91` off B11's pose, where
+the burst goes off beside the apron edge and a checkered crate: faithful, enhanced without the
+shimmer, enhanced with it, and a crop of the same crate at three amplitudes. Against the no-shimmer
+frame the change is confined to the quad's footprint, about 70 by 110 px, and grows with the
+amplitude (1849, 2191, 2507 changed pixels at 0.16, 0.32, 0.80); the displacement is sub-pixel at
+the median
+with peaks of 2.2 px by a sub-pixel edge fit, which at this range is a crate outline that bends
+rather than jumps. A still can only show a displaced edge; the wobble itself, which is the point of
+the effect, is owed to the user at the controls. So is the amplitude: 0.32 ships, 0.16 is nearly
+invisible at a still and 0.80 visibly bends the crate's checkers.
+
+**Original approach (kept for reference).**
 
 **Goal.** The air over and behind a fireball refracts for its life under Enhanced.
 

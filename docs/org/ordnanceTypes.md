@@ -726,7 +726,10 @@ of the authored range; its peak, decay and flicker are a remake envelope with no
 the data, and it ends with the fireball it came from rather than on a clock. CSVM:
 `EffectCatalogue.BurstLightAnimNames` names which effects throw one,
 `WorldEffectsFactory.RegisterBurstLight` decides, `WorldLights.AddBurst` holds the envelope, and
-the `burst-light` suite pins both presentations.
+the `burst-light` suite pins both presentations. The heat shimmer over the same burst
+(`Effects/HeatShimmer.cs`) is that same remake-only, Enhanced-only layer: it reads the same effect
+names and the same liveness, so a fireball that lights what stands around it is the one that
+refracts the air over it, and the faithful presentation carries neither.
 
 ### Which row a burst reads
 

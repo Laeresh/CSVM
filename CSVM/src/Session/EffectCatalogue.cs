@@ -113,10 +113,10 @@ public static class EffectCatalogue
 
     // The impact effects whose fireball is big enough to light what stands around it, the HE
     // rocket/bomb ground burst, the torpedo's, and the two fireball defs the heaviest ordnance
-    // binds. ⚠ Enhanced Graphics only, and a remake-only rule (WorldLights.AddBurst); the faithful
-    // path registers no light. The gun-hit family and the fireless bursts (choker, sonic, flash,
-    // beeper) are excluded because they carry no fireball, and `ap_ground_effect`/`flak_effect`
-    // because their burst is a spark rather than a fireball.
+    // binds. ⚠ Enhanced Graphics only, and a remake-only rule (WorldLights.AddBurst and
+    // Effects.HeatShimmer, which take the same set); the faithful path registers neither. The
+    // gun-hit family and the fireless bursts (choker, sonic, flash, beeper) carry no fireball, and
+    // `ap_ground_effect`/`flak_effect` throw a spark rather than one, so none of them is here.
     public static readonly string[] BurstLightAnimNames =
         { "he_ground_effect", "torpedo_ground_effect", "large_fireball", "small_fireball" };
 
@@ -246,8 +246,9 @@ public static class EffectCatalogue
     public static readonly string[] CrashActivatedRoots = { "cpilot" };
 
     /// <summary>Whether a played impact effect throws a fireball that lights the world around it
-    /// (<see cref="BurstLightAnimNames"/>). Enhanced Graphics only; the faithful presentation
-    /// never registers a light, so it never asks.</summary>
+    /// and heats the air over it (<see cref="BurstLightAnimNames"/>): the burst light and the heat
+    /// shimmer read the same set. Enhanced Graphics only; the faithful presentation registers
+    /// neither, so it never asks.</summary>
     public static bool IsBurstLight(string animName) =>
         Array.Exists(BurstLightAnimNames,
             name => string.Equals(name, animName, StringComparison.OrdinalIgnoreCase));

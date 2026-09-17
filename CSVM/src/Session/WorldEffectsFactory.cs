@@ -68,6 +68,10 @@ public sealed class WorldEffectsFactory
 
     private AnimRuntime? _worldEffects;
 
+    // The session's heat-shimmer quads, built on the first fireball that asks for one and null
+    // otherwise, so the faithful presentation carries no pool and no node at all.
+    private HeatShimmer? _shimmer;
+
     // The builder for the planes-gamez half of a crash rig's template stage. Kept for the session
     // rather than per rig so all rigs share one material cache, the way every rig already shares
     // the world scene builder. Unpainted: the chute is not livery-bearing.
@@ -105,6 +109,10 @@ public sealed class WorldEffectsFactory
     /// <see cref="EnsureWorldEffects"/> has run. <c>HumanFlightAdapter</c> hands it to every
     /// controller, so all rigs index the ONE vector rather than each building its own.</summary>
     public SurfaceDefTable? TouchdownDefs { get; private set; }
+
+    /// <summary>The session's heat-shimmer pool, null until a fireball has asked for one and on the
+    /// faithful presentation always. Observation only; the pool stays owned here.</summary>
+    internal HeatShimmer? Shimmer => _shimmer;
 
     /// <summary>The effect-template ROOT names the world-effects stage builds, the set
     /// <see cref="EffectPools"/> sizes, exposed so the committed pool config can be checked
@@ -291,10 +299,12 @@ public sealed class WorldEffectsFactory
             {
                 if (!effects.PlayEffectAt(name, pt, null, ttl, orient, callOrient: ringOrient))
                     return;
-                // Unconditional: the whole rule, the mode gate included, lives in the helper, so
-                // there is one place a burst light is decided rather than two that can disagree.
-                RegisterBurstLight(worldRuntime.Lights, name, pt,
-                    () => effects.AnimStateOf(name) == AnimStateRunning);
+                // Unconditional: the whole rule, the mode gate included, lives in each helper, so
+                // there is one place a burst light or a shimmer is decided rather than two that
+                // can disagree. Both read the same liveness, the fireball's own ANIM_STATE.
+                Func<bool> stillBurning = () => effects.AnimStateOf(name) == AnimStateRunning;
+                RegisterBurstLight(worldRuntime.Lights, name, pt, stillBurning);
+                RegisterHeatShimmer(name, pt, stillBurning);
             };
             // The one callee a burst may re-base, and only when the pool hands a basis in, which is
             // the enhanced presentation alone (ProjectilePool.UpperRingOrient).
@@ -345,6 +355,20 @@ public sealed class WorldEffectsFactory
         if (lights == null || !GraphicsMode.Enhanced || !EffectCatalogue.IsBurstLight(animName))
             return;
         lights.AddBurst(at, EffectCatalogue.BurstLightColor, stillBurning);
+    }
+
+    /// <summary>The effect sink's heat-shimmer rule, the one place it is decided: under Enhanced
+    /// Graphics a played fireball effect (<see cref="EffectCatalogue.IsBurstLight"/>, the same set,
+    /// since a fireball that lights what stands around it is one that heats the air over it) takes
+    /// a refracting quad from this session's <see cref="HeatShimmer"/> pool.
+    /// <paramref name="stillBurning"/> is the fireball's liveness, the same closure the burst light
+    /// reads. The faithful presentation builds neither the pool nor its node.</summary>
+    internal void RegisterHeatShimmer(string animName, Vector3 at, Func<bool> stillBurning)
+    {
+        if (!GraphicsMode.Enhanced || !EffectCatalogue.IsBurstLight(animName))
+            return;
+        _shimmer ??= HeatShimmer.Attach(_worldRoot);
+        _shimmer.Spawn(at, stillBurning);
     }
 
     // Every template root either rig kind stages, for the pool-config drift check alone. Derived
