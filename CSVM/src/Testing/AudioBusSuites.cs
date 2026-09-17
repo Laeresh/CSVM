@@ -6,7 +6,9 @@ using System.Text;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
+using CSVM.UI;
 using CSVM.UI.Menu;
+using CSVM.UI.Menu.Original;
 using CSVM.Utils;
 using Godot;
 
@@ -34,6 +36,14 @@ internal static class AudioBusSuites
     // Slack for a dB comparison, well under the 6 dB a level step of that size moves a bus by.
     private const float DbSlack = 0.01f;
 
+    // Sideways presses to walk a slider from any level to its floor. A press moves SliderControl's
+    // KeyStep and the ends clamp rather than wrap, so any count past the range is the floor exactly.
+    private const int ToSilence = (AudioMix.MaxLevel / SliderControl.KeyStep) + 1;
+
+    // The walk's guard against a key a screen does not carry: the pages here are far shorter, and a
+    // focus that never reaches the key would otherwise spin.
+    private const int WalkGuard = 32;
+
     [Suite("audio-buses",
         "the shipped bus layout, the mix written onto it, and the placement of every player: "
         + "Master carries Music, Effects and Voice as its children, each of the fourteen "
@@ -42,9 +52,11 @@ internal static class AudioBusSuites
         + "and one-shot, and the projectile pool) builds its players on the bus its category names, "
         + "a walk of the whole live scene tree fails on any player left on Master, the four "
         + "levels reach the three child buses at startup and on a live change while bus 0, which "
-        + "carries the developer volume alone, is untouched by either, and a page's live preview "
+        + "carries the developer volume alone, is untouched by either, a page's live preview "
         + "moves all three buses from Master alone, sounds one clip over twenty-one level changes "
-        + "rather than twenty-one, and puts back the exact mix it opened over")]
+        + "rather than twenty-one, and puts back the exact mix it opened over, and Effects walked to "
+        + "silence and accepted on the pause sheet's AUDIO page leaves the flight's own gun and "
+        + "engine players on a silent bus at once rather than at the next start")]
     internal static void AudioBusPlacement(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -138,6 +150,7 @@ internal static class AudioBusSuites
             CheckSite(ctx, world, "WorldSounds emitter + one-shot", AudioBuses.Effects, report);
             CheckSite(ctx, pool, "ProjectilePool's eight", AudioBuses.Effects, report);
             SweepTree(ctx, report);
+            CheckPauseAccept(ctx, menu, flight, aiEngine, report);
         }
         finally
         {
@@ -295,6 +308,124 @@ internal static class AudioBusSuites
         {
             menu.EndMixPreview();
             AudioMix.Apply();
+        }
+    }
+
+    // The pause half: the AUDIO page opened over a held mission, Effects walked to silence and
+    // accepted, and the flight's own live players read straight afterwards. What this catches is an
+    // accept that applies the levels and then hands the mix back to the preview's restore, which
+    // leaves the accepted level saved but inaudible until the next start. ⚠ Drive the leaf rather
+    // than calling the mix by hand: the ordering of the apply against the end of the preview is the
+    // whole subject, and a suite that applied the levels itself would pass over the fault.
+    private static void CheckPauseAccept(
+        TestContext ctx, MenuAudioService menu, FlightAudio flight, AiEngineAudio aiEngine,
+        StringBuilder report)
+    {
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out string? why);
+        if (layout == null)
+        {
+            ctx.Note($"no decoded menu layout ({why}), so the pause accept was not walked");
+            return;
+        }
+
+        OptionsApplyExit? applied = null;
+        // The audio half of Launcher.PersistOptions, which is what the launcher hands the leaf. The
+        // options file it also writes is the pause-preferences suite's subject, not this one's.
+        var leaf = PausePreferences.Build(ctx.DataRoot, layout, null, exit =>
+        {
+            applied = exit;
+            AudioMix.Apply(exit.AudioMaster, exit.AudioMusic, exit.AudioEffects, exit.AudioVoice);
+        }, menu);
+        ctx.Check(leaf != null, $"the Preferences leaf builds over the install's decoded layout");
+        if (leaf == null)
+        {
+            return;
+        }
+
+        ctx.Host.AddChild(leaf);
+        float developer = AudioServer.GetBusVolumeDb(0);
+        try
+        {
+            AudioMix.Apply();
+            var reader = new MenuInput { Keyboard = false, Pads = Array.Empty<int>() };
+            leaf.Open(new[] { reader }, 0);
+            WalkTo(leaf, OriginalOptionsScreen.AudioDoorKey);
+            leaf.Drive(new MenuCommands { Accept = true });
+            ctx.Check(leaf.Shell.Screen == OriginalScreen.Audio,
+                $"the AUDIO door behind the Options screen opens over the pause ({leaf.Shell.Screen})");
+            WalkTo(leaf, OriginalOptionsScreen.AudioEffectsKey);
+            for (int press = 0; press < ToSilence; press++)
+            {
+                leaf.Drive(new MenuCommands { MoveX = -1 });
+            }
+
+            ctx.Check(leaf.Shell.Options.AudioEffectsChoice == AudioMix.MinLevel,
+                $"the Effects row walks to silence ({leaf.Shell.Options.AudioEffectsChoice?.ToString() ?? "unset"})");
+            float moving = BusVolume(AudioBuses.Effects);
+            report.AppendLine($"pause AUDIO page: Effects at {AudioMix.MinLevel} previews db={moving:0.###}");
+            WalkTo(leaf, OriginalOptionsScreen.AudioAcceptKey);
+            leaf.Drive(new MenuCommands { Accept = true });
+            ctx.Check(applied != null && applied.AudioEffects == AudioMix.MinLevel,
+                $"ACCEPT CHANGES hands the walked level to the apply ({applied?.AudioEffects?.ToString() ?? "no exit"})");
+            ctx.Check(!leaf.Visible, $"and closes the leaf back onto the sheet (visible={leaf.Visible})");
+
+            float effects = BusVolume(AudioBuses.Effects);
+            report.AppendLine($"after the accept: {AudioBuses.Effects} db={effects:0.###}");
+            ctx.Check(effects <= SilenceDb + DbSlack,
+                $"the accepted silence stands on {AudioBuses.Effects} while the mission is still held db={effects:0.###}");
+            CheckPlayersHeardAt(ctx, flight, "FlightAudio's six", effects, report);
+            CheckPlayersHeardAt(ctx, aiEngine, "AiEngineAudio.MakeLoop", effects, report);
+            // The two categories nobody moved keep the levels the page opened on, so an accept is a
+            // mix and not a mute of everything.
+            CheckBus(ctx, AudioBuses.Music, AudioMix.DefaultMusic, AudioMix.DefaultMaster, report);
+            CheckBus(ctx, AudioBuses.Voice, AudioMix.DefaultVoice, AudioMix.DefaultMaster, report);
+            float after = AudioServer.GetBusVolumeDb(0);
+            ctx.Check(Math.Abs(after - developer) <= DbSlack,
+                $"and the accept left bus 0 alone db={after:0.###} before={developer:0.###}");
+            ctx.Note($"pause accept: Effects {AudioMix.MinLevel} lands at db={effects:0.###} on the held mission");
+        }
+        finally
+        {
+            leaf.Close();
+            menu.EndMixPreview();
+            ctx.Host.RemoveChild(leaf);
+            leaf.QueueFree();
+            AudioMix.Apply();
+        }
+    }
+
+    // Every player a site built, read against the gain its own bus actually stands at. Reading the
+    // bus the player names is the only thing that says a moved level was heard: a player left on
+    // Master, or a bus the accept never wrote, both sound on regardless of what was accepted.
+    private static void CheckPlayersHeardAt(
+        TestContext ctx, Node owner, string site, float want, StringBuilder report)
+    {
+        var players = new List<(string Path, string Bus)>();
+        Collect(owner, owner, players);
+        ctx.Check(players.Count >= AtLeastOne, $"{site} built at least one player got={players.Count}");
+        foreach (var (path, bus) in players)
+        {
+            float db = BusVolume(bus);
+            report.AppendLine($"  {path} bus={bus} db={db:0.###}");
+            ctx.Check(bus != AudioBuses.Master && Math.Abs(db - want) <= DbSlack,
+                $"{site}'s {path} sounds at the accepted level bus={bus} db={db:0.###} want={want:0.###}");
+        }
+    }
+
+    // A bus's standing volume by name, NaN where no bus carries the name, which reads in a report
+    // rather than throwing off an index of -1.
+    private static float BusVolume(string bus)
+    {
+        int index = AudioServer.GetBusIndex(bus);
+        return index < 0 ? float.NaN : AudioServer.GetBusVolumeDb(index);
+    }
+
+    // Walks the page's focus onto a key, the keyboard's own way across a screen.
+    private static void WalkTo(PausePreferences leaf, string key)
+    {
+        for (int guard = 0; guard < WalkGuard && leaf.Shell.FocusedKey != key; guard++)
+        {
+            leaf.Drive(new MenuCommands { MoveY = 1 });
         }
     }
 

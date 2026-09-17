@@ -232,6 +232,10 @@ public sealed partial class PausePreferences : Control
         SyncControlsSeats();
         if (step.Exit is OptionsApplyExit applied)
         {
+            // ⚠ End the preview before the apply, never after, the close below ending it too. A
+            // restore running last puts the page's opening mix back over the accepted levels, heard
+            // then only at the next start.
+            _audio?.EndMixPreview();
             _applied?.Invoke(applied);
             Close();
             return false;

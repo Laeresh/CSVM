@@ -921,23 +921,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   Voice bus or the one-shot path. *⚠ Traps:* the scripted lines ride `Mech3/MissionRadio.cs`, a
   different channel, so their working proves nothing about this one. *Playtest after fix:* any
   campaign dogfight with an AI wingman; damage an enemy and take hits, and listen for the tiered
-  calls. *Cross-refs:* `docs/formats/combat-voice.md`, `BL-935` (the levels, in case the Voice
-  level is the cause).
-
-- `BL-935` `[Bug]` `[S]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **A level moved on
-  the AUDIO page does not change the sound of the mission being flown; it takes hold only after
-  the game is closed and started again.** *Evidence:* reported at the controls.
-  `Launcher.PersistOptions` writes the three category buses through `AudioMix.Apply` on every
-  accept, the same call the startup path makes, and the page previews a level as it moves through
-  `MenuAudioService.PreviewMix`, so the mixer is written; what to settle is what the in-flight
-  emitters play on. *What to settle first:* whether the flight's players sit on the `Music`,
-  `Effects` and `Voice` buses that `AudioMix` writes or on the Master bus, and whether the pause
-  sheet's AUDIO page reaches `PersistOptions` at all (the sheet builds through
-  `Flight.PausePreferences`), reading the `sound` log's `mix master=` line on an accept over the
-  pause. *⚠ Traps:* bus 0 is deliberately never written by the mix, since it carries the developer
-  gain; do not fix this by writing it. *Playtest after fix:* over the pause, drop Effects to 0 and
-  resume; the guns and the engine fall silent at once. *Cross-refs:* `BL-782` (Built-in's page),
-  `PLAN-audio-preferences`, `AudioBusSuites.cs`.
+  calls. *Cross-refs:* `docs/formats/combat-voice.md`, the saved Voice level, in case the mix rather
+  than the dispatcher is what silences them (`Utils/AudioMix.cs`, the `audio-buses` suite).
 
 ## Cameras & views
 

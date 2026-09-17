@@ -754,6 +754,12 @@ member, and it does not go here.
   evidence any frame differed, only reading the presented frames back is.** A load screen that
   repainted a `Control` and called `RenderingServer.ForceDraw()` reported 12 draws over a real
   launch and wrote 12 byte-identical captures, the first fraction over and over.
+- **INSTR-89**, **A setting's own apply line is not evidence that the setting stands: read the state
+  it writes after the screen that applied it has closed, since a screen previewing a setting live
+  owes the state it opened over back and can put it back on top of the accept.** The pause sheet's
+  AUDIO page logged `mix master=100 music=50 effects=0 voice=50` on an accept and the bus was at
+  -6.021 dB a moment later, the preview's restore having run after the apply, which is why the level
+  was heard only at the next start.
 
 ## SRC, sources and documents
 
