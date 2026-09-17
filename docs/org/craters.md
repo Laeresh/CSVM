@@ -14,8 +14,14 @@ record list and the refusal, `TerrainCarve.cs` the mesh and collider surgery, `C
 decoration destruction. What is faithful and what stands in for it is "How CSVM builds it" below.
 
 **Scope.** This page covers the **engine-wide crater template**, the **weapon sub-block** that
-overrides it, **what one carve actually builds**, the **three failure paths**, and the
-**bookkeeping** that decides how many craters a mission can hold.
+overrides it, **what one carve actually builds**, the **three failure paths**, the
+**bookkeeping** that decides how many craters a mission can hold, and the **node flag that keeps
+every one of those from running in the shipped game**.
+
+⚠ **Read "No shipped detonation reaches the carve" before building on anything above it.** The carve
+is decoded, complete and unreachable from a played detonation: the gate is the struck node's
+`CAN_MODIFY` flag, and no node in the install carries it. Everything this page describes about
+building, clipping, tesselating and refusing a crater is code that runs only under the debug key.
 
 ## Function map
 
@@ -24,6 +30,7 @@ overrides it, **what one carve actually builds**, the **three failure paths**, a
 | `FUN_004e5590` | `zdec_init.cpp`: reads `declient.zrd`, fills the crater and quicksand templates and the texture table |
 | `FUN_004e4870` | copies the crater template into a caller's request struct |
 | `FUN_005ac690` | the weapon's carve request: fills a template copy from the hit and the weapon, then asks for the carve |
+| `FUN_004ccb20` | `zclass/Class.c`: sets or clears a node's `CAN_MODIFY` bit, the flag the carve gates on |
 | `FUN_004e4a10` | the entry point: an optional veto hook, then the instancer |
 | `FUN_004e4890` | `zdec_crater.cpp`: the instancer, and the owner of the three failure strings |
 | `FUN_004e4e00` | allocates the crater instance from the request |
@@ -142,10 +149,12 @@ authored.
 
 `FUN_005ac690` runs from the direct-impact handler `FUN_005ac7a0` at two sites, `0x005ac83c` for the
 struck surface and `0x005ac8bb` for the terrain record stashed in `DAT_00a1e17c`, both under
-`+0x74` bit `0x10` and both skipped when the impact hook's suppression mask carries bit 2. It fills
-a request (position from the hit record's `+0x0c`…`+0x14`, material from `+0x20`, the three sizes as
-above) and hands it to `FUN_004e4a10`, which first offers the request to an optional veto callback
-at `DAT_00727ca4`. **No code in the binary installs that callback**, so the veto never fires.
+`+0x74` bit `0x10` and both skipped when the impact hook's suppression mask carries bit 2. It opens
+with the node gate below, and only past it fills a request (position from the hit record's
+`+0x0c`…`+0x14`, material from `+0x20`, the three sizes as above) and hands it to `FUN_004e4a10`,
+which first offers the request to an optional veto callback at `DAT_00727ca4`. **No code in the
+binary installs that callback**, so the veto never fires: `0x00727ca4` has one cross-reference
+program-wide and it is `FUN_004e4a10`'s own read.
 
 `FUN_004e4890` then runs the three stages, with a geometry tolerance global saved, set to 0.005 for
 the duration and restored afterwards (`FUN_005600c0` / `FUN_005600d0`).
@@ -206,6 +215,110 @@ which nothing in this install does ([`ordnanceTypes.md`](ordnanceTypes.md), "Hal
 impact"). `zdec_qsand.cpp` carries the same three messages for `QUICK_SAND`, whose weapon flag
 `+0x74` bit `0x40000` no entry sets.
 
+## No shipped detonation reaches the carve
+
+`FUN_005ac690` opens on a gate that stands in front of everything above. It reads the struck node off
+the hit record (`hit + 0x24`, the field `FUN_004c7f50` fills with the node it recorded) and tests
+that node's own flag word for bit `0x10000`:
+
+| Address | Instruction | Meaning |
+|---|---|---|
+| `0x005ac698` | `MOV ECX,[ESI+0x24]` | the struck node, off the hit record |
+| `0x005ac69b` | `MOV EDX,[ECX+0x24]` | that node's flag word |
+| `0x005ac69e` | `XOR EAX,EAX` | the return value, pre-set to false |
+| `0x005ac6a0` | `TEST EDX,0x10000` | bit 16, `CAN_MODIFY` |
+| `0x005ac6a6` | `JZ 0x005ac795` | clear: return false, having touched nothing |
+
+Bit 16 is **`CAN_MODIFY`**, and both halves of that identification are independent. Its setter is
+`FUN_004ccb20` (`zclass/Class.c`), which ORs `0x10000` into node `+0x24` on a non-zero argument and
+clears it otherwise; the GameGen keyword walk `FUN_004c2130` calls it at `0x004c2184` from the same
+keyword table that fixes `INTERSECT_SURFACE` at 4, `LANDMARK` at 7 and `CLIP_TO` at 17
+([`weaponRay.md`](weaponRay.md)). mech3ax's node-flag table names the same bit `CAN_MODIFY` and
+glosses it "geometry can be modified by the destruction engine, this allows craters to be generated".
+
+**No node in the install carries it.** Census over the extraction, every node of every tree:
+
+| Tree | Nodes | `can_modify: true` |
+|---|---|---|
+| C1 | 7,064 | 0 |
+| C1B | 5,603 | 0 |
+| C1C | 5,644 | 0 |
+| C2 | 4,956 | 0 |
+| C2B | 4,901 | 0 |
+| C3 | 5,408 | 0 |
+| C4 | 8,289 | 0 |
+| C5 | 11,438 | 0 |
+| `planes` | 3,317 | 0 |
+
+mech3ax's reader annotates the bit `CS never`, and the install round-trips byte-identically through
+extract and repack, so the absence is exact rather than a reader gap.
+
+**Nothing turns it on at runtime either.** `FUN_004ccb20` has exactly three callers. `FUN_004c2130`
+is the load-time keyword applier above, which reads what the file authors. `FUN_004d7b90`
+(`zclass/cls_util.c`) is the node-copy helper, which passes bit 16 of a source node to the setter on
+a destination, so it can only propagate a bit already set. The third, at `0x005bad7c` inside
+`FUN_005b80a0`, is the script command `NodeSetCanModify` (its name string at `0x0063eaf0`, beside
+`NodeSetLighting`). A byte scan of every file in the retail install finds `NodeSetCanModify` only
+inside `crimson.exe`, so no shipped archive invokes it.
+
+**So the three failure paths are never reached.** A `CRATER` round in play returns from
+`FUN_005ac690` at `0x005ac6a6` with false. `FUN_004e4a10` is never entered from a detonation, the
+veto callback is beside the point, and `FUN_004e4890` never logs Build Failed, Clip Failed or
+Tesselation Failed, because it never runs. The one live reach of `FUN_004e4a10` is the debug-key
+handler `FUN_00443310`, which supplies its own template and world position and takes no hit record,
+so the subsystem is exercisable in development and unreachable in play.
+
+**A fused burst reaches the same gate and fails it too.** `FUN_005ac3a0` fills its synthetic hit
+record's node field (`+0x24`) from the round's own `+0x0c` before calling `FUN_005ac7a0`, so a
+`CRATER` weapon that detonates on its proximity fuse still enters `FUN_005ac690` and still fails the
+flag test, rather than being kept out by a null record.
+
+**Two of the four carve sites are dead a second way.** `FUN_005ac7a0`'s second crater site and both
+quicksand sites read `DAT_00a1e17c` and `DAT_00a1e174`. Those globals are written in exactly three
+places: `FUN_005abcf0`'s entry zeroes both (`0x005abcf8`, `0x005abcfe`), the init `FUN_005ad4e0`
+zeroes both (`0x005ad53b`, `0x005ad540`), and `FUN_005abf80` would set them but **has no caller**.
+Both are therefore always zero, and the only carve site with any reach at all is `0x005ac83c`.
+
+**What that costs the presentation.** Because the carve never lands, `FUN_005ac690` always returns
+false, `FUN_005ac7a0`'s suppression byte stays zero, and the six `CRATER` weapons always play their
+`IMPACT` row's `ANIMATION` and `SURFACE_ANIMATION`. The "a successful crater suppresses both slots"
+rule is real code with no reach in the shipped game.
+
+## What a Choker ground hit shows
+
+`wep_12`, the Choker, is one of the six `CRATER` carriers and the only one a human can fit, so it is
+the case the question turns on. Its authored `IMPACT` table is four rows:
+
+| Row | `ANIMATION` | `EFFECT` | `SOUND` |
+|---|---|---|---|
+| `default` | `scatter_effect` | none | `snd_missile_choker` |
+| `water` | `bsplsh.flt` | none | `snd_bsplash` |
+| `player` | `scatter_effect` | `rcochet1` | `snd_missile_choker` |
+| `buildings` | `scatter_effect` | none | `snd_missile_choker` |
+
+No row authors a `SURFACE_ANIMATION`, so nothing the Choker plays is ever rotated onto the struck
+normal, and the `default` row authors no `EFFECT`.
+
+The `TANGLER` parse installs the impact hook `LAB_004ba660`, which builds the choke cloud and returns
+**1** ([`ordnanceTypes.md`](ordnanceTypes.md), "The choker, settled"). Bit 1 is the sound bit, so
+`FUN_005ad100` is skipped and **a Choker impact is silent in the original**, on ground, water and
+aircraft alike; what a player hears is the cloud's own presentation and the propeller wind-down of
+whatever it catches. Bits 2 and 4 are clear, so the crater attempt and both animation slots are left
+alone.
+
+Flat C1 ground carries soil id `default`(0) or `dirt`(13), and `dirt` is named by no weapon in the
+install, so it inherits `default`'s row whole ([`weaponImpact.md`](weaponImpact.md)). Either way the
+row played is `default`. So one Choker on flat ground in the original spawns `scatter_effect` at the
+hit point with no rotation, and nothing else: no sound, no row effect, no surface-laid animation and
+no crater.
+
+`scatter_effect` is the `ANIMATION_NAME` of the def `scatter_trails` in `scatter_control.zrd`. Its
+sequence calls three things at the spawn point: `scatter_flashes` (a `scatter_light1` at colour
+`0.95, 0.76, 0.24` and range 4 to 10, ramped out to 16 to 40 over 1.2 s and back over 0.8 s, then
+made inactive), `call_scatter_trails`, and `large_black_smokeball`. **A gold flash, the scatter
+trails and a large black smokeball is the whole of what the original shows**, which is the
+"explosion then black smoke" a Choker drop reads as at the controls.
+
 ## Persistent, capped per cell, and never overlapping
 
 A crater is **permanent for the mission**. Nothing ages it out, nothing recycles it, and there is no
@@ -241,9 +354,17 @@ defaults.
 
 ## How CSVM builds it
 
-A `CRATER` weapon's round that strikes anything other than an aircraft asks `CraterField` for a
-crater at its impact point, and only a carve that landed suppresses the row's impact animation, the
-same AND the original runs. What is faithful:
+⚠ **CSVM carves where the original never does.** A `CRATER` weapon's round that strikes anything
+other than an aircraft asks `CraterField` for a crater at its impact point, with no test of the
+struck node's `CAN_MODIFY` flag, because `SceneBuilder` carries no node flag but
+`intersect_surface` into the built world. The original's own gate refuses every shipped node ("No
+shipped detonation reaches the carve"), so a bowl in the ground is a divergence, and so is its
+knock-on: `ImpactOutcome.Resolve` drops both animation slots and the stand-in on a carve that
+landed, the same AND the original runs, so the drop that digs the bowl also shows none of the burst
+the original always shows. What the carve builds when it is asked, below, is faithful to what the
+original's own debug key builds.
+
+What is faithful:
 
 - The shape. Seven rim vertices at radius 20 on the ground the ring was clipped against, a mid ring
   halfway in and one `DEPTH` down, an apex two `DEPTH`s under the impact. No randomisation, because
@@ -291,6 +412,16 @@ What stands in for the original's own mechanism:
 - The three failure paths' cleanup was read from `FUN_004e4890`'s disassembly. The decompiler drops
   the argument to the Clip-Failed cleanup call and makes it look like a leak; the instruction at
   `0x004e4915` pushes the instance, so it is not one.
+- The node gate was read from `FUN_005ac690`'s disassembly (`0x005ac698`…`0x005ac6a6`), and the bit
+  named from `FUN_004ccb20`'s single store and from `FUN_004c2130`'s keyword walk, which reaches it
+  beside the setters `weaponRay.md` already ties to `INTERSECT_SURFACE`, `INTERSECT_BBOX` and
+  `LANDMARK`. "No shipped node carries it" is a count of `"can_modify": true` over every
+  `nodes.json` the extraction produces, 56,620 nodes, zero hits. "Nothing sets it at runtime" rests
+  on `FUN_004ccb20`'s three cross-references and on a byte scan of all 360 files of the retail
+  install for `NodeSetCanModify`, which hits only `crimson.exe`.
+- What the round's `+0x0c` holds, which `FUN_005ac3a0` copies into the synthetic hit record's node
+  field, was not traced; the claim made from it is only that the field is non-null on the fused
+  path, so the gate rather than a null check is what refuses the carve there.
 - `FUN_005272e0` (the clip), `FUN_00527040` and `FUN_00526590` (the mesh builder and its polygon
   emitter), `FUN_00526350` (the lighting probe) and `FUN_004da3b0` / `FUN_004da430` (the terrain
   cell queries) were not opened; their roles are inferred from their arguments and from the

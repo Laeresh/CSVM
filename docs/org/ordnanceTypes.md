@@ -670,13 +670,15 @@ and sound a row binds and how rows are filled. It does not cover what a detonati
   `+0x74`, not on the extension flags: `FUN_005ac690` under bit `0x10` (**`CRATER` present**, set by
   `FUN_005ad630` where it reads the key) and `FUN_005ac580` under bit `0x40000` (**`QUICKSAND`**,
   unauthored). Both gate on the struck node carrying `0x10000` and randomise a count and two scales
-  from weapon fields `+0x198`/`+0x1c0`, `+0x1a4`/`+0x1cc` and `+0x1a8`/`+0x1d0`. ⚠ A crater that was
-  actually carved suppresses **both** animation slots below unless the weapon authors
-  `ANIMATION_ALWAYS` (`+0x74` bit `0x800000`; nothing in this install does), so on the six
-  `CRATER` weapons the ground effect is the crater rather than the ring where the terrain takes one.
-  The randomisation never fires, because all six carriers author the block bare and every span is
-  zero; what the carve then builds, and why a carve is often refused outright, is
-  [`craters.md`](craters.md), which also says what CSVM builds and what stands in for the rest.
+  from weapon fields `+0x198`/`+0x1c0`, `+0x1a4`/`+0x1cc` and `+0x1a8`/`+0x1d0`. ⚠ **That `0x10000`
+  is `CAN_MODIFY`, and no node in the install carries it**, so neither carve ever runs in play and
+  `FUN_005ac690` always returns false ([`craters.md`](craters.md), "No shipped detonation reaches
+  the carve"). A crater that was actually carved would suppress **both** animation slots below
+  unless the weapon authors `ANIMATION_ALWAYS` (`+0x74` bit `0x800000`; nothing in this install
+  does), so that suppression is code with no reach and the six `CRATER` weapons always play their
+  rows. The randomisation never fires either, because all six carriers author the block bare and
+  every span is zero; what the carve would build, and what CSVM builds instead, is
+  [`craters.md`](craters.md).
 - **The row's own bindings** follow: the sound through `FUN_005ad100`; the `ANIMATION` (row `+0x4`)
   spawned through `FUN_004edc10` with a zero rotation, and only when `FUN_005abcf0` returned 0; and
   the `SURFACE_ANIMATION` (row `+0x1c`) spawned with an orientation built from the hit record:

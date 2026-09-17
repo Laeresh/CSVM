@@ -99,7 +99,7 @@ against each caliber's slug, not something the engine computes.
 | `IMPACT_PROXIMITY` | 14 | 15–500 | blast / effect radius, m (**stored raw and squared**, see below) |
 | `DETONATION_DOT_PRODUCT` | 3 | 0.1 / 0.3 | cone-alignment threshold for a proximity detonation |
 | `DETONATION_TIME` | 1 | 2.0 | timed fuse, s (rear-arc flare). Defaults to −1.0 and the fuse demands a positive value, so an unauthored one is off rather than instant |
-| `CRATER` | 6 | 0 | carves a bowl out of the terrain where the round lands; marks the ground-attack munitions. All six carriers spell it as the bare scalar `[0]`, so none of them overrides the engine-wide size, and every crater in the game is a 7-vertex rim at radius 20 and depth 3 (the engine-wide `declient.zrd` values). The block also accepts `points`/`radius`/`depth` min-max pairs that nothing authors. Decoded in [`org/craters.md`](../org/craters.md) |
+| `CRATER` | 6 | 0 | marks the ground-attack munitions, and would carve a bowl out of the terrain where the round lands. ⚠ **No crater is ever carved in the shipped game**: the carve gates on the struck node's `can_modify` flag and no node in the install carries it, so the six carriers are marked and nothing more. All six spell the key as the bare scalar `[0]`, so none of them overrides the engine-wide size either; the block also accepts `points`/`radius`/`depth` min-max pairs that nothing authors. Decoded in [`org/craters.md`](../org/craters.md) |
 
 **Whether a round is steered is a gate, and how hard it turns is `TURN_RATE`.** There is no `GUIDED`
 boolean. The engine enters its steering step only for a weapon carrying `LOCK_ON` whose round holds

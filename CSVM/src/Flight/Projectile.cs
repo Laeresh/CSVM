@@ -2033,8 +2033,8 @@ public sealed partial class ProjectilePool : Node3D
         // feeds the resolve, so Apply performs a row already stripped of what the hook silenced.
         var suppression = RunImpactHook(weapon, point);
         // The terrain carve runs between the hook and the row's own bindings, under the hook's
-        // Effects bit, and only on a direct strike: a fused burst carries no hit record, so the
-        // original's carve sites are never reached from one (docs/org/craters.md).
+        // Effects bit. ⚠ The original refuses every carve on the struck node's CAN_MODIFY flag,
+        // which no shipped node carries, so this sink diverges whenever it fires (docs/org/craters.md).
         bool cratered = weapon.Crater && shapeIdx >= 0 && collider is not AircraftBody
             && (suppression & ImpactSuppression.Effects) == 0
             && (CraterSink?.Invoke(point, collider) ?? false);
