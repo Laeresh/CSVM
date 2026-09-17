@@ -56,7 +56,9 @@ internal static class MenuOriginalSuites
         + "aircraft column and over Instant Action's contents window moves each one row and clamps "
         + "at the head, a drag down each thumb's track lands the window on its last row without "
         + "activating what the click stood over, and the contents arrows still step it, seat 0 steering with a "
-        + "pad claims it so it can never join as another seat, joining is open on the Instant Action "
+        + "pad claims it so it can never join as another seat, a pad a guest already joined on is "
+        + "not claimable and a rebind of seat 0's set drops the stale last-active reading with it, "
+        + "joining is open on the Instant Action "
         + "screen and a second seat joined there stays seated, the campaign flight check carries the "
         + "seat strip with two seats and none with one, drawn as Built-in's own chip row in the "
         + "top-right corner clear of the book tab, a switch to Built-in "
@@ -361,6 +363,8 @@ internal static class MenuOriginalSuites
         ctx.Check(devices.P1Pad == 2 && devices.IsClaimed(2),
             $"seat 0 steering with pad 2 claims it, so the join scan skips that pad ({devices.P1Pad}, claimed={devices.IsClaimed(2)})");
         player1.LastActivePad = -1;
+        host.Tick(Dt);
+        GuestPadClaim(ctx, host, setup, devices, player1);
 
         WalkTo(host, seat, shell, "MM_B_INSTANTACTION");
         Press(host, seat, Accept);
@@ -387,6 +391,33 @@ internal static class MenuOriginalSuites
         host.Show(MenuReturnDestination.TopLevel);
         ctx.Check(shell.Screen == OriginalScreen.TopLevel && !host.Features.Get<CampaignFeature>().IsOpen,
             $"a top-level show closes the scratch campaign again ({shell.Screen})");
+    }
+
+    // Seat 0 borrows every unclaimed pad, so a guest steering the menu before they press Start
+    // leaves their own pad in its last-active reading. Both halves of what keeps a later claim off
+    // that pad: the claim skips a pad another seat holds, and a rebind of seat 0's set drops the
+    // reading it was taken from.
+    private static void GuestPadClaim(
+        TestContext ctx, MenuHost host, PlayerSetupFeature setup, MenuSeatDevices devices, MenuInput player1)
+    {
+        var guest = new MenuInput { Pads = new[] { 2 } };
+        var seat = setup.Join(new BuiltInSeat(guest));
+        player1.LastActivePad = 2;
+        ctx.Check(seat != null && !devices.ClaimP1Pad() && devices.P1Pad < 0,
+            $"a guest's joined pad is not claimable by seat 0, so neither seat flies the other's ({devices.P1Pad})");
+
+        player1.Pads = new[] { 2 };
+        devices.Sync();
+        ctx.Check(player1.LastActivePad < 0,
+            $"and rebinding seat 0's pads drops the stale reading with them ({player1.LastActivePad})");
+        ctx.Check(!devices.ClaimP1Pad() && devices.P1Pad < 0,
+            $"leaving the claim nothing to take from a set seat 0 no longer reads ({devices.P1Pad})");
+        if (seat != null)
+        {
+            setup.Unjoin(seat);
+        }
+
+        host.Tick(Dt);
     }
 
     // How many seat lines the composed board's overlays carry: the strip's lines are the only

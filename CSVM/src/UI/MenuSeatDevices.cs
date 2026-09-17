@@ -129,6 +129,10 @@ public sealed class MenuSeatDevices
         {
             _player1.Pads = free.ToArray();
             _player1.Prime();
+            // ⚠ The last-active reading dies with the set it was taken from: it names a pad seat 0
+            // was only BORROWING, and a guest steering the menu before they press Start leaves
+            // theirs in it, which a later claim would pin seat 0 to.
+            _player1.LastActivePad = -1;
             dirty = true;
         }
 
@@ -177,12 +181,14 @@ public sealed class MenuSeatDevices
     }
 
     /// <summary>Pins seat 0 to whichever pad it is steering with, once, so by the time joining
-    /// opens every other pad is unambiguously a joiner. Steering with the keyboard claims nothing.
-    /// Returns whether a claim was made.</summary>
+    /// opens every other pad is unambiguously a joiner. Steering with the keyboard claims nothing,
+    /// and neither does a pad another seat already holds: two seats on one pad fly both planes off
+    /// it and leave the other player's own pad bound to nobody. Returns whether a claim was made.
+    /// </summary>
     public bool ClaimP1Pad()
     {
         int pad = _player1.LastActivePad;
-        if (P1Pad >= 0 || pad < 0)
+        if (P1Pad >= 0 || pad < 0 || IsClaimed(pad))
         {
             return false;
         }
