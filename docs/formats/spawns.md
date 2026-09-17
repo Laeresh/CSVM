@@ -12,10 +12,24 @@ by `CSVM/src/Flight/SpawnPoints.cs`.
 
 `spawn_points` is a dict mapping scenario name → list of spawn entries
 `[x, y, z, heading°]`. The original picks one entry at **random** per launch (e.g.
-C1/IA1 `zeppelin_run` = 4 spawns, which are the first 4 of `dogfight_ace`). Scenario
+C1/IA1 `zeppelin_run` = 4 spawns, which are the first 4 of `dogfight_ace`; the other seven
+chapters author the two lists independently). Scenario
 names seen: `dogfight_ace`, `dogfight_squadron`, `stunt_flying`, `zeppelin_run`. No
 throttle/speed fields here: an Instant Action spawn takes throttle 1.0 from the engine and
 its speed from the same `PLAYER_INIT[4]` the story missions use (see "Story mission spawns").
+
+⚠ **The distance between two authored entries is never a rule.** The builder `FUN_0045a390`
+places at most three aircraft from the list: the player on `rand() % count`, the ace on
+`rand() % (count - 1)` and the enemy flight's leader on another `rand() % (count - 1)`, each of the
+latter two bumped to the last entry when it collides with the player's index. That collision bump
+is the only separation the executable enforces. Everyone else is placed **relative to one of those
+three**, on a fan off that entry's heading: member `i` sits `((i >> 1) + 1) × 100` m out on the
+heading rotated by `±0.7853982` rad, the sign alternating with `i & 3`, at the entry's own altitude.
+So a list's own pairwise spacing constrains nothing, and reading one list as "tighter" than another
+describes the authoring, not a behaviour. Across the eight `IA1` files the closest authored pair is
+176 m (C1B `dogfight_ace`) and the widest nearest-neighbour is 3047 m (C4 `zeppelin_run`);
+`dogfight_ace` is the denser list in seven of eight chapters simply because it holds eight points
+where `zeppelin_run` holds four.
 
 Scenario names appear **only** in `ia.json` (spawn lists + `disallow_missions`); no
 reader carries scenario-conditional world state, the world build is per-mission,

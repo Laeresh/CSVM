@@ -5,9 +5,10 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// Dogfight match bookkeeping (<see cref="VersusMatch"/>), off-engine: kill/death tallies, the
-/// two ways a match ends (threshold, time-out), the tie-draw rule, a rematch's re-arm, and each
-/// end condition disabled on its own. <see cref="VersusMatch"/> is a plain class with no engine
+/// Dogfight match bookkeeping (<see cref="VersusMatch"/>), off-engine: the signed score with its
+/// suicide penalty, kill/death tallies, the two ways a match ends (threshold, time-out), the
+/// tie-draw rule, a rematch's re-arm, and each end condition disabled on its own.
+/// <see cref="VersusMatch"/> is a plain class with no engine
 /// dependency at all (unlike its sibling <see cref="StuntRace"/>, it needs no fake-collaborator or
 /// console-sink dance, there is nothing here that could reach <c>GD.*</c>).
 /// </summary>
@@ -21,10 +22,56 @@ public class VersusMatchTests
         match.RegisterKill(shooter: 0, victim: 1);
 
         Assert.Equal(1, match.KillsOf(0));
+        Assert.Equal(1, match.ScoreOf(0));
         Assert.Equal(0, match.DeathsOf(0));
         Assert.Equal(0, match.KillsOf(1));
         Assert.Equal(1, match.DeathsOf(1));
+        Assert.Equal(0, match.ScoreOf(1)); // shot down by somebody else, no penalty
         Assert.False(match.Completed);
+    }
+
+    // The original's score_suicide: a death with no killer costs the pilot who died a point off
+    // the same running score the kill target is compared against.
+    [Fact]
+    public void ADeathWithNoKillerCostsAPointAndPushesTheTargetFurtherAway()
+    {
+        var match = new VersusMatch(playerCount: 2, killTarget: 3, timeLimit: 300f);
+
+        match.RegisterKill(shooter: 0, victim: 1);
+        match.RegisterKill(shooter: 0, victim: 1);
+        Assert.Equal(1, match.KillsRemaining(0));
+
+        match.RegisterDeath(victim: 0);
+
+        Assert.Equal(2, match.KillsOf(0));
+        Assert.Equal(1, match.DeathsOf(0));
+        Assert.Equal(1, match.ScoreOf(0));
+        Assert.Equal(2, match.KillsRemaining(0)); // one kill further from the target than before
+        Assert.False(match.Completed);
+
+        match.RegisterKill(shooter: 0, victim: 1);
+        Assert.False(match.Completed); // a third kill is only the second point
+        match.RegisterKill(shooter: 0, victim: 1);
+        Assert.True(match.Completed);
+        Assert.Equal(4, match.KillsOf(0));
+        Assert.Equal(3, match.ScoreOf(0));
+    }
+
+    [Fact]
+    public void ScoreGoesNegativeAndRanksBelowAnUntouchedPilot()
+    {
+        var match = new VersusMatch(playerCount: 2, killTarget: 0, timeLimit: 10f);
+
+        match.RegisterDeath(victim: 0);
+        match.RegisterDeath(victim: 0);
+        match.Advance(10f);
+
+        Assert.Equal(-2, match.ScoreOf(0));
+        var order = new List<VersusStanding>(match.Standings());
+        Assert.Equal(1, order[0].PlayerIndex); // the pilot who never crashed leads on 0
+        Assert.Equal(1, order[0].Rank);
+        Assert.Equal(0, order[1].PlayerIndex);
+        Assert.Equal(2, order[1].Rank);
     }
 
     [Fact]
@@ -107,8 +154,9 @@ public class VersusMatchTests
         match.Advance(9999f);
 
         Assert.Equal(2, match.KillsOf(0));
+        Assert.Equal(2, match.ScoreOf(0));
         Assert.Equal(2, match.DeathsOf(1));
-        Assert.Equal(0, match.DeathsOf(0));
+        Assert.Equal(0, match.DeathsOf(0)); // the post-completion RegisterDeath changed nothing
         Assert.Equal(1, completedCount); // still just the one firing
     }
 
@@ -127,6 +175,7 @@ public class VersusMatchTests
 
         Assert.False(match.Completed);
         Assert.Equal(0, match.KillsOf(0));
+        Assert.Equal(0, match.ScoreOf(0));
         Assert.Equal(0, match.DeathsOf(1));
         Assert.Equal(0f, match.Elapsed);
 
@@ -177,7 +226,8 @@ public class VersusMatchTests
 
         Assert.Equal(10, match.DeathsOf(0));
         Assert.Equal(0, match.KillsOf(0));
+        Assert.Equal(-10, match.ScoreOf(0)); // the penalty applies every time, nothing floors it
         Assert.Equal(0, match.KillsOf(1));
-        Assert.False(match.Completed);
+        Assert.False(match.Completed); // a falling score can never reach the target
     }
 }

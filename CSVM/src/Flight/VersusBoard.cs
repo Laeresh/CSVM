@@ -9,7 +9,7 @@ namespace CSVM.Flight;
 /// The shared results board for splitscreen "Dogfight", <see cref="ResultsBoard"/>'s shell: the
 /// match ends for everybody at once, so this covers the WHOLE window on its own CanvasLayer over
 /// the splitscreen panes, not a per-pane overlay. Winner (or "DRAW" on a tie) on top, then one
-/// ranked row per player, tag, kills, deaths, in their own identity colour; the winner's row is
+/// ranked row per player, tag, score, kills, deaths, in their own identity colour; the winner's row is
 /// highlighted the same way the race board highlights first place. R and pad Y still reach the
 /// rematch directly, for the muscle memory and for the hold-test harness.
 /// </summary>
@@ -48,7 +48,7 @@ public sealed partial class VersusBoard : ResultsBoard
         Log.Info("flight", $"dogfight results:");
         foreach (var st in _match.Standings())
             Log.Info("flight",
-                $"  #{st.Rank}  {SplitScreen.PlayerTag(st.PlayerIndex)}  {st.Kills}K/{st.Deaths}D");
+                $"  #{st.Rank}  {SplitScreen.PlayerTag(st.PlayerIndex)}  {st.Score} pts  {st.Kills}K/{st.Deaths}D");
         Populate();
         Wake();
     }
@@ -69,15 +69,18 @@ public sealed partial class VersusBoard : ResultsBoard
         body.AddChild(Centered(Label(_context, (int)(ContextFont * s), ContextColor)));
         body.AddChild(Separator(s));
 
-        // One row per player: placing | tag | kills | deaths.
-        var grid = new GridContainer { Columns = 4 };
+        // One row per player: placing | tag | score | kills | deaths. Score is the ranked number
+        // and kills alone do not explain it, a death with no killer costs a point.
+        var grid = new GridContainer { Columns = 5 };
         grid.AddThemeConstantOverride("h_separation", Mathf.RoundToInt(26f * s));
         grid.AddThemeConstantOverride("v_separation", Mathf.RoundToInt(6f * s));
         body.AddChild(grid);
 
-        int rankW = (int)(52f * s), tagW = (int)(56f * s), killsW = (int)(80f * s), deathsW = (int)(80f * s);
+        int rankW = (int)(52f * s), tagW = (int)(56f * s), scoreW = (int)(80f * s);
+        int killsW = (int)(80f * s), deathsW = (int)(80f * s);
         AddCell(grid, "", (int)(HeaderFont * s), HeaderColor, HorizontalAlignment.Left, rankW);
         AddCell(grid, "", (int)(HeaderFont * s), HeaderColor, HorizontalAlignment.Left, tagW);
+        AddCell(grid, "SCORE", (int)(HeaderFont * s), HeaderColor, HorizontalAlignment.Right, scoreW);
         AddCell(grid, "KILLS", (int)(HeaderFont * s), HeaderColor, HorizontalAlignment.Right, killsW);
         AddCell(grid, "DEATHS", (int)(HeaderFont * s), HeaderColor, HorizontalAlignment.Right, deathsW);
 
@@ -91,6 +94,7 @@ public sealed partial class VersusBoard : ResultsBoard
             AddCell(grid, $"#{st.Rank}", font, color, HorizontalAlignment.Left, rankW);
             AddCell(grid, SplitScreen.PlayerTag(st.PlayerIndex), font, SplitScreen.PlayerColor(st.PlayerIndex),
                 HorizontalAlignment.Left, tagW);
+            AddCell(grid, st.Score.ToString(), font, color, HorizontalAlignment.Right, scoreW);
             AddCell(grid, st.Kills.ToString(), font, color, HorizontalAlignment.Right, killsW);
             AddCell(grid, st.Deaths.ToString(), font, color, HorizontalAlignment.Right, deathsW);
         }

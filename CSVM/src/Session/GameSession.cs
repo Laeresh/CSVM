@@ -2561,8 +2561,8 @@ public partial class GameSession : Node3D
         }
 
         // Dogfight (--vs): the match bookkeeping, fed by every rig's Downed report. A killer inside
-        // the roster scores a kill and anything else is a plain death. ⚠ Do not guard against
-        // post-completion events here; the match ignores them, and the rigs only report facts.
+        // the roster scores a kill, anything else is a death with no killer and costs a point.
+        // ⚠ Do not guard post-completion events here; the match ignores them, rigs report facts.
         if (versus is { } match)
         {
             _versus = match;
@@ -2593,8 +2593,8 @@ public partial class GameSession : Node3D
                             match.RegisterDeath(victim);
                     };
                 }
-            match.MatchCompleted += () => Log.Info("flight", $"dogfight: match complete, {string.Join(", ", match.Standings().Select(s => $"P{s.PlayerIndex + 1} {s.Kills}K/{s.Deaths}D (#{s.Rank})"))}");
-            Log.Info("flight", $"dogfight: {_rigs.Count} pilots, {(match.KillTarget > 0 ? $"first to {match.KillTarget} kills" : "no kill target")}, {(match.TimeLimit > 0f ? $"{match.TimeLimit / 60f:0.#} min limit" : "no time limit")}");
+            match.MatchCompleted += () => Log.Info("flight", $"dogfight: match complete, {string.Join(", ", match.Standings().Select(s => $"P{s.PlayerIndex + 1} {s.Score}pts {s.Kills}K/{s.Deaths}D (#{s.Rank})"))}");
+            Log.Info("flight", $"dogfight: {_rigs.Count} pilots, {(match.KillTarget > 0 ? $"first to {match.KillTarget} points" : "no kill target")}, {(match.TimeLimit > 0f ? $"{match.TimeLimit / 60f:0.#} min limit" : "no time limit")}");
 
             // The match's shared results board: same construction as the race board above,
             // one CanvasLayer over the whole window (the match ends for everybody at once), R

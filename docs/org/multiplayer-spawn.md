@@ -3,6 +3,8 @@
 Where the original puts a pilot in a network match: the opening placement off the mission's
 `net.zrd` table, and the different rule a respawn takes. The table's own file format is
 [`formats/net-spawns.md`](../formats/net-spawns.md); this page is what the executable does with it.
+What the same match counts and how it ends is
+[`multiplayer-scoring.md`](multiplayer-scoring.md).
 
 All of it lives in `remote.cpp` (the source path string at `00628f50`): `FUN_00495310` is the
 session init and `FUN_004969b0` is the placement it ends with.
@@ -73,4 +75,6 @@ The remake's Dogfight is the un-teamed match, so it takes the opening rule and t
 throttle and speed (`SpawnPicker.LoadSpawnList` and `SpawnPicker.StartState`, over
 `SpawnPoints.LoadNetFreeForAll`). It does **not** take the respawn rule: a centroid displacement
 puts a returning pilot next to the pack, which is the camping problem
-`Flight/VersusSpawnRotation.cs` exists to solve, and that rotation stays as it is.
+`Flight/VersusSpawnRotation.cs` exists to solve, and that rotation stays as it is. The stunt
+race's abreast starting grid is selected only when a race exists and never touches a Dogfight:
+four dogfighters 60 m apart on one heading is a head-on merge every round.

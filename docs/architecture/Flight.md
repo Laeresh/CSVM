@@ -674,12 +674,14 @@ once. Wakes on `RaceCompleted` and retires once `AllFinished` clears, so the rem
 without going through the menu. `StuntScoreboard` is the single-pilot form of the same table.
 
 ## src/Flight/VersusMatch.cs
-Dogfight deathmatch bookkeeping, engine-free: `RegisterKill` scores the shooter and tallies the
-victim's death, `RegisterDeath` tallies a death with no killer and no score change, `Advance(dt)`
-is the host-fed match clock, `MatchCompleted` fires once on the kill threshold or the time-out
-(leader wins, equal top kills draw), `Standings()` ranks by kills with ties sharing a rank, and
-`Restart()` zeroes every score and re-arms completion. Off-engine coverage:
-`CSVM.Tests/VersusMatchTests.cs`. Read `VersusHud` and `VersusBoard` for what it feeds.
+Dogfight deathmatch bookkeeping, engine-free: every pilot carries one signed score, `KillScore` per
+kill to the shooter and `SuicideScore` per death with no killer to the pilot who died, the
+original's own amounts. `RegisterKill`/`RegisterDeath` report those facts, `Advance(dt)` is the
+host-fed match clock, `MatchCompleted` fires once on a score reaching the target or on the time-out
+(leader wins, equal top scores draw), `Standings()` ranks by score with ties sharing a rank and
+carries kills and deaths for display, and `Restart()` zeroes everything and re-arms completion.
+Off-engine coverage: `CSVM.Tests/VersusMatchTests.cs`. Read `VersusHud` and `VersusBoard` for what
+it feeds, and `docs/org/multiplayer-scoring.md` for the decode.
 
 ## src/Flight/VersusSpawnRotation.cs
 Where a Dogfight seat comes back, engine-free: it owns the per-seat spawn-list ledger the opening
@@ -733,8 +735,9 @@ Decode: [targeting](../org/targeting.md), [spyglass](../org/spyglass.md).
 
 ## src/Flight/VersusBoard.cs
 The Dogfight results overlay on `ResultsBoard`'s shell: the winner in their own
-`SplitScreen.PlayerColor`, or a draw on a tie, over one ranked row per player with tag, kills and
-deaths from `VersusMatch.Standings()`. Whole-window, because the match ends for everybody at once.
+`SplitScreen.PlayerColor`, or a draw on a tie, over one ranked row per player with tag, score,
+kills and deaths from `VersusMatch.Standings()`. Score is the ranked column, kills alone do not
+explain it. Whole-window, because the match ends for everybody at once.
 Wakes on `MatchCompleted` and retires on the rematch; the rows are populated only from that
 completion, so they stay the ones the match ended with even after `Restart()` zeroes the live
 state. Restart routes through `GameSession.RestartMatch`, which the keyboard and pad shortcuts

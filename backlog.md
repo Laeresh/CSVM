@@ -430,8 +430,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the damage gather keeps dropping it, which is one gather flag, not a second walk. *⚠ Traps:* this
   is not the self-blast exemption itself, which is decoded, faithful and pinned by the `air-to-air`
   suite; only the no-damage arms are at issue. The decide is whether a self-flash a player cannot
-  see past is worth the fidelity in a two-to-four-player Dogfight. *Cross-refs:* `BL-301` (the VS
-  tuning entry the exemption settled), `ProjectilePool.GatherAircraftCandidates`.
+  see past is worth the fidelity in a two-to-four-player Dogfight. *Cross-refs:*
+  `git log --grep=BL-301` (the VS tuning entry the exemption settled),
+  `ProjectilePool.GatherAircraftCandidates`.
 
 - `BL-938` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **CSVM carves a crater
   where the original carves none, and the carve takes the Choker's own impact burst with it.** The
@@ -1171,7 +1172,7 @@ viewer set behind `ProjectilePool.Viewers` / `ScreenSize.NearestFloor` for draw 
 "the camera". Sim state stays global, the mission wind is the worked example
 (`Session/WeatherRig.Tick`, stepped once per frame outside the per-rig loop on purpose). Splitscreen-scoped items that live with
 their own system: `BL-537` (the 4-player pool judgement), `BL-296` (per-player ActionMap),
-`BL-301` (Dogfight tuning), `BL-314` (race countdown).
+`BL-314` (race countdown).
 
 The theme's first batch (`BL-126`, `BL-365`–`BL-376`) landed via
 `PLAN-splitscreen-polish` (2026-08-15,
@@ -1281,43 +1282,6 @@ usual.
   race has a defined start (`StuntRace.cs`, `ScoreStore.GetBest`/`RecordIfBest`), and would want
   their own key namespace, since a countdown makes race and solo totals diverge again.
 
-- `BL-301` `[Tuning]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Dogfight (VS mode) tuning**, every deliberate v1 deferral, to be re-judged from
-  `PT-43` evidence, not speculation. **Aim-assist strength settled 2026-08-13** from `PT-43`(a)/(b):
-  the shipped `sticky_bullet_*` constants (decoded in
-  [`docs/org/aim-assist.md`](docs/org/aim-assist.md), built by `BL-342`) read right at the
-  controls, damage balance plane-vs-plane felt good and guns are now a practical kill weapon
-  without rockets, a marked improvement over firing with no assist at all. No retune.
-  **Spawn camping is settled**, which `PT-43`(c) had confirmed a real problem: spawn rotation is
-  in, so the opening spawn is still the scenario list walk (one seat per point) and a downed seat
-  then comes back on a point drawn between the roomiest entries against the living field, never
-  the one it was downed at and never one a living seat holds, with the killer weighed heaviest
-  (`CSVM/src/Flight/VersusSpawnRotation.cs`, fed the live field by `GameSession` through
-  `FlightController.RespawnPlacement`). **The match rules are on the menu**: the built-in
-  launchscreen's Dogfight map screen carries the kill target and the time limit as two rows under
-  the maps, defaulting to the command line's own 5 kills and 5 minutes, with an explicit
-  `--vs-kills=`/`--vs-time=` still beating the row it names (`PlayerSetupFeature`,
-  `LaunchExit.Match`, `SessionSpec.FromMenu`); Original's Dogfight screen is remake-designed with
-  no authored slot for a widget, so it offers neither and launches at the defaults.
-  **The self-blast exemption holds, and it is the original's own rule rather than a balance
-  choice**: a round never damages the aircraft that fired it, by direct hit, fuse burst or splash,
-  because the original guards shooter against victim on the vehicle hit path
-  ([`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md)). CSVM drops the shooter one level
-  earlier, at the blast pass's aircraft gather, and the `air-to-air` suite pins it with a burst the
-  shooter cannot dodge: no damage and no death for it, the falloff share for a plane the same
-  distance out. The residual deviation that exemption creates is `BL-930`.
-  Still open: suicide penalty and last-damager credit (0 /
-  none in v1), sudden-death overtime on a drawn time-out (draw declared in v1; `PT-43`(f) found
-  draw frequency fine at the 5-kills/5-min defaults, so this stays low priority),
-  `dogfight_ace` vs `zeppelin_run` spawn
-  spacing, VS HUD line/arrow sizing at 4-player panes (`PT-43`(d):
-  confirmed readable and correctly edge-flipping at both 2 and 4 players, `BL-126` chrome playtest
-  2026-08-15, no retune owed; the general HUD text-scale config covers the separate font-size preference). Related,
-  not absorbed: `BL-126` (splitscreen chrome, closed 2026-08-15). ⚠ The stunt race's
-  abreast starting grid deliberately does **not** touch `--vs`, it is selected only when a race
-  exists, so Dogfight walks the scattered `dogfight_ace` list and the rotation keeps it that way.
-  Copying the grid over is the wrong reflex: four dogfighters 60 m apart on one heading is an
-  instant head-on merge every round.
-
 - `BL-523` `[Bug]` `[L]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **The AI's patrol/pursue/lay-off cycle does not match the original: CM05's
   second patrol never pursues, CM07's friendly flights hold their net while enemies attack them,
   and CM09's enemies fly up to 80 km away.** *Evidence:* three
@@ -1426,6 +1390,29 @@ usual.
   past C1's torpedo missions replays C1/M01 and finds the torpedo rows on the pylons.
   *Cross-refs:* `git log --grep=BL-788` (the guest's ammo and plane screens),
   `docs/formats/campaign-screens.md`.
+
+- `BL-939` `[Fidelity]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The original
+  arms a kill target or a time limit, never both, while CSVM's Dogfight arms both rows at once and
+  ends on whichever lands first.** *Evidence:* `FUN_004136e0` reads the lobby's limit kind from
+  `00642f94` and arms exactly one: kind 0 writes the time limit to `0071c180` and sets the
+  score-limit-off byte `0071c1a2`, kind 1 writes the score target to `0071c17c` and sets the
+  time-limit-off byte `0071c1a1`, and each end check is gated on the other's off byte
+  ([`docs/org/multiplayer-scoring.md`](docs/org/multiplayer-scoring.md)). CSVM's map screen offers
+  a kill-target row and a time-limit row together, both defaulted non-zero (5 kills, 5 minutes),
+  and `VersusMatch` honours whichever fires first. *The decision:* which of three, none of them
+  settled by the decode, since a remake menu is not a lobby.
+  (1) Keep both armed and record the deviation as a deliberate remake choice: no code, and a
+  Dogfight can still end two ways, which is the combination the original cannot produce.
+  (2) Make the rows exclusive like the original: the map screen picks a limit kind and greys the
+  other row out. Costs a kind toggle in `PlayerSetupFeature` carried through `LaunchExit.Match`
+  and `SessionSpec.FromMenu`, plus a rule for `--vs-kills=` and `--vs-time=` passed together;
+  `VersusMatch` needs nothing, it already disables an end condition whose value is 0.
+  (3) Keep both rows but ship one disabled by default (a time limit armed, a kill target of 0):
+  one default constant, no menu work, and a player who fills both rows in is back at (1).
+  *⚠ Traps:* this is the menu's offer, not the scoring, which is faithful; a match that reaches
+  its time limit is a draw on a tie in both the original and CSVM, with no overtime.
+  *Cross-refs:* `git log --grep=BL-301` (the Dogfight tuning entry this came out of),
+  `Flight/VersusMatch.cs`, `docs/org/multiplayer-scoring.md`.
 
 ## Tooling, platform & docs
 
