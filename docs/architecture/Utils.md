@@ -75,9 +75,8 @@ caller that wants to aggregate the spans without emitting the line, which is how
 ## src/Utils/LoadProgress.cs
 The load screen's progress while a build holds the frame loop: the original's sixteen authored
 milestone fractions, one per `LoadStep`, a monotonic setter that no step can drag backwards, and a
-wall-clock pump throttled to one repaint every 0.1 s. Ambient over `Current` for the reason
-`StartupProfile` is, so `Launcher`, `GameSession` and `WorldSession` report a boundary they have
-crossed without being handed a sink, and a launch with no screen over it draws nothing at all.
+wall-clock pump throttled to one repaint every 0.1 s. The throttle holds off only a step that left the bar where it was, since our phases can cross ten milestones inside one window and a bar the build skips past shows its first fraction and then the mission; `Trace` and `Draws` are the read-back, every step against the build's own wall clock with the undrawn ones marked.
+Ambient over `Current` for the reason `StartupProfile` is, so `Launcher`, `GameSession` and `WorldSession` report a boundary they have crossed without being handed a sink, and a launch with no screen over it draws nothing at all.
 Engine-free: `FillPixels` and `FrameAt` are the bar's pixel clip and the propeller's frame, and
 `UI/LoadBoard.cs` is what turns them into a drawn frame. Decode:
 [../org/loading-screen.md](../org/loading-screen.md).

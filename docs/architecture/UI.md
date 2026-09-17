@@ -229,7 +229,7 @@ extraction roots, and caches a miss so an absent extraction is probed once per n
 to a `MovieSurface`, whose one texture the cache holds and the surface rewrites in place, so the
 picture animates with nothing invalidated; `AdvanceMovies` runs their clocks off the caller's own step and
 `AdvanceCaret` blinks a text cursor off it, each saying whether to repaint. Supplies the font metric a flowed
-`BoardNote` and a caret cannot take, `Fitted` shrinking a note's face until its list fits its box rather than losing a row, the two-line hint band a pad needs, and `ArtSize` for a caller that must clip against a bitmap's own authored width.
+`BoardNote` and a caret cannot take, `Fitted` shrinking a note's face until its list fits its box rather than losing a row, the two-line hint band a pad needs, and `ArtSize` for a caller that must clip against a bitmap's own authored width. `PresentMoving` is the one repaint a caller holding the frame loop can still make: its pictures go on a canvas item of the view's own, fitted by the same maths and re-fitted on a resize, rather than through a queued redraw callback the blocked loop would never reach, so a load screen's build can move the bar it draws.
 
 ## src/UI/CinemaScreen.cs
 One cinema on screen: a `CinemaPlayback`, the `ImageTexture` its pictures upload into, and the
@@ -313,9 +313,8 @@ through `ComposedBoardView`, so it inherits the authored-pixel surface and `Boar
 Populated in `_Ready`, since the view sizes itself off the viewport, and it tracks the window every
 frame the way every shared board does. Holds no composition of its own, so what the screen says
 tests off engine; a campaign launch hands it the `LoadSheet` its story position resolves. It is
-also the pump `Utils/LoadProgress.cs` repaints through, installed for its own tree lifetime alone:
-a step the build reports repaints the bar and the propeller and forces a frame out of a loop the
-build owns, which is how the screen moves at all.
+also the pump `Utils/LoadProgress.cs` repaints through, installed for its own tree lifetime alone: a step the build reports puts the bar's fill and the propeller's frame on the view's moving layer and presents there, which is how the screen moves at all, a queued redraw being no use while the build holds the loop that would flush it.
+`--debug-load` stands the screen over a CLI launch and photographs each presented frame, the only way to read the bar back with nobody at the menu, and `_ExitTree` writes every reported step against the build's own wall clock as one line.
 
 ## src/UI/LoadScreens.cs
 What the load screen is made of, engine-free. `LoadSheet` is the campaign screen's authored half,
@@ -323,7 +322,7 @@ one `Loading.zrd` dialog with its mission's objectives and the seated profile's 
 composes either that chart sheet, through `MissionMap` the way `PauseScreens` does, or the Instant
 Action blackboard with the four texts its own `loading_i` dialog places; `DialogTexts` takes that composition by file and key, so an Instant Action pause writes its `ia_escape.zrd` dialog's texts through it. The mission type picks the
 blackboard's dialog by the exe's own letter; free flight and dogfight are ours, so they write the
-mode's name and nothing else. `LoadMotion` is the moving half, the fill strip and the six propeller frames the sheet's own `Cycle` beat names, and `Painted` re-lays those two into `Overlays` at a fraction and a frame, so the still composition under them is never rewritten. An absent extraction yields the frame and the bar rather than
+mode's name and nothing else. `LoadMotion` is the moving half, the fill strip and the six propeller frames the sheet's own `Cycle` beat names, `Moving` places those two at a fraction and a frame, the clipped fill and the propeller face a pump presents on their own layer, and `Painted` re-lays the same pair into `Overlays` for a caller composing a whole board, so the still composition under them is never rewritten. An absent extraction yields the frame and the bar rather than
 throwing, since this screen is shown while everything else is still loading. The dialogs, the beat
 sheet and the face mapping: [../org/loading-screen.md](../org/loading-screen.md).
 

@@ -25,6 +25,10 @@ internal static class LoadProgressSuites
     private const int ChalkStripWidth = 236;
     private const int SheetStripWidth = 338;
 
+    // The lamps the fill strip is drawn as (docs/org/loading-screen.md). The bar is a pixel clip,
+    // not a count of lamps, so this is what a watcher counts rather than what the fill computes.
+    private const int LampCount = 6;
+
     /// <summary>The load screen moving under a build: both families find their fill strip and
     /// their propeller in the extraction, the fill at each authored milestone is the floored pixel
     /// clip of that strip's own width, the propeller names one of its six frames at its authored
@@ -38,7 +42,9 @@ internal static class LoadProgressSuites
         + "steps backwards, the propeller cycles the six extracted frames at its authored point "
         + "and rate, the campaign sheet's own content is unchanged under the overlay that moves, "
         + "the board owns the pump for exactly as long as it is in the tree so a CLI launch gains "
-        + "no draw, and a reported step draws a frame from inside the blocking build")]
+        + "no draw, every one of the sixteen steps reported back to back lights the strip a lamp "
+        + "at a time on the window's own frames, and a reported step draws a frame from inside "
+        + "the blocking build")]
     internal static void LoadScreenMoves(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -49,6 +55,7 @@ internal static class LoadProgressSuites
         CheckFamily(ctx, report, campaign: true, sheet: filmed, stripWidth: SheetStripWidth);
         CheckSheetCycleIsTheScriptsOwn(ctx, report, filmed);
         CheckPumpOwnership(ctx, report, filmed);
+        CheckEveryFractionReachesTheFrame(ctx, report);
         CheckPumpDuringAWorldBuild(ctx, report, filmed);
 
         ctx.WriteArtifact($"test-load-progress.txt", report.ToString());
@@ -192,14 +199,14 @@ internal static class LoadProgressSuites
             // The real path, pump and forced frame included: a build reports a step from inside
             // the block that owns the loop, and the screen has to be repainted there or nowhere.
             LoadProgress.Report(LoadStep.RenderState);
-            int first = view?.Board is { } opening ? FillWidth(opening) : -1;
+            int first = view is { } opening ? FillWidth(opening.Moving) : -1;
             ctx.Check(first > 0, $"the first step lights {first} px from inside the build");
 
-            // Past the pump's own 0.1 s throttle, so the last step draws rather than coalescing
-            // into the first.
-            System.Threading.Thread.Sleep((int)(LoadProgress.PumpSeconds * 1000d) + 20);
+            // Reported at once, inside the pump's own 0.1 s window: a step the bar moved on is
+            // drawn whatever the clock says, or a fast build shows its first fraction and nothing
+            // after it.
             LoadProgress.Report(LoadStep.Finished);
-            int last = view?.Board is { } closing ? FillWidth(closing) : -1;
+            int last = view is { } closing ? FillWidth(closing.Moving) : -1;
             ctx.Check(last > first, $"the last step lights {last} px, over the first's {first}");
             report.AppendLine($"pumped fill: first={first}px last={last}px");
         }
@@ -211,6 +218,106 @@ internal static class LoadProgressSuites
 
         ctx.Check(LoadProgress.Current == null, $"the board off the tree hands the pump back");
         LoadProgress.Current = held;
+    }
+
+    // Every authored fraction on the glass, counted off the rendered frame rather than off the
+    // pump's own call count: the steps are reported back to back, which is the fast build the
+    // throttle used to swallow, and each one's frame is read back and its lamps counted.
+    private static void CheckEveryFractionReachesTheFrame(TestContext ctx, StringBuilder report)
+    {
+        var held = LoadProgress.Current;
+        LoadProgress.Current = null;
+        var board = LoadBoard.Build(
+            ctx.DataRoot, ctx.ZrdrPath, ctx.MessagesPath, campaign: false, "FREE FLIGHT", null);
+        ctx.Host.AddChild(board);
+        try
+        {
+            if (LoadProgress.Current is not { } progress
+                || board.GetChild(0) is not ComposedBoardView view)
+            {
+                ctx.Check(false, $"the board in the tree owns the pump and its view");
+                return;
+            }
+
+            var motion = LoadScreens.MotionFor(false, null);
+            var art = view.ArtSize(new BoardArt(BoardArtLibrary.Rimage, motion.FillArt));
+            var window = ctx.Host.GetViewport().GetVisibleRect().Size;
+            var fit = BoardFit.For(window.X, window.Y);
+            var seen = new List<int>();
+            int rises = 0;
+            int previous = 0;
+            foreach (var step in Enum.GetValues<LoadStep>())
+            {
+                LoadProgress.Report(step);
+                if (Lamps(ctx, fit, motion, art) is not { } lit)
+                {
+                    continue;
+                }
+
+                ctx.Check(
+                    lit >= previous,
+                    $"{step}: the frame on the glass shows {lit} lamp(s), never fewer than {previous}");
+                rises += lit > previous ? 1 : 0;
+                previous = lit;
+                seen.Add(lit);
+                report.AppendLine($"presented {step} {progress.Fraction} lamps={lit}");
+            }
+
+            if (seen.Count == 0)
+            {
+                ctx.Note($"the window returned no image, so nothing on the glass was counted");
+                return;
+            }
+
+            // The point of the item, read off the glass: a build crossing every boundary inside one
+            // throttle window still lights the strip a lamp at a time, where a screen drawn once at
+            // the end would rise from nothing to six in a single frame.
+            ctx.Same(
+                LoadProgress.Milestones.Count, seen.Count,
+                $"the sixteen steps were each read back off the window");
+            ctx.Same(LampCount, rises, $"the strip lit one lamp at a time: {string.Join(",", seen)}");
+            ctx.Same(LampCount, previous, $"the last milestone lights the whole strip");
+            report.AppendLine(
+                $"presented lamps {string.Join(",", seen)} over {progress.Draws} draw(s)");
+        }
+        finally
+        {
+            ctx.Host.RemoveChild(board);
+            board.QueueFree();
+            LoadProgress.Current = held;
+        }
+    }
+
+    // How many lamps of the fill strip are lit on the frame just presented, or null where the
+    // window hands back no image. Counted as runs of red across the strip's own middle row, which
+    // is what a watcher sees; the propeller sits outside the band on both families.
+    private static int? Lamps(TestContext ctx, BoardFit fit, LoadMotion motion, Vector2 art)
+    {
+        if (art.X <= 0f || art.Y <= 0f
+            || ctx.Host.GetViewport()?.GetTexture()?.GetImage() is not { } shot || shot.IsEmpty())
+        {
+            return null;
+        }
+
+        int row = Mathf.Clamp(
+            (int)(fit.Y(motion.FillY) + (fit.Length(art.Y) / 2f)), 0, shot.GetHeight() - 1);
+        int from = Mathf.Clamp((int)fit.X(motion.FillX), 0, shot.GetWidth() - 1);
+        int to = Mathf.Clamp((int)(fit.X(motion.FillX) + fit.Length(art.X)), 0, shot.GetWidth());
+        int runs = 0;
+        bool inRun = false;
+        for (int x = from; x < to; x++)
+        {
+            var pixel = shot.GetPixel(x, row);
+            bool red = pixel.R > 0.35f && pixel.R > pixel.G * 2f && pixel.R > pixel.B * 2f;
+            if (red && !inRun)
+            {
+                runs++;
+            }
+
+            inRun = red;
+        }
+
+        return runs;
     }
 
     // The whole point of the item, driven for real: a world build holds the frame loop, and the
@@ -264,12 +371,23 @@ internal static class LoadProgressSuites
     {
         foreach (var panel in board.Overlays)
         {
-            foreach (var picture in panel.Pictures)
+            if (FillWidth(panel.Pictures) is > 0 and var lit)
             {
-                if (picture.Crop is { } crop)
-                {
-                    return (int)crop.Width;
-                }
+                return lit;
+            }
+        }
+
+        return 0;
+    }
+
+    // The same, over the moving layer's own pictures.
+    private static int FillWidth(IReadOnlyList<BoardPicture> pictures)
+    {
+        foreach (var picture in pictures)
+        {
+            if (picture.Crop is { } crop)
+            {
+                return (int)crop.Width;
             }
         }
 

@@ -188,15 +188,13 @@ public static class LoadScreens
             cycle?.At.X ?? 0f, cycle?.At.Y ?? 0f, cycle?.Center ?? false);
     }
 
-    /// <summary>The still board with the build's own progress over it: the lit strip clipped to
-    /// <see cref="LoadProgress.FillPixels"/> of <paramref name="fillArtWidth"/>, and the cycle's
-    /// current frame over the still one. An overlay, so the composition under it is untouched and
-    /// a screen with no build behind it draws exactly what it always did.</summary>
-    public static ComposedBoard Painted(
-        ComposedBoard still, LoadMotion motion,
-        float fillArtWidth, float fillArtHeight, float fraction, int frame)
+    /// <summary>The two pictures that move while a build holds the frame loop: the lit strip
+    /// clipped to <see cref="LoadProgress.FillPixels"/> of <paramref name="fillArtWidth"/>, and the
+    /// propeller cycle's current frame over the still one. Either may be absent, an unstarted bar
+    /// lights nothing and a sheet that did not read carries no cycle.</summary>
+    public static IReadOnlyList<BoardPicture> Moving(
+        LoadMotion motion, float fillArtWidth, float fillArtHeight, float fraction, int frame)
     {
-        ArgumentNullException.ThrowIfNull(still);
         ArgumentNullException.ThrowIfNull(motion);
         var over = new List<BoardPicture>(2);
         int lit = LoadProgress.FillPixels((int)fillArtWidth, fraction);
@@ -214,9 +212,24 @@ public static class LoadScreens
                 motion.PropellerX, motion.PropellerY, 0, motion.PropellerCentered));
         }
 
+        return over;
+    }
+
+    /// <summary>The still board with the build's own progress over it: the lit strip clipped to
+    /// <see cref="LoadProgress.FillPixels"/> of <paramref name="fillArtWidth"/>, and the cycle's
+    /// current frame over the still one. An overlay, so the composition under it is untouched and
+    /// a screen with no build behind it draws exactly what it always did.</summary>
+    public static ComposedBoard Painted(
+        ComposedBoard still, LoadMotion motion,
+        float fillArtWidth, float fillArtHeight, float fraction, int frame)
+    {
+        ArgumentNullException.ThrowIfNull(still);
         var overlays = new List<BoardPanel>(still.Overlays)
         {
-            new(Array.Empty<BoardFill>(), over, Array.Empty<BoardLine>()),
+            new(
+                Array.Empty<BoardFill>(),
+                Moving(motion, fillArtWidth, fillArtHeight, fraction, frame),
+                Array.Empty<BoardLine>()),
         };
         return new ComposedBoard(
             still.Pictures, still.Strokes, still.Lines, still.Plaques,

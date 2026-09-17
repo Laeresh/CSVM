@@ -73,8 +73,9 @@ public enum LoadStep
 /// </summary>
 public sealed class LoadProgress
 {
-    /// <summary>How long the pump holds off between draws, the original's own throttle, so the
-    /// screen repaints at most ten times a second however fast the steps arrive.</summary>
+    /// <summary>How long the pump holds off between draws that leave the bar where it was, the
+    /// original's own throttle, so a step reported twice at one fraction turns the propeller at
+    /// most ten times a second.</summary>
     public const double PumpSeconds = 0.1;
 
     /// <summary>The propeller cycle's authored rate.</summary>
@@ -85,9 +86,11 @@ public sealed class LoadProgress
     public const int PropellerFrames = 6;
 
     private readonly Func<double> _seconds;
+    private readonly List<StepTrace> _trace = new();
 
     private double _lastDraw = double.NegativeInfinity;
     private float _fraction;
+    private int _draws;
 
     /// <summary>Builds a progress over a wall clock in seconds, its own by default. A caller
     /// hands one in to walk the table without waiting on a real clock.</summary>
@@ -117,6 +120,14 @@ public sealed class LoadProgress
     /// <summary>How far the bar is filled, 0 before the first step.</summary>
     public float Fraction => _fraction;
 
+    /// <summary>How many times the screen has been drawn since the build started.</summary>
+    public int Draws => _draws;
+
+    /// <summary>Every step the build has reported, in the order it reported them. What the load
+    /// screen writes its one log line out of, so a bar reported not to move is read back against
+    /// wall time instead of guessed at.</summary>
+    public IReadOnlyList<StepTrace> Trace => _trace;
+
     /// <summary>Which of the cycle's frames is showing now.</summary>
     public int Frame => FrameAt(_seconds());
 
@@ -133,12 +144,26 @@ public sealed class LoadProgress
     public static int FrameAt(double seconds) =>
         seconds <= 0d ? 0 : (int)((long)(seconds * PropellerFps) % PropellerFrames);
 
-    /// <summary>Sets the step's fraction and pumps, which is the order the original's own load
-    /// steps use: do the work, set the fraction, draw.</summary>
+    /// <summary>Sets the step's fraction and draws, which is the order the original's own load
+    /// steps use: do the work, set the fraction, draw. A step the bar moved on is drawn whatever
+    /// the clock says; the throttle holds off only a step that moved it nowhere.
+    /// ⚠ Do not throttle a moved bar. Our phases are fast enough that a whole build can cross ten
+    /// of them inside one throttle window, which shows the first fraction and then the mission.
+    /// </summary>
     public void Reach(LoadStep step)
     {
-        Set(Milestones[(int)step]);
-        Pump();
+        double now = _seconds();
+        int before = _draws;
+        if (Set(Milestones[(int)step]))
+        {
+            Draw(now);
+        }
+        else
+        {
+            Pump();
+        }
+
+        _trace.Add(new StepTrace(step, _fraction, now, _draws > before));
     }
 
     /// <summary>Stores a fraction, answering whether the bar moved. Monotonic: a fraction below
@@ -164,7 +189,17 @@ public sealed class LoadProgress
             return;
         }
 
+        Draw(now);
+    }
+
+    private void Draw(double now)
+    {
         _lastDraw = now;
+        _draws++;
         Repaint?.Invoke();
     }
+
+    /// <summary>One reported step: which it was, the bar it left behind, the second of the build it
+    /// arrived at, and whether the screen was drawn for it.</summary>
+    public readonly record struct StepTrace(LoadStep Step, float Fraction, double Seconds, bool Drawn);
 }

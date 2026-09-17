@@ -269,10 +269,20 @@ nearest dialog, the `d` family's, would state a win condition neither mode has.
 
 **The bar fills and the propeller turns from a pump inside the blocking build**, which is the
 original's own shape rather than a threaded or incremental load. `Utils/LoadProgress.cs` holds the
-sixteen authored fractions in build order, clamps them monotonically the way `FUN_004a2100` does,
-and throttles its repaint to one draw per 0.1 s the way `FUN_004a18a0` does; `UI/LoadBoard.cs`
-installs that repaint while it is in the tree and ends it with `RenderingServer.ForceDraw()`, our
-equivalent of the original yielding a frame from inside its own load. The build stays one
+sixteen authored fractions in build order and clamps them monotonically the way `FUN_004a2100`
+does. `FUN_004a18a0`'s 0.1 s throttle is kept for the case it was written for, a step reported at a
+fraction the bar already stood at, which is what holds the propeller to its rate; a step the bar
+moved on draws whatever the clock says. That is a deliberate departure: the original's phases are
+slow enough that its throttle never swallows a milestone, while ours can cross ten of them inside
+one 0.1 s window, and a throttled build shows its first fraction and then the mission.
+`UI/LoadBoard.cs` installs the repaint while it is in the tree and presents through
+`ComposedBoardView.PresentMoving`, which issues the fill and the propeller frame to a canvas item of
+the view's own and calls `RenderingServer.ForceDraw()`. Going through the Control's own `_Draw` does
+not work: `QueueRedraw` defers the callback through the MessageQueue, which only the main loop
+flushes, and the build owns that loop until it returns, so a forced frame would present the same
+canvas commands every time. `--debug-load[=dir]` stands this screen over a CLI launch and
+photographs each presented frame, which is how the bar is read back with nobody at the menu.
+The build stays one
 synchronous block: `Session/Launcher.cs`, `Session/GameSession.cs` and `Mech3/WorldSession.cs`
 report each phase boundary they cross, taking the fraction the table authors for it and never one
 derived from how long the phase took. The fill is the repaint's own pixel clip,

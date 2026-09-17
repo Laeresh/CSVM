@@ -57,6 +57,12 @@ public sealed partial class ComposedBoardView : Control
     // that texture's pixels changed. A file that does not open caches a null so it is tried once.
     private readonly Dictionary<string, MovieSurface?> _movies = new();
 
+    // The moving layer's own canvas item, a child of this control's. Its commands are issued to
+    // the server as they are asked for, where a Control's own _Draw is a callback the main loop
+    // flushes, so this is the only part of a board a blocked frame loop can still change.
+    private Rid _motion;
+    private IReadOnlyList<BoardPicture> _moving = Array.Empty<BoardPicture>();
+
     private FontVariation? _slanted;
     private FontVariation? _emboldened;
 
@@ -75,6 +81,10 @@ public sealed partial class ComposedBoardView : Control
     /// <summary>The board last handed to <see cref="Show"/>, which is what the surface is
     /// drawing.</summary>
     public ComposedBoard? Board => _board;
+
+    /// <summary>The pictures last handed to <see cref="PresentMoving"/>, which is what the moving
+    /// layer holds over that board.</summary>
+    public IReadOnlyList<BoardPicture> Moving => _moving;
 
     /// <summary>Builds the view over the extraction root its art loads from.</summary>
     public static ComposedBoardView Build(string dataRoot)
@@ -194,6 +204,19 @@ public sealed partial class ComposedBoardView : Control
         QueueRedraw();
     }
 
+    /// <summary>Puts the pictures that move over the still board on screen at once, and asks for a
+    /// frame. The one repaint a caller holding the frame loop can still make: the pictures are
+    /// issued to the server here rather than queued for a redraw callback the loop would have to
+    /// reach. They stay up, over whatever the board draws, until the next call replaces them.
+    /// ⚠ Keep them out of the board handed to <see cref="Show"/>, or each one draws twice.</summary>
+    public void PresentMoving(IReadOnlyList<BoardPicture> pictures)
+    {
+        ArgumentNullException.ThrowIfNull(pictures);
+        _moving = pictures;
+        PaintMoving();
+        RenderingServer.ForceDraw();
+    }
+
     /// <inheritdoc/>
     public override void _Draw()
     {
@@ -266,6 +289,20 @@ public sealed partial class ComposedBoardView : Control
         }
 
         DrawHints(fit, font);
+
+        // The moving layer sits in its own canvas item, so a resize (which is what re-runs this)
+        // has to re-place it at the new fit; nothing else touches it between pumps.
+        PaintMoving();
+    }
+
+    /// <inheritdoc/>
+    public override void _Notification(int what)
+    {
+        if (what == NotificationPredelete && _motion.IsValid)
+        {
+            RenderingServer.FreeRid(_motion);
+            _motion = default;
+        }
     }
 
     // The hint band is one line, so a multi-line description is joined and cut rather than allowed
@@ -448,11 +485,14 @@ public sealed partial class ComposedBoardView : Control
         DrawRect(box, colour, filled: false, Mathf.Max(1f, fit.Length(1f)));
     }
 
-    private void DrawPicture(BoardFit fit, BoardPicture picture)
+    // Where one picture lands and which part of its bitmap it takes, both in this control's own
+    // pixels, or null where the extraction does not carry the art.
+    private (Texture2D Texture, Rect2 Dest, Rect2 Src, Color Tint)? Placed(
+        BoardFit fit, BoardPicture picture)
     {
         if (Load(picture.Art) is not { } texture)
         {
-            return;
+            return null;
         }
 
         var frame = FrameRect(texture, picture.Art.Frames, picture.Frame);
@@ -483,17 +523,70 @@ public sealed partial class ComposedBoardView : Control
         var tint = picture.Tint is { } rgb
             ? new Color(rgb.R / 255f, rgb.G / 255f, rgb.B / 255f, Mathf.Clamp(picture.Opacity, 0f, 1f))
             : new Color(1f, 1f, 1f, Mathf.Clamp(picture.Opacity, 0f, 1f));
+        return (texture, new Rect2(at, span), frame, tint);
+    }
+
+    // The moving pictures, re-issued to their own canvas item at the current fit. Cleared first,
+    // so the layer holds the last call's pictures and nothing older.
+    private void PaintMoving()
+    {
+        if (_moving.Count == 0 && !_motion.IsValid)
+        {
+            return;
+        }
+
+        if (!_motion.IsValid)
+        {
+            _motion = RenderingServer.CanvasItemCreate();
+            RenderingServer.CanvasItemSetParent(_motion, GetCanvasItem());
+            RenderingServer.CanvasItemSetDefaultTextureFilter(
+                _motion, RenderingServer.CanvasItemTextureFilter.Nearest);
+        }
+
+        RenderingServer.CanvasItemClear(_motion);
+        var fit = BoardFit.For(GetViewportRect().Size.X, GetViewportRect().Size.Y);
+        foreach (var picture in _moving)
+        {
+            if (Placed(fit, picture) is not { } placed)
+            {
+                continue;
+            }
+
+            if (picture.Revs == 0f)
+            {
+                RenderingServer.CanvasItemAddTextureRectRegion(
+                    _motion, placed.Dest, placed.Texture.GetRid(), placed.Src, placed.Tint);
+                continue;
+            }
+
+            var span = placed.Dest.Size;
+            RenderingServer.CanvasItemAddSetTransform(
+                _motion,
+                new Transform2D(picture.Revs * Mathf.Tau, placed.Dest.Position + (span / 2f)));
+            RenderingServer.CanvasItemAddTextureRectRegion(
+                _motion, new Rect2(-span / 2f, span), placed.Texture.GetRid(), placed.Src, placed.Tint);
+            RenderingServer.CanvasItemAddSetTransform(_motion, Transform2D.Identity);
+        }
+    }
+
+    private void DrawPicture(BoardFit fit, BoardPicture picture)
+    {
+        if (Placed(fit, picture) is not { } placed)
+        {
+            return;
+        }
+
         if (picture.Revs == 0f)
         {
-            DrawTextureRectRegion(texture, new Rect2(at, span), frame, tint);
+            DrawTextureRectRegion(placed.Texture, placed.Dest, placed.Src, placed.Tint);
             return;
         }
 
         // A spin turns the element about its own middle, which is where the script's own centred
         // placement puts it; drawing through a transform keeps the frame region intact.
-        var middle = at + (span / 2f);
-        DrawSetTransform(middle, picture.Revs * Mathf.Tau, Vector2.One);
-        DrawTextureRectRegion(texture, new Rect2(-span / 2f, span), frame, tint);
+        var span = placed.Dest.Size;
+        DrawSetTransform(placed.Dest.Position + (span / 2f), picture.Revs * Mathf.Tau, Vector2.One);
+        DrawTextureRectRegion(placed.Texture, new Rect2(-span / 2f, span), placed.Src, placed.Tint);
         DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
     }
 

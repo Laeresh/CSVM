@@ -710,6 +710,11 @@ public sealed record SessionSpec
     /// <c>SpectatorCamera</c>. The way to watch what the AI does when no player is provoking
     /// it.</summary>
     public bool DebugSpectate { get; private set; }
+
+    /// <summary><c>--debug-load[=dir]</c>: stand the real load screen over a CLI launch, the way a
+    /// menu launch does, and write one PNG per presented pump frame into that folder. The only way
+    /// to watch the bar fill with nobody at the menu; empty string = screen but no captures.</summary>
+    public string? DebugLoad { get; private set; }
     public int? DebugLivery { get; private set; }
     public string? DebugMesh { get; private set; }
     public string? DebugNames { get; private set; }
@@ -967,6 +972,8 @@ public sealed record SessionSpec
             else if (arg == "--compass-squeeze") { s.CompassSqueeze = true; }
             else if (arg == "--debug-markers") { s.DebugMarkers = true; }
             else if (arg == "--debug-spectate") { s.DebugSpectate = true; }
+            else if (arg == "--debug-load") { s.DebugLoad ??= ""; }
+            else if (arg.StartsWith("--debug-load=")) { s.DebugLoad = arg["--debug-load=".Length..]; }
             else if (arg == "--debug-livery") { s.DebugLivery ??= 0; }
             else if (arg.StartsWith("--debug-livery=")) { s.DebugLivery = int.Parse(arg["--debug-livery=".Length..]); }
             else if (arg == "--debug-mesh") { s.DebugMesh ??= ""; }

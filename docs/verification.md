@@ -748,6 +748,12 @@ member, and it does not go here.
   sounds is blind to how loud it is.** Mapping `snd_turretgun`'s `RANGE [30, 400]` onto the
   inverse-distance model left a hull's gun 7 dB under the decoded law at 100 m and hard silent at
   400 m, where the decoded law plays on to 440.
+- **INSTR-88**, **A frame forced from inside a synchronous block presents only the drawing commands
+  the server already holds, so a repaint there must issue its own; a queued redraw is deferred
+  through a queue none but the main loop flushes, and counting the calls or their log lines is not
+  evidence any frame differed, only reading the presented frames back is.** A load screen that
+  repainted a `Control` and called `RenderingServer.ForceDraw()` reported 12 draws over a real
+  launch and wrote 12 byte-identical captures, the first fraction over and over.
 
 ## SRC, sources and documents
 

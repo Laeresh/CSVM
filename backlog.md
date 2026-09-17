@@ -1163,23 +1163,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   scripts are the decode for positions, the film only for the look. *Cross-refs:* `CAP-52`,
   `docs/org/menu-inventory.md`, `docs/formats/menu-layout.md` (`SCRAPBOOK.CSV`).
 
-- `BL-937` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **The load screen's
-  bar does not step through the sixteen authored fractions at the controls: it shows its first
-  stage and the next thing on screen is the mission.** *Evidence:* the `BL-812` verdict ("No
-  stepping. First stage then in mission"). The landing drives the bar from a pump inside the one
-  synchronous build (`Utils/LoadProgress.cs` holds the table and the 0.1 s throttle,
-  `UI/LoadBoard.cs` repaints and ends with `RenderingServer.ForceDraw()`), and the closing commit
-  reports the steps from the log rather than from a watched screen. *What to settle first:*
-  whether the forced draws reach the window at all on the user's rig (a `ForceDraw` from inside
-  `_Ready` or a frame that the compositor does not present shows nothing), or whether the build
-  finishes inside the first throttle window so only the 0.01 paint lands; the file sink's progress
-  lines against wall time, and a `--screenshot` taken mid-build, tell the two apart. *⚠ Traps:*
-  do not thread the build to fix this; the original does not, and `GameSession.StartSession`'s
-  try/catch is why the pump shape was chosen (`git log --grep=BL-812`). *Playtest after fix:* an
-  Instant Action launch from the menu; the bar fills in visible steps and the propeller turns
-  before the world appears. *Cross-refs:* `docs/org/loading-screen.md`, `BL-909` (the handoff after
-  the load).
-
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored

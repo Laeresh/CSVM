@@ -828,6 +828,14 @@ public partial class Launcher : Node3D
             return;
         }
 
+        // --debug-load stands the real screen over a CLI launch, deferred build and all, which is
+        // the only way to watch the bar with nobody at the menu.
+        if (_spec.DebugLoad != null)
+        {
+            BeginLaunch();
+            return;
+        }
+
         // A CLI launch has no load screen, so the cover is the whole of what stands between the
         // build and the session's first real frame. Same rule as the interactive paths: a session
         // starts from dark, whatever opened it.
@@ -1227,8 +1235,10 @@ public partial class Launcher : Node3D
             ? CampaignLoadSheet(missionSeq ?? _spec.CampaignMissionSeq ?? 0)
             : null;
         _loadLayer = new CanvasLayer { Name = "load_board", Layer = UI.HudLayers.Board };
-        _loadLayer.AddChild(UI.LoadBoard.Build(
-            _dataRoot, _zrdrPath, _messagesPath, campaign, subject, missionType, sheet));
+        var board = UI.LoadBoard.Build(
+            _dataRoot, _zrdrPath, _messagesPath, campaign, subject, missionType, sheet);
+        board.CaptureDir = _spec.DebugLoad ?? string.Empty;
+        _loadLayer.AddChild(board);
         AddChild(_loadLayer);
     }
 

@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.IO;
+using System.Text;
 using CSVM.Utils;
 using Godot;
 
@@ -7,10 +10,11 @@ namespace CSVM.UI;
 /// The load screen drawn over the whole window while a session builds: the composition
 /// <see cref="LoadScreens"/> makes, through the campaign boards' authored-pixel surface.
 /// A build is one synchronous block that stalls the frame loop, so this board draws from inside
-/// it: the build reports each of its steps to <see cref="LoadProgress"/>, and the pump repaints
-/// the bar's fill and the propeller's frame and asks the renderer for a frame then and there.
+/// it: the build reports each of its steps to <see cref="LoadProgress"/>, and the pump puts the
+/// bar's fill and the propeller's frame straight on the moving layer and asks for a frame there.
 /// ⚠ Install the pump nowhere but this node's own tree lifetime; a build with no screen over it
-/// (every CLI launch) must leave <see cref="LoadProgress.Current"/> null and gain no draw.
+/// (every CLI launch bar <c>--debug-load</c>) must leave <see cref="LoadProgress.Current"/> null
+/// and gain no draw.
 /// </summary>
 public sealed partial class LoadBoard : Control
 {
@@ -20,6 +24,12 @@ public sealed partial class LoadBoard : Control
     private string _dataRoot = string.Empty;
     private ComposedBoardView? _view;
     private LoadProgress? _progress;
+    private int _shots;
+
+    /// <summary>Where each presented pump frame is photographed to (<c>--debug-load=</c>), empty
+    /// for the ordinary launch that photographs nothing. A read back of the GPU per pump, which is
+    /// why it is off unless a run asks for it.</summary>
+    public string CaptureDir { get; set; } = string.Empty;
 
     /// <summary>Builds the board for one launch. <paramref name="campaign"/> picks the paper sheet
     /// over the blackboard, and <paramref name="missionType"/> the Instant Action dialog whose four
@@ -63,6 +73,11 @@ public sealed partial class LoadBoard : Control
         {
             LoadProgress.Current = null;
         }
+
+        if (_progress is { } progress && progress.Trace.Count > 0)
+        {
+            Log.Info("ui", $"load screen: {Steps(progress)}");
+        }
     }
 
     /// <inheritdoc/>
@@ -74,9 +89,28 @@ public sealed partial class LoadBoard : Control
         Size = GetViewportRect().Size;
     }
 
+    // The build's own steps against wall time, one log line: which fraction each left the bar at,
+    // the second of the build it arrived at, and a '-' where the screen was not drawn for it.
+    private static string Steps(LoadProgress progress)
+    {
+        var line = new StringBuilder();
+        line.Append(progress.Trace.Count).Append(" step(s), ")
+            .Append(progress.Draws).Append(" draw(s):");
+        foreach (var step in progress.Trace)
+        {
+            line.Append(CultureInfo.InvariantCulture, $" {step.Step}={step.Fraction:0.00}@{step.Seconds:0.000}s");
+            if (!step.Drawn)
+            {
+                line.Append('-');
+            }
+        }
+
+        return line.ToString();
+    }
+
     // One pumped repaint: the fill at the fraction the build has reached and the propeller frame
-    // the wall clock is on, then a frame asked for rather than waited on, since the build owns the
-    // loop until it returns.
+    // the wall clock is on, put on the moving layer and presented there, since the build owns the
+    // loop until it returns and no queued redraw of ours would be flushed before it does.
     private void Repaint()
     {
         if (_view is not { } view || _progress is not { } progress)
@@ -85,9 +119,33 @@ public sealed partial class LoadBoard : Control
         }
 
         var art = view.ArtSize(new BoardArt(BoardArtLibrary.Rimage, _motion.FillArt));
-        view.Show(
-            LoadScreens.Painted(_board, _motion, art.X, art.Y, progress.Fraction, progress.Frame),
-            _palette, string.Empty, string.Empty);
-        RenderingServer.ForceDraw();
+        view.PresentMoving(
+            LoadScreens.Moving(_motion, art.X, art.Y, progress.Fraction, progress.Frame));
+        Capture(progress);
+    }
+
+    // The frame just presented, read back off the GPU. The only way to see what a build's own
+    // forced frames put on screen, since nothing yields between them.
+    private void Capture(LoadProgress progress)
+    {
+        if (CaptureDir.Length == 0)
+        {
+            return;
+        }
+
+        Directory.CreateDirectory(CaptureDir);
+        string name = string.Format(
+            CultureInfo.InvariantCulture, "pump{0:D2}_{1:0.00}.png", _shots++, progress.Fraction);
+        string path = Path.Combine(CaptureDir, name);
+        if (GetViewport()?.GetTexture()?.GetImage() is not { } shot || shot.IsEmpty())
+        {
+            Log.Warn("ui", $"load screen: no image from the viewport for {path}");
+            return;
+        }
+
+        var err = shot.SavePng(path);
+        Log.Info(
+            "ui",
+            $"load screen: pump {name} fraction={progress.Fraction} draw={progress.Draws} save={err}");
     }
 }
