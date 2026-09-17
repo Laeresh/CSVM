@@ -158,13 +158,14 @@ whole-frame differential. The plane count rides the bank's tally slot, so `ai_pl
 same bracket as `ai_ms`, which divides its total by FRAMES rather than walks.
 
 ## src/Utils/PhaseCost.cs
-A row of named WallCostBank slots, one per phase of a pass, where only one slot is open at a time
-and opening the next closes the one before it. SimPhaseCost is the row SessionSimulation.Enter
-and AnimRuntime's physics advance feed, one slot per phase, printed as sim_ms= divided by the
-window's TICKS so it reads beside phys_tick_ms; ProcessSiteCost is the row a using scope at the
-projectile pool's, animation runtime's, aircraft's, emitters' and session's _Process feeds, as
-proc_sites_ms= divided by FRAMES beside proc_ms. Each slot prints mean/max, the max being the
-longest single span, so a stall names its slot. The gap to the whole-pass term is everything unnamed.
+A row of named WallCostBank slots, one per phase of a pass: only one is open at a time, and opening the next closes
+the one before it. SimPhaseCost is the row SessionSimulation.Enter and AnimRuntime's physics advance feed, one slot
+per phase, printed as sim_ms= divided by the window's TICKS so it reads beside phys_tick_ms; ProcessSiteCost is the
+row a using scope at the projectile pool's, animation runtime's, aircraft's, emitters' and session's _Process feeds,
+as proc_sites_ms= divided by FRAMES beside proc_ms. Each slot prints mean/max, the max the longest single span, so a
+stall names its slot; the gap to the whole-pass term is unnamed. Each slot also banks the BYTES allocated inside it,
+drained by the same TakeRow and printed by AllocRow as sim_alloc_b=, since a millisecond figure names where a GC pause
+landed and never what earned it (verification PERF-34).
 
 ## src/Utils/GcTrace.cs
 The `--perf` GC readout: one `[perf] gc` line per ten wall seconds carrying the pause the process
@@ -300,7 +301,7 @@ block, where the same predicate drives both window hiding and the interactive ru
 
 ## src/Utils/OptionsStore.cs
 Process-wide, version-tolerant JSON persistence for `OptionsDef`: the menu presentation, graphics mode and difficulty words, the five
-display settings (monitor index, resolution, display mode, V-Sync, render scale), the four volume levels and the nearest-after-a-kill targeting switch. One file, `user://options.json`,
+display settings (monitor index, resolution, display mode, V-Sync, render scale), the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in and the automatic head turn. One file, `user://options.json`,
 independent of `Session/CampaignProfileStore.cs`. A missing or malformed file reads as empty, an unknown version invalidates it, an
 unknown value drops only that field, and a field the file does not carry reads as never set, which is why adding a field does not bump
 `Version`. Four reads hold that one contract: a word set (`DisplayWords` holds the three display vocabularies), a shape predicate for the

@@ -22,10 +22,10 @@ public sealed class LensFlareRig
 {
     // ── Measured off the footage, at 1280×720 ──────────────────────────────────────────────────
     // Every pixel figure below is normalised by pane HEIGHT against this reference. Godot's default
-    // KeepHeight aspect means vertical FOV stays 62° whatever the window or pane shape, so height
-    // is the axis that maps to a fixed angle, normalising by it keeps each element the same
-    // ANGULAR size as measured, in every pane, at every resolution. The raw measurement is kept in
-    // the comments so a decoded FOV would make this a one-line conversion.
+    // KeepHeight aspect holds the vertical FOV whatever the pane's shape, so height is the axis that
+    // maps to a fixed angle, and that angle is the decoded external base
+    // (CameraController.ExternalFovDeg), the original's own vertical, so a pixel share of this
+    // pane's height and an angular size say the same thing in every pane at every resolution.
     private const float RefHeight = 720f;
 
     // The wash ("sun blindness"): a plain white alpha composite, opacity ~linear in the sun's

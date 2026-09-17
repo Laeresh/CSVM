@@ -93,7 +93,7 @@ public sealed partial class ClassOverlay : Node
             // No gamez content to classify: --stage=empty and no other mode reaches this overlay
             // without one. Say so rather than showing an overlay that tints nothing, which would
             // read as "nothing here has a class" instead of "there is no world here".
-            Log.Warn("world", $"class overlay: this mode builds no gamez world to classify (--stage=empty) — there is nothing to tint.");
+            Log.Warn("world", $"class overlay: this mode builds no gamez world to classify (--stage=empty), there is nothing to tint.");
             ShowNotice("NO WORLD CONTENT IN THIS MODE\n--stage=empty builds no gamez content to classify.");
             return;
         }

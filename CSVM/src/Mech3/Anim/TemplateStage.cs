@@ -319,7 +319,7 @@ public sealed class TemplateStage<TNode>
             Recycles++;
             if (_recyclesLogged.Add(callee.AnimName ?? callee.Name))
             {
-                _print($"anim: caller pool for '{callee.AnimName ?? callee.Name}' wrapped — "
+                _print($"anim: caller pool for '{callee.AnimName ?? callee.Name}' wrapped, "
                        + $"{next + 1} call site(s) over {copies} staged cop(ies) share again");
             }
         }
@@ -377,7 +377,7 @@ public sealed class TemplateStage<TNode>
             if (_recyclesLogged.Add(def.AnimName ?? def.Name))
             {
                 _print($"anim: effect pool for '{def.AnimName ?? def.Name}' recycled slot {slot} of "
-                       + $"{slots.Count} while it was still live — overlapping calls beyond the "
+                       + $"{slots.Count} while it was still live, overlapping calls beyond the "
                        + "pool size share a copy again");
             }
         }

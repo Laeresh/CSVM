@@ -527,6 +527,9 @@ internal static class CampaignRosterSuites
                 $"every rig on the stage is in play before the ranking is measured");
             if (shooter.Pilot?.Machine is { } machine)
             {
+                // The picker's reach is the ATTACK radius (docs/org/aiPilot.md); the activation one
+                // goes with it so the pursue entry gate agrees with what the ranking admits.
+                machine.AttackRange = ScanRangeM;
                 machine.ActivationRange = ScanRangeM;
             }
             var gunner = shooter.Pilot?.Gunner;

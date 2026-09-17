@@ -647,7 +647,8 @@ internal static class TargetingCandidateSuites
         "candidate scan, a picked target carries the engine's 20 s hold, the decoded order keeps " +
         "a still-valid camp through an enemy aeroplane arriving and sweeps the pool only once the " +
         "hold runs out, while the aircraft-first preference takes the aeroplane the moment it is " +
-        "in reach")]
+        "in reach; and the reach is the ATTACK radius, so a widened activation radius admits " +
+        "nothing further (BL-789)")]
     internal static void AiTargetRescore(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -780,6 +781,22 @@ internal static class TargetingCandidateSuites
             enemy.PlaceHeld(reachPos, reachPos + Vector3.Forward);
             ctx.Check(ReferenceEquals(Step(), enemy),
                 $"and the wingman leaves it mid-hold for an aeroplane {ally.WorldPosition.DistanceTo(reachPos):0} m out, past the camp at {ally.WorldPosition.DistanceTo(campNode.GlobalPosition):0} m");
+
+            // The admission volume is the ATTACK cylinder, never the activation one: a DEDG-widened
+            // member is simulated out to 9,000 m and still picks up nothing past its attack radius.
+            allyPilot.Machine = new AiModeMachine(new System.Random(789))
+            {
+                ActivationRange = CampaignRosterPlan.DedgActivationRangeM,
+                AttackRange = 2000f,
+            };
+            var widePos = new Vector3(0f, 500f, -2500f);
+            enemy.PlaceHeld(widePos, widePos + Vector3.Forward);
+            float wideGap = ally.WorldPosition.DistanceTo(widePos);
+            ctx.Check(ReferenceEquals(Acquire(true), camp),
+                $"a widened activation radius of {allyPilot.Machine.ActivationRange:0} m does not admit an aeroplane {wideGap:0} m out, past the {allyPilot.Machine.AttackRange:0} m attack radius: the pick stays {TargetPool.NameOf(allyPilot.Gunner.Target)}");
+            allyPilot.Machine.AttackRange = 4000f;
+            ctx.Check(ReferenceEquals(Acquire(true), enemy),
+                $"and raising the ATTACK radius to {allyPilot.Machine.AttackRange:0} m admits the same aeroplane at {wideGap:0} m target={TargetPool.NameOf(allyPilot.Gunner.Target)}");
         }
         finally
         {

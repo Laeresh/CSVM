@@ -98,6 +98,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/WavFile.cs`, pure-C# WAV parser + MS ADPCM→PCM16 decoder (the game's format; Godot can't load it).
 - `src/Mech3/WavCues.cs`, a WAV's RIFF `cue ` chunk as ascending times in seconds, the marker clock the briefing narration's reveal script waits on.
 - `src/Mech3/SoundArchive.cs`, WAV lookup over a sounds extraction → cached `AudioStreamWav` (forward loop when LOOPED).
+- `src/Mech3/SoundFalloff.cs`, the original's positional gain law: a distance, a `RANGE` pair and a `VOLUME` to decibels, pure and engine-free.
 - `src/Mech3/MusicPlayer.cs`, the state-driven score: one 2D streaming channel for menu, cabin and mission, with the decoded battle hold.
 - `src/Mech3/MissionRadio.cs`, the mission radio queue: the non-positional voice channel the campaign's objective callouts and VO dialogue chains speak on.
 - `src/Mech3/SoundDefs.cs`, sounds.json parser: SETS `snd_*` → `SoundDef`; `LoadGroups` → the weighted-random `SOUND_GROUPS` + their dialogue chains.
@@ -177,7 +178,8 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/MarkerDraw.cs`, the world marker's drawing primitives: reticle, edge arrow, centred text block and its clamped variant, marker blue and shadow.
 - `src/Flight/StuntRunHud.cs`, the stunt run's readouts: clock and zones cleared, intro banner, cleared flash, completion or race placing; one per player.
 - `src/Flight/ResultsBoard.cs`, the shared shell every results board is built on: backdrop and panel, the palette, the halt contract, and the standard menu.
-- `src/Flight/StuntScoreboard.cs`, end-of-run results overlay: a per-pane panel of per-zone splits, total, and the persisted best time.
+- `src/Flight/StuntScoreboard.cs`, end-of-run results overlay: a per-pane panel of per-zone splits, total, the persisted best time, and the run's photo strip.
+- `src/Flight/StuntCapture.cs`, the Danger Zone camera: one latched pane photograph per marker per run, written beside the saves with its sting.
 - `src/Flight/StuntSplits.cs`, the stunt run's split table, shared by the scoreboard and the wrap-up board: per-zone rows, the total, and the best comparison.
 - `src/Flight/StuntRace.cs`, splitscreen stunt race bookkeeping: one `Racer` per player, finish placings, standings, rematch reset.
 - `src/Flight/StuntRaceBoard.cs`, the race's shared ranked results overlay, on its own full-window CanvasLayer above the splitscreen panes.
@@ -538,7 +540,8 @@ clusters they delegate to.
 - `src/Session/CampaignHumanField.cs`, the human field's rules, engine-free: what a condition naming one aeroplane asks once two to four humans fly.
 - `src/Session/ObjectiveSites.cs`, the flown campaign mission's flagged target sites as targeting candidates, rebuilt from their live source every frame.
 - `src/Session/CampaignDirector.cs`, the engine side of a campaign mission: the graph armed against the built world, the roster spawned and launched off its hooks, the attempt recorded.
-- `src/Session/CampaignDangerZones.cs`, a campaign mission's own danger zones: the `dzpathN` gates its script arms, tracked per human by the stunt gate rule.
+- `src/Session/CampaignDangerZones.cs`, a campaign mission's own danger zones: the `dzpathN` gates its script arms, tracked per human by the stunt gate rule, each carrying its mission's objective number.
+- `src/Session/CampaignSnapshot.cs`, the Danger Zone photograph a campaign mission writes into the flying profile's directory under the scrapbook row's own `Snap_<mission>_<objective>` name.
 - `src/Session/AirframeSwap.cs`, the three `CALLBACK` codes that hand the player a different airframe in mid mission, and the def and node each names.
 - `src/Session/CutsceneController.cs`, the host a cutscene definition raises its `CALLBACK` codes to, and the session state those codes describe.
 - `src/Session/LandingApproachRuntime.cs`, the mid-mission cutscene trigger: `landings.zrd` rows tested against each flying human, and the auto-land offer.

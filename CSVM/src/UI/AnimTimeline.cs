@@ -175,7 +175,7 @@ public sealed partial class AnimTimeline : Control
         if (_def == null || _lanes.Count == 0)
         {
             string hint = _def == null
-                ? "no def playing — pick one (P) or --play-anim=<name>"
+                ? "no def playing, pick one (P) or --play-anim=<name>"
                 : $"{_def.AnimName} has no Initial sequences (all on-call)";
             Text(new Vector2(Pad, HeaderH + 18), hint, LabelDim, _fontSize);
             return;

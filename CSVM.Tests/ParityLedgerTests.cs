@@ -166,7 +166,7 @@ public class ParityLedgerTests
             Assert.True(InventoryClasses.ContainsKey(row.Class),
                 $"{name} is classified '{row.Class}', which the ledger has no class for");
             Assert.False(string.IsNullOrWhiteSpace(row.Source),
-                $"{name} has no source — a constant with no address, global or data key behind it "
+                $"{name} has no source, a constant with no address, global or data key behind it "
                 + "is a fitted constant until somebody proves otherwise");
         }
     }
@@ -206,7 +206,7 @@ public class ParityLedgerTests
         foreach (var row in all.Rows)
         {
             Assert.True(known.Contains(row.Name),
-                $"{row.Plane}'s '{row.Name}' has no parity-ledger row — add one to "
+                $"{row.Plane}'s '{row.Name}' has no parity-ledger row, add one to "
                 + "ParityLedgerTests.EnvelopeRows and regenerate docs/org/flightModel.md's ledger");
         }
 

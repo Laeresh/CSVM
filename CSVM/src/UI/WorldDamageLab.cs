@@ -118,7 +118,7 @@ public sealed partial class WorldDamageLab : Node
                 rejected.Add(step);
                 continue;
             }
-            Log.Warn("ui", $"--debug-damage step '{step}' is not node=/pool=/hp=/kill/reset/tick=/open — ignoring it");
+            Log.Warn("ui", $"--debug-damage step '{step}' is not node=/pool=/hp=/kill/reset/tick=/open, ignoring it");
         }
         return string.Join(",", kept);
     }
@@ -244,7 +244,7 @@ public sealed partial class WorldDamageLab : Node
         box.AddThemeConstantOverride("separation", 4);
         _box = box;
 
-        box.AddChild(new Label { Text = "DAMAGE LAB — WORLD", Modulate = Amber });
+        box.AddChild(new Label { Text = "DAMAGE LAB: WORLD", Modulate = Amber });
         _header = Small("");
         box.AddChild(_header);
         _reach = Small("");
@@ -346,13 +346,13 @@ public sealed partial class WorldDamageLab : Node
         var node = _selection.Current;
         if (_runtime == null)
         {
-            SetHeader("no animation runtime in this session — nothing here is a destructible", Loud);
+            SetHeader("no animation runtime in this session, nothing here is a destructible", Loud);
             RequestResize();
             return;
         }
         if (node == null || !IsInstanceValid(node))
         {
-            SetHeader("nothing selected — click an object (PgUp/PgDn walk its ladder)", Dim);
+            SetHeader("nothing selected, click an object (PgUp/PgDn walk its ladder)", Dim);
             RequestResize();
             return;
         }
@@ -373,7 +373,7 @@ public sealed partial class WorldDamageLab : Node
             RequestResize();
             return;
         }
-        SetHeader(Log.Format($"'{name}' — {pools.Count} pool(s)"), Amber);
+        SetHeader(Log.Format($"'{name}', {pools.Count} pool(s)"), Amber);
         if (_reach != null)
         {
             _reach.Text = reachable == null
@@ -456,7 +456,7 @@ public sealed partial class WorldDamageLab : Node
         else
         {
             var why = reachable == null
-                ? "no controls: nothing can damage this pool — its object has no reachable pool at all"
+                ? "no controls: nothing can damage this pool, its object has no reachable pool at all"
                 : Log.Format($"no controls: a hit resolves to {Label(reachable)}, so this pool is unreachable by damage and holds its own HP");
             var note = Small(why);
             note.Modulate = Loud;
@@ -485,7 +485,7 @@ public sealed partial class WorldDamageLab : Node
         if (_status != null && _runtime != null && _rows.Count > 0)
         {
             _status.Text = Log.Format($"world: debris launched {_runtime.BallisticMotionsLaunched} · one-shot sounds {_runtime.OneShotSoundsPlayed}")
-                           + (_collisionBuilt ? "" : "\ncolliders NOT BUILT IN THIS MODE — a kill's collider census would read zero here and lie");
+                           + (_collisionBuilt ? "" : "\ncolliders NOT BUILT IN THIS MODE, a kill's collider census would read zero here and lie");
         }
     }
 
@@ -544,7 +544,7 @@ public sealed partial class WorldDamageLab : Node
         AskForEffects();
         if (inst.Status == DestructibleRegistry.State.Destroyed)
         {
-            Log.Info("ui", $"damagelab kill pool={Label(inst)} already destroyed — Reset it first (a dead pool takes no further damage) via={via}");
+            Log.Info("ui", $"damagelab kill pool={Label(inst)} already destroyed, Reset it first (a dead pool takes no further damage) via={via}");
             return;
         }
         var colBefore = _collisionBuilt
@@ -578,13 +578,13 @@ public sealed partial class WorldDamageLab : Node
             var colAfter = Probes.EnabledColliders(Probes.WorldRootOf(inst.Anchor));
             int off = colBefore.Count(cs => IsInstanceValid(cs) && !colAfter.Contains(cs));
             int on = colAfter.Count(cs => !colBefore.Contains(cs));
-            Log.Info("ui", $"damagelab kill colliders off={off} on={on} (counted separately — the net hides a real removal)");
+            Log.Info("ui", $"damagelab kill colliders off={off} on={on} (counted separately, the net hides a real removal)");
         }
         else
         {
-            Log.Info("ui", $"damagelab kill colliders NOT BUILT IN THIS MODE — this world was built with no collision at all, so a census here would read zero and lie about what the death removed");
+            Log.Info("ui", $"damagelab kill colliders NOT BUILT IN THIS MODE, this world was built with no collision at all, so a census here would read zero and lie about what the death removed");
         }
-        Log.Info("ui", $"damagelab kill debris={_runtime.BallisticMotionsLaunched - debrisBefore} sounds={_runtime.OneShotSoundsPlayed - soundsBefore} (immediate, pre-tick — the death's debris motion is SCHEDULED seconds in)");
+        Log.Info("ui", $"damagelab kill debris={_runtime.BallisticMotionsLaunched - debrisBefore} sounds={_runtime.OneShotSoundsPlayed - soundsBefore} (immediate, pre-tick, the death's debris motion is SCHEDULED seconds in)");
     }
 
     // Returns a pool to healthy through the definition's own RESET_STATE.
@@ -663,7 +663,7 @@ public sealed partial class WorldDamageLab : Node
         }
         _effectsAsked = true;
         var effects = EffectsSource();
-        Log.Info("ui", $"damagelab effects runtime={(effects != null ? "built" : "unavailable")} — damage-stage and death effects {(effects != null ? "render here" : "will start but draw nothing in this mode")}");
+        Log.Info("ui", $"damagelab effects runtime={(effects != null ? "built" : "unavailable")}, damage-stage and death effects {(effects != null ? "render here" : "will start but draw nothing in this mode")}");
     }
 
     // ---- scripted script --------------------------------------------------------------------
@@ -689,7 +689,7 @@ public sealed partial class WorldDamageLab : Node
             string name = step["node=".Length..];
             if (SelectByName == null)
             {
-                Log.Warn("ui", $"damagelab node='{name}' — this session has no name index to select through");
+                Log.Warn("ui", $"damagelab node='{name}', this session has no name index to select through");
                 return;
             }
             SelectByName(name);
@@ -708,13 +708,13 @@ public sealed partial class WorldDamageLab : Node
             }
             else
             {
-                Log.Info("ui", $"damagelab pool={which} — nothing is selected, so there is no pool to drive");
+                Log.Info("ui", $"damagelab pool={which}, nothing is selected, so there is no pool to drive");
             }
             return;
         }
         if (Row() is not { } row)
         {
-            Log.Warn("ui", $"damagelab step '{step}' skipped — no destructible pool is selected");
+            Log.Warn("ui", $"damagelab step '{step}' skipped, no destructible pool is selected");
             return;
         }
         if (step.StartsWith("hp=", StringComparison.OrdinalIgnoreCase)
@@ -742,7 +742,7 @@ public sealed partial class WorldDamageLab : Node
             Reset(row, "script");
             return;
         }
-        Log.Warn("ui", $"damagelab step '{step}' is not node=/pool=/hp=/kill/reset/tick=/open — ignoring it");
+        Log.Warn("ui", $"damagelab step '{step}' is not node=/pool=/hp=/kill/reset/tick=/open, ignoring it");
     }
 
     // A step aimed at a pool nothing can hit is reported rather than silently doing nothing: that
@@ -751,7 +751,7 @@ public sealed partial class WorldDamageLab : Node
     {
         if (!row.Drivable)
         {
-            Log.Warn("ui", $"damagelab {action} refused on pool={Label(row.Inst)} ({Source(row.Inst)}) — a hit on this object resolves elsewhere, so this pool is unreachable by damage and has no controls");
+            Log.Warn("ui", $"damagelab {action} refused on pool={Label(row.Inst)} ({Source(row.Inst)}), a hit on this object resolves elsewhere, so this pool is unreachable by damage and has no controls");
         }
     }
 
@@ -761,7 +761,7 @@ public sealed partial class WorldDamageLab : Node
     {
         if (_rows.Count == 0)
         {
-            Log.Info("ui", $"damagelab pools node={(_selection.Current is { } n ? SelectionService.NameOf(n) : "none")} pools=0 — not a destructible");
+            Log.Info("ui", $"damagelab pools node={(_selection.Current is { } n ? SelectionService.NameOf(n) : "none")} pools=0, not a destructible");
             return;
         }
         Log.Info("ui", $"damagelab pools node={SelectionService.NameOf(_selection.Current!)} pools={_rows.Count}");

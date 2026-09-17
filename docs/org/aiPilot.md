@@ -118,17 +118,21 @@ silent, and the emplacement file settles nothing about a hull's own weapon.
 
 `attack_dwell` parses to def `+0x5c` and `not_pursuit_dwell` to def `+0x60` (`0x00479da1`,
 `0x00479dbc`), and `FUN_00475820` copies them to vehicle `+0x304` and `+0x308`. Both feed the one
-timestamp `+0x300`, which is the earliest time a pursuit may start:
+timestamp `+0x300`, which paces a pursuit at both ends:
 
 - `FUN_0041f040` refuses to promote while `DAT_0071c470 <= +0x300`, unless the offered target
   differs from the one at `+0x2fc`, the target the last promotion took;
 - on promoting it sets `+0x300` to now plus `+0x304`, except that a `jet` or `wingman` promoting
   onto a target that is not a `TargetVehicle` gets a hardcoded 20 s instead;
-- losing a pursued target sets `+0x300` to now plus `+0x308` (step 3 above).
+- losing a pursued target sets `+0x300` to now plus `+0x308` (step 3 above);
+- the pursue behaviour's tail reverts the task the moment `+0x300` passes (`0x0041e674`), so the
+  same stamp that made the aeroplane wait before the chase is also what ends it.
 
+`basic_airplane` authors `attack_dwell 60` and `not_pursuit_dwell 5` and every aeroplane def
+inherits them, so an unassigned chase runs a minute and the next one may start five seconds later.
 ⚠ **Neither field does anything on a `ship`, a `plane` or a `heli`**, since those classes never
-reach `FUN_0041f040`. The boat's authored `attack_dwell 60` and `not_pursuit_dwell 5` are inert.
-What paces a boat's target churn is the sticky-target hold below.
+reach `FUN_0041f040`. The boat's own copies of the same two values are inert. What paces a boat's
+target churn is the sticky-target hold below.
 
 The AI mode enum lives at `+0x358` and is a different thing from the task: 1 evasive maneuver,
 2 approaching danger zone, 3 avoid crash, 4 stunned, 5 navigating danger zone, 0 otherwise.
@@ -242,11 +246,150 @@ The admission test is a **cylinder**, not a radius: horizontal `d.x² + d.z²` a
 picked. `FUN_00421ad0` also returns `1e21` when the candidate object's `+0x04` field is 3 or more,
 and `FUN_00422890` is a validity check whose failure scores the same.
 
-⚠ **That cylinder is the ATTACK volume, not the activation volume**, on the field map the
-net-assignment section below records: activation is `+0x318`/`+0x31c`/`+0x320`, and its only reader
-in the executable is the state update `FUN_004897c0`. Both volumes ship at 2,000 m, so the two
-readings part company only where something moves one of them, and `DEDG`'s widening moves the
-activation volume alone ([../formats/objectives.md](../formats/objectives.md)).
+⚠ **That cylinder is the ATTACK volume and it is the SCORER's own.** The base of all three loads
+is `*(param_1 + 0x18)`, the scoring vehicle, so the volume belongs to the pilot doing the looking
+and never to what is being looked at. The field map the net-assignment section below records puts
+activation at `+0x318`/`+0x31c`/`+0x320` and attack at `+0x328`/`+0x32c`/`+0x330`.
+
+### Every reader of the attack and activation triples
+
+Each of the six fields was swept for by displacement across the whole image (648,780 instructions),
+so these lists are complete for a direct `[reg + disp]` access; the only sites that take a triple's
+ADDRESS instead are the two copy-and-clamp ones named below.
+
+**The attack triple, `+0x328` / `+0x32c` / `+0x330`.** Three readers, and all three are the same
+admission test:
+
+| Where | Function | The condition it applies under |
+|---|---|---|
+| `0x00421b47`–`0x00421b67` | `FUN_00421ad0` | the `jet`/`wingman` scorer: outside the cylinder the rank is `1e21`, so the candidate is never picked |
+| `0x004219ac`–`0x004219cc` | `FUN_00421950` | the scorer every OTHER `mode` runs, the same three fields, the same `1e21` |
+| `0x0041cb5d`–`0x0041cb7d` and `0x0041cf2a`–`0x0041cf4a` | `FUN_0041c470` | the debug overlay, duplicating both scorers for the readout |
+
+⚠ **The non-`jet` scorer admits on the attack cylinder too.** `FUN_00421950` drops the three
+geometry terms, not the admission, so a `ship`, `plane`, `heli` or `tank` is bounded by the same
+volume an aeroplane is.
+
+Its writers are the constructor's zero (`FUN_004aff80`, `0x004b0106`), the def copy
+(`FUN_00475820`, `0x00475a62`), the net assignment (`FUN_00475fc0`, `0x00476128`), the roster block
+(`FUN_0047c210`, `0x0047c888`), and the script command **`SET_AI_ATTACK_RADIUS`** (`FUN_00469f70`,
+`0x00469f93`), which stores r² into `+0x328` and ∓r into `+0x32c`/`+0x330`. "Where a hull's attack
+triple comes from" below walks all five in the order a spawn runs them.
+
+**The activation triple, `+0x318` / `+0x31c` / `+0x320`.** One reader that decides anything:
+
+| Where | Function | The condition it applies under |
+|---|---|---|
+| `0x00489a28`–`0x00489a48` | `FUN_004897c0` | the world tick's AWAKE test, cylinder measured to the player |
+
+⚠ **The activation volume is the simulation gate, not a targeting range.** The offset it tests is
+the player's position (`DAT_0071c298`) minus this vehicle's, and what the test writes is the awake
+byte `+0x944`: an asleep vehicle gets neither the AI update `FUN_0041c270` nor its physics that
+frame. The cylinder is the last of five disjuncts. Byte `+0x91f` set wakes the vehicle outright;
+otherwise `+0x354` must be zero, and then the AI-suppressed byte `+0xcc`, a default task `+0x2f4`
+of 2, a `primary_target` at `+0x2fc` whose own vtable `+0x14` test fails, byte `+0x324`, or the
+cylinder each wake it on their own.
+
+Its writers are the constructor's zero (`FUN_004aff80`, `0x004b00ee`), the def copy
+(`FUN_00475820`, `0x00475a4b`, through the copier at `0x004830e0`), the net assignment
+(`FUN_00475fc0`, `0x004760d7`), the roster block (`FUN_0047c210`, `0x0047c81d`), the
+`min_ai_active_dist` clamp, which reads the field back to compare (`FUN_00476250`, `0x004763fe`;
+`FUN_0047c210`, `0x0047c922`), and the `DEDG` widening (`FUN_00465850`, `0x0046586c` read,
+`0x0046587f` write, raise-only). **No script command writes it**: `SET_AI_ATTACK_RADIUS` has no
+activation counterpart anywhere in the image.
+
+⚠ **So a `DEDG` widening never reaches acquisition.** Both volumes ship at 2,000 m and the widening
+raises the activation triple alone ([../formats/objectives.md](../formats/objectives.md)), so a
+watched group is SIMULATED out to 9,000 m while every member still admits candidates only inside
+its own 2,000 m attack cylinder. A net or a roster block that authors the two volumes differently
+parts them the same way.
+
+### Where a hull's attack triple comes from
+
+`patrolboat` and `t_truck` author neither `attack` nor `kind_of`, so what their scorer admits on is
+settled by the def record's own constructed default. Five writers touch
+`+0x328`/`+0x32c`/`+0x330`, and a roster-block spawn runs them in this order:
+
+| # | Where | Addresses | The condition it applies under | A shipped hull |
+|---|---|---|---|---|
+| 1 | vehicle constructor `FUN_004aff80` | `0x004b0106`, `0x004b010c`, `0x004b0112` | unconditional, `EBX` zeroed at `0x004affaf` | 0, then overwritten |
+| 2 | def copy `FUN_00475820` | `0x00475a5f`–`0x00475a74` | unconditional, the def record's `+0x44`/`+0x48`/`+0x4c` straight across | **160000.0 / −400.0 / +400.0** |
+| 3 | net assignment `FUN_00475fc0` | `0x00476128`, `0x00476143`, `0x0047615c` | per field, only where the net's own float is non-zero (`FCOMP` against `0x006032c8`) | no write |
+| 4 | roster block `FUN_0047c210` | `0x0047c888`, `0x0047c8a6`, `0x0047c8c2` | the same per-field non-zero gate, after the def copy, so an authored slot wins | no write |
+| 5 | `SET_AI_ATTACK_RADIUS` `FUN_00469f70` | `0x00469f93` r², `0x00469fa1` +r, `0x00469faf` −r | only where a mission script issues it, on the vehicle `FUN_004aff10` resolves by name | never reached |
+
+The spawn order inside `FUN_0047c210` is `0x0047c51d` the constructor, `0x0047c550` the def copy,
+`0x0047c77b` the `min_ai_active_dist` clamp, then the block's own volume writes from `0x0047c803`.
+`FUN_00475fc0` is not called from the block spawn at all; its callers are `FUN_004a6610`
+(`0x004a66eb`), `FUN_00476250` (`0x004763d2`) and `FUN_00475f30` (`0x00475fa9`).
+
+**The 400 m is the def record's constructed default.** With no `kind_of`, `FUN_004735b0` takes the
+no-parent branch at `0x00474c42` and builds the record through `FUN_00478a00`, which writes
+`+0x44 = 160000.0` (`0x00478a69`), `+0x48 = −400.0` (`0x00478a70`) and `+0x4c = +400.0`
+(`0x00478a77`). The def parser `FUN_00479240` overwrites those three only inside its `attack` token
+branch (`0x00479cf5`–`0x00479d5a`, the token string at `0x627e30`), which a def authoring no
+`attack` skips at the `JZ` at `0x00479d05`. A def that does name a parent inherits the parent's
+triple through the copy constructor `FUN_00477b70` (`0x00477f34`, `0x00477f37`), which is the chain
+walk `Mech3/VehicleDefs.AttackOf` performs.
+
+Nothing in the shipped data overrides it. All 23 hull blocks in the campaign (C1/M05's twelve
+`patrolboat_1..12`, C1B/M03's four, C2/M01's `patrolboat_eg0`, C5/M01's two boats and four
+`t_truck_1..4`) author roster slots 8–19 as zero, and all fourteen nets those blocks reference
+author elements 2–10 as zero. **So a shipped boat or truck ranks candidates inside 400 m**, not
+inside the 2,500 m its `activation` authors. Its `weapons` window of 1 to 500 m is the looser gate
+of the two and its far end never binds.
+
+⚠ **`SET_AI_ATTACK_RADIUS` reaches a hull in the original and does not here.** `FUN_004aff10`
+resolves the named vehicle whatever its `mode`, where `Session/CampaignDirector.SetAiAttackRadius`
+reaches aircraft rigs carrying a `Pilot.Machine`. No shipped mission authors the directive, so the
+hull half is deliberately unported rather than overlooked.
+
+### The third volume, and where the leash is read
+
+The return triple `+0x334` / `+0x338` / `+0x33c` also has exactly one reader: the tail of the pursue
+behaviour `FUN_0041d9f0`, which runs on every frame the task is pursue and in every AI state but the
+danger-zone approach. It is a CYLINDER about the anchor at `+0x348`–`+0x350`, offset by the vehicle's
+own position at `+0x204`–`+0x20c`, and any one of five terms reverts the task:
+
+| Term | Where | The test |
+|---|---|---|
+| dwell | `0x0041e674`–`0x0041e68b` | the timestamp `+0x300` has passed (`DAT_0071c470` is the clock), skipped while `DAT_0064f66e` is set |
+| validity | `0x0041e68d`–`0x0041e69a` | the standing target's own virtual `+0x14` reports it gone |
+| horizontal | `0x0041e69c`–`0x0041e6b5` | `dx² + dz²` exceeds `+0x334`, which holds r² |
+| below | `0x0041e6b7`–`0x0041e6c5` | `dy` is under `+0x338`, which holds −r |
+| above | `0x0041e6c7`–`0x0041e6d5` | `dy` is over `+0x33c`, which holds +r |
+
+The revert at `0x0041e6d7` writes the default task `+0x2f4` into `+0x2f0` and re-arms `+0x300` to now
+plus `+0x308`, or plus a hardcoded 20.0 for a `jet`/`wingman` whose target is not a `TargetVehicle`.
+**None of the five reads the activation volume.** The parse fills all three fields from one token
+(`0x00479de9`–`0x00479e09`, as `r²`, `+r`, `−r`), and only a second and third token part the band from
+the radius (`0x00479e14`, `0x00479e22`); `basic_airplane` authors `return_range 1200` alone and every
+def inherits it, so every aeroplane flies a 1,200 m radius with a ±1,200 m band.
+
+**The anchor is the PURSUER's own pose, written exactly once per promotion.** `FUN_0041f040` reads
+the vehicle's own world index at `+0x2e8` through the scene accessor `FUN_00432140` and stores that
+position at `0x0041f0a6`. The per-frame update `FUN_0041c270` reaches the promotion only from the
+patrol branch (task `0` or `2`), never while the task is already pursue, and the AI state at `+0x358`
+is a separate field, so a stun, a climb-out or an evasive program leaves task and anchor standing.
+A pursuit is leashed to where the chase began, not to the spawn and not to the last maneuver.
+
+⚠ **The whole revert is skipped for an assigned `primary_target`.** The tail sits inside a guard
+(`0x0041e5fd` onward) that runs only when `+0x2fc` is null or the standing target at `+0x948` has a
+different owner, the same predicate the promotion's dwell gate uses. A vehicle chasing the target its
+roster block assigned it neither waits to promote nor ever reverts.
+
+⚠ **The dwell pair caps every other chase at 60 seconds.** `basic_airplane` authors `attack_dwell 60`
+and `not_pursuit_dwell 5`, inherited install-wide, so a promotion sets `+0x300` to now + 60 and the
+first disjunct fires when that passes: an aeroplane chasing anything but its assigned target holds
+the pursuit for a minute, reverts, and cannot promote again for five seconds. The geometry terms only
+end it sooner. Subtracting `(1 − +0x8f4) × +0x304` at `0x0041e65c` shortens the deadline while the
+quarry is the player and the player is chasing back.
+
+CSVM ports the anchor and the cylinder. `AiModeMachine.PursuitAnchor` is taken on the promotion into
+pursue and dropped when the task reverts, `ReturnRange` is tested as the cylinder above, and the
+disengage reads no activation term. Unported, named rather than guessed: the dwell pair, which would
+need the promotion's own `+0x300` refusal beside it to mean anything; the `primary_target` exemption;
+and the per-frame revert during an evasive program, which CSVM defers to the moment the program ends.
 
 ### `rating_biases` returns rank units directly
 
@@ -397,10 +540,24 @@ the bare decoded hold with it, and the order is then the two biases' alone.
 `Session/SurfaceGunner` never takes the preference, since it
 drops non-aircraft candidates anyway.
 
-Unmodelled, named rather than guessed: the activation volume is scored as a sphere where the engine
-tests a cylinder (`+0x328`, `+0x32c`–`+0x330`); `TargetProjectile` is not part of the acquisition
-sweep at all; and `FUN_00421ad0`'s `1e21` on a
-candidate object whose `+0x04` reads 3 or more.
+The admission volume comes out as the attack one in every picker. `AiTargetRanking.Score` refuses a
+candidate past the `attackRange` it is handed, and `FlightController.SelectRankedTarget`, its
+re-score `HoldsStandingTarget` and the withdrawal's reach test all hand it
+`AiModeMachine.AttackRange`, so a member whose activation volume a `DEDG` widened keeps its own
+attack radius for what it may pick up. `Session/SurfaceGunner` is handed the radius
+`SurfaceVehicleRuntime` resolves for the hull at spawn, the block's and net's attack slot over the
+def's own `attack` over the 400 m def record default, which is the engine's own order (see "Where a
+hull's attack triple comes from"). `AiModeMachine.ActivationRange` is left where the spawn seeds it
+and reaches the ranking nowhere.
+
+Unmodelled, named rather than guessed: the attack volume is scored as a sphere where the engine
+tests a cylinder (`+0x328`, `+0x32c`–`+0x330`), so the altitude band is unported on both the
+acquisition and the awake test (the return volume is the one triple CSVM does test as a cylinder,
+see "The third volume, and where the leash is read"); the awake test itself, `FUN_004897c0`'s use of
+the activation volume, has no CSVM counterpart at all, since every rig ticks every frame;
+`TargetProjectile` is not
+part of the acquisition sweep; and `FUN_00421ad0`'s `1e21` on a candidate object whose `+0x04` reads
+3 or more.
 
 ## The chapter's net table, and what "the first net" means
 

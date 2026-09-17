@@ -174,10 +174,11 @@ public static class DefaultBindings
         // control the freecam look posture reads (SpectatorCamera).
         b.Mouse(InputAction.FreeLook, MouseButton.Right);
 
-        // The two look-mode selectors on the original's own keys, which its keybind page calls
-        // Access Snap Look Mode and Access Smooth Look Mode. Keyboard only, as the original has
-        // them: neither reaches a joystick button there and the pad has no free control here.
+        // The three look-mode selectors on the original's own keys, which its keybind page calls
+        // Access Snap Look Mode, Track Target and Access Smooth Look Mode. Keyboard only, as the
+        // original has them: none reaches a joystick button there and the pad has no free control.
         b.Keys(InputAction.SnapLookMode, Key.K);
+        b.Keys(InputAction.TrackTarget, Key.L);
         b.Keys(InputAction.SmoothLookMode, Key.J);
         return b;
     }

@@ -28,7 +28,7 @@ internal static class ZeppelinHullActivationSuites
         "hidden and the zeppelin record is what switches it on. With it on, the hook point, " +
         "the hangar bay and both landing cones resolve UNDER the hull, and after pzhomebase " +
         "(the anim OBJECTIVE8 wakes at the end of the race) has run its dock choreography the " +
-        "hull, the hook and the hangar bay all draw — rather than a live dock on an invisible " +
+        "hull, the hook and the hangar bay all draw, rather than a live dock on an invisible " +
         "Pandora")]
     internal static void ZeppelinHullActivation(TestContext ctx)
     {

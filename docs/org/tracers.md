@@ -271,3 +271,11 @@ None of these are changed by this page. `TracerMinPixels` in particular was intr
 reference captures showing distant fire as visible streaks; the 600 m LOD says the original stops
 drawing them, so that reading needs re-checking against a shot fired at a *known* range before
 either side is called wrong.
+
+⚠ **The 2.0 px floor was fitted under a wider frustum than the one the external views now draw.**
+The formula above takes the live camera's own FOV and so stays correct arithmetic, but the fit that
+chose 2.0 was made while every external camera ran a 62° vertical, and the decoded base is 46.8°
+(`docs/org/cameraViews.md`, "FOV constants and aspect correction"). A round of a given size at a
+given range now covers 1.39× the pixels it did, so the floor engages at a longer range than when
+the number was picked. Re-judge what the floor is for against the captures rather than re-solving
+2.0 from the same arithmetic.

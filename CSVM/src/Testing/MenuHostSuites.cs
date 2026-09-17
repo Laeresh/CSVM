@@ -149,7 +149,7 @@ internal static class MenuHostSuites
         ctx.Check(menu.ShownScreen == "Chapter",
             $"a frame through the host's seat drives the screens: Accept opens the Chapter screen ({menu.ShownScreen})");
         Press(host, seat, Up);
-        ctx.Check(menu.ShownRowText == "New York — IA: Manhattan",
+        ctx.Check(menu.ShownRowText == "New York, IA: Manhattan",
             $"Up wraps the chapter cursor onto the last row ({menu.ShownRowText})");
         Press(host, seat, Accept);
         Press(host, seat, Down);
@@ -188,7 +188,7 @@ internal static class MenuHostSuites
         ctx.Check(menu.ShownScreen == "Mode" && menu.ShownRow == 0,
             $"a bare launch's return re-enters on the Mode screen ({menu.ShownScreen}, row {menu.ShownRow})");
         menu.Drive(Accept);
-        ctx.Check(menu.ShownScreen == "Chapter" && menu.ShownRowText == "New York — IA: Manhattan",
+        ctx.Check(menu.ShownScreen == "Chapter" && menu.ShownRowText == "New York, IA: Manhattan",
             $"the chapter cursor survives the flight ({menu.ShownRowText})");
         menu.Drive(Accept);
         ctx.Check(menu.ShownHeading == "SELECT AIRCRAFT" && menu.ShownRowText == "Balmoral",

@@ -103,6 +103,69 @@ internal static class OptionsLaunchSuites
         }
     }
 
+    [Suite("options-view-launch",
+        "The saved Default View and Auto Head Turn at launch: a saved cockpit reaches the opening "
+        + "view a plain launch builds, --view= on the command line outranks the saved word "
+        + "(--view=chase included, which is also the default), a --det run reads neither, a word "
+        + "outside the store's set loads as never set, the saved view is not folded outside flight, "
+        + "and the head turn reaches the policy as saved while a never-set field leaves it null so "
+        + "the headLook.autohead config key decides")]
+    internal static void OptionsViewLaunch(TestContext ctx)
+    {
+        string dir = Path.Combine(ctx.ScratchDir, "options-view-launch");
+        if (Directory.Exists(dir))
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+
+        Directory.CreateDirectory(dir);
+        string? previous = OptionsStore.DirectoryOverride;
+        OptionsStore.DirectoryOverride = dir;
+        try
+        {
+            ctx.Check(LaunchedView(new[] { "--fly" }) == PilotViewMode.Chase,
+                $"with no options file a launch opens in the chase view ({LaunchedView(new[] { "--fly" })})");
+
+            OptionsStore.UserOptions().Save(new OptionsDef
+            {
+                DefaultView = PilotView.Name(PilotViewMode.Cockpit),
+                AutoHeadTurn = true,
+            });
+            ctx.Check(LaunchedView(new[] { "--fly" }) == PilotViewMode.Cockpit,
+                $"a saved cockpit reaches the opening view on a plain launch ({LaunchedView(new[] { "--fly" })})");
+            ctx.Check(LaunchedView(new[] { "--fly", "--view=nose" }) == PilotViewMode.Nose,
+                $"--view=nose outranks the saved cockpit ({LaunchedView(new[] { "--fly", "--view=nose" })})");
+            // Chase is both the default and a nameable mode, so this is the case a value comparison
+            // alone cannot answer: the spec's own explicit flag is what settles it.
+            ctx.Check(LaunchedView(new[] { "--fly", "--view=chase" }) == PilotViewMode.Chase,
+                $"and --view=chase does too, though chase is also the default ({LaunchedView(new[] { "--fly", "--view=chase" })})");
+            ctx.Check(LaunchedView(new[] { "--fly", "--det" }) == PilotViewMode.Chase,
+                $"a --det run reads no saved view, so a golden cannot depend on one machine's file ({LaunchedView(new[] { "--fly", "--det" })})");
+            ctx.Check(LaunchedView(System.Array.Empty<string>()) == PilotViewMode.Chase,
+                $"and a run that is not a flight takes no saved view either ({LaunchedView(System.Array.Empty<string>())})");
+            ctx.Check(LaunchedAutoHead(new[] { "--fly" }) == true && LaunchedAutoHead(new[] { "--fly", "--det" }) == null,
+                $"the saved head turn reaches the policy and a --det run reads none ({LaunchedAutoHead(new[] { "--fly" })}, {LaunchedAutoHead(new[] { "--fly", "--det" })})");
+
+            OptionsStore.UserOptions().Save(new OptionsDef { AutoHeadTurn = false });
+            ctx.Check(LaunchedAutoHead(new[] { "--fly" }) == false,
+                $"a saved false reaches it as off rather than as never set ({LaunchedAutoHead(new[] { "--fly" })})");
+            ctx.Check(LaunchedAutoHead(new[] { "--fly" }) is not null && LaunchedView(new[] { "--fly" }) == PilotViewMode.Chase,
+                $"and a file naming no view leaves the opening view at the default ({LaunchedView(new[] { "--fly" })})");
+
+            // The momentary arguments --view= also takes (a numpad digit, "back") name a look rather
+            // than a selection, so the file may not carry them: written by hand, they load as unset.
+            File.WriteAllText(Path.Combine(dir, "options.json"),
+                "{\"version\": 1, \"defaultView\": \"back\"}", new System.Text.UTF8Encoding(false));
+            ctx.Check(OptionsStore.UserOptions().Load().DefaultView == null
+                && LaunchedView(new[] { "--fly" }) == PilotViewMode.Chase,
+                $"a word outside the store's set loads as never set and the launch keeps chase ({LaunchedView(new[] { "--fly" })})");
+        }
+        finally
+        {
+            OptionsStore.DirectoryOverride = previous;
+        }
+    }
+
     // The launch's own read: the spec a command line parses to, the saved word folded in the way
     // Launcher.LaunchSession folds it, then the policy the roster is built from.
     private static int Launched(string[] args)
@@ -116,5 +179,21 @@ internal static class OptionsLaunchSuites
     {
         var spec = SessionSpec.Parse(args).WithSavedNearestAfterKill(OptionsStore.UserOptions().Load().NearestAfterKill);
         return FlightRosterPolicy.From(spec).NearestAfterKill;
+    }
+
+    // The opening view the same fold reaches, which is what HumanFlightAdapter seeds the camera's
+    // selected mode from.
+    private static PilotViewMode LaunchedView(string[] args)
+    {
+        var spec = SessionSpec.Parse(args).WithSavedDefaultView(OptionsStore.UserOptions().Load().DefaultView);
+        return FlightRosterPolicy.From(spec).ViewMode;
+    }
+
+    // The head turn the same fold reaches, null where never set, which is what leaves the
+    // headLook.autohead config key deciding at FlightController's own gate.
+    private static bool? LaunchedAutoHead(string[] args)
+    {
+        var spec = SessionSpec.Parse(args).WithSavedAutoHeadTurn(OptionsStore.UserOptions().Load().AutoHeadTurn);
+        return FlightRosterPolicy.From(spec).AutoHeadTurn;
     }
 }

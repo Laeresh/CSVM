@@ -6,9 +6,9 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The head-look laws: the snap direction table, the 2 rad/s
-/// free-look integration, the elevation clamp and azimuth wrap, and the exponential smoothing at
-/// the decoded rates (elevation 3.0/s, azimuth 5.0/s). <see cref="HeadLook"/> is engine-free, so
-/// none of this needs a live camera.
+/// free-look integration, the elevation clamp and azimuth wrap, the padlock's target bearing and
+/// its exit scan, and the exponential smoothing at the decoded rates (elevation 3.0/s, azimuth
+/// 5.0/s). <see cref="HeadLook"/> is engine-free, so none of this needs a live camera.
 /// </summary>
 public class HeadLookTests
 {
@@ -29,6 +29,10 @@ public class HeadLookTests
 
     private static HeadLookInput SmoothKey =>
         new(0f, 0f, 0f, 0f, false, 0f, 0f, false, false, true);
+
+    // Track Target, L, as the frame it is pressed on.
+    private static HeadLookInput PadlockKey =>
+        new(0f, 0f, 0f, 0f, false, 0f, 0f, false, false, false, true);
 
     // The eight direction slots as the original's own key-binding menu labels them
     // (OriginalScreenshots/Keybinds Views 2.png), each read as the composed direction its key
@@ -576,6 +580,163 @@ public class HeadLookTests
         var t = HeadLook.AutoheadTarget(new Vector3(50f, 0f, -100f), ShippedTurnTime, ShippedTurnMax, ShippedMinPitch);
         Assert.NotNull(t);
         Assert.True(t!.Value.Azimuth < 0f);
+    }
+
+    // Track Target (the original's state 2): the head holds the selected target's own bearing every
+    // frame, with no rate of its own, and the shown angles do all the smoothing there is.
+
+    [Theory]
+    [InlineData(0f, 0f, -100f, 0f, 0f)]                          // dead ahead
+    [InlineData(-100f, 0f, 0f, 0f, Mathf.Pi / 2f)]               // abeam to port, azimuth is +left
+    [InlineData(100f, 0f, 0f, 0f, -Mathf.Pi / 2f)]               // abeam to starboard
+    [InlineData(0f, 0f, 100f, 0f, Mathf.Pi)]                     // dead astern
+    [InlineData(0f, 100f, -100f, Mathf.Pi / 4f, 0f)]             // 45° up, dead ahead
+    [InlineData(0f, -100f, -100f, -Mathf.Pi / 4f, 0f)]           // 45° down, dead ahead
+    public void ThePadlockBearingIsTheTargetsOwnAngleInThePlanesFrame(
+        float x, float y, float z, float elevation, float azimuth)
+    {
+        var (e, a) = HeadLook.PadlockTargets(new Vector3(x, y, z));
+        Assert.Equal(elevation, e, Tol);
+        Assert.Equal(0f, HeadLook.Wrap(a - azimuth), Tol);
+    }
+
+    [Fact]
+    public void TrackTargetTogglesIntoPadlockAndBackToSnapNeverToFreeLook()
+    {
+        var head = new HeadLook();
+        head.Step(0.1f, SmoothKey);
+        Assert.Equal(LookMode.FreeLook, head.Mode);
+
+        head.Step(0.1f, PadlockKey);
+        Assert.Equal(LookMode.Padlock, head.Mode);
+        head.Step(0.1f, Idle);                          // held, not a second press edge
+        Assert.Equal(LookMode.Padlock, head.Mode);
+
+        head.Step(0.1f, PadlockKey);
+        Assert.Equal(LookMode.Snap, head.Mode);
+    }
+
+    [Fact]
+    public void APadlockedHeadTurnsOntoATargetAbeamAtTheDecodedAzimuthRate()
+    {
+        const float dt = 0.1f;
+        // The toggle's own frame is already a padlock frame, as the original's is: its command
+        // handler writes the state before the controller reads it.
+        var head = new HeadLook { TargetOffset = () => new Vector3(-100f, 0f, 0f) };
+        head.Step(dt, PadlockKey);
+        Assert.Equal(Mathf.Pi / 2f, head.TargetAzimuth, Tol);
+        Assert.Equal(HeadLook.Approach(0f, Mathf.Pi / 2f, HeadLook.AzimuthSmoothRate, dt),
+            head.Azimuth, Tol);
+
+        for (int i = 0; i < 100; i++)
+        {
+            head.Step(dt, Idle);
+        }
+
+        Assert.Equal(Mathf.Pi / 2f, head.Azimuth, 1e-3f);
+    }
+
+    // The only bound the padlock law carries is the placing view's own floor, so a target below a
+    // cockpit head holds at level while the chase camera's head follows it down.
+    [Fact]
+    public void TheViewsFloorIsTheOnlyClampAPadlockedHeadTakes()
+    {
+        var cockpit = Padlocked(new Vector3(0f, -100f, -100f));
+        cockpit.Step(0.1f, Idle);
+        Assert.Equal(HeadLook.FirstPersonElevationFloor, cockpit.TargetElevation, Tol);
+
+        var chase = Padlocked(new Vector3(0f, -100f, -100f), HeadLook.ChaseElevationFloor);
+        chase.Step(0.1f, Idle);
+        Assert.Equal(-Mathf.Pi / 4f, chase.TargetElevation, Tol);
+    }
+
+    // A target crossing dead astern flips the bearing's sign, and the head crosses the ±π seam by
+    // the short arc rather than unwinding through the nose: the wrap the original applies before
+    // every chase, which only this state reaches.
+    [Fact]
+    public void ATargetPassingBehindIsFollowedAcrossTheTailNotThroughTheFront()
+    {
+        var offset = new Vector3(-10f, 0f, 100f);                // aft and a little to port
+        var head = new HeadLook { TargetOffset = () => offset };
+        head.Step(0.1f, PadlockKey);
+        for (int i = 0; i < 200; i++)
+        {
+            head.Step(0.05f, Idle);
+        }
+
+        float before = head.Azimuth;
+        Assert.True(before > 3f, $"settled aft-left, read {before}");
+
+        offset = new Vector3(10f, 0f, 100f);                     // now aft and a little to starboard
+        head.Step(0.05f, Idle);
+        Assert.True(head.Azimuth > before,
+            $"the first step goes on toward the tail, not back through the nose (read {head.Azimuth} against {before})");
+        for (int i = 0; i < 200; i++)
+        {
+            head.Step(0.05f, Idle);
+        }
+
+        Assert.True(head.Azimuth < -3f, $"and settles aft-right, read {head.Azimuth}");
+        Assert.InRange(head.Azimuth, -Mathf.Pi, Mathf.Pi);
+    }
+
+    // No target is the state's own idle frame: the angles zero, and the autohead hook owns it, the
+    // second arm of the original's own gate.
+    [Fact]
+    public void APadlockWithNothingSelectedCentresTheHeadAndReachesTheIdleHook()
+    {
+        var bare = new HeadLook();
+        bare.Step(0.1f, PadlockKey);
+        bare.Step(0.5f, Free(-1f, 1f));
+        // The exit writes SNAP whichever slot caused it, so a pan out of padlock lands there and
+        // the free-look state is one further input away.
+        Assert.Equal(LookMode.Snap, bare.Mode);
+
+        bare = new HeadLook();
+        bare.Step(0.1f, PadlockKey);
+        bare.Step(0.1f, Idle);
+        Assert.Equal(0f, bare.TargetAzimuth, Tol);
+        Assert.Equal(0f, bare.TargetElevation, Tol);
+
+        int calls = 0;
+        var leaning = new HeadLook { IdleAim = () => { calls++; return (-0.0524f, 0.2f); } };
+        leaning.Step(0.1f, PadlockKey);
+        leaning.Step(0.1f, Idle);
+        Assert.Equal(2, calls);                                  // the toggle's own frame is one
+        Assert.Equal(0.2f, leaning.TargetAzimuth, Tol);
+        Assert.Equal(-0.0524f, leaning.TargetElevation, Tol);
+    }
+
+    // The exit scan is the eight direction slots and nothing else: the centre key and the pad's
+    // absolute aim are polled and discarded while padlocked, as the original's own arm does.
+    [Fact]
+    public void ASnapDirectionLeavesPadlockWhileTheCentreKeyAndThePadDoNot()
+    {
+        var head = Padlocked(new Vector3(-100f, 0f, 0f));
+        head.Step(0.1f, new HeadLookInput(0f, 0f, 0f, 0f, true));
+        Assert.Equal(LookMode.Padlock, head.Mode);
+        Assert.Equal(Mathf.Pi / 2f, head.TargetAzimuth, Tol);
+
+        head.Step(0.1f, Pad(1f, 0f));
+        Assert.Equal(LookMode.Padlock, head.Mode);
+        Assert.Equal(Mathf.Pi / 2f, head.TargetAzimuth, Tol);
+
+        // The exit frame still aims at the target; the snap state owns the frame after it.
+        head.Step(0.1f, Snap(0f, 1f));
+        Assert.Equal(LookMode.Snap, head.Mode);
+        Assert.Equal(Mathf.Pi / 2f, head.TargetAzimuth, Tol);
+        head.Step(0.1f, Snap(0f, 1f));
+        Assert.Equal(HeadLook.MaxElevation, head.TargetElevation, Tol);
+        Assert.Equal(0f, head.TargetAzimuth, Tol);
+    }
+
+    // A head already in padlock, fed a target: the helper every case above starts from.
+    private static HeadLook Padlocked(Vector3 offset,
+        float floor = HeadLook.FirstPersonElevationFloor)
+    {
+        var head = new HeadLook(floor) { TargetOffset = () => offset };
+        head.Step(0.1f, PadlockKey);
+        return head;
     }
 
     private static HeadLookInput Snap(float x, float y) => new(x, y, 0f, 0f, false);

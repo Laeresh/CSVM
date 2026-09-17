@@ -241,7 +241,7 @@ public sealed class MissionSetup
     /// <summary>One-line summary of what the script did, for the build log.</summary>
     public string Report()
     {
-        var s = $"mission setup: {ScriptName} — {_deactivated} node(s) deactivated";
+        var s = $"mission setup: {ScriptName}, {_deactivated} node(s) deactivated";
         if (_activated > 0)
             s += $", {_activated} activated";
         if (_translated > 0)

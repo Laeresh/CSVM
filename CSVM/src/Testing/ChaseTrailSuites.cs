@@ -70,8 +70,8 @@ internal static class ChaseTrailSuites
             ctx.Same(0, moved,
                 $"frames of the faithful roll whose camera pose the cue step moved, out of {stepped.Poses.Count}");
             ctx.Check(stepped.SettledFov == unstepped.SettledFov
-                && stepped.SettledFov == stepped.BuiltFov,
-                $"and the faithful external FOV is the one the camera was built with ({stepped.SettledFov:0.0000}° against {stepped.BuiltFov:0.0000}°)");
+                && stepped.SettledFov == stepped.BaseFov,
+                $"and the faithful external FOV is the decoded base angle ({stepped.SettledFov:0.0000}° against {stepped.BaseFov:0.0000}°)");
 
             // The teeth on the check above: the enhanced arm has to move the same poses, or an
             // arm that did nothing at all would pass every line here.
@@ -103,13 +103,13 @@ internal static class ChaseTrailSuites
             float widen = CameraController.SpeedFovWiden(RatedMaxFrac);
             ctx.Check(widen > 0f && CameraController.SpeedFovWiden(1.4f) == widen,
                 $"the widening reaches {widen:0.##}° at rated max and is held there in a dive past it");
-            ctx.Check(enhanced.RatedMaxFov == enhanced.BuiltFov + widen,
-                $"so the enhanced external FOV at rated max is the built-in {enhanced.BuiltFov:0.00}° plus it ({enhanced.RatedMaxFov:0.0000}°)");
-            ctx.Check(enhanced.CruiseFov == enhanced.BuiltFov,
-                $"and at cruise it is the built-in angle exactly ({enhanced.CruiseFov:0.0000}°)");
-            ctx.Check(stepped.RatedMaxFov == stepped.BuiltFov,
-                $"while the faithful presentation holds the built-in angle at rated max ({stepped.RatedMaxFov:0.0000}°)");
-            ctx.Check(enhanced.CrashCutFov == enhanced.BuiltFov,
+            ctx.Check(enhanced.RatedMaxFov == enhanced.BaseFov + widen,
+                $"so the enhanced external FOV at rated max is the decoded {enhanced.BaseFov:0.00}° plus it ({enhanced.RatedMaxFov:0.0000}°)");
+            ctx.Check(enhanced.CruiseFov == enhanced.BaseFov,
+                $"and at cruise it is the decoded angle exactly ({enhanced.CruiseFov:0.0000}°)");
+            ctx.Check(stepped.RatedMaxFov == stepped.BaseFov,
+                $"while the faithful presentation holds the decoded angle at rated max ({stepped.RatedMaxFov:0.0000}°)");
+            ctx.Check(enhanced.CrashCutFov == enhanced.BaseFov,
                 $"and the crash cut keeps the decoded angle whatever speed the aeroplane was carrying ({enhanced.CrashCutFov:0.0000}°)");
 
             ctx.WriteArtifact("test-chase-trail.txt", report.ToString());
@@ -129,7 +129,7 @@ internal static class ChaseTrailSuites
         GraphicsMode.Resolve(mode);
         var camera = new Camera3D { Name = $"chase-trail-{mode}-{stepCues}" };
         ctx.Host.AddChild(camera);
-        var sortie = new Sortie { BuiltFov = camera.Fov };
+        var sortie = new Sortie { BaseFov = CameraController.ExternalFovDeg };
         try
         {
             var cam = new CameraController(camera, new CamParams(), _ => false, 0);
@@ -166,7 +166,7 @@ internal static class ChaseTrailSuites
             cam.CrashView(Vector3.Zero, -attitude.Z);
             sortie.CrashCutFov = camera.Fov;
 
-            report.AppendLine($"{mode} cues={stepCues}: rolled {sortie.RolledLagDeg:0.##}°, holding {sortie.HalfwayLagDeg:0.##}°, settled {sortie.SettledLagDeg:0.####}°, fov built {sortie.BuiltFov:0.0000}° rated-max {sortie.RatedMaxFov:0.0000}° cruise {sortie.CruiseFov:0.0000}° crash {sortie.CrashCutFov:0.0000}°");
+            report.AppendLine($"{mode} cues={stepCues}: rolled {sortie.RolledLagDeg:0.##}°, holding {sortie.HalfwayLagDeg:0.##}°, settled {sortie.SettledLagDeg:0.####}°, fov base {sortie.BaseFov:0.0000}° rated-max {sortie.RatedMaxFov:0.0000}° cruise {sortie.CruiseFov:0.0000}° crash {sortie.CrashCutFov:0.0000}°");
             return sortie;
         }
         finally
@@ -194,7 +194,7 @@ internal static class ChaseTrailSuites
     {
         public List<Transform3D> Poses { get; } = new List<Transform3D>();
 
-        public float BuiltFov { get; init; }
+        public float BaseFov { get; init; }
 
         public float RolledLagDeg { get; set; }
 

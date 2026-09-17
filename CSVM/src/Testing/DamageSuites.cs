@@ -129,7 +129,7 @@ internal static class DamageSuites
                 var second = copies.Find(c => AtPoolSite(c, pdp4));
                 ctx.Check(second != null, $"pdpanel4's tear placed a planeflakes copy at pdp4");
                 ctx.Check(first != null && AtPoolSite(first, pdp5),
-                    $"pdp5's copy stayed at ITS OWN site — the new tear did not steal it (BL-288)");
+                    $"pdp5's copy stayed at ITS OWN site, the new tear did not steal it (BL-288)");
                 ctx.Check(first != null && second != null && !ReferenceEquals(first, second),
                     $"the two tears hold two different copies");
                 ctx.Check(runtime.PoolRecycles == 0,
@@ -294,7 +294,7 @@ internal static class DamageSuites
         // pins only means anything when that already sits at or under the panel's threshold.
         float strippedCombined = part.MaxHp / (part.MaxHp + part.MaxArmor);
         ctx.Check(strippedCombined <= threshold,
-            $"precondition: armour gone puts the COMBINED fraction at {strippedCombined:0.00}, already past {panelAnim}'s {threshold:0.00} — the early tear this pins");
+            $"precondition: armour gone puts the COMBINED fraction at {strippedCombined:0.00}, already past {panelAnim}'s {threshold:0.00}, the early tear this pins");
         if (strippedCombined > threshold)
             return;
 
@@ -405,7 +405,7 @@ internal static class DamageSuites
             ctx.Check(torn.All(p => p.Visible),
                 $"…{panelAnim} tore its exterior panel once health crossed {threshold:0.00}");
             ctx.Check(cockpit.Visible,
-                $"…and {cockpitNode} tore alongside it — the same injure entry, not a separate rule");
+                $"…and {cockpitNode} tore alongside it, the same injure entry, not a separate rule");
 
             // A view-mode switch only ever hides/shows the interior GROUP root; a child's own
             // Visible must ride through unchanged (B11's CockpitVisibility.Apply, four nodes only).
@@ -501,7 +501,7 @@ internal static class DamageSuites
 
             visuals.OnPartDamage("nose", 1f);
             ctx.Check(visuals.StagedEntryCount("pdpanel1") == 3 && stops == 0,
-                $"one zone repaired clears its own slot and stops nothing — three zones still hold the anim");
+                $"one zone repaired clears its own slot and stops nothing, three zones still hold the anim");
             foreach (var part in multi.DestroyableParts)
                 visuals.OnPartDamage(part.Name, 1f);
             ctx.Check(visuals.StagedEntryCount("pdpanel1") == 0 && stops == 1,

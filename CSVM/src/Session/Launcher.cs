@@ -576,7 +576,7 @@ public partial class Launcher : Node3D
         // any session builds, rather than let it hang as an orphan holding the log handle.
         if (_spec.ScreenshotPath != null && DisplayServer.GetName() == "headless")
         {
-            Log.Error("core", $"--screenshot needs a real GPU context; --headless never renders a capturable frame — drop one of the two flags");
+            Log.Error("core", $"--screenshot needs a real GPU context; --headless never renders a capturable frame, drop one of the two flags");
             GetTree().Quit(1);
             return;
         }
@@ -604,7 +604,7 @@ public partial class Launcher : Node3D
         else if (_spec.NoDet && (_spec.DetExplicit || _spec.ScriptedBy.Length > 0))
         {
             string wouldBe = _spec.DetExplicit ? "--det" : _spec.ScriptedBy;
-            Log.Info("core", $"no-det: {wouldBe} would run deterministically — wall-clock sim clock, unpinned randomness seed={_masterSeed}");
+            Log.Info("core", $"no-det: {wouldBe} would run deterministically, wall-clock sim clock, unpinned randomness seed={_masterSeed}");
         }
         // After the --det block, so a deterministic run reads the flag but not the tuning file that
         // ClearOverrides just dropped; before the early-quit probes below, so --run-tests and the
@@ -624,7 +624,7 @@ public partial class Launcher : Node3D
         SessionPaths.ForceZipped = _spec.ZipAssets;
         if (_spec.ZipAssets)
         {
-            Log.Info("core", $"assets: --zip-assets — reading .zip archives, ignoring unpacked folders");
+            Log.Info("core", $"assets: --zip-assets, reading .zip archives, ignoring unpacked folders");
         }
         // Prefer the unpacked sibling folder from ExtractAssets.ps1 -Unzip when it exists (loose
         // JSON/PNG/WAV: no zip decompression at load). Base (chapter-independent) paths resolve now;
@@ -778,13 +778,19 @@ public partial class Launcher : Node3D
             // nothing more to report, the roster is deliberately empty
         }
         else if (padsAtLaunch.Count == 0)
-            Log.Info("core", $"gamepad: none at launch (hotplug live — connect any time)");
+            Log.Info("core", $"gamepad: none at launch (hotplug live, connect any time)");
         else
             foreach (int p in padsAtLaunch)
                 Log.Info("core", $"gamepad: device {p} \"{Input.GetJoyName(p)}\" guid={Input.GetJoyGuid(p)} info={Input.GetJoyInfo(p)}");
 
         SetupLighting();
-        _camera = new Camera3D { Fov = _spec.Fly || _spec.Freecam || _spec.AnimLab ? 62 : 50, Far = 40000f };
+        // The same two framings GameSession re-applies per launch: the decoded world base for
+        // every camera that draws the world, the viewer's own 50 for a model on a stage.
+        _camera = new Camera3D
+        {
+            Fov = _spec.Fly || _spec.Freecam || _spec.AnimLab ? CameraController.ExternalFovDeg : 50f,
+            Far = 40000f,
+        };
         AddChild(_camera);
         _orbit = new OrbitCamera(_camera);
         if (_spec.Yaw is { } argYaw) _orbit.Yaw = argYaw;
@@ -1061,7 +1067,7 @@ public partial class Launcher : Node3D
         // sound track is the one place that reads as a defect rather than as a quiet run.
         if (MasterVolume.Resolve(_spec.Volume, _exported) <= 0f)
         {
-            Log.Warn("sound", $"cinema {name} is playing at master volume 0 — pass --volume=1.0 to hear it");
+            Log.Warn("sound", $"cinema {name} is playing at master volume 0, pass --volume=1.0 to hear it");
         }
 
         Log.Info("ui", $"cinema {name} playing skip={skip}");
@@ -1196,7 +1202,7 @@ public partial class Launcher : Node3D
         // Built-in's error line is its own; Original has no note and its top level shows bare, so
         // the log carries the fact for both presentations.
         Log.Warn("ui", $"menu: the build failed, back at the top level of {_menuHost?.Selected}");
-        BuiltInMenu?.ShowError($"Could not load {_spec.Chapter} / {string.Join(", ", _spec.PlaneNames)} — see the log.");
+        BuiltInMenu?.ShowError($"Could not load {_spec.Chapter} / {string.Join(", ", _spec.PlaneNames)}, see the log.");
     }
 
     // Shows the load screen and owes a build from the next frame. Every interactive path in (the
@@ -1447,7 +1453,8 @@ public partial class Launcher : Node3D
         // The saved gameplay options, read at every launch so an Options apply reaches the next
         // flight in the same process. The flag and --det rules are the spec's own.
         var saved = OptionsStore.UserOptions().Load();
-        _spec = _spec.WithSavedDifficulty(saved.Difficulty).WithSavedNearestAfterKill(saved.NearestAfterKill);
+        _spec = _spec.WithSavedDifficulty(saved.Difficulty).WithSavedNearestAfterKill(saved.NearestAfterKill)
+            .WithSavedDefaultView(saved.DefaultView).WithSavedAutoHeadTurn(saved.AutoHeadTurn);
         LoadProgress.Report(LoadStep.RenderState);
         // Set per launch, not once at startup: a relaunch can change chapter, and the original
         // re-sources the new chapter's adjust.gw at the same point.
@@ -1550,15 +1557,16 @@ public partial class Launcher : Node3D
         {
             BackgroundMode = Godot.Environment.BGMode.Sky,
             Sky = new Sky { SkyMaterial = new ProceduralSkyMaterial() },
-            AmbientLightSource = Godot.Environment.AmbientSource.Sky,
-            // ⚠ Inert as built, and measured so: with the ambient taken from the sky at full
-            // contribution the renderer ignores this energy. Zeroing it moves no golden pixel;
-            // WeatherRig.ApplyZone rewrites it per zone regardless (docs/architecture.md).
+            // ⚠ Colour-sourced in BOTH modes, never AmbientSource.Sky: a sky ambient fills a night
+            // chapter's aircraft off the same daylight gradient a day one gets, and ignores the
+            // pair written here. Per-zone values: WeatherRig.ApplyZone (docs/architecture.md).
+            AmbientLightSource = Godot.Environment.AmbientSource.Color,
+            AmbientLightColor = Colors.White,
             AmbientLightEnergy = WeatherRig.DefaultEnergies.Ambient,
         };
-        // Enhanced mode alone: SSAO reads ambient light, which the faithful path never has, so
-        // it has nothing to modulate there. The cockpit pass duplicates this Environment at build
-        // time (CockpitOverlay.NewOverlay), so its 100 m interior inherits the same settings.
+        // Enhanced mode alone: SSAO darkens ambient light where geometry occludes it, and the
+        // faithful path's world is fullbright, so it would find nothing to occlude. The cockpit
+        // pass duplicates this Environment (CockpitOverlay.NewOverlay) and inherits the settings.
         if (GraphicsMode.Enhanced)
         {
             UseMissionSky(_env);
@@ -1578,14 +1586,11 @@ public partial class Launcher : Node3D
     // Enhanced mode alone: the sky a reflection reads is the mission's own colour, not Godot's
     // procedural gradient. The dome is gamez geometry drawn over the background, so this is
     // normally unseen; what it feeds is the glossy water's specular. WeatherRig.WriteSkyColor
-    // writes the flown zone's own FOG_COLOR over the default here on every zone apply.
-    // ⚠ Do not leave the ambient on the sky: enhanced mode drives it from the zone's authored
-    // SUNLIGHT_AMBIENT, and a flat sky would override that with one colour.
+    // writes the flown zone's own FOG_COLOR over the default here on every zone apply. The ambient
+    // is colour-sourced already, built that way above, so a flat panorama reaches reflection alone.
     private void UseMissionSky(Godot.Environment env)
     {
         env.Sky = new Sky { SkyMaterial = new PanoramaSkyMaterial() };
-        env.AmbientLightSource = Godot.Environment.AmbientSource.Color;
-        env.AmbientLightColor = Colors.White;
         WeatherRig.WriteSkyColor(env, EnhancedDefaultSkyColor);
     }
 
@@ -1649,7 +1654,7 @@ public partial class Launcher : Node3D
     // through _UnhandledInput, which quits with neither a menu nor a session up.
     private void ShowNoGameData()
     {
-        Log.Error("core", $"no extracted game data path={Path.Combine(_dataRoot, "extracted")} — {UI.NoGameDataScreen.Instruction(_exported)}");
+        Log.Error("core", $"no extracted game data path={Path.Combine(_dataRoot, "extracted")}, {UI.NoGameDataScreen.Instruction(_exported)}");
         AddChild(UI.NoGameDataScreen.Build(_dataRoot, _exported));
     }
 
@@ -1839,9 +1844,9 @@ public partial class Launcher : Node3D
 
     // The options file's one writer, shared by the menu's apply above and by the pause leaf's:
     // every choice the screen took saved, then the display settings and the mix applied now.
-    // ⚠ The graphics word and the render scale are saved and nothing more. Both resolve once at
-    // launch and reach a viewport as it is built, so the choice takes hold on the next start; do
-    // not rebuild the world here.
+    // ⚠ The graphics word, the render scale, the opening view and the automatic head turn are saved
+    // and nothing more: each is read once, at launch or as a flight is built, so the choice takes
+    // hold on the next start rather than on this one. Do not rebuild the world here.
     private void PersistOptions(OptionsApplyExit applied)
     {
         var requested = applied.Presentation;
@@ -1852,6 +1857,8 @@ public partial class Launcher : Node3D
         options.Difficulty = applied.Difficulty;
         options.NearestAfterKill = applied.NearestAfterKill;
         options.Rumble = applied.Rumble;
+        options.DefaultView = applied.DefaultView;
+        options.AutoHeadTurn = applied.AutoHeadTurn;
         options.MonitorIndex = applied.MonitorIndex;
         options.Resolution = applied.Resolution;
         options.DisplayMode = applied.DisplayMode;
@@ -2044,7 +2051,7 @@ public partial class Launcher : Node3D
     // the result the mission ended with.
     private void OpenDebrief(string profile, CampaignMissionResult result)
     {
-        Log.Info("core", $"campaign: {result.Outcome} — arrived at the debrief with '{profile}'");
+        Log.Info("core", $"campaign: {result.Outcome}, arrived at the debrief with '{profile}'");
         ReturnToMenu(new DebriefReturn(profile, result.Attempt.Seq, result.Outcome == MissionOutcome.Won));
     }
 
@@ -2152,7 +2159,7 @@ public partial class Launcher : Node3D
             return;
         }
         AudioServer.SetBusVolumeDb(MasterBus, MasterVolume.VolumeDb(volume));
-        string note = volume <= 0f ? " — sounds still load, play, count and log" : "";
+        string note = volume <= 0f ? ", sounds still load, play, count and log" : "";
         Log.Info("sound", $"master volume={volume:0.###} via={source}{note}");
     }
 
@@ -2172,9 +2179,9 @@ public partial class Launcher : Node3D
         // entry. Keyboard needs no gate: Godot releases held keys on focus loss.
         Pads.Focused = !muted;
         if (muted)
-            Log.Info("sound", $"focus: lost — audio muted, pad reads gated");
+            Log.Info("sound", $"focus: lost, audio muted, pad reads gated");
         else
-            Log.Info("sound", $"focus: regained — audio restored, pad reads live");
+            Log.Info("sound", $"focus: regained, audio restored, pad reads live");
     }
 
     // Samples the engine's eight per-frame counters once, for both instruments. The two
@@ -2305,6 +2312,7 @@ public partial class Launcher : Node3D
         // The split of the two whole-pass terms above by what ran: the sim step per TICK beside
         // phys_tick_ms, the named _Process consumers per FRAME beside proc_ms (src/Utils/PhaseCost.cs).
         string simRow = SimPhaseCost.TakeRow(physTicks);
+        string simAllocRow = SimPhaseCost.AllocRow();
         string procSites = ProcessSiteCost.TakeRow(n);
         double draws = _perfDraws / n;
         double prims = _perfPrims / n;
@@ -2315,6 +2323,10 @@ public partial class Launcher : Node3D
         double maxMs = _perfFrameMsSorted[PerfWindowFrames - 1];
         double p95Ms = _perfFrameMsSorted[Perf95Index];
         Log.Info("perf", $"window sim_frame={simFrame} frames={_perfFrames} wall_ms={wallMs:0.00} fps={fps:0.0} frame_ms={frameMs:0.00} script_ms={scriptMs:0.00} proc_ms={procMs:0.000} proc_max_ms={procMaxMs:0.000} proc_passes={procPasses} ai_ms={aiMs:0.000} ai_planes={aiPlanes:0.0} render_cpu_ms={renderCpuMs:0.00} gpu_ms={gpuMs:0.00} physics_ms={physicsMs:0.00} phys_tick_ms={physTick:0.000} phys_tick_max_ms={physTickMaxMs:0.000} phys_hz={physHz:0.0} draws={draws:0.0} prims={prims:0.0} nodes={nodes:0.0} mem_mb={memMb:0.00} max_ms={maxMs:0.00} p95_ms={p95Ms:0.00} sim_ms={simRow} proc_sites_ms={procSites}");
+        // Its own line, not another term on the window above: the BYTE figure answers a different
+        // question from the millisecond one (which phase feeds the collector, rather than which
+        // phase the pause landed in, PERF-34), and the two are read side by side.
+        Log.Info("perf", $"alloc sim_frame={simFrame} sim_alloc_b={simAllocRow}");
         _perfClock = 0; _perfFrames = 0; _perfProcess = _perfGpu = _perfCpuRender = _perfPhysics = 0;
         _perfDraws = _perfPrims = _perfNodes = _perfMem = 0;
     }

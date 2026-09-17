@@ -1129,7 +1129,7 @@ public sealed class WorldBuilder
             var names = new List<string>();
             foreach (var z in zones)
                 names.Add(z.Name);
-            Log.Info("world", $"horizon: no '{zone}' subtree (has {string.Join("/", names)}) — building '{zones[0].Name}'");
+            Log.Info("world", $"horizon: no '{zone}' subtree (has {string.Join("/", names)}), building '{zones[0].Name}'");
         }
         return zones[0].Name;
     }

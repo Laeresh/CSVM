@@ -266,7 +266,7 @@ public class EffectCatalogueTests
         // The Devastator's four parts are the shipped case (DamageVisuals' own doc: "the 10
         // aircraft whose data carries no 0.99 entry at all"), a check that found none would be
         // passing on no evidence, exactly the trap ExtractedDataFact exists to avoid.
-        Assert.True(found > 0, "no plane's data carried a *_damage_effects entry — the check ran on nothing");
+        Assert.True(found > 0, "no plane's data carried a *_damage_effects entry, the check ran on nothing");
     }
 
     /// <summary>Every airframe's injure_anims entry that <see cref="DamageVisuals.RigAnimFor"/>
@@ -301,7 +301,7 @@ public class EffectCatalogueTests
         }
 
         Assert.True(violations.Count == 0, string.Join("\n", violations));
-        Assert.True(found > 0, "no plane's data carried a stage entry — the check ran on nothing");
+        Assert.True(found > 0, "no plane's data carried a stage entry, the check ran on nothing");
         Assert.Equal("player_damage_trail", DamageVisuals.RigAnimFor("player_smoketrail"));
     }
 
@@ -331,7 +331,7 @@ public class EffectCatalogueTests
         }
 
         Assert.True(violations.Count == 0, string.Join("\n", violations));
-        Assert.True(found > 0, "no AI airframe's data carried a stage entry — the check ran on nothing");
+        Assert.True(found > 0, "no AI airframe's data carried a stage entry, the check ran on nothing");
     }
 
     /// <summary>The cockpit gauge families must stay unplayable on an airframe: C1 ships
@@ -365,7 +365,7 @@ public class EffectCatalogueTests
         var defs = CSVM.Mech3.AnimDefs.LoadFileDefs(zrdr, "player_destruct_reset.json")
             .Concat(CSVM.Mech3.AnimDefs.LoadFileDefs(zrdr, "player-1.json"))
             .ToList();
-        Assert.True(defs.Count > 0, "the two reader files loaded no defs — the check ran on nothing");
+        Assert.True(defs.Count > 0, "the two reader files loaded no defs, the check ran on nothing");
 
         var pairing = DamageVisuals.PanelPairingSets(defs);
 

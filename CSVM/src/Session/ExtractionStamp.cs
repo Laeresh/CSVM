@@ -47,7 +47,7 @@ public static class ExtractionStamp
         var path = Path.Combine(dataRoot, "extracted", "VERSION.json");
         if (!File.Exists(path))
         {
-            Log.Warn("core", $"extraction tree has no version stamp path={path} — cannot tell which extractor produced it; re-run ExtractAssets.ps1 (and ExtractRof.ps1) to stamp it");
+            Log.Warn("core", $"extraction tree has no version stamp path={path}, cannot tell which extractor produced it; re-run ExtractAssets.ps1 (and ExtractRof.ps1) to stamp it");
             return;
         }
         try
@@ -58,18 +58,18 @@ public static class ExtractionStamp
             if (!doc.RootElement.TryGetProperty("schema", out var schema) ||
                 schema.ValueKind != JsonValueKind.Number)
             {
-                Log.Warn("core", $"extraction stamp carries no schema integer path={path} — re-run ExtractAssets.ps1 to rewrite it");
+                Log.Warn("core", $"extraction stamp carries no schema integer path={path}, re-run ExtractAssets.ps1 to rewrite it");
                 return;
             }
             int found = schema.GetInt32();
             if (found != Schema)
             {
-                Log.Warn("core", $"extraction stamp schema={found} but this build expects schema={Schema} path={path} — the tree's vintage no longer matches the loaders; re-run ExtractAssets.ps1 and ExtractRof.ps1 (with -Force if everything looks up to date)");
+                Log.Warn("core", $"extraction stamp schema={found} but this build expects schema={Schema} path={path}, the tree's vintage no longer matches the loaders; re-run ExtractAssets.ps1 and ExtractRof.ps1 (with -Force if everything looks up to date)");
             }
         }
         catch (Exception e) when (e is IOException or JsonException or FormatException)
         {
-            Log.Warn("core", $"extraction stamp unreadable path={path} error={e.GetType().Name} — re-run ExtractAssets.ps1 to rewrite it");
+            Log.Warn("core", $"extraction stamp unreadable path={path} error={e.GetType().Name}, re-run ExtractAssets.ps1 to rewrite it");
         }
     }
 

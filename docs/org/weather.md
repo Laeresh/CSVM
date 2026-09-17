@@ -566,7 +566,10 @@ what is unreliable there.
 
 ⚠ **Do not re-diagnose the C1 river pose as fog either.** The original's overcast ceiling reads
 166–175 in its own still while ours rendered 200–220 *before* any fog, that was the deck's own
-underside brightness seen from below, and it is fixed (now 168–170 unfogged against 167.7).
+underside brightness seen from below, and it is fixed (now 168–170 unfogged against 167.7). The
+stills that settled it were framed before the external views took the decoded 46.8° vertical base
+(`docs/org/cameraViews.md`), so a re-comparison must re-frame the pose rather than reuse them; the
+brightness figures survive that, the framing does not.
 
 ### ⚠ The zone1 fog/band coincidence, RETIRED as evidence
 

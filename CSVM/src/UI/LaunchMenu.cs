@@ -101,11 +101,12 @@ public sealed partial class LaunchMenu : CanvasLayer
     // every category page; here they are the tail of the one list this presentation has. TUNE.
     private const int ControlsFooterRows = 3;
     // The Options screen's stepper rows, above the Controls door and the apply row. The screen is a
-    // form the cursor walks top to bottom: the three gameplay settings, the presentation and the
-    // graphics mode, then the five display settings in the order the Original presentation's VIDEO
-    // page draws them, then the two doors. Twelve rows fit the band without a window, which is why
-    // this screen has no paging rule of its own.
-    private const int OptionsStepperRows = 10;
+    // form the cursor walks top to bottom: the five gameplay settings (the three the Original
+    // presentation's GAME OPTIONS page draws, in its order, then the targeting switch and the
+    // rumble), the presentation and the graphics mode, then the five display settings in the order
+    // the Original presentation's VIDEO page draws them, then the two doors. Fourteen rows fit the
+    // band without a window, which is why this screen has no paging rule of its own.
+    private const int OptionsStepperRows = 12;
     // The Controls list's two column widths and the extra band width they need, in ems of the row
     // font and in 720p points. TUNE: measured against the longest shipped action name and the
     // longest four-control row, not decoded from anything.
@@ -124,9 +125,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     // See docs/architecture.md.
     private static readonly Choice[] Modes =
     {
-        new("Free Flight", "Explore the map freely — no objectives, no clock."),
-        new("Instant Action", "Pick an environment and a mission — ace, squadron, stunt or zeppelin."),
-        new("Dogfight", "Splitscreen free-for-all — first to the kill target wins."),
+        new("Free Flight", "Explore the map freely, no objectives, no clock."),
+        new("Instant Action", "Pick an environment and a mission: ace, squadron, stunt or zeppelin."),
+        new("Dogfight", "Splitscreen free-for-all, first to the kill target wins."),
     };
 
     // The eight chapter worlds: this screen's row text over the shared roster (MenuChapters owns
@@ -194,6 +195,12 @@ public sealed partial class LaunchMenu : CanvasLayer
     private bool? _nearestAfterKillChoice;
     // The haptics setting as saved, null while never set, which the consumer reads as ON.
     private bool? _rumbleChoice;
+    // The opening view as saved, null while never set, which the flight reads as Chase. Held as the
+    // --view= word rather than the enum, the spelling the store carries.
+    private string? _defaultViewChoice;
+    // The automatic head turn as saved, null while never set, which leaves the headLook.autohead
+    // config key deciding rather than overruling it with a default of this screen's own.
+    private bool? _autoHeadTurnChoice;
     private string _presentationChoice = PresentationId.BuiltIn.Value;
     private string _graphicsChoice = GraphicsMode.Default;
     // The five display settings, stepped by the five rows under the graphics one. Each is stored as
@@ -1041,14 +1048,14 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     private static string ChapterRowText(string code) => code switch
     {
-        "C1" => "Sea Haven (night) — IA: an airfield",
-        "C1B" => "The ocean — Sea Haven variant",
-        "C1C" => "Sea Haven variant C — no IA, campaign/MP only",
-        "C2" => "Hollywood — IA: a movie studio",
-        "C2B" => "The clouds — Hollywood variant",
+        "C1" => "Sea Haven (night), IA: an airfield",
+        "C1B" => "The ocean, Sea Haven variant",
+        "C1C" => "Sea Haven variant C (no IA, campaign/MP only)",
+        "C2" => "Hollywood, IA: a movie studio",
+        "C2B" => "The clouds, Hollywood variant",
         "C3" => "Hawaii (islands)",
-        "C4" => "Rocky Mountains — IA: Sky Haven",
-        "C5" => "New York — IA: Manhattan",
+        "C4" => "Rocky Mountains, IA: Sky Haven",
+        "C5" => "New York, IA: Manhattan",
         _ => code,
     };
 
@@ -1566,19 +1573,21 @@ public sealed partial class LaunchMenu : CanvasLayer
         switch (_screen)
         {
             case Screen.Options:
-                // The ten choice rows are steppers; the doors under them have nothing to step.
+                // The twelve choice rows are steppers; the doors under them have nothing to step.
                 switch (_optionsIndex)
                 {
                     case 0: StepDifficultyChoice(dir); return true;
-                    case 1: ToggleNearestAfterKillChoice(); return true;
-                    case 2: ToggleRumbleChoice(); return true;
-                    case 3: TogglePresentationChoice(); return true;
-                    case 4: ToggleGraphicsChoice(); return true;
-                    case 5: StepMonitorChoice(dir); return true;
-                    case 6: StepResolutionChoice(dir); return true;
-                    case 7: StepDisplayModeChoice(dir); return true;
-                    case 8: StepVSyncChoice(dir); return true;
-                    case 9: StepRenderScaleChoice(dir); return true;
+                    case 1: StepDefaultViewChoice(dir); return true;
+                    case 2: ToggleAutoHeadTurnChoice(); return true;
+                    case 3: ToggleNearestAfterKillChoice(); return true;
+                    case 4: ToggleRumbleChoice(); return true;
+                    case 5: TogglePresentationChoice(); return true;
+                    case 6: ToggleGraphicsChoice(); return true;
+                    case 7: StepMonitorChoice(dir); return true;
+                    case 8: StepResolutionChoice(dir); return true;
+                    case 9: StepDisplayModeChoice(dir); return true;
+                    case 10: StepVSyncChoice(dir); return true;
+                    case 11: StepRenderScaleChoice(dir); return true;
                     default: return false;
                 }
             case Screen.Chapter:
@@ -1679,7 +1688,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                         Difficulty.Word(_difficultyChoice), _monitorChoice, _resolutionChoice,
                         _displayModeChoice, _vsyncChoice, _renderScaleChoice, _audioMasterChoice,
                         _audioMusicChoice, _audioEffectsChoice, _audioVoiceChoice, _nearestAfterKillChoice,
-                        _rumbleChoice));
+                        _rumbleChoice, _defaultViewChoice, _autoHeadTurnChoice));
                 }
 
                 break;
@@ -2361,7 +2370,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             _uiStrings = UiStrings.TryLoad(_dataRoot);
             if (_uiStrings == null)
             {
-                GD.PushWarning("launchscreen: no extracted/rof/—— hangar labels fall back");
+                GD.PushWarning("launchscreen: no extracted/rof/ tree, hangar labels fall back");
                 _uiStrings = UiStrings.Empty;
             }
         }
@@ -2593,6 +2602,8 @@ public sealed partial class LaunchMenu : CanvasLayer
         _difficultyChoice = Difficulty.Parse(saved.Difficulty) ?? Difficulty.Normal;
         _nearestAfterKillChoice = saved.NearestAfterKill;
         _rumbleChoice = saved.Rumble;
+        _defaultViewChoice = saved.DefaultView;
+        _autoHeadTurnChoice = saved.AutoHeadTurn;
         _presentationChoice = saved.MenuPresentation ?? PresentationId.Original.Value;
         _graphicsChoice = saved.GraphicsMode ?? GraphicsMode.Default;
         _monitorChoice = saved.MonitorIndex;
@@ -2888,6 +2899,22 @@ public sealed partial class LaunchMenu : CanvasLayer
     private void StepDifficultyChoice(int dir) =>
         _difficultyChoice = ((Difficulty.Clamp(_difficultyChoice) + dir) % 3 + 3) % 3;
 
+    // A three-way stepper with wrap over PilotView.Selectable, the order the original's own Default
+    // View dropdown offers. A never-set view steps from Chase, which is what its absence reads as.
+    private void StepDefaultViewChoice(int dir) =>
+        _defaultViewChoice = PilotView.Name(PilotView.Step(
+            PilotView.Parse(_defaultViewChoice ?? "") ?? PilotViewMode.Chase, dir));
+
+    private string DefaultViewChoiceLabel() =>
+        PilotView.Label(PilotView.Parse(_defaultViewChoice ?? "") ?? PilotViewMode.Chase);
+
+    // A two-way toggle over a setting the flight reads three ways: on, off, and never set, which
+    // leaves the headLook.autohead config key deciding. A first press turns it on, since the key
+    // ships off, so a press has to change something.
+    private void ToggleAutoHeadTurnChoice() => _autoHeadTurnChoice = _autoHeadTurnChoice != true;
+
+    private string AutoHeadTurnChoiceLabel() => _autoHeadTurnChoice == true ? "On" : "Off";
+
     // A two-way toggle. A never-set field steps to on, since off is what its absence already reads
     // as and a first press has to change something.
     private void ToggleNearestAfterKillChoice() =>
@@ -3038,7 +3065,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             Screen.Waves => "CONFIGURE WAVES",
             Screen.WaveEdit => $"WAVE {_waveEditIndex + 1}",
             Screen.Wingmen => "WINGMEN",
-            Screen.WingmanLoadout => $"WINGMEN — AMMO SELECTION  ({_ia.WingmanPlane.Name})",
+            Screen.WingmanLoadout => $"WINGMEN: AMMO SELECTION  ({_ia.WingmanPlane.Name})",
             Screen.Hangar => _hangar?.Page.Title ?? HangarRow,
             Screen.Campaign => _campaign?.Page.Title ?? CampaignRow,
             Screen.Options => "OPTIONS",
@@ -3046,7 +3073,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             _ when _slots.Count == 1 && _slots[0].InLoadout =>
                 $"AMMO SELECTION  ({_roster[_slots[0].PlaneIndex].Name})",
             _ when _slots.Count == 1 && _slots[0].Locked => "AIRCRAFT SELECTED",
-            _ => _slots.Count > 1 ? "SELECT AIRCRAFT — ALL PLAYERS" : "SELECT AIRCRAFT",
+            _ => _slots.Count > 1 ? "SELECT AIRCRAFT: ALL PLAYERS" : "SELECT AIRCRAFT",
         };
     }
 
@@ -3510,16 +3537,18 @@ public sealed partial class LaunchMenu : CanvasLayer
             Screen.Options => index switch
             {
                 0 => $"Difficulty: {Difficulty.Label(_difficultyChoice)}",
-                1 => $"Nearest target after a kill: {NearestAfterKillChoiceLabel()}",
-                2 => $"Controller rumble: {RumbleChoiceLabel()}",
-                3 => $"Menu presentation: {PresentationChoiceLabel()}",
-                4 => $"Graphics: {GraphicsChoiceLabel()}",
-                5 => $"Monitor: {MonitorChoiceLabel()}",
-                6 => $"Resolution: {ResolutionChoiceLabel()}",
-                7 => $"Display mode: {DisplayModeChoiceLabel()}",
-                8 => $"V-Sync: {VSyncChoiceLabel()}",
-                9 => $"Render scale: {RenderScaleChoiceLabel()}",
-                10 => ControlsRow,
+                1 => $"Default View: {DefaultViewChoiceLabel()}",
+                2 => $"Auto Head Turn: {AutoHeadTurnChoiceLabel()}",
+                3 => $"Nearest target after a kill: {NearestAfterKillChoiceLabel()}",
+                4 => $"Controller rumble: {RumbleChoiceLabel()}",
+                5 => $"Menu presentation: {PresentationChoiceLabel()}",
+                6 => $"Graphics: {GraphicsChoiceLabel()}",
+                7 => $"Monitor: {MonitorChoiceLabel()}",
+                8 => $"Resolution: {ResolutionChoiceLabel()}",
+                9 => $"Display mode: {DisplayModeChoiceLabel()}",
+                10 => $"V-Sync: {VSyncChoiceLabel()}",
+                11 => $"Render scale: {RenderScaleChoiceLabel()}",
+                12 => ControlsRow,
                 _ => "Apply and restart the menu",
             },
             Screen.Controls => $"{ControlsRowLabel(index)}   {ControlsRowValue(index)}",
@@ -3555,7 +3584,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         string summary = w.Count == 0
             ? "empty"
             : $"{w.Count}x {militia.Name} {militia.Aircraft[w.AircraftIndex]} ({Cap(InstantActionFeature.Skills[w.SkillIndex])})";
-        return $"Wave {index + 1} — {summary}";
+        return $"Wave {index + 1}: {summary}";
     }
 
     // One WaveEdit-screen field row: the label plus the field's own current value, since
@@ -3716,7 +3745,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         if (_screen != Screen.Plane)
             return "(other players join at aircraft select)";
         if (_mode == MenuMode.Versus && _slots.Count < 2)
-            return $"(Dogfight needs a fight — {SplitScreen.PlayerTag(_slots.Count)}: press START to join)";
+            return $"(Dogfight needs a fight, {SplitScreen.PlayerTag(_slots.Count)}: press START to join)";
         return Pads.Connected().Count > 0
             ? "(press START on a free pad to join)"
             : "(connect a pad and press START to join)";
@@ -3840,16 +3869,18 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.Options => focus switch
         {
             0 => "Select the difficulty level for a solo campaign. Enemy armour and health scale with it at spawn.",
-            1 => "Take the nearest target after a kill instead of the first of the list.",
-            2 => "Rumble the gamepad for guns, launches, hits, the nitro and a dive past the rated maximum.",
-            3 => "Built-in needs no extracted menu art; Original draws the original's own screens from it.",
-            4 => GraphicsDetail(),
-            5 => "Select the monitor the game opens on. Applied on the way out, before the size.",
-            6 => ResolutionDetail(),
-            7 => "Select how the window sits on the screen. Borderless leaves the desktop beneath it.",
-            8 => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap.",
-            9 => "Render the world above native and sample it back down. Takes effect on the next start.",
-            10 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
+            1 => "Select your default view. A --view= on the command line still outranks it.",
+            2 => "Select to turn your head automatically as your aircraft turns. Cockpit views only.",
+            3 => "Take the nearest target after a kill instead of the first of the list.",
+            4 => "Rumble the gamepad for guns, launches, hits, the nitro and a dive past the rated maximum.",
+            5 => "Built-in needs no extracted menu art; Original draws the original's own screens from it.",
+            6 => GraphicsDetail(),
+            7 => "Select the monitor the game opens on. Applied on the way out, before the size.",
+            8 => ResolutionDetail(),
+            9 => "Select how the window sits on the screen. Borderless leaves the desktop beneath it.",
+            10 => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap.",
+            11 => "Render the world above native and sample it back down. Takes effect on the next start.",
+            12 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
             _ => "Saves every choice and restarts the menu at its top level; unfinished setup is discarded.",
         },
         Screen.Controls => ControlsDetail(focus),

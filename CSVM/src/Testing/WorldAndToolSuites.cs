@@ -344,6 +344,14 @@ internal static class WorldAndToolSuites
             ctx.Check(Mathf.Abs(CameraController.FirstPersonFovDeg(PilotViewMode.Cockpit)
                     - CameraController.HorizontalToVerticalFovDeg(80f)) < 0.001f,
                 $"the pass's FOV law is the camera's own per-mode law");
+            // The other half of that table: every pose outside the interior takes the one decoded
+            // base, whatever FOV the camera arrived carrying, so no caller writes its own number
+            // beside the camera and expects the controller to hand it back.
+            var probeCam = new Camera3D { Fov = 12f };
+            host.AddChild(probeCam);
+            new CameraController(probeCam, new CamParams(), _ => false, -1).RestoreExternalFov();
+            ctx.Check(Mathf.Abs(probeCam.Fov - CameraController.ExternalFovDeg) < 0.001f,
+                $"an external pose takes the decoded base fov={probeCam.Fov:0.##}");
             // The wobble the interior inherited below the shake pivot has to reach the pass. The
             // mount's tilt is about X, so its Right axis is the witness: a Z roll of r turns it by
             // exactly r, and a pass that forgot the wobble leaves it at 0.
@@ -1055,6 +1063,123 @@ internal static class WorldAndToolSuites
         ctx.Note($"{chapter} bare firtree1={bareFir1} firtree2={bareFir2}; dressed firtree1={dressedFir1} firtree2={dressedFir2}; scales {lo:0.000}-{hi:0.000}");
     }
 
+    // A decoration model is a node chain, and the mesh node under its `.flt` top may translate: C5's
+    // w_lightglow sits 4.75 m up, the lamp head's height. Asserted as an A/B against the same build
+    // with that chain transform cleared, which is the state the stamp had while it dropped it, so
+    // the control both fails able and shows the move is confined to the glow.
+    [Suite("clutter-mesh-lift",
+        "C5's lamp glow stamps 4.75 m up its own decoration chain, and clearing that chain moves the glow alone")]
+    internal static void ClutterMeshLift(TestContext ctx)
+    {
+        const string chapter = "C5";
+        const string template = "cblock7";   // the district carrying lightpole and its poleflare glow
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, chapter);
+        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
+        ctx.RequireData(texturesPath, $"{chapter} textures");
+        ctx.RequireData(gamezPath, $"{chapter} gamez");
+
+        var gamez = GameZ.Load(gamezPath);
+        using var textures = new TextureArchive(texturesPath);
+        var props = ClutterTemplateSpec.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, chapter));
+
+        var root = ClutterBuilder.FindTemplateRoot(gamez, template);
+        ctx.Check(root != null, $"{chapter} carries the {template} template");
+        var ground = root == null ? null : ClutterBuilder.FirstWithMesh(gamez, root);
+        ctx.Check(ground != null, $"{template} has a ground quad node");
+        if (ground == null)
+        {
+            return;
+        }
+
+        // Every decoration of this template whose chain translates, with the mesh node it ends on.
+        var chains = new List<(GameZNode Node, Transform3D Local, string Deco)>();
+        foreach (var childIndex in ground.Children)
+        {
+            var deco = gamez.Nodes[childIndex];
+            if (ClutterBuilder.FirstWithMesh(gamez, deco, false, out var toMesh) is not { } meshNode
+                || toMesh.Origin == Vector3.Zero)
+            {
+                continue;
+            }
+            // One hop in the shipped data, which is what makes clearing the mesh node's own
+            // transform the exact control for dropping the chain.
+            ctx.Check(meshNode.Local != null && meshNode.Local.Value.Origin == toMesh.Origin,
+                $"{deco.Name}'s chain is one hop deco={toMesh.Origin} mesh={meshNode.Local?.Origin}");
+            chains.Add((meshNode, meshNode.Local ?? Transform3D.Identity, deco.Name));
+            ctx.Check(toMesh.Origin == new Vector3(0f, 4.75f, 0f),
+                $"{deco.Name} lifts its mesh to the lamp head lift={toMesh.Origin}");
+        }
+        ctx.Check(chains.Count > 0, $"{template} authors a translating decoration chain count={chains.Count}");
+
+        static Dictionary<string, List<Transform3D>> Take(ClutterBuilder builder, string name)
+        {
+            var built = builder.Build(new[] { name });
+            var byKind = new Dictionary<string, List<Transform3D>>(System.StringComparer.Ordinal);
+            foreach (var kind in builder.ExportedKinds ?? System.Array.Empty<ClutterBuilder.KindExport>())
+            {
+                if (!byKind.TryGetValue(kind.Texture, out var list))
+                {
+                    byKind[kind.Texture] = list = new List<Transform3D>();
+                }
+                list.AddRange(kind.Placements);
+            }
+            built?.Free();
+            return byKind;
+        }
+
+        var lifted = Take(new ClutterBuilder(gamez, textures, null, props), template);
+        foreach (var (node, _, _) in chains)
+        {
+            node.Local = Transform3D.Identity;
+        }
+        var dropped = Take(new ClutterBuilder(gamez, textures, null, props), template);
+        foreach (var (node, local, _) in chains)
+        {
+            node.Local = local;
+        }
+
+        ctx.Same(dropped.Count, lifted.Count, $"both builds export the same kinds");
+        int moved = 0, wrongHeight = 0, wrongGround = 0, unmoved = 0;
+        foreach (var (label, after) in lifted)
+        {
+            dropped.TryGetValue(label, out var before);
+            if (before == null || before.Count != after.Count)
+            {
+                ctx.Check(false, $"kind {label} kept its stamp count before={before?.Count ?? -1} after={after.Count}");
+                continue;
+            }
+            for (int i = 0; i < after.Count; i++)
+            {
+                var delta = after[i].Origin - before[i].Origin;
+                if (delta == Vector3.Zero)
+                {
+                    unmoved++;
+                    continue;
+                }
+                moved++;
+                // The centimetre band is float32 headroom, not slack: C5's stamps reach kilometres
+                // out, where a single-precision metre carries about a millimetre of spacing.
+                if (Mathf.Abs(delta.Y - 4.75f) > 0.01f)
+                {
+                    wrongHeight++;
+                }
+                if (delta.X != 0f || delta.Z != 0f)
+                {
+                    wrongGround++;
+                }
+            }
+        }
+
+        lifted.TryGetValue("poleflare.tif", out var glows);
+        dropped.TryGetValue("lightpole.tif", out var poles);
+        ctx.Check(glows != null && glows.Count > 0, $"the glow kind stamped something count={glows?.Count ?? 0}");
+        ctx.Same(glows?.Count ?? 0, moved, $"exactly the glow stamps moved");
+        ctx.Same(0, wrongHeight, $"every moved stamp rose the authored 4.75 m");
+        ctx.Same(0, wrongGround, $"no moved stamp changed its ground position");
+        ctx.Check(unmoved > 0, $"the other kinds stamped and stayed put count={unmoved}");
+        ctx.Note($"{chapter}/{template}: {moved} glow stamps lifted 4.75 m, {unmoved} stamps unchanged, poles={poles?.Count ?? 0}");
+    }
+
     // The DirectionalLight3D is pointed by the flown zone's authored SUNLIGHT_ORIENTATION and keeps
     // following it when the camera's weather state moves to another zone. The CSVM.Tests units pin the
     // parse and the euler-to-direction mapping; neither can see the light wired to the wrong seam, or
@@ -1125,7 +1250,7 @@ internal static class WorldAndToolSuites
     // ⚠ C1B against C1C is the install's OWN night/day pair. Do not fold this onto one mission:
     // two zones of one mission differ by cloud layer, which is not the difference under test.
     [Suite("sun-energy",
-        "the world's light takes its energy from the flown zone's authored SUNLIGHT, so C1B's night mission lights an aircraft dimmer than C1C's daylight, and a zone change carries the new energy (BL-332)")]
+        "the world's light takes its energy from the flown zone's authored SUNLIGHT, so C1B's night mission lights an aircraft dimmer than C1C's daylight, the ambient fill is colour-sourced from the zone's own SUNLIGHT_COLOR_AMBIENT rather than the sky, and a zone change carries the new energy (BL-332)")]
     internal static void SunEnergy(TestContext ctx)
     {
         string nightZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1B", "IA1");
@@ -1135,18 +1260,26 @@ internal static class WorldAndToolSuites
         ctx.RequireData(dayZrdr, $"C1C/M01 mission zrdr");
         ctx.RequireData(edgeZrdr, $"C1C/MP1 mission zrdr");
 
-        var (nightSun, nightAmbient) = ZoneEnergies(ctx, "C1B", "IA1", nightZrdr);
-        var (daySun, dayAmbient) = ZoneEnergies(ctx, "C1C", "M01", dayZrdr);
+        var night = ZoneEnergies(ctx, "C1B", "IA1", nightZrdr);
+        var day = ZoneEnergies(ctx, "C1C", "M01", dayZrdr);
+        (float nightSun, float nightAmbient) = (night.Sun, night.Ambient);
+        (float daySun, float dayAmbient) = (day.Sun, day.Ambient);
         ctx.Note($"C1B/IA1 night sun {nightSun:0.000} ambient {nightAmbient:0.000}; C1C/M01 day sun {daySun:0.000} ambient {dayAmbient:0.000}");
         ctx.Check(nightSun < daySun * 0.5f,
             $"C1B's night zone lights the aircraft under half as hard as C1C's day zone");
         ctx.Check(nightAmbient < dayAmbient * 0.5f,
             $"and its ambient fill is under half of C1C's too");
+        // The energy counts only where the renderer reads it, which is a colour-sourced ambient:
+        // on the sky source Godot takes the fill off the procedural cubemap and both the colour
+        // and the energy written here are ignored (docs/verification.md WORLD-32).
+        ctx.Check(night.Source == Godot.Environment.AmbientSource.Color,
+            $"the zone apply leaves the Environment's ambient colour-sourced (got {night.Source})");
+        ctx.Check(night.Color.IsEqualApprox(night.Authored),
+            $"and carries the zone's own authored SUNLIGHT_COLOR_AMBIENT {night.Authored.ToHtml(false)} (got {night.Color.ToHtml(false)})");
         if (!CSVM.Utils.GraphicsMode.Enhanced)
         {
             // The faithful mapping's own numbers, so a drifting factor is caught here and not only
-            // by a moved golden. ⚠ The ambient reaches the Environment but the renderer ignores it
-            // while the ambient is sky-sourced (docs/architecture.md).
+            // by a moved golden.
             ctx.Check(Mathf.IsEqualApprox(nightSun, 0.64f) && Mathf.IsEqualApprox(daySun, 1.6f),
                 $"the faithful mapping resolves 0.64 at C1B and 1.6 at C1C (got {nightSun:0.000}/{daySun:0.000})");
         }
@@ -1276,7 +1409,7 @@ internal static class WorldAndToolSuites
     // nothing about C1 looking correct would tell you a flare rig had started building there.
     // Data-only on purpose, so it stays a fast suite rather than a third eight-chapter world sweep.
     [Suite("lens-flare-gates",
-        "the sun's lens flare is gated on chapter data alone, and its two independent gates — the gamez `sun` node and init.gw's LensFlareTexture slots — agree chapter by chapter, in C2 and C3 and nowhere else (BL-165)")]
+        "the sun's lens flare is gated on chapter data alone, and its two independent gates (the gamez `sun` node and init.gw's LensFlareTexture slots) agree chapter by chapter, in C2 and C3 and nowhere else (BL-165)")]
     internal static void LensFlareGates(TestContext ctx)
     {
         ctx.RequireData(ctx.InterpPath, $"interp.json");
@@ -1313,7 +1446,7 @@ internal static class WorldAndToolSuites
         ctx.Same(2, withFlare, $"chapters authoring a lens flare");
         // ⚠ C2's flare is PREDICTED, not verified: the data says it has one and there is no
         // footage of it. Only C3 was ever captured.
-        ctx.Note($"C2's flare is predicted from data only — no capture of the original exists");
+        ctx.Note($"C2's flare is predicted from data only, no capture of the original exists");
     }
 
     // ---- node lab tree rows must follow live Visible --------------------------------------------
@@ -1514,7 +1647,7 @@ internal static class WorldAndToolSuites
     // AudioStreamPlayer3D finds no listener in range, clears its bus volumes, and every 3D emitter in
     // the world is silent, with nothing logged or counted to say so.
     [Suite("splitscreen-listeners",
-        "every 2–4P pane is a 3D audio listener, which a SubViewport is not by default — the "
+        "every 2–4P pane is a 3D audio listener, which a SubViewport is not by default, the "
         + "pinned listener model (A2), and the one thing standing between splitscreen and a "
         + "world with no listener at all")]
     internal static void SplitscreenListeners(TestContext ctx)
@@ -1583,7 +1716,7 @@ internal static class WorldAndToolSuites
         lights.Add(farFromP1, Colors.White, 1f, 10f);
         lights.Commit(new[] { p1, p2 });
         ctx.Check(lights.CommittedPositions.Contains(farFromP1),
-            $"the same light stays committed once a second viewer sits 100 m from it — nearest, not P1 alone");
+            $"the same light stays committed once a second viewer sits 100 m from it, nearest, not P1 alone");
 
         // The MaxActive budget's Significance rank must answer to the same nearest-viewer rule, not just
         // the fade: the 16-slot budget is packed with filler lights strictly farther from P1 than besideP2
@@ -1814,11 +1947,13 @@ internal static class WorldAndToolSuites
         return (meshes, merged);
     }
 
-    // One mission's ZONE1 energies, off a rig of its own so the two missions cannot share state.
-    // The Environment is a bare one: what is asserted is the value the zone apply wrote.
+    // One mission's ZONE1 lighting, off a rig of its own so the two missions cannot share state:
+    // the two energies, the ambient as the renderer will read it (source and colour), and the
+    // authored colour it should be, read straight off the file for comparison. The Environment is
+    // a bare one, so every field returned is a value the zone apply itself wrote.
     // ⚠ --sky-zone=zone1 on purpose. The default request is zone2, the ABOVE-cloud zone, and
     // comparing two missions' cloud tops is not the night-against-day question.
-    private static (float Sun, float Ambient) ZoneEnergies(
+    private static (float Sun, float Ambient, Godot.Environment.AmbientSource Source, Color Color, Color Authored) ZoneEnergies(
         TestContext ctx, string chapter, string mission, string zrdr)
     {
         var sun = new DirectionalLight3D { Name = $"sun-energy-{chapter}-{mission}" };
@@ -1830,7 +1965,9 @@ internal static class WorldAndToolSuites
                 new[] { $"--chapter={chapter}", $"--mission={mission}", "--sky-zone=zone1" });
             var weatherRig = new WeatherRig(spec, ctx.Host, sun, env: env);
             weatherRig.Build(zrdr, System.Array.Empty<PlayerRig>(), System.Array.Empty<HorizonZone>(), _ => { });
-            return (sun.LightEnergy, env.AmbientLightEnergy);
+            var authored = WeatherState.Load(zrdr)?.Zone("zone1").SunColorAmbient ?? Colors.White;
+            return (sun.LightEnergy, env.AmbientLightEnergy, env.AmbientLightSource,
+                env.AmbientLightColor, authored);
         }
         finally
         {

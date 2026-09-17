@@ -189,7 +189,7 @@ internal static class AiSuites
         "inert one AFTER activation: a plane built inert is not returned by a raycast, is " +
         "listed by the aim assist's candidate collector but not as LIVE (so a scan pointed " +
         "straight at it finds nothing), takes no damage from a round fired through it, does " +
-        "not move under a sim step and is not drawn — then Activate re-homes it and every one " +
+        "not move under a sim step and is not drawn, then Activate re-homes it and every one " +
         "of those flips back")]
     internal static void InertAircraft(TestContext ctx)
     {
@@ -377,7 +377,7 @@ internal static class AiSuites
         "with hits landing under the host's shooter id (never on the host's own airframe), " +
         "holds fire while tracking through a bored window, parks at the NEARER yaw end stop " +
         "out of arc, treats YAW [0,0] as unrestricted rather than locked, and goes quiet with " +
-        "a crashed host — plus the aim assist's turret candidate list is fed")]
+        "a crashed host, plus the aim assist's turret candidate list is fed")]
     internal static void CarriedTurrets(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -660,7 +660,7 @@ internal static class AiSuites
                     $"shipped ACTIVATED: only the piratezep's own awake rings are up (ally, TEAM 1)");
                 ctx.Check(runtime.Emplacements.Where(t => t.Activated)
                         .All(t => t.Team == AimAssist.PlayerTeam),
-                    $"every emplacement awake by data is on the ally team — no hostile fires unwoken");
+                    $"every emplacement awake by data is on the ally team, no hostile fires unwoken");
 
                 // A dormant hostile emplacement: aagun32, enemy by the loader's no-TEAM default.
                 var aagun = runtime.Emplacements.FirstOrDefault(t => t.Label.EndsWith("@aagun32"));
@@ -1487,7 +1487,7 @@ internal static class AiSuites
             if (ai.Body == null)
                 return;
             ctx.Check(ProjectilePool.SurfaceIdOf(ai.Body) == SurfaceRegistry.Player,
-                $"the AI body answers surface id {SurfaceRegistry.Player} (player) — weapon IMPACT rows fire on it");
+                $"the AI body answers surface id {SurfaceRegistry.Player} (player), weapon IMPACT rows fire on it");
             var space = live.GetWorld3D().DirectSpaceState;
             var probe = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
                 spawnPos + new Vector3(0f, 0f, -30f), spawnPos, CollisionLayers.WorldAndAircraft));
@@ -1816,7 +1816,7 @@ internal static class AiSuites
             var gun = ai.Loadout.FirableGuns.First();
             float armorDmg = gun.Weapon.ArmorDamage ?? 0f;
             ctx.Check(armorDmg > 0f && Mathf.IsEqualApprox(armorDmg, gun.Weapon.HealthDamage ?? -1f),
-                $"the stock gun's two damage magnitudes are equal ({gun.Weapon.Id}, {armorDmg:0.#}) — the hit counter's precondition");
+                $"the stock gun's two damage magnitudes are equal ({gun.Weapon.Id}, {armorDmg:0.#}), the hit counter's precondition");
             float Combined(FlightController rig) => rig.Damage!.Parts.Values.Sum(p => p.Hp + p.Armor);
             bool Pristine(FlightController rig) => rig.Damage!.Parts.Values.All(
                 p => p.Hp >= p.Def.MaxHp && p.Armor >= p.Def.MaxArmor);
@@ -2046,7 +2046,7 @@ internal static class AiSuites
         "the avoid-crash override climbs out on a blocked probe and releases, and the D15 " +
         "rubber-band assist: a chasing human fallen behind puts the machine in lay off " +
         "(throttle eased, fire held) and --no-assist's switch never enters it under the " +
-        "same geometry — every transition in the engine's own mode vocabulary")]
+        "same geometry, every transition in the engine's own mode vocabulary")]
     internal static void AiModes(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");

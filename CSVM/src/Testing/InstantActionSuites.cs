@@ -479,7 +479,7 @@ internal static class InstantActionSuites
             ctx.Same(6, releasedAt.Count, $"exactly wave 1's six members are released");
             ctx.Check(wave1.All(m => m.InPlay), $"…and all six are in play");
             ctx.Check(wave2.All(m => m.Inert),
-                $"wave 2 is untouched — one wave's credit releases one wave");
+                $"wave 2 is untouched, one wave's credit releases one wave");
             ctx.Check(releaseDropDistances.All(distance => distance < 0.1f),
                 $"…at the generator's live cargobay drop point max error={releaseDropDistances.Max():0.###} m");
             var expectedLaunchVelocity = hostVelocity + Vector3.Down * 22.352f;
@@ -606,8 +606,8 @@ internal static class InstantActionSuites
         "the G13 mission end, one mission type at a time and each through the real signal: an " +
         "ace's own Downed report wins the duel, the wave sequencer's last kill wins the " +
         "squadron (with a wave still flying it does not), the LAST pilot in wins the stunt run " +
-        "over C1/IA1's authored zones while the first does not — and the last still-flying one " +
-        "does when the other is out of lives — and really shooting out every one of C1/M04's " +
+        "over C1/IA1's authored zones while the first does not, and the last still-flying one " +
+        "does when the other is out of lives, and really shooting out every one of C1/M04's " +
         "piratezep engines wins the zeppelin run with its hull still alive (one engine short " +
         "does not), as does the gasbag threshold on its own; each with a second mission of " +
         "another type subscribed to the same " +
@@ -761,7 +761,7 @@ internal static class InstantActionSuites
             }
             StepWaves(wave1);
             ctx.Check(waves.CurrentWave == 2 && wave2[0].InPlay,
-                $"wave 1 cleared: wave 2 is current and flying — the mission is NOT over yet");
+                $"wave 1 cleared: wave 2 is current and flying, the mission is NOT over yet");
             ctx.Check(!squadron.Ended, $"…and the squadron mission is still running with a wave left");
             wave2[0].DebugForceCrash();
             StepWaves(wave2);
@@ -787,7 +787,7 @@ internal static class InstantActionSuites
                 probe.SimStep(1f / 60f);
             }
             ctx.Check(!probe.Crashed,
-                $"…and 5 s later the armed 3 s crash cam has respawned it — the able-to-fail control");
+                $"…and 5 s later the armed 3 s crash cam has respawned it, the able-to-fail control");
             // ⚠ The respawn path must stay clear of the ending's hold: a death with a life left
             // ends nothing, so nothing is armed and no board is ever due.
             lifeLedger.Advance(InstantActionRuntime.WrapupHoldS + 1f);
@@ -1076,7 +1076,7 @@ internal static class InstantActionSuites
                     && engineMission.Outcome == InstantActionOutcome.Won,
                     $"the last engine dying WINS a zeppelin_run mission: alive={motion?.AliveEngines} outcome={engineMission.Outcome}");
                 ctx.Check(!zeps.IsDead("piratezep"),
-                    $"…with the HULL still alive — engines are their own win, not a kill");
+                    $"…with the HULL still alive, engines are their own win, not a kill");
                 ctx.Check(!otherHull.Ended,
                     $"…and a mission whose objective is another hull is untouched: {otherHull.Outcome}");
 
@@ -1223,8 +1223,8 @@ internal static class InstantActionSuites
         "BL-426's per-pilot record gate over a real ScoreStore: an incomplete run's summary " +
         "shows the stored best and claims no new one, and its elapsed total, shorter than that " +
         "stored best, never overwrites it (the store file is byte-identical before and after); " +
-        "a completed run records and the reload confirms it; and the split splitscreen end — " +
-        "one pilot's own run complete, the other's not — is decided from each pilot's own " +
+        "a completed run records and the reload confirms it; and the split splitscreen end " +
+        "(one pilot's own run complete, the other's not) is decided from each pilot's own " +
         "StuntMission alone, never a shared mission outcome")]
     internal static void InstantActionStuntSummary(TestContext ctx)
     {
@@ -1282,7 +1282,7 @@ internal static class InstantActionSuites
         ctx.Check(undercutSummary.PrevBest == bestTotal && !undercutSummary.NewBest,
             $"a shorter but INCOMPLETE run still shows the real best and claims none: prev={undercutSummary.PrevBest} new={undercutSummary.NewBest}");
         ctx.Check(before.SequenceEqual(File.ReadAllBytes(storePath)),
-            $"…and the store file is byte-identical afterwards — the early end never wrote");
+            $"…and the store file is byte-identical afterwards, the early end never wrote");
 
         // The split splitscreen end: each pilot's own StuntMission decides its own summary: P1
         // complete records even though P2, sharing nothing but the mission clock, is not.
@@ -1307,7 +1307,7 @@ internal static class InstantActionSuites
         "the ResultsBoard shell contract, once for all four results boards: waking raises " +
         "Ended, the resting Photo Mode row changes nothing, the standard Restart leaves the " +
         "release to the live flag, the flag clearing retires the board and releases the " +
-        "clock — and the wrap-up board's own menu-driven retire, which no flag ever performs")]
+        "clock, and the wrap-up board's own menu-driven retire, which no flag ever performs")]
     internal static void ResultsBoardShell(TestContext ctx)
     {
         var state = new PauseState();

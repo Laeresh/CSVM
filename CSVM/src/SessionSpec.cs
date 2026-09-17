@@ -569,6 +569,16 @@ public sealed record SessionSpec
     /// pilot flies in and the one the cycle key changes. Dropped outside flight, like
     /// <see cref="View"/>.</summary>
     public Flight.PilotViewMode ViewMode { get; private set; }
+    /// <summary>Whether <see cref="ViewMode"/> came from a <c>--view=</c> naming a mode rather than
+    /// from the default. Held because Chase is both the default and a nameable mode, so the value
+    /// alone cannot say whether the command line asked for it, and
+    /// <see cref="WithSavedDefaultView"/> must not overrule a <c>--view=chase</c>.</summary>
+    public bool ViewModeExplicit { get; private set; }
+    /// <summary>Whether the pilot's head turns with the aircraft in the cockpit, as the options
+    /// file has it; null where never set, which leaves the <c>headLook.autohead</c> config key
+    /// deciding (<see cref="Flight.FlightController.AutoHeadTurn"/>). Dropped under
+    /// <c>--det</c> like every other saved option.</summary>
+    public bool? AutoHeadTurn { get; private set; }
     /// <summary>The <c>--look=x,y</c> right-stick deflection held for the whole
     /// run, both in [−1, 1], +x right and +y up: the scripted twin of pushing the look stick, and
     /// the only way a headless run aims it. Drives the chase camera's swing and the first-person
@@ -683,6 +693,11 @@ public sealed record SessionSpec
     /// nearest-hostile marker. A watching aid for AI work (whose plane is where), never a
     /// gameplay feature.</summary>
     public bool DebugMarkers { get; private set; }
+
+    /// <summary><c>--compass-squeeze</c>: draw the heading tape's octant letters with the ticks'
+    /// own horizontal drum squeeze instead of upright. The A/B for a reading the reference stills
+    /// cannot settle, so it survives <c>--det</c> where a config key would not.</summary>
+    public bool CompassSqueeze { get; private set; }
 
     /// <summary><c>--debug-spectate</c>: build the session exactly as it would be flown, then take
     /// every human OUT of it: the aircraft goes inert (undrawn, uncollidable, and absent from
@@ -944,6 +959,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--debug-pause=")) { s.DebugPauseFrame = int.Parse(arg["--debug-pause=".Length..]); }
             else if (arg.StartsWith("--debug-objective=")) { s.DebugObjective = int.Parse(arg["--debug-objective=".Length..]); }
             else if (arg.StartsWith("--debug-wash=")) { s.DebugWash = int.Parse(arg["--debug-wash=".Length..]); }
+            else if (arg == "--compass-squeeze") { s.CompassSqueeze = true; }
             else if (arg == "--debug-markers") { s.DebugMarkers = true; }
             else if (arg == "--debug-spectate") { s.DebugSpectate = true; }
             else if (arg == "--debug-livery") { s.DebugLivery ??= 0; }
@@ -966,7 +982,7 @@ public sealed record SessionSpec
                 s.ShowColliders = want == "show";
                 if (!s.ShowColliders && want.Length > 0)
                 {
-                    notes.Add(new Note("world", $"--collision='{want}' is not a value it takes (only '=show', which opens the C overlay) — building collision anyway"));
+                    notes.Add(new Note("world", $"--collision='{want}' is not a value it takes (only '=show', which opens the C overlay), building collision anyway"));
                 }
             }
             else if (arg == "--debug-colliders") { s.ShowColliders = true; }
@@ -979,7 +995,7 @@ public sealed record SessionSpec
                     .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                 if (names.Length == 0)
                 {
-                    notes.Add(new Note("world", "--clutter-templates= names no templates — keeping the chapter's own list"));
+                    notes.Add(new Note("world", "--clutter-templates= names no templates, keeping the chapter's own list"));
                 }
                 else
                 {
@@ -995,7 +1011,7 @@ public sealed record SessionSpec
                 }
                 else
                 {
-                    notes.Add(new Note("world", $"--map-edge-block='{want}' is not a cell count >= 1 — keeping the chapter's measured default"));
+                    notes.Add(new Note("world", $"--map-edge-block='{want}' is not a cell count >= 1, keeping the chapter's measured default"));
                 }
             }
             else if (arg.StartsWith("--map-edge-mode="))
@@ -1004,7 +1020,7 @@ public sealed record SessionSpec
                 s.MapEdgeRepeat = want != "mirror";
                 if (s.MapEdgeRepeat && want != "repeat")
                 {
-                    notes.Add(new Note("world", $"--map-edge-mode='{want}' is not a mode it takes (mirror|repeat) — keeping 'repeat', the behaviour the original was A/B'd against"));
+                    notes.Add(new Note("world", $"--map-edge-mode='{want}' is not a mode it takes (mirror|repeat), keeping 'repeat', the behaviour the original was A/B'd against"));
                 }
             }
             else if (arg == "--debug-damage") { s.DebugDamage ??= ""; }
@@ -1176,7 +1192,7 @@ public sealed record SessionSpec
                 }
                 else if (!string.Equals(want, "orbit", StringComparison.OrdinalIgnoreCase))
                 {
-                    notes.Add(new Note("ui", $"--weapon-camera={want} is not free/orbit/<frames> — keeping the orbit camera"));
+                    notes.Add(new Note("ui", $"--weapon-camera={want} is not free/orbit/<frames>, keeping the orbit camera"));
                 }
             }
             else if (arg == "--weapon-click") { s.WeaponClick = true; s.HasContentArg = true; }
@@ -1200,7 +1216,7 @@ public sealed record SessionSpec
                 }
                 else if (!string.Equals(want, "aim", StringComparison.OrdinalIgnoreCase))
                 {
-                    notes.Add(new Note("ui", $"--weapon-click={want} is not x,y[,aim] — clicking the viewport centre instead"));
+                    notes.Add(new Note("ui", $"--weapon-click={want} is not x,y[,aim], clicking the viewport centre instead"));
                 }
                 else
                 {
@@ -1228,7 +1244,7 @@ public sealed record SessionSpec
                 else
                 {
                     s.CampaignProfile = val;
-                    notes.Add(new Note("core", $"--campaign={val} has no ':<seq>' mission index — profile only, no mission chosen"));
+                    notes.Add(new Note("core", $"--campaign={val} has no ':<seq>' mission index, profile only, no mission chosen"));
                 }
                 s.HasContentArg = true;
             }
@@ -1258,7 +1274,7 @@ public sealed record SessionSpec
                 }
                 else
                 {
-                    notes.Add(new Note("world", $"--graphics={want} is not original/enhanced — keeping the config key's value"));
+                    notes.Add(new Note("world", $"--graphics={want} is not original/enhanced, keeping the config key's value"));
                 }
             }
             else if (arg == "--dump-mips") { s.DumpMips = true; }
@@ -1287,12 +1303,12 @@ public sealed record SessionSpec
                 string want = arg["--volume=".Length..];
                 if (!float.TryParse(want, NumberStyles.Float, CultureInfo.InvariantCulture, out float volume))
                 {
-                    notes.Add(new Note("core", $"--volume={want} is not a number (0-1) — leaving the volume alone"));
+                    notes.Add(new Note("core", $"--volume={want} is not a number (0-1), leaving the volume alone"));
                 }
                 else if (volume is < 0f or > 1f)
                 {
                     s.Volume = Math.Clamp(volume, 0f, 1f);
-                    notes.Add(new Note("core", $"--volume={want} is outside 0-1 — using {s.Volume}"));
+                    notes.Add(new Note("core", $"--volume={want} is outside 0-1, using {s.Volume}"));
                 }
                 else
                 {
@@ -1321,13 +1337,14 @@ public sealed record SessionSpec
                 if (Flight.PilotView.Parse(want) is { } mode)
                 {
                     s.ViewMode = mode;
+                    s.ViewModeExplicit = true;
                 }
                 else
                 {
                     s.View = ParseView(want);
                     if (s.View == 0)
                     {
-                        notes.Add(new Note("core", $"--view={want} is not a numpad view (1-4, 6-9), 'back', 'flyby', or a view mode (chase/cockpit/nose) — using the chase camera"));
+                        notes.Add(new Note("core", $"--view={want} is not a numpad view (1-4, 6-9), 'back', 'flyby', or a view mode (chase/cockpit/nose), using the chase camera"));
                     }
                 }
             }
@@ -1340,7 +1357,7 @@ public sealed record SessionSpec
                 }
                 else
                 {
-                    notes.Add(new Note("core", $"--look={want} is not an x,y pair — leaving the look stick centred"));
+                    notes.Add(new Note("core", $"--look={want} is not an x,y pair, leaving the look stick centred"));
                 }
             }
         }
@@ -1441,6 +1458,30 @@ public sealed record SessionSpec
     /// flight without a restart.</summary>
     public SessionSpec WithSavedNearestAfterKill(bool? saved) =>
         Det || saved is not { } on ? this : this with { NearestAfterKill = on };
+
+    /// <summary>The saved opening view folded in, the difficulty's own rules with <c>--view=</c> in
+    /// the flag's place: a command line naming a mode beats the saved word, a word
+    /// <see cref="CSVM.Flight.PilotView.Parse"/> refuses (or null) changes nothing, and a
+    /// <c>--det</c> run reads no saved option. Not folded outside <see cref="Fly"/>, since the two
+    /// first-person views sit on a flown aircraft's camera and the other modes have cameras of
+    /// their own; it runs after <c>Validate</c>, so it keeps that rule rather than warning.</summary>
+    public SessionSpec WithSavedDefaultView(string? savedWord)
+    {
+        if (ViewModeExplicit || Det || !Fly
+            || CSVM.Flight.PilotView.Parse(savedWord ?? string.Empty) is not { } saved)
+        {
+            return this;
+        }
+
+        return this with { ViewMode = saved };
+    }
+
+    /// <summary>The saved automatic head turn folded in, on
+    /// <see cref="WithSavedNearestAfterKill"/>'s rules: nothing on the command line names it, a
+    /// never-set field leaves the <c>headLook.autohead</c> config key deciding, and a <c>--det</c>
+    /// run reads no saved option.</summary>
+    public SessionSpec WithSavedAutoHeadTurn(bool? saved) =>
+        Det || saved is not { } on ? this : this with { AutoHeadTurn = on };
 
     /// <summary>Parse <c>--plane=</c>: one node name, or a comma-separated list, one plane per
     /// player for splitscreen (the launchscreen's simultaneous pick produces the same list).</summary>
@@ -1782,7 +1823,7 @@ public sealed record SessionSpec
         if (WeaponSurface is { } wantSurface && Mech3.SurfaceRegistry.IdForName(wantSurface) == null)
         {
             Warn("ui", $"--weapon-surface={wantSurface} is not a surface-registry name "
-                       + $"({string.Join('/', Mech3.SurfaceRegistry.Names)}) — ignoring it");
+                       + $"({string.Join('/', Mech3.SurfaceRegistry.Names)}), ignoring it");
             WeaponSurface = null;
         }
         // A non-flight mode that won the arbitration above would silently leave the weapon lab
@@ -1974,7 +2015,7 @@ public sealed record SessionSpec
         string kept = filter(spec, rejected);
         foreach (var token in rejected)
         {
-            Warn("ui", $"{what} '{token}' {wanted} — ignoring it");
+            Warn("ui", $"{what} '{token}' {wanted}, ignoring it");
         }
         return kept;
     }
@@ -1990,7 +2031,7 @@ public sealed record SessionSpec
         }
         else
         {
-            Warn("world", $"--mips='{value}' is neither 'authored' nor 'generated' — "
+            Warn("world", $"--mips='{value}' is neither 'authored' nor 'generated', "
                           + $"keeping {Mips.ToString().ToLowerInvariant()}");
         }
     }

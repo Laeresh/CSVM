@@ -102,12 +102,6 @@ draws its authored 800x600 space one-to-one.
 | `CAP-52` | **Menu audio, keyboard focus and the briefing**, across screens, re-recorded **with sound** | The first take (`CAP-52.mkv`, 2:28) settled the pointer (which bitmap where, the top-left hotspot, the swap on enter and leave only), the three lettering states, the press firing on the release, the two message boxes and where every Back lands, all of which Original now draws; the findings are `docs/org/menu-inventory.md` Part 4. Its audio track is digital silence, as are `CAP-49`'s, `CAP-50`'s and `CAP-51`'s, so the recorder had no game output routed to it: **check the recorder hears the game before the take**. Then one continuous walk, main menu, Instant Action, back, Campaign, roster (type a character and a refused one), cabin, scrapbook, briefing, flight check, back out. *Look for:* (a) which sound a rollover makes and which a press makes, on a main-menu plaque, a campaign plaque, a roster row, a contents row, a scrap and a dropdown row (CSVM's Original menu plays `MOUSEOVER` on entering a button and `MOUSECLICK` on a press and nothing over a row, unconfirmed); (b) what the edit-box keystroke and reject sounds are attached to (`ENTERTEXT` per taken character, `ENTERTEXT_ERROR` per refused one, unconfirmed); (c) where the splash music starts, stops and resumes, and whether the briefing's narration ducks it; (d) **REPLAY BRIEFING pressed** mid-narration, then RETURN TO CABIN mid-narration (Original restarts the wav from its top, and ends it and lifts the duck on leaving); (e) **DELETE PLAYER pressed** and cancelled (Original opens the two-button box focused on Yes); (f) **a keyboard and a pad pressed on every screen**, arrows, Tab, Enter and the pad's stick and A, since no take has pressed a key outside an edit box and CSVM's Original focus walk is a remake equivalence with no film behind it. CSVM's Built-in menu plays **no** click, rollover or keystroke sound and draws no pointer at all, so this is the whole of the evidence for both | `A4` (the audio and menu-input contracts), `D33`, the focus walk `docs/org/menu-inventory.md` Part 4 still calls a remake equivalence |
 | `CAP-53` | The **Plane Construction tab bar out of order, Purchase, and the two refusals** | Two walks exist already, `CAP-50.mkv` t=118 to 140 from Instant Action's door and `CAP-52.mkv` t=110 to 145 from the cabin's, and they settled the name dialog, the tab art, the running total, the dropdowns, both doors' strips and scraps, SELL PLANES and its INVENTORY, and CANCEL, all of which Original now draws; the findings are `docs/org/menu-inventory.md` Part 4. Both walks ran the tabs strictly 1 to 6 and neither purchased. The langui 206 defaults ask is settled without film: `AIRFRAME.SCRIPT`'s own mailbox arms carry its gate and all three answers (`docs/org/hangar.md`, "When the airframe swap asks"). Film from the cabin: **clear** Load Default Configuration on the name dialog and read what the Airframe tab opens on; visit the tabs **out of order** (Paint, then Engine, then Airframe); enter a name the game refuses (langui 203, a duplicate or empty one); then press READY TO PURCHASE and hold the totals page, and buy. *Look for:* whether picks survive leaving a tab and whether Purchase commits them all at once, what the totals page shows, and what the refusal looks like. Sound rides `CAP-52`'s re-record | `C23` |
 
-### Camera
-
-| ID | Capture | What must be in frame | Unblocks |
-|---|---|---|---|
-| `CAP-56` | The **death camera and the flyby** in the original | Both cameras are implemented from the decode and their geometry is pinned by engine suites, so this take judges PRESENTATION only and settles no constant. (a) **Death.** Get shot down in level flight at a few hundred metres and hold the recording from the kill until the respawn prompt. *Look for:* how long the camera holds before anything else takes the screen, whether the HUD is really gone, and whether the wreck stays framed the whole way down or leaves the picture. (b) **Flyby.** In level flight press **F7** and hold it for twenty seconds without touching the stick. *Look for:* how the cut in reads (hard cut or a move), whether the aeroplane passes as close as the authored 5.5-7 m radius makes it look, and what the camera does at the moment it re-sites. Fly a chapter with terrain under you for both, so the shared clearance has something to lift over | presentation of `StaticCameras`; nothing is blocked on it |
-
 ### Audio
 
 | ID | Capture | What must be audible | Unblocks |
@@ -137,12 +131,13 @@ draws its authored 800x600 space one-to-one.
 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
+| `CAP-58` | A **C5 Instant Action spawn held still**, three or four times, so a building wall can be measured at a pose we can reproduce exactly | The C5 half of `CAP-11` compares different buildings: `playtest/CAP-11/t0.5-c5-spawn-night-city.png` looks north over midtown past a stepped Art Deco tower, and no pose in C5 `IA1`'s eight `dogfight_ace` or four extra `dogfight_squadron` entries renders that view, so the original's start point is not recoverable from the data and every ratio measured off that pair is between unlike surfaces. This take fixes that: **start a C5 Instant Action flight and hold the very first second without touching the stick**, then quit and repeat three or four times, so more than one of the eight spawns is caught. Our side then renders the same spawn coordinate and heading with `--pos`/`--direction`, and the two frames hold the same buildings. Each frame must contain **at least one plain building wall turned toward the camera, close enough to read its texture**, rather than a face made of lit windows. *Look for:* whether the walls in ours read darker than the original's at all, and whether a wall turned away from the camera's left reads differently from one turned toward it, which is the directional shading the remake has no term for. Note the compass and altimeter in frame so the pose can be checked | `BL-322`: whether C5's facades are darker in ours at all, which the decode says can happen only on the `bldg1`-`bldg4` tower skins and never on the `cblock` city blocks |
 
 ### AI flight, an AI aircraft flying itself, external view
 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
-| `CAP-54` | The **same aircraft lit by night and by day** in the original, one airframe and one livery | Two matched-pose chase-view stills of **one** aircraft in **one** livery: a night mission and a day mission, framed the same way, with the plane large enough in frame to read its lit and shaded sides and with terrain visible beside it for a reference level. C1B IA1 by night against a C1C campaign mission by day is the pair the remake needs, and **C1C has no capture at all today**. The existing stills cannot answer it: `playtest/CAP-11/`'s frames and `OriginalScreenshots/C1B IA1 Bloodhawk tracer and ejection.png` show a red Bloodhawk at night and a red plane over C2 by day, but CAP-11's measurement boxes deliberately avoid the aircraft, and our own build flies a grey and yellow paint at those poses, so nothing is comparable. Pin the same paint in our shot when the take exists. *Look for:* how much darker the airframe reads at night than by day relative to the terrain under it, and whether the plane's shaded side goes to black or keeps a fill | `BL-332`'s two TUNE constants, landed but unjudged, and `BL-683`'s ambient question |
+| `CAP-54` | The **same aircraft lit by night and by day** in the original, one airframe and one livery | Two matched-pose chase-view stills of **one** aircraft in **one** livery: a night mission and a day mission, framed the same way, with the plane large enough in frame to read its lit and shaded sides and with terrain visible beside it for a reference level. C1B IA1 by night against a C1C campaign mission by day is the pair the remake needs, and **C1C has no capture at all today**. The existing stills cannot answer it: `playtest/CAP-11/`'s frames and `OriginalScreenshots/C1B IA1 Bloodhawk tracer and ejection.png` show a red Bloodhawk at night and a red plane over C2 by day, but CAP-11's measurement boxes deliberately avoid the aircraft, and our own build flies a grey and yellow paint at those poses, so nothing is comparable. Pin the same paint in our shot when the take exists. *Look for:* how much darker the airframe reads at night than by day relative to the terrain under it, and whether the plane's shaded side goes to black or keeps a fill | `BL-332`'s two TUNE constants and the faithful path's colour-sourced ambient fill, both landed and neither judged at the controls |
 
 ---
 
@@ -217,12 +212,15 @@ draws its authored 800x600 space one-to-one.
 ./RunGame.ps1 --plane=player_bhawk --chapter=C1
 ```
 
-- `PT-121` `[A/B: HUD.png]` **The compass tape's overscan, rim and nearest-tick look
-  (`BL-113`).** `TileOverscan`, `RimGain` and the nearest-tick treatment are all still TUNE. North
-  = −Z is confirmed against the original and is not in question here. *Look for:*
-  - (a) the tick spacing, and how much of the tape shows at once, read like
-    `OriginalScreenshots/HUD.png` rather than a wider or narrower window;
-  - (b) the rim's brightness against the tape body at the same gauge size;
+- `PT-121` `[A/B: HUD.png]` **The compass tape's rim falloff and its octant letters
+  (`BL-113`).** The bar-end caps, the tile's overscan and the comb's hem are settled off the
+  stills; the edge falloff `min(1, 1.35·cos(Δ)^2.1)` and the letters' upright default are the two
+  that need eyes, the second with `--compass-squeeze` as its A/B. North = −Z is confirmed against
+  the original and is not in question here. *Look for:*
+  - (a) the outer quarter of the bar going near black while the inner half stays flat, at the
+    same gauge size as `OriginalScreenshots/HUD.png`, rather than the whole bar dimming evenly;
+  - (b) the octant letters at the bar's edges: upright as shipped, or narrowed with the drum
+    under `--compass-squeeze`, whichever reads like the original's card;
   - (c) the nearest tick under the pointer: picked and drawn the way the original's is, holding
     steady through a slow turn instead of stepping or flickering between neighbours.
   *Blocks:* `BL-113`.
@@ -241,6 +239,39 @@ draws its authored 800x600 space one-to-one.
   - (c) at the 1,700 m rung the cloud tops sit at the original's brightness rather than above it;
   - (d) flying level inside the band, no popping as a sprite's own band swings across the cull.
   *Blocks:* nothing tracks the outcome; a fail mints a new `BL` naming which of (a)-(d) failed.
+
+### C1 · Bloodhawk, the police car and the train, sound on
+
+```powershell
+./RunGame.ps1 --chapter=C1 --plane=player_bhawk --volume=1.0 --no-det --debug-anim --log=sound
+```
+
+⚠ `--volume=1.0` is not optional: the default master volume is 0, so a run without it is silent for
+reasons that have nothing to do with this check. `--debug-anim --log=sound` prints one line per
+emitter each second carrying its distance, its authored range and the gain the curve put it at, so
+a disagreement can be read off numbers instead of guessed.
+
+- `PT-150` `[Own]` **The positional falloff, re-judged on the two emitters that produced the
+  complaint (`BL-269`).** The curve is no longer an approximation: it is the original's own law,
+  computed per frame from the definition's `RANGE` pair. The police chase car (`RANGE [200, 1200]`)
+  is now unattenuated out to 325 m, 10 dB down at 450, 20 at 700 and 30 at 1200, then silent at
+  1320; the track train (`RANGE [600, 1200]`) is unattenuated to 675 m, 10 down at 750, 20 at 900
+  and 30 at 1200. The previous curve was 6 dB per doubling from the emitter times a linear fade to
+  nothing at the audible radius, so the train was already 6 dB down where it should have been at
+  full volume and silent where it should still have been audible. No instrument can say whether the
+  new level reads right at the controls.
+  *Look for:*
+  - (a) flying past the police car at chase height, the siren stays at a steady full level while it
+    is close rather than dropping the moment you pass, and it fades out over the approach to a
+    kilometre instead of cutting;
+  - (b) the train on its track, heard from well out and holding its level through the near pass,
+    the earlier "quiet too soon" being gone;
+  - (c) neither emitter is now too loud too far out, which is the failure the other way: at the
+    authored audible radius both should be faint, not merely quieter;
+  - (d) circling one of them at a fixed radius, the level holds steady rather than pumping, since
+    the level is recomputed every frame from the nearest pane.
+  *Blocks:* `BL-269`. A fail on (a) or (b) alone is a scale question, not a curve one; quote the
+  `sound` log's distance and gain for the foot you judged it at.
 
 ### C1 · Bloodhawk vs AI, the kill sequence, sound on
 
@@ -322,41 +353,45 @@ reasons that have nothing to do with any of these checks.
   which read as a mix problem. The original has no whine at all, so what the ear was matching in
   that dive was the engine slot's own movement, and these terms are what produces it.
 
-- `PT-126` `[A/B: OriginalScreenshots/Videos/CAP-10.mp4 + Bloodhawk Dive Sound.mp4]` **What plays
-  past the plane's own top speed, and how loud (`BL-252`).** The gating is settled and needs no
-  change: something starts exactly at `1.0× fd_speed`, the plane's own maximum level speed. Two
-  things are not. There is no whine (no shipped def names `prop_sound`), so the open candidate is
-  the RATTLE, `snd_planeshake`, whose curve runs 0 to 1 over `1.0` to `1.2× fd_speed`. ⚠ Settle
-  what the sound is before judging any level: this item has already tuned the wrong slot once.
+- `PT-126` `[A/B: OriginalScreenshots/Videos/CAP-10.mp4 + Bloodhawk Dive Sound.mp4]` **The airframe
+  rattle past the plane's own top speed (`BL-252`).** Both the sound and its level are decoded and
+  landed, so this is a confirmation, not a tuning pass: the original plays `snd_planeshake` from
+  exactly `1.0× fd_speed`, the plane's own maximum level speed, at full level and with no ramp
+  above it, level with the engine slot's own gain. Ours now does the same. ⚠ Judge whether the
+  port READS right, not whether a number should move: `1.0` is read out of the executable, and
+  `docs/verification.md`'s rule that a recording may not contest a decode covers the ear too.
   *Look for:*
-  - (a) hold straight and level at 100% throttle to settle at max speed, then dive: name what our
-    build plays, and whether it is the same sound the original plays at that foot;
-  - (b) the level, matched by ear against the original rather than measured, in the same view;
+  - (a) hold straight and level at 100% throttle to settle at max speed, then dive: the rattle
+    should come in at the crossing, sharply rather than swelling, and hold steady however deep
+    the dive goes;
+  - (b) whether it reads like the original's at the same foot, in the same view;
   - (c) the cockpit case separately, since the original's cockpit engine is damped where ours is
     not, so the ratio cannot be read across from the outside view.
   *Blocks:* `BL-252`. ⚠ Do not read the threshold off the airspeed dial: the gauge art, its red arc
-  and its `300` mark are the same for every plane and cannot express a per-plane limit.
+  and its `300` mark are the same for every plane and cannot express a per-plane limit. ⚠ There is
+  no whine to listen for: no shipped def names `prop_sound`, so that slot never sounds at all.
 
 - `PT-127` `[A/B: OriginalScreenshots/Videos/CAP-21 0 to 100 Full.mp4 + CAP-21 100 to 0 Full.mp4]`
-  **The engine start ramp, the wind-down, and the throttle-slam smoke gate (`BL-285`).** Two
-  constants pending one cockpit sitting. `EngineStartRamp` is now `startprops`'s authored 2.0 s and
-  the crash wind-down plays `snd_propstop`; `ThrottleSlamSmoke.SlamThreshold` is 0.25, the smallest
-  value consistent with footage whose 2/8 to 4/8 band is unobserved. *Look for:*
-  - (a) the start ramp and the wind-down by ear against the two clips above;
-  - (b) the slam gate walked by hand: a single 1/8 step must not fire, idle to 5/8 must, and where
-    in between it starts is the judgement;
-  - (c) whether the smoke reads as a slam response at all, rather than a puff on any throttle move.
-  *Blocks:* `BL-285`. ⚠ Judge against the current unscaled own-ship mix, not the old ×0.2 one
-  `BL-268` removed. In splitscreen `snd_propstop` carries `MixGain` and `snd_propstart` does not, so
-  judge each at the pane count being tested.
+  **The throttle-slam smoke gate (`BL-285`).** One constant pending one sortie:
+  `ThrottleSlamSmoke.SlamThreshold` is 0.25, the smallest value consistent with footage whose 2/8 to
+  4/8 band is unobserved. *Look for:*
+  - (a) the gate walked by hand from idle: a single 1/8 step must not fire, idle to 5/8 must, and
+    where in between it starts is the judgement;
+  - (b) whether the plume reads as a slam response at all, rather than a puff on any throttle move.
+  *Blocks:* `BL-285`. ⚠ The plume fires only on a build where the gate runs on the sim step: driven
+  from the rendered frame it read the lever flat on every other frame and nothing ever fired, so a
+  sortie on an older build judges an effect that never reached the screen.
 
 - `PT-128` `[A/B: OriginalScreenshots/Dirt Splash.png + Videos/30 Slu building.mp4]` **The building
   ricochet spark burst (`BL-289`).** The dirt-chip constants left this item with `BL-313`: dirt now
   takes the single spark, and the water column width is settled. What remains is the building
   ricochet, whose five constants are stand-ins because both authored assets are missing from the
   install: `RicochetSparks` 8, `RicochetSparkSize` 0.55 m, `RicochetSparkLife` 0.55 s,
-  `RicochetSparkSpeed` 22 m/s, `RicochetSpreadDeg` 90°. *Look for:*
-  - (a) strafe a building: the burst's count and spark size against the original's own impact spray;
+  `RicochetSparkSpeed` 22 m/s, `RicochetSpreadDeg` 90°.
+  ⚠ **Strafe a C1 airport hangar, not a Hollywood studio block.** The surface that reaches these
+  constants is the `soil` byte `buildings`(11), which only C1's `aphagar0N` hangar materials carry;
+  the film lot is `default` and plays the authored `3040slug_gunhit` instead (`BL-289`). *Look for:*
+  - (a) strafe a hangar: the burst's count and spark size against the original's own impact spray;
   - (b) how long a spark lives and how far it travels before it goes;
   - (c) the spread, where 90° is a stand-in: whether the burst reads as coming off the surface or as
     a sphere around the hit.
@@ -703,15 +738,6 @@ is a judgement on our own remake.
     hull death should already have taken it.
   *Blocks:* `BL-694`'s landing commit (`git log --grep=BL-694`). A sortie that reaches no end
   state mints a new `BL`; `CAP-55` is what the original owes against (b) and (d).
-- `PT-137` `[Own]` **A docking that wins the mission fades to black over the film's last frame,
-  never over the cockpit or chase view.** The original's code 13 parks the flying state before it
-  can present again, so the fade copies the film's frame; the episode now keeps its camera and
-  framing through the leaving hold once the result lands inside it (`git log --grep=BL-739`).
-  Dock with the objectives complete. *Look for:* the film's framing holding still through the
-  whole fade, with no flash of the pilot's own view between the film's last frame and black. A
-  loss taken under a film should fade that film the same way; a win in free flight fades the
-  pilot's own view as before. A visible cut to the cockpit before the fade mints a new `BL`.
-  *Blocks:* nothing.
 
 
 ### The exported package · a recipient's first run, no arguments
@@ -821,29 +847,6 @@ is a judgement on our own remake.
   turning onto two or three other headings, so a sign error cannot hide at one pose; (c) the
   zeppelin icon, where the mission draws one, lying along the hull's own course. *Blocks:* nothing;
   a fail mints a new `BL`.
-
-### CM24 (C5/M04) · the Dante's engine bank, external view
-
-```powershell
-./RunGame.ps1 --campaign=<profile>:23
-```
-
-- `PT-139` `[Own]` **Every engine the Dante loses keeps its own burning nacelle for the authored
-  half minute (`BL-720`).** Each engine's `destroy_dtz?engNN` calls `large_30sec_fire` WITH that
-  engine's own `supports` node, and one broadside kill works through four engines about eight
-  seconds apart, so four fires overlap for a dozen seconds and a whole bank is fourteen. The
-  world-effects stage staged four copies of that template, so the fifth burning engine took the
-  first one's copy back and its fire moved to the newest kill; the stage now carries one copy per
-  engine of the largest hull (`git log --grep=BL-720`). Kill a broadside cannon, then shoot
-  engines by hand, and watch from the chase or external view. *Look for:*
-  - (a) each dead engine holding its own fire and smoke at its own nacelle until it burns out,
-    with none of them stepping across to another engine as the next one dies;
-  - (b) an engine that has been dead a while still burning while newer ones catch, rather than
-    going dark the moment a fifth engine dies;
-  - (c) the skin fires along a burning gasbag's flank, which run through a different template
-    family (`zepskinfire_1/2/3` over eight burn points a side) and are not covered by the fix.
-  *Blocks:* `BL-720`. A fire still hopping between engines means the pool is still short of the
-  concurrency and reopens the item; (c) failing mints a new `BL` against the skin-fire roots.
 
 ## Everything else
 

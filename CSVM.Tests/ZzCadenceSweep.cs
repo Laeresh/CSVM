@@ -61,25 +61,25 @@ public class ZzCadenceSweep
         var stats = PlaneStats.Load(ZrdrPath, "player_bhawk");
 
         var sb = new StringBuilder();
-        sb.AppendLine("# square-wave pitch-cadence sweep — player_bhawk");
+        sb.AppendLine("# square-wave pitch-cadence sweep: player_bhawk");
         sb.AppendLine("# alternating full pitch-up / full pitch-down, 300 mph level entry, full throttle");
         sb.AppendLine($"# {SettlePeriods} periods settled, {FitPeriods} periods fitted "
-                      + "(cubic + sin + cos simultaneously — never detrend first)");
+                      + "(cubic + sin + cos simultaneously, never detrend first)");
         sb.AppendLine("# 'original' = the measured ripple from the original's own clips, feet");
         sb.AppendLine();
 
         foreach (bool ramped in new[] { true, false })
         {
             sb.AppendLine(ramped
-                ? "# STICK RAMPED — the key command through StickRamp, which is what the original's"
+                ? "# STICK RAMPED, the key command through StickRamp, which is what the original's"
                   + " aircraft saw"
-                : "# STICK RAW — full deflection the instant the key goes down; no original flies this");
+                : "# STICK RAW, full deflection the instant the key goes down; no original flies this");
             foreach (bool simIsWall in new[] { false, true })
             {
                 double k = simIsWall ? 1.0 : SimPerWall;
                 sb.AppendLine(simIsWall
-                    ? "## cadence read as SIM seconds (period_sim = period_wall) — SUPERSEDED, kept for continuity"
-                    : $"## cadence read as WALL seconds (period_sim = period_wall x {SimPerWall:0.000}, DET-11) — QUOTE THIS ONE");
+                    ? "## cadence read as SIM seconds (period_sim = period_wall), SUPERSEDED, kept for continuity"
+                    : $"## cadence read as WALL seconds (period_sim = period_wall x {SimPerWall:0.000}, DET-11), QUOTE THIS ONE");
                 sb.AppendLine("wall ms   period_sim   f0_sim      ripple ft   mean mph   original ft");
                 var amps = new List<double>();
                 foreach (var (wallMs, originalFt, atFloor) in Cadences)

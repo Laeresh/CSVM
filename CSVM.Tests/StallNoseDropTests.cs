@@ -56,7 +56,7 @@ public class StallNoseDropTests
 
         float noseDeg = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp((-m.Attitude.Z).Y, -1f, 1f)));
         Assert.True(noseDeg > -75f,
-            $"the nose reached {noseDeg:0.0}° after 30 s of stall — that is a chase toward "
+            $"the nose reached {noseDeg:0.0}° after 30 s of stall, that is a chase toward "
             + "world-down, not the decoded torque finding its equilibrium");
         Assert.True(noseDeg < 0f, $"the nose must end up below the horizon, not at {noseDeg:0.0}°");
     }

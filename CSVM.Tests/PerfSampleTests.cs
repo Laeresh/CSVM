@@ -355,7 +355,7 @@ public class PerfSampleTests
 
         // A ceiling well above measured cost, not a benchmark: catches a lock, allocation or
         // dictionary lookup landing on the scope path.
-        Assert.True(ns < 2000, $"a scope cost {ns:0.0} ns — something expensive is on the path");
+        Assert.True(ns < 2000, $"a scope cost {ns:0.0} ns, something expensive is on the path");
         PerfSample.Reset();
     }
 

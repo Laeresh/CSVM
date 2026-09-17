@@ -1,4 +1,4 @@
-"""Static collider probe (BL-070): predicts WorldBuilder's world-collider count per chapter
+"""Static collider probe: predicts WorldBuilder's world-collider count per chapter
 from the extracted gamez JSON alone, with no engine running, and diffs it against the runtime
 number `GameSession.LogBuildSummary` prints ("loaded ...: N colliders").
 

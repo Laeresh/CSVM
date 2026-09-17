@@ -19,6 +19,10 @@ namespace CSVM.Testing;
 /// suite modules: golden numbers are measured against the retail install.</summary>
 internal static class OrdnanceSuites
 {
+    // The chapter whose buildings are the movie studio, i.e. what a strafing run over Hollywood
+    // actually strikes. C1's buildings are its airport hangars, a different surface entirely.
+    private const string FilmLotChapter = "C2";
+
     // C10/C11 on controlled geometry: a torpedo fired straight down onto a ground plate, so the burst
     // sits at a known point on a known face and every target's near face is a measured distance
     // away. Boxes stand on the plate with a bottom edge at the exact range, so the nearest-shape
@@ -210,14 +214,14 @@ internal static class OrdnanceSuites
         float cruise = torpedo.Velocity ?? 0f;
         float window = torpedo.LockOn ?? 0f;
         ctx.Check(Mathf.IsEqualApprox(cruise, 60f) && Mathf.IsEqualApprox(window, 2.5f),
-            $"wep_14 authors VELOCITY {cruise:0.#} and LOCK_ON {window:0.##} — the decode's 60 m/s over 2.5 s");
+            $"wep_14 authors VELOCITY {cruise:0.#} and LOCK_ON {window:0.##}, the decode's 60 m/s over 2.5 s");
         ctx.Check(ProjectilePool.CarriesLockOn(torpedo) && !ProjectilePool.CarriesLockOn(choker)
                   && !ProjectilePool.CarriesLockOn(gun),
             $"the decay window flag is LOCK_ON itself: wep_14 carries it, the choker and the gun do not");
         ctx.Check(ProjectilePool.SteeringStepRuns(torpedo, hasTarget: true)
                   && !ProjectilePool.SteeringStepRuns(torpedo, hasTarget: false)
                   && !ProjectilePool.SteeringStepRuns(choker, hasTarget: true),
-            $"the steering step's gate needs BOTH halves — LOCK_ON and a held target (wrong-claim 3)");
+            $"the steering step's gate needs BOTH halves, LOCK_ON and a held target (wrong-claim 3)");
 
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
@@ -300,7 +304,7 @@ internal static class OrdnanceSuites
         "a round authoring ACCELERATION climbs to its speed cap and stops there (A3): wep_04 " +
         "off a standing launcher reads 150/300/450 m/s at 1/2/3 s and holds 450 from then on, " +
         "the same weapon off a 100 m/s launcher caps 100 higher, and no step of any round's " +
-        "flight — motor, coasting rocket or gun — ever reduces its own speed, because the " +
+        "flight (motor, coasting rocket or gun) ever reduces its own speed, because the " +
         "original carries no drag term")]
     internal static void MotorAcceleration(TestContext ctx)
     {
@@ -2049,7 +2053,7 @@ internal static class OrdnanceSuites
         "draws flak_effect at the round, a wep_10 fusing on the same target draws its named-and-" +
         "empty default row's nothing rather than the player row's large_fireball, the same burst " +
         "on a non-aircraft target draws nothing, and a wep_11 into the ground hands its authored " +
-        "ballflare.flt to the effects runtime — the white growing flare — instead of standing a " +
+        "ballflare.flt to the effects runtime (the white growing flare) instead of standing a " +
         "static gamez-template instance in for it")]
     internal static void OrdnanceImpactEffects(TestContext ctx)
     {
@@ -2206,7 +2210,7 @@ internal static class OrdnanceSuites
                 for (int i = 0; i < 120 && plays.Count == 0; i++)
                     live.SimStep(1f / 60f);
                 ctx.Check(plays.Count > 0 && plays[0] == "ballflare.flt",
-                    $"a seeker into the ground hands ballflare.flt to the effects sink — the authored flare def, not a static instance of its gamez template (played={(plays.Count > 0 ? plays[0] : "nothing")})");
+                    $"a seeker into the ground hands ballflare.flt to the effects sink, the authored flare def, not a static instance of its gamez template (played={(plays.Count > 0 ? plays[0] : "nothing")})");
             }
             finally
             {
@@ -2215,6 +2219,53 @@ internal static class OrdnanceSuites
                 worldTextures.Dispose();
             }
         });
+    }
+
+    // What a gun round finds on a movie-studio building. The original indexes the IMPACT table with
+    // the struck material's own soil byte and with nothing else (FUN_005ac7a0 at 0x005ac7a9,
+    // docs/org/weaponImpact.md), and the film lot's blocks carry soil `default`, so the round plays
+    // the authored gunhit there. `buildings`(11) is reached only by C1's hangar materials, where the
+    // guns bind the install-missing bld_damage.flt and the ricochet stands in for it; wep_02 is the
+    // exception whose large_fireball the runtime carries, and which therefore renders alone.
+    [Suite("impact-building-surface",
+        "a gun round on a C2 film-lot building reads default(0) off the struck material and hands " +
+        "the authored 3040slug_gunhit to the effects runtime, the chapter carrying no buildings(11) " +
+        "collider at all; on the hangar surface wep_00's install-missing bld_damage.flt still takes " +
+        "the ricochet stand-in while wep_02's runtime-carried large_fireball renders alone (BL-289)")]
+    internal static void ImpactBuildingSurface(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, FilmLotChapter);
+        ctx.RequireData(texturesPath, $"{FilmLotChapter} textures");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        if (!weapons.TryGet("wep_00", out var gun) || !weapons.TryGet("wep_02", out var fifty))
+        {
+            ctx.Check(false, $"wep_00 and wep_02 resolve");
+            return;
+        }
+
+        // The authored rows first, so a failure below names the mechanism and not a changed table.
+        ctx.Check(gun.ImpactFor(SurfaceRegistry.Default) is { Animation: "3040slug_gunhit" },
+            $"wep_00's default row authors 3040slug_gunhit, which is what a studio wall plays");
+        ctx.Check(gun.ImpactFor(SurfaceRegistry.Buildings) is { Animation: "bld_damage.flt" },
+            $"and its buildings row authors bld_damage.flt, a name no chapter and no bind carries");
+        ctx.Check(fifty.ImpactFor(SurfaceRegistry.Buildings) is { Animation: "large_fireball" },
+            $"wep_02 is the one gun binding a rendered def on buildings: large_fireball");
+
+        var unbound = ImpactOutcome.Resolve(gun, SurfaceRegistry.Buildings, modelResolved: false,
+            hasEffectsRuntime: true, effectBound: false);
+        ctx.Check(unbound.StandIn == ImpactStandIn.Ricochet,
+            $"a gun on buildings whose bound name renders nowhere keeps the ricochet stand-in standin={unbound.StandIn}");
+        var rendered = ImpactOutcome.Resolve(fifty, SurfaceRegistry.Buildings, modelResolved: false,
+            hasEffectsRuntime: true, effectBound: true);
+        ctx.Check(rendered is { EffectName: "large_fireball", StandIn: not ImpactStandIn.Ricochet },
+            $"and a name the runtime renders takes the burst away, playing the authored def alone fx={rendered.EffectName ?? "-"} standin={rendered.StandIn}");
+
+        // The lab reads the built chapter through the one physics space, where a cached collidable
+        // world's colliders would also stand and answer the ray.
+        ctx.EvictCollidableWorlds();
+        ctx.WithPrivateWorld(FilmLotChapter, collision: true,
+            world => Strafe(ctx, world, gun, texturesPath));
     }
 
     // A5's launch axis and D18's launch hook over a live fire path: the rig fires its own pylons
@@ -2244,7 +2295,7 @@ internal static class OrdnanceSuites
             $"a REAR weapon takes the same axis unnegated");
         ctx.Check(FlightController.OrdnanceLaunchDir(false, canted, false, mountAim) is { } aiDir
                   && aiDir.IsEqualApprox(mountAim),
-            $"an AI's round leaves along the clamped mount aim instead — the original's own asymmetry");
+            $"an AI's round leaves along the clamped mount aim instead, the original's own asymmetry");
         ctx.Check(FlightController.OrdnanceLaunchDir(false, canted, false, null) == null,
             $"and an AI with no aim to clamp keeps the mount's own axis");
 
@@ -2423,7 +2474,7 @@ internal static class OrdnanceSuites
                 }
                 ctx.Check(screens.IsLaying(human) && screens.ActiveCount == 1,
                     $"firing wep_13 lays one screen on the aircraft that fired it");
-                ctx.Same(0, CountLive(pool, live), $"and spawns no round at all — the pool stays empty");
+                ctx.Same(0, CountLive(pool, live), $"and spawns no round at all, the pool stays empty");
                 ctx.Check(human.Loadout.Hardpoints.Sum(h => h.Ammo) == before - 1,
                     $"the smoker still spends its round of ammo, as every other pylon weapon does");
             }
@@ -2936,6 +2987,84 @@ internal static class OrdnanceSuites
 
     // One ring mesh's state at a sampled instant of a sonic play (the effect-pool-reset suite):
     // which staged root it sits under, whether it draws, its scale and its per-instance opacity.
+    private static void Strafe(TestContext ctx, TestWorld world, WeaponDef gun, string texturesPath)
+    {
+        var bodies = world.Session.Root.FindChildren("*", "StaticBody3D", recursive: true, owned: false)
+            .OfType<StaticBody3D>().ToList();
+        var classed = bodies.Where(b => b.Name.ToString().StartsWith("col_buildings")).ToList();
+        int soilEleven = bodies.Count(b => ProjectilePool.SurfaceIdOf(b) == SurfaceRegistry.Buildings);
+        ctx.Check(bodies.Count > 100, $"the film-lot chapter built its colliders count={bodies.Count}");
+        ctx.Check(classed.Count > 0,
+            $"and SceneBuilder's texture-name classifier calls {classed.Count} of them buildings");
+        ctx.Same(0, soilEleven,
+            $"yet not one of the {bodies.Count} carries soil buildings(11): the classifier's string is cosmetic, the soil byte is the index");
+
+        var space = ctx.Host.GetWorld3D().DirectSpaceState;
+        Vector3? found = null;
+        StaticBody3D? struck = null;
+        foreach (var body in classed)
+        {
+            if (body.GetParent() is not Node3D owner
+                || owner.GetNodeOrNull<MeshInstance3D>("mesh") is not { } mesh)
+            {
+                continue;
+            }
+            var centre = mesh.GlobalTransform * mesh.GetAabb().GetCenter();
+            var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                centre with { Y = centre.Y + 400f }, centre with { Y = centre.Y - 400f },
+                CollisionLayers.World));
+            if (hit.Count == 0 || hit["collider"].Obj is not StaticBody3D landed
+                || !ReferenceEquals(landed, body))
+            {
+                continue;
+            }
+            struck = landed;
+            found = hit["position"].AsVector3();
+            break;
+        }
+        ctx.Check(found != null, $"a ray down onto one of the film lot's own building colliders lands on it");
+        if (found is not { } point || struck == null)
+        {
+            return;
+        }
+        ctx.Same(SurfaceRegistry.Default, ProjectilePool.SurfaceIdOf(struck),
+            $"the struck studio block reads default off its material's soil byte, the one thing FUN_005ac7a0 indexes with");
+
+        var bound = EffectCatalogue.WorldEffectAnimNames(world.Session.Program);
+        var sub = world.Session.Program.Subset(bound);
+        ctx.Check(sub.ByAnimName("3040slug_gunhit").Count > 0,
+            $"the world-effects bind carries the 3040slug_gunhit def, so the hit has something to render");
+
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? live = null;
+        try
+        {
+            var plays = new List<string>();
+            live = new ProjectilePool(textures, null, null,
+                flyoutGamez: world.Gamez, flyoutScene: world.Session.Builder.Scene,
+                flyoutAnims: world.Session.Program)
+            {
+                EffectSink = (name, at, orient, ringOrient, ttl) => plays.Add(name),
+                EffectHandles = name => sub.ByAnimName(name).Count > 0,
+            };
+            ctx.Host.AddChild(live);
+            live.Spawn(gun, new Transform3D(Basis.LookingAt(Vector3.Down, Vector3.Forward),
+                point + new Vector3(0f, 60f, 0f)), Vector3.Zero);
+            for (int i = 0; i < 180 && plays.Count == 0; i++)
+            {
+                live.SimStep(1f / 60f);
+            }
+            ctx.Check(plays.Count > 0 && plays[0] == "3040slug_gunhit",
+                $"a 30 cal round into that building hands the decoded gunhit to the effects runtime, no ricochet in sight (played={(plays.Count > 0 ? plays[0] : "nothing")})");
+            ctx.Note($"{FilmLotChapter}: {classed.Count} buildings-classed colliders, none carrying soil 11, a gun round on one playing {(plays.Count > 0 ? plays[0] : "nothing")}");
+        }
+        finally
+        {
+            live?.Free();
+            textures.Dispose();
+        }
+    }
+
     private readonly record struct RingReading(string Root, string Mesh, bool Visible, Vector3 Scale, float Opacity);
 
     // The smoke-screen suite's stand-in for one screen's authored trail: it keeps the drive instead

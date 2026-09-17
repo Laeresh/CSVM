@@ -69,7 +69,7 @@ public sealed partial class ZeppelinRuntime
         _broadsideWeapon = weapons.Get(BroadsideWeaponId);
         if (_broadsideWeapon == null)
         {
-            Log.Info("weapons", $"zep: broadside disabled — '{BroadsideWeaponId}' not in weapons.zrd");
+            Log.Info("weapons", $"zep: broadside disabled, '{BroadsideWeaponId}' not in weapons.zrd");
             return;
         }
         _gasbagRng = Rng.NewSystemRandom(Rng.Ai);
@@ -175,7 +175,7 @@ public sealed partial class ZeppelinRuntime
             var node = CannonNode(zep, cannon.Record.Node);
             if (node == null)
             {
-                Log.Info("weapons", $"zep: '{def.Node}' cannon '{cannon.Record.Node}' has no world node — out of the broadside");
+                Log.Info("weapons", $"zep: '{def.Node}' cannon '{cannon.Record.Node}' has no world node, out of the broadside");
                 continue;
             }
             zep.CannonNodes[cannon.Record.Node] = node;
@@ -196,7 +196,7 @@ public sealed partial class ZeppelinRuntime
             broadside.RightSign = -1f;
         }
         zep.Broadside = broadside;
-        Log.Info("weapons", $"zep: '{def.Node}' broadside wired — {def.LeftCannons.Count}+{def.RightCannons.Count} cannons, {BroadsideWeaponId} {_broadsideWeapon!.Velocity ?? ProjectilePool.DefaultVelocity:0} m/s, delay {broadside.FireDelaySeconds:0.#} s, range {def.CannonFireRange ?? 0f:0} m, inaccuracy {def.CannonInaccuracyDeg ?? 0f:0.#}°, targets [{string.Join(",", def.Targets)}], disengaged until COMPLETED_ZEPCANNONS");
+        Log.Info("weapons", $"zep: '{def.Node}' broadside wired, {def.LeftCannons.Count}+{def.RightCannons.Count} cannons, {BroadsideWeaponId} {_broadsideWeapon!.Velocity ?? ProjectilePool.DefaultVelocity:0} m/s, delay {broadside.FireDelaySeconds:0.#} s, range {def.CannonFireRange ?? 0f:0} m, inaccuracy {def.CannonInaccuracyDeg ?? 0f:0.#}°, targets [{string.Join(",", def.Targets)}], disengaged until COMPLETED_ZEPCANNONS");
     }
 
     // One broadside step for a live, active zeppelin: resolve the authored target, gate on
@@ -290,7 +290,7 @@ public sealed partial class ZeppelinRuntime
         if (skipped > 0 && zep.SkipLogged < 8)
         {
             zep.SkipLogged++;
-            Log.Info("weapons", $"zep: '{zep.Def.Node}' broadside: {skipped} cannon(s) skipped '{tgt.Name}' — no solution");
+            Log.Info("weapons", $"zep: '{zep.Def.Node}' broadside: {skipped} cannon(s) skipped '{tgt.Name}', no solution");
         }
     }
 
@@ -335,7 +335,7 @@ public sealed partial class ZeppelinRuntime
         }
         if (_warnedTargets.Add($"{zep.Def.Node}:{name}"))
         {
-            Log.Info("weapons", $"zep: '{zep.Def.Node}' target '{name}' unresolved — skipped");
+            Log.Info("weapons", $"zep: '{zep.Def.Node}' target '{name}' unresolved, skipped");
         }
         return null;
     }

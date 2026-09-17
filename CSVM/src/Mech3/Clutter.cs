@@ -38,6 +38,11 @@ public sealed class ClutterBuilder
         + "    float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);\n"
         + "    ALBEDO = mix(ALBEDO, csky_fog_color, csky_fog_on * fog_amt);\n";
 
+    // The cutout the scissor variant applies, at Godot's own default threshold. ⚠ Emit it only when
+    // the archive calls the card's alpha hard: a cut through soft ink both erases what sits under
+    // the threshold and solidifies what sits above it, and the original cuts nothing at all.
+    private const string ScissorLine = "    ALPHA_SCISSOR_THRESHOLD = 0.5;\n";
+
     // The seed of the substitute/scale stream: the constant the original seeds its own world
     // build with, borrowed as a label rather than as a claim, our PRNG, traversal and draw count
     // all differ, so the sequences cannot and do not agree. What IS reproduced is the property
@@ -185,7 +190,7 @@ public sealed class ClutterBuilder
         var absent = new List<string>();
         foreach (var name in requested)
             (FindTemplateRoot(gamez, name) != null ? resolved : absent).Add(name);
-        Log.Info("world", $"clutter: --clutter-templates={string.Join(",", requested)} replaces the chapter's registered set (the per-polygon no_clutter gate still applies) — in gamez: {(resolved.Count > 0 ? string.Join(",", resolved) : "(none)")}; not carried by this chapter: {(absent.Count > 0 ? string.Join(",", absent) : "(none)")} (retail-data-normal, not an error)");
+        Log.Info("world", $"clutter: --clutter-templates={string.Join(",", requested)} replaces the chapter's registered set (the per-polygon no_clutter gate still applies), in gamez: {(resolved.Count > 0 ? string.Join(",", resolved) : "(none)")}; not carried by this chapter: {(absent.Count > 0 ? string.Join(",", absent) : "(none)")} (retail-data-normal, not an error)");
         return resolved;
     }
 
@@ -213,14 +218,32 @@ public sealed class ClutterBuilder
     /// because it is the other half of resolving a template (with
     /// <see cref="FindTemplateRoot(GameZ, string)"/>), and the UV a decoration is stored at is
     /// only checkable against a worked example if both halves can be reached.</summary>
-    public static GameZNode? FirstWithMesh(GameZ gamez, GameZNode node, bool includeSelf = true)
+    public static GameZNode? FirstWithMesh(GameZ gamez, GameZNode node, bool includeSelf = true) =>
+        FirstWithMesh(gamez, node, includeSelf, out _);
+
+    /// <summary>The same search, also handing back the transform from <paramref name="node"/>'s
+    /// own frame down to the node that carries the mesh, identity when that is the node itself.
+    /// ⚠ A decoration model is a node chain, so take its position from here rather than from the
+    /// chain's top node alone. C5's <c>w_lightglow</c> mesh sits 4.75 m up its own
+    /// <c>w_lightglow.flt</c>, which is the height of the lamp head it belongs on.</summary>
+    public static GameZNode? FirstWithMesh(GameZ gamez, GameZNode node, bool includeSelf,
+        out Transform3D toMesh)
     {
+        toMesh = Transform3D.Identity;
         if (includeSelf && node.MeshIndex >= 0 && node.MeshIndex < gamez.Meshes.Count
             && gamez.Meshes[node.MeshIndex].Polygons.Count > 0)
             return node;
         foreach (var c in node.Children)
-            if (c >= 0 && c < gamez.Nodes.Count && FirstWithMesh(gamez, gamez.Nodes[c]) is { } found)
+        {
+            if (c < 0 || c >= gamez.Nodes.Count)
+                continue;
+            var child = gamez.Nodes[c];
+            if (FirstWithMesh(gamez, child, true, out var below) is { } found)
+            {
+                toMesh = (child.Local ?? Transform3D.Identity) * below;
                 return found;
+            }
+        }
         return null;
     }
 
@@ -451,8 +474,8 @@ public sealed class ClutterBuilder
                     {
                         // The decoration's quad UV in [0, 1), shifted to this repeat of the texture.
                         // Double for the same reason the quad map is: one extra rounding moves a golden.
-                        double cu = uInt + (double)cell.Origin.X;
-                        double cv = vInt + (double)cell.Origin.Z;
+                        double cu = uInt + (double)cell.OnQuad.Origin.X;
+                        double cv = vInt + (double)cell.OnQuad.Origin.Z;
                         if (!tri.Contains(cu, cv))
                             continue;
                         var p = tri.World(cu, cv);
@@ -496,11 +519,14 @@ public sealed class ClutterBuilder
                         // A sprite drops its basis and authored Y, since the shader re-faces it and
                         // its mesh carries the card's extent; a 3D decoration keeps both.
                         // ⚠ The scale compounds onto that basis and never replaces it.
-                        var basis = (target.Solid ? cell.Basis : Basis.Identity)
+                        var basis = (target.Solid ? cell.OnQuad.Basis : Basis.Identity)
                             .Scaled(new Vector3(scale, scale, scale));
+                        // ⚠ Both branches carry the mesh lift. It is where the decoration's own
+                        // chain puts the drawn mesh, so dropping it buries C5's lamp glow in the road.
+                        var lift = basis * cell.MeshLift;
                         target.Instances.Add(target.Solid
-                            ? new Transform3D(basis, new Vector3(p.X, p.Y + cell.Origin.Y, p.Z))
-                            : new Transform3D(basis, p));
+                            ? new Transform3D(basis, new Vector3(p.X, p.Y + cell.OnQuad.Origin.Y, p.Z) + lift)
+                            : new Transform3D(basis, p + lift));
                     }
                 }
     }
@@ -645,13 +671,13 @@ public sealed class ClutterBuilder
         return mm;
     }
 
-    // Upright billboard: the card spins about its planted point's vertical axis toward the camera,
-    // because the source decorations are one-sided quads that would vanish edge-on. Fullbright,
-    // scissor cutout, and SceneBuilder's cylindrical fog. `lit` and `fogged` are the decoration
-    // model's own authored flags, emitted as variants so a lit, fogged kind gets the base form.
-    private static string ShaderCode(bool lit, bool fogged, bool clampUv) => $$"""
+    // A billboard card, turned toward the camera by FaceBasisLines because the source decorations
+    // are one-sided quads that would vanish edge-on. Fullbright, SceneBuilder's cylindrical fog, and
+    // the archive's own blend-or-scissor verdict. `lit` and `fogged` are the decoration model's own
+    // authored flags, emitted as variants so a lit, fogged kind gets the base form.
+    private static string ShaderCode(bool lit, bool fogged, bool clampUv, bool spherical, bool blend) => $$"""
         shader_type spatial;
-        render_mode skip_vertex_transform, unshaded, cull_disabled, shadows_disabled;
+        render_mode skip_vertex_transform, unshaded, cull_disabled, shadows_disabled{{(blend ? ", blend_mix, depth_draw_never" : "")}};
 
         uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, {{(clampUv ? "repeat_disable" : "repeat_enable")}};
 
@@ -676,14 +702,8 @@ public sealed class ClutterBuilder
             // fragments; inside the ramp the fragment stage dithers it out.
             v_alpha = csky_clutter_fade_alpha(origin, CAMERA_POSITION_WORLD, INSTANCE_CUSTOM);
             float keep = step(0.004, v_alpha);
-            vec2 to_cam = CAMERA_POSITION_WORLD.xz - origin.xz;
-            float len = length(to_cam);
-            vec2 dir = len > 1e-4 ? to_cam / len : vec2(0.0, 1.0);
-            mat3 spin = mat3(
-                vec3(dir.y, 0.0, -dir.x),
-                vec3(0.0, 1.0, 0.0),
-                vec3(dir.x, 0.0, dir.y));
-            VERTEX = (VIEW_MATRIX * vec4(origin + spin * VERTEX * keep, 1.0)).xyz;
+        {{FaceBasisLines(spherical)}}
+            VERTEX = (VIEW_MATRIX * vec4(origin + face * VERTEX * keep, 1.0)).xyz;
         }
 
         void fragment() {
@@ -694,9 +714,23 @@ public sealed class ClutterBuilder
             ALBEDO = col.rgb{{(lit ? " * csky_world_light" : "")}};
         {{(fogged ? FogLines : "")}}{{SceneBuilder.TintLine}}
             ALPHA = col.a;
-            ALPHA_SCISSOR_THRESHOLD = 0.5;
-        }
+        {{(blend ? "" : ScissorLine)}}}
         """;
+
+    // The camera-facing basis one card's vertices are turned by, the rendering half of its
+    // decoration model's own FacadeMode (docs/org/vertexLighting.md, "Facades: the same gate, a
+    // different N"). A SphericalY glow takes the camera's whole basis and so keeps a round face
+    // from any angle, a nadir included; a CylindricalY card spins about its planted point's
+    // vertical alone, so a tree or a lamp post stays upright instead of tipping toward the eye.
+    private static string FaceBasisLines(bool spherical) => spherical
+        ? "    mat3 face = mat3(INV_VIEW_MATRIX[0].xyz, INV_VIEW_MATRIX[1].xyz, INV_VIEW_MATRIX[2].xyz);"
+        : "    vec2 to_cam = CAMERA_POSITION_WORLD.xz - origin.xz;\n"
+            + "    float len = length(to_cam);\n"
+            + "    vec2 dir = len > 1e-4 ? to_cam / len : vec2(0.0, 1.0);\n"
+            + "    mat3 face = mat3(\n"
+            + "        vec3(dir.y, 0.0, -dir.x),\n"
+            + "        vec3(0.0, 1.0, 0.0),\n"
+            + "        vec3(dir.x, 0.0, dir.y));";
 
     // A template subtree: root → ground node (first descendant with a mesh; its texture
     // + quad size define what gets decorated and the tiling period) → decoration nodes
@@ -727,7 +761,7 @@ public sealed class ClutterBuilder
         foreach (var childIndex in ground.Children)
         {
             var deco = _gamez.Nodes[childIndex];
-            var decoMesh = FirstWithMesh(_gamez, deco, includeSelf: false);
+            var decoMesh = FirstWithMesh(_gamez, deco, includeSelf: false, out var toMesh);
             if (decoMesh == null)
             {
                 (skipped ??= new List<string>()).Add(deco.Name);
@@ -741,8 +775,12 @@ public sealed class ClutterBuilder
                 (offQuad ??= new List<string>()).Add(deco.Name);
                 continue;
             }
-            var cell = new Transform3D(local.Basis, new Vector3(
-                GroundQuad.Wrap(uv.X), local.Origin.Y, GroundQuad.Wrap(uv.Y)));
+            // ⚠ The UV is projected from the chain's TOP node, which is where the original casts
+            // its ray; the lift below moves the drawn mesh, never the point it is stamped at.
+            var cell = (
+                OnQuad: new Transform3D(local.Basis, new Vector3(
+                    GroundQuad.Wrap(uv.X), local.Origin.Y, GroundQuad.Wrap(uv.Y))),
+                MeshLift: toMesh.Origin);
 
             if (!kinds.TryGetValue(decoMesh.MeshIndex, out var kind))
             {
@@ -784,6 +822,8 @@ public sealed class ClutterBuilder
                 Label = s.Texture,
                 Width = s.Width,
                 Height = s.Height,
+                Billboard = SceneBuilder.ClassifyBillboard(_gamez.Meshes[meshNode.MeshIndex])
+                    ?? SceneBuilder.BillboardKind.CylindricalY,
                 Lit = _gamez.Meshes[meshNode.MeshIndex].Lighting,
                 Fogged = _gamez.Meshes[meshNode.MeshIndex].Fog,
             };
@@ -1020,11 +1060,11 @@ public sealed class ClutterBuilder
 
     // ---------------------------------------------------------------- rendering
 
-    private Shader SpriteShader(bool lit, bool fogged, bool clampUv)
+    private Shader SpriteShader(bool lit, bool fogged, bool clampUv, bool spherical, bool blend)
     {
-        int key = (lit ? 1 : 0) | (fogged ? 2 : 0) | (clampUv ? 4 : 0);
+        int key = (lit ? 1 : 0) | (fogged ? 2 : 0) | (clampUv ? 4 : 0) | (spherical ? 8 : 0) | (blend ? 16 : 0);
         if (!_shaders.TryGetValue(key, out var shader))
-            _shaders[key] = shader = new Shader { Code = ShaderCode(lit, fogged, clampUv) };
+            _shaders[key] = shader = new Shader { Code = ShaderCode(lit, fogged, clampUv, spherical, blend) };
         return shader;
     }
 
@@ -1032,11 +1072,19 @@ public sealed class ClutterBuilder
     private MultiMeshInstance3D BuildKindInstance(Kind kind)
     {
         var tex = _textures.Find(kind.Label);
+        // ⚠ Read the verdict straight off the Find above and nowhere else; it is what sets the
+        // archive's Last* fields. A card whose alpha the archive calls soft blends, exactly as the
+        // same texture does on a world surface, so foliage and glow are not cut here alone.
+        bool blend = tex != null && _textures.LastHadAlpha && _textures.LastAlphaIsSoft;
         // Clamp when the card's UVs never leave the unit square, the same data-driven rule as
         // SceneBuilder's world surfaces; wrapping bleeds the texture's opposite edge in at the
         // UV border (the hairline-seam / tracer-tail artifact).
         bool clampUv = SceneBuilder.UvsWithinUnitSquare(_gamez.Meshes[kind.MeshIndex].Polygons, pass: 0);
-        var mat = new ShaderMaterial { Shader = SpriteShader(kind.Lit, kind.Fogged, clampUv) };
+        var mat = new ShaderMaterial
+        {
+            Shader = SpriteShader(kind.Lit, kind.Fogged, clampUv,
+                kind.Billboard == SceneBuilder.BillboardKind.Spherical, blend),
+        };
         if (tex != null)
             mat.SetShaderParameter("albedo_tex", tex);
 
@@ -1414,11 +1462,11 @@ public sealed class ClutterBuilder
     private sealed class Kind
     {
         // Where each decoration of this kind sits on the template's ground quad, as the quad's
-        // own TEXTURE UV: Origin.X is u and Origin.Z is v, both in [0, 1), not metres, and not
-        // relative to a corner (the winding differs between templates). Origin Y and the basis
-        // are the decoration node's own, and are used by the solid path only (a sprite is
-        // planted flat on the surface and re-faced by its shader, see PlaceOnTriangle).
-        public readonly List<Transform3D> CellPlacements = new();
+        // own TEXTURE UV: OnQuad.Origin.X is u and Origin.Z is v, both in [0, 1), not metres, and
+        // not relative to a corner (the winding differs between templates). Origin Y and the basis
+        // are the decoration node's own, used by the solid path only. MeshLift is the offset from
+        // that node down to the mesh it draws, and every stamp carries it, sprite or solid.
+        public readonly List<(Transform3D OnQuad, Vector3 MeshLift)> CellPlacements = new();
         public readonly List<Transform3D> Instances = new(); // world placements
 
         // Parallel to Instances: each stamp's (near², far², 1/(far² − near²), 0) as the MultiMesh
@@ -1431,6 +1479,11 @@ public sealed class ClutterBuilder
         public string Label = "";                // texture (sprites) or node name (solids)
         public bool Solid;                       // a 3D decoration, not a billboard card
         public float Width, Height;              // sprite quad extents (sprites only)
+
+        // The decoration model's own FacadeMode, which picks the sprite shader's face basis.
+        // ⚠ Never guess it from the card's shape. A legacy extraction carries no ModelType, and
+        // CylindricalY is what the whole install's clutter is apart from C5's lamp glows.
+        public SceneBuilder.BillboardKind Billboard = SceneBuilder.BillboardKind.CylindricalY;
 
         // templates.zrd's `scale_range` for THIS kind's model, (1,1) when it authors none or no
         // spec was supplied. ⚠ It is the SOURCE kind's range that scales a substituted stamp,
@@ -1494,7 +1547,7 @@ public sealed class ClutterBuilder
             string worst = OverLargeLattice > 0 ? $" worst_lattice_cells={WorstLatticeCells}" : "";
             Log.Info("world", $"clutter uv lattice: placed={Placed} substituted={Substituted} substitute_nothing={SubstituteNothing} outside_source={OutsideSource} dedup_rejected={DedupRejected} skipped_no_clutter_flag={NoClutterFlagged} skipped_zero_world_area={ZeroWorldArea} skipped_zero_uv_area={ZeroUvArea} skipped_no_uv_array={NoUvArray} skipped_over_large_lattice={OverLargeLattice}{worst}");
             if (OutsideSource > 0)
-                Log.Warn("world", $"clutter instances landed OUTSIDE their source triangle count={OutsideSource} of {Placed} — the UV containment test disagrees with the affine map");
+                Log.Warn("world", $"clutter instances landed OUTSIDE their source triangle count={OutsideSource} of {Placed}, the UV containment test disagrees with the affine map");
         }
     }
 }

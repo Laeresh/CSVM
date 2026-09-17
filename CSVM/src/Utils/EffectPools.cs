@@ -106,7 +106,7 @@ public sealed class EffectPools
         }
         catch (Exception ex) when (ex is JsonException or IOException or UnauthorizedAccessException)
         {
-            GD.PushWarning($"effect pools: {path} could not be read ({ex.Message}) — using built-in defaults");
+            GD.PushWarning($"effect pools: {path} could not be read ({ex.Message}), using built-in defaults");
             return Fallback;
         }
     }

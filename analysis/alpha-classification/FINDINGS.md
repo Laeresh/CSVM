@@ -54,8 +54,8 @@ whole-sheet vote and each sheet's dry-land half is solid, so it reads them as cu
 waterline scissors to a 1-bit sawtooth. No threshold fixes this — 0.6 catches three of the five
 and drags in unrelated art, and the inland transition sheets that share their role
 (`cliff01_trans1` 0.814, `terpat01_trans1` 0.928, and the rest of those two families) really are
-binary. They are named in `TextureArchive.SoftAlphaCoastline` instead, which also keeps them out
-of the scissor-coverage mip boost that would re-harden the ramp at distance.
+binary. They are named in `TextureArchive`'s soft-alpha family table instead, which also keeps them
+out of the scissor-coverage mip boost that would re-harden the ramp at distance.
 
 ## The original has no cutout path, so no flag selects one
 
@@ -95,6 +95,16 @@ coastline and every soft texture. Polygon `in_out` is zero across C2/C3/C4; poly
 105/12743, 1/16024 and 92/19476 polygons and lands on opaque terrain (`terpat01`, `river1`), zero
 on every coastline, cloud, waterfall and shadow polygon. `ALPHA_GRADIENT` is a `weather.cpp` key
 for precipitation particles, and `keyed`/`alpha` belong to the 2D UI pane vocabulary.
+
+## The families that blend by name
+
+Three families blend whatever their pixels measure, for the reason above: the cutout has no
+original to reproduce. They are the tree, bush and brush cards (13), the fence, railing, ladder,
+stair and grate cards (20), and the tower lattice, girder, support and cable cards (23), each list
+being the family's currently-scissored members at the 0.45 threshold, so a name the census already
+calls soft is absent because naming it would decide nothing. `TextureArchive` holds them as one
+list per family, and `Clutter`'s sprite shader reads the same verdict rather than cutting at 0.5 of
+its own. A scissored texture this census names outside the three keeps the pixel rule.
 
 **Landed** in `TextureArchive.AlphaIsSoft` (same census date). Re-run
 `python alpha_census.py` after any classifier change; it prints the flip lists at the

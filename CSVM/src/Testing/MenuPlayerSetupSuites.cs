@@ -235,7 +235,7 @@ internal static class MenuPlayerSetupSuites
     private static void SecondSeat(TestContext ctx, LaunchMenu menu, Exits<LaunchExit> launches)
     {
         menu.DebugJoin(1);
-        Is(ctx, "a second seat splits the aircraft screen", "SELECT AIRCRAFT — ALL PLAYERS", menu.ShownHeading);
+        Is(ctx, "a second seat splits the aircraft screen", "SELECT AIRCRAFT: ALL PLAYERS", menu.ShownHeading);
         Has(ctx, "the footer says who steers the shared screens", "(P1 chooses)", menu.ShownFooter);
         Has(ctx, "joining stays open below four seats", "START", menu.ShownJoinHint);
         menu.Drive(Accept);
@@ -252,7 +252,7 @@ internal static class MenuPlayerSetupSuites
         menu.Drive(Back);
         Is(ctx, "player 1's third Back, browsing, returns everyone to the Chapter screen", "Chapter", menu.ShownScreen);
         menu.Drive(Accept);
-        Is(ctx, "and the aircraft screen is still split", "SELECT AIRCRAFT — ALL PLAYERS", menu.ShownHeading);
+        Is(ctx, "and the aircraft screen is still split", "SELECT AIRCRAFT: ALL PLAYERS", menu.ShownHeading);
         menu.Drive(Accept);
         menu.Drive(Accept);
         ctx.Check(launches.Count == 1, $"the other seat's pick was unselected too, so the gate still waits ({launches.Count})");
@@ -271,8 +271,8 @@ internal static class MenuPlayerSetupSuites
         menu.Drive(Accept);
         menu.Drive(Accept);
         Is(ctx, "Dogfight reaches the aircraft screen", "Plane", menu.ShownScreen);
-        Is(ctx, "the second seat survived the trip to Mode and back", "SELECT AIRCRAFT — ALL PLAYERS", menu.ShownHeading);
-        ctx.Check(menu.ShownJoinHint != "(Dogfight needs a fight — P2: press START to join)",
+        Is(ctx, "the second seat survived the trip to Mode and back", "SELECT AIRCRAFT: ALL PLAYERS", menu.ShownHeading);
+        ctx.Check(menu.ShownJoinHint != "(Dogfight needs a fight, P2: press START to join)",
             $"two seats satisfy Dogfight's count, so the hint is the ordinary one ({menu.ShownJoinHint})");
         menu.Drive(Accept);
         menu.Drive(Accept);
@@ -292,7 +292,7 @@ internal static class MenuPlayerSetupSuites
             lone.Drive(Accept);
             lone.Drive(Accept);
             Is(ctx, "a lone Dogfight seat waits with the hint naming the missing seat",
-                "(Dogfight needs a fight — P2: press START to join)", lone.ShownJoinHint);
+                "(Dogfight needs a fight, P2: press START to join)", lone.ShownJoinHint);
             Is(ctx, "on the lone-seat layout", "SELECT AIRCRAFT", lone.ShownHeading);
             lone.Drive(Accept);
             Is(ctx, "it can still select", "AIRCRAFT SELECTED", lone.ShownHeading);
@@ -321,10 +321,10 @@ internal static class MenuPlayerSetupSuites
     private static void AidsUnderTwoSeats(TestContext ctx, LaunchMenu menu)
     {
         menu.ShowMenu("selected");
-        Is(ctx, "--menu=selected with seats joined keeps the split heading", "SELECT AIRCRAFT — ALL PLAYERS", menu.ShownHeading);
+        Is(ctx, "--menu=selected with seats joined keeps the split heading", "SELECT AIRCRAFT: ALL PLAYERS", menu.ShownHeading);
         Is(ctx, "the seats survive an aid's re-entry", "(4-player maximum)", menu.ShownJoinHint);
         menu.ShowMenu("loadout");
-        Is(ctx, "--menu=loadout likewise", "SELECT AIRCRAFT — ALL PLAYERS", menu.ShownHeading);
+        Is(ctx, "--menu=loadout likewise", "SELECT AIRCRAFT: ALL PLAYERS", menu.ShownHeading);
         menu.ShowMenu();
         Is(ctx, "and a plain re-entry lands on Mode", "Mode", menu.ShownScreen);
     }
@@ -348,7 +348,7 @@ internal static class MenuPlayerSetupSuites
             ctx.Check(setup.Join(s2) != null && host.Seats.Count == 2,
                 $"a second scripted seat joins through the feature and the host's live seat list grows ({host.Seats.Count})");
             Frame(menu, s2, MenuCommands.None);
-            Is(ctx, "the launchscreen picks the seat up on its next frame", "SELECT AIRCRAFT — ALL PLAYERS", menu.ShownHeading);
+            Is(ctx, "the launchscreen picks the seat up on its next frame", "SELECT AIRCRAFT: ALL PLAYERS", menu.ShownHeading);
             Frame(menu, s2, Down);
             Frame(menu, s2, Accept);
             Frame(menu, s2, Accept);
@@ -376,7 +376,7 @@ internal static class MenuPlayerSetupSuites
             menu.Drive(Down);
             menu.Drive(Accept);
             menu.Drive(Accept);
-            Is(ctx, "Dogfight with two seats reaches the split aircraft screen", "SELECT AIRCRAFT — ALL PLAYERS", menu.ShownHeading);
+            Is(ctx, "Dogfight with two seats reaches the split aircraft screen", "SELECT AIRCRAFT: ALL PLAYERS", menu.ShownHeading);
             Frame(menu, s2, Accept);
             Frame(menu, s2, Accept);
             menu.Drive(Accept);

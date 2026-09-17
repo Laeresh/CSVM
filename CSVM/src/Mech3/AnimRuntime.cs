@@ -1127,7 +1127,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             return;
         _ambientStarted = true;
         var (startupRun, ran, missing) = RunAmbientPasses();
-        Log.Info("anim", $"anim: ambient start — {startupRun} ON_STARTUP + {ran.Count} start anims running, {_instances.Count} live instance(s), {Motions.Count} live motion(s)");
+        Log.Info("anim", $"anim: ambient start, {startupRun} ON_STARTUP + {ran.Count} start anims running, {_instances.Count} live instance(s), {Motions.Count} live motion(s)");
         if (ran.Count > 0 || missing.Count > 0)
             Log.Info("anim", $"anim: start anims [{string.Join(", ", ran)}]{(missing.Count > 0 ? $", undefined here: [{string.Join(", ", missing)}]" : "")}");
     }
@@ -1167,7 +1167,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         _rangeDeferred.Clear(); // a quiet stage must not proximity-start ambient defs
         _rangeOriginLocal.Clear();
         _ambientStarted = false;
-        Log.Info("anim", $"anim: ambient stopped — {_instances.Count} live instance(s) kept, {Motions.Count} live motion(s)");
+        Log.Info("anim", $"anim: ambient stopped, {_instances.Count} live instance(s) kept, {Motions.Count} live motion(s)");
     }
 
     /// <summary>Hard-stops everything this runtime created and re-applies every anchored
@@ -2639,7 +2639,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         if (_routedWaitsNamed.Add(callName))
         {
-            Log.Info("anim", $"anim: WAIT_FOR_COMPLETION on '{callName}' not held — the callee is routed to the world-effects runtime, which this one cannot poll");
+            Log.Info("anim", $"anim: WAIT_FOR_COMPLETION on '{callName}' not held, the callee is routed to the world-effects runtime, which this one cannot poll");
         }
     }
 
@@ -2653,7 +2653,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             // ⚠ Keep this log. "Reached but holding nothing" is a different state from "never
             // dispatched", and without it a probe reports an inert mechanism as untested.
             if (_inertWaitsNamed.Add(callName))
-                Log.Info("anim", $"anim: WAIT_FOR_COMPLETION on '{callName}' had nothing to hold — no live callee instance");
+                Log.Info("anim", $"anim: WAIT_FOR_COMPLETION on '{callName}' had nothing to hold, no live callee instance");
             return;
         }
         _waitsInstalled++;
@@ -2666,7 +2666,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             if (_elapsed < deadline)
                 return true;
             _waitsAbandoned++;
-            Log.Warn("anim", $"anim: WAIT_FOR_COMPLETION on '{callName}' abandoned after {WaitCeilingS:0} s — the callee never finished");
+            Log.Warn("anim", $"anim: WAIT_FOR_COMPLETION on '{callName}' abandoned after {WaitCeilingS:0} s, the callee never finished");
             return false;
         };
     }
@@ -3464,7 +3464,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         if (resolved == null && AnchorWarnAnimNames != null && (def.AnimName ?? def.Name) is { } caller
             && AnchorWarnAnimNames.Contains(caller) && _anchorWarned.Add($"{caller}|{targetName}"))
         {
-            Log.Warn("anim", $"{AnchorWarnLabel ?? "rig"}: '{caller}' calls '{ev.Data.Str("name")}' onto '{targetName}', which this airframe has no node for — it lands on the airframe root instead");
+            Log.Warn("anim", $"{AnchorWarnLabel ?? "rig"}: '{caller}' calls '{ev.Data.Str("name")}' onto '{targetName}', which this airframe has no node for, it lands on the airframe root instead");
         }
         // Once per distinct (callee, target, caller) triple: the poll idiom re-issues its calls
         // every frame, so an unconditional line here would bury the log.
@@ -4278,7 +4278,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             else
                 Count("ObjectMotion(bounce landed after its instance ended)");
             if (DebugMotions)
-                Log.Debug("anim", $"anim/debug: '{landing.Target.Name}' landed at {landing.Target.GlobalPosition} — bounce sequence '{landing.Bounce}'{(live ? "" : ", NO LIVE INSTANCE, dispatched nothing")}");
+                Log.Debug("anim", $"anim/debug: '{landing.Target.Name}' landed at {landing.Target.GlobalPosition}, bounce sequence '{landing.Bounce}'{(live ? "" : ", NO LIVE INSTANCE, dispatched nothing")}");
         }
     }
 

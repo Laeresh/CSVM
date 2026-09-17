@@ -155,7 +155,7 @@ internal static class MenuInstantActionSuites
         menu.ShowMenu();
         menu.Drive(Down);
         Is(ctx, "the Mode screen's second row", "Instant Action", menu.ShownRowText);
-        Is(ctx, "its description", "Pick an environment and a mission — ace, squadron, stunt or zeppelin.", menu.ShownDetail);
+        Is(ctx, "its description", "Pick an environment and a mission: ace, squadron, stunt or zeppelin.", menu.ShownDetail);
         menu.Drive(Accept);
         Is(ctx, "Accept on Instant Action opens the Environment screen", "Environment", menu.ShownScreen);
         Is(ctx, "its heading", "SELECT ENVIRONMENT", menu.ShownHeading);
@@ -270,11 +270,11 @@ internal static class MenuInstantActionSuites
             $"the cursor opens on the Continue row ({menu.ShownRow}, {menu.ShownRowText})");
         Is(ctx, "its description", "Enter / A  on to the wingmen", menu.ShownDetail);
         menu.Drive(Up);
-        Is(ctx, "the fourth wave is empty", "Wave 4 — empty", menu.ShownRowText);
+        Is(ctx, "the fourth wave is empty", "Wave 4: empty", menu.ShownRowText);
         menu.Drive(Up);
         menu.Drive(Up);
         menu.Drive(Up);
-        Is(ctx, "the first wave is the preset's", "Wave 1 — 4x Medusa Kestrel (Veteran)", menu.ShownRowText);
+        Is(ctx, "the first wave is the preset's", "Wave 1: 4x Medusa Kestrel (Veteran)", menu.ShownRowText);
         Is(ctx, "its description", "Enter / A  edit a wave", menu.ShownDetail);
 
         menu.Drive(Accept);
@@ -300,10 +300,10 @@ internal static class MenuInstantActionSuites
         menu.Drive(Down);
         Field(ctx, "the field cursor wraps", "Enemies", "5", menu.ShownRowText);
         menu.Drive(Back);
-        ctx.Check(menu.ShownScreen == "Waves" && menu.ShownRowText == "Wave 1 — 5x Russian Devastator (Ace)",
+        ctx.Check(menu.ShownScreen == "Waves" && menu.ShownRowText == "Wave 1: 5x Russian Devastator (Ace)",
             $"Back returns to the list with the wave edited live ({menu.ShownScreen}, {menu.ShownRowText})");
         menu.Drive(Down);
-        Is(ctx, "the second wave is the preset's second", "Wave 2 — 2x Black Swan Fury (Ace)", menu.ShownRowText);
+        Is(ctx, "the second wave is the preset's second", "Wave 2: 2x Black Swan Fury (Ace)", menu.ShownRowText);
         menu.Drive(Accept);
         menu.Drive(Accept);
         ctx.Check(menu.ShownScreen == "Waves" && menu.ShownRow == 1,
@@ -343,7 +343,7 @@ internal static class MenuInstantActionSuites
         ctx.Check(menu.ShownRowCount == 2, $"two wingmen bring the aircraft row back ({menu.ShownRowCount})");
         menu.Drive(Loadout);
         Is(ctx, "Loadout with wingmen opens the wingman loadout", "WingmanLoadout", menu.ShownScreen);
-        Is(ctx, "its heading names the wingman aircraft", "WINGMEN — AMMO SELECTION  (Warhawk)", menu.ShownHeading);
+        Is(ctx, "its heading names the wingman aircraft", "WINGMEN: AMMO SELECTION  (Warhawk)", menu.ShownHeading);
         menu.Drive(Back);
         Is(ctx, "Back leaves the loadout for Wingmen", "Wingmen", menu.ShownScreen);
         menu.Drive(Loadout);
@@ -436,7 +436,7 @@ internal static class MenuInstantActionSuites
         menu.Drive(Up);
         menu.Drive(Up);
         menu.Drive(Up);
-        Is(ctx, "and the edited wave", "Wave 1 — 5x Russian Devastator (Ace)", menu.ShownRowText);
+        Is(ctx, "and the edited wave", "Wave 1: 5x Russian Devastator (Ace)", menu.ShownRowText);
         menu.Drive(Down);
         menu.Drive(Down);
         menu.Drive(Down);
@@ -467,7 +467,7 @@ internal static class MenuInstantActionSuites
         ctx.Check(menu.ShownScreen == "Wingmen" && menu.ShownRowCount == 2,
             $"--menu=wingmen opens the Wingmen screen ({menu.ShownScreen}, {menu.ShownRowCount})");
         menu.ShowMenu("wingmanloadout");
-        ctx.Check(menu.ShownScreen == "WingmanLoadout" && menu.ShownHeading.StartsWith("WINGMEN — AMMO SELECTION", StringComparison.Ordinal),
+        ctx.Check(menu.ShownScreen == "WingmanLoadout" && menu.ShownHeading.StartsWith("WINGMEN: AMMO SELECTION", StringComparison.Ordinal),
             $"--menu=wingmanloadout opens the wingman loadout ({menu.ShownScreen}, {menu.ShownHeading})");
 
         // The aids force the Instant Action mode whatever the Mode screen last picked.
@@ -485,9 +485,9 @@ internal static class MenuInstantActionSuites
         // --debug-waves= and --debug-wingmen= fill the wizard's slots with their own loads.
         menu.DebugWaves(2);
         menu.ShowMenu("waves");
-        Is(ctx, "--debug-waves=2 fills the first wave", "Wave 1 — 4x Black Hat Autogyro (Novice)", RowText(menu, 0));
-        Is(ctx, "and the second", "Wave 2 — 4x Black Swan Fury (Veteran)", RowText(menu, 1));
-        Is(ctx, "and leaves the third empty", "Wave 3 — empty", RowText(menu, 2));
+        Is(ctx, "--debug-waves=2 fills the first wave", "Wave 1: 4x Black Hat Autogyro (Novice)", RowText(menu, 0));
+        Is(ctx, "and the second", "Wave 2: 4x Black Swan Fury (Veteran)", RowText(menu, 1));
+        Is(ctx, "and leaves the third empty", "Wave 3: empty", RowText(menu, 2));
         menu.DebugWingmen(3);
         menu.ShowMenu("wingmen");
         Field(ctx, "--debug-wingmen=3 sets the count", "Wingmen", "3", menu.ShownRowText);

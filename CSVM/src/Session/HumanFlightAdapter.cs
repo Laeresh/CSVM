@@ -153,6 +153,7 @@ internal sealed class HumanFlightAdapter
             DebugCollision = _world.DebugCollision,
             PinnedView = _policy.View,
             PinnedViewMode = _policy.ViewMode,
+            AutoHeadTurn = _policy.AutoHeadTurn,
             PinnedLook = _policy.PinnedLook,
             HudParent = rig.Viewport,
             // Null when the airframe ships no cockpit1, the rig then hides nothing, as before B11.
@@ -269,7 +270,7 @@ internal sealed class HumanFlightAdapter
         }
         else if (verbose)
         {
-            Log.Info("flight", $"weapons: no stock loadout for '{loadoutDefName}' — unarmed");
+            Log.Info("flight", $"weapons: no stock loadout for '{loadoutDefName}', unarmed");
         }
 
         // The carried turret gunners: the vehicle def's thirdp turrets block resolved
@@ -303,7 +304,7 @@ internal sealed class HumanFlightAdapter
         }
         else
         {
-            GD.PushWarning("no airframe collision boxes — falling back to the center ray");
+            GD.PushWarning("no airframe collision boxes, falling back to the center ray");
         }
         if (verbose && controller.Damage != null)
         {
@@ -324,7 +325,7 @@ internal sealed class HumanFlightAdapter
 
         // The original's heading tape, rebuilt from the chapter's own HUD
         // textures (compassticks2/compasstxt ship in every chapter's archive).
-        pilotHud.Compass = CompassTape.Build(_aircraft.Textures);
+        pilotHud.Compass = CompassTape.Build(_aircraft.Textures, _policy.CompassSqueeze);
         if (verbose && pilotHud.Compass != null)
             Log.Info("flight", $"compass: heading tape from compassticks2/compasstxt");
 
@@ -371,7 +372,7 @@ internal sealed class HumanFlightAdapter
             controller.Visuals = BuildDamageVisuals(planeBuilder, planeModel, stats, _world.CrashProgram);
             if (verbose)
                 Log.Info("flight",
-                    $"damage visuals: {controller.Visuals.PanelCount} panels — authored stage anims via the rig runtime");
+                    $"damage visuals: {controller.Visuals.PanelCount} panels, authored stage anims via the rig runtime");
         }
 
         // The data-driven crash rig is built AFTER the controller enters the tree
@@ -399,6 +400,15 @@ internal sealed class HumanFlightAdapter
             // rather than through FlightRoster's roster-wide channel: each pane races its own copy
             // of the run, and a shared feed would put one pilot's cleared zones on another's HUD.
             controller.TargetObjectives = into => run.CollectTargets(into);
+            // This pane's Danger Zone camera. The photographed pixels are this seat's own pane, so
+            // in splitscreen the shot is the SubViewport that crossed the marker, never the window.
+            var pane = rig.Viewport;
+            var capture = new StuntCapture(run, _policy.Chapter,
+                () => (pane ?? (controller.IsInsideTree() ? controller.GetViewport() : null))
+                    ?.GetTexture()?.GetImage());
+            capture.Sting = () => controller.Audio?.OnDangerZoneCamera();
+            controller.StuntShots = capture;
+
             // The run HUD, one per pane: clock, zones cleared, banners. The zone MARKER is the
             // targeting HUD's, since a zone is an objective like any other.
             var runHud = StuntRunHud.Build(run);
@@ -429,6 +439,7 @@ internal sealed class HumanFlightAdapter
                     ScoreStore.Load(), scoreKey, _human.ExitsToMenu, _human.PauseState, _human.MenuInputFor);
                 scoreboard.Restart = controller.Rerun;
                 scoreboard.Exit = _human.ExitSession;
+                scoreboard.Shots = capture;
                 controller.Scoreboard = scoreboard;
                 Log.Info("flight", $"stunt scoreboard: splits + best time (key '{scoreKey}')");
             }

@@ -89,7 +89,7 @@ internal static class AnimationAndEffectsSuites
             // one side sizes nothing, silently.
             var unsized = Utils.EffectPools.Load().UnknownRoots(roots);
             ctx.Check(unsized.Count == 0,
-                $"effect_pools.json sizes only roots this bind stages — {ctx.Chapter}{(unsized.Count == 0 ? "" : $", sizes nothing: {string.Join(", ", unsized)}")}");
+                $"effect_pools.json sizes only roots this bind stages, {ctx.Chapter}{(unsized.Count == 0 ? "" : $", sizes nothing: {string.Join(", ", unsized)}")}");
 
             CrashStageRootTripwire(ctx, world);
         });
@@ -129,7 +129,7 @@ internal static class AnimationAndEffectsSuites
                         world.Session.Builder.Scene, built, rigRoots);
                     built.Free();
                     ctx.Check(n == rigRoots.Count,
-                        $"{model}: the crash rig stages every root its bound defs anchor on ({n}/{rigRoots.Count}) — {world.Chapter}");
+                        $"{model}: the crash rig stages every root its bound defs anchor on ({n}/{rigRoots.Count}), {world.Chapter}");
                 }
                 finally
                 {
@@ -551,7 +551,7 @@ internal static class AnimationAndEffectsSuites
     // ⚠ A vector-translation body turns about its COMPILED direction (`rnd_xz`) and holds exactly
     // when that is zero; both cases fail if the axis is ever "fixed" to a mesh axis.
     [Suite("forward-rotation",
-        "an OBJECT_MOTION tumble turns at the authored RATE about its own launch direction's horizontal perpendicular, scaled by that direction's length — a vector-translation launch about its compiled direction, and not at all when that is zero")]
+        "an OBJECT_MOTION tumble turns at the authored RATE about its own launch direction's horizontal perpendicular, scaled by that direction's length, a vector-translation launch about its compiled direction, and not at all when that is zero")]
     internal static void ForwardRotation(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -1211,7 +1211,7 @@ internal static class AnimationAndEffectsSuites
             }
 
             ctx.Same(0, Missed() - missedBefore, $"yard bounces landing after their instance ended");
-            ctx.Note($"the two zero-miss checks are invariants this seed does not discriminate: removing A4's retirement hold leaves both green here. the able-to-fail control is a SEED SWEEP of the --destroy=m_build probe, not this suite and not one run of that probe — with the hold removed it misses on 4 of 10 seeds and is clean on seed 1 (INSTR-6)");
+            ctx.Note($"the two zero-miss checks are invariants this seed does not discriminate: removing A4's retirement hold leaves both green here. the able-to-fail control is a SEED SWEEP of the --destroy=m_build probe, not this suite and not one run of that probe, with the hold removed it misses on 4 of 10 seeds and is clean on seed 1 (INSTR-6)");
             ctx.Same(
                 yard.Count * 4,   // sparkout3 + sparkout4, two events each, per building
                 timeline.Count(e => e.Seq == "sparkout3" || e.Seq == "sparkout4"),
@@ -1317,7 +1317,7 @@ internal static class AnimationAndEffectsSuites
                 }
 
                 ctx.Same(8, launched.Count, $"parts launched by one {root} destruction");
-                ctx.Check(!bounceOwed, $"no part owes a BOUNCE_SEQUENCE — the data names none");
+                ctx.Check(!bounceOwed, $"no part owes a BOUNCE_SEQUENCE, the data names none");
                 foreach (var name in parts.Keys.OrderBy(n => n, System.StringComparer.Ordinal))
                 {
                     if (!launched.TryGetValue(name, out float at))
@@ -1425,7 +1425,7 @@ internal static class AnimationAndEffectsSuites
 
                 ctx.Note($"destroy_crash: {flagged} t={splashAt:0.000}s, {held} t={sprayAt:0.000}s (gap {sprayAt - splashAt:0.000}s vs the authored 3.0s), holds armed={runtime.WaitsInstalled} abandoned={runtime.WaitsAbandoned}");
                 ctx.Check(splashAt <= 2f / 60f,
-                    $"the flagged call itself is NOT delayed — the hold is on what follows it (t={splashAt:0.000})");
+                    $"the flagged call itself is NOT delayed, the hold is on what follows it (t={splashAt:0.000})");
                 ctx.Check(sprayAt - splashAt >= 2.9f,
                     $"{held} waits out {flagged}'s authored 3.0 s choreography (gap={sprayAt - splashAt:0.000} s)");
                 ctx.Check(sprayAt - splashAt <= 4.5f,
@@ -1437,7 +1437,7 @@ internal static class AnimationAndEffectsSuites
                     if (startedAt.TryGetValue(unflagged, out float t))
                     {
                         ctx.Check(t <= 2f / 60f,
-                            $"unflagged {unflagged} is not held (t={t:0.000}) — null and 0 are different authored states");
+                            $"unflagged {unflagged} is not held (t={t:0.000}), null and 0 are different authored states");
                     }
                 }
 
@@ -1572,7 +1572,7 @@ internal static class AnimationAndEffectsSuites
             ctx.Check(deactivatedAt > 0f, $"{offSequence} switched {host} off t={deactivatedAt:0.000}");
             ctx.Check(stoppedAt > 0f, $"{pufferName} stopped within the 5 s window t={stoppedAt:0.000}");
             ctx.Check(stoppedAt > 0f && deactivatedAt > 0f && Mathf.Abs(stoppedAt - deactivatedAt) <= 2f / 60f,
-                $"{pufferName} ends on {host}'s own deactivation frame, not later — BL-224's stop is dated, not dropped (off={deactivatedAt:0.000} stop={stoppedAt:0.000})");
+                $"{pufferName} ends on {host}'s own deactivation frame, not later, BL-224's stop is dated, not dropped (off={deactivatedAt:0.000} stop={stoppedAt:0.000})");
         });
     }
 
@@ -1642,7 +1642,7 @@ internal static class AnimationAndEffectsSuites
     // session, while hiding eagerly or never revealing shows nothing at all. The CALLED case is
     // he_ground_effect's staged he_ring1; the ENDED case is 3040ap_gunhit's stop-retired chunk mesh.
     [Suite("effect-template-mesh",
-        "an effect's template meshes show at the call site — including a CALLED template's — and go dark when it ends (BL-061)")]
+        "an effect's template meshes show at the call site (including a CALLED template's) and go dark when it ends (BL-061)")]
     internal static void EffectTemplateMesh(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -1668,9 +1668,9 @@ internal static class AnimationAndEffectsSuites
             }
 
             ctx.Check(Probes.MeshCensus.VisibleMeshesUnder(stage, "he_ring") > 0,
-                $"he_ground_effect's own template mesh (he_ring) is visible — the PlayEffectAt half ({Probes.MeshCensus.VisibleMeshesUnder(stage, "he_ring")})");
+                $"he_ground_effect's own template mesh (he_ring) is visible, the PlayEffectAt half ({Probes.MeshCensus.VisibleMeshesUnder(stage, "he_ring")})");
             ctx.Check(Probes.MeshCensus.VisibleMeshesUnder(stage, "he_ring1") > 0,
-                $"the CALLED template's mesh (he_ring1, the upper ring) is visible too — BL-061 ({Probes.MeshCensus.VisibleMeshesUnder(stage, "he_ring1")})");
+                $"the CALLED template's mesh (he_ring1, the upper ring) is visible too, BL-061 ({Probes.MeshCensus.VisibleMeshesUnder(stage, "he_ring1")})");
             ctx.Check(peak >= 2, $"both rings drew in the same window (peak {peak} mesh(es))");
         });
     }
@@ -1692,7 +1692,7 @@ internal static class AnimationAndEffectsSuites
             }
 
             ctx.Check(Probes.MeshCensus.VisibleMeshesUnder(stage, "dum_gunhit") == 0,
-                $"and is dark once the effect has ended, without waiting for its TTL — BL-061 ({Probes.MeshCensus.VisibleMeshesUnder(stage, "dum_gunhit")} still lit)");
+                $"and is dark once the effect has ended, without waiting for its TTL, BL-061 ({Probes.MeshCensus.VisibleMeshesUnder(stage, "dum_gunhit")} still lit)");
         });
     }
 
@@ -1806,7 +1806,7 @@ internal static class AnimationAndEffectsSuites
             ctx.Check(pane2.A > 0.99f && pane2.R > 0.99f && pane2.G < 0.01f,
                 $"a blend wash addressed to player 2 paints pane 2 red at its full weight after the attack ({pane2})");
             ctx.Check(flash.CurrentFor(0).IsEqualApprox(clear),
-                $"and pane 1, whose camera stands at the same point, stays clear — routed by victim, not by proximity ({flash.CurrentFor(0)})");
+                $"and pane 1, whose camera stands at the same point, stays clear, routed by victim, not by proximity ({flash.CurrentFor(0)})");
             ctx.Check(!flash.RunningFor(1),
                 $"and starts no RAMP in pane 2: the two channels are separate states ({flash.RunningFor(1)})");
 
@@ -1875,7 +1875,7 @@ internal static class AnimationAndEffectsSuites
             ctx.Check(flash.RunningFor(0) && flash.CurrentFor(0).IsEqualApprox(white),
                 $"a burst 50 m from P1 washes P1's pane ({flash.CurrentFor(0)})");
             ctx.Check(!flash.RunningFor(1) && flash.CurrentFor(1).IsEqualApprox(clear),
-                $"and leaves P2's pane, 170 m away, clear — the BL-340 report ({flash.CurrentFor(1)})");
+                $"and leaves P2's pane, 170 m away, clear, the BL-340 report ({flash.CurrentFor(1)})");
 
             // 50 m past P2, 170 m from P1, the same case from the other side, while P1's own ramp
             // is still running: two panes, two independent states.
@@ -1883,12 +1883,12 @@ internal static class AnimationAndEffectsSuites
             ctx.Check(flash.RunningFor(1) && flash.CurrentFor(1).IsEqualApprox(violet),
                 $"a second burst 50 m from P2 washes P2's pane ({flash.CurrentFor(1)})");
             ctx.Check(flash.CurrentFor(0).IsEqualApprox(white),
-                $"without touching the ramp P1 is already watching ({flash.CurrentFor(0)}) — the state is per pane");
+                $"without touching the ramp P1 is already watching ({flash.CurrentFor(0)}), the state is per pane");
 
             // Between them: 60 m from each, so BOTH are inside the burst's own radius.
             flash.Play(green, white, 0.2f, new Vector3(0f, 0f, 60f), gate);
             ctx.Check(flash.CurrentFor(0).IsEqualApprox(green) && flash.CurrentFor(1).IsEqualApprox(green),
-                $"a burst 60 m from both washes both panes — every player inside the radius, not just the nearest ({flash.CurrentFor(0)} / {flash.CurrentFor(1)})");
+                $"a burst 60 m from both washes both panes, every player inside the radius, not just the nearest ({flash.CurrentFor(0)} / {flash.CurrentFor(1)})");
             ctx.Check(flash.RunningFor(0) && flash.RunningFor(1),
                 $"and replaces what each pane was running rather than compositing with it ({flash.RunningFor(0)}/{flash.RunningFor(1)})");
 
@@ -1981,7 +1981,7 @@ internal static class AnimationAndEffectsSuites
     // ⚠ Derive the staged roots (EffectCatalogue.StageRootsFor), never hand-list them; a def whose
     // anchor root was not staged plays nothing, silently. ⚠ Do not inherit --effects-test's 0.3 s TTL.
     [Suite("ordnance-burst-timeline",
-        "the HE, flash and sonic bursts play end to end and every sequence's whole event timeline matches the authored JSON — in order, at the authored time (D31)")]
+        "the HE, flash and sonic bursts play end to end and every sequence's whole event timeline matches the authored JSON, in order, at the authored time (D31)")]
     internal static void OrdnanceBurstTimeline(TestContext ctx)
     {
         var report = new System.Text.StringBuilder();
@@ -2077,7 +2077,7 @@ internal static class AnimationAndEffectsSuites
             // fireball that never started reports.
             int stopper = fired.Count(f => f.Anim == "large_fireball" && f.Sequence == "stop_p1trail");
             ctx.Check(stopper == 0,
-                $"large_fireball's parked stop_p1trail dispatched nothing — a STOP_SEQUENCE halts and never starts (B12) ({stopper} event(s))");
+                $"large_fireball's parked stop_p1trail dispatched nothing, a STOP_SEQUENCE halts and never starts (B12) ({stopper} event(s))");
         });
     }
 

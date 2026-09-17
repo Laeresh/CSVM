@@ -44,7 +44,7 @@ public class KnifeEdgeTests
         float moved = Mathf.RadToDeg((-m.Attitude.Z).AngleTo(-before.Z));
         Assert.True(moved < 1e-4f,
             $"a wings-level nose-up aircraft with its path on the nose must not rotate at all "
-            + $"(nose moved {moved:0.0000}°) — a sag term keyed on wing verticality leaks here");
+            + $"(nose moved {moved:0.0000}°), a sag term keyed on wing verticality leaks here");
     }
 
     /// <summary>The discriminating signature: the original's knife-edge drifts for the whole 36 s and
@@ -62,11 +62,11 @@ public class KnifeEdgeTests
             foreach (var run in r.Runs)
             {
                 Assert.True(run.DriftDegS > 0.2,
-                    $"{plane} @{run.EntryMph:0} mph: nose drift {run.DriftDegS:0.00} °/s — the "
+                    $"{plane} @{run.EntryMph:0} mph: nose drift {run.DriftDegS:0.00} °/s, the "
                     + "knife-edge must keep sagging (the original drifts 0.69–0.89 °/s)");
                 Assert.True(plane == "player_autogyro" || run.SettledFrac > 0.12,
                     $"{plane} @{run.EntryMph:0} mph: only {run.SettledFrac:0.00} of the sag arrived "
-                    + "in the last third — that is a bounded sag settling, not the original's drift");
+                    + "in the last third, that is a bounded sag settling, not the original's drift");
             }
         }
     }

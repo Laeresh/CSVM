@@ -10,7 +10,8 @@ namespace CSVM.Tests;
 /// <summary>
 /// The decoded mode machine's transition table, engine-free: the nine modes under fixed rolls
 /// (a pool-covering bite, a zero exponent) and seeded rngs. Pins activation into pursue, the
-/// return-range exit, the steady-hand power law and the sixth-sense roll in the engine's own
+/// return-cylinder exit measured from the pursuit anchor and the anchor's own life, the
+/// steady-hand power law and the sixth-sense roll in the engine's own
 /// vocabulary, the evasive
 /// maneuver playing to Done and returning, the avoid-crash override on an injected probe, the
 /// signature-maneuver weighting, the D15 lay-off entry/exit (a chasing human fallen behind,
@@ -59,25 +60,81 @@ public class AiModeMachineTests
     }
 
     [Fact]
-    public void PursuitEndsOnTargetLossAndPerTheReturnLeash()
+    public void PursuitEndsOnTargetLossAndOnTheReturnCylinderAlone()
     {
         // Target lost: straight back to patrol.
         var m = Machine();
         PursueFrom(m, Home + new Vector3(1500f, 0f, 0f));
         Assert.Equal(AiMode.Patrol, m.Update(Home, Level, null, null, 0.1f));
 
-        // The leash (our reading of return_range): beyond ReturnRange from where the pursuit
-        // began AND the target outside the activation radius.
+        // The decoded leash reverts on its own: outside the cylinder from the anchor, with the
+        // target 300 m off and deep inside the activation radius the condition no longer reads.
         var m2 = Machine();
         PursueFrom(m2, Home + new Vector3(1500f, 0f, 0f));
         var strayed = Home + new Vector3(1300f, 0f, 0f); // > 1200 from the anchor
-        var farTarget = Home + new Vector3(4000f, 0f, 0f); // > 2000 from the plane
-        Assert.Equal(AiMode.Patrol, m2.Update(strayed, Level, farTarget, null, 0.1f));
+        Assert.Equal(AiMode.Patrol,
+            m2.Update(strayed, Level, strayed + new Vector3(300f, 0f, 0f), null, 0.1f));
 
-        // Still inside the leash: the far target alone does not end the chase.
+        // Inside it, a target far outside the activation radius does not end the chase.
         var m3 = Machine();
         PursueFrom(m3, Home + new Vector3(1500f, 0f, 0f));
+        var farTarget = Home + new Vector3(4000f, 0f, 0f); // > 2000 from the plane
         Assert.Equal(AiMode.Pursue, m3.Update(Home + new Vector3(900f, 0f, 0f), Level, farTarget, null, 0.1f));
+    }
+
+    /// <summary>The leash is the decoded CYLINDER, not a sphere: the corner between the horizontal
+    /// radius and the vertical band is inside it, and the band alone recalls a pursuer that has
+    /// climbed away without straying at all.</summary>
+    [Fact]
+    public void TheReturnLeashIsACylinderAboutTheAnchor()
+    {
+        var target = Home + new Vector3(500f, 0f, 0f);
+
+        // 1000 m out and 1000 m up: 1414 m from the anchor, inside a 1200 m cylinder.
+        var m = Machine();
+        PursueFrom(m, target);
+        Assert.Equal(AiMode.Pursue,
+            m.Update(Home + new Vector3(1000f, 1000f, 0f), Level, target, null, 0.1f));
+
+        // Straight up past the band, with no horizontal stray at all.
+        var m2 = Machine();
+        PursueFrom(m2, target);
+        Assert.Equal(AiMode.Patrol,
+            m2.Update(Home + new Vector3(0f, 1300f, 0f), Level, target, null, 0.1f));
+    }
+
+    /// <summary>The anchor is taken once, where the promotion happened, and nothing while the task
+    /// stands moves it: a pilot leashed to where it caught its quarry rather than to where it
+    /// spawned, and a finished evasive program handing back to that same point.</summary>
+    [Fact]
+    public void ThePursuitAnchorIsWhereTheChaseBeganAndSurvivesAReaction()
+    {
+        var m = Machine();
+        m.Library = new[] { QuickManeuver("bank_turn", 1) };
+        Assert.Null(m.PursuitAnchor);
+
+        // The patrol has carried it 6 km from Home before anything comes into reach.
+        var chaseStart = Home + new Vector3(6000f, 0f, 0f);
+        var target = chaseStart + new Vector3(500f, 0f, 0f);
+        Assert.Equal(AiMode.Patrol, m.Update(Home, Level, null, null, 1f / 60f));
+        Assert.Equal(AiMode.Pursue, m.Update(chaseStart, Level, target, null, 1f / 60f));
+        Assert.Equal(chaseStart, m.PursuitAnchor!.Value);
+
+        // A hit, its program flown to the end, and the anchor is still the chase's own start.
+        var model = new FlightModel(new PlaneStats());
+        m.SteadyHandExponent = float.PositiveInfinity;
+        m.NotifyDamage(0f, 8f, 0f, 8f);
+        Assert.Equal(AiMode.EvasiveManeuver, m.Mode);
+        for (int i = 0; i < 40 && !m.Executor!.Done; i++)
+            m.Executor.Next(model, 0.02f);
+        Assert.Equal(AiMode.Pursue,
+            m.Update(chaseStart, Level, target, null, 1f / 60f, targetNose: new Vector3(0f, 0f, -1f)));
+        Assert.Equal(chaseStart, m.PursuitAnchor!.Value);
+
+        // Leaving the cylinder reverts the task, and the anchor goes with it.
+        var strayed = chaseStart + new Vector3(1300f, 0f, 0f);
+        Assert.Equal(AiMode.Patrol, m.Update(strayed, Level, target, null, 1f / 60f));
+        Assert.Null(m.PursuitAnchor);
     }
 
     [Fact]

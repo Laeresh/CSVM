@@ -42,7 +42,7 @@ internal static class CampaignZeppelinSuites
         var cli = SessionSpec.Parse(System.Array.Empty<string>());
         var campaignSpec = SessionSpec.FromCampaign(cli, "Suite", mission.Seq, new[] { "player_bhawk" }, players: 1);
         ctx.Check(!campaignSpec.Zeppelins && !campaignSpec.Generators,
-            $"FromCampaign itself sets neither flag — BL-451's own bug, guarded so it cannot come back unnoticed");
+            $"FromCampaign itself sets neither flag, BL-451's own bug, guarded so it cannot come back unnoticed");
 
         var resolved = CampaignDirector.ResolveSpec(campaignSpec, ctx.ZrdrPath);
         ctx.Check(resolved.Chapter.Equals(ZepChapter, System.StringComparison.OrdinalIgnoreCase)

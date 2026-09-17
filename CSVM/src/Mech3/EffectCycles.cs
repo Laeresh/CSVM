@@ -29,7 +29,7 @@ public static class EffectCycles
         }
         catch (Exception e) when (e is FileNotFoundException or DirectoryNotFoundException or InvalidDataException)
         {
-            Log.Warn("world", $"effects.zrd.json not readable under {sharedZrdrPath} — no effect flipbooks");
+            Log.Warn("world", $"effects.zrd.json not readable under {sharedZrdrPath}, no effect flipbooks");
             return applied;
         }
 
@@ -52,7 +52,7 @@ public static class EffectCycles
 
             if (FindMaterial(gamez, nodeName) is not { } hit)
             {
-                Log.Warn("world", $"effect {nodeName}: no node, mesh or material to cycle — skipped");
+                Log.Warn("world", $"effect {nodeName}: no node, mesh or material to cycle, skipped");
                 continue;
             }
 

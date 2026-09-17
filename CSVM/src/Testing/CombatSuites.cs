@@ -29,7 +29,7 @@ internal static class CombatSuites
         }
         if (ctx.LoadoutOverride != null)
         {
-            ctx.Note($"cross-binding every plane to loadout={ctx.LoadoutOverride} — not the stock check");
+            ctx.Note($"cross-binding every plane to loadout={ctx.LoadoutOverride}, not the stock check");
         }
         ctx.Same(PlayerAirframes, r.Bound, $"stock loadouts bound");
         ctx.Same(0, r.Failed, $"loadout binding failures");
@@ -108,9 +108,9 @@ internal static class CombatSuites
             string census = string.Join(" ", sides.Select(p => $"pylon{p.Index}@{p.X:+0.00;-0.00}"));
             ctx.Note($"3/1 custom Devastator binds {census}");
             ctx.Check(port == 3 && starboard == 1,
-                $"a 3/1 Devastator hangs three to port and one to starboard, got {port}/{starboard} — {census}");
+                $"a 3/1 Devastator hangs three to port and one to starboard, got {port}/{starboard}, {census}");
             ctx.Check(sides.All(p => (p.Index % 2 == 1) == (p.X < 0f)),
-                $"odd pylons sit to port and even to starboard — {census}");
+                $"odd pylons sit to port and even to starboard, {census}");
         }
         finally
         {
@@ -258,7 +258,7 @@ internal static class CombatSuites
         + "outright past 1/catchup_rate, and a forget timer keyed to the last SHOT, not to losing "
         + "a lock; plus the shipped sticky_bullet_* values player.json actually carries, B3's "
         + "constant-velocity intercept solver (dead-ahead, crossing, and outrun-with-no-solution) "
-        + "and B4's candidate scan — every rejection gate proved able to fail, the most-aligned "
+        + "and B4's candidate scan, every rejection gate proved able to fail, the most-aligned "
         + "selection the shipped dist_factor 0.0 produces, and a real fused round in a live pool "
         + "outranking the aircraft behind it; plus B5's 1° launch scatter (flat in the polar "
         + "angle, not over the solid angle) and the fire call's asymmetric step order, which "
@@ -407,7 +407,7 @@ internal static class CombatSuites
 
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var gun = weapons.All.FirstOrDefault(w => w.IsGun && w.CannonSpread is > 0f);
-        ctx.Check(gun != null, $"a gun ships CANNON_SPREAD — the assist's acceptance cone (BL-342 A1)");
+        ctx.Check(gun != null, $"a gun ships CANNON_SPREAD, the assist's acceptance cone (BL-342 A1)");
         if (gun != null)
         {
             ctx.Check(Mathf.IsEqualApprox(6.0f, gun.CannonSpread!.Value),
@@ -500,7 +500,7 @@ internal static class CombatSuites
         Only(enemy, live: true, deadAhead);
         var scan = MakeScan();
         ctx.Check(AimAssist.Scan(scan, set, out var best) && best.Kind == AimTargetKind.Vehicle,
-            $"aim-assist scan: baseline — a live enemy 300 m dead ahead is accepted");
+            $"aim-assist scan: baseline, a live enemy 300 m dead ahead is accepted");
         ctx.Check(best.Direction.IsEqualApprox(Vector3.Forward),
             $"aim-assist scan: a stationary target dead ahead scores on the plain nose direction");
 
@@ -509,13 +509,13 @@ internal static class CombatSuites
 
         Only(AimAssist.NeutralTeam, live: true, deadAhead);
         ctx.Check(!AimAssist.Scan(scan, set, out _),
-            $"aim-assist scan: an unaffiliated (team 0) target is rejected — 0 is not a wildcard");
+            $"aim-assist scan: an unaffiliated (team 0) target is rejected, 0 is not a wildcard");
 
         Only(enemy, live: true, deadAhead);
         var neutralShooter = MakeScan();
         neutralShooter.Team = AimAssist.NeutralTeam;
         ctx.Check(!AimAssist.Scan(neutralShooter, set, out _),
-            $"aim-assist scan: an unaffiliated SHOOTER snaps onto nothing — either side being 0 rejects the pair");
+            $"aim-assist scan: an unaffiliated SHOOTER snaps onto nothing, either side being 0 rejects the pair");
 
         Only(enemy, live: false, deadAhead);
         ctx.Check(!AimAssist.Scan(scan, set, out _),
@@ -551,7 +551,7 @@ internal static class CombatSuites
         set.Clear();
         set.AddTurret(deadAhead, Vector3.Zero, enemy, live: true, source: null);
         ctx.Check(AimAssist.Scan(scan, set, out best) && best.Kind == AimTargetKind.Turret,
-            $"aim-assist scan: the turret pass exists and scores — M4 wires a list in, it does not re-derive this");
+            $"aim-assist scan: the turret pass exists and scores, M4 wires a list in, it does not re-derive this");
     }
 
     // Selection among survivors, on the shipped `dist_factor 0.0`: a distant
@@ -571,7 +571,7 @@ internal static class CombatSuites
         ctx.Check(AimAssist.Scan(MakeScan(), set, out var best) && ReferenceEquals(best.Source, far),
             $"aim-assist selection: at the shipped dist_factor 0.0 a 900 m on-axis target beats a 100 m 5°-off one");
         ctx.Check(AimAssist.Scan(MakeScan(distFactor: 2.5e-4f), set, out best) && ReferenceEquals(best.Source, near),
-            $"aim-assist selection: at the executable's 2.5e-4 default the same pair flips to the near one — the term is live, the shipped data turns it off");
+            $"aim-assist selection: at the executable's 2.5e-4 default the same pair flips to the near one, the term is live, the shipped data turns it off");
     }
 
     // The rocket snap, on a live pool: a real proximity-fused round in flight is a
@@ -589,7 +589,7 @@ internal static class CombatSuites
         // asserts its two halves off the data before relying on them.
         var fused = weapons.All.FirstOrDefault(w => w.DetonationDistance is > AimAssist.MinFuseDistance);
         var gun = weapons.All.FirstOrDefault(w => w.IsGun && w.DetonationDistance is not > AimAssist.MinFuseDistance);
-        ctx.Check(fused != null, $"a weapon ships DETONATION_DISTANCE > {AimAssist.MinFuseDistance:0.0} m — the assist's ordnance-list test");
+        ctx.Check(fused != null, $"a weapon ships DETONATION_DISTANCE > {AimAssist.MinFuseDistance:0.0} m, the assist's ordnance-list test");
         ctx.Check(gun != null, $"a gun ships no proximity fuse, so it is NOT ordnance the assist can snap onto");
         if (fused == null || gun == null)
             return;
@@ -630,7 +630,7 @@ internal static class CombatSuites
             live.CollectFusedOrdnance(set);
             set.AddVehicle(ScanPoint(800f, 3f), Vector3.Zero, AimAssist.TeamOfPilot(1), live: true, plane);
             ctx.Check(AimAssist.Scan(scan, set, out best) && best.Kind == AimTargetKind.Vehicle,
-                $"aim-assist ordnance: with no round in flight the same aircraft wins — the snap was the round, not the ranking");
+                $"aim-assist ordnance: with no round in flight the same aircraft wins, the snap was the round, not the ranking");
         }
         finally
         {
@@ -682,10 +682,10 @@ internal static class CombatSuites
         float lo = (float)flat[0] / shots * bins;
         float hi = (float)flat[bins - 1] / shots * bins;
         ctx.Check(lo is > 0.85f and < 1.15f && hi is > 0.85f and < 1.15f,
-            $"aim-assist scatter: the polar angle is flat across [0,θ] — innermost band {lo:0.00}× of even, outermost {hi:0.00}× (1.00 = flat)");
+            $"aim-assist scatter: the polar angle is flat across [0,θ], innermost band {lo:0.00}× of even, outermost {hi:0.00}× (1.00 = flat)");
         float capLo = (float)cap[0] / shots * bins;
         ctx.Check(capLo > 1.5f,
-            $"able to fail: scored as equal-AREA bands the same draws are anything but flat ({capLo:0.00}× in the innermost) — a solid-angle port would have passed the check above and failed this one");
+            $"able to fail: scored as equal-AREA bands the same draws are anything but flat ({capLo:0.00}× in the innermost), a solid-angle port would have passed the check above and failed this one");
         int rollMin = Mathf.Min(Mathf.Min(rollQuadrants[0], rollQuadrants[1]), Mathf.Min(rollQuadrants[2], rollQuadrants[3]));
         ctx.Check(rollMin > shots / 4 * 9 / 10,
             $"aim-assist scatter: the roll about the aim axis covers the whole circle (thinnest quadrant {rollMin} of {shots / 4} even)");
@@ -734,7 +734,7 @@ internal static class CombatSuites
         ctx.Check(found.Found, $"aim-assist fire: the scan found the off-axis target");
         var expectedFired = (basis * smoothedLocal).Normalized();
         ctx.Check(fired.AngleTo(expectedFired) <= cone + 1e-5f,
-            $"aim-assist fire: the round leaves along the SMOOTHED line (off by {Mathf.RadToDeg(fired.AngleTo(expectedFired)):0.000}°, inside the {Mathf.RadToDeg(cone):0.0}° scatter) — not this frame's scan result");
+            $"aim-assist fire: the round leaves along the SMOOTHED line (off by {Mathf.RadToDeg(fired.AngleTo(expectedFired)):0.000}°, inside the {Mathf.RadToDeg(cone):0.0}° scatter), not this frame's scan result");
         ctx.Check(fired.AngleTo(offAxis) > cone,
             $"able to fail: the scan winner is {Mathf.RadToDeg(fired.AngleTo(offAxis)):0.0}° away from what was fired, so firing it instead would have been visible here");
         var expectedTarget = (basis.Transposed() * offAxis).Normalized();
@@ -896,6 +896,138 @@ internal static class CombatSuites
         finally
         {
             carrier?.Free();
+            textures.Dispose();
+        }
+    }
+
+    // The muzzle flash's own anchoring, in the two halves that decide it. The placement half is
+    // measured here: the quad's pinned corner against the muzzle node's live pose, over the frames
+    // the flash is drawn while the aeroplane flies on. The ORDER half cannot be measured by a
+    // hand-stepped harness, which poses the carrier itself before it draws, so the pool's draw
+    // priority is asserted instead: at the default priority it drew before the flight rigs wrote
+    // this frame's interpolated pose and every effect sat a frame astern of the gun.
+    [Suite("muzzle-flash-rides-muzzle",
+        "the flash quads and the shot light sit on the firing muzzle on every drawn frame of their life while the aeroplane flies on, and the pool draws after the flight rigs rather than before them")]
+    internal static void MuzzleFlashRidesMuzzle(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var gun = weapons.All.FirstOrDefault(w => w.IsGun);
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        Node3D? carrier = null;
+        try
+        {
+            ctx.Check(gun != null, $"a gun weapon loaded from the catalogue");
+            if (gun == null)
+            {
+                return;
+            }
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+            ctx.Check(live.ProcessPriority > 0,
+                $"the pool draws after the default-priority flight rigs priority={live.ProcessPriority}");
+
+            // The C1 spawn's pose: heading well off -Z and 9 km from the world origin, so a basis
+            // dropped anywhere in the chain shows up as metres rather than as rounding.
+            var attitude = new Basis(Vector3.Up, Mathf.DegToRad(132f));
+            var start = new Vector3(-7065f, 326f, -5519f);
+            carrier = new Node3D();
+            ctx.Host.AddChild(carrier);
+            carrier.GlobalTransform = new Transform3D(attitude, start);
+            var muzzle = new Node3D();
+            muzzle.SetMeta(AnimRuntime.NameMeta, "muzzle");
+            carrier.AddChild(muzzle);
+            muzzle.Position = new Vector3(2.4f, -0.3f, -3.1f);   // a wing gun, off all three axes
+
+            // One frame of level flight at 100 m/s, the speed the gap was reported at.
+            const float Dt = 1f / 60f;
+            var step = -attitude.Z * (100f * Dt);
+            live.Spawn(gun, muzzle.GlobalTransform, Vector3.Zero, shooterId: 0, muzzleAnchor: muzzle);
+
+            for (int frame = 1; frame <= 2; frame++)
+            {
+                carrier.GlobalTransform = new Transform3D(attitude, start + (step * frame));
+                live._Process(Dt);
+                var at = muzzle.GlobalPosition;
+                int drawn = 0;
+                float worst = 0f;
+                foreach (var pinned in live.DrawnMuzzleFlashAnchors())
+                {
+                    drawn++;
+                    worst = Mathf.Max(worst, pinned.DistanceTo(at));
+                }
+                float flown = step.Length() * frame;
+                ctx.Same(3, drawn, $"drawn frame {frame}: the flash triad is on screen");
+                ctx.Check(worst < 0.01f,
+                    $"drawn frame {frame}: flash-to-muzzle gap {worst:0.00} m after {flown:0.0} m of flight");
+                float lightGap = 0f;
+                int lights = 0;
+                foreach (var (position, _, _, _) in live.ActiveMuzzleLights())
+                {
+                    lights++;
+                    lightGap = Mathf.Max(lightGap,
+                        position.DistanceTo(at + (attitude * new Vector3(0f, -0.2f, -1.0f))));
+                }
+                ctx.Check(lights > 0, $"drawn frame {frame}: the shot light is lit count={lights}");
+                ctx.Check(lightGap < 0.01f,
+                    $"drawn frame {frame}: shot light to its effects-root offset {lightGap:0.00} m");
+                live.SimStep(Dt);
+            }
+        }
+        finally
+        {
+            pool?.Free();
+            carrier?.Free();
+            textures.Dispose();
+        }
+    }
+
+    // The Cockpit view's rule, which is per shooter and not per session: the pilot in the canopy
+    // draws no flash on their own guns, an aeroplane ahead of them still does, and the shot light
+    // that lights the interior fires either way.
+    [Suite("muzzle-flash-cockpit-hidden",
+        "a pilot flying the Cockpit view draws no muzzle flash quads from their own guns while the shot light still fires, and another shooter's flash is untouched")]
+    internal static void MuzzleFlashCockpitHidden(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var gun = weapons.All.FirstOrDefault(w => w.IsGun);
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        try
+        {
+            ctx.Check(gun != null, $"a gun weapon loaded from the catalogue");
+            if (gun == null)
+            {
+                return;
+            }
+            // Player 1 sits in the cockpit, player 2 does not; Nose is deliberately not covered,
+            // so a nose-view pilot reads false here exactly as an external one does.
+            var live = new ProjectilePool(textures, null, null) { CockpitViewOfPilot = id => id == 0 };
+            pool = live;
+            ctx.Host.AddChild(live);
+            var muzzle = new Transform3D(Basis.Identity, new Vector3(-7065f, 326f, -5519f));
+
+            live.Spawn(gun, muzzle, Vector3.Zero, shooterId: 0);
+            live._Process(1f / 60f);
+            ctx.Same(0, live.DrawnMuzzleFlashAnchors().Count(),
+                $"the cockpit pilot's own shot draws no flash quad");
+            ctx.Check(live.ActiveMuzzleLights().Any(), $"…and its shot light still fires");
+
+            live.Spawn(gun, muzzle, Vector3.Zero, shooterId: 1);
+            live._Process(1f / 60f);
+            ctx.Same(3, live.DrawnMuzzleFlashAnchors().Count(),
+                $"the other pilot's shot keeps its triad");
+        }
+        finally
+        {
+            pool?.Free();
             textures.Dispose();
         }
     }
@@ -1263,7 +1395,7 @@ internal static class CombatSuites
             var gun = ai.Loadout!.FirableGuns.First();
             float armorDmg = gun.Weapon.ArmorDamage ?? 0f;
             ctx.Check(armorDmg > 0f && Mathf.IsEqualApprox(armorDmg, gun.Weapon.HealthDamage ?? -1f),
-                $"the stock gun's two damage magnitudes are equal ({gun.Weapon.Id}, {armorDmg:0.#}) — the landed-round count's precondition");
+                $"the stock gun's two damage magnitudes are equal ({gun.Weapon.Id}, {armorDmg:0.#}), the landed-round count's precondition");
             float Combined() => target!.Damage!.Parts.Values.Sum(p => p.Hp + p.Armor);
 
             var hits = new List<string>();
@@ -1356,7 +1488,7 @@ internal static class CombatSuites
                 hits.Clear();
                 target.TakeCollisionHit(5f, 5f, target.GlobalPosition, ai.PlayerIndex);
                 ctx.Same(0, hits.Count,
-                    $"a contact rings nothing either — a scrape is not being shot at");
+                    $"a contact rings nothing either, a scrape is not being shot at");
 
                 // Who the shield covers is the SESSION's rule, not the airframe's, so it is measured
                 // on TWO human panes in both modes: a co-op pair both absorb, a Dogfight pair
@@ -1426,7 +1558,7 @@ internal static class CombatSuites
         "rebounds along the contact normal off the shipped bounce_factor, an AI rig on the " +
         "identical trajectory never gains normal speed (the original's player-only impulse " +
         "gate) and is destroyed outright by that same contact (the decoded local_11 rule), " +
-        "and the same impulse on a vertical face is entirely horizontal — one coefficient, " +
+        "and the same impulse on a vertical face is entirely horizontal, one coefficient, " +
         "no surface test anywhere in it")]
     internal static void GrazeBounce(TestContext ctx)
     {
@@ -1531,7 +1663,7 @@ internal static class CombatSuites
                 ctx.Check(player.VerticalOut > 0f,
                     $"…and on flat ground that rebound is what the altimeter reads vy {player.VerticalIn:0.00} → {player.VerticalOut:0.00} m/s");
                 ctx.Check(!ai.Contacted || Mathf.Abs(ai.NormalOut) < 0.05f * -ai.NormalIn,
-                    $"an AI aircraft never gains normal speed from a contact — no impulse (0x0048d7f0's player gate) in={ai.NormalIn:0.00} out={ai.NormalOut:0.00} m/s");
+                    $"an AI aircraft never gains normal speed from a contact, no impulse (0x0048d7f0's player gate) in={ai.NormalIn:0.00} out={ai.NormalOut:0.00} m/s");
                 ctx.Note($"floor graze: player {player.NormalIn:0.00} → {player.NormalOut:0.00} m/s on the normal (e={player.NormalOut / -player.NormalIn:0.00}), AI crashed={ai.Crashed}");
             }
 
@@ -1553,7 +1685,7 @@ internal static class CombatSuites
             if (alongWall.Contacted)
             {
                 ctx.Check(alongWall.NormalOut > 0.3f * -alongWall.NormalIn,
-                    $"the same impulse fires on a wall — no surface test anywhere in it in={alongWall.NormalIn:0.00} out={alongWall.NormalOut:0.00} m/s");
+                    $"the same impulse fires on a wall, no surface test anywhere in it in={alongWall.NormalIn:0.00} out={alongWall.NormalOut:0.00} m/s");
                 ctx.Check(Mathf.Abs(alongWall.VerticalOut - alongWall.VerticalIn) < 1f,
                     $"…and it is entirely horizontal: an altimeter reads nothing across the contact vy {alongWall.VerticalIn:0.00} → {alongWall.VerticalOut:0.00} m/s (CAP-14's vertical-face runs)");
                 ctx.Note($"wall scrape: {alongWall.NormalIn:0.00} → {alongWall.NormalOut:0.00} m/s on the normal (e={alongWall.NormalOut / -alongWall.NormalIn:0.00}), vy {alongWall.VerticalIn:0.00} → {alongWall.VerticalOut:0.00}");
@@ -1577,7 +1709,7 @@ internal static class CombatSuites
         "an AI aircraft resolves its OWN vehicle def for the damage model (BL-386): all eleven " +
         "airframes seed the authored whole armor/health pair with no destroyable_parts at all " +
         "and the AI seven-entry injure ladder, while the player def still supplies the loadout " +
-        "key and the rig — and a real spawn comes out damageable, zone-less and armed")]
+        "key and the rig, and a real spawn comes out damageable, zone-less and armed")]
     internal static void AiPlaneDefs(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -1607,7 +1739,7 @@ internal static class CombatSuites
                       && ai.VehicleArmor is { } a && Mathf.IsEqualApprox(a, pool),
                 $"{aiDef} seeds its authored pair armor={ai.VehicleArmor:0.#} health={ai.VehicleHealth:0.#} (want {pool:0.#}/{pool:0.#})");
             ctx.Check(ai.DestroyableParts.Count == 0,
-                $"{aiDef} is zone-less — destroyable_parts={ai.DestroyableParts.Count}");
+                $"{aiDef} is zone-less, destroyable_parts={ai.DestroyableParts.Count}");
             ctx.Check(ai.VehicleInjureAnims.Count == injure,
                 $"{aiDef} carries the AI injure ladder: {ai.VehicleInjureAnims.Count} entries (want {injure})");
 
@@ -1699,7 +1831,7 @@ internal static class CombatSuites
             // The other silent one: DefName keys stock_loadouts.json, which holds the eleven player
             // defs alone. An AI def name there binds nothing and the plane flies with no guns.
             ctx.Check(spawned.Loadout != null,
-                $"the AI Fury is armed — its stock loadout still binds off the player def name");
+                $"the AI Fury is armed, its stock loadout still binds off the player def name");
         }
         finally
         {
@@ -1886,7 +2018,7 @@ internal static class CombatSuites
 
             var neighborHit = recorded.FirstOrDefault(r => r.Body == neighbor);
             ctx.Check(neighborHit.Body == neighbor,
-                $"a neighbour whose ORIGIN sits outside the blast radius still takes splash damage, scored to its nearest surface (BL-239) — origin-scoring would have read zero here");
+                $"a neighbour whose ORIGIN sits outside the blast radius still takes splash damage, scored to its nearest surface (BL-239), origin-scoring would have read zero here");
             if (neighborHit.Body == neighbor)
             {
                 float expected = ProjectilePool.BlastDamage(fullDamage, radius, nearFaceDistance);
@@ -1914,7 +2046,9 @@ internal static class CombatSuites
         "it by the +3.0 % that item measured because the term is a MAGNITUDE, a 4 rad/s roll " +
         "moves it not at all because the nose-axis component is dropped, a climb reads the " +
         "opposite sign to a dive off a real attitude, neither term is audible on the shipped " +
-        "flat volume curve, and the authored 1.5 parameter clamp holds a tumble")]
+        "flat volume curve, the authored 1.5 parameter clamp holds a tumble, and the airframe " +
+        "rattle beside the slot is a GATE at the shipped 1.0x fd_speed rather than a ramp: " +
+        "silent a hair under it, full level at it and no louder a fifth of the way past")]
     internal static void EngineNote(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -1961,7 +2095,7 @@ internal static class CombatSuites
         var rolling = new FlightModel(stats) { BodyRates = new Vector3(0f, 0f, 4f) };
         var rollDrive = EngineAudioCurves.DriveFrom(rolling);
         ctx.Check(Mathf.IsEqualApprox(rollDrive.TurnRate, 0f),
-            $"a 4 rad/s ROLL reads turn rate {rollDrive.TurnRate:0.000} — the nose-axis component is dropped");
+            $"a 4 rad/s ROLL reads turn rate {rollDrive.TurnRate:0.000}, the nose-axis component is dropped");
         var pitching = new FlightModel(stats) { BodyRates = new Vector3(0.3f, 0f, 4f) };
         ctx.Check(Mathf.IsEqualApprox(EngineAudioCurves.DriveFrom(pitching).TurnRate, 0.3f),
             $"…while the same roll with 0.3 rad/s of pitch on top reads exactly the pitch rate");
@@ -1989,6 +2123,8 @@ internal static class CombatSuites
         float spun = Pitch(new EngineDrive(1f, 50f, 0f));
         ctx.Check(Mathf.IsEqualApprox(spun, stats.EnginePitch.Remap(1.5f)),
             $"an absurd 50 rad/s tumble clamps at the authored 1.5 parameter: {spun:0.0000}");
+
+        CheckRattleGate(ctx, stats);
     }
 
     // The air-to-air hit chain on two real flight rigs driven by manual sim steps: body strike,
@@ -2000,9 +2136,11 @@ internal static class CombatSuites
     [Suite("air-to-air",
         "a round strikes the target plane's body, maps to the data part, moves armor/HP by the " +
         "weapon's own values, downs it when whole-vehicle health exhausts (a lone dead critical " +
-        "part no longer kills — the decoded rule, D14) with the kill attributed through the " +
-        "Downed event — never hits the shooter's own geometry — a rocket fuses on a passing " +
-        "plane, blasting with falloff and attributing the kill, concentrated fire on ONE " +
+        "part no longer kills: the decoded rule, D14) with the kill attributed through the " +
+        "Downed event (never hits the shooter's own geometry), a rocket fuses on a passing " +
+        "plane, blasting with falloff and attributing the kill, a burst beside the plane that " +
+        "fired the round costs it nothing while a plane the same distance out takes the " +
+        "falloff share, concentrated fire on ONE " +
         "bearing kills through the decoded redirect + whole-pool overflow (the 2026-08-14 " +
         "correction), and a Fury dies to a few HE rockets")]
     internal static void AirToAir(TestContext ctx)
@@ -2037,7 +2175,9 @@ internal static class CombatSuites
         FlightController? target = null;
         FlightController? shooter = null;
         FlightController? bystander = null;
+        FlightController? witness = null;
         FlightController? fury = null;
+        StaticBody3D? selfBlastPlate = null;
         try
         {
             var live = new ProjectilePool(textures, null, null);
@@ -2293,7 +2433,7 @@ internal static class CombatSuites
             ctx.Check(!target.Crashed,
                 $"the armed crash auto-respawns at the 3 s mark (step {175 + extra} of 180±5)");
             ctx.Check(match.DeathsOf(1) == deathsAtCrash && match.KillsOf(0) == 1,
-                $"respawn emitted nothing — the death was reported at Crash deaths(P2)={match.DeathsOf(1)}");
+                $"respawn emitted nothing, the death was reported at Crash deaths(P2)={match.DeathsOf(1)}");
 
             // Data-driven pick for the proximity fuse: a dumbfire, spread-free rocket whose blast radius
             // exceeds both its fuse distance and the suite's fixed pass gap. Equal ARMOR/HEALTH magnitudes
@@ -2350,7 +2490,7 @@ internal static class CombatSuites
                 $"the fused pass blasts by the falloff at the {FuseGap:0} m gap moved={movedNear:0.##} expected={expectedBlast:0.##}");
             ctx.Check(target.Damage.Parts.Values.All(
                     p => p.Def == nose || (p.Hp >= p.Def.MaxHp && p.Armor >= p.Def.MaxArmor)),
-                $"the blast lands on the nearest box only — it maps to the nose");
+                $"the blast lands on the nearest box only, it maps to the nose");
             float movedFar = beforeFar - Combined(bystander);
             ctx.Check(movedFar > 0f && movedFar < movedNear,
                 $"a farther plane inside the radius takes less nearer={movedNear:0.##} farther={movedFar:0.##}");
@@ -2402,6 +2542,36 @@ internal static class CombatSuites
                 $"a rocket fired from inside its own airframe never self-fuses or self-damages");
             ctx.Check(Combined(target) < tBefore,
                 $"…and the same round flew on to fuse on the opponent moved={tBefore - Combined(target):0.##}");
+
+            // --- the self-blast exemption, the guns invariant carried onto the blast pass: a
+            // burst the shooter cannot dodge, on a plate abeam and below it, costs it nothing
+            // while a second plane the same distance out takes the falloff share.
+            float abeam = fuseRange + 15f;
+            var burstSite = shooterPos + new Vector3(-abeam, -6f, 0f);
+            selfBlastPlate = Plate("self-blast-plate", new Vector3(4f, 0.2f, 4f), burstSite);
+            ctx.Host.AddChild(selfBlastPlate);
+            witness = BuildRig(4, burstSite + new Vector3(-abeam, 6f, 0f));
+            var burstPoint = burstSite + new Vector3(0f, 0.1f, 0f);
+            shooter.Body.NearestShape(burstPoint, out float selfRange, out _);
+            witness.Body!.NearestShape(burstPoint, out float witnessRange, out _);
+            ctx.Check(Mathf.Abs(selfRange - witnessRange) < 0.5f && witnessRange < blastRadius
+                      && selfRange > fuseRange && witnessRange > fuseRange,
+                $"precondition: both planes stand the same distance off the burst (shooter {selfRange:0.##} m, witness {witnessRange:0.##} m), inside the {blastRadius:0} m radius and outside the {fuseRange:0} m fuse");
+            float beforeSelf = Combined(shooter);
+            float beforeWitness = Combined(witness);
+            int selfKills = match.KillsOf(0), selfDeaths = match.DeathsOf(0);
+            var downMuzzle = new Transform3D(
+                Basis.LookingAt(Vector3.Down, Vector3.Forward), burstSite + new Vector3(0f, 30f, 0f));
+            FireRocket(downMuzzle, shooter.PlayerIndex, steps: 60);
+            float movedWitness = beforeWitness - Combined(witness);
+            float expectedWitness = ProjectilePool.BlastDamage(rocketDmg, blastRadius, witnessRange);
+            ctx.Check(Mathf.Abs(movedWitness - expectedWitness) < 1f,
+                $"a plane {witnessRange:0.##} m off the burst takes the falloff share moved={movedWitness:0.##} expected={expectedWitness:0.##}");
+            ctx.Check(Mathf.IsEqualApprox(Combined(shooter), beforeSelf) && !shooter.Crashed,
+                $"…while the plane that FIRED the round, the same distance out, takes nothing from its own blast");
+            ctx.Check(match.KillsOf(0) == selfKills && match.DeathsOf(0) == selfDeaths,
+                $"…and the exempt plane scores neither a death nor a kill of its own kills={match.KillsOf(0)} deaths={match.DeathsOf(0)}");
+            ctx.Note($"self-blast: {rocket.Id} burst {selfRange:0.#} m off the plane that fired it and {witnessRange:0.#} m off the witness, which took {movedWitness:0.##} of {rocketDmg:0}");
 
             // The D14 correction (docs/org/vehicleDamage.md): concentrated fire on ONE bearing kills. Once the
             // nose dies the resolver redirects its hits to surviving zones and every unabsorbed leftover drains
@@ -2471,7 +2641,9 @@ internal static class CombatSuites
             target?.Free();
             shooter?.Free();
             bystander?.Free();
+            witness?.Free();
             fury?.Free();
+            selfBlastPlate?.Free();
             textures.Dispose();
         }
     }
@@ -2483,8 +2655,8 @@ internal static class CombatSuites
     // own. A round that reaches a teammate still costs it HP; there is no damage gate, only targeting.
     [Suite("team-model",
         "the B7 team model: two distinct pilot indices (real PlayerIndex values, not synthetic " +
-        "ints) share one explicit FlightController.Team and a third sits on another — " +
-        "impossible under the retired pilot-index-derived stand-in — the plumbed aim-assist " +
+        "ints) share one explicit FlightController.Team and a third sits on another, " +
+        "impossible under the retired pilot-index-derived stand-in, the plumbed aim-assist " +
         "scan reads Team and snaps onto the enemy while refusing the teammate, and a real " +
         "fired round that reaches the teammate still costs it HP (Decision 3/A2: targeting is " +
         "gated, damage never is)")]
@@ -2584,7 +2756,7 @@ internal static class CombatSuites
                 live.Clear();
             }
             ctx.Check(!Pristine(wingman),
-                $"a team-1 round that reaches a team-1 wingman still costs it HP — no damage gate");
+                $"a team-1 round that reaches a team-1 wingman still costs it HP, no damage gate");
         }
         finally
         {
@@ -2594,6 +2766,33 @@ internal static class CombatSuites
             enemy?.Free();
             textures.Dispose();
         }
+    }
+
+    // The rattle loop that sits beside the engine slot, on the same speed fraction the whine's
+    // curves read. ⚠ A ramp here is the regression: the block's volume_range is parsed into a global
+    // no instruction reads, so a 0→1 lift over 1.0→1.2x fd_speed leaves the loop inaudible through
+    // the speeds anyone actually flies. Decode: docs/org/shakes.md.
+    private static void CheckRattleGate(TestContext ctx, PlaneStats stats)
+    {
+        ctx.Check(Mathf.IsEqualApprox(stats.RattleSpeedGate, 1f),
+            $"the shipped rattle gate is {stats.RattleSpeedGate:0.###}x fd_speed (want 1)");
+        ctx.Check(stats.RattleSound == "snd_planeshake",
+            $"…on the definition the rattle block names, {stats.RattleSound}");
+
+        float below = EngineAudioCurves.Rattle(stats, 0.999f);
+        float at = EngineAudioCurves.Rattle(stats, 1f);
+        float over = EngineAudioCurves.Rattle(stats, 1.2f);
+        ctx.Check(below == 0f, $"a hair under the gate the rattle is silent: {below:0.0000}");
+        ctx.Check(Mathf.IsEqualApprox(at, 1f),
+            $"…and reaches FULL level the moment speed meets it: {at:0.0000}");
+        ctx.Check(Mathf.IsEqualApprox(over, at),
+            $"…with no ramp above it, {over:0.0000} a fifth of the way past against {at:0.0000}");
+
+        // Level with the engine slot, which is the relation the decode fixes: both loops take the
+        // same 1.0 into the mix, so nothing about the rattle is quieter than the engine beside it.
+        float engine = EngineAudioCurves.Engine(stats, new EngineDrive(1f, 0f, 0f), 1f).Volume;
+        ctx.Check(Mathf.IsEqualApprox(at, engine),
+            $"…and sits level with the engine slot's own gain, {at:0.0000} against {engine:0.0000}");
     }
 
     // A parked, stock-armed rig with its own airframe, collider and damage ledger. ⚠ The loadout

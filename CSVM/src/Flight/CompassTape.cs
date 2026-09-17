@@ -5,9 +5,9 @@ namespace CSVM.Flight;
 
 /// <summary>The original's heading tape at the top of the screen, rebuilt from its own
 /// compassticks2/compasstxt HUD textures (docs/formats/hud.md). A cylindrical drum seen edge-on:
-/// a mark Δ° from the current heading sits at <c>center − R·sin(Δ)</c>, brightness falls off as
-/// <c>cos(Δ)</c>, and headings increase to the LEFT, a real whiskey-compass card. Ticks render
-/// point-sampled while labels are smooth, so labels live on a bilinear child layer on top.
+/// a mark Δ° from the current heading sits at <c>center − R·sin(Δ)</c>, brightness follows
+/// <see cref="Fade"/>, and headings increase to the LEFT, a real whiskey-compass card. Ticks
+/// render point-sampled while labels are smooth, so labels live on a bilinear child layer on top.
 /// </summary>
 public sealed partial class CompassTape : Control
 {
@@ -16,15 +16,15 @@ public sealed partial class CompassTape : Control
     private const float RefDrumRadius = 127.6f; // fit of every tall tick: x = c − R·sin(Δ)
     private const float RefLabelTop = 3f;       // label box top below the bar top
     private const float RefLabelHeight = 20f;   // 32 src px drawn at 20 → scale 0.625
-    private const float RimGain = 1.5f;         // the bar-end silhouette ticks, drawn from
-                                                // the tall tick's soft side column (~192 in
-                                                // the original vs its ~128 texels)
+    // The comb stops short of the bar's bottom edge: in all three reference screenshots its last
+    // lit row is the 37th of 40, so the tile's box is the bar less these rows and the bar's own
+    // black shows under the ticks.
+    private const float RefHemHeight = 3f;
     private const float TileDegrees = 15f;      // one compassticks2 tile
-    // The original draws the tile ~25% taller than the bar, bottom-aligned (its empty
-    // top rows overflow the bar and clip): that is what puts the tall ticks at 77% of
-    // the bar height and the minors at 42%, full-height mapping leaves them stubby
-    // (measured 30 px / 17 px vs 24 px / 12 px in a 39 px bar).
-    private const float TileOverscan = 1.25f;
+    // The rim fade. A plain cos(Δ) is too gentle: the originals read flat over the inner half of
+    // the bar and near black in the outer quarter, which this clipped curve fits about four times
+    // closer (docs/formats/hud.md carries the measured profile).
+    private const float EdgeFadeGain = 1.35f, EdgeFadePower = 2.1f;
 
     private static readonly Vector2 TileSrcSize = new(64, 16);
 
@@ -44,6 +44,7 @@ public sealed partial class CompassTape : Control
     private Texture2D _ticks = null!;
     private Texture2D _labels = null!;
     private LabelLayer _labelLayer = null!;
+    private bool _squeezeLabels;
 
     /// <summary>Current heading in degrees, 0 = north (−Z), 90 = east (+X); set
     /// each frame by the flight controller.</summary>
@@ -57,8 +58,9 @@ public sealed partial class CompassTape : Control
         Mathf.PosMod(Mathf.RadToDeg(Mathf.Atan2(nose.X, -nose.Z)), 360f);
 
     /// <summary>Null when the chapter's texture archive lacks the two HUD textures
-    /// (the archive itself logs the miss).</summary>
-    public static CompassTape? Build(TextureArchive textures)
+    /// (the archive itself logs the miss). <paramref name="squeezeLabels"/> draws the octant
+    /// letters with the ticks' own horizontal squeeze instead of upright.</summary>
+    public static CompassTape? Build(TextureArchive textures, bool squeezeLabels = false)
     {
         var ticks = textures.Find("compassticks2");
         var labels = textures.Find("compasstxt");
@@ -68,8 +70,9 @@ public sealed partial class CompassTape : Control
         {
             _ticks = ticks,
             _labels = labels,
+            _squeezeLabels = squeezeLabels,
             MouseFilter = MouseFilterEnum.Ignore,
-            ClipContents = true, // rim caps, tile overscan + rim-faded labels clip at the bar
+            ClipContents = true, // the rim-faded labels overhang both bar ends
             TextureFilter = TextureFilterEnum.Nearest, // the ticks' hard-edged comb
         };
         tape._labelLayer = new LabelLayer
@@ -104,24 +107,24 @@ public sealed partial class CompassTape : Control
 
         // Tick tiles at every 15° edge. Tiles straddling ±90° are skipped: past the rim sin folds
         // back and the drum's far side would draw reversed.
-        float tileH = h * TileOverscan, tileY = h - tileH; // bottom-aligned, top clipped
+        float tileH = h - RefHemHeight * s; // the tile fills the bar down to the hem
         float first = Mathf.Ceil((HeadingDeg - 90f) / TileDegrees) * TileDegrees;
         for (float a = first; a + TileDegrees <= HeadingDeg + 90f; a += TileDegrees)
         {
             float d0 = a - HeadingDeg, d1 = d0 + TileDegrees;
             // d1 lands left of d0; the tile pattern is mirror-symmetric, so no flip
             float x0 = DrumX(d1), x1 = DrumX(d0);
-            float m = Mathf.Cos(Mathf.DegToRad((d0 + d1) / 2f));
-            DrawTextureRectRegion(_ticks, new Rect2(x0, tileY, x1 - x0, tileH),
+            float m = Fade((d0 + d1) / 2f);
+            DrawTextureRectRegion(_ticks, new Rect2(x0, 0f, x1 - x0, tileH),
                 new Rect2(Vector2.Zero, TileSrcSize), new Color(m, m, m));
         }
+    }
 
-        // The drum rims: the original caps both bar ends with a bright tall tick
-        // (the drum's silhouette edge), drawn from the tile's tall-tick side column.
-        var rimSrc = new Rect2(0, 0, 2, 16);
-        var rim = new Color(RimGain, RimGain, RimGain);
-        DrawTextureRectRegion(_ticks, new Rect2(0, tileY, 2f * s, tileH), rimSrc, rim);
-        DrawTextureRectRegion(_ticks, new Rect2(w - 2f * s, tileY, 2f * s, tileH), rimSrc, rim);
+    // Brightness of a mark Δ° off the current heading, ticks and labels alike.
+    private static float Fade(float deltaDeg)
+    {
+        float c = Mathf.Max(0f, Mathf.Cos(Mathf.DegToRad(deltaDeg)));
+        return Mathf.Min(1f, EdgeFadeGain * Mathf.Pow(c, EdgeFadePower));
     }
 
     // Screen x of a mark Δ° off the current heading, the drum projection;
@@ -130,10 +133,10 @@ public sealed partial class CompassTape : Control
         Size.X / 2f - RefDrumRadius * HudMetrics.Scale(this)
                     * Mathf.Sin(Mathf.DegToRad(deltaDeg));
 
-    // Octant labels every 45°, centred on their drum position but NOT
-    // drum-compressed (the original billboards them upright), fading with the same
-    // cos as the ticks, the atlas' own cream colour shows through. A child layer
-    // only so the letters filter bilinearly while the ticks stay point-sampled.
+    // Octant labels every 45°, centred on their drum position and fading with the ticks' own
+    // curve, the atlas' cream colour showing through. Upright by default; the squeeze draws them
+    // at the ticks' horizontal cos(Δ), which is the reading the stills cannot settle. A child
+    // layer only so the letters filter bilinearly while the ticks stay point-sampled.
     private sealed partial class LabelLayer : Control
     {
         public CompassTape Tape = null!;
@@ -149,11 +152,12 @@ public sealed partial class CompassTape : Control
                 float d = a - t.HeadingDeg;
                 if (Mathf.Abs(d) >= 90f)
                     continue;
-                float fade = Mathf.Cos(Mathf.DegToRad(d));
+                float fade = Fade(d);
                 var src = LabelSrc[(int)Mathf.PosMod(a / 45f, 8f)];
-                var dest = new Rect2(t.DrumX(d) - src.Size.X * scale / 2f,
-                                     RefLabelTop * s,
-                                     src.Size.X * scale, src.Size.Y * scale);
+                float squeeze = t._squeezeLabels ? Mathf.Cos(Mathf.DegToRad(d)) : 1f;
+                float width = src.Size.X * scale * squeeze;
+                var dest = new Rect2(t.DrumX(d) - width / 2f, RefLabelTop * s,
+                                     width, src.Size.Y * scale);
                 DrawTextureRectRegion(t._labels, dest, src, new Color(fade, fade, fade));
             }
         }

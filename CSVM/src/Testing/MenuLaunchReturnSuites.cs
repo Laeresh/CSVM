@@ -154,8 +154,10 @@ internal static class MenuLaunchReturnSuites
 
         WalkTo(run, menu, LaunchMenu.OptionsRow);
         run.Press(Accept);
-        // Three rows down, past the targeting setting and the rumble toggle, onto the presentation
-        // row.
+        // Five rows down, past the opening view, the automatic head turn, the targeting setting
+        // and the rumble toggle, onto the presentation row.
+        run.Press(Down);
+        run.Press(Down);
         run.Press(Down);
         run.Press(Down);
         run.Press(Down);

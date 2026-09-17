@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.IO;
 using CSVM.Mech3;
 using Godot;
 using Xunit;
@@ -209,6 +210,77 @@ public class ClutterQuadUvTests
         // The same vertex at two corners with two different UVs.
         Assert.Equal(poly.VertexIndices[3], poly.VertexIndices[4]);
         Assert.NotEqual(uvs[3], uvs[4]);
+    }
+
+    /// <summary>
+    /// A decoration is a node chain, and the mesh node under its <c>.flt</c> top carries a local
+    /// translation of its own. C5's <c>w_lightglow</c> hangs 4.75 m up, the height of the lamp head
+    /// on the 5 m <c>lightpole</c> card beside it, and the glow quad is centred on its own origin
+    /// (y in [-0.684, 0.684]), so a stamp that drops the lift lands half-buried in the road.
+    /// </summary>
+    [ExtractedDataFact]
+    public void C5sLampGlowHangsOnItsPostWhileTheLightpoleBesideItSitsAtItsOwnNode()
+    {
+        var lifts = new Dictionary<string, Vector3>();
+        foreach (var deco in Decorations("C5"))
+            lifts[deco.Model] = deco.Lift;
+
+        Assert.Equal(new Vector3(0f, 4.75f, 0f), lifts["w_lightglow.flt"]);
+        Assert.Equal(Vector3.Zero, lifts["lightpole.flt"]);
+    }
+
+    /// <summary>
+    /// The whole install's decoration chains, as the count of those whose mesh node translates at
+    /// all. C5's lamp glow is the only one, which is why carrying the lift changes that glow's
+    /// height and nothing else anywhere.
+    /// </summary>
+    [ExtractedDataFact]
+    public void OnlyTheLampGlowCarriesAMeshNodeTranslationInstallWide()
+    {
+        int decorations = 0, lifted = 0;
+        var models = new SortedSet<string>(System.StringComparer.OrdinalIgnoreCase);
+        var offsets = new SortedSet<string>(System.StringComparer.Ordinal);
+        foreach (var chapter in new[] { "C1", "C1B", "C1C", "C2", "C2B", "C3", "C4", "C5" })
+        {
+            foreach (var deco in Decorations(chapter))
+            {
+                decorations++;
+                if (deco.Lift == Vector3.Zero)
+                    continue;
+                lifted++;
+                models.Add(deco.Model);
+                offsets.Add(deco.Lift.ToString());
+            }
+        }
+
+        Assert.Equal(872, decorations);
+        Assert.Equal(164, lifted);
+        Assert.Equal("w_lightglow.flt", Assert.Single(models));
+        Assert.Equal("(0, 4.75, 0)", Assert.Single(offsets));
+    }
+
+    // Every decoration under every registered template of one chapter: its model name and the
+    // translation from its own node down to the node carrying the mesh it draws.
+    private static IEnumerable<(string Template, string Model, Vector3 Lift)> Decorations(string chapter)
+    {
+        var gamez = Gamez(chapter);
+        var interp = Path.Combine(TestData.DataRoot!, "extracted", "interp.json");
+        foreach (var name in ClutterBuilder.TemplateNames(interp, chapter))
+        {
+            // A registered template the chapter does not carry is retail-data-normal: C2B
+            // registers three of them.
+            if (ClutterBuilder.FindTemplateRoot(gamez, name) is not { } root)
+                continue;
+            if (ClutterBuilder.FirstWithMesh(gamez, root) is not { } ground)
+                continue;
+            foreach (var childIndex in ground.Children)
+            {
+                var deco = gamez.Nodes[childIndex];
+                if (ClutterBuilder.FirstWithMesh(gamez, deco, false, out var toMesh) == null)
+                    continue;
+                yield return (name, deco.Name, toMesh.Origin);
+            }
+        }
     }
 
     private static GameZ Gamez(string chapter) =>

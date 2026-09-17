@@ -96,8 +96,8 @@ public static class StuntSplits
             }
             else
             {
-                ResultsBoard.AddCell(grid, "—", font, ResultsBoard.HeaderColor, HorizontalAlignment.Right, timeW);
-                ResultsBoard.AddCell(grid, "—", font, ResultsBoard.HeaderColor, HorizontalAlignment.Right, timeW);
+                ResultsBoard.AddCell(grid, "-", font, ResultsBoard.HeaderColor, HorizontalAlignment.Right, timeW);
+                ResultsBoard.AddCell(grid, "-", font, ResultsBoard.HeaderColor, HorizontalAlignment.Right, timeW);
             }
             n++;
         }

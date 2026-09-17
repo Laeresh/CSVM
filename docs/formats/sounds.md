@@ -62,7 +62,7 @@ it.** The `RANGE` pair is the attenuation curve alone; the cull sits outside it,
 manager's own 3D update `FUN_00597c20`, which sets the voice to the minimum volume once the
 listener is at or past `audibleDist * 1.1` (DirectSound's own -10000, through the voice's
 `+0x3c` setter; the compare and the ramp below it read the definition record the voice points at,
-`RANGE`'s two floats at `+0x1c` and `+0x20`). Between the pair the gain is a logarithmic ramp; in
+`RANGE`'s two floats at `+0x1c` and `+0x20`). In
 the band past the audible distance the computed gain is clamped silent as soon as it falls below
 that same -10000, so the margin is a quiet tail rather than full volume held longer.
 Every weapon voice reaches that routine through one dispatcher, `FUN_00597af0`, and
@@ -72,6 +72,32 @@ share), and a turret's at `0x004ab1d9`. So the aircraft loop and the turret voic
 not two. `FUN_00597af0`'s other arm, the hardware-3D `FUN_00597b40`, applies no margin of its own,
 but the flag it switches on (`DAT_00639cb4`) is zero in the image and its only writer clears it, so
 the software path above is the one the retail build runs.
+
+### The gain between the two radii
+
+The same `FUN_00597c20` holds the whole curve, in DirectSound's hundredths of a decibel. Write
+`r0` for `RANGE`'s full-volume distance, `r1` for its audible one, `band = r1 - r0`, and take the
+listener distance from the emitter (`0x00597dac`, the classic bit-hack square root, so it is an
+approximate distance, not an exact one). With `V` the definition's own `VOLUME` as decibels:
+
+| Band | Gain, decibels | Where |
+|---|---|---|
+| `dist <= r0 + band/8` | `V` | `0x00597e60`, the shelf: the ramp's reference distance is one eighth of the band, so the level holds unattenuated past the full-volume radius |
+| `r0 + band/8 < dist < r1` | `V + 10 log2((band/8) / (dist - r0))` | `0x00597e88`, `FYL2X` against `ln 2` then `x 1442.695`, which is `1000 log2` in hundredths |
+| `r1 <= dist < 1.1 r1` | `V - 30 - 700 (dist - r1)/r1` | `0x00597e2d`, the constants `7000` at `0x00609424`, `0.1` at `0x006034a8` and `3000` at `0x00609420` |
+| `dist >= 1.1 r1`, or a total under -100 | silent | `0x00597e09` against `1.1` at `0x006082e8`; `-10000` is the floor everywhere |
+
+⚠ **The ramp is measured from `r0`, not from the emitter, which is what makes it flat.** Ten
+decibels per doubling is steeper per doubling than inverse distance's six, but the doublings are
+counted from the shelf, so the level holds far longer in absolute distance: a `RANGE [200, 1200]`
+siren is unattenuated to 325 m, 10 dB down at 450 m, 20 at 700 m and 30 at its audible radius,
+where the curve is continuous into the tail and reaches the floor at 1320 m. No engine attenuation
+model expresses that shape, so `CSVM/src/Mech3/SoundFalloff.cs` computes it and drives the player's
+level itself.
+
+⚠ **`VOLUME` converts on the same ten-decibels-per-doubling scale, not the usual `20 log10`.**
+`FUN_00593620` returns 0 at or above 1, `-10000` at or below `2^-10`, and `1000 log2(gain)`
+between, so the `0.8` four of the gasbag explosions carry is 3.2 dB down rather than 1.9.
 
 ⚠ **An aircraft's weapon cues are in the positional class, not the cockpit one.** Every caliber's
 `LOOPED_SOUND_NAME` (`snd_30cal` through `snd_70cal`, plus `snd_turretgun` and `snd_chaingun`)
@@ -165,13 +191,20 @@ with no trigger at all, is [`org/music.md`](../org/music.md).
 
 ## Player curves
 
-All are clamped two-point ramps `(inStart→inEnd maps outStart→outEnd)`:
+The first two are clamped two-point ramps `(inStart→inEnd maps outStart→outEnd)`; the third is
+authored as one but does not run as one:
 
 | Block | Meaning |
 |---|---|
 | `engine_sound` | pitch 0.6→1.0 over throttle 0.1→1.0; volume flat 1.0 |
 | `prop_sound` | the **overspeed dive whine**: volume 0→0.5 over speed 1.0→1.1× `fd_speed`, pitch 0.65→1.25 over 1.0→1.2×. Drives the engine audio's second slot, whose definition is the vehicle def's own `prop_sound` key |
-| `rattle` | `snd_planeshake`: volume 0→1 over speed 1.0→1.2× `fd_speed` |
+| `rattle` | `snd_planeshake`, the airframe rattle: authored as volume 0→1 over speed 1.0→1.2× `fd_speed`, **run as a gate**. Only `speed_range`'s first value reaches a reader; the loop is silent below `1.0× fd_speed` and at full level, the engine slot's own, from there upward |
+
+⚠ **The rattle's ramp is authoring the game ignores, and re-adding it silences the loop.** The
+`volume_range` pair and `speed_range`'s second value are parsed into globals with no read xref
+anywhere in `crimson.exe`, so a port that evaluates the ramp plays the rattle at a few percent of
+level through every speed a dive reaches. Addresses, the gate's own three conditions and the
+hardcoded call gain: [`org/shakes.md`](../org/shakes.md#the-rattle-sound-is-a-gate-at-full-level-not-the-authored-ramp).
 
 ⚠ **The whine never sounds in the retail install, and `snd_enginewhine` is not its WAV.** The
 second slot's definition comes from the vehicle def's `prop_sound` string key; no shipped def

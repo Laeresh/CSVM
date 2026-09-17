@@ -117,7 +117,7 @@ internal static class CampaignSupportBeamSuites
             sites.Collect(after);
             var site = FindBeam(after);
             ctx.Check(site is { Live: false },
-                $"the destroyed beam's site is still OFFERED (its own REMOVE_OBJECTIVE_TARGET never ran) but no longer LIVE — the destructible state alone took it out of the cycle");
+                $"the destroyed beam's site is still OFFERED (its own REMOVE_OBJECTIVE_TARGET never ran) but no longer LIVE, the destructible state alone took it out of the cycle");
         });
     }
 

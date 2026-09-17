@@ -50,7 +50,7 @@ public class AttitudeThrustTests
         float dive = ThrustTermAt(-90f);
 
         Assert.True(climb < level,
-            $"a vertical climb must LOSE thrust: {climb:0.000} vs level {level:0.000} m/s² — "
+            $"a vertical climb must LOSE thrust: {climb:0.000} vs level {level:0.000} m/s², "
             + "the argument's sign is inverted, and the flown result would still look plausible");
         Assert.True(dive > level,
             $"a vertical dive must GAIN thrust: {dive:0.000} vs level {level:0.000} m/s²");
@@ -80,14 +80,14 @@ public class AttitudeThrustTests
         var r = Probes.SustainedClimb(ZrdrPath, "player_bhawk");
         Assert.True(r.Error == null, $"{r.Error ?? "-"}");
         Assert.True(r.BandEdgeAt < 0,
-            $"the climb crossed the 2000 m band edge at +{r.BandEdgeAt:0.0} s — this run measures "
+            $"the climb crossed the 2000 m band edge at +{r.BandEdgeAt:0.0} s, this run measures "
             + "the coast above it, not the climb");
         Assert.True(r.PlateauMph < 220.0,
-            $"sustained climb settles at {r.PlateauMph:0.00} mph against a measured 163.05 — every "
+            $"sustained climb settles at {r.PlateauMph:0.00} mph against a measured 163.05, every "
             + "arrangement that keeps the climb-gravity constant or drops the attitude terms sits "
             + "above 230 here");
         Assert.True(r.PlateauMph > 163.05,
-            $"sustained climb settles at {r.PlateauMph:0.00} mph, BELOW the original's 163.05 — the "
+            $"sustained climb settles at {r.PlateauMph:0.00} mph, BELOW the original's 163.05, the "
             + "residual has always been on the fast side, so this is a different defect");
     }
 

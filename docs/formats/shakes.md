@@ -34,7 +34,10 @@ added to this file would therefore retune the collision shake and author no ambi
 per-contact kick".
 
 Readings with confidence: `frequency` in Hz, `damp` a decay rate (the impulse sources die fast),
-`sawtooth` selects the waveform (1 = the buzzy sources: firing, speed rattle, nitro), and
+`sawtooth` selects which of two integrator laws the source runs, a damped spring when clear and a
+ramp with a reversal test when set (1 = the buzzy sources: firing, speed rattle, nitro). Both
+`frequency` and `sawtooth` also scale the kick itself rather than only the decay, so a magnitude
+here is not an angle; the decoded laws are in [`../org/shakes.md`](../org/shakes.md). Also,
 `high_speed`'s magnitude is its driving quantity divided by `magnitude_quotient` (its input is
 self-evidently airspeed, it carries a `min_speed` gate). `nitro` is the only source with an
 **absolute** magnitude, 0.05. The `fire_bullet` and `high_speed` magnitude *laws*, what the

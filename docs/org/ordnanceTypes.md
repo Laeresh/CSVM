@@ -799,9 +799,11 @@ this path that takes a square root:
   distance flag and the occlusion flag. Under the occlusion flag `FUN_004cb420` casts
   `FUN_004c8f70` from the burst centre to the candidate's sphere centre through the whole intersect
   database, with the candidate's own intersect bit (`node+0x24` bit `0x10`) cleared for the
-  duration of the cast so it cannot shadow itself, and drops the candidate on any hit. The round's
-  owner node has that bit cleared for the whole gather (`FUN_005aca30`), so a shooter's own aircraft
-  neither takes splash nor shields anything from it. ⚠ The cast runs only for a candidate carrying
+  duration of the cast so it cannot shadow itself, and drops the candidate on any hit. The ROUND's
+  own node (`round+0xc`) has that bit cleared for the whole gather (`FUN_005aca30`), so the round
+  never shadows what it just burst against. ⚠ That node is the round, not its shooter: the shooter's
+  aircraft is an ordinary candidate here, gathered like any other and able to shield another one.
+  What keeps it from taking the damage is the guard on the hit side, below. ⚠ The cast runs only for a candidate carrying
   node flag `0x400000`; that bit is not in the GameZ node flags and no instruction in the binary sets
   it by an immediate, so which objects opt in is not decoded. CSVM tests every candidate.
 - **One entry per collidable NODE, and the node is a leaf.** `FUN_004cb420` walks the spatial grid's
@@ -823,8 +825,11 @@ A weapon carrying `MINE` (`+0x74` bit `0x4000`) skips the falloff entirely and a
 everything inside the radius. `round[+0x678]` is a per-round yield multiplier scaling the radius and
 both damage figures together, so it is one knob over the whole burst.
 
-CSVM keeps the falloff, the engulf clamp, the occlusion cast and the 32 cap, and departs on two
-points by choice (`Projectile.ApplyDamage`): the surface distance is to the nearest point of the
+CSVM keeps the falloff, the engulf clamp, the occlusion cast and the 32 cap, and departs on three
+points by choice (`Projectile.ApplyDamage`): the shooter's own aircraft is dropped at the gather
+(`GatherAircraftCandidates`) rather than at the hit-side guard below, which reaches the same
+damage figure of zero but also keeps it from occupying one of the 32 slots, from shielding another
+candidate, and from taking the no-damage types' own effects; the surface distance is to the nearest point of the
 target's own collision shape rather than to a bounding sphere, because a Godot collision body has no
 per-node box and a chapter mesh's enclosing sphere would hand full damage to everything inside it;
 and the 32 winners are the nearest 32, since the original's grid order is placement luck. The
@@ -892,6 +897,19 @@ order is what decides which types can ever deal damage:
    victim deals nothing), then the struck zone is found by walking the victim's zone list at stride
    0x58 and matching the zone id, and the pair is spent against that zone (`FUN_004b3bf0`) or against
    the whole vehicle when no zone matches (`FUN_004b8070`).
+
+**The self-hit guard is the whole of the self-blast exemption, and it sits here rather than in the
+gather.** It is `CMP EBX,ESI` at `0x004b9e3e`, shooter against victim, and on a match it writes 0
+into both halves of the damage pair (`0x004b9e42`, `0x004b9e45`) and returns. The shooter reaches
+it by value, not by geometry: `FUN_005acac0` hands each splash entry the round's own shooter at
+`round+0x4`, `FUN_005abcf0` parks it in `DAT_00a1d7c8`, and the victim's hit callback reads it back
+through `FUN_005ad440` (which is nothing but `return DAT_00a1d7c8`) and passes it here. So one guard
+covers the direct hit, the fuse burst and the splash alike, for a gun and for a rocket, which is why
+a pilot can fire a rocket out of a hardpoint sitting inside their own collision hull. ⚠ It stands
+BELOW the four no-damage arms, so a shooter IS flashed, deafened, tagged and choked by their own
+burst; only the damage pair is exempt. The one place the shooter is tested earlier is the mine's
+detonation check (`FUN_005b0970` calls `FUN_005aca30` with the flag the other three callers pass as
+1): a mine whose radius holds its own layer and nothing else does not go off at all.
 
 **Four of the twelve types cannot damage anything.** `SONIC`, `FLASH`, `BEEPER` and `TANGLER` each
 zero the damage pair before returning, so their authored `ARMOR_DAMAGE`/`HEALTH_DAMAGE` figures are
@@ -1230,6 +1248,19 @@ aircraft's later crash from replaying the fade and re-firing `snd_propstop`. The
 through `HumanFlightAdapter.Assemble` or `AiFlightAssembler`, which replay the spawn choreography
 already. CSVM plays `startprops` there where the original plays `spinprops`, a divergence in the
 spawn sound rather than in the choke.
+
+**The death runs it from the once-per-death shutdown, beside the cue.** `EndFlightSystems` is the
+one site that ends a spent aircraft's flight systems, so `FlightAudio.OnEngineStop` and the
+`stopprops` call stand on consecutive lines there and the wind-down's two halves cannot be raised
+apart: the discs fade to the still blade wherever `snd_propstop` sounds, whether the aircraft was
+shot down, rammed or flown into the world, and whether or not its airframe def binds a destroy def.
+That is also the original's order, the death routine's own `stopprops` call standing ahead of the
+def's destroy anim, so the destroy choreography deactivates the healthy hull's propeller nodes over
+a wind-down that has already run rather than being undone by it. A wreck's ground contact raises
+nothing further, its death having already spent the slot. `Respawn` takes `stopprops` off the slot
+before it replays `startprops`, or a hull that went down with its propellers stopped would fly again
+with the stop definition still fading `staticpropN` in under the start one fading it out. The suite
+is `prop-slot-edges`.
 
 ## Two answers this routine gives to other items
 

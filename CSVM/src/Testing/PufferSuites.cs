@@ -70,7 +70,7 @@ internal static class PufferSuites
                 ctx.Check(sawEmitting, $"{pufferName} started emitting after the kill");
 
                 bool rowPresent = runtime.Emitters.Census.Any(r => r.Name == pufferName);
-                ctx.Check(rowPresent, $"{pufferName}'s emitter row survives the kill — EndFor pauses, it does not forget");
+                ctx.Check(rowPresent, $"{pufferName}'s emitter row survives the kill, EndFor pauses, it does not forget");
 
                 bool stillEmitting = rowPresent
                     && runtime.Emitters.Census.First(r => r.Name == pufferName).Emitting;
@@ -246,8 +246,8 @@ internal static class PufferSuites
         ctx.Check(Mathf.IsEqualApprox(2f, trailState.DistanceInterval), $"smokepuffer DISTANCE_INTERVAL is 2 m");
         ctx.Check(trailState.Colors.Count > 0, $"smokepuffer carries a COLORS ramp");
         ctx.Check(Mathf.IsEqualApprox(0.1f, trailState.TimeInterval),
-            $"smokepuffer authors no TIME_INTERVAL — the still-host cadence is the synthetic 0.1 s");
-        ctx.Same(1, trailState.Number, $"smokepuffer authors no NUMBER — a still-host batch is one puff");
+            $"smokepuffer authors no TIME_INTERVAL, the still-host cadence is the synthetic 0.1 s");
+        ctx.Same(1, trailState.Number, $"smokepuffer authors no NUMBER, a still-host batch is one puff");
 
         // Detached for the duration: the harness's own clock is a FixedStep one nothing steps, so
         // left installed every emitter tick would advance no sim and every check would pass
@@ -310,7 +310,7 @@ internal static class PufferSuites
     // pushed sideways is deliberately used to prove the measure is depth and not range.
     [Suite("puffer-distance-fade",
         "the NEAR_FADE/FAR_FADE camera-distance alpha and its two culls, against the shipped "
-        + "bands of C3's spew_puffer and volcanosmoke — the cross-wire included (C7), and the "
+        + "bands of C3's spew_puffer and volcanosmoke, the cross-wire included (C7), and the "
         + "most-favourable-pane rule every viewer gets an answer from (B11)")]
     internal static void PufferDistanceFade(TestContext ctx)
     {
@@ -368,7 +368,7 @@ internal static class PufferSuites
             puffer.Burst(at);
             puffer._Process(1f / 60f);
             ctx.Same(1, puffer.LiveCount,
-                $"{state.Name}: the particle stays ALIVE whatever the fade decides — it is a draw rule, not a reaper");
+                $"{state.Name}: the particle stays ALIVE whatever the fade decides, it is a draw rule, not a reaper");
             return gpu.Shown > 0 ? gpu.LastFrame[0].Alpha : null;
         }
         finally
@@ -409,7 +409,7 @@ internal static class PufferSuites
             $"the measure is VIEW-SPACE DEPTH: 600 m off-axis does not change the fade alpha={sideways}");
         float range = new Vector3(600f, 0f, -350f).Length();
         ctx.Check(range > 400f,
-            $"ABLE-TO-FAIL CONTROL: that same point is {range:0} m away — a euclidean-range implementation would have discarded it");
+            $"ABLE-TO-FAIL CONTROL: that same point is {range:0} m away, a euclidean-range implementation would have discarded it");
     }
 
     // The cross-wire, reproduced rather than repaired: the near ramp's origin is FAR_FADE[0]. C3's
@@ -425,7 +425,7 @@ internal static class PufferSuites
             $"at 50 m volcanosmoke is culled: the near ramp reads FAR_FADE[0] (2000), so its alpha is (50-2000)/74");
         ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -80f), amb) is { } beyond
                   && Mathf.IsEqualApprox(beyond, 1f),
-            $"past NEAR_FADE[1] it pops in at full alpha — a hard edge at 75 m, not a 1-to-75 m fade-in");
+            $"past NEAR_FADE[1] it pops in at full alpha, a hard edge at 75 m, not a 1-to-75 m fade-in");
         // The repair we deliberately did NOT make, stated as a number so it cannot creep back in.
         float repaired = (50f - 1f) / (75f - 1f);
         ctx.Check(repaired > 0.6f,
@@ -452,14 +452,14 @@ internal static class PufferSuites
         ctx.Check(FadeAlphaAt(ctx, state, band, amb, noFade) is { } b && Mathf.IsEqualApprox(b, 1f),
             $"puffer.distanceFade false keeps full alpha across the authored band");
         ctx.Check(FadeAlphaAt(ctx, state, far, amb, noFade) == null,
-            $"and leaves the far CUTOFF alone — the ramp and the cull are two switches");
+            $"and leaves the far CUTOFF alone, the ramp and the cull are two switches");
 
         // ⚠ farCull alone is a no-op, and that is a finding, not an oversight: the authored ramp
         // reaches zero at exactly the cutoff distance, so the alpha > 0 gate removes what the cull
         // would have. Asserted so the pairing stays documented in something that runs.
         var noFarCull = new PufferFadeSwitches(DistanceFade: true, FarCull: false, NearCull: true);
         ctx.Check(FadeAlphaAt(ctx, state, far, amb, noFarCull) == null,
-            $"puffer.farCull false ALONE changes nothing — past the band the ramp's own alpha is already negative");
+            $"puffer.farCull false ALONE changes nothing, past the band the ramp's own alpha is already negative");
         var wideOpen = new PufferFadeSwitches(DistanceFade: false, FarCull: false, NearCull: true);
         ctx.Check(FadeAlphaAt(ctx, state, far, amb, wideOpen) is { } w && Mathf.IsEqualApprox(w, 1f),
             $"it takes distanceFade AND farCull together to keep a distant puffer drawn");
@@ -472,7 +472,7 @@ internal static class PufferSuites
             $"ABLE-TO-FAIL CONTROL: at the default factor 700 m is well past the cutoff and culled");
         float? scaled = FadeAlphaAt(ctx, state, wayOut, amb, pushedOut);
         ctx.Check(scaled is { } sc && Mathf.IsEqualApprox(sc, 0.5f, 1e-4f),
-            $"globalFadeFactor 0.5 measures that same 700 m as 350 m — half way across the band alpha={scaled}");
+            $"globalFadeFactor 0.5 measures that same 700 m as 350 m, half way across the band alpha={scaled}");
         ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, -20f), amb, pushedOut) == null,
             $"and it does NOT reach the near band, which still culls at 20 m on the unscaled depth");
     }
@@ -517,7 +517,7 @@ internal static class PufferSuites
             var justAheadOfP1 = new Vector3(0f, 0f, -20f);
             ctx.Check(FadeAlphaAt(ctx, state, justAheadOfP1, amb) is { } near
                       && Mathf.IsEqualApprox(near, 1f),
-                $"20 m ahead of P1 is inside P1's near cull but 220 m ahead of P2, so it DRAWS — the pane that can see it decides");
+                $"20 m ahead of P1 is inside P1's near cull but 220 m ahead of P2, so it DRAWS, the pane that can see it decides");
 
             var onlyP1 = new EffectAmbience();
             onlyP1.SetCamera(Vector3.Zero, Vector3.Forward);
@@ -525,7 +525,7 @@ internal static class PufferSuites
                 $"ABLE-TO-FAIL CONTROL: that same particle against P1's camera alone is culled, which is the reported bug");
 
             ctx.Check(FadeAlphaAt(ctx, state, new Vector3(0f, 0f, 300f), amb) == null,
-                $"behind BOTH panes it is still culled — 'any pane' is a union, not a disabled fade");
+                $"behind BOTH panes it is still culled, 'any pane' is a union, not a disabled fade");
 
             // The most FAVOURABLE answer, not the first or the last: P1 reads 350 m (half way
             // across its far band), P2 sits 50 m short of it and reads full alpha.
@@ -612,7 +612,7 @@ internal static class PufferSuites
         ctx.Check(Mathf.IsEqualApprox(baseline, 4f, 1e-4f),
             $"PRIORITY 0 draws at the plain size (radius 2 × diameter convention, A1) size={baseline:0.0000}");
         ctx.Check(Mathf.IsEqualApprox(inflated, baseline * 1.2f, 1e-4f),
-            $"PRIORITY 10 draws 20% larger than PRIORITY 0 — 1 + 0.02·10 baseline={baseline:0.0000} inflated={inflated:0.0000}");
+            $"PRIORITY 10 draws 20% larger than PRIORITY 0, 1 + 0.02·10 baseline={baseline:0.0000} inflated={inflated:0.0000}");
     }
 
     // One particle, no randomness: NUMBER 1, a degenerate random-velocity range (min ==
@@ -749,7 +749,7 @@ internal static class PufferSuites
         var half = RunWindParticle(ctx,
             WindTestState("wf_half", Vector3.Zero, Vector3.Zero, Friction, 0.3f), blowing, Frames, Dt);
         ctx.Check(Mathf.IsEqualApprox(half.X, carriedX * 0.3f, 0.01f),
-            $"and the coupling is linear in WIND_FACTOR — 0.3 drifts 0.3× as far x={half.X:0.0000}");
+            $"and the coupling is linear in WIND_FACTOR, 0.3 drifts 0.3× as far x={half.X:0.0000}");
     }
 
     // The engine's own gate: the whole damp-toward-wind block sits inside
@@ -786,7 +786,7 @@ internal static class PufferSuites
             ctx.Check(wind.Magnitude >= 0f && wind.Magnitude <= 10f,
                 $"gust magnitude stays in [0, RANDOM_MAX_SPEED] mag={wind.Magnitude:0.000}");
             if (!Mathf.IsEqualApprox(wind.Velocity.Y, 2f))
-                ctx.Check(false, $"the gust is horizontal — Y must stay the static 2 m/s, saw {wind.Velocity.Y}");
+                ctx.Check(false, $"the gust is horizontal, Y must stay the static 2 m/s, saw {wind.Velocity.Y}");
             float h = new Vector2(wind.Velocity.X, wind.Velocity.Z).Length();
             maxHorizontal = Mathf.Max(maxHorizontal, h);
             if (h > 1f)
@@ -1002,7 +1002,7 @@ internal static class PufferSuites
             ctx.Check(afterHitch <= gpu.Capacity,
                 $"a 25-batch hitch cannot overrun the pool live={afterHitch} pool={gpu.Capacity}");
             ctx.Check(afterHitch > 18,
-                $"its youngest batches ARE born alive — the hitch is not silently dropped whole live={afterHitch}");
+                $"its youngest batches ARE born alive, the hitch is not silently dropped whole live={afterHitch}");
             // ⚠ Do not assert how many of the spawns the born-dead skip discarded. The pool is sized to one
             // lifetime and the survivors are one lifetime's worth, so the pool clamp would answer the check
             // instead of the skip; the drain assertion below is where the skip's arithmetic is readable.
@@ -1098,7 +1098,7 @@ internal static class PufferSuites
             puffer._Process(0f);
             int strays = gpu.LastFrame.Count(p => p.Position.X > b.X + 10f && p.Position.X < c.X - 10f);
             ctx.Same(0, strays,
-                $"a restart re-homes at the new site — no puffs interpolated across the 1000 m jump");
+                $"a restart re-homes at the new site, no puffs interpolated across the 1000 m jump");
             ctx.Check(gpu.LastFrame.Any(p => p.Position.DistanceTo(c) < 3f),
                 $"the restart's first batch lands at the new site");
         }
@@ -1210,7 +1210,7 @@ internal static class PufferSuites
             }
             ctx.Note($"unauthored TIME_INTERVAL, live sprites after 1/2/3 s: {string.Join("/", series)}");
             ctx.Check(series[0] == 1 && series[1] == 2 && series[2] == 3,
-                $"an unauthored state emits once a second, not on the emission floor — {string.Join("/", series)}");
+                $"an unauthored state emits once a second, not on the emission floor, {string.Join("/", series)}");
         }
         finally
         {
@@ -1477,7 +1477,7 @@ internal static class PufferSuites
             puffer._Process(1f / 60f);
 
             ctx.Same(40, gpu.Shown,
-                $"every particle draws — this state's start age (max 0.1) never reaches its lifetime (1), so the born-dead skip stays silent shown={gpu.Shown}");
+                $"every particle draws, this state's start age (max 0.1) never reaches its lifetime (1), so the born-dead skip stays silent shown={gpu.Shown}");
 
             int redCount = gpu.LastFrame.Count(p => p.Color == Colors.Red);
             ctx.Check(redCount > gpu.LastFrame.Count / 2,
@@ -1485,10 +1485,10 @@ internal static class PufferSuites
 
             var bySize = gpu.LastFrame.GroupBy(p => p.Size).OrderByDescending(g => g.Count()).First();
             ctx.Check(bySize.Count() > gpu.LastFrame.Count / 2,
-                $"most particles collapse onto one identical size — the growth ramp clamps age<=0 to stop 0 rather than each drawing its own extrapolated value count={bySize.Count()}/{gpu.LastFrame.Count}");
+                $"most particles collapse onto one identical size, the growth ramp clamps age<=0 to stop 0 rather than each drawing its own extrapolated value count={bySize.Count()}/{gpu.LastFrame.Count}");
             float commonSize = bySize.Key;
             ctx.Check(gpu.LastFrame.All(p => p.Size >= commonSize - 1e-3f),
-                $"no particle sits below the clamped stop-0 size — an unclamped negative age would shrink (or negate) it");
+                $"no particle sits below the clamped stop-0 size, an unclamped negative age would shrink (or negate) it");
 
             // Past the unmodified 1 s LIFETIME_RANGE, particles born with a negative start age
             // must still be alive: they need up to Life - StartAgeMin = 2 s of Age to reap.
@@ -1516,7 +1516,7 @@ internal static class PufferSuites
     // ⚠ Assert ratios and bands, never a pinned decimal; a height is one seed's extreme and moves
     // about 1.5 m with suite order, so the exact figures belong in ctx.Note.
     [Suite("puffer-fire-column",
-        "the 30 s fire's authored column height, still air and in C1's own upward wind — the readout that retired the invented fire scales (D10)")]
+        "the 30 s fire's authored column height, still air and in C1's own upward wind, the readout that retired the invented fire scales (D10)")]
     internal static void PufferFireColumn(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -1544,14 +1544,14 @@ internal static class PufferSuites
             // The compiled numbers this measurement rests on, asserted rather than assumed: a data
             // change must fail here naming itself, not silently re-baseline the heights below.
             ctx.Check(fire.Name == "fire_n_smoke", $"the 30 s fire's emitter name={fire.Name}");
-            ctx.Same(1, fire.Number, $"large_30sec_fire authors no NUMBER — one puff per interval (BL-218)");
+            ctx.Same(1, fire.Number, $"large_30sec_fire authors no NUMBER, one puff per interval (BL-218)");
             ctx.Check(Mathf.IsEqualApprox(0.1f, fire.TimeInterval), $"TIME_INTERVAL 0.1 s");
             ctx.Check(Mathf.IsEqualApprox(5f, fire.LocalVelocity.Y) && Mathf.IsEqualApprox(4f, fire.WorldVelocity.Y),
                 $"the rise is LOCAL_VELOCITY 5 + WORLD_VELOCITY 4 m/s");
             ctx.Check(Mathf.IsEqualApprox(-1f, fire.WorldAcceleration.Y), $"WORLD_ACCELERATION −1 m/s²");
             ctx.Check(Mathf.IsEqualApprox(0.6f, fire.Friction), $"FRICTION 0.6");
             ctx.Check(Mathf.IsEqualApprox(1f, fire.SizeMin) && Mathf.IsEqualApprox(3.5f, fire.SizeMax),
-                $"SIZE_RANGE 1–3.5 m (a RADIUS — A1)");
+                $"SIZE_RANGE 1–3.5 m (a RADIUS, A1)");
             ctx.Check(Mathf.IsEqualApprox(3.5f, fire.LifetimeMin) && Mathf.IsEqualApprox(5.5f, fire.LifetimeMax),
                 $"LIFETIME_RANGE 3.5–5.5 s");
             ctx.Check(Mathf.IsEqualApprox(2.5f, fire.GrowthFactor), $"GROWTH_FACTOR 2.5");
@@ -1568,7 +1568,7 @@ internal static class PufferSuites
                 var still = MeasureFireColumn(ctx, fire, EffectAmbience.Still);
                 var wind = MeasureFireColumn(ctx, fire, breeze);
 
-                ctx.Note($"large_30sec_fire column, 30 s at 1/60, still host — heights above the emitter:");
+                ctx.Note($"large_30sec_fire column, 30 s at 1/60, still host, heights above the emitter:");
                 ctx.Note($"  still air: centre apex {still.Centre:0.0} m, drawn top {still.Top:0.0} m (unscaled sprite: {still.PreA1Top:0.0} m), peak live {still.Live}, largest sprite {still.Sprite:0.0} m");
                 ctx.Note($"  C1 IA1 wind (0,2,0): centre apex {wind.Centre:0.0} m, drawn top {wind.Top:0.0} m, peak live {wind.Live}");
 
@@ -1579,7 +1579,7 @@ internal static class PufferSuites
                 // (2) the sprite's own half-extent is a real share of the plume, the SIZE_RANGE
                 //     radius showing up in the picture rather than only in a constant;
                 ctx.Check(still.Top > still.Centre * 1.3f,
-                    $"the drawn top stands well above the centre apex — A1's sprite is a real share of the plume top={still.Top:0.0} centre={still.Centre:0.0}");
+                    $"the drawn top stands well above the centre apex, A1's sprite is a real share of the plume top={still.Top:0.0} centre={still.Centre:0.0}");
                 // (3) the wind coupling lifts this puffer. C1 IA1's authored wind blows straight
                 //     UP, and with no engine-side fire tune this is the whole reason the authored
                 //     column reaches: decouple the wind and the plume loses ~6 m of height.
@@ -1676,7 +1676,7 @@ internal static class PufferSuites
                      "exp_yel01", "poleflare", "magnesiumtip", "watersquirt",
                  })
         {
-            ctx.Check(!textures.IsAdditive(name), $"{name} is alpha-mixed — no puffer sprite carries the bit");
+            ctx.Check(!textures.IsAdditive(name), $"{name} is alpha-mixed, no puffer sprite carries the bit");
         }
         ctx.Check(!textures.IsAdditive("no_such_texture"),
             $"a name the archive cannot resolve alpha-mixes, which is the engine's own fallback");

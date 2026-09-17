@@ -156,7 +156,7 @@ public class FarFieldPlantTests
 
         Assert.Equal(0f, far.BodyRates.Length(), 7);
         Assert.True(Mathf.Abs(near.BodyRates.Y) > 1e-4f,
-            $"the near-field control picked up no yaw ({near.BodyRates.Y}) — the coupling is out of "
+            $"the near-field control picked up no yaw ({near.BodyRates.Y}), the coupling is out of "
             + "reach in this attitude and the comparison says nothing");
     }
 
@@ -199,7 +199,7 @@ public class FarFieldPlantTests
 
         Assert.Equal(1f, far.CommandLimit, 6);
         Assert.True(near.CommandLimit < 0.95f,
-            $"the near-field control's limiter is not in reach ({near.CommandLimit}) — the probe "
+            $"the near-field control's limiter is not in reach ({near.CommandLimit}), the probe "
             + "no longer separates a forced 1 from a computed one");
     }
 

@@ -583,7 +583,7 @@ public sealed class FogVolumeSpec
         if (rectArea <= 0 || Mathf.Abs((float)(footprint / rectArea) - 1f) > 0.001f)
         {
             return (null, $"{pieces.Count} top-anchored box volume(s) do not exactly tile their "
-                          + $"own bounds ({footprint:0}/{rectArea:0}) — not a map-spanning slab");
+                          + $"own bounds ({footprint:0}/{rectArea:0}), not a map-spanning slab");
         }
 
         return (new MapSpanningSlab(x0, x1, z0, z1, topY), null);

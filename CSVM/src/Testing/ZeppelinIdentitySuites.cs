@@ -146,7 +146,7 @@ internal static class ZeppelinIdentitySuites
         float owned = AiTargetRanking.ObjectiveBiasFor("gasbag1", new[] { "cargozep2" }, biases);
         float other = AiTargetRanking.ObjectiveBiasFor("gasbag1", new[] { "beowulfzep" }, biases);
         ctx.Check(bare == 0f,
-            $"a zone offered under its own anchor name alone matches nothing — the zone is 'gasbag1', the pattern names the hull (bias={bare})");
+            $"a zone offered under its own anchor name alone matches nothing, the zone is 'gasbag1', the pattern names the hull (bias={bare})");
         ctx.Check(owned == AiTargetRanking.NotRanked,
             $"…and the same zone carrying its owning zeppelin's name takes the authored -1.0 exclusion (bias={owned})");
         ctx.Check(other == 0f,
@@ -170,7 +170,7 @@ internal static class ZeppelinIdentitySuites
         var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
         ctx.Check(ZeppelinRuntime.AuthoredTeam(Record(defs, AllyZep)) == AimAssist.PlayerTeam
             && ZeppelinRuntime.AuthoredTeam(Record(defs, PlainZep)) == null,
-            $"C1/MP3 authors 'ally' on '{AllyZep}' and nothing on '{PlainZep}' — the pair this measures");
+            $"C1/MP3 authors 'ally' on '{AllyZep}' and nothing on '{PlainZep}', the pair this measures");
 
         ctx.WithWorld("C1", collision: false, "MP3", world =>
         {

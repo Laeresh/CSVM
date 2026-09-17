@@ -541,12 +541,12 @@ public sealed class WeatherRig
                 // Once per state, not per crossing: a mission with no authored ZONE<n> keeps the
                 // file's first zone rather than rendering fullbright/no-fog. The one line
                 // explaining a state change that moves nothing on screen.
-                Log.Info("world", $"weather: {_spec.Chapter}/{_spec.Mission} authors no 'zone{change.State}' (zones: {string.Join("/", _weather.ZoneNames)}) — camera state {change.State} keeps fog zone '{change.Zone}'");
+                Log.Info("world", $"weather: {_spec.Chapter}/{_spec.Mission} authors no 'zone{change.State}' (zones: {string.Join("/", _weather.ZoneNames)}), camera state {change.State} keeps fog zone '{change.Zone}'");
             if (change.Applied)
             {
                 var fog = _weather.Zone(change.Zone);
                 ApplyZone(fog);
-                Log.Info("world", $"weather: camera state {change.State} -> fog zone '{change.Zone}' — fog {fog.FogNear:0}-{fog.FogFar:0} m, altitude {fog.FogLow:0}-{fog.FogHigh:0} m, world light {fog.WorldLight:0.00}, sun {Mathf.RadToDeg(fog.SunOrientation.X):0.#}°/{Mathf.RadToDeg(fog.SunOrientation.Y):0.#}° (dome built for '{_activeZone}'){LightSuffix(fog)}");
+                Log.Info("world", $"weather: camera state {change.State} -> fog zone '{change.Zone}', fog {fog.FogNear:0}-{fog.FogFar:0} m, altitude {fog.FogLow:0}-{fog.FogHigh:0} m, world light {fog.WorldLight:0.00}, sun {Mathf.RadToDeg(fog.SunOrientation.X):0.#}°/{Mathf.RadToDeg(fog.SunOrientation.Y):0.#}° (dome built for '{_activeZone}'){LightSuffix(fog)}");
             }
         }
     }
@@ -593,8 +593,17 @@ public sealed class WeatherRig
         // this rather than a placeholder gradient, so a night zone mirrors its own sky.
         WriteSkyColor(env, skyColor);
         env.ReflectedLightSource = Godot.Environment.ReflectionSource.Bg;
-        // ⚠ Take the ambient off the sky: AmbientSource.Sky reads the placeholder procedural sky,
-        // not the mission's authored ambient colour, and would ignore both values written here.
+        WriteColorAmbient(env, ambientColor, ambientEnergy);
+    }
+
+    // One Environment's ambient as a colour and an energy, the write both lighting arms share.
+    // ⚠ The source is written on every apply and never left on AmbientSource.Sky: Godot then takes
+    // the fill off the sky cubemap scaled by the background energy, which is a daylight procedural
+    // gradient at night as well as by day, and ignores both values passed here.
+    private static void WriteColorAmbient(Godot.Environment? env, Color ambientColor, float ambientEnergy)
+    {
+        if (env == null)
+            return;
         env.AmbientLightSource = Godot.Environment.AmbientSource.Color;
         env.AmbientLightColor = ambientColor;
         env.AmbientLightEnergy = ambientEnergy;
@@ -687,7 +696,7 @@ public sealed class WeatherRig
             // Said out loud once per session: "0 of 144" is what a broken lookup looks like, and
             // it would otherwise be indistinguishable from a deck that is simply never above the
             // band.
-            Log.Info("world", $"deck lighting: {lighting.Tiles.Count} of {instances} deck tile(s) carry an undimmed twin — the sheet keeps SUNLIGHT below the cloud band, drops it above");
+            Log.Info("world", $"deck lighting: {lighting.Tiles.Count} of {instances} deck tile(s) carry an undimmed twin, the sheet keeps SUNLIGHT below the cloud band, drops it above");
         }
         if (lighting.Tiles.Count != instances)
         {
@@ -735,7 +744,7 @@ public sealed class WeatherRig
             // Said out loud once per session: a puffer that drifts sideways for no visible reason
             // is otherwise indistinguishable from a broken spawn, and this is the one line that
             // names the force doing it.
-            Log.Info("world", $"wind: static ({_weather.WindStatic.X:0.##}, {_weather.WindStatic.Y:0.##}, {_weather.WindStatic.Z:0.##}) m/s, gust <= {_weather.WindRandomMaxSpeed:0.##} m/s (step {_weather.WindRandomAccel:0.##} m/s per frame, turning {_weather.WindRandomAngVel:0.##} deg/s) — carries every puffer with FRICTION by its WIND_FACTOR");
+            Log.Info("world", $"wind: static ({_weather.WindStatic.X:0.##}, {_weather.WindStatic.Y:0.##}, {_weather.WindStatic.Z:0.##}) m/s, gust <= {_weather.WindRandomMaxSpeed:0.##} m/s (step {_weather.WindRandomAccel:0.##} m/s per frame, turning {_weather.WindRandomAngVel:0.##} deg/s), carries every puffer with FRICTION by its WIND_FACTOR");
         string byFile = _weather?.ResolveZone(_spec.SkyZone) ?? _spec.SkyZone;
         _activeZone = _spec.SkyZoneExplicit
             ? byFile
@@ -744,21 +753,21 @@ public sealed class WeatherRig
         if (!_activeZone.Equals(byFile, StringComparison.OrdinalIgnoreCase))
             // The horizon correction. Printed with the counts it was decided on, because this is
             // the one line that says which sky and which fog the flight actually got.
-            Log.Info("world", $"weather: {_spec.Chapter} builds no horizon geometry under '{byFile}' ({string.Join(", ", HorizonZoneCounts(horizonZones))}) — rendering '{_activeZone}' sky and fog");
+            Log.Info("world", $"weather: {_spec.Chapter} builds no horizon geometry under '{byFile}' ({string.Join(", ", HorizonZoneCounts(horizonZones))}), rendering '{_activeZone}' sky and fog");
         // The fog zone follows the camera's weather state from here, starting at the zone Build
         // just resolved. An explicit --sky-zone disarms the machine entirely, so an inspection
         // pose renders one named zone reproducibly.
         _fogState = new FogStateTrigger(stateDriven: !_spec.SkyZoneExplicit, buildZone: _activeZone);
         if (_weather == null)
         {
-            GD.PushWarning($"no weather.json for {_spec.Chapter}/{_spec.Mission} — flying without fog / whiteout");
+            GD.PushWarning($"no weather.json for {_spec.Chapter}/{_spec.Mission}, flying without fog / whiteout");
             return;
         }
         if (!byFile.Equals(_spec.SkyZone, StringComparison.OrdinalIgnoreCase))
             // Not a fault: a chapter that numbers its zones differently resolves here every
             // flight. C5 (zone1/zone3) does so on all 8 missions, and zone1 is the confirmed
             // correct choice there, so this must not read as a missing-data warning.
-            Log.Info("world", $"weather: {_spec.Chapter}/{_spec.Mission} has no '{_spec.SkyZone}' (zones: {string.Join("/", _weather.ZoneNames)}) — rendering '{_activeZone}'");
+            Log.Info("world", $"weather: {_spec.Chapter}/{_spec.Mission} has no '{_spec.SkyZone}' (zones: {string.Join("/", _weather.ZoneNames)}), rendering '{_activeZone}'");
     }
 
     // Applies the loaded weather: sets the distance-fog global shader parameters for
@@ -778,7 +787,7 @@ public sealed class WeatherRig
             // Said out loud once per session, because "the curtain never fired" and "the chapter
             // never armed it" are the same picture otherwise. Only C5 prints it.
             var wc = _fogWhiteout.Color ?? _weather.CloudTopColor ?? WhiteoutFallbackColor;
-            Log.Info("world", $"fvol whiteout: armed — {_fogVolumes.Count} volume(s), approach {_fogWhiteout.FadeDist:0.#} m, interior decay {_fogWhiteout.InteriorFadeDist:0.#} m, colour {wc.ToHtml(false)}{(_fogWhiteout.Color == null ? " (CLOUD_COVER TOP_COLOR default)" : " (authored)")}");
+            Log.Info("world", $"fvol whiteout: armed, {_fogVolumes.Count} volume(s), approach {_fogWhiteout.FadeDist:0.#} m, interior decay {_fogWhiteout.InteriorFadeDist:0.#} m, colour {wc.ToHtml(false)}{(_fogWhiteout.Color == null ? " (CLOUD_COVER TOP_COLOR default)" : " (authored)")}");
         }
         SetupWhiteoutAndPrecip(rigs);
     }
@@ -856,22 +865,18 @@ public sealed class WeatherRig
                 fog.SunColorAmbient, fog.FogColor);
     }
 
-    // The faithful path's half of the zone apply: the authored SUNLIGHT drives the one light the
-    // aircraft is shaded by. The world takes csky_world_light instead, being fullbright.
-    // ⚠ The ambient write is inert while the Environment takes its ambient from the sky at full
-    // contribution, which is what the faithful path builds. Zeroing it moves no golden pixel;
-    // whose colour that ambient should be is a separate question (docs/architecture.md).
+    // The faithful path's half of the zone apply: the authored SUNLIGHT pair drives the sun the
+    // aircraft is shaded by and the ambient that fills its shaded side. The world takes
+    // csky_world_light instead, being fullbright, and does not read this ambient at all.
     private void ApplyFaithfulLighting(WeatherState.ZoneWeather fog)
     {
         (float sunEnergy, float ambientEnergy) = FaithfulEnergies(fog);
         _sun.LightEnergy = sunEnergy;
-        if (_env != null)
-            _env.AmbientLightEnergy = ambientEnergy;
+        WriteColorAmbient(_env, fog.SunColorAmbient, ambientEnergy);
         foreach (var (sun, env) in _extraLighting)
         {
             sun.LightEnergy = sunEnergy;
-            if (env != null)
-                env.AmbientLightEnergy = ambientEnergy;
+            WriteColorAmbient(env, fog.SunColorAmbient, ambientEnergy);
         }
     }
 

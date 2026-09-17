@@ -11,7 +11,7 @@ namespace CSVM.Flight;
 /// while the airframe is hurt and for 'cockpit_engine_sound' while the pilot's SELECTED view is
 /// Cockpit or Nose, <see cref="EngineAudioCurves.EngineDefFor"/> is the one precedence rule both
 /// swaps share), the overspeed whine ('prop_sound', which no shipped def names), the
-/// airframe rattle (player.json 'rattle' block), plus the prop start/stop one-shots
+/// airframe rattle (player.json 'rattle', a gate at full level past fd_speed), plus the one-shots
 /// (snd_propstart/snd_propstop). Non-positional players: these are what the pilot hears, and
 /// <see cref="AiEngineAudio"/> is the positional twin every other aircraft carries (own-ship only,
 /// an AI rig has no selected view, so it never reads 'cockpit_engine_sound').
@@ -50,6 +50,8 @@ public partial class FlightAudio : Node
     private float _grazeGroundVol = 1f, _grazeWaterVol = 1f;
     private AudioStreamPlayer? _propStart, _propStop;
     private float _propStartVol = 1f, _propStopVol = 1f;
+    private AudioStreamPlayer? _dzCamera;
+    private float _dzCameraVol = 1f;
     private float _engineRamp = 1f; // 0→1 gain envelope while the engine catches after a start
 
     // Gun firing: kept references so the looped firing sound + empty-clip cue can be built
@@ -109,6 +111,10 @@ public partial class FlightAudio : Node
         // wind-down for a future landing/shutdown (see OnEngineStop).
         _propStart = MakeOneShot(archive, defs, "snd_propstart", out _propStartVol);
         _propStop = MakeOneShot(archive, defs, "snd_propstop", out _propStopVol);
+
+        // The stunt run's camera sting, a flat SFX definition no SOUND_GROUPS entry and no world
+        // data names: what the Danger Zone photograph sounds like.
+        _dzCamera = MakeOneShot(archive, defs, "snd_dangerzone_camera", out _dzCameraVol);
 
         // Crash explosions: the game defines snd_exp_plane1..4 as a set; pick one at
         // random per crash, like the original.
@@ -227,7 +233,7 @@ public partial class FlightAudio : Node
             var (pitch, volume) = EngineAudioCurves.Whine(_stats, speedFrac);
             UpdateLoop(_whine, volume * _whineVol * MixGain, pitch);
         }
-        UpdateLoop(_rattle, _stats.RattleVolume.Eval(speedFrac) * _rattleVol * MixGain, 1f);
+        UpdateLoop(_rattle, EngineAudioCurves.Rattle(_stats, speedFrac) * _rattleVol * MixGain, 1f);
     }
 
     /// <summary>Holds (or releases) the own-plane loops where they are, for the sim-clock halt:
@@ -320,6 +326,16 @@ public partial class FlightAudio : Node
     /// <summary>A canopy hole opened: one draw from <c>window_hit_sg</c>. The cadence is
     /// <see cref="CanopyHoleCue"/>'s, and the caller has already decided.</summary>
     public string? OnWindowHit() => PlayGroupCue(_windowHit, _windowHitGroup);
+
+    /// <summary>The Danger Zone camera sting, one shot as the run latches that marker's
+    /// photograph (<see cref="StuntCapture"/>). Takes MixGain like the other own-ship cues, so four
+    /// racing pilots crossing markers at once do not sum into one wall of shutter.</summary>
+    public void OnDangerZoneCamera()
+    {
+        float gain = _dzCameraVol * MixGain;
+        PlayOneShot(_dzCamera, gain);
+        Log.Info("sound", $"stunt capture: snd_dangerzone_camera MixGain={MixGain:0.00} vol={gain:0.000}");
+    }
 
     /// <summary>Engine wind-down: plays snd_propstop and kills the loops. Layers over the crash
     /// explosion one-shot (<see cref="OnCrash"/>) rather than replacing it, FlightController

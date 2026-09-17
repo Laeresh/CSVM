@@ -444,25 +444,25 @@ public sealed class NameResolver<TNode>
                   + $"unanchored={_censusUnanchored} target_missing_ops={_censusMissing}");
         if (_censusUnanchored > 0)
         {
-            lines.Add($"bind unanchored={_censusUnanchored} — no handler ever fires for these: "
+            lines.Add($"bind unanchored={_censusUnanchored}, no handler ever fires for these: "
                       + Sample(_censusUnanchoredNames, _censusUnanchored));
         }
         if (_censusLifted > 0)
         {
-            lines.Add($"bind root_lifted={_censusLifted} — anchored only because this subtree has "
+            lines.Add($"bind root_lifted={_censusLifted}, anchored only because this subtree has "
                       + $"≤{MaxRootLift} of the def's ANIMATION_ROOT_NAME, which the full world does not: "
                       + Sample(_censusLiftedNames, _censusLifted));
         }
         if (_censusSuppressed > 0)
         {
-            lines.Add($"bind root_lift_suppressed={_censusSuppressed} — these WOULD have anchored on "
+            lines.Add($"bind root_lift_suppressed={_censusSuppressed}, these WOULD have anchored on "
                       + $"this subtree's generic ANIMATION_ROOT_NAME children, which the full world's "
                       + $"node count rules out; refused so the stage shows only defs that name it: "
                       + Sample(_censusSuppressedNames, _censusSuppressed));
         }
         if (_censusMissing > 0)
         {
-            lines.Add($"bind target_missing={_censusMissing} — the def IS running, the node is not in "
+            lines.Add($"bind target_missing={_censusMissing}, the def IS running, the node is not in "
                       + $"this subtree: " + Sample(_censusMissingTargets, _censusMissing));
         }
         return lines;

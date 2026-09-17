@@ -59,7 +59,7 @@ public sealed partial class AiEngineAudio : Node3D
             // Said out loud, because the alternative reading of a silent aircraft is a slot that
             // failed to resolve: no archive means no line from Setup below, and no line at all is
             // the one case that would otherwise be indistinguishable from never having tried.
-            Log.Info("sound", $"ai engine {controller.Name}: no sound archive — this aircraft carries no engine loop");
+            Log.Info("sound", $"ai engine {controller.Name}: no sound archive, this aircraft carries no engine loop");
             return null;
         }
         var audio = new AiEngineAudio { Name = "EngineAudio", Listeners = listeners };

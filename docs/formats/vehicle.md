@@ -97,8 +97,10 @@ holds **two** sound handles per vehicle. Both are positional or not by the sound
 
 An AI vehicle's arm adds exactly one thing: both handles stop past **2000 world units** from the
 player (compared as a squared distance against 4000000) and start again on the way back in. Rattle,
-the collision one-shots and the landing one-shots are not part of this routine and are player-gated
-elsewhere. ⚠ **The pitch multiplier is not an AI/player fork.** Both arms rejoin at the damage test
+the collision one-shots and the landing one-shots are not part of this routine and are gated
+elsewhere: the rattle on the vehicle the camera is watching, past `1.0× fd_speed`, at the engine
+slot's own level ([org/shakes.md](../org/shakes.md#the-rattle-sound-is-a-gate-at-full-level-not-the-authored-ramp)).
+⚠ **The pitch multiplier is not an AI/player fork.** Both arms rejoin at the damage test
 (`0x004b19e2`), so an AI's damaged engine draws the same multiplier a player's does; the literal
 1.0 store at `0x004b1b33` is the HEALTHY case for both, which the decompiler's branch order hides.
 

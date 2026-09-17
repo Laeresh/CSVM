@@ -64,6 +64,19 @@ public class CameraControllerFovTests
             CameraController.FirstPersonFovDeg(PilotViewMode.Nose), 3);
     }
 
+    [Fact]
+    public void EveryViewOutsideTheCockpitInteriorTakesTheOneDecodedBase()
+    {
+        // The chase, the nine fixed numpad poses, look-behind, the pad look-around, the crash and
+        // death cuts and the flyby are all camera modes the binary hands the 60° constant, so they
+        // share one number with the Nose view rather than carrying an assumption of their own.
+        Assert.InRange(CameraController.ExternalFovDeg, 46.7f, 46.9f);
+        Assert.Equal(CameraController.FirstPersonFovDeg(PilotViewMode.Nose),
+            CameraController.ExternalFovDeg, 3);
+        Assert.NotEqual(CameraController.FirstPersonFovDeg(PilotViewMode.Cockpit),
+            CameraController.ExternalFovDeg, 3);
+    }
+
     // The horizontal angle a frustum of this vertical spans on a viewport of this aspect, in
     // degrees. The inverse of the conversion under test, so it is written out here rather than
     // taken from the class it is checking.

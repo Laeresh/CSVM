@@ -54,7 +54,10 @@ already-live gate would drop every ejection but one per 2 s window):
   (range 21.25 / 18.25 m), lit while a pilot holds a first-person view.
   Every one of them is **anchored to the firing muzzle node** and re-placed on that node's drawn
   pose each frame, the way the flash quads are: a light left at the world point it was lit at ends
-  a frame of travel astern of the muzzle, ~1.7 m at 100 m/s over the two frames it lives.
+  a frame of travel astern of the muzzle, ~1.7 m at 100 m/s over the two frames it lives. The pool
+  draws at a `ProcessPriority` above every flight rig's so that the pose it reads off the anchor is
+  the one this frame's interpolation wrote, not the previous frame's (`docs/verification.md`
+  INSTR-86).
   All three secondaries spawn at the authored (0, −0.2, −1.0) displacement of the effects root
   above, taken in the muzzle node's own frame, and the first-person pair's (±11, −1, −5) composes
   on top of it, so those two lights sit at (±11, −1.2, −6) from the gun.
@@ -111,10 +114,15 @@ common case and false of three quarters of the family; a reader that generalises
 gets the other one wrong. The slug def's only other authored bound is its debris `OBJECT_MOTION`
 `RUN_TIME` (1–2 s), which does not gate emission.
 
-⚠ **A gun's `buildings` entry is not a `gunhit`.** Every gun but `wep_02` (50slug) routes
-`buildings` → `bld_damage.flt`, which is absent from the install, so a gun round on a building
-draws the engine's ricochet stand-in and no smoke. The `gunhit` family is reached through
-`default`, i.e. terrain. Verify gun-impact work by strafing **dirt**, not a hangar.
+⚠ **A gun's `buildings` entry is not a `gunhit`, but almost nothing is `buildings`.** Every gun but
+`wep_02` (50slug, `ANIMATION large_fireball`) routes `buildings` → `bld_damage.flt`, which is absent
+from the install, so a round on that surface draws the engine's ricochet stand-in and no smoke. The
+surface is the struck material's `soil` byte, not what the geometry looks like
+([../org/weaponImpact.md](../org/weaponImpact.md)), and in the shipped data id 11 is reached only by
+C1's four `aphagar0N` hangar materials (61 colliders). **Hollywood's film-lot buildings are `soil`
+`Default`**, so strafing a studio wall or the `nycity` skyscraper plays the authored
+`<caliber><ammo>_gunhit` exactly as a dirt hit does. Verify gun-impact work by strafing **dirt or a
+C2 wall**; a C1 hangar is the one place the `gunhit` family is not what plays.
 
 ### Engine wiring (M3)
 
@@ -137,9 +145,11 @@ effect **animation**, splits by what the bound name resolves to:
   so the impact-puffer wiring folds into D32. The per-class stand-ins these names fall to:
   dirt → the single spark, i.e. no arm of its own (the tumbling chips on the `bit01–04` textures
   were **deleted, `BL-313`**, see the `PLAYER_RANGE 200` note above; ground still
-  resolves to a non-`None` stand-in because the world-effects sink is gated on it); a gun round on a
-  buildings-classed surface → a ricochet spark burst + flash (judged by eye, `bld_damage.flt`
-  and the `rcochet1` `EFFECT` are both install-missing, see the unresolved-names table).
+  resolves to a non-`None` stand-in because the world-effects sink is gated on it); a gun round on
+  `buildings`(11) whose bound name reaches neither a gamez root nor the world-effects runtime → a
+  ricochet spark burst + flash (judged by eye, `bld_damage.flt` and the `rcochet1` `EFFECT` are both
+  install-missing, see the unresolved-names table). A name the runtime **does** carry, which on
+  `buildings` means only `wep_02`'s `large_fireball`, renders and takes no stand-in on top.
 
 ### Water splash defs, `splash1.zrd.json` / `bsplsh.zrd.json`
 
@@ -342,6 +352,12 @@ recoverable from the data. The pick-one reading (one rolled quad playing the
 `BL-263`)**: it does not reproduce the stills, and what stands is a documented remake-only rule.
 The `_muzzle2` frame is not played by the flash; the impact stand-in spark keeps reusing it
 through its own separate pool.
+
+The quads are **not drawn for the guns of a pilot whose own view is the full Cockpit (mode 6)**,
+which is what the retail captures show from inside the canopy: no flash at all, only the interior
+lit by the shot. Nose (mode 7) and every other aeroplane on screen keep theirs, so the rule is per
+shooter (`ProjectilePool.CockpitViewOfPilot`), not per session. The `PLAYER_1ST_PERSON` light pair
+is unaffected and is the thing doing the lighting.
 
 ## Unresolved bindings
 

@@ -78,6 +78,16 @@ A decoration that projects onto nothing logs
 32 resolving templates), so implementing it is fidelity rather than a case any chapter exercises,
 but a miss must skip and say so, never quietly land at UV (0, 0).
 
+**A decoration is a node chain, and the position is read off its top.** The `.flt` node the
+template ground parents is what the ray is cast from, and the model it draws hangs under it with a
+local transform of its own, which moves the drawn mesh and never the stored UV. C5's
+`w_lightglow.flt` translates by 0 and its `w_lightglow` mesh child by y = 4.75, the height of the
+lamp head on the 5 m `lightpole` card beside it; the glow quad is centred on its own origin (y in
+[-0.684, 0.684]), so a stamp that drops the chain buries it in the road. ⚠ **It is the only
+non-identity chain in the install**: of 872 decorations across all eight chapters, the 164 that
+translate are all this one model at the same (0, 4.75, 0), which `CSVM.Tests/ClutterQuadUvTests.cs`
+pins as a census.
+
 **The `fmod` wrap has a negative branch.** A negative coordinate maps to `1 − frac`, and an exact
 `1.0` (a fraction that rounded away) collapses back to `0`. ⚠ **No retail decoration reaches the
 negative branch**, all 32 resolving ground quads span exactly 0..1 in both axes, install-wide, so

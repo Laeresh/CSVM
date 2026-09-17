@@ -170,14 +170,14 @@ public sealed partial class SelectionService : Node
             || !float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float x)
             || !float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float y))
         {
-            Log.Warn("ui", $"--debug-select='{spec}' is not x,y[,up] — ignoring it");
+            Log.Warn("ui", $"--debug-select='{spec}' is not x,y[,up], ignoring it");
             return null;
         }
         int up = 0;
         if (parts.Length == 3
             && !int.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out up))
         {
-            Log.Warn("ui", $"--debug-select='{spec}' has a non-integer rung count — ignoring the walk");
+            Log.Warn("ui", $"--debug-select='{spec}' has a non-integer rung count, ignoring the walk");
             up = 0;
         }
         return (new Vector2(x, y), up);
@@ -357,7 +357,7 @@ public sealed partial class SelectionService : Node
         }
         if (_ladder.Count == 0)
         {
-            Log.Warn("ui", $"select found no named ancestor above node='{node.Name}' — nothing under the cursor carries a cs_name, so there is no ladder to walk");
+            Log.Warn("ui", $"select found no named ancestor above node='{node.Name}', nothing under the cursor carries a cs_name, so there is no ladder to walk");
             Clear();
             return;
         }
@@ -371,7 +371,7 @@ public sealed partial class SelectionService : Node
     {
         if (_ladder.Count == 0)
         {
-            Log.Info("ui", $"select nothing selected — click an object first (steps={steps})");
+            Log.Info("ui", $"select nothing selected, click an object first (steps={steps})");
             return;
         }
         int want = Level + steps;

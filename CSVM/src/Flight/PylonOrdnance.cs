@@ -88,7 +88,7 @@ public sealed class PylonOrdnance
                 if (!want && _hidesLogged < 12)
                 {
                     _hidesLogged++;
-                    Log.Info("weapons", $"pylon ordnance: pylon{m.Hardpoint.Index} dry — mounted model hidden");
+                    Log.Info("weapons", $"pylon ordnance: pylon{m.Hardpoint.Index} dry, mounted model hidden");
                 }
             }
         }

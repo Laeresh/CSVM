@@ -373,7 +373,7 @@ internal static class CampaignSuites
         + "BEGIN_DORMANT wake timings and their sound/turret actions, the primary completing "
         + "off an INACTIVEn node, its KILL/WAKE/NAP chains and target-list edits, the display "
         + "rows and the mask bit their IDENTITY priority names (bit 0 staying clear, since it is "
-        + "the win flag the director lays on), plus BOTH endings the script authors — the INSTANTWIN "
+        + "the win flag the director lays on), plus BOTH endings the script authors, the INSTANTWIN "
         + "path and the 300 s reminder fuse that naps the INSTANTLOSS objective")]
     internal static void CampaignObjectives(TestContext ctx)
     {

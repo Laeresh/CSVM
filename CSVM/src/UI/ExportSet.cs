@@ -103,7 +103,7 @@ public sealed partial class ExportSet : Node
         var set = _members.Where(IsInstanceValid).ToList();
         if (set.Count == 0)
         {
-            Log.Info("ui", $"nodelab export set — the set is empty (Ctrl+click objects, or ± set on a selection)");
+            Log.Info("ui", $"nodelab export set, the set is empty (Ctrl+click objects, or ± set on a selection)");
             return;
         }
         Log.Info("ui", $"nodelab export set count={set.Count} nodes=[{string.Join(" ", set.Select(SelectionService.NameOf))}]");
@@ -125,5 +125,5 @@ public sealed partial class ExportSet : Node
     private string CountLine() =>
         _members.Count == 0
             ? ""
-            : Log.Format($"\nexport set {_members.Count} node(s) — N opens the node lab's Export set");
+            : Log.Format($"\nexport set {_members.Count} node(s), N opens the node lab's Export set");
 }

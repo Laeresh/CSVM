@@ -447,7 +447,11 @@ public partial class GameSession : Node3D
         };
         GameClock.Current = _clock;
         LoadProgress.Report(LoadStep.Scaffold);
-        _camera.Fov = _spec.Fly || _spec.Freecam || _spec.AnimLab ? 62 : 50;
+        // Every world camera outside the cockpit interior draws at the one decoded base
+        // (CameraController.ExternalFovDeg); the 50 is the static viewer's own framing, which
+        // shows a model rather than the world and is not one of the original's views.
+        _camera.Fov = _spec.Fly || _spec.Freecam || _spec.AnimLab
+            ? CameraController.ExternalFovDeg : 50f;
         // One rig per rendered view, before anything camera-anchored is built (the skydome and
         // weather visuals below are per-rig). Single player reuses the main-viewport camera.
         BuildRigs(_spec.Fly ? _spec.Players : 1);
@@ -471,7 +475,7 @@ public partial class GameSession : Node3D
         }
         catch (Exception e)
         {
-            GD.PushWarning($"smoke screen: player.json unavailable ({e.Message}) — flying on the image defaults");
+            GD.PushWarning($"smoke screen: player.json unavailable ({e.Message}), flying on the image defaults");
             smokeTunables = SmokeScreenTunables.Image;
         }
         var screenFlashSink = _screenFlash;
@@ -1004,7 +1008,7 @@ public partial class GameSession : Node3D
         }
         if (only.Count == 0)
         {
-            Log.Info("world", $"zep: '{graft.Record}' has no record in {graft.Chapter}/{graft.Mission}'s zeppelins.zrd.json — the hull is built but nothing is wired to it");
+            Log.Info("world", $"zep: '{graft.Record}' has no record in {graft.Chapter}/{graft.Mission}'s zeppelins.zrd.json, the hull is built but nothing is wired to it");
             return (only, System.Array.Empty<AiNet>(), null);
         }
         var seat = graft.Pos ?? new Vector3(0f, only[0].Position.Y, 0f);
@@ -1044,7 +1048,7 @@ public partial class GameSession : Node3D
             return;
         }
 
-        Log.Info("core", $"campaign: {result.Outcome} — handing '{profile}' back to the menu's debrief");
+        Log.Info("core", $"campaign: {result.Outcome}, handing '{profile}' back to the menu's debrief");
         _campaignMissionEnded(profile, result);
     }
 
@@ -1197,7 +1201,7 @@ public partial class GameSession : Node3D
             }
             else
             {
-                Log.Warn("world", $"--node= no name in {_spec.Chapter} contains '{_spec.NodeName}' either — run the full world with --debug-names to read names off the objects");
+                Log.Warn("world", $"--node= no name in {_spec.Chapter} contains '{_spec.NodeName}' either, run the full world with --debug-names to read names off the objects");
             }
             _sessionTextures?.Dispose();
             _sessionTextures = null;
@@ -1213,7 +1217,7 @@ public partial class GameSession : Node3D
         Log.Info("world", $"--node='{_spec.NodeName}' matched {matches.Count} node(s): {string.Join(", ", labels)}");
         if (matches.Count > 1)
         {
-            Log.Warn("world", $"--node='{_spec.NodeName}' is ambiguous — building the first ({state.NodeSubtree.Name}#{state.NodeSubtree.Index}); name a unique node or pick by eye from the list above");
+            Log.Warn("world", $"--node='{_spec.NodeName}' is ambiguous, building the first ({state.NodeSubtree.Name}#{state.NodeSubtree.Index}); name a unique node or pick by eye from the list above");
         }
         return true;
     }
@@ -1453,7 +1457,7 @@ public partial class GameSession : Node3D
         }
         else if (state.NodeSubtree != null)
         {
-            Log.Warn("world", $"node stage: '{state.NodeSubtree.Name}'#{state.NodeSubtree.Index} built no geometry at all — it is a group node; the camera framing has nothing to aim at");
+            Log.Warn("world", $"node stage: '{state.NodeSubtree.Name}'#{state.NodeSubtree.Index} built no geometry at all, it is a group node; the camera framing has nothing to aim at");
         }
 
         // --damage-test: drive one destructible's HP through its DAMAGE_SEQUENCE stages and quit.
@@ -1546,7 +1550,7 @@ public partial class GameSession : Node3D
             if (_edgeExtender != null)
             {
                 _plane.AddChild(_edgeExtender);
-                Log.Info("world", $"map edge: rolling tile window active — block {_edgeExtender.BlockCells} cell(s), {(_edgeExtender.RepeatInsteadOfMirror ? "repeat" : "mirror (NOT what the original does)")}");
+                Log.Info("world", $"map edge: rolling tile window active, block {_edgeExtender.BlockCells} cell(s), {(_edgeExtender.RepeatInsteadOfMirror ? "repeat" : "mirror (NOT what the original does)")}");
             }
 
             // --dump-tilegrid: the census is complete the moment the extender exists (it is built
@@ -1585,7 +1589,7 @@ public partial class GameSession : Node3D
             if (cloudField != null)
             {
                 _worldRoot!.AddChild(cloudField);
-                Log.Info("world", $"fogvol clouds: {cloudField.InstanceCount} sprites ({cloudField.BaseCount} base + {cloudField.ExtensionCount} map-edge extension) over {fogVolumes.Count} volume(s) — {cloudField.Summary}");
+                Log.Info("world", $"fogvol clouds: {cloudField.InstanceCount} sprites ({cloudField.BaseCount} base + {cloudField.ExtensionCount} map-edge extension) over {fogVolumes.Count} volume(s), {cloudField.Summary}");
             }
             // ⚠ Read the fvol zone from the data, never assume it: a chapter authoring -1 keeps the
             // default layer and renders below its deck, which is authored and not a bug. One
@@ -1607,7 +1611,7 @@ public partial class GameSession : Node3D
             if (cloudBanks != null)
             {
                 _worldRoot!.AddChild(cloudBanks);
-                Log.Info("world", $"fogvol banks: {cloudBanks.BankCount} volumetric bank(s) under the cards over {cloudBanks.TileCount} fog box(es) — density {cloudBanks.Density:0.####} per metre");
+                Log.Info("world", $"fogvol banks: {cloudBanks.BankCount} volumetric bank(s) under the cards over {cloudBanks.TileCount} fog box(es), density {cloudBanks.Density:0.####} per metre");
             }
 
             // The sun goes in with the weather: its bearing is the zone's own SUNLIGHT_ORIENTATION,
@@ -1676,7 +1680,7 @@ public partial class GameSession : Node3D
                     var parts = new List<string>();
                     foreach (var d in built)
                         parts.Add($"{d.Node.Name} (zone_id {d.ZoneId})");
-                    Log.Info("world", $"horizon: {built.Count} dome(s) per rig — {string.Join(", ", parts)}{(built.Count > 1 ? "; shown by camera weather state" : "")}");
+                    Log.Info("world", $"horizon: {built.Count} dome(s) per rig, {string.Join(", ", parts)}{(built.Count > 1 ? "; shown by camera weather state" : "")}");
                 }
             });
             if (_fogStateBeforeWeather is { } heldFog)
@@ -1748,7 +1752,7 @@ public partial class GameSession : Node3D
             return HorizonScale;
         float fitted = Mathf.Min(HorizonScale, _camera.Far * HorizonFarFraction / radius);
         if (fitted < HorizonScale)
-            Log.Info("world", $"horizon: dome radius {radius:0} m x {HorizonScale:0.##} would reach past the {_camera.Far:0} m far plane — scaled {fitted:0.##}x instead");
+            Log.Info("world", $"horizon: dome radius {radius:0} m x {HorizonScale:0.##} would reach past the {_camera.Far:0} m far plane, scaled {fitted:0.##}x instead");
         return fitted;
     }
 
@@ -1775,7 +1779,7 @@ public partial class GameSession : Node3D
         labStage.AddChild(labAnchors);
         session.Root.AddChild(labStage);
         session.Runtime.IndexStage(labStage);
-        Log.Info("anim", $"anim-lab: stage — {effectRoots} effect template(s) + player anchor set built + indexed");
+        Log.Info("anim", $"anim-lab: stage, {effectRoots} effect template(s) + player anchor set built + indexed");
 
         // The spawn the mission would place the player at, the camera starts here so
         // the interesting part of the map is in view, and (below) an optional parked
@@ -1851,7 +1855,7 @@ public partial class GameSession : Node3D
         };
         _worldRoot!.AddChild(animLab);
         state.AnimLabNode = animLab;
-        Log.Info("anim", $"anim-lab: quiet stage, seed {_masterSeed}, fixed dt 1/60{(_spec.PlayAnim != null ? $", playing '{_spec.PlayAnim}'" : "")} — freecam (RMB look, WASD/QE move); transport on the button panel, P pause · . step · R restart · F picker · N node lab; click an object to follow");
+        Log.Info("anim", $"anim-lab: quiet stage, seed {_masterSeed}, fixed dt 1/60{(_spec.PlayAnim != null ? $", playing '{_spec.PlayAnim}'" : "")}, freecam (RMB look, WASD/QE move); transport on the button panel, P pause · . step · R restart · F picker · N node lab; click an object to follow");
         state.What += " + anim lab";
     }
 
@@ -2057,7 +2061,7 @@ public partial class GameSession : Node3D
         };
         _worldRoot!.AddChild(_spectator);
         state.What += " + freecam";
-        Log.Info("core", $"freecam: spectator camera at ({camPos.X:0}, {camPos.Y:0}, {camPos.Z:0}) — hold RMB to look, WASD/QE to move, Shift boost, wheel sets speed; click an object to select it, PgUp/PgDn walk its ancestor ladder (Home/End jump), N opens the node lab, F19 the damage lab on whatever destructible is selected");
+        Log.Info("core", $"freecam: spectator camera at ({camPos.X:0}, {camPos.Y:0}, {camPos.Z:0}), hold RMB to look, WASD/QE to move, Shift boost, wheel sets speed; click an object to select it, PgUp/PgDn walk its ancestor ladder (Home/End jump), N opens the node lab, F19 the damage lab on whatever destructible is selected");
     }
 
     // --fly (and --stunt): builds every rendered rig's aircraft (model, loadout, HUD, audio,
@@ -2185,7 +2189,7 @@ public partial class GameSession : Node3D
         if (iaRt != null && iaPlayerNode == null)
         {
             GD.PushWarning($"ia: player plane '{iaRt.Def.PlayerPlane}' is not one of " +
-                            $"the eleven airframes — flying '{_spec.PlaneName}' instead");
+                            $"the eleven airframes, flying '{_spec.PlaneName}' instead");
         }
 
         // What the mission forces on every human, which the wizard's own def does not: its
@@ -2221,7 +2225,7 @@ public partial class GameSession : Node3D
         }
         catch (Exception e)
         {
-            GD.PushWarning($"turrets: ai.zrd unavailable — no turret gunners: {e.Message}");
+            GD.PushWarning($"turrets: ai.zrd unavailable, no turret gunners: {e.Message}");
         }
         StartupProfile.Record("zrdr", mark);
         // flyoutAnims: the world program also carries the rockets' FLYOUT MODEL_ANIMATION defs
@@ -2249,6 +2253,9 @@ public partial class GameSession : Node3D
             // muzzle_burst's PLAYER_1ST_PERSON: the same closure the world runtime gets, so the
             // shot's lights pick the same testfp branch the anim data would.
             FirstPersonView = AnyPilotFirstPerson,
+            // The Cockpit view's own rule, per shooter rather than per session: the pilot in the
+            // canopy loses their own flash quads, every other aeroplane keeps theirs.
+            CockpitViewOfPilot = PilotInCockpitView,
             BeeperTags = _beeperTags,
             WashSink = _screenFlash != null ? _screenFlash.PlayBlend : null,
             EngineDeadBounds = TanglerChoke.EngineDeadBounds(weaponDefs),
@@ -2297,7 +2304,7 @@ public partial class GameSession : Node3D
         bool wantStunt = _spec.Stunt || iaStunt;
         if (wantStunt && _spec.EmptyStage)
         {
-            Log.Info("flight", $"--stunt has no danger zones on the empty stage (no mission, no world) — flying free");
+            Log.Info("flight", $"--stunt has no danger zones on the empty stage (no mission, no world), flying free");
         }
         else if (wantStunt)
         {
@@ -2305,11 +2312,11 @@ public partial class GameSession : Node3D
             if (stuntZones == null)
                 // Expected for the chapters whose IA1 has no dzones (C1C, C2B), a data
                 // fact, not a fault, so a plain line (log hygiene: no stack traces).
-                Log.Info("flight", $"--stunt: no danger zones for {_spec.Chapter}/{_spec.Mission} — flying free");
+                Log.Info("flight", $"--stunt: no danger zones for {_spec.Chapter}/{_spec.Mission}, flying free");
             else if (_rigs.Count > 1)
                 race = new StuntRace(); // splitscreen: a race, ranked on the shared board
             if (stuntZones != null && iaStunt && !_spec.Stunt)
-                Log.Info("flight", $"ia: stunt_flying — {stuntZones.TotalCount} danger zone(s) from {_spec.Chapter}/{_spec.Mission}, the mission type's own objective");
+                Log.Info("flight", $"ia: stunt_flying, {stuntZones.TotalCount} danger zone(s) from {_spec.Chapter}/{_spec.Mission}, the mission type's own objective");
         }
 
         // Dogfight (--vs): built here, before the rigs, same reason Race is (HumanFlightAdapter
@@ -2544,14 +2551,14 @@ public partial class GameSession : Node3D
             // silently leaving the other panes' pilots without a panel they can see.
             if (_rigs.Count > 1)
             {
-                Log.Info("weapons", $"weapon lab: {_rigs.Count} players — the lab binds P1's aircraft and P1's pane only; the other panes fly normally");
+                Log.Info("weapons", $"weapon lab: {_rigs.Count} players, the lab binds P1's aircraft and P1's pane only; the other panes fly normally");
             }
             Log.Info("weapons", $"weapon lab: '{_spec.PlaneName}' held {(_spec.EmptyStage ? "on the empty stage" : $"in {_spec.Chapter}")}, firing through the session pool{(_spec.WeaponFire ? " (--weapon-fire: trigger held)" : "")}{(_spec.WeaponCycle > 0 ? $" (--weapon-cycle: a weapon every {_spec.WeaponCycle} frames)" : "")}");
             // The authored impact/destruction effects need the world-effects runtime, which is only
             // built when there IS a world program, say so rather than silently drawing stand-ins.
             if (state.WorldScene == null)
             {
-                Log.Info("weapons", $"weapon lab: no world program on this stage — impacts fall back to the pool's stand-in burst and rockets fly without their FLYOUT body/trail");
+                Log.Info("weapons", $"weapon lab: no world program on this stage, impacts fall back to the pool's stand-in burst and rockets fly without their FLYOUT body/trail");
             }
             state.What += " + weapon lab";
         }
@@ -2615,7 +2622,7 @@ public partial class GameSession : Node3D
                             match.RegisterDeath(victim);
                     };
                 }
-            match.MatchCompleted += () => Log.Info("flight", $"dogfight: match complete — {string.Join(", ", match.Standings().Select(s => $"P{s.PlayerIndex + 1} {s.Kills}K/{s.Deaths}D (#{s.Rank})"))}");
+            match.MatchCompleted += () => Log.Info("flight", $"dogfight: match complete, {string.Join(", ", match.Standings().Select(s => $"P{s.PlayerIndex + 1} {s.Kills}K/{s.Deaths}D (#{s.Rank})"))}");
             Log.Info("flight", $"dogfight: {_rigs.Count} pilots, {(match.KillTarget > 0 ? $"first to {match.KillTarget} kills" : "no kill target")}, {(match.TimeLimit > 0f ? $"{match.TimeLimit / 60f:0.#} min limit" : "no time limit")}");
 
             // The match's shared results board: same construction as the race board above,
@@ -3189,6 +3196,11 @@ public partial class GameSession : Node3D
                 ? pilot.WorldPosition
                 : Vector3.Zero,
             PlayerAircraft = () => _rigs.Count > 0 ? _rigs[0].Controller : null,
+            // P1's pane for the Danger Zone photograph, read the way the stunt camera reads its
+            // own: the seat's SubViewport when there is one, the window's viewport otherwise.
+            PlayerPane = () => _rigs.Count == 0
+                ? null
+                : (_rigs[0].Viewport ?? (IsInsideTree() ? GetViewport() : null))?.GetTexture()?.GetImage(),
             Humans = HumanAircraft,
             Aircraft = AllAircraft,
             BeginSpectate = BeginCampaignSpectate,
@@ -3516,7 +3528,7 @@ public partial class GameSession : Node3D
         {
             // The static viewer builds the bodies but binds no overlay: C there cycles the mesh
             // lab's cull override, and silently rebinding a lab key would be worse than saying so.
-            Log.Info("world", $"--collision built the world's colliders, but the C overlay is not bound in this mode (C is the mesh lab's cull cycler) — use --freecam to see them");
+            Log.Info("world", $"--collision built the world's colliders, but the C overlay is not bound in this mode (C is the mesh lab's cull cycler), use --freecam to see them");
         }
 
         // Map-edge tile grid (--debug-tilegrid, flag-only). Gated on the extender rather than a
@@ -3582,7 +3594,7 @@ public partial class GameSession : Node3D
             if (!warned)
             {
                 warned = true;
-                Log.Warn("flight", $"grid ground probe found nothing under a slot (probe {ProbeAbove:0}m up / {ProbeBelow:0}m down, mask=World) — measured, this does not happen at session build, so suspect the probe ran before the world stage was added rather than an empty map; the field keeps the spawn data's own altitude. Reported once per session.");
+                Log.Warn("flight", $"grid ground probe found nothing under a slot (probe {ProbeAbove:0}m up / {ProbeBelow:0}m down, mask=World). Measured, this does not happen at session build, so suspect the probe ran before the world stage was added rather than an empty map; the field keeps the spawn data's own altitude. Reported once per session.");
             }
             return null;
         };
@@ -3655,6 +3667,17 @@ public partial class GameSession : Node3D
         return false;
     }
 
+    // Whether the pilot this shooter id names is flying the full Cockpit view, which draws no
+    // muzzle flash on that pilot's own guns. Keyed on the controller's own PlayerIndex, the id
+    // every round is stamped with, so another aeroplane's flash is untouched.
+    private bool PilotInCockpitView(int shooterId)
+    {
+        for (int i = 0; i < _rigs.Count; i++)
+            if (_rigs[i].Controller is { CockpitView: true } c && c.PlayerIndex == shooterId)
+                return true;
+        return false;
+    }
+
     // Creates this session's PlayerRigs, one per rendered view. One player keeps the main-viewport
     // camera and the default visual layers, so that render path is unchanged. Two or more build the
     // SplitScreen pane rig, each pane culling every other player's private sky/deck/puff layer.
@@ -3686,7 +3709,7 @@ public partial class GameSession : Node3D
             var camera = new Camera3D
             {
                 Name = $"camera{i + 1}",
-                Fov = 62,
+                Fov = CameraController.ExternalFovDeg,
                 Far = _camera.Far,
                 CullMask = SplitScreen.PlayerCullMask(i),
                 Current = true,
@@ -3937,17 +3960,22 @@ public partial class GameSession : Node3D
     // rather than in the FlightController that read the button.
     private void RestartRace(StuntRace race)
     {
-        Log.Info("flight", $"stunt race: rematch — fresh clocks and zones for every pilot");
+        Log.Info("flight", $"stunt race: rematch, fresh clocks and zones for every pilot");
         race.Restart();
         foreach (var rig in _rigs)
+        {
+            // The race owns every pilot's zones and clock, but each pane's own camera is the
+            // controller's, so the rematch clears the photographs seat by seat.
+            rig.Controller?.StuntShots?.Reset();
             rig.Controller?.Respawn();
+        }
     }
 
     // Rematch from the dogfight results board (R): every score and the clock reset, then every
     // plane back to its own spawn. Mirrors RestartRace exactly.
     private void RestartMatch(VersusMatch match)
     {
-        Log.Info("flight", $"dogfight: rematch — scores and clock reset for every pilot");
+        Log.Info("flight", $"dogfight: rematch, scores and clock reset for every pilot");
         match.Restart();
         // A rematch is a fresh round, so it opens on the opening spawns rather than on wherever
         // the last round's rotation had left each seat.
@@ -4462,7 +4490,7 @@ public partial class GameSession : Node3D
         {
             if (accentId != null && _aiVoice == null)
             {
-                Log.Info("sound", $"ai voice: accent {accentId} ignored — no voice runtime in this session");
+                Log.Info("sound", $"ai voice: accent {accentId} ignored, no voice runtime in this session");
             }
             return;
         }

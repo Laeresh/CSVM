@@ -157,7 +157,7 @@ public sealed class SessionSimulation
         }
         Log.Error(
             "core",
-            $"session step phase={_phase} threw — the rest of this step did not run (seen={seen})",
+            $"session step phase={_phase} threw, the rest of this step did not run (seen={seen})",
             e);
     }
 }

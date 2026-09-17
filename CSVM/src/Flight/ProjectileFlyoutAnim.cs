@@ -302,7 +302,7 @@ public sealed partial class ProjectilePool : ISequenceHost
         if (def != null)
             Log.Info("weapons", $"flyout anim '{animName}' ({weapon.Id}): {def.Sequences.Count} sequence(s), reset {(def.ResetState?.Events.Count ?? 0)} event(s)");
         else
-            Log.Info("weapons", $"flyout anim '{animName}' ({weapon.Id}): not in the anim program — no trail");
+            Log.Info("weapons", $"flyout anim '{animName}' ({weapon.Id}): not in the anim program, no trail");
         return def;
     }
 
@@ -335,7 +335,7 @@ public sealed partial class ProjectilePool : ISequenceHost
             if (puffer == null)
             {
                 if (_flyoutAnimLogged.Add("trail:" + state.Name))
-                    Log.Info("weapons", $"flyout puffer '{state.Name}' ({weapon.Id}) has no textures in this chapter — skipped");
+                    Log.Info("weapons", $"flyout puffer '{state.Name}' ({weapon.Id}) has no textures in this chapter, skipped");
                 return;
             }
             AddChild(puffer);
@@ -350,7 +350,7 @@ public sealed partial class ProjectilePool : ISequenceHost
     private void Unsupported(AnimDefinition def, string kind)
     {
         if (_flyoutAnimLogged.Add(def.AnimName + ":" + kind))
-            Log.Info("weapons", $"flyout anim '{def.AnimName}': {kind} is not run on a round — event skipped");
+            Log.Info("weapons", $"flyout anim '{def.AnimName}': {kind} is not run on a round, event skipped");
     }
 
     // One round's running def: the instance, the model's nodes by gamez index and name, the

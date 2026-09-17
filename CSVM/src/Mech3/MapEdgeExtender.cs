@@ -708,7 +708,7 @@ public sealed partial class MapEdgeExtender : Node3D
                 _tileCell[spare.Idx] = cell;
                 _adopted.Add(spare.Idx);
                 AccumulateCoverage(cell, spare.WorldCenter, spare.Span);
-                Log.Info("world", $"map edge: cell ({cell.Item1},{cell.Item2}) is short of ground — adopting dropped sheet '{spare.Node.Name}' ({spare.Span.X:F0} x {spare.Span.Z:F0} m).");
+                Log.Info("world", $"map edge: cell ({cell.Item1},{cell.Item2}) is short of ground, adopting dropped sheet '{spare.Node.Name}' ({spare.Span.X:F0} x {spare.Span.Z:F0} m).");
             }
         }
         _spares.Clear();

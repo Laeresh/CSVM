@@ -215,6 +215,12 @@ member, and it does not go here.
   shot byte-identical. So the 1 pixel is a shader-recompile artifact and the pinned framing
   photographs none of the sprite arms' mip levels, which the re-pin's reason has to say.
 
+- **GOLD-19**, **A decoration that fades out inside its authored `far_fade_range` is invisible to
+  every pinned shot flown above that range, so an unmoved golden set says nothing about where it
+  sits; move it in a suite and photograph it from street level.** Raising C5's lamp glow 4.75 m
+  left all 19 shots hash-identical, `c5-city-night` included, whose camera stands 178 m up while
+  the glow's authored fade closes it out by 150 m.
+
 ## DET, determinism and randomness
 
 - **DET-2**, **Disable live input during scripted runs.**
@@ -397,7 +403,10 @@ member, and it does not go here.
   own reflected light gave Godot no radiance map, and the vanished specular read as a success.
 - **WORLD-32**, **A Godot property that accepts a write is not a property the renderer reads:
   prove a lighting knob is live by driving it to an extreme and watching the goldens move.**
-  `AmbientLightEnergy` 0.9 to 0.0 moved no golden; `LightEnergy` 1.6 to 0.5 moved 7.
+  `LightEnergy` 1.6 to 0.5 moved 7 shots while `AmbientLightEnergy` 0.9 to 0.0 moved none, because
+  a sky-sourced ambient takes its fill off the sky cubemap and reads neither the energy nor the
+  colour written beside it. On the colour-sourced ambient both lighting arms write today, the same
+  zeroing moves the same 7 aircraft shots.
 - **WORLD-33**, **An upward ray reports open air under a one-sided collider, so read a column
   DOWNWARD from above instead.** A downward ray answers in 1,376 of 1,376 partition cells and an
   upward one in 24.
@@ -709,6 +718,29 @@ member, and it does not go here.
   leash 15.3 s after the cutoff and to within 7 m of the pre-burn separation only once the leader
   turns, because a turn is the only corner an escort capped at its own `fd_speed` can take back.
   Script the leader turns before reading a re-form time, or the leg reports a permanent loss.
+- **INSTR-83**, **A consumer that compares a value between two of its own calls must run on the
+  clock that moves the value; driven from the rendered frame it is green under every scripted run
+  and dead at the controls, because those run one sim step per frame and the controls do not.** A
+  headless realtime flight holds 120 rendered frames a second over the fixed 60 Hz step, so a
+  throttle gate driven per frame read the lever flat on every other frame and could never see a
+  rise larger than one step's slew, a thirtieth of what it was watching for (INSTR-14 is the same
+  seam one level up).
+- **INSTR-84**, **A golden shot reported as "the run printed no pixel hash" is a scrape that lost
+  the race, not proof the render broke: open the shot's own `.scratch/goldens/<name>.log` and look
+  for the `shot pixmd5=` line before believing it.** One four-worker pass reported that on two of
+  19 shots, and both logs carried a hash, one of them identical to the pinned one; the same two
+  shots hashed normally on the next pass. Compare the logged hash against the manifest to tell a
+  real move from a lost line, since the report cannot tell you which it was.
+- **INSTR-85**, **Reading an effect's placement against its anchor on the simulation step reports
+  one frame of travel whether or not the effect rode anything, because the effect was placed on the
+  interpolated DRAWN pose and the anchor now stands on the simulation pose; take both readings at
+  the same instant or measure travel, never the difference.** A muzzle-light breadcrumb that read
+  0.00 m under `--det` printed 1.11 m at 158 mph on the wall clock with nothing wrong.
+- **INSTR-86**, **An effect anchored to a node is drawn from the pose that node holds when the
+  effect's OWN frame callback runs, so its draw must be ordered after every node that writes a
+  drawn pose in its callback; a hand-stepped suite poses the anchor before it draws and can never
+  see the lag, so assert the `ProcessPriority` as well as the placement.** `ProjectilePool` drew
+  before the flight rigs, and every anchored flash and shot light sat a frame astern of the gun.
 
 ## SRC, sources and documents
 
@@ -751,6 +783,11 @@ member, and it does not go here.
   slot the cursor's sideways travel, and gating that travel three times as wide as the same travel's
   bank left an ordinary cursor offset flying the autogyro nothing while it already banked an
   aeroplane. Ask which SOURCE a decoded threshold was measured on before keeping it.
+- **SRC-19**, **"That file carries no such id" is a claim about a file, so open the file across the
+  whole install before routing the binding through somewhere else.** A campaign danger zone's
+  objective number was written up as coming from the mission graph because `dzones.zrd` was said to
+  carry no objective id; its `objective_numbers` key carries exactly that id, and the pairs match
+  the shipped `Snap_<mission>_<objective>` scrapbook rows mission for mission.
 
 ## What this project cannot verify itself
 

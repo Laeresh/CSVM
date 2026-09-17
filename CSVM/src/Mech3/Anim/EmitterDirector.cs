@@ -190,7 +190,7 @@ public sealed class EmitterDirector
             ? $"PufferState(stop matched by owner, not host: {name})"
             : $"PufferState(stop reached no emitter: {name})");
         if (_debug)
-            Log.Info("anim", $"anim: PUFFER_STATE 0 '{name}' missed its host '{AnimRuntime.NameOf(host)}' [def {def.AnimName}] — {(owned.Count > 0 ? $"stopped {owned.Count} emitter(s) this instance owns instead" : "this instance owns no emitter of that name")}");
+            Log.Info("anim", $"anim: PUFFER_STATE 0 '{name}' missed its host '{AnimRuntime.NameOf(host)}' [def {def.AnimName}], {(owned.Count > 0 ? $"stopped {owned.Count} emitter(s) this instance owns instead" : "this instance owns no emitter of that name")}");
     }
 
     /// <summary>Ends emission for every emitter on <paramref name="root"/> or its subtree, what
@@ -215,13 +215,13 @@ public sealed class EmitterDirector
             {
                 _count("ObjectActiveState(spared an emitter started this instant)");
                 if (_debug)
-                    Log.Info("anim", $"anim: host '{AnimRuntime.NameOf(node)}' deactivated in the instant its emitter started — left emitting");
+                    Log.Info("anim", $"anim: host '{AnimRuntime.NameOf(node)}' deactivated in the instant its emitter started, left emitting");
                 continue;
             }
             emitter.SustainEnd();
             _active.RemoveAt(i);
             if (_debug)
-                Log.Info("anim", $"anim: host '{AnimRuntime.NameOf(node)}' deactivated — emitter stopped ({_active.Count} still emitting)");
+                Log.Info("anim", $"anim: host '{AnimRuntime.NameOf(node)}' deactivated, emitter stopped ({_active.Count} still emitting)");
         }
     }
 
@@ -334,7 +334,7 @@ public sealed class EmitterDirector
         offset = visual == xform.Origin ? Vector3.Zero : xform.AffineInverse() * visual;
         _hostOffsets[host] = offset;
         if (_debug && offset != Vector3.Zero)
-            Log.Info("anim", $"anim: puffer host '{AnimRuntime.NameOf(host)}' origin {xform.Origin} is outside its mesh bounds — emitting at {visual}");
+            Log.Info("anim", $"anim: puffer host '{AnimRuntime.NameOf(host)}' origin {xform.Origin} is outside its mesh bounds, emitting at {visual}");
         return offset;
     }
 

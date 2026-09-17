@@ -534,7 +534,7 @@ public sealed partial class MeshLab : Node
         else if (!_warnedOverrideGap)
         {
             _warnedOverrideGap = true;
-            Log.Info("ui", $"[mesh] '{s.Instance.Name}' surface {s.Index} has no override slot — override not applied there (results for that surface are not A/B'd)");
+            Log.Info("ui", $"[mesh] '{s.Instance.Name}' surface {s.Index} has no override slot, override not applied there (results for that surface are not A/B'd)");
         }
     }
 
@@ -574,16 +574,16 @@ public sealed partial class MeshLab : Node
             int restored = _surfaces.Count;
             DetachScoped();
             _ui.Visible = false;
-            Log.Info("ui", $"mesh lab off — restored {restored} surface(s)");
+            Log.Info("ui", $"mesh lab off, restored {restored} surface(s)");
             return;
         }
         var pick = _selection?.Current;
         if (pick == null)
         {
             // Absence of a subject is not "the subtree is clean", say which it is.
-            Log.Info("ui", $"mesh lab: nothing is selected — click an object first (PgUp/PgDn pick the rung)");
+            Log.Info("ui", $"mesh lab: nothing is selected, click an object first (PgUp/PgDn pick the rung)");
             _ui.Visible = ShowPanel;
-            _scopedNote = "NOTHING SELECTED — click an object, then M";
+            _scopedNote = "NOTHING SELECTED, click an object, then M";
             UpdateStatus();
             return;
         }
@@ -983,7 +983,7 @@ public sealed partial class MeshLab : Node
         if (!_warnedDeriveGap)
         {
             _warnedDeriveGap = true;
-            Log.Info("ui", $"mesh lab: '{s.Instance.Name}' surface {s.Index} has no readable shader — overriding it through the replica shader (fog/scroll/alpha terms are not carried there)");
+            Log.Info("ui", $"mesh lab: '{s.Instance.Name}' surface {s.Index} has no readable shader, overriding it through the replica shader (fog/scroll/alpha terms are not carried there)");
         }
         bool textured = s.Original is ShaderMaterial osm
                         && osm.GetShaderParameter("albedo_tex").VariantType != Variant.Type.Nil;
@@ -1316,7 +1316,7 @@ void fragment() {{
         var box = new VBoxContainer();
         box.AddThemeConstantOverride("separation", 3);
 
-        box.AddChild(new Label { Text = Scoped ? "MESH LAB — SELECTION" : "MESH LAB" });
+        box.AddChild(new Label { Text = Scoped ? "MESH LAB: SELECTION" : "MESH LAB" });
         box.AddChild(Small(Scoped
             ? "M detaches (restores the subtree) · click / PgUp / PgDn re-target it"
             : "M hides this panel · F19 damage lab · L livery lab"));
@@ -1340,7 +1340,7 @@ void fragment() {{
         }
 
         box.AddChild(Separator());
-        box.AddChild(Small("OVERRIDES — A/B the render decisions"));
+        box.AddChild(Small("OVERRIDES: A/B the render decisions"));
         _cullBtn = CycleRow(box, Scoped ? "cull" : "cull     [C]", () => { _cull = Cycle(_cull); ApplyOverrides(); });
         _sourceBtn = CycleRow(box, Scoped ? "normal src" : "normal src [V]", () => { _normals = Cycle(_normals); ApplyOverrides(); });
 
@@ -1350,7 +1350,7 @@ void fragment() {{
         {
             // Scoped lighting drives the lab's OWN light. The world's sun and ambient are the
             // world's; steering them to inspect one building would re-light everything else.
-            box.AddChild(Small("the lab's own light — the world sun is not touched"));
+            box.AddChild(Small("the lab's own light, the world sun is not touched"));
             _lightNote = Small("");
             box.AddChild(_lightNote);
         }
@@ -1485,7 +1485,7 @@ void fragment() {{
             // a measurement. Say which case this target is.
             _lightNote.Text = _surfaces.Count == 0 ? ""
                 : _fullbrightSurfaces == _surfaces.Count
-                    ? "target is fullbright (unshaded) — no light reaches it"
+                    ? "target is fullbright (unshaded), no light reaches it"
                     : $"{_surfaces.Count - _fullbrightSurfaces} of {_surfaces.Count} surfaces are lit";
         }
         _statusLabel.Text = _scopedNote.Length > 0 ? _scopedNote
@@ -1494,7 +1494,7 @@ void fragment() {{
                 : $"render: OVERRIDDEN ({_cull}, {_normals})";
     }
 
-    private string Pct(int n) => _triCount > 0 ? $"{n * 100f / _triCount:0}%" : "—";
+    private string Pct(int n) => _triCount > 0 ? $"{n * 100f / _triCount:0}%" : "-";
 
     // One committed surface, flattened into plane-local space. Indices are always
     // materialised (SurfaceTool commits indexed, but an unindexed surface is legal).

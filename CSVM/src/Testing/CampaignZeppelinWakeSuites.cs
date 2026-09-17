@@ -93,7 +93,7 @@ internal static class CampaignZeppelinWakeSuites
         ctx.Same(1, allies, $"C1/MP3's 'ally' record reads as the player's side, id {AimAssist.PlayerTeam}");
         ctx.Same(3, enemies, $"C5/M03's three 'enemy' records read as the first enemy id, {TurretDef.DefaultTeamId}");
         ctx.Check(unauthored >= 2,
-            $"and a record authoring no team stays unauthored ({unauthored} of them here) rather than taking a literal — BL-407 owns that fall-through");
+            $"and a record authoring no team stays unauthored ({unauthored} of them here) rather than taking a literal, BL-407 owns that fall-through");
     }
 
     // What the pool flags buy on the consumer side, on a registry this suite owns outright: an

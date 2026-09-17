@@ -20,9 +20,9 @@ Fields: [../formats/gamez.md](../formats/gamez.md), [../formats/world-structure.
 Texture lookup over an unzbd texture extraction, a zip or an unpacked PNG dir. It absorbs the
 stored-name quirks (20-char truncation prefix match, legacy `.-N` renames, the fork's trailing
 doubled period) and classifies each texture's alpha twice, for two unrelated readers:
-`LastHadAlpha`/`LastAlphaIsSoft` from the decoded pixels, which scissor-versus-blend keys on, and
-`LastAlphaClass` from the extractor's manifest, the one reader that sees the `Simple` textures. The
-same manifest supplies `RenderFlags`, whose bit 2 (`IsAdditive`) is the whole sprite-blend rule.
+`LastHadAlpha`/`LastAlphaIsSoft`, off the decoded pixels and the named soft-alpha families (`IsNamedSoftAlpha`), which scissor-versus-blend keys on, and `LastAlphaClass` from the extractor's
+manifest, the one reader that sees the `Simple` textures. That manifest also supplies
+`RenderFlags`, whose bit 2 (`IsAdditive`) is the whole sprite-blend rule.
 `Build` is the one construction path (decode, classify, drop-in, mip chain), `Find` caches it, `BuildMipped` hands it to `--dump-mips` un-cached, and `MipBias` reads the chapter's authored LOD
 bias for `Launcher`. [../org/textures.md](../org/textures.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../formats/gamez.md](../formats/gamez.md).
 
@@ -183,13 +183,13 @@ grow from `ClutterBuilder.ExportedKinds`, each keeping its source stamp's fade t
 measurements: [../formats/world-structure.md](../formats/world-structure.md). Read `Clutter.cs` next.
 
 ## src/Mech3/Clutter.cs
-Stamps the boot-script clutter templates across placed polygons carrying the template's ground
-texture, one stamp per integer UV repeat of the polygon's UV lattice: sprites become one fullbright
-Y-billboard MultiMesh per kind, solids go through `SceneBuilder.SharedMesh`, `ClassifyBillboard` the
-split. Every stamp carries its far fade as MultiMesh custom data under `EffectsLevel`, and samples
-through `SceneBuilder.SampleAlbedo` for the chapter's mip bias. `TemplateNames` reads
-`AddClutterTemplates` unfiltered, the per-polygon `no_clutter` gate deciding which patch a district
-dresses; `OverrideTemplateNames` is `--clutter-templates=`'s replacement.
+Stamps the boot-script clutter templates across placed polygons carrying the template's ground texture,
+one stamp per integer UV repeat of the polygon's UV lattice: sprites become one fullbright billboard
+MultiMesh per kind, turned toward the camera as that kind's own `FacadeMode` says, solids go through
+`SceneBuilder.SharedMesh`, `ClassifyBillboard` the split. A card blends or scissors on the archive's own alpha verdict, one shader variant each. Every stamp carries its far fade as MultiMesh custom
+data under `EffectsLevel`, and samples through `SceneBuilder.SampleAlbedo` for the chapter's mip bias. `TemplateNames` reads `AddClutterTemplates` unfiltered, the per-polygon `no_clutter` gate deciding
+which patch a district dresses; `OverrideTemplateNames` is `--clutter-templates=`'s replacement.
+A decoration is a node chain, and `FirstWithMesh` hands back the translation down to the node carrying the mesh, so a stamp lands where the chain puts the drawn card: C5's lamp glow rides 4.75 m up its post.
 Placement runtime: [../org/clutter.md](../org/clutter.md); authored side: [../formats/clutter.md](../formats/clutter.md), [../formats/templates.md](../formats/templates.md).
 
 ## src/Mech3/ClutterTemplates.cs
@@ -313,8 +313,8 @@ The `vehicle.json` def table as an index, next to `Flight/PlaneStats.cs`'s full 
 `AirframeFor` finds the player airframe node an AI def's model is built from (the `p`-prefixed twin
 of the nearest ancestor, else of the chain's `nodename`), `BaseDefForPlayerNode` is its inverse and
 `DerivesFrom` is the variant test `PlaneStats.LoadForAi` enforces. `StartAnimsOf`, `InjureAnimsOf`,
-`WeaponsOf` and `ActivationOf` return the nearest authored value up that chain, the last two arming
-a hull with its def's own gun. Pure over `FromRoot`, pinned in `CampaignRosterPlanTests`.
+`WeaponsOf` and `AttackOf` return the nearest authored value up that chain, the last two arming a hull with its def's own gun and giving it the radius its scorer admits candidates inside, `DefaultAttackRadiusM` the decoded 400 m both surface defs fall to for want of an authored `attack` ([../org/aiPilot.md](../org/aiPilot.md)).
+Pure over `FromRoot`, pinned in `CampaignRosterPlanTests`.
 
 ## src/Mech3/FogVolumes.cs
 The chapter's `fogvol.zrd` (`FogVolumeSpec.Load`/`Parse`) plus `VolumesOf`, the gamez census of
@@ -419,11 +419,20 @@ unchanged. Two entries exist install-wide (`fire1.flt` 12@10, `fire2.flt` 6@5).
 `SOUND_NODE` ambient looping 3D emitters: one pooled `AudioStreamPlayer3D` per live emitter,
 following its host's pose each frame. `PlayOneShot(name, worldPos, rng, bus)` is the one-shot
 `SOUND` half, fire-and-forget destruction and impact audio resolving a `SOUND_GROUPS` name to a
-member first; the overload taking a `Node3D` rides that source's pose per Tick instead. `bus`
-defaults to Effects and is read per play, because combat voice (`Session/AiVoiceRuntime.cs`) is
-the one caller passing Voice on a path those one-shots share. `HasStream` answers availability
-after the prewarm; `OneShotsStarted` asserts a cue fired without a log grep. Who hears an emitter
-is `UI/SplitScreen.cs`'s per-pane model; `SetListeners` feeds `--debug-anim`. Next: `SoundArchive.cs`.
+member first; the overload taking a `Node3D` rides that source's pose per Tick. `bus` is read per
+play, because combat voice (`Session/AiVoiceRuntime.cs`) is the one caller not on Effects.
+`HasStream` answers availability after the prewarm, `OneShotsStarted` that a cue fired. Who hears
+an emitter is `UI/SplitScreen.cs`'s per-pane model, fed by `SetListeners`: `Tick` measures to the
+nearest and levels every player from `SoundFalloff.cs`, never Godot's. Next: `SoundFalloff.cs`.
+
+## src/Mech3/SoundFalloff.cs
+The original's positional gain law, engine-free and pure: what a listener distance, a definition's
+`RANGE` pair and its `VOLUME` come to in decibels. `AttenuationDb` is the distance term alone,
+`VolumeDb` the linear-gain conversion (ten decibels per doubling, not `20 log10`), `GainDb` the sum
+with the silence floor. It exists as its own module because no Godot attenuation model expresses
+the shape: the ramp is measured from the full-volume radius rather than from the emitter, and the
+band past the audible radius is a tail rather than a cut. The decode, its addresses and the table
+are [../formats/sounds.md](../formats/sounds.md). Read `WorldSounds.cs` for the only caller.
 
 ## src/Mech3/WorldLights.cs
 Packs the animated world's `LIGHT_STATE` point lights into the 2xN RGBAF texture the fullbright
@@ -571,14 +580,14 @@ carries the CALL_SEQUENCE/STOP_SEQUENCE semantics. Anchors are opaque pass-throu
 drives the seam with a recorder host. Decode: docs/org/sequences.md.
 
 ## src/Mech3/DestructibleRegistry.cs
-Live per-instance HP for the world's destructibles, any `AnimDefinition` with `HEALTH > 0`: one
-`Instance` per `(def, anchor)` pair seeded from the authored `HEALTH`, plus a coarse
-healthy/damaged/destroyed `State` and a monotonic `DamageStage`. Built in `AnimRuntime`'s
-bootstrap, read by `ANIM_HEALTH` evaluation, escalated by `ApplyDamageStages`, damaged via
-`DamageAt`. `Resolve(struck)` climbs to the nearest claiming pool, which answers for its damage node
-and everything under it (what the original stamps its handler over) and, through its anchor alone,
-for nothing. `Instance` carries what a mission record authors (`Team`, `Owner`, `Gasbag`, `Dormant`,
-`Reseed`). Schema: docs/formats/destructibles.md; teams docs/org/targeting.md.
+Live per-instance HP for the world's destructibles, any `AnimDefinition` with `HEALTH > 0`: one `Instance` per `(def,
+anchor)` pair seeded from the authored `HEALTH`, plus a coarse healthy/damaged/destroyed `State` and a monotonic
+`DamageStage`. Built in `AnimRuntime`'s bootstrap, read by `ANIM_HEALTH` evaluation, escalated by `ApplyDamageStages`,
+damaged via `DamageAt`. `Resolve(struck)` climbs to the nearest claiming pool, which answers for its damage node and
+everything under it (what the original stamps its handler over) and, through its anchor alone, for nothing. `Instance`
+carries what a mission record authors (`Team`, `Owner`, `Gasbag`, `Dormant`, `Reseed`) and caches the anchor's gamez
+ancestor names for `TargetPool.CollectOwners` under the parent's id, so an authored re-parent re-walks them and a
+per-tick ranking ask does not. Schema: docs/formats/destructibles.md; teams docs/org/targeting.md.
 
 ## src/Mech3/WavFile.cs
 Pure-C# WAV parser with an MS ADPCM to PCM16 decoder (`DecodeMsAdpcm`), no Godot dependencies:

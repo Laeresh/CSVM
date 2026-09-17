@@ -65,7 +65,7 @@ public sealed partial class AiVoiceRuntime : Node
         int? voId = _voice.PilotFor(accentId, _rng);
         if (voId is not { } vo)
         {
-            Log.Info("sound", $"ai voice: {ai.Name}: accent {accentId} resolves to no voiced pilot — silent");
+            Log.Info("sound", $"ai voice: {ai.Name}: accent {accentId} resolves to no voiced pilot, silent");
             return;
         }
         var speaker = _dispatcher.Register(ai.PlayerIndex, vo, ai.Team,

@@ -52,7 +52,7 @@ internal static class CampaignRosterObjectiveMarkerSuites
     [Suite("campaign-cm15-roster-objective-marker",
         "CM15's Tex over C2/M05's own BUILT roster and graph: balmoral_1 authors the roster's "
         + "objectiveTarget flag with both label slots and a slot-20 pilot name, and its marker "
-        + "rides the aeroplane's own candidate — nothing offered while the block sleeps, exactly "
+        + "rides the aeroplane's own candidate, nothing offered while the block sleeps, exactly "
         + "one Objective-ranked target named Tex once OBJECTIVE21 wakes it, nothing after it dies")]
     internal static void CampaignCm15RosterObjectiveMarker(TestContext ctx)
     {
@@ -101,7 +101,7 @@ internal static class CampaignRosterObjectiveMarkerSuites
     [Suite("campaign-cm21-cabbie-marker",
         "CM21's Cabbie over C5/M01's own BUILT roster and graph: autogyro_1 authors team 0 (neither "
         + "side) and the non-destructive MSG_OBJ_FOLLOW help label with no category label, ships "
-        + "deactivated, and its marker rides the aeroplane's own candidate exactly like Tex's — no "
+        + "deactivated, and its marker rides the aeroplane's own candidate exactly like Tex's, no "
         + "candidate before OBJECTIVE28's WAKEUP_ENEMIES, exactly one Objective-ranked target named "
         + "Cabbie once it wakes, coloured blue rather than red or green, and none after it is shot down")]
     internal static void CampaignCm21CabbieMarker(TestContext ctx)

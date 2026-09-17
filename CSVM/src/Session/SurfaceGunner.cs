@@ -43,7 +43,13 @@ internal sealed class SurfaceGunner
     private readonly ProjectilePool _pool;
     private readonly WeaponDef _weapon;
     private readonly AiWeaponSlot _slot;
-    private readonly float _activationRange;
+
+    // The ATTACK cylinder's radius, never the activation one: the reach the scorer admits a
+    // candidate inside. 400 m on both shipped hull defs against a 2500 m activation, and tighter
+    // than the def's own 500 m weapon window, so that window's far end never binds on a shipped
+    // hull (docs/org/aiPilot.md "Where a hull's attack triple comes from").
+    private readonly float _attackRadius;
+
     private readonly Node3D _turretNode;
     private readonly Node3D _gunNode;
     private readonly Node3D _firepoint;
@@ -64,14 +70,14 @@ internal sealed class SurfaceGunner
     private bool _firstShotLogged;
 
     private SurfaceGunner(SurfaceVehicle vessel, ProjectilePool pool, WeaponDef weapon,
-        AiWeaponSlot slot, float activationRange, Node3D turretNode, Node3D gunNode,
+        AiWeaponSlot slot, float attackRadius, Node3D turretNode, Node3D gunNode,
         Node3D firepoint, GunVoiceHome? voices)
     {
         _vessel = vessel;
         _pool = pool;
         _weapon = weapon;
         _slot = slot;
-        _activationRange = activationRange;
+        _attackRadius = attackRadius;
         _turretNode = turretNode;
         _gunNode = gunNode;
         _firepoint = firepoint;
@@ -94,6 +100,11 @@ internal sealed class SurfaceGunner
     /// <summary>What the acquisition last picked, or null while nothing ranks, the identity the
     /// suite reads rather than inferring the pick from where the barrel points.</summary>
     public object? Target => _target;
+
+    /// <summary>The radius the ranking admits a candidate inside, the hull's attack volume as
+    /// <see cref="SurfaceVehicleRuntime"/> resolved it at spawn. Exposed so the suite reads the
+    /// reach rather than inferring it from which shots landed.</summary>
+    public float AttackRadius => _attackRadius;
 
     /// <summary>The mount's aim in the hull's own frame, the value the guards and the slew act on
     /// and the aim-quality gate is measured from.</summary>
@@ -118,7 +129,7 @@ internal sealed class SurfaceGunner
     /// model. ⚠ The node lookup is recursive by name (<c>FUN_004761c0</c>): on both shipped defs
     /// the chain sits under <c>healthy</c>, so a direct-child lookup silences every boat.</summary>
     public static SurfaceGunner? Build(SurfaceVehicle vessel, ProjectilePool? pool,
-        WeaponDefs? weapons, IReadOnlyList<AiWeaponSlot> fit, float activationRange,
+        WeaponDefs? weapons, IReadOnlyList<AiWeaponSlot> fit, float attackRadius,
         GunVoiceHome? voices = null)
     {
         if (pool == null || weapons == null || fit.Count == 0)
@@ -141,7 +152,7 @@ internal sealed class SurfaceGunner
             Log.Info("weapons", $"surface: '{vessel.Name}' unarmed: model carries no turret/gun/firepoint chain");
             return null;
         }
-        return new SurfaceGunner(vessel, pool, weapon, slot, activationRange, turret, gun,
+        return new SurfaceGunner(vessel, pool, weapon, slot, attackRadius, turret, gun,
             firepoint, voices);
     }
 
@@ -295,7 +306,7 @@ internal sealed class SurfaceGunner
         // an ally flies behind, the aeroplane's and the turret's. A hull keeps the decoded order,
         // which is also what leaves one picker in the build running the original's own priority.
         int best = AiTargetRanking.SelectBest(_vessel.Position, -_vessel.Body.GlobalTransform.Basis.Z,
-            _activationRange, AiScorer.Other, aircraftFirst: false, _ranked, out _);
+            _attackRadius, AiScorer.Other, aircraftFirst: false, _ranked, out _);
         if (best < 0)
         {
             _target = null;

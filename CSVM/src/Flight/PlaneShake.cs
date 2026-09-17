@@ -7,9 +7,9 @@ namespace CSVM.Flight;
 /// The plane-wobble oscillators (<c>shakes.json</c> via <see cref="ShakeDefs"/>): gunfire buzz,
 /// overspeed rattle, being-hit rocks and the nitro engage, summed into <see cref="Roll"/>, radians the flight
 /// rig applies to a pivot node between the <see cref="FlightController"/> and its plane model.
-/// Decode: docs/org/shakes.md, which carries the random-walk law the FIRE source runs and what
-/// the other sources still do. Engine-free on purpose: the pivot write is the controller's one
-/// line, the law lives here where the unit tests reach.
+/// Decode: docs/org/shakes.md, which carries the random-walk law and the component block the
+/// overspeed and nitro sources run, and what the other sources still do. Engine-free on purpose:
+/// the pivot write is the controller's one line, the law lives here where the unit tests reach.
 /// ⚠ Everything visual rides the pivot; physics, aim and the chase camera read the controller's
 /// own transform and must never read the pivot's.
 /// ⚠ Every random step must come from the injected <see cref="Random"/>, never a fresh one, or
@@ -22,6 +22,15 @@ public sealed class PlaneShake
     /// is evaluating, this is how loud the wobble reads.</summary>
     public const float GunBuzzKickScale = 1f;
 
+    /// <summary>Per-tick overspeed-rattle step scale, the dive rattle's one tune knob. Scale 1 is
+    /// the original's own velocity kick into its component block, so dial this and never
+    /// <c>magnitude_quotient</c>.</summary>
+    public const float DiveRattleKickScale = 1f;
+
+    /// <summary>Per-engage nitro-wobble step scale, the same knob for the nitro source. Scale 1 is
+    /// the original's own velocity kick, so dial this and never the authored <c>magnitude</c>.</summary>
+    public const float NitroWobbleKickScale = 1f;
+
     // What each impact source's magnitude_factor multiplies is authored for fire_bullet only
     // (caliber, measured). For being hit: an incoming gun round reuses the caliber law; a rocket
     // has no caliber, so its armor damage stands in, doubled by he_factor when HIGH_EXPLOSIVE.
@@ -30,8 +39,12 @@ public sealed class PlaneShake
     private readonly Osc _bulletHit = new();
     private readonly Osc _missileHit = new();
     private readonly Osc _explosion = new();
-    private readonly Osc _speed = new();
-    private readonly Osc _nitro = new();
+
+    // The two sources that run the original's component block whole (velocity kick, ramp-and-
+    // reverse integrator) rather than an envelope: the overspeed rattle re-kicked every tick the
+    // gate is open, and the nitro engage's single kick. docs/org/shakes.md.
+    private readonly Block? _speed;
+    private readonly Block? _nitro;
 
     // Block 5 (camera+0xf4) is the one oscillator no data authors: shakes.zrd names no `turbulence`
     // source, so the constructor's law stands and the collision path is the block's only kicker
@@ -41,11 +54,14 @@ public sealed class PlaneShake
         Src = new ShakeSource { Id = "contact", Frequency = 2f, Damp = 4.5f, Sawtooth = false },
     };
 
-    // The fire source's per-shot steps. Injected for off-engine determinism (BL-266(a) branch:
-    // see the class summary); the session resolves Rng.NewSystemRandom(Rng.Shake).
-    private readonly Random _fireRng;
+    // The random-walk steps of all three walking sources. Injected for off-engine determinism
+    // (see the class summary); the session resolves Rng.NewSystemRandom(Rng.Shake).
+    private readonly Random _rng;
 
-    /// <param name="rng">The stream the fire source draws its per-shot steps from. Defaults to
+    // This tick's high_speed magnitude, the excess over the authored gate; zero below it.
+    private float _speedDrive;
+
+    /// <param name="rng">The stream the walking sources draw their steps from. Defaults to
     /// <see cref="Rng.NewSystemRandom(Rng.Shake)"/> (deterministic under <c>--det</c>); tests pass
     /// a fixed-seed <see cref="Random"/> so the wobble trace is pinned without the engine.
     /// Accepting an engineer-supplied <see cref="Random"/> (never the shared Godot stream directly)
@@ -56,9 +72,9 @@ public sealed class PlaneShake
         _bulletHit.Src = defs.BulletImpact;
         _missileHit.Src = defs.MissileImpact;
         _explosion.Src = defs.Explosion;
-        _speed.Src = defs.HighSpeed;
-        _nitro.Src = defs.Nitro;
-        _fireRng = rng ?? Rng.NewSystemRandom(Rng.Shake);
+        _speed = defs.HighSpeed is { } highSpeed ? new Block(highSpeed) : null;
+        _nitro = defs.Nitro is { } nitro ? new Block(nitro) : null;
+        _rng = rng ?? Rng.NewSystemRandom(Rng.Shake);
     }
 
     /// <summary>The summed wobble after the last <see cref="Advance"/>, radians of roll.</summary>
@@ -73,7 +89,7 @@ public sealed class PlaneShake
     {
         if (_fire.Src is { MagnitudeFactor: { } f })
         {
-            _fire.RandomWalkKick(f * caliber * GunBuzzKickScale, _fireRng);
+            _fire.RandomWalkKick(f * caliber * GunBuzzKickScale, _rng);
         }
     }
 
@@ -106,14 +122,15 @@ public sealed class PlaneShake
         }
     }
 
-    /// <summary>The nitro engaged on this plane: one kick of the source's absolute authored
-    /// <c>magnitude</c> (block 6 at <c>0x4b21ce</c>, docs/org/shakes.md), decaying at its damp.
+    /// <summary>The nitro engaged on this plane: one random velocity kick of the source's absolute
+    /// authored <c>magnitude</c> into its component block (block 6 at <c>0x4b21ce</c>,
+    /// docs/org/shakes.md), which the block's ramp law then swings out and decays.
     /// The caller gates it on a human pilot, as the original gates it on the player.</summary>
     public void NitroEngaged()
     {
-        if (_nitro.Src is { Magnitude: { } m })
+        if (_nitro?.Src is { Magnitude: { } m })
         {
-            _nitro.Kick(m);
+            _nitro.Kick(m * NitroWobbleKickScale, _rng);
         }
     }
 
@@ -133,13 +150,13 @@ public sealed class PlaneShake
     /// <summary>Per-tick overspeed drive: <paramref name="speedRatio"/> is speed over the
     /// plane's rated max, so the authored <c>min_speed</c> 1.0 gate reads "beyond rated max",
     /// the dive rattle. Magnitude is the EXCESS over the gate <c>(speedRatio − gate)/quotient</c>,
-    /// not the whole ratio: zero at rated max, gentle ramp with overspeed, same order as the gun
-    /// buzz in a dive (a whole-ratio reading snapped on at <c>1.0/70</c> = 5× the buzz). Quiet
-    /// cruise matches the footage's motionless idle floor.</summary>
+    /// not the whole ratio: zero at rated max, gentle ramp with overspeed (a whole-ratio reading
+    /// snapped on at <c>1.0/70</c> = 5× the gun buzz). What it feeds is the next
+    /// <see cref="Advance"/>'s velocity kick, not a displacement.</summary>
     public void SetSpeedRatio(float speedRatio)
     {
-        _speed.Target = _speed.Src is { MinSpeed: { } gate, MagnitudeQuotient: > 0f } src
-                        && speedRatio >= gate
+        _speedDrive = _speed?.Src is { MinSpeed: { } gate, MagnitudeQuotient: > 0f } src
+                      && speedRatio > gate
             ? (speedRatio - gate) / src.MagnitudeQuotient!.Value
             : 0f;
     }
@@ -153,16 +170,23 @@ public sealed class PlaneShake
         {
             return;
         }
+        // The overspeed source is re-kicked every tick the gate is open, as the original kicks it
+        // from its own per-frame player updater, so the dive rattle is sustained accumulation.
+        if (_speedDrive > 0f)
+        {
+            _speed?.Kick(_speedDrive * DiveRattleKickScale, _rng);
+        }
+        _speed?.Advance(dt);
+        _nitro?.Advance(dt);
         Roll = _fire.Advance(dt) + _bulletHit.Advance(dt) + _missileHit.Advance(dt)
-               + _explosion.Advance(dt) + _speed.Advance(dt) + _nitro.Advance(dt)
-               + _contact.Advance(dt);
+               + _explosion.Advance(dt) + _contact.Advance(dt)
+               + (_speed?.Roll ?? 0f) + (_nitro?.Roll ?? 0f);
     }
 
     private sealed class Osc
     {
         public ShakeSource? Src;
         public float Amp;      // current envelope, radians
-        public float Target;   // continuous drive (high_speed); impulses leave it 0
         public float Phase;    // waveform cycles, wraps at 1
         public float Walk;     // random-walk accumulator (fire source, BL-266(a) branch)
 
@@ -183,10 +207,9 @@ public sealed class PlaneShake
                 }
                 return Walk;
             }
-            // exponential decay toward Target (0 for impulse sources, the drive for high_speed)
-            float k = MathF.Exp(-Src.Damp * dt);
-            Amp = Target + (Amp - Target) * k;
-            if (Amp <= 1e-6f && Target <= 0f)
+            // every remaining source is an impulse: the envelope decays toward rest at its damp
+            Amp *= MathF.Exp(-Src.Damp * dt);
+            if (Amp <= 1e-6f)
             {
                 Amp = 0f;
                 return 0f;
@@ -214,6 +237,79 @@ public sealed class PlaneShake
             // collapses to the 7.54 the class docs quote.
             float u = 2f * (float)rng.NextDouble() - 1f;
             Walk += u * magnitude * 7.54f;
+        }
+    }
+
+    /// <summary>
+    /// One of the original's seven camera component blocks, ported whole: a roll VELOCITY the
+    /// kickers walk at random and the POSITION it integrates into, which is what renders.
+    /// The authored <c>sawtooth</c> picks both laws, the kick's waveform factor and the
+    /// integrator's, so a source's rate and decay fall out of its own law rather than a
+    /// hand-picked envelope. Decode with every address: docs/org/shakes.md.
+    /// ⚠ The kick is a velocity, not an angle: the rendered wobble is a fraction of it, set by
+    /// how far the ramp travels before the reversal test turns it round.</summary>
+    private sealed class Block
+    {
+        // The original integrates at this fixed substep inside whatever its frame was, and runs
+        // the remainder short rather than long; a 60 Hz sim tick is two and a half of them.
+        private const float SubStep = 1f / 150f;
+
+        // The roll below which the block is at rest, paired with the velocity that could still
+        // swing it that far. Neither law reaches zero on its own, and a ringing denormal would
+        // keep writing the pivot forever.
+        private const float RestPos = 1e-6f;
+
+        private float _vel;   // rad/s, what a kick adds to
+        private float _pos;   // rad, what the plane node is rolled by
+
+        public Block(ShakeSource src) => Src = src;
+
+        public ShakeSource Src { get; }
+
+        public float Roll => _pos;
+
+        /// <summary>One kicker's random velocity step: uniform in
+        /// ±<c>0.6·magnitude·frequency·W</c>, W being 4 on a <c>sawtooth</c> source and 2π
+        /// otherwise. Roll takes the ×1.2 axis weight, yaw's ×2.5 is unported because the pivot
+        /// rolls only.</summary>
+        public void Kick(float magnitude, Random rng)
+        {
+            float wave = Src.Sawtooth ? 4f : MathF.Tau;
+            _vel += ((float)rng.NextDouble() - 0.5f) * magnitude * Src.Frequency * wave * 1.2f;
+        }
+
+        /// <summary>Integrates the block over one sim tick: a damped spring on a smooth source,
+        /// and on a <c>sawtooth</c> one the ramp-and-reverse that draws the buzzy triangle, where
+        /// an outward-moving block slower than <c>4·frequency·|pos|</c> has its velocity turned
+        /// round to <c>−4·frequency·e^(−damp/2·frequency)·pos</c>, which is where the decay
+        /// lives.</summary>
+        public void Advance(float dt)
+        {
+            if (Src.Frequency <= 0f)
+            {
+                return;
+            }
+            for (float left = dt; left > 1e-7f;)
+            {
+                float h = MathF.Min(SubStep, left);
+                if (!Src.Sawtooth)
+                {
+                    float w = Src.Frequency * MathF.Tau;
+                    _vel -= ((Src.Damp * _vel) + (w * w * _pos)) * h;
+                }
+                else if (_pos * _vel > 0f && MathF.Abs(_vel) < MathF.Abs(_pos) * Src.Frequency * 4f)
+                {
+                    _vel = -4f * Src.Frequency * MathF.Exp(-Src.Damp * 0.5f / Src.Frequency) * _pos;
+                }
+                _pos += _vel * h;
+                left -= h;
+            }
+            float restVel = RestPos * Src.Frequency * (Src.Sawtooth ? 4f : MathF.Tau);
+            if (MathF.Abs(_pos) < RestPos && MathF.Abs(_vel) < restVel)
+            {
+                _pos = 0f;
+                _vel = 0f;
+            }
         }
     }
 }

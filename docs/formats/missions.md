@@ -95,8 +95,9 @@ Over"); both use the same authored gate test (revisit only if a real mission rea
 
 A **second, separate** file, in the mission's own zrdr archive, keyed on `dzpathN` rather than
 `dzN` (23 files: story missions plus C5/IA1). It is what makes one chapter's fixed zone set
-behave differently per mission. **Nothing in the remake opens it**, it is decoded here, not
-consumed. Flat alternating `KEY, [values…]`; all three keys are optional.
+behave differently per mission. `CampaignDangerZones` reads all three keys: `disable` narrows the
+armed set, and `objective_numbers` and `nosnapshot` decide which zone photographs into which
+scrapbook row. Flat alternating `KEY, [values…]`; all three keys are optional.
 
 | Key | Value | Meaning |
 |---|---|---|
@@ -106,15 +107,18 @@ consumed. Flat alternating `KEY, [values…]`; all three keys are optional.
 
 - **`objective_numbers`** values occupy a fixed **18–31** band across the whole install (14
   distinct values, contiguous within a mission), a reserved slot range for danger zones in the
-  mission's objective list, not a zone id. C5/M01 uses all 14.
+  mission's objective list, not a zone id. C5/M01 uses all 14. The number is the zone's bit in the
+  completed-objective mask and the objective half of the `Snap_<mission>_<objective>` scrapbook row
+  it photographs into (`docs/formats/campaign-screens.md`, "The danger-zone slot"). ⚠ The debrief
+  turns ids **18 to 30** into mask bits and stops there, so a zone numbered 31 scores and
+  photographs but can never light a row.
 - **`disable`** is how a story mission narrows the chapter's zone set: C1/M05 disables five of
   six, leaving one; C2/M05 and C4/M05 disable **every** zone, so those missions have none. It
   names `dzpathN`, so a zone is disabled by its path, not by its `dzN` marker.
-- **`nosnapshot`** corresponds to the design's per-zone capture: navigating a Danger Zone was
-  meant to grab a still or video for the pilot's scrapbook, and this list opts a zone out.
-  C5 sets it on 20 of 34 paths in every story mission (measured); C5/IA1's file carries
-  `nosnapshot` alone. *(Key name and membership are data-confirmed; the scrapbook-capture
-  reading is design-informed.)*
+- **`nosnapshot`** opts a zone out of the per-zone capture: crossing a listed zone still scores its
+  objective number, but no photograph is written for it, which is why CM11/CM12 ship no `Snap_*_27`
+  row for the zone they number 27. C5 sets it on 20 of 34 paths in every story mission (measured);
+  C5/IA1's file carries `nosnapshot` alone.
 
 ## Target display keys
 

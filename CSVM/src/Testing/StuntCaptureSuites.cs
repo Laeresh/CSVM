@@ -1,0 +1,251 @@
+using System.Collections.Generic;
+using System.IO;
+using CSVM.Flight;
+using CSVM.Mech3;
+using CSVM.UI;
+using Godot;
+
+namespace CSVM.Testing;
+
+/// <summary>The Danger Zone camera over C4/IA1's fourteen authored markers: one photograph per
+/// marker per run, the sting with it, no second latch while the aircraft stays inside the radius
+/// and none on a later pass through the same marker, and the scoreboard's thumbnail strip in
+/// marker order. Writes into the run's own scratch directory, never beside the player's
+/// saves.</summary>
+internal static class StuntCaptureSuites
+{
+    private const string Chapter = "C4";
+    private const string Mission = "IA1";
+    private const string StingDef = "snd_dangerzone_camera";
+
+    // Well outside every marker's 15 m radius, so a step through here leaves all of them.
+    private static readonly Vector3 Elsewhere = new(0f, 60000f, 0f);
+
+    [Suite("stunt-capture",
+        "the Danger Zone camera over a C4/IA1 stunt run: crossing inside DzRadius of each dzN "
+        + "marker latches exactly one photograph of that pilot's pane and plays the camera sting "
+        + "once, lingering inside the radius latches nothing more, a later pass over a "
+        + "photographed marker latches nothing more, the files land under screenshots/stunts/ "
+        + "named by chapter, marker and run clock, a rerun makes every marker photographable "
+        + "again, and the scoreboard's thumbnail strip lists the run's shots in marker order")]
+    internal static void StuntCaptureRun(TestContext ctx)
+    {
+        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, Chapter);
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
+        ctx.RequireData(gamezPath, $"{Chapter} gamez");
+        ctx.RequireData(missionZrdr, $"{Chapter}/{Mission} zrdr");
+        ctx.RequireData(ctx.MessagesPath, $"messages.json");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+
+        var run = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, Messages.Load(ctx.MessagesPath))
+            ?? throw new SuiteSkippedException($"{Chapter}/{Mission} ships no Danger Zones");
+
+        // The sting has something to play: the definition is a data orphan no SOUND_GROUPS entry
+        // and no world data names, so nothing else in the build would notice it going missing.
+        var defs = SoundDefs.Load(ctx.ZrdrPath);
+        ctx.Check(defs.TryGetValue(StingDef, out var sting) && sting.WavName.Length > 0,
+            $"the camera sting '{StingDef}' is a real sounds.json definition");
+        if (defs.TryGetValue(StingDef, out var def))
+        {
+            using var archive = new SoundArchive(ctx.SoundsPath);
+            ctx.Check(archive.Find(def.WavName, looped: false, warn: false) != null,
+                $"…and its '{def.WavName}' decodes out of the sound archive");
+        }
+
+        string root = Path.Combine(ctx.ScratchDir, "StuntCapture");
+        string? previous = StuntCapture.DirectoryOverride;
+        try
+        {
+            StuntCapture.DirectoryOverride = root;
+            if (Directory.Exists(StuntCapture.ShotDir()))
+            {
+                Directory.Delete(StuntCapture.ShotDir(), recursive: true);
+            }
+            Drive(ctx, run);
+        }
+        finally
+        {
+            StuntCapture.DirectoryOverride = previous;
+        }
+    }
+
+    private static void Drive(TestContext ctx, StuntMission run)
+    {
+        int grabs = 0, stings = 0;
+        var capture = new StuntCapture(run, Chapter, () =>
+        {
+            grabs++;
+            return Pane();
+        });
+        capture.Sting = () => stings++;
+
+        var latched = new List<(string DzName, float At)>();
+        for (int i = 0; i < run.Zones.Count; i++)
+        {
+            var zone = run.Zones[i];
+            run.Tick(2f);
+            float at = run.Elapsed;
+            capture.Update(zone.Position);
+            latched.Add((zone.DzName, at));
+            if (i == 0)
+            {
+                ctx.Check(capture.Count == 1 && stings == 1,
+                    $"the first crossing latches one photograph and one sting: shots={capture.Count} stings={stings}");
+            }
+
+            // Still inside, a metre off the centre: the latch is the crossing, not the presence.
+            run.Tick(1f);
+            capture.Update(zone.Position + new Vector3(1f, 0f, 0f));
+            ctx.Check(capture.Count == i + 1,
+                $"{zone.DzName}: lingering inside the radius latches nothing more (shots={capture.Count})");
+
+            // Out and back in during the same run: one latch per marker per run.
+            run.Tick(1f);
+            capture.Update(Elsewhere);
+            capture.Update(zone.Position);
+            ctx.Check(capture.Count == i + 1,
+                $"{zone.DzName}: a second pass through the same marker latches nothing more (shots={capture.Count})");
+            capture.Update(Elsewhere);
+        }
+
+        ctx.Same(run.TotalCount, capture.Count, $"the run latches one photograph per marker");
+        ctx.Same(run.TotalCount, stings, $"…and plays the camera sting once per marker");
+        ctx.Same(run.TotalCount, grabs, $"…reading the pane exactly once per latch");
+        CheckFiles(ctx, latched);
+        CheckOrder(ctx, run, capture);
+        CheckRerun(ctx, run, capture);
+        CheckStrip(ctx, run, capture);
+        ctx.Note($"{Chapter}/{Mission}: {run.TotalCount} markers photographed into {StuntCapture.ShotDir()}");
+    }
+
+    // Each shot is on disk under screenshots/stunts/ with the name its chapter, marker and run
+    // clock make, which is the deterministic name a scripted run writes every time.
+    private static void CheckFiles(TestContext ctx, IReadOnlyList<(string DzName, float At)> latched)
+    {
+        int found = 0;
+        var missing = new List<string>();
+        foreach (var (dzName, at) in latched)
+        {
+            string path = Path.Combine(StuntCapture.ShotDir(), StuntCapture.FileName(Chapter, dzName, at));
+            if (File.Exists(path) && new FileInfo(path).Length > 0)
+            {
+                found++;
+            }
+            else
+            {
+                missing.Add(Path.GetFileName(path));
+            }
+        }
+
+        ctx.Same(latched.Count, found,
+            $"every photograph is a non-empty PNG under screenshots/stunts/{(missing.Count > 0 ? $" (missing {string.Join(", ", missing)})" : "")}");
+    }
+
+    private static void CheckOrder(TestContext ctx, StuntMission run, StuntCapture capture)
+    {
+        var shots = new List<string>();
+        foreach (var shot in capture.InMarkerOrder())
+        {
+            shots.Add(shot.DzName);
+        }
+
+        var markers = new List<string>();
+        foreach (var zone in run.Zones)
+        {
+            markers.Add(zone.DzName);
+        }
+
+        ctx.Check(string.Join(",", shots) == string.Join(",", markers),
+            $"the run's shots read back in marker order: [{string.Join(" ", shots)}]");
+    }
+
+    // A rerun makes every marker photographable again, but not while the aircraft is still standing
+    // inside one: a restart under a marker must fly through it again to photograph it.
+    private static void CheckRerun(TestContext ctx, StuntMission run, StuntCapture capture)
+    {
+        var zone = run.Zones[0];
+        capture.Update(zone.Position);
+        capture.Reset();
+        ctx.Check(capture.Count == 0, $"a rerun clears the run's photographs: shots={capture.Count}");
+
+        capture.Update(zone.Position);
+        ctx.Check(capture.Count == 0,
+            $"…and a rerun under a marker does not photograph it without flying through it: shots={capture.Count}");
+
+        capture.Update(Elsewhere);
+        capture.Update(zone.Position);
+        ctx.Check(capture.Count == 1,
+            $"…while the next crossing of that marker photographs it again: shots={capture.Count}");
+    }
+
+    // The strip on the real board: built from the run's own shots when the run completes, one cell
+    // per photograph, captioned and ordered by marker rather than by the order they were flown.
+    private static void CheckStrip(TestContext ctx, StuntMission run, StuntCapture capture)
+    {
+        capture.Reset();
+        capture.Update(Elsewhere);  // out of the marker the rerun check left the aircraft inside
+        foreach (var zone in run.Zones)
+        {
+            run.Tick(1f);
+            capture.Update(zone.Position);
+            capture.Update(Elsewhere);
+        }
+
+        string storePath = Path.Combine(ctx.ScratchDir, "StuntCapture", "stunt_scores.json");
+        var board = StuntScoreboard.Build(run, "Test Plane", $"{Chapter}", ScoreStore.Load(storePath),
+            $"stunt-capture/{Mission}/player_test", exitsToMenu: true, new PauseState(),
+            _ => new MenuInput());
+        board.Shots = capture;
+        ctx.Host.AddChild(board);
+        try
+        {
+            run.DebugCompleteAll();
+            ctx.Check(board.Visible, $"the run completing wakes the scoreboard");
+            var captions = Captions(board);
+            var markers = new List<string>();
+            foreach (var zone in run.Zones)
+            {
+                markers.Add(zone.DzName);
+            }
+
+            ctx.Same(markers.Count, captions.Count, $"the strip carries one cell per photograph");
+            ctx.Check(string.Join(",", captions) == string.Join(",", markers),
+                $"the strip lists the run's shots in marker order: [{string.Join(" ", captions)}]");
+        }
+        finally
+        {
+            board.Free();
+        }
+    }
+
+    // The strip's own captions, read off the named container so the splits table's rows above
+    // cannot be mistaken for them.
+    private static List<string> Captions(StuntScoreboard board)
+    {
+        var captions = new List<string>();
+        if (board.FindChild(StuntScoreboard.StripName, recursive: true, owned: false) is not { } strip)
+        {
+            return captions;
+        }
+        foreach (var cell in strip.GetChildren())
+        {
+            foreach (var part in cell.GetChildren())
+            {
+                if (part is Label label)
+                {
+                    captions.Add(label.Text);
+                }
+            }
+        }
+        return captions;
+    }
+
+    // The pane this suite photographs: a small solid frame, so the suite's verdict rests on the
+    // latch policy and the file it writes rather than on what a test host happened to render.
+    private static Image Pane()
+    {
+        var img = Image.CreateEmpty(64, 48, false, Image.Format.Rgba8);
+        img.Fill(new Color(0.2f, 0.4f, 0.6f));
+        return img;
+    }
+}

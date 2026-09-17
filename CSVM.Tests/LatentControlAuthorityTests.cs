@@ -115,7 +115,7 @@ public class LatentControlAuthorityTests
             {
                 Assert.True(m.PitchAuthorityAt(v) == m.RollAuthorityAt(v),
                     $"{plane}: at {v / Mph:0.0} mph pitch authority {m.PitchAuthorityAt(v):0.0000} is "
-                    + $"away from roll's {m.RollAuthorityAt(v):0.0000} — high_speed_pitch_fade has "
+                    + $"away from roll's {m.RollAuthorityAt(v):0.0000}, high_speed_pitch_fade has "
                     + "come into reach, and a stock envelope row moves with it");
             }
         }
@@ -248,7 +248,7 @@ public class LatentControlAuthorityTests
         // one carries the limiter's scalar and the closing one is untouched, which is the whole
         // asymmetry: entry into a departure is damped, recovery from one is free.
         Assert.True(away < Mathf.Abs(back) * 0.75f,
-            $"separating {away:0.00000} rad/s against closing {Mathf.Abs(back):0.00000} — the two "
+            $"separating {away:0.00000} rad/s against closing {Mathf.Abs(back):0.00000}, the two "
             + "are within a quarter of each other, so the sign test is not selecting");
     }
 
@@ -288,7 +288,7 @@ public class LatentControlAuthorityTests
         Assert.True(away > 1e-6f);
         Assert.True(back < -1e-6f);
         Assert.True(away < Mathf.Abs(back) * 0.75f,
-            $"separating {away:0.0000000} rad/s against closing {Mathf.Abs(back):0.0000000} — the "
+            $"separating {away:0.0000000} rad/s against closing {Mathf.Abs(back):0.0000000}, the "
             + "rudder's two directions are within a quarter of each other, so the sign test is not "
             + "selecting on the yaw axis");
     }
@@ -314,7 +314,7 @@ public class LatentControlAuthorityTests
         Assert.True(on.CommandLimit < 0.9f);
         Assert.True(on.BodyRates.X < off.BodyRates.X * 0.9f,
             $"with the window spent the sustained pitch rate is {on.BodyRates.X:0.0000} rad/s "
-            + $"against {off.BodyRates.X:0.0000} without it — the seam is not reaching the command");
+            + $"against {off.BodyRates.X:0.0000} without it, the seam is not reaching the command");
     }
 
     // A synthetic airframe whose high_speed_pitch_fade window sits inside the flyable band

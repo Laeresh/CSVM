@@ -266,6 +266,18 @@ public sealed class DestructibleRegistry
         /// motions can outlive the reset.</summary>
         public HashSet<(AnimDefinition Def, Node3D Anchor)> LocalCallTargets { get; } = new();
 
+        /// <summary>The gamez node names above <see cref="Anchor"/>, nearest first, as
+        /// <c>TargetPool.CollectOwners</c> hands them to a <c>rating_biases</c> match, null before
+        /// the first walk. Held because every AI shooter asks every ranked structure candidate for
+        /// them on every physics tick, and each ancestor's name comes back out of Godot as a string
+        /// plus a finalizable <c>StringName</c>. Re-walked when <see cref="CachedOwnerTreeParent"/>
+        /// no longer names the anchor's parent, what an authored ADD_CHILD leaves behind.</summary>
+        internal List<string>? CachedOwnerTree { get; set; }
+
+        /// <summary>The instance id <see cref="CachedOwnerTree"/> was walked under, 0 for an anchor
+        /// that had no parent then.</summary>
+        internal ulong CachedOwnerTreeParent { get; set; }
+
         /// <summary>Re-seeds this pool from a mission record, the zeppelin case (M4 F18):
         /// <c>zeppelins.json</c> authors per-part hp (<c>gasbags</c> 80–400,
         /// <c>cannon_health</c> 200) that overrides the def's own <c>HEALTH</c> where present.

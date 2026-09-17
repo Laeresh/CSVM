@@ -49,10 +49,10 @@ public static class DisplayWords
 }
 
 /// <summary>The process-wide options: the requested menu presentation, the requested graphics
-/// mode, the difficulty setting, the nearest-after-a-kill targeting setting, the five display
-/// settings (the monitor, the window size, the display mode, the V-Sync choice and the render
-/// scale) and the four volume levels. A missing field means "never set"; the caller, not this def,
-/// decides what that falls back to.
+/// mode, the difficulty setting, the nearest-after-a-kill targeting setting, the opening view, the
+/// automatic head turn, the five display settings (the monitor, the window size, the display mode,
+/// the V-Sync choice and the render scale) and the four volume levels. A missing field means "never
+/// set"; the caller, not this def, decides what that falls back to.
 /// ⚠ A display field added here is read through a <c>SavedWord(bool det)</c> reader and nowhere
 /// else, and that reader returns null under <c>--det</c>: a golden shot is a deterministic run
 /// against the player's own options directory, so a saved size or mode that escaped the drop would
@@ -81,6 +81,19 @@ public sealed class OptionsDef
     /// "never set", which the consumer reads as ON, since the original ships force feedback on.
     /// </summary>
     public bool? Rumble { get; set; }
+
+    /// <summary>The view a flight opens in (<see cref="Flight.PilotView.Name"/>), the original's
+    /// own Default View setting. Kept as a word rather than the enum for the reason the difficulty
+    /// is: the file carries a spelling, and the mode it resolves to belongs to the flight.
+    /// ⚠ A <c>--view=</c> on the command line outranks this, so a scripted capture that names a
+    /// view is not silently overruled by whatever is saved at this machine's controls.</summary>
+    public string? DefaultView { get; set; }
+
+    /// <summary>Whether the pilot's head turns with the aircraft in the cockpit
+    /// (<see cref="Flight.FlightController.AutoHeadTurn"/>), the original's Auto Head Turn box.
+    /// ⚠ Nullable because null is "never set", which leaves the <c>headLook.autohead</c> config
+    /// key deciding: the row exposes the existing key rather than replacing its default.</summary>
+    public bool? AutoHeadTurn { get; set; }
 
     /// <summary>The screen the window opens on, its index rendered decimal (<c>"0"</c>,
     /// <c>"1"</c>). This is not a vocabulary word, so the store proves the shape alone: whether a
@@ -181,8 +194,18 @@ public sealed class OptionsStore
         Flight.Difficulty.Word(Flight.Difficulty.Hardest),
     };
 
+    // The three selectable views, spelt as Flight.PilotView.Name spells them and so as --view=
+    // takes them. Parse's other arguments (a numpad digit, "back") name a momentary look rather
+    // than a selection, so they are not words this file may carry.
+    private static readonly HashSet<string> ValidDefaultViews = new(StringComparer.Ordinal)
+    {
+        Flight.PilotView.Name(Flight.PilotViewMode.Chase),
+        Flight.PilotView.Name(Flight.PilotViewMode.Cockpit),
+        Flight.PilotView.Name(Flight.PilotViewMode.Nose),
+    };
+
     // The three display vocabularies, DisplayWords' own lists as sets. Held here rather than there
-    // for the same reason the three above are held here at all: the words a file may carry are
+    // for the same reason the four above are held here at all: the words a file may carry are
     // this reader's business, and a file reads back only what an options screen writes.
     private static readonly HashSet<string> ValidDisplayModes = new(DisplayWords.DisplayModes, StringComparer.Ordinal);
 
@@ -230,6 +253,8 @@ public sealed class OptionsStore
             Write(w, "difficulty", def.Difficulty);
             WriteFlag(w, "nearestAfterKill", def.NearestAfterKill);
             WriteFlag(w, "rumble", def.Rumble);
+            Write(w, "defaultView", def.DefaultView);
+            WriteFlag(w, "autoHeadTurn", def.AutoHeadTurn);
             Write(w, "monitorIndex", def.MonitorIndex);
             Write(w, "resolution", def.Resolution);
             Write(w, "displayMode", def.DisplayMode);
@@ -273,6 +298,8 @@ public sealed class OptionsStore
                 Difficulty = Read(root, "difficulty", ValidDifficulties),
                 NearestAfterKill = ReadFlag(root, "nearestAfterKill"),
                 Rumble = ReadFlag(root, "rumble"),
+                DefaultView = Read(root, "defaultView", ValidDefaultViews),
+                AutoHeadTurn = ReadFlag(root, "autoHeadTurn"),
                 MonitorIndex = ReadShaped(root, "monitorIndex", static v => TryParseMonitorIndex(v, out _)),
                 Resolution = ReadShaped(root, "resolution", static v => TryParseResolution(v, out _, out _)),
                 DisplayMode = Read(root, "displayMode", ValidDisplayModes),

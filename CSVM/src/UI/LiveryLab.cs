@@ -235,7 +235,7 @@ public sealed partial class LiveryLab : Node
         bool painted = _scheme != null;
         _paintedToggle.ButtonPressed = painted;
         _patternLabel.Text = !painted
-            ? "unpainted — shipped skin"
+            ? "unpainted (shipped skin)"
             : $"{_scheme!.Label}{(_patternIndex >= 0 ? $"   [{_patternIndex + 1}/{_patterns.Count}]" : "   (not for this plane)")}";
 
         for (int slot = 0; slot < 3; slot++)
@@ -245,7 +245,7 @@ public sealed partial class LiveryLab : Node
             _rgb[slot, 0].Value = Mathf.Round(c.R * 255f);
             _rgb[slot, 1].Value = Mathf.Round(c.G * 255f);
             _rgb[slot, 2].Value = Mathf.Round(c.B * 255f);
-            _decalLabels[slot].Text = painted ? DecalText(slot) : "—";
+            _decalLabels[slot].Text = painted ? DecalText(slot) : "-";
         }
         _cliLabel.Text = CliArgs();
         _suppressCallbacks = false;
@@ -303,7 +303,7 @@ public sealed partial class LiveryLab : Node
 
         box.AddChild(new Label { Text = "LIVERY LAB" });
         box.AddChild(Small("L hides this panel · F19 toggles the damage lab"));
-        box.AddChild(Small("patterns are per aircraft — this plane's set only"));
+        box.AddChild(Small("patterns are per aircraft, this plane's set only"));
 
         _paintedToggle = new CheckButton { Text = "painted" };
         _paintedToggle.Toggled += on => { if (!_suppressCallbacks) SetPainted(on); };

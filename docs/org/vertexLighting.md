@@ -49,7 +49,9 @@ else; `soil` never reaches the lighting code.
 | `FUN_00552020` | Hardware draw, the per-model decision: the same three flag-word bits, plus `FUN_00567060` asking whether any gathered light reaches the model's bound sphere |
 | `FUN_00568830` | Hardware draw: seeds every vertex's light accumulator to 1.0 before the evaluation |
 | `FUN_005688a0` | Hardware draw: the per-vertex light evaluation. Adds each directional light's `ambient + diffuse × max(N·L, 0)` times its colour, minus one, into the accumulator. Reads positions, normals, the accumulator and the polygon flags; never the texture |
-| `FUN_005a0e00` | Direct3D device set-up: stage 0 colour op MODULATE (texture × diffuse), alpha op SELECTARG1 (texture alpha) |
+| `FUN_005a0e00` | Direct3D device set-up: stage 0 colour op MODULATE (texture × diffuse), alpha op SELECTARG1 (texture alpha), and `SPECULARENABLE` off for the life of the process |
+| `FUN_005a2f70` | The fog enable, and the only kind of `SetLightState` the engine ever issues |
+| `FUN_005a4430` | The model batch drain: `DrawPrimitive` with FVF `0x1c4`, the pre-transformed vertex every draw in the layer submits |
 | `0x005a6160` | The hardware transparent-queue drain (no function boundary in the database): per polygon sets shade mode, alpha blend, z-write off, the alpha op and the destination blend, then draws with FVF `0x1c4`, which carries diffuse. Never touches the colour op |
 | `FUN_00566e00` | Per model, selects which of the gathered lights reach it and writes each one's scalar intensity into the accumulator |
 | `FUN_00567150` | The per-vertex light evaluation for a **textured** polygon: `N·L` against each selected light's direction, plus its ambient |
@@ -232,6 +234,169 @@ blending on and z-write off, and it excludes the polygon from the projected-shad
 passes. The two globals the submit reads beside it, the opacity `DAT_00a06f98` (default 1.0, set by
 `FUN_0054e0e0`) and the overwrite flag `DAT_00a06f94`, are routing too and never a brightness term.
 
+## The sun's own term, and where the product is clamped
+
+`FUN_005688a0` is only the middle of three steps. The zone apply builds the light, the evaluation
+accumulates it, and the draw multiplies the accumulator by the authored colour and clamps at white.
+All three matter to a reproduction, because the remake clamps at a different point.
+
+### What the zone apply writes (`FUN_00472ea0`)
+
+The apply reads one `0x58`-byte zone record out of a table selected by the hardware flag
+(`DAT_0071dd24` hardware, `DAT_0071de2c` software) and writes the whole light in one pass:
+`FUN_004dbcc0` the enable from `+0x24`, `FUN_004dc610` the orientation from `+0x28`,
+`FUN_004dbdb0` the diffuse scalar from `+0x34`, `FUN_004dbce0` the ambient scalar from `+0x38`,
+`FUN_004dcb10` the **diffuse colour** from `+0x3c`, `FUN_004dcc70` the **ambient colour** from
+`+0x48`, `FUN_004dc2f0` `SUNLIGHT_STATIC` from `+0x54`, and `FUN_004dbe80` `SUNLIGHT_BICOLORED`
+from `+0x55`. **Both colours are always written**, so the light always carries two of them, and
+the bicolored bit decides only whether the second one is ever read.
+
+Each setter also pre-multiplies, so the class data caches three derived triples beside the two
+authored ones. The extractor's own field names for the same offsets are in the third column:
+
+| Offset | Holds | Extractor's name |
+|---|---|---|
+| `+0xa4` | `SUNLIGHT_COLOR_DIFFUSE` | `color` |
+| `+0xb0` | `SUNLIGHT_COLOR_AMBIENT` | `color_ambient` |
+| `+0xbc` | diffuse scalar × diffuse colour | `color_diffuse_mixed` |
+| `+0xc8` | ambient scalar × ambient colour | `color_ambient_mixed` |
+| `+0xd4` | the sum of the two above | `color_da_combined` |
+
+### `SUNLIGHT_BICOLORED` is flag `0x400`, and it swaps one colour for two
+
+`FUN_004dbe80` writes it as `(value & 1) << 10` into the flag word at `+0xe0`, and
+`FUN_005688a0` tests it at `0x00568a7f` (`TEST AH,0x4` on `[light+0xe0]`), once per directional
+light, outside the vertex loop:
+
+- **clear** (`JZ 0x00568cdb`): the term is one scalar times one colour. The dot product runs at
+  `0x00568ddf` and the ambient is added at `0x00568df0`, giving `ambient + diffuse × max(N·L, 0)`,
+  and that scalar multiplies the **diffuse** colour triple at `+0xa4`/`+0xa8`/`+0xac`
+  (`0x00568ec7`, `0x00568ee5`, `0x00568ef7`). **The ambient colour at `+0xb0` is never read on this
+  path**, so a file that authors two different colours with the bit clear loses the second one.
+- **set** (fall through, `0x00568c70`-`0x00568cb4`): the two halves carry their own colours. The
+  accumulator takes `max(N·L, 0)` times the pre-multiplied diffuse triple at `+0xbc`, plus the
+  pre-multiplied ambient triple at `+0xc8` whole, reading both caches directly.
+
+Both branches then subtract 1.0 per channel (`FSUB [0x006032dc]` at `0x00568c8a`/`0x00568ca8`/
+`0x00568cc4` bicolored and `0x00568ed4`/`0x00568eeb`/`0x00568efd` plain), which is what makes a
+single directional light land exactly on its own value against `FUN_00568830`'s seed of 1.0.
+
+⚠ **The bit also suppresses the light's cache flag.** `FUN_004dcb10`, `FUN_004dcc70` and
+`FUN_004dc2f0` each recompute flag `0x200` as "`SUNLIGHT_STATIC` set, bicolored clear, none of
+`0xe0` set, and the diffuse colour exactly 1,1,1". `FUN_005688a0` skips a light carrying `0x200`
+outright at `0x00568a69` when the polygon supplies a baked per-vertex scalar array, because that
+array already holds the contribution. A bicolored light therefore always evaluates live.
+
+Authored populations, over all 212 `ZONE*` and `SW_ZONE*` blocks in the 53 shipped
+`weather.zrd.json`:
+
+| `SUNLIGHT_BICOLORED` | the two colours | blocks | chapters |
+|---|---|---|---|
+| 0 | identical | 162 | all |
+| 1 | **different** | 28 | C1 (2), C2 (8), C4 (18) |
+| 1 | identical | 16 | C5 |
+| 0 | different | 6 | C1B (1), C1C (4), C2 (1) |
+
+So the bit is live where it is authored with two colours: C4's `IA1` pairs a warm diffuse
+(1.0, 0.8, 0.7) with a cool ambient (0.7, 0.9, 1.0), a sun-and-sky split. It is a **no-op on the
+value in C5**, whose 32 zone blocks all author white for both, and the six blocks in the last row
+author a second colour the binary discards.
+
+### One sun leaves exactly `ambient + diffuse × max(N·L, 0)`
+
+`FUN_00568790` sorts the lights that reach a model into three lists by the flag word at `+0xe0`:
+bit `0x08` (directional) into `DAT_00a06924`, else bit `0x04` into `DAT_00a06d2c`, else, when
+either scalar is non-zero, into `DAT_00a06b28`. Only the **directional** loop subtracts 1.0; the
+other two add their term with no subtraction at all. A point light is therefore purely additive on
+top of the sun's value and can never rescale or dim it.
+
+⚠ **C5 has one light and no `LIGHT_STATE`.** Its `gamez` places exactly one `Light` node,
+`sunlight`, among 11,438 nodes, and `LIGHT_STATE` appears in no C5 file (66 files carry it
+install-wide, across C1, C1B, C2, C3, C4 and the shared `zrdr` tree). The accumulator over a C5
+polygon is the sun's term and nothing else.
+
+### The draw clamps the product, not the factor (`FUN_00554550`)
+
+After the evaluation, the draw multiplies each vertex's accumulator by the authored colour and
+clamps the **product** to 0..255. Which colour depends on the polygon's material, tested at
+`0x0055526a` on the material's texture pointer at `+0x10`:
+
+- **textured**: the per-vertex colour array at the vertex record's `+0x14`/`+0x18`/`+0x1c`
+  (`0x00555289`, `0x00555295`, `0x005552a4`), clamped at `0x005552b2`-`0x00555349` against 255.0
+  (`0x0060414c`) and 0.0 (`0x006032c8`).
+- **colored**: the material's own colour triple at `+0x04`/`+0x08`/`+0x0c`
+  (`0x0055536e`-`0x00555396`), same clamp at `0x0055539a`-`0x00555431`.
+- **unlit** (the model mask rejected it): the authored colours are copied through unchanged
+  (`0x0055545e`-`0x005554a6` per vertex, `0x005554a8` for the material colour).
+
+⚠ **Saturation is where the collapse and the original agree, and it is not an edge case.** A C5
+vertex authored at 255 under `SUNLIGHT` 1.5 / 0.5 has its product clamped at white for every
+`N·L >= 1/3`, which is exactly what the remake's `csky_world_light` of 1.0 already draws; below
+1/3 the original is **darker** than the remake, never brighter. Counted over C5's 2,851 models
+(2,619 of them `lighting: true`, 108,513 authored polygon vertex colours, 66.4 % of them 255):
+
+| Texture family | Vertex colours | at 255 | mean | p10 |
+|---|---|---|---|---|
+| `cblock1`-`cblock7`, the city-block skins | 8,549 | **100.0 %** | 255 | 255 |
+| `bldg1`-`bldg4`, the tower skins | 8,578 | 51 % to 71 % | 181 to 221 | 0 to 112 |
+| `wtr00000`, the water | 2,786 | 100.0 % | 255 | 255 |
+| `brick1` / `roof01` / `z_support02` | 11,591 | 36 % to 60 % | 165 to 193 | 48 to 100 |
+
+So the two families a night-city frame is mostly made of behave oppositely under the per-vertex
+term: the city blocks cannot darken at all on a sunward wall and halve on an away-facing one,
+while the tower skins run the full `1 / (ambient + diffuse × N·L)` range.
+
+### What a reproduction needs, and what the remake has
+
+The faithful term, per lit vertex, is
+
+    drawn = clamp(authored_vertex_colour × (AMBIENT + DIFFUSE × max(dot(N, L), 0)), 0, 1)
+
+against the remake's `authored_vertex_colour × clamp(AMBIENT + DIFFUSE × 0.46, 0.15, 1)`. Three
+things stand between the two. The clamp moves from before the multiply to after it. The averaged
+0.46 becomes a real `N·L`, which the fullbright world shader does not compute and has no sun
+direction for. And `N` is the per-vertex normal only where the polygon carries one: **34 % of C5's
+21,577 lit polygons and 43 % of C1's 16,580 do**, and the rest are shaded from the face normal, so
+a reproduction has to emit flat normals for the majority rather than smoothing them.
+
+## Specular: the device turns it off and no material exists to turn it back on
+
+⚠ **Nothing in the original carries a specular term, on an aircraft or on anything else.** Four
+independent readings agree, and the first is the whole answer on its own:
+
+1. **The device disables it at creation and nothing re-enables it.** `FUN_005a0e00` calls
+   `SetRenderState(D3DRENDERSTATE_SPECULARENABLE, 0)` at `0x005a12f8`-`0x005a12fc` (the call
+   reports through `zvid_ddd3d.c` line 523 on failure), and that is the **only** write of render
+   state `0x1d` in the shipped image: one `push 0x1d` in the whole 0x0059e000-0x005ab000 video
+   layer, against 110 `SetRenderState` call sites.
+2. **The D3D lighting pipeline never runs, so a material could not apply anyway.** Every submit in
+   the layer draws with FVF `0x1c4`, which is `XYZRHW | DIFFUSE | SPECULAR | TEX1` (23 sites; the
+   model batch drains through `FUN_005a4430` at `0x005a4530`). `XYZRHW` is a pre-transformed,
+   pre-lit vertex, so the device's own transform and lighting stages are bypassed entirely.
+3. **No material is ever set.** The interface is `IDirect3DDevice3`, where a material is installed
+   with `SetLightState(D3DLIGHTSTATE_MATERIAL, handle)` at vtable `+0x60`. Every `+0x60` call in
+   the video layer passes a fog state instead, `4` `FOGMODE` (`FUN_005a2f70`), `5` `FOGSTART`
+   (`0x005a2fe5`, `0x005a30a4`) and `6` `FOGEND` (`0x005a30ba`); light state `1` appears nowhere.
+4. **The specular slot the FVF declares is a fog carrier, not a colour.** The vertex is 32 bytes,
+   diffuse at `+0x10` and specular at `+0x14`, and every writer stores the constant `0xFF000000`
+   into `+0x14`: the model polygon packer at `0x005a3ff8` (one instruction after it assembles the
+   diffuse from the per-vertex colour bytes at `0x005a3ff1`), and the sprite, clutter and UI
+   packers at `0x00558da7`, `0x0056baca`, `0x005a5b34` and `0x005c1432`. RGB zero, alpha 255,
+   which is the no-fog end of the fog-factor slot pre-transformed vertices carry.
+
+The per-vertex evaluation above agrees: `FUN_005688a0` accumulates `ambient + diffuse × max(N·L, 0)`
+per light and has no half-vector, no view direction and no exponent. An aircraft in the original is
+its texture times a Lambert term, and nothing else.
+
+### What CSVM does with that
+
+The remake shades aircraft through Godot's PBR material, which has no zero-gloss setting that also
+keeps the diffuse response, so the faithful reading is a floor rather than a value to copy. The
+shaded arm of `SceneBuilder.GetBiasShader` therefore carries `SPECULAR = 0.25` (`AircraftSpecular`)
+at roughness 0.85 and metallic 0.0, which is the remake's own choice: the value the user picked by
+eye off a sweep against `OriginalScreenshots/Fury from above.png`, low enough that sunlight reads as
+a sheen instead of gloss. The decode is the record behind it, not its source.
+
 ## Facades: the same gate, a different `N`
 
 A billboard is not a separate renderer. A facade node reaches the draw by the same route as any
@@ -342,6 +507,21 @@ honouring the flag with a flat multiply, which is what `SceneBuilder` does today
 *which* cards are lit (C1C, C2B and C5's `fvol` field, and nothing in C1, C4 or any placed
 `cloudparent` cluster) and wrong about the value on all of them. Acting on that is a look change on
 a visible population and is owed a verdict at the controls, not a luminance distance.
+
+⚠ **A city wall is the same miss as a card, but the sign of the miss depends on the authored
+vertex colour.** The collapse's 0.46 stands for the world's mean `N·L`, so any surface whose own
+`N·L` is far from it is rendered at the wrong value, and a vertical facade turned toward the sun is
+as far from the mean as a billboard is. C5 authors `SUNLIGHT_DIFFUSE` 1.5 with `SUNLIGHT_AMBIENT`
+0.5 in both zones, so the per-vertex factor runs 0.5 to 2.0 where `WorldLightFactor` returns
+`clamp(0.5 + 1.5 × 0.46, 0.15, 1)`, a flat 1.0 that also throws 0.19 away at the clamp. What that
+costs on a given wall is decided by the clamp's position, above: the original clamps the
+**product** of factor and authored colour, the remake clamps the **factor** alone. On a vertex
+authored at 255 the two agree for every `N·L >= 1/3` and the remake is the brighter of the two
+below it, so the ratio `1 / (0.5 + 1.5 N·L)` applies only where the authored colour is low enough
+for the original's product to stay under white. C4 authors the identical scalar pair and shows no
+deficit on the surfaces `CAP-12` measured, which are the cloud deck, `lighting: false` there and
+so lit by neither engine. What a reproduction costs, and the look verdict it is owed, is on
+`BL-322`.
 
 ⚠ **The PNG alpha channel is not a substitute for the field.** It distinguishes `Full` from `None`
 but loses the one to ten `Simple` textures per chapter, which carry the bit too, so the pixel

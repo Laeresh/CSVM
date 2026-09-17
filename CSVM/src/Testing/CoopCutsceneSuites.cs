@@ -25,7 +25,7 @@ internal static class CoopCutsceneSuites
     [Suite("campaign-coop-cutscene-fullscreen",
         "the window a cutscene plays in at 2, 3 and 4 panes: an episode gives pane 1 the whole "
         + "window, takes the other panes down and leaves EXACTLY ONE listener-enabled viewport "
-        + "rather than none, and both exits — the definition ending and a player's skip — lay "
+        + "rather than none, and both exits (the definition ending and a player's skip) lay "
         + "the panes back out with a listener each; an intro whose first code lands before the "
         + "rig exists collapses as the rigs bind, and a skip names the player in their colour")]
     internal static void CampaignCoopCutsceneFullscreen(TestContext ctx)

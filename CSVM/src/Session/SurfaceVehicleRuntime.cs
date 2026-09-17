@@ -26,11 +26,6 @@ public sealed partial class SurfaceVehicleRuntime : Node
     private const int WaterProbeHits = 4;
     private const float WaterProbeStep = 0.05f;
 
-    // The acquisition radius a def authoring no `activation` falls back to, metres. Both shipped
-    // surface defs author 2500, so nothing reaches this today; it is the same floor the aircraft
-    // path takes when a mission supplies no min_ai_active_dist.
-    private const float DefaultActivationM = 2000f;
-
     private readonly GameZ _gamez;
     private readonly SceneBuilder _scene;
     private readonly AnimRuntime _runtime;
@@ -122,11 +117,12 @@ public sealed partial class SurfaceVehicleRuntime : Node
         // The hull's own gun, from the def's own weapons block: the engine's weapon builder runs
         // for every vehicle it parses, so a boat is armed by the same path an aeroplane is
         // (docs/org/aiPilot.md "What a mode ship vehicle runs").
+        float attackRadius = AttackRadiusOf(plan);
         vessel.Gunner = SurfaceGunner.Build(vessel, Projectiles, Weapons,
-            _defs.WeaponsOf(plan.Def), _defs.ActivationOf(plan.Def) ?? DefaultActivationM, Voices);
+            _defs.WeaponsOf(plan.Def), attackRadius, Voices);
         _vessels.Add(vessel);
         _byName[name] = vessel;
-        Log.Info("world", $"surface: '{name}' ({plan.Def}, {plan.Mode}) built at ({position.X:0},{waterY:0.##},{position.Z:0}){waterNote} team={plan.Team?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "-"} group={plan.Group}{(vessel.MarkerName.Length > 0 ? $" marker '{vessel.MarkerName}'" : " unnamed")}{(pool != null ? Log.Format($" pool '{pool.Def.Name}' HP {pool.MaxHealth:0}") : " no destructible pool")}{(vessel.Gunner != null ? Log.Format($" armed {vessel.Gunner.Ammo} rounds") : " unarmed")}{(plan.Inert ? " DEACTIVATED" : "")}");
+        Log.Info("world", $"surface: '{name}' ({plan.Def}, {plan.Mode}) built at ({position.X:0},{waterY:0.##},{position.Z:0}){waterNote} team={plan.Team?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "-"} group={plan.Group}{(vessel.MarkerName.Length > 0 ? $" marker '{vessel.MarkerName}'" : " unnamed")}{(pool != null ? Log.Format($" pool '{pool.Def.Name}' HP {pool.MaxHealth:0}") : " no destructible pool")}{(vessel.Gunner != null ? Log.Format($" armed {vessel.Gunner.Ammo} rounds, reach {attackRadius:0} m") : " unarmed")}{(plan.Inert ? " DEACTIVATED" : "")}");
         return vessel;
     }
 
@@ -159,6 +155,22 @@ public sealed partial class SurfaceVehicleRuntime : Node
             into.AddVehicle(vessel.Position, vessel.Velocity, vessel.Team ?? AimAssist.NeutralTeam,
                 !vessel.Inert && !vessel.IsDestroyed, vessel);
         }
+    }
+
+    // The radius the hull's own scorer admits a candidate inside, in the order the engine writes
+    // the attack triple at spawn: the def copy, then the net, then the block, each later writer
+    // skipping a field the data leaves zero (docs/org/aiPilot.md "Where a hull's attack triple
+    // comes from"). plan.Volumes is already the net overlaid by the block. A hull that resolves
+    // to nothing keeps the decoded def record default: a 0 m reach would silence every boat and
+    // truck in the game while still passing any check that only watches the scan.
+    private float AttackRadiusOf(RosterSpawnPlan plan)
+    {
+        float radius = plan.Volumes.Attack.Radius;
+        if (radius <= 0f)
+        {
+            radius = _defs.AttackOf(plan.Def) ?? VehicleDefs.DefaultAttackRadiusM;
+        }
+        return radius > 0f ? radius : VehicleDefs.DefaultAttackRadiusM;
     }
 
     // The hull's target-box name, resolved here because this is the seam where the string table

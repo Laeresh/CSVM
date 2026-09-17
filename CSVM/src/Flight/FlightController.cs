@@ -101,8 +101,8 @@ public partial class FlightController : Node3D
     /// each frame. Null if the model has no wing-flare nodes.</summary>
     public WingLightBlinker? WingLights;
 
-    /// <summary>The throttle-slam exhaust smoke; advanced each frame. Null if the model has no
-    /// exhaust nodes.</summary>
+    /// <summary>The throttle-slam exhaust smoke; advanced on each sim step, the clock its own
+    /// gate needs. Null if the model has no exhaust nodes.</summary>
     public ThrottleSlamSmoke? ThrottleSmoke;
 
     /// <summary>The chapter-authored pale speed wisps spawned ahead of this aircraft; one private
@@ -249,6 +249,11 @@ public partial class FlightController : Node3D
     /// Null in free flight.</summary>
     public StuntMission? Stunt;
 
+    /// <summary>This pane's Danger Zone camera: one latched photograph per marker per run, stepped
+    /// from <see cref="SimStep"/> beside the run itself. Null in free flight and on every rig with
+    /// no pane of its own to photograph.</summary>
+    public StuntCapture? StuntShots;
+
     /// <summary>The end-of-run results overlay: splits + total + best-time on
     /// AllComplete. Added to the HUD canvas last (drawn over the marker/dials); wakes itself on
     /// the run's RunCompleted. Null in free flight.</summary>
@@ -308,11 +313,11 @@ public partial class FlightController : Node3D
     /// marker, Track Target's camera and any later AI-order consumer are meant to read.</summary>
     public TargetSelection? Targeting;
 
-    /// <summary>Appends the mission's selectable structures (the zeppelin sub-parts) to the
-    /// targeting pool each frame, <c>ZeppelinRuntime.CollectTargetParts</c>, bound by
-    /// <c>GameSession</c> once the zeppelins exist. Null in a session with none. A delegate because
-    /// the zeppelins are BUILT AFTER the rigs, so there is no runtime to hand the assembler; the
-    /// same sink shape <see cref="CollideDamageSink"/> already uses.</summary>
+    /// <summary>Appends the zeppelin sub-parts to the targeting pool each frame,
+    /// <c>ZeppelinRuntime.CollectTargetParts</c>, bound by <c>GameSession</c> once the zeppelins
+    /// exist. Null in a session with none, and the pool takes them only under the torpedo gate
+    /// (<see cref="TargetPool.Rebuild"/>). A delegate because the zeppelins are BUILT AFTER the
+    /// rigs; the same sink shape <see cref="CollideDamageSink"/> already uses.</summary>
     public System.Action<List<AimCandidate>>? TargetSubParts;
 
     /// <summary>Appends this pilot's live objective sites to the targeting pool each frame: the
@@ -422,6 +427,14 @@ public partial class FlightController : Node3D
     /// (<see cref="CameraController.ViewMode"/>) once <see cref="Setup"/> has run, because the
     /// cycle key changes it; this field only seeds it.</summary>
     public PilotViewMode PinnedViewMode = PilotViewMode.Chase;
+
+    /// <summary>The Auto Head Turn option as the options file has it, the original's own GAME
+    /// OPTIONS checkbox: true turns the head with the aircraft in the cockpit, false leaves it
+    /// straight ahead.
+    /// ⚠ Null, the default, is "never set" and leaves the <c>headLook.autohead</c> config key
+    /// deciding, which ships OFF (<see cref="Utils.Config"/>). The row exposes that key rather than
+    /// replacing it, so a build with no options file behaves byte for byte as before.</summary>
+    public bool? AutoHeadTurn;
 
     /// <summary>The right-stick deflection held for the whole run (<c>--look=x,y</c>, +x right and
     /// +y up), the scripted twin of pushing the look stick. Zero (the default) is a centred stick,
@@ -769,6 +782,12 @@ public partial class FlightController : Node3D
     /// the anim data's <c>PLAYER_1ST_PERSON</c> condition (id 120).</summary>
     public bool FirstPersonView => PilotView.IsFirstPerson(ViewMode);
 
+    /// <summary>Whether this pilot has the full Cockpit view (mode 6) selected, the half of
+    /// <see cref="FirstPersonView"/> that draws an interior. Nose (mode 7) reads false. A held
+    /// look-behind leaves a first-person selection where it is, so the effective view is the
+    /// selected one (<see cref="PilotView.Effective"/>).</summary>
+    public bool CockpitView => ViewMode == PilotViewMode.Cockpit;
+
     /// <summary>The one head every view of this pilot's aircraft is placed by, or null on an AI rig,
     /// which has no camera. Read by the suites: the angles it has settled at and the elevation floor
     /// the last placed frame handed it are what say which view's law ran.</summary>
@@ -1021,6 +1040,7 @@ public partial class FlightController : Node3D
         if (_cam != null)
         {
             _cam.Head.IdleAim = AutoheadTarget;
+            _cam.Head.TargetOffset = PadlockOffset;
         }
         _spawnPos = spawnPos;
         _spawnAttitude = Basis.LookingAt((spawnLookAt - spawnPos).Normalized(), Vector3.Up);
@@ -1157,6 +1177,7 @@ public partial class FlightController : Node3D
     public void Rerun()
     {
         Stunt?.Reset();
+        StuntShots?.Reset();
         Respawn();
     }
 
@@ -1218,6 +1239,11 @@ public partial class FlightController : Node3D
         // The original tops the tank up where it places the aircraft, from the def-derived capacity.
         Fuel.Capacity = Stats?.FuelCapacity ?? 0f;
         Fuel.Fill();
+        // ⚠ Off the slot before the spawn choreography goes on it: a hull that went down with its
+        // propellers stopped would otherwise fly again with the stop definition still fading
+        // staticpropN in under the start one fading it back out.
+        _crashRuntime?.Stop("stopprops");
+
         // ⚠ The backing field here, never CrashRuntime: a still-armed rig has played nothing, so
         // there is nothing to replay, and asking would build the whole rig on the placement frame.
         // First setup precedes adapter construction, so the adapter replays startprops after attachment.
@@ -1662,7 +1688,7 @@ public partial class FlightController : Node3D
         // flag), reachable through the zone-less overflow, so it is tested on every hit.
         if (Damage.IsDestroyed)
         {
-            Log.Info("weapons", $"vehicle health exhausted ({struckPart} last) — shot down by {weapon.Id}");
+            Log.Info("weapons", $"vehicle health exhausted ({struckPart} last), shot down by {weapon.Id}");
             Destroy(impact, $"gunfire ({weapon.Id})", colliderPart,
                 killer: shooter != ProjectilePool.NoShooter ? shooter : null);
             return;
@@ -1736,7 +1762,7 @@ public partial class FlightController : Node3D
             $"rammed P{PlayerIndex + 1} by P{striker + 1} ({struckPart}): a={armorDamage:0.0} h={healthDamage:0.0} hull={Damage.WholeHealth:0.0}/{Damage.WholeHealthMax:0}");
         if (Damage.IsDestroyed)
         {
-            Log.Info("flight", $"vehicle health exhausted ({struckPart} last) — rammed by P{striker + 1}");
+            Log.Info("flight", $"vehicle health exhausted ({struckPart} last), rammed by P{striker + 1}");
             Destroy(impact, "collision", "center", null);
         }
     }
@@ -1912,6 +1938,11 @@ public partial class FlightController : Node3D
         // which this clock is. A crash or halt stops the calls, freezing the radius too.
         _cam?.UpdateDynamics(dt, _model.Speed);
 
+        // ⚠ The slam gate belongs on this clock, never on the rendered frame: the lever slews only
+        // inside this step, so a frame carrying none reads it flat and ends the climb it measures.
+        // Past the pose write above, so the plume emits at this step's pose.
+        ThrottleSmoke?.Update(dt, _model.Throttle);
+
         // The AI gunner: acquire/hold the target and decide this tick's trigger and lead
         // BEFORE the fire step reads them. Runs for AI pilots only; a gunner-less AI keeps the
         // released trigger it always had.
@@ -1993,6 +2024,10 @@ public partial class FlightController : Node3D
 
         // Stunt run: flew-through-a-danger-zone test against this frame's committed position.
         Stunt?.Update(_model.Position);
+
+        // The camera latch reads the same committed position, after the run's own test, so a
+        // photograph and the zone it completes land on one frame.
+        StuntShots?.Update(_model.Position);
 
         // height over ground for the altimeter's LOW ALT warning: one ray straight
         // down per physics frame (world + map-edge extension colliders)
@@ -2240,9 +2275,6 @@ public partial class FlightController : Node3D
             Audio?.Update(simDt, engineDrive, speedFrac, healthFrac, _model.EngineDead,
                 ViewMode == PilotViewMode.Cockpit);
             EngineAudio?.Update(simDt, engineDrive, speedFrac, healthFrac, _model.EngineDead);
-            // The throttle-slam gate needs the live value every frame, not just while its plume
-            // is active, so it can tell a fresh climb from one already in progress.
-            ThrottleSmoke?.Update(simDt, _model.Throttle);
             if (SpeedCue != null && _viewCamera != null)
             {
                 var cameraPos = _viewCamera.GlobalPosition;
@@ -2734,6 +2766,22 @@ public partial class FlightController : Node3D
         return null;
     }
 
+    // The ordnance the hardpoint selector points at, or null with no fit, no fire control or no
+    // pylon. What the Non-Aircraft cycle's torpedo gate reads (TargetPool.Rebuild), on every
+    // per-frame rebuild, so switching off the torpedo drops the zeppelin parts from that cycle on
+    // the next pass and the re-resolve moves a selected part to the head rather than holding it.
+    // The gun selector can never open the gate: no gun in this install authors LOCK_ON.
+    private WeaponDef? SelectedOrdnance()
+    {
+        if (Loadout is not { Hardpoints.Count: > 0 } fit || _fire == null)
+        {
+            return null;
+        }
+
+        int pylon = _fire.SelectedPylon;
+        return pylon >= 0 && pylon < fit.Hardpoints.Count ? fit.Hardpoints[pylon].Weapon : null;
+    }
+
     /// <summary>A gun group's muzzle MIDPOINT: the original averages that group's live barrel
     /// attachments, which is where that group's fire converges.</summary>
     private Vector3 MuzzleMidpoint(GunGroup group)
@@ -2903,7 +2951,7 @@ public partial class FlightController : Node3D
         {
             Audio?.PlayEmptyClip();
             WeaponAudio?.PlayEmptyClip();
-            Log.Info("weapons", $"rocket: {Name} dry pull, all pylons empty — empty-clip cue");
+            Log.Info("weapons", $"rocket: {Name} dry pull, all pylons empty, empty-clip cue");
         }
     }
 
@@ -3076,7 +3124,6 @@ public partial class FlightController : Node3D
             using (PerfSample.Scope(PerfSite.PartDetach))
             {
                 CrashRuntime.Play(destroyDef, CrashAnchor, applyReset: false);
-                PlayStopProps();
             }
         }
         else if (PlaneModel != null)
@@ -3113,6 +3160,10 @@ public partial class FlightController : Node3D
         // The engine wind-down cue layers over the explosion, replacing the loops' abrupt cut with
         // snd_propstop.
         Audio?.OnEngineStop();
+        // ⚠ Keep the visual wind-down beside the cue: they are two halves of one event, and a
+        // caller raising one alone would spin a dead aeroplane's propeller over snd_propstop. The
+        // original's death routine runs it here too (docs/org/ordnanceTypes.md).
+        PlayStopProps();
         // No plume survives a dead engine.
         ThrottleSmoke?.Reset(_throttle);
         SpeedCue?.Reset();
@@ -3244,10 +3295,6 @@ public partial class FlightController : Node3D
             using (PerfSample.Scope(PerfSite.PartDetach))
             {
                 CrashRuntime.Play(crashDef, CrashAnchor, applyReset: false);
-                // The prop wind-down (staticpropN fades back in as prop1..3 fade out), inert the
-                // instant PlaneModel above hides, but it keeps the def's own state consistent for
-                // whatever plays next. A choked aircraft already holds the slot and is refused.
-                PlayStopProps();
             }
         }
         // ⚠ Not on a wreck landing: the cut and the report both belong to the kill, seconds
@@ -3265,10 +3312,10 @@ public partial class FlightController : Node3D
             var theirs = struckAir.Rig.WorldVelocity;
             var los = struckAir.Rig.WorldPosition - _model.Position;
             Log.Info("flight",
-                $"midair aspect: into {hitName} — tracks {AngleBetweenDeg(mine, theirs):0}° apart (0 = same heading, 180 = head-on), line of sight {AngleBetweenDeg(mine, los):0}° off own track, spd mine={_model.Speed:0} theirs={theirs.Length():0} m/s");
+                $"midair aspect: into {hitName}, tracks {AngleBetweenDeg(mine, theirs):0}° apart (0 = same heading, 180 = head-on), line of sight {AngleBetweenDeg(mine, los):0}° off own track, spd mine={_model.Speed:0} theirs={theirs.Length():0} m/s");
         }
         Log.Info("flight",
-            $"CRASH into {hitName} ({part}) surface={surface} def={crashDef ?? "-"} wreck={landing.WreckLanding} impact=({impact.X:0},{impact.Y:0},{impact.Z:0}) pos=({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) spd={_model.Speed:0} m/s — waiting for respawn");
+            $"CRASH into {hitName} ({part}) surface={surface} def={crashDef ?? "-"} wreck={landing.WreckLanding} impact=({impact.X:0},{impact.Y:0},{impact.Z:0}) pos=({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) spd={_model.Speed:0} m/s, waiting for respawn");
         if (landing.Downed)
             Downed?.Invoke(PlayerIndex, landing.Killer);
         // After the death report, so the crash notice reads above the kill line that death posted,
@@ -3438,7 +3485,7 @@ public partial class FlightController : Node3D
         // coincidence and wrong for every other pane the moment a mission sets teams, the
         // wingman-in-the-marker bug (see TargetHud.OwnTeam).
         sel.Rebuild(_targetScan, _targetParts, Team, this, _model.Position, _model.Attitude,
-            _targetSites);
+            _targetSites, SelectedOrdnance());
 
         // The death prune (FUN_004a64e0). There is no session-wide Downed broadcast outside --vs,
         // so this pane prunes its own queue: a shot-down attacker must not be offered again.
@@ -3570,7 +3617,7 @@ public partial class FlightController : Node3D
 
         string listed = names.Count == 0 ? "(nothing)"
             : string.Join(", ", names) + (extra > 0 ? $", +{extra} more" : "");
-        Log.Warn("core", $"--target={InitialTarget}: no match — selectable now: {listed}");
+        Log.Warn("core", $"--target={InitialTarget}: no match, selectable now: {listed}");
     }
 
     /// <summary>The view-selection inputs, edge-detected: F8 or D-pad Down advances the original's
@@ -3770,20 +3817,20 @@ public partial class FlightController : Node3D
         // ⚠ The withdrawal argument is CSVM's layer, not the decode. Evaluated last, and only for a
         // structure target, so the aircraft walk costs nothing on the ordinary aeroplane duel.
         return AiTargetRanking.KeepsStandingTarget(WorldPosition, NoseDirection,
-            Pilot?.Machine?.ActivationRange ?? 2000f, AiScorer.Jet,
+            Pilot?.Machine?.AttackRange ?? 2000f, AiScorer.Jet,
             AiTargetRanking.AircraftFirst && rank.IsStructureClass && EnemyAircraftRanks(gunner),
             rank);
     }
 
     // Whether one live enemy aeroplane is in reach, the withdrawal's test, over the aircraft roster
     // alone: a hull is neither class the preference suppresses. Ranking is the reach test in
-    // AiTargetRanking.SelectBest, so this asks the same two things it does, the activation radius
+    // AiTargetRanking.SelectBest, so this asks the same two things it does, the attack radius
     // and an authored hard exclusion, rather than a second reading of "in reach".
     private bool EnemyAircraftRanks(AiGunner gunner)
     {
         if (Projectiles == null)
             return false;
-        float activation = Pilot?.Machine?.ActivationRange ?? 2000f;
+        float attack = Pilot?.Machine?.AttackRange ?? 2000f;
         var ownPos = WorldPosition;
         _rescoreScan.Clear();
         Projectiles.CollectAircraft(_rescoreScan);
@@ -3792,7 +3839,7 @@ public partial class FlightController : Node3D
             if (!c.Live || c.Source is not FlightController fc || ReferenceEquals(fc, this))
                 continue;
             if (!AimAssist.Hostile(Team, c.Team)
-                || ownPos.DistanceSquaredTo(c.Position) > activation * activation)
+                || ownPos.DistanceSquaredTo(c.Position) > attack * attack)
                 continue;
             float bias = AiTargetRanking.ObjectiveBiasFor(
                 fc.IsHumanPiloted ? AiTargetRanking.PlayerRole : TargetPool.NameOf(c.Source),
@@ -3957,7 +4004,10 @@ public partial class FlightController : Node3D
             _gunnerScan.AddMissionStructures(Destructibles);
         }
         int ownTeam = Team;
-        float activation = Pilot?.Machine?.ActivationRange ?? 2000f; // min_ai_active_dist fallback
+        // ⚠ The attack volume, not the activation one: both decoded scorers admit on the attack
+        // cylinder and the activation volume is the engine's awake test alone, so a DEDG widening
+        // never reaches acquisition (docs/org/aiPilot.md).
+        float attack = Pilot?.Machine?.AttackRange ?? 2000f;
         var ownPos = WorldPosition;
         var ownFwd = NoseDirection;
         _rankCandidates.Clear();
@@ -3976,7 +4026,7 @@ public partial class FlightController : Node3D
             // are properties of an aeroplane simply do not apply to it.
             var fc = c.Source as FlightController;
             if (gunner.PrimaryTargetName is { Length: > 0 } wanted
-                && ownPos.DistanceSquaredTo(c.Position) <= activation * activation)
+                && ownPos.DistanceSquaredTo(c.Position) <= attack * attack)
             {
                 if (primary == null
                     && string.Equals(TargetPool.NameOf(c.Source), wanted, StringComparison.OrdinalIgnoreCase))
@@ -4042,7 +4092,7 @@ public partial class FlightController : Node3D
             // Log the assigned pick with its own rank inputs (informational, rank not consulted).
             int idx = _rankSources.IndexOf(primary);
             if (idx >= 0)
-                score = AiTargetRanking.Score(ownPos, ownFwd, activation, AiScorer.Jet,
+                score = AiTargetRanking.Score(ownPos, ownFwd, attack, AiScorer.Jet,
                     _rankCandidates[idx]);
             how = byRole ? "primary target: nearest human" : "primary target";
             return primary;
@@ -4051,7 +4101,7 @@ public partial class FlightController : Node3D
         // ⚠ Jet is asserted, not derived: the engine picks the scorer off the SHOOTER's own mode,
         // so a mode plane or heli aeroplane should take Other. Deriving it here would change what
         // those aircraft target, which is a behaviour claim wanting its own evidence.
-        int best = AiTargetRanking.SelectBest(ownPos, ownFwd, activation, AiScorer.Jet,
+        int best = AiTargetRanking.SelectBest(ownPos, ownFwd, attack, AiScorer.Jet,
             AiTargetRanking.AircraftFirst, _rankCandidates, out score);
         if (best < 0)
             return null;
@@ -4601,7 +4651,21 @@ public partial class FlightController : Node3D
         // held control rides along so a still mouse holds the look instead of reading as idle.
         return new HeadLookInput(snapX, snapY, freeRight, freeUp, _actions.Held(InputAction.LookCenter),
             lookX, -lookY, FreeLookHeld(),
-            _actions.Held(InputAction.SnapLookMode), _actions.Held(InputAction.SmoothLookMode));
+            _actions.Held(InputAction.SnapLookMode), _actions.Held(InputAction.SmoothLookMode),
+            _actions.Held(InputAction.TrackTarget));
+    }
+
+    // HeadLook's TargetOffset: where this pilot's selection sits in the plane's own frame, the one
+    // thing the padlock state reads. Null with nothing selected, which is that state's no-target
+    // frame. Taken off the SIM pose, the pose the original's own padlock differences against.
+    private Vector3? PadlockOffset()
+    {
+        if (Targeting?.Current is not { } target)
+        {
+            return null;
+        }
+
+        return _model.Attitude.Inverse() * (target.Position - _model.Position);
     }
 
     // C22's IdleAim delegate: HeadLook.Step calls this only on a frame with no look input at all.
@@ -4611,7 +4675,7 @@ public partial class FlightController : Node3D
     private (float Elevation, float Azimuth)? AutoheadTarget()
     {
         if (_cam == null || _cam.ViewMode != PilotViewMode.Cockpit
-            || !Config.GetBool("headLook.autohead", false))
+            || !(AutoHeadTurn ?? Config.GetBool("headLook.autohead", false)))
         {
             return null;
         }

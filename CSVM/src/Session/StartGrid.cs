@@ -90,7 +90,7 @@ public sealed class StartGrid : IFlightStarts
         // same as flat ground at sea level, and a whole-field miss means a broken sampler.
         if (unprobed > 0)
         {
-            Log.Warn("flight", $"grid found no ground under {unprobed}/{playerCount} slots — field not raised on their account");
+            Log.Warn("flight", $"grid found no ground under {unprobed}/{playerCount} slots, field not raised on their account");
         }
         lift = Mathf.Max(lift, 0f);
 

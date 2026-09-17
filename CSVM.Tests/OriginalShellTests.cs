@@ -333,10 +333,10 @@ public class OriginalShellTests
         // Down is the shell's own column walk over the page's rows and Right the module's own
         // sideways step, which changes the value there and keeps the focus.
         shell.Step(Down);
-        Assert.Equal(OriginalOptionsScreen.PresentationKey, shell.FocusedKey);
+        Assert.Equal(OriginalOptionsScreen.DefaultViewKey, shell.FocusedKey);
         shell.Step(Right);
-        Assert.Equal(OriginalOptionsScreen.PresentationKey, shell.FocusedKey);
-        Assert.Equal("BUILT-IN", Row(shell, OriginalOptionsScreen.PresentationKey).Label);
+        Assert.Equal(OriginalOptionsScreen.DefaultViewKey, shell.FocusedKey);
+        Assert.Equal("Cockpit", Row(shell, OriginalOptionsScreen.DefaultViewKey).Label);
 
         // Back on the page is the module's, answered the way that page's own CANCEL CHANGES is.
         Assert.Null(shell.Step(Back).Exit);

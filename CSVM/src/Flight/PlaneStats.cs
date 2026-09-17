@@ -305,7 +305,7 @@ public sealed class PlaneStats
 
     // sound: the three engine-slot def names are vehicle.json keys, the curves are player.json
     // blocks every airframe indexes. Engine curves run on throttle [0..1]; the whine ('prop_sound')
-    // and rattle run on speed/fd_speed. Slot assignment: docs/formats/vehicle.md.
+    // curves and the rattle's gate run on speed/fd_speed. Slot assignment: docs/formats/vehicle.md.
     public string EngineSound = "snd_devastatorengine"; // basic_airplane default
     public SoundCurve EngineVolume = new(0.1f, 1f, 1f, 1f);
     public SoundCurve EnginePitch = new(0.1f, 0.6f, 1f, 1f);
@@ -326,7 +326,13 @@ public sealed class PlaneStats
     public SoundCurve WhineVolume = new(1f, 0f, 1.1f, 0.5f);
     public SoundCurve WhinePitch = new(1f, 0.65f, 1.2f, 1.25f);
     public string RattleSound = "snd_planeshake";
-    public SoundCurve RattleVolume = new(1f, 0f, 1.2f, 1f);
+
+    /// <summary>player.json <c>rattle.speed_range[0]</c>, the speed as a fraction of fd_speed the
+    /// rattle loop starts at, and the whole of the original's law for it. ⚠ Do not add the block's
+    /// <c>volume_range</c> back as a ramp: the original parses that pair and its second speed into
+    /// globals no instruction reads, so the loop is a hard on/off at full gain.
+    /// Decode: docs/org/shakes.md.</summary>
+    public float RattleSpeedGate = 1f;
 
     /// <summary>vehicle.json <c>damaged_engine_sound</c>, the looped def swapped ONTO the engine
     /// slot while the airframe is damaged, not a second loop blended over it. One entry install-wide
@@ -940,11 +946,7 @@ public sealed class PlaneStats
             if (player.Dict("rattle") is { } rattle)
             {
                 stats.RattleSound = rattle.Str("sound") ?? stats.RattleSound;
-                stats.RattleVolume = new SoundCurve(
-                    rattle.Float("speed_range", stats.RattleVolume.MinX),
-                    rattle.Float("volume_range", stats.RattleVolume.MinY),
-                    rattle.Float("speed_range", stats.RattleVolume.MaxX, 1),
-                    rattle.Float("volume_range", stats.RattleVolume.MaxY, 1));
+                stats.RattleSpeedGate = rattle.Float("speed_range", stats.RattleSpeedGate);
             }
         }
         return stats;

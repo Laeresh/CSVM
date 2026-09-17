@@ -17,10 +17,14 @@ Our implementation is `WeaponDefs.ParseImpact` / `ImpactOutcome.Resolve`.
 |---|---|
 | `FUN_005ad630` | the `.zrd` token dispatcher; its `IMPACT` branch builds the table |
 | `FUN_005ae990` | parses one `IMPACT` block into one row |
+| `FUN_005ac7a0` | the impact performer: reads the struck surface id, runs the hook, plays the row |
+| `FUN_005abcf0` | the damage path called from it; a damageable struck object plays its own arm |
 | `FUN_005acf60` | the hit handler: resolves what was struck, reads its surface id, dispatches |
 | `FUN_005ad100` | plays the row's `SOUND` |
 | `FUN_005ad160` | plays the row's `BOUNCE_SOUND` |
 | `FUN_005ad330` | the hit resolve; also tests `material + 0x20 == 1` (water) as a special case |
+| `FUN_004edc10` | spawns an animation definition at a point, with an optional rotation |
+| `FUN_00525d90` | spawns the row's `EFFECT` at a point |
 
 ## The table is an array indexed by surface id, stride 100 bytes
 
@@ -94,6 +98,60 @@ row, and for a weapon with no `IMPACT` block at all (`wep_26`).
 ⚠ **The index is unchecked.** `FUN_005ad100` computes `base + id*100` with no bounds test, so
 nothing but the registry's own range keeps it in the table. Every id reaching it comes from a
 material's `soil` field or, in our build, from `ProjectilePool.SurfaceIdOf`.
+
+## What one hit plays, `FUN_005ac7a0` slot by slot
+
+This is the performer, and it is the whole answer to "what does the original spawn when a round
+hits a building". There is no building arm and no structure table. A building is whatever `soil`
+its material carries, and the same three slots run for every surface.
+
+| Address | What it does |
+|---|---|
+| `0x005ac7a9`, `0x005ac7bc` | `surfaceId = hit->material ? *(int *)(material + 0x20) : 0`. Nothing else feeds the index: not the struck node's name, not its model, not whether it is a structure. |
+| `0x005ac7c7`–`0x005ac7dd` | calls the weapon's impact hook `*(weapon + 0x20c)` and keeps its return as the suppression mask (1 `Sound`, 2 `Effects`, 4 `Animation`). |
+| `0x005ac80f` | `CALL FUN_005abcf0`, the damage path, whose return is kept and gates the `ANIMATION` slot below. |
+| `0x005ac910`, `0x005ac91f` | mask bit 1 clear, then `FUN_005ad100(weapon, hit, surfaceId, 1.0f)` plays the row's `SOUND`. |
+| `0x005ac927` | the blast arm's own flag non-zero skips both animation slots. |
+| `0x005ac933` | mask bit 4 set skips the `ANIMATION` slot only. |
+| `0x005ac93a` | `FUN_005abcf0` having returned non-zero skips it too: the struck object already played it (below). |
+| `0x005ac942`–`0x005ac94e` | `*(int *)(*(weapon + 0x15c) + surfaceId*100 + 0x4)`, the row's `ANIMATION`. The address arithmetic is `LEA EAX,[EBX+EBX*4]` then `LEA ECX,[EAX+EAX*4]` then `[EDX + ECX*4 + 4]`, which is the 100-byte stride and the `+0x04` offset in the open. |
+| `0x005ac956`–`0x005ac95e` | the caller's own override animation (`param_4`) wins over the row's when non-null. |
+| `0x005ac97f` | `CALL FUN_004edc10(anim, 0, hit.x, hit.y, hit.z, 0,0,0,0,0,0)`: spawned at the hit point with **no rotation**. |
+| `0x005ac987`–`0x005ac996` | `*(...surfaceId*100 + 0x1c)`, the row's `SURFACE_ANIMATION`, under no mask bit. |
+| `0x005ac9b1`, `0x005ac9c0` | `FUN_0053fd40`/`FUN_00540260` build the rotation that lays world up onto the struck normal. |
+| `0x005ac9f3` | `CALL FUN_004edc10` again, this time with that rotation. This is the only orientation difference between the two slots. |
+| `0x005ac9fb`–`0x005aca07` | `*(...surfaceId*100 + 0x24)`, the row's `EFFECT`. |
+| `0x005aca0f`, `0x005aca1b` | mask bit 2 clear, then `CALL FUN_00525d90(effect, hit + 0xc)`. |
+
+Inside `FUN_005abcf0` the struck object gets first refusal on the same animation:
+
+- `0x005abd27`, `EDI = *(struck + 0xbc)`, the object's hit-handler vtable; a null there returns 0
+  and the performer plays the row itself.
+- `0x005abf1a`, `EDX = *(weapon + 0x15c)`: the handler is passed the same
+  `row[+0x4]` `ANIMATION`, gated on `weapon + 0x74 & 2` and the global `DAT_00a1d7dc`. The
+  alternatives it can substitute are the `(float, handle)` pair table at `weapon + 0x164` (count) /
+  `weapon + 0x168`, keyed by `_DAT_00a1e178` (initialised `1.0`), and `weapon + 0x18c` when
+  `DAT_00a1e174` is non-zero.
+
+So a damageable building plays the row's `ANIMATION` **once**, from whichever of the two sites ran,
+never twice, and never anything the row does not name.
+
+## A building is a soil byte, and Hollywood's buildings are not `buildings`
+
+⚠ **`buildings`(11) is not "geometry that looks like a building".** It is the `soil` byte on the
+struck material, and the shipped chapters spend it sparingly:
+
+- **C2/C2B (Hollywood, the film lot)** carries **no collider with id 11 at all**. Scanning the
+  built chapter finds ids 0 (`default`) 1380, 1 (`water`) 82, 13 (`dirt`) 81, across 1,544 bodies.
+  Every `filmlot*`, `chrysler*` and `empire*` material carries `Default`. The film-lot walls, the
+  studio blocks and the `nycity` skyscraper are all id 0, so a gun round on them takes the guns'
+  `default` row and plays the authored `<caliber><ammo>_gunhit`.
+- **C1** carries 61 bodies with id 11, all of them the `aphagar01/02/04/05` airport-hangar
+  materials (4 materials). The hangars are the `buildings` surface in the shipped data.
+
+`SceneBuilder.ClassifySurface`'s `buildings` string is a separate, cosmetic classification and does
+not select the impact; `AttachCollision` writes the bucket's dominant `SoilId` into
+`SurfaceIdMeta`, and that is what `ProjectilePool.SurfaceIdOf` reads.
 
 ## What this decides in the shipped data
 

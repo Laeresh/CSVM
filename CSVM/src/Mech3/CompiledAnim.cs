@@ -89,7 +89,7 @@ public sealed class AnimArchive
         catch (Exception e)
         {
             // A corrupt/partial extraction must not take the world build down with it.
-            Log.Info("anim", $"anim archive '{label}': unreadable ({e.GetType().Name}) — skipping");
+            Log.Info("anim", $"anim archive '{label}': unreadable ({e.GetType().Name}), skipping");
             return null;
         }
         return archive;

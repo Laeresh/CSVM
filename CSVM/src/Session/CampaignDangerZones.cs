@@ -44,18 +44,25 @@ internal sealed class CampaignDangerZones
         if (names.Count == 0)
             return null;
 
-        var disabled = ReadDisabled(missionZrdrPath);
+        var overrides = ReadOverrides(missionZrdrPath);
         var zones = new List<Zone>();
         var skipped = new List<string>();
         foreach (var name in names)
         {
-            if (disabled.Contains(name))
+            if (overrides.Disabled.Contains(name))
             {
                 skipped.Add($"{name} (disabled)");
             }
             else if (TryReadGates(gamez, name, out var green, out var red))
             {
-                zones.Add(new Zone { PathName = name, Green = green, Red = red });
+                zones.Add(new Zone
+                {
+                    PathName = name,
+                    Green = green,
+                    Red = red,
+                    Objective = overrides.Objectives.TryGetValue(name, out int number) ? number : -1,
+                    Snapshot = !overrides.NoSnapshot.Contains(name),
+                });
             }
             else
             {
@@ -119,26 +126,26 @@ internal sealed class CampaignDangerZones
     /// a <c>dzpathN</c> named here is switched off for this mission, for the player's scoring and
     /// the AI's runs alike. Absent for most missions (no <c>dzones.zrd</c> at all), which reads as
     /// nothing disabled.</summary>
-    internal static HashSet<string> ReadDisabled(string missionZrdrPath)
+    internal static HashSet<string> ReadDisabled(string missionZrdrPath) =>
+        ReadOverrides(missionZrdrPath).Disabled;
+
+    /// <summary>One armed zone's scrapbook binding: the objective number its mission gives it, and
+    /// whether it photographs at all. Answers false for a name this mission did not arm. An
+    /// objective of -1 is a zone the mission's <c>objective_numbers</c> does not name, which the
+    /// original leaves at the same -1 and never photographs.</summary>
+    internal bool TryZone(string pathName, out int objective, out bool snapshot)
     {
-        var disabled = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (string.IsNullOrEmpty(missionZrdrPath))
-            return disabled;
-        List<object?> root;
-        try
+        foreach (var z in _zones)
         {
-            root = Zrdr.LoadFileOrEmpty(missionZrdrPath, "dzones.json");
-        }
-        catch (System.IO.IOException)
-        {
-            return disabled; // no dzones.zrd override for this mission
+            if (string.Equals(z.PathName, pathName, StringComparison.OrdinalIgnoreCase))
+            {
+                (objective, snapshot) = (z.Objective, z.Snapshot);
+                return true;
+            }
         }
 
-        if (ZrdrDict.FromAlternating(root).List("disable") is { } list)
-            foreach (var v in list)
-                if (v is string s)
-                    disabled.Add(s);
-        return disabled;
+        (objective, snapshot) = (-1, false);
+        return false;
     }
 
     /// <summary>Test seam: one armed zone's gate centres and outward normals, the same values
@@ -159,6 +166,47 @@ internal sealed class CampaignDangerZones
         }
         greenCenter = redCenter = greenNormal = redNormal = default;
         return false;
+    }
+
+    // The mission's own dzones.zrd, all three keys at once (docs/formats/missions.md, "Zone
+    // overrides"). Absent for most missions, which reads as no override of any kind.
+    private static Overrides ReadOverrides(string missionZrdrPath)
+    {
+        var overrides = new Overrides();
+        if (string.IsNullOrEmpty(missionZrdrPath))
+            return overrides;
+        List<object?> root;
+        try
+        {
+            root = Zrdr.LoadFileOrEmpty(missionZrdrPath, "dzones.json");
+        }
+        catch (System.IO.IOException)
+        {
+            return overrides; // no dzones.zrd override for this mission
+        }
+
+        var dict = ZrdrDict.FromAlternating(root);
+        ReadNames(dict.List("disable"), overrides.Disabled);
+        ReadNames(dict.List("nosnapshot"), overrides.NoSnapshot);
+        if (dict.List("objective_numbers") is { } numbers)
+        {
+            // Each entry is its own [dzpathN, n] list; a reader number arrives as a float.
+            foreach (var entry in numbers)
+                if (entry is List<object?> { Count: >= 2 } pair
+                    && pair[0] is string name && pair[1] is float number)
+                    overrides.Objectives[name] = (int)number;
+        }
+
+        return overrides;
+    }
+
+    private static void ReadNames(List<object?>? list, HashSet<string> into)
+    {
+        if (list == null)
+            return;
+        foreach (var v in list)
+            if (v is string s)
+                into.Add(s);
     }
 
     // Same read as Flight.StuntMission.TryReadGates: a dzpathN mesh is always route ribbon plus
@@ -271,5 +319,19 @@ internal sealed class CampaignDangerZones
         public bool GreenCrossed;
         public bool RedCrossed;
         public bool Completed;
+
+        // dzones.zrd's own two scrapbook fields: the objective number this zone stands for in this
+        // mission, -1 for a zone objective_numbers does not name, and whether it photographs.
+        public int Objective = -1;
+        public bool Snapshot = true;
+    }
+
+    private sealed class Overrides
+    {
+        public HashSet<string> Disabled { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public HashSet<string> NoSnapshot { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        public Dictionary<string, int> Objectives { get; } = new(StringComparer.OrdinalIgnoreCase);
     }
 }
