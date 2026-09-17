@@ -54,6 +54,13 @@ public sealed partial class ProjectilePool : Node3D
     /// with no world colliders, where a ground-attack round leaves the terrain alone.</summary>
     public System.Func<Vector3, Node?, bool>? CraterSink;
 
+    /// <summary>Where an Enhanced ground burst's scorch mark goes: the hit point, the struck
+    /// surface normal, the impact effect that played there and whether the same hit carved a bowl.
+    /// Asked only for a direct strike on ground that is neither an aircraft nor water. Wired to the
+    /// session's <c>Effects.ScorchField</c> and null on the faithful path, which builds no field
+    /// (docs/org/craters.md, "How CSVM builds it").</summary>
+    public System.Action<Vector3, Vector3, string?, bool>? ScorchSink;
+
     /// <summary>Plays a named IMPACT effect (its puffer half) at a hit point through the world-effects
     /// runtime: the gun/rocket smoke and fireballs whose <c>ANIMATION</c> is an ON_CALL effect
     /// def rather than a gamez model. Null in views with no anim runtime. After the point come the
@@ -2010,6 +2017,12 @@ public sealed partial class ProjectilePool : Node3D
         if (outcome.EffectName is { } fxName && !(EffectHandles?.Invoke(fxName) ?? false)
             && SpawnImpactModel(fxName, point, EffectOrient(outcome, normal)))
             outcome = ImpactOutcome.Resolve(weapon, surface, modelResolved: true, hasEffectsRuntime, suppression, cratered);
+
+        // The scorch follows the carve decision, not the effect sink: a mark is owed where a bowl
+        // was cut or a fireball burned, on ground a direct strike found, and never on water, where
+        // a projected decal reads wrong.
+        if (shapeIdx >= 0 && collider is not AircraftBody && surface != SurfaceRegistry.Water)
+            ScorchSink?.Invoke(point, normal, outcome.EffectName, cratered);
 
         // Verification breadcrumb: the first few impacts confirm hit detection and surface
         // classification without needing a lucky screenshot; then it goes quiet.

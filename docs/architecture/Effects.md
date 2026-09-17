@@ -84,3 +84,12 @@ by the fireball's own liveness, and writes it back with no gain, so it lifts no 
 bar. That copy is taken before the transparent pass and holds no fire or smoke, which is why the
 quad stands clear above the flame. `Spawn` recycles the oldest slot at the cap, `Step` retires a
 quad the frame its liveness goes false, and every size, lift, decay and amplitude constant is TUNE.
+
+## src/Effects/ScorchField.cs
+Remake-only scorch marks, a layer OVER the crater carve (`Mech3/CraterField.cs`) and never instead
+of it: a capped pool of `Decal` nodes sharing one procedural radial burn texture built on first use,
+projected along the struck surface normal and faded out over their own life. `Create` returns null
+unless `GraphicsMode.Enhanced`, so the faithful build holds no pool, no node and no texture.
+`GameSession.RegisterScorch` is the one decision point (a bowl was carved, or the impact played one
+of `EffectCatalogue`'s fireballs); `Flight/Projectile.ScorchSink` is the hook and skips water. Size
+comes from the weapon's crater radius. Every size, darkness and life constant is TUNE.

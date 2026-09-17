@@ -269,6 +269,10 @@ What stands in for the original's own mechanism:
   instance of a model.
 - **Nothing is serialised.** The original writes its record list under `zDEClient` and replays it on
   load; CSVM's craters live for the mission and no save path reads them.
+- **The scorch is remake-only and Enhanced-only.** `Effects/ScorchField.cs` lays a decal burn mark
+  over the carve, and over a fireball burst that carved nothing, under `GraphicsMode.Enhanced`
+  alone; the faithful presentation builds no field and keeps the carve and nothing else. The mark
+  fades out on its own life while the bowl it rings stays for the mission.
 
 ## Evidence & limits
 

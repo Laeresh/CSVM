@@ -908,6 +908,20 @@ public partial class GameSession : Node3D
         }
     }
 
+    // The enhanced scorch's one decision point, the way RegisterBurstLight is the burst light's: a
+    // hit marks the ground it burned when it carved a bowl, or when its effect is one of the
+    // fireballs EffectCatalogue names for the burst light. Every other impact, the gun hits among
+    // them, leaves the surface alone. One crater radius serves every weapon because all six CRATER
+    // carriers author the block bare (docs/org/craters.md). Internal so the scorch suite decides as
+    // a session does rather than modelling it.
+    internal static void RegisterScorch(Effects.ScorchField scorches, Vector3 at, Vector3 normal,
+        string? effectName, bool carved)
+    {
+        if (!carved && (effectName == null || !EffectCatalogue.IsBurstLight(effectName)))
+            return;
+        scorches.Mark(at, normal, CraterShape.RimRadius, carved);
+    }
+
     /// <summary>Carries out one step of the build the loading screen still owes and answers
     /// whether more is left. The wave aeroplanes are that work: they belong to the load, where
     /// there is no frame budget, rather than to the launch frame that needs one.</summary>
@@ -1366,6 +1380,11 @@ public partial class GameSession : Node3D
         // and to cut that terrain's own trimesh. Owned by the session, so they last exactly as long
         // as the mission does and a new launch starts on uncratered ground.
         state.Craters = BuildsCollision ? new CraterField(session.Root) : null;
+        // The enhanced scorch marks over those carves, a remake-only layer: null on the faithful
+        // path, where the field, its decal pool and its texture are never built at all.
+        state.Scorches = BuildsCollision ? Effects.ScorchField.Create() : null;
+        if (state.Scorches != null)
+            session.Root.AddChild(state.Scorches);
         // After the bootstrap: an intro definition has already raised its codes, and this is where
         // the host picks up the two nodes it drives.
         _cutscene?.BindWorld(session.Runtime, session.Aircraft);
@@ -2219,6 +2238,10 @@ public partial class GameSession : Node3D
             // Route a CRATER weapon's ground strike to the mission's crater field: the pool reports
             // the impact and the struck collider, the field refuses or carves (Mech3.CraterField).
             CraterSink = state.Craters != null ? state.Craters.TryCarve : null,
+            // And the scorch that layers over the carve under Enhanced (Effects.ScorchField).
+            ScorchSink = state.Scorches is { } scorch
+                ? (at, normal, effectName, carved) => RegisterScorch(scorch, at, normal, effectName, carved)
+                : null,
             // The same equal-power splitscreen factor FlightAudio's own-ship loops take, plus the
             // nearest-human snapshot shared with WorldSession and the world-effects runtime.
             MixGain = mixGain,
@@ -4577,6 +4600,7 @@ public partial class GameSession : Node3D
         public SceneBuilder? WorldScene;
         public AnimRuntime? WorldRuntime;
         public CraterField? Craters;
+        public Effects.ScorchField? Scorches;
 
         /// <summary>The chapter's resolved approach rows, kept so the actor build can re-bind the
         /// trigger once the roster's own approach nodes exist (<see cref="Mech3.RosterMarkers"/>).

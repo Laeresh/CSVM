@@ -185,7 +185,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 12. ☑ The additive fireball frames bloom
 13. ☑ Sun-shaded smoke billboards
 14. ☑ Heat shimmer over a fireball
-15. ☐ Scorch decals at a hit
+15. ☑ Scorch decals at a hit
 
 ### Wave C, lit clouds
 
@@ -798,7 +798,54 @@ spawned through the same sink hook as B11.
 is several copies, so measure under D32. The quad must draw after the fireball and be excluded from
 the glow pass.
 
-## B15 ☐ Scorch decals at a hit
+## B15 ☑ Scorch decals at a hit
+
+**Landed.** `Effects/ScorchField.cs` is the new module: a pool of Godot `Decal` nodes sharing one
+procedural radial burn texture, built on first use from an `Image` with a soft radial falloff, a
+ragged rim and mottled soot off an integer hash (no art asset, no seed to pin, the same bytes every
+run). `Create` returns null unless `GraphicsMode.Enhanced`, so the faithful build holds no field, no
+node and no generated texture. The hook is `Flight/Projectile.ScorchSink`, an `Action` beside the
+existing `CraterSink`, raised in `Impact` after the outcome resolves and skipping both aircraft and
+`SurfaceRegistry.Water`; `GameSession.RegisterScorch` is the one decision point and marks when the
+hit carved a bowl or when its effect is one of `EffectCatalogue`'s fireballs, which is what gives a
+crater-less rocket its mark. Size comes from the weapon's crater radius (0.85x when a bowl was cut,
+0.35x for a burst that cut none), the box straddles the surface (1.5 m up, 7 m down, past the bowl's
+own floor) and is oriented by the struck surface's normal, so a mark on a slope lies along the
+ground. The mark holds full darkness for the first 55 percent of its 90 s life and fades out over
+the rest; the field ages itself in `_Process` off `GameClock`, so it freezes with a halted clock.
+The pool caps at 16, twice the eight-round stock rocket load, which is the most one aircraft can put
+on the ground in a pass: the crater field keeps no count cap to copy, its own bound being the
+no-overlap refusal, so the scorch borrows that refusal (a hit inside half a live mark's radius
+refreshes that mark rather than stacking a second decal) and caps the node pool instead. Nothing
+removes a CSVM crater, so a mark can never be orphaned by a refill; when the pool is full the oldest
+mark is taken, which is the same order the field would fade them in. Every size, darkness and life
+constant is TUNE. `Testing/CraterSuites.cs` gained the `scorch-decals` engine suite and
+`analysis/engine-suite-weights.json` its weight; `docs/architecture/Effects.md`, the
+`docs/architecture.md` index and `docs/org/craters.md` carry the entry.
+
+**Verified.** On the item worktree: `dotnet build` warning-free, the complete `RunTests.ps1` PASS
+(units 4574 passed 0 failed 2 skipped of 4576, engine 355 suites passed 0 failed with engine errors
+clean, goldens **19 shots hash-identical, zero movers**), `CheckCommentCaps.ps1` /
+`CheckDocEntries.ps1` / `CheckEncoding.ps1` clean. The
+`scorch-decals` suite covers a rocket hit on tarmac and on grass under Enhanced (one mark each,
+radius from the crater radius), the fade to hidden past the life, the cap holding at 16 and
+recycling the oldest, water placing none and the faithful mode placing no field at all, with the
+mode restored in a `finally`. Headless captures on the hidden desktop, three rocket hits on C1
+tarmac and one on grass, faithful against enhanced, are in the item's scratch folder with a control
+capture of the same deterministic frame holding the field back: the field changes nothing in the
+frame but the three marks, and at the mark's core the ground reads 12 percent darker than the same
+ground without it (10 to 20 percent across the marks measured). Two darkness steps either side of
+the shipped value are captured beside it (7.7 percent at half alpha, 17.2 percent at full).
+Not verified here: the look at the controls, which is the user's, and with it the size and darkness
+pick; the montage is a grazing chase view at 150 m and the mark reads subtle there.
+
+⚠ A decal renders on the enhanced world's terrain and tarmac (Forward+, albedo modulate through
+the cluster), and Godot's clustered fragment shader applies the same mix under `MODE_UNSHADED`, so
+a fullbright material left under Enhanced would take the mark too. Reading the mark on a dark
+screenshot is deceptive: a bright-coloured probe texture and a scorch-off control frame are what
+proved the path, not the eye.
+
+**Original approach (kept for reference).**
 
 **Goal.** A rocket or bomb hit on ground leaves a dark scorch under Enhanced; the faithful path
 keeps the crater carve and nothing else.

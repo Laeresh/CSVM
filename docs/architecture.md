@@ -258,6 +258,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Effects/FogVolumeClutter.cs`, the authored ambient cloud field: `fogvol.zrd` clutter scattered through its `fvol*` volumes, one MultiMesh per kind.
 - `src/Effects/FogVolumeBanks.cs`, Enhanced Graphics only: the volumetric bank inside each authored `fvol*` volume, under the cards.
 - `src/Effects/Precipitation.cs`, weather.json rain/snow: one camera-following MultiMesh of flakes or streaks, self-animating on the GPU.
+- `src/Effects/ScorchField.cs`, the enhanced presentation's scorch marks: a capped pool of decals with one procedural burn texture, laid over the crater carve.
 - `src/Effects/WindStreaks.cs`, the enhanced presentation's camera-local wind streaks, keyed to airspeed and load factor, over the authored speed cue.
 - `src/Effects/HeatShimmer.cs`, the enhanced presentation's refracting quads over a fireball: one pooled MultiMesh reading the screen texture while the burst burns.
 - `src/Effects/WorldWind.cs`, the mission's global wind (static vector plus random-walk gust) and `EffectAmbience`, the seam a `Puffer` reads it through.
