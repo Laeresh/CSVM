@@ -533,7 +533,7 @@ public sealed class WorldEffectsFactory
         }
         Log.Info("anim", $"world-effects runtime: {staged}/{wanted} effect template(s) staged over {depth} pool slot(s) for {players} player(s) [{string.Join(", ", sizes)}], {bound.Count} effect name(s) bound");
         foreach (var unknown in _pools.UnknownRoots(roots))
-            Log.Warn("anim", $"effect pools: '{unknown}' is not an effect stage root — it sizes nothing");
+            Log.Warn("anim", $"effect pools: '{unknown}' is not an effect stage root, it sizes nothing");
         return effects;
     }
 
@@ -695,7 +695,7 @@ public sealed class WorldEffectsFactory
             _destroyAnim = EffectCatalogue.DestroyAnimFor(_controller.IsHumanPiloted, _planeName);
             if (_destroyAnim != null && _crashProgram.ByAnimName(_destroyAnim).Count == 0)
             {
-                Log.Warn("anim", $"crash rig '{_planeName}': no destroy def '{_destroyAnim}' in this chapter's program — a kill will leave no wreck");
+                Log.Warn("anim", $"crash rig '{_planeName}': no destroy def '{_destroyAnim}' in this chapter's program, a kill will leave no wreck");
                 _destroyAnim = null;
             }
 
@@ -838,16 +838,16 @@ public sealed class WorldEffectsFactory
             var warmed = _warmed;
             Log.Info("anim", $"crash rig '{_planeName}': pre-warmed {warmed.Built} emitter(s) in {_warmMs:0} ms over {_warmSteps} step(s) ({warmed.SelfHosted} call-site hosted, {warmed.Unhosted} unhosted here)");
             if (_slot0Roots != _rootNames!.Count)
-                Log.Warn("anim", $"crash rig '{_planeName}': staged {_slot0Roots} of {_rootNames.Count} template root(s) the bound defs anchor on — the rest built nothing from this chapter's gamez, so their defs play nothing");
+                Log.Warn("anim", $"crash rig '{_planeName}': staged {_slot0Roots} of {_rootNames.Count} template root(s) the bound defs anchor on, the rest built nothing from this chapter's gamez, so their defs play nothing");
             // ⚠ Both kinds' roots, never this rig's alone: one crash section sizes two families that
             // stage different roots, so a per-rig test warns on every correct entry the other owns.
             // What survives is the real drift, a key naming a root neither kind stages.
             foreach (var unknown in _factory._pools.UnknownCrashRoots(_bothKindsRoots!))
             {
-                Log.Warn("anim", $"effect pools: crash root '{unknown}' is staged by no rig kind — it sizes nothing");
+                Log.Warn("anim", $"effect pools: crash root '{unknown}' is staged by no rig kind, it sizes nothing");
             }
             if (_verbose)
-                Log.Info("anim", $"data-crash: {_effectRoots} effect template cop(ies) over {_factory._pools.CrashDepthFor(_rootNames)} pool slot(s) + {_restPoses.Count} wreck node(s) — crash runtime bound (scoped, no auto-start)");
+                Log.Info("anim", $"data-crash: {_effectRoots} effect template cop(ies) over {_factory._pools.CrashDepthFor(_rootNames)} pool slot(s) + {_restPoses.Count} wreck node(s), crash runtime bound (scoped, no auto-start)");
         }
     }
 }

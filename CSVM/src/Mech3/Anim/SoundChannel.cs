@@ -246,7 +246,7 @@ internal sealed class SoundChannel
         {
             return;
         }
-        GD.PushWarning($"anim: {kind} '{name}' requested after the world build and {why} — "
+        GD.PushWarning($"anim: {kind} '{name}' requested after the world build and {why}, "
                        + "it will be silent for the rest of the session");
     }
 

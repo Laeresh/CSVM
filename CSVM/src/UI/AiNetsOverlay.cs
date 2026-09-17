@@ -263,7 +263,7 @@ public sealed partial class AiNetsOverlay : Node
             }
             else
             {
-                Log.Warn("world", $"--debug-ainets: no net named '{token}' in {_chapter} — the census lines above list all {nets.Count}");
+                Log.Warn("world", $"--debug-ainets: no net named '{token}' in {_chapter}, the census lines above list all {nets.Count}");
             }
         }
         return picked;

@@ -190,7 +190,7 @@ public sealed class ClutterBuilder
         var absent = new List<string>();
         foreach (var name in requested)
             (FindTemplateRoot(gamez, name) != null ? resolved : absent).Add(name);
-        Log.Info("world", $"clutter: --clutter-templates={string.Join(",", requested)} replaces the chapter's registered set (the per-polygon no_clutter gate still applies) — in gamez: {(resolved.Count > 0 ? string.Join(",", resolved) : "(none)")}; not carried by this chapter: {(absent.Count > 0 ? string.Join(",", absent) : "(none)")} (retail-data-normal, not an error)");
+        Log.Info("world", $"clutter: --clutter-templates={string.Join(",", requested)} replaces the chapter's registered set (the per-polygon no_clutter gate still applies), in gamez: {(resolved.Count > 0 ? string.Join(",", resolved) : "(none)")}; not carried by this chapter: {(absent.Count > 0 ? string.Join(",", absent) : "(none)")} (retail-data-normal, not an error)");
         return resolved;
     }
 
@@ -1547,7 +1547,7 @@ public sealed class ClutterBuilder
             string worst = OverLargeLattice > 0 ? $" worst_lattice_cells={WorstLatticeCells}" : "";
             Log.Info("world", $"clutter uv lattice: placed={Placed} substituted={Substituted} substitute_nothing={SubstituteNothing} outside_source={OutsideSource} dedup_rejected={DedupRejected} skipped_no_clutter_flag={NoClutterFlagged} skipped_zero_world_area={ZeroWorldArea} skipped_zero_uv_area={ZeroUvArea} skipped_no_uv_array={NoUvArray} skipped_over_large_lattice={OverLargeLattice}{worst}");
             if (OutsideSource > 0)
-                Log.Warn("world", $"clutter instances landed OUTSIDE their source triangle count={OutsideSource} of {Placed} — the UV containment test disagrees with the affine map");
+                Log.Warn("world", $"clutter instances landed OUTSIDE their source triangle count={OutsideSource} of {Placed}, the UV containment test disagrees with the affine map");
         }
     }
 }

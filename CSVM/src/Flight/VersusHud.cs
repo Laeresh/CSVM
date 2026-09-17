@@ -119,12 +119,12 @@ public sealed partial class VersusHud : Control
         return $"{time}{kd}   {LeaderText(match)}";
     }
 
-    // The sole rank-1 player's tag, or "—" while tied (including 0-0 before the first
-    // kill, nobody leads yet).
+    // The sole rank-1 player's tag, or TIED while nobody leads (including 0-0 before the
+    // first kill).
     private string LeaderText(VersusMatch match)
     {
         var leaders = match.Standings().Where(st => st.Rank == 1).ToList();
-        return leaders.Count == 1 ? $"LEADER {SplitScreen.PlayerTag(leaders[0].PlayerIndex)}" : "LEADER —";
+        return leaders.Count == 1 ? $"LEADER {SplitScreen.PlayerTag(leaders[0].PlayerIndex)}" : "LEADER TIED";
     }
 
     // One opponent's marker: on screen, their tag floats just above the projected

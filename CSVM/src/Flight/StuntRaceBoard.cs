@@ -91,7 +91,7 @@ public sealed partial class StuntRaceBoard : ResultsBoard
             // placing reads at a glance.
             var color = won ? r.Color : RowColor;
             int font = (int)(RowFont * s);
-            AddCell(grid, r.Finished ? StuntRace.Ordinal(r.Rank) : "—", font, color, HorizontalAlignment.Left, rankW);
+            AddCell(grid, r.Finished ? StuntRace.Ordinal(r.Rank) : "-", font, color, HorizontalAlignment.Left, rankW);
             AddCell(grid, r.Tag, font, r.Color, HorizontalAlignment.Left, tagW);
             AddCell(grid, r.PlaneDisplay, font, color, HorizontalAlignment.Left, planeW);
             AddCell(grid, $"{r.Mission.CompletedCount}/{r.Mission.TotalCount}", font, color,

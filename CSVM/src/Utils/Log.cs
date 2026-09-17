@@ -191,7 +191,7 @@ public static class Log
         Info("core", $"log file={path} mode={mode} console={DescribeFilter()}");
         if (_preludeOverflowed)
         {
-            Warn("core", $"log prelude overflowed cap={PreludeCap} — earlier lines reached the console only");
+            Warn("core", $"log prelude overflowed cap={PreludeCap}, earlier lines reached the console only");
         }
         foreach (string cat in UnknownCategories)
         {
@@ -317,7 +317,7 @@ public static class Log
                 // A dead sink must never take the run with it, drop it and say so once.
                 _sink = null;
                 SinkPath = null;
-                GD.PrintErr($"ERROR [core] log sink write failed — file logging off error={Describe(e)}");
+                GD.PrintErr($"ERROR [core] log sink write failed, file logging off error={Describe(e)}");
             }
         }
     }

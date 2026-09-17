@@ -266,7 +266,7 @@ public sealed class MarkerRig
 
         var sb = new StringBuilder();
         string title = display != null ? $"{display} ({PlaneRoot})" : PlaneRoot;
-        sb.Append("=== ").Append(title).Append(" — ")
+        sb.Append("=== ").Append(title).Append(": ")
             .Append(firepoints).Append(" firepoints, ")
             .Append(pylons).Append(" pylons")
             .Append(hasTarget ? ", target" : ", no target")

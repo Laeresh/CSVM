@@ -95,15 +95,15 @@ public static class VSyncSetting
         Engine.MaxFps = plan.MaxFps;
         if (plan.Enabled)
         {
-            Log.Info("perf", $"vsync on source={plan.Source} — frame/fps/script are floored at the refresh interval");
+            Log.Info("perf", $"vsync on source={plan.Source}, frame/fps/script are floored at the refresh interval");
         }
         else if (plan.MaxFps > Uncapped)
         {
-            Log.Info("perf", $"vsync off source={plan.Source} max_fps={plan.MaxFps} — frame/fps/script are floored at the cap, not the refresh");
+            Log.Info("perf", $"vsync off source={plan.Source} max_fps={plan.MaxFps}, frame/fps/script are floored at the cap, not the refresh");
         }
         else
         {
-            Log.Info("perf", $"vsync off source={plan.Source} max_fps=0 — frame/fps/script report work done, not a refresh cap");
+            Log.Info("perf", $"vsync off source={plan.Source} max_fps=0, frame/fps/script report work done, not a refresh cap");
         }
     }
 }

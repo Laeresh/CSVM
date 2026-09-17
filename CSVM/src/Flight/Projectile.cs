@@ -1111,7 +1111,7 @@ public sealed partial class ProjectilePool : Node3D
             node = _flyoutGamez.FindByName(modelName);
             _flyoutNodes[modelName] = node;
             if (node == null)
-                Log.Info("weapons", $"flyout model '{modelName}' ({weapon.Id}) absent from this chapter gamez — rocket flies streak-only");
+                Log.Info("weapons", $"flyout model '{modelName}' ({weapon.Id}) absent from this chapter gamez, rocket flies streak-only");
         }
         if (node == null)
             return null;
@@ -1921,7 +1921,7 @@ public sealed partial class ProjectilePool : Node3D
                 twin.Shader = fadeShader;
             _splashFadeTwins[sm] = twin;
             if (twin == null)
-                Log.Info("weapons", $"splash fade: source shader has no alpha path — fade skipped, curves unaffected");
+                Log.Info("weapons", $"splash fade: source shader has no alpha path, fade skipped, curves unaffected");
         }
         if (twin != null)
             mi.SetSurfaceOverrideMaterial(0, twin);
@@ -1970,7 +1970,7 @@ public sealed partial class ProjectilePool : Node3D
             // A geometry-less host (e.g. the `gunhit` puffer root): nothing would render, drop it
             // and keep the spark. Logged once so the data fact is visible, not silently swallowed.
             if (_impactFxLogged.Add(animName))
-                Log.Info("weapons", $"impact effect '{animName}' is a geometry-less node — spark stands in");
+                Log.Info("weapons", $"impact effect '{animName}' is a geometry-less node, spark stands in");
             inst.QueueFree();
             return false;
         }
@@ -2012,7 +2012,7 @@ public sealed partial class ProjectilePool : Node3D
             AdvanceSplash(fx); // pose t=0 (the column at full authored scale) before the first tick
         _impactFx.Add(fx);
         if (_impactFxLogged.Add(animName))
-            Log.Info("weapons", $"impact effect '{animName}' instanced: {meshes} mesh(es){(animated ? $" — splash curves driven (base {(baseNode != null ? "✓" : "–")}, column {(splashNode != null ? "✓" : "–")})" : "")}");
+            Log.Info("weapons", $"impact effect '{animName}' instanced: {meshes} mesh(es){(animated ? $", splash curves driven (base {(baseNode != null ? "✓" : "–")}, column {(splashNode != null ? "✓" : "–")})" : "")}");
         return true;
     }
 
@@ -2915,7 +2915,7 @@ public sealed partial class ProjectilePool : Node3D
             _casingProtoResolved = true;
             _casingProto = _flyoutGamez!.FindByName("gunshell");
             if (_casingProto == null)
-                Log.Info("weapons", $"gun casing 'gunshell' absent from this chapter gamez — no ejection");
+                Log.Info("weapons", $"gun casing 'gunshell' absent from this chapter gamez, no ejection");
         }
         if (_casingProto == null)
             return null;
@@ -2980,7 +2980,7 @@ public sealed partial class ProjectilePool : Node3D
                 }
             }
         }
-        Log.Info("weapons", $"gun casing 'gunshell' def not in the anim program — no ejection");
+        Log.Info("weapons", $"gun casing 'gunshell' def not in the anim program, no ejection");
         return null;
     }
 

@@ -139,7 +139,7 @@ public sealed partial class NodeLab : Node
                 rejected.Add(token);
                 continue;
             }
-            Log.Warn("ui", $"--debug-nodelab token '{token}' is not deps/dest/open/all/node=<cs_name> — ignoring it");
+            Log.Warn("ui", $"--debug-nodelab token '{token}' is not deps/dest/open/all/node=<cs_name>, ignoring it");
         }
         return string.Join(",", kept);
     }
@@ -234,12 +234,12 @@ public sealed partial class NodeLab : Node
     {
         if (_selection.Current is not { } node || !IsInstanceValid(node))
         {
-            Log.Info("ui", $"nodelab frame — nothing is selected");
+            Log.Info("ui", $"nodelab frame, nothing is selected");
             return;
         }
         if (CameraSource?.Invoke() is not { } cam)
         {
-            Log.Warn("ui", $"nodelab frame — this session has no free camera to move");
+            Log.Warn("ui", $"nodelab frame, this session has no free camera to move");
             return;
         }
         var box = _selection.CurrentBox;
@@ -261,7 +261,7 @@ public sealed partial class NodeLab : Node
     {
         if (_selection.Current is not { } node || !IsInstanceValid(node))
         {
-            Log.Info("ui", $"nodelab hide — nothing is selected");
+            Log.Info("ui", $"nodelab hide, nothing is selected");
             return;
         }
         node.Visible = !node.Visible;
@@ -275,7 +275,7 @@ public sealed partial class NodeLab : Node
     {
         if (_selection.Current is not { } node || !IsInstanceValid(node))
         {
-            Log.Info("ui", $"nodelab export — nothing is selected");
+            Log.Info("ui", $"nodelab export, nothing is selected");
             return;
         }
         string nodeName = SelectionService.NameOf(node);
@@ -289,7 +289,7 @@ public sealed partial class NodeLab : Node
     {
         if (_selection.Current is not { } node || !IsInstanceValid(node))
         {
-            Log.Info("ui", $"nodelab set — nothing is selected");
+            Log.Info("ui", $"nodelab set, nothing is selected");
             return;
         }
         _set.Toggle(node);
@@ -658,14 +658,14 @@ public sealed partial class NodeLab : Node
         }
         var node = _selection.Current;
         string sel = node == null || !IsInstanceValid(node)
-            ? "nothing selected — click an object or a row"
+            ? "nothing selected, click an object or a row"
             : Log.Format($"{SelectionService.NameOf(node)}  rung {_selection.Level + 1}/{_selection.Ladder.Count}  visible={node.Visible} in_tree={node.IsVisibleInTree()}");
         _status.Text = sel;
         if (_setLabel != null)
         {
             var set = _set.Members;
             _setLabel.Text = set.Count == 0
-                ? "set empty — Ctrl+click adds"
+                ? "set empty, Ctrl+click adds"
                 : $"set {set.Count}: {string.Join(" ", set.Where(IsInstanceValid).Select(SelectionService.NameOf))}";
             _setLabel.TooltipText = _setLabel.Text;
         }
@@ -855,7 +855,7 @@ public sealed partial class NodeLab : Node
             }
         }
         _rootItem = tree.CreateItem();
-        _rootItem.SetText(0, $"search '{query}' — {hits.Count} of {total} match(es)");
+        _rootItem.SetText(0, $"search '{query}', {hits.Count} of {total} match(es)");
         _rootItem.SetCustomColor(0, Amber);
         _rootItem.SetSelectable(0, false);
         foreach (var (_, node) in hits)
@@ -871,7 +871,7 @@ public sealed partial class NodeLab : Node
         if (total > hits.Count)
         {
             var more = tree.CreateItem(_rootItem);
-            more.SetText(0, $"… {total - hits.Count} more — narrow the search");
+            more.SetText(0, $"… {total - hits.Count} more, narrow the search");
             more.SetCustomColor(0, Dim);
             more.SetSelectable(0, false);
         }
@@ -909,7 +909,7 @@ public sealed partial class NodeLab : Node
         if (kids.Count > shown)
         {
             var more = tree.CreateItem(item);
-            more.SetText(0, $"… {kids.Count - shown} more — use the search box");
+            more.SetText(0, $"… {kids.Count - shown} more, use the search box");
             more.SetCustomColor(0, Dim);
             more.SetSelectable(0, false);
         }
@@ -971,7 +971,7 @@ public sealed partial class NodeLab : Node
         if (kids.Count > shown)
         {
             var more = tree.CreateItem(item);
-            more.SetText(0, $"… {kids.Count - shown} more — use the search box");
+            more.SetText(0, $"… {kids.Count - shown} more, use the search box");
             more.SetCustomColor(0, Dim);
             more.SetSelectable(0, false);
         }
@@ -1050,7 +1050,7 @@ public sealed partial class NodeLab : Node
         if (_runtime.SuppressRootLift)
         {
             Banner(tree.CreateItem(_rootItem),
-                "PARTIAL WORLD — these are the slice's destructibles, not the chapter's", Loud);
+                "PARTIAL WORLD: these are the slice's destructibles, not the chapter's", Loud);
             foreach (string line in _runtime.ResolutionLines())
             {
                 Banner(tree.CreateItem(_rootItem), line, Loud);
@@ -1126,7 +1126,7 @@ public sealed partial class NodeLab : Node
             };
             if (def.RootName == null)
             {
-                row.RootColumn = "—";
+                row.RootColumn = "-";
             }
             else if (row.Instances.Count == 0)
             {
@@ -1183,7 +1183,7 @@ public sealed partial class NodeLab : Node
         if (def.RootName == null || _runtime == null)
         {
             ok = true;
-            return "—";
+            return "-";
         }
         int n = _runtime.FindNodes(def.RootName, anchor).Count;
         ok = n > 0;
@@ -1215,7 +1215,7 @@ public sealed partial class NodeLab : Node
     {
         if (_runtime == null || _program == null)
         {
-            lines.Add("anim NOT BUILT — this session has no animation runtime, so no definition can be attributed");
+            lines.Add("anim NOT BUILT, this session has no animation runtime, so no definition can be attributed");
             return;
         }
         EnsureAnimIndex();
@@ -1238,7 +1238,7 @@ public sealed partial class NodeLab : Node
         lines.Add(Log.Format($"anim defs anchored_here={anchored.Count} naming_this_node={named.Count}"));
         if (_runtime.SuppressRootLift)
         {
-            lines.Add("anim PARTIAL WORLD — this is a --node= slice: the root-name lift is refused here, so a definition the full chapter binds may be missing from this list");
+            lines.Add("anim PARTIAL WORLD, this is a --node= slice: the root-name lift is refused here, so a definition the full chapter binds may be missing from this list");
         }
         foreach (var def in anchored.Take(MaxListed))
         {
@@ -1270,8 +1270,8 @@ public sealed partial class NodeLab : Node
         if (here.Count == 0)
         {
             lines.Add(resolved == null
-                ? "destructible none — nothing up this node's parent chain is a destructible"
-                : Log.Format($"destructible none on this node — the enclosing '{SelectionService.NameOf(resolved.Anchor)}' is the pool a hit here would damage"));
+                ? "destructible none, nothing up this node's parent chain is a destructible"
+                : Log.Format($"destructible none on this node, the enclosing '{SelectionService.NameOf(resolved.Anchor)}' is the pool a hit here would damage"));
             return;
         }
         foreach (var inst in here)
@@ -1281,7 +1281,7 @@ public sealed partial class NodeLab : Node
             var damage = inst.Def.Sequences.FirstOrDefault(s =>
                 s.Name.Equals("DAMAGE_SEQUENCE", StringComparison.OrdinalIgnoreCase));
             lines.Add(damage == null
-                ? Log.Format($"destructible DAMAGE_SEQUENCE absent def={DefLabel(inst.Def)} — damage escalates no stages on this pool")
+                ? Log.Format($"destructible DAMAGE_SEQUENCE absent def={DefLabel(inst.Def)}, damage escalates no stages on this pool")
                 : Log.Format($"destructible DAMAGE_SEQUENCE def={DefLabel(inst.Def)} events={damage.Events.Count} thresholds={CountThresholds(damage)}"));
             var (coverage, ok) = EventCoverage(inst.Def);
             lines.Add(Log.Format($"destructible event coverage def={DefLabel(inst.Def)} {(ok ? "" : "UNRESOLVED kinds ")}{coverage}"));
@@ -1327,13 +1327,13 @@ public sealed partial class NodeLab : Node
         }
         Walk(node);
         string listed = textures.Count == 0
-            ? "—"
+            ? "-"
             : string.Join(", ", textures.Take(MaxListed))
               + (textures.Count > MaxListed ? $", … +{textures.Count - MaxListed}" : "");
         lines.Add(Log.Format($"geometry meshes={meshes} surfaces={surfaces} materials={materials.Count} textures={listed}"));
         if (_scene == null && meshes > 0)
         {
-            lines.Add("geometry texture names unavailable — this session kept no SceneBuilder, so materials are named by type only");
+            lines.Add("geometry texture names unavailable, this session kept no SceneBuilder, so materials are named by type only");
         }
     }
 
@@ -1341,7 +1341,7 @@ public sealed partial class NodeLab : Node
     {
         if (!_collisionBuilt)
         {
-            lines.Add("colliders NOT BUILT IN THIS MODE — --freecam/--anim-lab build the world with no collision at all, so an empty list here would be the missing instrument, not missing colliders (verification WORLD-9)");
+            lines.Add("colliders NOT BUILT IN THIS MODE, --freecam/--anim-lab build the world with no collision at all, so an empty list here would be the missing instrument, not missing colliders (verification WORLD-9)");
             return;
         }
         int bodies = 0, on = 0, off = 0;
@@ -1493,7 +1493,7 @@ public sealed partial class NodeLab : Node
         Log.Info("ui", $"nodelab destructibles defs={totals.Defs} instances={totals.Instances} node_groups={totals.Anchors} unresolved_defs={totals.Unresolved}");
         if (_runtime is { SuppressRootLift: true })
         {
-            Log.Warn("ui", $"nodelab destructibles PARTIAL WORLD — a --node= slice refuses the root-name lift, so this list is the slice's own destructibles and NOT the chapter's census");
+            Log.Warn("ui", $"nodelab destructibles PARTIAL WORLD, a --node= slice refuses the root-name lift, so this list is the slice's own destructibles and NOT the chapter's census");
             foreach (string line in _runtime.ResolutionLines())
             {
                 Log.Warn("ui", $"nodelab destructibles {line}");
@@ -1527,7 +1527,7 @@ public sealed partial class NodeLab : Node
         }
         if (skippedResolved + skippedUnresolved > 0)
         {
-            Log.Info("ui", $"nodelab destructible … elided resolved={skippedResolved} unresolved={skippedUnresolved} — the panel's list is complete");
+            Log.Info("ui", $"nodelab destructible … elided resolved={skippedResolved} unresolved={skippedUnresolved}, the panel's list is complete");
         }
     }
 

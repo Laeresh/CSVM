@@ -262,8 +262,8 @@ public sealed partial class MarkerOverlay : Node3D
         {
             _hud.Text = $"markers [K]: {_firepoints} firepoints, {_pylons} pylons"
                         + (_hasTarget ? ", 1 target" : ", no target")
-                        + (_shared > 0 ? $" — {_shared} shared mount(s) in magenta" : "")
-                        + (hidden > 0 ? $"   ({shown} labels shown, {hidden} hidden — orbit to read)" : "");
+                        + (_shared > 0 ? $", {_shared} shared mount(s) in magenta" : "")
+                        + (hidden > 0 ? $"   ({shown} labels shown, {hidden} hidden, orbit to read)" : "");
         }
     }
 

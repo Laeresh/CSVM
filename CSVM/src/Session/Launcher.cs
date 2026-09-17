@@ -566,7 +566,7 @@ public partial class Launcher : Node3D
         // any session builds, rather than let it hang as an orphan holding the log handle.
         if (_spec.ScreenshotPath != null && DisplayServer.GetName() == "headless")
         {
-            Log.Error("core", $"--screenshot needs a real GPU context; --headless never renders a capturable frame — drop one of the two flags");
+            Log.Error("core", $"--screenshot needs a real GPU context; --headless never renders a capturable frame, drop one of the two flags");
             GetTree().Quit(1);
             return;
         }
@@ -594,7 +594,7 @@ public partial class Launcher : Node3D
         else if (_spec.NoDet && (_spec.DetExplicit || _spec.ScriptedBy.Length > 0))
         {
             string wouldBe = _spec.DetExplicit ? "--det" : _spec.ScriptedBy;
-            Log.Info("core", $"no-det: {wouldBe} would run deterministically — wall-clock sim clock, unpinned randomness seed={_masterSeed}");
+            Log.Info("core", $"no-det: {wouldBe} would run deterministically, wall-clock sim clock, unpinned randomness seed={_masterSeed}");
         }
         // After the --det block, so a deterministic run reads the flag but not the tuning file that
         // ClearOverrides just dropped; before the early-quit probes below, so --run-tests and the
@@ -614,7 +614,7 @@ public partial class Launcher : Node3D
         SessionPaths.ForceZipped = _spec.ZipAssets;
         if (_spec.ZipAssets)
         {
-            Log.Info("core", $"assets: --zip-assets — reading .zip archives, ignoring unpacked folders");
+            Log.Info("core", $"assets: --zip-assets, reading .zip archives, ignoring unpacked folders");
         }
         // Prefer the unpacked sibling folder from ExtractAssets.ps1 -Unzip when it exists (loose
         // JSON/PNG/WAV: no zip decompression at load). Base (chapter-independent) paths resolve now;
@@ -748,7 +748,7 @@ public partial class Launcher : Node3D
             // nothing more to report, the roster is deliberately empty
         }
         else if (padsAtLaunch.Count == 0)
-            Log.Info("core", $"gamepad: none at launch (hotplug live — connect any time)");
+            Log.Info("core", $"gamepad: none at launch (hotplug live, connect any time)");
         else
             foreach (int p in padsAtLaunch)
                 Log.Info("core", $"gamepad: device {p} \"{Input.GetJoyName(p)}\" guid={Input.GetJoyGuid(p)} info={Input.GetJoyInfo(p)}");
@@ -1037,7 +1037,7 @@ public partial class Launcher : Node3D
         // sound track is the one place that reads as a defect rather than as a quiet run.
         if (MasterVolume.Resolve(_spec.Volume, _exported) <= 0f)
         {
-            Log.Warn("sound", $"cinema {name} is playing at master volume 0 — pass --volume=1.0 to hear it");
+            Log.Warn("sound", $"cinema {name} is playing at master volume 0, pass --volume=1.0 to hear it");
         }
 
         Log.Info("ui", $"cinema {name} playing skip={skip}");
@@ -1172,7 +1172,7 @@ public partial class Launcher : Node3D
         // Built-in's error line is its own; Original has no note and its top level shows bare, so
         // the log carries the fact for both presentations.
         Log.Warn("ui", $"menu: the build failed, back at the top level of {_menuHost?.Selected}");
-        BuiltInMenu?.ShowError($"Could not load {_spec.Chapter} / {string.Join(", ", _spec.PlaneNames)} — see the log.");
+        BuiltInMenu?.ShowError($"Could not load {_spec.Chapter} / {string.Join(", ", _spec.PlaneNames)}, see the log.");
     }
 
     // Shows the load screen and owes a build from the next frame. Every interactive path in (the
@@ -1618,7 +1618,7 @@ public partial class Launcher : Node3D
     // through _UnhandledInput, which quits with neither a menu nor a session up.
     private void ShowNoGameData()
     {
-        Log.Error("core", $"no extracted game data path={Path.Combine(_dataRoot, "extracted")} — {UI.NoGameDataScreen.Instruction(_exported)}");
+        Log.Error("core", $"no extracted game data path={Path.Combine(_dataRoot, "extracted")}, {UI.NoGameDataScreen.Instruction(_exported)}");
         AddChild(UI.NoGameDataScreen.Build(_dataRoot, _exported));
     }
 
@@ -2015,7 +2015,7 @@ public partial class Launcher : Node3D
     // the result the mission ended with.
     private void OpenDebrief(string profile, CampaignMissionResult result)
     {
-        Log.Info("core", $"campaign: {result.Outcome} — arrived at the debrief with '{profile}'");
+        Log.Info("core", $"campaign: {result.Outcome}, arrived at the debrief with '{profile}'");
         ReturnToMenu(new DebriefReturn(profile, result.Attempt.Seq, result.Outcome == MissionOutcome.Won));
     }
 
@@ -2123,7 +2123,7 @@ public partial class Launcher : Node3D
             return;
         }
         AudioServer.SetBusVolumeDb(MasterBus, MasterVolume.VolumeDb(volume));
-        string note = volume <= 0f ? " — sounds still load, play, count and log" : "";
+        string note = volume <= 0f ? ", sounds still load, play, count and log" : "";
         Log.Info("sound", $"master volume={volume:0.###} via={source}{note}");
     }
 
@@ -2143,9 +2143,9 @@ public partial class Launcher : Node3D
         // entry. Keyboard needs no gate: Godot releases held keys on focus loss.
         Pads.Focused = !muted;
         if (muted)
-            Log.Info("sound", $"focus: lost — audio muted, pad reads gated");
+            Log.Info("sound", $"focus: lost, audio muted, pad reads gated");
         else
-            Log.Info("sound", $"focus: regained — audio restored, pad reads live");
+            Log.Info("sound", $"focus: regained, audio restored, pad reads live");
     }
 
     // Samples the engine's eight per-frame counters once, for both instruments. The two

@@ -373,7 +373,7 @@ public sealed class SmokeScreenEmitters
             if (!_logged)
             {
                 _logged = true;
-                Log.Info("weapons", $"smoke screen '{EffectAnimName}': no DISTANCE_INTERVAL puffer in the anim program — screens lay no smoke");
+                Log.Info("weapons", $"smoke screen '{EffectAnimName}': no DISTANCE_INTERVAL puffer in the anim program, screens lay no smoke");
             }
             return null;
         }

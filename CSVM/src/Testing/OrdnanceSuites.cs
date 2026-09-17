@@ -214,14 +214,14 @@ internal static class OrdnanceSuites
         float cruise = torpedo.Velocity ?? 0f;
         float window = torpedo.LockOn ?? 0f;
         ctx.Check(Mathf.IsEqualApprox(cruise, 60f) && Mathf.IsEqualApprox(window, 2.5f),
-            $"wep_14 authors VELOCITY {cruise:0.#} and LOCK_ON {window:0.##} — the decode's 60 m/s over 2.5 s");
+            $"wep_14 authors VELOCITY {cruise:0.#} and LOCK_ON {window:0.##}, the decode's 60 m/s over 2.5 s");
         ctx.Check(ProjectilePool.CarriesLockOn(torpedo) && !ProjectilePool.CarriesLockOn(choker)
                   && !ProjectilePool.CarriesLockOn(gun),
             $"the decay window flag is LOCK_ON itself: wep_14 carries it, the choker and the gun do not");
         ctx.Check(ProjectilePool.SteeringStepRuns(torpedo, hasTarget: true)
                   && !ProjectilePool.SteeringStepRuns(torpedo, hasTarget: false)
                   && !ProjectilePool.SteeringStepRuns(choker, hasTarget: true),
-            $"the steering step's gate needs BOTH halves — LOCK_ON and a held target (wrong-claim 3)");
+            $"the steering step's gate needs BOTH halves, LOCK_ON and a held target (wrong-claim 3)");
 
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? pool = null;
@@ -304,7 +304,7 @@ internal static class OrdnanceSuites
         "a round authoring ACCELERATION climbs to its speed cap and stops there (A3): wep_04 " +
         "off a standing launcher reads 150/300/450 m/s at 1/2/3 s and holds 450 from then on, " +
         "the same weapon off a 100 m/s launcher caps 100 higher, and no step of any round's " +
-        "flight — motor, coasting rocket or gun — ever reduces its own speed, because the " +
+        "flight (motor, coasting rocket or gun) ever reduces its own speed, because the " +
         "original carries no drag term")]
     internal static void MotorAcceleration(TestContext ctx)
     {
@@ -1798,7 +1798,7 @@ internal static class OrdnanceSuites
         "draws flak_effect at the round, a wep_10 fusing on the same target draws its named-and-" +
         "empty default row's nothing rather than the player row's large_fireball, the same burst " +
         "on a non-aircraft target draws nothing, and a wep_11 into the ground hands its authored " +
-        "ballflare.flt to the effects runtime — the white growing flare — instead of standing a " +
+        "ballflare.flt to the effects runtime (the white growing flare) instead of standing a " +
         "static gamez-template instance in for it")]
     internal static void OrdnanceImpactEffects(TestContext ctx)
     {
@@ -1955,7 +1955,7 @@ internal static class OrdnanceSuites
                 for (int i = 0; i < 120 && plays.Count == 0; i++)
                     live.SimStep(1f / 60f);
                 ctx.Check(plays.Count > 0 && plays[0] == "ballflare.flt",
-                    $"a seeker into the ground hands ballflare.flt to the effects sink — the authored flare def, not a static instance of its gamez template (played={(plays.Count > 0 ? plays[0] : "nothing")})");
+                    $"a seeker into the ground hands ballflare.flt to the effects sink, the authored flare def, not a static instance of its gamez template (played={(plays.Count > 0 ? plays[0] : "nothing")})");
             }
             finally
             {
@@ -2040,7 +2040,7 @@ internal static class OrdnanceSuites
             $"a REAR weapon takes the same axis unnegated");
         ctx.Check(FlightController.OrdnanceLaunchDir(false, canted, false, mountAim) is { } aiDir
                   && aiDir.IsEqualApprox(mountAim),
-            $"an AI's round leaves along the clamped mount aim instead — the original's own asymmetry");
+            $"an AI's round leaves along the clamped mount aim instead, the original's own asymmetry");
         ctx.Check(FlightController.OrdnanceLaunchDir(false, canted, false, null) == null,
             $"and an AI with no aim to clamp keeps the mount's own axis");
 
@@ -2219,7 +2219,7 @@ internal static class OrdnanceSuites
                 }
                 ctx.Check(screens.IsLaying(human) && screens.ActiveCount == 1,
                     $"firing wep_13 lays one screen on the aircraft that fired it");
-                ctx.Same(0, CountLive(pool, live), $"and spawns no round at all — the pool stays empty");
+                ctx.Same(0, CountLive(pool, live), $"and spawns no round at all, the pool stays empty");
                 ctx.Check(human.Loadout.Hardpoints.Sum(h => h.Ammo) == before - 1,
                     $"the smoker still spends its round of ammo, as every other pylon weapon does");
             }

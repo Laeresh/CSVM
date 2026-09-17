@@ -51,7 +51,7 @@ public class AngularDampingTests
         float expected = undamped * Mathf.Exp(-Dt * stats.AngMomentumDamp);
         Assert.True(Mathf.IsEqualApprox(m.BodyRates.Z, expected, 1e-6f),
             $"roll rate {m.BodyRates.Z:0.000000} vs cmd·dt·exp(-dt·damp) {expected:0.000000} "
-            + $"(undamped cmd·dt alone — the decay-then-add ordering bug — would give {undamped:0.000000})");
+            + $"(undamped cmd·dt alone, the decay-then-add ordering bug, would give {undamped:0.000000})");
     }
 
     [Fact]
@@ -76,7 +76,7 @@ public class AngularDampingTests
         // The point: bounded, positive, strictly decayed at any dt, never the sign flip
         // and 4x growth the linear form would have produced here (linearFactor · 1 = -4).
         Assert.True(m.BodyRates.Z is > 0f and < 1f,
-            $"roll rate {m.BodyRates.Z:0.000000} must stay in (0, 1) — positive and decayed, unlike "
+            $"roll rate {m.BodyRates.Z:0.000000} must stay in (0, 1), positive and decayed, unlike "
             + $"the linear form's {linearFactor:0.000000}");
     }
 

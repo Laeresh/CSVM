@@ -1683,7 +1683,7 @@ public partial class FlightController : Node3D
         // flag), reachable through the zone-less overflow, so it is tested on every hit.
         if (Damage.IsDestroyed)
         {
-            Log.Info("weapons", $"vehicle health exhausted ({struckPart} last) — shot down by {weapon.Id}");
+            Log.Info("weapons", $"vehicle health exhausted ({struckPart} last), shot down by {weapon.Id}");
             Destroy(impact, $"gunfire ({weapon.Id})", colliderPart,
                 killer: shooter != ProjectilePool.NoShooter ? shooter : null);
             return;
@@ -1757,7 +1757,7 @@ public partial class FlightController : Node3D
             $"rammed P{PlayerIndex + 1} by P{striker + 1} ({struckPart}): a={armorDamage:0.0} h={healthDamage:0.0} hull={Damage.WholeHealth:0.0}/{Damage.WholeHealthMax:0}");
         if (Damage.IsDestroyed)
         {
-            Log.Info("flight", $"vehicle health exhausted ({struckPart} last) — rammed by P{striker + 1}");
+            Log.Info("flight", $"vehicle health exhausted ({struckPart} last), rammed by P{striker + 1}");
             Destroy(impact, "collision", "center", null);
         }
     }
@@ -2931,7 +2931,7 @@ public partial class FlightController : Node3D
         {
             Audio?.PlayEmptyClip();
             WeaponAudio?.PlayEmptyClip();
-            Log.Info("weapons", $"rocket: {Name} dry pull, all pylons empty — empty-clip cue");
+            Log.Info("weapons", $"rocket: {Name} dry pull, all pylons empty, empty-clip cue");
         }
     }
 
@@ -3291,10 +3291,10 @@ public partial class FlightController : Node3D
             var theirs = struckAir.Rig.WorldVelocity;
             var los = struckAir.Rig.WorldPosition - _model.Position;
             Log.Info("flight",
-                $"midair aspect: into {hitName} — tracks {AngleBetweenDeg(mine, theirs):0}° apart (0 = same heading, 180 = head-on), line of sight {AngleBetweenDeg(mine, los):0}° off own track, spd mine={_model.Speed:0} theirs={theirs.Length():0} m/s");
+                $"midair aspect: into {hitName}, tracks {AngleBetweenDeg(mine, theirs):0}° apart (0 = same heading, 180 = head-on), line of sight {AngleBetweenDeg(mine, los):0}° off own track, spd mine={_model.Speed:0} theirs={theirs.Length():0} m/s");
         }
         Log.Info("flight",
-            $"CRASH into {hitName} ({part}) surface={surface} def={crashDef ?? "-"} wreck={landing.WreckLanding} impact=({impact.X:0},{impact.Y:0},{impact.Z:0}) pos=({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) spd={_model.Speed:0} m/s — waiting for respawn");
+            $"CRASH into {hitName} ({part}) surface={surface} def={crashDef ?? "-"} wreck={landing.WreckLanding} impact=({impact.X:0},{impact.Y:0},{impact.Z:0}) pos=({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) spd={_model.Speed:0} m/s, waiting for respawn");
         if (landing.Downed)
             Downed?.Invoke(PlayerIndex, landing.Killer);
         // After the death report, so the crash notice reads above the kill line that death posted,
@@ -3596,7 +3596,7 @@ public partial class FlightController : Node3D
 
         string listed = names.Count == 0 ? "(nothing)"
             : string.Join(", ", names) + (extra > 0 ? $", +{extra} more" : "");
-        Log.Warn("core", $"--target={InitialTarget}: no match — selectable now: {listed}");
+        Log.Warn("core", $"--target={InitialTarget}: no match, selectable now: {listed}");
     }
 
     /// <summary>The view-selection inputs, edge-detected: F8 or D-pad Down advances the original's

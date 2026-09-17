@@ -66,7 +66,7 @@ public class ControlLimiterTests
             var (peakG, where, _, _) = Worst(stats);
             Assert.True(peakG < stats.HighGStart,
                 $"{plane}: peak demanded load factor {peakG:0.00} G ({where}) reaches the authored "
-                + $"highGs[0] = {stats.HighGStart:0.0} G — the G limiter now engages and is owed an "
+                + $"highGs[0] = {stats.HighGStart:0.0} G, the G limiter now engages and is owed an "
                 + "implementation (gating ONLY input that opposes the current rotation)");
         }
     }
@@ -88,7 +88,7 @@ public class ControlLimiterTests
             Assert.True(into < 0.15f,
                 $"{plane}: the delivered body-up load factor reaches {most:0.00} G, which is "
                 + $"{into:0.0%} into the ramp from lowGs[0] = {stats.LowGStart:0.0} to "
-                + $"lowGs[1] = {stats.LowGMax:0.0} — the negative-G limiter has stopped being a "
+                + $"lowGs[1] = {stats.LowGMax:0.0}, the negative-G limiter has stopped being a "
                 + "graze, and every envelope row that pushes is owed a re-read");
         }
     }
@@ -104,7 +104,7 @@ public class ControlLimiterTests
         stats.LowGMax /= 2f;
         float into = Depth(MostNegativeBodyUpG(stats), stats.LowGStart, stats.LowGMax);
         Assert.True(into >= 0.15f,
-            $"player_bhawk on a halved lowGs pair reaches only {into:0.0%} into the ramp — the push "
+            $"player_bhawk on a halved lowGs pair reaches only {into:0.0%} into the ramp, the push "
             + "has become too gentle for the graze bound above to be measuring anything");
     }
 
@@ -120,7 +120,7 @@ public class ControlLimiterTests
             float most = MostPositiveBodyUpG(stats);
             Assert.True(most < stats.HighGStart,
                 $"{plane}: the delivered body-up load factor reaches {most:0.00} G against the "
-                + $"authored highGs[0] = {stats.HighGStart:0.0} G — the G limiter now engages");
+                + $"authored highGs[0] = {stats.HighGStart:0.0} G, the G limiter now engages");
         }
     }
 
@@ -138,7 +138,7 @@ public class ControlLimiterTests
             var (_, _, peakAlpha, where) = Worst(stats);
             Assert.True(peakAlpha < maxAoaDeg,
                 $"{plane}: α peaks at {peakAlpha:0.0}° ({where}) against the authored maxAOA of "
-                + $"{maxAoaDeg:0.0}° — the AOA limiter now engages and is owed an implementation "
+                + $"{maxAoaDeg:0.0}°, the AOA limiter now engages and is owed an implementation "
                 + "(gating ONLY input that opposes the current rotation)");
         }
     }
@@ -157,11 +157,11 @@ public class ControlLimiterTests
 
         Assert.True(peakG > stats.HighGStart / 2f,
             $"player_bhawk: peak demanded load factor is only {peakG:0.00} G ({gWhere}) against "
-            + $"half the authored highGs[0] ({stats.HighGStart / 2f:0.0} G) — the manoeuvre has "
+            + $"half the authored highGs[0] ({stats.HighGStart / 2f:0.0} G), the manoeuvre has "
             + "become too gentle to trip a limiter, so the G disproof can no longer fail");
         Assert.True(peakAlpha > maxAoaDeg * DisproofAoaFraction,
             $"player_bhawk: α peaks at only {peakAlpha:0.0}° ({alphaWhere}) against "
-            + $"{maxAoaDeg * DisproofAoaFraction:0.0}° — the manoeuvre has become too gentle to "
+            + $"{maxAoaDeg * DisproofAoaFraction:0.0}°, the manoeuvre has become too gentle to "
             + "trip a limiter, so the AOA disproof can no longer fail");
     }
 

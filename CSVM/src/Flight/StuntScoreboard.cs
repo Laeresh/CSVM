@@ -74,7 +74,7 @@ public sealed partial class StuntScoreboard : ResultsBoard
         float total = _mission.Elapsed;
         float? prevBest = _store.GetBest(_scoreKey);
         bool newBest = _store.RecordIfBest(_scoreKey, total);
-        string bestSuffix = newBest ? " — NEW BEST"
+        string bestSuffix = newBest ? " (NEW BEST)"
             : prevBest.HasValue ? $" (best {StuntMission.FormatTime(prevBest.Value)})" : "";
         Log.Info("flight", $"stunt: run complete {StuntMission.FormatTime(total)}{bestSuffix}");
         // Log the split table too (the splits are otherwise only visible on the rendered board,

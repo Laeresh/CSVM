@@ -14,7 +14,7 @@ internal static class ZeppelinSuites
     [Suite("zeppelin-motion",
         "zeppelin motion (F17): C1/M04's piratezep record loads, its world node is placed at " +
         "the authored pose, which is PirateZep1's node 0 and an ARMED stop point, so it sits " +
-        "docked until SetStopPoint releases stop-point id 1 — then flown between manual sim " +
+        "docked until SetStopPoint releases stop-point id 1, then flown between manual sim " +
         "steps (every hop an EDGE, displacement never over max_speed·dt) until the route's " +
         "far end, armed under the unaddressable id 0, docks it for good; total engine loss " +
         "decelerates it to a stop through the decoded sqrt curve, and a deactivated record " +
@@ -50,7 +50,7 @@ internal static class ZeppelinSuites
             $"the route carries stop points, armed in the file ids={tagged} armed={armed} of {net.Nodes.Count} nodes");
         ctx.Check(net.Nodes[0].StopPointId == 1 && net.Nodes[0].StopsHere
             && def.Position.DistanceTo(net.Nodes[0].Position) < 5f,
-            $"…and the record spawns ON node 0, which is stop point 1 and armed — so C1/M04's PANDORA starts docked, not flying");
+            $"…and the record spawns ON node 0, which is stop point 1 and armed, so C1/M04's PANDORA starts docked, not flying");
 
         Node3D? host = null;
         Node3D? heldHost = null;
@@ -209,8 +209,8 @@ internal static class ZeppelinSuites
         "CM08's piratezep on its own Klondike1 chain: the file's stop 7 (node 5) settles the " +
         "hull ON the node rather than a hold distance short of it, releasing it (what " +
         "OBJECTIVE11 does) carries the Pandora to the cargo point over the freighter (stop 8, " +
-        "node 7), where the mission's own zepgetcargo — the freighter's hold doors, the " +
-        "Pandora's cargo doors, the crane on its chain — starts; releasing that too runs the " +
+        "node 7), where the mission's own zepgetcargo (the freighter's hold doors, the " +
+        "Pandora's cargo doors, the crane on its chain) starts; releasing that too runs the " +
         "chain to node 0, an open end with NO stop point authored at all, where the structural " +
         "dead-end hold parks it for good; the dock glide leaves the hull level at both stops, " +
         "and the pitch never rings up on the way")]
@@ -283,7 +283,7 @@ internal static class ZeppelinSuites
             Settle(runtime, dt);
             float shortOf = motion.Position.DistanceTo(net.Nodes[5].Position);
             ctx.Check(motion.Follower.Holding && motion.Follower.CurrentIndex == 5 && shortOf < 1f,
-                $"stop 7 settles the hull ON node 5 in {steps / 60f:0} s, {shortOf:0.##} m off it — not a hold distance short");
+                $"stop 7 settles the hull ON node 5 in {steps / 60f:0} s, {shortOf:0.##} m off it, not a hold distance short");
             ctx.Check(Mathf.Abs(Mathf.RadToDeg(motion.PitchRad)) < 0.5f,
                 $"…and level, which the dock glide does and the speed-scaled steer law cannot: pitch={Mathf.RadToDeg(motion.PitchRad):0.00}°");
 
@@ -313,7 +313,7 @@ internal static class ZeppelinSuites
             for (int i = 0; i < 60 * 20; i++)
                 runtime.SimStep(dt);
             ctx.Same(farEnd, motion.Follower.CurrentIndex,
-                $"…and stays there — no shuttle back along the altitude swing it just flew");
+                $"…and stays there, no shuttle back along the altitude swing it just flew");
             ctx.Check(motion.Speed == 0f, $"…with the throttle cut speed={motion.Speed:0.##}");
         }
         finally
@@ -366,12 +366,12 @@ internal static class ZeppelinSuites
 
     [Suite("zeppelin-launch",
         "zeppelin fighter launch (F20): C1/IA1's zeppelin-launch generator authors the " +
-        "decoded shape (cargobay origin, −90° drop, mp1 door anims — both shipped as " +
+        "decoded shape (cargobay origin, −90° drop, mp1 door anims, both shipped as " +
         "compiled OnCall defs over door_left/door_right), holds below the 100 m gate with " +
         "the door shut, and on F17's flown zeppelin opens the door, holds the overdue drop " +
         "for the decoded door lead, then drops fighters at " +
-        "the origin node's LIVE position on the composed 7 s schedule — the fast cycle " +
-        "leaving the hangar open (close early only past an 8 s gap) — while a max_active 1 " +
+        "the origin node's LIVE position on the composed 7 s schedule, the fast cycle " +
+        "leaving the hangar open (close early only past an 8 s gap), while a max_active 1 " +
         "clone stops after one live spawn")]
     internal static void ZeppelinLaunch(TestContext ctx)
     {
@@ -607,7 +607,7 @@ internal static class ZeppelinSuites
         "compiled defs (40), a no-DAMAGES_ZEPPELIN gun round strikes a gasbag and is refused " +
         "while a DAMAGES_ZEPPELIN round spends real hp, an engine kill slows the zeppelin " +
         "through the F17 sqrt seam, and the survivor threshold kills with the decoded " +
-        "polarity — dead at survivors 3 < required 4, NOT at the design's destroy count — " +
+        "polarity (dead at survivors 3 < required 4, NOT at the design's destroy count), " +
         "playing the authored all_pzep_gasbags death and stopping the motion")]
     internal static void ZeppelinDamageSuite(TestContext ctx)
     {
@@ -932,7 +932,7 @@ internal static class ZeppelinSuites
                     live.SimStep(dt);
                 }
                 ctx.Same(5, zeps.BroadsideShotsOf("piratezep") - shotsBefore,
-                    $"the destroyed cannon drops out — the volley thins to 5 after {guard * dt:0.#} s");
+                    $"the destroyed cannon drops out, the volley thins to 5 after {guard * dt:0.#} s");
 
                 // 4. Scatter: a clone authoring cannon_inaccuracy 10° (the C2B/M04 value) on
                 // the same hull spreads a volley the exact solve would collapse to a point.
@@ -1140,7 +1140,7 @@ internal static class ZeppelinSuites
             // (destroy_dtzep_lbroad12, a call the runtime routes through that cannon's pool), so
             // the port volley loses two of its six, not one.
             ctx.Same(4, zeps.BroadsideShotsOf("dantezep") - shotsBefore,
-                $"the destroyed Dante cannon and its burnt side-mate drop out — the volley thins to 4 after {guard * dt:0.#} s");
+                $"the destroyed Dante cannon and its burnt side-mate drop out, the volley thins to 4 after {guard * dt:0.#} s");
         }
         finally
         {

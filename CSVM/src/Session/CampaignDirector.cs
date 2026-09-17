@@ -269,7 +269,7 @@ public sealed class CampaignDirector
 
         if (MissionFor(zrdrPath, seq) is not { } mission || mission.ChapterFolder.Length == 0)
         {
-            GD.PushWarning($"--campaign: seq {seq} is not in cm_sequence — flying the CLI chapter instead");
+            GD.PushWarning($"--campaign: seq {seq} is not in cm_sequence, flying the CLI chapter instead");
             return spec;
         }
 
@@ -808,7 +808,7 @@ public sealed class CampaignDirector
         if (_seatsDown.Count < seats)
         {
             _beginSpectate?.Invoke(human);
-            Log.Info("core", $"campaign: seat {seat + 1} of {seats} is lost — spectating; {seats - _seatsDown.Count} human(s) still flying");
+            Log.Info("core", $"campaign: seat {seat + 1} of {seats} is lost, spectating; {seats - _seatsDown.Count} human(s) still flying");
             return;
         }
 
@@ -818,7 +818,7 @@ public sealed class CampaignDirector
         }
 
         _playerLost = true;
-        Log.Info("core", $"campaign: the last of {seats} human aircraft is lost — the objectives stop, and the mission ends where the wreck does");
+        Log.Info("core", $"campaign: the last of {seats} human aircraft is lost, the objectives stop, and the mission ends where the wreck does");
     }
 
     // The second stage: a hull that is still falling has not landed yet, which is the whole of the
@@ -954,7 +954,7 @@ public sealed class CampaignDirector
         int at = _profile.WingmanPlane;
         if (at < 0 || at >= _profile.Planes.Count)
         {
-            GD.PushWarning($"campaign: wingman plane index {at} is not one '{_profile.Name}' owns — no wingman fit bound");
+            GD.PushWarning($"campaign: wingman plane index {at} is not one '{_profile.Name}' owns, no wingman fit bound");
             return;
         }
 
@@ -1109,7 +1109,7 @@ public sealed class CampaignDirector
         Result = new CampaignMissionResult(
             outcome, attempt, recorded, _mission.Campaign, skipCapture);
         _leaving = LeavingHoldS;
-        Log.Info("core", $"campaign: mission {_mission.Ordinal} {outcome} — mask 0x{attempt.CompletedMask:x}, {attempt.TimeMs / 1000}s, primary={recorded.PrimaryCompleted}, advanced={recorded.Advanced}, log {_profile.PersistLog.Count} object(s), attempt {CampaignProgression.ResultOf(_profile, _mission.Seq)?.Attempts ?? 0} (skip offered={recorded.SkipOffered}); holding the world {LeavingHoldS:0.#}s before leaving it");
+        Log.Info("core", $"campaign: mission {_mission.Ordinal} {outcome}, mask 0x{attempt.CompletedMask:x}, {attempt.TimeMs / 1000}s, primary={recorded.PrimaryCompleted}, advanced={recorded.Advanced}, log {_profile.PersistLog.Count} object(s), attempt {CampaignProgression.ResultOf(_profile, _mission.Seq)?.Attempts ?? 0} (skip offered={recorded.SkipOffered}); holding the world {LeavingHoldS:0.#}s before leaving it");
     }
 
     // The second source of the completed-objective mask: a bit per completed danger zone, by the

@@ -125,9 +125,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     // See docs/architecture.md.
     private static readonly Choice[] Modes =
     {
-        new("Free Flight", "Explore the map freely — no objectives, no clock."),
-        new("Instant Action", "Pick an environment and a mission — ace, squadron, stunt or zeppelin."),
-        new("Dogfight", "Splitscreen free-for-all — first to the kill target wins."),
+        new("Free Flight", "Explore the map freely, no objectives, no clock."),
+        new("Instant Action", "Pick an environment and a mission: ace, squadron, stunt or zeppelin."),
+        new("Dogfight", "Splitscreen free-for-all, first to the kill target wins."),
     };
 
     // The eight chapter worlds: this screen's row text over the shared roster (MenuChapters owns
@@ -1048,14 +1048,14 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     private static string ChapterRowText(string code) => code switch
     {
-        "C1" => "Sea Haven (night) — IA: an airfield",
-        "C1B" => "The ocean — Sea Haven variant",
-        "C1C" => "Sea Haven variant C — no IA, campaign/MP only",
-        "C2" => "Hollywood — IA: a movie studio",
-        "C2B" => "The clouds — Hollywood variant",
+        "C1" => "Sea Haven (night), IA: an airfield",
+        "C1B" => "The ocean, Sea Haven variant",
+        "C1C" => "Sea Haven variant C (no IA, campaign/MP only)",
+        "C2" => "Hollywood, IA: a movie studio",
+        "C2B" => "The clouds, Hollywood variant",
         "C3" => "Hawaii (islands)",
-        "C4" => "Rocky Mountains — IA: Sky Haven",
-        "C5" => "New York — IA: Manhattan",
+        "C4" => "Rocky Mountains, IA: Sky Haven",
+        "C5" => "New York, IA: Manhattan",
         _ => code,
     };
 
@@ -2369,7 +2369,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             _uiStrings = UiStrings.TryLoad(_dataRoot);
             if (_uiStrings == null)
             {
-                GD.PushWarning("launchscreen: no extracted/rof/—— hangar labels fall back");
+                GD.PushWarning("launchscreen: no extracted/rof/ tree, hangar labels fall back");
                 _uiStrings = UiStrings.Empty;
             }
         }
@@ -3053,7 +3053,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             Screen.Waves => "CONFIGURE WAVES",
             Screen.WaveEdit => $"WAVE {_waveEditIndex + 1}",
             Screen.Wingmen => "WINGMEN",
-            Screen.WingmanLoadout => $"WINGMEN — AMMO SELECTION  ({_ia.WingmanPlane.Name})",
+            Screen.WingmanLoadout => $"WINGMEN: AMMO SELECTION  ({_ia.WingmanPlane.Name})",
             Screen.Hangar => _hangar?.Page.Title ?? HangarRow,
             Screen.Campaign => _campaign?.Page.Title ?? CampaignRow,
             Screen.Options => "OPTIONS",
@@ -3061,7 +3061,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             _ when _slots.Count == 1 && _slots[0].InLoadout =>
                 $"AMMO SELECTION  ({_roster[_slots[0].PlaneIndex].Name})",
             _ when _slots.Count == 1 && _slots[0].Locked => "AIRCRAFT SELECTED",
-            _ => _slots.Count > 1 ? "SELECT AIRCRAFT — ALL PLAYERS" : "SELECT AIRCRAFT",
+            _ => _slots.Count > 1 ? "SELECT AIRCRAFT: ALL PLAYERS" : "SELECT AIRCRAFT",
         };
     }
 
@@ -3571,7 +3571,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         string summary = w.Count == 0
             ? "empty"
             : $"{w.Count}x {militia.Name} {militia.Aircraft[w.AircraftIndex]} ({Cap(InstantActionFeature.Skills[w.SkillIndex])})";
-        return $"Wave {index + 1} — {summary}";
+        return $"Wave {index + 1}: {summary}";
     }
 
     // One WaveEdit-screen field row: the label plus the field's own current value, since
@@ -3732,7 +3732,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         if (_screen != Screen.Plane)
             return "(other players join at aircraft select)";
         if (_mode == MenuMode.Versus && _slots.Count < 2)
-            return $"(Dogfight needs a fight — {SplitScreen.PlayerTag(_slots.Count)}: press START to join)";
+            return $"(Dogfight needs a fight, {SplitScreen.PlayerTag(_slots.Count)}: press START to join)";
         return Pads.Connected().Count > 0
             ? "(press START on a free pad to join)"
             : "(connect a pad and press START to join)";

@@ -193,7 +193,7 @@ public sealed class EffectAmbience
         if (_frozen)
         {
             throw new InvalidOperationException(
-                "EffectAmbience.Still is the still-air null object and cannot be written — "
+                "EffectAmbience.Still is the still-air null object and cannot be written, "
                 + "a session that has weather must construct its own EffectAmbience");
         }
     }

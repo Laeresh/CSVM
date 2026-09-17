@@ -159,6 +159,6 @@ public sealed class SoundArchive : IDisposable
             return;
         }
         _reopensLogged++;
-        Log.Info("sound", $"archive reopened after close for name={wavName} — prewarm missed it");
+        Log.Info("sound", $"archive reopened after close for name={wavName}, prewarm missed it");
     }
 }

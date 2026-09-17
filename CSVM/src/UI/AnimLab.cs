@@ -388,7 +388,7 @@ public sealed partial class AnimLab : Node
         var started = _runtime.Play(name, anchor);
         if (started.Count == 0)
         {
-            Log.Info("ui", $"anim-lab: no definition named '{name}' among this program's {_program.Defs.Count} defs — check --chapter/--mission (F lists them)");
+            Log.Info("ui", $"anim-lab: no definition named '{name}' among this program's {_program.Defs.Count} defs, check --chapter/--mission (F lists them)");
             _timeline?.Clear();
             return;
         }
@@ -396,7 +396,7 @@ public sealed partial class AnimLab : Node
         _stopped = false;
         _instances = started.Count;
         bool placeless = started.Any(s => ReferenceEquals(s.Anchor, anchor));
-        Log.Info("ui", $"anim-lab: playing '{name}' — {started.Count} instance(s), seed {_seed}{(placeless ? " (placeless — staged in front of the camera)" : "")}");
+        Log.Info("ui", $"anim-lab: playing '{name}', {started.Count} instance(s), seed {_seed}{(placeless ? " (placeless, staged in front of the camera)" : "")}");
         if (_autoFrame)
         {
             // Placeless: frame + follow the staging dummy, so the in-front-of-camera effect is
@@ -568,7 +568,7 @@ public sealed partial class AnimLab : Node
                 return;
             }
         }
-        Log.Info("ui", $"anim-lab: '{_defName}' resolves no frameable node — camera left as-is");
+        Log.Info("ui", $"anim-lab: '{_defName}' resolves no frameable node, camera left as-is");
     }
 
     // ---- UI ----------------------------------------------------------------------------------
@@ -748,7 +748,7 @@ public sealed partial class AnimLab : Node
         var def = _program.Defs[_rows[row]];
         if (string.IsNullOrEmpty(def.AnimName))
         {
-            Log.Info("ui", $"anim-lab: '{def.Name}' has no ANIMATION_NAME — cannot play it directly");
+            Log.Info("ui", $"anim-lab: '{def.Name}' has no ANIMATION_NAME, cannot play it directly");
             return;
         }
         Play(def.AnimName!, def);
@@ -767,7 +767,7 @@ public sealed partial class AnimLab : Node
         {
             return;
         }
-        string def = _defName == null ? "(none — pick one or --play-anim=<name>)"
+        string def = _defName == null ? "(none, pick one or --play-anim=<name>)"
             : _stopped ? $"{_defName} (stopped)"
             : $"{_defName} ({_instances} instance{(_instances == 1 ? "" : "s")})";
         string follow = _cam.Follow != null ? $"orbiting {_followName} (RMB to rotate)" : "free camera";

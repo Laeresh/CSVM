@@ -164,7 +164,7 @@ public sealed class HitchSidecar
         }
         if (_droppedCount > 0)
         {
-            Log.Warn("perf", $"hitch sidecar queue overflowed dropped={_droppedCount} depth={_queueDepth} — raise hitchSidecar.queueDepth or lower hitchSidecar.flushSeconds");
+            Log.Warn("perf", $"hitch sidecar queue overflowed dropped={_droppedCount} depth={_queueDepth}, raise hitchSidecar.queueDepth or lower hitchSidecar.flushSeconds");
             _droppedCount = 0;
         }
         _queueCount = 0;

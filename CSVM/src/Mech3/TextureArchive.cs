@@ -104,7 +104,7 @@ public static class TextureDropIn
             }
             else
             {
-                Log.Warn("world", $"tex override colour unreadable texture={name} color={colorText} — using magenta");
+                Log.Warn("world", $"tex override colour unreadable texture={name} color={colorText}, using magenta");
             }
         }
         Overrides[name] = color;
@@ -162,7 +162,7 @@ public static class TextureDropIn
             // from a count that quietly covers two surfaces.
             if (ByColor.TryGetValue(hex, out var twin))
             {
-                Log.Warn("world", $"tex census colour collision texture={archiveName} shares={twin} color={hex} — counts for both are one number");
+                Log.Warn("world", $"tex census colour collision texture={archiveName} shares={twin} color={hex}, counts for both are one number");
             }
             else
             {
@@ -556,7 +556,7 @@ public static class TextureDropIn
         _unusedQueued = false;
         foreach (var name in UnusedOverrides())
         {
-            Log.Warn("world", $"tex override coloured nothing texture={name} — no material resolved it this session");
+            Log.Warn("world", $"tex override coloured nothing texture={name}, no material resolved it this session");
         }
     }
 
@@ -957,11 +957,11 @@ public sealed class TextureArchive : IDisposable
             // print a full managed stack trace per call in Godot .NET, burying real errors.
             if (AbsentAndUndrawn.Contains(baseName))
             {
-                Log.Warn("world", $"texture absent from game data texture={materialTextureName} — polygons undrawn");
+                Log.Warn("world", $"texture absent from game data texture={materialTextureName}, polygons undrawn");
             }
             else if (IsKnownAbsent(materialTextureName))
             {
-                Log.Warn("world", $"texture absent from game data texture={materialTextureName} — gray fallback");
+                Log.Warn("world", $"texture absent from game data texture={materialTextureName}, gray fallback");
             }
             else
             {

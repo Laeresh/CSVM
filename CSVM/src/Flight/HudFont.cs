@@ -47,13 +47,13 @@ public sealed class HudFont
             out int runCount, out int top, out int height);
         if (normal == null)
         {
-            Log.Info("flight", $"[hudfont] no {NormalFile} in {rimageDir} — HUD text font off (run ExtractRof.ps1)");
+            Log.Info("flight", $"[hudfont] no {NormalFile} in {rimageDir}, HUD text font off (run ExtractRof.ps1)");
             return null;
         }
         if (runCount != CodeCount)
         {
             GD.PushWarning($"[hudfont] {NormalFile}: found {runCount} glyphs, expected {CodeCount} "
-                           + $"({FirstCode:X2}..{LastCode:X2}) — the ASCII mapping may be off");
+                           + $"({FirstCode:X2}..{LastCode:X2}), the ASCII mapping may be off");
         }
         var bright = LoadAtlas(Path.Combine(rimageDir, BrightFile), null, out _, out _, out _) ?? normal;
         return new HudFont(normal, bright, glyphs, top, height);

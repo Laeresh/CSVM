@@ -122,7 +122,7 @@ internal static class TargetingSuites
         ctx.Check(TargetRef.Classify(AimTargetKind.Turret, live: true, ownTeam + 1, ownTeam) == null
                   && TargetRef.Classify(AimTargetKind.Structure, live: true, AimAssist.WorldTeam,
                       ownTeam) == null,
-            $"an UNFLAGGED turret or structure is not selectable at all — the mission decides, not the world (which is why DestructibleRegistry never feeds this pool)");
+            $"an UNFLAGGED turret or structure is not selectable at all, the mission decides, not the world (which is why DestructibleRegistry never feeds this pool)");
         ctx.Check(TargetRef.Classify(AimTargetKind.Vehicle, live: false, ownTeam + 1, ownTeam) == null
                   && TargetRef.Classify(AimTargetKind.Structure, live: false, AimAssist.WorldTeam,
                       ownTeam, objectiveTarget: true) == null,
@@ -133,11 +133,11 @@ internal static class TargetingSuites
             new AimCandidate { Position = Vector3.Up, Live = true, Source = engine },
             TargetClass.NonAircraft, "Promised Land");
         ctx.Check(promisedLand.IsSameTarget(sameEngineLater),
-            $"a ref rebuilt next frame at a new pose still names the same target (FUN_004b6490 re-finds the selection by ENTITY — the wrappers are new objects every frame)");
+            $"a ref rebuilt next frame at a new pose still names the same target (FUN_004b6490 re-finds the selection by ENTITY, the wrappers are new objects every frame)");
         ctx.Check(!promisedLand.IsSameTarget(kestrel)
                   && !TargetRef.ForTurret(default, TargetClass.NonAircraft, "")
                       .IsSameTarget(TargetRef.ForTurret(default, TargetClass.NonAircraft, "")),
-            $"two different sources never match, and a null source matches nothing — including another null, which would otherwise make every sourceless ref the same target");
+            $"two different sources never match, and a null source matches nothing, including another null, which would otherwise make every sourceless ref the same target");
     }
 
     /// <summary>The tap/hold decoding. The suite reads no gamepad and no bare key press, so what
@@ -147,7 +147,7 @@ internal static class TargetingSuites
     /// pool. The key and pad reads themselves are owed as live play.</summary>
     [Suite("target-input",
         "the tap/hold decoding, which is what the suite CAN read (a gamepad and a bare key "
-        + "press it cannot): TapHoldButton's resolve-on-release rule — a short press taps, "
+        + "press it cannot): TapHoldButton's resolve-on-release rule, a short press taps, "
         + "crossing 250 ms fires the hold ONCE mid-press and the release is then spent, a held "
         + "button never repeats, and an up button with no press reports nothing; plus the "
         + "attacker queue's live wiring, where a real hostile round through TakeProjectileHit "
@@ -183,13 +183,13 @@ internal static class TargetingSuites
 
         var btn = new TapHoldButton(0.25f);
         ctx.Check(btn.Step(false, dt) == TapHold.None,
-            $"a button that is simply up reports nothing — a release with no press is not a tap");
+            $"a button that is simply up reports nothing, a release with no press is not a tap");
         ctx.Check(Press(btn, 12) == (1, 0),
             $"a 0.20 s press taps once on RELEASE and never holds");
         ctx.Check(Press(btn, 18) == (0, 1),
-            $"a 0.30 s press holds once and the release is then SPENT — it does not also tap, which is the flicker decision 7 exists to avoid");
+            $"a 0.30 s press holds once and the release is then SPENT, it does not also tap, which is the flicker decision 7 exists to avoid");
         ctx.Check(Press(btn, 120) == (0, 1),
-            $"holding for two seconds still fires exactly once — this is a tap/hold split, not a repeat");
+            $"holding for two seconds still fires exactly once, this is a tap/hold split, not a repeat");
         ctx.Check(Press(btn, 6) == (1, 0),
             $"and the next press taps again, so a hold leaves no state behind");
 
@@ -246,7 +246,7 @@ internal static class TargetingSuites
 
             ctx.Check(ReferenceEquals(live.RigOfShooter(2), hostile)
                       && ReferenceEquals(live.RigOfShooter(0), self),
-                $"RigOfShooter resolves a shooter id to the plane that fired — the ids are unique across the session, so it names one plane and not a class of them");
+                $"RigOfShooter resolves a shooter id to the plane that fired, the ids are unique across the session, so it names one plane and not a class of them");
             ctx.Check(live.RigOfShooter(ProjectilePool.NoShooter) == null
                       && live.RigOfShooter(9999) == null,
                 $"…and an unowned round or an unregistered id resolves to nothing");
@@ -254,7 +254,7 @@ internal static class TargetingSuites
             var impact = new Vector3(0f, 0f, -2f);
             self.TakeProjectileHit(gun, impact, "nose", ProjectilePool.NoShooter);
             ctx.Check(self.Targeting.Attackers.Count == 0,
-                $"an unowned round (a turret's, a zeppelin broadside) records no attacker — there is nobody to target");
+                $"an unowned round (a turret's, a zeppelin broadside) records no attacker, there is nobody to target");
             self.TakeProjectileHit(gun, impact, "nose", friendly.PlayerIndex);
             ctx.Check(self.Targeting.Attackers.Count == 0,
                 $"friendly fire records no attacker either: the engine's gate is a shooter on a DIFFERENT, non-zero team");
@@ -343,7 +343,7 @@ internal static class TargetingSuites
 
         var order = sel.Ordered.Select(t => t.Source).ToList();
         ctx.Check(order.SequenceEqual(new[] { objective, ahead2, ahead1, behind, left, right }),
-            $"the whole cycle order in one read: the objective first (1500 m BEHIND, and still first), then ahead nearest-first, then behind, left, right — the 100 m target off the right wing is LAST");
+            $"the whole cycle order in one read: the objective first (1500 m BEHIND, and still first), then ahead nearest-first, then behind, left, right, the 100 m target off the right wing is LAST");
         ctx.Check(sel.Current is { } head && ReferenceEquals(head.Source, objective)
                   && sel.ActiveClass == TargetClass.Enemy,
             $"auto-acquire: a fresh selector starts on the Enemy cycle already holding its head, with no input");
@@ -353,7 +353,7 @@ internal static class TargetingSuites
         // Stepping.
         sel.Next(TargetClass.Enemy);
         ctx.Check(ReferenceEquals(sel.Current?.Source, objective),
-            $"a handler mutates state only — Current still reads the old target until the next Resolve publishes it, which is the original's own one-frame shape");
+            $"a handler mutates state only, Current still reads the old target until the next Resolve publishes it, which is the original's own one-frame shape");
         sel.Resolve(Vector3.Zero, basis);
         ctx.Check(ReferenceEquals(sel.Current?.Source, ahead2), $"Next steps one entry down the cycle");
         sel.Previous(TargetClass.Enemy);
@@ -423,7 +423,7 @@ internal static class TargetingSuites
         sel.Rebuild(afterDeath, null, own, null, new Vector3(4000f, 900f, -6000f), farBasis);
         ctx.Check(ReferenceEquals(sel.Current?.Source, behind)
                   && !sel.Ordered.Select(t => t.Source).SequenceEqual(orderBefore),
-            $"flying 7 km away and swinging the nose onto a new bearing re-sorts the cycle but does NOT drop the selection — there is no range, bearing or LOS gate anywhere in the decoded path");
+            $"flying 7 km away and swinging the nose onto a new bearing re-sorts the cycle but does NOT drop the selection, there is no range, bearing or LOS gate anywhere in the decoded path");
 
         // Target Nothing STAYS cleared.
         sel.Clear();
@@ -434,7 +434,7 @@ internal static class TargetingSuites
         }
 
         ctx.Check(sel.Current == null && sel.Pool.Count == 0,
-            $"…and STAYS cleared through repeated rebuilds — the collection pass is skipped, so the auto-acquire cannot fire again pool={sel.Pool.Count}");
+            $"…and STAYS cleared through repeated rebuilds, the collection pass is skipped, so the auto-acquire cannot fire again pool={sel.Pool.Count}");
         sel.Next(TargetClass.Enemy);
         sel.Rebuild(afterDeath, null, own, null, Vector3.Zero, basis);
         ctx.Check(sel.Current != null && sel.ActiveClass == TargetClass.Enemy,
@@ -473,7 +473,7 @@ internal static class TargetingSuites
             $"the queue is an end insert, oldest first");
         shot.RecordAttacker(ahead1);
         ctx.Check(shot.Attackers.Count == 2 && ReferenceEquals(shot.Attackers[1], ahead1),
-            $"a repeat attacker MOVES to the end rather than listing twice (inference, not decode — FUN_004bc1e0 was not traced)");
+            $"a repeat attacker MOVES to the end rather than listing twice (inference, not decode, FUN_004bc1e0 was not traced)");
         shot.NextEnemy();
         shot.Resolve(Vector3.Zero, basis);
         ctx.Check(ReferenceEquals(shot.Current?.Source, ahead1),
@@ -541,7 +541,7 @@ internal static class TargetingSuites
 
             ctx.Check(SessionSpec.Parse(new[] { "--target=ai1_player_fury" }).TargetSelect == "ai1_player_fury"
                       && SessionSpec.Parse(System.Array.Empty<string>()).TargetSelect == null,
-                $"--target= reaches the spec verbatim, and its absence is null rather than 'none' — an unscripted session keeps the ordinary auto-acquire");
+                $"--target= reaches the spec verbatim, and its absence is null rather than 'none', an unscripted session keeps the ordinary auto-acquire");
 
             // The auto-acquire picks the NEARER enemy ahead. Everything below that names the far one
             // is therefore a claim the flag actually moved the selection.
@@ -566,7 +566,7 @@ internal static class TargetingSuites
             ctx.Check(ally.ApplyInitial("wing1_kestrel", Vector3.Zero, basis)
                       && ReferenceEquals(ally.Current?.Source, wing)
                       && ally.ActiveClass == TargetClass.Ally,
-                $"the same grammar reaches an ALLY, writing the class back — without that the next Resolve would drop a target outside the active cycle");
+                $"the same grammar reaches an ALLY, writing the class back, without that the next Resolve would drop a target outside the active cycle");
             var part = Fresh();
             ctx.Check(part.ApplyInitial("gasbag1", Vector3.Zero, basis)
                       && ReferenceEquals(part.Current?.Source, gasbagInst)
@@ -589,7 +589,7 @@ internal static class TargetingSuites
             var cross = Fresh();
             ctx.Check(cross.ApplyInitial("crosshair", Vector3.Zero, basis)
                       && ReferenceEquals(cross.Current?.Source, wing),
-                $"--target=crosshair runs the nose-cone scan, which reaches the nearest thing on the nose whatever its side — here the ally at 300 m");
+                $"--target=crosshair runs the nose-cone scan, which reaches the nearest thing on the nose whatever its side, here the ally at 300 m");
             var cleared = Fresh();
             ctx.Check(cleared.ApplyInitial("none", Vector3.Zero, basis)
                       && cleared.Current == null && cleared.ActiveClass == null,
@@ -612,7 +612,7 @@ internal static class TargetingSuites
             runB.ApplyInitial("ai1_player_fury", Vector3.Zero, basis);
             ctx.Check(ReferenceEquals(runA.Current?.Source, runB.Current?.Source)
                       && ReferenceEquals(runA.Current?.Source, far),
-                $"two selectors given the same spec land on the same target — the property a reproducible golden shot rests on");
+                $"two selectors given the same spec land on the same target, the property a reproducible golden shot rests on");
 
             // ⚠ The item's own trap: the flag sets the INITIAL selection and must not hold it.
             var live = Fresh();
@@ -623,7 +623,7 @@ internal static class TargetingSuites
                 $"a keypress after the flag moves the selection off the pinned target");
             live.Rebuild(scan, parts, own, self, Vector3.Zero, basis, null, torpedo);
             ctx.Check(ReferenceEquals(live.Current?.Source, near),
-                $"…and the next frame's rebuild does NOT snap back to it — the flag is spent, so an interactive session started with it still cycles");
+                $"…and the next frame's rebuild does NOT snap back to it, the flag is spent, so an interactive session started with it still cycles");
         }
         finally
         {
@@ -709,7 +709,7 @@ internal static class TargetingSuites
             pool.Rebuild(scan, null, AimAssist.TeamOfPilot(self.PlayerIndex), self);
             ctx.Check(pool.Enemy.Any(t => ReferenceEquals(t.Source, wingman))
                       && AimAssist.TeamOfPilot(self.PlayerIndex) != InstantActionRuntime.EnemyTeam,
-                $"CONTROL: deriving P2's side from its pilot index puts the wingman in Enemy — the bug this item diagnosed — and no longer collides with the enemy team itself");
+                $"CONTROL: deriving P2's side from its pilot index puts the wingman in Enemy (the bug this item diagnosed) and no longer collides with the enemy team itself");
 
             // Sub-parts: the only channel by which a structure becomes selectable.
             var gasbagInst = registry.Register(
@@ -737,7 +737,7 @@ internal static class TargetingSuites
             ctx.Check(bag.Kind == AimTargetKind.Structure && bag.Velocity == hullVel
                       && bag.Name == "gasbag1"
                       && bag.Health is { } bh && Mathf.IsEqualApprox(bh, 1f) && bag.Armor == null,
-                $"…carrying its hull's velocity (never zero — the bracket gate has to lead it), its part node's name and health with no armor pool name='{bag.Name}' v={bag.Velocity}");
+                $"…carrying its hull's velocity (never zero, the bracket gate has to lead it), its part node's name and health with no armor pool name='{bag.Name}' v={bag.Velocity}");
 
             // Off the torpedo the cycle is the mission's flagged list alone, which here is empty.
             // The same parts list is passed every time, so an empty cycle is the gate refusing and
@@ -850,7 +850,7 @@ internal static class TargetingSuites
         "at all; plus --debug-markers' " +
         "own selection, which takes EVERY live aircraft instead of the nearest, flags each " +
         "by team against the pane's own, skips a crashed one and skips the pane's own " +
-        "aircraft; plus the shipped marker's rules — the three decoded colours, the bracket " +
+        "aircraft; plus the shipped marker's rules, the three decoded colours, the bracket " +
         "gate's gun reach (inside RANGE brackets, past it does not, a target outrunning the " +
         "round never does, and the hysteresis holds the boundary case), the label lines " +
         "an aircraft, an off-screen target and a named objective each compose, and the " +
@@ -903,7 +903,7 @@ internal static class TargetingSuites
             pureHuman.Team = AimAssist.PlayerTeam;
             ctx.Check(p2.OwnTeam == AimAssist.PlayerTeam
                       && AimAssist.TeamOfPilot(1) != AimAssist.PlayerTeam,
-                $"P2 flying an Instant Action mission is on the PLAYER team, which its pilot index would have derived as {AimAssist.TeamOfPilot(1)} — the wingman-in-the-marker bug");
+                $"P2 flying an Instant Action mission is on the PLAYER team, which its pilot index would have derived as {AimAssist.TeamOfPilot(1)}, the wingman-in-the-marker bug");
             var wingScan = new AimCandidateSet();
             wingScan.AddVehicle(new Vector3(0f, 0f, -80f), Vector3.Zero, AimAssist.PlayerTeam,
                 live: true, pureNear);                                  // P2's own wingman
@@ -967,10 +967,10 @@ internal static class TargetingSuites
                   != TargetHud.MarkerColor(allyRef, AimAssist.PlayerTeam)
                   && TargetHud.MarkerColor(allyRef, AimAssist.PlayerTeam)
                      != TargetHud.MarkerColor(protectRef, AimAssist.PlayerTeam),
-            $"three colours, not two: a hostile, a friendly and a non-destructive objective all read differently (the decode's own rule — a FRIENDLY is green, blue is the objective)");
+            $"three colours, not two: a hostile, a friendly and a non-destructive objective all read differently (the decode's own rule, a FRIENDLY is green, blue is the objective)");
         ctx.Check(TargetHud.MarkerColor(destroyRef, AimAssist.PlayerTeam)
                   == TargetHud.MarkerColor(enemyRef, AimAssist.PlayerTeam),
-            $"a Destroy objective is the hostile colour, whatever team the entity carries — the four destructive categories override the team test");
+            $"a Destroy objective is the hostile colour, whatever team the entity carries, the four destructive categories override the team test");
         ctx.Check(TargetHud.MarkerColor(enemyRef, AimAssist.NeutralTeam)
                   == TargetHud.MarkerColor(allyRef, AimAssist.PlayerTeam),
             $"a neutral own side has no enemies: with either team 0 the categoryless rule falls to the friendly colour");
@@ -986,7 +986,7 @@ internal static class TargetingSuites
             $"a target inside the gun's authored RANGE is bracketed and one past it is not");
         ctx.Check(!TargetHud.GunReaches(muzzle, Vector3.Zero, RoundSpeed, GunRange,
                       new Vector3(0f, 0f, -600f), new Vector3(0f, 0f, -900f)),
-            $"a target OUTRUNNING the round is never bracketed, at any range — the solver returns no intercept (the port of 'a fixed-metres threshold would lose this')");
+            $"a target OUTRUNNING the round is never bracketed, at any range, the solver returns no intercept (the port of 'a fixed-metres threshold would lose this')");
         ctx.Check(!TargetHud.GunReaches(muzzle, Vector3.Zero, RoundSpeed, GunRange,
                       new Vector3(0f, 0f, -1010f), Vector3.Zero)
                   && TargetHud.GunReaches(muzzle, Vector3.Zero, RoundSpeed,
@@ -997,7 +997,7 @@ internal static class TargetingSuites
         var lines = new List<string>();
         TargetHud.LabelLines(enemyRef, null, lines);
         ctx.Check(lines.Count == 2 && lines[0].Length == 0 && lines[1] == "Fury",
-            $"an ordinary aircraft under a box is its airframe name alone, in the SECOND slot — the blank category line still holds the first, which is what keeps the name out of the silhouette ({string.Join(" / ", lines)})");
+            $"an ordinary aircraft under a box is its airframe name alone, in the SECOND slot, the blank category line still holds the first, which is what keeps the name out of the silhouette ({string.Join(" / ", lines)})");
         lines.Clear();
         TargetHud.LabelLines(enemyRef, "4 o'clock", lines, keepSlots: false);
         ctx.Check(lines.Count == 2 && lines[0] == "Fury" && lines[1] == "4 o'clock",

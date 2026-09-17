@@ -68,7 +68,7 @@ public sealed class SpentEmitterFactory : IEmitterFactory
         if (!_reported)
         {
             _reported = true;
-            Log.Warn("anim", $"puffer '{state.Name}' asked for after the texture archive was released — this runtime builds no further PUFFER_STATE emitters (WorldSession.Options.TexturesOutliveBuild)");
+            Log.Warn("anim", $"puffer '{state.Name}' asked for after the texture archive was released, this runtime builds no further PUFFER_STATE emitters (WorldSession.Options.TexturesOutliveBuild)");
         }
         return null;
     }

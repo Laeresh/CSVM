@@ -310,7 +310,7 @@ public sealed partial class DamageLab : Node
 
         box.AddChild(new Label
         {
-            Text = $"DAMAGE LAB — {_stats.DefName}" +
+            Text = $"DAMAGE LAB: {_stats.DefName}" +
                    (_target.Subtitle is { } who ? $"  ·  {who}" : ""),
         });
         box.AddChild(Small("drag a part's armor/health over its thresholds · F19 hides this panel"));

@@ -325,7 +325,7 @@ internal static class DestroyChoreographySuites
     // every "the fire ends on time" check reads the absence as a pass (DIAG-20). Subject: a C1 AA gun.
     // Able to fail: with RunDeathSlot deleted, no destruction_slot lane ever dispatches.
     [Suite("death-slot",
-        "a killed destructible dispatches its compiled destruction slot — the block carrying the 30 s fire's 1,035 death calls (BL-276)")]
+        "a killed destructible dispatches its compiled destruction slot, the block carrying the 30 s fire's 1,035 death calls (BL-276)")]
     internal static void DeathSlotDispatches(TestContext ctx)
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
@@ -883,7 +883,7 @@ internal static class DestroyChoreographySuites
     // places effect templates. ⚠ Every pooled template copy of one root must show the same lit mesh
     // count as its slot-0 sibling; a copy the reset pass missed stays lit for the whole session.
     [Suite("crash-rig-anchors",
-        "binding the crash rig leaves the airframe model under the controller — even the Devastator, whose model root shares the crash defs' authored NAME — and stages every pooled copy in the same reset pose")]
+        "binding the crash rig leaves the airframe model under the controller (even the Devastator, whose model root shares the crash defs' authored NAME) and stages every pooled copy in the same reset pose")]
     internal static void CrashRigAnchors(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -1820,7 +1820,7 @@ internal static class DestroyChoreographySuites
     // there. ⚠ Read CrashRigPending before anything else on a deferred aeroplane: CrashRuntime,
     // CrashAnchor and CrashDefs all force the build, which is the point of them.
     [Suite("ai-crash-rig-deferral",
-        "a mid-flight AI introduction leaves its crash rig armed rather than built, the roster's pump takes more than one frame to finish it, and the finished rig is the same one an undeferred build makes — while a second aeroplane that is hit before the pump reaches it builds its rig on the damage intake instead (BL-641)")]
+        "a mid-flight AI introduction leaves its crash rig armed rather than built, the roster's pump takes more than one frame to finish it, and the finished rig is the same one an undeferred build makes, while a second aeroplane that is hit before the pump reaches it builds its rig on the damage intake instead (BL-641)")]
     internal static void AiCrashRigDeferral(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -1935,7 +1935,7 @@ internal static class DestroyChoreographySuites
     // 0, ai_crash_default, never a player_crash_* def. ⚠ Keep the human-piloted A/B control; without
     // it a family mix-up in the pick would be invisible from the AI side alone.
     [Suite("ai-crash-defs",
-        "an AI plane's crash rig binds the ai_crash_* family and its crash indexes it by the struck surface id — dirt(13) plays ai_crash_dirt, no material plays ai_crash_default, and the def switches off both the airframe's healthy subtree and the crash root's wreck — while a human rig off the same factory keeps player_crash_* (G21)")]
+        "an AI plane's crash rig binds the ai_crash_* family and its crash indexes it by the struck surface id, dirt(13) plays ai_crash_dirt, no material plays ai_crash_default, and the def switches off both the airframe's healthy subtree and the crash root's wreck, while a human rig off the same factory keeps player_crash_* (G21)")]
     internal static void AiCrashDefs(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");

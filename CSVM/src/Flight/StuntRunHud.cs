@@ -100,7 +100,7 @@ public sealed partial class StuntRunHud : Control
     private void OnZoneCompleted(StuntZone z)
     {
         _flash = FlashDuration;
-        _flashText = z.Description.Length > 0 ? $"{z.Description} — CLEARED" : "DANGER ZONE CLEARED";
+        _flashText = z.Description.Length > 0 ? $"{z.Description} CLEARED" : "DANGER ZONE CLEARED";
     }
 
     // The banner shown in this player's pane once they have cleared every zone. Solo: the
@@ -113,7 +113,7 @@ public sealed partial class StuntRunHud : Control
             return new[] { "ALL DANGER ZONES CLEARED", StuntMission.FormatTime(_mission.Elapsed) };
         var lines = new List<string>(3)
         {
-            $"FINISHED — {StuntRace.Ordinal(me.Rank)}",
+            $"FINISHED {StuntRace.Ordinal(me.Rank)}",
             StuntMission.FormatTime(me.FinishTime),
         };
         if (!Race.AllFinished)

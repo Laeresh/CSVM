@@ -524,7 +524,7 @@ public sealed partial class WeaponLab : Node3D
         {
             // A click on the sky is not a placement, say so and leave the aircraft where it is.
             _pickLine = "target: nothing under the cursor (sky)";
-            Log.Info("ui", $"weapon lab: pick at ({screen.X:0},{screen.Y:0}) hit nothing — aircraft left where it was");
+            Log.Info("ui", $"weapon lab: pick at ({screen.X:0},{screen.Y:0}) hit nothing, aircraft left where it was");
             SyncState();
             return;
         }
@@ -566,7 +566,7 @@ public sealed partial class WeaponLab : Node3D
         var dir = point - _plane.GlobalPosition;
         if (dir.LengthSquared() <= 1e-6f)
         {
-            Log.Warn("ui", $"--weapon-target names the aircraft's own position — leaving it at spawn");
+            Log.Warn("ui", $"--weapon-target names the aircraft's own position, leaving it at spawn");
             return;
         }
         dir = dir.Normalized();
@@ -586,7 +586,7 @@ public sealed partial class WeaponLab : Node3D
     {
         if (SurfaceRegistry.IdForName(want) is not { } target)
         {
-            Log.Warn("ui", $"--weapon-surface={want} is not a surface-registry name — leaving the aircraft at spawn");
+            Log.Warn("ui", $"--weapon-surface={want} is not a surface-registry name, leaving the aircraft at spawn");
             _pickLine = $"target: '{want}' is not a surface name";
             SyncState();
             return;
@@ -620,7 +620,7 @@ public sealed partial class WeaponLab : Node3D
         Walk(GetParent() ?? this);
         if (best == null)
         {
-            Log.Warn("ui", $"--weapon-surface={want}: this chapter has no collider carrying {target}/{want} among {scanned} scanned — leaving the aircraft at spawn");
+            Log.Warn("ui", $"--weapon-surface={want}: this chapter has no collider carrying {target}/{want} among {scanned} scanned, leaving the aircraft at spawn");
             _pickLine = $"target: no {target}/{want} collider in this chapter";
             SyncState();
             return;
@@ -652,7 +652,7 @@ public sealed partial class WeaponLab : Node3D
         }
         float blocked = (hit["position"].AsVector3() - point).Length();
         float clamped = Mathf.Max(MinStandoff, blocked - ClearanceMargin);
-        Log.Info("ui", $"weapon lab: stand-off clamped {_standoff:0} -> {clamped:0} m — geometry {blocked:0} m back along the aim");
+        Log.Info("ui", $"weapon lab: stand-off clamped {_standoff:0} -> {clamped:0} m, geometry {blocked:0} m back along the aim");
         return clamped;
     }
 
@@ -950,8 +950,8 @@ public sealed partial class WeaponLab : Node3D
             : (_bank == Guns ? "(no gun groups)" : "(no pylons)");
         _ammoLabel.Text = AmmoLine();
         _cameraLabel.Text = _freeCamera
-            ? "V: FREE camera — WASD/QE fly, hold RMB to look; V returns the orbit"
-            : "V: orbit camera (WASD/arrows swing it, numpad +/- zoom) — V frees it";
+            ? "V: FREE camera, WASD/QE fly, hold RMB to look; V returns the orbit"
+            : "V: orbit camera (WASD/arrows swing it, numpad +/- zoom), V frees it";
         _pickLabel.Text = _pickLine;
         _standoffLabel.Text = $"stand-off {_standoff:0} m";
         _autoFireToggle.ButtonPressed = _autoFire;
@@ -973,7 +973,7 @@ public sealed partial class WeaponLab : Node3D
             : m.Hp is { } h ? (h.Ammo, h.Capacity)
             : (0, 0);
         return _host is { InfiniteAmmo: true }
-            ? $"ammo: ∞ of {cap} — nothing drains, no model hides"
+            ? $"ammo: ∞ of {cap}, nothing drains, no model hides"
             : $"ammo: {ammo} / {cap}";
     }
 

@@ -127,7 +127,7 @@ public sealed class PatternLibrary
         var graphics = Path.Combine(rofRoot, "ASSETS", "GRAPHICS");
         if (!Directory.Exists(graphics))
         {
-            Log.Info("world", $"[paint] no pattern library at {graphics} — run ExtractRof.ps1 to enable the original's paint patterns; aircraft build unpainted");
+            Log.Info("world", $"[paint] no pattern library at {graphics}, run ExtractRof.ps1 to enable the original's paint patterns; aircraft build unpainted");
             return lib;
         }
         foreach (var dir in Directory.EnumerateDirectories(graphics))

@@ -93,7 +93,7 @@ public sealed class WorldSession
             // Skipped deliberately: the one verb MissionSetup reliably resolves switches the
             // subject off (C1/IA1 hides hk_zep); a node stage shows the subtree in its gamez
             // base state instead.
-            Log.Info("world", $"node stage: mission setup skipped for {o.Chapter}/{o.Mission} — the subtree renders in its gamez base state");
+            Log.Info("world", $"node stage: mission setup skipped for {o.Chapter}/{o.Mission}, the subtree renders in its gamez base state");
         }
         else
         {
@@ -197,7 +197,7 @@ public sealed class WorldSession
         if (o.DebugClutterFlag)
         {
             int painted = clutterRoot != null ? TintClutterBlue(clutterRoot) : 0;
-            Log.Info("world", $"debug: --debug-clutterflag view — world polygons no_clutter={builder.Scene.FlaggedPolygonCount} (red), clear={builder.Scene.ClearPolygonCount} (green), over the models built for {o.Chapter}; clutter blue ({painted} multimesh{(painted == 1 ? ")" : "es)")}");
+            Log.Info("world", $"debug: --debug-clutterflag view, world polygons no_clutter={builder.Scene.FlaggedPolygonCount} (red), clear={builder.Scene.ClearPolygonCount} (green), over the models built for {o.Chapter}; clutter blue ({painted} multimesh{(painted == 1 ? ")" : "es)")}");
         }
 
         // Base states first, then ON_STARTUP + startanims, which now play rather than being posed

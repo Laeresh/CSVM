@@ -157,7 +157,7 @@ public sealed partial class ColliderOverlay : Node
         {
             // The whole reason this control exists: no bodies were built in this mode, which is not
             // the same fact as "nothing here is solid".
-            Log.Warn("world", $"collider overlay: this mode builds NO collision at all — there is nothing to draw, which is not the same as 'nothing is collidable'. Relaunch with --collision (or fly the chapter) to see the colliders.");
+            Log.Warn("world", $"collider overlay: this mode builds NO collision at all, there is nothing to draw, which is not the same as 'nothing is collidable'. Relaunch with --collision (or fly the chapter) to see the colliders.");
             ShowNotice("NO COLLISION BUILT IN THIS MODE\n"
                        + "--freecam / --anim-lab build no bodies at all.\n"
                        + "Relaunch with --collision to build and draw them.");
@@ -178,7 +178,7 @@ public sealed partial class ColliderOverlay : Node
         }
         // Two counts, never their difference: a death switches a healthy collider off and its
         // wreck's on, and the signed sum of that reads as death ADDING collision.
-        Log.Info("world", $"collider overlay {(_shown ? "on" : "off")} — {_summary} · switched on {_lastOn} · switched off {_lastOff}");
+        Log.Info("world", $"collider overlay {(_shown ? "on" : "off")}, {_summary} · switched on {_lastOn} · switched off {_lastOff}");
     }
 
     private static StandardMaterial3D LineMaterial() => _lineMaterial ??= new StandardMaterial3D
@@ -521,11 +521,11 @@ public sealed partial class ColliderOverlay : Node
                    + (boxed > 0 ? $" · {boxed} drawn as bounding boxes (over {MaxShapeTris} tris or past the line budget)" : "");
         if (unknown > 0)
         {
-            Log.Warn("world", $"collider overlay: {unknown} body(ies) carry server-side shapes this overlay cannot read back — they are NOT drawn");
+            Log.Warn("world", $"collider overlay: {unknown} body(ies) carry server-side shapes this overlay cannot read back, they are NOT drawn");
         }
         Log.Info("world", $"collider overlay built: {_summary}");
         // Said every build, not just in the docs: the two ways this picture is not the source data.
-        Log.Info("world", $"collider overlay: colours are the surface id a touch RESOLVES to — an id whose def this install does not ship draws as 0/default — and the id is stamped per collider BODY, not per polygon. It shows what the engine will select, not the material data.");
+        Log.Info("world", $"collider overlay: colours are the surface id a touch RESOLVES to (an id whose def this install does not ship draws as 0/default), and the id is stamped per collider BODY, not per polygon. It shows what the engine will select, not the material data.");
     }
 
     // Releases this pass's drawings before the next show rebuilds from the live tree.

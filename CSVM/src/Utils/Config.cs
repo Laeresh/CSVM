@@ -83,7 +83,7 @@ public static class Config
         string path = ProjectSettings.GlobalizePath(resPath);
         if (!File.Exists(path))
         {
-            Log.Info("core", $"config absent file={resPath} — using in-code defaults");
+            Log.Info("core", $"config absent file={resPath}, using in-code defaults");
             return;
         }
         try
@@ -96,7 +96,7 @@ public static class Config
             var doc = JsonDocument.Parse(File.ReadAllBytes(path), opts);
             if (doc.RootElement.ValueKind != JsonValueKind.Object)
             {
-                Log.Error("core", $"config root is not a JSON object file={resPath} — ignoring the file");
+                Log.Error("core", $"config root is not a JSON object file={resPath}, ignoring the file");
                 doc.Dispose();
                 return;
             }
@@ -107,7 +107,7 @@ public static class Config
         }
         catch (JsonException e)
         {
-            Log.Error("core", $"config is not valid JSON file={resPath} — using in-code defaults", e);
+            Log.Error("core", $"config is not valid JSON file={resPath}, using in-code defaults", e);
             _values.Clear();
         }
     }
@@ -188,7 +188,7 @@ public static class Config
             {
                 if (!_registry.ContainsKey(key))
                 {
-                    Log.Warn("core", $"config key matches no tunable key={key} — ignored (typo? wrong block?)");
+                    Log.Warn("core", $"config key matches no tunable key={key}, ignored (typo? wrong block?)");
                 }
             }
         }
@@ -342,7 +342,7 @@ public static class Config
         }
         if (firstMiss)
         {
-            Log.Info("core", $"config key absent key={key} — using its in-code default");
+            Log.Info("core", $"config key absent key={key}, using its in-code default");
         }
         return false;
     }
@@ -356,7 +356,7 @@ public static class Config
         }
         if (first)
         {
-            Log.Warn("core", $"config key is wrong-typed key={key} got={got} want={want} — using its in-code default");
+            Log.Warn("core", $"config key is wrong-typed key={key} got={got} want={want}, using its in-code default");
         }
     }
 }

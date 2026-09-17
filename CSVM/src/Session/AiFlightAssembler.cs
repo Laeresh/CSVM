@@ -202,7 +202,7 @@ internal sealed class AiFlightAssembler
                 else
                 {
                     string armed = stats.AiDefName ?? stats.DefName;
-                    Log.Warn("weapons", $"ai: no weapons block on '{armed}' and no stock loadout for '{stats.DefName}' — this plane flies unarmed");
+                    Log.Warn("weapons", $"ai: no weapons block on '{armed}' and no stock loadout for '{stats.DefName}', this plane flies unarmed");
                 }
                 if (controller.Loadout != null)
                 {
@@ -213,7 +213,7 @@ internal sealed class AiFlightAssembler
             }
             catch (Exception e)
             {
-                Log.Warn("weapons", $"ai: loadout bind failed for '{stats.DefName}' — this plane flies unarmed error={e.Message}");
+                Log.Warn("weapons", $"ai: loadout bind failed for '{stats.DefName}', this plane flies unarmed error={e.Message}");
             }
 
             // The carried turret gunners, built as the player's are and independent of the loadout
@@ -452,7 +452,7 @@ internal sealed class AiFlightAssembler
         }
         catch (Exception e)
         {
-            GD.PushWarning($"ai: no mode machine — cannot load skills/maneuvers: {e.Message}");
+            GD.PushWarning($"ai: no mode machine, cannot load skills/maneuvers: {e.Message}");
         }
     }
 

@@ -63,7 +63,7 @@ internal static class MenuJourneySuites
         menu.Drive(Up);
         Is(ctx, "the last row is the Options door", LaunchMenu.OptionsRow, menu.ShownRowText);
         menu.Drive(Down);
-        Is(ctx, "Free Flight's description", "Explore the map freely — no objectives, no clock.", menu.ShownDetail);
+        Is(ctx, "Free Flight's description", "Explore the map freely, no objectives, no clock.", menu.ShownDetail);
         Has(ctx, "the top level's Back is Quit", "Esc / B  Quit", menu.ShownFooter);
         Is(ctx, "joining is not open here", "(other players join at aircraft select)", menu.ShownJoinHint);
     }
@@ -75,7 +75,7 @@ internal static class MenuJourneySuites
         Is(ctx, "its heading", "SELECT MAP", menu.ShownHeading);
         Is(ctx, "its breadcrumb names the mode", "Free Flight  ›  Map  ›  Aircraft", menu.ShownBreadcrumb);
         ctx.Check(menu.ShownRowCount == 8, $"Free Flight offers all eight chapters ({menu.ShownRowCount})");
-        Is(ctx, "the first row", "Sea Haven (night) — IA: an airfield", menu.ShownRowText);
+        Is(ctx, "the first row", "Sea Haven (night), IA: an airfield", menu.ShownRowText);
         Is(ctx, "its description is the region code", "Region C1", menu.ShownDetail);
         Has(ctx, "Back here is Back, not Quit", "Esc / B  Back", menu.ShownFooter);
 
@@ -96,7 +96,7 @@ internal static class MenuJourneySuites
 
         menu.Drive(Up);
         menu.Drive(Up);
-        Is(ctx, "the pick for the launch below", "New York — IA: Manhattan", menu.ShownRowText);
+        Is(ctx, "the pick for the launch below", "New York, IA: Manhattan", menu.ShownRowText);
     }
 
     private static void AircraftScreen(TestContext ctx, LaunchMenu menu, Exits<LaunchExit> launches)
@@ -104,7 +104,7 @@ internal static class MenuJourneySuites
         menu.Drive(Accept);
         Is(ctx, "Accept on a chapter opens the Aircraft screen", "Plane", menu.ShownScreen);
         Is(ctx, "its heading", "SELECT AIRCRAFT", menu.ShownHeading);
-        Is(ctx, "its breadcrumb names the chapter", "Free Flight  ›  New York — IA: Manhattan  ›  Aircraft", menu.ShownBreadcrumb);
+        Is(ctx, "its breadcrumb names the chapter", "Free Flight  ›  New York, IA: Manhattan  ›  Aircraft", menu.ShownBreadcrumb);
         Is(ctx, "the cursor opens on the roster's first airframe", "Autogyro", menu.ShownRowText);
         ctx.Check(menu.ShownRowCount >= 11, $"the roster holds the eleven stock airframes at least ({menu.ShownRowCount})");
         Has(ctx, "the focused airframe's stats line", "Top Speed", menu.ShownDetail);
@@ -134,7 +134,7 @@ internal static class MenuJourneySuites
         ctx.Check(menu.ShownScreen == "Plane" && menu.ShownHeading == "SELECT AIRCRAFT" && menu.ShownRowText == "Balmoral",
             $"Back on a selected airframe unselects it and keeps the cursor ({menu.ShownHeading}, {menu.ShownRowText})");
         menu.Drive(Back);
-        ctx.Check(menu.ShownScreen == "Chapter" && menu.ShownRowText == "New York — IA: Manhattan",
+        ctx.Check(menu.ShownScreen == "Chapter" && menu.ShownRowText == "New York, IA: Manhattan",
             $"Back while browsing returns to the Chapter screen on the same chapter ({menu.ShownScreen}, {menu.ShownRowText})");
         menu.Drive(Accept);
         ctx.Check(menu.ShownScreen == "Plane" && menu.ShownRowText == "Balmoral",
@@ -172,7 +172,7 @@ internal static class MenuJourneySuites
         ctx.Check(menu.ShownScreen == "Mode" && menu.ShownRow == 0,
             $"a bare launch's return re-enters on the Mode screen ({menu.ShownScreen}, row {menu.ShownRow})");
         menu.Drive(Accept);
-        ctx.Check(menu.ShownScreen == "Chapter" && menu.ShownRowText == "New York — IA: Manhattan",
+        ctx.Check(menu.ShownScreen == "Chapter" && menu.ShownRowText == "New York, IA: Manhattan",
             $"the chapter cursor survives the flight ({menu.ShownRowText})");
         menu.Drive(Accept);
         ctx.Check(menu.ShownHeading == "SELECT AIRCRAFT" && menu.ShownRowText == "Balmoral",
@@ -226,7 +226,7 @@ internal static class MenuJourneySuites
         menu.ShowMenu();
         menu.Drive(Accept);
         menu.Drive(Accept);
-        Is(ctx, "two seats split the Aircraft screen", "SELECT AIRCRAFT — ALL PLAYERS", menu.ShownHeading);
+        Is(ctx, "two seats split the Aircraft screen", "SELECT AIRCRAFT: ALL PLAYERS", menu.ShownHeading);
         menu.Drive(Accept);
         menu.Drive(Accept);
         ctx.Check(launches.Count == 1,

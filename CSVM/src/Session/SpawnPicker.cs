@@ -127,7 +127,7 @@ public sealed class SpawnPicker : IFlightStarts
             // Silent with no mission to read (a lab, a headless test): that is not a data problem.
             // A mission that HAS a zrdr and still has no record is, so that one says so.
             if (!string.IsNullOrEmpty(missionZrdrPath))
-                Log.Warn("flight", $"no PLAYER_INIT for {_spec.Chapter}/{_spec.Mission} — starting on the shipped-majority throttle/speed");
+                Log.Warn("flight", $"no PLAYER_INIT for {_spec.Chapter}/{_spec.Mission}, starting on the shipped-majority throttle/speed");
             return (instantAction ? SpawnPoints.InstantActionThrottleFrac : SpawnPoints.DefaultThrottleFrac,
                 SpawnPoints.DefaultSpeedMps);
         }
@@ -174,7 +174,7 @@ public sealed class SpawnPicker : IFlightStarts
         if (SpawnPoints.LoadPlayerInit(missionZrdrPath) is { } init)
             return LogSpawn("PLAYER_INIT", init.Spawn);
 
-        GD.PushWarning($"no ia.json / PLAYER_INIT spawn for {_spec.Chapter}/{_spec.Mission} — using fallback spawn");
+        GD.PushWarning($"no ia.json / PLAYER_INIT spawn for {_spec.Chapter}/{_spec.Mission}, using fallback spawn");
         return (new Vector3(-6200, 500, -3300), new Vector3(-5700, 350, -6300));
     }
 

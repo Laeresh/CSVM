@@ -382,7 +382,7 @@ public class FlightHudMappingTests
     {
         var hud = new FlightHud();
         var halted = new FlightHudState { Halted = true, Crashed = true };
-        Assert.Contains("⏸ PAUSED — . steps one frame",
+        Assert.Contains("⏸ PAUSED (. steps one frame)",
             hud.ComposeTextLines(in halted, mph: 0f, ft: 0f, wide: false));
 
         // The respawn prompt is its own centred line, so the crash adds nothing to the block.

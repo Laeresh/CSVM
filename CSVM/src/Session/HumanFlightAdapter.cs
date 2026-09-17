@@ -269,7 +269,7 @@ internal sealed class HumanFlightAdapter
         }
         else if (verbose)
         {
-            Log.Info("flight", $"weapons: no stock loadout for '{loadoutDefName}' — unarmed");
+            Log.Info("flight", $"weapons: no stock loadout for '{loadoutDefName}', unarmed");
         }
 
         // The carried turret gunners: the vehicle def's thirdp turrets block resolved
@@ -303,7 +303,7 @@ internal sealed class HumanFlightAdapter
         }
         else
         {
-            GD.PushWarning("no airframe collision boxes — falling back to the center ray");
+            GD.PushWarning("no airframe collision boxes, falling back to the center ray");
         }
         if (verbose && controller.Damage != null)
         {
@@ -371,7 +371,7 @@ internal sealed class HumanFlightAdapter
             controller.Visuals = BuildDamageVisuals(planeBuilder, planeModel, stats, _world.CrashProgram);
             if (verbose)
                 Log.Info("flight",
-                    $"damage visuals: {controller.Visuals.PanelCount} panels — authored stage anims via the rig runtime");
+                    $"damage visuals: {controller.Visuals.PanelCount} panels, authored stage anims via the rig runtime");
         }
 
         // The data-driven crash rig is built AFTER the controller enters the tree

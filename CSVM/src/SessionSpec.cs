@@ -982,7 +982,7 @@ public sealed record SessionSpec
                 s.ShowColliders = want == "show";
                 if (!s.ShowColliders && want.Length > 0)
                 {
-                    notes.Add(new Note("world", $"--collision='{want}' is not a value it takes (only '=show', which opens the C overlay) — building collision anyway"));
+                    notes.Add(new Note("world", $"--collision='{want}' is not a value it takes (only '=show', which opens the C overlay), building collision anyway"));
                 }
             }
             else if (arg == "--debug-colliders") { s.ShowColliders = true; }
@@ -995,7 +995,7 @@ public sealed record SessionSpec
                     .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
                 if (names.Length == 0)
                 {
-                    notes.Add(new Note("world", "--clutter-templates= names no templates — keeping the chapter's own list"));
+                    notes.Add(new Note("world", "--clutter-templates= names no templates, keeping the chapter's own list"));
                 }
                 else
                 {
@@ -1011,7 +1011,7 @@ public sealed record SessionSpec
                 }
                 else
                 {
-                    notes.Add(new Note("world", $"--map-edge-block='{want}' is not a cell count >= 1 — keeping the chapter's measured default"));
+                    notes.Add(new Note("world", $"--map-edge-block='{want}' is not a cell count >= 1, keeping the chapter's measured default"));
                 }
             }
             else if (arg.StartsWith("--map-edge-mode="))
@@ -1020,7 +1020,7 @@ public sealed record SessionSpec
                 s.MapEdgeRepeat = want != "mirror";
                 if (s.MapEdgeRepeat && want != "repeat")
                 {
-                    notes.Add(new Note("world", $"--map-edge-mode='{want}' is not a mode it takes (mirror|repeat) — keeping 'repeat', the behaviour the original was A/B'd against"));
+                    notes.Add(new Note("world", $"--map-edge-mode='{want}' is not a mode it takes (mirror|repeat), keeping 'repeat', the behaviour the original was A/B'd against"));
                 }
             }
             else if (arg == "--debug-damage") { s.DebugDamage ??= ""; }
@@ -1192,7 +1192,7 @@ public sealed record SessionSpec
                 }
                 else if (!string.Equals(want, "orbit", StringComparison.OrdinalIgnoreCase))
                 {
-                    notes.Add(new Note("ui", $"--weapon-camera={want} is not free/orbit/<frames> — keeping the orbit camera"));
+                    notes.Add(new Note("ui", $"--weapon-camera={want} is not free/orbit/<frames>, keeping the orbit camera"));
                 }
             }
             else if (arg == "--weapon-click") { s.WeaponClick = true; s.HasContentArg = true; }
@@ -1216,7 +1216,7 @@ public sealed record SessionSpec
                 }
                 else if (!string.Equals(want, "aim", StringComparison.OrdinalIgnoreCase))
                 {
-                    notes.Add(new Note("ui", $"--weapon-click={want} is not x,y[,aim] — clicking the viewport centre instead"));
+                    notes.Add(new Note("ui", $"--weapon-click={want} is not x,y[,aim], clicking the viewport centre instead"));
                 }
                 else
                 {
@@ -1244,7 +1244,7 @@ public sealed record SessionSpec
                 else
                 {
                     s.CampaignProfile = val;
-                    notes.Add(new Note("core", $"--campaign={val} has no ':<seq>' mission index — profile only, no mission chosen"));
+                    notes.Add(new Note("core", $"--campaign={val} has no ':<seq>' mission index, profile only, no mission chosen"));
                 }
                 s.HasContentArg = true;
             }
@@ -1274,7 +1274,7 @@ public sealed record SessionSpec
                 }
                 else
                 {
-                    notes.Add(new Note("world", $"--graphics={want} is not original/enhanced — keeping the config key's value"));
+                    notes.Add(new Note("world", $"--graphics={want} is not original/enhanced, keeping the config key's value"));
                 }
             }
             else if (arg == "--dump-mips") { s.DumpMips = true; }
@@ -1303,12 +1303,12 @@ public sealed record SessionSpec
                 string want = arg["--volume=".Length..];
                 if (!float.TryParse(want, NumberStyles.Float, CultureInfo.InvariantCulture, out float volume))
                 {
-                    notes.Add(new Note("core", $"--volume={want} is not a number (0-1) — leaving the volume alone"));
+                    notes.Add(new Note("core", $"--volume={want} is not a number (0-1), leaving the volume alone"));
                 }
                 else if (volume is < 0f or > 1f)
                 {
                     s.Volume = Math.Clamp(volume, 0f, 1f);
-                    notes.Add(new Note("core", $"--volume={want} is outside 0-1 — using {s.Volume}"));
+                    notes.Add(new Note("core", $"--volume={want} is outside 0-1, using {s.Volume}"));
                 }
                 else
                 {
@@ -1344,7 +1344,7 @@ public sealed record SessionSpec
                     s.View = ParseView(want);
                     if (s.View == 0)
                     {
-                        notes.Add(new Note("core", $"--view={want} is not a numpad view (1-4, 6-9), 'back', 'flyby', or a view mode (chase/cockpit/nose) — using the chase camera"));
+                        notes.Add(new Note("core", $"--view={want} is not a numpad view (1-4, 6-9), 'back', 'flyby', or a view mode (chase/cockpit/nose), using the chase camera"));
                     }
                 }
             }
@@ -1357,7 +1357,7 @@ public sealed record SessionSpec
                 }
                 else
                 {
-                    notes.Add(new Note("core", $"--look={want} is not an x,y pair — leaving the look stick centred"));
+                    notes.Add(new Note("core", $"--look={want} is not an x,y pair, leaving the look stick centred"));
                 }
             }
         }
@@ -1823,7 +1823,7 @@ public sealed record SessionSpec
         if (WeaponSurface is { } wantSurface && Mech3.SurfaceRegistry.IdForName(wantSurface) == null)
         {
             Warn("ui", $"--weapon-surface={wantSurface} is not a surface-registry name "
-                       + $"({string.Join('/', Mech3.SurfaceRegistry.Names)}) — ignoring it");
+                       + $"({string.Join('/', Mech3.SurfaceRegistry.Names)}), ignoring it");
             WeaponSurface = null;
         }
         // A non-flight mode that won the arbitration above would silently leave the weapon lab
@@ -2015,7 +2015,7 @@ public sealed record SessionSpec
         string kept = filter(spec, rejected);
         foreach (var token in rejected)
         {
-            Warn("ui", $"{what} '{token}' {wanted} — ignoring it");
+            Warn("ui", $"{what} '{token}' {wanted}, ignoring it");
         }
         return kept;
     }
@@ -2031,7 +2031,7 @@ public sealed record SessionSpec
         }
         else
         {
-            Warn("world", $"--mips='{value}' is neither 'authored' nor 'generated' — "
+            Warn("world", $"--mips='{value}' is neither 'authored' nor 'generated', "
                           + $"keeping {Mips.ToString().ToLowerInvariant()}");
         }
     }

@@ -152,21 +152,21 @@ public class FlightConstantInventoryTests
 
         var added = live.Keys.Where(k => !known.ContainsKey(k)).OrderBy(k => k, StringComparer.Ordinal).ToList();
         Assert.True(added.Count == 0,
-            $"unclassified plant constant(s): {string.Join(", ", added)} — add a row to "
+            $"unclassified plant constant(s): {string.Join(", ", added)}, add a row to "
             + "FlightConstantInventoryTests.Inventory and its evidence to docs/org/flightModel.md, "
             + "\"The plant's constant inventory\". A constant with no provenance is a fitted "
             + "constant until someone proves otherwise");
 
         var gone = known.Keys.Where(k => !live.ContainsKey(k)).OrderBy(k => k, StringComparer.Ordinal).ToList();
         Assert.True(gone.Count == 0,
-            $"the inventory names constant(s) the plant no longer has: {string.Join(", ", gone)} — "
+            $"the inventory names constant(s) the plant no longer has: {string.Join(", ", gone)}, "
             + "delete the row here and the matching row in docs/org/flightModel.md");
 
         foreach (var (key, value) in live.OrderBy(x => x.Key, StringComparer.Ordinal))
         {
             var row = known[key];
             Assert.True(Math.Abs(value - row.Value) <= Math.Abs(row.Value) * 1e-6 + 1e-9,
-                $"{key} is {value:R}, the inventory records {row.Value:R} as {row.Class} — a moved "
+                $"{key} is {value:R}, the inventory records {row.Value:R} as {row.Class}, a moved "
                 + "value needs its evidence re-checked in docs/org/flightModel.md before the row "
                 + "here is updated to match it");
         }
@@ -183,7 +183,7 @@ public class FlightConstantInventoryTests
         {
             double v = LiveConstants()[$"FlightModel.{axis}"];
             Assert.True(v == 1.0,
-                $"{axis} is {v:R} — the original's torque chain carries no per-axis factor "
+                $"{axis} is {v:R}, the original's torque chain carries no per-axis factor "
                 + "(docs/org/flightModel.md, \"The *Tune rates\"), so restoring one needs a "
                 + "mechanism traced in the binary and never a rate timed off footage");
         }
@@ -208,7 +208,7 @@ public class FlightConstantInventoryTests
 
         Assert.True(ConfigKeys.SequenceEqual(keys),
             $"the flightModel config block is [{string.Join(", ", keys)}] against the accounted-for "
-            + $"[{string.Join(", ", ConfigKeys)}] — every key overrides one inventory row, so add "
+            + $"[{string.Join(", ", ConfigKeys)}], every key overrides one inventory row, so add "
             + "or drop the row alongside it");
     }
 
@@ -225,7 +225,7 @@ public class FlightConstantInventoryTests
             var (peak, where) = FastestFlight(stats);
             Assert.True(peak < 1.35f,
                 $"{plane}: peak speed reaches {peak:0.000} x fd_speed ({where}) against the "
-                + "MaxDiveSpeedFrac backstop at 1.75 — the cap is close enough to bind, and a bound "
+                + "MaxDiveSpeedFrac backstop at 1.75, the cap is close enough to bind, and a bound "
                 + "cap reports itself instead of the model's own terminal speed");
         }
     }
@@ -239,7 +239,7 @@ public class FlightConstantInventoryTests
         var stats = PlaneStats.Load(ZrdrPath, "player_bhawk");
         var (peak, where) = FastestFlight(stats);
         Assert.True(peak > 1.05f,
-            $"player_bhawk: the fastest manoeuvre peaks at only {peak:0.000} x fd_speed ({where}) — "
+            $"player_bhawk: the fastest manoeuvre peaks at only {peak:0.000} x fd_speed ({where}), "
             + "it has gone too gentle to approach any cap, so the dive-cap disproof measures nothing");
     }
 
@@ -255,7 +255,7 @@ public class FlightConstantInventoryTests
             "player_bhawk: a 22° full-throttle climb from 1900 m never crossed the 2000 m band edge, "
             + "so this measures nothing");
         Assert.True(m.Position.Y < apexM - 50f,
-            $"player_bhawk: the climb apexed at {apexM:0.0} m and is still at {m.Position.Y:0.0} m — "
+            $"player_bhawk: the climb apexed at {apexM:0.0} m and is still at {m.Position.Y:0.0} m, "
             + "the thin band above 2000 m must stop the climb and let it fall back "
             + "(docs/org/flightModel.md, \"The resting altitude cap is the atmosphere band edge\")");
     }
@@ -275,7 +275,7 @@ public class FlightConstantInventoryTests
             float above = apexM - BandEdgeM;
             Assert.True(above > 0.3f * ballistic && above < 1.5f * ballistic,
                 $"{plane}: crossed the edge at {crossingVy:0.0} m/s and apexed {above:0.0} m above it, "
-                + $"against the {ballistic:0.0} m a frictionless coast buys — the height above the edge "
+                + $"against the {ballistic:0.0} m a frictionless coast buys, the height above the edge "
                 + "must come from the climb, not from a constant");
         }
     }

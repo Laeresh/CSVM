@@ -257,7 +257,7 @@ public sealed partial class NodeLabels : Node
             _pool[i].Visible = false;
 
         if (_hud != null)
-            _hud.Text = $"node labels: {_mode} — {shown} shown"
+            _hud.Text = $"node labels: {_mode}, {shown} shown"
                         + (hidden > 0 ? $", {hidden} hidden (overlap / cap {MaxLabels})" : "")
                         + $" within {Radius:0} m";
     }

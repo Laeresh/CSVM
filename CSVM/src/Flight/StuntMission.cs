@@ -327,7 +327,7 @@ public sealed class StuntMission
     /// and is not a property of the run.</summary>
     public string StatusLine() =>
         AllComplete
-            ? $"STUNT {CompletedCount}/{TotalCount} — COMPLETE"
+            ? $"STUNT {CompletedCount}/{TotalCount} COMPLETE"
             : $"STUNT {CompletedCount}/{TotalCount}";
 
     // The anchor point for a dzone whose ia.json record names world geometry rather than a `dzN`
@@ -367,7 +367,7 @@ public sealed class StuntMission
         var anchor = merged!.Value.GetCenter();
         string meshesDesc = hasDoorPair ? $"the {doorCount} door leaves of its {boxes.Count} meshes"
                                          : $"all {boxes.Count} of its meshes";
-        Log.Info("flight", $"stunt: {node.Name} is world geometry, not a dz marker — anchored on {meshesDesc} at ({anchor.X:0.0}, {anchor.Y:0.0}, {anchor.Z:0.0}) instead of its node origin ({origin.X:0.0}, {origin.Y:0.0}, {origin.Z:0.0})");
+        Log.Info("flight", $"stunt: {node.Name} is world geometry, not a dz marker, anchored on {meshesDesc} at ({anchor.X:0.0}, {anchor.Y:0.0}, {anchor.Z:0.0}) instead of its node origin ({origin.X:0.0}, {origin.Y:0.0}, {origin.Z:0.0})");
         return anchor;
     }
 
@@ -513,7 +513,7 @@ public sealed class StuntMission
         z.CompletedAt = Elapsed;      // cumulative run time, the scoreboard derives splits
         z.CompletionOrder = CompletedCount; // 0-based, before the increment below
         CompletedCount++;
-        Log.Info("flight", $"stunt: {LogTag}completed {z.DzName} — {z.MarkerText()} ({CompletedCount}/{TotalCount})");
+        Log.Info("flight", $"stunt: {LogTag}completed {z.DzName}, {z.MarkerText()} ({CompletedCount}/{TotalCount})");
         ZoneCompleted?.Invoke(z);
         if (CompletedCount >= _zones.Count && !AllComplete)
         {

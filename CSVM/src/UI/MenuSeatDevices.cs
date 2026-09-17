@@ -93,7 +93,7 @@ public sealed class MenuSeatDevices
             int pad = PadOf(seats[i].Source);
             if (pad >= 0 && !connected.Contains(pad))
             {
-                Log.Info("ui", $"launchscreen: P{i + 1}'s pad {pad} disconnected — player left");
+                Log.Info("ui", $"launchscreen: P{i + 1}'s pad {pad} disconnected, player left");
                 _setup.Unjoin(seats[i]);
                 dirty = true;
             }
@@ -101,7 +101,7 @@ public sealed class MenuSeatDevices
 
         if (P1Pad >= 0 && !connected.Contains(P1Pad))
         {
-            Log.Info("ui", $"launchscreen: P1's pad {P1Pad} disconnected — back to keyboard + any free pad");
+            Log.Info("ui", $"launchscreen: P1's pad {P1Pad} disconnected, back to keyboard + any free pad");
             P1Pad = -1;
             dirty = true;
         }

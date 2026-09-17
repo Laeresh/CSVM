@@ -297,7 +297,7 @@ public static class TestHarness
             counts.TryGetValue(allowance.Pattern, out int n);
             if (n > allowance.Max)
             {
-                overCap.Add($"{allowance.Pattern} seen {n}x, allowed {allowance.Max}x — {allowance.Why}");
+                overCap.Add($"{allowance.Pattern} seen {n}x, allowed {allowance.Max}x, {allowance.Why}");
             }
         }
         return new StderrScreen
@@ -449,7 +449,7 @@ public static class TestHarness
         }
         if (screen == null)
         {
-            sb.AppendLine($"  SKIP  engine errors    — no --log-file, native ERROR lines not screened"
+            sb.AppendLine($"  SKIP  engine errors  no --log-file, native ERROR lines not screened"
                           + (logPath != null ? $" ({logPath})" : ""));
         }
         else

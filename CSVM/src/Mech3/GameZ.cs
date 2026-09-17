@@ -648,7 +648,7 @@ public sealed class GameZ
             mat.SoilId = SoilLabelToId.TryGetValue(soilLabel, out var soilId)
                 ? soilId
                 : throw new FormatException(
-                    $"Unknown material soil label '{soilLabel}' — the extractor's surface-id " +
+                    $"Unknown material soil label '{soilLabel}', the extractor's surface-id " +
                     "registry may have changed; GameZ.SoilLabelToId needs a new entry.");
             if (prop.Name == "Textured")
             {

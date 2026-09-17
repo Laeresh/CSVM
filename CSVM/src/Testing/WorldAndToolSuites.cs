@@ -1409,7 +1409,7 @@ internal static class WorldAndToolSuites
     // nothing about C1 looking correct would tell you a flare rig had started building there.
     // Data-only on purpose, so it stays a fast suite rather than a third eight-chapter world sweep.
     [Suite("lens-flare-gates",
-        "the sun's lens flare is gated on chapter data alone, and its two independent gates — the gamez `sun` node and init.gw's LensFlareTexture slots — agree chapter by chapter, in C2 and C3 and nowhere else (BL-165)")]
+        "the sun's lens flare is gated on chapter data alone, and its two independent gates (the gamez `sun` node and init.gw's LensFlareTexture slots) agree chapter by chapter, in C2 and C3 and nowhere else (BL-165)")]
     internal static void LensFlareGates(TestContext ctx)
     {
         ctx.RequireData(ctx.InterpPath, $"interp.json");
@@ -1446,7 +1446,7 @@ internal static class WorldAndToolSuites
         ctx.Same(2, withFlare, $"chapters authoring a lens flare");
         // ⚠ C2's flare is PREDICTED, not verified: the data says it has one and there is no
         // footage of it. Only C3 was ever captured.
-        ctx.Note($"C2's flare is predicted from data only — no capture of the original exists");
+        ctx.Note($"C2's flare is predicted from data only, no capture of the original exists");
     }
 
     // ---- node lab tree rows must follow live Visible --------------------------------------------
@@ -1647,7 +1647,7 @@ internal static class WorldAndToolSuites
     // AudioStreamPlayer3D finds no listener in range, clears its bus volumes, and every 3D emitter in
     // the world is silent, with nothing logged or counted to say so.
     [Suite("splitscreen-listeners",
-        "every 2–4P pane is a 3D audio listener, which a SubViewport is not by default — the "
+        "every 2–4P pane is a 3D audio listener, which a SubViewport is not by default, the "
         + "pinned listener model (A2), and the one thing standing between splitscreen and a "
         + "world with no listener at all")]
     internal static void SplitscreenListeners(TestContext ctx)
@@ -1716,7 +1716,7 @@ internal static class WorldAndToolSuites
         lights.Add(farFromP1, Colors.White, 1f, 10f);
         lights.Commit(new[] { p1, p2 });
         ctx.Check(lights.CommittedPositions.Contains(farFromP1),
-            $"the same light stays committed once a second viewer sits 100 m from it — nearest, not P1 alone");
+            $"the same light stays committed once a second viewer sits 100 m from it, nearest, not P1 alone");
 
         // The MaxActive budget's Significance rank must answer to the same nearest-viewer rule, not just
         // the fade: the 16-slot budget is packed with filler lights strictly farther from P1 than besideP2

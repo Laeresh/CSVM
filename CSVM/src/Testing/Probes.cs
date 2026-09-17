@@ -117,7 +117,7 @@ public static class Probes
         r.Requested = wanted.Count;
 
         var sb = new StringBuilder();
-        sb.AppendLine($"# Aircraft marker rig — {planesGamezPath}");
+        sb.AppendLine($"# Aircraft marker rig: {planesGamezPath}");
         sb.AppendLine("# Positions are plane frame, metres (nose -Z, right +X, up +Y). See docs/formats/markers.md.");
         sb.AppendLine();
         foreach (var (model, display) in wanted)
@@ -128,7 +128,7 @@ public static class Probes
                 // Recorded, not swallowed: a silently skipped airframe would reduce the final
                 // count with nothing naming it.
                 r.Missing.Add(model);
-                sb.AppendLine($"=== {display} ({model}) — root node not found ===").AppendLine();
+                sb.AppendLine($"=== {display} ({model}): root node not found ===").AppendLine();
                 continue;
             }
             sb.Append(rig.Format(display)).AppendLine();
@@ -165,7 +165,7 @@ public static class Probes
         r.EmptyClipSound = weapons.EmptyClipSound;
 
         var sb = new StringBuilder();
-        sb.AppendLine($"# weapons.json — {zrdrPath}");
+        sb.AppendLine($"# weapons.json: {zrdrPath}");
         sb.AppendLine($"# {weapons.All.Count} BALLISTICS entries; empty-clip sound = {weapons.EmptyClipSound}");
         sb.AppendLine("# See docs/formats/weapons.md.");
         sb.AppendLine();
@@ -227,7 +227,7 @@ public static class Probes
         r.Text = sb.ToString();
         r.Summary = r.UnhandledTotal == 0
             ? $"weapons dump: {r.Shown} entr(y/ies) of {r.Total}, NO unhandled keys"
-            : $"weapons dump: {r.Shown} entr(y/ies) of {r.Total}, {r.UnhandledTotal} UNHANDLED key(s) — see the !! lines above";
+            : $"weapons dump: {r.Shown} entr(y/ies) of {r.Total}, {r.UnhandledTotal} UNHANDLED key(s), see the !! lines above";
         return r;
     }
 
@@ -259,8 +259,8 @@ public static class Probes
 
         var sb = new StringBuilder();
         sb.AppendLine(forRig
-            ? "# Full-rig lab loadouts (Loadout.ForRig) — every firepoint/pylon, seeded from stock_loadouts.json"
-            : "# Stock loadouts bound to models — CSVM/data/stock_loadouts.json");
+            ? "# Full-rig lab loadouts (Loadout.ForRig): every firepoint/pylon, seeded from stock_loadouts.json"
+            : "# Stock loadouts bound to models: CSVM/data/stock_loadouts.json");
         if (loadoutOverride != null)
         {
             sb.AppendLine($"# --loadout override: binding every plane to '{loadoutOverride}'");
@@ -342,7 +342,7 @@ public static class Probes
         r.Text = sb.ToString();
         r.Summary = r.Failed == 0
             ? $"loadout dump: {r.Bound} plane(s) bound, every marker resolved"
-            : $"loadout dump: {r.Bound} ok, {r.Failed} FAILED — see the !! lines above";
+            : $"loadout dump: {r.Bound} ok, {r.Failed} FAILED, see the !! lines above";
         return r;
     }
 
@@ -370,7 +370,7 @@ public static class Probes
         }
 
         var sb = new StringBuilder();
-        sb.AppendLine($"# Texture mip chains — {chapter}, {texturesPath}");
+        sb.AppendLine($"# Texture mip chains: {chapter}, {texturesPath}");
         sb.AppendLine($"# policy: --mips={TextureArchive.Mips.ToString().ToLowerInvariant()}");
         float bias = TextureArchive.MipBias(interpPath, chapter);
         sb.AppendLine($"# mip LOD bias: adjust.gw MipBias={bias:0.##}; level N is first sampled at "
@@ -378,7 +378,7 @@ public static class Probes
                       + $"L1 at {Math.Pow(2.0, 1.0 - bias):0.###} texels per pixel.");
         sb.AppendLine($"# {textures.AuthoredMipBases.Count} base texture(s) ship an authored level; "
                       + $"{textures.AuthoredMipsAvailable} level(s) in all.");
-        sb.AppendLine("# 'px>128' is the share of pixels above luminance 128 — what the artists kept "
+        sb.AppendLine("# 'px>128' is the share of pixels above luminance 128, what the artists kept "
                       + "and a box filter averages away.");
         sb.AppendLine();
 
@@ -456,7 +456,7 @@ public static class Probes
         }
 
         var sb = new StringBuilder();
-        sb.AppendLine($"# AI data families — {dataRoot}");
+        sb.AppendLine($"# AI data families: {dataRoot}");
         sb.AppendLine("# nets (patrol graphs), aiv (rosters), ai.zrd (turrets), zeppelins, egen (generators)");
         sb.AppendLine("# See docs/formats/ai-nets.md, ai-rosters.md, turrets.md, mission-entities.md.");
         sb.AppendLine();
@@ -483,7 +483,7 @@ public static class Probes
                 }
             }
             r.TurretEntries = entries.Count;
-            sb.AppendLine($"=== turrets — {sharedZrdrPath}/ai.json ===");
+            sb.AppendLine($"=== turrets: {sharedZrdrPath}/ai.json ===");
             sb.AppendLine($"  {r.TurretEntries} TURRET entries "
                 + $"({carried} CREATE_STANDALONE/carried, {r.TurretEntries - carried} NODES/world emplacements)");
             sb.AppendLine();
@@ -491,7 +491,7 @@ public static class Probes
         catch (Exception e)
         {
             r.Errors.Add($"turrets: {e.Message}");
-            sb.AppendLine($"=== turrets — FAILED: {e.Message} ===").AppendLine();
+            sb.AppendLine($"=== turrets FAILED: {e.Message} ===").AppendLine();
         }
 
         foreach (var chapter in chapters)
@@ -505,7 +505,7 @@ public static class Probes
             catch (Exception e)
             {
                 r.Errors.Add($"{chapter} nets: {e.Message}");
-                sb.AppendLine($"=== {chapter} — nets FAILED: {e.Message} ===").AppendLine();
+                sb.AppendLine($"=== {chapter}: nets FAILED: {e.Message} ===").AppendLine();
                 continue;
             }
             r.NetFiles += nets.Count;
@@ -598,7 +598,7 @@ public static class Probes
         r.Summary = r.Errors.Count == 0
             ? $"ai dump: {r.NetFiles} net(s), {r.AivBlocks} aiv block(s)/{r.AivFiles} file(s), "
               + $"{r.TurretEntries} turret(s), {r.ZeppelinRecords} zeppelin(s), {r.GeneratorRecords} generator(s)"
-            : $"ai dump: {r.Errors.Count} ERROR(s) — see the FAILED/!! lines above";
+            : $"ai dump: {r.Errors.Count} ERROR(s), see the FAILED/!! lines above";
         return r;
     }
 
@@ -769,7 +769,7 @@ public static class Probes
         var sb = new StringBuilder();
         string mode = damageHd > 0f ? $"weapon hits, {damageHd:0.##} HEALTH_DAMAGE each" : "continuous HP sweep";
         string kind = damageHd > 0f ? "destructible def(s)" : "DAMAGE_SEQUENCE def(s)";
-        sb.AppendLine($"damage-test: chapter {chapter}, filter '{filter}', mode = {mode} — "
+        sb.AppendLine($"damage-test: chapter {chapter}, filter '{filter}', mode = {mode}, "
             + $"{chosen.Count} {kind} of {result.TotalInstances} destructible instance(s)");
         foreach (var inst in chosen)
         {
@@ -1292,7 +1292,7 @@ public static class Probes
         Run(m, 1f, 180f, pitch: 0f, watch: watch);
         Row("level-top-speed", "level full throttle held to equilibrium", "mph",
             m.Speed / Mph, LevelTopSpeedMph, 0.5,
-            $"fd_speed = {fd / Mph:0.0} mph, α {m.Alpha:0.0}° — target is the decoded lever-1 "
+            $"fd_speed = {fd / Mph:0.0} mph, α {m.Alpha:0.0}°, target is the decoded lever-1 "
             + "solve (PartThrottleEquilibriumTests); the filmed 300.40 is discarded");
 
         // --- acceleration. The force path is byte-verified against the binary with nothing fitted,
@@ -1301,7 +1301,7 @@ public static class Probes
         m = Fresh(stats, Level(), 150f * Mph, 1f);
         double tAccel = RunUntil(m, 1f, 30f, () => m.Speed >= 290f * Mph, watch: watch);
         Row("accel-150-290", "level full throttle, 150 -> 290 mph", "s", tAccel, null, 0.0,
-            $"α {m.Alpha:0.0}° at finish — decoded force path; footage read 3.76 s, discarded",
+            $"α {m.Alpha:0.0}° at finish, decoded force path; footage read 3.76 s, discarded",
             info: true);
 
         // --- terminal dive, at 70.7°, the angle the original's "vertical" clip actually came out
@@ -1313,7 +1313,7 @@ public static class Probes
         Row("terminal-dive", "70.7° dive at full throttle, held to terminal", "mph",
             m.Speed / Mph, TerminalDiveMph, 2.0,
             $"settled path {pathDeg:0.0}°, {m.Speed / fd:0.000} x fd_speed, α {m.Alpha:0.0}°, "
-            + $"thrust ×{FlightModel.AttitudeThrustScale(m.Attitude.Z.Y):0.000} — target is the "
+            + $"thrust ×{FlightModel.AttitudeThrustScale(m.Attitude.Z.Y):0.000}, target is the "
             + "decoded thrust/drag/gravity balance at this path; the filmed 355.2 is discarded");
 
         // --- roll. Accumulated body roll rate: no other axis is commanded. The target is the
@@ -1322,7 +1322,7 @@ public static class Probes
         m = Fresh(stats, Level(), fd, 1f);
         double tRoll = RunUntil(m, 1f, 30f, RollAccum(m), roll: 1f, watch: watch);
         Row("roll-360", "full aileron from level cruise, 360°", "s", tRoll, 2.08, 0.25,
-            $"α {m.Alpha:0.0}° at finish — target is the decoded steady rate "
+            $"α {m.Alpha:0.0}° at finish, target is the decoded steady rate "
             + "2 * roll_torque · recInertia.z / ang_momentum_damp with its own spin-up; a stopwatch "
             + "read 2.05 s off the original's ADI");
 
@@ -1342,7 +1342,7 @@ public static class Probes
             pitchRates[1], null, 0.0,
             $"at 120/200/280 mph = {pitchRates[0]:0.0}/{pitchRates[1]:0.0}/{pitchRates[2]:0.0} °/s, "
             + $"α = {pitchAlphas[0]:0.0}/{pitchAlphas[1]:0.0}/{pitchAlphas[2]:0.0}° "
-            + "(the alignment lag at this body rate) — decoded window and lag rate; footage read "
+            + "(the alignment lag at this body rate), decoded window and lag rate; footage read "
             + "33.00 °/s, discarded",
             info: true);
 
@@ -1355,7 +1355,7 @@ public static class Probes
                                onStep: () => { sumSpeed += m.Speed; samples++; }, watch: watch);
         Row("yaw-360", "full rudder from 290 mph, 360°", "s", tYaw, null, 0.0,
             (samples > 0 ? $"mean speed {sumSpeed / samples / Mph:0.0} mph, " : "")
-            + $"α {m.Alpha:0.0}° at finish — decoded torque path; footage read 28.6 s, discarded",
+            + $"α {m.Alpha:0.0}° at finish, decoded torque path; footage read 28.6 s, discarded",
             info: true);
 
         // --- the altitude ceiling: fixed 22° nose-up hold (attitude set once, not continuous
@@ -1367,7 +1367,7 @@ public static class Probes
                  pitch: 0f, onStep: () => apexFt = Math.Max(apexFt, m.Position.Y / Ft), watch: watch);
         Row("altitude-ceiling", "22° nose-up hold at full throttle, apex reached", "ft",
             apexFt, null, 0.0,
-            $"{m.Speed / Mph:0.0} mph at apex, α {m.Alpha:0.0}° — the ceiling is the 6561.7 ft band "
+            $"{m.Speed / Mph:0.0} mph at apex, α {m.Alpha:0.0}°, the ceiling is the 6561.7 ft band "
             + "edge and the height above it is bought with the climb rate, so no constant sets it",
             info: true);
 
@@ -1378,7 +1378,7 @@ public static class Probes
         Run(m, 1f, 180f, pitch: 0f, watch: watch);
         Row("level-speed-near-cap", "level full throttle at 1988 m, held to equilibrium", "mph",
             m.Speed / Mph, LevelTopSpeedMph, 0.5,
-            $"the band edge must not leak below 2000 m, α {m.Alpha:0.0}° — same decoded lever-1 "
+            $"the band edge must not leak below 2000 m, α {m.Alpha:0.0}°, same decoded lever-1 "
             + "solve as level-top-speed");
 
         // --- sustained turn: full throttle, stick full back from a 100° banked entry, settled 10 s
@@ -1388,7 +1388,7 @@ public static class Probes
         Row("sustained-turn-speed", "full back stick from a banked entry, settled speed", "mph",
             turn.SpeedMph, null, 0.0,
             $"entered at 100° bank, settled at {turn.BankDeg:0.0}° (emergent, not held), "
-            + $"α {turn.Alpha:0.0}°, swept {turn.SweptDeg:0} ° — decoded plant; footage read "
+            + $"α {turn.Alpha:0.0}°, swept {turn.SweptDeg:0} °, decoded plant; footage read "
             + "222.94 mph and 449.8° in the same window, discarded",
             info: true);
 
@@ -1407,7 +1407,7 @@ public static class Probes
             $"{turn.RateDegS / 18.95:0.00}x the discarded footage. The footage pulls 1.6x slower BANKED than "
             + "wings-level (18.95 vs 30.16 °/sim-s round its own loop) and we pull the same rate in "
             + "both, so the difference is bank/load-factor, not pitch authority. Its 18.95 "
-            + "°/sim-s at 222.94 mph implies a 58.7° bank, and CAP-33 confirmed that IS its bank — "
+            + "°/sim-s at 222.94 mph implies a 58.7° bank, and CAP-33 confirmed that IS its bank, "
             + "the ADI's +100° is airframe attitude, not bank",
             info: true);
 
@@ -1421,7 +1421,7 @@ public static class Probes
         // is asserted in PartThrottleEquilibriumTests instead.
         Row("eighth-throttle-speed", "1/8 throttle held to equilibrium", "mph",
             m.Speed / Mph, null, 0.0,
-            $"{m.Speed / fd:0.000} x fd_speed, settled path {idlePath:0.0}°, α {m.Alpha:0.0}° — "
+            $"{m.Speed / fd:0.000} x fd_speed, settled path {idlePath:0.0}°, α {m.Alpha:0.0}°, "
             + "against the decoded level-equilibrium curve, not footage "
             + "(docs/org/flightModel.md, 'Part-throttle equilibrium')",
             info: true);
@@ -1432,7 +1432,7 @@ public static class Probes
         m = Fresh(stats, Level(), 290f * Mph, 0f);
         double tDecel = RunUntil(m, 0f, 60f, () => m.Speed <= 150f * Mph, watch: watch);
         Row("decel-290-150", "throttle cut to ZERO, 290 -> 150 mph, level", "s", tDecel, null, 0.0,
-            $"pure drag — no thrust term to assume, α {m.Alpha:0.0}° at finish — the polar is the "
+            $"pure drag, no thrust term to assume, α {m.Alpha:0.0}° at finish, the polar is the "
             + "binary's; footage read 7.04 s, discarded", info: true);
 
         // --- zoom climb, INFORMATIONAL: full throttle, full back stick from the same take that
@@ -1454,7 +1454,7 @@ public static class Probes
         Row("zoom-climb", "full pull from 300 mph level, altitude gained", "ft",
             apex / Ft, null, 0.0,
             $"min speed {minSpeed / Mph:0.0} mph, apex at {tApex:0.0} s, "
-            + $"α {alphaAtMinSpeed:0.0}° at min speed — decoded plant; footage read 936 ft, "
+            + $"α {alphaAtMinSpeed:0.0}° at min speed, decoded plant; footage read 936 ft, "
             + "127.9 mph and an apex at 6.5 s, all discarded",
             info: true);
 
@@ -1462,7 +1462,7 @@ public static class Probes
         // half: the row above reads the height and this one the speed the climb was bought with.
         Row("zoom-climb-min-speed", "same loop, speed at its own minimum", "mph",
             minSpeed / Mph, null, 0.0,
-            $"α {alphaAtMinSpeed:0.0}° here (the wings-level pull settles lower — this loop has "
+            $"α {alphaAtMinSpeed:0.0}° here (the wings-level pull settles lower, this loop has "
             + "carried well past that regime by its own minimum)",
             info: true);
 
@@ -1484,12 +1484,12 @@ public static class Probes
         Row("stall-departure", "0 throttle from 0.9 fd, stick centred, nose where it rests", "deg",
             NoseDeg(), null, 0.0,
             $"broke at {tBreak:0.0} s with the nose {breakNoseDeg:+0.0;-0.0}°, peak drop "
-            + $"{peakDropDegS:0.00} °/s, stall flag {m.StallFlag:0.00} at rest — the drop is a torque "
+            + $"{peakDropDegS:0.00} °/s, stall flag {m.StallFlag:0.00} at rest, the drop is a torque "
             + "settling at an equilibrium, not a chase; no target, every candidate is footage",
             info: true);
 
         var sb = new StringBuilder();
-        sb.AppendLine($"# flight envelope — {planeNodeName} ({stats.DefName})");
+        sb.AppendLine($"# flight envelope: {planeNodeName} ({stats.DefName})");
         sb.AppendLine($"# fd_speed {fd:0.#} m/s ({fd / Mph:0.0} mph)  weight {stats.VehWeight:0} kg  "
                       + $"engine power {stats.EnginePower:0.###}  gravity {stats.Gravity:0.#} m/s²");
         sb.AppendLine($"# thrust accel at fd_speed {thrustAccel:0.00} m/s²  stepped at {EnvDt * 1000f:0.0} ms");
@@ -1543,7 +1543,7 @@ public static class Probes
         r.Reached = watch.Reached.ToList();
         r.Missed = watch.Missed.ToList();
         sb.AppendLine();
-        sb.AppendLine($"# branch coverage — {r.Reached.Count} of {EnvelopeMargins.Branches.Length} "
+        sb.AppendLine($"# branch coverage: {r.Reached.Count} of {EnvelopeMargins.Branches.Length} "
                       + "decoded branches reached by this airframe's scenarios");
         sb.AppendLine($"#   reached: {string.Join(" ", r.Reached)}");
         sb.AppendLine($"#   missed : {string.Join(" ", r.Missed)}");
@@ -1551,7 +1551,7 @@ public static class Probes
         r.Text = sb.ToString();
         r.Summary = r.Failed == 0
             ? $"flight envelope: {r.Asserted} scenario(s) asserted against a decoded target, all within tolerance"
-            : $"flight envelope: {r.Failed} of {r.Asserted} asserted scenario(s) FAILED — see the !! lines above";
+            : $"flight envelope: {r.Failed} of {r.Asserted} asserted scenario(s) FAILED, see the !! lines above";
         return r;
     }
 
@@ -1586,7 +1586,7 @@ public static class Probes
         }
 
         var sb = new StringBuilder();
-        sb.AppendLine($"# knife-edge hold — {planeNodeName} ({stats.DefName})");
+        sb.AppendLine($"# knife-edge hold: {planeNodeName} ({stats.DefName})");
         sb.AppendLine("# 90° bank at entry then FREE; stick neutral; throttle trimmed level at entry speed");
         sb.AppendLine("# original (Bloodhawk, CAP-05, two takes): nose −4.9° / −7.3° at +3 s, then a");
         sb.AppendLine("# drift of 0.69 / 0.89 °/sim-s to −27° at +36 s; nose 4.8–8.3° BELOW the path");
@@ -1595,7 +1595,7 @@ public static class Probes
         {
             sb.AppendLine();
             sb.AppendLine($"entry {run.EntryMph:0} mph, bank {run.EntryBankDeg:0}°, "
-                          + $"throttle {run.Throttle:0.000} — drift {run.DriftDegS:0.00} °/s over 3–36 s, "
+                          + $"throttle {run.Throttle:0.000}, drift {run.DriftDegS:0.00} °/s over 3–36 s, "
                           + $"last-third share {run.SettledFrac:0.00}, "
                           + $"α peak {run.AlphaPeak:0.00}° settles {run.AlphaSettled:0.00}°");
             sb.AppendLine($"  {"t",4} {"nose",8} {"path",8} {"nose-path",10} {"sink",9} {"Δalt",9} "
@@ -1708,18 +1708,18 @@ public static class Probes
         r.PlateauPathDeg = plateau > 0 ? pathSum / plateau : 0;
 
         var sb = new StringBuilder();
-        sb.AppendLine($"# sustained climb — {planeNodeName} ({stats.DefName})");
+        sb.AppendLine($"# sustained climb: {planeNodeName} ({stats.DefName})");
         sb.AppendLine($"# {EntryMph:0} mph entry, path {EntryPathDeg:0.0}° set at entry then FREE, "
                       + "full throttle, stick neutral, 24 sim s");
         sb.AppendLine("# original (Bloodhawk, \"Climp 90° 100% Thrust\"): entry 298.9 mph, path settles");
-        sb.AppendLine("# 56.3 ± 3.2°, min 152.4 mph at +6.5 s, then RECOVERS — 163.1 mph over this");
+        sb.AppendLine("# 56.3 ± 3.2°, min 152.4 mph at +6.5 s, then RECOVERS, 163.1 mph over this");
         sb.AppendLine("# probe's own 12–18 s window, still creeping to a flat 167.0 ± 0.5 by +36 s,");
         sb.AppendLine("# climbing ≈12,000 fpm from 900 to 6,300 ft");
         sb.AppendLine($"plateau (12–18 s) {r.PlateauMph:0.00} mph at path {r.PlateauPathDeg:0.0}° "
-                      + $"— original 163.05 mph at 55.5°; minimum {r.MinSpeedMph:0.00} mph at "
-                      + $"+{r.MinSpeedT:0.0} s — original 152.40 at +6.5 s"
+                      + $"vs original 163.05 mph at 55.5°; minimum {r.MinSpeedMph:0.00} mph at "
+                      + $"+{r.MinSpeedT:0.0} s vs original 152.40 at +6.5 s"
                       + (r.BandEdgeAt >= 0
-                         ? $"  ⚠ BAND EDGE crossed at +{r.BandEdgeAt:0.0} s — every sample after "
+                         ? $"  ⚠ BAND EDGE crossed at +{r.BandEdgeAt:0.0} s, every sample after "
                            + "that reads a coast in thin air, not the climb"
                          : ""));
         sb.AppendLine($"  {"t",4} {"speed",8} {"orig",8} {"path",8} {"nose",8} {"climb",10} "
@@ -1845,7 +1845,7 @@ public static class Probes
             string half = row.PuffersBuilt > 0 ? $"puffer[{row.PuffersBuilt}]" : "no puffer";
             string meshHalf = stage == null ? "" : $" mesh[{litMeshes}] {census.Describe()}";
             if (!row.Resolved)
-                row.Line = $"  {name,-22} UNRESOLVED — no def bound";
+                row.Line = $"  {name,-22} UNRESOLVED, no def bound";
             else if (row.PuffersBuilt > 0 || litMeshes > 0)
                 row.Line = $"  {name,-22} {half}{meshHalf} rendered";
             else

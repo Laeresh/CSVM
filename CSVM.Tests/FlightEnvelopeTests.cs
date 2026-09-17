@@ -107,7 +107,7 @@ public class FlightEnvelopeTests
             .Rows.Single(x => x.Name == "terminal-dive").Target!.Value;
         Assert.True(Math.Abs(pinned - flat) > 1.0,
             $"the dive solves to {flat:0.00} mph with no attitude thrust, inside the tolerance "
-            + $"around the pinned {pinned:0.00} mph — the control measures nothing");
+            + $"around the pinned {pinned:0.00} mph, the control measures nothing");
     }
 
     /// <summary>The ceiling row asserts no target, because the height an aircraft reaches above the

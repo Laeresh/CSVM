@@ -464,7 +464,7 @@ public sealed class DamageVisuals
         {
             _noRuntimeLogged = true;
             Utils.Log.Info("anim",
-                $"damage stage: no rig runtime — authored anim '{anim}' (and any later stage) not played; panel flips only");
+                $"damage stage: no rig runtime, authored anim '{anim}' (and any later stage) not played; panel flips only");
         }
     }
 
@@ -477,7 +477,7 @@ public sealed class DamageVisuals
     {
         if (defPairing == null)
         {
-            Utils.Log.Warn("flight", $"damage panels: no authored pairing data (plane_reset/pdpanelN defs unavailable) — geometric AABB pairing over every *_h skin engaged");
+            Utils.Log.Warn("flight", $"damage panels: no authored pairing data (plane_reset/pdpanelN defs unavailable), geometric AABB pairing over every *_h skin engaged");
         }
         var torn = new List<(string Name, Vector3 Center)>();
         var healthy = new List<(string Name, Node3D Node, Vector3 Center)>();
@@ -489,7 +489,7 @@ public sealed class DamageVisuals
             {
                 if (defPairing != null && !defPairing.HideableHealthy.Contains(name))
                 {
-                    Utils.Log.Info("flight", $"damage panels: {name} is not in the authored reset list — never hidden");
+                    Utils.Log.Info("flight", $"damage panels: {name} is not in the authored reset list, never hidden");
                     continue;
                 }
                 healthy.Add((name, node, c));
@@ -498,7 +498,7 @@ public sealed class DamageVisuals
             {
                 if (defPairing != null && !defPairing.TornTargets.Contains(name))
                 {
-                    Utils.Log.Info("flight", $"damage panels: {name} is not an authored pdpanelN target — not paired");
+                    Utils.Log.Info("flight", $"damage panels: {name} is not an authored pdpanelN target, not paired");
                     continue;
                 }
                 torn.Add((name, c));
@@ -520,7 +520,7 @@ public sealed class DamageVisuals
             if (bestName == null || bestDist > MaxPairDistance || mirrored)
             {
                 Utils.Log.Info("flight",
-                    $"damage panels: {name} has no co-located torn panel (nearest {bestName ?? "none"} {bestDist:0.0} m{(mirrored ? ", mirrored" : "")}) — never hidden");
+                    $"damage panels: {name} has no co-located torn panel (nearest {bestName ?? "none"} {bestDist:0.0} m{(mirrored ? ", mirrored" : "")}), never hidden");
                 continue;
             }
             if (!_pairedHealthy.TryGetValue(bestName, out var list))
@@ -528,7 +528,7 @@ public sealed class DamageVisuals
             list.Add(node);
             if (!name.Equals(bestName + "_h", StringComparison.OrdinalIgnoreCase))
                 Utils.Log.Info("flight",
-                    $"damage panels: {name} is the healthy skin of {bestName} (names crossed in the model) — paired by position");
+                    $"damage panels: {name} is the healthy skin of {bestName} (names crossed in the model), paired by position");
         }
     }
 }

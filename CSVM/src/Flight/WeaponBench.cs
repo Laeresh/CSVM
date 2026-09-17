@@ -56,7 +56,7 @@ public static class WeaponBench
             if (mounts.Count == 0)
             {
                 skip++;
-                sb.AppendLine($"  {w.Id,-7} {Trim(w.Name, 10),-10} {kind,-6} SKIP — no "
+                sb.AppendLine($"  {w.Id,-7} {Trim(w.Name, 10),-10} {kind,-6} SKIP, no "
                               + (w.IsGun ? "gun group" : "pylon") + " on this plane");
                 continue;
             }

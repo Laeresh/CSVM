@@ -48,7 +48,7 @@ public sealed class ProbeRunner
     {
         if (weapons.Get(wepId) is not { } weapon)
         {
-            GD.PushWarning($"--rocket='{wepId}' is not a known weapon id — hardpoints keep their stock ordnance");
+            GD.PushWarning($"--rocket='{wepId}' is not a known weapon id, hardpoints keep their stock ordnance");
             return;
         }
         int per = weapon.ClusterSize ?? 0;
@@ -300,7 +300,7 @@ public sealed class ProbeRunner
             // The dummy renderer compiles no shaders, so a shader error cannot occur, and
             // therefore cannot be screened. Say so rather than letting the clean error census read
             // as proof.
-            Log.Warn("test", $"headless display — no shaders compiled, so the error screen cannot see a shader error");
+            Log.Warn("test", $"headless display, no shaders compiled, so the error screen cannot see a shader error");
         }
         int code = TestHarness.Run(ctx, spec.RunTestsFilter);
         host.Free();

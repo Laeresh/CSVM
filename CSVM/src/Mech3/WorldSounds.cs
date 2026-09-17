@@ -352,7 +352,7 @@ public sealed partial class WorldSounds : Node3D
                 if (e.Player.Playing)
                     e.Player.Stop();
                 if (DegenerateHosts.Add(e.Name))
-                    Log.Info("sound", $"sound: '{e.Name}' silenced — its host node's world pose is degenerate ({pos}); pre-existing, not caused by the sound path");
+                    Log.Info("sound", $"sound: '{e.Name}' silenced, its host node's world pose is degenerate ({pos}); pre-existing, not caused by the sound path");
                 continue;
             }
             e.Player.GlobalPosition = pos;

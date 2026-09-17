@@ -278,7 +278,7 @@ public sealed partial class PerfHud : Node
         _hud.AddThemeFontSizeOverride("font_size", Mathf.Max(1, Mathf.RoundToInt(ReferenceFontSize * scale)));
         double fps = _lastFrameMs > 0 ? 1000.0 / _lastFrameMs : 0;
         string headline = string.Create(CultureInfo.InvariantCulture,
-            $"perf [F14]: {ModeLabel(_mode)} — {fps:0.0} fps  frame {_lastFrameMs:0.00} ms  worst {_worstMs:0.00} ms");
+            $"perf [F14]: {ModeLabel(_mode)}, {fps:0.0} fps  frame {_lastFrameMs:0.00} ms  worst {_worstMs:0.00} ms");
 
         if (_mode != Mode.Full)
         {

@@ -144,7 +144,7 @@ public sealed class AircraftContactResolver
         {
             // Neither zones nor an authored whole pair, so there is no health pool to survive on
             // and every contact is fatal. No shipped load lands here.
-            Log.Info("flight", $"impact into {contact.ColliderName} at vn={vn:0.0} m/s — crash (no damage data)");
+            Log.Info("flight", $"impact into {contact.ColliderName} at vn={vn:0.0} m/s, crash (no damage data)");
             return outcome with { Fate = ContactFate.Crash };
         }
 
@@ -152,7 +152,7 @@ public sealed class AircraftContactResolver
         // checks it after spending but independently of the result.
         if (outcome.Dooms)
         {
-            Log.Info("flight", $"AI ram into {contact.ColliderName} — destroyed outright (the decoded local_11 rule)");
+            Log.Info("flight", $"AI ram into {contact.ColliderName}, destroyed outright (the decoded local_11 rule)");
             return outcome with { Fate = ContactFate.Crash };
         }
 
@@ -168,7 +168,7 @@ public sealed class AircraftContactResolver
         if (striker.Ledger.IsDestroyed)
         {
             Log.Info("flight",
-                $"vehicle health exhausted ({struckPart} last) — vn={vn:0.0} m/s into {contact.ColliderName}");
+                $"vehicle health exhausted ({struckPart} last), vn={vn:0.0} m/s into {contact.ColliderName}");
             return outcome with { Fate = ContactFate.Crash }; // whole-vehicle health at zero
         }
 
@@ -203,7 +203,7 @@ public sealed class AircraftContactResolver
                 return outcome with { PushOut = pushOut };
             if (attempt >= EmbedTries)
             {
-                Log.Info("flight", $"embedded in terrain after a graze — destroyed");
+                Log.Info("flight", $"embedded in terrain after a graze, destroyed");
                 return outcome with { PushOut = pushOut, Fate = ContactFate.Crash };
             }
 
