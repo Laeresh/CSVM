@@ -28,13 +28,13 @@ public sealed record GunVoiceHome(Node3D Node, SoundArchive? Archive,
 /// </summary>
 public sealed partial class GunVoice : Node3D
 {
-    private const float SilenceThreshold = 0.002f;
-
     private readonly Func<IReadOnlyList<Vector3>>? _listeners;
     private readonly AudioStreamPlayer3D _player;
     private readonly string _cue;
     private readonly float _cull;
-    private readonly float _cullSq;
+    private readonly float _rangeMin;
+    private readonly float _rangeMax;
+    private readonly float _volume;
     private readonly string _label;
     private readonly float _lease;
 
@@ -54,20 +54,21 @@ public sealed partial class GunVoice : Node3D
     {
         _cue = cue.Name;
         _cull = cue.CullDistance;
-        _cullSq = _cull * _cull;
+        _rangeMin = cue.RangeMin;
+        _rangeMax = cue.RangeMax;
+        _volume = cue.Volume;
         _listeners = listeners;
         _label = label;
         _lease = lease;
         Name = "GunVoice";
-        // RANGE is [full-volume distance, audible distance], mapped onto Godot's inverse-distance
-        // curve the way WorldSounds and AiWeaponAudio map every other 3D emitter.
+        // ⚠ Do not restore an engine attenuation model or a MaxDistance; Sound drives the level
+        // from SoundFalloff, the same law WorldSounds runs. Either one costs the mount its level
+        // well inside the distance its own RANGE pair calls audible (INSTR-87).
         _player = new AudioStreamPlayer3D
         {
             Stream = cue.Stream,
-            UnitSize = cue.RangeMin,
-            MaxDistance = cue.RangeMax,
-            VolumeDb = Mathf.LinearToDb(Mathf.Max(SilenceThreshold, cue.Volume)),
-            AttenuationModel = AudioStreamPlayer3D.AttenuationModelEnum.InverseDistance,
+            VolumeDb = SoundFalloff.VolumeDb(cue.Volume),
+            AttenuationModel = AudioStreamPlayer3D.AttenuationModelEnum.Disabled,
             Bus = AudioBuses.Effects,
         };
         AddChild(_player);
@@ -81,6 +82,11 @@ public sealed partial class GunVoice : Node3D
     /// <summary>Whether the voice is sounding, read off the live player rather than off a flag this
     /// component keeps, which could agree with itself while the stream is stopped.</summary>
     internal bool Sounding => _player.Playing;
+
+    /// <summary>The level the decoded law last set this voice to, decibels, and the definition's
+    /// own <c>VOLUME</c> before the first renewal. Internal so an emitter suite reads the gain the
+    /// listener actually gets rather than re-deriving it from a distance.</summary>
+    internal float GainDb => _player.VolumeDb;
 
     /// <summary>Builds the voice for a mount whose cue is <paramref name="sndName"/>, or null when
     /// the session has no archive, the mount authors no cue, or the definition is not positional.
@@ -160,21 +166,22 @@ public sealed partial class GunVoice : Node3D
     /// past it. Internal so an emitter suite reads the pairing this path's log prints rather than
     /// inferring it, the two distances included: they differ by the margin above.</summary>
     internal (string Name, Vector3 Position, float RangeMax, float Cull) Emitter() =>
-        (_cue, _player.GlobalPosition, _player.MaxDistance, _cull);
+        (_cue, _player.GlobalPosition, _rangeMax, _cull);
 
     // ⚠ The cull is the cue's OWN WeaponSoundCue.CullDistance, not EngineAudioCurves.CullDistance:
     // a turret loop is authored audible to 200 m, far inside the engine routine's 2000, so that
     // number could never bite first and reading it here would be a borrowed constant.
     private void Sound()
     {
-        float distSq = AudioListeners.NearestDistanceSq(this, _listeners);
-        bool culled = distSq > _cullSq;
-        SetCulled(culled, distSq);
+        float dist = Mathf.Sqrt(AudioListeners.NearestDistanceSq(this, _listeners));
+        bool culled = dist > _cull;
+        SetCulled(culled, dist);
         if (culled)
         {
             _player.Stop();
             return;
         }
+        _player.VolumeDb = SoundFalloff.GainDb(dist, _rangeMin, _rangeMax, _volume);
         if (!_player.Playing)
         {
             _player.Play();
@@ -184,13 +191,13 @@ public sealed partial class GunVoice : Node3D
     // The first shot and every transition after it, always logged: audio cannot be
     // screenshot-verified (INSTR-45), and this line is what separates "silent because it is past
     // the cull" from "silent because its definition never resolved".
-    private void SetCulled(bool culled, float distSq)
+    private void SetCulled(bool culled, float dist)
     {
         if (culled == _culled)
         {
             return;
         }
         _culled = culled;
-        Log.Debug("sound", $"gun voice {_label} {(culled ? "culled" : "audible")} at {Mathf.Sqrt(distSq):0} m (cull {_cull:0} m)");
+        Log.Debug("sound", $"gun voice {_label} {(culled ? "culled" : "audible")} at {dist:0} m, {SoundFalloff.GainDb(dist, _rangeMin, _rangeMax, _volume):0.0} dB (cull {_cull:0} m)");
     }
 }

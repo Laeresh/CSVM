@@ -741,6 +741,13 @@ member, and it does not go here.
   drawn pose in its callback; a hand-stepped suite poses the anchor before it draws and can never
   see the lag, so assert the `ProcessPriority` as well as the placement.** `ProjectilePool` drew
   before the flight rigs, and every anchored flash and shot light sat a frame astern of the gun.
+- **INSTR-87**, **An `AudioStreamPlayer3D`'s `VolumeDb` is the level a listener gets only when its
+  attenuation model is `Disabled` and its `MaxDistance` is 0: any other model applies its own curve
+  and a low-pass of up to 24 dB above 5 kHz, and a `MaxDistance` multiplies a second linear fade
+  that reaches zero exactly at that distance. Drive the level yourself, or a suite asserting a cue
+  sounds is blind to how loud it is.** Mapping `snd_turretgun`'s `RANGE [30, 400]` onto the
+  inverse-distance model left a hull's gun 7 dB under the decoded law at 100 m and hard silent at
+  400 m, where the decoded law plays on to 440.
 
 ## SRC, sources and documents
 

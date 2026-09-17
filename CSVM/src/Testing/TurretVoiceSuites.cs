@@ -32,13 +32,20 @@ internal static class TurretVoiceSuites
     // off GunVoice, so a build that culls at the RANGE pair itself fails this suite.
     private const float CullMargin = 1.1f;
 
+    // Inside snd_chaingun's own 200 m audible distance and well past the shelf its band buys, so
+    // the level read there is on the decoded law's ramp rather than on its flat head.
+    private const float GainProbeMetres = 150f;
+
     [Suite("turret-gun-voices",
         "every turret the data gives a voice is heard firing from its own mount (BL-793): over C4, "
         + "each piratezep gun ring builds its OWN positional snd_chaingun emitter rather than one "
-        + "shared per hull, attenuated over that definition's authored RANGE audible distance and "
-        + "culled at 1.1 times it, the margin the sound manager leaves over the pair, rather than "
-        + "at the engine routine's 2000, on the Effects bus at its source asset's pitch "
-        + "with Doppler tracking off; the voice sounds on the frame a round leaves the firepoint it "
+        + "shared per hull, levelled per frame by the decoded RANGE law over that definition's "
+        + "authored audible distance and culled at 1.1 times it, the margin the sound manager "
+        + "leaves over the pair, rather than at the engine routine's 2000, carrying no engine "
+        + "attenuation model and no MaxDistance of its own, on the Effects bus at its source "
+        + "asset's pitch with Doppler tracking off; at 150 m it stands at the level "
+        + "SoundFalloff gives that pair rather than at Godot's inverse-distance one; the voice "
+        + "sounds on the frame a round leaves the firepoint it "
         + "is placed at, is STILL sounding a quarter of a second later with no new round (the lease "
         + "the original renews per shot, not a clip restarted per projectile), goes quiet within "
         + "that lease once the gun stows, is STILL heard from just past the cue's own audible "
@@ -251,6 +258,7 @@ internal static class TurretVoiceSuites
                 Step(1);
                 ctx.Check(voice.Sounding,
                     $"…and sounds again from {ring.WorldPosition.DistanceTo(abeam):0} m, inside it");
+                CheckGain(ctx, voice, cue, ears, GainProbeMetres, Step);
 
                 // A carried gunner takes the same component, hung on its own host rather than on
                 // the world's sound node: the original's turret slot is positional whoever owns it.
@@ -289,9 +297,10 @@ internal static class TurretVoiceSuites
 
     /// <summary>One voice's live players. The pitch guard holds the decode in
     /// docs/formats/sounds.md: the original's world emitters carry no Doppler, and Godot's 3D
-    /// player takes a shift from its own tracking mode without a line of ours asking for one.
-    /// Internal so the hull's own voice suite reads the same three properties rather than its own
-    /// copy.</summary>
+    /// player takes a shift from its own tracking mode without a line of ours asking for one. The
+    /// attenuation guard holds the other half: the level is the decoded law's, so an engine model
+    /// or a <c>MaxDistance</c> would multiply a second curve onto it. Internal so the hull's own
+    /// voice suite reads the same properties rather than its own copy.</summary>
     internal static void CheckPlayers(TestContext ctx, GunVoice voice)
     {
         var players = voice.GetChildren().OfType<AudioStreamPlayer3D>().ToList();
@@ -302,7 +311,27 @@ internal static class TurretVoiceSuites
                 && Mathf.IsEqualApprox(player.PitchScale, 1f)
                 && player.Bus.ToString() == AudioBuses.Effects,
                 $"…on the {AudioBuses.Effects} bus at pitch {player.PitchScale:0.000} with Doppler {player.DopplerTracking}");
+            ctx.Check(player.AttenuationModel == AudioStreamPlayer3D.AttenuationModelEnum.Disabled
+                && !(player.MaxDistance > 0f),
+                $"…carrying no engine attenuation model ({player.AttenuationModel}) and no MaxDistance ({player.MaxDistance:0}), so the decoded law is the only curve on it");
         }
+    }
+
+    /// <summary>The level one gun voice stands at against <see cref="SoundFalloff"/>'s own answer
+    /// for the same listener distance, definition and <c>VOLUME</c>. Internal so a hull's voice and
+    /// a turret's are read the same way: a voice that sounds proves nothing about how loud it is,
+    /// which is the whole of what the inverse-distance mapping got wrong.</summary>
+    internal static void CheckGain(TestContext ctx, GunVoice voice, SoundDef cue,
+        List<Vector3> ears, float metres, Action<int> step)
+    {
+        var from = voice.Emitter().Position;
+        ears[0] = from + new Vector3(metres, 0f, 0f);
+        step(1);
+        float at = voice.Emitter().Position.DistanceTo(ears[0]);
+        float want = SoundFalloff.GainDb(at, cue.RangeMin, cue.RangeMax, cue.Volume);
+        ctx.Check(voice.Sounding && want > SoundFalloff.FloorDb
+            && Mathf.Abs(voice.GainDb - want) < 0.05f,
+            $"…and from {at:0} m it plays at {voice.GainDb:0.0} dB, the decoded law's own level for RANGE [{cue.RangeMin:0}, {cue.RangeMax:0}] ({want:0.0} dB), well above the {SoundFalloff.FloorDb:0} dB floor");
     }
 
     // Steps until one more round leaves this gun, and stops on that frame: every lease check below

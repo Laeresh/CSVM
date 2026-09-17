@@ -832,14 +832,14 @@ concept rides here. The `sound` log carries the observable: each slot's verdict,
 transition, one per damaged-engine swap, whose edge waits out `PlaneStats.DamagedTimer`'s re-arm.
 
 ## src/Flight/AiWeaponAudio.cs
-The weapon half of the positional pair an AI-flown aircraft carries instead of `FlightAudio`: the
-sustained-fire gun loop and the dry-trigger cue on `AudioStreamPlayer3D`s riding this node, so
-another aircraft's guns are heard from where that aircraft is, which is where the original's fire
-tick puts its own ([../org/weaponFire.md](../org/weaponFire.md)), so no muzzle offset belongs here;
-the dry cue is positional by decision where the original's is flat. `Attach` is the whole
-spawner-side surface; the cues come from `WeaponAudioCues` and the cull with them, the margin the
-sound manager leaves over a cue's audible distance ([../formats/sounds.md](../formats/sounds.md)),
-measured against the human pilots `AiEngineAudio` reads too. No `3D` flag means no world player.
+The weapon half of what an AI-flown aircraft carries instead of `FlightAudio`: the sustained-fire
+gun loop and the dry-trigger cue on `AudioStreamPlayer3D`s riding this node, so another aircraft's
+guns are heard from where it is, which is where the original's fire tick puts its own
+([../org/weaponFire.md](../org/weaponFire.md)), so no muzzle offset belongs here; the dry cue is
+positional by decision where the original's is flat. `Attach` is the whole spawner-side surface;
+the cues come from `WeaponAudioCues` and the cull with them, the margin over a cue's audible
+distance ([../formats/sounds.md](../formats/sounds.md)). Neither player carries an attenuation
+model or a `MaxDistance`: the level is `Mech3.SoundFalloff`'s. No `3D` flag means no world player.
 
 ## src/Flight/GunVoice.cs
 One mounted gun's firing voice: a single `AudioStreamPlayer3D` on the mount's own cue, moved to where
@@ -847,9 +847,9 @@ the gun fires from and held sounding by a lease each renewal resets, so a firing
 continuous burst rather than a clip restarted per projectile. The lease is the caller's, per mount: a
 turret renews half a second per round, a hull's gun zero every tick
 ([../org/weaponFire.md](../org/weaponFire.md)). `Attach` takes the `GunVoiceHome` bundle of parent,
-archive and listeners a session builds once and hands every mount. One voice per mount, never one per
-owner. The cue comes from `WeaponAudioCues` and the cull with it, the same one an aircraft's loop
-takes ([../formats/sounds.md](../formats/sounds.md)); the `sound` log names each verdict.
+archive and listeners a session builds once, one voice per mount and never one per owner. The cue
+and cull come from `WeaponAudioCues`; the player carries no attenuation model and no `MaxDistance`,
+its level `Mech3.SoundFalloff`'s, and the `sound` log names each verdict with the gain it stood at.
 
 ## src/Flight/AudioListeners.cs
 Where the session's audio listeners are, for every positional flight-audio path: the human pilots'

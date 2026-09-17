@@ -896,31 +896,32 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `git log --grep=BL-783` (the same gap for the display settings, closed by four rows on this
   screen), `docs/menu-presentations.md`.
 
-- `BL-933` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **Turret guns and
-  the patrol boat's and turret truck's guns cannot be heard at all, and an AI aeroplane's guns only
-  when it fires right beside the player, where the original's guns carry.** *Evidence:* reported
-  at the controls three times, after `BL-793` landed a positional loop per mount ("cant hear guns
+- `BL-933` `[Bug]` `[Owed-playtest]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]`
+  **The gun voices now run the decoded level law, and whether that is enough to hear a turret, a
+  patrol boat and another aeroplane's guns is the listen `PT-151` owes.** *Evidence:* reported at
+  the controls three times, after `BL-793` landed a positional loop per mount ("cant hear guns
   of turrets. And planes only when very near. Too much falloff perhaps?"), after `BL-820` gave the
   hulls a voice ("Cant hear them. They fire but there is no sound") and against `BL-846` ("i can
-  only hear them if they are shooting right beside me"). The turret voice is `snd_chaingun`,
-  `RANGE [30, 200]`, silenced past 1.1x the audible distance as the decode says; the hull voice is
-  `snd_turretgun` culled at its authored 400 m; the aeroplane loops (`snd_30cal` to `snd_70cal`)
-  author `RANGE [80, 800]`. Every one of these sites maps the pair onto Godot's inverse-distance
-  curve (`GunVoice.cs` and `AiWeaponAudio.cs`: `UnitSize = RangeMin`, `MaxDistance = RangeMax`),
-  which is the mapping `BL-269` names as the remaining suspect now that its decoded curve drives
-  `WorldSounds`. *What to settle first:* the gain each site produces at 100, 200 and 400 m against
-  `SoundFalloff.cs`'s law for the same pair, and the volume term the players are built with
-  against the definition's `VOLUME`. A 200 m cull is authored, so a turret is silent from further
-  away in the original too, and the question is the level inside the band; a hull silent at a few
-  metres while its rounds leave is a second question, whether `SurfaceGunner`'s voice is renewed on
-  the tick the fire decision selects the gun in a played mission as the suite says it is.
-  *Fix shape:* level the gun voices from `SoundFalloff.cs` the way `WorldSounds.Tick` does, so
-  every 3D emitter runs one law. *⚠ Traps:* `WeaponSoundCue.CullMargin` (1.1) is decoded from the
-  compare and is not the knob; `BL-846`'s closing note says the same. *Playtest after fix:* C4
-  (turret emplacements of all three mount classes), C5/M01 (the patrol boats) and any Instant
-  Action wave, listening from the chase view at a few hundred metres. *Cross-refs:* `BL-269` and
-  `PT-150` (the decoded curve, owed a listen), `git log --grep=BL-793`, `git log --grep=BL-820`,
-  `git log --grep=BL-846`.
+  only hear them if they are shooting right beside me"). The cause was the mapping `BL-269` named:
+  every gun voice built its player with `UnitSize = RANGE`'s full-volume distance and
+  `MaxDistance` = its audible one on Godot's inverse-distance model, which multiplies a second
+  linear fade onto the level, reaches silence exactly at the audible radius where the decoded law
+  still plays to 1.1x, and brings a low-pass of up to 24 dB above 5 kHz that guts a gun's crack.
+  Against `SoundFalloff.cs` at `VOLUME` 1, `snd_turretgun` `RANGE [30, 400]` read -13.0 / -22.5 /
+  -32.0 / silent dB at 100 / 200 / 300 / 400 m where the law gives -6.0 / -18.8 / -25.5 / -30.0;
+  `snd_60cal` `RANGE [35, 450]` read -11.3 / -20.2 / -28.2 / -40.2 against -3.3 / -16.7 / -23.5 /
+  -28.1. Both sites now carry a player with no attenuation model and no `MaxDistance`, levelled
+  from the law per frame, the way `WorldSounds` already was.
+  *What is left:* the audible radii are the data's and did not move, so a turret's `snd_chaingun`
+  is still silent past 220 m and a 30-cal past 165 m, and whether the recovered level is enough at
+  the controls is a judgement no instrument makes. The aeroplane loops author `RANGE [20, 150]` to
+  `[40, 550]` by caliber, not the `[80, 800]` of the dry cue `snd_emptyclip`.
+  *⚠ Traps:* `WeaponSoundCue.CullMargin` (1.1) is `SoundFalloff.CullFactor`, decoded from the
+  compare, and is not the knob; `BL-846`'s closing note says the same. Do not retune a level by
+  ear: every constant here is the decode's or the authored `RANGE`.
+  *Cross-refs:* `PT-151` (the sortie), `BL-269` and `PT-150` (the same law on the world emitters,
+  owed its own listen), `docs/formats/sounds.md` ("The gain between the two radii"), `INSTR-87`,
+  `git log --grep=BL-793`, `git log --grep=BL-820`, `git log --grep=BL-846`.
 
 - `BL-934` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **Enemies and allies
   play no dynamic voice lines at all; only the scripted mission dialogue is heard.** *Evidence:*

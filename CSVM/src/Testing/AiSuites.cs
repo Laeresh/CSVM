@@ -2828,12 +2828,15 @@ internal static class AiSuites
         "every firing AI aircraft carries its OWN positional weapon voice (D31): each of two "
         + "spawned planes builds one gun-loop emitter and one dry-cue emitter on 3D players, both "
         + "riding that aircraft's world position rather than the origin, the listener or each "
-        + "other, both taking the definition's own RANGE pair as their distance model rather than "
-        + "the reader default, neither rig carrying the own-ship FlightAudio, every emitter on the "
+        + "other, both levelled by the decoded RANGE law rather than by an engine attenuation "
+        + "model, so neither player carries one or a MaxDistance of its own, neither rig carrying "
+        + "the own-ship FlightAudio, every emitter on the "
         + "Effects bus at its source asset's own pitch with Doppler tracking off (CAP-09 measured "
-        + "none in the original), and the loop silencing past 1.1 times the cue's own authored "
+        + "none in the original), the loop silencing past 1.1 times the cue's own authored "
         + "audible distance, the margin the sound manager leaves over the RANGE pair, while a burst "
-        + "just outside that distance is still heard, with a `sound` log transition either way")]
+        + "just outside that distance is still heard, with a `sound` log transition either way, and "
+        + "at the distance its own pair calls audible the loop standing at the level SoundFalloff "
+        + "gives that pair, where the old inverse-distance mapping's MaxDistance fade was zero")]
     internal static void AiWeaponEmitters(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -2959,6 +2962,19 @@ internal static class AiSuites
                 float justOut = a.GlobalPosition.DistanceTo(ears[0]) / Mathf.Max(audible, 1f);
                 ctx.Check(weaponA.LoopSounding && justOut > 1f && justOut < VoiceCullMargin,
                     $"…and {justOut:0.00}x it is heard again, inside that cull");
+
+                // The level inside the band, which no cull verdict can see: at the distance this
+                // caliber calls audible the decoded law is thirty down where the old mapping's
+                // MaxDistance fade was zero. The decibel of slack is the step the aeroplane flies.
+                ears[0] = a.GlobalPosition + new Vector3(audible, 0f, 0f);
+                a.SimStep(dt);
+                float atEdge = a.GlobalPosition.DistanceTo(ears[0]);
+                var loopDef = soundDefs[here[0].Name];
+                float wantEdge = SoundFalloff.GainDb(atEdge, loopDef.RangeMin, loopDef.RangeMax,
+                    loopDef.Volume);
+                ctx.Check(weaponA.LoopSounding && wantEdge > SoundFalloff.FloorDb
+                    && Mathf.Abs(weaponA.LoopGainDb - wantEdge) < 1f,
+                    $"and from {atEdge:0} m it plays at {weaponA.LoopGainDb:0.0} dB, the decoded law's own level for {here[0].Name}'s RANGE [{loopDef.RangeMin:0}, {loopDef.RangeMax:0}] ({wantEdge:0.0} dB), well above the {SoundFalloff.FloorDb:0} dB floor");
                 ctx.Check(culls.Count(l => l.Contains(" culled ")) >= 1,
                     $"the `sound` log carries the cull transition, the pairing INSTR-45 asks for (lines={culls.Count})");
                 // ⚠ Snapshot before noting: ctx.Note echoes each line to the console, which the sink
@@ -3492,6 +3508,9 @@ internal static class AiSuites
                 $"…and plays its source asset's own pitch, {player.PitchScale:0.000}");
             ctx.Check(player.Bus.ToString() == AudioBuses.Effects,
                 $"…on the {AudioBuses.Effects} bus, not Master (got {player.Bus})");
+            ctx.Check(player.AttenuationModel == AudioStreamPlayer3D.AttenuationModelEnum.Disabled
+                && !(player.MaxDistance > 0f),
+                $"…carrying no engine attenuation model ({player.AttenuationModel}) and no MaxDistance ({player.MaxDistance:0}), so the decoded law is the only curve on it");
         }
         ctx.Check(players == emitters.Count, $"{name}'s emitter roll-call matches the live players ({players})");
         ctx.Note($"{name}: {emitters.Count} emitter(s) at ({at.X:0},{at.Y:0},{at.Z:0}), {string.Join(", ", emitters.Select(e => $"{e.Name} audible {e.RangeMax:0} m"))}, loop cull {audio.LoopCull:0} m");

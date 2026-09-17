@@ -93,7 +93,9 @@ counted from the shelf, so the level holds far longer in absolute distance: a `R
 siren is unattenuated to 325 m, 10 dB down at 450 m, 20 at 700 m and 30 at its audible radius,
 where the curve is continuous into the tail and reaches the floor at 1320 m. No engine attenuation
 model expresses that shape, so `CSVM/src/Mech3/SoundFalloff.cs` computes it and drives the player's
-level itself.
+level itself, on every positional path alike: the world's ambient emitters and one-shots, an
+aircraft's gun loop and dry cue, and a mount's gun voice all carry a player with no attenuation
+model and no `MaxDistance`, since either would multiply a second curve onto the decoded one.
 
 ⚠ **`VOLUME` converts on the same ten-decibels-per-doubling scale, not the usual `20 log10`.**
 `FUN_00593620` returns 0 at or above 1, `-10000` at or below `2^-10`, and `1000 log2(gain)`

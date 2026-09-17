@@ -33,6 +33,10 @@ internal static class SurfaceVehicleGunSuites
     // off GunVoice, so a build that culls at the RANGE pair itself fails this suite.
     private const float CullMargin = 1.1f;
 
+    // snd_turretgun's own authored audible distance, where the decoded law stands at its edge level
+    // and the old inverse-distance mapping's MaxDistance fade reached exactly zero.
+    private const float GainProbeMetres = 400f;
+
     // Long enough for the mount to slew onto any bearing (it closes 1/7.5 of what is left per
     // step at this dt) and for several 0.3 s refire intervals to come round.
     private const int FiringSteps = 150;
@@ -220,14 +224,17 @@ internal static class SurfaceVehicleGunSuites
     [Suite("surface-gun-voices",
         "a mode ship hull is heard firing (BL-820): over C5/M01, which places both classes, a "
         + "patrol boat and a turret truck each build their own positional snd_turretgun emitter "
-        + "from the armed weapon's LOOPED_SOUND_NAME rather than a SOUNDS.CANNON lease, attenuated "
-        + "over that definition's own 400 m and culled at 1.1 times it, the margin the sound "
+        + "from the armed weapon's LOOPED_SOUND_NAME rather than a SOUNDS.CANNON lease, levelled "
+        + "per frame by the decoded RANGE law over that definition's own 400 m and culled at 1.1 "
+        + "times it, the margin the sound "
         + "manager leaves over the RANGE pair, and placed at the hull origin the engine hands its "
         + "sound slot rather than at the firepoint the rounds leave; a hull is silent with nothing "
         + "to shoot at, sounds by the frame its first round leaves, holds the loop unbroken "
         + "across every one of the def's 0.3 s refire intervals while the target is held, because "
         + "the fire decision renews the voice per TICK ahead of the refire timer, and is still "
-        + "heard from just past that audible distance while being silenced past the cull; and on a "
+        + "heard from just past that audible distance while being silenced past the cull; at 400 m "
+        + "it stands at the level SoundFalloff gives that pair, where the old inverse-distance "
+        + "mapping's MaxDistance fade reached zero; and on a "
         + "lease of zero it goes quiet within two steps of the pass that stops selecting the gun, "
         + "where the turret path's half-second lease would still be sounding")]
     internal static void SurfaceGunVoices(TestContext ctx)
@@ -427,6 +434,9 @@ internal static class SurfaceVehicleGunSuites
         ears[0] = hull.Position;
         Step(hulls, 1);
         ctx.Check(voice.Sounding, $"…and sounds again with the ear back at the hull");
+        TurretVoiceSuites.CheckGain(ctx, voice, cue, ears, GainProbeMetres, n => Step(hulls, n));
+        ears[0] = hull.Position;
+        Step(hulls, 1);
 
         // The far end. The lease is ZERO, so one pass that does not select the gun ends it: the
         // first tick spends the renewal it already had and the next stops the player.

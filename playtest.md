@@ -739,6 +739,41 @@ is a judgement on our own remake.
   *Blocks:* `BL-694`'s landing commit (`git log --grep=BL-694`). A sortie that reaches no end
   state mints a new `BL`; `CAP-55` is what the original owes against (b) and (d).
 
+### CM17 (C4/M02) and CM21 (C5/M01) · the gun voices, sound on
+
+```powershell
+./RunGame.ps1 --campaign=<profile>:16 --volume=1.0 --no-det --log=sound:debug
+./RunGame.ps1 --campaign=<profile>:20 --volume=1.0 --no-det --log=sound:debug
+```
+
+`:16` is CM17, The Pirate's Duel, for the pirate zeppelin's gun rings; `:20` is CM21, Death on the
+Docks, for the patrol boats and the turret trucks. An Instant Action wave off the launchscreen
+covers the aeroplane guns. `--log=sound:debug` prints one line per gun voice each time it crosses
+into or out of earshot, carrying the distance, the gain and the cull, so a disagreement can be read
+off numbers instead of guessed.
+
+- `PT-151` `[Own]` **The gun voices, re-judged now that they run the decoded level law
+  (`BL-933`).** A turret's, a hull's and an AI aeroplane's gun voice each took Godot's
+  inverse-distance curve with `UnitSize` at `RANGE`'s full-volume distance and `MaxDistance` at its
+  audible one, which multiplied a second linear fade onto the level and reached silence exactly at
+  the audible radius; they now take `SoundFalloff`'s decoded curve on a player with no attenuation
+  model at all, as the world's ambient emitters already did. A hull's `snd_turretgun`
+  (`RANGE [30, 400]`) gains 7 dB at 100 m, 4 at 200 and 6 at 300, and plays at 30 dB down at 400 m
+  where it was silent; a 60-cal gains 8 dB at 100 m and 12 at 400. The audible radii themselves are
+  the data's and did not move: a turret's `snd_chaingun` reaches 200 m (220 with the cull), a 30-cal
+  150 m, a 70-cal 550 m.
+  *Look for:*
+  - (a) a zeppelin's gun rings firing at you from a couple of hundred metres are heard, where they
+    were not;
+  - (b) a patrol boat and a turret truck shooting at you across the docks are heard through the
+    whole approach rather than only overhead;
+  - (c) an enemy aeroplane on your tail is heard firing from further off than "right beside me",
+    allowing that a light caliber is authored quiet past 150 m;
+  - (d) nothing is now too loud: at a cue's own audible radius a gun should be faint, not merely
+    quieter, and passing that radius should fade rather than cut.
+  *Blocks:* `BL-933`. A remaining "cannot hear them" on (a) or (c) is a scale question about the
+  decoded law itself, not this mapping; quote the `sound` log's distance and gain line for the pass
+  you judged it on.
 
 ### The exported package · a recipient's first run, no arguments
 
