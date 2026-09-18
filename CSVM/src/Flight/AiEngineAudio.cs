@@ -33,7 +33,7 @@ public sealed partial class AiEngineAudio : Node3D
     private AudioStreamWav? _engineStream, _damagedStream;
     private float _engineVol = 1f, _damagedVol = 1f, _whineVol = 1f, _nitroVol = 1f;
     private float _nitroKeyedS;    // s the keyed nitro loop has left before it expires
-    private bool _engineDamaged;
+    private EngineSlotPhase _phase;
     private float _enginePitchMul = 1f;
     private bool _culled = true;   // starts culled so the first in-range frame logs its start
 
@@ -96,7 +96,7 @@ public sealed partial class AiEngineAudio : Node3D
     public void Update(float dt, in EngineDrive drive, float speedFrac, float healthFrac,
         bool engineDead = false)
     {
-        SetEngineDamaged(EngineAudioCurves.EngineDamaged(healthFrac, engineDead));
+        bool damaged = EngineAudioCurves.EngineDamaged(healthFrac, engineDead) && _damagedStream != null;
         float distSq = AudioListeners.NearestDistanceSq(this, Listeners);
         bool culled = distSq > EngineAudioCurves.CullDistanceSq;
         if (culled != _culled)
@@ -112,14 +112,17 @@ public sealed partial class AiEngineAudio : Node3D
             _engine?.Stop();
             _whine?.Stop();
             _nitro?.Stop();
+            // The original's cull skips the re-arm timer; only the damage edge's direction is kept.
+            if (!damaged && _phase != EngineSlotPhase.Healthy)
+                RestoreHealthyStream();
+            else if (damaged && _phase == EngineSlotPhase.Healthy)
+                _phase = EngineSlotPhase.Out;
             return;
         }
-        // A damaged loop that stopped (this cull, or its stream ending) waits out the re-arm
-        // timer. One still playing skips straight to UpdateLoop below.
-        if (_engine != null && (!_engineDamaged || _engine.Playing || ArmDamagedLoop(_engine, dt)))
+        if (_engine != null && StepEngineSlot(_engine, damaged, dt))
         {
             var (pitch, volume) = EngineAudioCurves.Engine(_stats, drive, _enginePitchMul);
-            UpdateLoop(_engine, volume * (_engineDamaged ? _damagedVol : _engineVol), pitch);
+            UpdateLoop(_engine, volume * (_phase == EngineSlotPhase.Damaged ? _damagedVol : _engineVol), pitch);
         }
         if (_whine != null)
         {
@@ -195,46 +198,47 @@ public sealed partial class AiEngineAudio : Node3D
     // of them.
     private string Aircraft() => GetParent()?.Name.ToString() ?? Name.ToString();
 
-    // The engine slot's damage EDGE, decided by the same helper the own-ship path uses so the two
-    // cannot drift. Only the healthy direction swaps here. The damaged direction just silences the
-    // slot; Update's ArmDamagedLoop waits out the re-arm timer and swaps it back on.
-    private void SetEngineDamaged(bool damaged)
+    // The engine slot's damage phase, stepped by the same rule the own-ship path runs so the two
+    // cannot drift. Returns whether the slot should sound this frame: false while Out, the silence
+    // the damage edge opens and the shared re-arm timer closes.
+    private bool StepEngineSlot(AudioStreamPlayer3D engine, bool damaged, float dt)
     {
-        damaged &= _damagedStream != null;
-        if (damaged == _engineDamaged || _engine == null)
+        var rng = Rng.Stream(Rng.FlightAudio);
+        float u = damaged ? rng.Randf() : 0f;
+        var from = _phase;
+        bool sounding = engine.Playing;
+        _phase = EngineAudioCurves.StepEnginePhase(from, damaged, sounding, _stats.DamagedTimer, dt, u);
+        if (EngineAudioCurves.StartsDamagedLoop(from, _phase, sounding))
         {
-            return;
+            var (name, pitchMul) = EngineAudioCurves.EngineDefFor(_stats, true, rng);
+            _enginePitchMul = pitchMul;
+            engine.Stop();
+            engine.Stream = _damagedStream;
+            Log.Debug("sound", $"ai engine {Aircraft()} slot 0 -> {name} pitchMul={_enginePitchMul:0.000}");
         }
-        _engineDamaged = damaged;
-        if (damaged)
+        else if (_phase == EngineSlotPhase.Out)
         {
-            _engine.Stop();
-            return;
+            engine.Stop();
         }
+        else if (_phase == EngineSlotPhase.Healthy && from != EngineSlotPhase.Healthy)
+        {
+            RestoreHealthyStream();
+        }
+        return _phase != EngineSlotPhase.Out;
+    }
+
+    // The healthy direction swaps at once, no re-arm wait; UpdateLoop starts it on this frame.
+    private void RestoreHealthyStream()
+    {
+        _phase = EngineSlotPhase.Healthy;
         var (name, pitchMul) = EngineAudioCurves.EngineDefFor(_stats, false, Rng.Stream(Rng.FlightAudio));
         _enginePitchMul = pitchMul;
-        bool wasPlaying = _engine.Playing;
+        bool wasPlaying = _engine!.Playing;
         _engine.Stop();
         _engine.Stream = _engineStream;
         if (wasPlaying)
             _engine.Play();
         Log.Debug("sound", $"ai engine {Aircraft()} slot 0 -> {name} pitchMul={_enginePitchMul:0.000}");
-    }
-
-    // Ticks the shared re-arm timer one frame. Once it fires, swaps the damaged stream onto the
-    // slot with a freshly drawn pitch multiplier and returns true.
-    private bool ArmDamagedLoop(AudioStreamPlayer3D engine, float dt)
-    {
-        var rng = Rng.Stream(Rng.FlightAudio);
-        if (!EngineAudioCurves.AdvanceDamagedRearm(_stats.DamagedTimer, dt, rng.Randf()))
-        {
-            return false;
-        }
-        var (name, pitchMul) = EngineAudioCurves.EngineDefFor(_stats, true, rng);
-        _enginePitchMul = pitchMul;
-        engine.Stream = _damagedStream;
-        Log.Debug("sound", $"ai engine {Aircraft()} slot 0 -> {name} pitchMul={_enginePitchMul:0.000}");
-        return true;
     }
 
     // RANGE is [full-volume distance, audible distance], mapped onto Godot's inverse-distance curve

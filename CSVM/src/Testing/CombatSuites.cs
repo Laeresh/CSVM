@@ -2253,6 +2253,88 @@ internal static class CombatSuites
         CheckRattleGate(ctx, stats);
     }
 
+    // The own-ship engine slot walked through the damage phases on a real FlightAudio. Decode:
+    // docs/formats/vehicle.md, "The damaged engine's phases". The phase lengths come from the
+    // re-arm timer's constants, never from a listen, so a failure here is the port drifting.
+    [Suite("engine-damage-phases",
+        "the own-ship engine slot across heavy damage: the damage edge cuts the healthy loop on " +
+        "that frame, the slot stays silent below the re-arm timer's 3 s floor, the damaged loop " +
+        "starts by the 5 s ceiling at full level with no start ramp and then holds while it " +
+        "sounds, and a heal restores the healthy loop on the same frame with no wait")]
+    internal static void EngineDamagePhases(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
+        var soundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath);
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        ctx.Check(stats.DamagedEngineSound != null,
+            $"{ctx.PlaneName} binds damaged_engine_sound={stats.DamagedEngineSound}");
+        if (stats.DamagedEngineSound == null)
+            return;
+
+        using var archive = new SoundArchive(ctx.SoundsPath);
+        var audio = new FlightAudio();
+        audio.Setup(archive, soundDefs, stats, weapons, soundGroups);
+        ctx.Host.AddChild(audio);
+        try
+        {
+            const float dt = 1f / 60f;
+            var drive = new EngineDrive(1f, 0f, 0f);
+            for (int i = 0; i < 180; i++)
+                audio.Update(dt, drive, 1f, 1f);
+            ctx.Check(audio.EnginePhase == EngineSlotPhase.Healthy && audio.EngineSounding
+                      && !audio.EngineHoldsDamagedStream,
+                $"healthy flight sounds the healthy loop (phase={audio.EnginePhase}, sounding={audio.EngineSounding})");
+
+            audio.Update(dt, drive, 1f, 0.1f);
+            ctx.Check(audio.EnginePhase == EngineSlotPhase.Out && !audio.EngineSounding,
+                $"the damage edge puts the engine out on that frame (phase={audio.EnginePhase}, sounding={audio.EngineSounding})");
+
+            // Frame 1 was the edge; 3 s of frames at the 3.0 s floor never fire whatever the draw.
+            int frame = 1;
+            bool silent = true;
+            for (; frame < 180; frame++)
+            {
+                audio.Update(dt, drive, 1f, 0.1f);
+                silent &= audio.EnginePhase == EngineSlotPhase.Out && !audio.EngineSounding;
+            }
+            ctx.Check(silent, $"the slot stays silent for the timer's 3 s floor ({frame} frames)");
+
+            int startFrame = -1;
+            for (; frame < 320 && startFrame < 0; frame++)
+            {
+                audio.Update(dt, drive, 1f, 0.1f);
+                if (audio.EnginePhase == EngineSlotPhase.Damaged)
+                    startFrame = frame;
+            }
+            ctx.Check(startFrame >= 180 && startFrame <= 302,
+                $"the damaged loop starts {startFrame * dt:0.00} s after the edge, inside the drawn 3 to 5 s threshold");
+            ctx.Check(audio.EngineSounding && audio.EngineHoldsDamagedStream,
+                $"…on the damaged_engine_sound stream, sounding");
+            ctx.Check(Mathf.IsEqualApprox(audio.EngineRampLevel, 1f),
+                $"…at full level with no start ramp (ramp={audio.EngineRampLevel:0.00})");
+
+            bool held = true;
+            for (int i = 0; i < 600; i++)
+            {
+                audio.Update(dt, drive, 1f, 0.1f);
+                held &= audio.EnginePhase == EngineSlotPhase.Damaged && audio.EngineHoldsDamagedStream;
+            }
+            ctx.Check(held, $"a sounding damaged loop holds for 10 s, the stutter runs without a second restart");
+
+            audio.Update(dt, drive, 1f, 1f);
+            ctx.Check(audio.EnginePhase == EngineSlotPhase.Healthy && audio.EngineSounding
+                      && !audio.EngineHoldsDamagedStream,
+                $"a heal restores the healthy loop on the same frame (phase={audio.EnginePhase})");
+        }
+        finally
+        {
+            audio.QueueFree();
+        }
+    }
+
     // The air-to-air hit chain on two real flight rigs driven by manual sim steps: body strike,
     // struck-shape to part mapping, armor-first damage, the decoded whole-vehicle kill rule, a
     // crashed plane's immunity, Downed attribution into a real VersusMatch, the VS respawn loop, and

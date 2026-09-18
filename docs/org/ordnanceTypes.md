@@ -1175,8 +1175,9 @@ name `spinprops`, the two autogyro chains name `agyro_rotors`, and all 23 name `
 `prop3`/`prop3b` faded from 1 to 0 over 1.5 s and then deactivated. `snd_propstop` is
 `propstop.wav`, `PURGEABLE` (not looped), `3D`, range 200 to 420, so
 it plays positionally at the choked aircraft whoever is flying it. The blur discs cross-fade to a
-still blade over a second and a half while the engine loop is already carrying `snd_damagedengine` at
-its drawn pitch ([formats/vehicle.md](../formats/vehicle.md), "What makes an airframe damaged").
+still blade over a second and a half while slot 0 is silent: the same edge stops the engine loop, and
+`snd_damagedengine` starts only once the definition's re-arm timer fires, 3 to 5 s later
+([formats/vehicle.md](../formats/vehicle.md), "The damaged engine's phases").
 
 **The restart is silent and instant.** `spinprops` carries no `SOUND` event and no opacity ramp: it
 activates `propN`/`propNb`, deactivates `staticpropN` and `nitropropN`, and starts an endless

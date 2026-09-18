@@ -2,6 +2,22 @@ using Godot;
 
 namespace CSVM.Flight;
 
+/// <summary>Where the engine slot stands against the airframe's damage. The original has no
+/// sputter or restart cue of its own: the damage edge stops the slot, the slot stays silent while
+/// the shared re-arm timer runs, and then the damaged loop starts at full level and holds.
+/// Decode: docs/formats/vehicle.md, "The damaged engine's phases".</summary>
+public enum EngineSlotPhase
+{
+    /// <summary>The plain or cockpit loop, per the view.</summary>
+    Healthy,
+
+    /// <summary>Damaged, and the slot is silent until the re-arm timer fires.</summary>
+    Out,
+
+    /// <summary>The <c>damaged_engine_sound</c> loop, at its drawn pitch multiplier.</summary>
+    Damaged,
+}
+
 /// <summary>Everything the engine slot's curves read this frame. The original's per-frame routine
 /// takes the throttle lever plus two things off the airframe's own state, so this carries all three
 /// rather than letting each audio path re-derive them.</summary>
@@ -88,20 +104,46 @@ public static class EngineAudioCurves
             : 1f;
 
     /// <summary>Ticks the shared re-arm timer one frame and says whether the damaged loop may
-    /// start now. The accumulator resets to zero once it crosses a threshold redrawn every frame
-    /// from <paramref name="u"/>, the frame's own draw in [0, 1). Only reached while the engine
-    /// handle is silent and the airframe is damaged.
+    /// start now. The accumulator as it stood BEFORE this frame is tested against a threshold
+    /// redrawn every frame from <paramref name="u"/>, the frame's own draw in [0, 1): past it, it
+    /// resets to zero and fires; otherwise it takes this frame's <paramref name="dt"/>.
     /// Decode: docs/formats/vehicle.md, "What makes an airframe damaged".</summary>
     public static bool AdvanceDamagedRearm(DamagedEngineTimer timer, float dt, float u)
     {
-        timer.Elapsed += dt;
-        if (timer.Elapsed < DamagedRearmMin + (DamagedRearmSpread * u))
+        if (timer.Elapsed <= DamagedRearmMin + (DamagedRearmSpread * u))
         {
+            timer.Elapsed += dt;
             return false;
         }
         timer.Elapsed = 0f;
         return true;
     }
+
+    /// <summary>One frame of the engine slot's damage phases (<see cref="EngineSlotPhase"/>).
+    /// Healthy is taken the moment <paramref name="damaged"/> clears; a damaged slot whose loop
+    /// is still sounding holds; anything else (the edge, the silence, a stopped loop) ticks the
+    /// shared re-arm timer and starts the damaged loop when it fires. The caller stops the slot on
+    /// the way into <see cref="EngineSlotPhase.Out"/> and starts it on the way out of it.
+    /// Decode: docs/formats/vehicle.md, "The damaged engine's phases".</summary>
+    public static EngineSlotPhase StepEnginePhase(EngineSlotPhase phase, bool damaged,
+        bool loopSounding, DamagedEngineTimer timer, float dt, float u)
+    {
+        if (!damaged)
+        {
+            return EngineSlotPhase.Healthy;
+        }
+        if (phase == EngineSlotPhase.Damaged && loopSounding)
+        {
+            return EngineSlotPhase.Damaged;
+        }
+        return AdvanceDamagedRearm(timer, dt, u) ? EngineSlotPhase.Damaged : EngineSlotPhase.Out;
+    }
+
+    /// <summary>Whether a step from <paramref name="from"/> to <paramref name="next"/> starts the
+    /// damaged loop this frame, which includes a damaged loop that had stopped (an AI past the
+    /// cull) being started again once the timer fires.</summary>
+    public static bool StartsDamagedLoop(EngineSlotPhase from, EngineSlotPhase next, bool loopSounding) =>
+        next == EngineSlotPhase.Damaged && !(from == EngineSlotPhase.Damaged && loopSounding);
 
     /// <summary>The engine slot's definition and its pitch multiplier: damaged swaps onto
     /// <c>damaged_engine_sound</c> at a drawn multiplier; else <paramref name="cockpitView"/>

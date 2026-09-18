@@ -92,7 +92,7 @@ holds **two** sound handles per vehicle. Both are positional or not by the sound
 |---|---|---|
 | 0 | `engine_sound` | pitch and volume off the player-global `engine_sound` throttle curves |
 | 0, in the Cockpit view | `cockpit_engine_sound` | swapped in while the camera is in the full Cockpit mode only, the Nose view keeps the plain def, confirmed at the controls of the original (an earlier "either cockpit mode" reading is retired); CSVM keys this to the pilot's SELECTED view being Cockpit, not the per-frame camera pose, so a held numpad key or look-behind does not retrigger it |
-| 0, while damaged | `damaged_engine_sound[]` | a random entry replaces the definition and holds while the vehicle's disabled-systems mask is nonzero (below, "What makes an airframe damaged"); the entry's pitch range is drawn once and multiplies the throttle pitch curve; CSVM's port decision is that this wins over the cockpit swap when both apply, since no def authors a damaged cockpit variant and the interaction is not itself decoded |
+| 0, while damaged | `damaged_engine_sound[]` | the damage edge silences the slot and a random entry replaces the definition once the re-arm timer fires, then holds while the vehicle's disabled-systems mask is nonzero (below, "What makes an airframe damaged" and "The damaged engine's phases"); the entry's pitch range is drawn once and multiplies the throttle pitch curve; CSVM's port decision is that this wins over the cockpit swap when both apply, since no def authors a damaged cockpit variant and the interaction is not itself decoded |
 | 1 | `prop_sound` | the overspeed whine, off the player-global `prop_sound` speed curves |
 
 An AI vehicle's arm adds exactly one thing: both handles stop past **2000 world units** from the
@@ -164,6 +164,48 @@ before re-running. The damaged arm additionally holds a re-arm timer on the **de
 `3.0 + 2·rand()/32767` seconds, so a damaged engine that has been silenced (an AI stopped past the
 cull) waits three to five seconds before it sounds again. A looped `snd_damagedengine` that is
 still playing never reaches the timer.
+
+### The damaged engine's phases
+
+What a player hears as "the engine goes out, sputters, restarts and runs stuttering" is three states
+of slot 0 and one cue. There is no sputter or restart sound on the slot.
+
+| Phase | Entered by | Slot 0 plays | Lasts |
+|---|---|---|---|
+| Healthy | spawn, or the mask clearing | `engine_sound` (or `cockpit_engine_sound`) | while the mask is zero |
+| Out | the mask's 0-to-nonzero edge, or a damaged handle found dead | nothing | until the re-arm timer fires, 3 to 5 s from a zeroed timer |
+| Damaged | the re-arm timer firing | a `damaged_engine_sound[]` entry at full level | while the handle plays and the mask stays nonzero |
+
+- **Out.** `FUN_004b1690` sees the edge and calls `FUN_004b14e0(0)`, which stops slot 0, then re-runs
+  `FUN_004b18a0`. From then on the damaged arm finds the slot-0 handle (`veh+0x70`) dead or not
+  playing (`FUN_00593c90` is the is-playing query) and runs the timer instead of starting anything.
+- **The timer.** Each frame the handle is dead the arm tests the value from before this frame's add:
+  `if (t <= 3.0 || t <= 3.0 + 2·rand()·3.051851e-05) t += dt; else fire`. The `rand()` is drawn only
+  once `t` is past 3.0, and because the threshold is redrawn every frame the fire in practice lands a
+  little past 3 s, not uniformly in 3 to 5 s. The timer is the definition's (`def+0x88`), so a second
+  airframe of the same type damaged later inherits the running total and restarts sooner. It resets
+  to zero only on a fire; a heal leaves it where it was.
+- **Damaged.** On the fire the arm picks a random entry, sets it on slot 0 with `FUN_004b1540(0, name)`
+  and starts it with `FUN_004b1470(0, 1.0)`: full level, no `snd_propstart`, no ramp. The pitch
+  multiplier is drawn on that frame (above). `snd_damagedengine` is `engine_damaged.wav`, a looped
+  5.69 s recording of an engine running rough with no silence inside it, so the stutter is the
+  asset's, not a modulation the routine applies. While the handle plays the timer is not read.
+- **Healthy again.** The mask's nonzero-to-0 edge stops slot 0, restores `def+0x6c` (`engine_sound`)
+  through `FUN_004b1560`, and re-runs the routine, whose healthy arm starts the handle with
+  `FUN_004b1470(0, 1.0)` on that same frame and stores the multiplier 1.0 at `0x004b1b33`. There is no
+  wait in this direction. Bit `0x1` clears on a heal because `FUN_004b8180` rewrites it from the
+  whole-vehicle fraction against `def+0xbc` (`0x004b82af` sets, `0x004b82bd` clears).
+- **The cull.** An AI past the 2000-unit cull skips the timer altogether, so a culled damaged engine
+  is Out with a frozen timer until it comes back in range.
+- **Bit `0x2` does not add a phase.** Only the choker sets it (`FUN_004b9bc0`, `0x004b9e34`); no graze
+  or damage path does. `FUN_0048c470` counts `veh+0x2e0` down while it is set (`0x0048c606` to
+  `0x0048c63e`) and clears it through `FUN_004b1690(0, 2, 0)` at zero. Its edges add the prop stop and
+  spin (`FUN_004b15c0`, `FUN_004b1630`) but run the same slot-0 edges as bit `0x1`.
+
+The original's Balmoral nose-graze capture (under `OriginalScreenshots/Videos`) shows the sequence. The healthy
+band runs to the graze at about 23.7 s, the slot is quiet but for the graze's own low impact pulses,
+and at about 26.8 s a steady band at 180 to 220 Hz and 340 Hz with the `engine_damaged.wav` spectrum
+starts and holds. The 3.1 s gap matches the timer's floor from zero.
 
 ### The engine slot's pitch and gain are not throttle alone
 

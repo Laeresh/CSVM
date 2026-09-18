@@ -755,24 +755,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `docs/formats/combat-voice.md`, `git log --grep=BL-934`, the saved Voice level (`Utils/AudioMix.cs`, the `audio-buses`
   suite) if the lines dispatch and stay inaudible.
 
-- `BL-955` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: footage]` **After heavy damage the engine sound stays
-  on the sputter loop for good; the original's engine goes out, sputters, restarts and then runs
-  while stuttering.** *Evidence:* `FlightAudio.UpdateEngineSlot` swaps the engine slot onto
-  `damaged_engine_sound` once `EngineAudioCurves.EngineDamaged` reads the worst zone under 25% or
-  the engine dead, and holds it there; the only other state is the healthy loop, so a damaged
-  aeroplane sputters until it lands or dies. The original's sequence at the controls is out,
-  sputter, start, then the running loop with a stutter over it, and `CAP-14 Building crash
-  Balmoral.mp4` / `CAP-14 Building Hard graze Balmoral.mp4` carry it at about 25 s in, which is
-  the reference. *Fix shape:* decode the orchestration. The damaged-swap re-arm timer
-  (`DamagedTimer`, 3 to 5 s) is already the decoded piece of it and is a clue that the original's
-  slot does not simply hold: read what `FUN_0048c470`'s engine block and the disabled-systems mask
-  do across the engine-out, the restart and the stutter, which sounds each phase starts
-  (`docs/formats/vehicle.md`, "What makes an airframe damaged", is the starting page), and port
-  the phases as states of the engine slot with their own cues. *⚠ Traps:* `AiEngineAudio` shares
-  `EngineAudioCurves` with the own-ship path; keep the two agreeing. Do not tune a phase length by
-  ear where the executable has the number. *Cross-refs:* `docs/architecture/Flight.md` (the
-  engine-audio slot maths), `docs/org/shakes.md`.
-
 ## Cameras & views
 
 - `BL-266` `[Research]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **Plane wobble: residual decode questions after the

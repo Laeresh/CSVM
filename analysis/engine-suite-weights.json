@@ -165,6 +165,7 @@
     "emitter-lifetime": 1.543,
     "emitter-prewarm": 0.447,
     "empty-stage-net": 0.384,
+    "engine-damage-phases": 0.05,
     "engine-note": 0.004,
     "fade-walk-bound": 0.032,
     "fbfx-flash": 0.074,

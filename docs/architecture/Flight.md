@@ -811,30 +811,29 @@ The own plane's non-positional audio: the engine, overspeed whine and rattle loo
 one-shots a crash, a ground or water explosion, a survivable graze, an engine stop and a stunt
 run's Danger Zone camera fire, most drawing the sound their own definition authors, not a fixed name.
 The three incoming-fire cues are group draws, flat as the original plays them: `OnWarningShot`,
-`OnBulletHit` and `OnWindowHit`, rate-limited by `FlightController`. The engine is one voice on one
-slot whose pitch, gain and definition all come from `EngineAudioCurves`, and the gun loop and dry
-cue from `WeaponAudioCues`; `MixGain` is the only own-ship scale left, for splitscreen.
-`AiEngineAudio` and `AiWeaponAudio` are the positional pair an AI aircraft carries instead of this.
+`OnBulletHit` and `OnWindowHit`, rate-limited by `FlightController`. The engine slot's pitch, gain,
+definition and damage phase come from `EngineAudioCurves`, the gun loop and dry cue from
+`WeaponAudioCues`; `MixGain` is the only own-ship scale left, for splitscreen. `AiEngineAudio` and
+`AiWeaponAudio` are the positional pair an AI aircraft carries instead of this.
 
 ## src/Flight/EngineAudioCurves.cs
-The engine-audio slot maths both audio paths read: whether an airframe counts as damaged, which
-definition the slot then holds and the swap's one-off pitch draw, each slot's pitch and gain off
-the `PlaneStats` curves, the rattle gate, the drive parameter and the cull distance. It exists
-because the original runs one per-frame routine for the player and every AI vehicle. The slot's
-parameter is not the throttle lever alone: the drive adds a turn rate and a climb attitude to each
-curve's normalised parameter under a clamp with headroom above 1, which is why `SoundCurve` exposes
-its steps separately from a plain evaluation. `AdvanceDamagedRearm` is the pure re-arm timer only
-`AiEngineAudio` reaches. Decode: [../formats/vehicle.md](../formats/vehicle.md), [../org/shakes.md](../org/shakes.md).
+The engine-audio slot maths both audio paths read, because the original runs one per-frame routine
+for the player and every AI vehicle: whether an airframe counts as damaged, the slot's damage phase
+(`StepEnginePhase`: Healthy, Out while the re-arm timer runs, Damaged), which definition it holds
+and the swap's one-off pitch draw, each slot's pitch and gain off the `PlaneStats` curves, the
+rattle gate, the drive parameter and the cull distance. The drive adds a turn rate and a climb
+attitude to each curve's normalised parameter under a clamp with headroom above 1, which is why
+`SoundCurve` exposes its steps separately from a plain evaluation. Decode: [../formats/vehicle.md](../formats/vehicle.md), [../org/shakes.md](../org/shakes.md).
 
 ## src/Flight/AiEngineAudio.cs
 The positional twin of `FlightAudio` an AI-flown aircraft carries instead of it: the same two engine
 slots on `AudioStreamPlayer3D`s plus the injector's `snd_nitro` loop, and the cull that stops them
 past `EngineAudioCurves`' cull distance and starts them again inside it. The nitro slot is keyed,
 `RefreshNitroLoop` giving it 0.1 s more each time, so its cadence is the state machine's own calls.
-Its listeners are the human pilots, the seam `AiWeaponAudio` and `ProjectilePool` read too, so one
-aircraft answers one listener model. `Attach` is the whole spawner-side surface, and no own-ship
-concept rides here. The `sound` log carries the observable: each slot's verdict, a line per cull
-transition, one per damaged-engine swap, whose edge waits out `PlaneStats.DamagedTimer`'s re-arm.
+Its listeners are the human pilots, the seam `AiWeaponAudio` and `ProjectilePool` read too.
+`Attach` is the whole spawner-side surface. The damage phase steps through `EngineAudioCurves`
+like the own ship's, except that a culled aircraft never ticks the re-arm timer. The `sound` log
+carries each slot's verdict, a line per cull transition and one per damaged-engine swap.
 
 ## src/Flight/AiWeaponAudio.cs
 The weapon half of what an AI-flown aircraft carries instead of `FlightAudio`: the sustained-fire
