@@ -668,25 +668,35 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   entry that drives it "plausibly an authoring leftover", present on 1 of 11 aircraft, so the
   capture may delete the feature rather than tune it.
 
-- `BL-285` `[Tuning]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: footage]` **The throttle-slam plume streams the
-  wrong smoke, and its threshold cannot be judged until it streams the right one.** *Evidence:* the
-  plume now fires at the controls, and what it draws is the `nitro_boost` def's own `nitropuffN`
-  puffers, which `ThrottleSlamSmoke.Build` borrows from the boost by construction, where the
-  CAP-21 footage shows black exhaust smoke ("the nitro smoke, not the black smoke from the
-  original"). The nitro puffers were a stand-in: nothing in the tree decodes which emitter the
-  original starts on a slam. *Fix shape:* decode first. Find the original's throttle-rise arm (the
-  same throttle read the slam gate ports) and which puffer or effect it starts, port that emitter
-  from the exhaust markers, then fly `PT-127` for the threshold. The gate stays: the CAP-21 footage
-  bounds it at its two ends only, a single 1/8 step (0.125) never fires and idle to 5/8 (0.625)
-  does, leaving the 2/8 to 4/8 band unobserved; 0.25, a two-notch jump, is the smallest round
-  number consistent with both, and `PT-127` moves it or leaves it once the smoke is the decoded one.
-  ⚠ Traps: the plume was unreachable at the controls until the gate moved onto the sim step. It was
-  driven from the rendered frame while the lever slews only inside the flight step, so at the 120
-  rendered frames a second a realtime session holds over the fixed 60 Hz step it read the throttle
-  flat on every other frame and no slam of any size could cross any threshold. Judge nothing off a
-  build that predates that fix. The gate itself is covered by the `throttle-slam-smoke` suite (an
-  idle-to-full slam fires once, a single 1/8 step fires nothing), so what is left is the number
-  alone. *Cross-refs:* `PT-127` (the sortie that judges it).
+- `BL-285` `[Bug]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The decoded
+  exhaust smoke is ported and wants one look against CAP-21.** *Evidence:* the original's exhaust
+  smoke is its one code-built puffer, a near-black 0.4 m trail per `exhaust%d` marker whose opacity
+  charges from the commanded lever running ahead of the live one and decays at 1.5/s
+  (`FUN_004afa20`, `FUN_004afbc0`, fed from `FUN_0048e580`; decode in `docs/formats/effects.md`,
+  "Aircraft throttle-rise exhaust"). `Flight.ExhaustSmoke` ports it in place of the borrowed
+  `nitropuffN` puffers and the invented 0.25 threshold gate, which had no counterpart: every
+  constant is now decoded and none is left to tune. The decode reproduces both ends CAP-21 bounds,
+  a 1/8 step peaking at opacity 0.013 and an idle-to-full slam at 0.356, out 3.9 sim-s later (the
+  footage's plume is gone about 2.8 wall-s after the slam, 3.9 sim-s at the capture's 1.39 ratio).
+  A render over grey fog shows two dark streams where the nitro trails were; beside a CAP-21 frame
+  0.8 wall-s after the slam, ours reads narrower and paler near the tail. The footage plane had
+  been idling for several seconds and flies slower than the render's, which alone thickens the
+  plume near the tail, so no instrument here settles it. *The look:* fly `PT-127`. A mismatch that
+  survives a matched speed is a puffer-renderer question (sprite size, texture alpha), not a
+  constant of this emitter. ⚠ Traps: slam with a digit key, not the throttle-up key. A held key
+  moves the commanded lever at the slew's own rate, so the gap stays one step's slew and the
+  original shows nothing for it either. A scripted `--hold` feeds the smoke no gap, so no capture
+  flag reaches the plume. *Cross-refs:* `PT-127` (the sortie), `BL-969` (AI aircraft carry it too).
+
+- `BL-969` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **AI aircraft
+  never stream the exhaust smoke the original gives every airframe with exhaust markers.**
+  *Evidence:* `FUN_00476250` builds an exhaust wrapper per `exhaust%d` marker for every aircraft,
+  and `FUN_0048e580` drives them for every normally flown one, so an AI pilot whose desired throttle
+  jumps ahead of its live lever smokes exactly as the player does. `HumanFlightAdapter` alone builds
+  `Flight.ExhaustSmoke`. *Fix shape:* build it for AI rigs too and feed it the AI's own gap, which
+  `FlightController.NextPilotInput` already records before the slew. ⚠ Traps: each trail is a
+  `Puffer`, and constructing one draws a seed off `Rng.Puffer`, so every golden with an AI aircraft
+  in it moves; prove the move is confined to the new emitters before re-pinning.
 
 - `BL-782` `[Feature]` `[Blocked: BL-455]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Built-in's Options screen carries no audio
   levels, so the mix is settable in the Original presentation alone.** *Evidence:*

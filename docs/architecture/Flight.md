@@ -982,15 +982,15 @@ accumulate-from-rest decode `AnimRuntime` plays the ambient world's `XYZ_ROTATIO
 a long flight session cannot drift. `FlightController` drives it throttle-scaled with a
 `PropIdleSpin` floor and zero while crashed. `--fly` only; the static viewer keeps the still disc.
 
-## src/Flight/ThrottleSlamSmoke.cs
-The throttle-slam exhaust smoke: a large sudden throttle increase streams the `nitro_boost` def's
-own `nitropuffN` puffers (AT_NODE `exhaust1..4`) from the plane's exhaust markers for a few
-sim-seconds, reused without the rest of that def, since the same shape shows on a plain throttle
-jump with no boost. `Update(dt, throttle)` is an edge-triggered gate driven by
-`FlightController.SimStep`, the clock the lever slews on: it tracks the throttle starting the current
-unbroken climb and fires once per climb as the rise crosses `SlamThreshold`, never on a flat or
-falling one. It emits through `Puffer.Emit`/`Stop` in DISTANCE_INTERVAL mode; `Reset(throttle)`
-hard-stops the plume and re-anchors the tracker, so a crash or respawn never slams.
+## src/Flight/ExhaustSmoke.cs
+The engine exhaust smoke, the original's one code-built puffer (`FUN_004afa20`, one per
+`exhaust%d` marker from `FUN_00476250`): a near-black 0.4 m distance trail per marker. `Update(dt,
+leverGap)` ports `FUN_004afbc0`: a non-negative commanded-minus-live gap adds `dt · gap` to an
+intensity, which then decays by `exp(-1.5 dt)`; the trail runs above 0.01 and each particle keeps
+`min(intensity, 1)` as its opacity through `Puffer.BirthAlpha`. `FlightController` reads the gap
+before the slew, where `FUN_0048e580` does; a held seat and a scripted `--hold` feed 0. `Reset()`
+clears it on crash, respawn and placement. The resulting curves (an idle-to-full slam peaks at
+0.356, a held throttle-up key draws nothing): [../formats/effects.md](../formats/effects.md).
 
 ## src/Flight/FuelTank.cs
 The flown aircraft's tank, engine-free so the arithmetic is testable without a scene. `Step(dt,

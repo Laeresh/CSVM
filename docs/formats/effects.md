@@ -186,15 +186,32 @@ It is a distance trail: one particle per **0.4 m**, random velocity **−0.1..+0
 axis, initial size **0.2..0.3 m**, lifetime **0.5..1.5 s**, friction **1.2**, deviation **0.001 m**,
 and normalized scale **1.0 → 3.45** over life. Each particle chooses `smoke101`, `smoke102` or
 `smoke103`; the colour ramp is near-black at age 0.2 and transparent black at age 1, with a
-**200..300 m** distance fade. `FUN_004afbc0` activates it from a positive
-commanded-versus-current throttle gap and otherwise decays it to off. The generic puffer update
+**200..300 m** far fade (`FUN_00550550`, the `+0xdc` band).
+
+**The drive has no threshold.** Every frame of normal flight, `FUN_0048e580` (`0x48e58f`–`0x48e5d2`)
+takes commanded minus live throttle (`[obj+0x124] − [obj+0x128]`), before that frame's 0.5/s slew,
+and hands it to `FUN_004afbc0` for each exhaust wrapper; scripted path flight (`FUN_00490590`) hands
+0. `FUN_004afbc0` adds `dt · gap` (`DAT_009ad744`, the frame dt) to an intensity at wrapper `+0x8`
+when the gap is not negative, then multiplies it by `exp(−1.5 · dt)` (`FUN_00460470` →
+`FUN_00460410`, a three-term series below 0.1). At or below **0.01** it switches the emitter off
+(`FUN_00550350(…, 0)`, which also drops the trail's previous position). Above it, it rebuilds the
+colour ramp: RGB `(7, 7, 9)/255` with alpha `min(intensity, 1)` at age 0.2, transparent black at
+age 1. The ramp container is refcounted and each particle holds the one current at its birth
+(`FUN_0054f8b0`, particle `[0x1d]`; `FUN_0054f6d0` drops the emitter's reference on a rewrite), so
+the opacity is fixed per particle at spawn.
+
+What follows from the constants at a 60 Hz step: an idle-to-full digit slam peaks at intensity
+0.356 about 0.9 s in and is off 3.9 s after the command; idle to 5/8 peaks at 0.18; a single 1/8
+step peaks at 0.013 and is off within 0.4 s, which is why the CAP-21 footage shows no plume for it.
+A held throttle-up key moves the commanded lever at the slew's own rate, so the gap stays one
+step's slew and the intensity settles below the 0.01 floor. The generic puffer update
 `FUN_0054ee10` → `FUN_0054f8b0` samples each exhaust node's world transform and leaves emitted
 particles in world space, which is why they pass behind the moving aircraft.
 
-This is the executable counterpart of the throttle-rise smoke described in
-`CSVM/src/Flight/ThrottleSlamSmoke.cs`, not the speed-cue wisp system. The full Ghidra trace of
-both emitters, and of the mechanisms ruled out on the way to them, is in
-`analysis/bl-317-plane-wisps/FINDINGS.md`.
+`FUN_00476250` builds the wrappers for every aircraft that carries `exhaust%d` markers, not only
+the player's. CSVM implements it in `CSVM/src/Flight/ExhaustSmoke.cs` for the flown aircraft only.
+The full Ghidra trace of this emitter and the speed-cue wisps, and of the mechanisms ruled out on
+the way to them, is in `analysis/bl-317-plane-wisps/FINDINGS.md`.
 
 
 ## Texture flipbooks

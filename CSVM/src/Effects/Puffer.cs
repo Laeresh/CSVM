@@ -485,6 +485,12 @@ public sealed partial class Puffer : Node3D
     /// <see cref="SpeedCue.LateralSpreadFor"/>, whose remark carries the rule.</summary>
     internal float LateralSpreadScale { get; set; } = 1f;
 
+    /// <summary>An opacity each particle takes at birth and keeps for its life, multiplying its
+    /// ramp. The engine's particle holds its own reference to the ramp current when it spawned, so
+    /// a host that rewrites the ramp per frame changes only the particles born after the change.
+    /// 1 for every authored emitter; <see cref="Flight.ExhaustSmoke"/> alone writes it.</summary>
+    internal float BirthAlpha { get; set; } = 1f;
+
     /// <summary>The ambience handed in at construction, so a suite can ask WHICH instance an
     /// emitter reads rather than only what that instance says this frame. The wiring is what breaks
     /// silently: an emitter left on <see cref="EffectAmbience.Still"/> reads zero wind and no
@@ -709,7 +715,7 @@ public sealed partial class Puffer : Node3D
                 Pos = p.Pos,
                 Size = size,
                 Frame = flipbook ? FrameFor(lifeFrac) : p.Frame,
-                Alpha = (hasRamp ? 1f : FadeFor(lifeFrac)) * distAlpha,
+                Alpha = (hasRamp ? 1f : FadeFor(lifeFrac)) * distAlpha * p.BirthAlpha,
                 Color = hasRamp ? RampColor(lifeFrac) : Colors.White,
             };
         }
@@ -1100,6 +1106,7 @@ public sealed partial class Puffer : Node3D
                 Life = life,
                 Age = age,
                 Frame = frame,
+                BirthAlpha = BirthAlpha,
             };
         }
     }
@@ -1161,6 +1168,7 @@ public sealed partial class Puffer : Node3D
                 BaseSize = size,
                 Life = life,
                 Age = age,
+                BirthAlpha = BirthAlpha,
             };
         }
         _burstsSpawned++;
@@ -1185,6 +1193,7 @@ public sealed partial class Puffer : Node3D
         public Vector3 Pos, Vel;
         public float BaseSize, Age, Life;
         public float Frame; // static-TEXTURES pool: the randomly picked atlas column
+        public float BirthAlpha; // Puffer.BirthAlpha as it stood at spawn
     }
 
     // One particle's finished draw payload, buffered so the frame can be reordered before it

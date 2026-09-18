@@ -518,11 +518,9 @@ internal sealed class HumanFlightAdapter
             if (verbose)
                 Log.Info("flight", $"weapon lab: P{pi + 1} held at the spawn pose (world sim running)");
         }
-        // The throttle-slam exhaust smoke: needs the plane's own exhaust marker
-        // nodes plus the live throttle Setup just wrote, so it builds after Setup rather than
-        // alongside Props/WingLights above.
-        controller.ThrottleSmoke = ThrottleSlamSmoke.Build(planeModel, _aircraft.ZrdrPath, _aircraft.Textures,
-            controller, controller.Throttle, _world.Ambience);
+        // The exhaust smoke hangs off the plane's own exhaust marker nodes, one trail per marker.
+        controller.ExhaustSmoke = ExhaustSmoke.Build(planeModel, _aircraft.Textures, controller,
+            _world.Ambience);
 
         // The ambient speed cue is chapter data, not an aircraft-model effect: one private copy
         // per player so splitscreen panes do not see another pilot's ahead-of-plane wisps.

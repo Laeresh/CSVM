@@ -355,17 +355,17 @@ reasons that have nothing to do with any of these checks.
   that dive was the engine slot's own movement, and these terms are what produces it.
 
 - `PT-127` `[A/B: OriginalScreenshots/Videos/CAP-21 0 to 100 Full.mp4 + CAP-21 100 to 0 Full.mp4]`
-  **The throttle-slam smoke gate (`BL-285`).** One constant pending one sortie:
-  `ThrottleSlamSmoke.SlamThreshold` is 0.25, the smallest value consistent with footage whose 2/8 to
-  4/8 band is unobserved. *Look for:*
-  - (a) the gate walked by hand from idle: a single 1/8 step must not fire, idle to 5/8 must, and
-    where in between it starts is the judgement;
-  - (b) whether the plume reads as a slam response at all, rather than a puff on any throttle move.
-  *Blocks:* `BL-285`. ⚠ The plume fires only on a build where the gate runs on the sim step: driven
-  from the rendered frame it read the lever flat on every other frame and nothing ever fired, so a
-  sortie on an older build judges an effect that never reached the screen. ⚠ Judge the threshold
-  only once the plume is the decoded black exhaust smoke: today it streams the nitro puffers, and
-  `BL-285` decodes the right emitter first.
+  **The decoded exhaust smoke (`BL-285`).** No constant is left to tune: every value of the trail
+  and its charge is decoded, so this sortie judges only whether the port reads like the original.
+  From idle at a steady cruise, slam to full with the `8` digit key and watch from the chase camera,
+  as CAP-21 does around 12.5 s. *Look for:*
+  - (a) near-black smoke from each exhaust, strongest about a second after the slam and gone about
+    four seconds after it, matching the footage's fade;
+  - (b) its width and opacity against the footage's: a render reads narrower and paler near the
+    tail, and the footage plane flies slower, so match the speed before judging;
+  - (c) a single 1/8 step drawing at most a faint wisp, and idle to 5/8 a plume about half as dark.
+  *Blocks:* `BL-285`. ⚠ Slam with a digit key: the held throttle-up key moves the commanded lever
+  at the slew's own rate and draws nothing, in the original as here.
 
 - `PT-128` `[A/B: OriginalScreenshots/Dirt Splash.png + Videos/30 Slu building.mp4]` **The building
   ricochet spark burst (`BL-289`).** ⚠ Flown once: the hangar drew no sparks in CSVM, and the

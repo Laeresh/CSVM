@@ -218,7 +218,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/StickRamp.cs`, the keyboard stick as an accumulator: a held key ramps the axis at 2.5/s, release or reversal drops it to centre in one frame.
 - `src/Flight/PathFollower.cs`, the second movement law: a placed vehicle driven along an authored waypoint path instead of through the flight model.
 - `src/Flight/PropAnimator.cs`, spins the collected prop/rotor discs about their local axes, throttle-scaled (idle floor 0.4); `--fly` only.
-- `src/Flight/ThrottleSlamSmoke.cs`, a large throttle jump streams dark exhaust trail smoke for a few seconds; a single notch or a decrease shows nothing.
+- `src/Flight/ExhaustSmoke.cs`, the original's code-built exhaust trail: near-black smoke whose strength charges from the commanded lever running ahead of the live one.
 - `src/Flight/FuelTank.cs`, the flown tank: burns with the lever, and a dry one freezes the throttle lever where it stands. Engine-free.
 - `src/Flight/SpeedCue.cs`, chapter-authored pale smoke wisps emitted 60 m ahead of each player, density selected by camera altitude.
 - `src/Flight/ControlSurfaceMix.cs`, the decoded control-surface angle solver: three stick channels into six clamped slots, smoothed at 2/s. No scene node.

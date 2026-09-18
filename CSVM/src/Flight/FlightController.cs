@@ -101,9 +101,9 @@ public partial class FlightController : Node3D
     /// each frame. Null if the model has no wing-flare nodes.</summary>
     public WingLightBlinker? WingLights;
 
-    /// <summary>The throttle-slam exhaust smoke; advanced on each sim step, the clock its own
-    /// gate needs. Null if the model has no exhaust nodes.</summary>
-    public ThrottleSlamSmoke? ThrottleSmoke;
+    /// <summary>The exhaust smoke a commanded lever ahead of the live one streams; advanced on
+    /// each sim step, the clock the lever slews on. Null if the model has no exhaust nodes.</summary>
+    public ExhaustSmoke? ExhaustSmoke;
 
     /// <summary>The chapter-authored pale speed wisps spawned ahead of this aircraft; one private
     /// instance per rendered player view.</summary>
@@ -577,6 +577,7 @@ public partial class FlightController : Node3D
     private float _spawnSpeed = FallbackSpawnSpeed;
     private float _throttle;                     // the live lever (+0x128), slewing toward the next
     private float _throttleSetting;              // the commanded lever (+0x124) the controls write
+    private float _leverGap;                     // commanded minus live, read before this step's slew
     private float _keyPitch;                    // the three keyboard axes' own deflection, ramped
     private float _keyRoll;                      // by StickRamp; a gamepad's analogue axis adds on
     private float _keyYaw;                       // top and is never ramped
@@ -753,8 +754,8 @@ public partial class FlightController : Node3D
     }
 
     /// <summary>Current throttle (0-1), the live flight model's own value, exposed so the rig
-    /// assembler can seed <see cref="ThrottleSmoke"/> at build time, after <see cref="Setup"/> has
-    /// already placed the plane at its spawn throttle.</summary>
+    /// assembler and the suites can read the lever, after <see cref="Setup"/> has already placed
+    /// the plane at its spawn throttle.</summary>
     public float Throttle => _model.Throttle;
 
     /// <summary>Seconds left on this aircraft's engine-dead timer, zero when the engine runs. The
@@ -1243,9 +1244,8 @@ public partial class FlightController : Node3D
         // First setup precedes adapter construction, so the adapter replays startprops after attachment.
         _crashRuntime?.Play("startprops", PlaneModel, applyReset: false);
         _propsStopped = false;  // a fresh airframe's discs turn, whatever the last hull ended on
-        // A fresh engine has no in-flight plume, and the spawn throttle jump (0 → the spawn
-        // throttle) must never itself read as a slam.
-        ThrottleSmoke?.Reset(_throttle);
+        // A fresh engine has no in-flight plume, and no charge left over from the last airframe.
+        ExhaustSmoke?.Reset();
         Nitro.Reset();
         _aiNitroArmed = false;
         SpeedCue?.Reset();
@@ -1376,7 +1376,7 @@ public partial class FlightController : Node3D
             _model.Throttle = opened;
             if (Pilot != null)
                 Pilot.Throttle = opened;
-            ThrottleSmoke?.Reset(_throttle);
+            ExhaustSmoke?.Reset();
         }
     }
 
@@ -1416,7 +1416,7 @@ public partial class FlightController : Node3D
         _model.Throttle = throttle;
         if (Pilot != null)
             Pilot.Throttle = throttle;
-        ThrottleSmoke?.Reset(_throttle);
+        ExhaustSmoke?.Reset();
         Pilot?.Patrol?.Reseat();
     }
 
@@ -1876,6 +1876,9 @@ public partial class FlightController : Node3D
             return;
         }
 
+        // Only a step that reads the controls measures a gap; a held or wholly held seat reads none.
+        _leverGap = 0f;
+
         // Weapon lab: a HELD airframe skips input/model/collision and re-asserts its pinned pose
         // instead; weapons/gauges/telemetry below run exactly as in flight, through _model.Reset.
         if (_held)
@@ -1978,10 +1981,10 @@ public partial class FlightController : Node3D
         // which this clock is. A crash or halt stops the calls, freezing the radius too.
         _cam?.UpdateDynamics(dt, _model.Speed);
 
-        // ⚠ The slam gate belongs on this clock, never on the rendered frame: the lever slews only
-        // inside this step, so a frame carrying none reads it flat and ends the climb it measures.
-        // Past the pose write above, so the plume emits at this step's pose.
-        ThrottleSmoke?.Update(dt, _model.Throttle);
+        // ⚠ The smoke belongs on this clock, never on the rendered frame: the gap it charges from
+        // closes only inside this step, so a frame carrying none would charge it twice. Past the
+        // pose write above, so the plume emits at this step's pose.
+        ExhaustSmoke?.Update(dt, _leverGap);
 
         // The AI gunner: acquire/hold the target and decide this tick's trigger and lead
         // BEFORE the fire step reads them. Runs for AI pilots only; a gunner-less AI keeps the
@@ -3205,7 +3208,7 @@ public partial class FlightController : Node3D
         // original's death routine runs it here too (docs/org/ordnanceTypes.md).
         PlayStopProps();
         // No plume survives a dead engine.
-        ThrottleSmoke?.Reset(_throttle);
+        ExhaustSmoke?.Reset();
         SpeedCue?.Reset();
     }
 
@@ -3714,6 +3717,7 @@ public partial class FlightController : Node3D
         }
         var input = Pilot!.Next(_model, dt);
         _throttleSetting = input.Throttle;
+        _leverGap = _throttleSetting - _throttle;
         _throttle = Mathf.MoveToward(_throttle, _throttleSetting, ThrottleRate * dt);
         input.Throttle = _throttle;
         return input;
@@ -4256,6 +4260,7 @@ public partial class FlightController : Node3D
         // A dry tank skips the slew, so the lever freezes rather than closing; a crashed airframe
         // still moves it (the original's crashed-flag arm). ⚠ Slew every tick, not only while a key
         // is down: stepping it inside the digit test left a tapped setting barely moved.
+        _leverGap = _throttleSetting - _throttle; // ahead of the fuel test, as FUN_0048e580 reads it
         if (Crashed || Fuel.Step(dt, _throttle))
             _throttle = Mathf.MoveToward(_throttle, _throttleSetting, ThrottleRate * dt);
 
