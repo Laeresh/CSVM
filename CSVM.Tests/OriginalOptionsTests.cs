@@ -1036,6 +1036,32 @@ public class OriginalOptionsTests
         Assert.Equal((136f, 371f, 170f, 23f), Rect(Row(host, OriginalOptionsScreen.ControlsMouseKey)));
     }
 
+    /// <summary>The scheme chooser presses on the slider's region but draws its word and arrow in
+    /// the Controller Type box's column, so the two rows' words start together and their arrows end
+    /// together although the two press regions stand at different columns.</summary>
+    [Fact]
+    public void TheFlyingSchemeRowDrawsInTheSeatRowsColumn()
+    {
+        var host = Host(controls: Controls(out _, out _));
+        host.Module.OpenControlsPrefs();
+        var seat = Row(host, OriginalOptionsScreen.ControlsPlayerKey);
+        var scheme = Row(host, OriginalOptionsScreen.ControlsMouseKey);
+        Assert.NotEqual(seat.X, scheme.X);
+
+        var board = Compose(host);
+        int seatIndex = host.Rows.ToList().IndexOf(seat);
+        int schemeIndex = host.Rows.ToList().IndexOf(scheme);
+        var seatWord = board.Lines.Single(l => l.Row == seatIndex);
+        var schemeWord = board.Lines.Single(l => l.Row == schemeIndex);
+        Assert.Equal(seatWord.X, schemeWord.X);
+        Assert.Equal(seatWord.Width, schemeWord.Width);
+
+        var arrows = board.Pictures.Where(p => p.Art.Name == seat.Art!.Name).ToArray();
+        Assert.Equal(2, arrows.Length);
+        Assert.Equal(arrows[0].X, arrows[1].X);
+        Assert.True(schemeWord.Y > seatWord.Y);
+    }
+
     /// <summary>The scheme row is the Controls door's own: a press flips it, a sideways step flips
     /// it back, and neither reaches the seat until ACCEPT CHANGES.</summary>
     [Fact]

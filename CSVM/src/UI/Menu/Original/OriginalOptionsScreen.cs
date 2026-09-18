@@ -2598,8 +2598,23 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
                 continue;
             }
 
-            _host.ComposeGenericRow(row, i == focus, i == _host.PressedRow, i, fills, lines, plaques, pictures);
+            _host.ComposeGenericRow(ControlsFace(screen, row), i == focus, i == _host.PressedRow, i, fills, lines, plaques, pictures);
         }
+    }
+
+    // Where a CONTROLS row is drawn. The scheme chooser presses on the slider's region, whose
+    // corner is <DROPX> 142, but a dropdown's word and arrow are what it shows, and those stand in
+    // the Controller Type box's column (134 to 309) so both rows read as one column. Only the
+    // horizontal span is taken; the press region itself stays the authored one.
+    private OriginalRow ControlsFace(MenuLayoutScreen screen, OriginalRow row)
+    {
+        if (row.Key != ControlsMouseKey)
+        {
+            return row;
+        }
+
+        var column = ControlsPlayerBox(screen);
+        return row with { X = column.X, Width = column.Width };
     }
 
     // The KEYS AND BUTTONS page as drawn: the plate, the title, the three column heads, the tab

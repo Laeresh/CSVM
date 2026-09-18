@@ -1178,19 +1178,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `git log --grep=BL-819`, `docs/formats/campaign-screens.md` ("The mission cheat"),
   `docs/org/menu-inventory.md`.
 
-- `BL-942` `[Bug]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: feel]` **The Original CONTROLS
-  page's Mouse row still does not line up horizontally with the Controller Type row above it.**
-  *Evidence:* judged at the controls against the before/after crops as "Better but not right,
-  horizontal alignment ist still off". The row now takes its rectangle from `CP_S_MOUSE`'s own
-  slider-slot art rather than from the dropdown beside it, 170 by 23 at 142, 381
-  (`git log --grep=BL-917`), which fixed the vertical placement and the height but left the
-  horizontal reading wrong. *Fix shape:* measure the drawn word and arrow against `CP_D_Fly`'s
-  column in a capture of the page, and say which of the three horizontal terms is off: the row's
-  `X 142` (`<DROPX>`), the text's own inset inside the region, or the arrow's offset from the right
-  edge. *⚠ Traps:* do not move the region to make the text line up; the region is the press target
-  the original authored, so a text inset is the likelier fault. *Cross-refs:*
-  `Z:\CSVM\.scratch\orch-5\BL-917\` (controls-crop-before.png, controls-crop-after.png),
-  `docs/formats/menu-layout.md` (the `Z` row's four insets), `docs/org/menu-inventory.md`.
 
 - `BL-946` `[Fidelity]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The Weapon
   Loadout screen maps rocket widget N to physical pylon N+1 where the original maps it to the saved
