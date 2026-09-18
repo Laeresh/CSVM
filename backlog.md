@@ -912,8 +912,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   and the forced 164x123 region but not the eye. *Deliverable:* read the original's capture call
   (the writer of the `.PN_` file the commit sweep `FUN_004072a0` renames) and say whether it grabs
   the back buffer as drawn or poses a camera of its own first, and if the latter, from where. If a
-  camera is posed, mint the port with the pose. *Cross-refs:* `BL-964` (the same latch's frame
-  cost), `docs/formats/campaign-screens.md` ("The danger-zone slot"), `docs/org/debrief.md`.
+  camera is posed, mint the port with the pose. *Cross-refs:* `Utils/PaneReadback.cs` (the
+  latch's asynchronous readback), `docs/formats/campaign-screens.md` ("The danger-zone slot"), `docs/org/debrief.md`.
 
 ## HUD & UI
 
@@ -1088,7 +1088,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Fix shape:* carry the shots into `IaWrapupSnapshot` and draw the strip on the Original page in
   the band under the rows, at the same 164-pixel thumbnail width, without moving the decoded rows.
   *⚠ Traps:* `BL-943` to `BL-945` are reshaping that band; land beside them, not under them.
-  *Cross-refs:* `BL-964` (the shots' frame cost), `BL-943`, `git log --grep=BL-256`.
+  *Cross-refs:* `StuntCapture.ShotLanded` (a shot's thumbnail can land after the board wakes),
+  `BL-943`, `git log --grep=BL-256`.
 
 ## Splitscreen
 
@@ -1272,21 +1273,6 @@ usual.
   avoidance and an AI path keeps driving one until something stops it (`docs/org/aiPilot.md`), so a
   crash that plays without stopping the path looks like this too. *Cross-refs:*
   `docs/formats/anim-definitions.md`, `docs/org/sequences.md`.
-
-- `BL-964` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **A Danger Zone photograph freezes the frame
-  it is taken on, and one such freeze crashed the game.** *Evidence:* "strong hitch/freeze while
-  screenshotting, had a crash because of it". `StuntCapture.Latch` calls the pane delegate, which
-  is `GetViewport().GetTexture().GetImage()`, a synchronous GPU readback of the full pane, then
-  `SavePng` on the same frame, then the thumbnail resize; `CampaignSnapshot.Stage` does the same
-  readback and write for a campaign zone. At 5120x1440 that is a 29 MB readback and a PNG encode
-  inside one rendered frame. *Fix shape:* keep the latch on the crossing frame but move the cost
-  off it: request the readback and encode the PNG and the thumbnail on a worker, with the shot's
-  record completed when the file lands; the sting and the pass mark stay on the crossing. Find the
-  crash first: reproduce with the log and read the exception, since a readback that fails on a
-  frame still being presented is a different bug from a frame that merely stalls. *⚠ Traps:*
-  the `stunt-capture` suite photographs a synthetic frame and cannot see the cost; a live `--fly`
-  run over C4/IA1 with `HitchMonitor` on is the instrument. *Cross-refs:* `BL-965`, `BL-966`,
-  `git log --grep=BL-256`.
 
 ## Tooling, platform & docs
 

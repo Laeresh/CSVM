@@ -106,7 +106,7 @@ public sealed class CampaignDirector
     private NetTrailerTargets? _netTrailers;
     private float _minAiActiveDist = 2000f;
     private CampaignDangerZones? _dangerZones;
-    private Func<Image?>? _playerPane;
+    private PaneRequest? _playerPane;
     private DangerZoneRibbons? _ribbons;
     private Messages? _strings;
     private bool _cutsceneHold;
@@ -673,7 +673,7 @@ public sealed class CampaignDirector
         _zonesCompleted.Add(objective);
         if (snapshot && ProfileDirectory() is { } directory)
         {
-            CampaignSnapshot.Stage(directory, _mission.Ordinal, objective, _playerPane?.Invoke());
+            CampaignSnapshot.Stage(directory, _mission.Ordinal, objective, _playerPane);
         }
     }
 
@@ -1367,10 +1367,10 @@ public sealed class CampaignDirector
         /// because the flight rigs are built after the world.</summary>
         public Func<FlightController?>? PlayerAircraft;
 
-        /// <summary>The scripted player's pane as an image, read fresh, for the Danger Zone
+        /// <summary>The scripted player's pane, requested on the crossing frame, for the Danger Zone
         /// photograph. Null leaves a completed zone scored but unphotographed, which is what every
         /// suite without a viewport gets.</summary>
-        public Func<Image?>? PlayerPane;
+        public PaneRequest? PlayerPane;
 
         /// <summary>The HUMAN FIELD: every joined player's aircraft, read fresh. Left unset by a
         /// solo sortie and by every suite that builds one rig, where the scripted player is the

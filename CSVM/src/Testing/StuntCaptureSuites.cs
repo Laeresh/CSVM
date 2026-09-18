@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.UI;
@@ -27,7 +28,9 @@ internal static class StuntCaptureSuites
         + "once, lingering inside the radius latches nothing more, a later pass over a "
         + "photographed marker latches nothing more, the files land under screenshots/stunts/ "
         + "named by chapter, marker and run clock, a rerun makes every marker photographable "
-        + "again, and the scoreboard's thumbnail strip lists the run's shots in marker order")]
+        + "again, the scoreboard's thumbnail strip lists the run's shots in marker order, and a "
+        + "frame landing after the crossing (and after the board woke) writes its file and fills "
+        + "its cell while the sting and the pass mark stay on the crossing")]
     internal static void StuntCaptureRun(TestContext ctx)
     {
         string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, Chapter);
@@ -71,12 +74,9 @@ internal static class StuntCaptureSuites
 
     private static void Drive(TestContext ctx, StuntMission run)
     {
-        int grabs = 0, stings = 0;
-        var capture = new StuntCapture(run, Chapter, () =>
-        {
-            grabs++;
-            return Pane();
-        });
+        int stings = 0;
+        var pane = new PaneRig();
+        var capture = new StuntCapture(run, Chapter, pane.Request);
         capture.Sting = () => stings++;
 
         var latched = new List<(string DzName, float At)>();
@@ -110,11 +110,11 @@ internal static class StuntCaptureSuites
 
         ctx.Same(run.TotalCount, capture.Count, $"the run latches one photograph per marker");
         ctx.Same(run.TotalCount, stings, $"…and plays the camera sting once per marker");
-        ctx.Same(run.TotalCount, grabs, $"…reading the pane exactly once per latch");
+        ctx.Same(run.TotalCount, pane.Grabs, $"…reading the pane exactly once per latch");
         CheckFiles(ctx, latched);
         CheckOrder(ctx, run, capture);
         CheckRerun(ctx, run, capture);
-        CheckStrip(ctx, run, capture);
+        CheckStrip(ctx, run, capture, pane, () => stings);
         ctx.Note($"{Chapter}/{Mission}: {run.TotalCount} markers photographed into {StuntCapture.ShotDir()}");
     }
 
@@ -179,17 +179,34 @@ internal static class StuntCaptureSuites
     }
 
     // The strip on the real board: built from the run's own shots when the run completes, one cell
-    // per photograph, captioned and ordered by marker rather than by the order they were flown.
-    private static void CheckStrip(TestContext ctx, StuntMission run, StuntCapture capture)
+    // per photograph, captioned and ordered by marker rather than by the order they were flown. The
+    // last marker's frame is held back past the board waking, the way a live readback lands frames
+    // after the crossing that completes the run.
+    private static void CheckStrip(TestContext ctx, StuntMission run, StuntCapture capture, PaneRig pane,
+        System.Func<int> stings)
     {
         capture.Reset();
         capture.Update(Elsewhere);  // out of the marker the rerun check left the aircraft inside
+        var last = run.Zones[run.Zones.Count - 1];
         foreach (var zone in run.Zones)
         {
             run.Tick(1f);
+            pane.Hold = zone == last;
+            int before = stings();
             capture.Update(zone.Position);
             capture.Update(Elsewhere);
+            if (pane.Hold)
+            {
+                ctx.Check(stings() == before + 1 && capture.Count == run.Zones.Count,
+                    $"the sting and the pass mark land on the crossing, before the frame does (shots={capture.Count})");
+            }
         }
+
+        pane.Hold = false;
+        capture.Settle();
+        var held = capture.InMarkerOrder().Last();
+        ctx.Check(!held.Landed && !File.Exists(held.Path),
+            $"{held.DzName}: a frame still on its way has written no file and has no thumbnail");
 
         string storePath = Path.Combine(ctx.ScratchDir, "StuntCapture", "stunt_scores.json");
         var board = StuntScoreboard.Build(run, "Test Plane", $"{Chapter}", ScoreStore.Load(storePath),
@@ -211,11 +228,38 @@ internal static class StuntCaptureSuites
             ctx.Same(markers.Count, captions.Count, $"the strip carries one cell per photograph");
             ctx.Check(string.Join(",", captions) == string.Join(",", markers),
                 $"the strip lists the run's shots in marker order: [{string.Join(" ", captions)}]");
+            ctx.Same(markers.Count - 1, Pictures(board), $"…with a picture in every cell whose frame has landed");
+
+            pane.Release(Pane());
+            capture.Settle();
+            ctx.Check(held.Landed && held.Thumb != null && File.Exists(held.Path),
+                $"{held.DzName}: the late frame completes the shot's record and writes its file");
+            ctx.Same(markers.Count, Pictures(board), $"…and fills its cell on the board already showing");
         }
         finally
         {
             board.Free();
         }
+    }
+
+    // How many strip cells show a picture.
+    private static int Pictures(StuntScoreboard board)
+    {
+        int count = 0;
+        if (board.FindChild(StuntScoreboard.StripName, recursive: true, owned: false) is { } strip)
+        {
+            foreach (var cell in strip.GetChildren())
+            {
+                foreach (var part in cell.GetChildren())
+                {
+                    if (part is TextureRect { Texture: not null })
+                    {
+                        count++;
+                    }
+                }
+            }
+        }
+        return count;
     }
 
     // The strip's own captions, read off the named container so the splits table's rows above
@@ -247,5 +291,36 @@ internal static class StuntCaptureSuites
         var img = Image.CreateEmpty(64, 48, false, Image.Format.Rgba8);
         img.Fill(new Color(0.2f, 0.4f, 0.6f));
         return img;
+    }
+
+    // The suite's pane request: lands the synthetic frame at once, or holds it until Release, which
+    // stands in for a live readback landing frames after the crossing.
+    private sealed class PaneRig
+    {
+        private System.Action<Image?>? _held;
+
+        public int Grabs { get; private set; }
+
+        public bool Hold { get; set; }
+
+        public bool Request(System.Action<Image?> landed)
+        {
+            Grabs++;
+            if (Hold)
+            {
+                _held = landed;
+            }
+            else
+            {
+                landed(Pane());
+            }
+            return true;
+        }
+
+        public void Release(Image frame)
+        {
+            _held?.Invoke(frame);
+            _held = null;
+        }
     }
 }

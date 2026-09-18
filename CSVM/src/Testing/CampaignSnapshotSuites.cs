@@ -34,7 +34,8 @@ internal static class CampaignSnapshotSuites
         + "profile directory, winning the mission keeps it at the row's own name and sets the "
         + "zone's mask bit, the written file is the forced 164x123 region, the scrapbook resolves "
         + "and draws it under its photo-corner mount, a spread composed without the file on disk "
-        + "skips the row, and a stunt Instant Action run writes its own shots and no Snap_ file")]
+        + "skips the row, a stunt Instant Action run writes its own shots and no Snap_ file, and a "
+        + "frame landing after the mission-end sweep takes that sweep's keep or drop")]
     internal static void CampaignDangerZoneSnapshot(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -60,6 +61,7 @@ internal static class CampaignSnapshotSuites
             ctx.WithWorld(Chapter, collision: false, Mission, world =>
                 Fly(ctx, world, script, mission, profile, store, missionZrdr, report));
             StuntRunWritesNoSnap(ctx, root, store.DirFor(Pilot), report);
+            LandsAfterCommit(ctx, Path.Combine(root, "Late"), mission.Ordinal);
         }
         finally
         {
@@ -110,10 +112,11 @@ internal static class CampaignSnapshotSuites
         {
             Runtime = world.Runtime,
             Gamez = world.Gamez,
-            PlayerPane = () =>
+            PlayerPane = landed =>
             {
                 panes++;
-                return Pane();
+                landed(Pane());
+                return true;
             },
         });
 
@@ -231,7 +234,11 @@ internal static class CampaignSnapshotSuites
         try
         {
             StuntCapture.DirectoryOverride = Path.Combine(root, "Stunts");
-            var capture = new StuntCapture(run, "C4", Pane);
+            var capture = new StuntCapture(run, "C4", landed =>
+            {
+                landed(Pane());
+                return true;
+            });
             foreach (var zone in run.Zones)
             {
                 run.Tick(1f);
@@ -249,6 +256,30 @@ internal static class CampaignSnapshotSuites
         finally
         {
             StuntCapture.DirectoryOverride = previous;
+        }
+    }
+
+    // The readback lands frames after the crossing, so a zone that ends the mission is committed
+    // before its file exists: the verdict waits for the landing instead of missing the file.
+    private static void LandsAfterCommit(TestContext ctx, string dir, int mission)
+    {
+        foreach (bool won in new[] { true, false })
+        {
+            int objective = won ? 18 : 19;
+            Action<Image?>? held = null;
+            string? staged = CampaignSnapshot.Stage(dir, mission, objective, landed =>
+            {
+                held = landed;
+                return true;
+            });
+            string kept = Path.Combine(dir, CampaignSnapshot.FileName(mission, objective));
+            ctx.Check(staged != null && !File.Exists(staged),
+                $"a {(won ? "won" : "lost")} mission's crossing stages nothing on disk until its frame lands");
+            ctx.Same(1, CampaignSnapshot.Commit(dir, mission, won),
+                $"…and the mission-end sweep still counts the photograph on its way");
+            held?.Invoke(Pane());
+            ctx.Check(!File.Exists(staged ?? "") && File.Exists(kept) == won,
+                $"the late frame of a {(won ? "won" : "lost")} mission takes the sweep's verdict: kept={File.Exists(kept)}");
         }
     }
 

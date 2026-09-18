@@ -174,12 +174,13 @@ Gate decode: [../formats/missions.md](../formats/missions.md).
 
 ## src/Session/CampaignSnapshot.cs
 The campaign Danger Zone photograph: the pilot's pane, scaled to the 164x123 region the scrapbook
-forces, written into the flying profile's own directory under the `Snap_<mission>_<objective>` name
-a capture row resolves against. `Stage` writes one zone's still under a `.PN_` pending name during
-the flight and `Commit` sweeps ids 10 to 31 at mission end, keeping them under their scrapbook names
-on a win and deleting them on a loss, which is the original's own two-step. `Flight/StuntCapture.cs`
-is the other camera and shares nothing but the idea: an Instant Action run has no mission slot or
-objective to be named by. Rows and gate: [../formats/campaign-screens.md](../formats/campaign-screens.md).
+forces, written into the flying profile's directory under the `Snap_<mission>_<objective>` name a
+capture row resolves against. `Stage` requests one zone's still on the crossing frame, and a worker
+writes it under a `.PN_` pending name when the frame lands. `Commit` sweeps ids 10 to 31 at mission
+end, keeping them under their scrapbook names on a win and deleting them on a loss (the original's
+two-step); a still landing after the sweep takes the verdict left for it. `Flight/StuntCapture.cs`
+is the other camera: an Instant Action run has no mission slot or objective to be named by. Rows and
+gate: [../formats/campaign-screens.md](../formats/campaign-screens.md).
 
 ## src/Session/ObjectiveGraph.cs
 The objectives runtime over a parsed script, pure state over `Step` calls in the shape of

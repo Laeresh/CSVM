@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using CSVM.UI;
 using CSVM.Utils;
 using Godot;
@@ -28,6 +29,11 @@ public sealed partial class StuntScoreboard : ResultsBoard
     // course shrinks each frame to fit rather than pushing the panel off the pane. TUNE.
     private const float StripWidth = 560f;
     private const float StripGap = 6f;
+
+    // Strip cells drawn before their shot landed, filled by OnShotLanded, and the camera whose
+    // landings this board listens to.
+    private readonly Dictionary<StuntShot, (TextureRect Picture, float Width)> _pending = new();
+    private StuntCapture? _landingShots;
 
     private StuntMission _mission = null!;
     private ScoreStore _store = null!;
@@ -63,11 +69,25 @@ public sealed partial class StuntScoreboard : ResultsBoard
         return board;
     }
 
-    public override void _ExitTree() => _mission.RunCompleted -= OnRunCompleted;
+    public override void _ExitTree()
+    {
+        _mission.RunCompleted -= OnRunCompleted;
+        if (_landingShots != null)
+        {
+            _landingShots.ShotLanded -= OnShotLanded;
+            _landingShots = null;
+        }
+    }
 
     // This board draws inside one pilot's pane, so its metrics are damped by the pane share
     // (identical to plain Max(1, h/720) at any full-screen view 720p or taller).
     protected override float BoardScale() => Mathf.Max(0.5f, HudMetrics.Scale(this, 720f));
+
+    private static void Fill(TextureRect picture, Image thumb, float width)
+    {
+        picture.Texture = ImageTexture.CreateFromImage(thumb);
+        picture.CustomMinimumSize = new Vector2(width, width * thumb.GetHeight() / Mathf.Max(1, thumb.GetWidth()));
+    }
 
     private void OnRunCompleted()
     {
@@ -123,28 +143,64 @@ public sealed partial class StuntScoreboard : ResultsBoard
         strip.AddThemeConstantOverride("separation", Mathf.RoundToInt(StripGap * s));
         float width = Mathf.Min(StuntCapture.ThumbWidth * s,
             ((StripWidth * s) - (StripGap * s * (shots.Count - 1))) / shots.Count);
+        _pending.Clear();
         foreach (var shot in shots.InMarkerOrder())
         {
-            if (shot.Thumb is not { } thumb)
+            if (shot.Landed && shot.Thumb == null)
             {
                 continue;
             }
             var cell = new VBoxContainer();
-            float height = width * thumb.GetHeight() / Mathf.Max(1, thumb.GetWidth());
-            cell.AddChild(new TextureRect
+            var picture = new TextureRect
             {
-                Texture = ImageTexture.CreateFromImage(thumb),
-                CustomMinimumSize = new Vector2(width, height),
                 ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize,
                 StretchMode = TextureRect.StretchModeEnum.Scale,
-            });
+            };
+            cell.AddChild(picture);
+            if (shot.Thumb is { } thumb)
+            {
+                Fill(picture, thumb, width);
+            }
+            else
+            {
+                // The run's last crossing usually wakes this board before its frame has landed.
+                picture.CustomMinimumSize = new Vector2(width, width * 3f / 4f);
+                _pending[shot] = (picture, width);
+            }
             var caption = Label(shot.DzName, Mathf.Max(8, (int)(StripFont * s)), HeaderColor);
             caption.HorizontalAlignment = HorizontalAlignment.Center;
             cell.AddChild(caption);
             strip.AddChild(cell);
         }
 
+        if (_pending.Count > 0 && _landingShots != shots)
+        {
+            if (_landingShots != null)
+            {
+                _landingShots.ShotLanded -= OnShotLanded;
+            }
+            _landingShots = shots;
+            shots.ShotLanded += OnShotLanded;
+        }
+
         body.AddChild(Separator(s));
         body.AddChild(Centered(strip));
+    }
+
+    private void OnShotLanded(StuntShot shot)
+    {
+        if (!_pending.Remove(shot, out var cell) || !IsInstanceValid(cell.Picture))
+        {
+            return;
+        }
+
+        if (shot.Thumb is { } thumb)
+        {
+            Fill(cell.Picture, thumb, cell.Width);
+        }
+        else
+        {
+            cell.Picture.GetParent<Control>().Visible = false;
+        }
     }
 }

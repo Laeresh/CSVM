@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using CSVM.Utils;
@@ -35,70 +37,117 @@ public static class CampaignSnapshot
     // The staged extension the original writes during the flight, renamed to .PNG at mission end.
     private const string PendingExtension = "PN_";
 
+    // Staged paths whose frame has not landed yet, with the verdict Commit left for them (null while
+    // the mission is still being flown). Stage and Commit run on the main thread, a landing on a
+    // worker, so every read and write holds Gate.
+    private static readonly object Gate = new();
+    private static readonly Dictionary<string, bool?> InFlight = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>The name a scrapbook capture row resolves against the profile directory:
     /// <c>Snap_&lt;mission&gt;_&lt;objective&gt;.PNG</c>, the mission being the 1-based campaign
     /// ordinal (<c>CampaignMission.Ordinal</c>) the book's own slot numbering uses.</summary>
     public static string FileName(int mission, int objective) =>
         string.Format(CultureInfo.InvariantCulture, "Snap_{0}_{1}.PNG", mission, objective);
 
-    /// <summary>Writes one zone's photograph into <paramref name="directory"/> as a pending file,
-    /// scaled to the forced region. Answers the path written, or null when there was no pane to
-    /// photograph or the write failed.</summary>
-    public static string? Stage(string directory, int mission, int objective, Image? pane)
+    /// <summary>Requests the pane for one zone's photograph, written into
+    /// <paramref name="directory"/> as a pending file scaled to the forced region once the frame
+    /// lands. Answers the path it will be staged at, or null when there was no pane to
+    /// photograph.</summary>
+    public static string? Stage(string directory, int mission, int objective, PaneRequest? pane)
     {
-        if (pane == null || pane.GetWidth() <= 0 || pane.GetHeight() <= 0)
+        string staged = Path.Combine(directory, Pending(mission, objective));
+        string kept = Path.Combine(directory, FileName(mission, objective));
+        lock (Gate)
         {
+            InFlight[staged] = null;
+        }
+
+        if (pane == null || !pane(frame => Develop(frame, directory, staged, kept, objective)))
+        {
+            lock (Gate)
+            {
+                InFlight.Remove(staged);
+            }
+
             Log.Warn("core", $"danger zone snapshot: no pane image for objective {objective}, nothing written");
             return null;
         }
 
-        var shot = (Image)pane.Duplicate();
-        shot.Resize(Width, Height, Image.Interpolation.Bilinear);
-        string path = Path.Combine(directory, Pending(mission, objective));
-        Directory.CreateDirectory(directory);
-        var err = shot.SavePng(path);
-        if (err != Error.Ok)
-        {
-            Log.Error("core", $"danger zone snapshot: could not write {path} ({err})");
-            return null;
-        }
-
-        Log.Info("core", $"danger zone snapshot: objective {objective} -> {path}");
-        return path;
+        return staged;
     }
 
     /// <summary>Mission end: a won mission's staged photographs replace whatever the profile held
-    /// under their scrapbook names, a lost one's are dropped. Answers how many files it acted on,
-    /// so a caller can log the sweep.</summary>
+    /// under their scrapbook names, a lost one's are dropped. A photograph still on its way takes
+    /// the same verdict when it lands. Answers how many photographs it acted on, so a caller can
+    /// log the sweep.</summary>
     public static int Commit(string directory, int mission, bool won)
     {
-        if (!Directory.Exists(directory))
-        {
-            return 0;
-        }
-
         int acted = 0;
-        for (int objective = FirstPending; objective <= LastPending; objective++)
+        lock (Gate)
         {
-            string staged = Path.Combine(directory, Pending(mission, objective));
-            if (!File.Exists(staged))
+            for (int objective = FirstPending; objective <= LastPending; objective++)
             {
-                continue;
+                string staged = Path.Combine(directory, Pending(mission, objective));
+                if (InFlight.ContainsKey(staged))
+                {
+                    InFlight[staged] = won;
+                    acted++;
+                }
+                else if (File.Exists(staged))
+                {
+                    Settle(staged, Path.Combine(directory, FileName(mission, objective)), won);
+                    acted++;
+                }
             }
-
-            acted++;
-            if (!won)
-            {
-                File.Delete(staged);
-                continue;
-            }
-
-            string kept = Path.Combine(directory, FileName(mission, objective));
-            File.Delete(kept);
-            File.Move(staged, kept);
         }
 
         return acted;
+    }
+
+    // Worker thread: the resize and the encode, then the mission-end verdict if Commit has already
+    // passed this photograph by.
+    private static void Develop(Image? frame, string directory, string staged, string kept, int objective)
+    {
+        bool written = false;
+        if (frame == null || frame.GetWidth() <= 0 || frame.GetHeight() <= 0)
+        {
+            Log.Warn("core", $"danger zone snapshot: the pane never arrived for objective {objective}, nothing written");
+        }
+        else
+        {
+            frame.Resize(Width, Height, Image.Interpolation.Bilinear);
+            Directory.CreateDirectory(directory);
+            var err = frame.SavePng(staged);
+            written = err == Error.Ok;
+            if (written)
+            {
+                Log.Info("core", $"danger zone snapshot: objective {objective} -> {staged}");
+            }
+            else
+            {
+                Log.Error("core", $"danger zone snapshot: could not write {staged} ({err})");
+            }
+        }
+
+        lock (Gate)
+        {
+            if (InFlight.Remove(staged, out bool? verdict) && verdict is { } won && written)
+            {
+                Settle(staged, kept, won);
+            }
+        }
+    }
+
+    private static void Settle(string staged, string kept, bool won)
+    {
+        if (!won)
+        {
+            File.Delete(staged);
+            return;
+        }
+
+        File.Delete(kept);
+        File.Move(staged, kept);
     }
 
     private static string Pending(int mission, int objective) =>

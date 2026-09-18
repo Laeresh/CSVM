@@ -627,20 +627,21 @@ shell, since a held clock is not an ended run.
 Stunt Flying's end-of-run results overlay on `ResultsBoard`'s shell: the plane and chapter heading
 over a `StuntSplits` section of per-zone splits, total and best-time comparison, and under it the
 `StuntCapture` thumbnail strip, which is in marker order where the splits are in the order flown.
-Wakes on `StuntMission.RunCompleted`, records through `ScoreStore.RecordIfBest` and logs the split
+The last crossing usually wakes the board before its frame has landed, so a cell whose shot is
+still on its way is drawn empty and filled on `StuntCapture.ShotLanded`. Wakes on `StuntMission.RunCompleted`, records through `ScoreStore.RecordIfBest` and logs the split
 table so a headless run is reviewable. The one per-pane board among the results boards, which is
 why it overrides the shell's whole-window placement. Read `ResultsBoard` for the shared shell and
 its halt contract, and `IaWrapupBoard` for the board Instant Action carries the splits on instead.
 
 ## src/Flight/StuntCapture.cs
-The Danger Zone camera: one photograph of the pilot's own pane per `dzN` marker per stunt run.
-`Update` tests the plane against each marker centre at `StuntMission.DzRadius` every physics frame
-and latches on the frame it first crosses inside, writing a PNG named by chapter, marker and run
-clock into `screenshots/stunts/` beside the saves, firing the `snd_dangerzone_camera` sting and
-keeping a thumbnail for the scoreboard strip. A marker already photographed is not photographed
-again in the run, and a pass that lingers inside a radius latches once. Where the pixels come from
-is the caller's delegate, which is what lets a splitscreen seat photograph its own SubViewport and
-a suite photograph a synthetic frame. `DirectoryOverride` points the writes at a scratch directory.
+The Danger Zone camera: one photograph of the pilot's own pane per `dzN` marker per stunt run,
+latched once on the physics frame the plane first crosses inside `StuntMission.DzRadius` of the
+marker centre, lingering or a later pass latching nothing. That frame counts the shot, fires the
+`snd_dangerzone_camera` sting and requests the pane, nothing more. The frame lands later on a
+worker, which writes the PNG named by chapter, marker and run clock into `screenshots/stunts/` and
+shrinks the thumbnail; `Settle` completes the record on the main thread and raises `ShotLanded`.
+The pixels come from the caller's `PaneRequest` (`Utils/PaneReadback.cs` live, a synthetic frame in
+a suite). `DirectoryOverride` points the writes at a scratch directory.
 
 ## src/Flight/StuntSplits.cs
 The stunt run's split section, shared by `StuntScoreboard` and `IaWrapupBoard`: the per-zone rows

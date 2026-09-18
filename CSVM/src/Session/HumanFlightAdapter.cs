@@ -403,8 +403,7 @@ internal sealed class HumanFlightAdapter
             // in splitscreen the shot is the SubViewport that crossed the marker, never the window.
             var pane = rig.Viewport;
             var capture = new StuntCapture(run, _policy.Chapter,
-                () => (pane ?? (controller.IsInsideTree() ? controller.GetViewport() : null))
-                    ?.GetTexture()?.GetImage());
+                landed => PaneReadback.Request(pane ?? (controller.IsInsideTree() ? controller.GetViewport() : null), landed));
             capture.Sting = () => controller.Audio?.OnDangerZoneCamera();
             controller.StuntShots = capture;
 

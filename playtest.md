@@ -850,7 +850,7 @@ off numbers instead of guessed.
   and the request was "should work in missions too for the scrapbook photos". CM07 authors four
   zones (objectives 18 to 21, `C1/M02/zrdr/dzones.zrd.json`). Fly through at least one zone, win
   the mission, and open the scrapbook. *Look for:* (a) the sting on the crossing and one hitch-free
-  frame (`BL-964` owns the hitch, note it if it shows); (b) the photograph on the mission's spread
+  frame (a hitch there is a new `BL`); (b) the photograph on the mission's spread
   with its photo-corner mount, and the zoom showing the full 164x123 still; (c) a lost attempt
   leaving no photograph behind; (d) whether the framing reads like the original's, which the user
   recalls as taken from outside the aeroplane (`BL-966`). *Blocks:* nothing tracks the outcome; a

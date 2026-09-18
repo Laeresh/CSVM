@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -8,7 +9,8 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>One Danger Zone photograph: the marker it was latched at, the run clock at that
-/// frame, the file it was written to, and the strip thumbnail the scoreboard draws.</summary>
+/// frame, the file it is written to, and the strip thumbnail the scoreboard draws. The first
+/// three are fixed on the latch frame; the thumbnail arrives when the file lands.</summary>
 public sealed class StuntShot
 {
     public required string DzName { get; init; }
@@ -19,21 +21,27 @@ public sealed class StuntShot
 
     public required string Path { get; init; }
 
-    /// <summary>The downscaled copy the scoreboard strip draws, or null when the resize failed.
-    /// Kept in memory so the strip costs no disk read at run end.</summary>
-    public Image? Thumb { get; init; }
+    /// <summary>The downscaled copy the scoreboard strip draws, null until the shot has
+    /// <see cref="Landed"/> and null after it when the frame never arrived. Kept in memory so the
+    /// strip costs no disk read at run end.</summary>
+    public Image? Thumb { get; internal set; }
+
+    /// <summary>Whether the readback and the write have finished, successfully or not. Set on the
+    /// main thread by <see cref="StuntCapture.Settle"/>.</summary>
+    public bool Landed { get; internal set; }
 }
 
 /// <summary>
 /// The Danger Zone camera: one latched photograph of the pilot's own pane per <c>dzN</c> marker
 /// per stunt run. <see cref="Update"/> tests the plane against each marker centre at
 /// <see cref="StuntMission.DzRadius"/> every physics frame and latches on the frame the aircraft
-/// first crosses inside, writing a PNG under <see cref="ShotDir"/> and firing <see cref="Sting"/>.
+/// first crosses inside, requesting the pane and firing <see cref="Sting"/> on that frame. The PNG
+/// under <see cref="ShotDir"/> and the strip thumbnail are made on a worker once the frame lands,
+/// and <see cref="Settle"/> completes the shot's record on the main thread.
 /// A marker that has been photographed is not photographed again in the same run, and one that is
 /// still being flown through does not re-trigger while the aircraft stays inside its radius.
-///
-/// <para>Per pilot, like the run itself: each pane latches its own pane's pixels through the
-/// <c>pane</c> delegate it was built with. <see cref="StuntScoreboard"/> draws the strip.</para>
+/// Per pilot, like the run itself: each pane latches its own pane's pixels through the
+/// <c>pane</c> request it was built with. <see cref="StuntScoreboard"/> draws the strip.
 /// </summary>
 public sealed class StuntCapture
 {
@@ -43,14 +51,17 @@ public sealed class StuntCapture
 
     private readonly StuntMission _run;
     private readonly string _chapter;
-    private readonly Func<Image?> _pane;
+    private readonly PaneRequest _pane;
     private readonly StuntShot?[] _shots;
     private readonly bool[] _inside;
 
+    // Shots whose file has landed on a worker, waiting for the main thread to complete their record.
+    private readonly ConcurrentQueue<(StuntShot Shot, Image? Thumb)> _developed = new();
+
     /// <summary>Builds the camera for one pilot's run. <paramref name="chapter"/> names the file,
-    /// and <paramref name="pane"/> yields that pilot's pane as an image (in splitscreen the seat's
-    /// own SubViewport), or null on a frame with nothing rendered yet.</summary>
-    public StuntCapture(StuntMission run, string chapter, Func<Image?> pane)
+    /// and <paramref name="pane"/> requests that pilot's pane (in splitscreen the seat's own
+    /// SubViewport), refusing on a frame with nothing to read.</summary>
+    public StuntCapture(StuntMission run, string chapter, PaneRequest pane)
     {
         _run = run;
         _chapter = chapter;
@@ -58,6 +69,10 @@ public sealed class StuntCapture
         _shots = new StuntShot?[run.TotalCount];
         _inside = new bool[run.TotalCount];
     }
+
+    /// <summary>Raised on the main thread when a shot of the current run has landed, with its
+    /// <see cref="StuntShot.Thumb"/> set, so a strip drawn before then can fill its cell.</summary>
+    public event Action<StuntShot>? ShotLanded;
 
     /// <summary>Where the shots go instead of <c>user://</c> while set, so a suite writes into its
     /// own scratch directory rather than beside the player's saves.</summary>
@@ -121,7 +136,7 @@ public sealed class StuntCapture
                 _inside[i] = true;
                 continue;
             }
-            // ⚠ Mark the pass only once a frame was actually photographed. A session whose first
+            // ⚠ Mark the pass only once the pane accepted the request. A session whose first
             // rendered frame has not landed yet would otherwise spend the marker on nothing.
             if (Latch(_run.Zones[i]) is { } shot)
             {
@@ -140,47 +155,78 @@ public sealed class StuntCapture
         Count = 0;
     }
 
-    // The strip copy, made once here rather than at run end: the full pane image is the frame that
-    // was just rendered, and holding one per marker is far more memory than the strip needs.
+    /// <summary>Completes the record of every shot whose file has landed since the last call:
+    /// sets its thumbnail, marks it <see cref="StuntShot.Landed"/> and raises
+    /// <see cref="ShotLanded"/> for a shot of the current run. Main thread only. A landing
+    /// schedules this itself, so a caller needs it only to settle within one frame.</summary>
+    public void Settle()
+    {
+        while (_developed.TryDequeue(out var done))
+        {
+            done.Shot.Thumb = done.Thumb;
+            done.Shot.Landed = true;
+            if (Array.IndexOf(_shots, done.Shot) >= 0)
+            {
+                ShotLanded?.Invoke(done.Shot);
+            }
+        }
+    }
+
+    // The strip copy, made in place once the full frame is written: holding one full pane per
+    // marker is far more memory than the strip needs.
     private static Image Thumbnail(Image full)
     {
-        var thumb = (Image)full.Duplicate();
         int height = Math.Max(1, ThumbWidth * full.GetHeight() / full.GetWidth());
-        thumb.Resize(ThumbWidth, height, Image.Interpolation.Bilinear);
-        return thumb;
+        full.Resize(ThumbWidth, height, Image.Interpolation.Bilinear);
+        return full;
     }
 
     private StuntShot? Latch(StuntZone zone)
     {
-        var img = _pane();
-        if (img == null || img.GetWidth() <= 0 || img.GetHeight() <= 0)
+        float at = _run.Elapsed;
+        var shot = new StuntShot
+        {
+            DzName = zone.DzName,
+            At = at,
+            Path = Path.Combine(ShotDir(), FileName(_chapter, zone.DzName, at)),
+        };
+        if (!_pane(frame => Develop(shot, frame)))
         {
             Log.Warn("flight", $"stunt capture: no pane image at {zone.DzName}, nothing latched");
             return null;
         }
 
-        float at = _run.Elapsed;
-        string dir = ShotDir();
-        string path = Path.Combine(dir, FileName(_chapter, zone.DzName, at));
-        Directory.CreateDirectory(dir);
-        var err = img.SavePng(path);
-        if (err != Error.Ok)
+        Count++;
+        Sting?.Invoke();
+        return shot;
+    }
+
+    // Worker thread: the PNG encode and the resize are the frame's former cost. The record is
+    // completed on the main thread, since the scoreboard reads it there.
+    private void Develop(StuntShot shot, Image? frame)
+    {
+        Image? thumb = null;
+        if (frame == null || frame.GetWidth() <= 0 || frame.GetHeight() <= 0)
         {
-            Log.Error("flight", $"stunt capture: could not write {path} ({err})");
+            Log.Warn("flight", $"stunt capture: the pane never arrived for {shot.DzName}, nothing written");
         }
         else
         {
-            Log.Info("flight", $"stunt capture: {zone.DzName} at {StuntMission.FormatTime(at)} -> {path}");
+            Directory.CreateDirectory(Path.GetDirectoryName(shot.Path)!);
+            var err = frame.SavePng(shot.Path);
+            if (err != Error.Ok)
+            {
+                Log.Error("flight", $"stunt capture: could not write {shot.Path} ({err})");
+            }
+            else
+            {
+                Log.Info("flight", $"stunt capture: {shot.DzName} at {StuntMission.FormatTime(shot.At)} -> {shot.Path}");
+            }
+
+            thumb = Thumbnail(frame);
         }
 
-        Count++;
-        Sting?.Invoke();
-        return new StuntShot
-        {
-            DzName = zone.DzName,
-            At = at,
-            Path = path,
-            Thumb = Thumbnail(img),
-        };
+        _developed.Enqueue((shot, thumb));
+        Callable.From(Settle).CallDeferred();
     }
 }
