@@ -85,6 +85,49 @@ public sealed class SoundFalloffTests
     }
 
     [Fact]
+    public void A_range_scale_of_one_is_the_law_itself()
+    {
+        foreach (float distance in new[] { 0f, 325f, 450f, 700f, 1200f, 1260f, 1320f, 5000f })
+        {
+            Assert.Equal(SoundFalloff.GainDb(distance, 200f, 1200f, 0.8f),
+                SoundFalloff.GainDb(distance, 200f, 1200f, 0.8f, 1f));
+        }
+    }
+
+    [Fact]
+    public void A_range_scale_multiplies_both_radii_and_the_cull_with_them()
+    {
+        // At twice the radii the siren's table is read at twice the distances.
+        foreach (float distance in new[] { 0f, 325f, 450f, 700f, 1200f, 1260f, 1319f })
+        {
+            Assert.Equal(SoundFalloff.GainDb(distance, 200f, 1200f, 1f),
+                SoundFalloff.GainDb(distance * 2f, 200f, 1200f, 1f, 2f), Slack);
+        }
+        Assert.Equal(0f, SoundFalloff.GainDb(650f, 200f, 1200f, 1f, 2f), Slack);      // the shelf edge
+        Assert.Equal(-30f, SoundFalloff.GainDb(4800f, 200f, 1200f, 1f, 4f), Slack);   // the audible radius
+        Assert.Equal(-100f, SoundFalloff.GainDb(2640f, 200f, 1200f, 1f, 2f), Slack);  // the cull
+    }
+
+    [Fact]
+    public void Only_a_finite_positive_range_scale_is_taken()
+    {
+        try
+        {
+            SoundFalloff.SetRangeScale(3f);
+            Assert.Equal(3f, SoundFalloff.RangeScale);
+            foreach (float bad in new[] { 0f, -2f, float.NaN, float.PositiveInfinity })
+            {
+                SoundFalloff.SetRangeScale(bad);
+                Assert.Equal(1f, SoundFalloff.RangeScale);
+            }
+        }
+        finally
+        {
+            SoundFalloff.SetRangeScale(1f);
+        }
+    }
+
+    [Fact]
     public void A_degenerate_range_is_silent_rather_than_infinite()
     {
         Assert.Equal(-100f, SoundFalloff.AttenuationDb(100f, 0f, 0f), Slack);

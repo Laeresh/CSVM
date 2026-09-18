@@ -128,7 +128,7 @@ public sealed partial class AiWeaponAudio : Node3D
         }
         // Every frame, not only on the frame the loop starts: the aeroplane and the listener are
         // both flying, so a level written once is the level of wherever they happened to be then.
-        _gunLoop.VolumeDb = SoundFalloff.GainDb(dist, _gunLoopRangeMin, _gunLoopRangeMax, _gunLoopVol);
+        _gunLoop.VolumeDb = SoundFalloff.SessionGainDb(dist, _gunLoopRangeMin, _gunLoopRangeMax, _gunLoopVol);
         if (!_gunLoop.Playing)
         {
             _gunLoop.Play();
@@ -151,7 +151,7 @@ public sealed partial class AiWeaponAudio : Node3D
             return;
         }
         float dist = Mathf.Sqrt(AudioListeners.NearestDistanceSq(this, Listeners));
-        _emptyClip.VolumeDb = SoundFalloff.GainDb(dist, _emptyClipRangeMin, _emptyClipRangeMax,
+        _emptyClip.VolumeDb = SoundFalloff.SessionGainDb(dist, _emptyClipRangeMin, _emptyClipRangeMax,
             _emptyClipVol);
         _emptyClip.Play();
     }
@@ -236,7 +236,7 @@ public sealed partial class AiWeaponAudio : Node3D
         // number could never bite first and reading it here would be a borrowed constant.
         _gunLoopCull = resolved.CullDistance;
         _culled = null;   // re-armed with the slot, so the first frame of this caliber logs its verdict
-        Log.Info("sound", $"ai weapons {Aircraft()}: loop={SlotState(sndName, cue)} audible={resolved.RangeMax:0} m cull={_gunLoopCull:0} m");
+        Log.Info("sound", $"ai weapons {Aircraft()}: loop={SlotState(sndName, cue)} audible={resolved.RangeMax:0} m cull={_gunLoopCull:0} m range=x{SoundFalloff.RangeScale:0.###}");
     }
 
     // The first frame and every transition after it, always logged: audio cannot be
@@ -249,7 +249,7 @@ public sealed partial class AiWeaponAudio : Node3D
             return;
         }
         _culled = culled;
-        Log.Debug("sound", $"ai weapons {Aircraft()} {(culled ? "culled" : "audible")} at {dist:0} m, {SoundFalloff.GainDb(dist, _gunLoopRangeMin, _gunLoopRangeMax, _gunLoopVol):0.0} dB (cull {_gunLoopCull:0} m)");
+        Log.Debug("sound", $"ai weapons {Aircraft()} {(culled ? "culled" : "audible")} at {dist:0} m, {SoundFalloff.SessionGainDb(dist, _gunLoopRangeMin, _gunLoopRangeMax, _gunLoopVol):0.0} dB (cull {_gunLoopCull:0} m, range x{SoundFalloff.RangeScale:0.###})");
     }
 
     // Which aircraft every line here is about: the controller this component hangs under, whose name

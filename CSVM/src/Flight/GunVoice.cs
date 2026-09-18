@@ -107,7 +107,7 @@ public sealed partial class GunVoice : Node3D
         }
         var voice = new GunVoice(cue, home.Listeners, label, leaseSeconds);
         home.Node.AddChild(voice);
-        Log.Info("sound", $"gun voice {label}: loop={cue.Name} audible={cue.RangeMax:0} m cull={voice._cull:0} m lease={leaseSeconds:0.00} s");
+        Log.Info("sound", $"gun voice {label}: loop={cue.Name} audible={cue.RangeMax:0} m cull={voice._cull:0} m range=x{SoundFalloff.RangeScale:0.###} lease={leaseSeconds:0.00} s");
         return voice;
     }
 
@@ -181,7 +181,7 @@ public sealed partial class GunVoice : Node3D
             _player.Stop();
             return;
         }
-        _player.VolumeDb = SoundFalloff.GainDb(dist, _rangeMin, _rangeMax, _volume);
+        _player.VolumeDb = SoundFalloff.SessionGainDb(dist, _rangeMin, _rangeMax, _volume);
         if (!_player.Playing)
         {
             _player.Play();
@@ -198,6 +198,6 @@ public sealed partial class GunVoice : Node3D
             return;
         }
         _culled = culled;
-        Log.Debug("sound", $"gun voice {_label} {(culled ? "culled" : "audible")} at {dist:0} m, {SoundFalloff.GainDb(dist, _rangeMin, _rangeMax, _volume):0.0} dB (cull {_cull:0} m)");
+        Log.Debug("sound", $"gun voice {_label} {(culled ? "culled" : "audible")} at {dist:0} m, {SoundFalloff.SessionGainDb(dist, _rangeMin, _rangeMax, _volume):0.0} dB (cull {_cull:0} m, range x{SoundFalloff.RangeScale:0.###})");
     }
 }

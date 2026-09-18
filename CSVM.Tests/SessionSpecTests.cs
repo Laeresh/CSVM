@@ -918,6 +918,26 @@ public class SessionSpecTests
         Assert.Empty(S("--mute").Warnings);
     }
 
+    [Fact]
+    public void TheSoundRangeScaleDefaultsToTheAuthoredRadii()
+    {
+        Assert.Equal(1f, S("--fly").SoundRangeScale);
+        Assert.Equal(2f, S("--sound-range-scale=2").SoundRangeScale);
+        Assert.Equal(0.5f, S("--sound-range-scale=0.5").SoundRangeScale);
+        Assert.Empty(S("--sound-range-scale=4").Warnings);
+    }
+
+    [Fact]
+    public void AnUnusableSoundRangeScaleIsIgnoredLoudly()
+    {
+        foreach (string bad in new[] { "0", "-1", "far", "2,5" })
+        {
+            var s = S($"--sound-range-scale={bad}");
+            Assert.Equal(1f, s.SoundRangeScale);
+            Assert.Contains(s.Warnings, w => w.Category == "core" && w.Message.Contains("not a positive number"));
+        }
+    }
+
     // ---- Parse conventions ---------------------------------------------------------------------
 
     [Fact]

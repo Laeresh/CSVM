@@ -352,7 +352,7 @@ public sealed partial class WorldSounds : Node3D
             return;
         }
         float range = NearestEar(ears, player.GlobalPosition).Range;
-        player.VolumeDb = SoundFalloff.GainDb(range, rangeMin, rangeMax, volume);
+        player.VolumeDb = SoundFalloff.SessionGainDb(range, rangeMin, rangeMax, volume);
     }
 
     // Range from the closest listener to `at`, or -1 with no listeners,
@@ -462,7 +462,7 @@ public sealed partial class WorldSounds : Node3D
                 : "UNATTACHED";
             bool hidden = e.Host is { } hv && IsInstanceValid(hv) && !hv.IsVisibleInTree();
             var near = NearestEar(ears, e.Player.GlobalPosition);
-            Log.Info("sound", $"sound: {e.Name} @ {host}{(hidden ? " (host hidden)" : "")} pos {e.Player.GlobalPosition.Snapped(Vector3.One)} dist {near.Range:0} m (P{near.Index + 1}) range {e.RangeMin:0}-{e.RangeMax:0} m gain {e.Player.VolumeDb:0.0} dB {(e.Player.Playing ? "PLAYING" : e.Active ? "silent" : "off")}");
+            Log.Info("sound", $"sound: {e.Name} @ {host}{(hidden ? " (host hidden)" : "")} pos {e.Player.GlobalPosition.Snapped(Vector3.One)} dist {near.Range:0} m (P{near.Index + 1}) range {e.RangeMin:0}-{e.RangeMax:0} m x{SoundFalloff.RangeScale:0.###} gain {e.Player.VolumeDb:0.0} dB {(e.Player.Playing ? "PLAYING" : e.Active ? "silent" : "off")}");
         }
     }
 

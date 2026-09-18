@@ -25,8 +25,10 @@ public readonly record struct WeaponSoundCue(
 
     /// <summary>Where this cue goes silent, <see cref="RangeMax"/> grown by
     /// <see cref="CullMargin"/>. The pair drives the attenuation curve, so the cull sits outside
-    /// that curve rather than on its end.</summary>
-    public float CullDistance => RangeMax * CullMargin;
+    /// that curve rather than on its end. Scaled with the curve by
+    /// <see cref="SoundFalloff.RangeScale"/>, so the diagnostic factor cannot cut a voice the
+    /// scaled curve still plays.</summary>
+    public float CullDistance => RangeMax * SoundFalloff.RangeScale * CullMargin;
 }
 
 /// <summary>

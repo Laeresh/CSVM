@@ -109,6 +109,32 @@ level itself, on every positional path alike: the world's ambient emitters and o
 aircraft's gun loop and dry cue, and a mount's gun voice all carry a player with no attenuation
 model and no `MaxDistance`, since either would multiply a second curve onto the decoded one.
 
+⚠ **No listener-side term scales the reach: the distance the curve reads is the raw world distance
+from the camera to the emitter, and the radii are the authored ones.** Each place such a term could
+sit has been read and holds none:
+
+- **DirectSound's 3D listener.** The software path `FUN_00597c20` touches only the voice buffer
+  (`SetVolume` `+0x3c`, `SetPan` `+0x40`, `GetFrequency`/`SetFrequency` `+0x20`/`+0x44`); no
+  listener object, distance factor or rolloff factor is set. The hardware arm that owns a listener
+  interface (`DAT_00639cbc`, reached through `FUN_00597b40` and `FUN_00597a00`'s second branch) is
+  gated on `DAT_00639cb4`, which is 0 in the image and whose one writer (`0x005923a0`) stores 0.
+- **The definition load.** `FUN_00592c90` copies `RANGE`'s two floats into `+0x1c`/`+0x20`
+  unscaled (defaults `50`/`400` when the key is absent); its post-load hook `DAT_00639ec8` is null
+  on the one load path (`FUN_00592340` passes 0).
+- **Where the listener stands.** `FUN_00597a00` copies a 12-float world matrix to `DAT_00639e34`,
+  the position landing at `DAT_00639e58`; its caller `FUN_004d31d0` hands it the camera node's own
+  world matrix (`+0x44`), at most once per frame. An emitter's position is its `SOUND` node's world origin
+  (`FUN_004e0e60`), refreshed by the walk over the world's sound-node list (`FUN_004db750`). Both are in world
+  units, as the port's are.
+- **Gain multipliers.** The level takes `VOLUME x SoundVolume x` a per-category option level
+  (`DAT_00639e8c`, default 1.0 at `DAT_00639e88`; the callback at `0x004803c0` returns the `VOICE`,
+  `MUSIC` or `SFX` option level), and `FUN_00593620` clamps any product at or above 1 to 0 dB, so
+  none of them can lift a distant voice.
+
+The distance itself is the bit-hack square root at `0x00597dac`, which reads long rather than short
+between powers of four, so it cannot add reach either. `--sound-range-scale` (`docs/cli.md`)
+multiplies both radii at every positional path as a diagnostic; it stands for no decoded constant.
+
 ⚠ **`VOLUME` converts on the same ten-decibels-per-doubling scale, not the usual `20 log10`.**
 `FUN_00593620` returns 0 at or above 1, `-10000` at or below `2^-10`, and `1000 log2(gain)`
 between, so the `0.8` four of the gasbag explosions carry is 3.2 dB down rather than 1.9.

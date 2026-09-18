@@ -604,6 +604,11 @@ public partial class Launcher : Node3D
         // rule the saved graphics word below follows; SavedLevels owns that drop.
         var savedMix = AudioMix.SavedLevels(_spec.Det);
         AudioMix.Apply(savedMix.Master, savedMix.Music, savedMix.Effects, savedMix.Voice);
+        Mech3.SoundFalloff.SetRangeScale(_spec.SoundRangeScale);
+        if (Mech3.SoundFalloff.RangeScale != 1f)
+        {
+            Log.Info("sound", $"sound range scale=x{Mech3.SoundFalloff.RangeScale:0.###} via=--sound-range-scale, every positional RANGE pair and its cull multiplied (diagnostic)");
+        }
         // The haptics toggle, read under the same rule and defaulting ON where nothing is saved.
         // ⚠ A deterministic run never rumbles: a golden sweep or a scripted probe must not reach the
         // hardware on the desk, and no screen is drawn from this.

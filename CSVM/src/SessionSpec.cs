@@ -844,6 +844,11 @@ public sealed record SessionSpec
     /// At volume 0 every sound still loads, plays, counts and logs; it is simply inaudible.</para></summary>
     public float? Volume { get; private set; }
 
+    /// <summary><c>--sound-range-scale=</c>: a diagnostic multiplier on every positional sound's
+    /// <c>RANGE</c> radii, read into <see cref="Mech3.SoundFalloff.RangeScale"/>. 1, the data's own
+    /// radii, when absent; a value that is not a positive number is ignored with a warning.</summary>
+    public float SoundRangeScale { get; private set; } = 1f;
+
     public bool NoVsync { get; private set; }
     public bool Perf { get; private set; }
     public bool GcTypes { get; private set; }
@@ -1325,6 +1330,19 @@ public sealed record SessionSpec
                 else
                 {
                     s.Volume = volume;
+                }
+            }
+            else if (arg.StartsWith("--sound-range-scale="))
+            {
+                string want = arg["--sound-range-scale=".Length..];
+                if (float.TryParse(want, NumberStyles.Float, CultureInfo.InvariantCulture, out float scale)
+                    && float.IsFinite(scale) && scale > 0f)
+                {
+                    s.SoundRangeScale = scale;
+                }
+                else
+                {
+                    notes.Add(new Note("core", $"--sound-range-scale={want} is not a positive number, leaving the RANGE radii as authored"));
                 }
             }
             else if (arg == "--debug-collision") { s.DebugCollision = true; }

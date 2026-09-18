@@ -35,6 +35,12 @@ public static class SoundFalloff
     // The quietest linear gain that is not simply silence, three doublings below the floor's ten.
     private const float QuietestVolume = 1f / 1024f;
 
+    /// <summary>The session's diagnostic multiplier on both <c>RANGE</c> radii,
+    /// <c>--sound-range-scale</c>; 1, the data's own radii, unless that flag says otherwise.
+    /// ⚠ Do not default it to anything but 1: the decode found no listener-side distance term
+    /// (docs/formats/sounds.md), so any other value is a picked factor.</summary>
+    public static float RangeScale { get; private set; } = 1f;
+
     /// <summary>A definition's linear <c>VOLUME</c> as decibels on the original's own scale. Not
     /// the usual 20 log10: the retail converter is ten decibels per doubling, so 0.5 is 10 dB down
     /// rather than 6, and a gain at or below a thousandth is written as silence outright.</summary>
@@ -89,4 +95,20 @@ public static class SoundFalloff
         float db = VolumeDb(volume) + AttenuationDb(distance, rangeMin, rangeMax);
         return db < FloorDb ? FloorDb : db;
     }
+
+    /// <summary>Sets <see cref="RangeScale"/> for the session. A value that is not a finite
+    /// positive number leaves the radii as authored.</summary>
+    public static void SetRangeScale(float scale) =>
+        RangeScale = float.IsFinite(scale) && scale > 0f ? scale : 1f;
+
+    /// <summary><see cref="GainDb(float, float, float, float)"/> with both radii multiplied by
+    /// <paramref name="rangeScale"/>, the cull and the tail moving with them. 1 is the identity.</summary>
+    public static float GainDb(float distance, float rangeMin, float rangeMax, float volume,
+        float rangeScale) =>
+        GainDb(distance, rangeMin * rangeScale, rangeMax * rangeScale, volume);
+
+    /// <summary>The level every positional play path sets: <see cref="GainDb(float, float, float, float, float)"/>
+    /// at the session's <see cref="RangeScale"/>.</summary>
+    public static float SessionGainDb(float distance, float rangeMin, float rangeMax, float volume) =>
+        GainDb(distance, rangeMin, rangeMax, volume, RangeScale);
 }

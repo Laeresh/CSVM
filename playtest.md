@@ -908,6 +908,25 @@ is a judgement on our own remake.
   *Blocks:* `BL-934` (lines unheard at the controls); a silent sortie whose log carries the
   `ai voice:` lines is that item's next cause.
 
+### C1 · Bloodhawk, the siren and train fly-pasts at three sound reaches, sound on
+
+```powershell
+./RunGame.ps1 --chapter=C1 --plane=player_bhawk --debug-anim --log=sound --sound-range-scale=1
+./RunGame.ps1 --chapter=C1 --plane=player_bhawk --debug-anim --log=sound --sound-range-scale=2
+./RunGame.ps1 --chapter=C1 --plane=player_bhawk --debug-anim --log=sound --sound-range-scale=4
+```
+
+- `PT-163` `[Own]` **Which reach matches the original: the police chase car and the track train
+  heard from as far off as you remember them.** The positional law is the decoded one, and the
+  decode found no term in the original that stretches it, so the diagnostic
+  `--sound-range-scale` multiplies every positional `RANGE` pair to find the reach by ear
+  (`git log --grep=BL-269`). Fly the same approach to the siren and to the train at each factor,
+  from a kilometre or more out to overhead. *Look for:* (a) the distance at which each is first
+  heard, against recall of the original; (b) neither too loud at its far edge; (c) an enemy's or a
+  turret's guns firing, whether the factor that brings the siren in brings them in too (`BL-933`).
+  The `sound:` lines log each emitter's distance, gain and the factor once a second. *Blocks:*
+  `BL-269` (name the factor, or none), `BL-933`.
+
 ## Everything else
 
 Everything blocked on an unlanded fix is tracked in [`backlog.md`](backlog.md) with its own

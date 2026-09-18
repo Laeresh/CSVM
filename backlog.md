@@ -609,35 +609,32 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Audio
 
-- `BL-269` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: decoded]` **Positional sounds
+- `BL-269` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]` **Positional sounds
   are heard from far closer in than in the original, although the level law between the authored
   `RANGE` radii is the original's own curve.** *Verdict at the controls:* the police chase car and
   the track train fly-pasts on C1 both fail the same way, each is heard only near its emitter where
   the original is heard from much farther off (the user's recall of the original, which has
   overturned data readings before). *Evidence:* `SoundFalloff.cs` computes the decoded law and
-  `WorldSounds` drives every emitter's level from it, the players carrying no engine attenuation
-  model. The curve holds full volume one eighth of the way into the band, then loses 10 dB per
-  doubling of the reach past that shelf, reaching 30 dB down at the audible radius and running
-  straight to silence over the next tenth. For the siren (`RANGE [200, 1200]`) that is 0 dB to
+  every positional play path levels from it. For the siren (`RANGE [200, 1200]`) that is 0 dB to
   325 m, -10 at 450, -20 at 700, -30 at 1200 and silent at 1320; for the train (`RANGE [600,
-  1200]`) 0 dB to 675 m, -10 at 750, -20 at 900, -30 at 1200. Every one of those numbers is decoded
-  (`docs/formats/sounds.md`, "The gain between the two radii"), so the missing reach is a term the
-  port has no place for, not a wrong curve. *Fix shape:* two halves, the knob first. (1) A
-  diagnostic `--sound-range-scale=<f>` (default 1) that multiplies both `RANGE` radii at every
-  `SoundFalloff.GainDb` call site (`WorldSounds`, `GunVoice`, `AiWeaponAudio`, `WeaponAudioCues`'
-  cull with them) and prints the factor in the `sound` log lines; the user flies the same two
-  fly-pasts at 2 and at 4 and names the factor that matches recall. (2) Decode the listener-side
-  term that factor stands for: DirectSound's 3D listener carries a distance factor and a rolloff
-  factor the sound manager may set once at start-up, the `RANGE` pair may be scaled at definition
-  load, or the listener may sit somewhere other than the pane's camera. The factor the ear names is
-  the clue to which, and the term found is what ships. *⚠ Traps:* do not ship the factor as a
-  constant, and do not move the curve's own numbers. The C1 refinery flare is not a candidate
-  emitter: neither `refinery_fire_always` nor `refinery_fire.zrd` authors a sound.
-  *Playtest after fix:* the same C1 fly-pasts (`--chapter=C1 --plane=player_bhawk --volume=1.0
-  --no-det --debug-anim --log=sound`, one line per emitter each second with its distance and gain):
-  the siren at a steady level while close and fading over the approach to a kilometre, the train
-  heard from well out, neither too loud at its audible radius. *Cross-refs:* `BL-933` (the gun
-  voices on the same law, failing harder), `docs/formats/sounds.md`, `git log --grep=BL-269`.
+  1200]`) 0 dB to 675 m, -10 at 750, -20 at 900, -30 at 1200 (`docs/formats/sounds.md`, "The gain
+  between the two radii"). The decode of a listener-side term that would stretch that reach found
+  none: the retail build never runs the DirectSound 3D listener path, so no distance or rolloff
+  factor is set; `RANGE` loads unscaled; the listener is the camera node's world position and an
+  emitter its sound node's world origin, both in the world units the port uses; and every gain
+  multiplier is at most 1 (addresses and the four ruled-out places in `docs/formats/sounds.md`,
+  "No listener-side term scales the reach"). The diagnostic `--sound-range-scale=<f>` (default 1,
+  `docs/cli.md`) multiplies both radii and the cull at every `SoundFalloff` play path and prints
+  the factor in the `sound` lines. *The look:* fly `PT-163`, the two fly-pasts at 1, 2 and 4, and
+  name the factor that matches recall. A named factor has no decoded term behind it, so it opens
+  the next question (what the port hears differently at the same level: the bus mix, Godot's
+  stereo pan law against DirectSound's `SetPan` of up to 16 dB on the far channel) rather than
+  shipping. A match at 1 closes the item as a recall mismatch. *⚠ Traps:* do not ship the factor
+  as a constant or a default, and do not move the curve's own numbers. The C1 refinery flare is
+  not a candidate emitter: neither `refinery_fire_always` nor `refinery_fire.zrd` authors a sound.
+  Weapon impact one-shots (`Projectile.DistanceGain`) run their own linear term, not this law, so
+  the knob does not reach them. *Cross-refs:* `BL-933` (the gun voices on the same law, failing
+  harder), `PT-163`, `docs/formats/sounds.md`, `git log --grep=BL-269`.
 
 - `BL-281` `[Tuning]` `[Blocked: CAP-27]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The ricochet sounds are audible but very faint.** `PT-25` (c), 2026-08-05:
   `snd_ricochet1–4` play under the per-impact spark burst but sit too low to read. A mix-gain
@@ -693,9 +690,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   controls a shooting enemy aeroplane or turret is audible within about 10 m and no further.**
   *Verdict at the controls:* the listen after the law landed failed, and harder than the world
   emitters (`BL-269`) on the same law, "worse than BL-269, I can't hear shooting enemies or
-  turrets, only within ~10 meters". *What moves first:* `BL-269`'s range-scale knob and its decode
-  of the missing listener-side term; run the same sortie at the factor that brings the siren and
-  the train in. If that factor brings the guns in too, this closes with it. If the world emitters
+  turrets, only within ~10 meters". *What moves first:* `BL-269`'s `--sound-range-scale` knob (the
+  decode found no listener-side term, so `PT-163` names the factor by ear); run the same sortie at
+  the factor that brings the siren and the train in. If that factor brings the guns in too, this closes with it. If the world emitters
   come in and the guns do not, the gun sites carry a second cause of their own and the
   `--log=sound:debug` lines (distance, gain and cull per voice) decide between the level, the
   lease and the cue's `VOLUME`. *Evidence:* reported at

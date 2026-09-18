@@ -427,13 +427,14 @@ an emitter is `UI/SplitScreen.cs`'s per-pane model, fed by `SetListeners`: `Tick
 nearest and levels every player from `SoundFalloff.cs`, never Godot's. Next: `SoundFalloff.cs`.
 
 ## src/Mech3/SoundFalloff.cs
-The original's positional gain law, engine-free and pure: what a listener distance, a definition's
-`RANGE` pair and its `VOLUME` come to in decibels. `AttenuationDb` is the distance term alone,
-`VolumeDb` the linear-gain conversion (ten decibels per doubling, not `20 log10`), `GainDb` the sum
-with the silence floor. It exists as its own module because no Godot attenuation model expresses
-the shape: the ramp is measured from the full-volume radius rather than from the emitter, and the
-band past the audible radius is a tail rather than a cut. The decode, its addresses and the table
-are [../formats/sounds.md](../formats/sounds.md). Read `WorldSounds.cs` for the only caller.
+The original's positional gain law, engine-free: what a listener distance, a definition's `RANGE`
+pair and its `VOLUME` come to in decibels. `AttenuationDb` is the distance term alone, `VolumeDb`
+the linear-gain conversion (ten decibels per doubling, not `20 log10`), `GainDb` the sum with the
+silence floor. No Godot attenuation model expresses the shape, since the ramp is measured from the
+full-volume radius. `SessionGainDb` is what the play paths call: the law at the session's
+`--sound-range-scale` diagnostic, the one piece of state here. The decode and its addresses are
+[../formats/sounds.md](../formats/sounds.md). Callers: `WorldSounds`, `Flight/GunVoice.cs`,
+`Flight/AiWeaponAudio.cs`.
 
 ## src/Mech3/WorldLights.cs
 Packs the animated world's `LIGHT_STATE` point lights into the 2xN RGBAF texture the fullbright
