@@ -402,7 +402,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   capture swallows them entirely, while ours are plainly visible in the same scene
   (`playtest/CAP-11/csvm-c2b-low.png`). Streak width is the first constant to revisit.
 
-- `BL-322` `[Research]` `[Blocked: CAP-58]` `[L]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]` `[C5]` **The original shades a lit surface per vertex and clamps the
+- `BL-322` `[Research]` `[L]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]` `[C5]` **The original shades a lit surface per vertex and clamps the
   product at white, so reproducing its sun term darkens every away-facing surface of every chapter
   and cannot darken a C5 city block at all** (split out of `BL-303` at its close). Explicitly NOT
   fog, `BL-303`'s own adjunct note, and the Wave B fog work moved none of it.
@@ -435,7 +435,27 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   compare *different buildings*, and the decode above says the difference between two buildings is
   exactly what decides the ratio. C5's sky dome cannot serve as the in-world control either: at a
   level view its rows read 0.83, 0.69 and 0.43 of the original's from zenith to horizon, a gradient
-  mismatch of its own rather than one scalar. `CAP-58` is the matched pose this needs.
+  mismatch of its own rather than one scalar. The matched poses are the `CAP-58` stills below.
+  *Matched poses, `playtest/CAP-58/pairs/`:* seven original spawn stills of C5 `IA1`, each paired
+  with our render of the same `dogfight_ace` entry (`--pos`/`--direction` from `ia.zrd`, frame 30),
+  original above ours in `pair1`..`pair7`, `sheet.png` the overview and `patches.png` the measured
+  regions. Every still matched an entry by its scenery, so seven of the eight spawns are covered
+  (entries 0, 1, 2, 3, 4, 5, 7; entry 6 was not caught). Frame-wide the pose matches (the bridge
+  towers stand at the same screen columns), but the original's chase camera holds the aircraft
+  smaller and the horizon lower than ours, so regions were placed per image, not shared (`BL-885`).
+  *What the pairs show:* the answer depends on the surface, in both directions. On the `bldg`
+  tower skins in `pair2` (entry 7, amid the towers) the wall between the windows is darker in ours:
+  the right tower's face turned away from the camera reads ours/theirs 0.48 at the median and its
+  face toward the camera 0.44, the tenth percentile 1 in ours against 5 to 12 in the original. The
+  two faces stand at right angles and read the same ratio, so these pairs show a flat halving of
+  the wall texel, not a term that differs by facing. Plain surfaces go the other way: the bridge
+  deck underside (`pair5`) reads 1.26 at the median and the bridge tower masonry (`pair4`) 1.30,
+  both brighter in ours. The HUD control holds, the ALT gauge disc reads 0.98 (mean), so nothing
+  frame-wide is in either number. The original stills are JPEG and the wall levels sit near black,
+  so the tenth-percentile figures carry compression noise and only the medians are quoted as
+  ratios. No pair holds a close plain `cblock` wall toward the camera, so the low-rise blocks are
+  still unmeasured. This is a luminance reading of matched frames, and the verdict on whether the
+  tower walls are too dark or the deck too bright stays with the eye at the controls.
   *Fix shape:* per lit vertex, `drawn = clamp(authored_vertex_colour × (SUNLIGHT_AMBIENT +
   SUNLIGHT_DIFFUSE × max(dot(N, L), 0)), 0, 1)` in place of `ALBEDO *= csky_world_light`. Four
   files: `Weather.cs` stops collapsing (the uncollapsed pair is already on `ZoneWeather`),
