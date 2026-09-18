@@ -849,6 +849,12 @@ public sealed record SessionSpec
     /// radii, when absent; a value that is not a positive number is ignored with a warning.</summary>
     public float SoundRangeScale { get; private set; } = 1f;
 
+    /// <summary><c>--cloud-jitter=</c>: a remake-only extra X/Z offset, in metres, on every
+    /// lattice-scattered <c>fvol</c> cloud card (<see cref="Effects.FogVolumeClutter"/>). 0, the
+    /// decoded field untouched, when absent; a value that is not a non-negative number is ignored
+    /// with a warning.</summary>
+    public float CloudJitter { get; private set; }
+
     public bool NoVsync { get; private set; }
     public bool Perf { get; private set; }
     public bool GcTypes { get; private set; }
@@ -1343,6 +1349,19 @@ public sealed record SessionSpec
                 else
                 {
                     notes.Add(new Note("core", $"--sound-range-scale={want} is not a positive number, leaving the RANGE radii as authored"));
+                }
+            }
+            else if (arg.StartsWith("--cloud-jitter="))
+            {
+                string want = arg["--cloud-jitter=".Length..];
+                if (float.TryParse(want, NumberStyles.Float, CultureInfo.InvariantCulture, out float metres)
+                    && float.IsFinite(metres) && metres >= 0f)
+                {
+                    s.CloudJitter = metres;
+                }
+                else
+                {
+                    notes.Add(new Note("core", $"--cloud-jitter={want} is not a non-negative number of metres, leaving the cloud lattice as decoded"));
                 }
             }
             else if (arg == "--debug-collision") { s.DebugCollision = true; }

@@ -1579,11 +1579,11 @@ public partial class GameSession : Node3D
             var fogVolumes = Mech3.FogVolumeSpec.VolumesOf(state.Gamez);
             var fogVolumeSpec = Mech3.FogVolumeSpec.Load(SessionPaths.ChapterZrdr(_dataRoot, _spec.Chapter));
             var cloudField = Effects.FogVolumeClutter.Create(state.Gamez, state.Textures,
-                fogVolumeSpec, fogVolumes);
+                fogVolumeSpec, fogVolumes, _spec.CloudJitter);
             if (cloudField != null)
             {
                 _worldRoot!.AddChild(cloudField);
-                Log.Info("world", $"fogvol clouds: {cloudField.InstanceCount} sprites ({cloudField.BaseCount} base + {cloudField.ExtensionCount} map-edge extension) over {fogVolumes.Count} volume(s), {cloudField.Summary}");
+                Log.Info("world", $"fogvol clouds: {cloudField.InstanceCount} sprites ({cloudField.BaseCount} base + {cloudField.ExtensionCount} map-edge extension) over {fogVolumes.Count} volume(s), {cloudField.Summary}{(_spec.CloudJitter > 0f ? $", remake jitter {_spec.CloudJitter:0.#} m" : "")}");
             }
             // ⚠ Read the fvol zone from the data, never assume it: a chapter authoring -1 keeps the
             // default layer and renders below its deck, which is authored and not a bug. One

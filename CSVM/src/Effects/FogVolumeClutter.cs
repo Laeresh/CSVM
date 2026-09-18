@@ -64,8 +64,10 @@ public sealed partial class FogVolumeClutter : Node3D
     /// no <c>fogvol.zrd</c>, no <c>fvol*</c> volume, no resolvable template, or a
     /// <c>distance</c> that is not a usable mean spacing. Add the result to the world root at
     /// identity, its instance transforms are absolute world coordinates.</summary>
+    /// <param name="jitter"><c>--cloud-jitter=</c>, metres: a remake-only uniform X/Z offset per
+    /// lattice card, applied after every decoded draw. 0 leaves the decoded field untouched.</param>
     public static FogVolumeClutter? Create(GameZ gamez, TextureArchive textures,
-        FogVolumeSpec? spec, IReadOnlyList<FogVolumeBox> volumes)
+        FogVolumeSpec? spec, IReadOnlyList<FogVolumeBox> volumes, float jitter = 0f)
     {
         if (spec == null)
         {
@@ -91,7 +93,7 @@ public sealed partial class FogVolumeClutter : Node3D
         }
 
         var field = new FogVolumeClutter();
-        field.Scatter(spec, volumes, kinds);
+        field.Scatter(spec, volumes, kinds, jitter);
         if (field.InstanceCount == 0)
         {
             field.QueueFree();
@@ -331,7 +333,8 @@ public sealed partial class FogVolumeClutter : Node3D
     // outline places one sprite, weighted over the resolved clutter table. `distance` is still the
     // field's areal DENSITY, an authored mean spacing, not a lattice phase.
     // See docs/org/cloudCards.md for the decoded walk and docs/formats/fogvol.md for the density.
-    private void Scatter(FogVolumeSpec spec, IReadOnlyList<FogVolumeBox> volumes, List<Kind> kinds)
+    private void Scatter(FogVolumeSpec spec, IReadOnlyList<FogVolumeBox> volumes, List<Kind> kinds,
+        float jitter)
     {
         Name = "fog_volume_clutter";
         float period = spec.Distance;
@@ -364,6 +367,10 @@ public sealed partial class FogVolumeClutter : Node3D
         // suite that builds two chapters sees the second one's counts move.
         var bandRng = Rng.NewSystemRandom(Rng.CloudBands);
 
+        // The remake-only X/Z jitter draws off its own stream, and only when asked for, so every
+        // value of the knob lays the same decoded field and moves only where each card sits.
+        var jitterRng = jitter > 0f ? Rng.NewSystemRandom(Rng.CloudJitter) : null;
+
         // One pass per volume's own faces, not per clutter block, weights are already flattened
         // into Kind.Weight. Overlapping volumes (C1C's build-ups over its own slab) each scatter
         // their own faces; every lattice is anchored on its face, not on the world origin.
@@ -375,7 +382,7 @@ public sealed partial class FogVolumeClutter : Node3D
             var reference = volume.Box.GetCenter();
             foreach (var face in volume.Polygons ?? Array.Empty<FogVolumeFace>())
             {
-                ScatterFace(face, reference, period, kinds, totalWeight, rng, bandRng);
+                ScatterFace(face, reference, period, kinds, totalWeight, rng, bandRng, jitter, jitterRng);
             }
         }
 
@@ -392,7 +399,7 @@ public sealed partial class FogVolumeClutter : Node3D
     // the decoded order: kind, band, perpendicular offset, perturbation, scale
     // (docs/org/cloudCards.md).
     private void ScatterFace(in FogVolumeFace face, Vector3 reference, float period,
-        List<Kind> kinds, float totalWeight, Random rng, Random bandRng)
+        List<Kind> kinds, float totalWeight, Random rng, Random bandRng, float jitter, Random? jitterRng)
     {
         var origin = face.Vertices[0];
         var along = face.Vertices[1] - origin;
@@ -455,13 +462,21 @@ public sealed partial class FogVolumeClutter : Node3D
                 // One magnitude, then an independent draw on each axis, so the perturbation is a
                 // displacement in space rather than a ring around the lattice point.
                 float perturb = Lerp(block.PerturbDistRange, (float)rng.NextDouble());
-                var jitter = new Vector3(Rand(-0.5f, 0.5f), Rand(-0.5f, 0.5f), Rand(-0.5f, 0.5f))
+                var displace = new Vector3(Rand(-0.5f, 0.5f), Rand(-0.5f, 0.5f), Rand(-0.5f, 0.5f))
                     * perturb;
                 float scale = Lerp(block.ScaleRange, (float)rng.NextDouble());
+                // Not the original's: the decoded ±10 m on a 130 m lattice leaves its rows standing,
+                // and this widens only the horizontal spread, after every decoded draw is taken.
+                if (jitterRng != null)
+                {
+                    displace += new Vector3(
+                        ((float)jitterRng.NextDouble() * 2f - 1f) * jitter, 0f,
+                        ((float)jitterRng.NextDouble() * 2f - 1f) * jitter);
+                }
 
                 kind.Placements.Add(new Transform3D(
                     Basis.Identity.Scaled(new Vector3(scale, scale, scale)),
-                    point + (away * perp) + jitter));
+                    point + (away * perp) + displace));
                 kind.Bands.Add(BandData(face.Normal, band));
                 InstanceCount++;
             }

@@ -31,6 +31,9 @@ internal static class CloudFieldSuites
     private const float ProbeAmbient = 0.6f;
     private const float ProbeDiffuse = 0.4f;
 
+    // A --cloud-jitter value wide enough that nearly every lattice card moves, in metres.
+    private const float ProbeJitter = 40f;
+
     private static readonly Vector3 ProbeSun = new Vector3(0.62f, 0.3f, 0.72f).Normalized();
 
     // Per chapter: the pinned placement counts (base, map-edge extension), the normal tally
@@ -54,7 +57,9 @@ internal static class CloudFieldSuites
         + "spans both authored far_fade_range pairs, the card sampler fetches through the "
         + "chapter's mip LOD bias, a card authored `lighting: true` carries its three authored "
         + "normals and reads brighter on the side it turns toward the light than on the side it "
-        + "turns away, a card authored false reads flat, and the pinned placement counts hold")]
+        + "turns away, a card authored false reads flat, the pinned placement counts hold, and "
+        + "the remake-only --cloud-jitter moves every lattice card on X/Z within its value and "
+        + "nothing else")]
     internal static void CloudFieldFade(TestContext ctx)
     {
         foreach (var (chapter, expectBase, expectExtension, expectUp, expectSloped, lit) in Fields)
@@ -87,6 +92,16 @@ internal static class CloudFieldSuites
                     CheckNormalsAreTheirOwnFaces(ctx, chapter, field, spec!, volumes);
                     CheckCardSampler(ctx, chapter, field);
                     CheckVertexLight(ctx, chapter, field, lit);
+                    Utils.Rng.Rewind();
+                    var jittered = FogVolumeClutter.Create(world.Gamez, textures, spec, volumes, ProbeJitter);
+                    try
+                    {
+                        CheckJitter(ctx, chapter, field, jittered);
+                    }
+                    finally
+                    {
+                        jittered?.Free();
+                    }
                 }
                 finally
                 {
@@ -226,6 +241,72 @@ internal static class CloudFieldSuites
 
         ctx.Same(0, orphans, $"{chapter} sprites further than {budget:0.0} m from a face carrying their own normal");
         ctx.Note($"{chapter} worst sprite-to-own-face distance {worst:0.00} m of {budget:0.0} m allowed");
+    }
+
+    // The remake-only jitter must lay the same decoded field and move only where each card sits:
+    // same kinds, counts, heights, scales and bands, X/Z within the knob, the map-edge ring still.
+    private static void CheckJitter(TestContext ctx, string chapter, FogVolumeClutter plain,
+        FogVolumeClutter? jittered)
+    {
+        ctx.Check(jittered != null, $"{chapter} builds a jittered cloud field");
+        if (jittered == null)
+        {
+            return;
+        }
+        ctx.Same(plain.BaseCount, jittered.BaseCount, $"{chapter} jittered cloud sprites on the authored faces");
+        ctx.Same(plain.ExtensionCount, jittered.ExtensionCount, $"{chapter} jittered cloud sprites past the map edge");
+
+        var plainMeshes = new List<MultiMesh>();
+        var jitterMeshes = new List<MultiMesh>();
+        foreach (var child in plain.GetChildren())
+        {
+            if (child is MultiMeshInstance3D { Multimesh: { } mm })
+            {
+                plainMeshes.Add(mm);
+            }
+        }
+        foreach (var child in jittered.GetChildren())
+        {
+            if (child is MultiMeshInstance3D { Multimesh: { } mm })
+            {
+                jitterMeshes.Add(mm);
+            }
+        }
+        ctx.Same(plainMeshes.Count, jitterMeshes.Count, $"{chapter} jittered cloud kinds");
+
+        int moved = 0, still = 0, outOfBounds = 0, otherwise = 0;
+        for (int k = 0; k < Mathf.Min(plainMeshes.Count, jitterMeshes.Count); k++)
+        {
+            var a = plainMeshes[k];
+            var b = jitterMeshes[k];
+            ctx.Same(a.InstanceCount, b.InstanceCount, $"{chapter} kind {k} jittered instance count");
+            for (int i = 0; i < Mathf.Min(a.InstanceCount, b.InstanceCount); i++)
+            {
+                var ta = a.GetInstanceTransform(i);
+                var tb = b.GetInstanceTransform(i);
+                var d = tb.Origin - ta.Origin;
+                if (d.Y != 0f || ta.Basis != tb.Basis || a.GetInstanceCustomData(i) != b.GetInstanceCustomData(i))
+                {
+                    otherwise++;
+                }
+                if (Mathf.Abs(d.X) > ProbeJitter + 1e-3f || Mathf.Abs(d.Z) > ProbeJitter + 1e-3f)
+                {
+                    outOfBounds++;
+                }
+                if (d.X == 0f && d.Z == 0f)
+                {
+                    still++;
+                }
+                else
+                {
+                    moved++;
+                }
+            }
+        }
+        ctx.Same(0, otherwise, $"{chapter} jittered sprites whose height, scale or band changed");
+        ctx.Same(0, outOfBounds, $"{chapter} jittered sprites moved further than {ProbeJitter:0} m on an axis");
+        ctx.Same(plain.BaseCount, moved, $"{chapter} lattice sprites the jitter moved");
+        ctx.Same(plain.ExtensionCount, still, $"{chapter} map-edge sprites the jitter left in place");
     }
 
     // The card declares mip levels, so it must fetch through the one function carrying the

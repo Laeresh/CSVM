@@ -938,6 +938,26 @@ public class SessionSpecTests
         }
     }
 
+    [Fact]
+    public void TheCloudJitterDefaultsToTheDecodedLattice()
+    {
+        Assert.Equal(0f, S("--fly").CloudJitter);
+        Assert.Equal(40f, S("--cloud-jitter=40").CloudJitter);
+        Assert.Equal(0f, S("--cloud-jitter=0").CloudJitter);
+        Assert.Empty(S("--cloud-jitter=12.5").Warnings);
+    }
+
+    [Fact]
+    public void AnUnusableCloudJitterIsIgnoredLoudly()
+    {
+        foreach (string bad in new[] { "-1", "wide", "2,5", "NaN" })
+        {
+            var s = S($"--cloud-jitter={bad}");
+            Assert.Equal(0f, s.CloudJitter);
+            Assert.Contains(s.Warnings, w => w.Category == "core" && w.Message.Contains("--cloud-jitter"));
+        }
+    }
+
     // ---- Parse conventions ---------------------------------------------------------------------
 
     [Fact]

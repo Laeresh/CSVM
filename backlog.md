@@ -474,76 +474,66 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   controls and not a luminance distance.
   *Playtest after fix:* the C5 night poses in `playtest/CAP-11/README.md`.
 
-- `BL-325` `[Tuning]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: footage]` **The deck-top cloud
-  cards read as rows from some viewpoints, and the C1B night clouds are lit flat where the
-  original's footage shows a moon side.** *Judged at the controls:* the cards sitting directly on
-  the cloud deck (the `fvol` scatter, `cloudsprite1`/`cloudsprite2`, not the small placed
-  `cloudparent` groups above it) line up into visible rows depending on the perspective; the user
-  wants to try a random X/Z offset per card to break the pattern. *Where the rows come from:* the
-  placement is decoded (`docs/org/cloudCards.md`, `FUN_0044c780`): a staggered lattice on each
-  volume face, row step `distance·√3/2`, every other row offset by half a step, then a
-  perturbation of up to half of one draw over the authored `perturb_dist_range` on each axis
-  independently, which is what `FogVolumeClutter.ScatterFace` lays. So the original lays the same
-  lattice, and whether its rows show as ours do is a footage question first. *Fix shape:* (1)
-  pull `CAP-12`'s deck-level takes (`playtest/CAP-12/`) at a grazing view along the deck and say
-  whether the original's cards read as rows there; (2) a `--cloud-jitter=<m>` knob (default 0)
-  adding a remake-only random X/Z offset per `fvol` card off `Rng.Clouds` after the decoded draws,
-  so the seeded field stays a function of the seed and the placed `cloudparent` groups and the
-  speed cue are untouched; the user flies C1 and C1C along the deck at a few values. If the
-  footage shows no rows, the perturbation port is the suspect (a half-draw where the original may
-  take the whole magnitude) and that is the bug to re-decode, not a knob to ship; if the footage
-  shows them too, the knob is a recorded departure and its value is the user's.
-  *Second half, the C1B moon side:* the original lights a night cloud by which side of it faces
-  the moon; we apply one flat `WorldLight` to the whole population, so a moonlit frame is right on
-  the away side and roughly half as bright on the lit side (split out of `BL-118` at its close,
-  PLAN-overcast-match `C24`).
-  *Evidence:* `CAP-11` C1B (`playtest/CAP-11/`): cloud cores near the moon reach
-  **p90 218** (t=16) while the away-from-moon cloud sits at **p90 70** (t=5); our uniform
-  `WorldLight` 0.426 rendered **p90 102**, matching the away side and ~2× dark against the lit
-  side. Re-measured on the Wave-B build (`B15`, plan `B17` Table 4): our C1B moonlit cloud tops
-  read **p90 187.5** against the original's **155.4 (t5) / 181.9 (t16)** at the spawn pose
-  (`--chapter=C1B --pos=-5406,55,-7200 --direction=-0.391,0,-0.921`), i.e. the *band* is now
-  plausible and the *direction* is still absent.
-  ⚠ **Which population.** C1B ships **no `fvol` volumes at all** (`FogVolumeTests`
-  `C1B "0|-|206.25|bare|cloudsprite:absent"`; its freecam census prints no `fogvol clouds`
-  line), so every cloud in that footage is one of the **70 placed `cloudparent` facades**,
-  ordinary world geometry. Verified by `C23`'s fork landing, which changed the `fvol` card colour
-  and left C1B byte-identical (`mean|d| 0.000, 0 px changed`, `c1b-night-sea` golden `ok`).
-  ⚠ **Vocabulary, three populations, never one phrase for two** (`BL-118`'s note, kept alive
-  here): **`cloudsprite1`/`cloudsprite2`** are the `fvol*` clutter scatter (the deck field,
-  world-locked and tiled); **`cloudparent`** are discrete world-placed clusters (C1B's 70, C1's
-  28, C4's 45); and the **plane-local ambient wisps** each chapter's `speed_cue.zrd` emits 60 m
-  ahead of the player (`Flight.SpeedCue`, `docs/formats/effects.md`) are a third. A claim about one is not
-  evidence about the others, and the first two **share their textures**, `--tex-override` on
-  `cloud1.tif`/`cloud2.tif` paints both (`SHOT-21`), so separate them by altitude or cluster
-  position, never by texture.
-  ⚠ Traps: `csky_world_light` is CAP-11-calibrated on terrain, a directional cloud term must be
-  cloud-local, the way `C22`'s deck fix was deck-local. And C1's own daytime cards were measured
-  faithful at `lighting: false` (`C21`/`C23`). Nothing in the original scales a cloud card's
-  colour at all (decoded, `docs/org/cloudCards.md`), so this must not become a global cloud
-  brightness knob; `FogVolumeClutter` carries no such constant, and the only thing that reaches the
-  authored 240 is the original's own per-vertex term, on the cards whose chapter authors it.
-  ⚠ **The lighting gate cannot supply this item's direction, decoded, and that half is now
-  built.** Every placed `cloudparent` card in every deck chapter (C1's 626, C1B's 1,620, C1C's
-  1,056, C4's 1,453) is authored `lighting: false` and ships an EMPTY normal array, so neither the
-  gate nor the geometry the term runs on is there, and C1B carries no `fvol` volume to hold the
-  cards that do. The original's directional light therefore reaches nothing in C1B's footage and
-  the item's stated mechanism is not the one in that frame; re-check what the measured p90 above
-  is actually reading (fog mix, not the world light) before building on it. What the gate does buy
-  is a per-vertex term on the `fvol` cards, and `FogVolumeClutter` now applies it: the card carries
-  its three authored normals and a `lighting: true` chapter (C1C, C2B, C5) evaluates
-  `AMBIENT + DIFFUSE × max(N·L, 0)` per vertex through the billboard basis off the zone's
-  uncollapsed `SUNLIGHT` pair, clamping the product against the authored 240 rather than the
-  factor. C1 and C4 author false and are byte-identical. That lifts a C1C card top from the flat
-  **163.7** toward the placed facades' **235.25** while its underside drops, which narrows the
-  71.6 cloud-population spread at the top of each puff and widens it at the bottom, and C1B moves
-  by nothing at all (p90 173.0 whole frame, 165.7 moon side, 175.3 away, before and after).
-  *Playtest after fix:* three sorties, C1 and C1C flown low along the deck with the jitter knob at
-  a few values against `CAP-12`'s grazing takes for the rows; the C1B night spawn
-  (`--chapter=C1B --pos=-5406,55,-7200 --direction=-0.391,0,-0.921`) against `playtest/CAP-11/`'s
-  t5 and t16 frames, saying for every measured puff which side of the moon it faces; and one lit
-  chapter (C1C above the band) for a verdict on whether the per-vertex shading on the `fvol` cards
-  reads like the original rather than only measuring closer.
+- `BL-325` `[Tuning]` `[Owed-playtest]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **The
+  deck-top cloud cards read as rows from some viewpoints, and the C1B night clouds are lit flat
+  where the original's footage shows a moon side.** *Judged at the controls:* the cards sitting
+  directly on the cloud deck (the `fvol` scatter, `cloudsprite1`/`cloudsprite2`, not the placed
+  `cloudparent` groups above it) line up into visible rows depending on the perspective.
+  *The sortie owed:* `PT-166`, C1 and C1C flown low along the deck at `--cloud-jitter=0`, `30` and
+  `65`; the user names the value, or 0 to keep the decoded lattice, and a non-zero value becomes
+  the knob's default as a recorded departure.
+  *What the footage shows:* `CAP-12`'s grazing takes along the C1 deck (t 33, 58, 88, 103 to 131,
+  the tops at 3,560 to 4,000 ft) and the C4 take (t 26 to 58, among the tops) read as soft
+  continuous mottling, with no rows visible in any frame. That is weak evidence: the chase camera
+  sits 50 to 200 m above tops that are washed into the band's fog, a card's edge is soft at that
+  range, and a still frame loses the parallax that shows a lattice in motion. The frames judged
+  from are in the orch-8 scratch folder for this item.
+  *What the decode shows:* the perturbation port is faithful. `FUN_0044c780` draws one magnitude
+  `m` over `perturb_dist_range` and moves each axis by `(rand() · 3.051851e-05 − 0.5) · m`
+  (`0x0044cde0`..`0x0044ce50`), exactly `ScatterFace`'s half-draw per axis, so on C1 and C1C
+  (`distance` 130, `perturb_dist_range` [10, 20]) the original's own lattice is regular to within
+  ±10 m, and it lays the same rows ours does. Whether they show is therefore a look question, not
+  a bug. Two small lattice differences the re-decode found (the whole-number step fit with its
+  half-step row start, and the outline test on the perturbed point rather than the lattice point)
+  are recorded in `docs/org/cloudCards.md`; neither bears on rows, and fixing either moves every
+  cloud golden.
+  *What is built:* `--cloud-jitter=<m>` (default 0, `docs/cli.md`) adds a uniform X/Z offset of up
+  to `m` metres per axis to each lattice card after every decoded draw, off its own
+  `Rng.CloudJitter` stream, so every value lays the same seeded field; the `cloudparent` groups,
+  the map-edge ring and the speed cue are untouched (`cloud-field-fade` checks all of it). At 0 all
+  19 goldens are hash-identical.
+  *Second half, the C1B moon side:* the original was read as lighting a night cloud by which side
+  of it faces the moon, where we light the population flat. *Evidence:* `CAP-11` C1B
+  (`playtest/CAP-11/`): cloud cores p90 **218** at t16 against **70** at t5, and our spawn pose
+  (`--chapter=C1B --pos=-5406,55,-7200 --direction=-0.391,0,-0.921`) at p90 173.0 whole frame,
+  165.7 on the moon side, 175.3 away. ⚠ **The measured split may not be a moon side at all.** At
+  t5 the dim cloud hangs directly beside the moon, far off and deep in the night fog; at t16 the
+  bright cloud is close to the aircraft and also on the moon's bearing. Both frames put their
+  cloud on the moon's side, so the 218/70 split reads as distance through the fog, not as the side
+  a cloud turns to the moon. Moderately sure, from two stills. And the mechanism cannot reach that
+  frame in any case: C1B ships **no `fvol` volumes** (`FogVolumeTests`
+  `C1B "0|-|206.25|bare|cloudsprite:absent"`), and its **70 placed `cloudparent` facades** (1,620
+  card nodes) are authored `lighting: false` with an empty normal array, so the original's
+  per-vertex term has neither the gate nor the geometry. What that term does buy is on the `fvol`
+  cards, and `FogVolumeClutter` applies it for the chapters authoring `lighting: true` (C1C, C2B,
+  C5), per vertex off the zone's uncollapsed `SUNLIGHT`, while C1B moves by nothing. Nothing here
+  touches `SceneBuilder` or `WeatherRig` lighting. What would settle this half is a capture of one
+  C1B cloud from two headings at the same range, one with the moon behind the camera and one with
+  it behind the cloud.
+  ⚠ **Vocabulary, three populations, never one phrase for two:** **`cloudsprite1`/`cloudsprite2`**
+  are the `fvol*` clutter scatter (the deck field, world-locked and tiled); **`cloudparent`** are
+  discrete world-placed clusters (C1B's 70, C1's 28, C4's 45); and the **plane-local ambient
+  wisps** each chapter's `speed_cue.zrd` emits 60 m ahead of the player (`Flight.SpeedCue`,
+  `docs/formats/effects.md`) are a third. A claim about one is not evidence about the others, and
+  the first two **share their textures**, `--tex-override` on `cloud1.tif`/`cloud2.tif` paints
+  both (`SHOT-21`), so separate them by altitude or cluster position, never by texture.
+  ⚠ Traps: `csky_world_light` is CAP-11-calibrated on terrain, so a directional cloud term must be
+  cloud-local. Nothing in the original scales a cloud card's colour except its own per-vertex term
+  (decoded, `docs/org/cloudCards.md`), so this must not become a global cloud brightness knob.
+  *Playtest after fix:* `PT-166` for the rows; the C1B night spawn above against
+  `playtest/CAP-11/`'s t5 and t16 frames, saying for every puff how far off it is and which side
+  of the moon it faces; and one lit chapter (C1C above the band) for a verdict on whether the
+  per-vertex shading on the `fvol` cards reads like the original.
   *Cross-refs:* `docs/org/cloudCards.md` (the lattice and the perturbation), `CAP-12`,
   `docs/formats/effects.md`'s speed-cue section (the third population),
   `docs/org/vertexLighting.md`'s facade section, `CAP-11`.

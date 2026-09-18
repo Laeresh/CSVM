@@ -40,6 +40,9 @@ public static class Rng
     // shift every later placement, and the field's counts and positions are what the pinned
     // chapter totals and the golden shots stand on.
     public const string CloudBands = "cloudbands";
+    // The cloud field's remake-only X/Z jitter (--cloud-jitter). Its own stream for CloudBands'
+    // reason: every knob value then lays the same decoded field and moves only the offsets.
+    public const string CloudJitter = "cloudjitter";
     public const string Precip = "precip";
     // The mission's global wind gust (Effects.WorldWind). Its own stream, not Puffer's: the wind
     // is one random walk for the whole world, stepped once per frame by WeatherRig, while

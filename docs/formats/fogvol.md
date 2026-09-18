@@ -544,9 +544,10 @@ volume, 112× the 16 m ramp (predicted before the run, pinned in
   term then drops that sheet outright rather than showing it from below
   ([`../org/cloudCards.md`](../org/cloudCards.md)). Do not read a thin-looking interior, or an empty
   street-level frame, as a missing population.
-- **Volume walls are not sprite clips.** `perturb_dist_range` is applied after containment, so a
-  card's centre can sit up to `perturb_dist_range.y` outside its own volume's wall. That is what a
-  perturbation means; the volume bounds where the field is placed, not where each sprite may hang.
+- **Volume walls are not sprite clips.** The port applies `perturb_dist_range` after its outline
+  test, so a card's centre can sit up to half of `perturb_dist_range.y` outside its own face. The
+  original tests the perturbed point instead ([`../org/cloudCards.md`](../org/cloudCards.md)), so
+  its centres stay inside the outline; the difference is confined to the rim cells.
 - **The field no longer ends at the base map's rim, for the four map-spanning-slab chapters.**
   `A5`'s engine-side continuation (its own section above) fills the same void this document used to
   describe as "no edge anywhere a player can reach it", that phrase described the ABSENCE of

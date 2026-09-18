@@ -203,16 +203,27 @@ field is scattered **over the volume mesh's faces**, not through its interior. P
   polygon's vertices projected onto the two;
 - the steps are `distance * sqrt(3) / 2` along `U` and `distance` along `V`, each extent divided
   into a whole number of steps, and **every other row is offset by half a step**, which is a
-  staggered lattice rather than a square one;
-- each cell's point is tested by `FUN_0044c310` against the polygon's own outline and skipped when
-  it falls outside;
-- the point is then displaced **along `unit(p - ref)`** by a random draw over `perp_dist_range`,
+  staggered lattice rather than a square one. In full (`0x0044c9b3`..`0x0044ca3e`): an extent
+  wider than its nominal step takes `step = extent / ftol(extent / nominal + 0.5)`, a narrower one
+  is its own single step; rows start half a row step in from the minimum and run while they stay
+  at or below the maximum, columns start at the minimum (plus half a column step on odd rows);
+- the kind is drawn by weight twice, once over the blocks and once over a block's nodes, and then
+  the fade band;
+- the point is displaced **along `unit(p - ref)`** by a random draw over `perp_dist_range`,
   where `ref` is a per-volume reference point the caller passes from the volume record's `+0x64`
   (untraced beyond that; for a slab's top face the direction it gives is up near the middle and
-  increasingly outward towards the rim), and then perturbed on all three axes independently by up
-  to half of one random draw over `perturb_dist_range`;
+  increasingly outward towards the rim);
+- it is then perturbed by **one** draw `m` over `perturb_dist_range` (`0x0044cde0`..`0x0044cdf9`,
+  the block's `+0x24`/`+0x28`) and one draw per axis, `p += (rand() · 3.051851e-05 − 0.5) · m`
+  (`0x0044cdfc`..`0x0044ce50`, the constants at `0x00603598` and `0x006032e0` = 0.5), so each axis
+  moves uniformly over `[−m/2, m/2]`. On C1 and C1C (`distance` 130, `perturb_dist_range`
+  `[10, 20]`) that is at most ±10 m per axis against a 130 m column step, so the original's own
+  lattice is regular to within 8 % of a step;
 - the scale is one uniform random draw over `scale_range`, applied to all three axes;
-- the kind is drawn by weight twice, once over the blocks and once over a block's nodes.
+- only then is the final, displaced and perturbed point tested by `FUN_0044c310` against the
+  polygon's own outline (`0x0044ce5e`..`0x0044ce87`, the argument is the perturbed point), and the
+  placement skipped when it falls outside. Every draw above is taken for every lattice cell,
+  accepted or not.
 
 Every `rand()` above runs inside the fixed-seed window `FUN_0044e010` opens, so the whole field is
 the same every launch.
@@ -250,6 +261,20 @@ underside and the walls too and place several times the field.
   the templates clutter already takes from the graphics `EffectsLevel`, so `HIGH` leaves the
   authored metres literal and the two clutter populations cannot drift apart.
 - **The card takes no fog in either build**, which is the one place the two agree by construction.
+
+⚠ **The port lays the lattice with two known differences, neither of which bears on rows.** It
+steps the nominal `distance · sqrt(3)/2` by `distance` from the face's minimum corner rather than
+the whole-number fit above with its half-step row start, and it tests the undisplaced lattice point
+against the outline before drawing, where the original tests the perturbed point after every draw.
+The perturbation itself is the original's to the constant: one magnitude, then `[−m/2, m/2]` per
+axis. Fixing either difference moves the placed field and every cloud golden, and is a separate
+change.
+
+**`--cloud-jitter=<m>` is a remake-only departure, default 0.** Because the original's own ±10 m on
+a 130 m lattice leaves its rows standing, a regular lattice seen along the deck can read as rows in
+either build. The knob adds a uniform X/Z offset of up to `m` metres per axis to each lattice card
+after every decoded draw, off its own `cloudjitter` stream, so every value lays the same seeded
+field; the map-edge ring, whose cards are already uniform in their cells, is left alone.
 
 ⚠ **Two quantities are still inferred.** The per-volume reference point the perpendicular offset
 runs away from is taken as the volume's own bounds centre, which gives the direction the decode

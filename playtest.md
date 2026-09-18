@@ -952,6 +952,27 @@ is a judgement on our own remake.
   The `sound:` lines log each emitter's distance, gain and the factor once a second. *Blocks:*
   `BL-269` (name the factor, or none), `BL-933`.
 
+### C1 and C1C · Bloodhawk, along the cloud deck at three cloud jitters
+
+```powershell
+./RunGame.ps1 --fly --chapter=C1 --plane=player_bhawk --pos=-4974,1260,-3861 --direction=-1,0,0 --cloud-jitter=0
+./RunGame.ps1 --fly --chapter=C1 --plane=player_bhawk --pos=-4974,1260,-3861 --direction=-1,0,0 --cloud-jitter=30
+./RunGame.ps1 --fly --chapter=C1 --plane=player_bhawk --pos=-4974,1260,-3861 --direction=-1,0,0 --cloud-jitter=65
+./RunGame.ps1 --fly --chapter=C1C --plane=player_bhawk --pos=-4974,1260,-3861 --direction=-1,0,0 --cloud-jitter=0
+./RunGame.ps1 --fly --chapter=C1C --plane=player_bhawk --pos=-4974,1260,-3861 --direction=-1,0,0 --cloud-jitter=65
+```
+
+- `PT-166` `[Own]` **Whether the deck-top cloud cards still read as rows, and at which jitter they
+  stop.** The cards on the deck lie on the original's own staggered lattice with its own ±10 m
+  perturbation (re-decoded, faithful), and `--cloud-jitter=<m>` is a remake-only extra X/Z offset
+  of up to `m` metres per card. Fly low along the deck tops, turning through a full circle and
+  climbing slowly to about 1,500 m, at each value, and compare against `CAP-12`'s grazing takes.
+  *Look for:* (a) at 0, the viewpoints where the rows show; (b) the smallest value at which they
+  no longer show from those viewpoints; (c) whether that value makes the deck read lumpy or
+  patchy rather than as the original's soft mottling; (d) the big puffs above the deck
+  (`cloudparent`) and the ambient wisps ahead of the aircraft, which must not change between
+  runs. *Blocks:* `BL-325` (name the value, or 0 to keep the decoded lattice).
+
 ## Everything else
 
 Everything blocked on an unlanded fix is tracked in [`backlog.md`](backlog.md) with its own
