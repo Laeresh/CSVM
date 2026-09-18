@@ -36,7 +36,7 @@ Index, name (the exe's), and what the shipped data shows. `-1` is the near-unive
 
 | idx | name | notes |
 |---|---|---|
-| 0 | `netids` | patrol-net id into the chapter `neindex` ([ai-nets.md](ai-nets.md)); `-1` = none. The exe comment calls it a **list** and the reader agrees: `FUN_0047c210` (`0x0047c733`) takes the single id when the count is 1 and **`rand() % count`** when it is higher, drawn once at spawn. This install only ever authors a scalar, so the draw never fires. ⚠ **A `-1` here is not "no orders", it selects a different AI behaviour entirely** ([`org/aiPilot.md`](../org/aiPilot.md)); in the shipped campaign the only netless blocks are `player` and the wingmen (below) |
+| 0 | `netids` | patrol-net id into the chapter `neindex` ([ai-nets.md](ai-nets.md)); `-1` = none. The exe comment calls it a **list** and the reader agrees: `FUN_0047c210` (`0x0047c733`) takes the single id when the count is 1 and **`rand() % count`** when it is higher, drawn once at spawn, and a count of 0 writes `-1` (`0x0047c76d`). This install authors a scalar on every block but C1/M04's `blakepeace_2_2`, whose slot 0 is an empty list, so the draw never fires. ⚠ **A `-1` here is not "no orders", it selects a different AI behaviour entirely** ([`org/aiPilot.md`](../org/aiPilot.md)); in the shipped campaign the only netless blocks are `player`, the wingmen and `blakepeace_2_2` (below) |
 | 1 | `(x y z)` | spawn position, the only list-typed slot, present on all 414 |
 | 2 | `yaw` | spawn heading, degrees |
 | 3 | `team` | |
@@ -73,17 +73,21 @@ Index, name (the exe's), and what the shipped data shows. `-1` is the near-unive
 **31 of the bare-number slots are constant across all 414 blocks** (8–19, 36, 43–56, 58, 60, 62, 64),
 authored defaults, not signal.
 
-### Who is netless: the player and the wingmen, nobody else
+### Who is netless: the player, the wingmen and one enemy
 
 Across all 53 `aiv.zrd.json` files (414 blocks), `netids` is `-1` on exactly 106 of
-them and every one is the player or a wingman:
+them and every one is the player or a wingman. ⚠ One more block is netless without authoring `-1`:
+C1/M04's `blakepeace_2_2` authors an empty list, zero volumes and a spawn at the origin, and the
+spawn reader resolves it to `-1` as well, which gives the only netless `jet` in the shipped data
+([`org/aiPilot.md`](../org/aiPilot.md), the headline).
 
 | node name | blocks | `netids` |
 |---|---|---|
 | `player` | 53 | `-1` |
 | `wingman_N` | 50 | `-1` |
 | `bswingman_N` | 3 | `-1` |
-| everything else (enemies, `patrolboat_N`, `t_truck_N`) | 308 | a real net id, every one |
+| C1/M04 `blakepeace_2_2` | 1 | an empty list |
+| everything else (enemies, `patrolboat_N`, `t_truck_N`) | 307 | a real net id, every one |
 
 This is not a curiosity of the data, it is the switch that selects the AI behaviour. `wingman` and
 `bswingman` are also the two `vehicle.json` defs (besides the eleven Instant Action `w<plane>` ones)

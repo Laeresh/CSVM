@@ -28,8 +28,16 @@ by one authored key and one authored field:
 - a **formation escort**, which requires a `primary_target` and never looks at a net.
 
 An aircraft with no patrol net does not fly a degenerate straight line and does not loiter. It
-either flies a formation station on its leader, or it is a `jet` with no net, which is a state the
-shipped data never produces.
+either flies a formation station on its leader, or it is a `jet` with no net, which the engine has no
+branch for.
+
+⚠ **The shipped data does produce one netless `jet`.** C1/M04's `blakepeace_2_2` (team 2, group 4,
+enabled) authors slot 0 as an empty list, every volume as `0.0` and its spawn at the world origin.
+The spawn reader `FUN_0047c210` takes the id when the list count is 1, draws `rand() % count` when
+it is higher, and otherwise writes `-1` to `+0x2e4` (`0x0047c76d`); nothing on that path skips the
+block. The net follower `FUN_0041d1f0` then looks `-1` up in the chapter net table
+(`0x0041d20a`–`0x0041d228`), finds no match and indexes record `-1`, 100 bytes before the table's
+first record, with no guard. What the aeroplane does on that read is not determinable statically.
 
 ## `mode`, the dynamics class
 
@@ -120,13 +128,18 @@ silent, and the emplacement file settles nothing about a hull's own weapon.
 `0x00479dbc`), and `FUN_00475820` copies them to vehicle `+0x304` and `+0x308`. Both feed the one
 timestamp `+0x300`, which paces a pursuit at both ends:
 
-- `FUN_0041f040` refuses to promote while `DAT_0071c470 <= +0x300`, unless the offered target
-  differs from the one at `+0x2fc`, the target the last promotion took;
-- on promoting it sets `+0x300` to now plus `+0x304`, except that a `jet` or `wingman` promoting
-  onto a target that is not a `TargetVehicle` gets a hardcoded 20 s instead;
+- `FUN_0041f040` refuses to promote, returning 0, while `DAT_0071c470 <= +0x300`
+  (`0x0041f069`–`0x0041f07a`), unless the standing target at `+0x948` is the vehicle's assigned
+  `primary_target` at `+0x2fc` (the two objects' `+0x4` compared at `0x0041f048`–`0x0041f05e`) or the
+  debug flag `DAT_0064f66e` is set;
+- on promoting it sets `+0x300` to now plus `+0x304` (`0x0041f106`), except that a `jet` or
+  `wingman` promoting onto a target that is not a `TargetVehicle` gets a hardcoded 20.0 s instead
+  (`0x006035e4`, `0x0041f0ea`);
 - losing a pursued target sets `+0x300` to now plus `+0x308` (step 3 above);
 - the pursue behaviour's tail reverts the task the moment `+0x300` passes (`0x0041e674`), so the
-  same stamp that made the aeroplane wait before the chase is also what ends it.
+  same stamp that made the aeroplane wait before the chase is also what ends it, and the revert
+  re-arms it to now plus `+0x308`, or plus a hardcoded 15.0 s (`0x00603560`) on the same
+  `jet`/`wingman` non-`TargetVehicle` condition.
 
 `basic_airplane` authors `attack_dwell 60` and `not_pursuit_dwell 5` and every aeroplane def
 inherits them, so an unassigned chase runs a minute and the next one may start five seconds later.
@@ -360,7 +373,10 @@ own position at `+0x204`–`+0x20c`, and any one of five terms reverts the task:
 | above | `0x0041e6c7`–`0x0041e6d5` | `dy` is over `+0x33c`, which holds +r |
 
 The revert at `0x0041e6d7` writes the default task `+0x2f4` into `+0x2f0` and re-arms `+0x300` to now
-plus `+0x308`, or plus a hardcoded 20.0 for a `jet`/`wingman` whose target is not a `TargetVehicle`.
+plus `+0x308` (`0x0041e72b`), or plus a hardcoded 15.0 (`0x00603560`, `0x0041e713`) for a
+`jet`/`wingman` whose target is not a `TargetVehicle`. It leaves `+0x948` standing, so the next
+frame's selection may hand the same target straight back, and the promotion's dwell refusal is what
+keeps the aeroplane on its net until the re-armed stamp passes.
 **None of the five reads the activation volume.** The parse fills all three fields from one token
 (`0x00479de9`–`0x00479e09`, as `r²`, `+r`, `−r`), and only a second and third token part the band from
 the radius (`0x00479e14`, `0x00479e22`); `basic_airplane` authors `return_range 1200` alone and every
@@ -373,9 +389,10 @@ patrol branch (task `0` or `2`), never while the task is already pursue, and the
 is a separate field, so a stun, a climb-out or an evasive program leaves task and anchor standing.
 A pursuit is leashed to where the chase began, not to the spawn and not to the last maneuver.
 
-⚠ **The whole revert is skipped for an assigned `primary_target`.** The tail sits inside a guard
-(`0x0041e5fd` onward) that runs only when `+0x2fc` is null or the standing target at `+0x948` has a
-different owner, the same predicate the promotion's dwell gate uses. A vehicle chasing the target its
+⚠ **The whole revert is skipped for an assigned `primary_target`.** The guard at
+`0x0041e5a6`–`0x0041e5bc` jumps straight to the return at `0x0041e73d` when `+0x2fc` is set and the
+standing target at `+0x948` has the same `+0x4` object, the same predicate the promotion's dwell gate
+uses; the anchor offset (`0x0041e5c2`) and the five terms run only otherwise. A vehicle chasing the target its
 roster block assigned it neither waits to promote nor ever reverts.
 
 ⚠ **The dwell pair caps every other chase at 60 seconds.** `basic_airplane` authors `attack_dwell 60`
@@ -385,11 +402,32 @@ the pursuit for a minute, reverts, and cannot promote again for five seconds. Th
 end it sooner. Subtracting `(1 − +0x8f4) × +0x304` at `0x0041e65c` shortens the deadline while the
 quarry is the player and the player is chasing back.
 
+### The promotion has no range, team or net gate of its own
+
+`FUN_0041c270` calls `FUN_0041f040` on every frame the task is patrol (`0` or `2`), the selected
+target at `+0x948` is live and `+0x67c` is not `ship`, `plane` or `heli` (`0x0041c37c`). The promotion
+reads no distance, no team, no net flag and no volume: its one refusal is the dwell above, and its
+only other input is what `FUN_0041fe10` selected. Every admission term (team, `rating_biases`, the
+attack cylinder, the gasbag gate, the 20 s hold) therefore lives in the selection, and a target that
+is selected is chased the frame the dwell allows it. The enemy and the friendly side run the same
+path; nothing in either function reads the team beyond the scorer's own hostility test.
+
 CSVM ports the anchor and the cylinder. `AiModeMachine.PursuitAnchor` is taken on the promotion into
 pursue and dropped when the task reverts, `ReturnRange` is tested as the cylinder above, and the
-disengage reads no activation term. Unported, named rather than guessed: the dwell pair, which would
-need the promotion's own `+0x300` refusal beside it to mean anything; the `primary_target` exemption;
-and the per-frame revert during an evasive program, which CSVM defers to the moment the program ends.
+disengage reads no activation term. Where it diverges:
+
+- `AiModeMachine`'s `Patrol` case promotes on its own distance test, the quarry within
+  `min(ActivationRange, AttackRange)`, which the original does not have. Since the selection already
+  refuses anything past `AttackRange`, it binds only on a pilot whose activation radius is the
+  smaller of the two.
+- It has no `+0x300` refusal, so a revert on the return cylinder re-promotes on the next tick with a
+  fresh anchor at the pursuer's new position. A chase that keeps leaving its cylinder walks across
+  the map one return range at a time and never flies its net in between.
+- It has no dwell deadline in `Pursue`, so an unassigned chase is not capped at `attack_dwell`, and
+  neither the revert nor a lost target re-arms `not_pursuit_dwell` or the 15 s hold.
+- It has no `primary_target` exemption, so a pilot chasing its assigned target reverts on the
+  cylinder like any other.
+- The per-frame revert during an evasive program is deferred to the moment the program ends.
 
 ### `rating_biases` returns rank units directly
 
@@ -1568,6 +1606,7 @@ law is a campaign behaviour and the wrong fix for a wingman that leaves the figh
 | `FUN_0041d1f0` | the patrol-net follower |
 | `FUN_0041d9f0` | pursue, including the 400 m merge rule at `0x0041e130` |
 | `FUN_0041e760` | the formation escort law |
+| `FUN_0041f040` | the promotion to pursue: the `+0x300` dwell refusal, the anchor, the dwell re-arm |
 | `FUN_0041b560` | the shared steering law: point in, stick and throttle out |
 | `FUN_004311c0` | builds the chapter net table from `neindex`, in file order (`FUN_00431300` frees it) |
 | `FUN_004314e0` | builds one `CCENet` from its record: nodes, edges, volumes, and the trailer's name→object resolve |
@@ -1612,5 +1651,8 @@ law is a campaign behaviour and the wrong fix for a wingman that leaves the figh
   point into bank, pitch and rudder) is a separate decode, and it is what would replace
   `AiPilot`'s placeholder.
 - `mode_alt` has no identified consumer.
+- What a `jet` whose net resolved to `-1` flies (C1/M04's `blakepeace_2_2`, see the headline) is a
+  read of record `-1` outside the net table; only a debugger run of that mission can say what it
+  finds there.
 - Whether the original's Instant Action wingmen visibly hold station is untested. The code path says
   they do not.
