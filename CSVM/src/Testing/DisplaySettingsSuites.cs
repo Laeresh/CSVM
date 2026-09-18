@@ -30,9 +30,9 @@ internal static class DisplaySettingsSuites
     private const string CustomSize = "640x480";
 
     // Where the size row stands on the built-in Options screen, under difficulty, the opening
-    // view, the automatic head turn, the targeting switch, the rumble toggle, the presentation,
-    // the graphics mode and the monitor.
-    private const int BuiltInResolutionRow = 8;
+    // view, the automatic head turn, the targeting switch, the rumble toggle, the graphics mode and
+    // the monitor.
+    private const int BuiltInResolutionRow = 7;
 
     // Every field OptionsDef carries, with a value the store validates and whether it is a display
     // setting, which is what makes it something no deterministic run may read. The list is compared
