@@ -752,6 +752,10 @@ member, and it does not go here.
   drawn pose in its callback; a hand-stepped suite poses the anchor before it draws and can never
   see the lag, so assert the `ProcessPriority` as well as the placement.** `ProjectilePool` drew
   before the flight rigs, and every anchored flash and shot light sat a frame astern of the gun.
+  A reader that runs first does not lag evenly: on a frame with a physics step it reads the new
+  simulation pose, and on one without it reads last frame's drawn pose, so its error alternates
+  with the step cadence and reads as a stepping picture. `TargetHud` aimed the spyglass that way,
+  0.18 to 1.44 m off the drawn target in a realtime turn.
 - **INSTR-87**, **An `AudioStreamPlayer3D`'s `VolumeDb` is the level a listener gets only when its
   attenuation model is `Disabled` and its `MaxDistance` is 0: any other model applies its own curve
   and a low-pass of up to 24 dB above 5 kHz, and a `MaxDistance` multiplies a second linear fade

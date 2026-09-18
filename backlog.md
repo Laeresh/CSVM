@@ -1037,18 +1037,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (the pattern as other local co-op games ship it, asked for by name).
 
 
-- `BL-958` `[Bug]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: feel]` **The spyglass disc's picture still steps in a
-  hard turn.** *Evidence:* judged at the controls after the eye moved onto the interpolated draw
-  pose and the disc's camera dropped the own aeroplane's layer (`git log --grep=BL-906`): the
-  picture inside the disc moves in steps with the target rather than smoothly, while the disc
-  itself holds and the own aeroplane no longer crosses it. So the remaining source is the disc
-  camera's aim, not its eye: the target it looks at is read from a pose that is a physics step
-  behind, or the aim is quantised by the bearing it is composed from. *Fix shape:* log the disc
-  camera's aim and the target's drawn pose per rendered frame in a hard turn and find which one
-  steps; then feed the aim the same interpolated pose the eye takes. *⚠ Traps:* the
-  `spyglass-marker-hud` suite runs in one frame and cannot see a per-frame step; a live `--fly`
-  probe with a log line is the instrument. *Cross-refs:* `git log --grep=BL-906`.
-
 - `BL-967` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: spec]` **Built-in's Instant Action
   wrap-up board shows the stunt run's Danger Zone photographs.** *Evidence:* an Instant Action stunt
   run under Built-in ends on `IaWrapupBoard`, which draws the four counters and the splits but no

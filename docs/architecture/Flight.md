@@ -731,9 +731,9 @@ selection from `TargetSelection` (objective sites included), a nearest AI-hostil
 selection exists, and the F16 / `--debug-markers` every-aircraft overlay. Draws the original's
 bracket box and label block and owns the colour table, the label layout, the selected gun's reach
 gate and the debug identity string. Off screen it owns the arrow, `ArrowHead`, `ShaftTail` and
-`EdgeLabelAnchor` over `EdgeMarker`'s placement. It owns the spyglass's gates, which read the sim
-pose in `PlanePos` while the picture's eye stands on the drawn `RenderPose`, and draws that picture.
-Decode: [targeting](../org/targeting.md), [spyglass](../org/spyglass.md).
+`EdgeLabelAnchor` over `EdgeMarker`'s placement. It owns the spyglass's gates (sim pose, `PlanePos`)
+and draws the picture: the eye on the drawn `RenderPose`, the aim on the target's drawn pose,
+read after the flight rigs (`AfterFlightRigs`). Decode: [targeting](../org/targeting.md), [spyglass](../org/spyglass.md).
 
 ## src/Flight/VersusBoard.cs
 The Dogfight results overlay on `ResultsBoard`'s shell: the winner in their own
