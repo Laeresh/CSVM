@@ -752,6 +752,18 @@ Because the eye stays level with the aircraft, a photograph taken in level fligh
 and both wings coming at the camera, a bank shows as a tilted wing line, and one taken in a steep
 dive shows the upper surface with the nose toward the bottom of the frame and the tail at the top.
 
+**When it can fire.** [Evidence: decoded] There is no separate camera test. The trigger is inside
+`FUN_00446990`'s completion branch (more than one gate passed, `0x004469dc`), behind the zone's
+completed byte `+0x40`: tested at `0x00446aaa` before the completed-zones counter, and set at
+`0x00446ae8` whether or not a photograph was taken. A zone therefore photographs at most once, on
+its first completion, and the last photograph a run can take is the one its last zone's
+completion takes; nothing photographs after the run completes. The zone list's builder
+`FUN_004459f0` seeds every record with `+0x48` and `+0x49` set and `+0x4c` at -1, so only a zone
+that `objective_numbers` gives a slot photographs at all. The remake's stunt camera latches on
+the `dzN` marker sphere rather than the gate pair, and ends where the original does: its last test
+is on the frame the run completes, and a marker first entered after that frame is not
+photographed.
+
 The remake takes the same pose in `DangerZonePhotograph`, a viewport of its own that shares the
 pane's world, so the pane is never moved. A pilot in a first-person view has the hidden airframe
 groups shown for that one frame on a visual layer no pane draws. The fill light is not ported. A

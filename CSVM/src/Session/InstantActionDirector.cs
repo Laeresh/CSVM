@@ -676,9 +676,9 @@ public sealed class InstantActionDirector
                 return;
             }
 
-            // The photographs are read at the handover rather than the ending: the run completes on
-            // its last gate pair, which can come before the camera's marker sphere or share its
-            // frame, where the camera tests after the run.
+            // The photographs are read at the handover rather than the ending: a marker crossed on
+            // the frame the run completes is latched after the run's test, and its frame lands
+            // later still. A marker first entered after that frame is never photographed.
             var camera = final.Stunt != null && _rigs is { Count: > 0 } ? _rigs[0].Controller?.StuntShots : null;
             if (inputs.WrapupToMenu is { } toMenu)
             {

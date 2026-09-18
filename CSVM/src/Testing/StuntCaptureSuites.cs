@@ -31,7 +31,8 @@ internal static class StuntCaptureSuites
         + "again, the scoreboard's thumbnail strip lists the run's shots in marker order, and a "
         + "frame landing after the crossing (and after the board woke) writes its file and fills "
         + "its cell while the sting and the pass mark stay on the crossing, a marker latched on "
-        + "the frame the run completes joins the strip of the board that frame woke, and Instant "
+        + "the frame the run completes joins the strip of the board that frame woke, a marker first "
+        + "entered on a later frame is not photographed, and Instant "
         + "Action's wrap-up board draws player 1's shots the same way (marker order, a held frame "
         + "filled on landing, no strip without a camera or a shot)")]
     internal static void StuntCaptureRun(TestContext ctx)
@@ -118,7 +119,7 @@ internal static class StuntCaptureSuites
         CheckOrder(ctx, run, capture);
         CheckRerun(ctx, run, capture);
         CheckStrip(ctx, run, capture, pane, () => stings);
-        CheckLatchAfterCompletion(ctx, run, capture);
+        CheckLatchAfterCompletion(ctx, run, capture, () => stings, pane);
         CheckWrapupStrip(ctx, run, capture, pane);
         ctx.Note($"{Chapter}/{Mission}: {run.TotalCount} markers photographed into {StuntCapture.ShotDir()}");
     }
@@ -249,15 +250,19 @@ internal static class StuntCaptureSuites
 
     // FlightController tests the run before the camera on one physics frame, so the gate pair that
     // completes the run wakes the board before the camera latches a marker crossed on that frame.
-    private static void CheckLatchAfterCompletion(TestContext ctx, StuntMission run, StuntCapture capture)
+    // That frame's test is the camera's last: a marker first entered on a later frame is not
+    // photographed, as the original photographs only inside a zone's first completion.
+    private static void CheckLatchAfterCompletion(TestContext ctx, StuntMission run, StuntCapture capture,
+        System.Func<int> stings, PaneRig pane)
     {
         run.Reset();
         capture.Reset();
         capture.Update(Elsewhere);
         var last = run.Zones[run.Zones.Count - 1];
+        var late = run.Zones[run.Zones.Count - 2];
         foreach (var zone in run.Zones)
         {
-            if (zone != last)
+            if (zone != last && zone != late)
             {
                 run.Tick(1f);
                 capture.Update(zone.Position);
@@ -277,10 +282,30 @@ internal static class StuntCaptureSuites
             run.DebugCompleteAll();
             capture.Update(last.Position);
             var captions = Captions(board);
-            ctx.Check(captions.Count == run.Zones.Count && captions[^1] == last.DzName,
+            int photographed = run.Zones.Count - 1;
+            ctx.Check(captions.Count == photographed && captions[^1] == last.DzName,
                 $"a marker latched on the frame the run completes, after the board woke, joins the strip: [{string.Join(" ", captions)}]");
             capture.Settle();
-            ctx.Same(run.Zones.Count, Pictures(board), $"…and its picture fills its cell once it lands");
+            ctx.Same(photographed, Pictures(board), $"…and its picture fills its cell once it lands");
+
+            // A later frame, into a marker this run never photographed.
+            int stingsBefore = stings();
+            int grabsBefore = pane.Grabs;
+            capture.Update(Elsewhere);
+            capture.Update(late.Position);
+            capture.Settle();
+            ctx.Check(capture.Count == photographed && stings() == stingsBefore && pane.Grabs == grabsBefore
+                    && capture.InMarkerOrder().All(s => s.DzName != late.DzName),
+                $"{late.DzName}, first entered on a frame after the run completed, is not photographed: shots={capture.Count} stings+={stings() - stingsBefore} reads+={pane.Grabs - grabsBefore}");
+            ctx.Check(Captions(board).Count == photographed,
+                $"…and the board's strip gains no cell for it: [{string.Join(" ", Captions(board))}]");
+
+            // The control: the same crossing counts again once a rerun reopens the run.
+            run.Reset();
+            capture.Update(Elsewhere);
+            capture.Update(late.Position);
+            ctx.Check(capture.InMarkerOrder().Any(s => s.DzName == late.DzName),
+                $"…while the same crossing in a run still being flown photographs it: shots={capture.Count}");
         }
         finally
         {

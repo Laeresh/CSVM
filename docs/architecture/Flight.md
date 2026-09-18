@@ -646,12 +646,12 @@ its halt contract, and `IaWrapupBoard` for the board Instant Action carries the 
 ## src/Flight/StuntCapture.cs
 The Danger Zone camera: one photograph of the pilot's aircraft per `dzN` marker per stunt run,
 latched once on the physics frame the plane first crosses inside `StuntMission.DzRadius` of the
-marker centre, lingering or a later pass latching nothing. That frame counts the shot, fires the
-`snd_dangerzone_camera` sting, raises `ShotLatched` and requests the pane. The frame lands later on
-a worker, which writes the PNG named by chapter, marker and run clock into `screenshots/stunts/`
-and the thumbnail; `Settle` completes the record on the main thread and raises `ShotLanded`. The
-pixels come from the caller's `PaneRequest` (`DangerZonePhotograph` live, the pane in a run that
-draws no frames, a synthetic frame in a suite); `DirectoryOverride` redirects writes.
+marker centre, lingering or a later pass latching nothing; the run's completing frame is the last
+tested. A latch counts the shot, fires the `snd_dangerzone_camera` sting, raises `ShotLatched` and
+requests the pane. The frame lands later on a worker, which writes the PNG named by chapter,
+marker and run clock into `screenshots/stunts/` and the thumbnail; `Settle` completes the record
+on the main thread and raises `ShotLanded`. The pixels come from the caller's `PaneRequest`
+(`DangerZonePhotograph` live, the pane headless, a synthetic frame in a suite).
 
 ## src/Flight/StuntShotStrip.cs
 A stunt run's Danger Zone photographs as a board section, shared by `StuntScoreboard` and

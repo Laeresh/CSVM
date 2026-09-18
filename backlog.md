@@ -1197,17 +1197,21 @@ usual.
   timers", "The third volume, and where the leash is read"), `BL-522`'s closing commit
   (`git log --grep=BL-522`).
 
-- `BL-971` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **A Danger Zone marker first
-  entered after the stunt run completes is never photographed.** *Evidence:* once a non-race run is
-  complete, `FlightController.SimStep` returns before the Danger Zone camera's test, so a marker
-  whose sphere the plane first enters on a later frame than the completing gate pair latches
-  nothing, in solo and Instant Action alike; the comment in `InstantActionDirector` that a shot "can
-  come before the camera's marker sphere" describes a shot that cannot arrive. Found while landing
-  `BL-967`, not seen at the controls. *Fix shape:* decode whether the original's camera keeps
-  testing after the run completes (the trigger is `FUN_00446990`, see
-  `docs/formats/campaign-screens.md`), then either keep the camera's test running after completion
-  until the board wakes or correct the comment. *Cross-refs:* `git log --grep=BL-967`,
-  `Flight/StuntCapture.cs`.
+- `BL-973` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **An Instant Action
+  stunt run's pilot stops dead in the air on the frame the run completes, through the whole hold
+  before the wrap-up.** *Evidence:* `FlightController.SimStep` returns at `Stunt.AllComplete` whenever
+  there is no `Race`, holding the finish pose, which is the solo scoreboard's rule; an Instant Action
+  stunt run has no `Race` either, so the aeroplane freezes for the 3.0 s the original flies on
+  (`docs/formats/instant-action/wrap-up.md`, "The hold after the ending": `FUN_004a0a80` ticks the
+  whole world through the countdown). `InstantActionDirector` hands the pilot the stick for that hold
+  (`FlightControlHold.CommandsOnly`), which the return makes moot. In splitscreen the first pilot to
+  finish also hangs motionless while the others fly. Read off the code, not seen at the controls.
+  *Fix shape:* keep the finish-pose return for the solo scoreboard only (a flag the adapter sets,
+  or `Scoreboard != null`), let an Instant Action pilot fly on, and add a suite step that completes
+  an Instant Action stunt run and steps the controller through the hold. The Danger Zone camera
+  already stops on its own on the completing frame (`StuntCapture.Update`), so a marker crossed while
+  flying on stays unphotographed. *Cross-refs:* `Flight/FlightController.cs` `SimStep`,
+  `Session/InstantActionDirector.cs` (`HoldPilotControls`).
 
 ## Tooling, platform & docs
 

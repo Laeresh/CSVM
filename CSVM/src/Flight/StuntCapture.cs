@@ -58,6 +58,9 @@ public sealed class StuntCapture
     // Shots whose file has landed on a worker, waiting for the main thread to complete their record.
     private readonly ConcurrentQueue<(StuntShot Shot, Image? Thumb)> _developed = new();
 
+    // Whether the completed run has had its one test, the completing frame's.
+    private bool _closed;
+
     /// <summary>Builds the camera for one pilot's run. <paramref name="chapter"/> names the file,
     /// and <paramref name="pane"/> requests that pilot's photograph, refusing on a frame with
     /// nothing to read.</summary>
@@ -118,9 +121,27 @@ public sealed class StuntCapture
     }
 
     /// <summary>Physics-frame test against this frame's committed plane position: latches the
-    /// markers the aircraft has just crossed into.</summary>
+    /// markers the aircraft has just crossed into. The last test of a run is the first one that
+    /// finds it complete, which is the completing frame's, since the caller tests the run first on
+    /// every frame; a marker first entered after that is never photographed.</summary>
     public void Update(Vector3 planePos)
     {
+        // ⚠ Do not test past the completing frame. The original photographs inside a zone's own
+        // first completion, so once every zone has completed nothing can photograph again
+        // (docs/formats/campaign-screens.md, "The danger-zone slot").
+        if (!_run.AllComplete)
+        {
+            _closed = false;
+        }
+        else if (_closed)
+        {
+            return;
+        }
+        else
+        {
+            _closed = true;
+        }
+
         float radius = StuntMission.DzRadius * StuntMission.DzRadius;
         for (int i = 0; i < _shots.Length; i++)
         {
