@@ -724,6 +724,63 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `docs/formats/combat-voice.md`, `git log --grep=BL-934`, the saved Voice level (`Utils/AudioMix.cs`, the `audio-buses`
   suite) if the lines dispatch and stay inaudible.
 
+- `BL-977` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **An Instant Action
+  pilot never speaks: the ace's, the wingmen's and the wave enemies' accents are left out of the
+  voice prewarm set, so every one of their dispatches dies on "no clip".** *Evidence:*
+  `GameSession.BuildWorldStage` builds the set from `CombatVoice.SessionPrewarmNames(zrdr,
+  missionZrdr, defs, groups, cliAccents)`, the mission roster's `accentID`s plus the
+  `--ai=…:accent=N` spawns. `InstantActionDirector` registers the ace on `ia.Def.AceAccentId`,
+  each wingman slot on `slot.AccentId` and each wave enemy on `ResolveWaveAccentId`, and none of
+  those reach that call. `extracted/c1/ia1/zrdr/aiv.zrd.json` authors one accent, the player
+  block's 11, so a dogfight-ace session logs `prewarmed 22 combat-voice stream(s) of 24 roster
+  clip def(s)` and then `ai voice: ai1_player_peacemaker: accent 24 -> VO id 29 (talker 0.95)`, a
+  pilot with 74 clips of its own in `soundsh`. That ace absorbed 97.6, 59.2 and 82.4 damage,
+  evaded and was shot down without one `trigger #` line, the forced death cry included.
+  `AiVoiceRuntime.ResolvePlayable` returns null for an unprewarmed clip and the gate answers "no
+  clip" without logging, exactly as the warning on that member says. *Fix shape:* hand the
+  director's accents to the prewarm join: the ace id, every wingman slot id, and the wave range
+  12 to 16 (the roll happens at spawn, after the prewarm). Log the "no clip" refusal once per
+  speaker and family so the next silent pilot is visible. Pin it with a session test over
+  `c1/ia1` that a registered ace's `DE` family passes `WorldSounds.HasStream`. *⚠ Traps:* a
+  campaign pilot's silence on the same trigger is usually data, not this: VO 4 (accent 13) owns
+  no `WA-*` or `TA-*` family, the shipped rosters author `accentID` -1 on nearly every enemy
+  (`BL-934`), the DI tiers read the whole-vehicle health pool and a wingman whose armor soaked
+  the hits stays at full health, and the bearing and attack call-outs fire only on a human
+  quarry, so a wave that targets a wingman is silent by rule. *Playtest after fix:* launch a
+  dogfight-ace Instant Action, take the ace's fire and shoot it down; listen for its attack line,
+  its damage tiers and the death cry. *Cross-refs:* `BL-934` (the campaign dispatch, where the
+  same lines already play), `docs/formats/combat-voice.md` ("The remake's dispatch sites"),
+  `docs/formats/instant-action.md` (`ace_accentID`, `enemy_accentID` and the 12 + rand % 5
+  re-roll).
+
+- `BL-978` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: data]` **A combat voice line
+  is placed in the world at the speaker's aircraft and attenuated by distance; it is radio and
+  should play flat, like the scripted lines.** *Evidence:* heard at the controls, a wingman's
+  bearing call-out arrived as a positional sound from where the wingman flew. `AiVoiceRuntime.Play`
+  hands every line to the source-following `WorldSounds.PlayOneShot(name, Node3D, rng, Voice)`,
+  and `WorldSounds.Spawn` builds an `AudioStreamPlayer3D` at the aircraft for every one-shot, so
+  Godot pans the line by position whatever the attenuation model, and the one-shot's `Tick`
+  applies the distance law each frame. The voice defs author no `3D` flag:
+  `snd_id7_WA-Enemy-6` in `extracted/zrdr/sounds.zrd.json` is `PURGEABLE` and `QUEUE 0.5`, the
+  same shape as the scripted radio def `snd_c3-HW-M5_Zachary_3`, which `Mech3/MissionRadio.cs`
+  plays through a plain 2D `AudioStreamPlayer` on the Voice bus. A flagless def still inherits
+  `SoundDefs`' default `RANGE` of 130 to 1020 m, so a wingman calling from beyond a kilometre is
+  attenuated to the floor and lost, and one at a few hundred metres is quieter than a line beside
+  you. *Fix shape:* give combat voice a flat path on the Voice bus. Either `WorldSounds.Spawn`
+  builds a plain `AudioStreamPlayer` when the def carries no `3D` flag, which also covers any
+  other flat def routed through a one-shot, or the voice runtime keeps its own queued 2D player
+  the way `MissionRadio` does; the defs' `QUEUE` value points at one channel in the original, so
+  the second is the closer port. Pin it in the `ai-voice` suite: a played line's player is not an
+  `AudioStreamPlayer3D`, and its gain does not move with the speaker's distance. *⚠ Traps:* do
+  not fix it by widening the voice defs' range; the range is the symptom's instrument, not its
+  cause. The destruction and impact callers share `PlayOneShot` and must stay positional; the bus
+  argument alone tells them apart today. *Playtest after fix:* fly C2/M05 from the campaign and
+  let the Peacemakers commit to you; a wingman's clock call should sit in the centre at one level
+  wherever the wingman is. *Cross-refs:* `BL-934` (whether the lines are audible at the controls,
+  which this range law partly answers), `BL-977` (the Instant Action prewarm gap),
+  `docs/formats/combat-voice.md` ("The remake's dispatch sites"), `docs/formats/sounds.md` (the
+  `3D` flag and `RANGE`).
+
 ## Cameras & views
 
 - `BL-266` `[Research]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **Plane wobble: residual decode questions after the
