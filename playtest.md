@@ -844,16 +844,17 @@ off numbers instead of guessed.
 ```
 
 - `PT-154` `[Own]` **A campaign mission's Danger Zone photograph lands in the scrapbook.** The
-  campaign camera is built and suited: crossing a zone stages the pilot's pane into the profile
-  under the scrapbook row's own `Snap_<mission>_<objective>` name, and a win keeps it while a loss
-  drops it (`git log --grep=BL-256`, `CampaignSnapshot`). It has never been seen at the controls,
+  campaign camera is built and suited: crossing a zone stages a photograph of the aircraft, taken
+  from ahead of it looking back as the original's is, into the profile under the scrapbook row's own
+  `Snap_<mission>_<objective>` name, and a win keeps it while a loss drops it
+  (`git log --grep=BL-256`, `CampaignSnapshot`, `DangerZonePhotograph`). It has never been seen at the controls,
   and the request was "should work in missions too for the scrapbook photos". CM07 authors four
   zones (objectives 18 to 21, `C1/M02/zrdr/dzones.zrd.json`). Fly through at least one zone, win
   the mission, and open the scrapbook. *Look for:* (a) the sting on the crossing and one hitch-free
   frame (a hitch there is a new `BL`); (b) the photograph on the mission's spread
   with its photo-corner mount, and the zoom showing the full 164x123 still; (c) a lost attempt
-  leaving no photograph behind; (d) whether the framing reads like the original's, which the user
-  recalls as taken from outside the aeroplane (`BL-966`). *Blocks:* nothing tracks the outcome; a
+  leaving no photograph behind; (d) whether the framing reads like the original's photographs, a
+  head-on view of the aeroplane from outside it. *Blocks:* nothing tracks the outcome; a
   missing photograph mints a new `BL`.
 
 ## Everything else

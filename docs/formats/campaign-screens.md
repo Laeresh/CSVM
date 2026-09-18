@@ -713,13 +713,49 @@ photo-corner mount.
 **Which flight writes one.** The objective half of the name is the mission's own
 `dzones.zrd` `objective_numbers` entry for a danger zone (`docs/formats/missions.md`, "Zone
 overrides"), so the zone the pilot flies through and the row that draws its photograph are named by
-the same data. Completing that zone on the campaign path photographs the pilot's pane into the
-seated profile's directory under a `.PN_` pending name; the mission end keeps the pending files as
+the same data. Completing that zone on the campaign path photographs the pilot's aircraft (below)
+into the seated profile's directory under a `.PN_` pending name; the mission end keeps the pending files as
 `Snap_<mission>_<objective>.PNG` on a win and deletes them on a loss, the original's own sweep over
 ids 10 to 31. A zone in the mission's `nosnapshot` list scores its objective and writes nothing.
 `CampaignSnapshot` is the writer and `CampaignDangerZones` the binding; the stunt camera is a
 different thing entirely and keeps its own names under `screenshots/stunts/`, since an Instant
-Action run has no mission slot and no objective to be named by.
+Action run has no mission slot and no objective to be named by. Both take the same photograph.
+
+**The camera.** [Evidence: decoded] The photograph is not the pilot's view. The zone update
+`FUN_00446990`, on a zone completing whose record has the snapshot flag `+0x49` set and an
+objective `+0x4c` of 0 or more, stores the objective in `DAT_00623ccc` (`0x00446ac5`), plays the
+sting and raises `DAT_0064fb78` (`0x00446ae1`). The next main tick, `FUN_004a0220` from
+`0x004a0372`, takes the photograph when that flag is up, the game is not a network game
+(`FUN_00440ad0`), a player exists and the player is not in a cutscene (`+0x91d`). It saves the
+camera's mode, FOV, position and orientation, then for one frame:
+
+- sets the camera mode to chase (`+0x14c` = 0, `0x004a0400`), so the `cockpit1` interior is not
+  drawn and the airframe is not hidden;
+- places the eye at the aircraft position plus `2.5 × dist` along the nose's level heading (the
+  backward row `+0x198` with y zeroed, normalised by `FUN_00422690`, times `dist` and the double
+  -2.5 at `0x00608348`), where `dist` is the airframe's `camparam` chase distance, plus a uniform
+  `rand()` scatter of up to ±0.15 `dist` on world X and Z and ±0.25 `dist` on Y. A nose pointing
+  straight up or down has no level heading and leaves the eye on the scatter alone;
+- turns the eye to look at the aircraft with no roll (`FUN_0053de20`: a yaw and a pitch off the two
+  positions), set through `FUN_004d2710` and `FUN_004d2490`;
+- sets the FOV to 60° (`FUN_0042b570(0x3f860a92)`), turns the cockpit and HUD chrome off
+  (`FUN_00455800(0)`), and draws the player model and `cockpit1` opaque (`FUN_0049cc00`);
+- on the hardware renderer, gives the player model a fill light of the scene light's intensity
+  times 1.5 plus 0.1 (`FUN_004ccfd0`, `FUN_004cd060`);
+- renders without the screen tint (`FUN_0049fe70(0)`) and saves the back buffer through
+  `FUN_005a9800` as `<profile>\Snap_<mission>_<objective>.PN_`.
+
+It then restores every saved setting, clears the flag (`0x004a0979`) and renders the normal frame
+over the same back buffer before the flip, so the player never sees the pose. The result is a
+head-on portrait of the aircraft from ahead of it, at the external field of view, with no HUD.
+Because the eye stays level with the aircraft, a photograph taken in level flight shows the nose
+and both wings coming at the camera, a bank shows as a tilted wing line, and one taken in a steep
+dive shows the upper surface with the nose toward the bottom of the frame and the tail at the top.
+
+The remake takes the same pose in `DangerZonePhotograph`, a viewport of its own that shares the
+pane's world, so the pane is never moved. A pilot in a first-person view has the hidden airframe
+groups shown for that one frame on a visual layer no pane draws. The fill light is not ported. A
+run that draws no frames (headless) photographs the pane instead.
 
 Authoring gaps stay as they are: CM18 numbers a zone 19 with no row for it, CM19 numbers one 31
 with no row, CM23 ships rows 27 and 28 for zones it disables, and every `_31` row is dead because

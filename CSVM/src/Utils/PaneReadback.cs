@@ -4,15 +4,15 @@ using Godot;
 
 namespace CSVM.Utils;
 
-/// <summary>Asks for one frame of a pilot's pane without waiting for it. Answers false, and never
-/// calls <paramref name="landed"/>, when there is no pane to read; otherwise
+/// <summary>Asks for one Danger Zone photograph without waiting for it. Answers false, and never
+/// calls <paramref name="landed"/>, when there is nothing to read; otherwise
 /// <paramref name="landed"/> runs exactly once, on any thread, with the frame or with null when the
 /// readback failed.</summary>
 public delegate bool PaneRequest(Action<Image?> landed);
 
 /// <summary>
-/// A viewport's pixels read back off the frame path, the <see cref="PaneRequest"/> a live session
-/// hands its Danger Zone cameras. The request copies the viewport's render target through
+/// A viewport's pixels read back off the frame path, behind every live <see cref="PaneRequest"/>.
+/// The request copies the viewport's render target through
 /// <see cref="RenderingDevice.TextureGetDataAsync"/>, which delivers the bytes a few frames later
 /// (the device's frame queue), and the image is built and handed over on a worker thread, so the
 /// frame that asks pays for neither the GPU stall nor the decode. A run with no rendering device

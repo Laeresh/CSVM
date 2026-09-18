@@ -24,7 +24,7 @@ internal static class StuntCaptureSuites
 
     [Suite("stunt-capture",
         "the Danger Zone camera over a C4/IA1 stunt run: crossing inside DzRadius of each dzN "
-        + "marker latches exactly one photograph of that pilot's pane and plays the camera sting "
+        + "marker latches exactly one photograph for that pilot and plays the camera sting "
         + "once, lingering inside the radius latches nothing more, a later pass over a "
         + "photographed marker latches nothing more, the files land under screenshots/stunts/ "
         + "named by chapter, marker and run clock, a rerun makes every marker photographable "

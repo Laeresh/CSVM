@@ -32,15 +32,15 @@ public sealed class StuntShot
 }
 
 /// <summary>
-/// The Danger Zone camera: one latched photograph of the pilot's own pane per <c>dzN</c> marker
-/// per stunt run. <see cref="Update"/> tests the plane against each marker centre at
+/// The Danger Zone camera: one latched photograph of the pilot's aircraft per <c>dzN</c> marker
+/// per stunt run, taken through that pilot's <see cref="DangerZonePhotograph"/>. <see cref="Update"/> tests the plane against each marker centre at
 /// <see cref="StuntMission.DzRadius"/> every physics frame and latches on the frame the aircraft
 /// first crosses inside, requesting the pane and firing <see cref="Sting"/> on that frame. The PNG
 /// under <see cref="ShotDir"/> and the strip thumbnail are made on a worker once the frame lands,
 /// and <see cref="Settle"/> completes the shot's record on the main thread.
 /// A marker that has been photographed is not photographed again in the same run, and one that is
 /// still being flown through does not re-trigger while the aircraft stays inside its radius.
-/// Per pilot, like the run itself: each pane latches its own pane's pixels through the
+/// Per pilot, like the run itself: each pane latches its own pilot's photograph through the
 /// <c>pane</c> request it was built with. <see cref="StuntScoreboard"/> draws the strip.
 /// </summary>
 public sealed class StuntCapture
@@ -59,8 +59,8 @@ public sealed class StuntCapture
     private readonly ConcurrentQueue<(StuntShot Shot, Image? Thumb)> _developed = new();
 
     /// <summary>Builds the camera for one pilot's run. <paramref name="chapter"/> names the file,
-    /// and <paramref name="pane"/> requests that pilot's pane (in splitscreen the seat's own
-    /// SubViewport), refusing on a frame with nothing to read.</summary>
+    /// and <paramref name="pane"/> requests that pilot's photograph, refusing on a frame with
+    /// nothing to read.</summary>
     public StuntCapture(StuntMission run, string chapter, PaneRequest pane)
     {
         _run = run;

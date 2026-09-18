@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using CSVM.Mech3;
 using Godot;
 
@@ -17,6 +18,10 @@ namespace CSVM.Flight;
 public sealed class CockpitVisibility
 {
     private readonly Node3D? _interior, _body, _markers, _dontmove;
+
+    // What ShowForPhotograph changed, so EndPhotograph restores exactly that and nothing else.
+    private readonly List<(VisualInstance3D Instance, uint Layers)> _photoLayers = new();
+    private readonly List<Node3D> _photoShown = new();
 
     private CockpitVisibility(Node3D? interior, Node3D? body, Node3D? markers, Node3D? dontmove)
     {
@@ -64,6 +69,45 @@ public sealed class CockpitVisibility
         Set(_dontmove, shown.Dontmove);
     }
 
+    /// <summary>For the one frame the Danger Zone camera draws (<see cref="DangerZonePhotograph"/>):
+    /// every group this frame's rule hides but an external view draws is shown, moved onto
+    /// <paramref name="layer"/>, which no pane's camera draws, so the photograph sees the whole
+    /// airframe while every pane draws what it drew. The interior needs nothing: the shipped path
+    /// draws it in a world of its own (<see cref="CockpitOverlay"/>), which the photograph's camera
+    /// never sees. <see cref="EndPhotograph"/> puts every write back.</summary>
+    public void ShowForPhotograph(uint layer)
+    {
+        EndPhotograph();
+        var external = Rules(PilotViewMode.Chase, firstPerson: false);
+        Reveal(_body, external.Body, layer);
+        Reveal(_markers, external.Markers, layer);
+        Reveal(_dontmove, external.Dontmove, layer);
+    }
+
+    /// <summary>Undoes <see cref="ShowForPhotograph"/>: each group's own visibility and every mesh's
+    /// own layers as they were. Nothing to do when no photograph is being drawn.</summary>
+    public void EndPhotograph()
+    {
+        // Newest first, so a mesh a nested group stamped twice ends on its first recorded layers.
+        for (int i = _photoLayers.Count - 1; i >= 0; i--)
+        {
+            var (instance, layers) = _photoLayers[i];
+            if (GodotObject.IsInstanceValid(instance))
+            {
+                instance.Layers = layers;
+            }
+        }
+        foreach (var node in _photoShown)
+        {
+            if (GodotObject.IsInstanceValid(node))
+            {
+                node.Visible = false;
+            }
+        }
+        _photoLayers.Clear();
+        _photoShown.Clear();
+    }
+
     private static void Set(Node3D? node, bool visible)
     {
         if (node != null && node.Visible != visible)
@@ -97,6 +141,30 @@ public sealed class CockpitVisibility
 
     private static bool IsInterior(Node3D node) =>
         AnimRuntime.NameOf(node).StartsWith("cockpit", StringComparison.OrdinalIgnoreCase);
+
+    private void Reveal(Node3D? node, bool shownOutside, uint layer)
+    {
+        if (node == null || !shownOutside || node.Visible || !GodotObject.IsInstanceValid(node))
+        {
+            return;
+        }
+        Restamp(node, layer);
+        node.Visible = true;
+        _photoShown.Add(node);
+    }
+
+    private void Restamp(Node node, uint layer)
+    {
+        if (node is VisualInstance3D instance)
+        {
+            _photoLayers.Add((instance, instance.Layers));
+            instance.Layers = layer;
+        }
+        foreach (var child in node.GetChildren())
+        {
+            Restamp(child, layer);
+        }
+    }
 
     /// <summary>Which of the four groups render this frame. All four true is the built state,
     /// which is what every external view and every AI plane keeps.</summary>

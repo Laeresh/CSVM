@@ -250,6 +250,10 @@ public partial class FlightController : Node3D
     /// no pane of its own to photograph.</summary>
     public StuntCapture? StuntShots;
 
+    /// <summary>The eye both Danger Zone writers photograph this pilot through, posed ahead of the
+    /// aircraft rather than at the pilot's view. Null on every rig with no pane of its own.</summary>
+    public DangerZonePhotograph? Photograph;
+
     /// <summary>The end-of-run results overlay: splits + total + best-time on
     /// AllComplete. Added to the HUD canvas last (drawn over the marker/dials); wakes itself on
     /// the run's RunCompleted. Null in free flight.</summary>

@@ -81,9 +81,11 @@ mission's completed danger zones, which carry none. ⚠ The loop ends at 30 whil
 runs to 31, so a zone numbered 31 (C4/M04's and C5's) can never set a bit, and the
 `Snap_<mission>_31` scrapbook rows are unreachable in the original as much as here.
 
-Crossing such a zone also photographs the pilot's pane into the profile directory under the
+Crossing such a zone also photographs the pilot's aircraft into the profile directory under the
 `Snap_<mission>_<objective>` name the scrapbook row carries (`FUN_004a0220` writes it, `FUN_004072a0`
 keeps or drops it at mission end); the two halves are named by the one `objective_numbers` entry.
+The photograph is taken from a camera posed ahead of the aircraft looking back at it, not from the
+pilot's view (`docs/formats/campaign-screens.md`, "The danger-zone slot").
 
 ## The four-attempt skip offer
 

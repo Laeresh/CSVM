@@ -193,7 +193,7 @@ internal static class WorldAndToolSuites
     // marker. Able to fail: without the Skip arm the interior build finds no cockpit1; without the
     // mount it sits at the plane origin at authored (~20x) scale.
     [Suite("cockpit-interior",
-        "the player plane's cockpit1 interior builds hidden at the cockpit_camera marker, an AI-style build gains nothing, and the per-mode hiding follows the pilot's view (B11)")]
+        "the player plane's cockpit1 interior builds hidden at the cockpit_camera marker, an AI-style build gains nothing, and the per-mode hiding follows the pilot's view (B11), while the Danger Zone photograph's frame shows the hidden airframe on a layer no pane draws and puts it back after")]
     internal static void CockpitInterior(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -292,6 +292,7 @@ internal static class WorldAndToolSuites
             ctx.Check(!interior.Visible && body is { Visible: false }
                 && markers is { Visible: false } && dontmove is { Visible: false },
                 $"Nose: interior out, body out, markers/dontmove out");
+            PhotographFrame(ctx, cockpit, interior, body, markers, dontmove);
             cockpit.Apply(PilotViewMode.Cockpit, firstPerson: false);
             ctx.Check(!interior.Visible && body is { Visible: true }
                 && markers is { Visible: true } && dontmove is { Visible: true },
@@ -2130,4 +2131,39 @@ internal static class WorldAndToolSuites
         byArm.Count == 0 ? "none"
         : string.Join(" ", byArm.OrderBy(p => p.Key, System.StringComparer.Ordinal)
             .Select(p => $"{p.Key}={p.Value}"));
+
+    // The Danger Zone camera's frame over a Nose view, which hides the most: every hidden airframe
+    // group shows for the photograph on a layer no pane draws, the interior stays out, and the end of
+    // the frame puts every group's visibility and every mesh's layers back exactly.
+    private static void PhotographFrame(TestContext ctx, CockpitVisibility cockpit, Node3D interior,
+        Node3D? body, Node3D? markers, Node3D? dontmove)
+    {
+        var groups = new[] { body, markers, dontmove }.OfType<Node3D>().ToList();
+        var before = groups.SelectMany(Meshes).Distinct().ToDictionary(m => m, m => m.Layers);
+        uint layer = SplitScreen.PhotographLayer;
+
+        cockpit.ShowForPhotograph(layer);
+        var drawn = groups.SelectMany(Meshes).ToList();
+        ctx.Check(groups.Count == 3 && groups.All(g => g.Visible) && !interior.Visible,
+            $"the photograph frame shows body, markers and dontmove and leaves the interior out");
+        ctx.Check(drawn.Count > 0 && drawn.All(m => m.Layers == layer),
+            $"…every one of their {drawn.Count} meshes on the photograph layer alone");
+
+        cockpit.EndPhotograph();
+        ctx.Check(groups.All(g => !g.Visible),
+            $"the end of the frame hides the three groups again");
+        ctx.Check(before.All(kv => kv.Key.Layers == kv.Value),
+            $"…and gives every mesh back its own layers");
+    }
+
+    private static IEnumerable<VisualInstance3D> Meshes(Node root)
+    {
+        if (root is VisualInstance3D instance)
+            yield return instance;
+        foreach (var child in root.GetChildren())
+        {
+            foreach (var nested in Meshes(child))
+                yield return nested;
+        }
+    }
 }

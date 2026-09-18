@@ -423,9 +423,9 @@ backdrop, one `SubViewport` pane per player sharing the main `World3D`, and the 
 tag table. Two panes stack, or stand side by side once each half would still be wider than it is
 tall (`SideBySide`, true from 2:1 out); three and four are the 2x2 grid. **Every pane is a 3D audio
 listener**, or nothing positional is audible at all: Godot takes the per-channel maximum over
-listener-enabled viewports. `Fill(true)` gives pane 1 the whole window for a cutscene, a visibility
-change and one rect rather than a rebuild; `NoteSkip` names a skipping player. `OwnAirframeLayer` is
-one bit per seat for that pilot's own aeroplane, dropped only by that pilot's spyglass disc.
+listener-enabled viewports. `Fill(true)` gives pane 1 the whole window for a cutscene (one rect, no
+rebuild); `NoteSkip` names a skipping player. `OwnAirframeLayer` is one bit per seat, dropped only by
+that pilot's spyglass disc; `PhotographLayer` is one bit no pane draws, for the Danger Zone camera.
 
 ## src/UI/ScreenFlash.cs
 The full-screen colour wash, two channels over one hidden `ColorRect` per rendered view. The ramp

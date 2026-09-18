@@ -399,11 +399,14 @@ internal sealed class HumanFlightAdapter
             // rather than through FlightRoster's roster-wide channel: each pane races its own copy
             // of the run, and a shared feed would put one pilot's cleared zones on another's HUD.
             controller.TargetObjectives = into => run.CollectTargets(into);
-            // This pane's Danger Zone camera. The photographed pixels are this seat's own pane, so
-            // in splitscreen the shot is the SubViewport that crossed the marker, never the window.
+            // This pane's Danger Zone camera, photographing through the pilot's posed eye. A run
+            // with no window to draw it in reads this seat's own pane instead, so in splitscreen
+            // that shot is the SubViewport that crossed the marker, never the window.
             var pane = rig.Viewport;
             var capture = new StuntCapture(run, _policy.Chapter,
-                landed => PaneReadback.Request(pane ?? (controller.IsInsideTree() ? controller.GetViewport() : null), landed));
+                landed => controller.Photograph is { } eye && DangerZonePhotograph.Drawable
+                    ? eye.Request(landed)
+                    : PaneReadback.Request(pane ?? (controller.IsInsideTree() ? controller.GetViewport() : null), landed));
             capture.Sting = () => controller.Audio?.OnDangerZoneCamera();
             controller.StuntShots = capture;
 
@@ -497,9 +500,16 @@ internal sealed class HumanFlightAdapter
         // The plant's force path is chosen once, here, off who is flying, a person, so the
         // player path. FlightModel.UsesAiForcePath carries why this is a construction argument
         // rather than the original's own pointer-compare-against-the-player test.
+        var camParams = _aircraft.CamParamsFor(planeName);
         controller.Setup(new FlightModel(stats, aiForcePath: !controller.IsHumanPiloted),
-            rig.Camera, _aircraft.CamParamsFor(planeName), start.Pos, start.LookAt,
+            rig.Camera, camParams, start.Pos, start.LookAt,
             start.ThrottleFrac, start.SpeedMps, cockpitCameraOffset: planeBuilder.CockpitCameraOffset);
+        // The Danger Zone eye, framed off the airframe's own chase distance and aimed at the pose
+        // the controller draws, which is the controller node's own transform.
+        var scatter = Rng.Stream(Rng.Photograph);
+        controller.Photograph = DangerZonePhotograph.Build(rig.Camera, controller.Cockpit,
+            () => controller.GlobalTransform, camParams.Dist, scatter.Randf);
+        controller.AddChild(controller.Photograph);
         // --weapon-lab: a flight session whose aircraft is pinned at the spawn pose. Set after
         // Setup, so the pin, captured at the first held sim step, takes the pose Setup just wrote.
         if (_policy.WeaponLab)

@@ -30,7 +30,7 @@ internal static class CampaignSnapshotSuites
     [Suite("campaign-danger-zone-snapshot",
         "the campaign Danger Zone photograph over C3/M01's own dzpath1 gates: the mission's "
         + "dzones.zrd binds the zone to the objective number SCRAPBOOK.CSV's Snap_1_18 row names, "
-        + "a crossing of the authored gates stages the pilot's pane under that name in a scratch "
+        + "a crossing of the authored gates stages the pilot's photograph under that name in a scratch "
         + "profile directory, winning the mission keeps it at the row's own name and sets the "
         + "zone's mask bit, the written file is the forced 164x123 region, the scrapbook resolves "
         + "and draws it under its photo-corner mount, a spread composed without the file on disk "

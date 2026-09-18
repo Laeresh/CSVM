@@ -173,9 +173,9 @@ each in either order, the rule `Flight/StuntMission.cs` reads off `ia.json`'s zo
 Gate decode: [../formats/missions.md](../formats/missions.md).
 
 ## src/Session/CampaignSnapshot.cs
-The campaign Danger Zone photograph: the pilot's pane, scaled to the 164x123 region the scrapbook
-forces, written into the flying profile's directory under the `Snap_<mission>_<objective>` name a
-capture row resolves against. `Stage` requests one zone's still on the crossing frame, and a worker
+The campaign Danger Zone photograph through `Flight/DangerZonePhotograph.cs`, scaled to the 164x123
+region the scrapbook forces, written into the flying profile's directory under the
+`Snap_<mission>_<objective>` name a capture row resolves against. `Stage` requests one zone's still on the crossing frame, and a worker
 writes it under a `.PN_` pending name when the frame lands. `Commit` sweeps ids 10 to 31 at mission
 end, keeping them under their scrapbook names on a win and deleting them on a loss (the original's
 two-step); a still landing after the sweep takes the verdict left for it. `Flight/StuntCapture.cs`
@@ -480,8 +480,8 @@ title, stamps the block's objective marker, and owns the AI skills cache. Read `
 ## src/Session/HumanFlightAdapter.cs
 `FlightRoster`'s private human-aircraft path: one `Assemble` builds the painted model,
 `FlightController`, loadout and ordnance, carried turrets, HUD and instruments, damage visuals,
-audio, stunt and match bindings, target selection, the authored start placement, the crash runtime,
-and last the `UI.SplitScreen.OwnAirframeLayer` stamp that keeps the whole model out of this pilot's
+audio, stunt and match bindings, target selection, the authored start placement, the Danger Zone
+eye, the crash runtime, and last the `UI.SplitScreen.OwnAirframeLayer` stamp that keeps the whole model out of this pilot's
 own spyglass disc. It reads only the roster's copied policy plus the grouped aircraft, world and
 human-session contracts. Player order decides the shared paint and spawn draws. An airframe swap's
 captured scheme and its own build are laid over that assembly, the one path a bought plane takes.

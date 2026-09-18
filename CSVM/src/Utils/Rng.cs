@@ -63,6 +63,9 @@ public static class Rng
     // through IntSeedFor rather than Stream, so a match's respawn picks take nothing out of
     // Rng.Spawn: a draw there would shift the launch spawn index every pinned golden stands on.
     public const string VersusSpawn = "versusspawn";
+    // The Danger Zone photograph's eye scatter (Flight.DangerZonePhotograph). Its own stream, so a
+    // zone crossed never shifts the static cameras' spots or anything else a run rolls.
+    public const string Photograph = "photograph";
 
     private static readonly Dictionary<string, RandomNumberGenerator> Streams = new(StringComparer.Ordinal);
 

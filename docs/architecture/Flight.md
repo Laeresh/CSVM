@@ -246,11 +246,11 @@ Engine-free apart from `Mathf`; owned by `CameraController` as `Head`, stepped b
 The per-mode node hiding the original applies to the pilot's OWN aircraft while a first-person view
 is on the screen: Cockpit draws `cockpit1` and hides the `healthy` body, Nose hides the interior,
 the body and the `markers` and `dontmove` groups, and every external pose renders the plane as it was
-built. `Rules` is the whole decision as a pure function over `(PilotViewMode, firstPerson)`, so it
-unit-tests engine-free; `Bind` finds the four groups in a built plane model and `Apply` writes one
-frame's answer onto them. `FlightController._Process` calls it beside the camera write, keyed to the
-pose that frame actually took, so a look-behind brings the body back while it is held. Decode:
-[../org/cameraViews.md](../org/cameraViews.md).
+built. `Rules` is the pure decision over `(PilotViewMode, firstPerson)`; `Bind` finds the four
+groups and `Apply` writes one frame's answer, called by `FlightController._Process` keyed to the pose
+that frame took, so a held look-behind brings the body back. `ShowForPhotograph` shows the hidden
+airframe for the Danger Zone camera's frame on a layer no pane draws; `EndPhotograph` undoes it.
+Decode: [../org/cameraViews.md](../org/cameraViews.md).
 
 ## src/Flight/CockpitOverlay.cs
 The cockpit interior's own render pass, the shipped path `--no-cockpit-pass` opts out of. It re-parents
@@ -354,6 +354,16 @@ and `dzones.zrd`'s `disable` list as the inactive flag. `ByIndex` serves a numbe
 `NearestEnd` the negative one. One instance per session, shared through `AiPilot.DangerZones`,
 because lanes are occupancy-counted across pilots; `CampaignDirector.Attach` builds it and hands it
 to every roster pilot. Read `DangerZoneRibbon.cs` for one route's geometry.
+
+## src/Flight/DangerZonePhotograph.cs
+The Danger Zone camera's eye, one per human pilot, the `PaneRequest` `StuntCapture` and
+`Session/CampaignSnapshot` are handed. `Pose` is the decoded pose, engine-free: 2.5 `camparam`
+`dist` ahead on the nose's level heading, a world-axis scatter of 0.15, 0.25 and 0.15 `dist`, and a
+roll-free look back at the aircraft. The node is a `SubViewport` on the pane's world that poses its
+camera in `_Process` after the controller's, at the external FOV with no HUD, shows a first-person
+pilot's airframe through `CockpitVisibility`, renders once and reads back after `FramePostDraw`, so
+the requesting frame waits on nothing. Decode:
+[../formats/campaign-screens.md](../formats/campaign-screens.md), "The danger-zone slot".
 
 ## src/Flight/ZeppelinBroadside.cs
 The pure zeppelin broadside law, engine-free: the decoded 90 degree arc against the moving hull's
@@ -634,14 +644,14 @@ why it overrides the shell's whole-window placement. Read `ResultsBoard` for the
 its halt contract, and `IaWrapupBoard` for the board Instant Action carries the splits on instead.
 
 ## src/Flight/StuntCapture.cs
-The Danger Zone camera: one photograph of the pilot's own pane per `dzN` marker per stunt run,
+The Danger Zone camera: one photograph of the pilot's aircraft per `dzN` marker per stunt run,
 latched once on the physics frame the plane first crosses inside `StuntMission.DzRadius` of the
 marker centre, lingering or a later pass latching nothing. That frame counts the shot, fires the
 `snd_dangerzone_camera` sting and requests the pane, nothing more. The frame lands later on a
 worker, which writes the PNG named by chapter, marker and run clock into `screenshots/stunts/` and
 shrinks the thumbnail; `Settle` completes the record on the main thread and raises `ShotLanded`.
-The pixels come from the caller's `PaneRequest` (`Utils/PaneReadback.cs` live, a synthetic frame in
-a suite). `DirectoryOverride` points the writes at a scratch directory.
+The pixels come from the caller's `PaneRequest` (`DangerZonePhotograph` live, the pane through
+`Utils/PaneReadback.cs` in a run that draws no frames, a synthetic frame in a suite). `DirectoryOverride` points the writes at a scratch directory.
 
 ## src/Flight/StuntSplits.cs
 The stunt run's split section, shared by `StuntScoreboard` and `IaWrapupBoard`: the per-zone rows

@@ -886,17 +886,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   forward-velocity drop in the lean is C22's port decision and reads right; do not widen the lean
   to fake a turn. *Cross-refs:* `BL-784` (c), `PLAN-cockpit-view` C22, `docs/org/cameraViews.md`.
 
-- `BL-966` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: feel]` **Which camera the original's Danger
-  Zone photograph is taken from.** *Evidence:* both remake cameras (`StuntCapture` for a stunt run,
-  `CampaignSnapshot` for a campaign mission) photograph the pilot's own pane as it is drawn on the
-  latch frame. The user's recall of the original's scrapbook photographs is that they "look like
-  taken from an outside position, not the chase view". The scrapbook format decode names the file
-  and the forced 164x123 region but not the eye. *Deliverable:* read the original's capture call
-  (the writer of the `.PN_` file the commit sweep `FUN_004072a0` renames) and say whether it grabs
-  the back buffer as drawn or poses a camera of its own first, and if the latter, from where. If a
-  camera is posed, mint the port with the pose. *Cross-refs:* `Utils/PaneReadback.cs` (the
-  latch's asynchronous readback), `docs/formats/campaign-screens.md` ("The danger-zone slot"), `docs/org/debrief.md`.
-
 ## HUD & UI
 
 - `BL-113` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Compass tape**: two

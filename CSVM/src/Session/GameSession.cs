@@ -3167,10 +3167,12 @@ public partial class GameSession : Node3D
                 ? pilot.WorldPosition
                 : Vector3.Zero,
             PlayerAircraft = () => _rigs.Count > 0 ? _rigs[0].Controller : null,
-            // P1's pane for the Danger Zone photograph, read the way the stunt camera reads its
-            // own: the seat's SubViewport when there is one, the window's viewport otherwise.
+            // P1's Danger Zone photograph, taken the way the stunt camera takes its own: through the
+            // pilot's posed eye, or with no frames drawn, off the seat's pane.
             PlayerPane = landed => _rigs.Count != 0
-                && PaneReadback.Request(_rigs[0].Viewport ?? (IsInsideTree() ? GetViewport() : null), landed),
+                && (_rigs[0].Controller?.Photograph is { } eye && DangerZonePhotograph.Drawable
+                    ? eye.Request(landed)
+                    : PaneReadback.Request(_rigs[0].Viewport ?? (IsInsideTree() ? GetViewport() : null), landed)),
             Humans = HumanAircraft,
             Aircraft = AllAircraft,
             BeginSpectate = BeginCampaignSpectate,
@@ -3665,7 +3667,7 @@ public partial class GameSession : Node3D
             // ⚠ Reopen the whole zone band before this session's first frame. The main camera is
             // the Launcher's and outlives the session, so it arrives carrying the last flight's
             // gate, and WeatherRig.Tick only ever NARROWS the band.
-            _camera.CullMask = Mech3.ZoneGate.OpenCullMask(_camera.CullMask);
+            _camera.CullMask = SplitScreen.PaneCullMask(Mech3.ZoneGate.OpenCullMask(_camera.CullMask));
             _rigs.Add(new PlayerRig { Index = 0, Camera = _camera, HudParent = _worldRoot!, VisualLayer = 0 });
             return;
         }
