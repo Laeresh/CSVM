@@ -676,12 +676,13 @@ public sealed class InstantActionDirector
                 return;
             }
 
+            // The photographs are read at the handover rather than the ending: the run completes on
+            // its last gate pair, which can come before the camera's marker sphere or share its
+            // frame, where the camera tests after the run.
+            var camera = final.Stunt != null && _rigs is { Count: > 0 } ? _rigs[0].Controller?.StuntShots : null;
             if (inputs.WrapupToMenu is { } toMenu)
             {
-                // The photographs are read at the handover rather than the ending: the run completes
-                // on its last gate pair, which can come before the camera's marker sphere or share
-                // its frame, where the camera tests after the run.
-                toMenu(final.Stunt != null && _rigs is { Count: > 0 } && _rigs[0].Controller?.StuntShots is { } camera
+                toMenu(camera != null
                     ? final.Snapshot with { Shots = camera.InMarkerOrder().ToList() }
                     : final.Snapshot);
                 return;
@@ -689,7 +690,7 @@ public sealed class InstantActionDirector
 
             var shown = final.Snapshot;
             wrapupBoard!.Present(shown.Won, shown.Elapsed, shown.EnemiesShotDown, shown.ZonesCompleted,
-                shown.ShotPercent, final.Stunt);
+                shown.ShotPercent, final.Stunt, camera);
         };
     }
 

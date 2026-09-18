@@ -30,7 +30,10 @@ internal static class StuntCaptureSuites
         + "named by chapter, marker and run clock, a rerun makes every marker photographable "
         + "again, the scoreboard's thumbnail strip lists the run's shots in marker order, and a "
         + "frame landing after the crossing (and after the board woke) writes its file and fills "
-        + "its cell while the sting and the pass mark stay on the crossing")]
+        + "its cell while the sting and the pass mark stay on the crossing, a marker latched on "
+        + "the frame the run completes joins the strip of the board that frame woke, and Instant "
+        + "Action's wrap-up board draws player 1's shots the same way (marker order, a held frame "
+        + "filled on landing, no strip without a camera or a shot)")]
     internal static void StuntCaptureRun(TestContext ctx)
     {
         string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, Chapter);
@@ -115,6 +118,8 @@ internal static class StuntCaptureSuites
         CheckOrder(ctx, run, capture);
         CheckRerun(ctx, run, capture);
         CheckStrip(ctx, run, capture, pane, () => stings);
+        CheckLatchAfterCompletion(ctx, run, capture);
+        CheckWrapupStrip(ctx, run, capture, pane);
         ctx.Note($"{Chapter}/{Mission}: {run.TotalCount} markers photographed into {StuntCapture.ShotDir()}");
     }
 
@@ -242,11 +247,102 @@ internal static class StuntCaptureSuites
         }
     }
 
+    // FlightController tests the run before the camera on one physics frame, so the gate pair that
+    // completes the run wakes the board before the camera latches a marker crossed on that frame.
+    private static void CheckLatchAfterCompletion(TestContext ctx, StuntMission run, StuntCapture capture)
+    {
+        run.Reset();
+        capture.Reset();
+        capture.Update(Elsewhere);
+        var last = run.Zones[run.Zones.Count - 1];
+        foreach (var zone in run.Zones)
+        {
+            if (zone != last)
+            {
+                run.Tick(1f);
+                capture.Update(zone.Position);
+                capture.Update(Elsewhere);
+            }
+        }
+        capture.Settle();
+
+        string storePath = Path.Combine(ctx.ScratchDir, "StuntCapture", "stunt_scores.json");
+        var board = StuntScoreboard.Build(run, "Test Plane", $"{Chapter}", ScoreStore.Load(storePath),
+            $"stunt-capture/{Mission}/player_test", exitsToMenu: true, new PauseState(),
+            _ => new MenuInput());
+        board.Shots = capture;
+        ctx.Host.AddChild(board);
+        try
+        {
+            run.DebugCompleteAll();
+            capture.Update(last.Position);
+            var captions = Captions(board);
+            ctx.Check(captions.Count == run.Zones.Count && captions[^1] == last.DzName,
+                $"a marker latched on the frame the run completes, after the board woke, joins the strip: [{string.Join(" ", captions)}]");
+            capture.Settle();
+            ctx.Same(run.Zones.Count, Pictures(board), $"…and its picture fills its cell once it lands");
+        }
+        finally
+        {
+            board.Free();
+        }
+    }
+
+    // Instant Action's shared wrap-up board over player 1's camera: the markers are flown last to
+    // first so marker order and flown order differ, and the first one flown is held back past the
+    // board appearing. A board handed no camera, or one with no shot, draws no strip.
+    private static void CheckWrapupStrip(TestContext ctx, StuntMission run, StuntCapture capture, PaneRig pane)
+    {
+        run.Reset();
+        capture.Reset();
+        capture.Update(Elsewhere);
+        var summary = new StuntSummary(run, 0f, null, false);
+        var board = IaWrapupBoard.Build("stunt-capture", exitsToMenu: true, new PauseState(), _ => new MenuInput());
+        ctx.Host.AddChild(board);
+        try
+        {
+            board.Present(won: false, 1f, 0, 0, 0, summary);
+            ctx.Check(board.FindChild(StuntShotStrip.StripName, recursive: true, owned: false) == null,
+                $"the wrap-up board handed no camera draws no strip");
+            board.Present(won: false, 1f, 0, 0, 0, summary, capture);
+            ctx.Check(board.FindChild(StuntShotStrip.StripName, recursive: true, owned: false)?.GetParent()?.GetParent() is StuntShotStrip { Visible: false },
+                $"…and one handed a camera with no shot hides its strip");
+
+            var first = run.Zones[run.Zones.Count - 1];
+            for (int i = run.Zones.Count - 1; i >= 0; i--)
+            {
+                run.Tick(1f);
+                pane.Hold = run.Zones[i] == first;
+                capture.Update(run.Zones[i].Position);
+                capture.Update(Elsewhere);
+                pane.Hold = false;
+            }
+            capture.Settle();
+            run.DebugCompleteAll();
+            board.Present(won: true, run.Elapsed, 0, run.CompletedCount, 0,
+                new StuntSummary(run, run.Elapsed, null, false), capture);
+
+            var captions = Captions(board);
+            var markers = run.Zones.Select(z => z.DzName).ToList();
+            ctx.Check(string.Join(",", captions) == string.Join(",", markers),
+                $"the wrap-up board's strip lists player 1's shots in marker order, not the flown order: [{string.Join(" ", captions)}]");
+            ctx.Same(markers.Count - 1, Pictures(board), $"…with the held frame's cell drawn empty");
+
+            pane.Release(Pane());
+            capture.Settle();
+            ctx.Same(markers.Count, Pictures(board), $"…and filled once its frame lands on the board already showing");
+        }
+        finally
+        {
+            board.Free();
+        }
+    }
+
     // How many strip cells show a picture.
-    private static int Pictures(StuntScoreboard board)
+    private static int Pictures(Node board)
     {
         int count = 0;
-        if (board.FindChild(StuntScoreboard.StripName, recursive: true, owned: false) is { } strip)
+        if (board.FindChild(StuntShotStrip.StripName, recursive: true, owned: false) is { } strip)
         {
             foreach (var cell in strip.GetChildren())
             {
@@ -264,10 +360,10 @@ internal static class StuntCaptureSuites
 
     // The strip's own captions, read off the named container so the splits table's rows above
     // cannot be mistaken for them.
-    private static List<string> Captions(StuntScoreboard board)
+    private static List<string> Captions(Node board)
     {
         var captions = new List<string>();
-        if (board.FindChild(StuntScoreboard.StripName, recursive: true, owned: false) is not { } strip)
+        if (board.FindChild(StuntShotStrip.StripName, recursive: true, owned: false) is not { } strip)
         {
             return captions;
         }

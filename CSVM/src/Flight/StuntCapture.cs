@@ -41,7 +41,7 @@ public sealed class StuntShot
 /// A marker that has been photographed is not photographed again in the same run, and one that is
 /// still being flown through does not re-trigger while the aircraft stays inside its radius.
 /// Per pilot, like the run itself: each pane latches its own pilot's photograph through the
-/// <c>pane</c> request it was built with. <see cref="StuntScoreboard"/> draws the strip.
+/// <c>pane</c> request it was built with. <see cref="StuntShotStrip"/> draws the strip.
 /// </summary>
 public sealed class StuntCapture
 {
@@ -73,6 +73,10 @@ public sealed class StuntCapture
     /// <summary>Raised on the main thread when a shot of the current run has landed, with its
     /// <see cref="StuntShot.Thumb"/> set, so a strip drawn before then can fill its cell.</summary>
     public event Action<StuntShot>? ShotLanded;
+
+    /// <summary>Raised on the latch frame with the new shot, still pending, so a strip already
+    /// drawn can take a marker photographed after the run completed on the same frame.</summary>
+    public event Action<StuntShot>? ShotLatched;
 
     /// <summary>Where the shots go instead of <c>user://</c> while set, so a suite writes into its
     /// own scratch directory rather than beside the player's saves.</summary>
@@ -142,6 +146,7 @@ public sealed class StuntCapture
             {
                 _shots[i] = shot;
                 _inside[i] = true;
+                ShotLatched?.Invoke(shot);
             }
         }
     }

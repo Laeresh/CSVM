@@ -1025,21 +1025,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   https://discussions.unity.com/t/local-multiplayer-player-join-config-screen-using-ui-toolkit/1701038
   (the pattern as other local co-op games ship it, asked for by name).
 
-
-- `BL-967` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: spec]` **Built-in's Instant Action
-  wrap-up board shows the stunt run's Danger Zone photographs.** *Evidence:* an Instant Action stunt
-  run under Built-in ends on `IaWrapupBoard`, which draws the four counters and the splits but no
-  thumbnail strip; `StuntScoreboard`'s strip is the solo run's alone (`HumanFlightAdapter` builds no
-  scoreboard under Instant Action). The Original page draws the run's photographs as prints beside
-  its post-its. *Fix shape:* hand player 1's `StuntCapture.InMarkerOrder()` to
-  `IaWrapupBoard.Present` at the wrap-up (read then rather than at the ending, as the Original
-  handover in `InstantActionDirector` does) and draw the strip under the splits the way
-  `StuntScoreboard` does, a pending cell empty and filled on `StuntCapture.ShotLanded`.
-  *⚠ Traps:* the run completes on its last zone's gate pair while the camera latches on the marker's
-  sphere, tested after the run on a shared frame, so a list read at `MissionEnded` can miss the last
-  shot. *Cross-refs:*
-  `Flight/StuntScoreboard.cs`, `UI/InstantActionWrapupPage.Prints`.
-
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored

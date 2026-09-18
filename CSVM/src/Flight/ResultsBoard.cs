@@ -14,6 +14,9 @@ namespace CSVM.Flight;
 /// </summary>
 public abstract partial class ResultsBoard : Control
 {
+    // The share of the window an over-tall panel is shrunk into. TUNE.
+    internal const float PanelRoom = 0.96f;
+
     // The shared board style: one palette so every board reads as the same screen. All TUNE.
     internal static readonly Color TitleColor = new(0.93f, 0.96f, 1f);
     internal static readonly Color ContextColor = new(0.60f, 0.75f, 0.95f);
@@ -54,6 +57,7 @@ public abstract partial class ResultsBoard : Control
         // Track the window (resizable) so the backdrop always covers it.
         Position = Vector2.Zero;
         Size = GetViewportRect().Size;
+        FitPanel();
         // A rerun clears the subclass's live flag, retire the board and release the clock until
         // the next run ends. R and pad Y reach the rerun without the menu, so the release belongs
         // here rather than only on the menu's own Restart.
@@ -219,5 +223,22 @@ public abstract partial class ResultsBoard : Control
             return;
         }
         OnRestartChosen();
+    }
+
+    // A long course's splits and photographs stand taller than the window, and the centre
+    // container grows downward with them, taking the total and the menu off the bottom. So the
+    // container is re-centred on the window and the panel shrunk about its own centre to fit.
+    private void FitPanel()
+    {
+        if (_panel == null || _panel.Size.X <= 0f || _panel.Size.Y <= 0f)
+        {
+            return;
+        }
+
+        _center.Position = (Size - _center.Size) / 2f;
+        var room = Size * PanelRoom;
+        float fit = Mathf.Min(1f, Mathf.Min(room.X / _panel.Size.X, room.Y / _panel.Size.Y));
+        _panel.PivotOffset = _panel.Size / 2f;
+        _panel.Scale = new Vector2(fit, fit);
     }
 }

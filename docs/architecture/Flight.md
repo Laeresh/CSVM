@@ -630,15 +630,15 @@ The shared shell every results board is built on (`StuntScoreboard`, `StuntRaceB
 `VersusBoard`, `IaWrapupBoard`): the dimmed backdrop and centred panel, the board palette and
 label factories, the halt-and-retire contract on the sim clock, and the standard Photo Mode,
 Restart and Exit menu. A subclass keeps only its build signature, its completion event, its
-populate content and its still-ended test. `PauseBoard` shares the chrome statics but not the
-shell, since a held clock is not an ended run.
+populate content and its still-ended test. A panel taller than the window (a long course's
+splits and photographs) is re-centred and shrunk about its centre to fit, so its total and menu
+stay on screen. `PauseBoard` shares the chrome statics but not the shell, since a held clock is
+not an ended run.
 
 ## src/Flight/StuntScoreboard.cs
 Stunt Flying's end-of-run results overlay on `ResultsBoard`'s shell: the plane and chapter heading
 over a `StuntSplits` section of per-zone splits, total and best-time comparison, and under it the
-`StuntCapture` thumbnail strip, which is in marker order where the splits are in the order flown.
-The last crossing usually wakes the board before its frame has landed, so a cell whose shot is
-still on its way is drawn empty and filled on `StuntCapture.ShotLanded`. Wakes on `StuntMission.RunCompleted`, records through `ScoreStore.RecordIfBest` and logs the split
+pilot's `StuntShotStrip`. Wakes on `StuntMission.RunCompleted`, records through `ScoreStore.RecordIfBest` and logs the split
 table so a headless run is reviewable. The one per-pane board among the results boards, which is
 why it overrides the shell's whole-window placement. Read `ResultsBoard` for the shared shell and
 its halt contract, and `IaWrapupBoard` for the board Instant Action carries the splits on instead.
@@ -647,11 +647,20 @@ its halt contract, and `IaWrapupBoard` for the board Instant Action carries the 
 The Danger Zone camera: one photograph of the pilot's aircraft per `dzN` marker per stunt run,
 latched once on the physics frame the plane first crosses inside `StuntMission.DzRadius` of the
 marker centre, lingering or a later pass latching nothing. That frame counts the shot, fires the
-`snd_dangerzone_camera` sting and requests the pane, nothing more. The frame lands later on a
-worker, which writes the PNG named by chapter, marker and run clock into `screenshots/stunts/` and
-shrinks the thumbnail; `Settle` completes the record on the main thread and raises `ShotLanded`.
-The pixels come from the caller's `PaneRequest` (`DangerZonePhotograph` live, the pane through
-`Utils/PaneReadback.cs` in a run that draws no frames, a synthetic frame in a suite). `DirectoryOverride` points the writes at a scratch directory.
+`snd_dangerzone_camera` sting, raises `ShotLatched` and requests the pane. The frame lands later on
+a worker, which writes the PNG named by chapter, marker and run clock into `screenshots/stunts/`
+and the thumbnail; `Settle` completes the record on the main thread and raises `ShotLanded`. The
+pixels come from the caller's `PaneRequest` (`DangerZonePhotograph` live, the pane in a run that
+draws no frames, a synthetic frame in a suite); `DirectoryOverride` redirects writes.
+
+## src/Flight/StuntShotStrip.cs
+A stunt run's Danger Zone photographs as a board section, shared by `StuntScoreboard` and
+`IaWrapupBoard`: a rule and one captioned thumbnail per shot in marker order, where the splits
+above are in the order flown, sized so the row fits the board. It follows its `StuntCapture` while
+in the tree. `FlightController` tests the run before the camera on one physics frame, so a marker
+latched on the frame that completes the run arrives after the board woke; `ShotLatched` draws the
+row again with it. A cell whose frame is still on its way is drawn empty and filled on
+`ShotLanded`, and one whose frame never arrived is left out. Hidden while there is no shot.
 
 ## src/Flight/StuntSplits.cs
 The stunt run's split section, shared by `StuntScoreboard` and `IaWrapupBoard`: the per-zone rows
@@ -802,8 +811,9 @@ Instant Action's wrap-up board on `ResultsBoard`'s shell, whole-window since the
 every human at once: four label and value rows for time to complete, enemies shot down, danger
 zones completed and shot percentage. It takes no live match object at all, only the caller's own
 snapshot handed in once by `InstantActionRuntime`, so `InstantActionDirector` owns every source
-and this class draws what it is given. On a stunt mission it also grows a `StuntSplits` section,
-and the per-pane scoreboard is then not built. Its Restart reaches the Launcher's session restart
+and this class draws what it is given. On a stunt mission it also grows a `StuntSplits` section
+and player 1's `StuntShotStrip` (the one live source, handed over at the wrap-up rather than the
+ending so a marker latched after the run completed is on it), and no per-pane scoreboard is built. Its Restart reaches the Launcher's session restart
 and rebuilds the world, because a mission's waves, ace and zeppelin cannot be put back in place.
 
 ## src/Flight/Weather.cs

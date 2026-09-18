@@ -9,7 +9,8 @@ namespace CSVM.Flight;
 /// own <c>CanvasLayer</c>, since the mission ends for every human at once. Shows the shipped
 /// screen's four rows, Time to Complete Mission, Enemies Shot Down, Danger Zones Completed,
 /// Shot %, the ones <c>IA_WRAPUP.SCRIPT</c> and <c>LAYOUT.CSV</c> actually wire. On a
-/// <c>stunt_flying</c> mission it also carries the run's <see cref="StuntSplits"/> section, so one
+/// <c>stunt_flying</c> mission it also carries the run's <see cref="StuntSplits"/> section and
+/// player 1's <see cref="StuntShotStrip"/>, so one
 /// board covers the mission rather than stacking with <see cref="StuntScoreboard"/>. Decode:
 /// docs/formats/instant-action/wrap-up.md. Every value is handed in by the caller at
 /// <see cref="Present"/> time rather than read live off any source, the way
@@ -57,11 +58,12 @@ public sealed partial class IaWrapupBoard : ResultsBoard
     /// (docs/formats/instant-action.md "What the four numbers count"). Called exactly once, from
     /// <see cref="InstantActionRuntime.MissionEnded"/>, every value here is that instant's
     /// snapshot, the same discipline <see cref="VersusBoard"/> takes from
-    /// <see cref="VersusMatch.Standings"/>.</summary>
+    /// <see cref="VersusMatch.Standings"/>. <paramref name="shots"/>, player 1's camera, is the
+    /// exception: its strip under the splits fills in as late frames land.</summary>
     public void Present(bool won, float elapsedSeconds, int enemiesShotDown, int zonesCompleted,
-        int shotPercent, StuntSummary? stunt = null)
+        int shotPercent, StuntSummary? stunt = null, StuntCapture? shots = null)
     {
-        Populate(won, elapsedSeconds, enemiesShotDown, zonesCompleted, shotPercent, stunt);
+        Populate(won, elapsedSeconds, enemiesShotDown, zonesCompleted, shotPercent, stunt, shots);
         Wake();
     }
 
@@ -74,7 +76,7 @@ public sealed partial class IaWrapupBoard : ResultsBoard
     }
 
     private void Populate(bool won, float elapsedSeconds, int enemiesShotDown, int zonesCompleted,
-        int shotPercent, StuntSummary? stunt)
+        int shotPercent, StuntSummary? stunt, StuntCapture? shots)
     {
         float s = BoardScale();
         var body = BeginPanel(s);
@@ -110,6 +112,7 @@ public sealed partial class IaWrapupBoard : ResultsBoard
         {
             body.AddChild(Separator(s));
             StuntSplits.Add(body, run, s, separatorBeforeTotal: false);
+            StuntShotStrip.Add(body, shots, s);
         }
 
         body.AddChild(Separator(s));
