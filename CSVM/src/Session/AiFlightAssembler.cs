@@ -244,6 +244,10 @@ internal sealed class AiFlightAssembler
             controller.Setup(new FlightModel(stats, aiForcePath: true), null, new CamParams(),
                 spawn.Position, spawn.LookAt);
             controller.ArmSpawnTimers();
+            // The same exhaust smoke the flown aircraft carries, since the original builds it for
+            // every airframe with exhaust markers; the flight step feeds it this pilot's own gap.
+            controller.ExhaustSmoke = ExhaustSmoke.Build(planeModel, _aircraft.Textures, controller,
+                _world.Ambience);
             // The authored identity wins where the caller has one, because the ranking reads this
             // name against patterns written for it. The counter form is the fallback for the
             // spawners with no authored name (--ai, the Instant Action fan, the generators).

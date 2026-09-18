@@ -655,17 +655,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   constant of this emitter. ⚠ Traps: slam with a digit key, not the throttle-up key. A held key
   moves the commanded lever at the slew's own rate, so the gap stays one step's slew and the
   original shows nothing for it either. A scripted `--hold` feeds the smoke no gap, so no capture
-  flag reaches the plume. *Cross-refs:* `PT-127` (the sortie), `BL-969` (AI aircraft carry it too).
-
-- `BL-969` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **AI aircraft
-  never stream the exhaust smoke the original gives every airframe with exhaust markers.**
-  *Evidence:* `FUN_00476250` builds an exhaust wrapper per `exhaust%d` marker for every aircraft,
-  and `FUN_0048e580` drives them for every normally flown one, so an AI pilot whose desired throttle
-  jumps ahead of its live lever smokes exactly as the player does. `HumanFlightAdapter` alone builds
-  `Flight.ExhaustSmoke`. *Fix shape:* build it for AI rigs too and feed it the AI's own gap, which
-  `FlightController.NextPilotInput` already records before the slew. ⚠ Traps: each trail is a
-  `Puffer`, and constructing one draws a seed off `Rng.Puffer`, so every golden with an AI aircraft
-  in it moves; prove the move is confined to the new emitters before re-pinning.
+  flag reaches the plume. *Cross-refs:* `PT-127` (the sortie).
 
 - `BL-782` `[Feature]` `[Blocked: BL-455]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Built-in's Options screen carries no audio
   levels, so the mix is settable in the Original presentation alone.** *Evidence:*

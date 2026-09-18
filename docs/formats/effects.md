@@ -209,7 +209,11 @@ step's slew and the intensity settles below the 0.01 floor. The generic puffer u
 particles in world space, which is why they pass behind the moving aircraft.
 
 `FUN_00476250` builds the wrappers for every aircraft that carries `exhaust%d` markers, not only
-the player's. CSVM implements it in `CSVM/src/Flight/ExhaustSmoke.cs` for the flown aircraft only.
+the player's. CSVM implements it in `CSVM/src/Flight/ExhaustSmoke.cs` and builds it on the human
+and the AI rig alike, each fed its own pilot's gap. The trails' particle scatter draws on the
+shared puffer seed stream, as the original's generic particle spawn (`FUN_0054f8b0`) calls the CRT
+`rand` every other puffer calls, so each launched aircraft with exhaust markers re-seeds the
+emitters built after it.
 The full Ghidra trace of this emitter and the speed-cue wisps, and of the mechanisms ruled out on
 the way to them, is in `analysis/bl-317-plane-wisps/FINDINGS.md`.
 

@@ -376,7 +376,11 @@ reasons that have nothing to do with any of these checks.
     four seconds after it, matching the footage's fade;
   - (b) its width and opacity against the footage's: a render reads narrower and paler near the
     tail, and the footage plane flies slower, so match the speed before judging;
-  - (c) a single 1/8 step drawing at most a faint wisp, and idle to 5/8 a plume about half as dark.
+  - (c) a single 1/8 step drawing at most a faint wisp, and idle to 5/8 a plume about half as dark;
+  - (d) an AI wingman or enemy throttling up streams the same smoke from its own exhausts: every
+    AI launches with its lever at 0.5 under a desired 0.85, so a faint trail follows each one for
+    about two seconds after it appears (`--ai=player_kestrel,player_fury` from the chase camera
+    shows both), and a pursuer opening its throttle in a fight draws a darker one.
   *Blocks:* `BL-285`. ⚠ Slam with a digit key: the held throttle-up key moves the commanded lever
   at the slew's own rate and draws nothing, in the original as here.
 

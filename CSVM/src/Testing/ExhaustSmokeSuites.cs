@@ -80,6 +80,84 @@ internal static class ExhaustSmokeSuites
         }
     }
 
+    [Suite("exhaust-smoke-ai",
+        "an AI aircraft launched through the roster carries one exhaust trail per marker, charges "
+        + "nothing while its pilot's desired lever matches the live one, and streams a visible "
+        + "plume on its own step once the desired lever runs ahead of the live one")]
+    internal static void ExhaustSmokeAi(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, ctx.Chapter);
+        ctx.RequireData(texturesPath, $"{ctx.Chapter} textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        FlightController? ai = null;
+        try
+        {
+            pool = new ProjectilePool(textures, null, null);
+            ctx.Host.AddChild(pool);
+            var spec = SessionSpec.Parse(Array.Empty<string>());
+            var roster = new FlightRoster(FlightRosterPolicy.From(spec),
+                new LiveryResolver(spec, System.IO.Path.Combine(ctx.DataRoot, "extracted", "rof")),
+                null, ctx.Host,
+                new AircraftAssemblyResources
+                {
+                    PlanesGamez = planesGamez,
+                    StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
+                    AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+                    PaintRng = new RandomNumberGenerator(),
+                    ZrdrPath = ctx.ZrdrPath,
+                    StockLoadouts = StockLoadouts.Load(),
+                    WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+                    Textures = textures,
+                    Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+                },
+                new FlightWorldBindings { Projectiles = pool, Gamez = planesGamez },
+                new HumanRosterBindings());
+
+            var pos = new Vector3(0f, SpawnAltitudeM, 0f);
+            var pilot = AiPilot.HoldingCourse(pos, pos + Vector3.Forward);
+            ai = roster.SpawnAi(new AiSpawn(ctx.PlaneName, pos, pos + Vector3.Forward, pilot));
+            roster.ClearMembership();
+
+            if (ai.ExhaustSmoke is not { } smoke)
+            {
+                ctx.Check(false, $"{ctx.PlaneName}: the AI rig carries the exhaust smoke its airframe's markers call for");
+                return;
+            }
+            var census = smoke.CensusForTest;
+            ctx.Check(census.Trails > 0, $"{ctx.PlaneName}: the AI rig builds {census.Trails} exhaust trail(s)");
+
+            // The stun holds the stick neutral and the desired lever wherever it is set, so the
+            // gap below is the one this suite writes and not whatever the control law would walk.
+            pilot.Stun(60f);
+            pilot.Throttle = ai.Throttle;
+            var closed = Run(ai, smoke, 180);
+            ctx.Check(!closed.Charged && !closed.EverStreamed && smoke.CensusForTest.LiveParticles == 0,
+                $"{ctx.PlaneName}: with the desired lever on the live one ({ai.Throttle:0.000}) nothing charges and no particle is born");
+
+            float from = ai.Throttle;
+            pilot.Throttle = 1f;
+            var open = Run(ai, smoke, 360);
+            ctx.Check(open.EverStreamed && open.Peak > InvisibleOpacity && open.FirstOn <= 1,
+                $"{ctx.PlaneName}: a desired lever of 1 over a live {from:0.000} streams the trail from step {open.FirstOn}, peak intensity {open.Peak:0.000}");
+            ctx.Check(smoke.CensusForTest.LiveParticles > 0,
+                $"…and the trails hold {smoke.CensusForTest.LiveParticles} live particles");
+            ctx.Check(!smoke.StreamingForTest && ai.Throttle >= 0.999f,
+                $"…and are out again once the live lever has reached it, lever={ai.Throttle:0.000}");
+            ctx.Note($"{ctx.PlaneName} (AI): {census.Trails} trail(s), {from:0.000} to 1 peak {open.Peak:0.000} lit steps {open.FirstOn}..{open.LastOn}");
+        }
+        finally
+        {
+            ai?.Free();
+            pool?.Free();
+            textures.Dispose();
+        }
+    }
+
     // Steps the rig and records what the smoke did. The rig is stepped and nothing else: a
     // rendered frame is exactly what the charge must not need.
     private static (float Peak, bool Charged, bool EverStreamed, int FirstOn, int LastOn) Run(

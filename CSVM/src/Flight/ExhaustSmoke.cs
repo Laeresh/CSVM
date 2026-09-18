@@ -37,6 +37,18 @@ public sealed class ExhaustSmoke
     /// <summary>Whether the trails are emitting this step, for the same suite.</summary>
     internal bool StreamingForTest => _streaming;
 
+    /// <summary>How many exhaust markers carry a trail, and the particles alive on all of them.</summary>
+    internal (int Trails, int LiveParticles) CensusForTest
+    {
+        get
+        {
+            int live = 0;
+            foreach (var (_, trail) in _exhausts)
+                live += trail.LiveCount;
+            return (_exhausts.Count, live);
+        }
+    }
+
     /// <summary>Resolves the plane's <c>exhaust1..N</c> marker nodes in order, stopping at the
     /// first number missing as the original's search does, and builds one trail per marker. Null
     /// when the plane carries no exhaust markers or the smoke textures are missing (every call

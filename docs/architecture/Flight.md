@@ -993,10 +993,10 @@ The engine exhaust smoke, the original's one code-built puffer (`FUN_004afa20`, 
 `exhaust%d` marker from `FUN_00476250`): a near-black 0.4 m distance trail per marker. `Update(dt,
 leverGap)` ports `FUN_004afbc0`: a non-negative commanded-minus-live gap adds `dt · gap` to an
 intensity, which then decays by `exp(-1.5 dt)`; the trail runs above 0.01 and each particle keeps
-`min(intensity, 1)` as its opacity through `Puffer.BirthAlpha`. `FlightController` reads the gap
-before the slew, where `FUN_0048e580` does; a held seat and a scripted `--hold` feed 0. `Reset()`
-clears it on crash, respawn and placement. The resulting curves (an idle-to-full slam peaks at
-0.356, a held throttle-up key draws nothing): [../formats/effects.md](../formats/effects.md).
+`min(intensity, 1)` as its opacity through `Puffer.BirthAlpha`. Human and AI rigs both build it;
+`FlightController` reads either pilot's gap before the slew, where `FUN_0048e580` does, and a held
+seat or a scripted `--hold` feeds 0. `Reset()` clears it on crash, respawn and placement. Curves
+and seeding: [../formats/effects.md](../formats/effects.md).
 
 ## src/Flight/FuelTank.cs
 The flown aircraft's tank, engine-free so the arithmetic is testable without a scene. `Step(dt,
