@@ -14,7 +14,8 @@ namespace CSVM.Testing;
 /// choreography waits on a downward probe from the hull rather than on a clock. This suite is the
 /// headless proof that the gate stays shut at cruise, opens as the wreck sinks, and that the
 /// motions behind it (the pitch ease, the six gasbag drops) then run. It also pins where the
-/// hull and its gasbags stop, since the sea is the contact tier's answer and not the gate's.</summary>
+/// hull and its gasbags stop: the hull where the stop on floatdown catches it, the gasbags on the
+/// sea the contact tier answers with.</summary>
 internal static class ZeppelinBreakupSuites
 {
     private const string Chapter = "C1";
@@ -35,10 +36,13 @@ internal static class ZeppelinBreakupSuites
     // the break, so a pitch above this threshold can only be the ease.
     private const float Eased = -0.15f;
 
-    // C1/M04's sea, and how close to it a body has to stop to count as resting on it. A gasbag
-    // freezes its pose in the hull's frame, so the hull's own last metres of settle and pitch ease
-    // carry it a few more; the failure this replaces was 1,228 m, not a metre.
+    // C1/M04's sea, and how close to it a gasbag has to stop to count as resting on it. A gasbag
+    // freezes its pose in the hull's frame and the rotatezep ease carries it a few metres more;
+    // the failure this replaces was 1,228 m, not a metre.
     private const float SurfaceY = 0f, RestBandM = 10f;
+
+    // Where the halted hull may stand relative to its height on the frame the stop dispatched.
+    private const float HaltToleranceM = 0.5f;
 
     // The six engines breakupzep destroys, each behind its own -4 m water probe. Their destroy
     // defs switch the engine's healthy model off, which is the node the mission's twelve-entry
@@ -61,8 +65,8 @@ internal static class ZeppelinBreakupSuites
         "whose main_altitude_check gate reads a downward NODE_UNDERCOVER probe of the decoded " +
         "65 m. The gate stays shut while the wreck is still high, opens as floatdown's -3.5 " +
         "descent brings it down, and rotatezep, breakupzep's six gasbag drops and the stop on " +
-        "floatdown all follow from it. The wreck and all six gasbags then come to rest on the sea " +
-        "instead of falling through it. What the engine gates leave behind is read off the nodes " +
+        "floatdown all follow from it. The stop halts the wreck where it stands and all six " +
+        "gasbags come to rest on the sea instead of falling through it. What the engine gates leave behind is read off the nodes " +
         "themselves: all twelve engine healthy models lose their active bit, six from the " +
         "breakup's own calls and six from the burning bays")]
     internal static void ZeppelinBreakup(TestContext ctx)
@@ -139,11 +143,17 @@ internal static class ZeppelinBreakupSuites
         // What the gate lets through, taken at the dispatch seam rather than inferred from poses:
         // a CALL/STOP_SEQUENCE writes a state and moves nothing of its own.
         var fired = new List<string>();
+        float? haltedY = null;
         runtime.OnEventDispatched = d =>
         {
             if (d.Def.AnimName is "killpzep")
             {
-                fired.Add($"{d.Sequence}:{d.EventKind}({d.EventName})");
+                string line = $"{d.Sequence}:{d.EventKind}({d.EventName})";
+                fired.Add(line);
+                if (line == "main_altitude_check:StopSequence(floatdown)")
+                {
+                    haltedY = host.GlobalPosition.Y;
+                }
             }
         };
 
@@ -252,8 +262,8 @@ internal static class ZeppelinBreakupSuites
         ctx.Same(splashes, ripples,
             $"…and each one is followed half a second later by its huge_ripple ripples={ripples}");
 
-        // Where the wreck came to rest against the surface under it: the descent is MotionRuntime's
-        // contact tier, not the gate, and this line is what a later at-the-controls pass reads.
+        // Where the wreck came to rest: the stop on floatdown ends the hull's flight where it
+        // stands, a few tens of metres over the sea its gasbags fall to (docs/org/sequences.md).
         float wreckY = host.GlobalPosition.Y;
         if (host.GetWorld3D()?.DirectSpaceState is { } space)
         {
@@ -264,8 +274,8 @@ internal static class ZeppelinBreakupSuites
             report.AppendLine($"wreck rests at y={wreckY:0.0}, first surface above/below it y={surface}");
         }
 
-        ctx.Check(Mathf.Abs(wreckY - SurfaceY) <= RestBandM,
-            $"the wreck settles on the sea it was killed over rather than sinking past it y={wreckY:0.0} surface y={SurfaceY:0}");
+        ctx.Check(haltedY is { } h && Mathf.Abs(wreckY - h) <= HaltToleranceM,
+            $"STOP_SEQUENCE floatdown ends the hull's flight where it stands wreck y={wreckY:0.0} halted y={haltedY:0.0}");
 
         ctx.Same(6, engines,
             $"each engine's own -4 m NODE_UNDERCOVER opens and calls its destroy anim opened={engines} of 6");

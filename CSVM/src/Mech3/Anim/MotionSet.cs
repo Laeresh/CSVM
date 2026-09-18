@@ -140,6 +140,16 @@ internal sealed class MotionSet
     public void DiscardFor(AnimDefinition def, Node3D? anchor) =>
         _motions.RemoveAll(m => m.Owner.Def == def && m.Owner.Anchor == anchor);
 
+    /// <summary>Ends, where they stand, the ballistic bodies one of <paramref name="events"/>
+    /// launched for this <c>(def, anchor)</c>: a <c>STOP_SEQUENCE</c> on the sequence holding
+    /// them. The original integrates an <c>OBJECT_MOTION</c> only inside its handler, and a
+    /// stopped sequence is never dispatched again (docs/org/sequences.md). No bounce is owed, and
+    /// the pose is left as it is rather than retracted.</summary>
+    public int HaltLaunchedBy(AnimDefinition def, Node3D? anchor, IReadOnlyList<AnimEvent> events) =>
+        _motions.RemoveAll(m => m is MotionRuntime { LaunchedBy: { } by } body
+                                && body.Owner.Def == def && body.Owner.Anchor == anchor
+                                && events.Contains(by));
+
     /// <summary>Drops every live motion, the crash rig's respawn. Leaves
     /// <see cref="LaunchCount"/> alone.</summary>
     public void Reset() => _motions.Clear();

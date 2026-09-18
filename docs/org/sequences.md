@@ -586,8 +586,16 @@ the next one.
 not unique (`he_ground_effect` ships two unnamed sequences), and a name-keyed test collapses them
 into one and loses half the burst.
 
-⚠ Halting a runner does not touch what it already launched. Motions and puffers have authored
-lifetimes and outlive the sequence that started them.
+⚠ **A stop ends the ballistic `OBJECT_MOTION` bodies the stopped sequence launched, where they
+stand.** The handler (`004eb610`) writes the sequence's state byte to 2 (`004eb69a`), and the
+per-instance walk steps a slot only in state 0 or 1 (`004ecee8`-`004ecef1`, inside
+`FUN_004ecbb0`). The `OBJECT_MOTION` handler integrates its flight on every call and holds its
+event with a still-running return, so once its sequence is stopped nothing integrates the body
+again and it freezes in the pose the stop caught, with no bounce dispatched. Every zeppelin death
+is built on it: `main_altitude_check` stops `floatdown` half a second after the break, so the hull
+halts some 40 to 80 m over the sea while its gasbags fall the rest of the way. CSVM ends those
+bodies through `MotionSet.HaltLaunchedBy` and retracts nothing. Other motion kinds and puffers
+are left to their own lifetimes; the tweens were not decoded against the walk.
 
 ## CALL_ANIMATION hands the call site down as INPUT_NODE, and does not re-anchor the callee
 

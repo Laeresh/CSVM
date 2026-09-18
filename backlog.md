@@ -193,31 +193,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `CAP-29` (the capture), `CAP-27` (spark-shim existence), `BL-288` landing
   (`PLAN-m3-polish-10` A1), `DamageVisuals.cs` (the consumer),
   `extracted/zrdr/vehicle.zrd.json` (the authority).
-- `BL-979` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` `[CM14]` **When the Gemini
-  comes down on the sea and breaks apart, its parts oscillate rapidly up and down at the surface
-  before they sink.** *Evidence:* seen at the controls on the CM14 (C2B/M04) sitting that cleared
-  the zeppelin hull of see-through holes (`git log --grep=BL-931`): the wreck reaches sea level,
-  the breakup plays, and the separated parts jitter vertically at the water for a while and only
-  then go under. The descent and the surface contact are `MotionRuntime`'s contact tier (the
-  floatdown motion, and the `BOUNCE_SEQUENCE` water branch at `Mech3/Anim/MotionRuntime.cs`,
-  "The BOUNCE_SEQUENCE branch a contact selects"), and the breakup suite over C1/M04's
-  `piratezep` pins only where the hull comes to rest against the sea (`ZeppelinBreakupSuites`,
-  a 10 m rest band) and that each gasbag splashes once, never a part's height frame to frame
-  across the crossing, so two writers alternating on one part's Y every tick would pass it.
-  *Fix shape:* run CM14's Gemini death headless (the `gemini-gasbag-bays` suite's world) and log
-  each separated part's Y per tick through the surface crossing to name the two writers that
-  fight: the contact tier's bounce against the floatdown re-applied after the clamp, a gasbag's
-  frozen pose in the hull's frame against the hull's own settle, or a second surface read. Then
-  make the contact terminal for that part the way the original's contact is, read off the
-  original's handling of the water branch before choosing, and pin the crossing in the suite
-  (Y monotone once the part is within the rest band). *⚠ Traps:* do not damp the oscillation
-  with a velocity filter; the jitter is two authorities disagreeing about where the part is, and
-  a filter hides which. `ProjectilePool.SurfaceIsWater` is the one water read
-  (`AnimRuntime.SurfaceIsWater` binds it), do not add a second. *Playtest after fix:*
-  `--campaign=<profile>:13`, kill the Gemini over open water and watch the parts through the
-  splash from the side: each settles or sinks, none bobs. *Cross-refs:* `PT-119` (the same
-  mission's end states), `git log --grep=BL-956` (CM01's zeppelin crash off its net, the
-  neighbouring fix), `ZeppelinBreakupSuites`, `CampaignZeppelinCrashSuites`.
 
 ## Weapons & combat
 

@@ -795,9 +795,12 @@ third, the "stopper", turns out to author a teardown that never runs:
   (`flame_ball_01`/`flame_ball_02` → `stop_p1trail`, in all 8 chapters), and the effects those
   sequences would have switched off are instead left to their own authored lifetimes.
 
-Halting a runner never retracts what its events already launched, motions, puffers and lights
-run out their own authored lifetimes (the same independence that keeps a rocket ring's scale
-motion alive after its launching sequence ends).
+Halting a runner never retracts what its events already launched. Puffers, lights and the
+tweened motions run out their own authored lifetimes (the same independence that keeps a rocket
+ring's scale motion alive after its launching sequence ends). ⚠ A ballistic `OBJECT_MOTION` is the
+exception: it is integrated only while its sequence is still dispatched, so a stop freezes the
+body where it stands, which is how every zeppelin wreck halts over the sea
+([sequences.md](../org/sequences.md)).
 
 ⚠ **CSVM does not persist the disable.** It halts matching runners and reports whether the name
 resolved; it does not remember that a sequence was stopped, so a later `CALL_SEQUENCE` still

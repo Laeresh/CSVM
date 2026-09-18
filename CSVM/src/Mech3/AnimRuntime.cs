@@ -2914,9 +2914,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 return true;
 
             case "StopSequence":
-                // ⚠ Halt the named sequence's active runners and nothing else. Halting never
-                // retracts what the sequence already launched; those lifetimes are authored
-                // independently (docs/formats/anim-definitions.md).
+                // ⚠ Halt the named sequence's runners and end its in-flight OBJECT_MOTION bodies
+                // where they stand. Nothing is retracted, and what other events launched keeps its
+                // own lifetime (docs/formats/anim-definitions.md).
                 if (ev.Data.Str("name") is { } stopName)
                     StopSequence(def, anchor, stopName);
                 return true;
@@ -3571,6 +3571,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             return;
         if (!inst.StopSequence(name))
             Count("StopSequence(missing)");
+        foreach (var seq in def.Sequences)
+        {
+            if (string.Equals(seq.Name, name, StringComparison.OrdinalIgnoreCase))
+                Motions.HaltLaunchedBy(def, anchor, seq.Events);
+        }
     }
 
     // Evaluates one IF/ELSEIF condition; every kind the data uses is answerable, and semantics per

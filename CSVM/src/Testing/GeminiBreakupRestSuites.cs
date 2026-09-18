@@ -12,8 +12,9 @@ namespace CSVM.Testing;
 /// <c>zeppelin-breakup</c> pins C1/M04's piratezep and <c>gemini-gasbag-bays</c> starts
 /// <c>killgmzep</c> over a collision-less world where nothing can come to rest, so between them
 /// they leave this ship's five sections untested against the water. Here the world carries
-/// collision and the contact mask a real session wires, the hull is killed by its gasbags, and the
-/// verdict is where the wreck and all five sections stop.</summary>
+/// collision and the contact mask a real session wires, the hull's colliders ride its nodes as
+/// they do in a session, the hull is killed by its gasbags, and the verdict is where the wreck and
+/// all five sections stop and whether any section climbs back once it has reached the sea.</summary>
 internal static class GeminiBreakupRestSuites
 {
     private const string Chapter = "C2B";
@@ -31,10 +32,16 @@ internal static class GeminiBreakupRestSuites
     // How many frames of the settle the artifact traces, per section and per frame.
     private const int TraceFrames = 150;
 
-    // C2B/M04's sea, and how close to it a body has to stop to count as resting on it. A section
-    // freezes its pose in the hull's frame, so the hull's own last metres of settle and pitch ease
-    // carry it a few more; the failure this is written against is hundreds of metres, not ten.
+    // C2B/M04's sea, and how close to it a body has to stop to count as resting on it.
     private const float SurfaceY = 0f, RestBandM = 10f;
+
+    // The most a section may climb between two frames once inside the band: the energy-tested
+    // 0.2 restitution hop off the water is a few tenths of a metre, the column answering with the
+    // section's own structure and lifting it back out of the sea was tens of metres.
+    private const float HopM = 1f;
+
+    // Where the halted hull may stand relative to its height on the frame the stop dispatched.
+    private const float HaltToleranceM = 0.5f;
 
     // The three gasbags the kill goes through: survivors 2 < the record's required 3. The middle
     // three are chosen so the two END sections reach the water undamaged, which is the pair the
@@ -42,13 +49,14 @@ internal static class GeminiBreakupRestSuites
     private static readonly int[] KilledBags = { 2, 3, 4 };
 
     [Suite("gemini-breakup-rest",
-        "C2B/M04's geminizep killed by its gasbags over the sea, on a world that carries " +
-        "collision: killgmzep's main_altitude_check gate opens as floatdown brings the wreck " +
-        "down, breakupzep drops all five sections, and the wreck and every one of those sections " +
-        "comes to rest on the water instead of falling through it and dispatches its own " +
-        "hit_waterN splash there, including the two that land after the wreck has settled. " +
-        "zeppelin-breakup pins the six-section piratezep and gemini-gasbag-bays runs this hull " +
-        "with no colliders at all, so this is the only resting check the Gemini has")]
+        "C2B/M04's geminizep killed by its gasbags over the sea, on a world whose hull colliders " +
+        "ride their nodes as in a session: killgmzep's main_altitude_check gate opens as floatdown " +
+        "brings the wreck down, its STOP_SEQUENCE floatdown halts the hull where it stands, " +
+        "breakupzep drops all five sections, and every one comes to rest on the water, never " +
+        "climbing more than a restitution hop once inside the rest band, and dispatches its own " +
+        "hit_waterN splash there. zeppelin-breakup pins the six-section piratezep and " +
+        "gemini-gasbag-bays runs this hull with no colliders at all, so this is the only resting " +
+        "check the Gemini has")]
     internal static void GeminiBreakupRest(TestContext ctx)
     {
         string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, Chapter, Mission);
@@ -120,11 +128,17 @@ internal static class GeminiBreakupRestSuites
         }
 
         var fired = new List<string>();
+        float? haltedY = null;
         runtime.OnEventDispatched = d =>
         {
             if (d.Def.AnimName is "killgmzep")
             {
-                fired.Add($"{d.Sequence}:{d.EventKind}({d.EventName})");
+                string line = $"{d.Sequence}:{d.EventKind}({d.EventName})";
+                fired.Add(line);
+                if (line == "main_altitude_check:StopSequence(floatdown)")
+                {
+                    haltedY = hull.GlobalPosition.Y;
+                }
             }
         };
 
@@ -142,17 +156,33 @@ internal static class GeminiBreakupRestSuites
         int brokeAt = -1;
         float brokeY = 0f;
         float startY = hull.GlobalPosition.Y;
+        var lastY = new float[bags.Count];
+        var inBand = new bool[bags.Count];
+        var maxClimb = new float[bags.Count];
         int steps = (int)(SinkSeconds / Tick);
         for (int i = 0; i < steps; i++)
         {
             runtime.Advance(Tick);
             zeps.SimStep(Tick);
+            SyncColliders(hull);
             // Read off breakupzep's own dispatch, not the runtime's NODE_UNDERCOVER tally: that
             // tally is world-wide and any other definition's probe answers into it.
             if (brokeAt < 0 && fired.Contains("breakupzep:CallSequence(break1)"))
             {
                 brokeAt = i;
                 brokeY = hull.GlobalPosition.Y;
+            }
+
+            for (int n = 0; n < bags.Count; n++)
+            {
+                float y = bags[n].GlobalPosition.Y;
+                if (inBand[n])
+                {
+                    maxClimb[n] = Mathf.Max(maxClimb[n], y - lastY[n]);
+                }
+
+                inBand[n] |= Mathf.Abs(y - SurfaceY) <= RestBandM;
+                lastY[n] = y;
             }
 
             // Per frame through the settle, since which frame a section lands on relative to the
@@ -179,31 +209,52 @@ internal static class GeminiBreakupRestSuites
         int dropped = 0;
         int afloat = 0;
         int splashed = 0;
+        int steady = 0;
         for (int i = 0; i < bags.Count; i++)
         {
             float restY = bags[i].GlobalPosition.Y;
-            report.AppendLine($"gasbag{i + 1} rests at y={restY:0.0} on {SurfaceUnder(bags[i])}");
+            report.AppendLine($"gasbag{i + 1} rests at y={restY:0.0} on {SurfaceUnder(bags[i])}, " +
+                $"largest climb inside the band {maxClimb[i]:0.00} m");
             dropped += fired.Contains($"break{i + 1}:ObjectMotion(gasbag{i + 1})") ? 1 : 0;
             afloat += Mathf.Abs(restY - SurfaceY) <= RestBandM ? 1 : 0;
+            steady += inBand[i] && maxClimb[i] <= HopM ? 1 : 0;
             // break{i}'s BOUNCE_SEQUENCE names hit_water{i}, whose first event is the splash. The
             // two sections that land last are the ones a def-instance-scoped dispatch loses.
             splashed += fired.Contains($"hit_water{i + 1}:CallAnimation(huge_splash)") ? 1 : 0;
         }
 
         float wreckY = hull.GlobalPosition.Y;
-        report.AppendLine($"wreck rests at y={wreckY:0.0}");
+        report.AppendLine($"wreck rests at y={wreckY:0.0}, floatdown halted at y={haltedY:0.0}");
         report.AppendLine($"column tier: {runtime.Motions.ColumnLandings} landed by contact, " +
             $"{runtime.Motions.ColumnClockEndings} ran a clock out; " +
             $"killgmzep state={runtime.AnimStateOf("killgmzep")}");
 
         ctx.Same(5, dropped, $"breakupzep drops all five sections dropped={dropped} of 5");
-        ctx.Check(Mathf.Abs(wreckY - SurfaceY) <= RestBandM,
-            $"the wreck settles on the sea it was killed over y={wreckY:0.0} surface y={SurfaceY:0}");
+        ctx.Check(haltedY is { } h && Mathf.Abs(wreckY - h) <= HaltToleranceM,
+            $"STOP_SEQUENCE floatdown ends the hull's flight where it stands wreck y={wreckY:0.0} halted y={haltedY:0.0}");
         ctx.Same(5, afloat,
             $"…and every section comes to rest on the sea rather than falling through it afloat={afloat} of 5");
+        ctx.Same(5, steady,
+            $"…and none climbs more than a {HopM:0} m restitution hop once inside the band steady={steady} of 5");
         ctx.Same(5, splashed,
             $"…and every one dispatches its own hit_waterN splash on landing splashed={splashed} of 5");
-        ctx.Note($"{Chapter}/{Mission} {Hull}: wreck rests at y={wreckY:0.0}, {afloat} of 5 sections on the sea, {splashed} of 5 splashing; per-step trace in test-gemini-breakup-rest.txt");
+        ctx.Note($"{Chapter}/{Mission} {Hull}: wreck halted at y={wreckY:0.0}, {afloat} of 5 sections on the sea, {steady} of 5 steady, {splashed} of 5 splashing; per-step trace in test-gemini-breakup-rest.txt");
+    }
+
+    // A suite runs its ticks inside one engine frame, so a StaticBody3D's physics-server transform
+    // never follows its moving node. A real session's does, and a hull whose colliders stay where
+    // the world built them hides every question of what a section's own column answers with.
+    private static void SyncColliders(Node n)
+    {
+        if (n is CollisionObject3D body)
+        {
+            PhysicsServer3D.BodySetState(body.GetRid(), PhysicsServer3D.BodyState.Transform, body.GlobalTransform);
+        }
+
+        foreach (var child in n.GetChildren())
+        {
+            SyncColliders(child);
+        }
     }
 
     // What a settled section is standing on, read from above so the answer is the first surface

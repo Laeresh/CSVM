@@ -113,8 +113,8 @@
     {
       "name": "c1-debris-rest",
       "frame": 360,
-      "hash": "741eaa2d629651a152497153627decbc",
-      "exercises": "the two-ray column ground-contact tier: a killed hangar's flung debris tested against terrain, one piece resting with its landing's own spark puffer, on the mission wind, as the visible signal, over C1 ground and cutouts under one world light.",
+      "hash": "ffbd541c61d515da9c31c0bbda782fc0",
+      "exercises": "the two-ray column ground-contact tier, blind to each piece's own colliders: a killed hangar's flung debris resting on terrain, their landings' spark puffers on the mission wind as the visible signal, over C1 ground and cutouts under one world light.",
       "args": ["--freecam", "--chapter=C1", "--collision", "--destroy=m_build03", "--pos=-6104,230,-4200", "--direction=0,-0.55,-0.83", "--det", "--mute"]
     },
     {

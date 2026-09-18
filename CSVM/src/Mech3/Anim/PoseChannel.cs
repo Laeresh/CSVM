@@ -251,6 +251,7 @@ internal sealed class PoseChannel
                 }
                 else
                 {
+                    motion.LaunchedBy = ev;
                     _motions.Add(motion, def, anchor); // MotionSet.Add counts the launch
                     ballTime = Mathf.Max(ballTime, flight);
                     // A contact-tested body arms its bounce at contact, since the struck
