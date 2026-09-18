@@ -4336,7 +4336,7 @@ public partial class FlightController : Node3D
         }
 
         if (_mouse.Holding)
-            _mouse.StepCursor(PaneSize());
+            _mouse.StepCursor(PaneSize(), MouseSensitivity);
     }
 
     // Whether this seat should be holding the mouse. One physical mouse, so only the seat the

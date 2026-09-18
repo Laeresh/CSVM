@@ -111,7 +111,7 @@ VP_T_ShadowsDESC=T,IDS_VP_SHADOWS_DESC,340,425,50,0,0,<TCOLOR>,0
 
 ;The CONTROLS page behind the Preferences page's fourth door: the shipped section's keys and both
 ;return edges on invented lines and art, with the Controller Type dropdown the seat chooser takes,
-;the Mouse Sensitivity slider the page does not draw, and the KEYS AND BUTTONS door.
+;the Mouse Sensitivity slider the sensitivity takes, and the KEYS AND BUTTONS door.
 [@ControlsPrefs@]
 V1=TCOLOR,0xFFFFDDC4
 CP_BACKGROUND=P,PP_CpBack.png,100,200,0,1,0,1,0

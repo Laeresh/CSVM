@@ -104,10 +104,11 @@ reset (INSTR-64).
 ## Flying with the mouse
 
 A seat can fly with the mouse instead of leaving it to head-look. The choice is
-per seat and per player, and it lives on the launchscreen's CONTROLS page, in the
-box the original's Mouse Sensitivity slider stands in: the row reads **Look** for
-the scheme above and **Fly** for this one. It is staged like every other edit
-there, so ACCEPT CHANGES is what keeps it and CANCEL CHANGES puts it back, and it
+per seat and per player, and it lives on the launchscreen's CONTROLS page, on
+the Mouse panel's title line above the original's Mouse Sensitivity slider: the
+row reads **Look** for the scheme above and **Fly** for this one. Built-in's
+Controls screen carries the same two values as its Mouse sensitivity stepper and
+its scheme toggle. Both are staged like every other edit there, so ACCEPT CHANGES is what keeps it and CANCEL CHANGES puts it back, and it
 is saved in that player's own keymap file (`bindings_p<n>.json`) beside the rows
 the KEYS AND BUTTONS page writes. Accepted over the pause, it takes hold on the
 seat already flying, with no restart. A pad-only splitscreen seat cannot take it,
@@ -183,6 +184,20 @@ edge. Both numbers are this port's, chosen for the captured path only: the
 original read the desktop pointer over an 800x600 window, and the visible
 pointer (a seat that holds no capture) still flies the decoded 0.1 over pane
 pixels.
+
+**The sensitivity divides that travel.** Full deflection is
+`FullDeflectionCounts / s` counts, where `s` is the seat's sensitivity
+(`Bindings/SensitivityScale.cs`), so a higher setting needs less hand travel,
+and the centre band shrinks with it. `s` runs from 0.25 to 4 with 1 as the
+default, which keeps a keymap file written without it flying the table above.
+The table is worked for 1600 dpi; a factor of four either way puts the same
+32 mm of travel within reach of any mouse from 400 to 6400 dpi. The original's
+slider was authored 1 to 100 around 50, and it moved the desktop cursor, not a
+captured stick. This port's slider runs 0 to 100 with 50 as 1, and each 25
+levels doubles `s` (`s = 2^((level - 50) / 25)`), so the ends land exactly on
+0.25 and 4 and every step reads the same in either direction. A step is 5
+levels on both presentations, the slider's own key step, which multiplies `s`
+by about 1.15; Built-in prints the value as a multiplier, `1.00x`.
 
 ## Any mode
 

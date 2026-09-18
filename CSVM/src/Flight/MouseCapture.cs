@@ -1,3 +1,4 @@
+using CSVM.Bindings;
 using Godot;
 
 namespace CSVM.Flight;
@@ -13,7 +14,8 @@ namespace CSVM.Flight;
 public sealed class MouseCapture
 {
     /// <summary>Mouse counts from the pane's middle to its edge on either axis, so full deflection is
-    /// the same hand movement whatever the pane's pixel size: 32 mm at 1600 dpi. Remake-only, since
+    /// the same hand movement whatever the pane's pixel size: 32 mm at 1600 dpi. This is the default
+    /// sensitivity's travel; a seat's own divides it (<see cref="DeflectionCounts"/>). Remake-only, since
     /// the original read the desktop pointer; the arithmetic is in <c>docs/controls.md</c>, "Flying
     /// with the mouse".</summary>
     public const float FullDeflectionCounts = 2000f;
@@ -55,6 +57,12 @@ public sealed class MouseCapture
     /// </summary>
     public static Vector2 Centred(Vector2 offset) => new(Widen(offset.X), Widen(offset.Y));
 
+    /// <summary>Mouse counts from the pane's middle to its edge at a seat's sensitivity, which
+    /// divides <see cref="FullDeflectionCounts"/>: a higher setting is less hand travel, so more
+    /// sensitive. Clamped to the <see cref="SensitivityScale"/> range.</summary>
+    public static float DeflectionCounts(float sensitivity) =>
+        FullDeflectionCounts / SensitivityScale.Clamp(sensitivity);
+
     /// <summary>Takes the mouse, seeding the virtual cursor where the real one stood, so the capture
     /// starts from the stick position the pointer held rather than jumping to the middle.</summary>
     public void Take(Vector2 cursor)
@@ -85,14 +93,14 @@ public sealed class MouseCapture
     }
 
     /// <summary>Folds this frame's travel into the virtual cursor and returns where it now stands.
-    /// The travel is in mouse counts, scaled per axis so <see cref="FullDeflectionCounts"/> spans the
+    /// The travel is in mouse counts, scaled per axis so <see cref="DeflectionCounts"/> spans the
     /// half pane. Confined to <paramref name="pane"/> the way the OS pointer was confined to the
     /// window, so pushing past an edge saturates there instead of running up a debt to travel back.
     /// </summary>
-    public Vector2 StepCursor(Vector2 pane)
+    public Vector2 StepCursor(Vector2 pane, float sensitivity = SensitivityScale.Default)
     {
         var extent = new Vector2(Mathf.Max(pane.X, 0f), Mathf.Max(pane.Y, 0f));
-        var travel = _pendingCursor * (extent * 0.5f / FullDeflectionCounts);
+        var travel = _pendingCursor * (extent * 0.5f / DeflectionCounts(sensitivity));
         Cursor = new Vector2(
             Mathf.Clamp(Cursor.X + travel.X, 0f, extent.X),
             Mathf.Clamp(Cursor.Y + travel.Y, 0f, extent.Y));

@@ -84,6 +84,59 @@ public class MouseCaptureTests
         Assert.Equal(-1f, edge.Y, 5);
     }
 
+    /// <summary>A seat's sensitivity divides the counts to full deflection, so a higher setting is
+    /// less hand travel: at 2 half the counts reach the edge, at 0.5 twice as many, and the default
+    /// is the unscaled constant. Out-of-range settings stop at the scale's ends.</summary>
+    [Theory]
+    [InlineData(1f, 2000f)]
+    [InlineData(2f, 1000f)]
+    [InlineData(0.5f, 4000f)]
+    [InlineData(4f, 500f)]
+    [InlineData(0.25f, 8000f)]
+    [InlineData(10f, 500f)]
+    [InlineData(0f, 8000f)]
+    public void StepCursor_SensitivityScalesTheCountsToFullDeflection(float sensitivity, float counts)
+    {
+        Assert.Equal(counts, MouseCapture.DeflectionCounts(sensitivity), 3);
+        var pane = new Vector2(1920f, 1080f);
+        var half = pane * 0.5f;
+        var capture = new MouseCapture();
+        capture.Take(half);
+
+        capture.Moved(new Vector2(counts * 0.5f, 0f));
+        var halfway = MouseFlight.Offset(capture.StepCursor(pane, sensitivity), half, half);
+        capture.Moved(new Vector2(counts * 0.5f, 0f));
+        var edge = MouseFlight.Offset(capture.StepCursor(pane, sensitivity), half, half);
+
+        Assert.Equal(0.5f, halfway.X, 4);
+        Assert.Equal(1f, edge.X, 4);
+        Assert.Equal(MouseCapture.FullDeflectionCounts, MouseCapture.DeflectionCounts(Bindings.SensitivityScale.Default));
+    }
+
+    /// <summary>The slider scale both presentations step: the default at its middle, a doubling
+    /// every quarter of it, the range's ends at its ends, and one sideways step the Original slider's
+    /// own key step, so the two presentations land on the same values.</summary>
+    [Fact]
+    public void SensitivityScale_MapsTheSliderEvenlyInRatio()
+    {
+        Assert.Equal(50, Bindings.SensitivityScale.Level(Bindings.SensitivityScale.Default));
+        Assert.Equal(0.25f, Bindings.SensitivityScale.FromLevel(0));
+        Assert.Equal(0.5f, Bindings.SensitivityScale.FromLevel(25));
+        Assert.Equal(1f, Bindings.SensitivityScale.FromLevel(50));
+        Assert.Equal(2f, Bindings.SensitivityScale.FromLevel(75));
+        Assert.Equal(4f, Bindings.SensitivityScale.FromLevel(100));
+        for (int level = 0; level <= Bindings.SensitivityScale.MaxLevel; level++)
+        {
+            Assert.Equal(level, Bindings.SensitivityScale.Level(Bindings.SensitivityScale.FromLevel(level)));
+        }
+
+        Assert.Equal(UI.Menu.Original.SliderControl.KeyStep, Bindings.SensitivityScale.LevelStep);
+        Assert.Equal(Bindings.SensitivityScale.FromLevel(55), Bindings.SensitivityScale.Step(1f, 1));
+        Assert.Equal(4f, Bindings.SensitivityScale.Step(4f, 1));
+        Assert.Equal(0.25f, Bindings.SensitivityScale.Step(0.25f, -1));
+        Assert.Equal("1.00x", Bindings.SensitivityScale.Label(1f));
+    }
+
     /// <summary>The captured stick end to end, counts in and deflection out: nothing inside the
     /// centre band, then a straight line from the band's edge to full deflection at the pane's edge.
     /// </summary>

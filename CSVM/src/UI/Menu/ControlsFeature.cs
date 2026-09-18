@@ -131,6 +131,22 @@ public sealed class ControlsFeature : IMenuFeature
         }
     }
 
+    /// <summary>The seat being edited's mouse sensitivity (<see cref="SensitivityScale"/>), staged
+    /// beside <see cref="MouseFlying"/> and clamped to the scale's range.</summary>
+    public float MouseSensitivity
+    {
+        get => _seats[_player].MouseSensitivity;
+        set
+        {
+            var seat = _seats[_player];
+            float wanted = SensitivityScale.Clamp(value);
+            if (seat.MouseSensitivity == wanted)
+                return;
+            seat.MouseSensitivity = wanted;
+            MarkDirty();
+        }
+    }
+
     private ActionMap Map => _seats[_player].Working[_context];
 
     /// <summary>Registers one seat's live keymap. The profile is the one its polling sites read, not
@@ -356,6 +372,7 @@ public sealed class ControlsFeature : IMenuFeature
                 Restore(seat.Profile.Map(context), seat.Working[context]);
 
             seat.Profile.MouseFlying = seat.MouseFlying;
+            seat.Profile.MouseSensitivity = seat.MouseSensitivity;
             _save?.Invoke(player, seat.Profile);
             Accepted?.Invoke(player, seat.Profile);
         }
@@ -458,6 +475,8 @@ public sealed class ControlsFeature : IMenuFeature
 
         public bool MouseFlying { get; set; }
 
+        public float MouseSensitivity { get; set; }
+
         public DeviceId PadOf(InputContext context) => Devices.PadOf(context);
 
         /// <summary>Takes the working copy back to what the polling sites currently hold.</summary>
@@ -467,6 +486,7 @@ public sealed class ControlsFeature : IMenuFeature
                 Working[context] = Profile.Map(context).Clone();
 
             MouseFlying = Profile.MouseFlying && ReadsKeyboard;
+            MouseSensitivity = Profile.MouseSensitivity;
         }
     }
 }

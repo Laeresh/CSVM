@@ -88,6 +88,16 @@ public partial class FlightController
         set => _bindings.MouseFlying = value;
     }
 
+    /// <summary>How far this seat's captured mouse moves the stick, the multiplier on
+    /// <see cref="MouseCapture.FullDeflectionCounts"/>'s travel (higher is more sensitive). The seat's
+    /// own profile's value, read through each frame like <see cref="MouseFlying"/> and set the same
+    /// way, through <see cref="ApplyProfile"/>.</summary>
+    public float MouseSensitivity
+    {
+        get => _bindings.MouseSensitivity;
+        set => _bindings.MouseSensitivity = value;
+    }
+
     /// <summary>Puts this seat on the keymap its player saved, so it flies what the rebinding screen
     /// wrote. Anything the file does not carry, or this build cannot read, stays at that action's
     /// shipped default, and under the launch gate no file is read at all
@@ -96,7 +106,8 @@ public partial class FlightController
     public void LoadSavedKeymap() =>
         ApplyProfile(Bindings.LaunchBindings.Profile(PlayerIndex + 1, default, readsKeyboard: true));
 
-    /// <summary>Puts this seat on <paramref name="profile"/>'s flight rows and mouse scheme, the whole
+    /// <summary>Puts this seat on <paramref name="profile"/>'s flight rows, mouse scheme and mouse
+    /// sensitivity, the whole
     /// of what a seat takes from its player's keymap, and recomposes the prompts that name them.
     /// ⚠ The build's saved read and a Controls page accepted in flight both come through here, so
     /// anything a seat takes from a profile goes in this one method: a value copied anywhere else is
@@ -108,6 +119,7 @@ public partial class FlightController
         // from two reads could put the flag and the bindings on different files.
         FlightKeymap.Fill(profile.Map(Bindings.InputContext.Flight));
         MouseFlying = profile.MouseFlying;
+        MouseSensitivity = profile.MouseSensitivity;
         ComposeControlPrompts();
     }
 

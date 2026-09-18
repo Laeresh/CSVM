@@ -108,9 +108,13 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     /// <summary>The CONTROLS page's seat chooser, which takes the Controller Type row.</summary>
     public const string ControlsPlayerKey = "CP_D_Fly";
 
-    /// <summary>The CONTROLS page's flying-scheme chooser, which takes the Mouse Sensitivity row.
-    /// </summary>
-    public const string ControlsMouseKey = "CP_S_MOUSE";
+    /// <summary>The CONTROLS page's flying-scheme chooser, on the Mouse Sensitivity panel's title
+    /// line. Remake-only, so the layout names no widget for it.</summary>
+    public const string ControlsMouseKey = "MOUSESCHEME";
+
+    /// <summary>The CONTROLS page's Mouse Sensitivity slider, the authored one, which sets the Fly
+    /// scheme's sensitivity.</summary>
+    public const string ControlsSensitivityKey = "CP_S_MOUSE";
 
     /// <summary>The CONTROLS page's door onto the KEYS AND BUTTONS page.</summary>
     public const string KeysDoorKey = "CP_B_KEYS";
@@ -2148,8 +2152,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     }
 
     // The CONTROLS page: the seat chooser on the Controller Type row, the flying scheme on the Mouse
-    // Sensitivity row, the KEYS AND BUTTONS door and the exit pair, all one column. Without the
-    // section they stand as text buttons so the page is still walkable.
+    // Sensitivity panel's title line with the authored slider under it, the KEYS AND BUTTONS door
+    // and the exit pair, all one column. Without the section they stand as text buttons so the page
+    // is still walkable.
     private void BuildControlsPrefsRows(List<OriginalRow> rows)
     {
         var screen = _layout.Screen(ControlsPrefsSection);
@@ -2157,23 +2162,32 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         {
             rows.Add(_host.PlaqueRow(ControlsPlayerKey, PlayerWord(), 0, ControlsSeated, 0));
             rows.Add(_host.PlaqueRow(ControlsMouseKey, MouseWord(), 1, MouseSchemeLive, 0));
-            rows.Add(_host.PlaqueRow(KeysDoorKey, "KEYS AND BUTTONS", 2, true, 0));
-            rows.Add(_host.PlaqueRow(ControlsAcceptKey, "ACCEPT CHANGES", 3, true, 0));
-            rows.Add(_host.PlaqueRow(ControlsCancelKey, "CANCEL CHANGES", 4, true, 0));
+            rows.Add(_host.PlaqueRow(ControlsSensitivityKey, SensitivityWord(), 2, MouseSchemeLive, 0));
+            rows.Add(_host.PlaqueRow(KeysDoorKey, "KEYS AND BUTTONS", 3, true, 0));
+            rows.Add(_host.PlaqueRow(ControlsAcceptKey, "ACCEPT CHANGES", 4, true, 0));
+            rows.Add(_host.PlaqueRow(ControlsCancelKey, "CANCEL CHANGES", 5, true, 0));
             return;
         }
 
         var box = ControlsPlayerBox(screen);
+        var arrow = StripArt(screen.Widget(ControlsPlayerKey)?.Art ?? Array.Empty<string>(), 4);
         rows.Add(new OriginalRow(ControlsPlayerKey, PlayerWord(), OriginalRowKind.Dropdown,
-            box.X, box.Y, box.Width, box.Height, ControlsSeated, 0,
-            StripArt(screen.Widget(ControlsPlayerKey)?.Art ?? Array.Empty<string>(), 4)));
-        // The scheme sits in the Mouse Sensitivity slider's own box, as a chooser rather than a
-        // track: the setting behind that row is what mouse motion does, and this port has two
-        // answers to that rather than a cursor speed.
+            box.X, box.Y, box.Width, box.Height, ControlsSeated, 0, arrow));
         var mouseBox = ControlsMouseBox(screen);
         rows.Add(new OriginalRow(ControlsMouseKey, MouseWord(), OriginalRowKind.Dropdown,
-            mouseBox.X, mouseBox.Y, mouseBox.Width, mouseBox.Height, MouseSchemeLive, 0,
-            StripArt(screen.Widget(ControlsPlayerKey)?.Art ?? Array.Empty<string>(), 4)));
+            mouseBox.X, mouseBox.Y, mouseBox.Width, mouseBox.Height, MouseSchemeLive, 0, arrow));
+        // The authored slider as the original draws it, over the one scale both presentations step.
+        rows.Add(SliderRow(screen.Widget(ControlsSensitivityKey), ControlsSensitivityKey,
+            ControlsMouseX, ControlsMouseY, 0, SensitivityScale.MaxLevel,
+            SensitivityScale.Level(ControlsSeated ? _controls!.MouseSensitivity : SensitivityScale.Default),
+            level =>
+            {
+                if (MouseSchemeLive)
+                {
+                    _controls!.MouseSensitivity = SensitivityScale.FromLevel(level);
+                }
+            },
+            MouseSchemeLive));
         AddStrip(screen, rows, KeysDoorKey, OriginalRowKind.Button, true, 0);
         AddStrip(screen, rows, ControlsAcceptKey, OriginalRowKind.Button, true, 0);
         AddStrip(screen, rows, ControlsCancelKey, OriginalRowKind.Button, true, 0);
@@ -2275,16 +2289,28 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
             drop?.Int("ItemHeight", (int)ControlsItemHeight) ?? ControlsItemHeight);
     }
 
-    // The CONTROLS page's scheme chooser at the Mouse Sensitivity slot's own box, which is that
-    // row's authored press region rather than the Controller Type box: the two are different sizes
-    // and stand at different columns, so a row sized from the other one sits off its neighbours.
+    // The CONTROLS page's scheme chooser, on the Mouse Sensitivity title's own line, since the
+    // authored slider keeps the panel's only other line. It takes the right half of the Controller
+    // Type box's column at that box's item height, so its arrow ends where the seat row's does and
+    // the panel's title keeps the left half. It stops short of the slider's press region, which
+    // reaches ten pixels above the slot.
     private (float X, float Y, float Width, float Height) ControlsMouseBox(MenuLayoutScreen screen)
     {
-        var mouse = screen.Widget(ControlsMouseKey);
-        float x = mouse?.Int("X", (int)ControlsMouseX) ?? ControlsMouseX;
-        float y = mouse?.Int("Y", (int)ControlsMouseY) ?? ControlsMouseY;
-        var slot = StripSize(SliderArt(mouse, 0, SliderSlotArt), FallbackSlotWidth, FallbackSlotHeight);
-        return SliderRegion(mouse, x, y, slot);
+        var column = ControlsPlayerBox(screen);
+        float y = screen.Widget("CP_T_MouseTitle")?.Int("Y", (int)ControlsMouseTitleY) ?? ControlsMouseTitleY;
+        float half = column.Width / 2f;
+        float sliderTop = ControlsSensitivityBox(screen).Y;
+        return (column.X + half, y, half, Math.Max(1f, Math.Min(column.Height, sliderTop - y)));
+    }
+
+    // The Mouse Sensitivity slider's authored press region, which is the slider row's own rectangle.
+    private (float X, float Y, float Width, float Height) ControlsSensitivityBox(MenuLayoutScreen screen)
+    {
+        var slider = screen.Widget(ControlsSensitivityKey);
+        float x = slider?.Int("X", (int)ControlsMouseX) ?? ControlsMouseX;
+        float y = slider?.Int("Y", (int)ControlsMouseY) ?? ControlsMouseY;
+        var slot = StripSize(SliderArt(slider, 0, SliderSlotArt), FallbackSlotWidth, FallbackSlotHeight);
+        return SliderRegion(slider, x, y, slot);
     }
 
     private string PlayerWord() => _controls is { } controls && controls.Players.Count > 0
@@ -2293,6 +2319,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
 
     private string MouseWord() => !MouseSchemeLive ? string.Empty
         : _controls!.MouseFlying ? "Fly" : "Look";
+
+    private string SensitivityWord() => !MouseSchemeLive ? string.Empty
+        : "Sensitivity " + SensitivityScale.Label(_controls!.MouseSensitivity);
 
     private MenuExit? ActivateControlsPrefs(OriginalRow row)
     {
@@ -2432,7 +2461,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     }
 
     // A sideways step on the seat chooser picks the next player and one on the scheme row flips it;
-    // anything else crosses columns.
+    // anything else crosses columns. The slider is the shell's own step and never reaches here, but
+    // the text-button page drawn without the section has no slider, so its sensitivity row steps here.
     private bool StepControlsValue(IReadOnlyList<OriginalRow> rows, int focus, int direction)
     {
         if (focus < 0 || focus >= rows.Count)
@@ -2444,8 +2474,21 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         {
             ControlsPlayerKey => StepControlsPlayer(direction),
             ControlsMouseKey => StepMouseScheme(),
+            ControlsSensitivityKey => StepSensitivity(direction),
             _ => false,
         };
+    }
+
+    private bool StepSensitivity(int direction)
+    {
+        if (_controls is not { } controls || !MouseSchemeLive)
+        {
+            return false;
+        }
+
+        controls.MouseSensitivity = SensitivityScale.Step(controls.MouseSensitivity, direction);
+        _host.FocusKey(ControlsSensitivityKey);
+        return true;
     }
 
     // Back from either rebinding page: a pending steal is dropped first, then the page leaves the
@@ -2520,8 +2563,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
 
     // The CONTROLS page as drawn: the hub's logo and this section's plate as backdrop, the page
     // title, the seat and mouse rows' own titles and descriptions, the KEYS AND BUTTONS description
-    // as authored, then the rows. The Mouse Sensitivity row's slot and thumb are not drawn: the row
-    // behind that box is a two-value chooser here, not a track.
+    // as authored, then the rows, the Mouse Sensitivity slider among them in its own slot and thumb.
     private void ComposeControlsPrefs(
         IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> backdrop, List<BoardPicture> pictures,
         List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques)
@@ -2552,16 +2594,18 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
 
         if (screen.Widget("CP_T_MouseTitle") is { } mouseTitle)
         {
-            lines.Add(new BoardLine("Mouse", mouseTitle.Int("X", (int)ControlsTitleX),
-                mouseTitle.Int("Y", (int)ControlsMouseTitleY),
-                mouseTitle.Int("Width", (int)ControlsTitleWidth), GameOptionTitleFont, BoardInk.Row));
+            // The title stops where the scheme chooser on its line starts.
+            float titleX = mouseTitle.Int("X", (int)ControlsTitleX);
+            float titleWidth = Math.Min(mouseTitle.Int("Width", (int)ControlsTitleWidth), ControlsMouseBox(screen).X - titleX);
+            lines.Add(new BoardLine("Mouse", titleX, mouseTitle.Int("Y", (int)ControlsMouseTitleY),
+                Math.Max(1f, titleWidth), GameOptionTitleFont, BoardInk.Row));
         }
 
         if (screen.Widget("CP_T_MouseDesc") is { } mouseDescription)
         {
             lines.Add(new BoardLine(
-                "What mouse motion does: fly the aeroplane, or look around. Free look hands a flying "
-                + "mouse back to the head.",
+                "Fly steers the aeroplane with the mouse, Look turns the head. The slider sets how "
+                + "fast a flying mouse moves the stick.",
                 mouseDescription.Int("X", (int)ControlsDescX),
                 mouseDescription.Int("Y", (int)ControlsMouseDescY),
                 mouseDescription.Int("Width", (int)ControlsDescWidth), KeysDescFont, BoardInk.Row));
@@ -2584,23 +2628,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
                 continue;
             }
 
-            _host.ComposeGenericRow(ControlsFace(screen, row), i == focus, i == _host.PressedRow, i, fills, lines, plaques, pictures);
+            _host.ComposeGenericRow(row, i == focus, i == _host.PressedRow, i, fills, lines, plaques, pictures);
         }
-    }
-
-    // Where a CONTROLS row is drawn. The scheme chooser presses on the slider's region, whose
-    // corner is <DROPX> 142, but a dropdown's word and arrow are what it shows, and those stand in
-    // the Controller Type box's column (134 to 309) so both rows read as one column. Only the
-    // horizontal span is taken; the press region itself stays the authored one.
-    private OriginalRow ControlsFace(MenuLayoutScreen screen, OriginalRow row)
-    {
-        if (row.Key != ControlsMouseKey)
-        {
-            return row;
-        }
-
-        var column = ControlsPlayerBox(screen);
-        return row with { X = column.X, Width = column.Width };
     }
 
     // The KEYS AND BUTTONS page as drawn: the plate, the title, the three column heads, the tab

@@ -166,8 +166,17 @@ applies to all of them at once. This is what a polling site is handed and what a
 edits. `Poll` resolves every context on the tick rather than only the mode in front of the player,
 because a pause board and the aeroplane behind it are both live on one tick. It also holds the
 seat's `ActiveDevice`, fed the tick's two halves by whoever polls them, so every prompt on the seat
-names one device, and the seat's flying scheme (`MouseFlying`), which two players at one machine
-choose separately. Where a seat's profile comes from is `LaunchBindings.cs`.
+names one device, and the seat's flying scheme (`MouseFlying`) and its `MouseSensitivity`, which
+two players at one machine choose separately. Where a seat's profile comes from is
+`LaunchBindings.cs`.
+
+## src/Bindings/SensitivityScale.cs
+The Fly scheme's mouse sensitivity as one set of numbers: a multiplier from 0.25 to 4 with 1 as the
+default, and the 0 to 100 slider scale both presentations step it on, even in ratio so that a
+`LevelStep` of 5 multiplies it by the same amount anywhere. `Clamp` reads a non-finite value as the
+default, which is what keeps a hand-edited keymap file from stopping the stick. `MouseCapture`
+divides its full-deflection travel by the value. The arithmetic and the range's reasoning:
+[../controls.md](../controls.md), "Flying with the mouse".
 
 ## src/Bindings/ActiveDevice.cs
 Which side of a seat's hardware produced its last real input, keyboard and mouse against the pads,
@@ -184,8 +193,8 @@ file and a rename. Named and versioned against the original, which writes 2400 u
 to the registry and points its live array at the loaded buffer, so a record-layout change there
 reinterprets an old save. `Encode` and `Decode` are the token grammar; version 2 is the key token's
 optional modifier prefix, and a version 1 file still loads whole because a bare key token means the
-same in both, which is why the reader checks no version. The file's shape, its tokens
-and what this build does with a row it cannot read: [../org/input.md](../org/input.md).
+same in both, which is why the reader checks no version; a file without `mouseSensitivity` loads at
+the default. Its shape, tokens and unreadable rows: [../org/input.md](../org/input.md).
 `DirectoryOverride` is what keeps a suite off the keymap saved at this machine's controls.
 
 ## src/Bindings/LaunchBindings.cs

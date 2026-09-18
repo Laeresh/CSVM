@@ -1001,41 +1001,66 @@ public class OriginalOptionsTests
     }
 
     /// <summary>Each CONTROLS row takes its rectangle from its own layout entry: the seat chooser
-    /// from the Controller Type dropdown's box, the scheme chooser from the Mouse Sensitivity
-    /// slider's own press region, which stands at another corner and another size.</summary>
+    /// from the Controller Type dropdown's box, the sensitivity slider from the Mouse Sensitivity
+    /// slider's own press region, and the scheme chooser from the right half of the seat box's
+    /// column on the Mouse Sensitivity title's line.</summary>
     [Fact]
     public void TheControlsRowsTakeTheirBoxesFromTheirOwnLayoutEntries()
     {
         var host = Host(controls: Controls(out _, out _));
         host.Module.OpenControlsPrefs();
         Assert.Equal((128f, 305f, 175f, 17f), Rect(Row(host, OriginalOptionsScreen.ControlsPlayerKey)));
-        Assert.Equal((136f, 371f, 170f, 23f), Rect(Row(host, OriginalOptionsScreen.ControlsMouseKey)));
+        // 16 rather than the item height's 17: the fixture's slider region starts at 371.
+        Assert.Equal((215.5f, 355f, 87.5f, 16f), Rect(Row(host, OriginalOptionsScreen.ControlsMouseKey)));
+        Assert.Equal((136f, 371f, 170f, 23f), Rect(Row(host, OriginalOptionsScreen.ControlsSensitivityKey)));
     }
 
-    /// <summary>The scheme chooser presses on the slider's region but draws its word and arrow in
-    /// the Controller Type box's column, so the two rows' words start together and their arrows end
-    /// together although the two press regions stand at different columns.</summary>
+    /// <summary>The scheme chooser's arrow ends where the seat row's does, and the panel's title
+    /// stops where the chooser on its line starts, so the two share the line without touching.
+    /// </summary>
     [Fact]
-    public void TheFlyingSchemeRowDrawsInTheSeatRowsColumn()
+    public void TheFlyingSchemeRowSharesTheTitleLineAndTheSeatRowsArrowColumn()
     {
         var host = Host(controls: Controls(out _, out _));
         host.Module.OpenControlsPrefs();
         var seat = Row(host, OriginalOptionsScreen.ControlsPlayerKey);
         var scheme = Row(host, OriginalOptionsScreen.ControlsMouseKey);
-        Assert.NotEqual(seat.X, scheme.X);
+        Assert.Equal(seat.X + seat.Width, scheme.X + scheme.Width);
 
         var board = Compose(host);
-        int seatIndex = host.Rows.ToList().IndexOf(seat);
-        int schemeIndex = host.Rows.ToList().IndexOf(scheme);
-        var seatWord = board.Lines.Single(l => l.Row == seatIndex);
-        var schemeWord = board.Lines.Single(l => l.Row == schemeIndex);
-        Assert.Equal(seatWord.X, schemeWord.X);
-        Assert.Equal(seatWord.Width, schemeWord.Width);
-
         var arrows = board.Pictures.Where(p => p.Art.Name == seat.Art!.Name).ToArray();
         Assert.Equal(2, arrows.Length);
         Assert.Equal(arrows[0].X, arrows[1].X);
-        Assert.True(schemeWord.Y > seatWord.Y);
+
+        var title = board.Lines.Single(l => l.Text == "Mouse");
+        Assert.Equal(scheme.Y, title.Y);
+        Assert.Equal(scheme.X, title.X + title.Width);
+    }
+
+    /// <summary>The authored Mouse Sensitivity slider is drawn as authored, slot and thumb, standing
+    /// at the default's level in the middle of its scale, and moving it stages the seat's
+    /// sensitivity until ACCEPT CHANGES writes it.</summary>
+    [Fact]
+    public void TheSensitivitySliderStagesTheMultiplierAndAcceptWritesIt()
+    {
+        var controls = Controls(out _, out var written);
+        var host = Host(controls: controls);
+        host.Module.OpenControlsPrefs();
+        var slider = Row(host, OriginalOptionsScreen.ControlsSensitivityKey);
+        Assert.Equal(OriginalRowKind.Slider, slider.Kind);
+        Assert.Equal(SensitivityScale.Level(SensitivityScale.Default), slider.Slider!.Value);
+        Assert.Contains(Compose(host).Pictures, p => p.Art.Name == slider.Slider.Slot!.Name);
+
+        slider.Slider.SetValue(75);
+
+        Assert.Equal(2f, controls.MouseSensitivity);
+        Assert.Empty(written);
+        Assert.Equal(75, Row(host, OriginalOptionsScreen.ControlsSensitivityKey).Slider!.Value);
+
+        Click(host, OriginalOptionsScreen.ControlsAcceptKey);
+
+        Assert.Equal(new[] { 1 }, written);
+        Assert.Equal(2f, controls.MouseSensitivity);
     }
 
     /// <summary>The scheme row is the Controls door's own: a press flips it, a sideways step flips
@@ -1172,10 +1197,10 @@ public class OriginalOptionsTests
         RowsAreClearOfEachOther(host, rows, "VIDEO", 10);
     }
 
-    // The CONTROLS page's rows, the same rule over its own plate, with the scheme chooser pinned to
-    // the Mouse Sensitivity row's own authored press region (the slot art at that row's corner, the
-    // four insets applied) rather than to the Controller Type box beside it, so a layout whose two
-    // entries differ in size or column puts each row where its own entry says.
+    // The CONTROLS page's rows, the same rule over its own plate, with the sensitivity slider pinned
+    // to the Mouse Sensitivity row's own authored press region (the slot art at that row's corner,
+    // the four insets applied), so a layout whose entries differ in size or column puts the slider
+    // where its own entry says and the scheme chooser on the title line above it.
     private static void ControlsRowsAreClearOfEachOther(MenuLayout layout, Func<string, (int Width, int Height)?> measure)
     {
         var host = Host(layout, measure, controls: Controls(out _, out _));
@@ -1185,19 +1210,20 @@ public class OriginalOptionsTests
             new[]
             {
                 OriginalOptionsScreen.ControlsPlayerKey, OriginalOptionsScreen.ControlsMouseKey,
+                OriginalOptionsScreen.ControlsSensitivityKey,
                 OriginalOptionsScreen.KeysDoorKey, OriginalOptionsScreen.ControlsAcceptKey,
                 OriginalOptionsScreen.ControlsCancelKey,
             },
             rows.Select(r => r.Key));
 
-        var mouse = layout.Screen(OriginalOptionsScreen.ControlsPrefsSection)!.Widget(OriginalOptionsScreen.ControlsMouseKey)!;
+        var mouse = layout.Screen(OriginalOptionsScreen.ControlsPrefsSection)!.Widget(OriginalOptionsScreen.ControlsSensitivityKey)!;
         var slot = measure(mouse.Art[0])!.Value;
         Assert.Equal(
             ((float)(mouse.Int("X") + mouse.Int("Left")),
              (float)(mouse.Int("Y") + mouse.Int("Top")),
              (float)(slot.Width - mouse.Int("Right") - mouse.Int("Left")),
              (float)(slot.Height - mouse.Int("Bottom") - mouse.Int("Top"))),
-            Rect(Row(host, OriginalOptionsScreen.ControlsMouseKey)));
+            Rect(Row(host, OriginalOptionsScreen.ControlsSensitivityKey)));
 
         RowsAreClearOfEachOther(host, rows, "CONTROLS", 5);
     }

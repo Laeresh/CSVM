@@ -23,7 +23,8 @@ internal static class MenuOriginalControlsSuites
         "Original's rebinding pages through the presentation boundary over the install's decoded "
         + "layout: PREFERENCES opens the Options screen with its CONTROLS door live over the shared "
         + "feature, the door opens the decoded CONTROLS page whose seat row names player 1, whose "
-        + "mouse row hands the mouse between the stick and head-look a press at a time, and whose "
+        + "mouse row hands the mouse between the stick and head-look a press at a time over the "
+        + "authored Mouse Sensitivity slider, and whose "
         + "KEYS AND BUTTONS button opens the decoded KEYS page on its Movement tab with the seven "
         + "category strips, the three column heads and CANCEL CHANGES authored left of ACCEPT "
         + "CHANGES, a click on a control cell arms a capture on that row's own action and slot, "
@@ -111,7 +112,10 @@ internal static class MenuOriginalControlsSuites
             $"and the seat row naming player 1 ({Row(shell, OriginalOptionsScreen.ControlsPlayerKey)?.Label})");
         var mouse = Row(shell, OriginalOptionsScreen.ControlsMouseKey);
         ctx.Check(mouse is { Enabled: true, Label: "Look" },
-            $"the Mouse Sensitivity row carries the flying scheme, on head-look ({mouse?.Label}, live {mouse?.Enabled})");
+            $"the Mouse panel's title line carries the flying scheme, on head-look ({mouse?.Label}, live {mouse?.Enabled})");
+        var slider = Row(shell, OriginalOptionsScreen.ControlsSensitivityKey);
+        ctx.Check(slider is { Enabled: true, Kind: OriginalRowKind.Slider, Slider.Value: 50 } && mouse != null && mouse.Y + mouse.Height <= slider.Y,
+            $"and the authored Mouse Sensitivity slider stands under it, live at the default's middle level ({slider?.Kind}, {slider?.Slider?.Value})");
         Click(host, seat, shell, fit, OriginalOptionsScreen.ControlsMouseKey);
         ctx.Check(controls.MouseFlying && Row(shell, OriginalOptionsScreen.ControlsMouseKey)?.Label == "Fly",
             $"a press hands the mouse to the stick ({controls.MouseFlying}, {Row(shell, OriginalOptionsScreen.ControlsMouseKey)?.Label})");

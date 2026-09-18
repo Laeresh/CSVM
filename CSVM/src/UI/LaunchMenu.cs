@@ -91,11 +91,15 @@ public sealed partial class LaunchMenu : CanvasLayer
     // onto the 19 presets (docs/formats/instant-action.md, "Screen controls"). Decoded, not a fit
     // to our own layout, do not "tidy" it to the item count.
     private const int PresetWindow = 14;
-    // The Controls list's window, and the two stepper rows above it (the seat, and which of the
-    // three keymaps is being edited). Flight alone owns 35 actions, so the list is windowed like
-    // the Table of Contents rather than shrinking the whole band to fit. TUNE.
+    // The Controls list's window, and the three stepper rows above it (the seat, its mouse
+    // sensitivity, and which of the three keymaps is being edited, last so it stands over the list it
+    // picks). Flight alone owns 35 actions, so the list is windowed like the Table of Contents rather
+    // than shrinking the whole band to fit. TUNE.
     private const int ControlsWindow = 14;
-    private const int ControlsHeaderRows = 2;
+    private const int ControlsHeaderRows = 3;
+    private const int ControlsPlayerRow = 0;
+    private const int ControlsSensitivityRow = 1;
+    private const int ControlsContextRow = 2;
     // The three rows below the action list, in the original's own order: reset the whole keymap,
     // abandon every staged edit, commit them. The original draws these as persistent buttons on
     // every category page; here they are the tail of the one list this presentation has. TUNE.
@@ -2712,8 +2716,9 @@ public sealed partial class LaunchMenu : CanvasLayer
 
         switch (_controlsIndex)
         {
-            case 0: StepControlsPlayer(1); return;
-            case 1: StepControlsContext(1); return;
+            case ControlsPlayerRow: StepControlsPlayer(1); return;
+            case ControlsSensitivityRow: return; // a range, not a wrap: only a sideways step moves it
+            case ControlsContextRow: StepControlsContext(1); return;
         }
 
         switch (ControlsButton(_controlsIndex))
@@ -2750,9 +2755,11 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     private bool StepControls(int dir)
     {
-        if (_controlsIndex == 0)
+        if (_controlsIndex == ControlsPlayerRow)
             return StepControlsPlayer(dir);
-        if (_controlsIndex == 1)
+        if (_controlsIndex == ControlsSensitivityRow)
+            return StepControlsSensitivity(dir);
+        if (_controlsIndex == ControlsContextRow)
             return StepControlsContext(dir);
         return ControlsButton(_controlsIndex) >= 0 ? false : StepControlsSlot(dir);
     }
@@ -2773,6 +2780,14 @@ public sealed partial class LaunchMenu : CanvasLayer
         _controls.Player = players[Wrap(at + dir, players.Count)];
         SyncControlsCursor();
         return true;
+    }
+
+    // Steps the Original slider's own scale, so the two presentations land on the same values.
+    private bool StepControlsSensitivity(int dir)
+    {
+        float before = _controls.MouseSensitivity;
+        _controls.MouseSensitivity = SensitivityScale.Step(before, dir);
+        return _controls.MouseSensitivity != before;
     }
 
     private bool StepControlsContext(int dir)
@@ -2819,9 +2834,11 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     private string ControlsRowLabel(int index)
     {
-        if (index == 0)
+        if (index == ControlsPlayerRow)
             return "Player";
-        if (index == 1)
+        if (index == ControlsSensitivityRow)
+            return "Mouse sensitivity";
+        if (index == ControlsContextRow)
             return "Control set";
         return ControlsButton(index) switch
         {
@@ -2836,9 +2853,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     // bindings the next capture would replace. The empty slot past the end is what adds one.
     private string ControlsRowValue(int index)
     {
-        if (index == 0)
+        if (index == ControlsPlayerRow)
             return _controls.Player.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        if (index == 1)
+        if (index == ControlsSensitivityRow)
+            return SensitivityScale.Label(_controls.MouseSensitivity);
+        if (index == ControlsContextRow)
             return ControlsContextLabel(_controls.Context);
         if (ControlsButton(index) >= 0)
             return _controls.Dirty ? "changed" : string.Empty;
@@ -2864,9 +2883,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     {
         if (_controls.Status.Length > 0)
             return _controls.Status;
-        if (focus == 0)
+        if (focus == ControlsPlayerRow)
             return "Whose keymap this is. Each seat holds its own, so rebinding here touches nobody else.";
-        if (focus == 1)
+        if (focus == ControlsSensitivityRow)
+            return "How fast a flying mouse moves the stick. Higher needs less hand travel for full deflection.";
+        if (focus == ControlsContextRow)
             return "Which keymap: one control means different things flying, on a board and in the free camera.";
         return ControlsButton(focus) switch
         {

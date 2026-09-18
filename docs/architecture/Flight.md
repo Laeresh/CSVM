@@ -927,11 +927,11 @@ deflections. Decode: [../org/flightModel.md](../org/flightModel.md); the scheme:
 ## src/Flight/MouseCapture.cs
 The mouse a flight seat takes while it flies, under either mouse scheme. A captured pointer reports
 one frozen position, so this scales relative motion into a virtual cursor confined to the pane
-(`FullDeflectionCounts` mouse counts reach the edge on any pane size) for `MouseFlight.Offset`, and
-banks the raw travel for head-look. `Centred` widens the stick's centre band to `CentreBand` on this
-path only, ahead of the decoded 0.1. `Allowed` is the guard: a real display with somebody at the
-controls, so the test desktop and `--det` keep their mouse mode. `Restorable` is what a board with
-its own pointer puts back, never a capture. `FlightController` owns the mode write and release, and
+(`DeflectionCounts`, `FullDeflectionCounts` over the seat's sensitivity, reach its edge) for
+`MouseFlight.Offset`, and banks the raw travel for head-look. `Centred` widens the stick's centre
+band to `CentreBand` on this path only, ahead of the decoded 0.1. `Allowed` is the guard: a real
+display with somebody at the controls, so the test desktop and `--det` keep their mouse mode.
+`Restorable` is what a board with its own pointer puts back, never a capture. `FlightController` owns the mode write and release, and
 `Session/FlightRosterInputs.cs` resolves the guard once per session. Read `MouseFlight.cs` next.
 
 ## src/Flight/NitroSystem.cs
@@ -1083,7 +1083,7 @@ controller keeps its runtime interface. `HoldSegments`, the scripted hold profil
 rides this DTO the same way `Pilot` does, so `FlightController` exposes a public field for neither;
 `Bind` copies it before resolving and storing the `IFlightInputSource`, alongside the `IWorldQuery`
 seam. The same partial holds `ApplyProfile`, the one method a seat takes a player's keymap and
-mouse scheme through, at build and on a Controls page accepted in flight alike.
+mouse scheme and sensitivity through, at build and on a Controls page accepted in flight alike.
 
 ## src/Flight/IFlightInputSource.cs
 The seam a sim step reads this frame's pilot intent through: `Read(dt)` returns one `FlightInput`.

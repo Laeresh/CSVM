@@ -27,6 +27,7 @@ public sealed class BindingStore
     public const int Version = 2;
 
     private const string MouseFlyingField = "mouseFlying";
+    private const string MouseSensitivityField = "mouseSensitivity";
     private const string KeyboardToken = "keyboard";
     private const string MouseToken = "mouse";
     private const string PadPrefix = "pad:";
@@ -81,6 +82,8 @@ public sealed class BindingStore
             // No version bump: a file written before this field reads false, which is the shipped
             // scheme, so an older keymap still describes the seat it was saved from.
             w.WriteBoolean(MouseFlyingField, profile.MouseFlying);
+            // The same rule: an older file names no sensitivity and reads the unscaled default.
+            w.WriteNumber(MouseSensitivityField, profile.MouseSensitivity);
             w.WriteStartObject("contexts");
             foreach (var context in Enum.GetValues<InputContext>())
             {
@@ -111,7 +114,7 @@ public sealed class BindingStore
     /// <paramref name="pad"/> and replacing every action the text gives a readable row for. Text
     /// that is not valid JSON, an unknown context or action name, and a binding token this build
     /// cannot read all leave the action at its default. A file naming no mouse-flying flag leaves the
-    /// seat on the keyboard and pad schemes.</summary>
+    /// seat on the keyboard and pad schemes, and one naming no sensitivity leaves it unscaled.</summary>
     public static BindingProfile Deserialize(string json, DeviceId pad, bool readsKeyboard)
     {
         var profile = BindingProfile.Defaults(pad, readsKeyboard);
@@ -124,6 +127,14 @@ public sealed class BindingStore
                 && flying.ValueKind is JsonValueKind.True or JsonValueKind.False)
             {
                 profile.MouseFlying = flying.GetBoolean();
+            }
+
+            if (root.ValueKind == JsonValueKind.Object
+                && root.TryGetProperty(MouseSensitivityField, out var sensitivity)
+                && sensitivity.ValueKind == JsonValueKind.Number
+                && sensitivity.TryGetSingle(out float scale))
+            {
+                profile.MouseSensitivity = scale;
             }
 
             if (root.ValueKind != JsonValueKind.Object

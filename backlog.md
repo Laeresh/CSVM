@@ -1049,18 +1049,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `spyglass-marker-hud` suite runs in one frame and cannot see a per-frame step; a live `--fly`
   probe with a log line is the instrument. *Cross-refs:* `git log --grep=BL-906`.
 
-- `BL-960` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: spec]` **A mouse sensitivity slider on the
-  Controls page, for the Fly scheme.** *Evidence:* asked for at the controls ("perhaps a slider in
-  options"), over the captured stick's scale constant `MouseCapture.FullDeflectionCounts`. The Original Controls page already carries the
-  Mouse row (`CP_S_MOUSE`'s slider-slot art) whose horizontal placement `BL-942` is still fitting.
-  *Fix shape:* a per-seat value in `BindingProfile` beside `MouseFlying`, saved by `BindingStore`,
-  applied as the multiplier on `FullDeflectionCounts`; a row on the Original Controls page under the
-  Mouse row, and the same value on Built-in's Controls screen in its stepper convention.
-  *⚠ Traps:* remake-only, so nothing to decode; the default must be that constant unscaled so a saved
-  file without the field flies as before; the seat takes it in `FlightController.ApplyProfile` beside
-  the scheme, or an accept over the pause stops at the file. *Cross-refs:* `BL-942`, `docs/controls.md`
-  ("Flying with the mouse").
-
 - `BL-965` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: spec]` **The Original wrap-up screen shows the
   stunt run's Danger Zone photographs.** *Evidence:* `StuntScoreboard` draws the run's latched
   shots as a thumbnail strip in marker order, but the Original presentation's wrap-up

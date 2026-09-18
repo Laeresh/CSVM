@@ -76,6 +76,48 @@ public class BindingStoreTests
         Assert.False(loaded.MouseFlying);
     }
 
+    /// <summary>The shipped sensitivity is written and read back as the unscaled multiplier, and a
+    /// moved one comes back as moved.</summary>
+    [Fact]
+    public void RoundTrip_PreservesTheMouseSensitivity()
+    {
+        var profile = BindingProfile.Defaults(Pad, readsKeyboard: true);
+        Assert.Equal(SensitivityScale.Default, profile.MouseSensitivity);
+
+        var json = BindingStore.Serialize(1, profile);
+        Assert.Contains("\"mouseSensitivity\": 1", json);
+        Assert.Equal(1f, BindingStore.Deserialize(json, Pad, readsKeyboard: true).MouseSensitivity);
+
+        profile.MouseSensitivity = SensitivityScale.FromLevel(65);
+        var moved = BindingStore.Deserialize(BindingStore.Serialize(1, profile), Pad, readsKeyboard: true);
+        Assert.Equal(profile.MouseSensitivity, moved.MouseSensitivity);
+        AssertSameMaps(profile, moved);
+    }
+
+    /// <summary>A file written before the field existed names no sensitivity and flies the captured
+    /// stick unscaled, and a hand-edited value outside the range is clamped rather than obeyed.
+    /// </summary>
+    [Theory]
+    [InlineData(null, 1f)]
+    [InlineData("0", 0.25f)]
+    [InlineData("-3", 0.25f)]
+    [InlineData("100", 4f)]
+    [InlineData("\"fast\"", 1f)]
+    public void AnOlderOrHandEditedFileReadsASensitivityInsideTheRange(string? field, float expected)
+    {
+        var json = BindingStore.Serialize(1, BindingProfile.Defaults(Pad, readsKeyboard: true));
+        var stripped = json.Replace("\"mouseSensitivity\": 1,", field == null ? string.Empty : $"\"mouseSensitivity\": {field},", StringComparison.Ordinal);
+        Assert.NotEqual(json, stripped);
+
+        var loaded = BindingStore.Deserialize(stripped, Pad, readsKeyboard: true);
+
+        Assert.Equal(expected, loaded.MouseSensitivity);
+        if (field == null)
+        {
+            Assert.DoesNotContain("mouseSensitivity", stripped, StringComparison.Ordinal);
+        }
+    }
+
     /// <summary>The snap-look diagonals are one key on two actions, so the file has to carry a
     /// control twice inside one context and read it back that way.</summary>
     [Fact]

@@ -132,8 +132,9 @@ internal static class MouseFlightSuites
         "a Controls page accepted over the pause reaches the seat already flying: the real pause "
         + "Preferences leaf over the install's decoded layout, holding a rebinding feature that "
         + "saves to scratch, opened over two human seats, walks to the CONTROLS page, flips the "
-        + "Mouse row to Fly and stages a flight rebind, and ACCEPT CHANGES puts player 1's seat on "
-        + "the mouse stick and the new control at once while player 2's seat stays as it was, the "
+        + "Mouse row to Fly, steps the sensitivity slider and stages a flight rebind, and ACCEPT "
+        + "CHANGES puts player 1's seat on the mouse stick, the new sensitivity and the new control "
+        + "at once while player 2's seat stays as it was, the "
         + "capture decision reads the same under either scheme, and once the leaf has closed a "
         + "later accept from the menu reaches no seat")]
     internal static void FlightMouseSchemeLive(TestContext ctx)
@@ -212,6 +213,13 @@ internal static class MouseFlightSuites
         ctx.Check(controls.MouseFlying && !one.MouseFlying && !Holds(one.FlightKeymap, Rebound),
             $"a staged flip and rebind reach no seat before the accept (page {controls.MouseFlying}, seat {one.MouseFlying})");
 
+        // Five sideways steps on the slider, a quarter of its scale up: twice the sensitivity.
+        WalkTo(leaf, UI.Menu.Original.OriginalOptionsScreen.ControlsSensitivityKey);
+        for (int i = 0; i < 5; i++)
+            leaf.Drive(new UI.Menu.MenuCommands { MoveX = 1 });
+        ctx.Check(controls.MouseSensitivity == 2f && one.MouseSensitivity == SensitivityScale.Default,
+            $"the slider stages twice the sensitivity and the seat keeps its own until the accept (page {controls.MouseSensitivity}, seat {one.MouseSensitivity})");
+
         WalkTo(leaf, UI.Menu.Original.OriginalOptionsScreen.ControlsAcceptKey);
         leaf.Drive(new UI.Menu.MenuCommands { Accept = true });
         var flown = one.ReadKeyboard(Dt);
@@ -219,10 +227,13 @@ internal static class MouseFlightSuites
             $"ACCEPT CHANGES puts player 1's flying seat on the mouse stick at once (flying {one.MouseFlying}, roll {flown.Roll:0.###})");
         ctx.Check(Holds(one.FlightKeymap, Rebound),
             $"and on the flight control staged beside it, the keymap riding the same accept");
-        ctx.Check(!two.MouseFlying && two.ReadKeyboard(Dt).Roll == 0f,
-            $"ABLE-TO-FAIL CONTROL: player 2's seat, which nobody edited, stays on head-look ({two.MouseFlying})");
-        ctx.Check(BindingStore.UserBindings().Load(1, default, readsKeyboard: true).MouseFlying,
-            $"and the scheme is saved to player 1's file too, so a restart reads the same seat");
+        ctx.Check(one.MouseSensitivity == 2f,
+            $"and on the sensitivity, so the captured stick needs half the hand travel at once ({one.MouseSensitivity})");
+        ctx.Check(!two.MouseFlying && two.ReadKeyboard(Dt).Roll == 0f && two.MouseSensitivity == SensitivityScale.Default,
+            $"ABLE-TO-FAIL CONTROL: player 2's seat, which nobody edited, stays on head-look at the default sensitivity ({two.MouseFlying}, {two.MouseSensitivity})");
+        var saved = BindingStore.UserBindings().Load(1, default, readsKeyboard: true);
+        ctx.Check(saved.MouseFlying && saved.MouseSensitivity == 2f,
+            $"and the scheme and sensitivity are saved to player 1's file too, so a restart reads the same seat ({saved.MouseSensitivity})");
         bool wantedOnFly = CaptureDecision(one);
         ctx.Check(wantedOnLook && wantedOnFly,
             $"the capture decision is the same under either scheme, the seat holding the mouse for the stick and for head-look alike (look {wantedOnLook}, fly {wantedOnFly})");

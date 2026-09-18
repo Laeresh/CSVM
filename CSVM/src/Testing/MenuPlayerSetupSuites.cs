@@ -136,6 +136,18 @@ internal static class MenuPlayerSetupSuites
         menu.Drive(Right);
         Has(ctx, "the stepper has nobody else to offer", "Player 1", menu.ShownBreadcrumb);
 
+        menu.Drive(Down);
+        Has(ctx, "the next stepper is the mouse sensitivity at the unscaled default", "Mouse sensitivity   1.00x", menu.ShownRowText);
+        menu.Drive(Right);
+        Has(ctx, "a step right is more sensitive by the Original slider's own step", "1.15x", menu.ShownRowText);
+        ctx.Check(controls.MouseSensitivity == SensitivityScale.FromLevel(55) && controls.Dirty,
+            $"and stages the multiplier like any other edit ({controls.MouseSensitivity})");
+        for (int i = 0; i < 20; i++)
+            menu.Drive(Right);
+        Has(ctx, "the stepper stops at the top of the range rather than wrapping", "4.00x", menu.ShownRowText);
+        controls.Cancel();
+        menu.Drive(Up);
+
         var padInput = new MenuInput { Pads = new[] { 0 } };
         padInput.Prime();
         setup.Join(new BuiltInSeat(padInput));

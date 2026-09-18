@@ -13,6 +13,7 @@ public sealed class BindingProfile
     private readonly Dictionary<InputContext, PlayerActions> _seats = new();
 
     private bool _readsKeyboard;
+    private float _mouseSensitivity = SensitivityScale.Default;
 
     public BindingProfile(IReadOnlyDictionary<InputContext, ActionMap> maps, bool readsKeyboard)
     {
@@ -52,6 +53,15 @@ public sealed class BindingProfile
     /// ⚠ Off leaves the mouse to head-look exactly as before, which is what the keyboard and pad
     /// schemes read; nothing else may consume mouse motion while this is false.</summary>
     public bool MouseFlying { get; set; }
+
+    /// <summary>How far this seat's flying mouse moves the stick, the <see cref="SensitivityScale"/>
+    /// multiplier on the captured cursor's travel, higher being more sensitive. Per seat for the same
+    /// reason as <see cref="MouseFlying"/>: two players hold two mice. Clamped on the way in.</summary>
+    public float MouseSensitivity
+    {
+        get => _mouseSensitivity;
+        set => _mouseSensitivity = SensitivityScale.Clamp(value);
+    }
 
     /// <summary>The shipped keymap for a seat flying <paramref name="pad"/>, which may be
     /// <c>default</c> for a seat with no pad.</summary>
