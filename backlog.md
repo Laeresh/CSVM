@@ -377,7 +377,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   capture swallows them entirely, while ours are plainly visible in the same scene
   (`playtest/CAP-11/csvm-c2b-low.png`). Streak width is the first constant to revisit.
 
-- `BL-322` `[Research]` `[Blocked: CAP-58]` `[L]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]` `[C5]` **The original shades a lit surface per vertex and clamps the
+- `BL-322` `[Research]` `[L]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]` `[C5]` **The original shades a lit surface per vertex and clamps the
   product at white, so reproducing its sun term darkens every away-facing surface of every chapter
   and cannot darken a C5 city block at all** (split out of `BL-303` at its close). Explicitly NOT
   fog, `BL-303`'s own adjunct note, and the Wave B fog work moved none of it.
@@ -410,7 +410,27 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   compare *different buildings*, and the decode above says the difference between two buildings is
   exactly what decides the ratio. C5's sky dome cannot serve as the in-world control either: at a
   level view its rows read 0.83, 0.69 and 0.43 of the original's from zenith to horizon, a gradient
-  mismatch of its own rather than one scalar. `CAP-58` is the matched pose this needs.
+  mismatch of its own rather than one scalar. The matched poses are the `CAP-58` stills below.
+  *Matched poses, `playtest/CAP-58/pairs/`:* seven original spawn stills of C5 `IA1`, each paired
+  with our render of the same `dogfight_ace` entry (`--pos`/`--direction` from `ia.zrd`, frame 30),
+  original above ours in `pair1`..`pair7`, `sheet.png` the overview and `patches.png` the measured
+  regions. Every still matched an entry by its scenery, so seven of the eight spawns are covered
+  (entries 0, 1, 2, 3, 4, 5, 7; entry 6 was not caught). Frame-wide the pose matches (the bridge
+  towers stand at the same screen columns), but the original's chase camera holds the aircraft
+  smaller and the horizon lower than ours, so regions were placed per image, not shared (`BL-885`).
+  *What the pairs show:* the answer depends on the surface, in both directions. On the `bldg`
+  tower skins in `pair2` (entry 7, amid the towers) the wall between the windows is darker in ours:
+  the right tower's face turned away from the camera reads ours/theirs 0.48 at the median and its
+  face toward the camera 0.44, the tenth percentile 1 in ours against 5 to 12 in the original. The
+  two faces stand at right angles and read the same ratio, so these pairs show a flat halving of
+  the wall texel, not a term that differs by facing. Plain surfaces go the other way: the bridge
+  deck underside (`pair5`) reads 1.26 at the median and the bridge tower masonry (`pair4`) 1.30,
+  both brighter in ours. The HUD control holds, the ALT gauge disc reads 0.98 (mean), so nothing
+  frame-wide is in either number. The original stills are JPEG and the wall levels sit near black,
+  so the tenth-percentile figures carry compression noise and only the medians are quoted as
+  ratios. No pair holds a close plain `cblock` wall toward the camera, so the low-rise blocks are
+  still unmeasured. This is a luminance reading of matched frames, and the verdict on whether the
+  tower walls are too dark or the deck too bright stays with the eye at the controls.
   *Fix shape:* per lit vertex, `drawn = clamp(authored_vertex_colour × (SUNLIGHT_AMBIENT +
   SUNLIGHT_DIFFUSE × max(dot(N, L), 0)), 0, 1)` in place of `ALBEDO *= csky_world_light`. Four
   files: `Weather.cs` stops collapsing (the uncollapsed pair is already on `ZoneWeather`),
@@ -565,6 +585,34 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`CaptureDirector.cs:96`), so judge this at the controls or on an undithered capture.
   *Playtest after fix:* any chapter under Enhanced Graphics, still and moving, over water and over
   ground. *Cross-refs:* `docs/architecture/Utils.md` (`GraphicsMode`).
+
+- `BL-981` `[Fidelity]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: footage]` **The aircraft reads
+  about three quarters as bright and purer in hue in the original than in ours, in every zone.**
+  Matched poses, the same Bloodhawk in the stock Fortune Hunters paint on both sides, red airframe
+  pixels averaged: C1 `IA1` spawn 3 under overcast day reads 88/6/19 in the original against
+  116/20/34 in ours (0.76), the C5 `IA1` tower spawn at night 98/7/21 against 145/24/43 (0.68).
+  The HUD gauge discs in the same frames read 0.98, so nothing frame-wide is in the ratio, and the
+  factor is the same order by day and by night, so it is not a night term the original has and we
+  lack. Originals: `OriginalScreenshots/C1 IA1 Zone1 environment Spawn3.png` and
+  `playtest/CAP-58/` still `232628`; ours beside them in `playtest/CAP-58/pairs/`
+  (`c1-spawn3-bhawk-fortune-csvm.png`, `pair2-bhawk-fortune-csvm.png`).
+  *Two terms in the numbers:* (1) a multiplicative shortfall, the original's aircraft being texture
+  times authored vertex colour times `SUNLIGHT_AMBIENT + SUNLIGHT_DIFFUSE × max(N·L, 0)` clamped
+  at white (`docs/org/vertexLighting.md`), where ours lights the full texture with
+  `WeatherRig.FaithfulEnergies`' day-level sun and ambient, picked by eye; (2) a shift toward grey,
+  the original's green and blue channels sitting at a third of ours, which a multiply cannot produce
+  and which the white `AmbientLightColor` and the `SceneBuilder.AircraftSpecular` 0.25 sheen can,
+  both neutral terms added on top of the texture and both the remake's own.
+  *Next, one decode:* what the vehicle draw multiplies into the diffuse byte, whether the airframe's
+  authored vertex colours sit below 255 as the `bldg` tower skins do, or the light term alone
+  accounts for the loss; the C1 zone 2 pair (1.2 / 0.25) and the C5 pair (1.5 / 0.5) give two
+  points to check the decoded law against. *Fix shape:* the faithful path shades the aircraft with
+  the decoded product per vertex, in place of the eye-picked energies, and the neutral ambient and
+  sheen are reviewed against the hue reading rather than kept as a look. It is not a night fix and
+  not a paint fix: the same pattern on both sides is what cleared those.
+  *Playtest after fix:* the two poses above, and a day chapter with the sun on the wing top.
+  *Cross-refs:* `BL-322` (the same product on the world), `BL-885` (the chase camera frames the
+  aircraft larger in ours, so region placement differs per image).
 
 ## Effects & animation runtime
 
@@ -1097,6 +1145,21 @@ usual.
   lives past spawn, what it flies), then port that; do not invent a leash or a despawn before the
   read. *Cross-refs:* `docs/org/aiPilot.md` (the headline, "Open"),
   `docs/formats/ai-rosters.md` ("Who is netless").
+
+- `BL-980` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **The Instant Action
+  ace's target marker names the aeroplane where the original names the pilot.** At the controls
+  the marker over the ace reads "Peacemaker"; in the original it reads the ace's name
+  ("Marshall Bill Redmann", C5's `MSG_SSCRAWFORD_NAME`), and the wave enemies read their group's
+  `enemy_name`. *Evidence:* `FUN_0045a390` writes the marker's name string from `ia.zrd`'s
+  `ace_name` (`0x0045ab0a`) and the waves' `enemy_name` (`0x0045ae73`), both MSG keys the parser
+  resolves through the string table (`0x0045946b`, `0x00458e36`; `docs/org/targeting.md`,
+  `docs/formats/instant-action.md`). CSVM already parses both (`InstantAction.AceName`,
+  `EnemyName`) and logs the ace's name at spawn, but `InstantActionDirector` spawns the ace and
+  the wave members with no title, so `TargetHud` falls through `PlaneRoster.PlaneDisplayName` to
+  the def-name derivation. The campaign path proves the mechanism: an authored roster `Title`
+  lands in `PlaneStats.AiTitle` and the marker reads it. *Fix shape:* resolve `AceName` and each
+  wave's `EnemyName` at spawn and set them as the actor's `AiTitle`, the same field the campaign
+  fills; the wingmen keep the plane-name fallback unless the decode shows otherwise.
 
 ## Tooling, platform & docs
 
