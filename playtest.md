@@ -254,6 +254,17 @@ draws its authored 800x600 space one-to-one.
   a pure roll moves nothing. *Blocks:* nothing tracks the outcome; a fail mints a new `BL` quoting
   which of (a)-(d) failed.
 
+- `PT-162` `[Own]` **The cockpit compass window fades its drum's ends instead of barring them.** The
+  panel's two fade quads in front of the 3D compass drum now alpha-blend their authored black ramp
+  instead of cutting it at half, so the comb runs to about 0.87 of the window's width with dimming
+  ends, where two flat dark bars stood before (`docs/formats/hud.md`, the compass window). Renders
+  measure the width against the original's cockpit footage; the look in motion is what they do not
+  settle. Fly with `--view=cockpit`, then F8 back to the chase view. *Look for:* (a) the comb
+  reaching close to both ends of the window and darkening smoothly into them as you turn, with no
+  hard edge or bar; (b) the octant letters on the drum readable and not fringed; (c) in the chase
+  view, the screen-space tape's letters squeezed toward the ends like the ticks. *Blocks:* nothing
+  tracks the outcome; a fail mints a new `BL` quoting which of (a)-(c) failed.
+
 ### C1 · Bloodhawk vs AI, the kill sequence, sound on
 
 ```powershell

@@ -44,7 +44,6 @@ public sealed partial class CompassTape : Control
     private Texture2D _ticks = null!;
     private Texture2D _labels = null!;
     private LabelLayer _labelLayer = null!;
-    private bool _squeezeLabels;
 
     /// <summary>Current heading in degrees, 0 = north (−Z), 90 = east (+X); set
     /// each frame by the flight controller.</summary>
@@ -58,9 +57,8 @@ public sealed partial class CompassTape : Control
         Mathf.PosMod(Mathf.RadToDeg(Mathf.Atan2(nose.X, -nose.Z)), 360f);
 
     /// <summary>Null when the chapter's texture archive lacks the two HUD textures
-    /// (the archive itself logs the miss). <paramref name="squeezeLabels"/> draws the octant
-    /// letters with the ticks' own horizontal squeeze instead of upright.</summary>
-    public static CompassTape? Build(TextureArchive textures, bool squeezeLabels = false)
+    /// (the archive itself logs the miss).</summary>
+    public static CompassTape? Build(TextureArchive textures)
     {
         var ticks = textures.Find("compassticks2");
         var labels = textures.Find("compasstxt");
@@ -70,7 +68,6 @@ public sealed partial class CompassTape : Control
         {
             _ticks = ticks,
             _labels = labels,
-            _squeezeLabels = squeezeLabels,
             MouseFilter = MouseFilterEnum.Ignore,
             ClipContents = true, // the rim-faded labels overhang both bar ends
             TextureFilter = TextureFilterEnum.Nearest, // the ticks' hard-edged comb
@@ -134,9 +131,9 @@ public sealed partial class CompassTape : Control
                     * Mathf.Sin(Mathf.DegToRad(deltaDeg));
 
     // Octant labels every 45°, centred on their drum position and fading with the ticks' own
-    // curve, the atlas' cream colour showing through. Upright by default; the squeeze draws them
-    // at the ticks' horizontal cos(Δ), which is the reading the stills cannot settle. A child
-    // layer only so the letters filter bilinearly while the ticks stay point-sampled.
+    // curve, the atlas' cream colour showing through, and squeezed to the ticks' horizontal
+    // cos(Δ) as marks painted on the drum. A child layer only so the letters filter bilinearly
+    // while the ticks stay point-sampled.
     private sealed partial class LabelLayer : Control
     {
         public CompassTape Tape = null!;
@@ -154,8 +151,7 @@ public sealed partial class CompassTape : Control
                     continue;
                 float fade = Fade(d);
                 var src = LabelSrc[(int)Mathf.PosMod(a / 45f, 8f)];
-                float squeeze = t._squeezeLabels ? Mathf.Cos(Mathf.DegToRad(d)) : 1f;
-                float width = src.Size.X * scale * squeeze;
+                float width = src.Size.X * scale * Mathf.Cos(Mathf.DegToRad(d));
                 var dest = new Rect2(t.DrumX(d) - width / 2f, RefLabelTop * s,
                                      width, src.Size.Y * scale);
                 DrawTextureRectRegion(t._labels, dest, src, new Color(fade, fade, fade));

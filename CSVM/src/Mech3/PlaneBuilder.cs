@@ -76,7 +76,7 @@ public sealed class PlaneBuilder
         // later caller a mesh biased for the wrong scale.
         if (cockpitInterior)
         {
-            _interiorScene = new SceneBuilder(gamez, textures, blendTexture: IsPropBlurTexture,
+            _interiorScene = new SceneBuilder(gamez, textures, blendTexture: IsInteriorBlendTexture,
                 cullBackfaces: true,
                 textureSubstitute: (name, tex) => _painter?.Substitute(name, tex) ?? tex)
             {
@@ -244,6 +244,12 @@ public sealed class PlaneBuilder
     // which a scissor cutout erases outright.
     private static bool IsPropBlurTexture(string tex) =>
         tex.Contains("blur", StringComparison.OrdinalIgnoreCase);
+
+    // ⚠ compasstxt must alpha-blend in the interior, never scissor: the panel's compass window
+    // fades the drum's ends under two quads sampling that atlas' black alpha ramp, which a scissor
+    // turns into opaque bars over the outer comb (docs/formats/hud.md).
+    private static bool IsInteriorBlendTexture(string tex) =>
+        IsPropBlurTexture(tex) || tex.StartsWith("compasstxt", StringComparison.OrdinalIgnoreCase);
 
     // ⚠ pdpN_h (the healthy twin, see IsHealthyPanel) must always render: skipping all of
     // player_damage_on amputates real airframe sections, not just the torn-skin state.

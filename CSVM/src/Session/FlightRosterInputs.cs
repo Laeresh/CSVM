@@ -44,7 +44,6 @@ internal sealed class FlightRosterPolicy
     public bool? AutoHeadTurn { get; init; }
     public bool AutoFire { get; init; }
     public bool AutoFireRockets { get; init; }
-    public bool CompassSqueeze { get; init; }
     public bool DebugMarkers { get; init; }
     public bool DebugScoreboard { get; init; }
     public bool EmptyStage { get; init; }
@@ -85,7 +84,6 @@ internal sealed class FlightRosterPolicy
         AutoHeadTurn = spec.AutoHeadTurn,
         AutoFire = spec.AutoFire,
         AutoFireRockets = spec.AutoFireRockets,
-        CompassSqueeze = spec.CompassSqueeze,
         DebugMarkers = spec.DebugMarkers,
         DebugScoreboard = spec.DebugScoreboard,
         EmptyStage = spec.EmptyStage,

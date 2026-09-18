@@ -876,31 +876,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
-- `BL-113` `[Bug]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Compass tape: the
-  octant letters are picked (squeezed with the drum, still shipped upright behind a flag), and in
-  the cockpit view the tape does not fill its bar, black bars stand left and right of the comb.**
-  *Judged at the controls:* the squeezed letters read better than the upright ones, so the
-  `--compass-squeeze` A/B is decided; the fitted rim fade `min(1, 1.35·cos(Δ)^2.1)` drew no
-  remark and stands. The bar-end caps, the tile at bar height and the three-row hem were settled
-  off `HUD.png`, `Targeting HUD Kestrel.png` and `C1 IA1 whiteout at height.png` and do not
-  reopen; North = −Z is confirmed against the original, do not reopen. *Fix shape:* (a) the
-  squeeze becomes the only drawing: `CompassTape.Build`'s `squeezeLabels` and `LabelLayer`'s
-  upright branch go, with `SessionSpec.CompassSqueeze`, `FlightRosterInputs.CompassSqueeze`, the
-  `--compass-squeeze` parse and its mentions in `docs/cli.md`, `docs/formats/hud.md` and
-  `docs/architecture/Flight.md`. (b) The cockpit black bars: find what they are before moving
-  anything. Two candidates, one drawn and one designed: the control paints a black rectangle over
-  the whole bar (`RefBarWidth` 263 at the HUD scale) and tiles only between the drum's rims
-  (2 × 127.6), skipping the tiles that straddle ±90°, so a few pixels of bar are black by
-  construction on every view; and the fitted fade takes the outer quarter near black by design,
-  which against the cockpit panel may read as a bar where against sky it read as the tape's own
-  falloff. Render the cockpit and the chase view at the same pose and compare the lit comb's width
-  against the bar's; if the two views differ, it is a layout term of the cockpit's HUD canvas, if
-  they match, it is the fade and the question is whether the original's cockpit tape shows the
-  same. *⚠ Traps:* do not widen the drum radius to fill the bar, it is a fit of every tall tick's
-  position across the three stills. *Playtest after fix:* `--view=cockpit` on C1, the tape's comb
-  reaching both ends of its bar, then the chase view for the same tape. *Cross-refs:*
-  `docs/formats/hud.md` (the tape's measured profile), `git log --grep=BL-113`.
-
 - `BL-181` `[Tuning]` `[Blocked: a shared type scale]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: feel]` **Marker HUD + scoreboard layout is a provisional pass, not a
   fidelity sign-off.** Playtested 2026-07-30
   (`./RunGame.ps1 --stunt --chapter=C4 --plane=player_fury`): the stunt run HUD and scoreboard placement,

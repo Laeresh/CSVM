@@ -56,11 +56,11 @@ The compass ships as two small textures in **every chapter's `texture.zbd`** (no
   screenshot, and a tall tick's lit span is then 22 rows.
 - Tick filtering is effectively **point-sampled** (the comb's hard 1–2 px edges and
   per-tick brightness lottery are minification aliasing); the labels are drawn
-  smooth (bilinear), **billboarded upright** at their drum x, scaled 0.625× of the atlas
-  (20 px tall at 1440p) with the box top ~3 px below the bar top. Whether the letters
-  foreshorten with the drum is unsettled: measured at 3× on the Kestrel shot the edge `E`
-  (Δ about 44°) is about 0.8 of the centre `E` while the edge `S` is full width, so
-  `--compass-squeeze` draws them at the ticks' own horizontal cos(Δ) for the A/B.
+  smooth (bilinear) at their drum x, scaled 0.625× of the atlas (20 px tall at 1440p) with
+  the box top ~3 px below the bar top, and **squeezed with the drum** to the ticks' own
+  horizontal cos(Δ). The stills alone do not settle it (at 3× on the Kestrel shot the edge
+  `E`, Δ about 44°, is about 0.8 of the centre `E` while the edge `S` is full width); the
+  squeezed letters are the reading chosen against the upright ones at the controls.
 - **Neither bar end is capped.** All three screenshots run dark to the rim; the ~192 at the
   very edge a bright rim tick was read from is `HUD.png`'s own sky value, outside the bar.
 - Labels every 45° (octants), no numeric readout, no lubber line, the current
@@ -256,6 +256,19 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   ever misses. Heading is `GaugeCluster.HeadingDeg`, the same value `CompassTape` reads, so the 3D
   drum and the screen-space tape turn off one number, matching the tape's own "headings increase to
   the left" card behaviour.
+- **The compass window's rim fade is geometry, not a shader term.** On all 11 player airframes the
+  drum (`compass`) is an octagonal prism, radius about 1.457, wrapped in `compassticks2` at three
+  15° tiles per 45° face, with the eight octant letters as `compasstxt` quads just proud of it.
+  A node `g730` beside it (a child of the outer `comp`) carries a grey `bezel` back plate behind the
+  drum and two priority-8 quads in front of it, from x ±0.625 to ±1.385, sampling `compasstxt`
+  at u 0.980–0.996. Those atlas columns (123–127) are black with alpha rising linearly from 0 at
+  row 3 to 255 at row 29, and the quads map that ramp along x, so each end of the drum darkens
+  from clear at the inner edge to opaque at the outer. The ramp works only blended: a 1-bit cut
+  turns each quad into an opaque dark bar from its 50% point outward, hiding the outer quarter of
+  the comb, so the interior builder blends `compasstxt` (the original never alpha-tests,
+  [../org/textures.md](../org/textures.md)). Blended, the lit comb spans about 0.87 of the
+  window's inner width at 720p, against 0.84 measured on the original's cockpit footage and 0.74
+  with the cut.
 - ⚠ **`nitrogauge` is the one dial not authored in normalized dial coords.** Its
   `nitro_backplate` mesh spans x ±1.4489 and y −0.1292…3.6746, so the bezel is centred at
   y ≈ 2.2078 with radius ≈ 1.4489 rather than at the origin with radius 1; the plate carries

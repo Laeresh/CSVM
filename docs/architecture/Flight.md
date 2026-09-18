@@ -1178,9 +1178,8 @@ The original's top-centre heading tape, rebuilt from the game's own compass tick
 as a cylindrical drum seen edge-on, headings increasing to the left under a clipped cosine-power
 fade holding the bar's inner half flat and its outer quarter near black. Neither end is capped and
 the comb stops a hem short of the bar's bottom edge. Metrics are probe-fitted reference constants
-times `HudMetrics.Scale`, `Build` returns null where a texture is missing, its `squeezeLabels` (the
-`--compass-squeeze` A/B) squeezes the octant letters like the ticks, and the control re-anchors on
-resize. The heading comes from `GaugeCluster`, and `ReadingDeg` is the one nose-vector-to-heading
+times `HudMetrics.Scale`, `Build` returns null where a texture is missing, the octant letters
+squeeze with the drum like the ticks, and the control re-anchors on resize. The heading comes from `GaugeCluster`, and `ReadingDeg` is the one nose-vector-to-heading
 conversion the gauges and pause chart icons share. Model: [../formats/hud.md](../formats/hud.md).
 
 ## src/Flight/GaugeCluster.cs
