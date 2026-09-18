@@ -1188,8 +1188,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   alone). *Fix shape:* the decision first: take the original's cell order, or keep the physical
   order. *⚠ Traps:* the physical order is not an accident, it is what makes the rows agree with the
   weapon gauge's belt lights, so taking the original's order contradicts that choice and the gauge
-  has to be answered in the same breath. *Cross-refs:* `git log --grep=BL-919`, `BL-947` (the other
-  half of the same screen's evidence), `docs/formats/instant-action.md`.
+  has to be answered in the same breath. *Cross-refs:* `git log --grep=BL-919`,
+  `docs/formats/campaign-screens.md` (the Ammo Selection screen).
 
 - `BL-951` `[Feature]` `[L]` `[Next: decide]` `[Impact: high]` `[Evidence: trace]` **A local
   multiplayer door on the main menu, opening a join board where every controller claims its seat
@@ -1451,19 +1451,6 @@ usual.
   holds a roster position without producing input came to take the seat `AssignPads` fills by
   position; `Pads.LogPads` records the roster so the next one reads off the log rather than being
   inferred. Dropping the var also closes that divergence.
-
-- `BL-947` `[Research]` `[S]` `[Next: data]` `[Impact: none]` `[Evidence: footage]` **The
-  deactivated-box reading in `docs/formats/instant-action.md` rests on footage that carries only two
-  eight-hardpoint aircraft, so it may not generalise.** *Evidence:* reported from the film as
-  "CAP-50 only shows two planes with 8 Hardpoints". The doc states that a deactivated box keeps its
-  place on the page, blank, with its arrow in the disabled frame, citing `CAP-50.mkv` t=13.0, while
-  the Ammo Selection screen's own script deactivates a field and draws nothing at all, which
-  `BL-919` settled and left the doc's claim standing as a reading of other footage. *Fix shape:*
-  re-watch `CAP-50.mkv` for every screen where a box is deactivated, say which ones show a blank box
-  and which show nothing, and either narrow the doc's claim to the screens that prove it or drop it.
-  *⚠ Traps:* the two screens are different widgets and the answer may differ per screen; the ammo
-  screen's own decode is settled and is not reopened by this. *Cross-refs:*
-  `git log --grep=BL-919`, `docs/formats/instant-action.md`, `CAP-50`, `BL-946`.
 
 ## Misc
 

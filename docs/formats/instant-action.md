@@ -40,16 +40,25 @@ short lists equals the item count. Two rows are windows onto a longer list rathe
 | `ia_tl_contents` | 2300 / 2302 | 14 visible | the Table of Contents, 19 preset scenarios (decoded below; the screen itself is `BL-352`) |
 
 Two behaviours matter beyond the option sets, both confirmed directly in the script. Selecting
-mission type 0 (dogfighting an ace) deactivates every enemy control, `gui_init`'s per-wave loop
-tests `0 == WT` and deactivates `ia_d_nenemyN`/`ia_d_egroupN`/`ia_d_planeeN`/`ia_d_difficultyN`, and
-the `20001` mailbox handler (fired on a mission-type change) repeats the same test to deactivate or
-revive them, which is the script's own statement that **dogfighting an ace takes no wave
-configuration**. ⚠ A deactivated box is not a removed one: it keeps its place on the page, blank,
-with its arrow in the disabled frame (`CAP-50.mkv` t=13.0). A wave whose own count is 0 deactivates
-its militia, skill and aircraft the same way and keeps its count box live (t=70.0), which is the
-film's reading, not the script's. And the enemy rows are paged: mailbox `20002` shows wave 0's row
-alone on page 1 and waves 1 to 3 on page 2, keyed off which of the `ia_b_up`/`ia_b_down` buttons was
-pressed; both buttons draw on both pages, the one with nowhere to go in its disabled frame.
+mission type 0 (dogfighting an ace) disables every enemy control: `gui_init`'s per-wave loop tests
+`0 == WT` and sends message `10000` to `ia_d_nenemyN`/`ia_d_egroupN`/`ia_d_planeeN`/`ia_d_difficultyN`,
+and the `20001` mailbox handler (fired on a mission-type change) repeats the same test to send
+`10000` or `10018` (enable), which is the script's own statement that **dogfighting an ace takes no
+wave configuration**. A wave whose own count is 0 sends `10000` to its militia, skill and aircraft
+and leaves its count box enabled (`gui_init`, and the `ia_d_nenemyN` arm of the `10015` handler).
+
+⚠ **The script has two ways to take a box away, and they draw differently.** `mail (10000, box)`
+disables it: the field sub-object `FV` sets its frame to `0x80000000` and stops printing its value,
+while still filling its background, so the box keeps its place on the page, blank, with its arrow in
+the disabled frame (`CAP-50.mkv` t=13.0 for the ace duel, t=70.6 for count-0 waves). `deactivate(box)`
+removes it: the enemy rows are paged, mailbox `20002` calling `deactivate` on every row not on the
+current page and `activate` on the rest, keyed off which of the `ia_b_up`/`ia_b_down` buttons was
+pressed, and the film shows wave 0's row alone on page 1 (t=13.0) and waves 1 to 3 on page 2 with
+page 1's rows gone, not blanked (t=70.6). Both paging buttons draw on both pages, the one with
+nowhere to go disabled by `10000` rather than deactivated. The Weapon Loadout screen's missing gun
+groups and unbought pylons are the `deactivate` case (`ORDINANCELAYOUT.SCRIPT`), so there the field
+is not drawn at all and only its caption survives; the rule is the script's, keyed on the airframe's
+own answer rather than on any one aircraft.
 
 **⚠ `ia_d_planep`'s 20 is not twenty aircraft.** The script sizes that list from
 `callback($$A$$, 1024)` (the player's saved-plane count) `+ 11`, and `gui_continue` re-checks the

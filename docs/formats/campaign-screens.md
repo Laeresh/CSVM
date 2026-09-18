@@ -520,8 +520,11 @@ Hoplite shot shows three greyed `No Gun` captions with no field under any of the
 a deactivation is the caption beside it, never the field. The rows that remain do not close up into
 the gap either, because every `OL_D_ROCKETS<N>` carries its own `LAYOUT.CSV` rect (y 320, 348, 376
 and 404, cells 0 to 3 anchored in `<V3>` and 4 to 7 in `<V4>`), so a hidden row leaves its slot
-empty and every other row stays where the layout put it. Both readings are this screen's own; a
-deactivated widget elsewhere is evidence about that screen, not about this one.
+empty and every other row stays where the layout put it. `CAP-50.mkv` t=80.0 shows the gun half
+again on a stock Warhawk (two `No Gun` captions, no field); that film's two aircraft both carry four
+pylons a wing, so the rocket half rests on the Hoplite shot and the script. The Instant Action
+page's blank boxes are a different act, a `10000` disable rather than a `deactivate`
+([instant-action.md](instant-action.md#screen-controls)), and say nothing about this screen.
 
 **⚠ A rocket dropdown's row index is not the ordnance id.** The rocket list is a table of twelve
 8-byte records at `0x00619efc`; an entry is offered only when its first field is at most

@@ -784,7 +784,8 @@ track from its head at board y 186 down to y 356, which is 14 of the 19 presets 
 track between the arrows), a dropdown's box `Width` wide and `ItemHeight`
 high showing its picked value with the `DropDown` arrow strip, the enemy rows on two pages keyed off `IA_B_UP`/
 `IA_B_DOWN` (the script's mailbox 20002), the ace duel blanking every enemy dropdown in place (the
-script's `0 == WT` branch deactivates them), the wingman plane blanking at zero wingmen, a changed
+script's `0 == WT` branch disables them with message `10000`, which blanks a box where
+`deactivate` would remove it), the wingman plane blanking at zero wingmen, a changed
 militia resetting its aircraft (`AV[BA].QG = 0`), stunt flying clearing the clouds
 (`FUN_004103b0`'s mask), a contents row applying its preset on select (callback 2302) and View
 Story writing the preset's name as the
