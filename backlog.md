@@ -1161,23 +1161,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   scripts are the decode for positions, the film only for the look. *Cross-refs:* `CAP-52`,
   `docs/org/menu-inventory.md`, `docs/formats/menu-layout.md` (`SCRAPBOOK.CSV`).
 
-- `BL-941` `[Bug]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: feel]` **The cabin cheat's
-  mission pull-down is unreadable in the Original presentation: light text on a bright field, and no
-  field background at all until it is clicked.** *Evidence:* reported at the controls as "Mission
-  pulldown has white font on bright background and the combobox has no background before clicking".
-  Both presentations compose that widget through `CampaignBoards.ComposeCombo`
-  (`CSVM/src/UI/CampaignBoards.cs:595-612`), which fills the closed field with `ComboPaper`
-  (200, 212, 230) and writes it in `BoardInk.Row`, a pairing chosen for the built-in board's own
-  parchment rather than for the cabin photograph the Original shell draws it over. *Fix shape:* read
-  what `PASSENGERCABIN.SCRIPT` gives `pc_d_missions` (its LAYOUT.CSV row and the `GN_DROPDOWN`
-  family's own art) and let the Original path draw the field from that instead of the shared paper
-  fill. *⚠ Traps:* the built-in presentation's combos are unaffected and must stay where they are;
-  this is the Original shell's reading of the same widget, not a change to `CampaignCombo`.
-  *Playtest after fix:* Original presentation, campaign, click the microphone side of the cabin,
-  type `idaho`, and read the pull-down before and after opening it. *Cross-refs:*
-  `git log --grep=BL-819`, `docs/formats/campaign-screens.md` ("The mission cheat"),
-  `docs/org/menu-inventory.md`.
-
 
 - `BL-946` `[Fidelity]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The Weapon
   Loadout screen maps rocket widget N to physical pylon N+1 where the original maps it to the saved

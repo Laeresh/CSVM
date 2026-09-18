@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using CSVM.Flight;
 using CSVM.Session;
 using CSVM.UI;
@@ -907,9 +908,11 @@ internal static class MenuOriginalCampaignSuites
 
     // Whether the composed screen draws that art name, whichever library it comes from: the cabin's
     // memento is the rimage bitmap and the chooser's is the scrapbook photograph.
+    // Either picture layer counts: the cabin puts its whole scene, the memento included, in the
+    // backdrop so the mission pull-down can stand over it.
     private static bool Draws(ComposedBoard board, string art)
     {
-        foreach (var picture in board.Pictures)
+        foreach (var picture in board.Backdrop.Concat(board.Pictures))
         {
             if (string.Equals(picture.Art.Name, art, StringComparison.OrdinalIgnoreCase))
             {

@@ -23,6 +23,7 @@ internal static class MenuOriginalCheatSuites
     private const float Dt = 1f / 60f;
     private const string Pilot = "Zachary";
     private const string Built = "Cheat Bird";
+    private const string CabinPainting = "PC_BackGround.png";
 
     // A point inside each screen's authored cheat region. No row of any of the three screens stands
     // in one, which is what lets the click be read before the hit test.
@@ -169,6 +170,12 @@ internal static class MenuOriginalCheatSuites
         {
             return;
         }
+
+        // The field's paper is a fill and fills draw under the pictures, so the painting has to
+        // stand in the backdrop for the closed field to show at all.
+        var shown = shell.Compose();
+        ctx.Check(HasArt(shown.Backdrop, CabinPainting) && !HasArt(shown.Pictures, CabinPainting) && shown.Fills.Count > 0,
+            $"the closed field's paper draws over the cabin painting ({shown.Backdrop.Count} backdrop, {shown.Fills.Count} fills)");
 
         Click(host, seat, Pointer(fit, field.X + 5f, field.Y + 5f, pressed: true, clicked: true));
         var entry = Row(shell, "ENTRY:" + PickedRow.ToString(CultureInfo.InvariantCulture));
@@ -378,6 +385,19 @@ internal static class MenuOriginalCheatSuites
         foreach (var line in board.Lines)
         {
             if (line.Text == text)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasArt(IReadOnlyList<BoardPicture> pictures, string name)
+    {
+        foreach (var picture in pictures)
+        {
+            if (string.Equals(picture.Art.Name, name, System.StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }

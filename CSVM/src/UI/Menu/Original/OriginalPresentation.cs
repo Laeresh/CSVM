@@ -152,6 +152,17 @@ public sealed class OriginalPresentation : IMenuPresentation
         CampaignDeleteAid,
     };
 
+    /// <summary>The cabin's palette: the shared cabin board's, with the mission pull-down's words
+    /// in the paper forms' list inks. <c>PASSENGERCABIN.SCRIPT</c> gives <c>pc_d_missions</c> the
+    /// <c>@shareditems@BUA</c> list, the one the plane selection and ammo screens take, which prints
+    /// black on its <c>0xffc8d4e6</c> paper whatever screen it stands on
+    /// (<c>docs/formats/campaign-screens.md</c>, "The mission cheat").</summary>
+    public static readonly BoardPalette CabinPalette = BoardPalette.Panel with
+    {
+        Row = BoardPalette.Paper.Row,
+        Focus = BoardPalette.Paper.Focus,
+    };
+
     // The aids' scratch build carries this name, so the shots read the same on every machine; it
     // is never committed by an aid.
     private const string AidPlaneName = "Sample Plane";
@@ -853,7 +864,15 @@ public sealed class OriginalPresentation : IMenuPresentation
                 _shell.Campaign.ShowDeleteConfirm(CampaignAidProfiles.Pilot);
                 break;
             case "campaign-cabin":
+                // A leading typed word stands the mission pull-down up as typing it on the wall
+                // would, and the script after it walks the cabin with the field there.
                 _shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
+                if (argument.StartsWith(CampaignCheats.MissionWord, StringComparison.Ordinal))
+                {
+                    _shell.Campaign.Cheats?.ShowMissionList();
+                    argument = argument[CampaignCheats.MissionWord.Length..];
+                }
+
                 break;
             case "campaign-previous":
                 _shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
@@ -958,6 +977,7 @@ public sealed class OriginalPresentation : IMenuPresentation
                 : _shell.Screen is OriginalScreen.Options or OriginalScreen.GameOptions or OriginalScreen.Audio
                     or OriginalScreen.Video or OriginalScreen.ControlsPrefs or OriginalScreen.Keys ? _preferencesPalette
                 : _shell.IsHangarScreen ? _hangarPalette
+                : _shell.CampaignPage == CampaignScreen.Cabin ? CabinPalette
                 : _shell.CampaignPage is { } campaign ? BoardPalette.For(campaign)
                 : _palette;
             _view.Show(_shell.Compose(), palette, string.Empty, string.Empty);

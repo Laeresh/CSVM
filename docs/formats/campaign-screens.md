@@ -225,7 +225,14 @@ when the campaign is finished.
 script keyboard focus, and typing `idaho` activates the otherwise-deactivated dropdown
 `pc_d_missions` (24 rows, filled from `uiData` 2038 with langui `3450 + row`, the long mission
 names). With the dropdown used, Next Mission passes `QG + 1` to 2104 instead of -2. The dropdown is
-pre-selected to the campaign position, with 24 clamped to row 23. The remake builds it, and builds
+pre-selected to the campaign position, with 24 clamped to row 23. Its `WM` is
+`@shareditems@BUA`, the list the plane selection and ammo screens' dropdowns also take, so it
+draws exactly as theirs do over the cabin painting: `SHAREDITEMS.SCRIPT`'s `BUA` fills the closed
+field `0xffc8d4e6` with a one-pixel frame in black (white while the pointer is over the list) and
+prints the pick in `0xff000000`, and its list `CUA` fills the window the same paper with a white
+frame, the picked row `0xffa7b9d7` and the row under the pointer `0xffe0e0e0`, every entry in
+black. `XTA`/`YTA` (the option pages' dark `0xff221c17` field) and `ZTA`/`AUA` (the hangar tabs'
+`0xffdacaa7` paper) are the file's other two list families. The remake builds it, and builds
 the same matcher on the table of contents (`ispy`) and the construction hub (`gimme`): the click
 arms the screen's own buffer, each typed character extends it, a character that leaves the word's
 prefix empties it so a partial retype starts over, and the comparison is case-sensitive.

@@ -104,9 +104,9 @@ public static class CampaignBoards
     // The panes in draw order, which is also the order a screen authors them in.
     private static readonly BoardDetailPane[] DetailPanes = { BoardDetailPane.Upper, BoardDetailPane.Lower };
 
-    // A drop-down's own colours, measured off OriginalScreenshots/Campaign Flight Check Change
-    // Plane Combo Box.png rather than decoded: LAYOUT.CSV's D rows carry art and item height but no
-    // colour column, the engine's own list class drawing the field and the picked row's bar.
+    // A drop-down's own colours: SHAREDITEMS.SCRIPT's BUA field and CUA list, the pair every
+    // campaign D row binds as its WM, fill with 0xffc8d4e6 and bar the picked row 0xffa7b9d7.
+    // LAYOUT.CSV's D rows carry no colour column.
     private static readonly byte[] ComboPaper = { 200, 212, 230 };
     private static readonly byte[] ComboPicked = { 167, 185, 215 };
 

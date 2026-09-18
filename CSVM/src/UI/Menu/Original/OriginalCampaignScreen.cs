@@ -513,7 +513,16 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         var board = CampaignBoards.For(page, pageFocus, pressed, detail, null, _layout);
         backdrop.AddRange(board.Backdrop);
         fills.AddRange(board.Fills);
-        pictures.AddRange(board.Pictures);
+
+        // The cabin's painting is the page's own picture, not a backdrop pane, so the pull-down's
+        // paper would land under it. PASSENGERCABIN.SCRIPT's field is drawn over the scene, so the
+        // scene, which leads the board's pictures, goes down as backdrop here.
+        int scene = page.Screen == CampaignScreen.Cabin ? page.Pictures.Count : 0;
+        for (int i = 0; i < board.Pictures.Count; i++)
+        {
+            (i < scene ? backdrop : pictures).Add(board.Pictures[i]);
+        }
+
         strokes.AddRange(board.Strokes);
         plaques.AddRange(board.Plaques);
         notes.AddRange(board.Notes);
