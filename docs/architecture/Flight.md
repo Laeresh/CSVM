@@ -765,8 +765,8 @@ once by `GameSession` on the shared board layer and wired to `PauseState.Changed
 completion event, it shows the pausing player's tag in their own colour and a Resume, Photo Mode,
 Preferences, Restart and Exit menu driven by that player alone, since `PauseState` lets only the
 owner resume; the Preferences row is built only where a `PausePreferences` leaf stands behind it. A
-fresh menu each pause, so the cursor starts on Resume and a stray confirm cannot destroy a run. It
-shares `ResultsBoard`'s chrome but not its shell, and a campaign session's objectives readout rides
+fresh menu each pause, so the cursor starts on Resume and a stray confirm cannot destroy a run. Its
+menu carries no control hints, the original's pause sheet having none. It shares `ResultsBoard`'s chrome but not its shell, and a campaign session's objectives readout rides
 the same pause on a layer of its own. The Original presentation puts `OriginalPauseBoard` in its place.
 
 ## src/Flight/OriginalPauseBoard.cs
@@ -774,7 +774,7 @@ The Original presentation's pause screen, on `PauseBoard`'s own seam: built once
 over a `PauseSheet` its mission resolves, following `PauseState.Changed`, driven by the pausing
 player's reader alone. What it draws is `PauseScreens`' composition through `ComposedBoardView`, so
 the screen tests off engine and this node owns the cursor, the pointer and the five actions. An Instant Action sortie's sheet is the blackboard, which it writes in `BoardPalette.EscapeBlackboard` rather than the campaign sheet's ink. That
-seat's pointer shares the cursor: a hover moves it, a press holds the strip, the release on it fires, and the OS pointer gives way to the dialog's own. Its readout is a delegate, since the objectives follow the running mission. Preferences stands `PausePreferences` over the held world and `Reprime`s on its close, and photo mode does the same over the frozen world. Its control hint is a `ControlHintBar` child drawn after the composed screen, placed by `PauseScreens.HintBox` and worded by `BoardMenuView.Legend`, so both pause boards teach the same three controls; a glyph is neither a picture nor text the composition carries, which is why it is a control of its own. Decode: [../org/pause-screen.md](../org/pause-screen.md).
+seat's pointer shares the cursor: a hover moves it, a press holds the strip, the release on it fires, and the OS pointer gives way to the dialog's own. Its readout is a delegate, since the objectives follow the running mission. Preferences stands `PausePreferences` over the held world and `Reprime`s on its close, and photo mode does the same over the frozen world. It draws no control hints, since the original's sheet carries none. Decode: [../org/pause-screen.md](../org/pause-screen.md).
 
 ## src/Flight/PausePreferences.cs
 The Preferences leaf over a paused mission: an `OriginalShell` of its own on the Options screen,

@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using CSVM.UI;
 using Godot;
 
@@ -18,20 +17,12 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed partial class OriginalPauseBoard : Control
 {
-    // The hint's face, the room it takes and the gap between its items, in the sheet's own authored
-    // pixels, so the line scales with the dialog the way every widget on it does. All TUNE: the
-    // sheet authors no such line.
-    private const int HintFont = 13;
-    private const float HintHeight = 18f;
-    private const float HintGap = 22f;
-
     private PauseState _state = null!;
     private Func<int, MenuInput> _inputFor = null!;
     private Func<PauseReadout> _readout = null!;
     private PauseSheet _sheet = null!;
     private string _dataRoot = "";
     private ComposedBoardView? _view;
-    private ControlHintBar? _hint;
     private BoardMenu? _menu;
     private MenuInput? _input;
 
@@ -41,11 +32,6 @@ public sealed partial class OriginalPauseBoard : Control
     private int _armed = -1;
     private bool _held;
     private bool _wasPressed;
-
-    // The hint as last composed, and the fit it was sized for, so a frame that changes neither
-    // costs a position write rather than a rebuild of the lines and their measurements.
-    private IReadOnlyList<ControlLine> _hintItems = Array.Empty<ControlLine>();
-    private float _hintScale = -1f;
 
     // What the mouse mode was when the sheet went up, so the resume puts back what the flight was
     // using rather than assuming it was visible.
@@ -117,10 +103,6 @@ public sealed partial class OriginalPauseBoard : Control
         // tree; the first pause is what composes anything.
         _view = ComposedBoardView.Build(_dataRoot);
         AddChild(_view);
-        // Over the sheet rather than in it: the composed board carries pictures and text, and a
-        // glyph is neither, so the hint is its own control drawn after the whole screen.
-        _hint = ControlHintBar.Build(_hintItems, HintFont, Colors.White, HintGap);
-        AddChild(_hint);
     }
 
     /// <inheritdoc/>
@@ -151,19 +133,12 @@ public sealed partial class OriginalPauseBoard : Control
     {
         Position = Vector2.Zero;
         Size = GetViewportRect().Size;
-        PlaceHint();
         if (!Visible || _menu == null || _input == null)
         {
             return;
         }
 
         _input.Poll((float)delta);
-        // A player who reaches for the other device is shown that device's controls, the same
-        // handover the flight prompts follow.
-        if (_input.DeviceMoved)
-        {
-            ComposeHint();
-        }
 
         // PadBack only: Escape and Start already reach the pause toggle through FlightController,
         // so reading the combined back here would act twice.
@@ -238,46 +213,7 @@ public sealed partial class OriginalPauseBoard : Control
         _armed = -1;
         _held = false;
         _wasPressed = PointerSource()?.Pressed ?? false;
-        ComposeHint();
         Compose();
-    }
-
-    // The sheet's own control hints, over the pausing seat's bindings and device. The wording is
-    // BoardMenuView's, so both presentations' pause boards teach the same three things.
-    private void ComposeHint()
-    {
-        if (_hint == null || _input == null)
-        {
-            return;
-        }
-
-        _hintItems = BoardMenuView.Legend(dismissable: true, _input);
-        _hintScale = -1f;
-        PlaceHint();
-    }
-
-    // Where the hint stands on this window: across the fitted sheet, clear of the strips, at the
-    // face size the fit gives it. Re-measured only when the scale moves, since the lines and their
-    // widths are the costly half.
-    private void PlaceHint()
-    {
-        if (_hint == null)
-        {
-            return;
-        }
-
-        var fit = BoardFit.For(Size.X, Size.Y);
-        if (!Mathf.IsEqualApprox(fit.Scale, _hintScale))
-        {
-            _hintScale = fit.Scale;
-            var palette = _sheet.InstantAction ? BoardPalette.EscapeBlackboard : BoardPalette.Escape;
-            _hint.Show(_hintItems, Mathf.Max(1, Mathf.RoundToInt(HintFont * fit.Scale)), palette.Hint,
-                HintGap * fit.Scale);
-        }
-
-        var box = PauseScreens.HintBox(_sheet, HintHeight);
-        _hint.Position = new Vector2(fit.X(box.Left), fit.Y(box.Top));
-        _hint.Size = new Vector2(fit.Length(box.Width), fit.Length(HintHeight));
     }
 
     // One frame of the pointer over the strips: standing on one moves the shared cursor there,

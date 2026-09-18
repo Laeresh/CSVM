@@ -1054,15 +1054,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   https://discussions.unity.com/t/local-multiplayer-player-join-config-screen-using-ui-toolkit/1701038
   (the pattern as other local co-op games ship it, asked for by name).
 
-- `BL-953` `[Cleanup]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: spec]` **The pause boards draw no control
-  hints.** *Evidence:* the original's pause sheet carries none, and the user asks for them gone.
-  `OriginalPauseBoard` composes a `ControlHintBar` from `BoardMenuView.Legend` and places it under
-  the strips; the built-in pause board draws the same legend through `BoardMenuView`. Both go.
-  *Fix shape:* drop the hint from `OriginalPauseBoard` (the `_hint` control, `ComposeHint`,
-  `PlaceHint` and `PauseScreens.HintBox`) and stop `BoardMenuView` building its legend for the pause
-  board; the menu boards that still want a legend keep it. *⚠ Traps:* a suite may read the hint's
-  node; move the assertion rather than the hint. *Cross-refs:* `docs/menu-presentations.md`.
-
 - `BL-954` `[Cleanup]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: spec]` **The menu presentation row leaves both
   Options screens; without a flag the menu is always the Original presentation.** *Evidence:* the
   user's call, "remove the Menu Option combo box for now, only original without CLI flags". Today

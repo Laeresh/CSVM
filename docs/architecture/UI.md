@@ -342,7 +342,7 @@ objectives parchment, the memento, and the labelled button strips, the block's f
 pause: its memento is the seated profile's own picture, `Rows` marks a note line by the runtime's answer for that line's own objective number, and
 `Icon` turns one world pose into the chart icon a session and a suite place alike, through the
 shared `MissionMap`, which draws nothing for a pose off the window. `RowAt` is the pointer's hit
-test over the five 132x28 plates, and a pointer draws the dialog's own cursor; an unreadable extraction leaves the pause to the Built-in board. `HintBox` is where a control hint stands, across the strips' own span and clear of them above or below, read off the sheet so a dialog that puts its strips anywhere still leaves the hint off them. Decode: [../org/pause-screen.md](../org/pause-screen.md).
+test over the five 132x28 plates, and a pointer draws the dialog's own cursor; an unreadable extraction leaves the pause to the Built-in board. Decode: [../org/pause-screen.md](../org/pause-screen.md).
 
 ## src/UI/MissionMap.cs
 The one chart drawer every screen showing a mission's map shares, engine-free: the sheet as a
@@ -387,19 +387,19 @@ centres them in its own box; its items are composed one at a time so the device 
 ## src/UI/BoardMenuView.cs
 Draws a `BoardMenu`'s rows as `CursorRow`s inside the board style all five boards share, so the
 cursor reads the same wherever it appears and a layout fix lands once. `Refresh` recolours from the
-current highlight, touching only label overrides. The footer is a `ControlHintBar` over `Legend`,
-the seat's own Select, Confirm and (where the board can be dismissed) Resume, composed off that
-seat's bindings and device rather than off the shipped defaults, since nothing else on a board
-teaches the cursor. `Legend` is public because the Original pause sheet draws its own footer and
-must say the same three things; `Relegend` rewrites the row when the seat changes device.
+current highlight, touching only label overrides. A results board's footer is a `ControlHintBar`
+over the seat's own Select and Confirm, composed off that seat's bindings and device rather than
+off the shipped defaults, since nothing else on such a board teaches the cursor; `Relegend`
+rewrites the row when the seat changes device. A pause board asks for no footer, as the original's
+pause sheet carries none.
 
 ## src/UI/BoardMenuHost.cs
 `BoardMenu` plus `BoardMenuView` plus the reader, kept together so a board wires a menu in two lines
 rather than restating the poll, handle and repaint order five times. `Build` primes the reader, so a
 button still held from whatever raised the board is not read as a fresh press. It reads the pad's
 back button alone, Escape and Start reaching the pause toggle through `FlightController` instead. A
-poll that reports the seat moved device relegends the view, which is the one seam that gives the
-pause board and every results board its control hint.
+poll that reports the seat moved device relegends the view, which is the one seam that gives every
+results board its control hint; `Build`'s legend flag is how the pause board declines one.
 
 ## src/UI/MenuInput.cs
 One player's menu input source: the keyboard flag, a `Pads` binding and the edge and auto-repeat

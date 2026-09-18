@@ -197,7 +197,7 @@ public abstract partial class ResultsBoard : Control
             (BoardMenuItem.Restart, "Restart"),
             (BoardMenuItem.Exit, _exitLabel));
         menu.Activated += OnActivated;
-        _host = BoardMenuHost.Build(menu, _inputFor(0), s);
+        _host = BoardMenuHost.Build(menu, _inputFor(0), s, legend: true);
         body.AddChild(_host.View);
     }
 

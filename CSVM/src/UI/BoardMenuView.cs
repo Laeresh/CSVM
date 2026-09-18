@@ -9,7 +9,8 @@ namespace CSVM.UI;
 /// highlighted one gold behind a ▶) inside the board style every board already uses. One renderer
 /// for all five boards, so the cursor reads the same wherever it appears and a layout fix lands
 /// once. Drop it in a board's body VBox and call <see cref="Refresh"/> when the menu reports the
-/// highlight moved. Its footer is the seat's own control hints, which follow that seat's device.
+/// highlight moved. A results board's footer is the seat's own control hints, which follow that
+/// seat's device; a pause board draws none, as the original's pause sheet carries none.
 /// </summary>
 public sealed partial class BoardMenuView : VBoxContainer
 {
@@ -27,11 +28,11 @@ public sealed partial class BoardMenuView : VBoxContainer
     private ControlHintBar? _legend;
     private float _scale = 1f;
 
-    /// <summary>Builds the rows and the button legend for <paramref name="menu"/>, scaled by the
-    /// board's own <paramref name="s"/> so a menu matches the panel it sits in.
-    /// <paramref name="input"/> is the seat driving the cursor, whose own bindings and device the
-    /// legend names.</summary>
-    public static BoardMenuView Build(BoardMenu menu, float s, MenuInput input)
+    /// <summary>Builds the rows for <paramref name="menu"/>, scaled by the board's own
+    /// <paramref name="s"/> so a menu matches the panel it sits in, and under them the button
+    /// legend where <paramref name="legend"/> asks for one. <paramref name="input"/> is the seat
+    /// driving the cursor, whose own bindings and device the legend names.</summary>
+    public static BoardMenuView Build(BoardMenu menu, float s, MenuInput input, bool legend)
     {
         var view = new BoardMenuView
         {
@@ -50,42 +51,24 @@ public sealed partial class BoardMenuView : VBoxContainer
         }
         view._rows = rows;
 
-        view._legend = ControlHintBar.Build(
-            Legend(menu.Dismissable, input), (int)(LegendFont * s), LegendColor, LegendGap * s);
-        view._legend.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        var spacer = new Control { CustomMinimumSize = new Vector2(0f, 8f * s) };
-        view.AddChild(spacer);
-        view.AddChild(view._legend);
+        if (legend)
+        {
+            view._legend = ControlHintBar.Build(
+                Legend(input), (int)(LegendFont * s), LegendColor, LegendGap * s);
+            view._legend.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+            var spacer = new Control { CustomMinimumSize = new Vector2(0f, 8f * s) };
+            view.AddChild(spacer);
+            view.AddChild(view._legend);
+        }
 
         view.Refresh();
         return view;
     }
 
-    /// <summary>What a board's footer teaches, over the seat's OWN bindings rather than the shipped
-    /// defaults, since nothing else on a board names the cursor's controls. Three separate hints and
-    /// not one sentence: a seat names one device at a time, and each item is composed through that
-    /// gate. A board with no way back advertises none, which is every results board. Public so the
-    /// Original sheet, which draws its own footer, says the same thing this one does.</summary>
-    public static IReadOnlyList<ControlLine> Legend(bool dismissable, MenuInput input)
-    {
-        var items = new List<ControlLine>(3)
-        {
-            input.Hint("%1  Select", InputAction.MenuDown),
-            input.Hint("%1  Confirm", InputAction.MenuAccept),
-        };
-        if (dismissable)
-        {
-            items.Add(input.Hint("%1  Resume", InputAction.MenuBack));
-        }
-
-        return items;
-    }
-
     /// <summary>Rewrites the footer for <paramref name="input"/>'s device, the seat's cue when a key
-    /// or a pad press hands the hints over mid-board.</summary>
+    /// or a pad press hands the hints over mid-board. A view built without a legend ignores it.</summary>
     public void Relegend(MenuInput input) =>
-        _legend?.Show(Legend(_menu.Dismissable, input), (int)(LegendFont * _scale), LegendColor,
-            LegendGap * _scale);
+        _legend?.Show(Legend(input), (int)(LegendFont * _scale), LegendColor, LegendGap * _scale);
 
     /// <summary>Recolours the rows from the menu's current highlight. Cheap enough to call every
     /// time the cursor moves, since it touches only the label overrides.</summary>
@@ -98,4 +81,13 @@ public sealed partial class BoardMenuView : VBoxContainer
         }
     }
 
+    // Over the seat's OWN bindings rather than the shipped defaults, since nothing else on a board
+    // names the cursor's controls. Separate hints and not one sentence: a seat names one device at
+    // a time, and each item is composed through that gate. No way back is advertised, since only a
+    // results board draws a legend and none of them can be dismissed.
+    private static IReadOnlyList<ControlLine> Legend(MenuInput input) => new[]
+    {
+        input.Hint("%1  Select", InputAction.MenuDown),
+        input.Hint("%1  Confirm", InputAction.MenuAccept),
+    };
 }

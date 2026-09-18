@@ -138,7 +138,8 @@ public sealed partial class PauseBoard : Control
         var menu = new BoardMenu(dismissable: true, rows.ToArray());
         menu.Activated += OnActivated;
         menu.Dismissed += () => _state.ForceResume();
-        _host = BoardMenuHost.Build(menu, _inputFor(owner), s);
+        // No control hints under it, since the original's pause sheet carries none.
+        _host = BoardMenuHost.Build(menu, _inputFor(owner), s, legend: false);
         body.AddChild(_host.View);
     }
 }

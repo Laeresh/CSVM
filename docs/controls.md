@@ -193,7 +193,7 @@ pixels.
 | ←→ · `A`/`D` | d-pad ←→ · left stick | step the value under the cursor, on the rows that carry one |
 | `Enter` · numpad `Enter` · `Space` | A | confirm the highlighted item |
 | `Esc` | B | close the pause menu, which Start also does from inside it. A results board's menu has no way back and reads none |
-| - | - | every board carries a footer naming the three rows above for the seat driving it, Select and Confirm plus Resume where the board can be dismissed: both pause boards (the Built-in panel and the Original sheet, where it stands with the strips) and every results board. It is composed off that seat's own bindings and the device it last used, so a pad seat reads its controls as glyphs where a keyboard seat reads key names, and it is rewritten the moment that seat reaches for the other device |
+| - | - | every results board carries a footer naming Select and Confirm for the seat driving it; neither pause board carries one, as the original's pause sheet has none. It is composed off that seat's own bindings and the device it last used, so a pad seat reads its controls as glyphs where a keyboard seat reads key names, and it is rewritten the moment that seat reaches for the other device |
 | `L` | Y | on a menu screen, open the loadout for whatever the screen is about (a wingman's fit, a locked player seat's) |
 | `P` | X | on a menu screen, open its contents list, which is the Instant Action presets today |
 | | Start | on a menu screen, claim a seat with a pad no seat owns yet. Which pad pressed it is a raw device read rather than an action, because a seat's bindings answer for every pad it holds at once and cannot say which one moved. The join gesture has no default of its own for the same reason |

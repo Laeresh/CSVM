@@ -22,11 +22,12 @@ public sealed class BoardMenuHost
     public BoardMenuView View { get; }
 
     /// <summary>Builds the rows at the board's own scale and primes the reader, so a button still
-    /// held from whatever raised the board is not read as a fresh press on the next frame.</summary>
-    public static BoardMenuHost Build(BoardMenu menu, MenuInput input, float s)
+    /// held from whatever raised the board is not read as a fresh press on the next frame.
+    /// <paramref name="legend"/> is whether the rows carry the seat's control hints under them.</summary>
+    public static BoardMenuHost Build(BoardMenu menu, MenuInput input, float s, bool legend)
     {
         input.Prime();
-        return new BoardMenuHost(menu, BoardMenuView.Build(menu, s, input), input);
+        return new BoardMenuHost(menu, BoardMenuView.Build(menu, s, input, legend), input);
     }
 
     /// <summary>One frame of the owner's menu input. ⚠ Pass wall time, not sim time: the clock this
