@@ -865,6 +865,18 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   forward-velocity drop in the lean is C22's port decision and reads right; do not widen the lean
   to fake a turn. *Cross-refs:* `BL-784` (c), `PLAN-cockpit-view` C22, `docs/org/cameraViews.md`.
 
+- `BL-976` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Auto Head Turn changed
+  on the pause sheet takes the next sortie, while the original applies it mid-flight.** *Evidence:*
+  the user's recall of the original: toggling Auto Head Turn during a mission changes the cockpit
+  head at once. `Launcher.PersistOptions` saves the choice and no more, and
+  `FlightController.AutoHeadTurn` is set once from the roster policy when the flight is built
+  (`HumanFlightAdapter`), so the live controllers keep the value they launched with. *Fix shape:*
+  after the save, push the applied value onto every human seat's live `FlightController.AutoHeadTurn`
+  (the read at `FlightController`'s autohead target is per frame, so nothing else needs rebuilding);
+  keep the launch fold for the next sortie. Check whether Default View shares the gap: it is an
+  opening view, so it likely should not switch the current view, but confirm against the original
+  before touching it. *Cross-refs:* `BL-784`, `Session/Launcher.cs` (`PersistOptions`).
+
 ## HUD & UI
 
 - `BL-113` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Compass tape**: two
