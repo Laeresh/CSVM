@@ -193,6 +193,31 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `CAP-29` (the capture), `CAP-27` (spark-shim existence), `BL-288` landing
   (`PLAN-m3-polish-10` A1), `DamageVisuals.cs` (the consumer),
   `extracted/zrdr/vehicle.zrd.json` (the authority).
+- `BL-979` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` `[CM14]` **When the Gemini
+  comes down on the sea and breaks apart, its parts oscillate rapidly up and down at the surface
+  before they sink.** *Evidence:* seen at the controls on the CM14 (C2B/M04) sitting that cleared
+  the zeppelin hull of see-through holes (`git log --grep=BL-931`): the wreck reaches sea level,
+  the breakup plays, and the separated parts jitter vertically at the water for a while and only
+  then go under. The descent and the surface contact are `MotionRuntime`'s contact tier (the
+  floatdown motion, and the `BOUNCE_SEQUENCE` water branch at `Mech3/Anim/MotionRuntime.cs`,
+  "The BOUNCE_SEQUENCE branch a contact selects"), and the breakup suite over C1/M04's
+  `piratezep` pins only where the hull comes to rest against the sea (`ZeppelinBreakupSuites`,
+  a 10 m rest band) and that each gasbag splashes once, never a part's height frame to frame
+  across the crossing, so two writers alternating on one part's Y every tick would pass it.
+  *Fix shape:* run CM14's Gemini death headless (the `gemini-gasbag-bays` suite's world) and log
+  each separated part's Y per tick through the surface crossing to name the two writers that
+  fight: the contact tier's bounce against the floatdown re-applied after the clamp, a gasbag's
+  frozen pose in the hull's frame against the hull's own settle, or a second surface read. Then
+  make the contact terminal for that part the way the original's contact is, read off the
+  original's handling of the water branch before choosing, and pin the crossing in the suite
+  (Y monotone once the part is within the rest band). *⚠ Traps:* do not damp the oscillation
+  with a velocity filter; the jitter is two authorities disagreeing about where the part is, and
+  a filter hides which. `ProjectilePool.SurfaceIsWater` is the one water read
+  (`AnimRuntime.SurfaceIsWater` binds it), do not add a second. *Playtest after fix:*
+  `--campaign=<profile>:13`, kill the Gemini over open water and watch the parts through the
+  splash from the side: each settles or sinks, none bobs. *Cross-refs:* `PT-119` (the same
+  mission's end states), `git log --grep=BL-956` (CM01's zeppelin crash off its net, the
+  neighbouring fix), `ZeppelinBreakupSuites`, `CampaignZeppelinCrashSuites`.
 
 ## Weapons & combat
 
@@ -425,12 +450,29 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   controls and not a luminance distance.
   *Playtest after fix:* the C5 night poses in `playtest/CAP-11/README.md`.
 
-- `BL-325` `[Feature]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` `[C1B]` **Night cloud sprites are directionally moonlit in the original; ours are
-  uniformly lit** (split out of `BL-118` at its close, PLAN-overcast-match `C24`, decision 2 of
-  that plan kept it out of a two-daytime-stills milestone). The original lights a
-  night cloud by which side of it faces the moon; we apply one flat `WorldLight` to the whole
-  population, so a moonlit frame is right on the away side and roughly half as bright on the lit
-  side.
+- `BL-325` `[Tuning]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: footage]` **The deck-top cloud
+  cards read as rows from some viewpoints, and the C1B night clouds are lit flat where the
+  original's footage shows a moon side.** *Judged at the controls:* the cards sitting directly on
+  the cloud deck (the `fvol` scatter, `cloudsprite1`/`cloudsprite2`, not the small placed
+  `cloudparent` groups above it) line up into visible rows depending on the perspective; the user
+  wants to try a random X/Z offset per card to break the pattern. *Where the rows come from:* the
+  placement is decoded (`docs/org/cloudCards.md`, `FUN_0044c780`): a staggered lattice on each
+  volume face, row step `distance·√3/2`, every other row offset by half a step, then a
+  perturbation of up to half of one draw over the authored `perturb_dist_range` on each axis
+  independently, which is what `FogVolumeClutter.ScatterFace` lays. So the original lays the same
+  lattice, and whether its rows show as ours do is a footage question first. *Fix shape:* (1)
+  pull `CAP-12`'s deck-level takes (`playtest/CAP-12/`) at a grazing view along the deck and say
+  whether the original's cards read as rows there; (2) a `--cloud-jitter=<m>` knob (default 0)
+  adding a remake-only random X/Z offset per `fvol` card off `Rng.Clouds` after the decoded draws,
+  so the seeded field stays a function of the seed and the placed `cloudparent` groups and the
+  speed cue are untouched; the user flies C1 and C1C along the deck at a few values. If the
+  footage shows no rows, the perturbation port is the suspect (a half-draw where the original may
+  take the whole magnitude) and that is the bug to re-decode, not a knob to ship; if the footage
+  shows them too, the knob is a recorded departure and its value is the user's.
+  *Second half, the C1B moon side:* the original lights a night cloud by which side of it faces
+  the moon; we apply one flat `WorldLight` to the whole population, so a moonlit frame is right on
+  the away side and roughly half as bright on the lit side (split out of `BL-118` at its close,
+  PLAN-overcast-match `C24`).
   *Evidence:* `CAP-11` C1B (`playtest/CAP-11/`): cloud cores near the moon reach
   **p90 218** (t=16) while the away-from-moon cloud sits at **p90 70** (t=5); our uniform
   `WorldLight` 0.426 rendered **p90 102**, matching the away side and ~2× dark against the lit
@@ -472,12 +514,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   **163.7** toward the placed facades' **235.25** while its underside drops, which narrows the
   71.6 cloud-population spread at the top of each puff and widens it at the bottom, and C1B moves
   by nothing at all (p90 173.0 whole frame, 165.7 moon side, 175.3 away, before and after).
-  *Playtest after fix:* two sorties, the C1B night spawn
+  *Playtest after fix:* three sorties, C1 and C1C flown low along the deck with the jitter knob at
+  a few values against `CAP-12`'s grazing takes for the rows; the C1B night spawn
   (`--chapter=C1B --pos=-5406,55,-7200 --direction=-0.391,0,-0.921`) against `playtest/CAP-11/`'s
-  t5 and t16 frames, saying for every measured puff which side of the moon it faces, and one lit
-  chapter (C1C above the band) for a verdict on whether the new per-vertex shading on the `fvol`
-  cards reads like the original rather than only measuring closer.
-  *Cross-refs:* `docs/formats/effects.md`'s speed-cue section (the third population),
+  t5 and t16 frames, saying for every measured puff which side of the moon it faces; and one lit
+  chapter (C1C above the band) for a verdict on whether the per-vertex shading on the `fvol` cards
+  reads like the original rather than only measuring closer.
+  *Cross-refs:* `docs/org/cloudCards.md` (the lattice and the perturbation), `CAP-12`,
+  `docs/formats/effects.md`'s speed-cue section (the third population),
   `docs/org/vertexLighting.md`'s facade section, `CAP-11`.
 
 - `BL-329` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The D32 in-cloud flicker's rate and ramp are declared
@@ -570,27 +614,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-537` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **Effect pools at four players, judged in play.** The pool sizes in `CSVM/data/effect_pools.json` were re-judged on a build with no first-use construction cost: rockets and the sonic burst never wrap, a four-object simultaneous death wraps `flame_ball_01` at 4 and 6 slots and is quiet at 8 (now shipped), and seven or more identical deaths in one frame wrap at the 16 ceiling and cannot be sized away. At the controls the single-player half reads right: four fireballs burn out in place, and the seven-death wrap is not visible under the debris. Still owed: a 4-player splitscreen session with everyone firing, judged for anything that reads as shared between panes, and the ceiling for many-player builds (at 16 players the default root wants 19 and gets 16). The instrument is `AnimRuntime.PoolRecycles` and the `anim: effect pool for '<name>' recycled slot` DEBUG line in the log file sink; the sizes staged print on the world-effects build line. ⚠ Raise only a root that logs a recycle, never the default; the three gun roots stay at 1; a root sized 0 clamps to 1. Each slot copies the root's subtree (155 templates at 1 player, 263 at 4).
   *Cross-refs:* `PT-129` (the four-player flight that judges it), `BL-296` (the other splitscreen-scoped item).
 
-- `BL-867` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` **The speed cue's wisps read
-  more opaque than the original's.** *The sortie:* fly C1 in chase view over water at about 58 m,
-  the one altitude the original is filmed at with the cue running, and judge the wisps against
-  `CM02.mkv` at that altitude. Report whether they still read too opaque now that the spread is in,
-  and if so whether the sprite reads too solid (the size stand-in or the blend) or too bright (the
-  authored alpha). *Evidence:* reported at the controls against mission recordings: the pale wisps
-  each chapter's `speed_cue.zrd` emits ahead of the player (`Flight/SpeedCue.cs`, three authored
-  `cuepufferN` states selected by altitude) are far more prominent than in the footage; size reads
-  right, opacity does not. Stills cannot settle it: the only original frame with wisps has a
-  different background from any CSVM render, and no recording shows wisps above 500 ft (CAP-11's
-  C1B never runs the cue at any altitude). The lateral spread is landed: at 16:9 the cue's emitter
-  widens its lateral spawn half-width by the pane's aspect over 4:3, 9.0 m to 12.0 m on
-  `cuepuffer1`, leaving the vertical and forward halves and the generic puffer's cube where the
-  data puts them. *Fix shape:* the alpha comes from the authored state, so a halved constant would
-  be a departure from data; CSVM's own contribution is the puffer's judged sprite-size stand-in
-  (`Puffer.SizeScaleDefault`) and the blend the texture header names. Move the constant the sortie
-  names: the blend or the size stand-in before the authored alpha, a cue-only alpha factor last.
-  *⚠ Traps:* three cloud populations share textures
-  (`BL-118`'s note under the cloud items): judge the wisps by altitude and by their position
-  ahead of the aircraft, never by texture. *Cross-refs:* [`docs/formats/effects.md`](docs/formats/effects.md)
-  (the cue's data), `docs/org/puffer.md`.
 - `BL-952` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The world
   shader's point-light spill is shaped differently from the original's point-light term, so a
   ground burst lights the walls facing it and barely the ground under it.** *Evidence:* the
@@ -611,24 +634,35 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Audio
 
-- `BL-269` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The 3D sound falloff between the authored `RANGE`
-  radii is the original's own curve now, and wants one pass by ear.** The approximation is gone:
-  `SoundFalloff.cs` computes the decoded law and `WorldSounds` drives every emitter's level from it,
-  so the players carry no engine attenuation model. The curve holds full volume one eighth of the
-  way into the band, then loses 10 dB per doubling of the reach past that shelf, reaching 30 dB down
-  at the audible radius and running straight to silence over the next tenth. For the police siren
-  (`RANGE [200, 1200]`) that is 0 dB to 325 m, -10 at 450, -20 at 700, -25.8 at 950, -30 at 1200 and
-  silent at 1320; for the train (`RANGE [600, 1200]`) 0 dB to 675 m, -10 at 750, -20 at 900, -25.8
-  at 1050, -30 at 1200. The old curve was 6 dB per doubling measured from the emitter, multiplied by
-  Godot's linear fade to nothing at `MaxDistance`, which is what dropped it early: the train was
-  already 6 dB down at its own full-volume radius and silent at 1200 where the original is 30 down
-  and still audible. *Playtest:* `PT-150`, the same two fly-pasts that produced the complaint.
-  ⚠ The C1 refinery flare is not a candidate emitter: neither `refinery_fire_always` nor
-  `refinery_fire.zrd` authors a sound. ⚠ Do not tune this by taste without re-reading
-  `docs/formats/sounds.md`: every number above is decoded, so a change is a change away from the
-  original. If the fly-past says it is still wrong, the suspect is the world scale or the other
-  positional sites (`AiWeaponAudio`, `WeaponAudioCues`, the turret voices) which still use Godot's
-  own inverse-distance model with a 1.1x cull, not this curve.
+- `BL-269` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: decoded]` **Positional sounds
+  are heard from far closer in than in the original, although the level law between the authored
+  `RANGE` radii is the original's own curve.** *Verdict at the controls:* the police chase car and
+  the track train fly-pasts on C1 both fail the same way, each is heard only near its emitter where
+  the original is heard from much farther off (the user's recall of the original, which has
+  overturned data readings before). *Evidence:* `SoundFalloff.cs` computes the decoded law and
+  `WorldSounds` drives every emitter's level from it, the players carrying no engine attenuation
+  model. The curve holds full volume one eighth of the way into the band, then loses 10 dB per
+  doubling of the reach past that shelf, reaching 30 dB down at the audible radius and running
+  straight to silence over the next tenth. For the siren (`RANGE [200, 1200]`) that is 0 dB to
+  325 m, -10 at 450, -20 at 700, -30 at 1200 and silent at 1320; for the train (`RANGE [600,
+  1200]`) 0 dB to 675 m, -10 at 750, -20 at 900, -30 at 1200. Every one of those numbers is decoded
+  (`docs/formats/sounds.md`, "The gain between the two radii"), so the missing reach is a term the
+  port has no place for, not a wrong curve. *Fix shape:* two halves, the knob first. (1) A
+  diagnostic `--sound-range-scale=<f>` (default 1) that multiplies both `RANGE` radii at every
+  `SoundFalloff.GainDb` call site (`WorldSounds`, `GunVoice`, `AiWeaponAudio`, `WeaponAudioCues`'
+  cull with them) and prints the factor in the `sound` log lines; the user flies the same two
+  fly-pasts at 2 and at 4 and names the factor that matches recall. (2) Decode the listener-side
+  term that factor stands for: DirectSound's 3D listener carries a distance factor and a rolloff
+  factor the sound manager may set once at start-up, the `RANGE` pair may be scaled at definition
+  load, or the listener may sit somewhere other than the pane's camera. The factor the ear names is
+  the clue to which, and the term found is what ships. *⚠ Traps:* do not ship the factor as a
+  constant, and do not move the curve's own numbers. The C1 refinery flare is not a candidate
+  emitter: neither `refinery_fire_always` nor `refinery_fire.zrd` authors a sound.
+  *Playtest after fix:* the same C1 fly-pasts (`--chapter=C1 --plane=player_bhawk --volume=1.0
+  --no-det --debug-anim --log=sound`, one line per emitter each second with its distance and gain):
+  the siren at a steady level while close and fading over the approach to a kilometre, the train
+  heard from well out, neither too loud at its audible radius. *Cross-refs:* `BL-933` (the gun
+  voices on the same law, failing harder), `docs/formats/sounds.md`, `git log --grep=BL-269`.
 
 - `BL-281` `[Tuning]` `[Blocked: CAP-27]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The ricochet sounds are audible but very faint.** `PT-25` (c), 2026-08-05:
   `snd_ricochet1–4` play under the per-impact spark burst but sit too low to read. A mix-gain
@@ -679,13 +713,21 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `git log --grep=BL-783` (the same gap for the display settings, closed by four rows on this
   screen), `docs/menu-presentations.md`.
 
-- `BL-933` `[Bug]` `[Owed-playtest]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]`
-  **The gun voices now run the decoded level law, and whether that is enough to hear a turret, a
-  patrol boat and another aeroplane's guns is the listen `PT-151` owes.** *Evidence:* reported at
-  the controls three times, after `BL-793` landed a positional loop per mount ("cant hear guns
+- `BL-933` `[Bug]` `[Blocked: BL-269]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]`
+  **The gun voices run the decoded level law and are still heard only beside the player: at the
+  controls a shooting enemy aeroplane or turret is audible within about 10 m and no further.**
+  *Verdict at the controls:* the listen after the law landed failed, and harder than the world
+  emitters (`BL-269`) on the same law, "worse than BL-269, I can't hear shooting enemies or
+  turrets, only within ~10 meters". *What moves first:* `BL-269`'s range-scale knob and its decode
+  of the missing listener-side term; run the same sortie at the factor that brings the siren and
+  the train in. If that factor brings the guns in too, this closes with it. If the world emitters
+  come in and the guns do not, the gun sites carry a second cause of their own and the
+  `--log=sound:debug` lines (distance, gain and cull per voice) decide between the level, the
+  lease and the cue's `VOLUME`. *Evidence:* reported at
+  the controls three times before the law landed, after `BL-793` landed a positional loop per mount ("cant hear guns
   of turrets. And planes only when very near. Too much falloff perhaps?"), after `BL-820` gave the
   hulls a voice ("Cant hear them. They fire but there is no sound") and against `BL-846` ("i can
-  only hear them if they are shooting right beside me"). The cause was the mapping `BL-269` named:
+  only hear them if they are shooting right beside me"). The cause found then was the mapping `BL-269` named:
   every gun voice built its player with `UnitSize = RANGE`'s full-volume distance and
   `MaxDistance` = its audible one on Godot's inverse-distance model, which multiplies a second
   linear fade onto the level, reaches silence exactly at the audible radius where the decoded law
@@ -695,34 +737,49 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `snd_60cal` `RANGE [35, 450]` read -11.3 / -20.2 / -28.2 / -40.2 against -3.3 / -16.7 / -23.5 /
   -28.1. Both sites now carry a player with no attenuation model and no `MaxDistance`, levelled
   from the law per frame, the way `WorldSounds` already was.
-  *What is left:* the audible radii are the data's and did not move, so a turret's `snd_chaingun`
-  is still silent past 220 m and a 30-cal past 165 m, and whether the recovered level is enough at
-  the controls is a judgement no instrument makes. The aeroplane loops author `RANGE [20, 150]` to
-  `[40, 550]` by caliber, not the `[80, 800]` of the dry cue `snd_emptyclip`.
+  The audible radii are the data's: a turret's `snd_chaingun` is silent past 220 m and a 30-cal
+  past 165 m, and the aeroplane loops author `RANGE [20, 150]` to `[40, 550]` by caliber, not the
+  `[80, 800]` of the dry cue `snd_emptyclip`.
   *⚠ Traps:* `WeaponSoundCue.CullMargin` (1.1) is `SoundFalloff.CullFactor`, decoded from the
   compare, and is not the knob; `BL-846`'s closing note says the same. Do not retune a level by
-  ear: every constant here is the decode's or the authored `RANGE`.
-  *Cross-refs:* `PT-151` (the sortie), `BL-269` and `PT-150` (the same law on the world emitters,
-  owed its own listen), `docs/formats/sounds.md` ("The gain between the two radii"), `INSTR-87`,
-  `git log --grep=BL-793`, `git log --grep=BL-820`, `git log --grep=BL-846`.
+  ear: every constant here is the decode's or the authored `RANGE`, and the reach that is missing
+  is `BL-269`'s term.
+  *Playtest after fix:* CM17 (`--campaign=<profile>:16`) for the pirate zeppelin's gun rings at a
+  couple of hundred metres, CM21 (`:20`) for the patrol boats and turret trucks across the docks,
+  an Instant Action wave for an enemy aeroplane's guns from further off than beside you, all with
+  `--volume=1.0 --no-det --log=sound:debug`; and nothing too loud at a cue's own audible radius.
+  *Cross-refs:* `BL-269` (the shared law and the knob), `docs/formats/sounds.md` ("The gain
+  between the two radii"), `INSTR-87`, `git log --grep=BL-933`, `git log --grep=BL-793`,
+  `git log --grep=BL-820`, `git log --grep=BL-846`.
 
-- `BL-934` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` **The dynamic enemy and
-  ally voice lines dispatch and play again; whether they are audible at the controls is unheard.**
-  *Evidence:* the silence was the mode-machine subscription sitting inside `RegisterAi`'s voiced
+- `BL-934` `[Bug]` `[Blocked: BL-977, BL-978]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` **The dynamic enemy and
+  ally voice lines dispatch in the suite and are still unheard at the controls: a campaign sitting
+  after the subscription fix heard no ally and no enemy line, not even on friendly fire.**
+  *Verdict at the controls:* "still no dynamic voice from friends or foes, not even on friendly
+  fire, nothing in the logs". Two causes are filed and go first: `BL-977` (an Instant Action
+  pilot's accent is never prewarmed, so every dispatch dies on "no clip") and `BL-978` (a line is
+  placed at the speaker and attenuated by distance where it should play flat as radio). This is the
+  re-listen once both land. ⚠ "Nothing in the logs" is not yet evidence of no dispatch: the
+  `ai voice:` lines are `Log.Info` on the `sound` category, so run with `--log=sound:debug` and
+  read for `ai voice: <name>: trigger #`. A campaign sortie that carries no such line with the
+  category up is a third cause, the trigger evaluation itself (talker test, the human-quarry rule
+  on the bearing and attack call-outs), and gets its own diagnosis here.
+  *Evidence:* the first silence was the mode-machine subscription sitting inside `RegisterAi`'s voiced
   branch, so an aircraft carrying no accent was never watched, and the shipped rosters leave nearly
   every enemy on `accentID` -1 while voicing the player's own flight. A flown C1 session now logs
   `ai voice: ai2_player_pfighter: trigger #8 -> snd_id7_WA-Enemy-6 (Talker test passed. Play AI
   sound #8.)`, an accentless hostile committing to the human and a voiced ally speaking the bearing
   call-out, and the `ai-voice-mission` suite holds the same chain over C1/M02's shipped roster
-  through to a playing stream on the Voice bus. *What to settle first:* whether the line is audible
-  from the cockpit, which no instrument here answers (`docs/verification.md`). *⚠ Traps:* the
+  through to a playing stream on the Voice bus; a playing stream is not an audible line
+  (`docs/verification.md`). *⚠ Traps:* the
   scripted lines ride `Mech3/MissionRadio.cs`, a different channel, so their working proves nothing
   about this one; the aircraft that speaks is never the enemy that was spotted, so a silent enemy
-  is not the symptom. *Playtest after fix:* fly C1/M02 from the campaign, stay in the fight beside
-  the enemy flight for a minute or two, and listen for a wingman calling an enemy's clock bearing
-  and for the tiered damage calls while you take and deal hits. *Cross-refs:*
-  `docs/formats/combat-voice.md`, `git log --grep=BL-934`, the saved Voice level (`Utils/AudioMix.cs`, the `audio-buses`
-  suite) if the lines dispatch and stay inaudible.
+  is not the symptom. *Playtest after fix:* fly C1/M02 from the campaign with `--log=sound:debug`,
+  stay in the fight beside the enemy flight for a minute or two, and listen for a wingman calling
+  an enemy's clock bearing and for the tiered damage calls while you take and deal hits; keep the
+  log. *Cross-refs:* `BL-977`, `BL-978`, `docs/formats/combat-voice.md`, `git log --grep=BL-934`,
+  the saved Voice level (`Utils/AudioMix.cs`, the `audio-buses` suite) if the lines dispatch and
+  stay inaudible.
 
 - `BL-977` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **An Instant Action
   pilot never speaks: the ace's, the wingmen's and the wave enemies' accents are left out of the
@@ -896,39 +953,60 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   base elevation (`git log --grep=BL-150`), `docs/formats/camparam.md` (`thirdp_pitch`, and the Known limits paragraph this corrects),
   `docs/org/cameraViews.md` (head-look controller, the chase placement's own elevation).
 
-- `BL-924` `[Fidelity]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: feel]` **The cockpit view does not turn the head with the
-  aeroplane's motion, and the original's does.** *Evidence:* judged at the controls on the cockpit
+- `BL-924` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` **The cockpit's automatic
+  head turn does the opposite of the original's: it holds the head on the heading the aeroplane is
+  leaving instead of leaning into the turn.** *Evidence:* first judged at the controls on the cockpit
   sitting that closed the view's other seven decisions (`git log --grep=BL-436`): panel scale,
   head-look feel and sign, the lean's sub-cap, engine-sound precedence, wobble and free-look in
-  Nose all read right, and the automatic head turn is what is missing. CSVM has C22's autohead
-  built (`HeadLook.AutoheadTarget`, fed by `FlightController.AutoheadTarget` with the def's
-  `autohead_turn_*` values) and gated behind `headLook.autohead`, default off because the
+  Nose all read right, and the automatic head turn was what was missing. CSVM has C22's autohead
+  built (`HeadLook.AutoheadTarget`, fed by `FlightController.AutoheadTarget` with the local
+  velocity `Attitude⁻¹ · velocity` and the def's `autohead_turn_*` values), exposed on the Game
+  Options page's Auto Head Turn row, and gated behind `headLook.autohead`, default off because the
   original's cockpit footage read as a pixel-frozen sight through manoeuvres (`Config.cs`,
-  `docs/formats/vehicle/player-globals.md`'s autohead row). *Decide:* whether the default is
-  simply wrong, or whether what the original does at the controls is a different turn from the
-  velocity lean the port implements. Fly with `headLook.autohead` true first; if that is the
-  original's turn, the fix is the default and the Game Options row (`BL-784` (c)). If it is not,
-  the turn wants a decode of what drives the head in mode 6 beyond the lean. *⚠ Traps:* the
-  forward-velocity drop in the lean is C22's port decision and reads right; do not widen the lean
-  to fake a turn. *Cross-refs:* `BL-784` (c), `PLAN-cockpit-view` C22, `docs/org/cameraViews.md`.
+  `docs/formats/vehicle/player-globals.md`'s autohead row). *Judged with the row on:* it is not the
+  original's turn, it is its opposite. Where the original leans the head into a turn, ours holds
+  the view on the heading the aeroplane is leaving, as if the head were pinned to the old
+  direction while the airframe turns under it. That is what aiming along the local velocity does
+  in a coordinated turn: the velocity vector lags the nose, so the head points outside the turn.
+  *Fix shape:* decode the idle tail block of `FUN_0042d010` (the mode-6 autohead branch,
+  `docs/org/cameraViews.md` "Autohead") for the vector the head is aimed along, the turn rate or
+  the commanded bank rather than the linear velocity is the expectation, and for the sign of each
+  component, then port it into `HeadLook.AutoheadTarget` with the def's `autohead_turn_time`,
+  `_max` and `_min_pitch` in their decoded roles. The Game Options row and the pause-sheet apply
+  (`git log --grep=BL-976`) stand and need no change. *⚠ Traps:* do not fix it by negating the
+  lean, a mirrored wrong vector is still the wrong vector; the forward-velocity drop in the lean is
+  C22's port decision and is not the subject. Do not move the `headLook.autohead` default until the
+  decoded turn is in. *Playtest after fix:* `--view=cockpit`, Auto Head Turn on, bank into a
+  sustained turn each way: the head leads into the turn and returns to centre as the wings level.
+  *Cross-refs:* `PT-157` (the mid-flight apply, owed its look), `git log --grep=BL-784` (the row),
+  `PLAN-cockpit-view` C22, `docs/org/cameraViews.md`.
 
 ## HUD & UI
 
-- `BL-113` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Compass tape**: two
-  readings the reference stills cannot settle on their own. The bar-end caps are gone, the tile
-  draws at bar height, and the comb stops on a three-row black hem, all measured off `HUD.png`,
-  `Targeting HUD Kestrel.png` and `C1 IA1 whiteout at height.png`. What is left is a look call on
-  both remaining picks, on the montage at `.scratch/orch-7/BL-113/bl113-compass-montage.png`
-  (the three originals' tape crops over the port's own tape, both fade laws crossed with upright
-  and squeezed letters). (3) The rim falloff ships as `min(1, 1.35·cos(Δ)^2.1)`, fitted to the
-  stills' own luminance profile across the bar (rms 0.026 against the plain `cos(Δ)`'s 0.102),
-  which holds the inner half flat and takes the outer quarter near black; the montage carries the
-  old cosine beside it. (5) Whether the octant labels foreshorten with the drum is unsettled by
-  the stills themselves (on the Kestrel shot the edge `E` at Δ about 44° is about 0.8 of the
-  centre `E` while the edge `S` is full width), so they ship upright and `--compass-squeeze`
-  draws them with the ticks' own horizontal squeeze for the A/B. North = −Z is confirmed against
-  the original, do not reopen. The nearest-tick look stays as shipped.
-  *Cross-refs:* `PT-121` (the flight that judges the result).
+- `BL-113` `[Bug]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Compass tape: the
+  octant letters are picked (squeezed with the drum, still shipped upright behind a flag), and in
+  the cockpit view the tape does not fill its bar, black bars stand left and right of the comb.**
+  *Judged at the controls:* the squeezed letters read better than the upright ones, so the
+  `--compass-squeeze` A/B is decided; the fitted rim fade `min(1, 1.35·cos(Δ)^2.1)` drew no
+  remark and stands. The bar-end caps, the tile at bar height and the three-row hem were settled
+  off `HUD.png`, `Targeting HUD Kestrel.png` and `C1 IA1 whiteout at height.png` and do not
+  reopen; North = −Z is confirmed against the original, do not reopen. *Fix shape:* (a) the
+  squeeze becomes the only drawing: `CompassTape.Build`'s `squeezeLabels` and `LabelLayer`'s
+  upright branch go, with `SessionSpec.CompassSqueeze`, `FlightRosterInputs.CompassSqueeze`, the
+  `--compass-squeeze` parse and its mentions in `docs/cli.md`, `docs/formats/hud.md` and
+  `docs/architecture/Flight.md`. (b) The cockpit black bars: find what they are before moving
+  anything. Two candidates, one drawn and one designed: the control paints a black rectangle over
+  the whole bar (`RefBarWidth` 263 at the HUD scale) and tiles only between the drum's rims
+  (2 × 127.6), skipping the tiles that straddle ±90°, so a few pixels of bar are black by
+  construction on every view; and the fitted fade takes the outer quarter near black by design,
+  which against the cockpit panel may read as a bar where against sky it read as the tape's own
+  falloff. Render the cockpit and the chase view at the same pose and compare the lit comb's width
+  against the bar's; if the two views differ, it is a layout term of the cockpit's HUD canvas, if
+  they match, it is the fade and the question is whether the original's cockpit tape shows the
+  same. *⚠ Traps:* do not widen the drum radius to fill the bar, it is a fit of every tall tick's
+  position across the three stills. *Playtest after fix:* `--view=cockpit` on C1, the tape's comb
+  reaching both ends of its bar, then the chase view for the same tape. *Cross-refs:*
+  `docs/formats/hud.md` (the tape's measured profile), `git log --grep=BL-113`.
 
 - `BL-181` `[Tuning]` `[Blocked: a shared type scale]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: feel]` **Marker HUD + scoreboard layout is a provisional pass, not a
   fidelity sign-off.** Playtested 2026-07-30
@@ -958,36 +1036,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the one with no width, which is the shape of a short label rather than a name. *Cross-refs:*
   `BL-764`'s landing (`git log --grep=BL-764`), which settled the same screen's buttons.
 
-- `BL-784` `[Feature]` `[Blocked: a user decision on the page's row budget]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The Game Options
-  page carries the original's Default View and Auto Head Turn rows, and holds six rows where the
-  plate holds four at the authored pitch.** *Decision:* the taller plate is built, tiled from the
-  one plate image and recorded in `docs/org/menu-inventory.md`; what is open is which rows the
-  page keeps. *Evidence:* the settings side stands. Both rows are entries in the `GameOptions`
-  table with `OptionsDef.DefaultView` and `OptionsDef.AutoHeadTurn` behind them, both rows stand
-  on Built-in's Options screen in its stepper convention, `SessionSpec.WithSavedDefaultView` and
-  `WithSavedAutoHeadTurn` fold them into a launch (a `--view=` outranking the saved word through
-  `ViewModeExplicit`, a `--det` run reading neither), and `FlightController.AutoHeadTurn` gates the
-  automatic turn with null leaving the `headLook.autohead` config key deciding, so no default
-  moves. The dropdown's words are the original's own: `uiData` 2127 at `0x0040d124` builds exactly
-  three items (`0x0040d12d`), langui 112 "Cockpit", 136 "First Person" and 113 "Exterior"
-  (`0x0040d181`, `0x0040d168`, `0x0040d14d`), and `FUN_00419160` maps those indices to camera
-  modes 6, 7 and 0 at `0x004191a4` while turning the autohead flag `DAT_0071dacc` on at
-  `0x00419180`. The plate grows one whole 62-pixel band, tiled from the band between its own
-  seams rather than stretched, and the plaques move down with it. **What is open is the row
-  budget.** `GO_BACKGROUND` stands at Y 215 and is 566x289, so its bottom sits at 504 and only one
-  62-pixel band fits inside the authored 600; the plate cannot move up either, `PF_LOGO` already
-  ending at 253 over its top. Four rows then fit at the authored 62 and the page carries six
-  (Difficulty, Default View, Auto Head Turn, Menu, Next Target, Rumble), so the pitch tightens to
-  40 and the rows no longer sit on the painted panels, which the renders beside
-  `git log --grep=BL-784` show. *Fix shape:* the user picks one of three: keep the squeeze, move
-  the remake-only Next Target and Rumble rows off this page (a second page, or the pause sheet),
-  or page the rows four at a time. *⚠ Traps:* (a) do not stretch the plate to buy room, the
-  stretch pulls the rivet holes into ovals and thins the panel edges. (b) Do not move autohead's
-  default: the row exposes the existing key, and `BL-924` is where the default itself is argued.
-  *Cross-refs:* `BL-924` (the missing automatic head turn), `BL-782` (the same
-  both-presentations gap for the audio levels), `git log --grep=BL-783` (the display settings' half,
-  closed with four rows on Built-in's screen), `docs/org/menu-inventory.md`,
-  `docs/org/cameraViews.md`.
 
 - `BL-809` `[Bug]` `[S]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]` **An opened scrap
   reads differently from the original's: the typeface differs, and where ours shows the scrap's

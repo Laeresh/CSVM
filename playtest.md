@@ -213,19 +213,6 @@ draws its authored 800x600 space one-to-one.
 ./RunGame.ps1 --plane=player_bhawk --chapter=C1
 ```
 
-- `PT-121` `[A/B: HUD.png]` **The compass tape's rim falloff and its octant letters
-  (`BL-113`).** The bar-end caps, the tile's overscan and the comb's hem are settled off the
-  stills; the edge falloff `min(1, 1.35·cos(Δ)^2.1)` and the letters' upright default are the two
-  that need eyes, the second with `--compass-squeeze` as its A/B. North = −Z is confirmed against
-  the original and is not in question here. *Look for:*
-  - (a) the outer quarter of the bar going near black while the inner half stays flat, at the
-    same gauge size as `OriginalScreenshots/HUD.png`, rather than the whole bar dimming evenly;
-  - (b) the octant letters at the bar's edges: upright as shipped, or narrowed with the drum
-    under `--compass-squeeze`, whichever reads like the original's card;
-  - (c) the nearest tick under the pointer: picked and drawn the way the original's is, holding
-    steady through a slow turn instead of stepping or flickering between neighbours.
-  *Blocks:* `BL-113`.
-
 - `PT-147` `[A/B: playtest/CAP-12/]` **The cloud field's view-angle fade, flown through the deck
   and above it.** Each `fvol` sprite's draw distance is now scaled by the cosine of the viewing
   angle against its polygon's normal, so the field is a disc around the camera rather than a flat
@@ -253,39 +240,6 @@ draws its authored 800x600 space one-to-one.
   selection to the nearest enemy rather than back to the cycle's head; (d) in a two-pilot
   splitscreen run, both panes following the one setting. *Blocks:* nothing tracks the outcome; a
   fail mints a new `BL`.
-
-### C1 · Bloodhawk, the police car and the train, sound on
-
-```powershell
-./RunGame.ps1 --chapter=C1 --plane=player_bhawk --volume=1.0 --no-det --debug-anim --log=sound
-```
-
-⚠ `--volume=1.0` is not optional: the default master volume is 0, so a run without it is silent for
-reasons that have nothing to do with this check. `--debug-anim --log=sound` prints one line per
-emitter each second carrying its distance, its authored range and the gain the curve put it at, so
-a disagreement can be read off numbers instead of guessed.
-
-- `PT-150` `[Own]` **The positional falloff, re-judged on the two emitters that produced the
-  complaint (`BL-269`).** The curve is no longer an approximation: it is the original's own law,
-  computed per frame from the definition's `RANGE` pair. The police chase car (`RANGE [200, 1200]`)
-  is now unattenuated out to 325 m, 10 dB down at 450, 20 at 700 and 30 at 1200, then silent at
-  1320; the track train (`RANGE [600, 1200]`) is unattenuated to 675 m, 10 down at 750, 20 at 900
-  and 30 at 1200. The previous curve was 6 dB per doubling from the emitter times a linear fade to
-  nothing at the audible radius, so the train was already 6 dB down where it should have been at
-  full volume and silent where it should still have been audible. No instrument can say whether the
-  new level reads right at the controls.
-  *Look for:*
-  - (a) flying past the police car at chase height, the siren stays at a steady full level while it
-    is close rather than dropping the moment you pass, and it fades out over the approach to a
-    kilometre instead of cutting;
-  - (b) the train on its track, heard from well out and holding its level through the near pass,
-    the earlier "quiet too soon" being gone;
-  - (c) neither emitter is now too loud too far out, which is the failure the other way: at the
-    authored audible radius both should be faint, not merely quieter;
-  - (d) circling one of them at a fixed radius, the level holds steady rather than pumping, since
-    the level is recomputed every frame from the nearest pane.
-  *Blocks:* `BL-269`. A fail on (a) or (b) alone is a scale question, not a curve one; quote the
-  `sound` log's distance and gain for the foot you judged it at.
 
 ### C1 · Bloodhawk vs AI, the kill sequence, sound on
 
@@ -755,42 +709,6 @@ is a judgement on our own remake.
     hull death should already have taken it.
   *Blocks:* `BL-694`'s landing commit (`git log --grep=BL-694`). A sortie that reaches no end
   state mints a new `BL`; `CAP-55` is what the original owes against (b) and (d).
-
-### CM17 (C4/M02) and CM21 (C5/M01) · the gun voices, sound on
-
-```powershell
-./RunGame.ps1 --campaign=<profile>:16 --volume=1.0 --no-det --log=sound:debug
-./RunGame.ps1 --campaign=<profile>:20 --volume=1.0 --no-det --log=sound:debug
-```
-
-`:16` is CM17, The Pirate's Duel, for the pirate zeppelin's gun rings; `:20` is CM21, Death on the
-Docks, for the patrol boats and the turret trucks. An Instant Action wave off the launchscreen
-covers the aeroplane guns. `--log=sound:debug` prints one line per gun voice each time it crosses
-into or out of earshot, carrying the distance, the gain and the cull, so a disagreement can be read
-off numbers instead of guessed.
-
-- `PT-151` `[Own]` **The gun voices, re-judged now that they run the decoded level law
-  (`BL-933`).** A turret's, a hull's and an AI aeroplane's gun voice each took Godot's
-  inverse-distance curve with `UnitSize` at `RANGE`'s full-volume distance and `MaxDistance` at its
-  audible one, which multiplied a second linear fade onto the level and reached silence exactly at
-  the audible radius; they now take `SoundFalloff`'s decoded curve on a player with no attenuation
-  model at all, as the world's ambient emitters already did. A hull's `snd_turretgun`
-  (`RANGE [30, 400]`) gains 7 dB at 100 m, 4 at 200 and 6 at 300, and plays at 30 dB down at 400 m
-  where it was silent; a 60-cal gains 8 dB at 100 m and 12 at 400. The audible radii themselves are
-  the data's and did not move: a turret's `snd_chaingun` reaches 200 m (220 with the cull), a 30-cal
-  150 m, a 70-cal 550 m.
-  *Look for:*
-  - (a) a zeppelin's gun rings firing at you from a couple of hundred metres are heard, where they
-    were not;
-  - (b) a patrol boat and a turret truck shooting at you across the docks are heard through the
-    whole approach rather than only overhead;
-  - (c) an enemy aeroplane on your tail is heard firing from further off than "right beside me",
-    allowing that a light caliber is authored quiet past 150 m;
-  - (d) nothing is now too loud: at a cue's own audible radius a gun should be faint, not merely
-    quieter, and passing that radius should fade rather than cut.
-  *Blocks:* `BL-933`. A remaining "cannot hear them" on (a) or (c) is a scale question about the
-  decoded law itself, not this mapping; quote the `sound` log's distance and gain line for the pass
-  you judged it on.
 
 ### The exported package · a recipient's first run, no arguments
 

@@ -58,7 +58,7 @@ exception, a display setting like V-Sync, and it is ignored under `--det` so no 
 | 9 | Perf budget? | **The finished stack holds the D31 Enhanced frame time within 20%** on C4/C5/C3 at 4 panes, render scale 1.0. Render scale above 1.0 is the user's own spend. |
 | 10 | Wave order and pacing? | **A, B, C, E, D. A wave halts on the user's flight, and the next wave starts as soon as it has no dependency on the halted one.** B, C and E need A1 landed (they are judged through the same temporal filter) but not A's verdict; D needs everything. |
 | 11 | The feel of speed and of direction changes (Wave E)? | **Wind streaks past the camera and a chase camera that lags the nose and widens its FOV with speed, both under Enhanced.** Wingtip vapour is out (too much for a prop plane); radial motion blur is out (it competes with the temporal pass for sharpness). |
-| 12 | What happens to the authored speed-cue wisps under Enhanced? | **They stay; the streaks are added over them.** The wisps are data (`speed_cue.zrd`) and `BL-867` tunes them on the faithful path; whether Enhanced dims them under the streaks is a TUNE the user judges in E41's montage, not a decision made here. |
+| 12 | What happens to the authored speed-cue wisps under Enhanced? | **They stay; the streaks are added over them.** The wisps are data (`speed_cue.zrd`), judged right on the faithful path (`git log --grep=BL-867`); whether Enhanced dims them under the streaks is a TUNE the user judges in E41's montage, not a decision made here. |
 | 13 | Do the trees, rails and lattice that now blend rather than scissor change the plan? | **Yes: A4 covers only what stays scissored beside them**, which is 332 of the census's 388 cut names. Blended surfaces have no coverage edge to fix. |
 
 ## ⚠ Read this before implementing anything
@@ -123,8 +123,8 @@ worktree session here; use a local commit or a file copy.
 - **The speed cue as shipped.** `Flight/SpeedCue.cs` loads each chapter's `speed_cue.zrd`
   verbatim: three `cuepufferN` states picked by camera altitude, emitted 60 m ahead of the player
   and left in world space for the aircraft to pass (`docs/formats/effects.md` "Aircraft speed-cue
-  wisps"); off within 50 m of the ground. `BL-867` says they read too opaque and is a faithful-path
-  tuning item; their lateral spread already widens with the pane's aspect over 4:3, and the opacity
+  wisps"); off within 50 m of the ground. Their opacity was judged right at the controls
+  (`git log --grep=BL-867`); their lateral spread already widens with the pane's aspect over 4:3, and the opacity
   is what the item still owes. The original authors no other speed cue: the
   `high_speed` shake runs only above rated max speed and the `rattle` sound is speed-keyed
   volume (`docs/org/shakes.md`).
@@ -214,7 +214,7 @@ and the effect sink, B14 adds its own material, B15 touches the crater/decal pat
 run in parallel worktrees with that file ownership. C21 owns `FogVolumeClutter.cs`; C22 is a new
 module and can run beside C21; C23 depends on C21's shader. E41 is a new `Effects` module and
 E42 owns `CameraController.cs`; they run in parallel with each other and with Wave C, after A1.
-E41 must not touch `SpeedCue.cs` or `Puffer.cs`, which `BL-867` owns. D31 and D32 depend on everything,
+E41 must not touch `SpeedCue.cs` or `Puffer.cs`, the faithful path's wisps. D31 and D32 depend on everything,
 and D32's baseline re-take (the D31 table was provisional) is taken at Wave A's start so the 20%
 has a current denominator.
 
@@ -606,8 +606,8 @@ density and length pairs for the user. Faithful goldens zero movers; `--det` enh
 (D31's rocket-hit pose) either excludes the field or pins it, decided at D31.
 
 **⚠ Traps.** The rain field's header warns never to use Godot's `TIME`; drive from `csky_time`.
-Streaks through the cockpit glass read wrong at the near plane: keep the near fade. Do not close
-`BL-867` or edit the wisps' opacity from here. Split screen needs the field per pane, as the
+Streaks through the cockpit glass read wrong at the near plane: keep the near fade. Do not edit
+the wisps' opacity from here. Split screen needs the field per pane, as the
 speed cue's `decorate` hook does.
 
 ## E42 ☐ The chase camera lags the nose through a roll and widens its FOV with speed
