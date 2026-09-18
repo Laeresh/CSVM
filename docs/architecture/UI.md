@@ -158,6 +158,13 @@ EXPORT TO DESKTOP's copy: the open scrap's own file to the desktop under its own
 overwriting, answering whether it landed and either the name or the OS reason, which are langui
 705's and 706's arguments. Engine-free, and the folder is a parameter so a test writes elsewhere.
 
+## src/UI/LanguiFace.cs
+A langui `[FONTID]` tag read as a typeface: the family letters resolved to the Windows face they
+abbreviate, the point size, and the bold and italic suffixes. `Pixels` is the size in board pixels at
+96 dpi, which is also the pitch the original sets that face's wrapped lines at. Engine-free; the
+renderer decides whether the machine has the face. The tag table and the size rule:
+[../formats/strings.md](../formats/strings.md).
+
 ## src/UI/ListWindow.cs
 A scrolled list as a pointer sees it, in the board's authored pixels: the window's box, the thumb's
 box on its track, and where the list stands inside it. `TopAfterWheel` steps the window by rows and
@@ -229,7 +236,7 @@ texture cache and the only art resolution there is, mission art and screen chrom
 extraction roots, and caches a miss so an absent extraction is probed once per name. A movie resolves
 to a `MovieSurface`, whose one texture the cache holds and the surface rewrites in place, so the
 picture animates with nothing invalidated; `AdvanceMovies` runs their clocks off the caller's own step and
-`AdvanceCaret` blinks a text cursor off it, each saying whether to repaint. Supplies the font metric a flowed
+`AdvanceCaret` blinks a text cursor off it, each saying whether to repaint. A line naming a `LanguiFace` draws in that installed Windows face, cached per tag, and keeps the board's own where the machine lacks it; a pitched block honours authored line breaks and indents and justifies as a whole, its lines left-aligned under the widest. Supplies the font metric a flowed
 `BoardNote` and a caret cannot take, `Fitted` shrinking a note's face until its list fits its box rather than losing a row, the two-line hint band a pad needs, and `ArtSize` for a caller that must clip against a bitmap's own authored width. `PresentMoving` is the one repaint a caller holding the frame loop can still make: its pictures go on a canvas item of the view's own, fitted by the same maths and re-fitted on a resize, rather than through a queued redraw callback the blocked loop would never reach, so a load screen's build can move the bar it draws.
 
 ## src/UI/CinemaScreen.cs

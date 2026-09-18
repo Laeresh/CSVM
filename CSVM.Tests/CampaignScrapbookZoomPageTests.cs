@@ -40,6 +40,48 @@ public class CampaignScrapbookZoomPageTests
         Assert.DoesNotContain(flow.Page.Captions, l => l.Text == "IDS_TEST_TITLE");
     }
 
+    /// <summary>An ImageType whose second letter is 0 names no inset: the zoom is the family
+    /// background and the words alone, with nothing for EXPORT TO DESKTOP to copy.</summary>
+    [Fact]
+    public void ATextScrapDrawsNoInsetAndOffersNoExport()
+    {
+        string root = ScrapbookCompositionFixture.WriteMinimalOpenableScrap(TestData.TempDir(), mission: 1, imageType: "P0");
+        string art = Path.Combine(root, "extracted", "rof", "ASSETS", "GRAPHICS", "SCRAPBOOK");
+        Directory.CreateDirectory(art);
+        File.WriteAllBytes(Path.Combine(art, "SB_01_01_test.PNG"), new byte[] { 1 });
+        var flow = OpenedOnZoom(root);
+
+        var picture = Assert.Single(flow.Page.Pictures);
+        Assert.Equal("SCRAPBOOK/SB_BG_M.jpg", picture.Art.Name);
+        Assert.Equal(1, flow.Page.RowCount);
+    }
+
+    /// <summary>A scrap's words take the face their langui row's [FONTID] names, at that face's
+    /// pixel size and pitch, in the colour and justification of the family's box row.</summary>
+    [Fact]
+    public void AScrapsWordsTakeTheirRowsFaceAndTheirBoxsColourAndJustification()
+    {
+        string root = ScrapbookCompositionFixture.WriteResolvableScrap(TestData.TempDir(), mission: 1);
+        File.WriteAllText(Path.Combine(root, "extracted", "rof", "ASSETS", "SCRAPBOOK.CSV"),
+            "[SCRAPBOOK]\n" +
+            "1_1_1=0,0,SB_01_01_test,P0,10,20,1,0,0,5,\"0,0,0,0\",B,0,0,IDS_TEST_TITLE,IDS_TEST_BODY\n");
+        var strings = UiStrings.Parse(
+            "[{\"id\":40002,\"text\":\"ZACHARY NABS <B>BALMORAL<b>!\",\"font\":\"[IMP36]\",\"dll\":\"langui\"}," +
+            "{\"id\":40003,\"text\":\"[TNR14]\\nNotorious corsair\",\"dll\":\"langui\"}]");
+        var flow = OpenedOnZoom(root, strings, CampaignLayout.Over(MenuLayoutReaderTests.OriginalLayout()));
+
+        var title = Assert.Single(flow.Page.Captions, l => l.Text == "ZACHARY NABS BALMORAL!");
+        Assert.Equal("Impact", title.Face?.Family);
+        Assert.Equal(48f, title.Size);
+        Assert.Equal(48f, title.Leading);
+        Assert.Equal(BoardJustify.Center, title.Justify); // SBZ_T_TITLEB's Justify 1
+        Assert.Equal(new BoardTint(0, 0, 0), title.Colour);
+
+        var body = Assert.Single(flow.Page.Captions, l => l.Text == "\nNotorious corsair");
+        Assert.Equal("Times New Roman", body.Face?.Family);
+        Assert.Equal(BoardJustify.Left, body.Justify); // SBZ_T_TEXTB's Justify 4, no reading of its own
+    }
+
     [Fact]
     public void CloseReturnsToTheScrapbookPage()
     {
@@ -96,16 +138,18 @@ public class CampaignScrapbookZoomPageTests
         Assert.False(flow.Page.Accept(CampaignScrapbookZoomPage.ExportRow));
     }
 
-    private static CampaignFlow OpenedOnZoom(string? root = null, UiStrings? strings = null)
+    private static CampaignFlow OpenedOnZoom(
+        string? root = null, UiStrings? strings = null, CampaignLayout? layout = null)
     {
-        var flow = FlowOnScrapbook(root, strings);
+        var flow = FlowOnScrapbook(root, strings, layout);
         flow.FocusRow(flow.Page.RowCount - 1); // the one openable scrap, after every button
         flow.Accept();
         Assert.Equal(CampaignScreen.ScrapbookZoom, flow.Screen);
         return flow;
     }
 
-    private static CampaignFlow FlowOnScrapbook(string? root = null, UiStrings? strings = null)
+    private static CampaignFlow FlowOnScrapbook(
+        string? root = null, UiStrings? strings = null, CampaignLayout? layout = null)
     {
         root ??= ScrapbookCompositionFixture.WriteMinimalOpenableScrap(TestData.TempDir(), mission: 1);
         var profile = CampaignProfileDef.NewProfile("Zachary");
@@ -117,7 +161,7 @@ public class CampaignScrapbookZoomPageTests
         Directory.CreateDirectory(dir);
         var store = new CampaignProfileStore(dir);
         store.Save(profile);
-        var flow = new CampaignFlow(store, strings ?? UiStrings.Empty, root);
+        var flow = new CampaignFlow(store, strings ?? UiStrings.Empty, root, layout: layout);
         flow.SelectProfile(store.Load(profile.Name)!);
         flow.SetMission(0);
         flow.GoTo(CampaignScreen.Scrapbook);

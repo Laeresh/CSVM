@@ -50,7 +50,15 @@ public sealed partial class ComposedBoardView : Control
     // screen's two headings differ by; the value is chosen to read like that screenshot.
     private const float Weight = 0.5f;
 
+    // The OpenType weight and stretch classes a langui face is looked up at.
+    private const int RegularWeight = 400;
+    private const int BoldWeight = 700;
+    private const int FullStretch = 100;
+
     private readonly Dictionary<string, Texture2D?> _textures = new();
+
+    // The installed fonts langui faces resolved to, by tag, a machine lacking one caching null.
+    private readonly Dictionary<string, Font?> _faces = new();
 
     // The movies behind the boards, one per file, kept beside the texture cache rather than in it
     // because a picture is drawn from the same ImageTexture forever and only the surface knows when
@@ -350,27 +358,31 @@ public sealed partial class ComposedBoardView : Control
         return new Rect2(0f, top, size.X, height);
     }
 
-    // Greedy word wrap in one face at one size: the words that fit a width, in order. A single word
-    // longer than the width stands on its own line rather than being broken mid-word.
+    // Greedy word wrap in one face at one size: the words that fit a width, in order, each authored
+    // line break starting a new line and an empty paragraph standing as an empty line. A single word
+    // longer than the width stands on its own line rather than being broken mid-word. A paragraph's
+    // leading spaces are its indent and are kept.
     private static IEnumerable<string> Wrap(Font font, string text, int points, float width)
     {
-        var line = new StringBuilder();
-        foreach (var word in text.Split(' '))
+        foreach (var paragraph in text.Replace("\r", string.Empty).Split('\n'))
         {
-            string candidate = line.Length == 0 ? word : line + " " + word;
-            if (line.Length > 0
-                && font.GetStringSize(candidate, HorizontalAlignment.Left, -1f, points).X > width)
+            var line = new StringBuilder();
+            bool first = true;
+            foreach (var word in paragraph.Split(' '))
             {
-                yield return line.ToString();
-                line.Clear().Append(word);
-                continue;
+                string candidate = first ? word : line + " " + word;
+                if (!first && line.ToString().Trim().Length > 0
+                    && font.GetStringSize(candidate, HorizontalAlignment.Left, -1f, points).X > width)
+                {
+                    yield return line.ToString();
+                    line.Clear().Append(word);
+                    continue;
+                }
+
+                line.Clear().Append(candidate);
+                first = false;
             }
 
-            line.Clear().Append(candidate);
-        }
-
-        if (line.Length > 0)
-        {
             yield return line.ToString();
         }
     }
@@ -432,10 +444,47 @@ public sealed partial class ComposedBoardView : Control
         _ => _palette.Row,
     };
 
-    // The face one line draws in. A line asks for at most one variation of the board's own, so a
-    // slant wins over a weight rather than the two compounding into a face nothing authored.
-    private Font? Face(Font? font, BoardLine line) =>
-        line.Italic ? Slanted(font) : line.Bold ? Emboldened(font) : font;
+    // A line's authored colour where it carries one, else its ink.
+    private Color InkOf(BoardLine line) =>
+        line.Colour is { } rgb ? new Color(rgb.R / 255f, rgb.G / 255f, rgb.B / 255f) : InkOf(line.Ink);
+
+    // The face one line draws in: the langui face it names where the machine has it installed,
+    // else a variation of the board's own. A slant wins over a weight rather than the two
+    // compounding into a face nothing authored.
+    private Font? Face(Font? font, BoardLine line)
+    {
+        if (line.Face is { } face && Installed(face) is { } installed)
+        {
+            return installed;
+        }
+
+        return line.Italic ? Slanted(font) : line.Bold ? Emboldened(font) : font;
+    }
+
+    // The installed font a langui face names, looked up once per tag, a miss included. A machine
+    // without the family keeps the board's own face rather than the system's arbitrary substitute.
+    private Font? Installed(LanguiFace face)
+    {
+        if (_faces.TryGetValue(face.Tag, out var cached))
+        {
+            return cached;
+        }
+
+        int weight = face.Bold ? BoldWeight : RegularWeight;
+        Font? font = null;
+        if (OS.GetSystemFontPath(face.Family, weight, FullStretch, face.Italic).Length > 0)
+        {
+            font = new SystemFont
+            {
+                FontNames = new[] { face.Family },
+                FontWeight = weight,
+                FontItalic = face.Italic,
+            };
+        }
+
+        _faces[face.Tag] = font;
+        return font;
+    }
 
     // The board's own face at a heavier weight, built once, for a screen that writes two authored
     // faces side by side.
@@ -636,7 +685,7 @@ public sealed partial class ComposedBoardView : Control
 
         if (line.Width <= 0f)
         {
-            DrawString(font, at, line.Text, HorizontalAlignment.Left, -1f, points, InkOf(line.Ink));
+            DrawString(font, at, line.Text, HorizontalAlignment.Left, -1f, points, InkOf(line));
             return;
         }
 
@@ -655,7 +704,7 @@ public sealed partial class ComposedBoardView : Control
             _ => HorizontalAlignment.Left,
         };
         DrawMultilineString(font, at, line.Text, justify, fit.Length(line.Width),
-            points, -1, InkOf(line.Ink));
+            points, -1, InkOf(line));
     }
 
     // The edit box's cursor after the text it follows, on the lit half of the blink. The text is
@@ -684,13 +733,28 @@ public sealed partial class ComposedBoardView : Control
 
     // Wrapped at the widget's own line pitch rather than the face's. Godot's multiline draw spaces
     // by the font's metrics, which on a face other than the authored one runs a block past the
-    // artwork it was written to sit inside; a justification is ignored here for want of a measure.
+    // artwork it was written to sit inside. A justification moves the block as a whole, its lines
+    // left-aligned under the widest, which is how the original sets a centred multi-line title.
     private void DrawPitched(BoardFit fit, Font font, BoardLine line, int points, Vector2 at)
     {
         float step = fit.Length(line.Leading);
-        foreach (var part in Wrap(font, line.Text, points, fit.Length(line.Width)))
+        float width = fit.Length(line.Width);
+        var parts = new List<string>(Wrap(font, line.Text, points, width));
+        float widest = 0f;
+        foreach (var part in parts)
         {
-            DrawString(font, at, part, HorizontalAlignment.Left, -1f, points, InkOf(line.Ink));
+            widest = Math.Max(widest, font.GetStringSize(part, HorizontalAlignment.Left, -1f, points).X);
+        }
+
+        at.X += line.Justify switch
+        {
+            BoardJustify.Right => Math.Max(0f, width - widest),
+            BoardJustify.Center => Math.Max(0f, (width - widest) / 2f),
+            _ => 0f,
+        };
+        foreach (var part in parts)
+        {
+            DrawString(font, at, part, HorizontalAlignment.Left, -1f, points, InkOf(line));
             at.Y += step;
         }
     }

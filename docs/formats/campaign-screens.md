@@ -677,6 +677,15 @@ script prefixes with `assets\graphics\`; the zoom background is
 the name under its own (second-letter) extension. All 294 page images, all 43 `.JPG` zoom insets
 and all 26 `SB_BG_*.jpg` backgrounds are present in the shipped install.
 
+⚠ **A second letter `0` names no inset at all, not a `.PNG` one.** `FUN_004061d0` switches on that
+letter and its `'0'` case stores an empty extension to `DAT_0064b32c`; the zoom's setup at
+`0x0040a99c` leaves the inset name empty when that extension is, and `SCRAPBOOKZOOM.SCRIPT` then
+creates no `sbz_image` and deactivates `sbz_b_export`. So every `P0` scrap that opens is the family
+background and its words alone, with RETURN and no EXPORT TO DESKTOP, which the original's capture
+shows on the Aloha Daily, the letter, the diary and the Bristol spec sheet. The "newspaper header"
+such a zoom shows is the family background itself (`SB_BG_B.jpg` carries the Aloha Daily masthead),
+not the page image, which is a picture of the clipping and never drawn in the zoom.
+
 The `Zoom` letter also names the text layout: `SBZ_T_TITLE<letter>`, `SBZ_T_CAPTION<letter>` and
 `SBZ_T_TEXT<letter>` in `LAYOUT.CSV` give each family its own box, colour and justification, 26
 families in all. Two of those rows carry typos the engine will not parse as colours,

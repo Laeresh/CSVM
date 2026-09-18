@@ -339,7 +339,8 @@ The original's UI string table by id, read from `extracted/rof/ui_strings.json`.
 rows are kept, since ids repeat across the file's two merged tables and every menu range this
 remake reads sits in that one. `FormatMessage` positional placeholders (`%1!d!`) convert to
 composite format rather than going to printf, and a leading `[FONTID]` tag is stripped as a
-renderer directive rather than text. `Parse` takes the JSON itself, so the table and its formatting
+renderer directive rather than text; `Face` answers the tag a row carries, from its `font` field or
+that stripped prefix, for a screen that draws the row in its own face. `Parse` takes the JSON itself, so the table and its formatting
 test off engine; `Empty` is the fallback that lets a menu draw on a missing extraction. Ids and
 rows: [../formats/strings.md](../formats/strings.md).
 

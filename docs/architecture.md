@@ -361,9 +361,10 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/Menu/BriefingObjectives.cs`, the briefing's parchment note from a mission's `objectives.zrd`, ordered by priority, which a reveal opcode indexes.
 - `src/UI/CampaignPreviousMissionsPage.cs`, the scrapbook's contents list, the career row then one row per mission below the campaign's position, plus the results page a mission's records compute.
 - `src/UI/CampaignScrapbookPage.cs`, the scrapbook itself: the browsed spread's scraps, the results card with its tabs and stamps, and the page arrows.
-- `src/UI/CampaignScrapbookZoomPage.cs`, one scrap's detail view: the zoom family's background, the inset image, its three text lines, and EXPORT TO DESKTOP.
+- `src/UI/CampaignScrapbookZoomPage.cs`, one scrap's detail view: the zoom family's background, the inset image where the row names one, its three text lines in their own faces, and EXPORT TO DESKTOP.
 - `src/UI/ScrapbookComposition.cs`, the scrapbook's per-spread scrap layout read from the shipped CSV, gated on the mission's own progress mask.
 - `src/UI/ScrapbookExport.cs`, EXPORT TO DESKTOP's copy: the scrap's file to the desktop, answering with the name or the OS reason. Engine-free.
+- `src/UI/LanguiFace.cs`, a langui `[FONTID]` tag read as a typeface: the Windows family it abbreviates, its size in board pixels, bold and italic.
 - `src/UI/CampaignCombo.cs`, a campaign screen's drop-down field: its authored box, its scrolling window, and a candidate it never commits itself.
 - `src/UI/CampaignModal.cs`, the one-button dialog a campaign screen raises over the board, held by the flow because two screens reach the same box.
 - `src/UI/CampaignTextEntry.cs`, a campaign screen's one-line text field, typed from a keyboard or stepped from a pad through one alphabet.

@@ -1113,21 +1113,25 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   closed with four rows on Built-in's screen), `docs/org/menu-inventory.md`,
   `docs/org/cameraViews.md`.
 
-- `BL-809` `[Bug]` `[S]` `[Next: data]` `[Impact: high]` `[Evidence: footage]` **An opened scrap
+- `BL-809` `[Bug]` `[S]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]` **An opened scrap
   reads differently from the original's: the typeface differs, and where ours shows the scrap's
   picture the original shows a newspaper-header-like image and then the text.** *Evidence:* reported
   at the controls as "Scrapbook Texts look different in the original", detailed as "Typeface, the
   image not showing but another one like the header of a newspaper and then the text". `CAP-52.mkv`
-  t=46 to 88.8 opens six scraps full page (`playtest/CAP-52/scrapclick.png` holds one), which is the
-  A/B to read them against. Ours composes the zoom family's background, the scrap's inset image and
-  up to three text lines at the family's boxes, with TUNE font sizes and no font-face decode
-  (`CSVM/src/UI/CampaignScrapbookZoomPage.cs:27-31`, `ScrapbookComposition.ZoomFamily`). *Fix
-  shape:* still the six opened scraps from CAP-52, put each beside ours at the same scrap, and say
-  per family what the original draws where (which image, which text boxes, which face); then align
-  the composition and pick the nearest shipped face. *⚠ Traps:* the look is the user's call, so a
-  montage goes in front of them before anything is parked on a distance; `SCRAPBOOK.CSV` and the
-  scripts are the decode for positions, the film only for the look. *Cross-refs:* `CAP-52`,
-  `docs/org/menu-inventory.md`, `docs/formats/menu-layout.md` (`SCRAPBOOK.CSV`).
+  t=46 to 88.8 opens the scraps full page. The composition is now the decode's
+  (`docs/formats/campaign-screens.md`, "Resolving a row to a file"): a `P0` scrap draws the family
+  background alone (the "newspaper header" is `SB_BG_B.jpg`'s masthead) with no inset and no EXPORT,
+  and each text box takes its langui row's `[FONTID]` face at points times 4/3 in pixels, pitched at
+  that size, in the box row's colour, a centred block justified as a whole
+  (`docs/formats/strings.md`, "Font prefix"). *Open question for the user:* the montages
+  (film | ours before | ours after) are `montage_{wanted,diary,letter,medal,hawaii,aloha,bristol}.png`
+  beside the item's commit message under `.scratch/orch-8/BL-809/`. Faces, sizes, positions and
+  pitch match the film by my reading; the one visible difference is weight, the original's text
+  reading near-black and heavy while ours draws the authored `0xFF444040`-class grey anti-aliased
+  and reads lighter. Does ours read right, or should the zoom's words draw heavier (unhinted-style
+  darker text, or the authored colour pushed toward black)? Also judge `AB` as Book Antiqua, read
+  from its letters alone. *⚠ Traps:* the look is the user's call; never close on a distance.
+  *Cross-refs:* `CAP-52`, `docs/org/menu-inventory.md`.
 
 
 - `BL-946` `[Fidelity]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The Weapon

@@ -273,11 +273,13 @@ public sealed record BoardPlaque(
 /// <paramref name="Bold"/> is the weight of an authored face a screen draws beside a lighter one,
 /// which the extraction ships no second typeface for, so the renderer emboldens its own.
 /// <paramref name="Leading"/> is the pitch a wrapped block's lines take, 0 leaving it to the face's
-/// own metrics; a widget whose authored block must end where the artwork under it does sets it.</summary>
+/// own metrics; a widget whose authored block must end where the artwork under it does sets it.
+/// <paramref name="Face"/> is the typeface the langui row names, drawn in place of the board's own
+/// where the machine carries it. <paramref name="Colour"/> is an authored colour beating the ink.</summary>
 public sealed record BoardLine(
     string Text, float X, float Y, float Width, float Size, BoardInk Ink, int Row = -1,
     bool Italic = false, BoardJustify Justify = BoardJustify.Left, BoardCaret? Caret = null,
-    bool Bold = false, float Leading = 0f);
+    bool Bold = false, float Leading = 0f, LanguiFace? Face = null, BoardTint? Colour = null);
 
 /// <summary>
 /// A list widget's entries and the box they flow inside, in authored pixels (the briefing

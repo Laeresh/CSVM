@@ -55,6 +55,16 @@ reader that shows one of them strips a leading `]` as well as a whole tag.
 
 A handful of strings also carry inline `<B>…<b>` bold markup.
 
+⚠ **The archive ships none of the `.ttf` files the table names, so a tag is read as the Windows face
+its letters abbreviate.** `AB` Book Antiqua (bold), `BEL` Bell MT, `CENT` Century, `COP` Copperplate
+Gothic Bold, `COUR` Courier New, `CSB` Century Schoolbook, `FREE` Freestyle Script, `IMP` Impact,
+`PEP` Pepita MT, `STEN` Stencil, `TNR` Times New Roman, `TREB` Trebuchet MS, `VIN` Viner Hand ITC;
+the digits are the point size and a trailing `B` or `I` bolds or slants it. The original's capture
+of the scrapbook zoom confirms Viner Hand, Courier New, Impact, Times New Roman, Century and Bell MT
+by eye; `AB` is read from its letters alone. A size is points at 96 dpi (an `IMP36` headline's
+capital stands about 39 of the 800x600 board's pixels), and a wrapped block's lines are pitched at
+that same pixel size, much tighter than the faces' own line metrics.
+
 ## Placeholders
 
 Substitutions use the positional `FormatMessage` form, `%1!s!`, `%2!d!`, not bare printf:

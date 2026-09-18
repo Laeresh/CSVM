@@ -37,6 +37,12 @@ public readonly record struct ScrapbookScrap(
     /// is (<c>ImageType</c>'s second letter), meaningful only while <see cref="Opens"/>.</summary>
     public string ZoomExtension { get; init; }
 
+    /// <summary>Whether the zoom view draws an inset image at all. <c>ImageType</c>'s second letter
+    /// <c>0</c> names none, which is every text scrap: the view is then the family's background and
+    /// the words alone, with nothing for EXPORT TO DESKTOP to copy
+    /// (<c>docs/formats/campaign-screens.md#resolving-a-row-to-a-file</c>).</summary>
+    public bool HasZoomInset { get; init; } = true;
+
     /// <summary>The inset image's file name for the zoom view.</summary>
     public string ZoomFileName => $"{ImageName}.{ZoomExtension}";
 
@@ -311,6 +317,7 @@ public static class ScrapbookComposition
             zoom, zoomX, zoomY, caption, title, text)
         {
             ZoomExtension = ExtensionOf(imageType, 1),
+            HasZoomInset = !(imageType.Length > 1 && imageType[1] == '0'),
             Region = ParseRegion(fields[10]),
         };
     }
