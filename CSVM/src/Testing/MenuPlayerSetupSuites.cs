@@ -446,7 +446,7 @@ internal static class MenuPlayerSetupSuites
         var setup = host.Features.Get<PlayerSetupFeature>();
         try
         {
-            host.Select(forceBuiltIn: false, cliOverride: "original", savedRequest: null);
+            host.Select(forceBuiltIn: false, cliOverride: "original");
             host.Show(MenuReturnDestination.TopLevel);
             var shell = (host.Active as CSVM.UI.Menu.Original.OriginalPresentation)?.Shell;
             ctx.Check(shell != null, $"Original shows with its shell built");

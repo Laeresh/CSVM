@@ -42,7 +42,7 @@ internal static class MenuLaunchReturnSuites
         + "every top-level return lands on Mode with the "
         + "cursors kept, the live launcher holds each launch's own destination for the exit press "
         + "to read, the debrief and cabin returns land on the book and the cabin, Back on Mode "
-        + "quits and Options' apply switches; an Original process started on --menu=free-flight "
+        + "quits and Options' apply leaves by its exit; an Original process started on --menu=free-flight "
         + "opens on Free Flight once and does the same over the decoded layout; and Original "
         + "refused at selection falls back to Built-in's top level with the request kept, a return "
         + "re-showing the same presentation without re-selecting")]
@@ -84,12 +84,12 @@ internal static class MenuLaunchReturnSuites
     }
 
     [Suite("menu-backdrop",
-        "the persistent environment's background over a presentation switch and a launch, on the "
+        "the persistent environment's background over an Options restart and a launch, on the "
         + "launcher's own WorldEnvironment: a run that shows no menu leaves it on the sky, the "
-        + "menu's first show blacks it, the frame between the Options apply's exit and the switch "
-        + "it asks for carries no presentation and stays black, the switch's three host calls "
-        + "stand Original up over the same black, and a launch puts the sky back with the "
-        + "material the rig built still on it")]
+        + "menu's first show blacks it, Built-in's Options screen offers ten steppers, two doors "
+        + "and no presentation row, the frame between the apply's exit and the restart carries no "
+        + "presentation and stays black, the restart stands a fresh Built-in up over the same "
+        + "black, and a launch puts the sky back with the material the rig built still on it")]
     internal static void MenuBackdrop(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -133,15 +133,15 @@ internal static class MenuLaunchReturnSuites
         }
     }
 
-    // The switch as the launcher performs it, with the background read at every step: ShowMenu
-    // blacks and shows, the apply exit arrives at the end of one frame, and ApplyOptions runs at
-    // the top of the next, which is the one frame that could show the procedural sky.
+    // The Options restart as the launcher performs it, with the background read at every step:
+    // ShowMenu blacks and shows, the apply exit arrives at the end of one frame, and ApplyOptions
+    // runs at the top of the next, which is the one frame that could show the procedural sky.
     private static void Switch(TestContext ctx, Run run, Godot.Environment env, Godot.Sky? sky)
     {
         var host = run.Host;
-        // Built-in is asked for by a saved request, since the shipped default is Original and the
-        // walk below switches from Built-in's Options row.
-        host.Select(forceBuiltIn: false, cliOverride: null, savedRequest: PresentationId.BuiltIn.Value);
+        // Built-in is asked for by the command-line override, since the shipped default is Original
+        // and the walk below applies from Built-in's Options screen.
+        host.Select(forceBuiltIn: false, cliOverride: PresentationId.BuiltIn.Value);
         WorldBackdrop.Black(env);
         run.Show(MenuReturnDestination.TopLevel);
         var menu = (host.Active as BuiltInPresentation)?.Menu;
@@ -154,38 +154,32 @@ internal static class MenuLaunchReturnSuites
 
         WalkTo(run, menu, LaunchMenu.OptionsRow);
         run.Press(Accept);
-        // Five rows down, past the opening view, the automatic head turn, the targeting setting
-        // and the rumble toggle, onto the presentation row.
-        run.Press(Down);
-        run.Press(Down);
-        run.Press(Down);
-        run.Press(Down);
-        run.Press(Down);
-        // The row opens on the saved word, which with no options file is the shipped Original, so
-        // it is stepped until it reads Original rather than assumed to start one step short of it.
-        for (int i = 0; i < 2 && !menu.ShownRowText.EndsWith("Original", StringComparison.Ordinal); i++)
+        // Every row of the screen once round: the presentation is the command line's alone, so no
+        // row may offer it.
+        var rows = new List<string>();
+        for (int i = 0; i < 16 && !rows.Contains(menu.ShownRowText); i++)
         {
-            run.Press(Right);
+            rows.Add(menu.ShownRowText);
+            run.Press(Down);
         }
 
-        ctx.Check(menu.ShownRowText.EndsWith("Original", StringComparison.Ordinal),
-            $"the presentation row is stepped to Original ({menu.ShownRowText})");
+        ctx.Check(rows.Count == 12 && !rows.Exists(r => r.Contains("presentation", StringComparison.OrdinalIgnoreCase)),
+            $"the Options screen holds ten steppers and two doors and no presentation row ({string.Join(" | ", rows)})");
         WalkTo(run, menu, "Apply and restart the menu");
         run.Press(Accept);
         var applied = run.Expect<OptionsApplyExit>();
-        ctx.Check(applied?.Presentation == PresentationId.Original, $"the apply carries the request ({applied?.Presentation})");
+        ctx.Check(applied != null, $"the apply leaves by the options exit");
         ctx.Check(!host.Shown && !menu.Visible && WorldBackdrop.IsBlack(env),
             $"the frame the exit lands on has no presentation on screen and is still black ({env.BackgroundMode})");
 
         host.Deactivate();
         ctx.Check(host.Active == null && WorldBackdrop.IsBlack(env),
-            $"the switch's first call frees the old presentation over the same black ({env.BackgroundMode})");
-        host.Select(forceBuiltIn: false, cliOverride: null, savedRequest: applied?.Presentation.Value);
+            $"the restart's first call frees the old instance over the same black ({env.BackgroundMode})");
         WorldBackdrop.Black(env);
         run.Show(MenuReturnDestination.TopLevel);
-        ctx.Check(host.Selected == PresentationId.Original && (host.Active as OriginalPresentation)?.Shell != null,
-            $"and the last stands Original up ({host.Selected})");
-        ctx.Check(WorldBackdrop.IsBlack(env), $"with the background black across every frame of the switch ({env.BackgroundMode})");
+        ctx.Check(host.Selected == PresentationId.BuiltIn && host.Active is BuiltInPresentation { Menu: { } fresh } && fresh != menu,
+            $"and the show stands a fresh Built-in up, the apply having changed no presentation ({host.Selected})");
+        ctx.Check(WorldBackdrop.IsBlack(env), $"with the background black across every frame of the restart ({env.BackgroundMode})");
 
         WorldBackdrop.Sky(env);
         ctx.Check(env.BackgroundMode == Godot.Environment.BGMode.Sky && env.Sky?.GetInstanceId() == sky?.GetInstanceId(),
@@ -220,7 +214,7 @@ internal static class MenuLaunchReturnSuites
         var host = run.Host;
         try
         {
-            host.Select(forceBuiltIn: false, cliOverride: null, savedRequest: null);
+            host.Select(forceBuiltIn: false, cliOverride: null);
             run.Show(MenuReturnDestination.TopLevel);
             var built = host.Active as BuiltInPresentation;
             var menu = built?.Menu;
@@ -428,7 +422,7 @@ internal static class MenuLaunchReturnSuites
         var host = run.Host;
         try
         {
-            string? reason = host.Select(forceBuiltIn: false, cliOverride: "original", savedRequest: null);
+            string? reason = host.Select(forceBuiltIn: false, cliOverride: "original");
             ctx.Check(host.Selected == PresentationId.Original && reason == null, $"Original is selected ({reason ?? "no reason"})");
             run.Show(MenuReturnDestination.TopLevel);
             var shell = (host.Active as OriginalPresentation)?.Shell;
@@ -596,7 +590,7 @@ internal static class MenuLaunchReturnSuites
         var host = run.Host;
         try
         {
-            host.Select(forceBuiltIn: false, cliOverride: "original", savedRequest: null);
+            host.Select(forceBuiltIn: false, cliOverride: "original");
             run.Show(MenuReturnDestination.TopLevel);
             var shell = (host.Active as OriginalPresentation)?.Shell;
             var campaign = host.Features.Get<CampaignFeature>();
@@ -629,7 +623,7 @@ internal static class MenuLaunchReturnSuites
         var host = run.Host;
         host.Deactivate();
         host.Availability = id => id == PresentationId.Original ? "the layout went away" : null;
-        string? reason = host.Select(forceBuiltIn: false, cliOverride: "original", savedRequest: null);
+        string? reason = host.Select(forceBuiltIn: false, cliOverride: "original");
         ctx.Check(host.Selected == PresentationId.BuiltIn && host.Requested == PresentationId.Original,
             $"Original refused at selection resolves Built-in with the request kept ({host.Selected}, {host.Requested})");
         ctx.Check(reason != null && reason.Contains("went away", StringComparison.Ordinal), $"with the availability reason appended ({reason})");

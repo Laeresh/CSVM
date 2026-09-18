@@ -150,7 +150,7 @@ public class OriginalCoverageTests : IDisposable
             new[]
             {
                 "MM_B_PREFERENCES", OriginalOptionsScreen.GameOptionsDoorKey,
-                OriginalOptionsScreen.PresentationKey, OriginalOptionsScreen.PresentationKey + ":1", OriginalOptionsScreen.GameOptionsAcceptKey,
+                OriginalOptionsScreen.DifficultyKey, OriginalOptionsScreen.DifficultyKey + ":1", OriginalOptionsScreen.GameOptionsAcceptKey,
             },
             Array.Empty<string>(), Exit: typeof(OptionsApplyExit)),
         new("apply-audio", null,

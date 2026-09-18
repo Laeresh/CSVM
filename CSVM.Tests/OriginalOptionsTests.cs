@@ -29,7 +29,6 @@ public class OriginalOptionsTests
 
         Assert.Equal(OriginalScreen.GameOptions, host.Screen);
         Assert.Equal(CSVM.Flight.Difficulty.Normal, host.Module.DifficultyChoice);
-        Assert.Equal(PresentationId.Original.Value, host.Module.PresentationChoice);
         Assert.Equal(GraphicsMode.Default, host.Module.GraphicsChoice);
         Assert.Equal(OriginalOptionsScreen.DifficultyKey, host.FocusedKey);
 
@@ -86,28 +85,9 @@ public class OriginalOptionsTests
         StepX(host, 1);
         Assert.True(host.Module.AutoHeadTurnChoice);
 
-        Down(host);
-        Assert.Equal(OriginalOptionsScreen.PresentationKey, host.FocusedKey);
-
-        // Accept on the closed dropdown opens its list; picking the second item closes it and
-        // leaves the focus on the box, now reading the other token.
-        Accept(host);
-        Assert.Equal(OriginalOptionsScreen.PresentationKey, host.Module.OpenGameOption);
-        Assert.Equal(new[] { "ORIGINAL", "BUILT-IN" }, host.Rows.Select(r => r.Label));
-        Down(host);
-        Accept(host);
-        Assert.Null(host.Module.OpenGameOption);
-        Assert.Equal(PresentationId.BuiltIn.Value, host.Module.PresentationChoice);
-        Assert.Equal("BUILT-IN", Row(host, OriginalOptionsScreen.PresentationKey).Label);
-
-        // A sideways step on the closed box takes the next token with wrap.
-        StepX(host, 1);
-        Assert.Equal(PresentationId.Original.Value, host.Module.PresentationChoice);
-        StepX(host, 1);
-        Assert.Equal(PresentationId.BuiltIn.Value, host.Module.PresentationChoice);
-
-        // The fifth row is the remake-only Next Target checkbox: Accept flips it, and a sideways
-        // step is the same flip, so the row is walkable with either gesture.
+        // The fourth row is the remake-only Next Target checkbox, straight under the head turn: the
+        // page offers no menu presentation row, the command line alone choosing one. Accept flips
+        // it, and a sideways step is the same flip, so the row is walkable with either gesture.
         Down(host);
         Assert.Equal(OriginalOptionsScreen.NearestAfterKillKey, host.FocusedKey);
         Assert.Null(host.Module.NearestAfterKillChoice);
@@ -118,7 +98,7 @@ public class OriginalOptionsTests
         StepX(host, 1);
         Assert.True(host.Module.NearestAfterKillChoice);
 
-        // The sixth row is the rumble toggle, which reads ON while nothing is saved, so its first
+        // The fifth row is the rumble toggle, which reads ON while nothing is saved, so its first
         // press is the one that turns it off.
         Down(host);
         Assert.Equal(OriginalOptionsScreen.RumbleKey, host.FocusedKey);
@@ -131,7 +111,6 @@ public class OriginalOptionsTests
         Down(host);
         Assert.Equal(OriginalOptionsScreen.GameOptionsAcceptKey, host.FocusedKey);
         var exit = Assert.IsType<OptionsApplyExit>(Accept(host));
-        Assert.Equal(PresentationId.BuiltIn, exit.Presentation);
         Assert.True(exit.NearestAfterKill);
         Assert.True(exit.Rumble);
         Assert.Equal("cockpit", exit.DefaultView);
@@ -157,9 +136,6 @@ public class OriginalOptionsTests
         Assert.True(host.Module.AutoHeadTurnChoice);
         Down(host);
         StepX(host, 1);
-        Assert.Equal(PresentationId.BuiltIn.Value, host.Module.PresentationChoice);
-        Down(host);
-        StepX(host, 1);
         Assert.True(host.Module.NearestAfterKillChoice);
         Down(host);
         StepX(host, 1);
@@ -170,7 +146,6 @@ public class OriginalOptionsTests
         Assert.Equal(OriginalOptionsScreen.GameOptionsCancelKey, host.FocusedKey);
         Assert.Null(Accept(host));
         Assert.Equal(OriginalScreen.Options, host.Screen);
-        Assert.Equal(PresentationId.Original.Value, host.Module.PresentationChoice);
         Assert.Equal(CSVM.Flight.Difficulty.Normal, host.Module.DifficultyChoice);
         Assert.Null(host.Module.NearestAfterKillChoice);
         Assert.Null(host.Module.RumbleChoice);
@@ -242,7 +217,6 @@ public class OriginalOptionsTests
         // The settings this page never showed ride the apply unchanged, read back when it opened.
         Assert.Equal("hard", exit.Difficulty);
         Assert.Equal("120", exit.VSync);
-        Assert.Equal(PresentationId.Original, exit.Presentation);
     }
 
     /// <summary>A level the options file has never carried opens the row on the shipped default,
@@ -436,7 +410,6 @@ public class OriginalOptionsTests
         Assert.Null(exit.Resolution);
         Assert.Null(exit.DisplayMode);
         Assert.Null(exit.VSync);
-        Assert.Equal(PresentationId.Original, exit.Presentation);
         Assert.Equal("normal", exit.Difficulty);
     }
 
@@ -642,11 +615,18 @@ public class OriginalOptionsTests
         host.Module.OpenGameOptions();
 
         Assert.Equal(GraphicsMode.EnhancedWord, host.Module.GraphicsChoice);
-        Assert.Equal(PresentationId.BuiltIn.Value, host.Module.PresentationChoice);
         Assert.Equal(CSVM.Flight.Difficulty.Hardest, host.Module.DifficultyChoice);
         Assert.True(host.Module.NearestAfterKillChoice);
         Assert.False(host.Module.RumbleChoice);
-        Assert.Equal("BUILT-IN", Row(host, OriginalOptionsScreen.PresentationKey).Label);
+        // An older file's saved presentation word opens no row: the page reads it nowhere.
+        Assert.Equal(
+            new[]
+            {
+                OriginalOptionsScreen.DifficultyKey, OriginalOptionsScreen.DefaultViewKey, OriginalOptionsScreen.AutoHeadTurnKey,
+                OriginalOptionsScreen.NearestAfterKillKey, OriginalOptionsScreen.RumbleKey,
+                OriginalOptionsScreen.GameOptionsAcceptKey, OriginalOptionsScreen.GameOptionsCancelKey,
+            },
+            host.Rows.Select(r => r.Key));
         Assert.Equal("Hardest", Row(host, OriginalOptionsScreen.DifficultyKey).Label);
         host.Module.OpenVideo();
         Assert.Equal("120", host.Module.VSyncChoice);
@@ -662,7 +642,6 @@ public class OriginalOptionsTests
         // with its own setting's fallback rule: off and borderless rather than either vocabulary's
         // first word, the size list's fallback (the project size, with no screen to ask), the standing screen.
         saved.GraphicsMode = null;
-        saved.MenuPresentation = null;
         saved.Difficulty = null;
         saved.NearestAfterKill = null;
         saved.Rumble = null;
@@ -672,7 +651,6 @@ public class OriginalOptionsTests
         saved.MonitorIndex = "9";
         host.Module.OpenGameOptions();
         Assert.Equal(GraphicsMode.Default, host.Module.GraphicsChoice);
-        Assert.Equal(PresentationId.Original.Value, host.Module.PresentationChoice);
         Assert.Equal(CSVM.Flight.Difficulty.Normal, host.Module.DifficultyChoice);
         Assert.Null(host.Module.NearestAfterKillChoice);
         Assert.Null(host.Module.RumbleChoice);
@@ -716,11 +694,10 @@ public class OriginalOptionsTests
         var host = Host();
         host.Module.OpenGameOptions();
 
-        // Row one's dropdown box at the authored Difficulty dropdown's corner and width, the Menu
-        // row's three rows down at the pitch, then the two decoded plaques.
+        // Row one's dropdown box at the authored Difficulty dropdown's corner and width, the Default
+        // View row's one row down at the pitch, then the two decoded plaques.
         Assert.Equal((135f, 295f, 144f, 17f), Rect(Row(host, OriginalOptionsScreen.DifficultyKey)));
-        Assert.Equal((135f, 339f, 144f, 17f), Rect(Row(host, OriginalOptionsScreen.DefaultViewKey)));
-        Assert.Equal((135f, 427f, 144f, 17f), Rect(Row(host, OriginalOptionsScreen.PresentationKey)));
+        Assert.Equal((135f, 350f, 144f, 17f), Rect(Row(host, OriginalOptionsScreen.DefaultViewKey)));
         // The exit pair side by side on one line, ACCEPT left of CANCEL, which is the arrangement
         // this section authors and the film shows; the VIDEO page's own section stacks them instead.
         // Both stand one whole band below their authored 470, the band the plate grew by.
@@ -740,23 +717,22 @@ public class OriginalOptionsTests
         Assert.Contains(board.Lines, l => l.Text == "GAME OPTIONS" && l.X == 120f && l.Justify == BoardJustify.Center);
         Assert.Contains(board.Lines, l => l.Text == "Difficulty" && l.X == 130f && l.Y == 280f && l.Width == 170f);
         Assert.Contains(board.Lines, l => l.Text == "Select the difficulty level for a solo campaign." && l.X == 340f && l.Y == 290f && l.Width == 310f);
-        // Six rows over a three-row section with room for one more band, so the plate grows that one
-        // band and the rows past it tighten the pitch from the authored 60 to the 44 that keeps the
-        // last row clear of the moved ACCEPT CHANGES.
-        Assert.Contains(board.Lines, l => l.Text == "Default View" && l.X == 130f && l.Y == 324f && l.Width == 170f);
-        Assert.Contains(board.Lines, l => l.Text == "Select your default view." && l.X == 340f && l.Y == 334f && l.Width == 310f);
+        // Five rows over a three-row section, so the plate grows and the rows tighten the pitch from
+        // the authored 60 to the 55 that keeps the last row clear of the moved ACCEPT CHANGES.
+        Assert.Contains(board.Lines, l => l.Text == "Default View" && l.X == 130f && l.Y == 335f && l.Width == 170f);
+        Assert.Contains(board.Lines, l => l.Text == "Select your default view." && l.X == 340f && l.Y == 345f && l.Width == 310f);
         // The checkbox rows take the narrower title box the authored head-turn row carries, which
         // is what leaves the box beside the words clear of them.
-        Assert.Contains(board.Lines, l => l.Text == "Auto Head Turn" && l.X == 130f && l.Y == 368f && l.Width == 112f);
-        Assert.Contains(board.Lines, l => l.Text == "Menu" && l.X == 130f && l.Y == 412f && l.Width == 170f);
-        Assert.Contains(board.Lines, l => l.Text == "Select the menu presentation." && l.X == 340f && l.Y == 422f && l.Width == 310f);
-        Assert.Contains(board.Lines, l => l.Text == "Next Target" && l.X == 130f && l.Y == 456f && l.Width == 112f);
+        Assert.Contains(board.Lines, l => l.Text == "Auto Head Turn" && l.X == 130f && l.Y == 390f && l.Width == 112f);
+        // No row offers the menu presentation: the command line alone chooses it.
+        Assert.DoesNotContain(board.Lines, l => l.Text is "Menu" or "Select the menu presentation.");
+        Assert.Contains(board.Lines, l => l.Text == "Next Target" && l.X == 130f && l.Y == 445f && l.Width == 112f);
         Assert.Contains(board.Lines,
             l => l.Text == "Take the nearest target after a kill instead of the first of the list."
-                && l.X == 340f && l.Y == 466f && l.Width == 310f);
+                && l.X == 340f && l.Y == 455f && l.Width == 310f);
         Assert.Contains(board.Lines, l => l.Text == "Rumble" && l.X == 130f && l.Y == 500f && l.Width == 112f);
-        // Six titles, six descriptions and the page's own tab title.
-        Assert.Equal(13, board.Lines.Count(l => l.Row < 0));
+        // Five titles, five descriptions and the page's own tab title.
+        Assert.Equal(11, board.Lines.Count(l => l.Row < 0));
 
         // The box is this page's focus mark, not standing chrome, so exactly one row carries it and
         // it is the focused one.
@@ -765,7 +741,7 @@ public class OriginalOptionsTests
             board.Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));
         Down(host);
         Assert.Equal(
-            new[] { (135f, 339f, 144f, 17f) },
+            new[] { (135f, 350f, 144f, 17f) },
             Compose(host).Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));
     }
 
@@ -1136,9 +1112,9 @@ public class OriginalOptionsTests
         ControlsRowsAreClearOfEachOther(InstallLayout(out var measure), measure);
     }
 
-    // The Game Options page's eight rows share one plate, so no two of them may overlap, and no
+    // The Game Options page's seven rows share one plate, so no two of them may overlap, and no
     // control may sit over a title or a description. The first three are the original's own, in its
-    // order; the three under them are this port's.
+    // order; the two under them are this port's.
     private static void GameOptionRowsAreClearOfEachOther(MenuLayout layout, Func<string, (int Width, int Height)?> measure)
     {
         var host = Host(layout, measure);
@@ -1148,12 +1124,12 @@ public class OriginalOptionsTests
             new[]
             {
                 OriginalOptionsScreen.DifficultyKey, OriginalOptionsScreen.DefaultViewKey,
-                OriginalOptionsScreen.AutoHeadTurnKey, OriginalOptionsScreen.PresentationKey,
+                OriginalOptionsScreen.AutoHeadTurnKey,
                 OriginalOptionsScreen.NearestAfterKillKey, OriginalOptionsScreen.RumbleKey,
                 OriginalOptionsScreen.GameOptionsAcceptKey, OriginalOptionsScreen.GameOptionsCancelKey,
             },
             rows.Select(r => r.Key));
-        RowsAreClearOfEachOther(host, rows, "GAME OPTIONS", 12);
+        RowsAreClearOfEachOther(host, rows, "GAME OPTIONS", 10);
     }
 
     // The AUDIO page's rows, the same rule over its own plate. Its press regions are the widest of

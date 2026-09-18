@@ -17,7 +17,7 @@ public class MenuHostTests
     {
         var host = Host(out _, out _);
 
-        string? reason = host.Select(forceBuiltIn: false, cliOverride: null, savedRequest: "no-such-presentation");
+        string? reason = host.Select(forceBuiltIn: false, cliOverride: "no-such-presentation");
 
         Assert.Equal(PresentationId.BuiltIn, host.Selected);
         Assert.Equal(new PresentationId("no-such-presentation"), host.Requested);
@@ -30,10 +30,10 @@ public class MenuHostTests
         var host = Host(out _, out _);
         var wizard = new PresentationId("fake-wizard");
 
-        Assert.Null(host.Select(forceBuiltIn: false, cliOverride: "fake-wizard", savedRequest: null));
+        Assert.Null(host.Select(forceBuiltIn: false, cliOverride: "fake-wizard"));
         Assert.Equal(wizard, host.Selected);
 
-        Assert.NotNull(host.Select(forceBuiltIn: true, cliOverride: "fake-wizard", savedRequest: null));
+        Assert.NotNull(host.Select(forceBuiltIn: true, cliOverride: "fake-wizard"));
         Assert.Equal(PresentationId.BuiltIn, host.Selected);
         Assert.Equal(wizard, host.Requested);
     }
@@ -46,7 +46,7 @@ public class MenuHostTests
         var host = Host(out _, out _);
         host.Availability = id => id.Value == "fake-wizard" ? "its layout is missing" : null;
 
-        string? reason = host.Select(forceBuiltIn: false, cliOverride: null, savedRequest: "fake-wizard");
+        string? reason = host.Select(forceBuiltIn: false, cliOverride: "fake-wizard");
 
         Assert.Equal(PresentationId.BuiltIn, host.Selected);
         Assert.Equal(new PresentationId("fake-wizard"), host.Requested);
@@ -54,7 +54,7 @@ public class MenuHostTests
         Assert.Contains("its layout is missing", reason);
 
         host.Availability = _ => null;
-        Assert.Null(host.Select(forceBuiltIn: false, cliOverride: null, savedRequest: "fake-wizard"));
+        Assert.Null(host.Select(forceBuiltIn: false, cliOverride: "fake-wizard"));
         Assert.Equal(new PresentationId("fake-wizard"), host.Selected);
     }
 
@@ -65,7 +65,7 @@ public class MenuHostTests
     {
         var host = Host(out _, out _);
 
-        Assert.NotNull(host.Select(forceBuiltIn: false, cliOverride: "   ", savedRequest: null));
+        Assert.NotNull(host.Select(forceBuiltIn: false, cliOverride: "   "));
         Assert.Equal(PresentationId.BuiltIn, host.Selected);
         Assert.Equal(PresentationId.BuiltIn, host.Requested);
     }
@@ -74,7 +74,7 @@ public class MenuHostTests
     public void ShowActivatesOneInstanceAndReshowsItAfterAnExit()
     {
         var host = Host(out var seat, out var exits);
-        host.Select(forceBuiltIn: false, cliOverride: "fake-wizard", savedRequest: null);
+        host.Select(forceBuiltIn: false, cliOverride: "fake-wizard");
 
         host.Show(MenuReturnDestination.TopLevel);
         var first = Assert.IsType<FakeWizardPresentation>(host.Active);
@@ -101,7 +101,7 @@ public class MenuHostTests
     public void DeactivateEndsThePresentationAndDiscardsTransientFeatureState()
     {
         var host = Host(out var seat, out _);
-        host.Select(forceBuiltIn: false, cliOverride: "fake-wizard", savedRequest: null);
+        host.Select(forceBuiltIn: false, cliOverride: "fake-wizard");
         host.Show(MenuReturnDestination.TopLevel);
         seat.Enqueue(new MenuCommands { Accept = true });
         host.Tick(1f / 60f);
@@ -138,7 +138,7 @@ public class MenuHostTests
     {
         var host = new MenuHost(new PresentationRegistry(), new RecordingAudio(), _ => { });
 
-        Assert.Throws<InvalidOperationException>(() => host.Select(false, null, null));
+        Assert.Throws<InvalidOperationException>(() => host.Select(false, null));
         Assert.Throws<InvalidOperationException>(() => host.Show(MenuReturnDestination.TopLevel));
     }
 

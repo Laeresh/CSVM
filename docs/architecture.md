@@ -445,7 +445,7 @@ determinism repo-wide; read `docs/verification.md` first.
 - `src/Utils/PhaseCost.cs`, a row of named cost slots behind `--perf`'s `sim_ms=` (the physics tick split by session-simulation phase) and `proc_sites_ms=` (the process pass split by its heaviest consumers).
 - `src/Utils/PhysicsTickCost.cs`, the wall cost of one whole physics tick and the tick count a wall second got, measured by a bracket pair spanning the tick.
 - `src/Utils/GcTrace.cs`, the `--perf` GC readout: pause per wall second, collections, and the finalizable-object count that sets the pause, per ten-second window.
-- `src/Utils/PresentationResolution.cs`, the requested-versus-active menu presentation resolver, availability checked separately from the saved request.
+- `src/Utils/PresentationResolution.cs`, the requested-versus-active menu presentation resolver, force flag, then `--presentation=`, then Original, availability checked separately.
 - `src/Utils/ProcessPassCost.cs`, the wall cost of one whole `_Process` pass and how many passes a window held, measured by a bracket pair spanning the pass.
 - `src/Utils/RenderPoses.cs`, the render half of the fixed-tick simulation: the pose a realtime session draws between two simulation steps.
 - `src/Utils/ResolutionSetting.cs`, the window size: the sizes a screen can hold, the saved one against the screen's own size, and the one place the window size is set.

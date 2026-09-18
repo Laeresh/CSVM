@@ -147,7 +147,7 @@ internal static class MenuHangarSuites
         ctx.Check(store.Load(scratch) == null, $"the scratch name {scratch} is free in the user's store before the run");
         try
         {
-            host.Select(forceBuiltIn: false, cliOverride: "original", savedRequest: null);
+            host.Select(forceBuiltIn: false, cliOverride: "original");
             host.Show(MenuReturnDestination.TopLevel);
             var shell = (host.Active as OriginalPresentation)?.Shell;
             ctx.Check(shell != null, $"Show activates Original ({host.Active?.Id})");

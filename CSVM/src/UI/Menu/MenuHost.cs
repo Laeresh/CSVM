@@ -40,7 +40,7 @@ public sealed class MenuHost : IMenuHost
     /// Built-in until then.</summary>
     public PresentationId Selected { get; private set; } = PresentationId.BuiltIn;
 
-    /// <summary>What was asked for before availability, the value Options show back.</summary>
+    /// <summary>What was asked for before availability, the value the startup log reports.</summary>
     public PresentationId Requested { get; private set; } = PresentationId.BuiltIn;
 
     /// <summary>The live presentation, or null before the first <see cref="Show"/> and after
@@ -91,16 +91,16 @@ public sealed class MenuHost : IMenuHost
         _seats.Remove(seat);
     }
 
-    /// <summary>Settles <see cref="Selected"/> from the force flag, the CLI override and the saved
-    /// request, availability being registration plus <see cref="Availability"/>; returns the
-    /// reason when the selection differs from the request, else null. An unknown or unavailable
-    /// request falls back to Built-in rather than throwing at a persisted value; Built-in itself
-    /// being unregistered is a wiring error.</summary>
-    public string? Select(bool forceBuiltIn, string? cliOverride, string? savedRequest)
+    /// <summary>Settles <see cref="Selected"/> from the force flag and the CLI override,
+    /// availability being registration plus <see cref="Availability"/>; returns the reason when the
+    /// selection differs from the request, else null. An unknown or unavailable request falls back
+    /// to Built-in rather than throwing at a command-line word; Built-in itself being unregistered
+    /// is a wiring error.</summary>
+    public string? Select(bool forceBuiltIn, string? cliOverride)
     {
         string? unavailable = null;
         var (active, reason) = PresentationResolution.Resolve(
-            forceBuiltIn, cliOverride, savedRequest,
+            forceBuiltIn, cliOverride,
             id => IsRegistered(id) && (unavailable = Availability(new PresentationId(id))) == null);
         if (reason != null && unavailable != null)
         {
@@ -114,7 +114,7 @@ public sealed class MenuHost : IMenuHost
         }
 
         Selected = selected;
-        string requested = PresentationResolution.Requested(cliOverride, savedRequest);
+        string requested = PresentationResolution.Requested(cliOverride);
         Requested = string.IsNullOrWhiteSpace(requested) ? PresentationId.BuiltIn : new PresentationId(requested);
         return reason;
     }

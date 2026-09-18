@@ -49,7 +49,7 @@ internal static class MenuOriginalWrapupSuites
         host.AddSeat(seat);
         try
         {
-            host.Select(forceBuiltIn: false, cliOverride: "original", savedRequest: null);
+            host.Select(forceBuiltIn: false, cliOverride: "original");
             host.Show(MenuReturnDestination.TopLevel);
             var shell = (host.Active as OriginalPresentation)?.Shell;
             ctx.Check(shell != null, $"Show activates Original ({host.Active?.Id})");

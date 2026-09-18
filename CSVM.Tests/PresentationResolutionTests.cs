@@ -3,15 +3,15 @@ using Xunit;
 
 namespace CSVM.Tests;
 
-/// <summary>The resolution contract: fixed precedence force-Built-in → CLI override → saved
-/// request → the Original default, availability checked only after the request is picked, and the
-/// requested value never changes because of a fallback.</summary>
+/// <summary>The resolution contract: fixed precedence force-Built-in → CLI override → the Original
+/// default, availability checked only after the request is picked, and the requested value never
+/// changes because of a fallback.</summary>
 public class PresentationResolutionTests
 {
     [Fact]
     public void NoInputsResolveToTheDefault()
     {
-        var (active, reason) = PresentationResolution.Resolve(false, null, null, Always);
+        var (active, reason) = PresentationResolution.Resolve(false, null, Always);
 
         Assert.Equal(PresentationResolution.Default, active);
         Assert.Null(reason);
@@ -20,7 +20,7 @@ public class PresentationResolutionTests
     [Fact]
     public void NoInputsFallBackToBuiltIn_WhenTheDefaultIsUnavailable()
     {
-        var (active, reason) = PresentationResolution.Resolve(false, null, null, Never);
+        var (active, reason) = PresentationResolution.Resolve(false, null, Never);
 
         Assert.Equal(PresentationResolution.BuiltIn, active);
         Assert.NotNull(reason);
@@ -29,49 +29,34 @@ public class PresentationResolutionTests
     [Fact]
     public void ForceBuiltIn_BeatsTheCliOverride()
     {
-        var (active, reason) = PresentationResolution.Resolve(true, "original", null, Always);
+        var (active, reason) = PresentationResolution.Resolve(true, "original", Always);
 
         Assert.Equal(PresentationResolution.BuiltIn, active);
         Assert.NotNull(reason);
     }
 
     [Fact]
-    public void ForceBuiltIn_BeatsTheSavedRequest()
+    public void ForceBuiltIn_BeatsTheDefault()
     {
-        var (active, reason) = PresentationResolution.Resolve(true, null, "original", Always);
+        var (active, reason) = PresentationResolution.Resolve(true, null, Always);
 
         Assert.Equal(PresentationResolution.BuiltIn, active);
         Assert.NotNull(reason);
-    }
-
-    [Fact]
-    public void CliOverride_BeatsTheSavedRequest()
-    {
-        Assert.Equal("original", PresentationResolution.Requested("original", "some-other"));
     }
 
     [Fact]
     public void CliOverride_BeatsTheDefault()
     {
-        var (active, reason) = PresentationResolution.Resolve(false, PresentationResolution.BuiltIn, null, Always);
+        var (active, reason) = PresentationResolution.Resolve(false, PresentationResolution.BuiltIn, Always);
 
         Assert.Equal(PresentationResolution.BuiltIn, active);
         Assert.Null(reason);
     }
 
     [Fact]
-    public void SavedRequest_BeatsTheDefault()
+    public void CliBuiltIn_NeedsNoAvailabilityCheck()
     {
-        var (active, reason) = PresentationResolution.Resolve(false, null, PresentationResolution.BuiltIn, Always);
-
-        Assert.Equal(PresentationResolution.BuiltIn, active);
-        Assert.Null(reason);
-    }
-
-    [Fact]
-    public void SavedBuiltIn_NeedsNoAvailabilityCheck()
-    {
-        var (active, reason) = PresentationResolution.Resolve(false, null, PresentationResolution.BuiltIn, Never);
+        var (active, reason) = PresentationResolution.Resolve(false, PresentationResolution.BuiltIn, Never);
 
         Assert.Equal(PresentationResolution.BuiltIn, active);
         Assert.Null(reason);
@@ -80,36 +65,36 @@ public class PresentationResolutionTests
     [Fact]
     public void UnavailableRequest_FallsBackToBuiltInWithAReason()
     {
-        var (active, reason) = PresentationResolution.Resolve(false, null, "original", Never);
+        var (active, reason) = PresentationResolution.Resolve(false, "original", Never);
 
         Assert.Equal(PresentationResolution.BuiltIn, active);
         Assert.NotNull(reason);
     }
 
-    /// <summary>A temporary availability failure must never look like the saved request changed:
-    /// <see cref="PresentationResolution.Requested"/> still answers "original" on the same inputs
+    /// <summary>A temporary availability failure must never look like the request changed:
+    /// <see cref="PresentationResolution.Requested"/> still answers "original" on the same input
     /// that resolved to Built-in above.</summary>
     [Fact]
     public void RequestedStaysOriginal_EvenWhenActiveFallsBackToBuiltIn()
     {
-        PresentationResolution.Resolve(false, null, "original", Never);
+        PresentationResolution.Resolve(false, null, Never);
 
-        Assert.Equal("original", PresentationResolution.Requested(null, "original"));
+        Assert.Equal("original", PresentationResolution.Requested(null));
     }
 
     [Fact]
     public void RequestedStaysOriginal_EvenWhenForceBuiltInWinsActive()
     {
-        var (active, _) = PresentationResolution.Resolve(true, null, "original", Always);
+        var (active, _) = PresentationResolution.Resolve(true, null, Always);
 
         Assert.Equal(PresentationResolution.BuiltIn, active);
-        Assert.Equal("original", PresentationResolution.Requested(null, "original"));
+        Assert.Equal("original", PresentationResolution.Requested(null));
     }
 
     [Fact]
     public void EmptyStringsAreTreatedAsAbsent()
     {
-        Assert.Equal(PresentationResolution.Default, PresentationResolution.Requested("", ""));
+        Assert.Equal(PresentationResolution.Default, PresentationResolution.Requested(""));
     }
 
     private static bool Always(string _) => true;

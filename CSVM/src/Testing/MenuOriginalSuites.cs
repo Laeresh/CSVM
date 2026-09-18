@@ -54,7 +54,8 @@ internal static class MenuOriginalSuites
         + "click on the door opens Free Flight, keyboard frames pick a chapter and an airframe and "
         + "FLY leaves as one LaunchExit, the return re-enters the top level, PREFERENCES and its "
         + "GAME OPTIONS door open the decoded page whose Difficulty dropdown stands first and whose "
-        + "six rows take every choice on a plate grown a band to hold them and whose CANCEL CHANGES "
+        + "five rows take every choice, none of them the menu presentation, on a plate grown a band "
+        + "to hold them and whose CANCEL CHANGES "
         + "drops them, a wheel step over the "
         + "aircraft column and over Instant Action's contents window moves each one row and clamps "
         + "at the head, a drag down each thumb's track lands the window on its last row without "
@@ -69,11 +70,11 @@ internal static class MenuOriginalSuites
         + "from mid-setup discards the pick and shows Built-in's Mode screen, a switch back starts "
         + "Original fresh, Built-in's Options route steps the difficulty, the opening view, the "
         + "automatic head turn, the targeting setting on and back off, the rumble toggle off, the "
-        + "two other choices and "
+        + "graphics mode and "
         + "its four display rows over the machine's own screens and sizes, the two vocabularies and "
         + "a wrap onto the last frame cap, "
         + "opens and leaves the rebinding screen behind its Controls door and emits the apply exit "
-        + "carrying all eleven, Original's VIDEO door opens the decoded page on its Display Mode dropdown "
+        + "carrying all ten with no presentation row among them, Original's VIDEO door opens the decoded page on its Display Mode dropdown "
         + "which fits its authored window and draws no bar, over the V-Sync one whose five words "
         + "window into four with the arrows and the thumb inside the box's right edge and the fifth "
         + "kept for the walk but unseen and unhit, that list wheeling and dragging like any other "
@@ -151,7 +152,7 @@ internal static class MenuOriginalSuites
 
     private static OriginalShell? ColdStart(TestContext ctx, MenuHost host)
     {
-        string? reason = host.Select(forceBuiltIn: false, cliOverride: "original", savedRequest: null);
+        string? reason = host.Select(forceBuiltIn: false, cliOverride: "original");
         ctx.Check(host.Selected == PresentationId.Original && reason == null,
             $"--presentation=original selects Original over the install's layout ({host.Selected}, {reason ?? "no reason"})");
         host.Show(MenuReturnDestination.TopLevel);
@@ -499,8 +500,8 @@ internal static class MenuOriginalSuites
         return ok;
     }
 
-    // The switch, as the launcher performs it after an Options exit: from mid-setup on the Free
-    // Flight screen, Deactivate discards the feature's pick and Built-in opens on its Mode screen.
+    // The host's switch between presentations, Deactivate, Select and Show: from mid-setup on the
+    // Free Flight screen, Deactivate discards the feature's pick and Built-in opens on its Mode screen.
     private static void SwitchToBuiltIn(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell)
     {
         Press(host, seat, Accept);
@@ -511,11 +512,11 @@ internal static class MenuOriginalSuites
         host.Deactivate();
         ctx.Check(host.Active == null && host.Features.Get<FreeFlightFeature>().Chapter == null,
             $"Deactivate frees Original and discards the unfinished pick");
-        string? reason = host.Select(forceBuiltIn: false, cliOverride: null, savedRequest: "built-in");
+        string? reason = host.Select(forceBuiltIn: false, cliOverride: "built-in");
         host.Show(MenuReturnDestination.TopLevel);
         var menu = (host.Active as BuiltInPresentation)?.Menu;
         ctx.Check(host.Selected == PresentationId.BuiltIn && reason == null && menu is { Visible: true },
-            $"the saved request re-selects Built-in and Show stands the launchscreen up ({host.Selected})");
+            $"a Built-in request re-selects it and Show stands the launchscreen up ({host.Selected})");
         ctx.Check(menu?.ShownScreen == "Mode" && menu.ShownRowText == "Free Flight",
             $"at its own top level, the Mode screen ({menu?.ShownScreen}, {menu?.ShownRowText})");
         ctx.Check(menu?.ShownRowCount == 6, $"whose sixth row is the Options door ({menu?.ShownRowCount})");
@@ -523,8 +524,9 @@ internal static class MenuOriginalSuites
 
     // Built-in's Options route: the last Mode row opens Options, Right steps the difficulty to
     // Hard, the two rows under it step the opening view and the automatic head turn, the two under
-    // those the targeting setting and the rumble, then the presentation and the graphics mode, the
-    // four display rows step over the machine's own screens and sizes, and the apply row's Accept
+    // those the targeting setting and the rumble, then the graphics mode (no presentation row: the
+    // command line alone chooses one), the four display rows step over the machine's own screens
+    // and sizes, and the apply row's Accept
     // leaves as the one exit the launcher persists every choice from.
     private static void BuiltInOptionsRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, List<MenuExit> exits)
     {
@@ -537,8 +539,8 @@ internal static class MenuOriginalSuites
         Press(host, seat, Up);
         ctx.Check(menu.ShownRowText == LaunchMenu.OptionsRow, $"Up from Free Flight wraps onto Options ({menu.ShownRowText})");
         Press(host, seat, Accept);
-        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 13 && menu.ShownRowText == "Difficulty: Normal",
-            $"Accept opens the Options screen with its thirteen rows, the difficulty stepper first ({menu.ShownScreen}, {menu.ShownRowCount}, {menu.ShownRowText})");
+        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 12 && menu.ShownRowText == "Difficulty: Normal",
+            $"Accept opens the Options screen with its twelve rows, the difficulty stepper first ({menu.ShownScreen}, {menu.ShownRowCount}, {menu.ShownRowText})");
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == "Difficulty: Hard", $"Right steps the difficulty to Hard ({menu.ShownRowText})");
         Press(host, seat, Down);
@@ -569,20 +571,14 @@ internal static class MenuOriginalSuites
         ctx.Check(menu.ShownRowText == "Controller rumble: Off",
             $"Right turns the rumble off ({menu.ShownRowText})");
         Press(host, seat, Down);
-        string before = menu.ShownRowText;
-        Press(host, seat, Right);
-        ctx.Check(menu.ShownRowText != before && menu.ShownRowText.StartsWith("Menu presentation: ", System.StringComparison.Ordinal),
-            $"Right steps the presentation row ({before} -> {menu.ShownRowText})");
-        string chosen = menu.ShownRowText.EndsWith("Original", System.StringComparison.Ordinal) ? "original" : "built-in";
-        Press(host, seat, Down);
         string beforeGraphics = menu.ShownRowText;
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText != beforeGraphics && menu.ShownRowText.StartsWith("Graphics: ", System.StringComparison.Ordinal),
-            $"Right steps the graphics row under it ({beforeGraphics} -> {menu.ShownRowText})");
+            $"the sixth row is the graphics mode, straight under the rumble with no presentation row between, and Right steps it ({beforeGraphics} -> {menu.ShownRowText})");
         string graphics = menu.ShownRowText.EndsWith("Enhanced", System.StringComparison.Ordinal) ? "enhanced" : "original";
         var display = BuiltInDisplayRows(ctx, host, seat, menu);
         Press(host, seat, Down);
-        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow, $"the twelfth row is the Controls door ({menu.ShownRowText})");
+        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow, $"the eleventh row is the Controls door ({menu.ShownRowText})");
         Press(host, seat, Accept);
         ctx.Check(menu.ShownScreen == "Controls" && menu.ShownRowCount > 2,
             $"which opens the rebinding screen over a seat's own keymap ({menu.ShownScreen}, {menu.ShownRowCount} rows)");
@@ -595,11 +591,11 @@ internal static class MenuOriginalSuites
             $"Apply leaves through the host as an OptionsApplyExit ({exits.Count}, {exits[^1].GetType().Name})");
         if (exits.Count == 2 && exits[1] is OptionsApplyExit applied)
         {
-            ctx.Check(applied.Presentation.Value == chosen && applied.Graphics == graphics && applied.Difficulty == "hard"
+            ctx.Check(applied.Graphics == graphics && applied.Difficulty == "hard"
                 && applied.NearestAfterKill == false && applied.Rumble == false
                 && applied.DefaultView == CSVM.Flight.PilotView.Name(CSVM.Flight.PilotViewMode.Cockpit)
                 && applied.AutoHeadTurn == true,
-                $"carrying every stepped choice, the targeting setting stepped back off, the rumble turned off, the opening view and the head turn among them ({applied.Presentation}, {applied.Graphics}, {applied.Difficulty}, {applied.NearestAfterKill}, {applied.Rumble}, {applied.DefaultView ?? "none"}, {applied.AutoHeadTurn})");
+                $"carrying every stepped choice, the targeting setting stepped back off, the rumble turned off, the opening view and the head turn among them ({applied.Graphics}, {applied.Difficulty}, {applied.NearestAfterKill}, {applied.Rumble}, {applied.DefaultView ?? "none"}, {applied.AutoHeadTurn})");
             ctx.Check(applied.MonitorIndex == display.Monitor && applied.Resolution == display.Resolution
                 && applied.DisplayMode == display.DisplayMode && applied.VSync == display.VSync,
                 $"and all four display settings the rows stepped ({applied.MonitorIndex}, {applied.Resolution}, {applied.DisplayMode}, {applied.VSync})");
@@ -689,7 +685,7 @@ internal static class MenuOriginalSuites
     // Original's own Options route over the install's decoded sections: PREFERENCES opens the
     // Preferences page, its GAME OPTIONS door the decoded page, whose rows take every choice and
     // whose CANCEL CHANGES drops them; the walk leaves the top level as it found it. The first
-    // three rows are the original's own, in its order, the three after them this port's.
+    // three rows are the original's own, in its order, the two after them this port's.
     private static void OriginalOptionsRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, List<MenuExit> exits)
     {
         WalkTo(host, seat, shell, "MM_B_PREFERENCES");
@@ -701,13 +697,16 @@ internal static class MenuOriginalSuites
             $"GAME OPTIONS opens the decoded page on its Difficulty dropdown, the first row ({shell.Screen}, {shell.FocusedKey})");
         var board = shell.Compose();
         int titles = 0;
+        int menuTitles = 0;
         foreach (var line in board.Lines)
         {
             titles += line.Text is "GAME OPTIONS" or "Difficulty" or "Default View" or "Auto Head Turn"
-                or "Menu" or "Next Target" or "Rumble" ? 1 : 0;
+                or "Next Target" or "Rumble" ? 1 : 0;
+            menuTitles += line.Text is "Menu" ? 1 : 0;
         }
 
-        ctx.Check(titles == 7, $"drawing the section's own tab title over the six row titles ({titles} of 7)");
+        ctx.Check(titles == 6 && menuTitles == 0,
+            $"drawing the section's own tab title over the five row titles and no Menu row ({titles} of 6, {menuTitles} Menu)");
         OriginalGameOptionsPlate(ctx, shell, board);
         Press(host, seat, Accept);
         ctx.Check(shell.Options.OpenGameOption == OriginalOptionsScreen.DifficultyKey && shell.Rows.Count == 3
@@ -731,24 +730,18 @@ internal static class MenuOriginalSuites
         Press(host, seat, Accept);
         ctx.Check(shell.Options.AutoHeadTurnChoice == true && shell.FocusedKey == OriginalOptionsScreen.AutoHeadTurnKey,
             $"Accept on the Auto Head Turn checkbox under it turns the head turn on ({shell.Options.AutoHeadTurnChoice})");
-        WalkTo(host, seat, shell, OriginalOptionsScreen.PresentationKey);
-        Press(host, seat, Accept);
-        ctx.Check(shell.Options.OpenGameOption == OriginalOptionsScreen.PresentationKey && shell.Rows.Count == 2,
-            $"Accept on the Menu row under it opens the dropdown over the two shipped presentations ({shell.Options.OpenGameOption}, {shell.Rows.Count})");
         Press(host, seat, Down);
-        Press(host, seat, Accept);
-        ctx.Check(shell.Options.PresentationChoice == PresentationId.BuiltIn.Value,
-            $"and picking the second closes it on the other token ({shell.Options.PresentationChoice})");
-        WalkTo(host, seat, shell, OriginalOptionsScreen.NearestAfterKillKey);
+        ctx.Check(shell.FocusedKey == OriginalOptionsScreen.NearestAfterKillKey,
+            $"the row straight under the head turn is Next Target, no presentation row standing between ({shell.FocusedKey})");
         Press(host, seat, Accept);
         ctx.Check(shell.Options.NearestAfterKillChoice == true,
-            $"Accept on the Next Target checkbox under them turns the targeting setting on ({shell.Options.NearestAfterKillChoice})");
+            $"Accept on the Next Target checkbox turns the targeting setting on ({shell.Options.NearestAfterKillChoice})");
         WalkTo(host, seat, shell, OriginalOptionsScreen.GameOptionsCancelKey);
         Press(host, seat, Accept);
-        ctx.Check(shell.Screen == OriginalScreen.Options && shell.Options.PresentationChoice == PresentationId.Original.Value
+        ctx.Check(shell.Screen == OriginalScreen.Options
             && shell.Options.DifficultyChoice == CSVM.Flight.Difficulty.Normal && shell.Options.NearestAfterKillChoice == null
             && shell.Options.DefaultViewChoice == null && shell.Options.AutoHeadTurnChoice == null,
-            $"CANCEL CHANGES lands back on Preferences with every edit dropped ({shell.Screen}, {shell.Options.PresentationChoice}, {shell.Options.DifficultyChoice}, {shell.Options.NearestAfterKillChoice}, {shell.Options.DefaultViewChoice ?? "none"}, {shell.Options.AutoHeadTurnChoice})");
+            $"CANCEL CHANGES lands back on Preferences with every edit dropped ({shell.Screen}, {shell.Options.DifficultyChoice}, {shell.Options.NearestAfterKillChoice}, {shell.Options.DefaultViewChoice ?? "none"}, {shell.Options.AutoHeadTurnChoice})");
         WalkTo(host, seat, shell, OriginalShell.OptionsBackKey);
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.TopLevel && exits.Count == 1,
@@ -827,11 +820,11 @@ internal static class MenuOriginalSuites
     private static OriginalShell? SwitchBackToOriginal(TestContext ctx, MenuHost host)
     {
         host.Deactivate();
-        string? reason = host.Select(forceBuiltIn: false, cliOverride: null, savedRequest: "original");
+        string? reason = host.Select(forceBuiltIn: false, cliOverride: "original");
         host.Show(MenuReturnDestination.TopLevel);
         var shell = (host.Active as OriginalPresentation)?.Shell;
         ctx.Check(host.Selected == PresentationId.Original && reason == null && shell != null,
-            $"the saved request re-selects Original and Show creates a fresh instance ({host.Selected})");
+            $"an Original request re-selects it and Show creates a fresh instance ({host.Selected})");
         ctx.Check(shell is { Screen: OriginalScreen.TopLevel, PickedChapter: null, FocusedKey: OriginalShell.FreeFlightKey },
             $"standing on its top level with nothing picked and the door focused ({shell?.Screen}, {shell?.PickedChapter ?? "none"}, {shell?.FocusedKey})");
         return shell;
@@ -1072,15 +1065,15 @@ internal static class MenuOriginalSuites
     // is not there falls back to Built-in with the availability reason and the request kept.
     private static void Recovery(TestContext ctx, MenuHost host, PresentationRegistry registry, RecordingAudio audio)
     {
-        string? reason = host.Select(forceBuiltIn: true, cliOverride: "original", savedRequest: "original");
+        string? reason = host.Select(forceBuiltIn: true, cliOverride: "original");
         ctx.Check(host.Selected == PresentationId.BuiltIn && reason != null && host.Requested == PresentationId.Original,
             $"--force-builtin resolves Built-in over the Original override and keeps the request ({reason})");
 
         var missing = new MenuHost(registry, audio, _ => { });
         missing.Availability = id => id == PresentationId.Original ? OriginalAvailability.Load(EmptyDataRoot(ctx), out var why) == null ? why : null : null;
-        reason = missing.Select(forceBuiltIn: false, cliOverride: null, savedRequest: "original");
+        reason = missing.Select(forceBuiltIn: false, cliOverride: null);
         ctx.Check(missing.Selected == PresentationId.BuiltIn && missing.Requested == PresentationId.Original,
-            $"a data root with no decoded layout selects Built-in and keeps the saved request ({missing.Selected}, {missing.Requested})");
+            $"a flagless run over a data root with no decoded layout selects Built-in and keeps the Original request ({missing.Selected}, {missing.Requested})");
         ctx.Check(reason != null && reason.Contains("menu_layout.json", System.StringComparison.Ordinal),
             $"with the reason naming the missing file ({reason})");
     }

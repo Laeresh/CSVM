@@ -163,13 +163,13 @@ public sealed record SessionSpec
     /// runs on is the audio device's, so a fixed-step sim clock would say nothing about it.</summary>
     public string? MovieName { get; private set; }
 
-    /// <summary><c>--presentation=</c>: a session-only menu presentation override, never persisted.
-    /// <see cref="Utils.PresentationResolution"/> ranks it above the saved request and below
+    /// <summary><c>--presentation=</c>: the menu presentation for this run, never persisted.
+    /// <see cref="Utils.PresentationResolution"/> ranks it above the Original default and below
     /// <see cref="ForceBuiltInPresentation"/>. Null when the flag is absent.</summary>
     public string? PresentationOverride { get; private set; }
 
     /// <summary><c>--force-builtin</c>: the startup escape hatch that always resolves to the
-    /// Built-in presentation for this run, without touching the saved request.</summary>
+    /// Built-in presentation for this run, writing nothing.</summary>
     public bool ForceBuiltInPresentation { get; private set; }
 
     /// <summary>Which mode-coercing probe (if any) drives this session. The three set a mode at

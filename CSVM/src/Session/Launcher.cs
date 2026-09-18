@@ -352,12 +352,11 @@ public partial class Launcher : Node3D
     private LaunchMenu? BuiltInMenu => (_menuHost?.Active as BuiltInPresentation)?.Menu;
 
     // The presentation a session's boards take. A menu launch has already settled it on the host,
-    // availability and saved option included. A CLI launch builds no host and reads no saved menu
-    // option, since it never went through the menu, so only the flags speak for it there.
+    // availability included. A CLI launch builds no host, so only the flags speak for it there.
     private PresentationId SessionPresentation =>
         _menuHost is { } host ? host.Selected
         : _spec.ForceBuiltInPresentation ? PresentationId.BuiltIn
-        : new PresentationId(Utils.PresentationResolution.Requested(_spec.PresentationOverride, null));
+        : new PresentationId(Utils.PresentationResolution.Requested(_spec.PresentationOverride));
 
     public override void _Ready()
     {
@@ -1706,7 +1705,7 @@ public partial class Launcher : Node3D
     // player-setup features, the first seat (keyboard plus every unclaimed pad behind the
     // launchscreen's own poller, the mouse as its pointer), the audio service over the process's music, archive and
     // the rof tree's menu sounds, and OnMenuExit as the sink. The active presentation is settled
-    // through PresentationResolution: the force flag, --presentation=, then the saved request;
+    // through PresentationResolution: the force flag, --presentation=, then Original;
     // availability is registration plus, for Original, OriginalAvailable below.
     private MenuHost BuildMenuHost()
     {
@@ -1755,8 +1754,7 @@ public partial class Launcher : Node3D
         host.Features.Add(new ControlsFeature((player, profile) =>
             CSVM.Bindings.BindingStore.UserBindings().Save(player, profile)));
         host.AddSeat(seat);
-        string? saved = OptionsStore.UserOptions().Load().MenuPresentation;
-        string? reason = host.Select(_spec.ForceBuiltInPresentation, _spec.PresentationOverride, saved);
+        string? reason = host.Select(_spec.ForceBuiltInPresentation, _spec.PresentationOverride);
         string why = reason == null ? "" : $" reason={reason}";
         Log.Info("ui", $"menu presentation active={host.Selected} requested={host.Requested}{why}");
         return host;
@@ -1804,9 +1802,8 @@ public partial class Launcher : Node3D
     }
 
     // The Options route's apply from the menu: persist and apply every choice, then end the active
-    // presentation (discarding every feature's transient state), re-select with the saved request in
-    // place of any session override, and show the selected presentation at its top level. The force
-    // flag still wins, since it is the recovery path.
+    // presentation (discarding every feature's transient state) and show the same one again at its
+    // top level. No re-select: the presentation is the command line's alone, settled once.
     private void ApplyOptions(OptionsApplyExit applied)
     {
         if (_menuHost == null)
@@ -1815,11 +1812,7 @@ public partial class Launcher : Node3D
         }
 
         PersistOptions(applied);
-        var requested = applied.Presentation;
         _menuHost.Deactivate();
-        string? reason = _menuHost.Select(_spec.ForceBuiltInPresentation, null, requested.Value);
-        string why = reason == null ? "" : $" reason={reason}";
-        Log.Info("ui", $"menu presentation switch requested={requested} active={_menuHost.Selected}{why}");
         ShowMenu(MenuReturnDestination.TopLevel);
     }
 
@@ -1831,10 +1824,8 @@ public partial class Launcher : Node3D
     // flight is built, so a pause-sheet change takes the next sortie rather than this one.
     private void PersistOptions(OptionsApplyExit applied)
     {
-        var requested = applied.Presentation;
         var store = OptionsStore.UserOptions();
         var options = store.Load();
-        options.MenuPresentation = requested.Value;
         options.GraphicsMode = applied.Graphics;
         options.Difficulty = applied.Difficulty;
         options.NearestAfterKill = applied.NearestAfterKill;
@@ -1865,15 +1856,14 @@ public partial class Launcher : Node3D
         // The haptics toggle takes effect now for the same reason, so a pilot turning it off over the
         // pause sheet flies the rest of the sortie with a quiet pad.
         PadRumble.Enabled = !_spec.Det && applied.Rumble != false;
-        Log.Info("ui", $"options applied: presentation={requested.Value} {Utils.GraphicsMode.Key}={applied.Graphics} difficulty={applied.Difficulty}");
+        Log.Info("ui", $"options applied: {Utils.GraphicsMode.Key}={applied.Graphics} difficulty={applied.Difficulty}");
     }
 
     // The in-flight Preferences leaf both pause boards open: the decoded layout the Original
     // presentation composes from, the host's own rebinding feature so a rebind over the pause edits
     // the keymap the menu edits and saves through the one writer, the menu's audio service for its
-    // cues, and PersistOptions as the apply. ⚠ No presentation switch and no ShowMenu: the flight
-    // returns to the sheet over its own world, so a saved presentation word reaches the shell at the
-    // next start rather than tearing down what the pause stands on. Null where no layout reads.
+    // cues, and PersistOptions as the apply. ⚠ No ShowMenu: the flight returns to the sheet over its
+    // own world rather than tearing down what the pause stands on. Null where no layout reads.
     private Flight.PausePreferences? BuildPauseOptions()
     {
         OriginalAvailable(PresentationId.Original);

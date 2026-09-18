@@ -37,9 +37,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     public const string CampaignRow = "Campaign";
 
     /// <summary>The row that opens the Options screen, the last on the Mode screen. Options hold
-    /// the process-wide choices (the difficulty, the targeting setting, the menu presentation, the
-    /// graphics mode and the four display settings), and every presentation exposes them so a
-    /// player can always get back to Built-in.</summary>
+    /// the process-wide choices (the difficulty, the targeting setting, the graphics mode and the
+    /// four display settings). Which presentation runs is not among them: only the two command-line
+    /// flags choose Built-in.</summary>
     public const string OptionsRow = "Options";
 
     /// <summary>The row that opens the rebinding screen, inside Options. It is not beside the
@@ -103,10 +103,10 @@ public sealed partial class LaunchMenu : CanvasLayer
     // The Options screen's stepper rows, above the Controls door and the apply row. The screen is a
     // form the cursor walks top to bottom: the five gameplay settings (the three the Original
     // presentation's GAME OPTIONS page draws, in its order, then the targeting switch and the
-    // rumble), the presentation and the graphics mode, then the four display settings in the order
-    // the Original presentation's VIDEO page draws them, then the two doors. Thirteen rows fit the
-    // band without a window, which is why this screen has no paging rule of its own.
-    private const int OptionsStepperRows = 11;
+    // rumble), the graphics mode, then the four display settings in the order the Original
+    // presentation's VIDEO page draws them, then the two doors. Twelve rows fit the band without a
+    // window, which is why this screen has no paging rule of its own.
+    private const int OptionsStepperRows = 10;
     // The Controls list's two column widths and the extra band width they need, in ems of the row
     // font and in 720p points. TUNE: measured against the longest shipped action name and the
     // longest four-control row, not decoded from anything.
@@ -186,8 +186,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     private int _modeIndex, _chapterIndex;
     // The Options screen's cursor and the choices its stepper rows would apply, seeded from the
     // saved options when the screen opens so it shows back what was asked for, not what is active:
-    // availability can make Built-in active, and the graphics mode a running process resolved is
-    // the one the process started under.
+    // the graphics mode a running process resolved is the one the process started under.
     private int _optionsIndex;
     private int _difficultyChoice = Difficulty.Normal;
     // The targeting setting as saved, null while never set, which the consumer reads as off: a
@@ -201,7 +200,6 @@ public sealed partial class LaunchMenu : CanvasLayer
     // The automatic head turn as saved, null while never set, which leaves the headLook.autohead
     // config key deciding rather than overruling it with a default of this screen's own.
     private bool? _autoHeadTurnChoice;
-    private string _presentationChoice = PresentationId.BuiltIn.Value;
     private string _graphicsChoice = GraphicsMode.Default;
     // The four display settings, stepped by the four rows under the graphics one. Each is stored as
     // the word the options file carries, never as a row index, so a screen unplugged or a size the
@@ -1573,7 +1571,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         switch (_screen)
         {
             case Screen.Options:
-                // The eleven choice rows are steppers; the doors under them have nothing to step.
+                // The ten choice rows are steppers; the doors under them have nothing to step.
                 switch (_optionsIndex)
                 {
                     case 0: StepDifficultyChoice(dir); return true;
@@ -1581,12 +1579,11 @@ public sealed partial class LaunchMenu : CanvasLayer
                     case 2: ToggleAutoHeadTurnChoice(); return true;
                     case 3: ToggleNearestAfterKillChoice(); return true;
                     case 4: ToggleRumbleChoice(); return true;
-                    case 5: TogglePresentationChoice(); return true;
-                    case 6: ToggleGraphicsChoice(); return true;
-                    case 7: StepMonitorChoice(dir); return true;
-                    case 8: StepResolutionChoice(dir); return true;
-                    case 9: StepDisplayModeChoice(dir); return true;
-                    case 10: StepVSyncChoice(dir); return true;
+                    case 5: ToggleGraphicsChoice(); return true;
+                    case 6: StepMonitorChoice(dir); return true;
+                    case 7: StepResolutionChoice(dir); return true;
+                    case 8: StepDisplayModeChoice(dir); return true;
+                    case 9: StepVSyncChoice(dir); return true;
                     default: return false;
                 }
             case Screen.Chapter:
@@ -1683,7 +1680,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                 {
                     // The launcher persists every choice and restarts the menu; the screen stays
                     // standing for the host to hide.
-                    _host.Exit(new OptionsApplyExit(new PresentationId(_presentationChoice), _graphicsChoice,
+                    _host.Exit(new OptionsApplyExit(_graphicsChoice,
                         Difficulty.Word(_difficultyChoice), _monitorChoice, _resolutionChoice,
                         _displayModeChoice, _vsyncChoice, _audioMasterChoice, _audioMusicChoice,
                         _audioEffectsChoice, _audioVoiceChoice, _nearestAfterKillChoice, _rumbleChoice,
@@ -2592,8 +2589,8 @@ public sealed partial class LaunchMenu : CanvasLayer
             : "";
 
     // Opens the Options screen on the saved options, so each stepper shows back what the player
-    // asked for even when availability made Built-in the active presentation, or when the running
-    // process resolved a graphics mode from a flag or the config key instead.
+    // asked for even when the running process resolved a graphics mode from a flag or the config
+    // key instead.
     private void OpenOptions()
     {
         _optionsIndex = 0;
@@ -2603,7 +2600,6 @@ public sealed partial class LaunchMenu : CanvasLayer
         _rumbleChoice = saved.Rumble;
         _defaultViewChoice = saved.DefaultView;
         _autoHeadTurnChoice = saved.AutoHeadTurn;
-        _presentationChoice = saved.MenuPresentation ?? PresentationId.Original.Value;
         _graphicsChoice = saved.GraphicsMode ?? GraphicsMode.Default;
         _monitorChoice = saved.MonitorIndex;
         _resolutionChoice = saved.Resolution;
@@ -2926,18 +2922,10 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     private string RumbleChoiceLabel() => _rumbleChoice != false ? "On" : "Off";
 
-    private void TogglePresentationChoice() =>
-        _presentationChoice = _presentationChoice == PresentationId.Original.Value
-            ? PresentationId.BuiltIn.Value
-            : PresentationId.Original.Value;
-
     private void ToggleGraphicsChoice() =>
         _graphicsChoice = _graphicsChoice == GraphicsMode.EnhancedWord
             ? GraphicsMode.Default
             : GraphicsMode.EnhancedWord;
-
-    private string PresentationChoiceLabel() =>
-        _presentationChoice == PresentationId.Original.Value ? "Original" : "Built-in";
 
     private string GraphicsChoiceLabel() =>
         _graphicsChoice == GraphicsMode.EnhancedWord ? "Enhanced" : "Original";
@@ -3529,13 +3517,12 @@ public sealed partial class LaunchMenu : CanvasLayer
                 2 => $"Auto Head Turn: {AutoHeadTurnChoiceLabel()}",
                 3 => $"Nearest target after a kill: {NearestAfterKillChoiceLabel()}",
                 4 => $"Controller rumble: {RumbleChoiceLabel()}",
-                5 => $"Menu presentation: {PresentationChoiceLabel()}",
-                6 => $"Graphics: {GraphicsChoiceLabel()}",
-                7 => $"Monitor: {MonitorChoiceLabel()}",
-                8 => $"Resolution: {ResolutionChoiceLabel()}",
-                9 => $"Display mode: {DisplayModeChoiceLabel()}",
-                10 => $"V-Sync: {VSyncChoiceLabel()}",
-                11 => ControlsRow,
+                5 => $"Graphics: {GraphicsChoiceLabel()}",
+                6 => $"Monitor: {MonitorChoiceLabel()}",
+                7 => $"Resolution: {ResolutionChoiceLabel()}",
+                8 => $"Display mode: {DisplayModeChoiceLabel()}",
+                9 => $"V-Sync: {VSyncChoiceLabel()}",
+                10 => ControlsRow,
                 _ => "Apply and restart the menu",
             },
             Screen.Controls => $"{ControlsRowLabel(index)}   {ControlsRowValue(index)}",
@@ -3847,7 +3834,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.Mode => focus < Modes.Length ? Modes[focus].Detail
             : focus == Modes.Length ? "Fly the story: pick a player, then the cabin."
             : focus == Modes.Length + 1 ? "Build a plane in the hangar and fly it."
-            : "Choose the difficulty, which presentation draws the menus, and the graphics mode.",
+            : "Choose the difficulty, the graphics mode and the display settings.",
         Screen.Hangar => _hangar?.Page.Detail(focus) ?? "",
         Screen.Campaign => _campaign?.Page.Detail(focus) ?? "",
         // One arm per row of the Options screen, in the order RowText writes them. A row that lost
@@ -3860,13 +3847,12 @@ public sealed partial class LaunchMenu : CanvasLayer
             2 => "Select to turn your head automatically as your aircraft turns. Cockpit views only.",
             3 => "Take the nearest target after a kill instead of the first of the list.",
             4 => "Rumble the gamepad for guns, launches, hits, the nitro and a dive past the rated maximum.",
-            5 => "Built-in needs no extracted menu art; Original draws the original's own screens from it.",
-            6 => GraphicsDetail(),
-            7 => "Select the monitor the game opens on. Applied on the way out, before the size.",
-            8 => ResolutionDetail(),
-            9 => "Select how the window sits on the screen. Borderless leaves the desktop beneath it.",
-            10 => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap.",
-            11 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
+            5 => GraphicsDetail(),
+            6 => "Select the monitor the game opens on. Applied on the way out, before the size.",
+            7 => ResolutionDetail(),
+            8 => "Select how the window sits on the screen. Borderless leaves the desktop beneath it.",
+            9 => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap.",
+            10 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
             _ => "Saves every choice and restarts the menu at its top level; unfinished setup is discarded.",
         },
         Screen.Controls => ControlsDetail(focus),

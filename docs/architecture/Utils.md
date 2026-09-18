@@ -269,7 +269,7 @@ the native window handle. Fully static, one call site in `Launcher._Ready` right
 block, where the same predicate drives both window hiding and the interactive run's focus request.
 
 ## src/Utils/OptionsStore.cs
-Process-wide, version-tolerant JSON persistence for `OptionsDef`: the menu presentation, graphics mode and difficulty words, the four
+Process-wide, version-tolerant JSON persistence for `OptionsDef`: the graphics mode and difficulty words, the four
 display settings (monitor index, resolution, display mode, V-Sync), the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in and the automatic head turn. One file, `user://options.json`,
 independent of `Session/CampaignProfileStore.cs`. A missing or malformed file reads as empty, an unknown version invalidates it, an
 unknown value drops only that field, and a field the file does not carry reads as never set, which is why adding a field does not bump
@@ -308,11 +308,11 @@ buses underneath it (`AudioMix`), so the two reach the output as a product and a
 un-silence a scripted run. The `audio-levels-launch` suite drives that whole ladder from a parsed command line.
 
 ## src/Utils/PresentationResolution.cs
-The requested-versus-active menu presentation resolver: force-Built-in → CLI override → saved
-request → the Original default, with the caller's availability check applied only after the request
+The requested-versus-active menu presentation resolver: force-Built-in → CLI override → the
+Original default, with the caller's availability check applied only after the request
 is picked, so a machine without the extracted menu data lands on Built-in with a reason. `Resolve`
-never rewrites what `Requested` would answer, so a fallback cannot alter `OptionsStore`'s saved
-value. Presentation names are plain strings; no presentation contract type lives here.
+never rewrites what `Requested` would answer. ⚠ No saved word takes part: a `menuPresentation` an
+older build wrote stays in the options file unread. Presentation names are plain strings; no presentation contract type lives here.
 
 ## src/Utils/WorldBackdrop.cs
 The background of the process's one `WorldEnvironment`, which is a `ProceduralSkyMaterial` as the

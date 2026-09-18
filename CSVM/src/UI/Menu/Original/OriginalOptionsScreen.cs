@@ -33,9 +33,6 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     /// <summary>The Game Options page's difficulty dropdown, the page's first row.</summary>
     public const string DifficultyKey = "DIFFICULTY";
 
-    /// <summary>The Game Options page's menu-presentation dropdown.</summary>
-    public const string PresentationKey = "PRESENTATION";
-
     /// <summary>The Game Options page's Default View dropdown, the original's own second row.</summary>
     public const string DefaultViewKey = "DEFAULTVIEW";
 
@@ -297,16 +294,13 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     private const float ControlsMouseTitleY = 364f;
     private const float ControlsMouseDescY = 373f;
 
-    // The three IDS_DIFFICULTY rows as the campaign selector labels them, the two shipped
-    // presentation tokens as the dropdown's items.
+    // The three IDS_DIFFICULTY rows as the campaign selector labels them.
     private static readonly string[] DifficultyWords =
     {
         CSVM.Flight.Difficulty.Label(CSVM.Flight.Difficulty.Normal),
         CSVM.Flight.Difficulty.Label(CSVM.Flight.Difficulty.Hard),
         CSVM.Flight.Difficulty.Label(CSVM.Flight.Difficulty.Hardest),
     };
-
-    private static readonly string[] PresentationWords = { "ORIGINAL", "BUILT-IN" };
 
     // The Default View dropdown's own three items, the words and the order the original's list
     // carries (CSVM.Flight.PilotView.Selectable and .Label, decoded from uiData 2127 in
@@ -345,9 +339,6 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
             OriginalRowKind.Radio, NearestAfterKillWords,
             s => s._autoHeadTurn == true ? 1 : 0,
             (s, i) => s._autoHeadTurn = i == 1),
-        new(PresentationKey, "Menu", _ => "Select the menu presentation.", OriginalRowKind.Dropdown, PresentationWords,
-            s => s._choice == PresentationId.BuiltIn.Value ? 1 : 0,
-            (s, i) => s._choice = i == 1 ? PresentationId.BuiltIn.Value : PresentationId.Original.Value),
         new(NearestAfterKillKey, "Next Target",
             _ => "Take the nearest target after a kill instead of the first of the list.",
             OriginalRowKind.Radio, NearestAfterKillWords,
@@ -499,7 +490,6 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     private int _vpListTop;
     private int _keysTab;
     private int _keysTop;
-    private string _choice = PresentationId.Original.Value;
     private string _graphics = CSVM.Utils.GraphicsMode.Default;
     private int _difficulty = CSVM.Flight.Difficulty.Normal;
     // The targeting setting as saved, null while never set, which the consumer reads as off. Held
@@ -597,9 +587,6 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
 
     /// <summary>The first row of the standing tab that the list's window shows.</summary>
     public int KeysTop => _keysTop;
-
-    /// <summary>The presentation the Game Options page would apply.</summary>
-    public string PresentationChoice => _choice;
 
     /// <summary>The graphics mode word the VIDEO page would apply.</summary>
     public string GraphicsChoice => _graphics;
@@ -957,7 +944,6 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     private void ReadSavedOptions()
     {
         var saved = _options?.Invoke();
-        _choice = saved?.MenuPresentation ?? PresentationId.Original.Value;
         _graphics = saved?.GraphicsMode ?? CSVM.Utils.GraphicsMode.Default;
         _difficulty = CSVM.Flight.Difficulty.Parse(saved?.Difficulty) ?? CSVM.Flight.Difficulty.Normal;
         _nearestAfterKill = saved?.NearestAfterKill;
@@ -979,7 +965,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     // page writes the ones it shows and hands the rest back as ReadSavedOptions read them, which
     // is what keeps Launcher.ApplyOptions the options file's one writer.
     private OptionsApplyExit AppliedOptions() =>
-        new(new PresentationId(_choice), _graphics, CSVM.Flight.Difficulty.Word(_difficulty),
+        new(_graphics, CSVM.Flight.Difficulty.Word(_difficulty),
             _monitorIndex, _resolution, _displayMode, _vsync,
             _audioMaster, _audioMusic, _audioEffects, _audioVoice, _nearestAfterKill, _rumble,
             _defaultView, _autoHeadTurn);

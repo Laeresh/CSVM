@@ -39,8 +39,7 @@ public static class DisplayWords
     public static readonly IReadOnlyList<string> VSyncChoices = new[] { VSyncOn, VSyncOff, "60", "120", "144" };
 }
 
-/// <summary>The process-wide options: the requested menu presentation, the requested graphics
-/// mode, the difficulty setting, the nearest-after-a-kill targeting setting, the opening view, the
+/// <summary>The process-wide options: the requested graphics mode, the difficulty setting, the nearest-after-a-kill targeting setting, the opening view, the
 /// automatic head turn, the four display settings (the monitor, the window size, the display mode
 /// and the V-Sync choice) and the four volume levels. A missing field means "never set"; the
 /// caller, not this def, decides what that falls back to.
@@ -52,6 +51,9 @@ public static class DisplayWords
 /// through <see cref="AudioMix.SavedLevels"/>, which is their one reader.</summary>
 public sealed class OptionsDef
 {
+    /// <summary>A menu presentation word an older build saved. Loaded and saved back so such a
+    /// file round-trips, and read by nothing: the command line alone picks the presentation, and
+    /// no screen writes this field.</summary>
     public string? MenuPresentation { get; set; }
 
     public string? GraphicsMode { get; set; }

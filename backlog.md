@@ -692,14 +692,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   levels, so the mix is settable in the Original presentation alone.** *Evidence:*
   `PLAN-audio-preferences` builds the AUDIO page for Original and puts four levels (Master, Music,
   Effects, Voice) in the shared options store, which is where every setting both presentations show
-  already lives. Built-in's Options screen holds seven steppers (difficulty, menu presentation,
-  graphics mode and the four display settings) and the Controls door, and its apply hands back the
+  already lives. Built-in's Options screen holds ten steppers (difficulty, default view, automatic
+  head turn, targeting, rumble, graphics mode and the four display settings) and the Controls door, and its apply hands back the
   four levels untouched, the only settings it does not show, so once the page lands a player on
   Built-in can hear the mix and not reach it. Blocked until the four levels exist in the
   store, which is the whole of the dependency: nothing else about this item waits on that plan.
   *Fix shape:* four rows on Built-in's Options screen reading and writing the same store fields the
   AUDIO page does, in the screen's own stepper convention, applied through the same
-  `OptionsApplyExit` the seven current rows leave by. The four display rows landed on that screen
+  `OptionsApplyExit` the ten current rows leave by. The four display rows landed on that screen
   are the worked model: read the store word, step over the row's own values, write the word back.
   *⚠ Traps:* Built-in has no continuous control of any kind, so a 0 to 100 level is a stepper with a
   chosen step rather than a slider, and the step size is a judgement the row has to make rather than
@@ -1054,17 +1054,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   https://discussions.unity.com/t/local-multiplayer-player-join-config-screen-using-ui-toolkit/1701038
   (the pattern as other local co-op games ship it, asked for by name).
 
-- `BL-954` `[Cleanup]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: spec]` **The menu presentation row leaves both
-  Options screens; without a flag the menu is always the Original presentation.** *Evidence:* the
-  user's call, "remove the Menu Option combo box for now, only original without CLI flags". Today
-  `OriginalOptionsScreen` carries the `PRESENTATION` dropdown, `LaunchMenu`'s Options page a
-  "Menu presentation" stepper, and `Launcher` resolves the saved `MenuPresentation` behind
-  `--force-builtin` and `--presentation=`. *Fix shape:* remove both rows; resolve the presentation
-  as force-Built-in, then the `--presentation=` flag, then Original, ignoring the saved word
-  (leave it in the file, unread, so an older file still loads). The two flags stay the only doors
-  to the built-in presentation. *⚠ Traps:* `MenuOriginalSuites` and `MenuLaunchReturnSuites` walk
-  the row; retarget them. `BL-782` counts seven steppers on Built-in's Options screen; it becomes
-  six. *Cross-refs:* `docs/cli.md` (`--presentation`, `--force-builtin`), `docs/menu-presentations.md`.
 
 - `BL-958` `[Bug]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: feel]` **The spyglass disc's picture still steps in a
   hard turn.** *Evidence:* judged at the controls after the eye moved onto the interpolated draw
