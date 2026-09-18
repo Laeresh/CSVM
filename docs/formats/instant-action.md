@@ -376,13 +376,19 @@ with all four wave counts: dogfighting an ace is a solo duel, in the data as wel
 
 Wingman `i` (0-based) is built as:
 
-| i | def | roster name | `accentID` | `primary_target` |
-|---|---|---|---|---|
-| 0 | `w<plane>` | `w<plane>_ia0` | 12 | `player` |
-| 1 | `<plane>` | `<plane>_ia1` | 14 | `player` |
-| 2 | `w<plane>` | `w<plane>_ia2` | 15 | `<plane>_ia1` |
-| 3 | `<plane>` | `<plane>_ia3` | 13 | `player` |
-| 4 | `w<plane>` | `w<plane>_ia4` | 16 | `<plane>_ia3` |
+| i | def | roster name | `accentID` | `primary_target` | title (string id, key, text) |
+|---|---|---|---|---|---|
+| 0 | `w<plane>` | `w<plane>_ia0` | 12 | `player` | `0x32c9`, `MSG_JACK_NAME`, Jack |
+| 1 | `<plane>` | `<plane>_ia1` | 14 | `player` | `0x32cd`, `MSG_TEX_NAME`, Tex |
+| 2 | `w<plane>` | `w<plane>_ia2` | 15 | `<plane>_ia1` | `0x32cb`, `MSG_BUCK_NAME`, Buck |
+| 3 | `<plane>` | `<plane>_ia3` | 13 | `player` | `0x32cc`, `MSG_BJOHN_NAME`, Big John |
+| 4 | `w<plane>` | `w<plane>_ia4` | 16 | `<plane>_ia3` | `0x32e4`, `MSG_BETTY_NAME`, Betty |
+
+The title is the block's `+0xc`, the name the target marker prints ([targeting.md](../org/targeting.md)):
+each switch case of the wingman loop resolves its hardcoded string id through `FUN_0059ce40`
+(`0x0045a502`, `0x0045a565`, `0x0045a5c8`, `0x0045a642`, `0x0045a6a2`) and `_strdup`s the text into
+the block at `0x0045a7ae`, so a wingman's marker names its pilot, as the ace's (`ace_name`) and a
+wave member's (`enemy_name`) do.
 
 `<plane>` is `wingman_plane`'s index through the two name columns above; the roster name format is
 `%s_ia%d` over the def and the index. **So the flight is not five aircraft on the player: 0, 1 and

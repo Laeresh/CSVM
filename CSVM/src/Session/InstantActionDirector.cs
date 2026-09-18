@@ -68,10 +68,10 @@ public sealed class InstantActionDirector
     }
 
     /// <summary>The roster's authoring spawn operation, handed in as a lambda for the same reason
-    /// AiGeneratorRuntime takes one: the spawner and its roster stay GameSession's.</summary>
-    internal delegate FlightController? SpawnAuthoredAircraft(string planeName, Vector3 pos,
-        Vector3 lookAt, AiPilot pilot, PaintScheme? scheme, int? team, int? attackRating,
-        bool inert, bool shippedSkins, Flight.LoadoutChoice? fit, int? difficulty);
+    /// AiGeneratorRuntime takes one: the spawner and its roster stay GameSession's. The director
+    /// writes the whole <see cref="AiSpawn"/>, so every authored fact of an actor, its name
+    /// included, is set here where a suite can drive it.</summary>
+    internal delegate FlightController? SpawnAuthoredAircraft(AiSpawn spawn);
 
     /// <summary>GameSession.RegisterAiVoice: the voice runtime serves non-mission spawns too.</summary>
     internal delegate void RegisterAiVoice(FlightController? ai, int? accentId, int? talkerOverride,
@@ -199,10 +199,10 @@ public sealed class InstantActionDirector
                 // shippedSkins for the same reason as a wave member below: the ace flies for an
                 // enemy militia, so an ia.json without ace_pattern (hand-authored only) falls back
                 // to its own textures, never the player militia's Fortune Hunters default.
-                var ace = inputs.Spawn(aceNode, sp.Position, sp.Position + fwd, pilot,
-                    ia.Def.AceLivery, InstantActionRuntime.EnemyTeam,
-                    rating, inert: false, shippedSkins: true, fit: null,
-                    difficulty: Flight.Difficulty.Parse(ia.Def.AceSkill));
+                var ace = inputs.Spawn(new AiSpawn(aceNode, sp.Position, sp.Position + fwd, pilot,
+                    ia.Def.AceLivery, InstantActionRuntime.EnemyTeam, Inert: false,
+                    ShippedSkins: true, AttackRating: rating, PilotName: ia.Def.AceName,
+                    Difficulty: Flight.Difficulty.Parse(ia.Def.AceSkill)));
                 inputs.RegisterVoice(ace, ia.Def.AceAccentId, rating, rating);
                 _ace = ace;
                 InstantActionRuntime.ApplyActorVolumes(pilot.Machine);
@@ -263,10 +263,10 @@ public sealed class InstantActionDirector
                     // The wizard's one wingman fit, covering the whole flight as the original's
                     // Player/Wingman radio does. Passed per spawn, never as a blanket default: the
                     // stock-table branch it lands in also catches enemies on player airframes.
-                    var wingman = inputs.Spawn(wingmanNode, pos, pos + wmFwd, pilot,
-                        wingmanScheme, AimAssist.PlayerTeam, attackRating: 5,
-                        inert: false, shippedSkins: false, fit: ia.Def.WingmanLoadout,
-                        difficulty: null); // on the player's team, so the scale never reaches it
+                    var wingman = inputs.Spawn(new AiSpawn(wingmanNode, pos, pos + wmFwd, pilot,
+                        wingmanScheme, AimAssist.PlayerTeam, Inert: false, ShippedSkins: false,
+                        Fit: ia.Def.WingmanLoadout, AttackRating: 5, PilotName: slot.TitleKey,
+                        Difficulty: null)); // on the player's team, so the scale never reaches it
                     wingmen[i] = wingman;
                     if (wingman == null)
                         continue;
@@ -329,11 +329,12 @@ public sealed class InstantActionDirector
                             InstantActionRuntime.RandomPilotStats(Rng.Stream(Rng.Ai).Randi()));
                         // The wave's skill is not a pilot rating: its whole effect is standing in
                         // as the difficulty for this one spawn (docs/formats/instant-action.md).
-                        var enemy = inputs.Spawn(waveNode, Vector3.Zero, Vector3.Forward,
-                            pilot, waveScheme, InstantActionRuntime.EnemyTeam,
-                            rating, inert: true,
-                            shippedSkins: waveScheme == null, fit: null,
-                            difficulty: Flight.Difficulty.Parse(wave.EnemySkill));
+                        // enemy_name names the member on its marker as well as choosing its paint.
+                        var enemy = inputs.Spawn(new AiSpawn(waveNode, Vector3.Zero,
+                            Vector3.Forward, pilot, waveScheme, InstantActionRuntime.EnemyTeam,
+                            Inert: true, ShippedSkins: waveScheme == null, AttackRating: rating,
+                            PilotName: wave.EnemyName,
+                            Difficulty: Flight.Difficulty.Parse(wave.EnemySkill)));
                         if (enemy == null)
                         {
                             continue;

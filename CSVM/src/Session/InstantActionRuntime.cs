@@ -261,7 +261,8 @@ public sealed class InstantActionRuntime
         float sign = (i & 3) is 1 or 2 ? 1f : -1f;
         int? escorts = i switch { 2 => 1, 4 => 3, _ => null };
         int accentId = new[] { 12, 14, 15, 13, 16 }[i];
-        return new WingmanSlot(metres, sign * 45f, escorts, accentId);
+        string titleKey = new[] { "MSG_JACK_NAME", "MSG_TEX_NAME", "MSG_BUCK_NAME", "MSG_BJOHN_NAME", "MSG_BETTY_NAME" }[i];
+        return new WingmanSlot(metres, sign * 45f, escorts, accentId, titleKey);
     }
 
     /// <summary>Decision 8a's flight-size cap: the friendly flight is capped at 6 aircraft (1
@@ -471,6 +472,8 @@ public sealed class InstantActionRuntime
     /// wingmen"): its fan placement off the player's spawn heading,
     /// <c>100 · ((i &gt;&gt; 1) + 1)</c> metres out, at ±45°, the same 100 m/45° pattern the wave
     /// sequencer uses, its <see cref="PrimaryTargetIsWingman"/> escort chain (0, 1 and 3 escort
-    /// the player; 2 and 4 escort wingmen 1 and 3), and its authored accent id.</summary>
-    public readonly record struct WingmanSlot(float MetresOut, float OffsetDeg, int? PrimaryTargetIsWingman, int AccentId);
+    /// the player; 2 and 4 escort wingmen 1 and 3), its authored accent id, and the <c>MSG_*</c> key
+    /// of the pilot name its marker prints (the builder's hardcoded string ids, one per slot).</summary>
+    public readonly record struct WingmanSlot(float MetresOut, float OffsetDeg, int? PrimaryTargetIsWingman,
+        int AccentId, string TitleKey);
 }

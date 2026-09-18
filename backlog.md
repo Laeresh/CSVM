@@ -1146,21 +1146,6 @@ usual.
   read. *Cross-refs:* `docs/org/aiPilot.md` (the headline, "Open"),
   `docs/formats/ai-rosters.md` ("Who is netless").
 
-- `BL-980` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **The Instant Action
-  ace's target marker names the aeroplane where the original names the pilot.** At the controls
-  the marker over the ace reads "Peacemaker"; in the original it reads the ace's name
-  ("Marshall Bill Redmann", C5's `MSG_SSCRAWFORD_NAME`), and the wave enemies read their group's
-  `enemy_name`. *Evidence:* `FUN_0045a390` writes the marker's name string from `ia.zrd`'s
-  `ace_name` (`0x0045ab0a`) and the waves' `enemy_name` (`0x0045ae73`), both MSG keys the parser
-  resolves through the string table (`0x0045946b`, `0x00458e36`; `docs/org/targeting.md`,
-  `docs/formats/instant-action.md`). CSVM already parses both (`InstantAction.AceName`,
-  `EnemyName`) and logs the ace's name at spawn, but `InstantActionDirector` spawns the ace and
-  the wave members with no title, so `TargetHud` falls through `PlaneRoster.PlaneDisplayName` to
-  the def-name derivation. The campaign path proves the mechanism: an authored roster `Title`
-  lands in `PlaneStats.AiTitle` and the marker reads it. *Fix shape:* resolve `AceName` and each
-  wave's `EnemyName` at spawn and set them as the actor's `AiTitle`, the same field the campaign
-  fills; the wingmen keep the plane-name fallback unless the decode shows otherwise.
-
 ## Tooling, platform & docs
 
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: data]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in

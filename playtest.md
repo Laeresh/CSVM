@@ -656,6 +656,18 @@ against `BL-389` rather than against the wash routing.
   *Blocks:* nothing tracks the outcome; a silent ace with that warning absent mints a new `BL`
   naming the trigger that stayed silent.
 
+- `PT-164` `[Own]` **Instant Action target markers name the pilot, not the aeroplane**
+  (it closed `BL-980`, `git log --grep=BL-980`). Menu path: Instant Action → C1 → Dogfighting an
+  Ace, then again as Dogfighting a Squadron with wingmen. A scripted build shows the names on each
+  actor's stats; what no instrument shows is the marker as drawn over the aircraft.
+  *Look for:*
+  - (a) the marker over the ace reads "Paladin Blake", not "Peacemaker";
+  - (b) a wave-1 enemy's marker reads "Ivar's Firebrand";
+  - (c) wherever a wingman's name shows (its marker, or a kill line naming it), it reads Jack,
+    Tex, Buck, Big John or Betty rather than the aircraft.
+
+  *Blocks:* nothing tracks the outcome; a wrong or missing name mints a new `BL`.
+
 ### CM01 (C3/M01) · two to four pilots, join, flight check, death and skip
 
 ```powershell

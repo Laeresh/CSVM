@@ -387,6 +387,125 @@ internal static class InstantActionSuites
         }
     }
 
+    // Driven through the director's own BuildActors rather than hand-built AiSpawns, so the name
+    // each actor carries is the one the mission build writes, not one this suite chose.
+    [Suite("instant-action-marker-names",
+        "the Instant Action actor build names its aircraft the way the original's marker does: "
+        + "over C1/IA1 and C5/IA1 as dogfight_ace, the ace's display name is its ace_name resolved "
+        + "through the string table (a pilot, not its airframe); over C1/IA1 as dogfight_squadron "
+        + "with five wingmen and one member per wave, each wave member reads its group's resolved "
+        + "enemy_name and the wingmen read Jack, Tex, Buck, Big John and Betty in slot order")]
+    internal static void InstantActionMarkerNames(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.MessagesPath, $"string table");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var strings = Messages.Load(ctx.MessagesPath);
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        var built = new List<FlightController>();
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+            var roster = CampaignRosterSuites.Spawner(ctx, planesGamez, textures, live);
+
+            // One mission build: the director spawns through the roster, and the spawns come back
+            // in build order (ace, wingmen, then waves 1 to 4).
+            List<(AiSpawn Spawn, FlightController Actor)> Build(string chapter, InstantActionDef def)
+            {
+                string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, "IA1");
+                var spec = SessionSpec.FromMenu(SessionSpec.Parse(System.Array.Empty<string>()),
+                    chapter, new[] { "player_bhawk" }, MenuMode.Free, def);
+                var director = InstantActionDirector.TryCreate(spec)!;
+                var leadAt = new Vector3(0f, 800f, 0f);
+                var lead = roster.SpawnAi(new AiSpawn("player_bhawk", leadAt, leadAt + Vector3.Forward,
+                    AiPilot.HoldingCourse(leadAt, leadAt + Vector3.Forward), Team: AimAssist.PlayerTeam));
+                built.Add(lead);
+                var spawned = new List<(AiSpawn, FlightController)>();
+                director.BuildActors(new InstantActionDirector.ActorBuildInputs
+                {
+                    Rigs = new List<PlayerRig> { new() { Controller = lead } },
+                    ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, chapter),
+                    MissionZrdrPath = missionZrdr,
+                    ZrdrPath = ctx.ZrdrPath,
+                    MessagesPath = ctx.MessagesPath,
+                    SpawnList = SpawnPoints.LoadIa(missionZrdr, def.MissionType),
+                    SpawnBase = 0,
+                    LiveryResolver = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
+                    NetTrailers = new NetTrailerTargets(null, null),
+                    Spawn = spawn =>
+                    {
+                        var fc = roster.SpawnAi(spawn);
+                        built.Add(fc);
+                        spawned.Add((spawn, fc));
+                        return fc;
+                    },
+                    RegisterVoice = (_, _, _, _) => { },
+                });
+                return spawned;
+            }
+
+            string Marker(FlightController fc) => PlaneRoster.PlaneDisplayName(fc.Stats!);
+
+            foreach (string chapter in new[] { "C1", "C5" })
+            {
+                string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, chapter, "IA1");
+                ctx.RequireData(missionZrdr, $"{chapter}/IA1 zrdr");
+                var shipped = InstantAction.Load(missionZrdr);
+                var aceDef = InstantAction.BuildFromWizard(shipped, "dogfight_ace", shipped.PlayerPlane,
+                    numWingmen: 0, shipped.WingmanPlane, shipped.Waves, shipped.Lives);
+                var aceBuild = Build(chapter, aceDef);
+                string expected = strings.Get(shipped.AceName);
+                ctx.Check(aceBuild.Count == 1 && aceBuild[0].Actor.Team == InstantActionRuntime.EnemyTeam,
+                    $"{chapter} dogfight_ace builds the ace alone: {aceBuild.Count} actor(s)");
+                if (aceBuild.Count == 0)
+                {
+                    continue;
+                }
+                string aceMarker = Marker(aceBuild[0].Actor);
+                ctx.Check(!expected.StartsWith("MSG_", System.StringComparison.Ordinal) && aceMarker == expected,
+                    $"{chapter}: the ace's marker reads its resolved ace_name '{shipped.AceName}' -> '{expected}': '{aceMarker}'");
+                ctx.Check(aceMarker != shipped.AcePlane,
+                    $"…the pilot, not the airframe '{shipped.AcePlane}'");
+            }
+
+            var c1 = InstantAction.Load(SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1"));
+            var oneEach = c1.Waves.Select(w => w with { NumEnemies = 1 }).ToList();
+            var squadDef = InstantAction.BuildFromWizard(c1, "dogfight_squadron", c1.PlayerPlane,
+                numWingmen: 5, c1.WingmanPlane, oneEach, c1.Lives);
+            var squad = Build("C1", squadDef);
+            var wingmen = squad.Where(s => s.Actor.Team == AimAssist.PlayerTeam).Select(s => Marker(s.Actor)).ToList();
+            var waves = squad.Where(s => s.Actor.Team == InstantActionRuntime.EnemyTeam).Select(s => s.Actor).ToList();
+            var wingmanNames = new[] { "Jack", "Tex", "Buck", "Big John", "Betty" };
+            ctx.Check(wingmen.SequenceEqual(wingmanNames),
+                $"the five wingmen read their slots' names in order: [{string.Join(", ", wingmen)}]");
+            ctx.Check(waves.Count == 4, $"one member per wave, four waves: {waves.Count}");
+            for (int w = 0; w < System.Math.Min(4, waves.Count); w++)
+            {
+                string key = c1.Waves[w].EnemyName;
+                string want = strings.Get(key);
+                string got = Marker(waves[w]);
+                ctx.Check(!want.StartsWith("MSG_", System.StringComparison.Ordinal) && got == want,
+                    $"wave {w + 1}'s member reads its group's resolved enemy_name '{key}' -> '{want}': '{got}'");
+            }
+        }
+        finally
+        {
+            pool?.Free();
+            foreach (var fc in built)
+            {
+                fc.Free();
+            }
+            textures.Dispose();
+        }
+    }
+
     // The F12 zeppelin run: the objective-zeppelin selection, the builder's own switch,
     // and the wave arm that replaces E11's teleport. Everything runs over C1/IA1's real
     // `ia.zrd.json` / `egen.zrd.json` / `zeppelins.zrd.json`, on the same host +
