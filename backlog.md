@@ -196,31 +196,59 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Weapons & combat
 
-- `BL-286` `[Tuning]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: footage]` **The first-person muzzle-light energy is picked, not
-  measured, and reads much dimmer inside the canopy than the original's.**
-  *Evidence:* `MuzzleLightEnergy` **2.5** (`CSVM/src/Flight/Projectile.cs`) is the one figure both
-  `muzzle_burst` light branches take, because no def carries an energy at all: the two big
-  `PLAYER_1ST_PERSON` lights (`bigmuzzle_lt` + `muzzle_lt`, at the authored offsets, ranges and
-  colour) start at the third-person stand-in's brightness. The magnitudes were signed off in
-  `--weapon-lab`, a static A/B that settles the third-person look only, and at the controls the
-  interior lights far more weakly than the original's.
-  *Fix shape:* one constant. The calibration clips are in the library:
-  `OriginalScreenshots/Videos/CAP-39 1.mkv` (Devastator) and `CAP-39 2.mkv` (Bloodhawk), the
-  original's cockpit view with the guns held. Read the lit interior's frame luminance at the
-  light's peak against the unlit frame on both sides at a matched pose, and fit the energy to the
-  measured ratio; the emphasis to match is the canopy struts above the head, which is where the
-  original puts the flash at the controls. Any windshield bullet-hole decals in the same clips ride
-  along for `BL-932`'s glass-hole judgement.
-  *⚠ Traps:* **do not raise the energy on an estimate**; the two clips are the only cockpit-view
-  gunfire in the library, so the fit is theirs. The pick-one single-quad flash reading
-  (+ `_muzzle1`→`_muzzle2` flip) was implemented and rejected at the controls; do not re-land it
-  without new footage evidence.
+- `BL-286` `[Bug]` `[Blocked: BL-952]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **A shot barely lights
+  the cockpit interior, where the original's first-person muzzle lights drive the canopy struts to
+  their fully lit colour and leave the dash untouched.**
+  *Evidence, the original:* `OriginalScreenshots/Videos/CAP-39 1.mkv` and `CAP-39 2.mkv` at 60 fps,
+  forward pose, guns held. Each shot lights exactly one frame. Per-shot lit/unlit luminance, the
+  unlit reference being the two neighbouring frames, patch means over a strut section above the
+  head. Clip 1 (the wood-and-black panel), 43 shots between frames 34 and 865: left strut
+  2.03 to 2.46 (median 2.27), right strut 1.85 to 2.25 (median 2.02). Clip 2 (the carbon panel),
+  74 shots between frames 172 and 1372: right strut **median 3.96** (3.40 to 4.08, sd 0.07), and
+  the left strut alternating between 3.15 to 3.69 and 1.80 to 2.81 as the two guns alternate. The dash
+  centre, the gauge panel and a sky control read 1.00 in both clips. Clip 2's right strut is lit to
+  the same (131, 130, 72) on every shot from (33, 32, 27) unlit, per channel 3.97 / 4.06 / 2.67: the
+  product clamp. That is the decoded point-light term (`docs/org/vertexLighting.md`, "Point
+  lights"): `weight(d) × (ambient + diffuse) × colour` added to the per-vertex accumulator with no
+  `N·L`, on `lighting: true` models only, then `vertex colour × accumulator` clamped. The two
+  `LIGHT_STATE`s author near/far 13.5 / 21.25 and 12.9 / 18.25 m, so a strut a few metres from them
+  takes a weight near 1, red and green clamp at white, and the lit/unlit ratio is `1 / (sun term)`:
+  3.96 against C1's 0.25 ambient on a strut turned from the sun. A strut facing the sun has a larger
+  sun term and so a smaller ratio, which is the clip 1 spread.
+  *Evidence, ours:* `RunProbe.ps1 --chapter=C1 --plane=player_bhawk --fly --view=cockpit --fire
+  "--hold=0,0,0,1" --frames=150 --shots=12` lights its left strut 1.03 to 1.04 and the right strut
+  1.04 to 1.07, and lifts the dash by 1.07 and the gauge panel by 1.08, which the original never
+  does. The unlit strut reads 113 against the original's 42 at the same cockpit, so the baseline
+  the ratio is taken over is itself the remake's Godot sun and ambient, which `BL-981` replaces.
+  *Why no energy fits:* `MuzzleLightEnergy` (`CSVM/src/Flight/Projectile.cs`) scales an additive
+  `OmniLight3D` with a `1/d` fall-off and `N·L` and no clamp, mirrored into the cockpit pass by
+  `CockpitOverlay.MirrorFlashes`. The original's ratio is set by the clamp and the face's sun term,
+  so one energy gives 2 on one strut and 4 on another only by accident, and it cannot leave the
+  dash at 1.00. Under `BL-981` the interior draws unshaded with the per-vertex sun law, so no
+  `OmniLight3D` reaches it and the energy stops lighting the cockpit at all.
+  *Fix shape:* after `BL-981`, add the point-light term to that per-vertex law for the cockpit
+  pass: the two first-person lights' pass-frame positions, near/far and colour as uniforms (ambient
+  1, diffuse 0, as the defs author neither), summed into the accumulator before the product clamp,
+  `lighting: true` models only. `MuzzleLightEnergy` then serves only the third-person lights.
+  Verify against the numbers above: clip 2's right strut at 3.96 with blue at 2.67, clip 1's struts
+  at about 2.0 to 2.5, the dash and gauge panel at 1.00. Crops, the montage and the measuring
+  scripts' outputs: `.scratch/orch-8/BL-286/` in the orch-8 run.
+  *⚠ Traps:* **do not raise the energy to meet a ratio**; the ratio is a clamp, not a gain. The two
+  clips are the only cockpit-view gunfire in the library. The frame numbers above count raw
+  decoded frames piped out of ffmpeg; on these clips (stream start -0.021 s)
+  `-vf select=eq(n,N-1)` is what returns the frame counted `N` here. The pick-one single-quad
+  flash reading (+ `_muzzle1`→`_muzzle2` flip) was implemented and rejected at the controls; do not
+  re-land it without new footage evidence.
+  *Open question in the same clips:* the capture note names clip 1 the Devastator and clip 2 the
+  Bloodhawk, but `--plane=player_bhawk` draws clip 1's wood-and-black cockpit, so either a label or
+  the cockpit mapping is wrong.
   *Note, the flash shape:* the def's 3-way `RANDOM_WEIGHT` roll (30/80/140°) may be rendered
   concurrently (all branches) by the original engine rather than pick-one, which would make the
   authored form itself a triad at those exact angles. Ours uses 120° spacing with one continuous
   roll; a 30/80/140° triad is one constant away and could be A/B'd against `MuzzleFlash1-3.png` if
   the flash shape is ever revisited.
-  *Cross-refs:* `BL-932` (the canopy holes, which the same clips may show).
+  *Cross-refs:* `BL-981` (the per-vertex aircraft law this term joins), `BL-952` (the same term on
+  the world shader), `BL-932` (the canopy holes, which the same clips may show).
 
 - `BL-693` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The rebinding screen's three axis-capture constants are
   picked, not measured.** *Evidence:* `ControlCapture.RestBand` **0.25**, `MoveThreshold` **0.6** and
