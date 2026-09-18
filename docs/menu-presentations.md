@@ -313,9 +313,15 @@ page behind its Preferences page's first door (`--menu=game-options` under
 (`--menu=video`), the four volume levels on the AUDIO page behind the second
 (`--menu=audio`) and the keymap on the CONTROLS page behind the fourth (`--menu=controls`, and
 `--menu=keys` for the KEYS AND BUTTONS page behind its own door). Built-in's one screen carries
-every setting Original spreads over those pages bar the volume levels, its rows in its own stepper
+every setting Original spreads over those pages, its rows in its own stepper
 convention: the difficulty, the opening view, the automatic head turn, the nearest-after-a-kill
-targeting switch and the rumble, the graphics mode, then the monitor, the window size, the display mode and the V-Sync choice. The two presentations read those four through one rule
+targeting switch and the rumble, the graphics mode, the monitor, the window size, the display mode
+and the V-Sync choice, then the four volume levels. Built-in has no continuous control, so a level
+is a stepper moving by the AUDIO page slider's own keyboard step (`SliderControl.KeyStep`, five)
+and clamped at both ends; a step that moves nothing writes nothing, so a level never touched stays
+never set. Built-in has no live preview either: a level is heard once the apply writes it. Sixteen
+rows overflow the band, so the screen is a window of the Controls list's height with its position
+in the heading. The two presentations read the four display settings through one rule
 set (`CSVM/src/UI/Menu/DisplaySettingRows.cs`) over the same per-machine enumerations, so a saved
 value cannot read one way on the VIDEO page and another on Built-in's screen. Every option page reads the saved options from the store on entry and leaves
 through an `OptionsApplyExit` carrying every choice, whichever page it was sent from, so the store

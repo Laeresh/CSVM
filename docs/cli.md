@@ -70,7 +70,8 @@ exactly how `PROJECT_CONTEXT.md`'s day-to-day table drifted from this page. One 
 `--mute` · `--volume` · `--sound-range-scale`
 
 Neither of those reaches the player's own mix, and no flag or config key does. The four volume
-levels (Master, Music, Effects, Voice) are set on Preferences' AUDIO page, saved in
+levels (Master, Music, Effects, Voice) are set on Preferences' AUDIO page or Built-in's Options
+screen, saved in
 `user://options.json` and written on the three category buses beneath Master, so the two gains
 multiply rather than compete: `--volume=0` silences a repo run whatever the saved levels say, and a
 `--det` run reads none of them. The mix is

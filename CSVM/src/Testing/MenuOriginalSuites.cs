@@ -72,9 +72,10 @@ internal static class MenuOriginalSuites
         + "automatic head turn, the targeting setting on and back off, the rumble toggle off, the "
         + "graphics mode and "
         + "its four display rows over the machine's own screens and sizes, the two vocabularies and "
-        + "a wrap onto the last frame cap, "
+        + "a wrap onto the last frame cap, its four volume rows stepped by the AUDIO page's own "
+        + "step and clamped at both ends, "
         + "opens and leaves the rebinding screen behind its Controls door and emits the apply exit "
-        + "carrying all ten with no presentation row among them, Original's VIDEO door opens the decoded page on its Display Mode dropdown "
+        + "carrying all fourteen with no presentation row among them, Original's VIDEO door opens the decoded page on its Display Mode dropdown "
         + "which fits its authored window and draws no bar, over the V-Sync one whose five words "
         + "window into four with the arrows and the thumb inside the box's right edge and the fifth "
         + "kept for the walk but unseen and unhit, that list wheeling and dragging like any other "
@@ -526,8 +527,8 @@ internal static class MenuOriginalSuites
     // Hard, the two rows under it step the opening view and the automatic head turn, the two under
     // those the targeting setting and the rumble, then the graphics mode (no presentation row: the
     // command line alone chooses one), the four display rows step over the machine's own screens
-    // and sizes, and the apply row's Accept
-    // leaves as the one exit the launcher persists every choice from.
+    // and sizes, the four volume rows step the levels the AUDIO page writes, and the apply row's
+    // Accept leaves as the one exit the launcher persists every choice from.
     private static void BuiltInOptionsRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, List<MenuExit> exits)
     {
         var menu = (host.Active as BuiltInPresentation)?.Menu;
@@ -539,8 +540,8 @@ internal static class MenuOriginalSuites
         Press(host, seat, Up);
         ctx.Check(menu.ShownRowText == LaunchMenu.OptionsRow, $"Up from Free Flight wraps onto Options ({menu.ShownRowText})");
         Press(host, seat, Accept);
-        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 12 && menu.ShownRowText == "Difficulty: Normal",
-            $"Accept opens the Options screen with its twelve rows, the difficulty stepper first ({menu.ShownScreen}, {menu.ShownRowCount}, {menu.ShownRowText})");
+        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 16 && menu.ShownRowText == "Difficulty: Normal",
+            $"Accept opens the Options screen with its sixteen rows, the difficulty stepper first ({menu.ShownScreen}, {menu.ShownRowCount}, {menu.ShownRowText})");
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == "Difficulty: Hard", $"Right steps the difficulty to Hard ({menu.ShownRowText})");
         Press(host, seat, Down);
@@ -577,8 +578,10 @@ internal static class MenuOriginalSuites
             $"the sixth row is the graphics mode, straight under the rumble with no presentation row between, and Right steps it ({beforeGraphics} -> {menu.ShownRowText})");
         string graphics = menu.ShownRowText.EndsWith("Enhanced", System.StringComparison.Ordinal) ? "enhanced" : "original";
         var display = BuiltInDisplayRows(ctx, host, seat, menu);
+        BuiltInAudioRows(ctx, host, seat, menu);
         Press(host, seat, Down);
-        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow, $"the eleventh row is the Controls door ({menu.ShownRowText})");
+        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow && menu.ShownHeading == "OPTIONS  (15/16)",
+            $"the fifteenth row is the Controls door, the heading counting the window's position ({menu.ShownRowText}, {menu.ShownHeading})");
         Press(host, seat, Accept);
         ctx.Check(menu.ShownScreen == "Controls" && menu.ShownRowCount > 2,
             $"which opens the rebinding screen over a seat's own keymap ({menu.ShownScreen}, {menu.ShownRowCount} rows)");
@@ -599,6 +602,9 @@ internal static class MenuOriginalSuites
             ctx.Check(applied.MonitorIndex == display.Monitor && applied.Resolution == display.Resolution
                 && applied.DisplayMode == display.DisplayMode && applied.VSync == display.VSync,
                 $"and all four display settings the rows stepped ({applied.MonitorIndex}, {applied.Resolution}, {applied.DisplayMode}, {applied.VSync})");
+            ctx.Check(applied.AudioMaster == null && applied.AudioMusic == AudioMix.DefaultMusic - SliderControl.KeyStep
+                && applied.AudioEffects == null && applied.AudioVoice == AudioMix.MinLevel,
+                $"and the levels the volume rows moved, the two left alone still never set ({Level(applied.AudioMaster)}, {Level(applied.AudioMusic)}, {Level(applied.AudioEffects)}, {Level(applied.AudioVoice)})");
             var plan = MonitorSetting.Resolve(applied.MonitorIndex, MonitorSetting.Screens());
             ctx.Check(plan.Source == "options.json" && ResolutionSetting.Resolve(applied.Resolution,
                     ResolutionSetting.ScreenSizes(), applied.DisplayMode).Source == "options.json",
@@ -668,6 +674,40 @@ internal static class MenuOriginalSuites
 
         return (MonitorSetting.Word(stepped), size, DisplayWords.Fullscreen, "144");
     }
+
+    // The four volume rows, walked from the V-Sync row on a mix nothing has saved: each shows the
+    // shipped level, steps by the AUDIO page's own keyboard step, and clamps at both ends. A step
+    // that moves nothing writes nothing, so Master stepped up off full stays never set.
+    private static void BuiltInAudioRows(TestContext ctx, MenuHost host, ScriptedSeat seat, LaunchMenu menu)
+    {
+        Press(host, seat, Down);
+        ctx.Check(menu.ShownRowText == $"Master volume: {AudioMix.DefaultMaster}" && menu.ShownHeading == "OPTIONS  (11/16)",
+            $"the eleventh row is the Master level, unsaved showing the shipped full level ({menu.ShownRowText}, {menu.ShownHeading})");
+        Press(host, seat, Right);
+        ctx.Check(menu.ShownRowText == $"Master volume: {AudioMix.MaxLevel}",
+            $"Right at full clamps rather than wrapping to silence ({menu.ShownRowText})");
+        Press(host, seat, Down);
+        ctx.Check(menu.ShownRowText == $"Music volume: {AudioMix.DefaultMusic}",
+            $"the Music level follows, unsaved showing its authored default ({menu.ShownRowText})");
+        Press(host, seat, Left);
+        ctx.Check(menu.ShownRowText == $"Music volume: {AudioMix.DefaultMusic - SliderControl.KeyStep}",
+            $"Left steps it down by the AUDIO page's own step ({menu.ShownRowText})");
+        Press(host, seat, Down);
+        ctx.Check(menu.ShownRowText == $"Effects volume: {AudioMix.DefaultEffects}",
+            $"the Effects level follows ({menu.ShownRowText})");
+        Press(host, seat, Down);
+        ctx.Check(menu.ShownRowText == $"Voice volume: {AudioMix.DefaultVoice}",
+            $"and the Voice level last, the order the AUDIO page draws them in ({menu.ShownRowText})");
+        for (int i = 0; i <= (AudioMix.DefaultVoice / SliderControl.KeyStep); i++)
+        {
+            Press(host, seat, Left);
+        }
+
+        ctx.Check(menu.ShownRowText == $"Voice volume: {AudioMix.MinLevel}",
+            $"a step past silence clamps there rather than wrapping to full ({menu.ShownRowText})");
+    }
+
+    private static string Level(int? level) => level?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unset";
 
     private static bool Offers(IReadOnlyList<string> sizes, string word)
     {

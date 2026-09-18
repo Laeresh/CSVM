@@ -107,10 +107,14 @@ public sealed partial class LaunchMenu : CanvasLayer
     // The Options screen's stepper rows, above the Controls door and the apply row. The screen is a
     // form the cursor walks top to bottom: the five gameplay settings (the three the Original
     // presentation's GAME OPTIONS page draws, in its order, then the targeting switch and the
-    // rumble), the graphics mode, then the four display settings in the order the Original
-    // presentation's VIDEO page draws them, then the two doors. Twelve rows fit the band without a
-    // window, which is why this screen has no paging rule of its own.
-    private const int OptionsStepperRows = 10;
+    // rumble), the graphics mode, the four display settings in the order the Original
+    // presentation's VIDEO page draws them, the four volume levels in the order its AUDIO page draws
+    // them, then the two doors.
+    private const int OptionsStepperRows = 14;
+    // How many Options rows show at once. Sixteen rows do not fit the band at 720p, and a band sized
+    // to all of them shrinks every row, so the screen is windowed at the Controls list's height,
+    // which is known to fit.
+    private const int OptionsWindow = ControlsWindow;
     // The Controls list's two column widths and the extra band width they need, in ems of the row
     // font and in 720p points. TUNE: measured against the longest shipped action name and the
     // longest four-control row, not decoded from anything.
@@ -191,7 +195,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     // The Options screen's cursor and the choices its stepper rows would apply, seeded from the
     // saved options when the screen opens so it shows back what was asked for, not what is active:
     // the graphics mode a running process resolved is the one the process started under.
-    private int _optionsIndex;
+    private int _optionsIndex, _optionsTop;
     private int _difficultyChoice = Difficulty.Normal;
     // The targeting setting as saved, null while never set, which the consumer reads as off: a
     // screen hands back "never set" rather than a choice the player did not make.
@@ -214,8 +218,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     // of its own (ResolutionSizes). Held apart from the stepped choice so a hand-written size stays
     // in the list after a step lands elsewhere, and a step back reaches it again.
     private string? _savedResolution;
-    // The four volume levels as saved. This screen shows none of them and hands them back untouched,
-    // so its apply cannot clear a level the Original presentation's AUDIO page wrote.
+    // The four volume levels as saved, null while never set, which the mixer reads as the shipped
+    // default. A step that moves nothing leaves the field null, so walking a row writes no level
+    // the player did not change.
     private int? _audioMasterChoice, _audioMusicChoice, _audioEffectsChoice, _audioVoiceChoice;
     // The Table of Contents' list cursor and the first visible row of its 14-row window; the
     // applied preset itself is the feature's.
@@ -1015,6 +1020,20 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     private static int Wrap(int index, int count) => ((index % count) + count) % count;
 
+    // One volume row's step, on the Original AUDIO page's own terms so the two presentations write
+    // the same levels: the keyboard step of that page's slider, clamped at both ends where every
+    // other row here wraps, since a step from silence must not land on full volume. A step that
+    // moves nothing hands back the field unchanged, so a never-set level stays never set.
+    private static int? StepLevel(int? level, int shipped, int dir)
+    {
+        int from = Math.Clamp(level ?? shipped, AudioMix.MinLevel, AudioMix.MaxLevel);
+        int to = Math.Clamp(from + (dir * Menu.Original.SliderControl.KeyStep), AudioMix.MinLevel, AudioMix.MaxLevel);
+        return to == from ? level : to;
+    }
+
+    private static string LevelLabel(int? level, int shipped) =>
+        Math.Clamp(level ?? shipped, AudioMix.MinLevel, AudioMix.MaxLevel).ToString(CultureInfo.InvariantCulture);
+
     // The read-out helpers behind the public rosters: one name per row of a feature list.
     private static string[] Names<T>(IReadOnlyList<T> rows, Func<T, string> name)
     {
@@ -1342,7 +1361,10 @@ public sealed partial class LaunchMenu : CanvasLayer
                     case Screen.WaveEdit: _waveFieldIndex = Wrap(_waveFieldIndex + p1.Move, n); break;
                     case Screen.Wingmen: _wingmenFieldIndex = Wrap(_wingmenFieldIndex + p1.Move, n); break;
                     case Screen.WingmanLoadout: _wingmanFitRow = Wrap(_wingmanFitRow + p1.Move, n); break;
-                    case Screen.Options: _optionsIndex = Wrap(_optionsIndex + p1.Move, n); break;
+                    case Screen.Options:
+                        _optionsIndex = Wrap(_optionsIndex + p1.Move, n);
+                        ScrollOptionsToCursor();
+                        break;
                 }
                 dirty = true;
             }
@@ -1588,7 +1610,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         switch (_screen)
         {
             case Screen.Options:
-                // The ten choice rows are steppers; the doors under them have nothing to step.
+                // The fourteen choice rows are steppers; the doors under them have nothing to step.
                 switch (_optionsIndex)
                 {
                     case 0: StepDifficultyChoice(dir); return true;
@@ -1601,6 +1623,10 @@ public sealed partial class LaunchMenu : CanvasLayer
                     case 7: StepResolutionChoice(dir); return true;
                     case 8: StepDisplayModeChoice(dir); return true;
                     case 9: StepVSyncChoice(dir); return true;
+                    case 10: _audioMasterChoice = StepLevel(_audioMasterChoice, AudioMix.DefaultMaster, dir); return true;
+                    case 11: _audioMusicChoice = StepLevel(_audioMusicChoice, AudioMix.DefaultMusic, dir); return true;
+                    case 12: _audioEffectsChoice = StepLevel(_audioEffectsChoice, AudioMix.DefaultEffects, dir); return true;
+                    case 13: _audioVoiceChoice = StepLevel(_audioVoiceChoice, AudioMix.DefaultVoice, dir); return true;
                     default: return false;
                 }
             case Screen.Chapter:
@@ -2417,6 +2443,18 @@ public sealed partial class LaunchMenu : CanvasLayer
         _presetTop = Math.Clamp(top, 0, last);
     }
 
+    // The Options window's counterpart of the one above, the cursor wrapping the same way.
+    private void ScrollOptionsToCursor()
+    {
+        int last = Math.Max(0, CurrentCount() - OptionsWindow);
+        int top = Math.Clamp(_optionsTop, 0, last);
+        if (_optionsIndex < top)
+            top = _optionsIndex;
+        else if (_optionsIndex >= top + OptionsWindow)
+            top = _optionsIndex - OptionsWindow + 1;
+        _optionsTop = Math.Clamp(top, 0, last);
+    }
+
     // Whether the Plane screen's launch gesture is live right now. The gate reads CONFIRMED, the
     // second stage, which leaves a window between selecting an airframe and flying it for the
     // loadout to be opened in. A lone Dogfight pilot stays on this screen with JoinHint naming
@@ -2544,14 +2582,18 @@ public sealed partial class LaunchMenu : CanvasLayer
         var content = new VBoxContainer();
         content.AddThemeConstantOverride("separation", (int)(ZoneSeparation * s));
         content.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        // Every screen but the contents list draws its whole roster; that one is a 14-row window
-        // onto 19, so it draws a slice and Row keeps taking the ABSOLUTE index (which is what the
-        // cursor comparison and the row text both read).
+        // A windowed screen (the contents list, Controls, Options) draws a slice, and Row keeps
+        // taking the ABSOLUTE index (which is what the cursor comparison and the row text both
+        // read); every other screen draws its whole roster.
         int count = CurrentCount();
-        int first = _screen == Screen.Presets ? _presetTop : _screen == Screen.Controls ? _controlsTop : 0;
-        int last = _screen == Screen.Presets ? Math.Min(count, _presetTop + PresetWindow)
-            : _screen == Screen.Controls ? Math.Min(count, _controlsTop + ControlsWindow)
-            : count;
+        int first = _screen switch
+        {
+            Screen.Presets => _presetTop,
+            Screen.Controls => _controlsTop,
+            Screen.Options => _optionsTop,
+            _ => 0,
+        };
+        int last = Math.Min(count, first + DrawnRowCount());
         for (int i = first; i < last; i++)
         {
             var row = Row(i, s);
@@ -2611,6 +2653,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     private void OpenOptions()
     {
         _optionsIndex = 0;
+        _optionsTop = 0;
         var saved = OptionsStore.UserOptions().Load();
         _difficultyChoice = Difficulty.Parse(saved.Difficulty) ?? Difficulty.Normal;
         _nearestAfterKillChoice = saved.NearestAfterKill;
@@ -3078,7 +3121,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             Screen.WingmanLoadout => $"WINGMEN: AMMO SELECTION  ({_ia.WingmanPlane.Name})",
             Screen.Hangar => _hangar?.Page.Title ?? HangarRow,
             Screen.Campaign => _campaign?.Page.Title ?? CampaignRow,
-            Screen.Options => "OPTIONS",
+            Screen.Options => $"OPTIONS  ({_optionsIndex + 1}/{CurrentCount()})",
             Screen.Controls => $"CONTROLS  ({_controlsIndex + 1}/{CurrentCount()})",
             _ when _slots.Count == 1 && _slots[0].InLoadout =>
                 $"AMMO SELECTION  ({_roster[_slots[0].PlaneIndex].Name})",
@@ -3315,12 +3358,13 @@ public sealed partial class LaunchMenu : CanvasLayer
         return MenuZones.For(viewH, header, middle, footer);
     }
 
-    // How many rows the middle band actually draws. Only the contents list differs from the item
-    // count: it is a 14-row window onto 19, and budgeting for all 19 shrinks it for nothing.
+    // How many rows the middle band actually draws. A windowed screen differs from its item count,
+    // and budgeting for every item would shrink the band for rows it does not draw.
     private int DrawnRowCount() => _screen switch
     {
         Screen.Presets => Math.Min(CurrentCount(), PresetWindow),
         Screen.Controls => Math.Min(CurrentCount(), ControlsWindow),
+        Screen.Options => Math.Min(CurrentCount(), OptionsWindow),
         _ => CurrentCount(),
     };
 
@@ -3556,7 +3600,11 @@ public sealed partial class LaunchMenu : CanvasLayer
                 7 => $"Resolution: {ResolutionChoiceLabel()}",
                 8 => $"Display mode: {DisplayModeChoiceLabel()}",
                 9 => $"V-Sync: {VSyncChoiceLabel()}",
-                10 => ControlsRow,
+                10 => $"Master volume: {LevelLabel(_audioMasterChoice, AudioMix.DefaultMaster)}",
+                11 => $"Music volume: {LevelLabel(_audioMusicChoice, AudioMix.DefaultMusic)}",
+                12 => $"Effects volume: {LevelLabel(_audioEffectsChoice, AudioMix.DefaultEffects)}",
+                13 => $"Voice volume: {LevelLabel(_audioVoiceChoice, AudioMix.DefaultVoice)}",
+                14 => ControlsRow,
                 _ => "Apply and restart the menu",
             },
             Screen.Controls => $"{ControlsRowLabel(index)}   {ControlsRowValue(index)}",
@@ -3868,7 +3916,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.Mode => focus < Modes.Length ? Modes[focus].Detail
             : focus == Modes.Length ? "Fly the story: pick a player, then the cabin."
             : focus == Modes.Length + 1 ? "Build a plane in the hangar and fly it."
-            : "Choose the difficulty, the graphics mode and the display settings.",
+            : "Choose the difficulty, the graphics mode, the display settings and the volume levels.",
         Screen.Hangar => _hangar?.Page.Detail(focus) ?? "",
         Screen.Campaign => _campaign?.Page.Detail(focus) ?? "",
         // One arm per row of the Options screen, in the order RowText writes them. A row that lost
@@ -3886,7 +3934,11 @@ public sealed partial class LaunchMenu : CanvasLayer
             7 => ResolutionDetail(),
             8 => "Select how the window sits on the screen. Borderless leaves the desktop beneath it.",
             9 => "Select the frame pacing. On follows the screen; off runs free, or to a frame cap.",
-            10 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
+            10 => "Set the overall volume of all sounds. Heard once the choices are applied.",
+            11 => "Set the volume of the in-game music. Heard once the choices are applied.",
+            12 => "Set the volume of the sound effects. Heard once the choices are applied.",
+            13 => "Set the volume of the voices. Heard once the choices are applied.",
+            14 => "Rebind any control, per player. Saved on the way out; the shipped keymap is one press away.",
             _ => "Saves every choice and restarts the menu at its top level; unfinished setup is discarded.",
         },
         Screen.Controls => ControlsDetail(focus),

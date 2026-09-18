@@ -820,6 +820,25 @@ is a judgement on our own remake.
   *Blocks:* nothing tracks the outcome; a fail mints a new `BL`. The reasoning behind the fallback
   and the apply order is in the landing commits (`git log --grep=BL-768`).
 
+### Built-in's Options screen · the four volume rows, sound on
+
+```powershell
+./RunGame.ps1 --force-builtin --menu=options
+```
+
+- `PT-165` `[Own]` **The volume rows on Built-in's Options screen set the mix the AUDIO page sets,
+  and it is heard.** Built-in's screen carries Master, Music, Effects and Voice as steppers of five
+  over 0 to 100, clamped at both ends, saved through the same apply as every other row
+  (`git log --grep=BL-782`); the `menu-original-tracer` suite pins the rows' labels, the step, the
+  clamp and the levels the apply carries, but no suite hears a level. Built-in has no live preview,
+  so a level is heard after Apply. *Look for:* (a) the sixteen rows windowed at fourteen, the heading
+  counting the position, and the window following the cursor down to the Apply row and back up;
+  (b) Music stepped to 0 and applied leaves the menu music silent on the restarted menu, and back to
+  50 brings it back; (c) the same levels read back on Original's AUDIO page
+  (`./RunGame.ps1 --presentation=original --menu=audio`), since both presentations share the store;
+  (d) whether five per press feels right for a stepper with no slider under it. *Blocks:* nothing
+  tracks the outcome; a fail mints a new `BL`.
+
 ### CM05, CM07, CM08 and CM20 · enemies engage, break off and come back
 
 ```powershell

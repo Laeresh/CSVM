@@ -711,28 +711,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   original shows nothing for it either. A scripted `--hold` feeds the smoke no gap, so no capture
   flag reaches the plume. *Cross-refs:* `PT-127` (the sortie).
 
-- `BL-782` `[Feature]` `[Blocked: BL-455]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Built-in's Options screen carries no audio
-  levels, so the mix is settable in the Original presentation alone.** *Evidence:*
-  `PLAN-audio-preferences` builds the AUDIO page for Original and puts four levels (Master, Music,
-  Effects, Voice) in the shared options store, which is where every setting both presentations show
-  already lives. Built-in's Options screen holds ten steppers (difficulty, default view, automatic
-  head turn, targeting, rumble, graphics mode and the four display settings) and the Controls door, and its apply hands back the
-  four levels untouched, the only settings it does not show, so once the page lands a player on
-  Built-in can hear the mix and not reach it. Blocked until the four levels exist in the
-  store, which is the whole of the dependency: nothing else about this item waits on that plan.
-  *Fix shape:* four rows on Built-in's Options screen reading and writing the same store fields the
-  AUDIO page does, in the screen's own stepper convention, applied through the same
-  `OptionsApplyExit` the ten current rows leave by. The four display rows landed on that screen
-  are the worked model: read the store word, step over the row's own values, write the word back.
-  *⚠ Traps:* Built-in has no continuous control of any kind, so a 0 to 100 level is a stepper with a
-  chosen step rather than a slider, and the step size is a judgement the row has to make rather than
-  inherit. Do not add a second writer: `Launcher.ApplyOptions` is the options file's one writer and
-  both presentations reach it through the apply exit. Do not re-tune `MusicPlayer.ChannelLevel` on
-  the way past; `BL-455` deletes it.
-  *Cross-refs:* `BL-455` (the page this mirrors), `PLAN-audio-preferences`,
-  `git log --grep=BL-783` (the same gap for the display settings, closed by four rows on this
-  screen), `docs/menu-presentations.md`.
-
 - `BL-933` `[Bug]` `[Blocked: BL-269]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]`
   **The gun voices run the decoded level law and are still heard only beside the player: at the
   controls a shooting enemy aeroplane or turret is audible within about 10 m and no further.**
