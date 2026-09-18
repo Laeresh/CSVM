@@ -1,19 +1,25 @@
 using System.Collections.Generic;
 using System.Globalization;
+using CSVM.Flight;
 using CSVM.Session;
 using CSVM.UI.Menu;
 
 namespace CSVM.UI;
 
+/// <summary>One yellow post-it on the wrap-up page: its top-left and size in authored pixels and the
+/// further lines written on it, in order.</summary>
+public sealed record WrapupPostIt(float X, float Y, float Width, float Height, IReadOnlyList<string> Lines);
+
 /// <summary>
 /// The Original presentation's Instant Action wrap-up page, composed from <c>[@IA_WrapUp@]</c>'s
 /// own rows (<c>docs/formats/instant-action/wrap-up.md</c>): the magazine background, the four
-/// brushstroke panes, the screen title and the four title/value pairs, plus the further lines the
-/// built-in board carries and the shipped page has nowhere to put (the outcome headline, the
-/// context line and the stunt splits). Row titles are literal strings rather than read off
-/// <c>ui_strings.json</c>, following <see cref="Flight.IaWrapupBoard"/>'s own precedent; positions
-/// come through the <see cref="CampaignLayout"/> a caller hands in, with the shipped values as the
-/// fallback beside every read.
+/// brushstroke panes, the screen title and the four title/value pairs. Two pieces of remake
+/// furniture stand in the space below them: yellow post-its carrying the further lines the shipped
+/// page has no row for (the context line and a stunt run's splits), and a tick box above CONTINUE
+/// saying whether the mission was won. Row titles are literal strings, following
+/// <see cref="IaWrapupBoard"/>'s own precedent; positions come through the
+/// <see cref="CampaignLayout"/> a caller hands in, with the shipped values as the fallback beside
+/// every read.
 /// </summary>
 public static class InstantActionWrapupPage
 {
@@ -38,9 +44,12 @@ public static class InstantActionWrapupPage
     /// <summary>A value's face, one step up from its title so the number reads as the answer.</summary>
     public const float ValueFont = 15f;
 
-    /// <summary>The further lines' face, the size their band is measured against; the band asks the
-    /// renderer to shrink it where a long stunt table would otherwise run past the pad.</summary>
+    /// <summary>The further lines' face on a post-it, the size a post-it is measured against; the
+    /// renderer shrinks it only where a line is wider than the post-it.</summary>
     public const float ExtraFont = 11f;
+
+    /// <summary>The gap between two further lines on one post-it, against their own face.</summary>
+    public const float ExtraSpacing = 2f;
 
     // The shipped titles, langui 1133-1137. Literal text for the reason IaWrapupBoard's own copies
     // are: ui_strings.json is a build-time extraction artifact, not one of the archives a session
@@ -50,11 +59,6 @@ public static class InstantActionWrapupPage
     private const string DestroyedTitle = "Enemies Shot Down";
     private const string ZonesTitle = "Danger Zones Completed";
     private const string ShotsTitle = "Shot %";
-
-    // The headline the shipped page has no row for: the original never lost an Instant Action
-    // mission with lives to run out, so this stands in, in the words the built-in board uses.
-    private const string CompleteText = "MISSION COMPLETE";
-    private const string FailedText = "MISSION FAILED";
 
     // The authored geometry, [@IA_WrapUp@]'s own, as the fallback beside every layout read: the
     // heading, the title column, the value column, the four brushstroke panes and the plaque.
@@ -66,13 +70,43 @@ public static class InstantActionWrapupPage
     private const float ContinueX = 640f;
     private const float ContinueY = 449f;
 
-    // GN_B_Continue.png's one frame, which the engine-free half cannot measure; the band of further
-    // lines runs down to the plaque's own foot.
-    private const float ContinueFrameHeight = 34f;
+    // GN_B_Continue.png's one frame, which the engine-free half cannot measure; the tick box is
+    // centred over it.
+    private const float ContinueFrameWidth = 112f;
 
-    // The gap between the last value row and the first further line, the pitch the value rows
-    // themselves leave. The band's right edge stops clear of the plaque by the same gap.
+    // The gap between the last value row and the first post-it, the pitch the value rows themselves
+    // leave; how far the first post-it stands proud of the title column, so its writing still
+    // lines up with the rows; and how far it stops short of the plaque.
     private const float ExtraGap = 26f;
+    private const float ColumnInset = 14f;
+    private const float PlaqueClearance = 6f;
+
+    // A post-it is at most square, the shape the paper is. Remake furniture, so every measure here
+    // is a look rather than a decode: the side, the gap between two post-its, the margins around
+    // the writing (the top one wider, where the glue strip is) and the pitch a line is planned at.
+    private const float PostItSide = 168f;
+    private const float PostItGap = 12f;
+    private const float PostItMargin = 6f;
+    private const float PostItHead = 12f;
+    private const float PostItFoot = 6f;
+    private const float LinePitch = 16f;
+
+    // How far a post-it's corner may sit from the page's left edge, and how far every second one
+    // drops, so a row of them reads as stuck on by hand rather than tiled.
+    private const float PageMargin = 8f;
+    private const float PostItStagger = 10f;
+
+    // The tick box, on the notepad above the plaque: its side, its gap above the plaque, and its
+    // outline weight in strokes one authored pixel apart.
+    private const float TickBoxSide = 40f;
+    private const float TickBoxGap = 10f;
+    private const int OutlinePasses = 2;
+    private const int TickPasses = 4;
+
+    // The page's own inks, sampled from its art: the notepad's graphite for the box, the
+    // brushstroke red for the tick.
+    private const byte InkR = 48, InkG = 40, InkB = 36;
+    private const byte RedR = 168, RedG = 38, RedB = 30;
 
     // The four rows, top to bottom: the title row's line, its value's line, and the brushstroke
     // pane under the title.
@@ -84,9 +118,17 @@ public static class InstantActionWrapupPage
         ("IAWU_T_SHOTSTITLE", ShotsTitle, 345f, "IAWU_T_SHOTS", 369f, "IAWU_LINE3", 359f),
     };
 
+    // The tick as a hand makes it, in the box's own pixels: down into the lower left, then a long
+    // stroke up past the box's top right corner.
+    private static readonly (float X, float Y)[] Tick = { (7f, 19f), (16f, 31f), (41f, -7f) };
+
     private static readonly BoardArt Background = new(BoardArtLibrary.Ui, "IA_StatScreenBackground.jpg");
     private static readonly BoardArt Brushstroke = new(BoardArtLibrary.Ui, "IA_StatScreen_Brushstroke.png");
     private static readonly BoardArt ContinuePlaque = new(BoardArtLibrary.Ui, "GN_B_Continue.png", 4);
+
+    /// <summary>The most lines one post-it carries: as many planned pitches as fit a square one
+    /// between its glue strip and its foot.</summary>
+    public static int PostItCapacity => (int)((PostItSide - PostItHead - PostItFoot) / LinePitch);
 
     /// <summary>The heading and the four title/value pairs, each at its own <c>IAWU_T_*</c> row.
     /// The four values are the snapshot's own and are never recomputed here.</summary>
@@ -119,12 +161,14 @@ public static class InstantActionWrapupPage
     }
 
     /// <summary>The further lines the built-in board carries and the shipped page authors no row
-    /// for: the outcome headline, the context line naming the chapter and the mission type, and the
-    /// stunt run's splits as the snapshot froze them.</summary>
+    /// for: the context line naming the chapter and the mission type, then the stunt run's splits
+    /// as the snapshot froze them. The outcome is the tick box's, not a line. ⚠ The splits' total
+    /// is left out: both clocks run from the start to the ending, so it is the time row's own
+    /// figure again.</summary>
     public static IReadOnlyList<string> ExtraLines(IaWrapupSnapshot snapshot)
     {
         System.ArgumentNullException.ThrowIfNull(snapshot);
-        var lines = new List<string> { snapshot.Won ? CompleteText : FailedText };
+        var lines = new List<string>();
         if (snapshot.Context.Length > 0)
         {
             lines.Add(snapshot.Context);
@@ -132,10 +176,134 @@ public static class InstantActionWrapupPage
 
         if (snapshot.StuntLines is { } splits)
         {
-            lines.AddRange(splits);
+            foreach (string line in splits)
+            {
+                if (!line.StartsWith(StuntSplits.TotalLabel + " ", System.StringComparison.Ordinal))
+                {
+                    lines.Add(line);
+                }
+            }
         }
 
         return lines;
+    }
+
+    /// <summary>How many post-its <paramref name="lines"/> further lines take: one per
+    /// <see cref="PostItCapacity"/> lines, no more than stand side by side from the first one's
+    /// corner to the page's left edge, and none for no lines.</summary>
+    public static int PostItCount(int lines, CampaignLayout? layout = null)
+    {
+        if (lines <= 0)
+        {
+            return 0;
+        }
+
+        var (x, _, _) = FirstPostIt(layout);
+        int room = 1 + (int)((x - PageMargin) / (PostItSide + PostItGap));
+        int wanted = (lines + PostItCapacity - 1) / PostItCapacity;
+        return System.Math.Clamp(wanted, 1, System.Math.Max(1, room));
+    }
+
+    /// <summary>The post-its the further lines are written on, first to last. The first stands on
+    /// the notepad under the last value row and clear of the plaque; each further one stands to the
+    /// left of the one before. The lines are shared out evenly and each post-it is only as tall as
+    /// what it holds, never taller than it is wide.</summary>
+    public static IReadOnlyList<WrapupPostIt> PostIts(IaWrapupSnapshot snapshot, CampaignLayout? layout = null)
+    {
+        var lines = ExtraLines(snapshot);
+        int count = PostItCount(lines.Count, layout);
+        var postIts = new List<WrapupPostIt>(count);
+        if (count == 0)
+        {
+            return postIts;
+        }
+
+        var (x, y, width) = FirstPostIt(layout);
+        int each = (lines.Count + count - 1) / count;
+        for (int i = 0, taken = 0; i < count; i++)
+        {
+            int n = System.Math.Min(each, lines.Count - taken);
+            var held = new List<string>(n);
+            for (int j = 0; j < n; j++)
+            {
+                held.Add(Compact(lines[taken + j]));
+            }
+
+            taken += n;
+            // Half a square at the least, so a single line still reads as a note and not a strip.
+            float height = System.Math.Clamp(
+                PostItHead + (n * LinePitch) + PostItFoot, PostItSide / 2f, PostItSide);
+            float left = i == 0 ? x : x - (i * (PostItSide + PostItGap));
+            float top = y + (i % 2 == 1 ? PostItStagger : 0f);
+            postIts.Add(new WrapupPostIt(left, top, i == 0 ? width : PostItSide, height, held));
+        }
+
+        return postIts;
+    }
+
+    /// <summary>The paper under one post-it's writing: a soft shadow, the yellow sheet, and the
+    /// glue strip along its top, drawn in that order.</summary>
+    public static IReadOnlyList<BoardFill> PostItPaper(WrapupPostIt postIt)
+    {
+        System.ArgumentNullException.ThrowIfNull(postIt);
+        return new[]
+        {
+            new BoardFill(postIt.X + 3f, postIt.Y + 3f, postIt.Width, postIt.Height, 0, 0, 0, 0.28f),
+            new BoardFill(postIt.X, postIt.Y, postIt.Width, postIt.Height, 252, 236, 132),
+            new BoardFill(postIt.X, postIt.Y, postIt.Width, PostItHead - 4f, 243, 222, 108),
+        };
+    }
+
+    /// <summary>The writing on one post-it: its lines flowed inside the paper's margins, in the
+    /// page's row ink, shrinking only where a line is wider than the post-it.</summary>
+    public static BoardNote PostItNote(WrapupPostIt postIt)
+    {
+        System.ArgumentNullException.ThrowIfNull(postIt);
+        return new BoardNote(
+            postIt.Lines, postIt.X + PostItMargin, postIt.Y + PostItHead,
+            postIt.Width - (2f * PostItMargin), postIt.Height - PostItHead - PostItFoot + ExtraSpacing,
+            ExtraSpacing, ExtraFont, BoardInk.Row, Italic: true, Shrink: true);
+    }
+
+    /// <summary>The tick box's top-left and side, on the notepad centred over the CONTINUE plaque.
+    /// </summary>
+    public static (float X, float Y, float Side) TickBox(CampaignLayout? layout = null)
+    {
+        var (plaqueX, plaqueY) = ContinueAt(layout);
+        return (plaqueX + (ContinueFrameWidth / 2f) - (TickBoxSide / 2f), plaqueY - TickBoxGap - TickBoxSide, TickBoxSide);
+    }
+
+    /// <summary>The tick box drawn in strokes: the outline in graphite, and on a won mission the
+    /// tick through it in the brushstroke red. A lost mission leaves the box empty; the original
+    /// never lost an Instant Action, so that state is the remake's own.</summary>
+    public static IReadOnlyList<BoardStroke> TickStrokes(bool won, CampaignLayout? layout = null)
+    {
+        var (x, y, side) = TickBox(layout);
+        var strokes = new List<BoardStroke>();
+        for (int p = 0; p < OutlinePasses; p++)
+        {
+            float l = x + p, t = y + p, r = x + side - p, b = y + side - p;
+            strokes.Add(new BoardStroke(l, t, r, t, InkR, InkG, InkB));
+            strokes.Add(new BoardStroke(r, t, r, b, InkR, InkG, InkB));
+            strokes.Add(new BoardStroke(r, b, l, b, InkR, InkG, InkB));
+            strokes.Add(new BoardStroke(l, b, l, t, InkR, InkG, InkB));
+        }
+
+        if (!won)
+        {
+            return strokes;
+        }
+
+        for (int p = 0; p < TickPasses; p++)
+        {
+            for (int s = 0; s + 1 < Tick.Length; s++)
+            {
+                strokes.Add(new BoardStroke(
+                    x + Tick[s].X + p, y + Tick[s].Y, x + Tick[s + 1].X + p, y + Tick[s + 1].Y, RedR, RedG, RedB));
+            }
+        }
+
+        return strokes;
     }
 
     /// <summary>The page's art: the magazine spread under everything, then a brushstroke under each
@@ -157,22 +325,6 @@ public static class InstantActionWrapupPage
         return pictures;
     }
 
-    /// <summary>The band the further lines flow inside: from under the last value row down to the
-    /// plaque's foot, in the title column and stopping clear of the plaque's left edge. Read off the
-    /// page's own rows rather than written down, so a layout that spaces them differently moves the
-    /// band with them instead of drawing it over an authored row.</summary>
-    public static (float X, float Y, float Width, float Height) ExtraBox(CampaignLayout? layout = null)
-    {
-        layout ??= CampaignLayout.Fallback;
-        var last = Wired[^1];
-        var (x, _) = layout.At(Section, last.TitleKey, ColumnX, last.TitleY);
-        var (_, valueY) = layout.At(Section, last.ValueKey, ValueX, last.ValueY);
-        var (plaqueX, plaqueY) = layout.At(Section, ContinueKey, ContinueX, ContinueY);
-        float top = valueY + ExtraGap;
-        return (x, top, System.Math.Max(1f, plaqueX - ExtraGap - x),
-            System.Math.Max(1f, plaqueY + ContinueFrameHeight - top));
-    }
-
     /// <summary>The CONTINUE plaque's art strip.</summary>
     public static BoardArt ContinueArt(CampaignLayout? layout = null) =>
         (layout ?? CampaignLayout.Fallback).Art(Section, ContinueKey, ContinuePlaque);
@@ -185,5 +337,60 @@ public static class InstantActionWrapupPage
     /// three zones behind it, so the page shows every line family at once.</summary>
     public static IaWrapupSnapshot Sample(bool won) => new(
         won, "C1   ·   Stunt Flying", 186f, 4, 3, 27,
-        new[] { "1.  Pier    12.4    12.4", "2.  Bridge    15.1    27.5", "3.  Tower    18.6    46.1", "TOTAL   46.1" });
+        new[] { "1.  Pier    12.4    12.4", "2.  Bridge    15.1    27.5", "3.  Tower    18.6    46.1", StuntSplits.TotalLabel + "   46.1" });
+
+    /// <summary>A stand-in for the longest stunt run the install ships, seventeen zones with a new
+    /// best, so the screenshot aid shows the page carrying more than one post-it.</summary>
+    public static IaWrapupSnapshot LongSample()
+    {
+        string[] names =
+        {
+            "Police Tower", "Harbour Bridge", "Gyro Hangar", "North Crane", "Girders 1", "Girders 2",
+            "East Crane", "River Crane", "Girders 3", "Dock Crane", "Pier Crane", "Girders 4",
+            "Tall Crane", "Yard Crane 1", "Yard Crane 2", "Sky Bridges", "Zeppelin Mast",
+        };
+        var lines = new List<string>();
+        float total = 0f;
+        for (int i = 0; i < names.Length; i++)
+        {
+            float split = 9.5f + ((i * 7) % 11);
+            total += split;
+            lines.Add($"{i + 1}.  {names[i]}   {StuntMission.FormatTime(split)}   {StuntMission.FormatTime(total)}");
+        }
+
+        lines.Add($"{StuntSplits.TotalLabel}   {StuntMission.FormatTime(total)}");
+        lines.Add($"NEW BEST   (was {StuntMission.FormatTime(total + 21.3f)})");
+        return new IaWrapupSnapshot(true, "C5   ·   Stunt Flying", total, 0, names.Length, 0, lines);
+    }
+
+    // The first post-it's corner and width: under the last value row, a little proud of the title
+    // column, and clear of the plaque.
+    private static (float X, float Y, float Width) FirstPostIt(CampaignLayout? layout)
+    {
+        layout ??= CampaignLayout.Fallback;
+        var last = Wired[^1];
+        var (column, _) = layout.At(Section, last.TitleKey, ColumnX, last.TitleY);
+        var (_, valueY) = layout.At(Section, last.ValueKey, ValueX, last.ValueY);
+        var (plaqueX, _) = layout.At(Section, ContinueKey, ContinueX, ContinueY);
+        float x = column - ColumnInset;
+        return (x, valueY + ExtraGap, System.Math.Clamp(plaqueX - PlaqueClearance - x, 1f, PostItSide));
+    }
+
+    // A split line's columns closed up to two spaces, the board's own three being more than a
+    // post-it's width can spare before the renderer would wrap the line.
+    private static string Compact(string line)
+    {
+        var text = new System.Text.StringBuilder(line.Length);
+        int run = 0;
+        foreach (char c in line)
+        {
+            run = c == ' ' ? run + 1 : 0;
+            if (run <= 2)
+            {
+                text.Append(c);
+            }
+        }
+
+        return text.ToString();
+    }
 }

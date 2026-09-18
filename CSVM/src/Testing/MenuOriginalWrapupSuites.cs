@@ -21,11 +21,11 @@ internal static class MenuOriginalWrapupSuites
         "Original's Instant Action wrap-up page end to end over the install's decoded layout: a real "
         + "runtime's ending freezes the four counters and holds, nothing leaves for the menu until "
         + "the hold ends, the handover then opens the decoded [@IA_WrapUp@] page with the magazine "
-        + "spread, the four brushstrokes, the heading and the eight row lines off the snapshot and "
-        + "the further lines the built-in board carries (the outcome headline, the context and the "
-        + "stunt splits) as one flowed note, a later ending's numbers never reach the page that is "
-        + "already standing, a failed run swaps only the headline, and CONTINUE and Back both return "
-        + "to the Instant Action screen with the run forgotten")]
+        + "spread, the four brushstrokes, the heading and the eight row lines off the snapshot, the "
+        + "context and the stunt splits (without their total) on a yellow post-it and a ticked box "
+        + "above CONTINUE, a later ending's numbers never reach the page that is already standing, a "
+        + "failed run leaves the box empty, and CONTINUE and Back both return to the Instant Action "
+        + "screen with the run forgotten")]
     internal static void MenuOriginalWrapup(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -119,11 +119,15 @@ internal static class MenuOriginalWrapupSuites
         ctx.Check(board.Pictures.Count >= 4, $"a brushstroke stands under each of the four rows ({board.Pictures.Count})");
 
         var note = board.Notes.FirstOrDefault();
-        ctx.Check(note != null && note.Entries.Count == 4 && note.Entries[0] == "MISSION COMPLETE"
-                && note.Entries[1] == "C1   ·   Ace Duel" && note.Entries[3] == "TOTAL   12.4",
-            $"the further lines flow on the pad under the rows ({(note == null ? "none" : string.Join(" / ", note.Entries))})");
-        ctx.Check(note != null && note.Shrink && note.Width > 1f && note.Height > 1f,
-            $"inside a band that shrinks its face rather than running past the pad ({note?.Width}x{note?.Height})");
+        ctx.Check(board.Notes.Count == 1 && note != null && note.Entries.Count == 2
+                && note.Entries[0] == "C1  ·  Ace Duel" && note.Entries[1] == "1.  Pier  12.4  12.4",
+            $"the context and the splits are the further lines, with no headline and no second time ({(note == null ? "none" : string.Join(" / ", note.Entries))})");
+        ctx.Check(note != null && note.Shrink && board.Fills.Any(f => f.X <= note.X && f.Y <= note.Y
+                && f.X + f.Width >= note.X + note.Width && f.Y + f.Height >= note.Y + note.Height),
+            $"written on a post-it that holds them ({board.Fills.Count} fills)");
+        float plaqueY = shell.Rows.Count > 0 ? shell.Rows[0].Y : 0f;
+        ctx.Check(board.Strokes.Count > 8 && board.Strokes.All(s => s.Y1 < plaqueY && s.Y2 < plaqueY),
+            $"a ticked box stands above CONTINUE on a win ({board.Strokes.Count} strokes, plaque at y {plaqueY})");
         ctx.Check(board.Plaques.Any(p => p.Row == 0) && shell.Rows.Count == 1
                 && shell.Rows[0].Key == OriginalWrapupScreen.ContinueKey,
             $"with CONTINUE as the page's one row ({shell.Rows.Count} rows)");
@@ -145,9 +149,10 @@ internal static class MenuOriginalWrapupSuites
         host.Show(new InstantActionWrapupReturn(new IaWrapupSnapshot(
             false, "C3   ·   Dogfight", 74.5f, 1, 0, 8)));
         var failed = shell.Compose();
-        ctx.Check(failed.Notes.Count == 1 && failed.Notes[0].Entries[0] == "MISSION FAILED"
-                && failed.Notes[0].Entries.Count == 2,
-            $"a failed run swaps the headline and carries no splits ({string.Join(" / ", failed.Notes[0].Entries)})");
+        ctx.Check(failed.Notes.Count == 1 && failed.Notes[0].Entries.Count == 1
+                && failed.Notes[0].Entries[0] == "C3  ·  Dogfight",
+            $"a failed run carries only its context and no splits ({string.Join(" / ", failed.Notes[0].Entries)})");
+        ctx.Check(failed.Strokes.Count == 8, $"and leaves the tick box empty ({failed.Strokes.Count} strokes)");
         ctx.Check(failed.Lines.Any(l => l.Text == "01:14") && failed.Lines.Any(l => l.Text == "8%"),
             $"and its own numbers");
     }

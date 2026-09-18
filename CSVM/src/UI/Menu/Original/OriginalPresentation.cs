@@ -98,6 +98,10 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// one, the two headlines being the page's only difference between them.</summary>
     public const string InstantActionWrapupFailedAid = "failed";
 
+    /// <summary>The wrap-up aid's argument that shows a seventeen-zone stunt run, the longest the
+    /// install ships, whose splits take more than one post-it.</summary>
+    public const string InstantActionWrapupLongAid = "long";
+
     /// <summary>The aid value that opens the hangar's name screen on a fresh build.</summary>
     public const string PlaneNameAid = "plane-name";
 
@@ -468,6 +472,9 @@ public sealed class OriginalPresentation : IMenuPresentation
                     break;
                 case InstantActionWrapupAid + ":" + InstantActionWrapupFailedAid:
                     _shell.Wrapup.ShowWrapup(InstantActionWrapupPage.Sample(won: false));
+                    break;
+                case InstantActionWrapupAid + ":" + InstantActionWrapupLongAid:
+                    _shell.Wrapup.ShowWrapup(InstantActionWrapupPage.LongSample());
                     break;
                 case PlaneNameAid:
                     _shell.OpenHangar();

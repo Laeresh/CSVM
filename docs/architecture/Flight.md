@@ -648,7 +648,8 @@ in the order flown with split and cumulative times, placeholder rows for zones n
 total, and the new-best or stored-best comparison line. `StuntSummary` is the value a board hands
 it, one run with its total and the stored best. A single flag keeps the two boards' shipped
 layouts apart, since the scoreboard rules off its total and the wrap-up board runs the table
-straight into it.
+straight into it. `Lines` is the same table as flat text for the Original wrap-up page, whose
+total line opens with `TotalLabel` so the page can leave it out.
 
 ## src/Flight/ScoreStore.cs
 Stunt best-time persistence: one JSON object in `user://stunt_scores.json` keyed

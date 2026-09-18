@@ -187,10 +187,14 @@ Where that ending goes depends on the presentation. Built-in keeps its own board
 leaves the world instead and lands on this page in the menu shell, `src/UI/Menu/Original/`
 `OriginalWrapupScreen.cs` over `src/UI/InstantActionWrapupPage.cs`: the magazine spread, the notepad
 carrying the heading and the four decoded rows at their authored positions, and CONTINUE back to the
-Instant Action screen in place of the board's Restart. The remake also writes the lines the shipped
-page has no row for onto the free pad under the four rows, so the Original path loses nothing the
-built-in board shows: the outcome headline, the context line naming the chapter and the mission type,
-and a stunt run's split table. The four numbers travel as `IaWrapupSnapshot`, read once at the ending
+Instant Action screen in place of the board's Restart. Two pieces of the page are the remake's own,
+on pad space the shipped page leaves empty. Yellow post-its under the four rows carry the lines the
+shipped page has no row for: the context line naming the chapter and the mission type, and a stunt
+run's split table, shared over a second and third post-it to the left when one will not hold them.
+The table's total is left off, since the stunt clock and the mission clock both run from the start
+to the ending and the time row already shows that figure. A box above CONTINUE carries the outcome,
+ticked on a win and empty on a loss; the original never lost an Instant Action, so the empty box has
+no reference art. The four numbers travel as `IaWrapupSnapshot`, read once at the ending
 (`src/UI/Menu/MenuReturnDestination.cs`) and never re-read, since the session that counted them is
 freed before the page draws.
 

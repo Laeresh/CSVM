@@ -1192,44 +1192,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `Z:\CSVM\.scratch\orch-5\BL-917\` (controls-crop-before.png, controls-crop-after.png),
   `docs/formats/menu-layout.md` (the `Z` row's four insets), `docs/org/menu-inventory.md`.
 
-- `BL-943` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **The Instant Action
-  wrap-up page wants a post-it under the notepad rows to hold the remake's own further lines, and
-  more than one of them where a stunt run has many splits.** *Evidence:* asked for at the controls
-  as "Can we add a post-it (yellow square background) under it, the new entries should be contained
-  to it but then we have a little more space and for long stunt missions we could add multiple (new
-  york has ~16 stunts)". The page draws the outcome headline, the context line and the stunt splits
-  as bare lines under the four decoded rows, with no panel of their own
-  (`CSVM/src/UI/InstantActionWrapupPage.cs:10-13`), and the band's foot is the CONTINUE plaque, so a
-  long stunt list has nowhere to go. *Fix shape:* a remake-only post-it panel behind that band,
-  sized to the lines it holds, and a second and further post-its when one will not carry them all.
-  *⚠ Traps:* the four `IAWU_T_*` rows and the plaque are the shipped page's own and do not move;
-  everything here is remake furniture in the space below them. *Playtest after fix:* a C1 stunt run
-  and an ordinary Instant Action sortie, both in the Original presentation. *Cross-refs:* `BL-944`
-  and `BL-945` (the same page), `git log --grep=BL-908`,
-  `docs/formats/instant-action/wrap-up.md`.
-
-- `BL-944` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **The wrap-up page's
-  further lines repeat the completion time the decoded row at the top of the page already carries.**
-  *Evidence:* reported at the controls as "The time completed is already at the top". The page draws
-  `IAWU_T_TIMETITLE`/`IAWU_T_TIME` as the first of the four decoded pairs
-  (`CSVM/src/UI/InstantActionWrapupPage.cs:81`) and then the built-in board's own band under them,
-  which carries the same figure through `IaWrapupBoard`'s Time to Complete Mission cell
-  (`CSVM/src/Flight/IaWrapupBoard.cs:31,97-98`). *Fix shape:* leave the time out of the Original
-  page's further lines; the built-in board keeps its own row, since it has no decoded row above it.
-  *⚠ Traps:* the stunt splits' own total is a different figure and stays. *Cross-refs:* `BL-943`,
-  `git log --grep=BL-908`.
-
-- `BL-945` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **The wrap-up page
-  should say whether the mission was won with a large tick box above CONTINUE rather than with the
-  words mission complete or mission failed.** *Evidence:* asked for at the controls as "Instead of
-  mission complete or fail add a large \"checkbox\" above continue that is ticked when mission is
-  complete". The outcome is one of the further lines the shipped page has no row for, drawn as the
-  headline above the context line (`CSVM/src/UI/InstantActionWrapupPage.cs:12,54`). *Fix shape:* a
-  remake-only tick box on the notepad above the CONTINUE plaque, ticked on a win and empty on a
-  loss, with the headline text dropped. *⚠ Traps:* the original never lost an Instant Action, so the
-  empty state is remake-only and has no reference art; the box is the item's own, not a decode.
-  *Cross-refs:* `BL-943` (the post-it that shares the space), `git log --grep=BL-908`.
-
 - `BL-946` `[Fidelity]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The Weapon
   Loadout screen maps rocket widget N to physical pylon N+1 where the original maps it to the saved
   record's ordnance cell N, so a starboard pylon can draw in a port box.** *Evidence:* left open
@@ -1259,8 +1221,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   free slot, Back leaves it; the resulting roster is what every later screen and the session itself
   read, so the flight screens stop being where seats are decided. *⚠ Traps:* the original has no
   such screen, so this is remake-only chrome and needs its own art direction decided before any of
-  it is drawn, the same call `BL-945`'s wrap-up tick box needs. The existing per-screen join must
-  become the board's own gesture rather than a second path, or the two disagree about who is
+  it is drawn; the wrap-up page's post-its and tick box (`git log --grep=BL-945`) are the nearest
+  precedent, procedural furniture in the page's own inks since no shipped art fits. The existing
+  per-screen join must become the board's own gesture rather than a second path, or the two disagree about who is
   seated. Seat 0 keeps the keyboard whatever the board says, so a slot is a pad's claim, not a
   player's existence. Device loss and reassignment is the part that bites (the linked thread lands
   on it too, over batteries and devices claimed twice); `MenuSeatDevices`'s guid reconciliation and

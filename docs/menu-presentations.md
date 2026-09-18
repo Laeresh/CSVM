@@ -518,7 +518,8 @@ list open, `instant-action:weapon-loadout` on the pilot's loadout screen and
 `instant-action:lives[:<count>]` with the remake-only Lives box focused, at Unlimited without a
 count and at that count with one (the screen opens on one life, so neither reading is a state a
 plain shot of it can show), `instant-action-wrapup` and `instant-action-wrapup:failed` on the
-wrap-up page a flown mission's ending lands on, over a sample stunt run in each outcome (Built-in
+wrap-up page a flown mission's ending lands on, over a sample stunt run in each outcome, and
+`instant-action-wrapup:long` over a seventeen-zone run whose splits take three post-its (Built-in
 shows a board inside the flight instead and has no menu page to open), `options`,
 `game-options` and `game-options:open` with its Difficulty list standing open, `audio` and
 `audio:mixed` with its four sliders at four distinct levels, `video`,

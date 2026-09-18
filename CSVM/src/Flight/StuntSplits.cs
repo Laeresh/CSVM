@@ -15,6 +15,10 @@ public readonly record struct StuntSummary(StuntMission Mission, float Total, fl
 /// </summary>
 public static class StuntSplits
 {
+    /// <summary>The word that opens the total's line in <see cref="Lines"/>, so a page that already
+    /// shows the mission clock can leave that line out.</summary>
+    public const string TotalLabel = "TOTAL";
+
     // Section metrics at 720p (scaled by the board's own scale). All TUNE.
     private const int HeaderFont = 14;
     private const int RowFont = 17;
@@ -48,7 +52,7 @@ public static class StuntSplits
             n++;
         }
 
-        lines.Add($"TOTAL   {StuntMission.FormatTime(run.Total)}");
+        lines.Add($"{TotalLabel}   {StuntMission.FormatTime(run.Total)}");
         if (run.NewBest)
         {
             lines.Add(run.PrevBest is { } was

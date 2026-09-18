@@ -6,8 +6,8 @@ namespace CSVM.UI.Menu.Original;
 /// <summary>
 /// The Original presentation's Instant Action wrap-up page, a standalone module over the decoded
 /// <c>[@IA_WrapUp@]</c> section: the magazine spread, the notepad's heading, the four decoded rows
-/// off the frozen snapshot, the further lines the built-in board carries, and a CONTINUE plaque back
-/// to the Instant Action screen. The page stands only while a snapshot is held, which the session
+/// off the frozen snapshot, the further lines on post-its, the outcome's tick box, and a CONTINUE
+/// plaque back to the Instant Action screen. The page stands only while a snapshot is held, which the session
 /// hands over when the wrap-up hold ends; the built-in presentation keeps its own board instead.
 /// Readings: docs/formats/instant-action/wrap-up.md.
 /// </summary>
@@ -22,9 +22,6 @@ public sealed class OriginalWrapupScreen : IOriginalScreenModule
     // The plaque's size where the file cannot be measured: GN_B_Continue.png's own frame.
     private const float FallbackPlaqueWidth = 112f;
     private const float FallbackPlaqueHeight = 34f;
-
-    // The gap between two further lines, against their own face.
-    private const float ExtraSpacing = 2f;
 
     private readonly CampaignLayout _layout;
     private readonly Func<string, (int Width, int Height)?> _measure;
@@ -121,10 +118,8 @@ public sealed class OriginalWrapupScreen : IOriginalScreenModule
     }
 
     /// <summary>The page as drawn: the magazine spread behind everything, the four brushstrokes,
-    /// the heading and the eight row lines, the further lines as one flowed note, and the plaque.
-    /// The page writes no fill and no stroke, so <paramref name="fills"/> and
-    /// <paramref name="strokes"/> stand unused; both are here because one signature serves every
-    /// module's dispatch.</summary>
+    /// the heading and the eight row lines, the post-its as fills with their further lines as one
+    /// flowed note each, the tick box as strokes, and the plaque.</summary>
     public void Compose(
         IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> backdrop, List<BoardPicture> pictures,
         List<BoardFill> fills, List<BoardStroke> strokes, List<BoardLine> lines, List<BoardPlaque> plaques,
@@ -133,6 +128,8 @@ public sealed class OriginalWrapupScreen : IOriginalScreenModule
         ArgumentNullException.ThrowIfNull(rows);
         ArgumentNullException.ThrowIfNull(backdrop);
         ArgumentNullException.ThrowIfNull(pictures);
+        ArgumentNullException.ThrowIfNull(fills);
+        ArgumentNullException.ThrowIfNull(strokes);
         ArgumentNullException.ThrowIfNull(lines);
         ArgumentNullException.ThrowIfNull(plaques);
         ArgumentNullException.ThrowIfNull(notes);
@@ -151,10 +148,13 @@ public sealed class OriginalWrapupScreen : IOriginalScreenModule
         }
 
         lines.AddRange(InstantActionWrapupPage.Rows(shown, _layout));
-        var band = InstantActionWrapupPage.ExtraBox(_layout);
-        notes.Add(new BoardNote(
-            InstantActionWrapupPage.ExtraLines(shown), band.X, band.Y, band.Width, band.Height,
-            ExtraSpacing, InstantActionWrapupPage.ExtraFont, BoardInk.Row, Italic: true, Shrink: true));
+        foreach (var postIt in InstantActionWrapupPage.PostIts(shown, _layout))
+        {
+            fills.AddRange(InstantActionWrapupPage.PostItPaper(postIt));
+            notes.Add(InstantActionWrapupPage.PostItNote(postIt));
+        }
+
+        strokes.AddRange(InstantActionWrapupPage.TickStrokes(shown.Won, _layout));
 
         for (int i = 0; i < rows.Count; i++)
         {

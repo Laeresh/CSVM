@@ -215,10 +215,11 @@ keys: [../formats/menu-layout.md](../formats/menu-layout.md).
 
 ## src/UI/InstantActionWrapupPage.cs
 The Instant Action wrap-up page's own content, engine-free over `CampaignLayout`: the heading, the four title/value pairs at `[@IA_WrapUp@]`'s authored rows, the magazine spread and the four
-brushstrokes, the CONTINUE plaque's art and corner, and the further lines the shipped page has no row for (the outcome headline, the context naming the chapter and the mission type, and the stunt
-run's splits). Every value is read off the `IaWrapupSnapshot` the ending froze and never recomputed, so the page shows the mission's own numbers however long it stands. `ExtraBox` measures the free
-pad off the page's own rows, from under the last value row to the plaque's foot and clear of its left edge, so a layout that spaces its rows differently moves the band with them rather than drawing
-over one. `Sample` is the stand-in run the `--menu=` aids and the coverage walk stand the page on. What the four numbers count:
+brushstrokes, the CONTINUE plaque's art and corner, and two pieces of remake furniture. `PostIts` writes the further lines the shipped page has no row for (the context naming the chapter and the
+mission type, and the stunt run's splits without their total, which is the time row's figure again) onto yellow post-its: the first under the last value row and clear of the plaque, each further
+one to its left, the lines shared out evenly and each post-it as tall as what it holds. `TickStrokes` draws the outcome as a box above CONTINUE, ticked on a win and empty on a loss. Every value is
+read off the `IaWrapupSnapshot` the ending froze and never recomputed; the geometry is read off the page's own rows, so a layout that spaces them differently moves the furniture with them.
+`Sample` and `LongSample` are the stand-in runs the `--menu=` aids and the coverage walk stand the page on. What the four numbers count:
 [../formats/instant-action/wrap-up.md](../formats/instant-action/wrap-up.md).
 
 ## src/UI/ComposedBoardView.cs
@@ -1004,7 +1005,7 @@ decides the screen its exit returns to. It is one `IOriginalScreenModule` and re
 The Original Instant Action wrap-up page, one standalone module over the decoded `[@IA_WrapUp@]` section and `InstantActionWrapupPage.cs`'s content. It stands only while it holds a snapshot, which
 arrives as `InstantActionWrapupReturn` when a flown mission's hold ends and the session hands the menu its frozen numbers; `ShowWrapup` takes that run and opens the page. Its one row is the CONTINUE
 plaque at its authored corner, and both CONTINUE and Back drop the run and reopen the Instant Action screen through that screen's own door, so the sortie's roster and environment are re-read on the
-way. `Compose` is the magazine spread as the backdrop, the four brushstrokes, the heading and the eight row lines, the further lines as one shrinking `BoardNote` on the free pad, and the plaque. The
+way. `Compose` is the magazine spread as the backdrop, the four brushstrokes, the heading and the eight row lines, each post-it as fills under a shrinking `BoardNote` of its lines, the tick box as strokes, and the plaque. The
 built-in presentation keeps its in-flight `Flight/IaWrapupBoard.cs` instead and has no page here, which is why its own return lands on the Instant Action screen. It is one `IOriginalScreenModule`
 reaching the shell only through `IOriginalScreenHost` (`OriginalScreenHost.cs`); the shell exposes it as `Wrapup`. The page's own decode:
 [../formats/instant-action/wrap-up.md](../formats/instant-action/wrap-up.md).
