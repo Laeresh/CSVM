@@ -4319,10 +4319,11 @@ public partial class FlightController : Node3D
         if (!IsInsideTree() || GetViewport() is not { } viewport)
             return Vector2.Zero;
         var half = viewport.GetVisibleRect().Size * 0.5f;
-        // A captured pointer reports one frozen position, so the virtual cursor the frame's relative
-        // travel was folded into stands in for it; off capture this is the pane's own cursor.
-        var cursor = _mouse.Holding ? _mouse.Cursor : viewport.GetMousePosition();
-        return MouseFlight.Offset(cursor, half, half);
+        // A captured pointer reports one frozen position, so the virtual cursor stands in for it,
+        // with its own wider centre band; off capture this is the pane's own cursor and decoded law.
+        if (_mouse.Holding)
+            return MouseCapture.Centred(MouseFlight.Offset(_mouse.Cursor, half, half));
+        return MouseFlight.Offset(viewport.GetMousePosition(), half, half);
     }
 
     // The seat's hold on the desktop mouse, re-decided every frame. A board that draws its own

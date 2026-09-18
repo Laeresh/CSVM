@@ -150,15 +150,37 @@ recentring, the free-look row above.
 the pointer while it flies and hides it, so the cursor cannot be left behind on a
 second monitor or clicked onto another window mid-sortie. Under capture the OS
 pointer stops moving, so the stick and head-look read relative motion instead:
-the travel is accumulated into a cursor confined to the pane, which reads the
-same deflection, the same dead bands and the same hold-to-look as the visible
-cursor did. Every board that draws its own pointer gets it back, since each of
+the travel is accumulated into a cursor confined to the pane, which reads through
+the same offset, the same gate and the same hold-to-look as the visible cursor
+did. Every board that draws its own pointer gets it back, since each of
 them halts the session: the pause sheet, the preferences page behind its
 PREFERENCES row, photo mode's free camera and the wrap-up boards. The resume
 takes it again, from where it stood. A pilot out of lives keeps the pointer, its
 pane being the spectator camera's. Nothing is taken on a headless host, in a
 `--det` run or in a scripted one, so the test desktop and the pinned shots read
 the mouse mode their launch set.
+
+**The captured stick is scaled in mouse counts, not pane pixels.** Relative
+motion arrives in the mouse's own counts, and adding those to the pane unscaled
+made full deflection half the pane's width in counts: 960 counts on a 1920-wide
+pane, 15 mm of hand travel on a 1600 dpi mouse, and shorter still on a narrower
+window. So each axis is scaled to put the pane's edge at
+`MouseCapture.FullDeflectionCounts` (2000) counts from the middle, on any pane
+size and on both axes alike:
+
+| mouse | full deflection | centre band |
+|---|---|---|
+| 800 dpi | 64 mm | 13 mm |
+| 1600 dpi | 32 mm | 6.4 mm |
+| 3200 dpi | 16 mm | 3.2 mm |
+
+The centre band is `MouseCapture.CentreBand`, 0.2 of that travel (400 counts),
+twice the original's 0.1, so a hand resting on the mouse holds the stick
+centred. Past the band the deflection rises in a straight line to full at the
+edge. Both numbers are this port's, chosen for the captured path only: the
+original read the desktop pointer over an 800x600 window, and the visible
+pointer (a seat that holds no capture) still flies the decoded 0.1 over pane
+pixels.
 
 ## Any mode
 

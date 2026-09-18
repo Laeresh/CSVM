@@ -5,12 +5,24 @@ namespace CSVM.Flight;
 /// <summary>The mouse a flight seat takes from the desktop, and the virtual cursor that stands in
 /// for the OS one while it holds it. A captured pointer stops reporting a position, so the absolute
 /// reads the stick and head-look grew up on are fed from relative motion instead: this accumulates
-/// that motion into a cursor confined to the pane, which the stick then reads exactly as it read the
-/// real one, dead bands and all. Pure arithmetic with no device and no display in it, so a unit
-/// drives the whole law; <see cref="FlightController"/> owns the mode write and the release.
+/// that motion into a cursor confined to the pane, which the stick reads through the same offset and
+/// the same gate as the real one. Two things differ: travel is scaled from mouse counts, and the
+/// centre band is wider. Pure arithmetic with no device and no display in it, so a unit drives the
+/// whole law; <see cref="FlightController"/> owns the mode write and the release.
 /// </summary>
 public sealed class MouseCapture
 {
+    /// <summary>Mouse counts from the pane's middle to its edge on either axis, so full deflection is
+    /// the same hand movement whatever the pane's pixel size: 32 mm at 1600 dpi. Remake-only, since
+    /// the original read the desktop pointer; the arithmetic is in <c>docs/controls.md</c>, "Flying
+    /// with the mouse".</summary>
+    public const float FullDeflectionCounts = 2000f;
+
+    /// <summary>The captured stick's centre band, as a fraction of the travel to the edge. ⚠ Wider
+    /// than the decoded 0.1 on purpose, and only here: <see cref="MouseFlight.Gate"/> keeps the
+    /// original's value for the desktop pointer (<see cref="Centred"/>).</summary>
+    public const float CentreBand = 0.2f;
+
     private Vector2 _pendingCursor;
     private Vector2 _pendingLook;
 
@@ -37,8 +49,14 @@ public sealed class MouseCapture
     public static Input.MouseModeEnum Restorable(Input.MouseModeEnum saved) =>
         saved == Input.MouseModeEnum.Captured ? Input.MouseModeEnum.Visible : saved;
 
-    /// <summary>Takes the mouse, seeding the virtual cursor where the real one stood, so the stick
-    /// reads the same deflection on the frame the capture starts as on the frame before it.</summary>
+    /// <summary>The captured cursor's offset with <see cref="CentreBand"/> taken out of the middle,
+    /// placed so <see cref="MouseFlight.Read"/>'s own 0.1 gate lands the band's edge on zero and the
+    /// pane's edge on full deflection. The desktop pointer's offset never passes through here.
+    /// </summary>
+    public static Vector2 Centred(Vector2 offset) => new(Widen(offset.X), Widen(offset.Y));
+
+    /// <summary>Takes the mouse, seeding the virtual cursor where the real one stood, so the capture
+    /// starts from the stick position the pointer held rather than jumping to the middle.</summary>
     public void Take(Vector2 cursor)
     {
         Cursor = cursor;
@@ -67,13 +85,17 @@ public sealed class MouseCapture
     }
 
     /// <summary>Folds this frame's travel into the virtual cursor and returns where it now stands.
-    /// Confined to <paramref name="pane"/> the way the OS pointer was confined to the window, so
-    /// pushing past an edge saturates there instead of running up a debt to travel back.</summary>
+    /// The travel is in mouse counts, scaled per axis so <see cref="FullDeflectionCounts"/> spans the
+    /// half pane. Confined to <paramref name="pane"/> the way the OS pointer was confined to the
+    /// window, so pushing past an edge saturates there instead of running up a debt to travel back.
+    /// </summary>
     public Vector2 StepCursor(Vector2 pane)
     {
+        var extent = new Vector2(Mathf.Max(pane.X, 0f), Mathf.Max(pane.Y, 0f));
+        var travel = _pendingCursor * (extent * 0.5f / FullDeflectionCounts);
         Cursor = new Vector2(
-            Mathf.Clamp(Cursor.X + _pendingCursor.X, 0f, Mathf.Max(pane.X, 0f)),
-            Mathf.Clamp(Cursor.Y + _pendingCursor.Y, 0f, Mathf.Max(pane.Y, 0f)));
+            Mathf.Clamp(Cursor.X + travel.X, 0f, extent.X),
+            Mathf.Clamp(Cursor.Y + travel.Y, 0f, extent.Y));
         _pendingCursor = Vector2.Zero;
         return Cursor;
     }
@@ -85,5 +107,14 @@ public sealed class MouseCapture
         var look = _pendingLook;
         _pendingLook = Vector2.Zero;
         return look;
+    }
+
+    private static float Widen(float offset)
+    {
+        float past = Mathf.Abs(offset) - CentreBand;
+        if (past <= 0f)
+            return 0f;
+        float gate = MouseFlight.AttitudeDeadzone;
+        return Mathf.Sign(offset) * (gate + ((1f - gate) * past / (1f - CentreBand)));
     }
 }

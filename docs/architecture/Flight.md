@@ -925,13 +925,13 @@ suite drives it with no window; `FlightController` sums what it returns into the
 deflections. Decode: [../org/flightModel.md](../org/flightModel.md); the scheme: [../controls.md](../controls.md).
 
 ## src/Flight/MouseCapture.cs
-The mouse a flight seat takes from the desktop while it flies, under either mouse scheme. A captured
-pointer reports one frozen position, so this accumulates relative motion into a virtual cursor
-confined to the pane, which `MouseFlight.Offset` then reads exactly as it read the real one, and
-banks the same travel separately for head-look's relative law. `Allowed` is the guard: a real display
-with somebody at the controls, which keeps the hidden test desktop and every `--det` run on their
-harness's mouse mode. `Restorable` is what a board drawing its own pointer puts back on close, never
-a capture. `FlightController` owns the mode write, the per-frame decision and the release, and
+The mouse a flight seat takes while it flies, under either mouse scheme. A captured pointer reports
+one frozen position, so this scales relative motion into a virtual cursor confined to the pane
+(`FullDeflectionCounts` mouse counts reach the edge on any pane size) for `MouseFlight.Offset`, and
+banks the raw travel for head-look. `Centred` widens the stick's centre band to `CentreBand` on this
+path only, ahead of the decoded 0.1. `Allowed` is the guard: a real display with somebody at the
+controls, so the test desktop and `--det` keep their mouse mode. `Restorable` is what a board with
+its own pointer puts back, never a capture. `FlightController` owns the mode write and release, and
 `Session/FlightRosterInputs.cs` resolves the guard once per session. Read `MouseFlight.cs` next.
 
 ## src/Flight/NitroSystem.cs

@@ -394,26 +394,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `PLAN-M5-polish-6` C22, `docs/verification.md` PERF-1, PERF-19, PERF-20, PERF-23
   and PERF-34.
 
-- `BL-959` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Flying with the mouse is far too sensitive:
-  the captured cursor adds raw mouse pixels with no scale, so a high-DPI mouse crosses the pane in
-  a few centimetres.** *Evidence:* judged at the controls under the Fly scheme: "works but much too
-  sensitive, needs a deadzone and larger mouse movements for input". The law itself is decoded and
-  right: `MouseFlight.Read` gates each source at the original's 0.1 of the pane's half-extent and
-  rescales the rest to full deflection, and `MouseFlight.Offset` reads the cursor's offset from the
-  pane's middle. What changed under the pointer capture is where the cursor comes from:
-  `MouseCapture.StepCursor` folds each motion event's raw relative pixels into the virtual cursor,
-  so the travel to saturate is half the pane in mouse counts, about 960 counts on a 1920-wide pane,
-  which a 1600 dpi mouse covers in 15 mm. The original read the desktop pointer over an 800x600
-  window at a 1990s count rate, so its 400 counts were a far larger hand movement. *Fix shape:*
-  a pixels-to-pane scale on the captured cursor's travel, chosen so a full deflection is a hand
-  movement of a few centimetres, and a centre band wider than the decoded 0.1 on the captured
-  path (the decoded value stays on the desktop-pointer path, since it is the original's). One
-  constant each, on `MouseCapture`, with `MouseFlightSuites` pinning the travel-to-deflection
-  ratio. *⚠ Traps:* do not touch `MouseFlight.Gate` or its 0.1: that is the decoded law and the
-  desktop path still runs it. The slider that exposes the scale is `BL-960`; land a sensible
-  constant first so the scheme is flyable without it. *Cross-refs:* `BL-960` (the slider),
-  `BL-961` (a scheme change reaching the live seat), `docs/controls.md` ("Flying with the mouse").
-
 ## Environment & world
 
 - `BL-272` `[Tuning]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Precipitation: every unit mapping from `weather.json` to a look is invented, and
@@ -1146,13 +1126,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 - `BL-960` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: spec]` **A mouse sensitivity slider on the
   Controls page, for the Fly scheme.** *Evidence:* asked for at the controls ("perhaps a slider in
-  options") once `BL-959` lands its scale constant. The Original Controls page already carries the
+  options"), over the captured stick's scale constant `MouseCapture.FullDeflectionCounts`. The Original Controls page already carries the
   Mouse row (`CP_S_MOUSE`'s slider-slot art) whose horizontal placement `BL-942` is still fitting.
   *Fix shape:* a per-seat value in `BindingProfile` beside `MouseFlying`, saved by `BindingStore`,
-  applied as the multiplier on `BL-959`'s scale; a row on the Original Controls page under the
+  applied as the multiplier on `FullDeflectionCounts`; a row on the Original Controls page under the
   Mouse row, and the same value on Built-in's Controls screen in its stepper convention.
-  *⚠ Traps:* remake-only, so nothing to decode; the default must be `BL-959`'s constant so a saved
-  file without the field flies as before. *Cross-refs:* `BL-959`, `BL-942`, `BL-961`.
+  *⚠ Traps:* remake-only, so nothing to decode; the default must be that constant unscaled so a saved
+  file without the field flies as before. *Cross-refs:* `BL-942`, `BL-961`, `docs/controls.md`
+  ("Flying with the mouse").
 
 - `BL-961` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **A Controls change accepted over the pause
   reaches the profile and not the flying seat, so the mouse scheme changes only on restart.**
@@ -1164,7 +1145,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   to (the mouse scheme, and whatever else `FlightControllerBuild` copies), or make the controller
   read the profile's field each frame. Audit the copy list in `FlightControllerBuild` for the rest.
   *⚠ Traps:* the seat's capture decision (`WantsMouseCapture`) reads the scheme, so a live flip
-  must re-run it on the next unhalted frame. *Cross-refs:* `BL-959`, `BL-960`.
+  must re-run it on the next unhalted frame. *Cross-refs:* `BL-960`.
 
 - `BL-965` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: spec]` **The Original wrap-up screen shows the
   stunt run's Danger Zone photographs.** *Evidence:* `StuntScoreboard` draws the run's latched
