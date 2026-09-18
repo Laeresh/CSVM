@@ -1392,7 +1392,8 @@ internal static class OrdnanceSuites
     [Suite("disabling-hits",
         "the hit-side dispatch of the no-damage types on a live pool (D15-D17): a wep_08 into a " +
         "human's tail washes that pane red at weight 1 for 5 s after a 1 s delay and no other " +
-        "pane, a wep_09 from behind does nothing while one from ahead washes white, two humans " +
+        "pane, a wep_09 from behind does nothing while one from ahead washes white, a human's " +
+        "own wep_08 bursting 20 m away washes their pane too, two humans " +
         "hit in one second each carry their own wash and an AI 20 m from one burst is stunned; " +
         "an AI is stunned for DisablingIntensity's seconds by a burst on the ground inside " +
         "IMPACT_PROXIMITY, raised to 5 s by a direct hit and overwritten back down by the next " +
@@ -1544,6 +1545,21 @@ internal static class OrdnanceSuites
                 $"a wep_09 into the nose washes pane 1 white at full weight (washes={washes.Count - before} last={(washes.Count > before ? $"{washes[^1].Colour} w={washes[^1].Weight:0.###}" : "-")})");
             Advance(7f);
             ctx.Check(Clear(0) && Clear(1) && Pristine(human0), $"and it clears; the ledger is still untouched");
+
+            // 2b. The shooter is not exempt from their own burst: P2's sonic into the AI 20 m off
+            // their wing stuns the AI and washes pane 2, since the original's self-hit guard sits
+            // below the no-damage arms and spares the damage pair alone.
+            before = washes.Count;
+            live.Spawn(sonic, new Transform3D(Basis.LookingAt(Vector3.Forward, Vector3.Up), Tail(aiNear)), Vector3.Zero,
+                shooterId: 1);
+            Advance(0.5f);
+            ctx.Check(!RoundsAlive() && washes.Count == before + 1 && washes[^1].Player == 1
+                      && washes[^1].Colour == new Color(1f, 0f, 0f),
+                $"P2's own wep_08 bursting on the AI 20 m away washes pane 2 red (washes={washes.Count - before} players={string.Join(",", washes.Skip(before).Select(w => w.Player + 1))})");
+            ctx.Check(aiNear.Pilot!.IsStunned && Pristine(human1) && Pristine(aiNear),
+                $"the struck AI is stunned and neither ledger moved (stunned={aiNear.Pilot.IsStunned})");
+            Advance(7f);
+            ctx.Check(Clear(1), $"the self-wash clears at its duration ({flash.CurrentFor(1)})");
 
             // 3. Two viewers hit inside one second: each pane its own wash, and the AI 20 m from the
             // second burst is inside the sonic's plateau and stunned for the full 5 s.
