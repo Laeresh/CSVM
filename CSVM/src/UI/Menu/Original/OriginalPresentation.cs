@@ -102,6 +102,14 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// install ships, whose splits take more than one post-it.</summary>
     public const string InstantActionWrapupLongAid = "long";
 
+    /// <summary>The wrap-up aid's argument that shows the sample run with a stand-in photograph
+    /// per zone, every one landed.</summary>
+    public const string InstantActionWrapupPhotosAid = "photos";
+
+    /// <summary>The wrap-up aid's argument that shows the seventeen-zone run with a stand-in
+    /// photograph per zone, the last one still on its way.</summary>
+    public const string InstantActionWrapupLongPhotosAid = "long-photos";
+
     /// <summary>The aid value that opens the hangar's name screen on a fresh build.</summary>
     public const string PlaneNameAid = "plane-name";
 
@@ -487,6 +495,12 @@ public sealed class OriginalPresentation : IMenuPresentation
                 case InstantActionWrapupAid + ":" + InstantActionWrapupLongAid:
                     _shell.Wrapup.ShowWrapup(InstantActionWrapupPage.LongSample());
                     break;
+                case InstantActionWrapupAid + ":" + InstantActionWrapupPhotosAid:
+                    _shell.Wrapup.ShowWrapup(WithSamplePhotos(InstantActionWrapupPage.Sample(won: true), pending: 0));
+                    break;
+                case InstantActionWrapupAid + ":" + InstantActionWrapupLongPhotosAid:
+                    _shell.Wrapup.ShowWrapup(WithSamplePhotos(InstantActionWrapupPage.LongSample(), pending: 1));
+                    break;
                 case PlaneNameAid:
                     _shell.OpenHangar();
                     break;
@@ -695,6 +709,9 @@ public sealed class OriginalPresentation : IMenuPresentation
         // An edit box's caret blinks on the same step, and repaints for the same reason: the
         // screen has not changed, only the pixels the box draws.
         picture |= _view.AdvanceCaret(dt);
+        // A photograph landing after the wrap-up page woke fills its print, which is a new picture
+        // on the board rather than new pixels in one already drawn, so the page is composed again.
+        changed |= _shell.Screen == OriginalScreen.InstantActionWrapup && _shell.Wrapup.TakeLanded();
         if (changed)
         {
             Redraw();
@@ -768,6 +785,45 @@ public sealed class OriginalPresentation : IMenuPresentation
         }
 
         return 0;
+    }
+
+    // One stand-in photograph per zone the sample completed, the last pending ones never landing.
+    // Each is a sky over a tilted horizon in its own hue, so the prints tell apart in a shot.
+    private static IaWrapupSnapshot WithSamplePhotos(IaWrapupSnapshot sample, int pending)
+    {
+        var shots = new List<StuntShot>();
+        for (int i = 0; i < sample.ZonesCompleted; i++)
+        {
+            var shot = new StuntShot { DzName = $"dz{i + 1}", At = i, Path = $"sample_dz{i + 1}.png" };
+            if (i < sample.ZonesCompleted - pending)
+            {
+                shot.Thumb = SamplePhoto(i);
+                shot.Landed = true;
+            }
+
+            shots.Add(shot);
+        }
+
+        return sample with { Shots = shots };
+    }
+
+    private static Image SamplePhoto(int index)
+    {
+        const int width = StuntCapture.ThumbWidth, height = StuntCapture.ThumbWidth * 9 / 16;
+        var image = Image.CreateEmpty(width, height, false, Image.Format.Rgb8);
+        var sky = Color.FromHsv(0.55f + (index * 0.037f % 0.2f), 0.45f, 0.9f);
+        var ground = Color.FromHsv(0.25f + (index * 0.053f % 0.12f), 0.5f, 0.45f);
+        float tilt = ((index % 5) - 2) * 0.12f;
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                float horizon = (height * 0.6f) + ((x - (width / 2f)) * tilt);
+                image.SetPixel(x, y, y < horizon ? sky.Darkened(y / (float)height * 0.3f) : ground);
+            }
+        }
+
+        return image;
     }
 
     // The Game Options aid's posed state, the keyboard walk that reaches it rather than a state the

@@ -1060,17 +1060,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `spyglass-marker-hud` suite runs in one frame and cannot see a per-frame step; a live `--fly`
   probe with a log line is the instrument. *Cross-refs:* `git log --grep=BL-906`.
 
-- `BL-965` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: spec]` **The Original wrap-up screen shows the
-  stunt run's Danger Zone photographs.** *Evidence:* `StuntScoreboard` draws the run's latched
-  shots as a thumbnail strip in marker order, but the Original presentation's wrap-up
-  (`OriginalWrapupScreen`) draws only the decoded rows and the further lines, so a run flown under
-  Original ends with no photographs on screen ("no thumbnails on the Original UI scoreboard seen").
-  The original's own wrap-up carries none; the strip is a remake addition the user wants on both.
-  *Fix shape:* carry the shots into `IaWrapupSnapshot` and draw the strip on the Original page in
-  the band under the rows, at the same 164-pixel thumbnail width, without moving the decoded rows.
-  *⚠ Traps:* `BL-943` to `BL-945` are reshaping that band; land beside them, not under them.
-  *Cross-refs:* `StuntCapture.ShotLanded` (a shot's thumbnail can land after the board wakes),
-  `BL-943`, `git log --grep=BL-256`.
+- `BL-967` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: spec]` **Built-in's Instant Action
+  wrap-up board shows the stunt run's Danger Zone photographs.** *Evidence:* an Instant Action stunt
+  run under Built-in ends on `IaWrapupBoard`, which draws the four counters and the splits but no
+  thumbnail strip; `StuntScoreboard`'s strip is the solo run's alone (`HumanFlightAdapter` builds no
+  scoreboard under Instant Action). The Original page draws the run's photographs as prints beside
+  its post-its. *Fix shape:* hand player 1's `StuntCapture.InMarkerOrder()` to
+  `IaWrapupBoard.Present` at the wrap-up (read then rather than at the ending, as the Original
+  handover in `InstantActionDirector` does) and draw the strip under the splits the way
+  `StuntScoreboard` does, a pending cell empty and filled on `StuntCapture.ShotLanded`.
+  *⚠ Traps:* the run completes on its last zone's gate pair while the camera latches on the marker's
+  sphere, tested after the run on a shared frame, so a list read at `MissionEnded` can miss the last
+  shot. *Cross-refs:*
+  `Flight/StuntScoreboard.cs`, `UI/InstantActionWrapupPage.Prints`.
 
 ## Splitscreen
 

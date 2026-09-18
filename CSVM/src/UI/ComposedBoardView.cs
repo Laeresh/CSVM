@@ -57,6 +57,9 @@ public sealed partial class ComposedBoardView : Control
 
     private readonly Dictionary<string, Texture2D?> _textures = new();
 
+    // The textures of the in-memory pictures the board last shown draws, by image.
+    private readonly Dictionary<Image, Texture2D> _held = new(ReferenceEqualityComparer.Instance);
+
     // The installed fonts langui faces resolved to, by tag, a machine lacking one caching null.
     private readonly Dictionary<string, Font?> _faces = new();
 
@@ -205,6 +208,7 @@ public sealed partial class ComposedBoardView : Control
         }
 
         _caretOnBoard = caret;
+        ForgetHeld(board);
         _board = board;
         _palette = palette;
         _detail = detail;
@@ -826,6 +830,11 @@ public sealed partial class ComposedBoardView : Control
     // screen backgrounds ship as, which no engine-free decoder here covers.
     private Texture2D? Load(BoardArt art)
     {
+        if (art.Library == BoardArtLibrary.Held)
+        {
+            return Held(art.Pixels);
+        }
+
         string path = art.Library switch
         {
             BoardArtLibrary.Rimage =>
@@ -860,5 +869,50 @@ public sealed partial class ComposedBoardView : Control
 
         _textures[path] = texture;
         return texture;
+    }
+
+    // One texture per in-memory picture, made on its first draw rather than every repaint. Keyed by
+    // the image itself: two runs can photograph under the same file name.
+    private Texture2D? Held(Image? pixels)
+    {
+        if (pixels == null || pixels.IsEmpty())
+        {
+            return null;
+        }
+
+        if (!_held.TryGetValue(pixels, out var texture))
+        {
+            texture = ImageTexture.CreateFromImage(pixels);
+            _held[pixels] = texture;
+        }
+
+        return texture;
+    }
+
+    // Drops the textures of held pictures the new board no longer draws, so a page shown once per
+    // stunt run does not keep every earlier run's photographs alive.
+    private void ForgetHeld(ComposedBoard board)
+    {
+        if (_held.Count == 0)
+        {
+            return;
+        }
+
+        var kept = new HashSet<Image>(ReferenceEqualityComparer.Instance);
+        foreach (var picture in board.Pictures)
+        {
+            if (picture.Art.Pixels is { } pixels)
+            {
+                kept.Add(pixels);
+            }
+        }
+
+        foreach (var pixels in new List<Image>(_held.Keys))
+        {
+            if (!kept.Contains(pixels))
+            {
+                _held.Remove(pixels);
+            }
+        }
     }
 }

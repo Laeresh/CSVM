@@ -199,7 +199,7 @@ sit over the background and stay under the page's pictures, where a selection ba
 is a widget's entries plus its wrap box (cut at a word where the box has no room for the rest, shrunk
 to a face the whole list fits in, or no box at all where the widget's own list stops nowhere), its
 marks, and `BoardCaret` an edit box's cursor on the line it follows, all placed by a caller that can measure text. `PlaqueFrame` and `PlaqueInk` are a plaque's states, and a plaque whose art leaves
-part of its frame empty carries its label's own baseline. `BoardArt` names a file and its frame count and the renderer resolves it; one of its four libraries is a movie, so a background film reaches the backdrop with no engine type here. `BoardCrop` takes a region of the source instead of the whole frame, which is a chart sheet's own window.
+part of its frame empty carries its label's own baseline. `BoardArt` names a file and its frame count and the renderer resolves it; one of its libraries is a movie, so a background film reaches the backdrop with no engine type here, and one is an image already in memory (`Held`), a stunt photograph's thumbnail. `BoardCrop` takes a region of the source instead of the whole frame, which is a chart sheet's own window.
 
 ## src/UI/CampaignBoards.cs
 The fixed chrome of all eight campaign screens, plus the composer that turns a page and a cursor
@@ -222,9 +222,9 @@ keys: [../formats/menu-layout.md](../formats/menu-layout.md).
 
 ## src/UI/InstantActionWrapupPage.cs
 The Instant Action wrap-up page's own content, engine-free over `CampaignLayout`: the heading, the four title/value pairs at `[@IA_WrapUp@]`'s authored rows, the magazine spread and the four
-brushstrokes, the CONTINUE plaque's art and corner, and two pieces of remake furniture. `PostIts` writes the further lines the shipped page has no row for (the context naming the chapter and the
+brushstrokes, the CONTINUE plaque's art and corner, and three pieces of remake furniture. `PostIts` writes the further lines the shipped page has no row for (the context naming the chapter and the
 mission type, and the stunt run's splits without their total, which is the time row's figure again) onto yellow post-its: the first under the last value row and clear of the plaque, each further
-one to its left, the lines shared out evenly and each post-it as tall as what it holds. `TickStrokes` draws the outcome as a box above CONTINUE, ticked on a win and empty on a loss. Every value is
+one to its left, the lines shared out evenly and each post-it as tall as what it holds. `Prints` lays a stunt run's photographs out in marker order to the left of the post-its. `TickStrokes` draws the outcome as a box above CONTINUE, ticked on a win and empty on a loss. Every value is
 read off the `IaWrapupSnapshot` the ending froze and never recomputed; the geometry is read off the page's own rows, so a layout that spaces them differently moves the furniture with them.
 `Sample` and `LongSample` are the stand-in runs the `--menu=` aids and the coverage walk stand the page on. What the four numbers count:
 [../formats/instant-action/wrap-up.md](../formats/instant-action/wrap-up.md).
@@ -235,7 +235,7 @@ The Godot half of the campaign boards: draws one `ComposedBoard` over the whole 
 texture cache and the only art resolution there is, mission art and screen chrome under their own
 extraction roots, and caches a miss so an absent extraction is probed once per name. A movie resolves
 to a `MovieSurface`, whose one texture the cache holds and the surface rewrites in place, so the
-picture animates with nothing invalidated; `AdvanceMovies` runs their clocks off the caller's own step and
+picture animates with nothing invalidated; a held image gets one texture per image, dropped once a shown board stops drawing it; `AdvanceMovies` runs their clocks off the caller's own step and
 `AdvanceCaret` blinks a text cursor off it, each saying whether to repaint. A line naming a `LanguiFace` draws in that installed Windows face, cached per tag, and keeps the board's own where the machine lacks it; a pitched block honours authored line breaks and indents and justifies as a whole, its lines left-aligned under the widest. Supplies the font metric a flowed
 `BoardNote` and a caret cannot take, `Fitted` shrinking a note's face until its list fits its box rather than losing a row, the two-line hint band a pad needs, and `ArtSize` for a caller that must clip against a bitmap's own authored width. `PresentMoving` is the one repaint a caller holding the frame loop can still make: its pictures go on a canvas item of the view's own, fitted by the same maths and re-fitted on a resize, rather than through a queued redraw callback the blocked loop would never reach, so a load screen's build can move the bar it draws.
 
@@ -1012,7 +1012,7 @@ decides the screen its exit returns to. It is one `IOriginalScreenModule` and re
 The Original Instant Action wrap-up page, one standalone module over the decoded `[@IA_WrapUp@]` section and `InstantActionWrapupPage.cs`'s content. It stands only while it holds a snapshot, which
 arrives as `InstantActionWrapupReturn` when a flown mission's hold ends and the session hands the menu its frozen numbers; `ShowWrapup` takes that run and opens the page. Its one row is the CONTINUE
 plaque at its authored corner, and both CONTINUE and Back drop the run and reopen the Instant Action screen through that screen's own door, so the sortie's roster and environment are re-read on the
-way. `Compose` is the magazine spread as the backdrop, the four brushstrokes, the heading and the eight row lines, each post-it as fills under a shrinking `BoardNote` of its lines, the tick box as strokes, and the plaque. The
+way. `Compose` is the magazine spread as the backdrop, the four brushstrokes, the heading and the eight row lines, each post-it as fills under a shrinking `BoardNote` of its lines, the photographs as prints, the tick box as strokes, and the plaque. A print drawn empty because its shot has not landed is what `TakeLanded` reports once it has, which the presentation's tick reads to compose the page again. The
 built-in presentation keeps its in-flight `Flight/IaWrapupBoard.cs` instead and has no page here, which is why its own return lands on the Instant Action screen. It is one `IOriginalScreenModule`
 reaching the shell only through `IOriginalScreenHost` (`OriginalScreenHost.cs`); the shell exposes it as `Wrapup`. The page's own decode:
 [../formats/instant-action/wrap-up.md](../formats/instant-action/wrap-up.md).
@@ -1105,7 +1105,7 @@ Where the menu stands when it comes back, said semantically: `TopLevel`, `Instan
 active presentation maps it into its own graph at `Activate`, so no presentation-specific screen id crosses the seam. `ForLaunch(exit)` reads off a launch's own exit the screen it came from, which is
 where a flight left early lands; the exit and not the session's spec, since a spec inherits the command line's `--campaign=` and would call a Free Flight launched afterwards a campaign mission. A
 destination names where the player stands and never a store: the two campaign returns name a profile, the store it is re-read from is the presentation's own, and an Instant Action return names
-nothing, the sortie's setup being the feature's. The one exception is the wrap-up return, which carries `IaWrapupSnapshot` (declared here, so nothing outside the shared namespace crosses the seam):
+nothing, the sortie's setup being the feature's. The one exception is the wrap-up return, which carries `IaWrapupSnapshot` (declared here, so nothing outside the shared namespace crosses the seam but the stunt camera's own `StuntShot` records):
 the session that counted an ended Instant Action mission's numbers is freed before any page can draw them. The `--menu=` aid is not a destination either, reaching the cold start alone, so a return is
 always one of these five. The namespace seam this whole
 folder is held to, and the two scans that enforce it, are in [../menu-presentations.md](../menu-presentations.md).

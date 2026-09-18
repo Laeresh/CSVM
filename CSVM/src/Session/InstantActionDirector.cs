@@ -678,7 +678,12 @@ public sealed class InstantActionDirector
 
             if (inputs.WrapupToMenu is { } toMenu)
             {
-                toMenu(final.Snapshot);
+                // The photographs are read at the handover rather than the ending: the run completes
+                // on its last gate pair, which can come before the camera's marker sphere or share
+                // its frame, where the camera tests after the run.
+                toMenu(final.Stunt != null && _rigs is { Count: > 0 } && _rigs[0].Controller?.StuntShots is { } camera
+                    ? final.Snapshot with { Shots = camera.InMarkerOrder().ToList() }
+                    : final.Snapshot);
                 return;
             }
 

@@ -1,12 +1,14 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Flight;
 
 namespace CSVM.UI.Menu.Original;
 
 /// <summary>
 /// The Original presentation's Instant Action wrap-up page, a standalone module over the decoded
 /// <c>[@IA_WrapUp@]</c> section: the magazine spread, the notepad's heading, the four decoded rows
-/// off the frozen snapshot, the further lines on post-its, the outcome's tick box, and a CONTINUE
+/// off the frozen snapshot, the further lines on post-its, a stunt run's photographs beside them,
+/// the outcome's tick box, and a CONTINUE
 /// plaque back to the Instant Action screen. The page stands only while a snapshot is held, which the session
 /// hands over when the wrap-up hold ends; the built-in presentation keeps its own board instead.
 /// Readings: docs/formats/instant-action/wrap-up.md.
@@ -27,6 +29,9 @@ public sealed class OriginalWrapupScreen : IOriginalScreenModule
     private readonly Func<string, (int Width, int Height)?> _measure;
     private readonly IOriginalScreenHost _host;
     private readonly Action _openInstantAction;
+
+    // The photographs the page last drew as empty prints, whose landing is what repaints it.
+    private readonly List<StuntShot> _pending = new();
 
     // The run the page is showing, frozen at the mission's ending. Null while no ended mission has
     // been handed over, which is every other moment the shell is alive.
@@ -58,6 +63,16 @@ public sealed class OriginalWrapupScreen : IOriginalScreenModule
     /// run is showing.</summary>
     public IReadOnlyList<BoardLine> PageRows =>
         _snapshot is { } shown ? InstantActionWrapupPage.Rows(shown, _layout) : Array.Empty<BoardLine>();
+
+    /// <summary>The run's photographs as the page lays them out, in marker order, or nothing while
+    /// no run is showing or the run took none.</summary>
+    public IReadOnlyList<WrapupPrint> Prints =>
+        _snapshot is { } shown ? InstantActionWrapupPage.Prints(shown, _layout) : Array.Empty<WrapupPrint>();
+
+    /// <summary>Whether a photograph the page drew as an empty print has landed since, answered once
+    /// per landing: the caller's cue to compose the page again. A shot lands on the main thread
+    /// (<see cref="StuntCapture.Settle"/>), which is where the presentation's tick reads this.</summary>
+    public bool TakeLanded() => _pending.RemoveAll(shot => shot.Landed) > 0;
 
     /// <summary>Whether a screen is this module's.</summary>
     public bool Owns(OriginalScreen screen) => screen == OriginalScreen.InstantActionWrapup;
@@ -119,7 +134,8 @@ public sealed class OriginalWrapupScreen : IOriginalScreenModule
 
     /// <summary>The page as drawn: the magazine spread behind everything, the four brushstrokes,
     /// the heading and the eight row lines, the post-its as fills with their further lines as one
-    /// flowed note each, the tick box as strokes, and the plaque.</summary>
+    /// flowed note each, the photographs as prints (empty until each lands), the tick box as
+    /// strokes, and the plaque.</summary>
     public void Compose(
         IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> backdrop, List<BoardPicture> pictures,
         List<BoardFill> fills, List<BoardStroke> strokes, List<BoardLine> lines, List<BoardPlaque> plaques,
@@ -154,6 +170,20 @@ public sealed class OriginalWrapupScreen : IOriginalScreenModule
             notes.Add(InstantActionWrapupPage.PostItNote(postIt));
         }
 
+        _pending.Clear();
+        foreach (var print in InstantActionWrapupPage.Prints(shown, _layout))
+        {
+            fills.AddRange(InstantActionWrapupPage.PrintPaper(print));
+            if (InstantActionWrapupPage.PrintPicture(print) is { } picture)
+            {
+                pictures.Add(picture);
+            }
+            else if (!print.Shot.Landed)
+            {
+                _pending.Add(print.Shot);
+            }
+        }
+
         strokes.AddRange(InstantActionWrapupPage.TickStrokes(shown.Won, _layout));
 
         for (int i = 0; i < rows.Count; i++)
@@ -178,6 +208,7 @@ public sealed class OriginalWrapupScreen : IOriginalScreenModule
     private void Leave()
     {
         _snapshot = null;
+        _pending.Clear();
         _openInstantAction();
     }
 }

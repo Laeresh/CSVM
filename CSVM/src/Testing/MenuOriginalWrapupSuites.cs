@@ -1,10 +1,14 @@
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using CSVM.Flight;
+using CSVM.Mech3;
 using CSVM.Session;
 using CSVM.UI;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Menu.Original;
+using Godot;
 
 namespace CSVM.Testing;
 
@@ -24,7 +28,9 @@ internal static class MenuOriginalWrapupSuites
         + "spread, the four brushstrokes, the heading and the eight row lines off the snapshot, the "
         + "context and the stunt splits (without their total) on a yellow post-it and a ticked box "
         + "above CONTINUE, a later ending's numbers never reach the page that is already standing, a "
-        + "failed run leaves the box empty, and CONTINUE and Back both return to the Instant Action "
+        + "failed run leaves the box empty, a real camera's C4/IA1 photographs stand in marker order "
+        + "beside the post-its under the rows and a frame landing after the page woke fills its "
+        + "print, and CONTINUE and Back both return to the Instant Action "
         + "screen with the run forgotten")]
     internal static void MenuOriginalWrapup(TestContext ctx)
     {
@@ -63,6 +69,7 @@ internal static class MenuOriginalWrapupSuites
             Handover(ctx, host, shell);
             Page(ctx, shell);
             Frozen(ctx, host, shell);
+            Photographs(ctx, host, shell);
             Doors(ctx, host, seat, shell, fit);
         }
         finally
@@ -155,6 +162,94 @@ internal static class MenuOriginalWrapupSuites
         ctx.Check(failed.Strokes.Count == 8, $"and leaves the tick box empty ({failed.Strokes.Count} strokes)");
         ctx.Check(failed.Lines.Any(l => l.Text == "01:14") && failed.Lines.Any(l => l.Text == "8%"),
             $"and its own numbers");
+    }
+
+    // A real camera's shots over C4/IA1's markers reach the page in marker order, beside the
+    // post-its; the last frame is held back past the page waking and fills its print on landing.
+    private static void Photographs(TestContext ctx, MenuHost host, OriginalShell shell)
+    {
+        string gamez = SessionPaths.ChapterGamez(ctx.DataRoot, "C4");
+        string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C4", "IA1");
+        ctx.RequireData(gamez, $"C4 gamez");
+        ctx.RequireData(zrdr, $"C4/IA1 zrdr");
+        ctx.RequireData(ctx.MessagesPath, $"messages.json");
+        var run = StuntMission.Load(GameZ.Load(gamez), zrdr, Messages.Load(ctx.MessagesPath))
+            ?? throw new SuiteSkippedException("C4/IA1 ships no Danger Zones");
+
+        string? previous = StuntCapture.DirectoryOverride;
+        try
+        {
+            StuntCapture.DirectoryOverride = Path.Combine(ctx.ScratchDir, "WrapupPhotographs");
+            PhotographsOver(ctx, host, shell, run);
+        }
+        finally
+        {
+            StuntCapture.DirectoryOverride = previous;
+        }
+    }
+
+    private static void PhotographsOver(TestContext ctx, MenuHost host, OriginalShell shell, StuntMission run)
+    {
+        System.Action<Image?>? held = null;
+        var last = run.Zones[^1];
+        bool hold = false;
+        var capture = new StuntCapture(run, "C4", landed =>
+        {
+            if (hold)
+            {
+                held = landed;
+            }
+            else
+            {
+                landed(Frame());
+            }
+
+            return true;
+        });
+        var landedEvents = new List<string>();
+        capture.ShotLanded += shot => landedEvents.Add(shot.DzName);
+        foreach (var zone in run.Zones)
+        {
+            run.Tick(1f);
+            hold = zone == last;
+            capture.Update(zone.Position);
+            capture.Update(new Vector3(0f, 60000f, 0f));
+        }
+
+        capture.Settle();
+        var markers = run.Zones.Select(z => z.DzName).ToList();
+        host.Show(new InstantActionWrapupReturn(
+            InstantActionWrapupPage.Sample(won: true) with { Shots = capture.InMarkerOrder().ToList() }));
+        var prints = shell.Wrapup.Prints;
+        ctx.Check(prints.Select(p => p.Shot.DzName).SequenceEqual(markers),
+            $"the page carries the run's photographs in marker order ({string.Join(" ", prints.Select(p => p.Shot.DzName))})");
+
+        var board = shell.Compose();
+        float lastRow = board.Lines.Where(l => l.Text == "27%").Select(l => l.Y).DefaultIfEmpty(0f).Max();
+        float leftmost = board.Notes.Select(n => n.X).DefaultIfEmpty(800f).Min();
+        ctx.Check(prints.All(p => p.Y > lastRow && p.X >= 0f && p.X + p.Width < leftmost && p.Y + p.Height <= 600f),
+            $"beside the post-its in the band under the rows ({prints.Count} prints, rows end at y {lastRow}, post-its from x {leftmost})");
+        ctx.Same(markers.Count - 1, Held(board), $"every landed photograph draws in its print, the held one's stays empty");
+        ctx.Check(!shell.Wrapup.TakeLanded(), $"with nothing landed since the page woke, nothing asks for a repaint");
+
+        held?.Invoke(Frame());
+        capture.Settle();
+        ctx.Check(landedEvents.Contains(last.DzName) && prints[^1].Shot.Landed,
+            $"the held frame lands after the page woke ({last.DzName}, ShotLanded raised)");
+        ctx.Check(shell.Wrapup.TakeLanded() && !shell.Wrapup.TakeLanded(),
+            $"its landing asks the page to repaint, once");
+        ctx.Same(markers.Count, Held(shell.Compose()), $"…and the repainted page fills its print");
+    }
+
+    // How many photographs a composed board draws.
+    private static int Held(ComposedBoard board) => board.Pictures.Count(p => p.Art.Library == BoardArtLibrary.Held);
+
+    // A stand-in frame, a flat colour, so the check rests on the page and not on what a host drew.
+    private static Image Frame()
+    {
+        var image = Image.CreateEmpty(64, 36, false, Image.Format.Rgba8);
+        image.Fill(new Color(0.3f, 0.5f, 0.7f));
+        return image;
     }
 
     // Both ways off the page, and what they leave behind.

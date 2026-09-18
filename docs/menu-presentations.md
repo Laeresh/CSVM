@@ -520,7 +520,9 @@ list open, `instant-action:weapon-loadout` on the pilot's loadout screen and
 count and at that count with one (the screen opens on one life, so neither reading is a state a
 plain shot of it can show), `instant-action-wrapup` and `instant-action-wrapup:failed` on the
 wrap-up page a flown mission's ending lands on, over a sample stunt run in each outcome, and
-`instant-action-wrapup:long` over a seventeen-zone run whose splits take three post-its (Built-in
+`instant-action-wrapup:long` over a seventeen-zone run whose splits take three post-its,
+`instant-action-wrapup:photos` and `instant-action-wrapup:long-photos` over the same two runs with a
+stand-in photograph per zone (the long run's last one still on its way) (Built-in
 shows a board inside the flight instead and has no menu page to open), `options`,
 `game-options` and `game-options:open` with its Difficulty list standing open, `audio` and
 `audio:mixed` with its four sliders at four distinct levels, `video`,

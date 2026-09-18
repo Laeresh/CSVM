@@ -10,13 +10,19 @@ namespace CSVM.UI;
 /// further lines written on it, in order.</summary>
 public sealed record WrapupPostIt(float X, float Y, float Width, float Height, IReadOnlyList<string> Lines);
 
+/// <summary>One Danger Zone photograph on the wrap-up page: its print's top-left and size in
+/// authored pixels, border included, and the shot it shows. A shot whose thumbnail has not landed
+/// yet keeps its print, empty, until it does.</summary>
+public sealed record WrapupPrint(float X, float Y, float Width, float Height, StuntShot Shot);
+
 /// <summary>
 /// The Original presentation's Instant Action wrap-up page, composed from <c>[@IA_WrapUp@]</c>'s
 /// own rows (<c>docs/formats/instant-action/wrap-up.md</c>): the magazine background, the four
-/// brushstroke panes, the screen title and the four title/value pairs. Two pieces of remake
+/// brushstroke panes, the screen title and the four title/value pairs. Three pieces of remake
 /// furniture stand in the space below them: yellow post-its carrying the further lines the shipped
-/// page has no row for (the context line and a stunt run's splits), and a tick box above CONTINUE
-/// saying whether the mission was won. Row titles are literal strings, following
+/// page has no row for (the context line and a stunt run's splits), a stunt run's photographs to
+/// the left of the post-its, and a tick box above CONTINUE saying whether the mission was won.
+/// Row titles are literal strings, following
 /// <see cref="IaWrapupBoard"/>'s own precedent; positions come through the
 /// <see cref="CampaignLayout"/> a caller hands in, with the shipped values as the fallback beside
 /// every read.
@@ -95,6 +101,19 @@ public static class InstantActionWrapupPage
     // drops, so a row of them reads as stuck on by hand rather than tiled.
     private const float PageMargin = 8f;
     private const float PostItStagger = 10f;
+
+    // The page's authored height, which the photographs stop a margin short of.
+    private const float PageHeight = 600f;
+
+    // A photograph's print: the white border round the picture and the gap between two prints. A
+    // pending print is laid out at the built-in strip's own 4:3 until a landed one says otherwise.
+    private const float PrintBorder = 3f;
+    private const float PrintGap = 6f;
+    private const float PendingAspect = 3f / 4f;
+
+    // How much narrower than the widest possible a grid's pictures may be and still win by having
+    // fewer rows. A look, not a decode.
+    private const float StripSlack = 0.85f;
 
     // The tick box, on the notepad above the plaque: its side, its gap above the plaque, and its
     // outline weight in strokes one authored pixel apart.
@@ -265,6 +284,93 @@ public static class InstantActionWrapupPage
             ExtraSpacing, ExtraFont, BoardInk.Row, Italic: true, Shrink: true);
     }
 
+    /// <summary>The run's photographs as prints, in marker order, laid out as a grid in the band under
+    /// the rows to the left of the post-its, right against them. Each picture is as wide as the band
+    /// allows up to <see cref="StuntCapture.ThumbWidth"/>. A shot whose frame never arrived is left
+    /// out; one still on its way keeps its place. No photographs, no prints.</summary>
+    public static IReadOnlyList<WrapupPrint> Prints(IaWrapupSnapshot snapshot, CampaignLayout? layout = null)
+    {
+        System.ArgumentNullException.ThrowIfNull(snapshot);
+        var prints = new List<WrapupPrint>();
+        var shots = new List<StuntShot>();
+        float aspect = PendingAspect;
+        bool measured = false;
+        foreach (var shot in snapshot.Shots ?? System.Array.Empty<StuntShot>())
+        {
+            if (shot.Landed && shot.Thumb == null)
+            {
+                continue;
+            }
+
+            shots.Add(shot);
+            if (!measured && shot.Thumb is { } thumb && thumb.GetWidth() > 0)
+            {
+                aspect = (float)thumb.GetHeight() / thumb.GetWidth();
+                measured = true;
+            }
+        }
+
+        if (shots.Count == 0)
+        {
+            return prints;
+        }
+
+        var (x, top, width) = FirstPostIt(layout);
+        var postIts = PostIts(snapshot, layout);
+        float right = postIts.Count > 0 ? postIts[^1].X - PostItGap : x + width;
+        var (columns, picture) = PrintGrid(shots.Count, right - PageMargin, PageHeight - PageMargin - top, aspect);
+        if (picture <= 0f)
+        {
+            return prints;
+        }
+
+        float cellWidth = picture + (2f * PrintBorder);
+        float cellHeight = (picture * aspect) + (2f * PrintBorder);
+        float left = right - ((columns * cellWidth) + ((columns - 1) * PrintGap));
+        for (int i = 0; i < shots.Count; i++)
+        {
+            prints.Add(new WrapupPrint(
+                left + ((i % columns) * (cellWidth + PrintGap)), top + ((i / columns) * (cellHeight + PrintGap)),
+                cellWidth, cellHeight, shots[i]));
+        }
+
+        return prints;
+    }
+
+    /// <summary>The paper under one photograph: the same soft shadow a post-it casts, then the
+    /// print's white border.</summary>
+    public static IReadOnlyList<BoardFill> PrintPaper(WrapupPrint print)
+    {
+        System.ArgumentNullException.ThrowIfNull(print);
+        return new[]
+        {
+            new BoardFill(print.X + 3f, print.Y + 3f, print.Width, print.Height, 0, 0, 0, 0.28f),
+            new BoardFill(print.X, print.Y, print.Width, print.Height, 246, 243, 234),
+        };
+    }
+
+    /// <summary>The photograph inside its print's border, or null while its thumbnail has not
+    /// landed. The picture keeps its own proportions, so one whose pane differs from the grid's
+    /// is fitted inside the print.</summary>
+    public static BoardPicture? PrintPicture(WrapupPrint print)
+    {
+        System.ArgumentNullException.ThrowIfNull(print);
+        if (print.Shot.Thumb is not { } thumb || thumb.GetWidth() <= 0 || thumb.GetHeight() <= 0)
+        {
+            return null;
+        }
+
+        float room = print.Width - (2f * PrintBorder);
+        float tall = print.Height - (2f * PrintBorder);
+        float scale = System.Math.Min(room / thumb.GetWidth(), tall / thumb.GetHeight());
+        float width = thumb.GetWidth() * scale;
+        float height = thumb.GetHeight() * scale;
+        return new BoardPicture(
+            new BoardArt(BoardArtLibrary.Held, print.Shot.Path, 1, thumb),
+            print.X + PrintBorder + ((room - width) / 2f), print.Y + PrintBorder + ((tall - height) / 2f),
+            Width: width, Height: height);
+    }
+
     /// <summary>The tick box's top-left and side, on the notepad centred over the CONTINUE plaque.
     /// </summary>
     public static (float X, float Y, float Side) TickBox(CampaignLayout? layout = null)
@@ -374,6 +480,36 @@ public static class InstantActionWrapupPage
         var (plaqueX, _) = layout.At(Section, ContinueKey, ContinueX, ContinueY);
         float x = column - ColumnInset;
         return (x, valueY + ExtraGap, System.Math.Clamp(plaqueX - PlaqueClearance - x, 1f, PostItSide));
+    }
+
+    // The grid for that many prints in the room: the fewest rows whose pictures come within
+    // StripSlack of the widest any grid allows (itself capped at the thumbnail width), and the
+    // widest of those, so a few shots read as one strip rather than a stack.
+    private static (int Columns, float Picture) PrintGrid(int count, float width, float height, float aspect)
+    {
+        var grids = new List<(int Columns, int Rows, float Picture)>(count);
+        float widest = 0f;
+        for (int columns = 1; columns <= count; columns++)
+        {
+            int rows = (count + columns - 1) / columns;
+            float across = ((width - ((columns - 1) * PrintGap)) / columns) - (2f * PrintBorder);
+            float down = (((height - ((rows - 1) * PrintGap)) / rows) - (2f * PrintBorder)) / aspect;
+            float picture = System.Math.Min(StuntCapture.ThumbWidth, System.Math.Min(across, down));
+            grids.Add((columns, rows, picture));
+            widest = System.Math.Max(widest, picture);
+        }
+
+        (int Columns, int Rows, float Picture) best = (1, int.MaxValue, 0f);
+        foreach (var grid in grids)
+        {
+            if (grid.Picture >= widest * StripSlack
+                && (grid.Rows < best.Rows || (grid.Rows == best.Rows && grid.Picture > best.Picture)))
+            {
+                best = grid;
+            }
+        }
+
+        return (best.Columns, best.Picture);
     }
 
     // A split line's columns closed up to two spaces, the board's own three being more than a

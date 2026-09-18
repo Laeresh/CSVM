@@ -187,16 +187,24 @@ Where that ending goes depends on the presentation. Built-in keeps its own board
 leaves the world instead and lands on this page in the menu shell, `src/UI/Menu/Original/`
 `OriginalWrapupScreen.cs` over `src/UI/InstantActionWrapupPage.cs`: the magazine spread, the notepad
 carrying the heading and the four decoded rows at their authored positions, and CONTINUE back to the
-Instant Action screen in place of the board's Restart. Two pieces of the page are the remake's own,
-on pad space the shipped page leaves empty. Yellow post-its under the four rows carry the lines the
+Instant Action screen in place of the board's Restart. Three pieces of the page are the remake's own,
+on space the shipped page leaves empty. Yellow post-its under the four rows carry the lines the
 shipped page has no row for: the context line naming the chapter and the mission type, and a stunt
 run's split table, shared over a second and third post-it to the left when one will not hold them.
 The table's total is left off, since the stunt clock and the mission clock both run from the start
-to the ending and the time row already shows that figure. A box above CONTINUE carries the outcome,
+to the ending and the time row already shows that figure. A stunt run's Danger Zone photographs
+stand as white-bordered prints in marker order in the same band, to the left of the post-its and
+right against them: the grid with the fewest rows whose pictures come within 15% of the widest the
+room allows, capped at the built-in strip's 164-pixel thumbnail width, so a short run reads as one
+strip and a seventeen-zone run over three post-its shrinks into the room left of the last one. A
+photograph still on its way when the page opens draws as an empty print and fills when it lands.
+A box above CONTINUE carries the outcome,
 ticked on a win and empty on a loss; the original never lost an Instant Action, so the empty box has
 no reference art. The four numbers travel as `IaWrapupSnapshot`, read once at the ending
 (`src/UI/Menu/MenuReturnDestination.cs`) and never re-read, since the session that counted them is
-freed before the page draws.
+freed before the page draws. The photographs join it at the handover rather than the ending: the
+run completes on its last zone's gate pair, and the camera latches a marker on entering its 15 m
+sphere, which can come after the ending or on the ending's own frame after the run's test.
 
 ### What the launcher maps
 

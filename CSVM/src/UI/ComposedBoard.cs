@@ -23,6 +23,11 @@ public enum BoardArtLibrary
     /// extension: the picture playing now rather than a bitmap. The renderer plays it endlessly,
     /// which is what every <c>movie</c> row on a screen it composes authors.</summary>
     Movie,
+
+    /// <summary>A picture already in memory, <see cref="BoardArt.Pixels"/>, with
+    /// <see cref="BoardArt.Name"/> naming it for a reader: a stunt photograph's strip thumbnail,
+    /// which the wrap-up page draws without reading the full-size file back.</summary>
+    Held,
 }
 
 /// <summary>How a piece of board text is inked. The authored colours are per widget and mostly
@@ -226,8 +231,10 @@ public readonly record struct BoardCaret(byte R, byte G, byte B, float Width, fl
 public readonly record struct BoardCrop(float X, float Y, float Width, float Height);
 
 /// <summary>One bitmap a board draws, and how many stacked frames it holds. A button strip is four
-/// frames (disabled, normal, rollover, depressed, in that order); everything else is one.</summary>
-public sealed record BoardArt(BoardArtLibrary Library, string Name, int Frames = 1);
+/// frames (disabled, normal, rollover, depressed, in that order); everything else is one.
+/// <paramref name="Pixels"/> is the picture itself for <see cref="BoardArtLibrary.Held"/> art and
+/// null for every library read from a file.</summary>
+public sealed record BoardArt(BoardArtLibrary Library, string Name, int Frames = 1, Godot.Image? Pixels = null);
 
 /// <summary>A picture placed at its authored pixel position. <paramref name="Centered"/> is the
 /// briefing script's own <c>center</c> flag: the coordinate is the middle, not the top left.

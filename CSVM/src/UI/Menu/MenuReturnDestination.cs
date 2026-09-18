@@ -1,17 +1,20 @@
 using System.Collections.Generic;
+using CSVM.Flight;
 
 namespace CSVM.UI.Menu;
 
 /// <summary>
 /// The frozen numbers one ended Instant Action mission hands the menu: the outcome, the context
-/// line naming the chapter and mission type, the four counters the wrap-up screen draws, and the
-/// stunt run's split table already flattened to text. Every field is read at the ending and never
-/// again, so the record can outlive the session node that made it; the splits are strings rather
-/// than a <c>StuntSummary</c> for the same reason, that summary holding a live mission object.
+/// line naming the chapter and mission type, the four counters the wrap-up screen draws, the
+/// stunt run's split table already flattened to text, and player 1's Danger Zone photographs in
+/// marker order. Every number is read at the ending and never again, so the record can outlive the
+/// session node that made it; the splits are strings rather than a <c>StuntSummary</c> for the
+/// same reason. The photographs are the camera's own records, which a thumbnail still on its way
+/// completes in place after the session is gone (<see cref="StuntShot.Landed"/>).
 /// </summary>
 public sealed record IaWrapupSnapshot(
     bool Won, string Context, float Elapsed, int EnemiesShotDown, int ZonesCompleted, int ShotPercent,
-    IReadOnlyList<string>? StuntLines = null);
+    IReadOnlyList<string>? StuntLines = null, IReadOnlyList<StuntShot>? Shots = null);
 
 /// <summary>
 /// Where the menu should stand when it comes back, said semantically so the host never names a

@@ -1,4 +1,5 @@
 using System.Linq;
+using CSVM.Flight;
 using CSVM.UI;
 using CSVM.UI.Menu;
 using Xunit;
@@ -155,6 +156,58 @@ public class InstantActionWrapupPageTests
     }
 
     [Fact]
+    public void ARunWithNoPhotographsDrawsNoPrints()
+    {
+        Assert.Empty(InstantActionWrapupPage.Prints(Won));
+        Assert.Empty(InstantActionWrapupPage.Prints(Won with { Shots = System.Array.Empty<StuntShot>() }));
+    }
+
+    [Fact]
+    public void PrintsStandInMarkerOrderBesideThePostItsUnderTheRows()
+    {
+        var run = Won with { Shots = Shots(3) };
+        var prints = InstantActionWrapupPage.Prints(run);
+        var postIt = InstantActionWrapupPage.PostIts(run).Single();
+        var rows = InstantActionWrapupPage.Rows(run);
+
+        Assert.Equal(new[] { "dz1", "dz2", "dz3" }, prints.Select(p => p.Shot.DzName));
+        Assert.All(prints, p =>
+        {
+            Assert.True(p.X >= 8f && p.X + p.Width < postIt.X, $"beside the post-it, on the page: {p}");
+            Assert.True(p.Y > rows[8].Y && p.Y + p.Height <= 592f, $"in the band under the rows: {p}");
+        });
+        Assert.Equal(prints.Select(p => p.X).OrderBy(x => x), prints.Select(p => p.X));
+        Assert.All(prints, p => Assert.True(p.Width - 6f <= StuntCapture.ThumbWidth, $"{p.Width}"));
+
+        // Three shots in a band this wide read as one strip, level with the post-it's top.
+        Assert.All(prints, p => Assert.Equal(postIt.Y, p.Y));
+    }
+
+    [Fact]
+    public void ALongRunsPrintsShrinkIntoTheRoomLeftOfItsLastPostIt()
+    {
+        var run = InstantActionWrapupPage.LongSample() with { Shots = Shots(17) };
+        var prints = InstantActionWrapupPage.Prints(run);
+        var last = InstantActionWrapupPage.PostIts(run)[^1];
+
+        Assert.Equal(17, prints.Count);
+        Assert.All(prints, p => Assert.True(p.X >= 8f && p.X + p.Width < last.X && p.Y + p.Height <= 592f, $"{p}"));
+        Assert.Equal(Enumerable.Range(1, 17).Select(i => $"dz{i}"), prints.Select(p => p.Shot.DzName));
+    }
+
+    [Fact]
+    public void APendingShotKeepsAnEmptyPrintAndAFailedOneIsLeftOut()
+    {
+        var shots = Shots(3);
+        shots[1].Landed = true;  // landed with no thumbnail: the pane never arrived
+        var prints = InstantActionWrapupPage.Prints(Won with { Shots = shots });
+
+        Assert.Equal(new[] { "dz1", "dz3" }, prints.Select(p => p.Shot.DzName));
+        Assert.All(prints, p => Assert.Null(InstantActionWrapupPage.PrintPicture(p)));
+        Assert.Equal(2, InstantActionWrapupPage.PrintPaper(prints[0]).Count);
+    }
+
+    [Fact]
     public void TheDecodedLayoutMovesEveryRowWithIt()
     {
         // The fixture section authors its own positions, so a page that read them rather than the
@@ -171,4 +224,11 @@ public class InstantActionWrapupPageTests
         Assert.True(first.X + first.Width <= x, "the first post-it still clears the moved plaque");
         Assert.True(InstantActionWrapupPage.TickBox(layout).X > x, "and the tick box follows it");
     }
+
+    // Shots still on their way, which is all a test without the engine can make: a thumbnail is an
+    // engine image.
+    private static StuntShot[] Shots(int count) =>
+        Enumerable.Range(1, count)
+            .Select(i => new StuntShot { DzName = $"dz{i}", At = i, Path = $"C1_dz{i}.png" })
+            .ToArray();
 }
