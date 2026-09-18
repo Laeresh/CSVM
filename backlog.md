@@ -1025,6 +1025,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   https://discussions.unity.com/t/local-multiplayer-player-join-config-screen-using-ui-toolkit/1701038
   (the pattern as other local co-op games ship it, asked for by name).
 
+- `BL-970` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: spec]` **The Danger Zone strip on
+  Built-in's boards wraps into a grid, and a selected photograph opens full size.** *Evidence:*
+  `StuntShotStrip` lays every shot in one row sized to the board, so a 14-zone C4 run draws
+  thumbnails about 26 px wide on the 720p board ("Do a grid for the thumbnails"), and no board lets
+  the player look at a photograph larger ("Can I select them to see them in large?"). *Fix shape:*
+  wrap the strip into the fewest rows that keep each thumbnail near its 164-pixel width, as the
+  Original page's `InstantActionWrapupPage.PrintGrid` does, on `StuntScoreboard` and `IaWrapupBoard`
+  alike; make each landed cell selectable with the board's own cursor (player 1, keyboard, pad and
+  mouse), opening the shot's PNG full size over the halted board, closed by `Esc` or pad `B`. Give
+  the Original page's prints the same viewer. *⚠ Traps:* the board's resting row must stay the
+  harmless one (`docs/controls.md`, results boards), and a pending cell is not selectable until
+  `ShotLanded`. *Cross-refs:* `git log --grep=BL-967`, `git log --grep=BL-965`.
+
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored
@@ -1192,6 +1205,18 @@ usual.
   *Cross-refs:* `BL-524`, `docs/org/aiPilot.md` ("`attack_dwell` and `not_pursuit_dwell` are pursuit
   timers", "The third volume, and where the leash is read"), `BL-522`'s closing commit
   (`git log --grep=BL-522`).
+
+- `BL-971` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **A Danger Zone marker first
+  entered after the stunt run completes is never photographed.** *Evidence:* once a non-race run is
+  complete, `FlightController.SimStep` returns before the Danger Zone camera's test, so a marker
+  whose sphere the plane first enters on a later frame than the completing gate pair latches
+  nothing, in solo and Instant Action alike; the comment in `InstantActionDirector` that a shot "can
+  come before the camera's marker sphere" describes a shot that cannot arrive. Found while landing
+  `BL-967`, not seen at the controls. *Fix shape:* decode whether the original's camera keeps
+  testing after the run completes (the trigger is `FUN_00446990`, see
+  `docs/formats/campaign-screens.md`), then either keep the camera's test running after completion
+  until the board wakes or correct the comment. *Cross-refs:* `git log --grep=BL-967`,
+  `Flight/StuntCapture.cs`.
 
 ## Tooling, platform & docs
 
