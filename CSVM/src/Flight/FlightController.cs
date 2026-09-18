@@ -267,7 +267,7 @@ public partial class FlightController : Node3D
     public VersusHud? VersusHud;
 
     /// <summary>The splitscreen stunt race this plane is one seat of, or null when
-    /// flying solo. Set, clearing every zone parks this player at the finish while the others fly
+    /// flying solo and in Instant Action, whose pilots fly on through the ending. Set, clearing every zone parks this player at the finish while the others fly
     /// on, and R only becomes a rematch once the whole field is in, a rematch restarts every
     /// player, so it goes through <see cref="RestartRace"/> rather than this plane alone.</summary>
     public StuntRace? Race;

@@ -879,6 +879,14 @@ public partial class GameSession : Node3D
         SessionSpec spec, bool hasDirector, bool stunting, bool hasWorld, int rigs) =>
         !hasDirector && spec.WorldMode && !spec.EmptyStage && !stunting && hasWorld && rigs > 0;
 
+    // The splitscreen stunt race's shared results board, or none in Instant Action. ⚠ Never build
+    // one there: it wakes on the last pilot's finish, which is also the mission's win, and its halt
+    // stops the clock the director's hold counts down on, so the wrap-up never comes. Internal so
+    // the instant-action-end suite builds the board the session builds.
+    internal static StuntRaceBoard? RaceBoardFor(StuntRace race, bool instantAction, string context,
+        bool exitsToMenu, PauseState pauseState, Func<int, MenuInput> inputFor) =>
+        instantAction ? null : StuntRaceBoard.Build(race, context, exitsToMenu, pauseState, inputFor);
+
     /// <summary>Orders the aeroplanes this mission's generators will launch, off the roster blocks
     /// they launch from, so the loading screen builds them instead of the launch frame. Depth is the
     /// generator's own authored wave size: that is how many arrive before the cycle rests, and a
@@ -2538,26 +2546,32 @@ public partial class GameSession : Node3D
             Log.Info("weapons", $"weapon lab: no flight rig to host it (nothing was built to hold)");
         }
 
-        // The race's shared results board: one ranked row per player, on its own CanvasLayer over
-        // the whole window, since the race ends for everybody at once. R rematches every plane,
-        // so it routes back through the session.
-        if (race != null)
+        // The race's shared results board, one ranked row per player over the whole window; R
+        // rematches every plane through the session. Instant Action keeps the race for the run
+        // HUD's placings alone and builds no board.
+        var raceBoard = race == null ? null
+            : RaceBoardFor(race, instantAction: iaRt != null,
+                $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}", exitsToMenu: _menuDriven,
+                _pauseState!, MenuInputFor);
+        if (race != null && raceBoard != null)
         {
             _race = race;
-            var board = StuntRaceBoard.Build(race, $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
-                exitsToMenu: _menuDriven, _pauseState!, MenuInputFor);
-            board.Restart = () => RestartRace(race);
-            board.Exit = _exitSession;
+            raceBoard.Restart = () => RestartRace(race);
+            raceBoard.Exit = _exitSession;
             // Player 1: a results board reads _inputFor(0), so its cursor is P1's whoever won.
-            board.PhotoMode = () => EnterPhotoMode(0);
-            _boards.Add(board);
+            raceBoard.PhotoMode = () => EnterPhotoMode(0);
+            _boards.Add(raceBoard);
             var boardLayer = new CanvasLayer { Name = "race_board", Layer = UI.HudLayers.Board };
-            boardLayer.AddChild(board);
+            boardLayer.AddChild(raceBoard);
             _worldRoot!.AddChild(boardLayer);
             foreach (var rig in _rigs)
                 if (rig.Controller != null)
                     rig.Controller.RestartRace = () => RestartRace(race);
             Log.Info("flight", $"stunt race: {_rigs.Count} pilots over {stuntZones!.TotalCount} danger zones, own progress + clock each, shared ranked board");
+        }
+        else if (race != null)
+        {
+            Log.Info("flight", $"stunt race: {_rigs.Count} pilots over {stuntZones!.TotalCount} danger zones, placings on each run HUD, no race board (the Instant Action wrap-up ends the run)");
         }
 
         // Dogfight (--vs): the match bookkeeping, fed by every rig's Downed report. A killer inside

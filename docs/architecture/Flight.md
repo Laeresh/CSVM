@@ -695,7 +695,9 @@ The race's shared ranked results overlay on `ResultsBoard`'s shell: one row per 
 `StuntRace.Standings()` with placing, tag, plane, zones, total and gap to the winner, and a DNF
 row for an unfinished run. Whole-window rather than per-pane, since a race ends for everybody at
 once. Wakes on `RaceCompleted` and retires once `AllFinished` clears, so the rematch is reachable
-without going through the menu. `StuntScoreboard` is the single-pilot form of the same table.
+without going through the menu. No Instant Action run builds one (`GameSession.RaceBoardFor`):
+there the last finish is the mission's win, and the director's hold and wrap-up end the run.
+`StuntScoreboard` is the single-pilot form of the same table.
 
 ## src/Flight/VersusMatch.cs
 Dogfight deathmatch bookkeeping, engine-free: every pilot carries one signed score, `KillScore` per

@@ -485,7 +485,7 @@ eye, the crash runtime, and last the `UI.SplitScreen.OwnAirframeLayer` stamp tha
 own spyglass disc. It reads only the roster's copied policy plus the grouped aircraft, world and
 human-session contracts. Player order decides the shared paint and spawn draws. An airframe swap's
 captured scheme and its own build are laid over that assembly, the one path a bought plane takes.
-`BuildDamageVisuals` is also the common first phase for AI damage. Read `FlightRoster.cs` next.
+An Instant Action racer takes no `Race`, so it flies on through the ending's hold. `BuildDamageVisuals` is also the common first phase for AI damage. Read `FlightRoster.cs` next.
 
 ## src/Session/EffectCatalogue.cs
 The record of which authored anims are playable effects and what their defs need staged: the name

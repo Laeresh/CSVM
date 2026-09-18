@@ -420,9 +420,15 @@ internal sealed class HumanFlightAdapter
                 // below covers the whole window when the last pilot is in. The run
                 // HUD shows this player's placing meanwhile.
                 race.Add(pi, controller.Stunt, planeDisplay);
-                controller.Race = race;
                 runHud.Race = race;
                 runHud.PlayerIndex = pi;
+                // ⚠ Instant Action keeps the placings and nothing else: its ending is the
+                // director's hold and wrap-up, which the pilot flies through, so the seat takes
+                // none of the race board's rules (the finish hold, R as a rematch).
+                if (!_human.InstantActionActive)
+                {
+                    controller.Race = race;
+                }
             }
             else if (_human.InstantActionActive)
             {

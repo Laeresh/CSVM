@@ -1168,25 +1168,6 @@ usual.
   read. *Cross-refs:* `BL-523`, `docs/org/aiPilot.md` (the headline, "Open"),
   `docs/formats/ai-rosters.md` ("Who is netless").
 
-- `BL-975` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **A splitscreen
-  Instant Action stunt run ends on the stunt race board, not on the 3.0 s flown hold and the
-  wrap-up.** *Evidence:* `GameSession` builds a `StuntRace` for any stunt run with more than one rig,
-  Instant Action included, and wires the `StuntRaceBoard` over it with no Instant Action exception;
-  `HumanFlightAdapter` takes its race branch before its Instant Action one. The last pilot in both
-  completes the race and wins the mission (`InstantActionRuntime.ZoneSetsFlown`), so on that frame
-  the race board wakes and raises `HaltReason.Ended`, which stops the sim clock that the director's
-  hold counts down on, and `FlightController.SimStep` also returns for every pilot once
-  `Race.AllFinished`. The original flies the whole world for 3.0 s and then shows its wrap-up
-  (`docs/formats/instant-action/wrap-up.md`, "The hold after the ending"). The solo case has no
-  board of its own there and flies on. Read off the code, not seen at the controls. *Fix shape:* in
-  Instant Action keep the race's per-pilot bookkeeping if the run HUD needs it, but build no race
-  board and take no `Race.AllFinished` return, so the director's hold and `IaWrapupBoard` own the
-  ending; the solo precedent is `HumanFlightAdapter`'s Instant Action branch, which builds no
-  scoreboard. *Playtest after fix:* two pilots on a C4 Instant Action stunt run: after the last gate
-  pair both planes fly on for 3 s and the Instant Action wrap-up follows, with no stunt race results
-  board. *Cross-refs:* `Session/GameSession.cs` (the stunt run's race and its board),
-  `Flight/FlightController.cs` `SimStep`, `Session/InstantActionDirector.cs` (`HoldPilotControls`).
-
 ## Tooling, platform & docs
 
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: data]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in

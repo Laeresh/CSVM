@@ -624,6 +624,27 @@ against `BL-389` rather than against the wash routing.
   *Blocks:* nothing tracks the outcome; a "fragile" verdict mints a new `BL` naming what the
   Dogfight should shield.
 
+### C4 · two pilots, Instant Action stunt run
+
+```powershell
+./RunGame.ps1
+```
+
+- `PT-155` `[Own]` **Both planes fly on through the ending's hold and the wrap-up follows**
+  (it closed `BL-975`, whose record is in that commit, `git log --grep=BL-975`). Two pads (or pad + keyboard); menu path: Instant Action → C4 → Stunt Flying, both
+  pilots joined. The original had no splitscreen, so this checks the remake against its own solo
+  rule (`docs/formats/instant-action/wrap-up.md`, "The hold after the ending"). A scripted two-pilot
+  run already shows the wrap-up arriving 3.0 s after the win with no race board; what no instrument
+  shows is two humans flying real gates to the finish.
+  *Look for:*
+  - (a) the first pilot through the last gate pair keeps flying, with a placing banner, while the
+    other still flies;
+  - (b) after the second pilot's last gate pair, both planes keep flying under the stick for about
+    3 s, no stunt race results board appears, and the Instant Action wrap-up board follows;
+  - (c) a marker either pilot enters during those 3 s takes no photograph and plays no camera sting.
+
+  *Blocks:* nothing tracks the outcome; a fail mints a new `BL` item.
+
 ### CM01 (C3/M01) · two to four pilots, join, flight check, death and skip
 
 ```powershell
