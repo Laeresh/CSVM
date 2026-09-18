@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using CSVM.Utils;
 using Godot;
@@ -55,15 +56,15 @@ public sealed class SceneBuilder
     // logged, not silently collapsed.
     public const int ConflictRankCap = 7;
 
-    /// <summary>Meta key a collider carries when its dominant surface is water or buildings.
+    /// <summary>Meta key a collider carries when its surface class is water or buildings.
     /// StringName, not <c>const string</c>, as every meta key here (see <c>AnimRuntime.NameMeta</c>).</summary>
     public static readonly StringName SurfaceMeta = "csky_surface";
 
     /// <summary>Meta key EVERY collider carries: an <c>int</c>, the original's numeric surface
-    /// type id (<see cref="GameZMaterial.SoilId"/>) for its dominant material, by polygon count
-    ///, the same body granularity <see cref="SurfaceMeta"/> already uses, not a per-triangle
-    /// value. A different name space from <see cref="SurfaceMeta"/>'s texture-derived class, so
-    /// it is never spelled as that string (see <see cref="CollidersForMesh"/>).</summary>
+    /// type id (<see cref="GameZMaterial.SoilId"/>) that every polygon in the body shares, since
+    /// bodies are split by soil as well as class (<see cref="CollidersForMesh"/>). A different
+    /// name space from <see cref="SurfaceMeta"/>'s texture-derived class, so it is never spelled
+    /// as that string.</summary>
     public static readonly StringName SurfaceIdMeta = "csky_surface_id";
 
     /// <summary>Meta key a collider carries when its node authors <see cref="GameZNode.CanModify"/>:
@@ -336,7 +337,7 @@ void fragment() {
     private readonly Dictionary<(int Model, bool Force, bool ForceLit, bool ClutterFade), ArrayMesh?> _meshCache = new();
     private readonly Dictionary<int, Vector3> _meshPivotCache = new(); // billboard meshes only: local quad center
     private readonly Dictionary<int, ArrayMesh> _lightMeshCache = new();
-    private readonly Dictionary<int, List<(string? Surface, int SurfaceId, List<ConcavePolygonShape3D> Shapes)>> _colliderCache = new();
+    private readonly Dictionary<int, List<(string Name, string? Surface, int SurfaceId, List<ConcavePolygonShape3D> Shapes)>> _colliderCache = new();
     private readonly Dictionary<(float Far, float Slope, float Blink), ShaderMaterial> _lightMaterialCache = new();
     // Billboard glow material for a flare sprite quad: always alpha-blended (the soft ramp
     // must never scissor into a hard star cutout), no night dimming (it's a light source).
@@ -949,22 +950,22 @@ void fragment() {
         return n3d;
     }
 
-    // One static trimesh body PER SURFACE CLASS actually present in the mesh, not one body for
-    // the whole mesh, see CollidersForMesh. The parent node carries the world transform, so
-    // each collider lines up with the rendered surface it was carved from. Shapes are cached per
-    // mesh index and shared across instances (shapes are resources).
+    // One static trimesh body PER (SURFACE CLASS, SOIL) pair actually present in the mesh, not one
+    // body for the whole mesh, see CollidersForMesh. The parent node carries the world transform,
+    // so each collider lines up with the rendered surface it was carved from. Shapes are cached
+    // per mesh index and shared across instances (shapes are resources).
     private void AttachCollision(Node3D parent, int meshIndex, bool canModify)
     {
         bool tracked = false;
-        foreach (var (surface, surfaceId, shapes) in CollidersForMesh(meshIndex))
+        foreach (var (name, surface, surfaceId, shapes) in CollidersForMesh(meshIndex))
         {
-            // ⚠ Keep the per-class names rather than "col" for all of them. Sibling bodies Godot
-            // cannot tell apart by the same requested name are renamed to an opaque
-            // "@StaticBody3D@N", breaking ColliderOverlay's "col" check once a mesh splits in two.
-            var body = new StaticBody3D { Name = surface != null ? $"col_{surface}" : "col" };
-            // ⚠ A class's one-sided and two-sided halves share ONE body. Two bodies would collide
+            // ⚠ Keep the distinct per-bucket names rather than "col" for all of them. Sibling
+            // bodies sharing a requested name are renamed to an opaque "@StaticBody3D@N",
+            // breaking ColliderOverlay's "col" check once a mesh splits in two.
+            var body = new StaticBody3D { Name = name };
+            // ⚠ A bucket's one-sided and two-sided halves share ONE body. Two bodies would collide
             // with the naming rule above, and every meta, count and OwnerOf answer below is per
-            // surface class, not per shape.
+            // bucket, not per shape.
             foreach (var shape in shapes)
                 body.AddChild(new CollisionShape3D { Shape = shape });
             // Stamp the struck-surface class (water / buildings), so a weapon impact can pick the
@@ -990,13 +991,13 @@ void fragment() {
         }
     }
 
-    // This mesh's colliding geometry split into one trimesh per surface class actually present,
-    // each polygon's own texture deciding which shape it joins. Each bucket also carries the
-    // original's numeric surface id for its dominant material by polygon count, which is a
-    // different name space from the class string and the same body granularity. Cached per mesh.
-    // ⚠ Do not collapse this to one area-weighted tag for the whole mesh. A coastal tile is mostly
-    // beach by area, so its real water polygons lose that vote and read as dry ground to a weapon.
-    private List<(string? Surface, int SurfaceId, List<ConcavePolygonShape3D> Shapes)> CollidersForMesh(int meshIndex)
+    // This mesh's colliding geometry split into one trimesh per (surface class, soil) pair actually
+    // present, each polygon's own material deciding which shape it joins. The soil split is what
+    // lets a body's SurfaceIdMeta be every struck polygon's own soil, as the original reads it per
+    // polygon (docs/org/weaponImpact.md). Within a class the soil with the most polygons keeps the
+    // class's plain name and comes first; any other soil is suffixed. Cached per mesh.
+    // ⚠ Do not merge buckets by area or count; a coastal tile's water or a shed's default wall then reads wrong.
+    private List<(string Name, string? Surface, int SurfaceId, List<ConcavePolygonShape3D> Shapes)> CollidersForMesh(int meshIndex)
     {
         if (_colliderCache.TryGetValue(meshIndex, out var cached))
             return cached;
@@ -1004,45 +1005,48 @@ void fragment() {
         _meshPivotCache.TryGetValue(meshIndex, out var offset); // Vector3.Zero when this mesh has none
         // "" stands in for the untagged/default bucket: Dictionary<TKey> needs a non-null key.
         const string defaultTag = "";
-        var buckets = new Dictionary<string, (List<Vector3> OneSided, List<Vector3> TwoSided)>();
-        var idCounts = new Dictionary<string, Dictionary<int, int>>();
+        var buckets = new Dictionary<(string Tag, int Soil), (List<Vector3> OneSided, List<Vector3> TwoSided, int Polys)>();
         foreach (var poly in mesh.Polygons)
         {
             bool hasMaterial = poly.MaterialIndex >= 0 && poly.MaterialIndex < _gamez.Materials.Count;
             var material = hasMaterial ? _gamez.Materials[poly.MaterialIndex] : null;
             string tag = ClassifySurface(material?.TextureName) ?? defaultTag;
-            if (!buckets.TryGetValue(tag, out var faces))
-            {
-                buckets[tag] = faces = (new List<Vector3>(), new List<Vector3>());
-                idCounts[tag] = new Dictionary<int, int>();
-            }
+            var key = (tag, material?.SoilId ?? 0);
+            if (!buckets.TryGetValue(key, out var faces))
+                faces = (new List<Vector3>(), new List<Vector3>(), 0);
+            buckets[key] = faces with { Polys = faces.Polys + 1 };
             // ⚠ The one-sided half is emitted REVERSED: the source's visible side is Godot's BACK
             // face, while a shape without BackfaceCollision is solid along Godot's own face normals
             // (docs/formats/gotchas.md). Unreversed it would be solid from behind alone.
             EmitCollisionFaces(mesh, poly, offset,
                 poly.ShowBackface ? faces.TwoSided : faces.OneSided, flip: !poly.ShowBackface);
             CountSidedness(tag, poly.ShowBackface);
-            int id = material?.SoilId ?? 0;
-            var counts = idCounts[tag];
-            counts[id] = counts.GetValueOrDefault(id) + 1;
         }
         CollisionBackToBackPairs += BackToBackPairs(mesh);
-        var result = new List<(string?, int, List<ConcavePolygonShape3D>)>();
-        foreach (var (tag, faces) in buckets)
+        var result = new List<(string, string?, int, List<ConcavePolygonShape3D>)>();
+        // Classes in first-seen order, as the bodies were ordered before the soil split.
+        foreach (var tag in buckets.Keys.Select(k => k.Tag).Distinct().ToList())
         {
-            // A polygon is solid from the side it is seen from and no other, the test the original
-            // runs (docs/org/weaponRay.md): the winding is not inconsistent, it is per polygon, and
-            // `chapter-census` is the tripwire for a down-wound tile a plane would fall through.
-            var shapes = new List<ConcavePolygonShape3D>();
-            AddShape(shapes, faces.OneSided, backface: false);
-            AddShape(shapes, faces.TwoSided, backface: true);
-            if (shapes.Count == 0)
-                continue;
-            int dominantId = idCounts[tag]
-                .OrderByDescending(kv => kv.Value)
-                .ThenBy(kv => kv.Key)
-                .First().Key;
-            result.Add((tag == defaultTag ? null : tag, dominantId, shapes));
+            var soils = buckets.Where(kv => kv.Key.Tag == tag)
+                .OrderByDescending(kv => kv.Value.Polys)
+                .ThenBy(kv => kv.Key.Soil)
+                .ToList();
+            string className = tag == defaultTag ? "col" : $"col_{tag}";
+            bool first = true;
+            foreach (var (key, faces) in soils)
+            {
+                // A polygon is solid from the side it is seen from and no other, the test the
+                // original runs (docs/org/weaponRay.md): the winding is per polygon, and
+                // `chapter-census` is the tripwire for a down-wound tile a plane would fall through.
+                var shapes = new List<ConcavePolygonShape3D>();
+                AddShape(shapes, faces.OneSided, backface: false);
+                AddShape(shapes, faces.TwoSided, backface: true);
+                if (shapes.Count == 0)
+                    continue;
+                string name = first ? className : $"{className}_soil{key.Soil.ToString(CultureInfo.InvariantCulture)}";
+                first = false;
+                result.Add((name, tag == defaultTag ? null : tag, key.Soil, shapes));
+            }
         }
         _colliderCache[meshIndex] = result;
         return result;

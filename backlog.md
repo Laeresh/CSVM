@@ -244,18 +244,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the flash shape is ever revisited.
   *Cross-refs:* `BL-932` (the canopy holes, which the same clips may show).
 
-- `BL-972` `[Bug]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **A collider body
-  carries one `soil` byte where the original reads it per polygon.** `CollidersForMesh` buckets a
-  mesh's polygons by `ClassifySurface` class and stamps each bucket with its dominant soil id, while
-  the original's impact performer reads the soil off the struck polygon's own material
-  (`FUN_005ac7a0`, material+0x20). A census of the shipped maps finds mixed-soil buckets in every
-  chapter: C1 97 (619 minority polygons), C2 57, C3 74, C4 80, C5 34. On C1, `aphagar03`'s polygons
-  share a building bucket with the `aphagar0N` materials that carry `buildings`(11), so a round on
-  them reads 11 in CSVM and `default` in the original, and draws nothing where the original plays
-  `3040slug_gunhit`. The same byte feeds the crash and touchdown cascades, so a split needs those
-  suites as well as `impact-building-surface`.
-  *Cross-refs:* [docs/org/weaponImpact.md](docs/org/weaponImpact.md).
-
 - `BL-693` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The rebinding screen's three axis-capture constants are
   picked, not measured.** *Evidence:* `ControlCapture.RestBand` **0.25**, `MoveThreshold` **0.6** and
   `CapturedDeadzone` **0.5** are what decide whether a stick or a trigger a player pushes becomes a

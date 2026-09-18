@@ -372,11 +372,15 @@ reasons that have nothing to do with any of these checks.
   not a tuning pass. The big zeppelin hangar (`hangar_left`, `hangar_right`, `mainhangar_roof`)
   reads `soil` `default` and plays the authored `3040slug_gunhit` chunk and smoke, which is the
   debris the clip shows (the clip is filmed at that hangar, not on the film lot). The small
-  destructible sheds beside the runway (`aphngr01`, `aphngr02`, `apbuild01`) read `buildings`(11),
-  whose gun row binds a `bld_damage.flt` no install file defines, so a round there draws and sounds
-  nothing ([docs/org/weaponImpact.md](docs/org/weaponImpact.md)). *Look for:*
+  destructible sheds beside the runway (`aphngr01`, `aphngr02`, `apbuild01`) are mostly
+  `buildings`(11), whose gun row binds a `bld_damage.flt` no install file defines, so a round there
+  draws and sounds nothing ([docs/org/weaponImpact.md](docs/org/weaponImpact.md)). Their
+  `aphagar03` faces are `default`, as the original reads the soil per struck polygon, so a round on
+  those plays the gunhit. The collider overlay (`--freecam --chapter=C1 --collision=show`, **C**)
+  colours each body by its soil id, which shows which faces are which. *Look for:*
   - (a) strafe the zeppelin hangar: the chunk and smoke against the clip;
-  - (b) strafe a shed: no spark, no puff and no hit sound, only the damage it takes.
+  - (b) strafe a shed's soil-11 faces: no spark, no puff and no hit sound, only the damage it takes;
+  - (c) strafe a shed's `aphagar03` faces: the same chunk and smoke as the hangar.
 
 - `PT-133` `[Own]` **The HUD's reading box is the right width at the controls on a 32:9 screen.**
   The dials, the SPD/ALT/THR block and the pause screen's objectives panel measure from a 16:9 box

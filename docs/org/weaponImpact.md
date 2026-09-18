@@ -146,10 +146,11 @@ struck material, and the shipped chapters spend it sparingly:
   Every `filmlot*`, `chrysler*` and `empire*` material carries `Default`. The film-lot walls, the
   studio blocks and the `nycity` skyscraper are all id 0, so a gun round on them takes the guns'
   `default` row and plays the authored `<caliber><ammo>_gunhit`.
-- **C1** carries 61 bodies with id 11, all of them the `aphagar01/02/04/05` materials (4
+- **C1** carries 72 bodies with id 11, all of them the `aphagar01/02/04/05` materials (4
   materials; `aphagar03` beside them is `Default`). Those textures dress the small destructible
   airport buildings, `aphngr01.flt`, `aphngr02.flt` and `apbuild01.flt` (the brick sheds with the
-  chequered roofs, under `m_build01`–`m_build04`), and nothing else.
+  chequered roofs, under `m_build01`–`m_build04`), and nothing else. The sheds' `aphagar03` faces
+  are their own id-0 bodies, so a round there plays the default gunhit.
 - ⚠ **C1's zeppelin hangar is not `buildings`.** `hangar_left`, `hangar_right`, `mainhangar_roof`
   and the hangar floor are textured `hangar19`–`hangar37`, every one `Default`. A gun round on it
   reads id 0 and plays the guns' `default` row, `<caliber><ammo>_gunhit`, whose flung `chunk` and
@@ -157,10 +158,12 @@ struck material, and the shipped chapters spend it sparingly:
   That clip is this hangar (the zeppelin inside it, 30 cal slug), not the Hollywood film lot.
 
 `SceneBuilder.ClassifySurface`'s `buildings` string is a separate, cosmetic classification and does
-not select the impact; `AttachCollision` writes the bucket's dominant `SoilId` into
-`SurfaceIdMeta`, and that is what `ProjectilePool.SurfaceIdOf` reads. The original reads the id per
-polygon (the hit record's material pointer, [weaponRay.md](weaponRay.md)), so a minority-soil
-polygon inside a bucket reads the dominant id in CSVM and its own in the original.
+not select the impact. The original reads the id per polygon (the hit record's material pointer,
+[weaponRay.md](weaponRay.md)); `SceneBuilder.CollidersForMesh` matches that by splitting a mesh's
+colliders by soil as well as by class, so every polygon of a body shares one `SoilId`, which
+`AttachCollision` writes into `SurfaceIdMeta` and `ProjectilePool.SurfaceIdOf` and the crash and
+graze cascades read. A per-face lookup off the hit's face index would give the same answer for the
+gun ray but not for the flight controller's sweep and contact reports, which carry no face index.
 
 ## An unresolved effect name leaves the slot null, and nothing falls back
 

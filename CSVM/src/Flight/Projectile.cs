@@ -2515,7 +2515,7 @@ public sealed partial class ProjectilePool : Node3D
         _blastCandidates.Sort(ByDistance);
 
         // One share per world OBJECT, not per collider body: the original's hit buffer holds one
-        // entry per node and SceneBuilder splits a node into a body per surface class. The struck
+        // entry per node and SceneBuilder splits a node into a body per surface class and soil. The struck
         // node took the full figure already, so its siblings are spent with it.
         _blastGroups.Clear();
         if (struck != null)

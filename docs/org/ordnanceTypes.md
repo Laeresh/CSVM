@@ -799,7 +799,7 @@ this path that takes a square root:
   from several collidable leaves takes several shares, one per leaf, all against the same HP pool.
   ⚠ This is NOT one entry per top-level object, and a reading that collapses a multi-part model to a
   single share contradicts the recursion. What the original has no counterpart for is CSVM's split of
-  one leaf into a body per surface class (`SceneBuilder.AttachCollision`), which is why the pool
+  one leaf into a body per surface class and soil (`SceneBuilder.AttachCollision`), which is why the pool
   collapses those siblings (`WorldCollision.OwnerOf`) and nothing coarser.
 - **At most 32 objects** are collected. The gather checks `count < 0x20` before testing each
   candidate and, once the buffer is full, logs "Database intersections array is full" for every

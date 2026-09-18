@@ -2081,7 +2081,8 @@ internal static class OrdnanceSuites
         "a gun round on a C2 film-lot building and on C1's zeppelin hangar reads default(0) off the " +
         "struck material and hands the authored 3040slug_gunhit to the effects runtime; on a C1 " +
         "airport building carrying buildings(11) wep_00's undefined bld_damage.flt draws and sounds " +
-        "nothing, while wep_02's runtime-carried large_fireball still renders")]
+        "nothing, while wep_02's runtime-carried large_fireball still renders; on the same sheds " +
+        "the aphagar03 faces read default off their own material and play the gunhit")]
     internal static void ImpactBuildingSurface(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
@@ -2965,14 +2966,67 @@ internal static class OrdnanceSuites
         var onHangar = FireDownOnto(ctx, world, hangar, gun, texturesPath, sub);
         ctx.Check(onHangar is { Plays: ["3040slug_gunhit", ..] },
             $"a round into the zeppelin hangar hands 3040slug_gunhit to the effects runtime, the debris the original throws there (played={onHangar?.Plays.FirstOrDefault() ?? "nothing"})");
-        var onEleven = FireDownOnto(ctx, world, eleven, gun, texturesPath, sub);
+        // A face of the body itself, not a ray down its mesh's middle: the sheds' roofs are
+        // aphagar03, a separate default(0) body since the soil split.
+        var onEleven = eleven.Select(b => FaceOf(ctx, b)).FirstOrDefault(f => f != null) is { } ef
+            ? FireAlong(ctx, world, ef.Point, ef.Dir, 40f, gun, texturesPath, sub)
+            : null;
         ctx.Check(onEleven != null, $"a round lands on a buildings(11) collider");
         if (onEleven is { } e)
         {
             ctx.Check(e.Plays.Count == 0 && e.Sprites == 0,
                 $"and it hands nothing to the effects runtime and draws no sprite of its own (played={e.Plays.Count} sprites={e.Sprites})");
-            ctx.Note($"C1: a buildings(11) collider struck at {e.Point}, the zeppelin hangar at {onHangar?.Point.ToString() ?? "-"}");
+            ctx.Note($"C1: one of {eleven.Count} buildings(11) colliders struck at {e.Point}, the zeppelin hangar at {onHangar?.Point.ToString() ?? "-"}");
         }
+        StrafeShedWalls(ctx, world, bodies, gun, texturesPath, sub);
+    }
+
+    // The sheds' meshes mix `aphagar03` (soil default) with the soil-11 `aphagar0N` materials in
+    // one surface class. The original reads the soil off the struck polygon's own material, so the
+    // aphagar03 faces play the default gunhit while the soil-11 faces of the same shed play nothing.
+    private static void StrafeShedWalls(TestContext ctx, TestWorld world, List<StaticBody3D> bodies,
+        WeaponDef gun, string texturesPath, AnimProgram sub)
+    {
+        var gamez = world.Gamez;
+        var a03 = Enumerable.Range(0, gamez.Materials.Count)
+            .Where(i => gamez.Materials[i].TextureName?.StartsWith("aphagar03", System.StringComparison.OrdinalIgnoreCase) == true)
+            .ToHashSet();
+        ctx.Check(a03.Count > 0 && a03.All(i => gamez.Materials[i].SoilId == SurfaceRegistry.Default),
+            $"C1's aphagar03 materials carry soil default(0) count={a03.Count}");
+        // Meshes where aphagar03 and a soil-11 material share one surface class: the mixed bucket.
+        bool Mixed(GameZMesh mesh) =>
+            mesh.Polygons.Any(p => a03.Contains(p.MaterialIndex))
+            && mesh.Polygons.Any(p => p.MaterialIndex >= 0 && p.MaterialIndex < gamez.Materials.Count
+                && gamez.Materials[p.MaterialIndex].SoilId == SurfaceRegistry.Buildings
+                && SceneBuilder.ClassifySurface(gamez.Materials[p.MaterialIndex].TextureName) == SceneBuilder.ClassifySurface("aphagar03"));
+        var sheds = gamez.Nodes
+            .Where(n => n.MeshIndex >= 0 && n.MeshIndex < gamez.Meshes.Count && Mixed(gamez.Meshes[n.MeshIndex]))
+            .ToList();
+        var shedIndices = sheds.Select(n => n.Index).ToHashSet();
+        var shedNames = sheds.Select(n => n.Name).Distinct().OrderBy(s => s).ToList();
+        ctx.Check(sheds.Count > 0, $"{sheds.Count} C1 nodes carry aphagar03 and soil-11 polygons in one class ({string.Join(" ", shedNames)})");
+        // Node names repeat across the chapter, so the built node is matched on its gamez index.
+        var onSheds = bodies.Where(b => b.GetParent() is { } p && p.HasMeta(AnimRuntime.IndexMeta)
+            && shedIndices.Contains(p.GetMeta(AnimRuntime.IndexMeta).AsInt32())).ToList();
+        var walls = onSheds.Where(b => ProjectilePool.SurfaceIdOf(b) == SurfaceRegistry.Default).ToList();
+        var eleven = onSheds.Where(b => ProjectilePool.SurfaceIdOf(b) == SurfaceRegistry.Buildings).ToList();
+        var unsplit = onSheds.GroupBy(b => b.GetParent())
+            .Where(g => !g.Any(b => walls.Contains(b)) || !g.Any(b => eleven.Contains(b)))
+            .Select(g => g.Key.Name.ToString())
+            .ToList();
+        ctx.Check(onSheds.Count > 0 && unsplit.Count == 0,
+            $"and every such node builds a default(0) collider beside its buildings(11) one, the soil split (default={walls.Count} eleven={eleven.Count} unsplit={string.Join(" ", unsplit)})");
+
+        var wall = walls.Select(b => (Body: b, Face: FaceOf(ctx, b))).FirstOrDefault(x => x.Face != null);
+        ctx.Check(wall.Face != null, $"a ray reaches a face of an aphagar03 collider");
+        if (wall.Face is not { } wf)
+        {
+            return;
+        }
+        var onWall = FireAlong(ctx, world, wf.Point, wf.Dir, 40f, gun, texturesPath, sub);
+        ctx.Check(onWall is { Plays: ["3040slug_gunhit", ..] },
+            $"a round into {wall.Body.GetParent().Name}'s aphagar03 face reads default and hands 3040slug_gunhit to the effects runtime (played={onWall?.Plays.FirstOrDefault() ?? "nothing"})");
+        ctx.Note($"C1: {onSheds.Count} shed colliders on {string.Join(" ", shedNames)}; aphagar03 struck at {wf.Point} on {wall.Body.GetParent().Name}/{wall.Body.Name}");
     }
 
     // Drops one round straight down onto the first candidate a ray from above lands on, steps the
@@ -2999,11 +3053,14 @@ internal static class OrdnanceSuites
                 break;
             }
         }
-        if (found is not { } point)
-        {
-            return null;
-        }
+        return found is { } point ? FireAlong(ctx, world, point, Vector3.Down, 60f, gun, texturesPath, sub) : null;
+    }
 
+    // Fires one round along `dir` from `standoff` short of `point` and steps the pool until the
+    // round strikes (DamageSink reports it); returns what the hit produced that step.
+    private static (List<string> Plays, int Sprites, Vector3 Point)? FireAlong(TestContext ctx, TestWorld world,
+        Vector3 point, Vector3 dir, float standoff, WeaponDef gun, string texturesPath, AnimProgram sub)
+    {
         var textures = new TextureArchive(texturesPath);
         ProjectilePool? live = null;
         try
@@ -3023,8 +3080,8 @@ internal static class OrdnanceSuites
                 },
             };
             ctx.Host.AddChild(live);
-            live.Spawn(gun, new Transform3D(Basis.LookingAt(Vector3.Down, Vector3.Forward),
-                point + new Vector3(0f, 60f, 0f)), Vector3.Zero);
+            var up = Mathf.Abs(dir.Y) > 0.9f ? Vector3.Forward : Vector3.Up;
+            live.Spawn(gun, new Transform3D(Basis.LookingAt(dir, up), point - (dir * standoff)), Vector3.Zero);
             for (int i = 0; i < 180 && !struck; i++)
             {
                 live.SimStep(1f / 60f);
@@ -3036,6 +3093,44 @@ internal static class OrdnanceSuites
             live?.Free();
             textures.Dispose();
         }
+    }
+
+    // A point on one of `body`'s own triangles that a ray from `Standoff` out along the face
+    // normal (either side) reaches before any other collider, and the direction that ray runs.
+    private static (Vector3 Point, Vector3 Dir)? FaceOf(TestContext ctx, StaticBody3D body)
+    {
+        const float Standoff = 40f;
+        var space = ctx.Host.GetWorld3D().DirectSpaceState;
+        foreach (var cs in body.GetChildren().OfType<CollisionShape3D>())
+        {
+            if (cs.Shape is not ConcavePolygonShape3D shape)
+            {
+                continue;
+            }
+            var xf = cs.GlobalTransform;
+            var faces = shape.GetFaces();
+            for (int i = 0; i + 2 < faces.Length; i += 3)
+            {
+                Vector3 a = xf * faces[i], b = xf * faces[i + 1], c = xf * faces[i + 2];
+                var n = (b - a).Cross(c - a);
+                if (n.Length() < 2f)
+                {
+                    continue;
+                }
+                n = n.Normalized();
+                var centre = (a + b + c) / 3f;
+                foreach (var side in new[] { n, -n })
+                {
+                    var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                        centre + (side * Standoff), centre - (side * 2f), CollisionLayers.World));
+                    if (hit.Count > 0 && hit["collider"].Obj is StaticBody3D landed && ReferenceEquals(landed, body))
+                    {
+                        return (hit["position"].AsVector3(), -side);
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     private readonly record struct RingReading(string Root, string Mesh, bool Visible, Vector3 Scale, float Opacity);

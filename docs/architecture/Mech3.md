@@ -34,7 +34,7 @@ world's `ConflictRank` map), applies CLAMP per surface off `UvsWithinUnitSquare`
 and colours a surface `vertex colour x material` except where the two restate each other.
 `BuildSubtree`'s `zoneGate` flag moves each instance onto its `zone_id` visual layer
 (`ZoneGate.cs`), off for the camera-anchored deck and dome. `CollidersForMesh` splits a mesh into one
-trimesh per surface class and by sidedness, both halves on one body registering with
+trimesh per surface class and soil and by sidedness, both halves on one body registering with
 `WorldCollision`; `MissionStructureTeamMeta` is the channel `DestructibleRegistry` reads a pool's
 team through. A textured surface takes `csky_world_light` on its `lighting` flag alone, and every
 mip-mapped arm fetches through `SampleAlbedo`, the one `csky_sample_albedo` carrying the chapter's

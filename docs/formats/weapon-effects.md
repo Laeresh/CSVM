@@ -119,12 +119,12 @@ gets the other one wrong. The slug def's only other authored bound is its debris
 file defines, so the original leaves the row empty and a round on that surface draws and sounds
 nothing of its own. The surface is the struck material's `soil` byte, not what the geometry looks
 like ([../org/weaponImpact.md](../org/weaponImpact.md)), and in the shipped data id 11 is reached
-only by C1's four `aphagar0N` materials (61 colliders), on the small destructible airport
-buildings. **Hollywood's film-lot buildings and C1's zeppelin hangar are `soil` `Default`**, so
+only by C1's four `aphagar0N` materials (72 colliders), on the small destructible airport
+buildings, whose `aphagar03` faces are `Default` and play the gunhit. **Hollywood's film-lot buildings and C1's zeppelin hangar are `soil` `Default`**, so
 strafing them plays the authored `<caliber><ammo>_gunhit` exactly as a dirt hit does, which is the
 debris `30 Slu building.mp4` shows on the zeppelin hangar. Verify gun-impact work by strafing
-**dirt, a C2 wall or the zeppelin hangar**; the `aphngr` sheds are the one place a gun round
-shows nothing.
+**dirt, a C2 wall or the zeppelin hangar**; the `aphngr` sheds' soil-11 faces are the one place a
+gun round shows nothing.
 
 ### Engine wiring (M3)
 
