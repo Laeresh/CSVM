@@ -24,9 +24,12 @@ internal static class PromptDeviceSuites
         + "touched nothing names its key in words, a pad button hands the line to the stick button "
         + "and gives the slot a glyph, a tick with nothing held leaves it alone, a key press takes "
         + "it back to words, and an auto-land the pad has no binding for falls back to naming the "
-        + "key")]
+        + "key; the seat's pad rumble follows the same side, silent on a rostered pad while the "
+        + "keyboard drives and handed back by the first pad press")]
     internal static void BindingsPromptDevice(TestContext ctx)
     {
+        RumbleFollowsTheSide(ctx);
+
         ctx.RequireData(ctx.MessagesPath, $"the install's message table");
         var strings = Messages.Load(ctx.MessagesPath);
         string onKey = strings.Format(PressKey, "A");
@@ -290,6 +293,44 @@ internal static class PromptDeviceSuites
             $"an auto-land the pad has no binding for names the key: '{rig.PilotHud.AutoLandPrompt.Text}'");
     }
 
+    // The rumble gate over a real seat holding pad 0: the device memory it reads is the one the
+    // prompts read, so a keyboard seat sends nothing and a pad press hands the rumble back. The
+    // process-wide toggle, sink and pad gate are borrowed and restored, since --det holds them off.
+    private static void RumbleFollowsTheSide(TestContext ctx)
+    {
+        var rig = new FlightController
+        {
+            PlayerIndex = 0,
+            UseKeyboard = true,
+            PadDevices = new[] { 0 },
+        };
+        var sink = new RumbleLog();
+        var (enabled, was, disabled, focused) = (PadRumble.Enabled, PadRumble.Sink, Pads.Disabled, Pads.Focused);
+        (PadRumble.Enabled, PadRumble.Sink, Pads.Disabled, Pads.Focused) = (true, sink, false, true);
+        try
+        {
+            rig.RumbleForTest(RumbleEvent.ContactHeavy);
+            ctx.Check(rig.ActiveDeviceSide == DeviceSide.Keyboard && sink.Pads.Count == 0,
+                $"a keyboard seat with a pad in its roster rumbles nothing: {sink.Pads.Count} sends");
+
+            rig.ObserveDeviceForTest(new OneSide(), OnPad(JoyButton.LeftStick));
+            rig.RumbleForTest(RumbleEvent.ContactHeavy);
+            ctx.Check(rig.ActiveDeviceSide == DeviceSide.Pad && sink.Pads.Count == 1 && sink.Pads[0] == 0,
+                $"…and the first pad press hands the rumble back to pad 0: [{string.Join(", ", sink.Pads)}]");
+
+            var key = new OneSide();
+            key.Keys.Add((int)Key.A);
+            rig.ObserveDeviceForTest(key, new OneSide());
+            rig.RumbleForTest(RumbleEvent.ContactHeavy);
+            ctx.Check(sink.Pads.Count == 1, $"…and a key press takes it off again: {sink.Pads.Count} sends");
+        }
+        finally
+        {
+            (PadRumble.Enabled, PadRumble.Sink, Pads.Disabled, Pads.Focused) = (enabled, was, disabled, focused);
+            rig.Free();
+        }
+    }
+
     // One pad button held, on the placeholder identity a seat's pad rows sit on.
     private static OneSide OnPad(JoyButton button)
     {
@@ -319,5 +360,13 @@ internal static class PromptDeviceSuites
             Axes.TryGetValue((device, axis), out float value) ? value : 0f;
 
         public HatDirection HatState(DeviceId device, int hat) => HatDirection.None;
+    }
+
+    // What the seat asked of which pad, in order.
+    private sealed class RumbleLog : IRumbleSink
+    {
+        public List<int> Pads { get; } = new();
+
+        public void Play(int device, float weak, float strong, float seconds) => Pads.Add(device);
     }
 }

@@ -199,7 +199,9 @@ draws its authored 800x600 space one-to-one.
   - (e) the sustained pair, the overspeed rattle and a turret gunner firing, hold while their cause
     lasts and stop when it does, without stuttering at the refresh seam;
   - (f) the Game Options Rumble row turns all of it off and back on, and the choice survives a
-    restart.
+    restart;
+  - (g) one sortie flown on the keyboard with the pad plugged in and untouched rumbles nothing, the
+    first pad press hands the rumble back, and a key press takes it off again.
   *Blocks:* `BL-693`. ⚠ Capturing the right trigger takes it from both Camera Boost and Camera
   Dolly Out rather than stacking a third reading (`ActionMap.SameControl` ignores the deadzone on
   purpose): that is not a fault of these three numbers and must not be tuned against.

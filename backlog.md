@@ -466,21 +466,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   detonation reaches the carve", "What a Choker ground hit shows", "How CSVM builds it"),
   `docs/formats/gamez.md` (`flags.can_modify`), `git log --grep=BL-413` (the carve as built).
 
-- `BL-948` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **A seat rumbles a pad
-  that is merely plugged in, even while the player is flying that seat on the keyboard.**
-  *Evidence:* reported at the controls as "similar to the input dialogs rumble should only play if
-  there was a controller input". `PadRumble` sends an event to every pad the seat's device list
-  names and stands down only with the toggle off, with pad input blocked, or when the seat holds no
-  pad at all (`CSVM/src/Bindings/PadRumble.cs:157-158`), so holding a pad in the roster is enough to
-  be rumbled. The control prompts already answer the same question the other way, naming the device
-  the seat last took input from (`git log --grep=BL-853`). *Fix shape:* gate the send on that same
-  active-device reading, so a seat driven by the keyboard is silent until a pad input arrives, and
-  the first pad input hands the rumble back. *⚠ Traps:* the effect table, its bands and the Game
-  Options toggle are the original's and do not move; this is a gate in front of them. *Playtest
-  after fix:* `PT-120`'s pad sitting, plus one keyboard sortie with a pad plugged in and untouched.
-  *Cross-refs:* `git log --grep=BL-922` (the effect table as built), `PT-120`,
-  `docs/org/input.md`.
-
 ## Flight model & collision physics
 
 - `BL-562` `[Perf]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: data]` `[CM11]` **CM11 (C2/M02) still spends a single physics tick of about 36 ms on the sortie's

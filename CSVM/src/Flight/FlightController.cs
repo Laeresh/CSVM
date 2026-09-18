@@ -675,8 +675,8 @@ public partial class FlightController : Node3D
     {
         _seatState = new SeatDeviceState(DefaultBindings.AnyPad, () => PadDevices);
         _padMutedState = new SeatDeviceState(DefaultBindings.AnyPad, () => PadDevices, readsPads: false);
-        _rumble = new PadRumble(() => PadDevices);
         _bindings = BindingProfile.Defaults(default, true);
+        _rumble = new PadRumble(() => PadDevices, _bindings.Device);
         _actions = _bindings.Actions(InputContext.Flight);
         var map = _bindings.Map(InputContext.Flight);
         _keyActions = new PlayerActions(map, true);
@@ -2639,6 +2639,10 @@ public partial class FlightController : Node3D
         if (_bindings.ObserveDevice(_keyActions.Current, _padActions.Current))
             ComposeControlPrompts();
     }
+
+    // One event through this seat's own rumble, so a suite reaches the gate the shipped event sites
+    // share without staging a hit, a launch or a collision.
+    internal void RumbleForTest(RumbleEvent ev) => _rumble.Play(ev);
 #pragma warning restore SA1202
 
     // F3 ("Cycle guns clockwise"), the KEY half alone: cycles the gun selector forward through the

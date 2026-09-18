@@ -126,8 +126,8 @@ public class PadRumbleTests : IDisposable
     {
         int[] one = { 0 };
         int[] two = { 1 };
-        var p1 = new PadRumble(() => one);
-        var p2 = new PadRumble(() => two);
+        var p1 = OnPad(() => one);
+        var p2 = OnPad(() => two);
         p1.Play(RumbleEvent.NitroStart);
         p2.Play(RumbleEvent.GunFireLarge);
         Assert.Equal(new[] { 0, 1 }, _sink.Devices);
@@ -135,7 +135,7 @@ public class PadRumbleTests : IDisposable
         Assert.Equal(new RumbleShape(0.95f, 0f, 0.30f), _sink.Shapes[1]);
 
         _sink.Clear();
-        new PadRumble(Array.Empty<int>).Play(RumbleEvent.ContactHeavy);
+        OnPad(Array.Empty<int>).Play(RumbleEvent.ContactHeavy);
         Assert.Empty(_sink.Devices);
     }
 
@@ -143,7 +143,7 @@ public class PadRumbleTests : IDisposable
     [Fact]
     public void ASeatHoldingTwoPadsRumblesBoth()
     {
-        new PadRumble(() => new[] { 3, 7 }).Play(RumbleEvent.ContactLight);
+        OnPad(() => new[] { 3, 7 }).Play(RumbleEvent.ContactLight);
         Assert.Equal(new[] { 3, 7 }, _sink.Devices);
     }
 
@@ -152,7 +152,7 @@ public class PadRumbleTests : IDisposable
     [Fact]
     public void NothingPlaysWithTheToggleOffOrThePadsGated()
     {
-        var seat = new PadRumble(() => new[] { 0 });
+        var seat = OnPad(() => new[] { 0 });
         PadRumble.Enabled = false;
         seat.Play(RumbleEvent.ContactHeavy);
         Assert.Empty(_sink.Devices);
@@ -178,7 +178,7 @@ public class PadRumbleTests : IDisposable
     [Fact]
     public void TheOverspeedDriveRefreshesOnACadenceAndResetsWhenItEnds()
     {
-        var seat = new PadRumble(() => new[] { 0 });
+        var seat = OnPad(() => new[] { 0 });
         seat.Overspeed(true, 10.0);
         seat.Overspeed(true, 10.05);
         seat.Overspeed(true, 10.1);
@@ -191,6 +191,58 @@ public class PadRumbleTests : IDisposable
         Assert.Equal(2, _sink.Devices.Count);
         seat.Overspeed(true, 10.22);
         Assert.Equal(3, _sink.Devices.Count);
+    }
+
+    /// <summary>⚠ The hands gate: a seat whose last input came off the keyboard sends nothing to the
+    /// pad in its roster, however hard the event, and the first pad press on that seat hands the
+    /// rumble back, the same reading that moves the seat's control prompts.</summary>
+    [Fact]
+    public void AKeyboardDrivenSeatIsSilentUntilItsPadIsPressed()
+    {
+        var device = new ActiveDevice();
+        var seat = new PadRumble(() => new[] { 0 }, device);
+        Assert.Equal(DeviceSide.Keyboard, device.Side);
+        seat.Play(RumbleEvent.ContactHeavy);
+        seat.Overspeed(true, 1.0);
+        Assert.Empty(_sink.Devices);
+
+        device.Observe(Quiet(), Pressed(InputAction.PitchUp), readsKeyboard: true);
+        Assert.Equal(DeviceSide.Pad, device.Side);
+        seat.Play(RumbleEvent.ContactHeavy);
+        Assert.Equal(new[] { 0 }, _sink.Devices);
+        Assert.Equal(new RumbleShape(1f, 1f, 1.00f), _sink.Shapes[0]);
+    }
+
+    /// <summary>A key press takes the rumble back off the pad, so a player who puts the pad down and
+    /// flies on the keyboard stops being buzzed the moment the keys speak.</summary>
+    [Fact]
+    public void AKeyPressSilencesThePadAgain()
+    {
+        var device = new ActiveDevice();
+        var seat = new PadRumble(() => new[] { 0 }, device);
+        device.Observe(Quiet(), Pressed(InputAction.PitchUp), readsKeyboard: true);
+        device.Observe(Pressed(InputAction.PitchUp), Quiet(), readsKeyboard: true);
+        Assert.Equal(DeviceSide.Keyboard, device.Side);
+        seat.Play(RumbleEvent.NitroStart);
+        Assert.Empty(_sink.Devices);
+    }
+
+    // A seat whose pad has already spoken, which is what every routing check above needs to reach
+    // the sink at all.
+    private static PadRumble OnPad(Func<int[]?> seatDevices)
+    {
+        var device = new ActiveDevice();
+        device.Observe(Quiet(), Pressed(InputAction.PitchUp), readsKeyboard: true);
+        return new PadRumble(seatDevices, device);
+    }
+
+    private static ActionSnapshot Quiet() => new();
+
+    private static ActionSnapshot Pressed(InputAction action)
+    {
+        var snapshot = new ActionSnapshot();
+        snapshot.Store(action, new ControlValue(true, 1f));
+        return snapshot;
     }
 
     // The stub sink: what was asked of which pad, in the order it was asked.

@@ -197,11 +197,11 @@ called. A seat is put on the loaded map through `ActionMap.Fill`. Coverage:
 `CSVM.Tests/LaunchBindingsTests.cs` and the `bindings-launch-load` engine suite.
 
 ## src/Bindings/PadRumble.cs
-The pad half of the flight cues: one seat's rumble, routed through `Pads.For` to the pads that seat's
-own bindings read, so a splitscreen pane never buzzes another pilot's controller. `RumbleEvent` is the
-original's own event list and a fixed table gives each row a weak magnitude, a strong one and a length.
-The static band functions (`GunFire`, `Launch`, `CannonHit`, `OrdnanceHit`, `Contact`) hold the
-original's own edges, so a call site passes the quantity it already has; `Overspeed` is the one
-sustained cue, restarted on a cadence while the dive lasts. `IRumbleSink` is the seam the unit tests
-replace and `JoyRumbleSink` is `Input.StartJoyVibration`; the static `Enabled` is the Game Options
-toggle, held off under `--det`. Every number, and why the bearing is dropped: [../org/input.md](../org/input.md).
+One seat's rumble, routed through `Pads.For` to the pads that seat's own bindings read, so a
+splitscreen pane never buzzes another pilot's controller, and sent only while the seat's own
+`ActiveDevice` (the reading its control prompts take) says the last input came off the pad.
+`RumbleEvent` is the original's event list; a fixed table gives each row a weak magnitude, a strong
+one and a length, and the static band functions (`GunFire`, `Launch`, `CannonHit`, `OrdnanceHit`,
+`Contact`) hold the original's edges. `Overspeed` is the one sustained cue, restarted on a cadence.
+`IRumbleSink` is the unit tests' seam over `Input.StartJoyVibration`; the static `Enabled` is the Game
+Options toggle, held off under `--det`. Every number and why the bearing is dropped: [../org/input.md](../org/input.md).

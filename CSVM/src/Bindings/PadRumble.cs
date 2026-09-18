@@ -116,13 +116,17 @@ public sealed class PadRumble
     };
 
     private readonly Func<int[]?> _seatDevices;
+    private readonly ActiveDevice _device;
     private double _speedRefreshAt;
 
     /// <summary>A seat rumbling on the pads <paramref name="seatDevices"/> names, re-asked on every
-    /// event because a seat's device list changes when a splitscreen player joins.</summary>
-    public PadRumble(Func<int[]?> seatDevices)
+    /// event because a seat's device list changes when a splitscreen player joins.
+    /// <paramref name="device"/> is the seat's own device memory, the one its control prompts read.
+    /// </summary>
+    public PadRumble(Func<int[]?> seatDevices, ActiveDevice device)
     {
         _seatDevices = seatDevices ?? throw new ArgumentNullException(nameof(seatDevices));
+        _device = device ?? throw new ArgumentNullException(nameof(device));
     }
 
     /// <summary>The shape an event plays, the whole table in one call.</summary>
@@ -155,10 +159,13 @@ public sealed class PadRumble
         Math.Max(armorDamage, healthDamage) < 50.5f ? RumbleEvent.ContactLight : RumbleEvent.ContactHeavy;
 
     /// <summary>Rumble this seat's pads for one event. Does nothing with the toggle off, with pad
-    /// input blocked, or when the seat holds no pad at all.</summary>
+    /// input blocked, when the seat holds no pad at all, or while the seat's last input came from
+    /// the keyboard side.
+    /// ⚠ A pad in the seat's roster is not a pad in the player's hands. The seat speaks through the
+    /// pad only once the pad has spoken, the same reading that moves its control prompts.</summary>
     public void Play(RumbleEvent ev)
     {
-        if (!Enabled)
+        if (!Enabled || _device.Side != DeviceSide.Pad)
             return;
         var shape = Table[(int)ev];
         foreach (int pad in Pads.For(_seatDevices()))

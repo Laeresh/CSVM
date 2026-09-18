@@ -395,6 +395,12 @@ into a left/right split, which would be a different cue rather than a smaller on
 The fallback gains are not reproduced. They exist so a file missing an effect still rumbles with a
 rescaled neighbour, and CSVM's table has a row for every event already.
 
+A seat rumbles only while its last real input came off the pad side, the same `ActiveDevice`
+reading that picks which control a prompt names. A seat flown on the keyboard with a pad plugged in
+and untouched stays silent until that pad is pressed, and a key press silences it again. This is a
+gate in front of the table rather than a change to it: every row, band and the Game Options toggle
+stand as above.
+
 ### The one quantity not pinned
 
 `FUN_00481540` rewrites the overspeed effect's gain from a float its caller hands it, rate-limited to
