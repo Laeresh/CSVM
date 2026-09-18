@@ -623,7 +623,10 @@ internal static class InstantActionSuites
         "stick and throttle flying while both triggers and all four selectors stay swallowed, a " +
         "crash inside a win's hold stays down with R held and the crash cam armed, and each has " +
         "its able-to-fail control at the release; plus the handover, where the hold offers no " +
-        "menu at all and the board that follows answers the first press on its Restart row")]
+        "menu at all and the board that follows answers the first press on its Restart row; and " +
+        "a C1/IA1 stunt run completing on that seat, which flies on through the whole win's hold " +
+        "to the wrap-up with a marker first entered inside the hold not photographed, where the " +
+        "same seat under a solo scoreboard holds its finish pose")]
     internal static void InstantActionEnd(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -935,6 +938,8 @@ internal static class InstantActionSuites
             {
                 board.Free();
             }
+
+            StuntRunFliesOn(ctx, seat, missionZrdr);
         }
         finally
         {
@@ -1376,6 +1381,141 @@ internal static class InstantActionSuites
         finally
         {
             wrapup.Free();
+        }
+    }
+
+    // A solo Instant Action stunt run on the real seat, stepped through the win's hold the way the
+    // director wires it: no scoreboard, the run completing inside SimStep, CommandsOnly at the ending.
+    // The original flies on for the whole hold, and nothing is photographed after the completing
+    // frame. The control hands the same seat a solo scoreboard, which holds the finish pose.
+    private static void StuntRunFliesOn(TestContext ctx, FlightController seat, string missionZrdr)
+    {
+        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, "C1");
+        ctx.RequireData(gamezPath, $"C1 gamez");
+        var run = StuntMission.Load(GameZ.Load(gamezPath), missionZrdr, Messages.Load(ctx.MessagesPath));
+        ctx.Check(run is { TotalCount: >= 2 }, $"C1/IA1 ships at least two danger zones for the hold's stunt run");
+        if (run is not { TotalCount: >= 2 })
+        {
+            return;
+        }
+
+        const float Dt = 1f / 60f;
+        int stings = 0;
+        int requests = 0;
+        // The pane accepts and never lands, so a latch is counted and nothing is written.
+        var camera = new StuntCapture(run, "C1", _ => ++requests > 0) { Sting = () => stings++ };
+        var mission = new InstantActionRuntime(EndDef(ctx, "stunt-hold", "stunt_flying"));
+        mission.RegisterPilot(seat.PlayerIndex);
+        int boards = 0;
+        void ZonesFlown()
+        {
+            if (InstantActionRuntime.ZoneSetsFlown(new[] { (false, run.AllComplete) }))
+            {
+                mission.ReportObjective(InstantActionObjective.ZonesFlown);
+            }
+        }
+
+        run.RunCompleted += ZonesFlown;
+        mission.MissionEnded += outcome => seat.ControlHold = outcome == InstantActionOutcome.Won
+            ? FlightControlHold.CommandsOnly
+            : FlightControlHold.All;
+        mission.WrapupDue += _ =>
+        {
+            seat.ControlHold = FlightControlHold.None;
+            boards++;
+        };
+        seat.ControlHold = FlightControlHold.None;
+        seat.Stunt = run;
+        seat.StuntShots = camera;
+        seat.Scoreboard = null;
+        seat.Race = null;
+        try
+        {
+            var shot = run.Zones[0];
+            var late = run.Zones[1];
+            Vector3 Above(StuntZone zone) => zone.Position + new Vector3(0f, 500f, 0f);
+
+            // The able-to-fail control for the camera: a marker crossed while the run is live latches.
+            seat.WarpTo(Above(shot), 0f, 80f);
+            seat.SimStep(Dt);
+            seat.WarpTo(shot.Position, 0f, 80f);
+            seat.SimStep(Dt);
+            ctx.Check(camera.Count == 1 && stings == 1,
+                $"{shot.DzName}, crossed while the run is live, is photographed on the real seat: shots={camera.Count} stings={stings}");
+
+            // The completing frame: DebugCompleteStunt completes the run inside SimStep, ahead of
+            // the return the solo scoreboard's finish pose takes, as the last gate pair would.
+            seat.WarpTo(Above(late), 0f, 80f);
+            seat.DebugCompleteStunt = true;
+            seat.SimStep(Dt);
+            seat.DebugCompleteStunt = false;
+            mission.Advance(Dt);
+            ctx.Check(run.AllComplete && mission.Outcome == InstantActionOutcome.Won && mission.HoldingWrapup
+                    && seat.ControlHold == FlightControlHold.CommandsOnly,
+                $"the stunt run completes on the seat and wins the mission into the hold: complete={run.AllComplete} {mission.Outcome} hold={seat.ControlHold}");
+
+            var atEnd = seat.WorldPosition;
+            int shotsAtEnd = camera.Count, stingsAtEnd = stings, requestsAtEnd = requests;
+            int frames = 0;
+            float lastStep = 0f, minStep = float.MaxValue;
+            bool warped = false;
+            while (boards == 0 && frames < (int)((InstantActionRuntime.WrapupHoldS + 1f) / Dt))
+            {
+                // Halfway through the hold, into a marker this run never photographed.
+                if (!warped && frames * Dt >= InstantActionRuntime.WrapupHoldS / 2f)
+                {
+                    seat.WarpTo(late.Position, 0f, 80f);
+                    warped = true;
+                }
+                var before = seat.WorldPosition;
+                seat.SimStep(Dt);
+                mission.Advance(Dt);
+                frames++;
+                lastStep = before.DistanceTo(seat.WorldPosition);
+                minStep = Mathf.Min(minStep, lastStep);
+            }
+
+            ctx.Check(boards == 1 && minStep > 0.1f,
+                $"the aircraft flies on through the whole {InstantActionRuntime.WrapupHoldS:0.#} s hold, every frame moving until the wrap-up is due: frames={frames} slowest step={minStep:0.00} m last={lastStep:0.00} m boards={boards}");
+            ctx.Check(warped && camera.Count == shotsAtEnd && stings == stingsAtEnd && requests == requestsAtEnd
+                    && camera.InMarkerOrder().All(s => s.DzName != late.DzName),
+                $"…and {late.DzName}, first entered inside the hold, is not photographed: shots+={camera.Count - shotsAtEnd} stings+={stings - stingsAtEnd} requests+={requests - requestsAtEnd}");
+            ctx.Note($"the Instant Action pilot flew {atEnd.DistanceTo(seat.WorldPosition):0} m between the run's end and the wrap-up");
+
+            // The control: the same seat with the solo scoreboard holds its finish pose.
+            run.RunCompleted -= ZonesFlown;
+            string storePath = Path.Combine(ctx.ScratchDir, "ia-end-stunt-hold-scores.json");
+            var scoreboard = StuntScoreboard.Build(run, "Test Plane", "C1", ScoreStore.Load(storePath),
+                "ia-end/stunt-hold/player_test", exitsToMenu: true, new PauseState(), _ => new MenuInput());
+            ctx.Host.AddChild(scoreboard);
+            try
+            {
+                seat.Scoreboard = scoreboard;
+                seat.Rerun();
+                seat.WarpTo(Above(late), 0f, 80f);
+                seat.DebugCompleteStunt = true;
+                seat.SimStep(Dt);
+                seat.DebugCompleteStunt = false;
+                var posed = seat.WorldPosition;
+                for (int i = 0; i < 30; i++)
+                {
+                    seat.SimStep(Dt);
+                }
+                ctx.Check(run.AllComplete && posed.DistanceTo(seat.WorldPosition) < 1e-3f,
+                    $"…while the solo scoreboard's run holds its finish pose, the able-to-fail control: moved={posed.DistanceTo(seat.WorldPosition):0.000} m");
+            }
+            finally
+            {
+                seat.Scoreboard = null;
+                scoreboard.Free();
+            }
+        }
+        finally
+        {
+            run.RunCompleted -= ZonesFlown;
+            seat.Stunt = null;
+            seat.StuntShots = null;
+            seat.ControlHold = FlightControlHold.None;
         }
     }
 }

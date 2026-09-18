@@ -640,7 +640,9 @@ Stunt Flying's end-of-run results overlay on `ResultsBoard`'s shell: the plane a
 over a `StuntSplits` section of per-zone splits, total and best-time comparison, and under it the
 pilot's `StuntShotStrip`. Wakes on `StuntMission.RunCompleted`, records through `ScoreStore.RecordIfBest` and logs the split
 table so a headless run is reviewable. The one per-pane board among the results boards, which is
-why it overrides the shell's whole-window placement. Read `ResultsBoard` for the shared shell and
+why it overrides the shell's whole-window placement. `FlightController` holds a finished pilot's
+finish pose and takes R as a rerun only while it has this board, so an Instant Action pilot, who
+has none, flies on through the ending's hold. Read `ResultsBoard` for the shared shell and
 its halt contract, and `IaWrapupBoard` for the board Instant Action carries the splits on instead.
 
 ## src/Flight/StuntCapture.cs

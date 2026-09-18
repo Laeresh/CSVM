@@ -256,7 +256,8 @@ public partial class FlightController : Node3D
 
     /// <summary>The end-of-run results overlay: splits + total + best-time on
     /// AllComplete. Added to the HUD canvas last (drawn over the marker/dials); wakes itself on
-    /// the run's RunCompleted. Null in free flight.</summary>
+    /// the run's RunCompleted. Null in free flight and in Instant Action, whose pilot flies on past
+    /// the finish.</summary>
     public StuntScoreboard? Scoreboard;
 
     /// <summary>The Dogfight per-pane HUD, <c>--vs</c> only: the match timer/K-D/leader line, the
@@ -983,6 +984,12 @@ public partial class FlightController : Node3D
     // Both holds swallow the discrete commands, so every command read tests this rather than one
     // named setting; only the stick asks which of the two it is.
     private bool CommandsHeld => ControlHold != FlightControlHold.None;
+
+    // The solo scoreboard's end: it shows over the finish pose and takes R as a rerun. Keyed on the
+    // board itself rather than a flag of its own, since the board is what these rules belong to.
+    // ⚠ Instant Action builds no scoreboard, and its pilot flies on through the ending's hold as
+    // the original's does, so a finished run there must not stop the aircraft.
+    private bool SoloBoardHolds => Stunt is { AllComplete: true } && Race == null && Scoreboard != null;
 
     // Which stick flies this aircraft: set in Bind, and lazy here too so a bare test rig that
     // never binds still gets one, off whichever of _holdSegments/Pilot it already set (Decision 8,
@@ -1848,7 +1855,7 @@ public partial class FlightController : Node3D
         if (Race is { AllFinished: true } && Stunt is { AllComplete: true })
             return;
 
-        if (Stunt is { AllComplete: true } && Race == null)
+        if (SoloBoardHolds)
         {
             _simPrev = _simCurr;   // hold the finish pose, no stale pair left to interpolate
             return;
@@ -3441,7 +3448,7 @@ public partial class FlightController : Node3D
                 RestartRace?.Invoke();
             return;
         }
-        if (Stunt is { AllComplete: true } && Race == null && RespawnPressed())
+        if (SoloBoardHolds && RespawnPressed())
             Rerun();   // the solo board takes R as a fresh run, distinct from a mid-run respawn
     }
 
