@@ -194,130 +194,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`PLAN-m3-polish-10` A1), `DamageVisuals.cs` (the consumer),
   `extracted/zrdr/vehicle.zrd.json` (the authority).
 
-- `BL-394` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]` **AI identity: landed, and owed a flight.** `PlaneStats.LoadForAi` takes a def
-  name, so a spawn flies a militia variant (`bhatwarhawk`, `secfury`) and gets that def's damage
-  model, its `weapons` fit (`Loadout.BindAi`, bound through the same `Loadout.Bind` and told apart
-  from guns by the weapon's `CANNON` flag), its authored livery and its nine-slot pilot vector plus
-  `accentID`. `--ai=<plane>:def=<name>` names one directly.
-  *⚠ Instant Action names none, and that is decoded, not assumed.* `FUN_0045a390` takes each spawn's
-  aircraft as an index into the eleven-row plane table at `0x00620c70` and reads the PLAIN AI def out
-  of it (`FUN_00426d20`), so an Instant Action Black Hat Warhawk is the plain `warhawk`. The militia
-  supplies the livery alone, written into the spawn's override record from the setup-screen record at
-  `0x00718dcc`. The militia defs are the campaign's, whose mission rosters name them outright. That
-  is also why a Sacred Trust Warhawk exists in the original with no def behind it
-  ([`docs/formats/instant-action.md`](docs/formats/instant-action.md)).
-  *⚠ One militia stays unpainted:* Broadway Bomber. `BROADWAY` ships six `PEA_*` masks and no def
-  anywhere authors `paint_pattern broadway`, so there are no colours to fill them with; they have to
-  be read off the original as `player_fortune`'s were. The same holds for the three base defs a
-  campaign mission fields directly (`bloodhawk`, `autogyro`, `balmoral`); each is logged once as
-  `[paint] ai def '<def>' authors no paint_pattern` and flies its shipped skins.
-  *The campaign half routes now.* A mission's own enemy set and its generator waves both resolve
-  their militia def from the `aiv` roster block's NAME (`VehicleDefs.DefForBlock` strips trailing
-  `_N` ordinals until a def matches, so `medkestrel_1` is `medkestrel` and `blakepeace_2_1` is
-  `blakepeace_2`), and `CampaignRosterPlan.SpawnFor` carries it into `PlaneStats.LoadForAi`. The
-  resolution is a function of the mission and the block alone, never of a running spawn count, so an
-  aeroplane built before the flight starts already knows its livery. CM01 fields Medusa Kestrels;
-  the British defs are CM02's (`britbalmoral`, `britpeace`) and CM04's (`britpeace`).
-  *Owed at the controls:* fly a Black Hat flight
-  (`--ai=player_warhawk:def=bhatwarhawk --ai-attack`, or a wizard wave set to Black Hat Warhawk) and
-  confirm the militia paint, the eight torpedoes, and that they stay on the rail against aircraft.
-  *Still open inside the landed work:* `dare_devil` is parsed and unconsumed; each authored ordnance
-  entry takes ONE pylon carrying its whole round count, since the original counts rounds per weapon
-  slot and has no pylons at all; a def authoring more entries than the airframe has pylons drops the
-  overflow.
-  *What the AI defs actually author (data, 2026-08-16).* A `weapons` block of 5-tuples,
-  `fury`: `[wep_04, 4, 200, 30, 800]`, `[wep_07, 2, 200, 30, 800]`, `[wep_130, 9000, 0.05, 1, 900]`,
-  overridden per militia variant (`secfury` swaps to `[wep_12, 6, 30, 200, 800]`,
-  `bhatwarhawk` to `[wep_14, 8, 5, 350, 800]`). Plus `paint_pattern`/`paint_color1..3`/
-  `paint_decal1..3` (the militia livery), the nine-slot pilot skill vector (`dare_devil`,
-  `dead_eye`, `quick_draw`, `steady_hand`, `sixth_sense`, `natural_touch`, `stun_recovery`,
-  `talker`, `constitution`), `accentID`, and `gun_pitch`/`gun_yaw` (the AI's forward-gun cone,
-  `[-11, 11]` on every AI aircraft).
-  *The militia mapping is already in the tree, undecoded as such.* `UI/LaunchMenu.cs`'s `Militias`
-  table (13 militias × their aircraft) reproduces the militia def names exactly: `bhat*` = Black
-  Hat {Warhawk, Brigand, Autogyro}, `bs*` = Black Swan {Fury}, `blake*` = Blake Aviation, `brit*` =
-  British, `ha*` = Hughes Aviation, `hk*` = Hollywood Knight, `med*` = Medusa, `rus*` = Russian,
-  `sec*` = Studio Security, `sti*`/`german*` = the two Hellhound militias. Two table entries have
-  no def (Sacred Trust's Warhawk, Broadway Bomber's Peacemaker), expected, since that table comes
-  from `.BM` paint coverage, not from `vehicle.json`.
-  *The 5-tuple is decoded, so that risk is gone:*
-  `[weapon_id, rounds_carried, refire_interval_s, min_range_m, max_range_m]`, read out of the
-  builder `FUN_004b59b0` ([`docs/org/aiPilot/aiWeapons.md`](docs/org/aiPilot/aiWeapons.md),
-  census in `analysis/ai-ordnance-census/`).
-  ⚠ Five base defs (`firebrand`, `bloodhawk`, `brigand`, `fury`,
-  `autogyro`) author fields 3 and 4 transposed against all 25 militia variants, `200, 30` against
-  `30, 200`, so they run a 200-second ordnance refire. That is shipped data; carry it, do not
-  "fix" it.
-  *The paint keys are decoded too.* `FUN_00479240` parses `paint_pattern` (`+0x220`),
-  `paint_decal1..3` (`+0x230`/`+0x234`/`+0x238`) and `paint_color1..3`
-  (`+0x23c`/`+0x248`/`+0x254`, three components each) into fixed slots in authored order, and
-  `FUN_0047c210` resolves a spawn's scheme **per field** against a per-instance override: a decal
-  falls back to the def below `-1`, a colour component on any negative, so an AI aircraft with no
-  override wears its own def's scheme. Write-up:
-  [`docs/org/paint.md`](docs/org/paint.md).
-  *⚠ Trap, handled:* `stock_loadouts.json` holds the eleven `p*` defs alone, so an AI def name run
-  through it disarms the plane. `FlightRoster` binds the def's own fit first, falls back to the
-  table, and says so in the log when neither arms the plane.
-  *Size:* what remains is the cockpit confirmation plus the two loose ends above (`dare_devil`, the
-  one-pylon-per-entry reading).
-  *Cross-refs:* `BL-386` (the damage half, landed and closed 2026-08-16,
-  `git log --grep=BL-386`; this builds on the `PlaneStats.AiDefName` seam it left),
-  `docs/formats/vehicle.md` (the def-family census), `docs/formats/instant-action.md` (the militia
-  table's provenance).
-  *The AI ordnance trigger reads the fit now.* `AiRocketeer` takes each pylon's own engagement band
-  and refire interval, and stamps both timers a launch stamps in the original: the vehicle-wide
-  lockout that blocks ordnance of any kind and the launching slot's own next-ready. `AiGunner` takes
-  a bound group's window the same way. Launch rates are worth tuning from here, and the
-  `DAMAGES_ZEPPELIN` rule is exercisable in the cockpit rather than only in `AiRocketeerTests`.
-
-- `BL-639` `[Bug]` `[Blocked: CAP-47]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: data]` `[CM14]` **CM14 (C2B/M04): the Gemini's gasbags do not burn out
-  completely, so the zeppelin never dies by its gasbags.** *Evidence:* reported at the controls and
-  re-confirmed on the merged build. The authored death is a count:
-  `extracted/C2B/M04/mis_anim/geminizep-all_gmzep_gasbags.json` carries
-  `activ_prereq_min_to_satisfy: 3` over five `finish_gmzepgasbagN` animation prerequisites, and its
-  `call_all_bags` sequence invalidates itself, calls `killgmzep` and runs the remaining gasbag
-  animations, so three finished gasbags of five kill the Gemini and the rest burn for show. That is
-  the `MINIMUM_TO_SATISFY`/`ANIMATION_LIST` prerequisite form CSVM's reader does parse, with
-  `ZeppelinRuntime` its only consumer, so the gate exists in the port; what does not arrive is a
-  finished gasbag. *What to settle first:* whether the fire's own animation stops short, or whether
-  it completes and the `finish_*` state is never raised. Those are different faults with the same
-  symptom, and only the second is a prerequisite question. `BL-599`'s closing commit is the nearest
-  precedent, a zeppelin that stopped burning out because the compiled prerequisite state is bit 0
-  of `active_raw` (`git log --grep=BL-599`); read it before starting.
-  *⚠ Traps:* do not judge a fix by whether the mission ends sooner. The mission's own progress gate
-  is the cannons, not the gasbags: primary 3 completes when five of six `deploy_gmzep_lbroadNN`
-  animations go `INVALID`, and the briefing says so outright (`MSG_BRF_HWM4_OBJ3`, "Destroy the
-  GEMINI by shooting the open cannon hatches"). Gasbags are not an authored substitute for that.
-  *Blocked:* what a finished gasbag looks like in the original is unfilmed, so "completely" has no
-  reference to compare against; `CAP-47` is that clip.
-  *Cross-refs:* `BL-640` (the same zeppelin's cannons); the other prerequisite form, node state, is
-  parsed on both paths and enforced at `Start` (`git log --grep=BL-575`).
-
-- `BL-931` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` **A pirate zeppelin's
-  hull reads as a see-through hole where a gasbag section lost a panel; the culling and
-  partial-damage halves of the first reading are disproved and the state the shot was taken in is
-  still unidentified.** *Evidence:* reported at the controls on the tarot-card livery
-  (`.scratch/orch-2/BL-931/gasbag-hole.png`), a panel-shaped opening in the hull ahead of the card
-  art. Three things are settled from the shipped data and headless renders. The culling half is
-  wrong: every `panel*` polygon ships `show_backface` clear and every `burnp*` polygon ships it set,
-  the truss ships both, and `SceneBuilder` already answers each with `cull_front` or `cull_disabled`
-  per polygon rather than per named material, which the `zeppelin-panel-swap` suite pins on all
-  fifteen meshes of `gasbag1`. The partial-damage half is wrong too: a gasbag zone carries hit
-  points and one destroy anim and draws nothing until it reaches zero, and a broadside bay's own
-  `DAMAGE_SEQUENCE` draws smoke alone, so the panel swap can only come from a death. The swap is
-  `pzepleft_gasbagN` / `pzepright_gasbagN`, which a bay's death sequence calls at +1 s and +8 s;
-  its authored pairing sends `burnpl3` to the top right while `fade_outpl3` removes `panelleft3` at
-  the top left, so that one position carries no skin from about 20 s into a side's burn until the
-  finish at 36 s, with `gasbagleft` and `structureleft` switched on behind it. *What is not
-  settled:* the reported shot carries no fire, no burnt skin and no envelope behind the opening,
-  which no headless reproduction of that burn matches, so it is unknown which state produced it.
-  *⚠ Traps:* `BL-735` (closed) traced an earlier see-through reading on the belly to a switched-off
-  MP zeppelin, so a switched-off section is still the first thing to exclude. *Playtest:* shoot one
-  broadside bay off the C2B/M04 pirate zeppelin, watch that section from above and from the side
-  through the whole burn, and say whether the opening shows sky or the yellow gasbag envelope behind
-  the truss. *Cross-refs:* `BL-639` (the Gemini's gasbags not burning out),
-  `git log --grep=BL-672`, `git log --grep=BL-713`, `git log --grep=BL-735`.
-
 ## Weapons & combat
 
 - `BL-233` `[Feature]` `[Blocked: M4]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **Extend the proximity fuse to zeppelins (and any other M4 flyer) when they get
@@ -342,7 +218,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (b) a world-armed fuse re-detonates every rocket 15–50 m short of terrain (the 2026-08-02
   failure), never widen the mask to world bodies.
 
-- `BL-286` `[Tuning]` `[Blocked: CAP-39]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The first-person muzzle-light energy is picked, not
+- `BL-286` `[Tuning]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: footage]` **The first-person muzzle-light energy is picked, not
   measured, and reads much dimmer inside the canopy than the original's.**
   *Evidence:* `MuzzleLightEnergy` **2.5** (`CSVM/src/Flight/Projectile.cs`) is the one figure both
   `muzzle_burst` light branches take, because no def carries an energy at all: the two big
@@ -350,13 +226,15 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   colour) start at the third-person stand-in's brightness. The magnitudes were signed off in
   `--weapon-lab`, a static A/B that settles the third-person look only, and at the controls the
   interior lights far more weakly than the original's.
-  *Fix shape:* one constant. With `CAP-39` in hand, read the lit interior's frame luminance at the
+  *Fix shape:* one constant. The calibration clips are in the library:
+  `OriginalScreenshots/Videos/CAP-39 1.mkv` (Devastator) and `CAP-39 2.mkv` (Bloodhawk), the
+  original's cockpit view with the guns held. Read the lit interior's frame luminance at the
   light's peak against the unlit frame on both sides at a matched pose, and fit the energy to the
-  measured ratio.
-  *⚠ Traps:* **`CAP-39` is not filmed, so do not raise the energy on an estimate.** The only
-  cockpit-view clips under `OriginalScreenshots/` are `CAP-02 Cockpit Second10.mp4` and
-  `CAP-02 Second12 cockpit with head turn.mp4`, canyon runs from the flight-model capture with no
-  gunfire in them, so there is no frame to fit against. The pick-one single-quad flash reading
+  measured ratio; the emphasis to match is the canopy struts above the head, which is where the
+  original puts the flash at the controls. Any windshield bullet-hole decals in the same clips ride
+  along for `BL-932`'s glass-hole judgement.
+  *⚠ Traps:* **do not raise the energy on an estimate**; the two clips are the only cockpit-view
+  gunfire in the library, so the fit is theirs. The pick-one single-quad flash reading
   (+ `_muzzle1`→`_muzzle2` flip) was implemented and rejected at the controls; do not re-land it
   without new footage evidence.
   *Note, the flash shape:* the def's 3-way `RANDOM_WEIGHT` roll (30/80/140°) may be rendered
@@ -364,9 +242,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   authored form itself a triad at those exact angles. Ours uses 120° spacing with one continuous
   roll; a 30/80/140° triad is one constant away and could be A/B'd against `MuzzleFlash1-3.png` if
   the flash shape is ever revisited.
-  *Cross-refs:* `CAP-39` (the clip that calibrates the brightness).
+  *Cross-refs:* `BL-932` (the canopy holes, which the same clips may show).
 
-- `BL-289` `[Tuning]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Gun-impact looks (A2/`BL-203`)**,
+- `BL-289` `[Tuning]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: footage]` **Gun-impact looks (A2/`BL-203`)**,
   ⚠ **The six `DirtDebris*` constants left this entry: the dirt-chip effect they tuned was deleted
   (`BL-313`, closed), so there is nothing to A/B.** Dirt now takes the single spark.
   What remains here is the building ricochet:
@@ -385,10 +263,17 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ricochet burst stands in for it. The suite `impact-building-surface` holds both halves, and the
   one defect the decode localised is fixed: a row the effects runtime does render (`wep_02`'s
   `large_fireball`) no longer draws the invented burst on top of it.
-  *Remaining:* the five constants are a look question and still unjudged, and the only place that
-  can judge them is a strafing run on a **C1 hangar**; `PT-128` is that flight.
-
-  *Cross-refs:* `PT-128` (the flight that judges the ricochet), `docs/org/weaponImpact.md`.
+  *Judged at the controls, and the reading above is contested by it.* The C1 hangar strafe drew
+  no sparks in CSVM, and the user's account of the original is "the original in the C1 airport
+  doesn't spark either, but has debris", the same wall debris `30 Slu building.mp4` shows on the
+  film lot. So the spark burst is not what the hangar wants, and the decode's split (film lot plays
+  `3040slug_gunhit`, hangar reaches the install-missing `bld_damage.flt` and so a stand-in) no
+  longer explains what the original shows on the hangar. Re-decode it against that clip: what the
+  original renders on a `buildings`(11) surface whose row binds a missing effect, whether a
+  fallback row or the `default` row's debris is taken, and whether the film lot and the hangar in
+  fact play the same thing. If they do, the five ricochet constants go with their burst and the
+  hangar takes the authored debris; `PT-128` then judges the debris, not a spark.
+  *Cross-refs:* `PT-128` (the flight that judges the result), `docs/org/weaponImpact.md`.
 
 - `BL-693` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The rebinding screen's three axis-capture constants are
   picked, not measured.** *Evidence:* `ControlCapture.RestBand` **0.25**, `MoveThreshold` **0.6** and
@@ -508,6 +393,26 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   fresh (`GodotWorldQuery`), so a re-measurement of the tick meets a different allocator than C22's.
   *Cross-refs:* `PLAN-M5-polish-6` C22, `docs/verification.md` PERF-1, PERF-19, PERF-20, PERF-23
   and PERF-34.
+
+- `BL-959` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Flying with the mouse is far too sensitive:
+  the captured cursor adds raw mouse pixels with no scale, so a high-DPI mouse crosses the pane in
+  a few centimetres.** *Evidence:* judged at the controls under the Fly scheme: "works but much too
+  sensitive, needs a deadzone and larger mouse movements for input". The law itself is decoded and
+  right: `MouseFlight.Read` gates each source at the original's 0.1 of the pane's half-extent and
+  rescales the rest to full deflection, and `MouseFlight.Offset` reads the cursor's offset from the
+  pane's middle. What changed under the pointer capture is where the cursor comes from:
+  `MouseCapture.StepCursor` folds each motion event's raw relative pixels into the virtual cursor,
+  so the travel to saturate is half the pane in mouse counts, about 960 counts on a 1920-wide pane,
+  which a 1600 dpi mouse covers in 15 mm. The original read the desktop pointer over an 800x600
+  window at a 1990s count rate, so its 400 counts were a far larger hand movement. *Fix shape:*
+  a pixels-to-pane scale on the captured cursor's travel, chosen so a full deflection is a hand
+  movement of a few centimetres, and a centre band wider than the decoded 0.1 on the captured
+  path (the decoded value stays on the desktop-pointer path, since it is the original's). One
+  constant each, on `MouseCapture`, with `MouseFlightSuites` pinning the travel-to-deflection
+  ratio. *⚠ Traps:* do not touch `MouseFlight.Gate` or its 0.1: that is the decoded law and the
+  desktop path still runs it. The slider that exposes the scale is `BL-960`; land a sensible
+  constant first so the scheme is flyable without it. *Cross-refs:* `BL-960` (the slider),
+  `BL-961` (a scheme change reaching the live seat), `docs/controls.md` ("Flying with the mouse").
 
 ## Environment & world
 
@@ -755,42 +660,24 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   for a `LIGHT_STATE` that authors neither, as `he_light` does. *Cross-refs:*
   `docs/architecture/Mech3.md` (`WorldLights`).
 
+- `BL-962` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Under Enhanced Graphics the impact burst's
+  upper ring is turned a quarter turn off the rocket's trail instead of facing back along it.**
+  *Evidence:* the re-basing that closed `BL-293` (`git log --grep=BL-293`) hands the upper ring a
+  basis whose Y is the reversed flight vector, and the suite pins that Y within half a degree of it.
+  At the controls the ring's direction does change with the dive, but it stands edge-on to the
+  trail, "not toward the rocket trail but turned 90 degrees": the ring's plane is rotated across
+  the flight path rather than facing it. The four screenshots of the C1 airfield runs are
+  `Z:\CSVM\screenshots\crimsonskies_2026-09-18_15-56-04-789.png` through `-56-22-573.png`; the
+  last shows the ring standing as a vertical fan beside the burst. *Fix shape:* the ring's own
+  authored axis is not world up. `ProjectilePool.UpperRingOrient` rotates world up onto the
+  reversed velocity, which is right only if the ring's disc lies in the XZ plane of its own node;
+  read `he_ring1`'s mesh or the surface-animation orientation the faithful path applies and rotate
+  the basis's correct axis, then re-pin the live case in the impact-orientation suite to assert the
+  disc normal, not the basis Y. *⚠ Traps:* Enhanced only; the faithful presentation's flat ring is
+  the decoded rule and stays. Do not widen `OrientedCallAnimNames`. *Cross-refs:*
+  `git log --grep=BL-293` (the landing whose axis this corrects).
+
 ## Audio
-
-- `BL-252` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The airframe rattle past
-  `1.0× fd_speed`** (`snd_planeshake`). The sound is now named and its law read out of
-  `crimson.exe`, and the fix that follows from the decode has landed; what is left is one listen.
-
-  *Evidence:* `FUN_0048c470`'s second overspeed block (`0x0048d209`) starts and per-frame refreshes
-  the `snd_planeshake` loop under exactly three conditions: the vehicle is the one the camera is
-  watching, the definition resolved at startup, and `speed_range[0] × fd_speed <= speed`
-  (`0x0048d227`–`0x0048d242`), which on the shipped data is `1.0× fd_speed`, the foot this entry
-  measured at the controls. The call passes no volume of its own, so the loop plays at the
-  hardcoded `1.0` of the keep-alive helper times the definition's `VOLUME`, which `snd_planeshake`
-  does not author. That is the same number the engine slot's flat volume curve hands the same gain
-  chain, so **the rattle and the engine sit level**.
-  ⚠ **The `rattle` block's ramp is authoring the game ignores.** `volume_range` and `speed_range`'s
-  second value land in globals with a write xref and no read anywhere in the image
-  (`0x0071c33c`/`0x0071c340`/`0x0071c348`); only `0x0071c344` is read. The loop is a hard on/off,
-  not a `0→1` lift over `1.0`→`1.2× fd_speed`. Full addresses: `docs/org/shakes.md`.
-
-  *Fix shape:* landed. Ours evaluated the unread ramp, so at the `1.02`–`1.05×` a dive actually
-  reaches the rattle played at a few percent of level, which is the "almost inaudible" this entry
-  recorded. `PlaneStats.RattleSpeedGate` now carries the one number the original reads,
-  `EngineAudioCurves.Rattle` is the gate, and the `engine-note` suite pins it. No mix constant
-  moved and none should: `1.0` is decoded, not chosen.
-
-  ⚠ **Do not read a threshold off the airspeed dial: the gauge art, including its red arc and its
-  `300` mark, is the same for every plane** and so cannot express a per-plane limit, a trap this
-  entry walked into once already. ⚠ The subject was the `prop_sound` whine for a long time and that
-  was wrong: no shipped def names `prop_sound`, so slot 1 is unassigned install-wide and the whine
-  never sounds for anybody. Anything this entry once said about a whine level is void.
-
-  *Playtest after fix:* `PT-126`, which now only has to confirm the port by ear: whether the
-  rattle at full level reads like the original's at the same foot, and whether the cockpit case
-  differs, since the original's cockpit engine is damped where ours is not so the ratio cannot be
-  read across from the outside view.
-  *Cross-refs:* `PT-126`; `docs/org/shakes.md` (the decode), `docs/formats/sounds.md` (the block).
 
 - `BL-269` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The 3D sound falloff between the authored `RANGE`
   radii is the original's own curve now, and wants one pass by ear.** The approximation is gone:
@@ -818,12 +705,18 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   entry that drives it "plausibly an authoring leftover", present on 1 of 11 aircraft, so the
   capture may delete the feature rather than tune it.
 
-- `BL-285` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Where between one notch and five the
-  throttle-slam plume should start: `ThrottleSlamSmoke.SlamThreshold` 0.25 is a stand-in nobody has
-  flown.** *Evidence:* the CAP-21 footage bounds the gate at its two ends only, a single 1/8 step
-  (0.125) never fires and idle to 5/8 (0.625) does, leaving the 2/8 to 4/8 band unobserved; 0.25, a
-  two-notch jump, is the smallest round number consistent with both. *Fix shape:* fly `PT-127`,
-  then move the constant to wherever the plume starts reading as a slam response, or leave it.
+- `BL-285` `[Tuning]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: footage]` **The throttle-slam plume streams the
+  wrong smoke, and its threshold cannot be judged until it streams the right one.** *Evidence:* the
+  plume now fires at the controls, and what it draws is the `nitro_boost` def's own `nitropuffN`
+  puffers, which `ThrottleSlamSmoke.Build` borrows from the boost by construction, where the
+  CAP-21 footage shows black exhaust smoke ("the nitro smoke, not the black smoke from the
+  original"). The nitro puffers were a stand-in: nothing in the tree decodes which emitter the
+  original starts on a slam. *Fix shape:* decode first. Find the original's throttle-rise arm (the
+  same throttle read the slam gate ports) and which puffer or effect it starts, port that emitter
+  from the exhaust markers, then fly `PT-127` for the threshold. The gate stays: the CAP-21 footage
+  bounds it at its two ends only, a single 1/8 step (0.125) never fires and idle to 5/8 (0.625)
+  does, leaving the 2/8 to 4/8 band unobserved; 0.25, a two-notch jump, is the smallest round
+  number consistent with both, and `PT-127` moves it or leaves it once the smoke is the decoded one.
   ⚠ Traps: the plume was unreachable at the controls until the gate moved onto the sim step. It was
   driven from the rendered frame while the lever slews only inside the flight step, so at the 120
   rendered frames a second a realtime session holds over the fixed 60 Hz step it read the throttle
@@ -898,6 +791,24 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   and for the tiered damage calls while you take and deal hits. *Cross-refs:*
   `docs/formats/combat-voice.md`, `git log --grep=BL-934`, the saved Voice level (`Utils/AudioMix.cs`, the `audio-buses`
   suite) if the lines dispatch and stay inaudible.
+
+- `BL-955` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: footage]` **After heavy damage the engine sound stays
+  on the sputter loop for good; the original's engine goes out, sputters, restarts and then runs
+  while stuttering.** *Evidence:* `FlightAudio.UpdateEngineSlot` swaps the engine slot onto
+  `damaged_engine_sound` once `EngineAudioCurves.EngineDamaged` reads the worst zone under 25% or
+  the engine dead, and holds it there; the only other state is the healthy loop, so a damaged
+  aeroplane sputters until it lands or dies. The original's sequence at the controls is out,
+  sputter, start, then the running loop with a stutter over it, and `CAP-14 Building crash
+  Balmoral.mp4` / `CAP-14 Building Hard graze Balmoral.mp4` carry it at about 25 s in, which is
+  the reference. *Fix shape:* decode the orchestration. The damaged-swap re-arm timer
+  (`DamagedTimer`, 3 to 5 s) is already the decoded piece of it and is a clue that the original's
+  slot does not simply hold: read what `FUN_0048c470`'s engine block and the disabled-systems mask
+  do across the engine-out, the restart and the stutter, which sounds each phase starts
+  (`docs/formats/vehicle.md`, "What makes an airframe damaged", is the starting page), and port
+  the phases as states of the engine slot with their own cues. *⚠ Traps:* `AiEngineAudio` shares
+  `EngineAudioCurves` with the own-ship path; keep the two agreeing. Do not tune a phase length by
+  ear where the executable has the number. *Cross-refs:* `docs/architecture/Flight.md` (the
+  engine-audio slot maths), `docs/org/shakes.md`.
 
 ## Cameras & views
 
@@ -1029,6 +940,37 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the turn wants a decode of what drives the head in mode 6 beyond the lean. *⚠ Traps:* the
   forward-velocity drop in the lean is C22's port decision and reads right; do not widen the lean
   to fake a turn. *Cross-refs:* `BL-784` (c), `PLAN-cockpit-view` C22, `docs/org/cameraViews.md`.
+
+- `BL-963` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **The two head-look modes: in J (smooth)
+  a held numpad direction pans continuously and the head stays on release; in K (snap) it snaps and
+  returns; the mouse obeys the same two rules.** *Evidence:* the decode in
+  `docs/org/cameraViews.md` says state 1 integrates the hat angle at 2 rad/s and a frame with no
+  input leaves the angles where they are, while state 0 maps the direction to a fixed angle and
+  zeroes on release. `HeadLook.Step` ports the selectors (K and J write the mode on their press
+  edge) but reads the numpad through `SnapTargets` in both modes, so J changes only what the mouse
+  does. The user's account of the original at the controls: "J, smooth mode: pressing a button the
+  camera moves continuously and stays if the button is released; K, snap mode: the camera moves to
+  the position and snaps back on key release. There is no mouse look in the original." *Fix shape:*
+  in `HeadLook`, route the numpad direction through the free-look integrator when the mode is
+  FreeLook and through the snap targets when it is Snap, exactly the decode's two arms; the head
+  parks on release in J and returns in K. The mouse is a remake addition and keeps the same two
+  rules: in J a pan parks the head where it pointed and J or numpad 5 recentres it; in K the head
+  springs back to straight ahead when the free-look control is released. *⚠ Traps:* the mode is
+  written once per frame and the last writer wins (`SelectMode`); a numpad direction must not
+  itself write Snap in J, or the pan can never happen. Autohead never runs in free-look; keep that.
+  `docs/controls.md`'s numpad and free-look rows change with this. *Cross-refs:*
+  `git log --grep=BL-432` (the selectors), `docs/org/cameraViews.md` (head-look controller).
+
+- `BL-966` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: feel]` **Which camera the original's Danger
+  Zone photograph is taken from.** *Evidence:* both remake cameras (`StuntCapture` for a stunt run,
+  `CampaignSnapshot` for a campaign mission) photograph the pilot's own pane as it is drawn on the
+  latch frame. The user's recall of the original's scrapbook photographs is that they "look like
+  taken from an outside position, not the chase view". The scrapbook format decode names the file
+  and the forced 164x123 region but not the eye. *Deliverable:* read the original's capture call
+  (the writer of the `.PN_` file the commit sweep `FUN_004072a0` renames) and say whether it grabs
+  the back buffer as drawn or poses a camera of its own first, and if the latter, from where. If a
+  camera is posed, mint the port with the pose. *Cross-refs:* `BL-964` (the same latch's frame
+  cost), `docs/formats/campaign-screens.md` ("The danger-zone slot"), `docs/org/debrief.md`.
 
 ## HUD & UI
 
@@ -1168,6 +1110,72 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   nearest existing art), `MenuSeatDevices.cs`, `PlayerSetupFeature.cs`,
   https://discussions.unity.com/t/local-multiplayer-player-join-config-screen-using-ui-toolkit/1701038
   (the pattern as other local co-op games ship it, asked for by name).
+
+- `BL-953` `[Cleanup]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: spec]` **The pause boards draw no control
+  hints.** *Evidence:* the original's pause sheet carries none, and the user asks for them gone.
+  `OriginalPauseBoard` composes a `ControlHintBar` from `BoardMenuView.Legend` and places it under
+  the strips; the built-in pause board draws the same legend through `BoardMenuView`. Both go.
+  *Fix shape:* drop the hint from `OriginalPauseBoard` (the `_hint` control, `ComposeHint`,
+  `PlaceHint` and `PauseScreens.HintBox`) and stop `BoardMenuView` building its legend for the pause
+  board; the menu boards that still want a legend keep it. *⚠ Traps:* a suite may read the hint's
+  node; move the assertion rather than the hint. *Cross-refs:* `docs/menu-presentations.md`.
+
+- `BL-954` `[Cleanup]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: spec]` **The menu presentation row leaves both
+  Options screens; without a flag the menu is always the Original presentation.** *Evidence:* the
+  user's call, "remove the Menu Option combo box for now, only original without CLI flags". Today
+  `OriginalOptionsScreen` carries the `PRESENTATION` dropdown, `LaunchMenu`'s Options page a
+  "Menu presentation" stepper, and `Launcher` resolves the saved `MenuPresentation` behind
+  `--force-builtin` and `--presentation=`. *Fix shape:* remove both rows; resolve the presentation
+  as force-Built-in, then the `--presentation=` flag, then Original, ignoring the saved word
+  (leave it in the file, unread, so an older file still loads). The two flags stay the only doors
+  to the built-in presentation. *⚠ Traps:* `MenuOriginalSuites` and `MenuLaunchReturnSuites` walk
+  the row; retarget them. `BL-782` counts seven steppers on Built-in's Options screen; it becomes
+  six. *Cross-refs:* `docs/cli.md` (`--presentation`, `--force-builtin`), `docs/menu-presentations.md`.
+
+- `BL-958` `[Bug]` `[M]` `[Next: decode]` `[Impact: low]` `[Evidence: feel]` **The spyglass disc's picture still steps in a
+  hard turn.** *Evidence:* judged at the controls after the eye moved onto the interpolated draw
+  pose and the disc's camera dropped the own aeroplane's layer (`git log --grep=BL-906`): the
+  picture inside the disc moves in steps with the target rather than smoothly, while the disc
+  itself holds and the own aeroplane no longer crosses it. So the remaining source is the disc
+  camera's aim, not its eye: the target it looks at is read from a pose that is a physics step
+  behind, or the aim is quantised by the bearing it is composed from. *Fix shape:* log the disc
+  camera's aim and the target's drawn pose per rendered frame in a hard turn and find which one
+  steps; then feed the aim the same interpolated pose the eye takes. *⚠ Traps:* the
+  `spyglass-marker-hud` suite runs in one frame and cannot see a per-frame step; a live `--fly`
+  probe with a log line is the instrument. *Cross-refs:* `git log --grep=BL-906`.
+
+- `BL-960` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: spec]` **A mouse sensitivity slider on the
+  Controls page, for the Fly scheme.** *Evidence:* asked for at the controls ("perhaps a slider in
+  options") once `BL-959` lands its scale constant. The Original Controls page already carries the
+  Mouse row (`CP_S_MOUSE`'s slider-slot art) whose horizontal placement `BL-942` is still fitting.
+  *Fix shape:* a per-seat value in `BindingProfile` beside `MouseFlying`, saved by `BindingStore`,
+  applied as the multiplier on `BL-959`'s scale; a row on the Original Controls page under the
+  Mouse row, and the same value on Built-in's Controls screen in its stepper convention.
+  *⚠ Traps:* remake-only, so nothing to decode; the default must be `BL-959`'s constant so a saved
+  file without the field flies as before. *Cross-refs:* `BL-959`, `BL-942`, `BL-961`.
+
+- `BL-961` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **A Controls change accepted over the pause
+  reaches the profile and not the flying seat, so the mouse scheme changes only on restart.**
+  *Evidence:* "changes to mouse Fly/Look only take hold on mission restart, not during flight".
+  `FlightController.MouseFlying` is written once, by `FlightControllerBuild` from the profile, and
+  by nothing later; the pause page's ACCEPT CHANGES writes `seat.Profile.MouseFlying` and the
+  store. Any other value the seat copies at build rather than reads through the profile has the
+  same gap. *Fix shape:* on accept, push the profile back into every live seat the change belongs
+  to (the mouse scheme, and whatever else `FlightControllerBuild` copies), or make the controller
+  read the profile's field each frame. Audit the copy list in `FlightControllerBuild` for the rest.
+  *⚠ Traps:* the seat's capture decision (`WantsMouseCapture`) reads the scheme, so a live flip
+  must re-run it on the next unhalted frame. *Cross-refs:* `BL-959`, `BL-960`.
+
+- `BL-965` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: spec]` **The Original wrap-up screen shows the
+  stunt run's Danger Zone photographs.** *Evidence:* `StuntScoreboard` draws the run's latched
+  shots as a thumbnail strip in marker order, but the Original presentation's wrap-up
+  (`OriginalWrapupScreen`) draws only the decoded rows and the further lines, so a run flown under
+  Original ends with no photographs on screen ("no thumbnails on the Original UI scoreboard seen").
+  The original's own wrap-up carries none; the strip is a remake addition the user wants on both.
+  *Fix shape:* carry the shots into `IaWrapupSnapshot` and draw the strip on the Original page in
+  the band under the rows, at the same 164-pixel thumbnail width, without moving the decoded rows.
+  *⚠ Traps:* `BL-943` to `BL-945` are reshaping that band; land beside them, not under them.
+  *Cross-refs:* `BL-964` (the shots' frame cost), `BL-943`, `git log --grep=BL-256`.
 
 ## Splitscreen
 
@@ -1337,51 +1345,51 @@ usual.
   timers", "The third volume, and where the leash is read"), `BL-522`'s closing commit
   (`git log --grep=BL-522`).
 
-- `BL-699` `[Perf]` `[Owed-playtest]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: trace]` **The wave's aeroplanes are built in the
-  loading screen and the launch frame binds one; whether the hitch a player feels is gone is the
-  author's to say.** *Evidence:* the author feels a hitch on every wave spawn in every mission, not
-  only CM18's generator launches. The launch frame is measured by `ai-wave-launch-hitch`
-  (`CSVM/src/Testing/AiWaveLaunchHitchSuites.cs`), which orders the pool exactly as a launch does,
-  holds the load screen's build in a window of its own, then drives C4/M03's `cargozep1` through
-  `FlightRoster.SpawnAi` over the mission's own built world and times each sim step on the wall
-  clock `HitchMonitor` reads. The median launch frame went from 62.6 ms to 17.0 to 17.8 ms at 1P
-  and from 65.6 ms to 17.2 to 18.4 ms at 4P, the cold first launch from 197 ms to 39.6 to 42.1 ms
-  at 1P and from 87.4 ms to 19.2 to 19.6 ms at 4P, and the worst frame carrying no launch from
-  73.5 ms to 24.5 ms at 1P and from 48.3 ms to 13.0 ms at 4P; five launches take five prepared
-  aeroplanes and miss none. The median now sits under `HitchMonitor`'s own 40 ms floor, so the
-  suite's bars are regression bars at the new level (median 50 ms, worst warm launch 110 ms, worst
-  idle frame 80 ms, each about 1.4x the worst reading over repeated runs, alone and inside the
-  sharded engine stage) and the floor is reported beside them rather than asserted: the readings
-  that still cross 40 ms are the frames a gen-0 collection lands on, which a bar at the floor would
-  fail on (`docs/verification.md` PERF-33).
-  *What is in place:* `Session/AiAirframePool.cs` holds one slot per airframe and livery, ordered
-  off the generator's own roster block at build time and filled by `GameSession.StepOwedLoad`, one
-  aeroplane a frame behind the load screen, so that screen is a real yield of several frames. The
-  launch frame keeps only the bind, the loadout and the tree insert. A quiet frame in play refills
-  one, never a frame a crash rig or a launch already builds on (PERF-32), which is what covers
-  Instant Action's waves and a campaign burst deeper than its block. The crash rig's
-  `PrewarmEmitters` is a resumable slice (`AnimRuntime.PrewarmSlice`), so a rig's 194 emitters
-  arrive about twelve a frame instead of all on one, and `PlaneCollider` hulls are shared per
-  airframe with `PlanePainter` shared per airframe and livery (PERF-22).
-  *What still costs:* the refill build is 19 to 28 ms, nearly all of it `PlaneBuilder.Build`'s mesh
-  instancing, so one refill still overruns a 60 Hz frame even though it now lands on a frame
-  carrying nothing else. Sharing the airframe's immutable mesh parts, or splitting that build along
-  its own mesh grain (PERF-25), is what would make a refill fit; until then a wave deeper than its
-  ordered block, or two waves inside a second, is where a stutter could still be felt.
-  *⚠ Traps:* the pool's claim path produces the same tree an in-place build does, asserted node by
-  node by `ai-airframe-pool-claim`; the goldens that fly AI aircraft did not move and must not. The
-  spawn index still feeds the spawn jitter (`Rng.NewSystemRandom(Rng.Spawn, index, 0)`) at launch
-  and is never allocated ahead, since that moves `c1-flight-kill`. C4/M03 cannot be made to launch
-  a wave headlessly: `cargozep1` takes its credit from the mission script's callback 800, which
-  `--wake-generators` does not grant, so the suite and not a `--det` probe is the launch-frame
-  instrument. The sim clock lags wall time on physics-bound late missions, so read hitch lines in
-  sim frames under `--det` (`docs/verification.md` PERF-12/13). The instrument numbers are with
-  nobody at the controls; the author's feel report is the acceptance.
-  *Playtest after fix:* fly a mission whose waves launch from a generator (C4/M03's `cargozep1`
-  after the cargo objective, or CM18) and watch a wave arrive: the arrival frame should pass
-  without a stutter, and the seconds between waves too.
-  *Cross-refs:* `BL-434` (the per-viewport splitscreen cost the same pass profiled), `BL-657`
-  (CM18's generator launching at the wrong time, which is where the measured case is flown).
+- `BL-956` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` `[CM01]` **CM01's cargo zeppelin keeps
+  flying after its propane tanks are destroyed, wandering under power instead of crashing.**
+  *Evidence:* at the controls the zeppelin is "not really crashing but flying random after
+  destroying the propane tanks": it keeps steering, off its authored path, so the crash never takes
+  over. The mission authors `cargozep1_crash` beside its gasbag and engine sequences
+  (`extracted/C3/M01/mis_anim/cargozep1-*.json`), and the objective script retargets from
+  `propane` (`docs/formats/objectives.md`). *Fix shape:* decode the chain from the propane
+  objective's completion to the `cargozep1_crash` call and find which link CSVM drops: the
+  callback the objective posts, the prerequisite the crash sequence gates on, or the AI path that
+  is never stopped when the crash starts. A headless `--campaign` run with the tanks destroyed by
+  probe, logging the sequence starts, is the instrument. *⚠ Traps:* zeppelins have no crash
+  avoidance and an AI path keeps driving one until something stops it (`docs/org/aiPilot.md`), so a
+  crash that plays without stopping the path looks like this too. *Cross-refs:*
+  `docs/formats/anim-definitions.md`, `docs/org/sequences.md`.
+
+- `BL-957` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: data]` **An allied roster block that names its own
+  def wears that def's paint, so the Black Swan flies her own livery in CM16 and CM19.** *Evidence:*
+  the livery routing that closed `BL-394` withholds the player militia's default pattern from every
+  team but the player's, and lets a def's authored scheme through everywhere else; on the player's
+  own team nothing changed, so a friendly block with a def of its own still takes the player's
+  colours. CM16 (C4/M01) flies the Black Swan on the player's side and she wears the Fortune
+  Hunters' pattern ("Black Swan in CM16 should have her own livery, not that of the fortune
+  hunters"); `bsfury` authors `paint_pattern blckswan`. *Fix shape:* in
+  `AiFlightAssembler.MilitiaScheme`, an ally whose block resolves to a def that authors a
+  `paint_pattern` wears it; a plain wingman block with no def of its own keeps the player's
+  colours, which is the shipped-skins reading for the player's team. Pin it in
+  `CampaignMilitiaLiveryTests` over CM16's and CM19's rosters. *⚠ Traps:* the `bswingman_N` blocks
+  are the escort family (`docs/architecture/Flight.md`); check which def they resolve to before
+  assuming every friendly Fury is hers. *Cross-refs:* `git log --grep=BL-394`,
+  `docs/org/paint.md`.
+
+- `BL-964` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **A Danger Zone photograph freezes the frame
+  it is taken on, and one such freeze crashed the game.** *Evidence:* "strong hitch/freeze while
+  screenshotting, had a crash because of it". `StuntCapture.Latch` calls the pane delegate, which
+  is `GetViewport().GetTexture().GetImage()`, a synchronous GPU readback of the full pane, then
+  `SavePng` on the same frame, then the thumbnail resize; `CampaignSnapshot.Stage` does the same
+  readback and write for a campaign zone. At 5120x1440 that is a 29 MB readback and a PNG encode
+  inside one rendered frame. *Fix shape:* keep the latch on the crossing frame but move the cost
+  off it: request the readback and encode the PNG and the thumbnail on a worker, with the shot's
+  record completed when the file lands; the sting and the pass mark stay on the crossing. Find the
+  crash first: reproduce with the log and read the exception, since a readback that fails on a
+  frame still being presented is a different bug from a frame that merely stalls. *⚠ Traps:*
+  the `stunt-capture` suite photographs a synthetic frame and cannot see the cost; a live `--fly`
+  run over C4/IA1 with `HitchMonitor` on is the instrument. *Cross-refs:* `BL-965`, `BL-966`,
+  `git log --grep=BL-256`.
 
 ## Tooling, platform & docs
 

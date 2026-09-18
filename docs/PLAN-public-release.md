@@ -1084,9 +1084,6 @@ Anything A2 or a later wave closes comes off this list.
 - **In the New York chapter the lit building faces read darker than the original.** No
   workaround; it is a matter of how the shipped textures are sampled and nothing is missing from
   the world. (`BL-322`; its premise has been narrowed by decodes and it has no landing commit.)
-- **Every wave of AI aircraft arriving in a mission costs a visible hitch.** No workaround; it
-  passes in a frame or two. (`BL-699`; no landing commit, and the model build and controller bind
-  still sit on the launch frame.)
 
 ## Menus, and playing with more than one person
 

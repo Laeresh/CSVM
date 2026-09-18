@@ -60,25 +60,28 @@ public class EngineAudioModelTests
     }
 
     /// <summary>The rattle is a GATE, not a ramp: silent below the authored fraction of fd_speed and
-    /// at full level from it upward, however far past it the dive goes. A ramp here is what left the
-    /// loop inaudible at the speeds a dive actually reaches, so the flat top is the pin that
-    /// matters, not just the edge.</summary>
+    /// at its one level from it upward, however far past it the dive goes. A ramp here is what left
+    /// the loop inaudible at the speeds a dive actually reaches, so the flat top is the pin that
+    /// matters, not just the edge. The level is the port's 1.3, a chosen step over the original's
+    /// 1.0.</summary>
     [Fact]
     public void RattleGainIsAGateAtFullLevelRatherThanARamp()
     {
         var stats = new PlaneStats { EngineSound = "snd_normal", RattleSpeedGate = 1f };
 
+        float level = EngineAudioCurves.RattleLevel();
+        Assert.Equal(1.3f, level);
         Assert.Equal(0f, EngineAudioCurves.Rattle(stats, 0f));
         Assert.Equal(0f, EngineAudioCurves.Rattle(stats, 0.999f));
-        Assert.Equal(1f, EngineAudioCurves.Rattle(stats, 1f));
-        Assert.Equal(1f, EngineAudioCurves.Rattle(stats, 1.05f));
-        Assert.Equal(1f, EngineAudioCurves.Rattle(stats, 1.2f));
-        Assert.Equal(1f, EngineAudioCurves.Rattle(stats, 3f));
+        Assert.Equal(level, EngineAudioCurves.Rattle(stats, 1f));
+        Assert.Equal(level, EngineAudioCurves.Rattle(stats, 1.05f));
+        Assert.Equal(level, EngineAudioCurves.Rattle(stats, 1.2f));
+        Assert.Equal(level, EngineAudioCurves.Rattle(stats, 3f));
 
         // The gate moves with the authored fraction rather than being pinned at 1.
         var late = new PlaneStats { EngineSound = "snd_normal", RattleSpeedGate = 1.5f };
         Assert.Equal(0f, EngineAudioCurves.Rattle(late, 1.2f));
-        Assert.Equal(1f, EngineAudioCurves.Rattle(late, 1.5f));
+        Assert.Equal(level, EngineAudioCurves.Rattle(late, 1.5f));
     }
 
     /// <summary>The damaged engine is a DEFINITION SWAP on slot 0 with a pitch multiplier drawn once

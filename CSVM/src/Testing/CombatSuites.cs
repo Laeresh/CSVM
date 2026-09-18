@@ -2909,16 +2909,16 @@ internal static class CombatSuites
         float at = EngineAudioCurves.Rattle(stats, 1f);
         float over = EngineAudioCurves.Rattle(stats, 1.2f);
         ctx.Check(below == 0f, $"a hair under the gate the rattle is silent: {below:0.0000}");
-        ctx.Check(Mathf.IsEqualApprox(at, 1f),
-            $"…and reaches FULL level the moment speed meets it: {at:0.0000}");
+        ctx.Check(Mathf.IsEqualApprox(at, EngineAudioCurves.RattleLevel()),
+            $"…and reaches its full level the moment speed meets it: {at:0.0000}");
         ctx.Check(Mathf.IsEqualApprox(over, at),
             $"…with no ramp above it, {over:0.0000} a fifth of the way past against {at:0.0000}");
 
-        // Level with the engine slot, which is the relation the decode fixes: both loops take the
-        // same 1.0 into the mix, so nothing about the rattle is quieter than the engine beside it.
+        // The original hands both loops the same 1.0; the port plays the rattle 1.3x the engine
+        // slot's gain, a chosen departure, so nothing about the rattle is quieter than the engine.
         float engine = EngineAudioCurves.Engine(stats, new EngineDrive(1f, 0f, 0f), 1f).Volume;
-        ctx.Check(Mathf.IsEqualApprox(at, engine),
-            $"…and sits level with the engine slot's own gain, {at:0.0000} against {engine:0.0000}");
+        ctx.Check(Mathf.IsEqualApprox(at, engine * 1.3f),
+            $"…and sits 1.3x the engine slot's own gain, {at:0.0000} against {engine:0.0000}");
     }
 
     // A parked, stock-armed rig with its own airframe, collider and damage ledger. ⚠ The loadout
