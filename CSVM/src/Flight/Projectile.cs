@@ -50,8 +50,9 @@ public sealed partial class ProjectilePool : Node3D
 
     /// <summary>Where a <c>CRATER</c> weapon's ground strike goes: given the impact point and the
     /// struck collider, carve the bowl and flatten the decorations in it, returning whether the
-    /// carve landed. Wired to <c>CraterField.TryCarve</c> in a collidable flight; null in a build
-    /// with no world colliders, where a ground-attack round leaves the terrain alone.</summary>
+    /// carve landed. Asked only for a collider whose node carries <see cref="SceneBuilder.CanModifyMeta"/>,
+    /// which no shipped node does. Wired to <c>CraterField.TryCarve</c> in a collidable flight; null
+    /// in a build with no world colliders.</summary>
     public System.Func<Vector3, Node?, bool>? CraterSink;
 
     /// <summary>Plays a named IMPACT effect (its puffer half) at a hit point through the world-effects
@@ -2033,10 +2034,11 @@ public sealed partial class ProjectilePool : Node3D
         // feeds the resolve, so Apply performs a row already stripped of what the hook silenced.
         var suppression = RunImpactHook(weapon, point);
         // The terrain carve runs between the hook and the row's own bindings, under the hook's
-        // Effects bit. ⚠ The original refuses every carve on the struck node's CAN_MODIFY flag,
-        // which no shipped node carries, so this sink diverges whenever it fires (docs/org/craters.md).
+        // Effects bit. ⚠ Do not drop the CanModify test: no shipped node carries the flag, so it is
+        // what keeps every played round off the carve, as in the original (docs/org/craters.md).
         bool cratered = weapon.Crater && shapeIdx >= 0 && collider is not AircraftBody
             && (suppression & ImpactSuppression.Effects) == 0
+            && SceneBuilder.CanModify(collider)
             && (CraterSink?.Invoke(point, collider) ?? false);
         // The decision, taken once and read twice. `modelResolved` cannot be known before the
         // attempt, so the first resolve is only for the effect NAME to attempt; the second carries

@@ -460,14 +460,15 @@ the glow pass.
 ## B15 ☐ Scorch decals at a hit
 
 **Goal.** A rocket or bomb hit on ground leaves a dark scorch under Enhanced; the faithful path
-keeps the crater carve and nothing else.
+leaves the ground untouched, as the original does.
 
-**Evidence (confidence: lead-only).** `docs/org/craters.md`: the original carves a crater from the
-weapon's `CRATER` block and destroys clutter; no scorch texture exists in the data. Godot's
-`Decal` node projects onto the lit world; on the faithful fullbright world it would not read.
+**Evidence (confidence: lead-only).** `docs/org/craters.md`: the original never carves a crater in
+play, since the carve gates on the struck node's `can_modify` flag and no shipped node carries it;
+no scorch texture exists in the data. Godot's `Decal` node projects onto the lit world; on the
+faithful fullbright world it would not read.
 
-**Approach.** Under Enhanced, at the crater build (`CraterField`/`TerrainCarve`) or the impact
-outcome for a weapon with no crater, place a `Decal` with a procedural radial scorch texture
+**Approach.** Under Enhanced, at the impact outcome (or at the crater build in
+`CraterField`/`TerrainCarve`, should an enhanced option re-enable the carve), place a `Decal` with a procedural radial scorch texture
 (TUNE size from the weapon's crater radius, TUNE fade), pooled and recycled with the same count
 cap the crater field keeps.
 

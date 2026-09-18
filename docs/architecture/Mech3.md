@@ -81,8 +81,9 @@ Every crater one mission has carved and the rule that decides whether it may car
 under the body the round struck, hands the carve to `TerrainCarve` and the decorations to
 `ClutterCull`, and returns which of the original's outcomes happened. A crater is permanent, nothing
 ages one out, so what bounds a mission's count is the refusal alone. `TryCarve` is the sink shape
-`ProjectilePool` holds, true only when the carve landed, which is what suppresses the weapon's
-impact animation.
+`ProjectilePool` holds, true only when the carve landed. The pool asks it only for a collider
+stamped `SceneBuilder.CanModifyMeta`, which no shipped node carries, so a played round never reaches
+it and only a direct caller (the `crater-carve` suite, an enhanced option) carves.
 
 ## src/Mech3/TerrainCarve.cs
 The mesh and collider surgery one carve performs on one world node. The ring is subtracted from

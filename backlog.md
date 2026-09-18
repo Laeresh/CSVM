@@ -434,38 +434,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `git log --grep=BL-301` (the VS tuning entry the exemption settled),
   `ProjectilePool.GatherAircraftCandidates`.
 
-- `BL-938` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **CSVM carves a crater
-  where the original carves none, and the carve takes the Choker's own impact burst with it.** The
-  user's recall is right: the original never carves in play, so the bowl is a divergence, and so is
-  the drop that digs it showing no flash, no scatter trails and no smokeball where the original
-  shows all three on every drop. *Evidence:* `FUN_005ac690`, the weapon's carve request, opens by
-  testing the struck node's flag word for `0x10000` (`MOV ECX,[ESI+0x24]` / `MOV EDX,[ECX+0x24]` /
-  `TEST EDX,0x10000` / `JZ` at `0x005ac698`…`0x005ac6a6`) and returns false when it is clear. Bit 16
-  is `CAN_MODIFY`, named from its setter `FUN_004ccb20` and the GameGen keyword walk `FUN_004c2130`,
-  and **no node in the install carries it**: 56,620 nodes across the eight chapter `gamez` trees and
-  `planes`, zero `"can_modify": true`, matching mech3ax's own `CS never` annotation on the bit. Its
-  three setters are the load-time keyword applier, a node-copy helper that only propagates, and the
-  script command `NodeSetCanModify`, whose name appears in no file of the retail install but
-  `crimson.exe`. So `FUN_004e4a10` is never entered from a detonation, none of the three failure
-  strings is ever logged, the veto callback at `DAT_00727ca4` (no installer, one cross-reference and
-  it is the read) never matters, and the only live reach of the subsystem is the debug key
-  `FUN_00443310`. *Fix shape:* carry the node flag through the build and gate the sink on it, which
-  keeps the whole decoded carve and simply never fires it: `GameZ`'s node reader already parses
-  `can_modify`, so `SceneBuilder` stamps it beside `SurfaceIdMeta` on the collider it attaches and
-  `ProjectilePool.Impact`'s `CraterSink` call at `Projectile.cs` tests it before asking
-  `CraterField`. The one-line stopgap is `CraterSink = null` at `GameSession.cs`'s
-  `ProjectilePool` build, which is behaviourally identical today and loses the decode's own shape.
-  Either way `ImpactOutcome.Resolve`'s `cratered` arm then never fires and the Choker plays its
-  `default` row on ground, which is already right. *Suite:* `crater-carve` calls `CraterField.Request`
-  directly and not through the sink, so it stays green under either fix; add one assertion that a
-  live round on C1 ground carves nothing. *⚠ Traps:* do not delete the carve. It is decoded, correct
-  and the original's own debug key builds exactly this bowl, so an Enhanced Graphics option is a
-  live possibility and `BL-413`'s work is the implementation of it. And the bowl is not the only
-  symptom: the suppression AND is faithful code, so removing the carve is what puts the Choker's
-  burst back on the first drop in a fresh spot. *Cross-refs:* `docs/org/craters.md` ("No shipped
-  detonation reaches the carve", "What a Choker ground hit shows", "How CSVM builds it"),
-  `docs/formats/gamez.md` (`flags.can_modify`), `git log --grep=BL-413` (the carve as built).
-
 ## Flight model & collision physics
 
 - `BL-562` `[Perf]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: data]` `[CM11]` **CM11 (C2/M02) still spends a single physics tick of about 36 ms on the sortie's

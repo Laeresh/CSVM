@@ -10,8 +10,9 @@ namespace CSVM.Testing;
 /// carve is measured where it lands rather than in the abstract: the node the round struck gets a
 /// private mesh one surface longer, the column over the bowl drops by about the decoded floor, the
 /// decorations inside the radius stop standing, and a second request beside the first is refused by
-/// the clearance rule. The world is private, because a carved chapter must not ride into a later
-/// suite's census.</summary>
+/// the clearance rule. Those requests go to the field directly, since a played round never reaches
+/// it: the round's gate is the struck node's can_modify flag, which no shipped node carries. The
+/// world is private, because a carved chapter must not ride into a later suite's census.</summary>
 internal static class CraterSuites
 {
     private const string Chapter = "C1";
@@ -35,7 +36,8 @@ internal static class CraterSuites
         "7-vertex rim at radius 20, a floor 6 below the impact, the struck node's own mesh one " +
         "surface longer and un-shared, the column 3 m off centre dropping into the bowl, every " +
         "decoration inside the radius destroyed, and a second crater inside the 5 m clearance " +
-        "refused while the first one stays carved")]
+        "refused while the first one stays carved; a live wep_12 on the same ground first carves " +
+        "nothing and plays its default scatter_effect, since no C1 node carries can_modify")]
     internal static void CraterCarve(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -90,6 +92,9 @@ internal static class CraterSuites
             $"every rim vertex stands at radius {CraterShape.RimRadius:0} at the impact's own height (worst error {worstRadius:0.0000})");
         ctx.Check(Mathf.IsEqualApprox(shape.Floor.Y, first.At.Y - (2f * CraterShape.BowlDepth)),
             $"the bowl's floor sits 6 m under the impact floor={shape.Floor.Y:0.00} impact={first.At.Y:0.00}");
+
+        // Before any direct request: a played round on the same ground leaves it uncarved.
+        LiveRound(ctx, world, first, before, report);
 
         var field = new CraterField(world.Session.Root);
         var carved = field.Request(first.At, first.Body);
@@ -156,6 +161,92 @@ internal static class CraterSuites
         ctx.Check(ColumnY(space, probe, out _) < first.At.Y - 3f,
             $"the first bowl is still cut into the terrain after the second carve");
         ctx.Note($"C1: one crater carved on {owner.Name}, {census} decorations flattened, the clearance refusing the repeat");
+    }
+
+    // A live wep_12 dropped through a ProjectilePool whose sink is a real field on this world. No C1
+    // node carries can_modify, so the gate refuses before the field is asked and the Choker plays its
+    // default row. The control is a plate stamped with the flag, whose sink is asked and declines.
+    private static void LiveRound(TestContext ctx, TestWorld world,
+        (Vector3 At, StaticBody3D Body) spot, ArrayMesh before, StringBuilder report)
+    {
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        if (!weapons.TryGet("wep_12", out var choker) || !choker.Crater)
+        {
+            ctx.Check(false, $"wep_12 resolves and carries CRATER");
+            return;
+        }
+        int flagged = CountCanModify(world.Session.Root);
+        ctx.Same(0, flagged, $"no collider of the built C1 world carries the can_modify stamp");
+
+        var mesh = ((Node3D)WorldCollision.OwnerOf(spot.Body)).GetNodeOrNull<MeshInstance3D>("mesh");
+        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, Chapter));
+        var liveField = new CraterField(world.Session.Root);
+        var plays = new List<(string Name, Vector3 At)>();
+        int asked = 0;
+        bool declineAll = false;
+        var pool = new ProjectilePool(textures, null, null)
+        {
+            CraterSink = (at, struck) =>
+            {
+                asked++;
+                return !declineAll && liveField.TryCarve(at, struck);
+            },
+            EffectSink = (name, at, orient, ring, ttl) => plays.Add((name, at)),
+        };
+        StaticBody3D? plate = null;
+        try
+        {
+            ctx.Host.AddChild(pool);
+            var played = Drop(pool, choker, spot.At + new Vector3(0f, 30f, 0f), plays);
+            report.AppendLine($"live wep_12 on {spot.Body.Name}: sink asked {asked}, "
+                + $"{liveField.Craters.Count} craters, fx={played?.Name ?? "-"}");
+            ctx.Same(0, asked, $"the gate refuses the round before the crater field is asked");
+            ctx.Same(0, liveField.Craters.Count, $"a live wep_12 on C1 ground carves nothing");
+            ctx.Check(ReferenceEquals(mesh?.Mesh, before),
+                $"the struck node still holds SceneBuilder's shared mesh, uncut");
+            ctx.Check(played is { Name: "scatter_effect" } p && p.At.DistanceTo(spot.At) < 2f,
+                $"the Choker's ground burst plays its default row, scatter_effect at the impact ({(played is { } q ? $"{q.Name} at {q.At}" : "no play")})");
+
+            // The control: the same round onto a node that does carry the flag reaches the sink.
+            declineAll = true;
+            var above = spot.At + new Vector3(0f, 1500f, 0f);
+            plate = CombatSuites.Plate("crater-gate-control", new Vector3(60f, 0.2f, 60f), above);
+            plate.SetMeta(SceneBuilder.CanModifyMeta, true);
+            ctx.Host.AddChild(plate);
+            var control = Drop(pool, choker, above + new Vector3(0f, 20f, 0f), plays);
+            ctx.Same(1, asked, $"a round on a can_modify collider is handed to the sink");
+            ctx.Check(control is { Name: "scatter_effect" },
+                $"and, the sink declining, still plays its default row ({control?.Name ?? "no play"})");
+        }
+        finally
+        {
+            pool.Free();
+            plate?.Free();
+            textures.Dispose();
+        }
+    }
+
+    private static (string Name, Vector3 At)? Drop(ProjectilePool pool, WeaponDef weapon, Vector3 above,
+        List<(string Name, Vector3 At)> plays)
+    {
+        plays.Clear();
+        pool.Spawn(weapon, new Transform3D(Basis.LookingAt(Vector3.Down, Vector3.Forward), above), Vector3.Zero);
+        for (int i = 0; i < 120 && plays.Count == 0; i++)
+        {
+            pool.SimStep(1f / 60f);
+        }
+        pool.Clear();
+        return plays.Count > 0 ? plays[0] : null;
+    }
+
+    private static int CountCanModify(Node node)
+    {
+        int count = SceneBuilder.CanModify(node) ? 1 : 0;
+        foreach (var child in node.GetChildren())
+        {
+            count += CountCanModify(child);
+        }
+        return count;
     }
 
     private static float ColumnY(PhysicsDirectSpaceState3D space, Vector3 at, out string into)

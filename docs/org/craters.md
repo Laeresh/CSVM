@@ -8,8 +8,9 @@ them can be re-checked at source. No decompiler output is reproduced.
 this install ships in the block, is [`formats/weapons.md`](../formats/weapons.md). The detonation
 that reaches this subsystem, including the flag word the gate reads and the animation suppression a
 successful carve causes, is [`ordnanceTypes.md`](ordnanceTypes.md) "Detonation: the impact, then the
-splash". The decorations a crater destroys are [`clutter.md`](clutter.md). Our implementation reads
-`WeaponDef.Crater` and carves: `CraterShape.cs` is the geometry, `CraterField.cs` the mission's
+splash". The decorations a crater destroys are [`clutter.md`](clutter.md). Our implementation gates
+a `WeaponDef.Crater` round on the struck node's flag as the original does, and keeps the carve
+behind that gate: `CraterShape.cs` is the geometry, `CraterField.cs` the mission's
 record list and the refusal, `TerrainCarve.cs` the mesh and collider surgery, `ClutterCull.cs` the
 decoration destruction. What is faithful and what stands in for it is "How CSVM builds it" below.
 
@@ -354,15 +355,19 @@ defaults.
 
 ## How CSVM builds it
 
-⚠ **CSVM carves where the original never does.** A `CRATER` weapon's round that strikes anything
-other than an aircraft asks `CraterField` for a crater at its impact point, with no test of the
-struck node's `CAN_MODIFY` flag, because `SceneBuilder` carries no node flag but
-`intersect_surface` into the built world. The original's own gate refuses every shipped node ("No
-shipped detonation reaches the carve"), so a bowl in the ground is a divergence, and so is its
-knock-on: `ImpactOutcome.Resolve` drops both animation slots and the stand-in on a carve that
-landed, the same AND the original runs, so the drop that digs the bowl also shows none of the burst
-the original always shows. What the carve builds when it is asked, below, is faithful to what the
-original's own debug key builds.
+**The gate is the original's, so no played round carves.** `GameZ` reads each node's
+`flags.can_modify`, `SceneBuilder` stamps `CanModifyMeta` on every collider it attaches to a node
+carrying it, and `ProjectilePool.Impact` tests that stamp on the struck collider before it asks
+`CraterField` for anything ("No shipped detonation reaches the carve"). No shipped node carries the
+flag, so a `CRATER` round on the ground leaves it intact and plays its `IMPACT` row, which for the
+Choker is `scatter_effect` ("What a Choker ground hit shows"). `ImpactOutcome.Resolve`'s arm for a
+carve that landed, which drops both animation slots and the stand-in as the original's AND does,
+therefore never fires in play either.
+
+⚠ **Do not remove the gate to get the bowl back.** Without it the first round on a fresh patch of
+ground digs a crater and, through that same AND, loses its whole burst. The carve itself is kept
+complete and callable directly (`CraterField.Request`, which the `crater-carve` suite drives), and
+what it builds when asked, below, is what the original's own debug key builds.
 
 What is faithful:
 

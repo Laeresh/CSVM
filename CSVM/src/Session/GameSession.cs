@@ -2203,8 +2203,8 @@ public partial class GameSession : Node3D
             // reports the struck collider, the runtime resolves it to a destructible and
             // spends the weapon's HEALTH_DAMAGE. Null runtime ⇒ impacts stay cosmetic.
             DamageSink = state.WorldRuntime != null ? state.WorldRuntime.DamageAt : null,
-            // Route a CRATER weapon's ground strike to the mission's crater field: the pool reports
-            // the impact and the struck collider, the field refuses or carves (Mech3.CraterField).
+            // Route a CRATER weapon's ground strike to the mission's crater field. The pool asks only
+            // for a node carrying can_modify, which no shipped node does (Mech3.CraterField).
             CraterSink = state.Craters != null ? state.Craters.TryCarve : null,
             // The same equal-power splitscreen factor FlightAudio's own-ship loops take, plus the
             // nearest-human snapshot shared with WorldSession and the world-effects runtime.

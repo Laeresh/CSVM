@@ -66,6 +66,11 @@ public sealed class SceneBuilder
     /// it is never spelled as that string (see <see cref="CollidersForMesh"/>).</summary>
     public static readonly StringName SurfaceIdMeta = "csky_surface_id";
 
+    /// <summary>Meta key a collider carries when its node authors <see cref="GameZNode.CanModify"/>:
+    /// a <c>bool</c>, always true where present. The crater carve is refused on any collider without
+    /// it, and no shipped node sets it (docs/org/craters.md). Read by <see cref="CanModify"/>.</summary>
+    public static readonly StringName CanModifyMeta = "csky_can_modify";
+
     /// <summary>Meta key a mission-structure node carries when the mission being built is one it
     /// authors an owner for: an <c>int</c>, that owner's team
     /// (<see cref="GameZNode.MissionStructureTeam"/>). A flagged node authoring no owner for this
@@ -447,6 +452,10 @@ void fragment() {
     /// <summary>The textured materials built here, each with its source texture name, so a
     /// caller can re-resolve and swap them without a rebuild. See <see cref="Repaint"/>.</summary>
     public IReadOnlyList<(ShaderMaterial Material, string TextureName)> TexturedMaterials => _texturedMaterials;
+
+    /// <summary>Whether a struck collider's node accepts a crater, the original's
+    /// <c>CAN_MODIFY</c> gate read off <see cref="CanModifyMeta"/>.</summary>
+    public static bool CanModify(Node? collider) => collider != null && collider.HasMeta(CanModifyMeta);
 
     /// <summary>The one billboard rule, read straight from the gamez model: is this a flat card the
     /// engine turns toward the camera? Every caller goes through this. Null when the extraction
@@ -906,7 +915,7 @@ void fragment() {
                 n3d.AddChild(mi);
                 MeshInstanceCount++;
                 if (collidable)
-                    AttachCollision(n3d, node.MeshIndex);
+                    AttachCollision(n3d, node.MeshIndex, node.CanModify);
             }
             // Point-sprite lights (night-sky stars, nav/tower beacons): rendered by the
             // original engine as small glowing dots. Never collidable, never shadowed.
@@ -944,7 +953,7 @@ void fragment() {
     // the whole mesh, see CollidersForMesh. The parent node carries the world transform, so
     // each collider lines up with the rendered surface it was carved from. Shapes are cached per
     // mesh index and shared across instances (shapes are resources).
-    private void AttachCollision(Node3D parent, int meshIndex)
+    private void AttachCollision(Node3D parent, int meshIndex, bool canModify)
     {
         bool tracked = false;
         foreach (var (surface, surfaceId, shapes) in CollidersForMesh(meshIndex))
@@ -966,6 +975,9 @@ void fragment() {
             // Every body carries the original's numeric surface id too, a different name space
             // from the class string above (see SurfaceIdMeta).
             body.SetMeta(SurfaceIdMeta, surfaceId);
+            // The node's own crater gate, stamped per body since a weapon reads the body it struck.
+            if (canModify)
+                body.SetMeta(CanModifyMeta, true);
             parent.AddChild(body);
             ColliderCount++;
             tracked = true;
