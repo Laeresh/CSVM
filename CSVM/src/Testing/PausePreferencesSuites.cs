@@ -28,6 +28,10 @@ internal static class PausePreferencesSuites
     private static readonly Vector2I FlightWindow = new(1280, 720);
     private static readonly Vector2I ResizedWindow = new(1024, 1024);
 
+    // The turn the live-options seats hold: nose rising and yawing to starboard, in the plant's own
+    // half-angle body rates, so an autohead that is on has a lead to aim along.
+    private static readonly Vector3 SeatBodyRates = new(0.1f, -0.15f, 0f);
+
     [Suite("pause-preferences",
         "the Preferences leaf over a paused mission: the Original pause sheet's PREFERENCES strip "
         + "opens it on the Options screen with the world still held, the VIDEO page behind its door "
@@ -94,11 +98,11 @@ internal static class PausePreferencesSuites
 
     [Suite("pause-preferences-live-options",
         "Auto Head Turn and Next Target changed over the pause reach the seats already flying: two "
-        + "human seats in the cockpit with a sideslip to lean into and a live target selection, the "
+        + "human seats in the cockpit in a held turn to lead into and a live target selection, the "
         + "real Preferences leaf opened over them, both Game Options switches toggled and ACCEPT "
         + "CHANGES pressed, puts the applied values on both seats at once, the targeting switch "
         + "written into the selection the seat already holds rather than a new one, the next "
-        + "frame's head target leans into the velocity where on and sits straight ahead where off, "
+        + "frame's head target leads into the turn where on and sits straight ahead where off, "
         + "and an accept carrying never-set values hands the head turn back to the "
         + "headLook.autohead config key and the targeting switch back to the decoded head rule")]
     internal static void PausePreferencesLiveOptions(TestContext ctx)
@@ -165,8 +169,8 @@ internal static class PausePreferencesSuites
             ctx.Check(ReferenceEquals(one.Targeting, selection),
                 $"written into the selection the seat already held, so its cycle and lock survive the accept");
             Frame(clock, seats);
-            ctx.Check(Leans(one) && Leans(two) && OnVelocity(one),
-                $"and the next frame's head target leans into the sideslip ({Target(one)} against {Expected(one)}, seat 2 {Target(two)})");
+            ctx.Check(Leans(one) && Leans(two) && OnTurn(one),
+                $"and the next frame's head target leads into the turn ({Target(one)} against {Expected(one)}, seat 2 {Target(two)})");
 
             AcceptGameOptions(leaf, seats, toggle: true);
             Frame(clock, seats);
@@ -467,7 +471,7 @@ internal static class PausePreferencesSuites
     }
 
     // One unhalted frame of each seat's view step, the one that asks the head for its idle aim.
-    // The sim step is left out so the sideslip the seats were given is the velocity it reads.
+    // The sim step is left out so the body rates the seats were given are the turn it reads.
     private static void Frame(GameClock clock, IReadOnlyList<FlightController> seats)
     {
         clock.BeginFrame(1f / 60f);
@@ -482,15 +486,15 @@ internal static class PausePreferencesSuites
     private static bool Leans(FlightController seat) =>
         seat.Head is { } head && (Mathf.Abs(head.TargetAzimuth) > 1e-3f || Mathf.Abs(head.TargetElevation) > 1e-3f);
 
-    // The target the decoded lean names for this seat's own velocity, the shipped airframe's three
-    // autohead values applied.
+    // The target the decoded lead names for the turn every seat is given, the shipped airframe's
+    // three autohead values applied.
     private static (float Elevation, float Azimuth)? Expected(FlightController seat) =>
         seat.Stats is { } stats
-            ? HeadLook.AutoheadTarget(seat.Attitude.Inverse() * seat.WorldVelocity,
+            ? HeadLook.AutoheadTarget(SeatBodyRates,
                 stats.AutoheadTurnTime, stats.AutoheadTurnMax, stats.AutoheadTurnMinPitch)
             : null;
 
-    private static bool OnVelocity(FlightController seat) =>
+    private static bool OnTurn(FlightController seat) =>
         Expected(seat) is { } want && seat.Head is { } head
         && Mathf.Abs(head.TargetElevation - want.Elevation) < 1e-4f
         && Mathf.Abs(head.TargetAzimuth - want.Azimuth) < 1e-4f;
@@ -498,8 +502,8 @@ internal static class PausePreferencesSuites
     private static string Target(FlightController seat) =>
         seat.Head is { } head ? $"({head.TargetElevation:0.####}, {head.TargetAzimuth:0.####})" : "no head";
 
-    // One human seat in the cockpit over its own camera, airborne and slipping to starboard and
-    // climbing, so an autohead that is on has a lean to aim along, holding the selection a launch
+    // One human seat in the cockpit over its own camera, airborne and turning to starboard and
+    // climbing, so an autohead that is on has a turn to lead into, holding the selection a launch
     // with nothing saved builds. No roster: the head, its gate and the two fields are the subject.
     private static FlightController CockpitSeat(TestContext ctx, SubViewport panes, PlaneStats stats, int index)
     {
@@ -522,8 +526,8 @@ internal static class PausePreferencesSuites
         var spawn = new Vector3(index * 60f, 800f, 0f);
         var flight = new FlightModel(stats);
         seat.Setup(flight, camera, new CamParams(), spawn, spawn + Vector3.Forward);
-        flight.VelocityDir = new Vector3(0.3f, 0.2f, -1f).Normalized();
         flight.Speed = 60f;
+        flight.BodyRates = SeatBodyRates;
         ctx.Host.AddChild(seat);
         return seat;
     }

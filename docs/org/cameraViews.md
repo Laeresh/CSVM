@@ -174,7 +174,7 @@ the wider 80° FOV.
 - The interior is **not** drawn (the `FUN_0049fb00` gate requires mode 6).
 - `FUN_0042d980` calls the head-look controller `FUN_0042d010` **unconditionally in both
   first-person modes**, mode 7 does not disable head-look. What mode 7 gates off is only the
-  **autohead** (idle velocity-follow) branch inside that controller; player-driven look (snap,
+  **autohead** (idle turn lead) branch inside that controller; player-driven look (snap,
   free-look, center key) is identical in Cockpit and Nose. A third caller runs the same controller
   for the chase camera: `FUN_0042c7f0` calls `FUN_0042d010(0xbfc90fdb, 0)`, the literal
   `0xbfc90fdb` is `−π/2`, so chase gets a full elevation range where first person is floored at
@@ -438,16 +438,37 @@ the back flag set the routine never calls `FUN_0042d010` at all and writes the f
   `e^(−x)` for `x < 0.1`): elevation rate **3.0/s**, azimuth rate **5.0/s** (τ ≈ 0.33 s / 0.20 s).
   The external camera's zoom value smooths at 1.5/s, moves at `2·dt` on keys `0x43`/`0x44`,
   clamped `[0, 1]`, the section above has its direction and what it feeds.
-- **Autohead** (idle velocity-follow, the gated tail block): the gate is
-  `(mode == 2 && no target) || (mode == 0 && no direction)`, so it never runs in free-look. With
-  that met and the option byte `DAT_0071dacc`
-  set, the plane's velocity transforms into the plane frame, scales by
-  `autohead_turn_time`, caps in magnitude at `autohead_turn_max`, and the head aims along it,
-  elevation floored at `autohead_turn_min_pitch` (below the input paths' own `0` floor). All three
-  are `player.json` keys (loader `FUN_004735b0`, globals `0071c464/468/46c`): shipped `0.75`,
-  `2.86°` (stored ×π/180×2 = 0.0998 rad, the loader doubles the authored value), `−3.0°` (stored
-  −0.0524 rad). The flag is `DAT_0071dacc` AND mode ≠ 7, Nose gates the whole branch off, not just
-  the input.
+- **Autohead** (the idle turn lead, the gated tail block `0042d61c`-`0042d7c5`): the gate is
+  `(mode == 2 && no target) || (mode == 0 && no direction)` (`0042d627`-`0042d64f`), so it never
+  runs in free-look. With that met and the caller's autohead argument set (the option byte
+  `DAT_0071dacc` AND mode ≠ 7, so Nose gates the whole branch off, not just the input), the head is
+  aimed where the nose will point `autohead_turn_time` seconds on at the present turn rate:
+  1. **The vector is the angular velocity, not the linear one.** `0042d655`-`0042d660` read the
+     camera subject's `+0x16c` (the plant's world-frame angular rate in its quaternion half-angle
+     units, [`formats/vehicle.md`](../formats/vehicle.md) "The engine slot's pitch and gain";
+     `org/flightModel.md`, "The stored vector is a quaternion half-angle rate"). `0042d68b`-`0042d6d3`
+     rotate it into the body frame by the ROWS of `+0x180` (`+x` right, `+y` up, `+z` aft).
+  2. **Scale and cap.** `0042d6d5`-`0042d6f6` multiply all three components by `autohead_turn_time`
+     (`_DAT_0071c464`); `0042d6fe`-`0042d747` cap the vector's magnitude at `autohead_turn_max`
+     (`_DAT_0071c468`), scaling all three when it is strictly greater. The roll component stays in
+     the magnitude, so a fast roll shrinks the pitch and yaw share of a capped lead.
+  3. **Rotate the nose.** `0042d754` passes the vector to `FUN_0053fbf0`, the plant's own exp map
+     `(cos |v|, sin |v| · v/|v|)`, identity at `|v| = 0`, which turns by `2|v|`; `0042d766` rotates
+     the forward vector `(0, 0, −1)` at `0x00604080` by it through `FUN_0053fb40` (`v' = qvq*`).
+     The integrator `FUN_0048e580` applies the same exp map to `ω·dt` and pre-multiplies the
+     orientation (`FUN_0053f920`, `q ⊗ orient`), so the rotated vector is the nose's body-frame
+     direction after `turn_time` at a constant rate. The head therefore leads into a turn, and a
+     plane whose rates have died has the head straight ahead.
+  4. **Angles.** Elevation `atan2(y, sqrt(x² + z²))` at `0042d78e`, azimuth `atan2(−x, −z)` at
+     `0042d7a0`, the padlock's own pair; elevation floored at `autohead_turn_min_pitch`
+     (`_DAT_0071c46c`, `0042d7ae`-`0042d7bb`), below the input paths' own `0` floor.
+
+  All three are `player.json` keys (loader `FUN_004735b0`, globals `0071c464/468/46c`): shipped
+  `0.75`, `2.86°` (stored ×π/180 and doubled by `FADD ST0,ST0` at `004745f5` = 0.0998 half-angle,
+  so the head leads the nose by at most 0.1996 rad = 11.4°; the compiled fallback `0x3dcccccd` =
+  0.1 at `004745ff` is not doubled), `−3.0°` (stored −0.0524 rad). CSVM's port is
+  `HeadLook.AutoheadTarget`, fed `FlightModel.BodyRates`, which is already the body-frame
+  half-angle rate.
 - **Fixed head-pitch offset.** `FUN_0042d980` applies a constant extra rotation of
   **−0.08203 rad = −4.70°** (`0xbda7ff58`) about the elevation axis when building the view basis,
   in both first-person modes.

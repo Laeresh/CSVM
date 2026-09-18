@@ -299,8 +299,8 @@ public sealed class PlaneStats
     // pi/180 on the way in. The shipped 1.0 is a 1-degree cone.
     public float StickyBulletInaccuracy = Mathf.Pi / 180f;
 
-    // C22's autohead velocity-follow (docs/formats/vehicle/player-globals.md): the idle-frame
-    // lean into the plane's own velocity that HeadLook.IdleAim drives in Cockpit only. All three
+    // The autohead lead (docs/formats/vehicle/player-globals.md): the idle-frame head aim along
+    // the plane's own turn that HeadLook.IdleAim drives in Cockpit only. All three
     // fallbacks are the executable's own compiled defaults, not this install's authored values,
     // ⚠ turn_max's asymmetry is the trap: the AUTHORED path converts degrees to radians and then
     // DOUBLES the result (the loader's own arithmetic), where the compiled DEFAULT is already the
@@ -885,7 +885,7 @@ public sealed class PlaneStats
             stats.StickyBulletInaccuracy = Mathf.DegToRad(
                 player.Float("sticky_bullet_inaccuracy", Mathf.RadToDeg(stats.StickyBulletInaccuracy)));
 
-            // autohead_* (C22, docs/formats/vehicle/player-globals.md): turn_max's authored
+            // autohead_* (docs/formats/vehicle/player-globals.md): turn_max's authored
             // degrees are converted THEN DOUBLED, unlike its already-doubled compiled default.
             stats.AutoheadTurnTime = player.Float("autohead_turn_time", stats.AutoheadTurnTime);
             stats.AutoheadTurnMax = player.TryFloat("autohead_turn_max", out var turnMaxDeg)

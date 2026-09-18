@@ -4738,8 +4738,8 @@ public partial class FlightController : Node3D
 
     // C22's IdleAim delegate: HeadLook.Step calls this only on a frame with no look input at all.
     // Gated on ViewMode (Cockpit only, the original's option byte AND mode ≠ 7) and the options
-    // toggle here, mirroring the original's engine option byte; the magnitude/negligible-velocity
-    // gate lives in HeadLook.AutoheadTarget itself.
+    // toggle here, mirroring the original's engine option byte. The body rates are already in the
+    // plane's own frame, the frame the original rotates its world rates into before the lead.
     private (float Elevation, float Azimuth)? AutoheadTarget()
     {
         if (_cam == null || _cam.ViewMode != PilotViewMode.Cockpit
@@ -4747,8 +4747,7 @@ public partial class FlightController : Node3D
         {
             return null;
         }
-        Vector3 localVelocity = _model.Attitude.Inverse() * (_model.VelocityDir * _model.Speed);
-        return HeadLook.AutoheadTarget(localVelocity, _model.Stats.AutoheadTurnTime,
+        return HeadLook.AutoheadTarget(_model.BodyRates, _model.Stats.AutoheadTurnTime,
             _model.Stats.AutoheadTurnMax, _model.Stats.AutoheadTurnMinPitch);
     }
 

@@ -241,6 +241,19 @@ draws its authored 800x600 space one-to-one.
   splitscreen run, both panes following the one setting. *Blocks:* nothing tracks the outcome; a
   fail mints a new `BL`.
 
+- `PT-159` `[Own]` **The automatic head turn leads into the turn.** Auto Head Turn now aims the
+  head where the nose will point `autohead_turn_time` (0.75 s) on at the present turn rate, decoded
+  from the original's autohead branch (`docs/org/cameraViews.md`, "Autohead"), instead of along the
+  velocity, which held the head outside the turn. A unit test flies the real plant in a 60° banked
+  pull each way and pins the side and the return to centre; the look is what no instrument
+  settles. Run with `--view=cockpit` and tick Auto Head Turn on the Game Options page (from the
+  front end or over the pause). *Look for:* (a) bank into a sustained turn to the right: the view
+  swings ahead of the nose toward the inside of the turn (up and to the right in the cockpit's own
+  frame), never toward the heading being left; (b) the same to the left, mirrored; (c) roll the wings level and release the stick: the
+  head eases back to straight ahead; (d) the lead stays small (at most about 11° off the nose) and
+  a pure roll moves nothing. *Blocks:* nothing tracks the outcome; a fail mints a new `BL` quoting
+  which of (a)-(d) failed.
+
 ### C1 · Bloodhawk vs AI, the kill sequence, sound on
 
 ```powershell

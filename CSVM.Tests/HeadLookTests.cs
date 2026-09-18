@@ -14,14 +14,17 @@ public class HeadLookTests
 {
     private const float Tol = 1e-4f;
 
-    // C22: HeadLook.AutoheadTarget's shipped constants (extracted/zrdr/player.zrd.json via
-    // PlaneStatsFlightGlobalsTests' own loader assertion), reused by the pure-vector-law tests
-    // near the bottom of this file.
+    // HeadLook.AutoheadTarget's shipped constants (extracted/zrdr/player.zrd.json via
+    // PlaneStatsFlightGlobalsTests' own loader assertion), reused by the lead-law tests near the
+    // bottom of this file.
     private const float ShippedTurnTime = 0.75f;
     private const float ShippedTurnMax = 0.0998f;
     private const float ShippedMinPitch = -0.0524f;
 
     private static HeadLookInput Idle => default;
+
+    private static string ZrdrPath =>
+        SessionPaths.PreferUnzipped(System.IO.Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
 
     // The original's two mode keys, K and J, as the frame they are pressed on.
     private static HeadLookInput SnapKey =>
@@ -611,68 +614,122 @@ public class HeadLookTests
         Assert.True(basis.X.IsEqualApprox(expected.X));
     }
 
-    // C22: HeadLook.AutoheadTarget, the idle-frame lean law fed to IdleAim, exercised as a pure
-    // vector law directly, no PlaneStats in the loop.
+    // HeadLook.AutoheadTarget, the lead law fed to IdleAim, exercised as a pure law on body rates,
+    // no PlaneStats in the loop. Rates are the plant's half-angle ones: +X nose up, +Y nose left.
 
     [Fact]
-    public void AutoheadIsNullWhenTheLocalVelocityIsNegligible()
+    public void AutoheadCentresTheHeadWhenThePlaneIsNotTurning()
     {
-        Assert.Null(HeadLook.AutoheadTarget(Vector3.Zero, ShippedTurnTime, ShippedTurnMax, ShippedMinPitch));
-        Assert.Null(HeadLook.AutoheadTarget(new Vector3(0f, 0f, -1e-5f), ShippedTurnTime, ShippedTurnMax, ShippedMinPitch));
+        var still = Lead(0f, 0f, 0f);
+        Assert.Equal(0f, still.Elevation, Tol);
+        Assert.Equal(0f, still.Azimuth, Tol);
     }
 
     [Fact]
-    public void AutoheadIgnoresPureForwardSpeedEntirely()
+    public void AutoheadIgnoresAPureRollBecauseTheNoseDoesNotMove()
     {
-        // Straight and level at full cruise speed, nose along the plane's own −Z: the forward
-        // component is dropped before scaling (the class doc's port decision), so this reads
-        // exactly as negligible, the same null a parked aircraft returns.
-        Assert.Null(HeadLook.AutoheadTarget(new Vector3(0f, 0f, -100f), ShippedTurnTime, ShippedTurnMax, ShippedMinPitch));
+        var rolling = Lead(0f, 0f, 1.5f);
+        Assert.Equal(0f, rolling.Elevation, Tol);
+        Assert.Equal(0f, rolling.Azimuth, Tol);
     }
 
     [Fact]
-    public void AutoheadPinsTheDecodedMinusThreeDegreeFloorOnAHardDive()
+    public void AutoheadAimsWhereTheNoseWillBeAfterTurnTimeBelowTheCap()
     {
-        // A steep dive at speed: the raw lean angle is well past −3°, so the floor, not the
-        // magnitude cap's direction, decides the shown elevation. This is the trap's own pin:
-        // the −3° floor sits below C21's [0, π/2] input floor and must survive here.
-        var t = HeadLook.AutoheadTarget(new Vector3(0f, -50f, -100f), ShippedTurnTime, ShippedTurnMax, ShippedMinPitch);
-        Assert.NotNull(t);
-        Assert.Equal(ShippedMinPitch, t!.Value.Elevation, Tol);
+        // 0.04 half-angle rad/s of yaw: the lead's half-angle is 0.03, under the 0.0998 cap, so the
+        // head turns by the full 2 × 0.03, the angle the plant's own step turns the nose by.
+        var t = Lead(0f, 0.04f, 0f);
+        Assert.Equal(2f * 0.04f * ShippedTurnTime, t.Azimuth, Tol);
+        Assert.Equal(0f, t.Elevation, Tol);
     }
 
     [Fact]
-    public void AutoheadCapsTheLeanVectorsMagnitudeAtTurnMax()
+    public void AutoheadCapsTheLeadAtTwiceTurnMax()
     {
-        // A climb well past the cap once scaled by turnTime (5 m/s × 0.75 = 3.75, against a
-        // 0.0998 rad cap): the resulting elevation must sit exactly at the cap, not the
-        // uncapped 3.75.
-        var t = HeadLook.AutoheadTarget(new Vector3(0f, 5f, -200f), ShippedTurnTime, ShippedTurnMax, ShippedMinPitch);
-        Assert.NotNull(t);
-        Assert.Equal(ShippedTurnMax, t!.Value.Elevation, Tol);
-        Assert.Equal(0f, t.Value.Azimuth, Tol);
+        // A hard pull well past the cap: the half-angle stops at turn_max, so the head rises by
+        // twice it (the quaternion's doubling), not by the uncapped 2 × 1.5.
+        var t = Lead(2f, 0f, 0f);
+        Assert.Equal(2f * ShippedTurnMax, t.Elevation, Tol);
+        Assert.Equal(0f, t.Azimuth, Tol);
     }
 
     [Fact]
-    public void AutoheadLeavesASmallLeanUncappedBelowTurnMax()
+    public void AutoheadFloorsAPushOverAtTheDecodedMinusThreeDegrees()
     {
-        // Well under the cap once scaled: the components pass straight through as the direct
-        // (elevation, azimuth) angles, not through an arctangent, the cap having any effect at
-        // all on the visible angle depends on this.
-        var t = HeadLook.AutoheadTarget(new Vector3(0.01f, 0.01f, -100f), ShippedTurnTime, ShippedTurnMax, ShippedMinPitch);
-        Assert.NotNull(t);
-        Assert.Equal(0.01f * ShippedTurnTime, t!.Value.Elevation, Tol);
-        Assert.Equal(-0.01f * ShippedTurnTime, t.Value.Azimuth, Tol);
+        // Nose falling hard: the lead points well below −3°, and the floor, below the input
+        // paths' own level floor, decides the elevation.
+        Assert.Equal(ShippedMinPitch, Lead(-2f, 0f, 0f).Elevation, Tol);
     }
 
-    [Fact]
-    public void AutoheadLooksRightWhenTheVelocityDriftsRightOfTheNose()
+    [Theory]
+    [InlineData(-0.2f, -1f)]   // nose yawing right: the head looks right (azimuth is +left)
+    [InlineData(0.2f, 1f)]     // and left
+    public void AutoheadLooksTheWayTheNoseIsTurning(float yawRate, float sign)
     {
-        // Forward with a rightward drift (local +X): the codebase's convention is positive azimuth
-        // = LEFT, so a rightward drift must read NEGATIVE, matching SnapTargets' own mirroring.
-        var t = HeadLook.AutoheadTarget(new Vector3(50f, 0f, -100f), ShippedTurnTime, ShippedTurnMax, ShippedMinPitch);
-        Assert.NotNull(t);
-        Assert.True(t!.Value.Azimuth < 0f);
+        var t = Lead(0.1f, yawRate, 0f);
+        Assert.True(Mathf.Sign(t.Azimuth) == sign, $"azimuth {t.Azimuth} for yaw rate {yawRate}");
+        Assert.True(t.Elevation > 0f, $"elevation {t.Elevation} under a pull");
+    }
+
+    /// <summary>The shipped Black Hawk flown by the real plant in a sustained 60° banked pull each way:
+    /// the head leads into the turn, on the side the nose is heading, and settles back to centre once
+    /// the wings are rolled level and the stick released. The lead's direction is also checked
+    /// against where the nose really is <c>turn_time</c> later.</summary>
+    [ExtractedDataTheory]
+    [InlineData(1f)]    // right bank
+    [InlineData(-1f)]   // left bank
+    public void AutoheadLeadsIntoASustainedBankedTurnAndCentresAsTheWingsLevel(float right)
+    {
+        const float dt = 1f / 60f;
+        var stats = PlaneStats.Load(ZrdrPath, "player_bhawk");
+        var model = new FlightModel(stats);
+        var banked = Basis.Identity.Rotated(Vector3.Back, -right * Mathf.DegToRad(60f));
+        model.Reset(new Vector3(0f, 1500f, 0f), banked, stats.FdSpeed, 1f);
+        var pull = new FlightInput { Pitch = 0.6f, Throttle = 1f };
+        for (int i = 0; i < 180; i++)
+        {
+            model.Step(pull, dt);
+        }
+
+        var (elevation, azimuth) = HeadLook.AutoheadTarget(model.BodyRates, stats.AutoheadTurnTime,
+            stats.AutoheadTurnMax, stats.AutoheadTurnMinPitch);
+        Assert.True(Mathf.Sign(azimuth) == -right,
+            $"bank {right}: the head must look into the turn, azimuth {azimuth} (+left), rates {model.BodyRates}");
+        Assert.True(elevation > 0f, $"bank {right}: the pull lifts the head, elevation {elevation}");
+
+        // Where the nose really goes in turn_time, in the frame the head is measured in.
+        var frame = model.Attitude;
+        for (float t = 0f; t < stats.AutoheadTurnTime; t += dt)
+        {
+            model.Step(pull, dt);
+        }
+
+        var (noseElevation, noseAzimuth) = HeadLook.PadlockTargets(frame.Inverse() * -model.Attitude.Z);
+        Assert.True(Mathf.Sign(noseAzimuth) == -right && noseElevation > 0f,
+            $"bank {right}: the nose itself went ({noseElevation}, {noseAzimuth}), the side the head led to");
+        Assert.True(Mathf.Abs(azimuth) <= Mathf.Abs(noseAzimuth) + 1e-3f,
+            $"bank {right}: the capped lead ({azimuth}) does not overshoot the nose's own turn ({noseAzimuth})");
+
+        // Roll the wings level against the bank, then release the stick.
+        for (int i = 0; i < 600 && Mathf.Abs(model.Attitude.X.Y) > 0.02f; i++)
+        {
+            model.Step(new FlightInput { Roll = model.Attitude.X.Y < 0f ? 1f : -1f, Throttle = 1f }, dt);
+        }
+
+        Assert.True(Mathf.Abs(model.Attitude.X.Y) <= 0.02f, $"bank {right}: the wings never came level");
+        for (int i = 0; i < 180; i++)
+        {
+            model.Step(new FlightInput { Throttle = 1f }, dt);
+        }
+
+        // The plant keeps a small residual pitch and yaw rate after the roll-out, so "centre" is a
+        // small fraction of the turn's own lead rather than zero.
+        var level = HeadLook.AutoheadTarget(model.BodyRates, stats.AutoheadTurnTime,
+            stats.AutoheadTurnMax, stats.AutoheadTurnMinPitch);
+        float turning = new Vector2(elevation, azimuth).Length();
+        float settled = new Vector2(level.Elevation, level.Azimuth).Length();
+        Assert.True(settled < 0.25f * turning,
+            $"bank {right}: wings level, the head must be back near centre, lead {settled} against the turn's {turning}, rates {model.BodyRates}");
     }
 
     // Track Target (the original's state 2): the head holds the selected target's own bearing every
@@ -842,4 +899,8 @@ public class HeadLookTests
     // mouse a held button cannot otherwise be told apart from a released one.
     private static HeadLookInput Looking(float right = 0f, float up = 0f) =>
         new(0f, 0f, right, up, false, 0f, 0f, true);
+
+    // The autohead lead for half-angle body rates, at the shipped constants.
+    private static (float Elevation, float Azimuth) Lead(float x, float y, float z) =>
+        HeadLook.AutoheadTarget(new Vector3(x, y, z), ShippedTurnTime, ShippedTurnMax, ShippedMinPitch);
 }

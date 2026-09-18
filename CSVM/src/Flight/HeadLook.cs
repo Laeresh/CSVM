@@ -209,28 +209,29 @@ public sealed class HeadLook
     /// </summary>
     public static float Nearest(float target, float shown) => shown + Wrap(target - shown);
 
-    /// <summary>The idle-frame lean into the plane's own velocity, local-frame X/Y only
-    /// (forward speed dropped, why, and the (elevation, azimuth) derivation, are
-    /// docs/formats/vehicle/player-globals.md's autohead row). Scaled by <paramref
-    /// name="turnTime"/>, capped in magnitude at <paramref name="turnMax"/>, floored at <paramref
-    /// name="minPitch"/>, below <see cref="ElevationFloor"/> on purpose, <see cref="Step"/>'s idle
-    /// branch bypasses it. Null when the lean is negligible.</summary>
-    public static (float Elevation, float Azimuth)? AutoheadTarget(
-        Vector3 localVelocity, float turnTime, float turnMax, float minPitch)
+    /// <summary>The autohead aim: where the nose will point <paramref name="turnTime"/> seconds on at
+    /// the present <see cref="FlightModel.BodyRates"/> (half-angle, so the capped lead turns by twice
+    /// its magnitude, as the plant's own step does), so the head leads into a turn and centres as the
+    /// rates die (docs/org/cameraViews.md, "Autohead"). Elevation floors at <paramref
+    /// name="minPitch"/>, below <see cref="ElevationFloor"/> on purpose. ⚠ Not the linear velocity:
+    /// that lags the nose in a turn and aims the head outside it.</summary>
+    public static (float Elevation, float Azimuth) AutoheadTarget(
+        Vector3 bodyRates, float turnTime, float turnMax, float minPitch)
     {
-        Vector2 lean = new Vector2(localVelocity.X, localVelocity.Y) * turnTime;
-        float mag = lean.Length();
-        if (mag <= 1e-4f)
+        Vector3 lead = bodyRates * turnTime;
+        float half = lead.Length();
+        if (half <= 1e-9f)
         {
-            return null;
+            return (0f, 0f);
         }
-        if (mag > turnMax)
+        if (half > turnMax)
         {
-            lean *= turnMax / mag;
+            lead *= turnMax / half;
+            half = turnMax;
         }
-        float elevation = Mathf.Max(lean.Y, minPitch);
-        float azimuth = ClampAzimuth(-lean.X);
-        return (elevation, azimuth);
+        Vector3 nose = new Basis(lead / half, 2f * half) * Vector3.Forward;
+        var (elevation, azimuth) = PadlockTargets(nose);
+        return (Mathf.Max(elevation, minPitch), azimuth);
     }
 
     /// <summary>The decoded smoothing law: <c>shown = target + (shown − target)·e^(−rate·dt)</c>.

@@ -929,34 +929,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   base elevation (`git log --grep=BL-150`), `docs/formats/camparam.md` (`thirdp_pitch`, and the Known limits paragraph this corrects),
   `docs/org/cameraViews.md` (head-look controller, the chase placement's own elevation).
 
-- `BL-924` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` **The cockpit's automatic
-  head turn does the opposite of the original's: it holds the head on the heading the aeroplane is
-  leaving instead of leaning into the turn.** *Evidence:* first judged at the controls on the cockpit
-  sitting that closed the view's other seven decisions (`git log --grep=BL-436`): panel scale,
-  head-look feel and sign, the lean's sub-cap, engine-sound precedence, wobble and free-look in
-  Nose all read right, and the automatic head turn was what was missing. CSVM has C22's autohead
-  built (`HeadLook.AutoheadTarget`, fed by `FlightController.AutoheadTarget` with the local
-  velocity `Attitude⁻¹ · velocity` and the def's `autohead_turn_*` values), exposed on the Game
-  Options page's Auto Head Turn row, and gated behind `headLook.autohead`, default off because the
-  original's cockpit footage read as a pixel-frozen sight through manoeuvres (`Config.cs`,
-  `docs/formats/vehicle/player-globals.md`'s autohead row). *Judged with the row on:* it is not the
-  original's turn, it is its opposite. Where the original leans the head into a turn, ours holds
-  the view on the heading the aeroplane is leaving, as if the head were pinned to the old
-  direction while the airframe turns under it. That is what aiming along the local velocity does
-  in a coordinated turn: the velocity vector lags the nose, so the head points outside the turn.
-  *Fix shape:* decode the idle tail block of `FUN_0042d010` (the mode-6 autohead branch,
-  `docs/org/cameraViews.md` "Autohead") for the vector the head is aimed along, the turn rate or
-  the commanded bank rather than the linear velocity is the expectation, and for the sign of each
-  component, then port it into `HeadLook.AutoheadTarget` with the def's `autohead_turn_time`,
-  `_max` and `_min_pitch` in their decoded roles. The Game Options row and the pause-sheet apply
-  (`git log --grep=BL-976`) stand and need no change. *⚠ Traps:* do not fix it by negating the
-  lean, a mirrored wrong vector is still the wrong vector; the forward-velocity drop in the lean is
-  C22's port decision and is not the subject. Do not move the `headLook.autohead` default until the
-  decoded turn is in. *Playtest after fix:* `--view=cockpit`, Auto Head Turn on, bank into a
-  sustained turn each way: the head leads into the turn and returns to centre as the wings level.
-  *Cross-refs:* `PT-157` (the mid-flight apply, owed its look), `git log --grep=BL-784` (the row),
-  `PLAN-cockpit-view` C22, `docs/org/cameraViews.md`.
-
 ## HUD & UI
 
 - `BL-113` `[Bug]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Compass tape: the

@@ -211,7 +211,7 @@ Zones.
 
 All three design-document padlock modes are present, and the nine `MSG_PADLOCK_*` directions are
 the hat-switch grid the design describes. `player.json`'s `autohead_turn_time` / `_max` /
-`_min_pitch` are this camera's rate limits (see [vehicle.md](vehicle.md#player-global-blocks)).
+`_min_pitch` are this camera's turn-lead time, lead cap and elevation floor (see [vehicle.md](vehicle.md#player-global-blocks)).
 
 ### Other
 
