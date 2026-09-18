@@ -432,16 +432,33 @@ re-derived.
 ## The proximity fuse
 
 `FUN_004b5fb0` runs the fuse as part of the world tick. For each round in flight (`DAT_0064f78c`) it
-walks **the aircraft list** (`DAT_0071dabc`), skips anything on the shooter's own side, and tests
-range against the round's weapon def `+0x44`. Nothing else is a candidate: the loop never touches
-world geometry, which decodes what was previously a recollection, that the original fuses on
-aircraft and never on terrain.
+walks **`VehicleList`** (the `std::list` at `0x0071dab8`, head node at `DAT_0071dabc`), skips anything
+on the shooter's own side, and tests range against the round's weapon def `+0x44`. Nothing else is
+a candidate: the loop never touches world geometry, which decodes what was previously a
+recollection, that the original fuses on aircraft and never on terrain.
+
+`VehicleList` holds aircraft and the AI ground/sea vehicles ([`aim-assist.md`](aim-assist.md) "The
+four lists"), and **no zeppelin**. Its one inserter is `FUN_0047c210`, which allocates the 0xa20-byte
+vehicle object and links it in through `FUN_005b3330` at `0x0047c543`; every other reference to
+`0x0071dab8` is a name lookup (`FUN_004aff10`) or an iteration. A zeppelin is a different object:
+`FUN_004bd110` reads `zeppelins.zrd`, allocates each one as a 0xfc-byte record (`FUN_004bd460`,
+initialised by `FUN_004bd8d0`) and pushes it only onto the `ZeppelinList` vector at `0x0071df80`
+(net-registered at `0x004bd223`). The mission script agrees: `SET_AI_TEAM` (`FUN_00469e20`) tries
+`VehicleList` first and falls back to a separate `ZeppelinList` search (`FUN_004bd3e0`), naming the
+two in one message, "can't find vehicle or zeppelin". The fuse's dot test also reads the candidate
+at `+0x198`, past the end of a 0xfc-byte zeppelin record. **So the list sweep never fuses on a
+zeppelin**, its hull, gasbags or cannons; a round passing close by flies on. The per-round
+target-proximity path above is a separate question, since it reads the round's own held target
+rather than a list.
 
 When the weapon carries `DETONATION_DOT_PRODUCT` (`0x80000`), passing the range test is not enough.
 The routine normalises the vector between the two and dots it against **the candidate's** orientation
 axis (`+0x198`..`+0x1a0`), and requires that dot to reach the authored threshold at ext `+0x20`. Below
 it, the candidate is skipped and the round flies on. The cone is measured against the target's
-facing, not the round's. `FUN_004b9770`, the terminal-impact path, repeats the same test against the
+facing, not the round's. The vector is round minus candidate (the candidate's slot-0 position call
+returns at `0x004b637c`, the round wrapper's at `0x004b6386`, and the round's is the minuend), and `+0x198` is the vehicle's
+`m[2]`, the backward axis ([`flightModel.md`](flightModel.md)), so a positive threshold admits a
+round in a cone behind the candidate. `FUN_004b9770`, the terminal-impact path, repeats the same test against the
 victim's basis before it will resolve a hit.
 
 ## The beeper and the seeker, which are one weapon in two halves

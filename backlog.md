@@ -196,28 +196,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Weapons & combat
 
-- `BL-233` `[Feature]` `[Blocked: M4]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **Extend the proximity fuse to zeppelins (and any other M4 flyer) when they get
-  bodies.** The fuse itself came back 2026-08-06 (PLAN-vs-mode B14): re-enabled **aircraft-only**
-  against the registered `AircraftBody` list, never world geometry, matching the user's
-  recollection that the original fuses on enemies, never terrain, detonating at the round's
-  **closest approach** within the swept step, with the fused-on body carried into `Impact` (the
-  per-surface IMPACT entries are reachable; the old null-collider bug cannot recur). DD = fuse
-  trigger distance, IP = effect radius (settled 2026-08-02 from the choker/torpedo/flare census,
-  see the B14 landing commit for the full argument). Remaining work: when M4 gives zeppelins (or
-  anything else that flies) collision bodies, they join the fuse's candidate list, the natural
-  seam is `CollisionLayers.Aircraft` or a shared targetable layer read by
-  `ProximityFuseTriggered`'s registry.
-  ✅ **The aircraft-only rule is now decoded, not recollected.** `FUN_004b5fb0` runs the fuse over the
-  aircraft list (`DAT_0071dabc`) and never touches world geometry
-  ([`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md)). Also decoded: when the weapon carries
-  `DETONATION_DOT_PRODUCT`, range alone does not trigger it. The dot is taken against **the
-  candidate's** orientation axis, not the round's, and must reach the authored threshold.
-  ⚠ Traps: (a) the six plain rockets author `DETONATION_DISTANCE == IMPACT_PROXIMITY`, so a
-  first-entry-into-range fuse always detonates exactly where the blast falls to zero and
-  deals nothing, the closest-approach rule is load-bearing, keep it for any new candidate class;
-  (b) a world-armed fuse re-detonates every rocket 15–50 m short of terrain (the 2026-08-02
-  failure), never widen the mask to world bodies.
-
 - `BL-286` `[Tuning]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: footage]` **The first-person muzzle-light energy is picked, not
   measured, and reads much dimmer inside the canopy than the original's.**
   *Evidence:* `MuzzleLightEnergy` **2.5** (`CSVM/src/Flight/Projectile.cs`) is the one figure both
@@ -287,6 +265,29 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   see past is worth the fidelity in a two-to-four-player Dogfight. *Cross-refs:*
   `git log --grep=BL-301` (the VS tuning entry the exemption settled),
   `ProjectilePool.GatherAircraftCandidates`.
+
+- `BL-982` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The proximity
+  fuse sweep differs from `FUN_004b5fb0` twice: it never fuses on a surface vessel, and its
+  `DETONATION_DOT_PRODUCT` cone is the round's forward cone rather than the candidate's rear one.**
+  *Evidence:* the original's sweep walks `VehicleList` (head `DAT_0071dabc`), which holds aircraft
+  and AI ground/sea vehicles; `ProjectilePool.ProximityFuseTriggered` walks the aircraft roster
+  alone, so a rocket passing a patrol boat inside `DETONATION_DISTANCE` flies on, where
+  `CollectVehicleList` already offers those hulls to the assist. The dot test dots
+  `unit(round - candidate)` against the candidate's `+0x198` row, its backward axis, while
+  `FuseDotAllows` dots the round's velocity against the direction to the hull, and the
+  `CSVM.Tests` fact on `FuseDotAllows` pins the velocity form. Three entries author the key
+  (`docs/formats/weapons.md`), the choker among them. Zeppelins are settled: they are not in
+  `VehicleList` at all ([`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md) "The proximity
+  fuse", with the writers). *Fix shape:* take the candidates from the same pool
+  `CollectVehicleList` reads, give a vessel the segment-distance query an `AircraftBody` has, and
+  pass the candidate's basis into the dot test. *⚠ Traps:* (a) the six plain rockets author
+  `DETONATION_DISTANCE == IMPACT_PROXIMITY`, so a first-entry-into-range fuse always detonates
+  where the blast falls to zero and deals nothing; keep closest approach for every candidate class.
+  (b) A world-armed fuse re-detonates every rocket 15 to 50 m short of terrain; never widen the
+  candidates to world bodies. (c) The choker's mid-air detonation is still an open decode
+  ([`docs/org/tracers.md`](docs/org/tracers.md)), so a changed cone is judged against the decode,
+  not against its footage. *Cross-refs:* `SurfaceVehicleRuntime.CollectVehicles`, the
+  `air-to-air` and `zeppelin-fuse` suites.
 
 ## Flight model & collision physics
 
