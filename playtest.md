@@ -367,23 +367,16 @@ reasons that have nothing to do with any of these checks.
   *Blocks:* `BL-285`. ⚠ Slam with a digit key: the held throttle-up key moves the commanded lever
   at the slew's own rate and draws nothing, in the original as here.
 
-- `PT-128` `[A/B: OriginalScreenshots/Dirt Splash.png + Videos/30 Slu building.mp4]` **The building
-  ricochet spark burst (`BL-289`).** ⚠ Flown once: the hangar drew no sparks in CSVM, and the
-  original shows debris rather than sparks there, so `BL-289` is back at decode; fly this again only
-  once it lands the decoded debris, and then judge the debris, not a spark. The dirt-chip constants left this item with `BL-313`: dirt now
-  takes the single spark, and the water column width is settled. What remains is the building
-  ricochet, whose five constants are stand-ins because both authored assets are missing from the
-  install: `RicochetSparks` 8, `RicochetSparkSize` 0.55 m, `RicochetSparkLife` 0.55 s,
-  `RicochetSparkSpeed` 22 m/s, `RicochetSpreadDeg` 90°.
-  ⚠ **Strafe a C1 airport hangar, not a Hollywood studio block.** The surface that reaches these
-  constants is the `soil` byte `buildings`(11), which only C1's `aphagar0N` hangar materials carry;
-  the film lot is `default` and plays the authored `3040slug_gunhit` instead (`BL-289`). *Look for:*
-  - (a) strafe a hangar: the burst's count and spark size against the original's own impact spray;
-  - (b) how long a spark lives and how far it travels before it goes;
-  - (c) the spread, where 90° is a stand-in: whether the burst reads as coming off the surface or as
-    a sphere around the hit.
-  *Blocks:* `BL-289`. The splash height and timing curves are authored data rather than TUNE and are
-  not on trial here.
+- `PT-128` `[A/B: OriginalScreenshots/Videos/30 Slu building.mp4]` **A gun round on the C1
+  airport's buildings draws what the original draws.** This is a confirmation of a decoded port,
+  not a tuning pass. The big zeppelin hangar (`hangar_left`, `hangar_right`, `mainhangar_roof`)
+  reads `soil` `default` and plays the authored `3040slug_gunhit` chunk and smoke, which is the
+  debris the clip shows (the clip is filmed at that hangar, not on the film lot). The small
+  destructible sheds beside the runway (`aphngr01`, `aphngr02`, `apbuild01`) read `buildings`(11),
+  whose gun row binds a `bld_damage.flt` no install file defines, so a round there draws and sounds
+  nothing ([docs/org/weaponImpact.md](docs/org/weaponImpact.md)). *Look for:*
+  - (a) strafe the zeppelin hangar: the chunk and smoke against the clip;
+  - (b) strafe a shed: no spark, no puff and no hit sound, only the damage it takes.
 
 - `PT-133` `[Own]` **The HUD's reading box is the right width at the controls on a 32:9 screen.**
   The dials, the SPD/ALT/THR block and the pause screen's objectives panel measure from a 16:9 box

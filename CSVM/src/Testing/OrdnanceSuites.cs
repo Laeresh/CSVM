@@ -2071,22 +2071,24 @@ internal static class OrdnanceSuites
         });
     }
 
-    // What a gun round finds on a movie-studio building. The original indexes the IMPACT table with
-    // the struck material's own soil byte and with nothing else (FUN_005ac7a0 at 0x005ac7a9,
-    // docs/org/weaponImpact.md), and the film lot's blocks carry soil `default`, so the round plays
-    // the authored gunhit there. `buildings`(11) is reached only by C1's hangar materials, where the
-    // guns bind the install-missing bld_damage.flt and the ricochet stands in for it; wep_02 is the
-    // exception whose large_fireball the runtime carries, and which therefore renders alone.
+    // What a gun round finds on a building. The original indexes the IMPACT table with the struck
+    // material's own soil byte and with nothing else (FUN_005ac7a0 at 0x005ac7a9,
+    // docs/org/weaponImpact.md). The film lot's blocks and C1's zeppelin hangar carry soil
+    // `default`, so the round plays the authored gunhit there. `buildings`(11) is reached only by
+    // C1's small airport buildings (`aphagar0N`), where the guns bind bld_damage.flt, a name no
+    // install file defines, so the original's slot is null and the round draws nothing.
     [Suite("impact-building-surface",
-        "a gun round on a C2 film-lot building reads default(0) off the struck material and hands " +
-        "the authored 3040slug_gunhit to the effects runtime, the chapter carrying no buildings(11) " +
-        "collider at all; on the hangar surface wep_00's install-missing bld_damage.flt still takes " +
-        "the ricochet stand-in while wep_02's runtime-carried large_fireball renders alone (BL-289)")]
+        "a gun round on a C2 film-lot building and on C1's zeppelin hangar reads default(0) off the " +
+        "struck material and hands the authored 3040slug_gunhit to the effects runtime; on a C1 " +
+        "airport building carrying buildings(11) wep_00's undefined bld_damage.flt draws and sounds " +
+        "nothing, while wep_02's runtime-carried large_fireball still renders")]
     internal static void ImpactBuildingSurface(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, FilmLotChapter);
         ctx.RequireData(texturesPath, $"{FilmLotChapter} textures");
+        string airportTextures = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(airportTextures, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         if (!weapons.TryGet("wep_00", out var gun) || !weapons.TryGet("wep_02", out var fifty))
         {
@@ -2104,18 +2106,21 @@ internal static class OrdnanceSuites
 
         var unbound = ImpactOutcome.Resolve(gun, SurfaceRegistry.Buildings, modelResolved: false,
             hasEffectsRuntime: true, effectBound: false);
-        ctx.Check(unbound.StandIn == ImpactStandIn.Ricochet,
-            $"a gun on buildings whose bound name renders nowhere keeps the ricochet stand-in standin={unbound.StandIn}");
+        ctx.Check(unbound is { StandIn: ImpactStandIn.None, Sound: null },
+            $"a gun on buildings whose bound name renders nowhere draws no stand-in and plays no sound, as the original's null slot and empty SOUND list do standin={unbound.StandIn} snd={unbound.Sound ?? "-"}");
         var rendered = ImpactOutcome.Resolve(fifty, SurfaceRegistry.Buildings, modelResolved: false,
             hasEffectsRuntime: true, effectBound: true);
-        ctx.Check(rendered is { EffectName: "large_fireball", StandIn: not ImpactStandIn.Ricochet },
-            $"and a name the runtime renders takes the burst away, playing the authored def alone fx={rendered.EffectName ?? "-"} standin={rendered.StandIn}");
+        ctx.Check(rendered.EffectName == "large_fireball",
+            $"and wep_02's bound large_fireball still plays on the same surface fx={rendered.EffectName ?? "-"}");
 
         // The lab reads the built chapter through the one physics space, where a cached collidable
         // world's colliders would also stand and answer the ray.
         ctx.EvictCollidableWorlds();
         ctx.WithPrivateWorld(FilmLotChapter, collision: true,
             world => Strafe(ctx, world, gun, texturesPath));
+        ctx.EvictCollidableWorlds();
+        ctx.WithPrivateWorld("C1", collision: true,
+            world => StrafeAirport(ctx, world, gun, airportTextures));
     }
 
     // A5's launch axis and D18's launch hook over a live fire path: the rig fires its own pylons
@@ -2930,8 +2935,101 @@ internal static class OrdnanceSuites
                 live.SimStep(1f / 60f);
             }
             ctx.Check(plays.Count > 0 && plays[0] == "3040slug_gunhit",
-                $"a 30 cal round into that building hands the decoded gunhit to the effects runtime, no ricochet in sight (played={(plays.Count > 0 ? plays[0] : "nothing")})");
+                $"a 30 cal round into that building hands the decoded gunhit to the effects runtime (played={(plays.Count > 0 ? plays[0] : "nothing")})");
             ctx.Note($"{FilmLotChapter}: {classed.Count} buildings-classed colliders, none carrying soil 11, a gun round on one playing {(plays.Count > 0 ? plays[0] : "nothing")}");
+        }
+        finally
+        {
+            live?.Free();
+            textures.Dispose();
+        }
+    }
+
+    // C1's two building kinds, each struck from above by one 30 cal round: the zeppelin hangar
+    // (`hangar_left`/`hangar_right`/`mainhangar_roof`, soil default) and an airport building whose
+    // collider carries buildings(11).
+    private static void StrafeAirport(TestContext ctx, TestWorld world, WeaponDef gun, string texturesPath)
+    {
+        var bodies = world.Session.Root.FindChildren("*", "StaticBody3D", recursive: true, owned: false)
+            .OfType<StaticBody3D>().ToList();
+        string[] zeppelinHangar = { "hangar_left", "hangar_right", "mainhangar_roof" };
+        var hangar = bodies.Where(b => b.GetParent() is { } p && zeppelinHangar.Contains(p.Name.ToString())).ToList();
+        var eleven = bodies.Where(b => ProjectilePool.SurfaceIdOf(b) == SurfaceRegistry.Buildings).ToList();
+        ctx.Check(hangar.Count > 0, $"C1 builds the zeppelin hangar's colliders count={hangar.Count}");
+        ctx.Check(hangar.All(b => ProjectilePool.SurfaceIdOf(b) == SurfaceRegistry.Default),
+            $"and every one of them reads default(0): the hangar_NN textures carry soil Default");
+        ctx.Check(eleven.Count > 0, $"and {eleven.Count} colliders carry buildings(11), the aphagar0N airport buildings");
+
+        var bound = EffectCatalogue.WorldEffectAnimNames(world.Session.Program);
+        var sub = world.Session.Program.Subset(bound);
+        var onHangar = FireDownOnto(ctx, world, hangar, gun, texturesPath, sub);
+        ctx.Check(onHangar is { Plays: ["3040slug_gunhit", ..] },
+            $"a round into the zeppelin hangar hands 3040slug_gunhit to the effects runtime, the debris the original throws there (played={onHangar?.Plays.FirstOrDefault() ?? "nothing"})");
+        var onEleven = FireDownOnto(ctx, world, eleven, gun, texturesPath, sub);
+        ctx.Check(onEleven != null, $"a round lands on a buildings(11) collider");
+        if (onEleven is { } e)
+        {
+            ctx.Check(e.Plays.Count == 0 && e.Sprites == 0,
+                $"and it hands nothing to the effects runtime and draws no sprite of its own (played={e.Plays.Count} sprites={e.Sprites})");
+            ctx.Note($"C1: a buildings(11) collider struck at {e.Point}, the zeppelin hangar at {onHangar?.Point.ToString() ?? "-"}");
+        }
+    }
+
+    // Drops one round straight down onto the first candidate a ray from above lands on, steps the
+    // pool until the round strikes (DamageSink reports it) and reads what the hit produced that step.
+    private static (List<string> Plays, int Sprites, Vector3 Point)? FireDownOnto(TestContext ctx, TestWorld world,
+        List<StaticBody3D> candidates, WeaponDef gun, string texturesPath, AnimProgram sub)
+    {
+        var space = ctx.Host.GetWorld3D().DirectSpaceState;
+        Vector3? found = null;
+        foreach (var body in candidates)
+        {
+            if (body.GetParent() is not Node3D owner
+                || owner.GetNodeOrNull<MeshInstance3D>("mesh") is not { } mesh)
+            {
+                continue;
+            }
+            var centre = mesh.GlobalTransform * mesh.GetAabb().GetCenter();
+            var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                centre with { Y = centre.Y + 400f }, centre with { Y = centre.Y - 400f },
+                CollisionLayers.World));
+            if (hit.Count > 0 && hit["collider"].Obj is StaticBody3D landed && ReferenceEquals(landed, body))
+            {
+                found = hit["position"].AsVector3();
+                break;
+            }
+        }
+        if (found is not { } point)
+        {
+            return null;
+        }
+
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? live = null;
+        try
+        {
+            var plays = new List<string>();
+            bool struck = false;
+            live = new ProjectilePool(textures, null, null,
+                flyoutGamez: world.Gamez, flyoutScene: world.Session.Builder.Scene,
+                flyoutAnims: world.Session.Program)
+            {
+                EffectSink = (name, at, orient, ringOrient, ttl) => plays.Add(name),
+                EffectHandles = name => sub.ByAnimName(name).Count > 0,
+                DamageSink = (_, _) =>
+                {
+                    struck = true;
+                    return false;
+                },
+            };
+            ctx.Host.AddChild(live);
+            live.Spawn(gun, new Transform3D(Basis.LookingAt(Vector3.Down, Vector3.Forward),
+                point + new Vector3(0f, 60f, 0f)), Vector3.Zero);
+            for (int i = 0; i < 180 && !struck; i++)
+            {
+                live.SimStep(1f / 60f);
+            }
+            return struck ? (plays, live.ImpactSpriteCount, point) : null;
         }
         finally
         {

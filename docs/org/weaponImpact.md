@@ -146,12 +146,47 @@ struck material, and the shipped chapters spend it sparingly:
   Every `filmlot*`, `chrysler*` and `empire*` material carries `Default`. The film-lot walls, the
   studio blocks and the `nycity` skyscraper are all id 0, so a gun round on them takes the guns'
   `default` row and plays the authored `<caliber><ammo>_gunhit`.
-- **C1** carries 61 bodies with id 11, all of them the `aphagar01/02/04/05` airport-hangar
-  materials (4 materials). The hangars are the `buildings` surface in the shipped data.
+- **C1** carries 61 bodies with id 11, all of them the `aphagar01/02/04/05` materials (4
+  materials; `aphagar03` beside them is `Default`). Those textures dress the small destructible
+  airport buildings, `aphngr01.flt`, `aphngr02.flt` and `apbuild01.flt` (the brick sheds with the
+  chequered roofs, under `m_build01`–`m_build04`), and nothing else.
+- ⚠ **C1's zeppelin hangar is not `buildings`.** `hangar_left`, `hangar_right`, `mainhangar_roof`
+  and the hangar floor are textured `hangar19`–`hangar37`, every one `Default`. A gun round on it
+  reads id 0 and plays the guns' `default` row, `<caliber><ammo>_gunhit`, whose flung `chunk` and
+  `blacksmokepuffer` puff are the wall debris of `OriginalScreenshots/Videos/30 Slu building.mp4`.
+  That clip is this hangar (the zeppelin inside it, 30 cal slug), not the Hollywood film lot.
 
 `SceneBuilder.ClassifySurface`'s `buildings` string is a separate, cosmetic classification and does
 not select the impact; `AttachCollision` writes the bucket's dominant `SoilId` into
-`SurfaceIdMeta`, and that is what `ProjectilePool.SurfaceIdOf` reads.
+`SurfaceIdMeta`, and that is what `ProjectilePool.SurfaceIdOf` reads. The original reads the id per
+polygon (the hit record's material pointer, [weaponRay.md](weaponRay.md)), so a minority-soil
+polygon inside a bucket reads the dominant id in CSVM and its own in the original.
+
+## An unresolved effect name leaves the slot null, and nothing falls back
+
+`FUN_005ae990` resolves `ANIMATION`, `SURFACE_ANIMATION`, `MODEL_ANIMATION`,
+`ANIMATION_ATTACHED` and `ANIMATION_MIN_RANGE` through `FUN_00523820`, a linear name compare over
+the loaded animation-definition array (`DAT_009fd14c`, count `DAT_009fd14a`, stride `0x110`) that
+returns **0** when no definition carries the name. There is no default name, no retry and no
+substitution. The table itself is `calloc(1, count * 100)` (`0x005ad842`, stored at
+`0x005ad84b`), and a found block is parsed without the `default` copy (`0x005ae239`), so every
+field the block does not author stays zero.
+
+The guns' `buildings` block (`wep_00`, `wep_01`, `wep_03`, `wep_23`, `wep_29`, `wep_30`–`wep_73`,
+`wep_130`–`wep_170`) authors `ANIMATION bld_damage.flt` and nothing else. No install file defines
+that name (it occurs only in `zrdr.zbd`, as this reference), so the row is all zero: `ANIMATION`
+null, `SURFACE_ANIMATION` null, `EFFECT` null, `SOUND` count 0. `FUN_005ac7a0` then spawns nothing
+at `0x005ac942`/`0x005ac987`, plays nothing at `0x005ac9fb`, and `FUN_005ad100` returns on its
+empty sound list. The struck building's own handler (`FUN_005abcf0`) still takes the damage and
+runs its `DAMAGE_SEQUENCE`; its fallback animation reads the weapon's `DAMAGE_ANIM_ON_HEALTH` /
+`DAMAGE_ANIMATION` / `KILL_ANIMATION` (`weapon+0x164`/`0x16c`/`0x18c`, parsed at
+`0x005ae478`/`0x005ae434`/`0x005ae40d`), which no shipped weapon authors. So a gun round on a
+`buildings`(11) polygon draws and sounds nothing of its own in the original. `wep_02`'s
+`large_fireball` is a defined name and plays.
+
+The bullet-hole stamp `FUN_00558f80` (called from `FUN_005abcf0` unless `weapon+0x74 & 0x400000`)
+paints the `WriteTextureSetMap pock1.tif` decal only into materials carrying the decal bit
+([weaponRay.md](weaponRay.md)); no C1 material carries it, so it paints nothing on either hangar.
 
 ## What this decides in the shipped data
 

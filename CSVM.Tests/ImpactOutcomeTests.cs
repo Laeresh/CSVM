@@ -64,13 +64,17 @@ public class ImpactOutcomeTests
             ImpactOutcome.Resolve(Rocket(), surfaceId, false, hasEffectsRuntime: true).StandIn);
     }
 
-    /// <summary>A gun round off a building ricochets; a rocket on the same wall does not, the
-    /// ricochet stands in for a gun-specific authored asset that is missing from the install.</summary>
+    /// <summary>A gun round on <c>buildings</c> whose row renders nowhere draws nothing, since the
+    /// original leaves the unresolved slot empty; a bound name keeps the base spark, and a rocket
+    /// on the same wall is untouched.</summary>
     [Fact]
-    public void OnlyAGunRicochetsOffABuilding()
+    public void AGunOnABuildingWithAnUnboundRowDrawsNothing()
     {
-        Assert.Equal(ImpactStandIn.Ricochet,
+        Assert.Equal(ImpactStandIn.None,
             ImpactOutcome.Resolve(Gun(), SurfaceRegistry.Buildings, false, hasEffectsRuntime: true).StandIn);
+        Assert.Equal(ImpactStandIn.Spark,
+            ImpactOutcome.Resolve(Gun(), SurfaceRegistry.Buildings, false, hasEffectsRuntime: true,
+                effectBound: true).StandIn);
         Assert.Equal(ImpactStandIn.Spark,
             ImpactOutcome.Resolve(Rocket(), SurfaceRegistry.Buildings, false, hasEffectsRuntime: true).StandIn);
     }

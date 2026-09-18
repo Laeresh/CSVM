@@ -641,7 +641,7 @@ internal static class CombatSuites
 
     // B5's launch scatter (AimAssist.Scatter): every round lands inside the
     // cone, the polar angle is UNIFORM IN THE ANGLE rather than over the cone's solid angle (the
-    // reflex port, and what `ProjectilePool.ApplySpread`'s `sqrt(rand)` does, which would
+    // reflex port, and what `sqrt(rand)` cap sampling does, which would
     // pile shots at the rim), and the roll about the aim axis covers the full circle. The
     // able-to-fail control is the solid-angle sampling itself, computed alongside from the same
     // draws: it fails the flatness test this one passes.

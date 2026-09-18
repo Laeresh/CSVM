@@ -219,16 +219,6 @@ public sealed partial class ProjectilePool : Node3D
     private const float MuzzleLightLife = 0.03f;   // s
     private const float MuzzleLightEnergy = 2.5f;  // TUNE: no def carries energy, so the big first-person pair starts at the third-person stand-in's brightness
 
-    // A gun hit on a buildings-classed surface: a ricochet spark burst. Both authored assets are
-    // confirmed missing from the install (`bld_damage.flt` and the `rcochet1` EFFECT are 2 of the
-    // 5 referenced-but-undefined names, weapon-effects.md), so this stand-in is judged by eye:
-    // fast bright sparks flying off the wall plus the flash. Count/size/speed/life are TUNE.
-    private const int RicochetSparks = 8;
-    private const float RicochetSparkSize = 0.55f;  // m
-    private const float RicochetSparkLife = 0.55f;  // s
-    private const float RicochetSparkSpeed = 22f;   // m/s launch speed
-    private const float RicochetSpreadDeg = 90f;    // cone half-angle around the surface normal
-
     // The authored water-splash playback, verbatim from splash1.flt/bsplsh.flt (identical shapes).
     // See docs/formats/weapon-effects/ordnance.md "Water splash playback" for the source events.
     private const float SplashRunTime = 2.0f;      // s, the def's sequence length
@@ -249,7 +239,6 @@ public sealed partial class ProjectilePool : Node3D
     // sibling material with no cycle block, so EnsureSplashFlipbook registers it lazily instead.
     private static readonly string[] SplashFlipbookTextures = { "splash01", "splash02", "splash03" };
 
-    private static readonly Color RicochetTint = new(1f, 0.95f, 0.6f); // white-hot spark yellow
     private static readonly Color MuzzleSmokeTint = new(0.85f, 0.85f, 0.85f);
 
     // Where a gun shot's three secondaries sit, in the firing muzzle node's own frame, -Z forward.
@@ -394,8 +383,8 @@ public sealed partial class ProjectilePool : Node3D
     // each choking every aircraft inside its radius for its TIME. Stepped by SimStep after the rounds.
     private readonly List<TanglerCloud> _tanglerClouds = new();
     private readonly List<AudioStreamPlayer> _sfxPool = new();
-    // The stand-in fireball's sprite scatter, muzzle-flash roll, and debris/ricochet spread
-    // (ApplySpread, gun dispersion itself was removed). Held rather than resolved per draw.
+    // The stand-in fireball's sprite scatter and the muzzle-flash roll (gun dispersion itself
+    // was removed). Held rather than resolved per draw.
     private readonly RandomNumberGenerator _rng = Rng.Stream(Rng.Weapons);
     private readonly HashSet<string> _flyoutLogged = new();
     // One MultiMesh per muzzle-flash ammo texture (MuzzleAmmoTextures), built in _Ready.
@@ -486,6 +475,10 @@ public sealed partial class ProjectilePool : Node3D
     /// session: an aeroplane ahead still flashes while the player sits in the canopy. Nose (mode 7)
     /// is not covered, and a null closure (the weapon bench, the suite labs) draws every flash.</summary>
     public Func<int, bool>? CockpitViewOfPilot { get; set; }
+
+    /// <summary>The impact sprites alive this step (spark, explosion stand-in), for a suite that
+    /// asserts a hit drew none of its own.</summary>
+    public int ImpactSpriteCount => _impact.Count;
 
     /// <summary>The session's surface hulls, so <see cref="CollectVehicleList"/> can offer the
     /// whole of the engine's <c>VehicleList</c> rather than its aircraft half. Null in every build
@@ -1672,7 +1665,7 @@ public sealed partial class ProjectilePool : Node3D
             }
             else
             {
-                // Smoke puffs and ricochet sparks carry velocity; every other sprite has it zeroed
+                // Smoke puffs carry velocity; every other sprite has it zeroed
                 // and is unaffected, the position/orientation set at spawn stands for its whole life.
                 if (s.Vel != Vector3.Zero)
                 {
@@ -1881,24 +1874,6 @@ public sealed partial class ProjectilePool : Node3D
         return mesh;
     }
 
-    private Vector3 ApplySpread(Vector3 forward, float coneDeg)
-    {
-        if (coneDeg <= 0f)
-            return forward;
-        // A random direction inside the cone: a random azimuth around `forward`, and a polar angle
-        // in [0, cone] biased for a roughly uniform disc so the pattern fills the cone, not its rim.
-        float half = Mathf.DegToRad(coneDeg) * 0.5f;
-        float polar = half * Mathf.Sqrt(_rng.Randf());
-        float azimuth = _rng.Randf() * Mathf.Tau;
-        // Build a basis with `forward` as -Z, then tilt.
-        var basis = Basis.LookingAt(forward, Mathf.Abs(forward.Dot(Vector3.Up)) > 0.99f ? Vector3.Right : Vector3.Up);
-        var tilted = basis * new Vector3(
-            Mathf.Sin(polar) * Mathf.Cos(azimuth),
-            Mathf.Sin(polar) * Mathf.Sin(azimuth),
-            -Mathf.Cos(polar));
-        return tilted.Normalized();
-    }
-
     // The in-flight rocket body: a BuildFlyoutBody instance parented under the
     // pool's own container (the caller poses it down the round's velocity each frame). Null falls back
     // to the exhaust streak.
@@ -2062,7 +2037,7 @@ public sealed partial class ProjectilePool : Node3D
         bool modelled = !effectBound && outcome.EffectName is { } fxName
             && SpawnImpactModel(fxName, point, EffectOrient(outcome, normal));
         // The second resolve now also carries whether the runtime renders the row's own name, which
-        // is what takes the ricochet burst off a `buildings` hit that already plays something.
+        // is what separates `wep_02`'s bound `buildings` row from the guns' unbound one.
         if (modelled || effectBound)
             outcome = ImpactOutcome.Resolve(weapon, surface, modelled, hasEffectsRuntime, suppression, cratered, effectBound);
 
@@ -2098,9 +2073,6 @@ public sealed partial class ProjectilePool : Node3D
         {
             case ImpactStandIn.Explosion:
                 SpawnExplosion(point, orient);
-                break;
-            case ImpactStandIn.Ricochet:
-                SpawnRicochet(point, orient);
                 break;
             case ImpactStandIn.Spark when _impact.Count < MaxFlashes:
                 // The water case is its own read of the struck id, as it is in the original
@@ -2677,30 +2649,6 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    // A gun round ricocheting off a buildings-classed surface: fast, bright sparks
-    // flying off the wall (additive, on the impact pool) plus the brief hit flash. A stand-in,
-    // the authored `bld_damage.flt`/`rcochet1` assets do not exist in the install; magnitudes
-    // are TUNE.
-    private void SpawnRicochet(Vector3 point, Basis orient)
-    {
-        if (_impact.Count < MaxFlashes)
-            _impact.Add(new Sprite { Pos = point, Life = ImpactLife, Size = ImpactSize, Tint = new Color(1f, 0.9f, 0.5f), Orient = orient });
-        for (int i = 0; i < RicochetSparks && _impact.Count < MaxFlashes; i++)
-        {
-            var dir = ApplySpread(orient.Z, RicochetSpreadDeg);
-            float speed = RicochetSparkSpeed * (0.5f + 0.5f * _rng.Randf());
-            _impact.Add(new Sprite
-            {
-                Pos = point,
-                Life = RicochetSparkLife * (0.7f + 0.6f * _rng.Randf()),
-                Size = RicochetSparkSize * (0.7f + 0.6f * _rng.Randf()),
-                Tint = RicochetTint,
-                Orient = orient,
-                Vel = dir * speed,
-            });
-        }
-    }
-
     // Ejects one shell casing: a pooled instance of the `gunshell` prototype, launched with its
     // def's own OBJECT_MOTION (MotionRuntime semantics). Each casing rides its own transient node,
     // so sustained fire ejects at gun rate. No-op without a world scene/anim program.
@@ -3241,7 +3189,7 @@ public sealed partial class ProjectilePool : Node3D
         public Basis Orient;   // unit quad orientation: X width, Y height, Z the facing normal.
                                // Muzzle flashes roll in the firing plane's basis; impact sprites
                                // face the struck surface normal, a fixed world plane for neither.
-        public Vector3 Vel;    // m/s, world; zero for every sprite but ricochet sparks and smoke
+        public Vector3 Vel;    // m/s, world; zero for every sprite but smoke
         public bool NoGravity; // smoke puffs drift on their spawn velocity; sparks arc (false)
         public bool AnchorLeft; // Pos is the texture's left edge (UV x=0), not the quad centre,
                                 // the muzzle flash triad; the centre is derived in RenderSprites

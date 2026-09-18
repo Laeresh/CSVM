@@ -334,7 +334,7 @@ public static class AimAssist
     /// "The scatter cone"), the only scatter the original applies to a player's round: rotate the aim
     /// direction about a perpendicular by <paramref name="inaccuracy"/> × a uniform [0,1).
     /// ⚠ The polar angle is uniform in <c>[0, inaccuracy]</c>, not over the cone's solid angle. Do
-    /// not merge this with <c>ProjectilePool.ApplySpread</c>'s <c>sqrt(rand)</c> cap sampling.</summary>
+    /// not replace it with <c>sqrt(rand)</c> cap sampling, which piles rounds at the rim.</summary>
     public static Vector3 Scatter(Vector3 aimDir, float inaccuracy, RandomNumberGenerator rng)
     {
         if (inaccuracy <= 0f || aimDir.LengthSquared() < 1e-12f)
