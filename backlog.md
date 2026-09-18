@@ -591,6 +591,34 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Playtest after fix:* any chapter under Enhanced Graphics, still and moving, over water and over
   ground. *Cross-refs:* `docs/architecture/Utils.md` (`GraphicsMode`).
 
+- `BL-981` `[Fidelity]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: footage]` **The aircraft reads
+  about three quarters as bright and purer in hue in the original than in ours, in every zone.**
+  Matched poses, the same Bloodhawk in the stock Fortune Hunters paint on both sides, red airframe
+  pixels averaged: C1 `IA1` spawn 3 under overcast day reads 88/6/19 in the original against
+  116/20/34 in ours (0.76), the C5 `IA1` tower spawn at night 98/7/21 against 145/24/43 (0.68).
+  The HUD gauge discs in the same frames read 0.98, so nothing frame-wide is in the ratio, and the
+  factor is the same order by day and by night, so it is not a night term the original has and we
+  lack. Originals: `OriginalScreenshots/C1 IA1 Zone1 environment Spawn3.png` and
+  `playtest/CAP-58/` still `232628`; ours beside them in `playtest/CAP-58/pairs/`
+  (`c1-spawn3-bhawk-fortune-csvm.png`, `pair2-bhawk-fortune-csvm.png`).
+  *Two terms in the numbers:* (1) a multiplicative shortfall, the original's aircraft being texture
+  times authored vertex colour times `SUNLIGHT_AMBIENT + SUNLIGHT_DIFFUSE × max(N·L, 0)` clamped
+  at white (`docs/org/vertexLighting.md`), where ours lights the full texture with
+  `WeatherRig.FaithfulEnergies`' day-level sun and ambient, picked by eye; (2) a shift toward grey,
+  the original's green and blue channels sitting at a third of ours, which a multiply cannot produce
+  and which the white `AmbientLightColor` and the `SceneBuilder.AircraftSpecular` 0.25 sheen can,
+  both neutral terms added on top of the texture and both the remake's own.
+  *Next, one decode:* what the vehicle draw multiplies into the diffuse byte, whether the airframe's
+  authored vertex colours sit below 255 as the `bldg` tower skins do, or the light term alone
+  accounts for the loss; the C1 zone 2 pair (1.2 / 0.25) and the C5 pair (1.5 / 0.5) give two
+  points to check the decoded law against. *Fix shape:* the faithful path shades the aircraft with
+  the decoded product per vertex, in place of the eye-picked energies, and the neutral ambient and
+  sheen are reviewed against the hue reading rather than kept as a look. It is not a night fix and
+  not a paint fix: the same pattern on both sides is what cleared those.
+  *Playtest after fix:* the two poses above, and a day chapter with the sun on the wing top.
+  *Cross-refs:* `BL-322` (the same product on the world), `BL-885` (the chase camera frames the
+  aircraft larger in ours, so region placement differs per image).
+
 ## Effects & animation runtime
 
 - `BL-674` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: data]` `[CM10]` **CM10's attack-balloon wave flies from 990 m down to water level and back up
@@ -1232,6 +1260,21 @@ usual.
   lives past spawn, what it flies), then port that; do not invent a leash or a despawn before the
   read. *Cross-refs:* `docs/org/aiPilot.md` (the headline, "Open"),
   `docs/formats/ai-rosters.md` ("Who is netless").
+
+- `BL-980` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **The Instant Action
+  ace's target marker names the aeroplane where the original names the pilot.** At the controls
+  the marker over the ace reads "Peacemaker"; in the original it reads the ace's name
+  ("Marshall Bill Redmann", C5's `MSG_SSCRAWFORD_NAME`), and the wave enemies read their group's
+  `enemy_name`. *Evidence:* `FUN_0045a390` writes the marker's name string from `ia.zrd`'s
+  `ace_name` (`0x0045ab0a`) and the waves' `enemy_name` (`0x0045ae73`), both MSG keys the parser
+  resolves through the string table (`0x0045946b`, `0x00458e36`; `docs/org/targeting.md`,
+  `docs/formats/instant-action.md`). CSVM already parses both (`InstantAction.AceName`,
+  `EnemyName`) and logs the ace's name at spawn, but `InstantActionDirector` spawns the ace and
+  the wave members with no title, so `TargetHud` falls through `PlaneRoster.PlaneDisplayName` to
+  the def-name derivation. The campaign path proves the mechanism: an authored roster `Title`
+  lands in `PlaneStats.AiTitle` and the marker reads it. *Fix shape:* resolve `AceName` and each
+  wave's `EnemyName` at spawn and set them as the actor's `AiTitle`, the same field the campaign
+  fills; the wingmen keep the plane-name fallback unless the decode shows otherwise.
 
 ## Tooling, platform & docs
 
