@@ -64,11 +64,11 @@ public static class EngineAudioCurves
     private const float BoostVolumeParam = 1.17f;
     private const float BoostPitchParam = 1.25f;
 
-    // The gain the rattle loop plays at once its gate opens, hardcoded by the original's own
-    // keep-alive call rather than read from the rattle block. ⚠ Not a mix constant to tune: it is
-    // the same 1.0 the engine slot's flat volume curve gives that slot, so the two sit level.
+    // The gain the rattle loop plays at once its gate opens. The original's keep-alive call
+    // hardcodes 1.0, level with the engine slot's flat volume curve; this port plays it 1.3x that,
+    // a chosen departure judged at the controls, where the decoded level read audible but low.
     // Decode: docs/org/shakes.md, "The rattle SOUND is a gate at full level".
-    private const float RattleGain = 1f;
+    private const float RattleGain = 1.3f;
 
     /// <summary>Whether the engine slot takes <c>damaged_engine_sound</c>: the original tests its
     /// whole disabled-systems mask for nonzero, and the two bits this engine models are the
@@ -165,4 +165,8 @@ public static class EngineAudioCurves
     /// reaches the mix at the engine slot's own level once it opens.</summary>
     internal static float Rattle(PlaneStats stats, float speedFrac) =>
         speedFrac < stats.RattleSpeedGate ? 0f : RattleGain;
+
+    /// <summary>The level the rattle plays at past its gate, for the suites that pin the gate's
+    /// flat top and its relation to the engine slot.</summary>
+    internal static float RattleLevel() => RattleGain;
 }
