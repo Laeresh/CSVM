@@ -19,6 +19,9 @@ internal static class MouseFlightSuites
     // High over an empty world, so nothing the rig spawns into resolves a ground contact.
     private const float SpawnAltitudeM = 800f;
 
+    // Past the last control a row can hold, so a staged offer adds a control rather than replacing one.
+    private const int RowSlots = 16;
+
     [Suite("flight-mouse-scheme",
         "the mouse flight-control scheme over the shipped defs: the Hoplite authors is_autogyro and "
         + "the Bloodhawk does not, sideways mouse motion banks the aeroplane where it yaws the "
@@ -123,6 +126,146 @@ internal static class MouseFlightSuites
         }
 
         ctx.Note($"the capture is guarded off on this harness and the mouse mode is left at {before}");
+    }
+
+    [Suite("flight-mouse-scheme-live",
+        "a Controls page accepted over the pause reaches the seat already flying: the real pause "
+        + "Preferences leaf over the install's decoded layout, holding a rebinding feature that "
+        + "saves to scratch, opened over two human seats, walks to the CONTROLS page, flips the "
+        + "Mouse row to Fly and stages a flight rebind, and ACCEPT CHANGES puts player 1's seat on "
+        + "the mouse stick and the new control at once while player 2's seat stays as it was, the "
+        + "capture decision reads the same under either scheme, and once the leaf has closed a "
+        + "later accept from the menu reaches no seat")]
+    internal static void FlightMouseSchemeLive(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(UI.Menu.MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = UI.Menu.Original.OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+            return;
+
+        string dir = System.IO.Path.Combine(ctx.ScratchDir, "flight-mouse-scheme-live");
+        if (System.IO.Directory.Exists(dir))
+            System.IO.Directory.Delete(dir, recursive: true);
+        System.IO.Directory.CreateDirectory(dir);
+        // ⚠ Before the feature saves anything, or the accept lands on this machine's own keymap.
+        string? previousDir = BindingStore.DirectoryOverride;
+        BindingStore.DirectoryOverride = dir;
+        var mode = Godot.Input.MouseMode;
+        var stats = PlaneStats.Load(ctx.ZrdrPath, "player_bhawk");
+        var one = Rig(ctx, stats, "LiveSchemeSeat1", human: true);
+        var two = Rig(ctx, stats, "LiveSchemeSeat2", human: true);
+        two.PlayerIndex = 1;
+        var controls = new UI.Menu.ControlsFeature((player, profile) => BindingStore.UserBindings().Save(player, profile));
+        var leaf = PausePreferences.Build(ctx.DataRoot, layout, controls, _ => { });
+        try
+        {
+            ctx.Check(leaf != null, $"the leaf builds over the install's decoded layout");
+            if (leaf == null)
+                return;
+            AcceptOverThePause(ctx, leaf, controls, one, two);
+            leaf.Close();
+            controls.MouseFlying = false;
+            controls.Accept();
+            ctx.Check(one.MouseFlying,
+                $"with the leaf closed, an accept from the menu reaches no seat, the listener having come off ({one.MouseFlying})");
+        }
+        finally
+        {
+            leaf?.Close();
+            leaf?.Free();
+            one.QueueFree();
+            two.QueueFree();
+            BindingStore.DirectoryOverride = previousDir;
+            Godot.Input.MouseMode = mode;
+        }
+
+        ctx.Note($"an accepted Controls page reaches the flying seat without a restart");
+    }
+
+    // The walk a pilot makes over the pause: Options, the CONTROLS door, the Mouse row, ACCEPT
+    // CHANGES. The rebind is staged through the feature rather than by a capture, since the scripted
+    // run presses no hardware and the keymap half only has to prove it rides the same accept.
+    private static void AcceptOverThePause(
+        TestContext ctx, PausePreferences leaf, UI.Menu.ControlsFeature controls, FlightController one, FlightController two)
+    {
+        const Key Rebound = Key.F8;
+        one.MouseStickForTest = new Vector2(0.8f, 0f);
+        two.MouseStickForTest = new Vector2(0.8f, 0f);
+        ctx.Check(!one.MouseFlying && one.ReadKeyboard(Dt).Roll == 0f,
+            $"ABLE-TO-FAIL CONTROL: player 1's seat starts on head-look, the cursor banking nothing ({one.MouseFlying})");
+        bool wantedOnLook = CaptureDecision(one);
+
+        leaf.Open(new[] { new UI.MenuInput { Keyboard = true } }, 0, new[] { one, two });
+        WalkTo(leaf, UI.Menu.Original.OriginalOptionsScreen.ControlsDoorKey);
+        leaf.Drive(new UI.Menu.MenuCommands { Accept = true });
+        ctx.Check(leaf.Shell.Screen == UI.Menu.Original.OriginalScreen.ControlsPrefs,
+            $"the CONTROLS door opens over the pause ({leaf.Shell.Screen})");
+        WalkTo(leaf, UI.Menu.Original.OriginalOptionsScreen.ControlsMouseKey);
+        leaf.Drive(new UI.Menu.MenuCommands { Accept = true });
+        controls.Context = InputContext.Flight;
+        controls.Focus(IndexOf(controls.Actions, InputAction.AutoLand));
+        controls.MoveSlot(RowSlots);
+        controls.Offer(new Binding(DeviceId.Keyboard, BindingControl.Key((int)Rebound)));
+        controls.ConfirmSteal();
+        ctx.Check(controls.MouseFlying && !one.MouseFlying && !Holds(one.FlightKeymap, Rebound),
+            $"a staged flip and rebind reach no seat before the accept (page {controls.MouseFlying}, seat {one.MouseFlying})");
+
+        WalkTo(leaf, UI.Menu.Original.OriginalOptionsScreen.ControlsAcceptKey);
+        leaf.Drive(new UI.Menu.MenuCommands { Accept = true });
+        var flown = one.ReadKeyboard(Dt);
+        ctx.Check(one.MouseFlying && flown.Roll < -0.7f,
+            $"ACCEPT CHANGES puts player 1's flying seat on the mouse stick at once (flying {one.MouseFlying}, roll {flown.Roll:0.###})");
+        ctx.Check(Holds(one.FlightKeymap, Rebound),
+            $"and on the flight control staged beside it, the keymap riding the same accept");
+        ctx.Check(!two.MouseFlying && two.ReadKeyboard(Dt).Roll == 0f,
+            $"ABLE-TO-FAIL CONTROL: player 2's seat, which nobody edited, stays on head-look ({two.MouseFlying})");
+        ctx.Check(BindingStore.UserBindings().Load(1, default, readsKeyboard: true).MouseFlying,
+            $"and the scheme is saved to player 1's file too, so a restart reads the same seat");
+        bool wantedOnFly = CaptureDecision(one);
+        ctx.Check(wantedOnLook && wantedOnFly,
+            $"the capture decision is the same under either scheme, the seat holding the mouse for the stick and for head-look alike (look {wantedOnLook}, fly {wantedOnFly})");
+        one.MouseStickForTest = null;
+        two.MouseStickForTest = null;
+    }
+
+    // The capture decision for an unhalted frame on a seat allowed the mouse, read and put back in
+    // one call: the harness must never leave a seat allowed, or its next frame would take the mouse.
+    private static bool CaptureDecision(FlightController seat)
+    {
+        seat.MouseCaptureAllowed = true;
+        bool wanted = seat.WantsMouseCaptureForTest(halted: false) && !seat.WantsMouseCaptureForTest(halted: true);
+        seat.MouseCaptureAllowed = false;
+        return wanted;
+    }
+
+    private static int IndexOf(System.Collections.Generic.IReadOnlyList<InputAction> actions, InputAction action)
+    {
+        for (int i = 0; i < actions.Count; i++)
+        {
+            if (actions[i] == action)
+                return i;
+        }
+
+        return 0;
+    }
+
+    private static bool Holds(ActionMap map, Key key)
+    {
+        foreach (var binding in map.Bindings(InputAction.AutoLand))
+        {
+            if (binding.Control.Kind == ControlKind.Key && binding.Control.Index == (int)key)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static void WalkTo(PausePreferences leaf, string key)
+    {
+        for (int guard = 0; guard < 32 && leaf.Shell.FocusedKey != key; guard++)
+            leaf.Drive(new UI.Menu.MenuCommands { MoveY = 1 });
     }
 
     // Hold-to-look, the posture under both mouse schemes: while the free-look control is down the

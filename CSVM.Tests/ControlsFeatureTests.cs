@@ -693,6 +693,34 @@ public class ControlsFeatureTests
         Assert.False(feature.Dirty);
     }
 
+    /// <summary>Accept announces each seat it committed, after the save and carrying the flag as
+    /// accepted, and only those: a clean seat is not announced, and Cancel announces nothing. A flight
+    /// behind the pause listens here, its seats holding keymaps of their own.</summary>
+    [Fact]
+    public void AcceptAnnouncesEveryCommittedSeatAndNoOther()
+    {
+        var order = new List<string>();
+        var feature = new ControlsFeature((player, _) => order.Add($"save {player}"));
+        var announced = new List<(int Player, bool Flying)>();
+        feature.Accepted += (player, profile) =>
+        {
+            order.Add($"accepted {player}");
+            announced.Add((player, profile.MouseFlying));
+        };
+        feature.AddSeat(1, BindingProfile.Defaults(Pad, readsKeyboard: true), OnePad(), true);
+        feature.AddSeat(2, BindingProfile.Defaults(Pad, readsKeyboard: true), OnePad(), true);
+
+        feature.MouseFlying = true;
+        feature.Cancel();
+        Assert.Empty(announced);
+
+        feature.MouseFlying = true;
+        feature.Accept();
+
+        Assert.Equal(new[] { (1, true) }, announced);
+        Assert.Equal(new[] { "save 1", "accepted 1" }, order);
+    }
+
     /// <summary>A pad-only splitscreen seat has no mouse to give the stick, so the row cannot put it
     /// on one and a saved file cannot either.</summary>
     [Fact]

@@ -4200,9 +4200,15 @@ public partial class GameSession : Node3D
         _pauseBoard.Visible = false;
         _pauseBoard.ProcessMode = ProcessModeEnum.Disabled;
         var pollers = new List<UI.MenuInput>();
+        var flying = new List<FlightController>();
         foreach (var rig in _rigs)
         {
-            rig.Controller?.BeginPauseLeaf();
+            if (rig.Controller is { } controller)
+            {
+                controller.BeginPauseLeaf();
+                flying.Add(controller);
+            }
+
             pollers.Add(MenuInputFor(rig.Index));
         }
 
@@ -4211,7 +4217,9 @@ public partial class GameSession : Node3D
             pollers.Add(MenuInputFor(0));
         }
 
-        leaf.Open(pollers, owner);
+        // The seats go in so an accepted Controls page reaches the flight behind the leaf now, not
+        // at the next restart.
+        leaf.Open(pollers, owner, flying);
     }
 
     // The leaf's own door out, by RETURN TO MAIN MENU, Back or an accepted page: the sheet comes

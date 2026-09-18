@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Bindings;
 using CSVM.UI;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
@@ -22,7 +23,9 @@ namespace CSVM.Flight;
 public sealed partial class PausePreferences : Control
 {
     private readonly List<MenuInput?> _pollers = new();
+    private readonly List<FlightController> _flying = new();
     private OriginalShell _shell = null!;
+    private ControlsFeature? _controls;
     private MenuControlsSeats? _controlsSeats;
     private IMenuAudio? _audio;
     private Action<OptionsApplyExit>? _applied;
@@ -97,6 +100,7 @@ public sealed partial class PausePreferences : Control
             screenSizes: ResolutionSetting.ScreenSizes,
             screens: MonitorSetting.Screens,
             controls: controls);
+        leaf._controls = controls;
         leaf._controlsSeats = controls == null ? null : new MenuControlsSeats(controls);
         leaf._palette = OriginalPresentation.PaletteFor(leaf._shell.PreferencesInks, leaf._shell.Inks);
         leaf.WindowPointer = leaf.SeatPointer;
@@ -114,7 +118,11 @@ public sealed partial class PausePreferences : Control
     }
 
     /// <inheritdoc/>
-    public override void _ExitTree() => GiveCursorBack();
+    public override void _ExitTree()
+    {
+        StopFeedingSeats();
+        GiveCursorBack();
+    }
 
     /// <inheritdoc/>
     public override void _Input(InputEvent @event)
@@ -129,8 +137,10 @@ public sealed partial class PausePreferences : Control
     /// <summary>Raises the leaf on the Options screen, the original's own door out of the pause.
     /// <paramref name="pollers"/> is one reader per seated player in player order, which is what the
     /// rebinding pages register their rows from, and <paramref name="owner"/> names the player whose
-    /// reader drives the cursor: the one who paused, since only that player may resume.</summary>
-    public void Open(IReadOnlyList<MenuInput> pollers, int owner)
+    /// reader drives the cursor: the one who paused, since only that player may resume.
+    /// <paramref name="flying"/> is every seat in the flight behind the leaf, which a rebinding page's
+    /// ACCEPT CHANGES puts on the accepted keymap and scheme at once (<see cref="FeedSeats"/>).</summary>
+    public void Open(IReadOnlyList<MenuInput> pollers, int owner, IReadOnlyList<FlightController>? flying = null)
     {
         ArgumentNullException.ThrowIfNull(pollers);
         if (pollers.Count == 0)
@@ -142,6 +152,17 @@ public sealed partial class PausePreferences : Control
         foreach (var poller in pollers)
         {
             _pollers.Add(poller);
+        }
+
+        StopFeedingSeats();
+        if (flying != null)
+        {
+            _flying.AddRange(flying);
+        }
+
+        if (_controls != null)
+        {
+            _controls.Accepted += FeedSeats;
         }
 
         _input = pollers[Math.Clamp(owner, 0, pollers.Count - 1)];
@@ -270,6 +291,7 @@ public sealed partial class PausePreferences : Control
         _seat = null;
         _input = null;
         _pollers.Clear();
+        StopFeedingSeats();
         GiveCursorBack();
         Visible = false;
         Closed?.Invoke();
@@ -283,6 +305,32 @@ public sealed partial class PausePreferences : Control
         {
             _controlsSeats?.Sync(_pollers);
         }
+    }
+
+    // An accepted rebinding page reaching the flight behind the leaf. The page stages from the saved
+    // file, not from the seats, so without this push a seat keeps the keymap and scheme it was built
+    // on until a restart rebuilds it. The seat a keymap file names is the human one numbered by it.
+    private void FeedSeats(int player, BindingProfile profile)
+    {
+        foreach (var seat in _flying)
+        {
+            if (IsInstanceValid(seat) && seat.IsHumanPiloted && seat.PlayerIndex + 1 == player)
+            {
+                seat.ApplyProfile(profile);
+            }
+        }
+    }
+
+    // ⚠ The feature is the menu's and outlives this flight, so the listener comes off on every close
+    // and at teardown: left on, a rebind accepted later from the menu would reach freed seats.
+    private void StopFeedingSeats()
+    {
+        if (_controls != null)
+        {
+            _controls.Accepted -= FeedSeats;
+        }
+
+        _flying.Clear();
     }
 
     private (float X, float Y)? PointerAt() =>

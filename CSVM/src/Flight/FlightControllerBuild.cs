@@ -76,18 +76,39 @@ public partial class FlightController
     /// </summary>
     public Bindings.DeviceSide ActiveDeviceSide => _bindings.Device.Side;
 
+    /// <summary>Whether this seat flies with the mouse, the third scheme beside the keyboard and the
+    /// pad. It is the seat's own profile's flag (<see cref="Bindings.BindingProfile.MouseFlying"/>),
+    /// read through each frame rather than copied, and <see cref="ApplyProfile"/> is how a saved or
+    /// accepted Controls page reaches it. Holding the free-look control routes the mouse to the head
+    /// for as long as it is held, under this scheme and the other two alike. False, the default,
+    /// leaves the mouse to head-look and every other reader byte for byte.</summary>
+    public bool MouseFlying
+    {
+        get => _bindings.MouseFlying;
+        set => _bindings.MouseFlying = value;
+    }
+
     /// <summary>Puts this seat on the keymap its player saved, so it flies what the rebinding screen
     /// wrote. Anything the file does not carry, or this build cannot read, stays at that action's
     /// shipped default, and under the launch gate no file is read at all
     /// (<see cref="Bindings.LaunchBindings"/>). A human rig calls it from <see cref="Bind"/> once
     /// <see cref="PlayerIndex"/> is known; an AI rig never reads a player's file.</summary>
-    public void LoadSavedKeymap()
+    public void LoadSavedKeymap() =>
+        ApplyProfile(Bindings.LaunchBindings.Profile(PlayerIndex + 1, default, readsKeyboard: true));
+
+    /// <summary>Puts this seat on <paramref name="profile"/>'s flight rows and mouse scheme, the whole
+    /// of what a seat takes from its player's keymap, and recomposes the prompts that name them.
+    /// ⚠ The build's saved read and a Controls page accepted in flight both come through here, so
+    /// anything a seat takes from a profile goes in this one method: a value copied anywhere else is
+    /// one an accepted edit cannot reach until the seat is rebuilt.</summary>
+    public void ApplyProfile(Bindings.BindingProfile profile)
     {
-        // One load for both, since the scheme and the keymap are one saved record: two calls would
-        // read the file twice and could take the flag off a different read than the bindings.
-        var profile = Bindings.LaunchBindings.Profile(PlayerIndex + 1, default, readsKeyboard: true);
+        ArgumentNullException.ThrowIfNull(profile);
+        // One profile for both, since the scheme and the keymap are one saved record: taking them
+        // from two reads could put the flag and the bindings on different files.
         FlightKeymap.Fill(profile.Map(Bindings.InputContext.Flight));
         MouseFlying = profile.MouseFlying;
+        ComposeControlPrompts();
     }
 
     /// <summary>Puts this seat's control prompts on <paramref name="strings"/> and composes them

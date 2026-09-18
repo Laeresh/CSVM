@@ -44,6 +44,12 @@ public sealed class ControlsFeature : IMenuFeature
     /// test never touches the player's real keymap file.</summary>
     public ControlsFeature(Action<int, BindingProfile>? save = null) => _save = save;
 
+    /// <summary>Raised by <see cref="Accept"/> once per seat it committed, after the save, with the
+    /// player and the profile as accepted. A host whose seats copied that player's keymap before the
+    /// page opened (a flight in progress) listens here, since the profile this feature edits is not
+    /// the one those seats hold.</summary>
+    public event Action<int, BindingProfile>? Accepted;
+
     /// <summary>The seats this screen can edit, in the order they were registered.</summary>
     public IReadOnlyList<int> Players => _players;
 
@@ -351,6 +357,7 @@ public sealed class ControlsFeature : IMenuFeature
 
             seat.Profile.MouseFlying = seat.MouseFlying;
             _save?.Invoke(player, seat.Profile);
+            Accepted?.Invoke(player, seat.Profile);
         }
 
         _dirty.Clear();

@@ -1112,20 +1112,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   applied as the multiplier on `FullDeflectionCounts`; a row on the Original Controls page under the
   Mouse row, and the same value on Built-in's Controls screen in its stepper convention.
   *⚠ Traps:* remake-only, so nothing to decode; the default must be that constant unscaled so a saved
-  file without the field flies as before. *Cross-refs:* `BL-942`, `BL-961`, `docs/controls.md`
+  file without the field flies as before; the seat takes it in `FlightController.ApplyProfile` beside
+  the scheme, or an accept over the pause stops at the file. *Cross-refs:* `BL-942`, `docs/controls.md`
   ("Flying with the mouse").
-
-- `BL-961` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **A Controls change accepted over the pause
-  reaches the profile and not the flying seat, so the mouse scheme changes only on restart.**
-  *Evidence:* "changes to mouse Fly/Look only take hold on mission restart, not during flight".
-  `FlightController.MouseFlying` is written once, by `FlightControllerBuild` from the profile, and
-  by nothing later; the pause page's ACCEPT CHANGES writes `seat.Profile.MouseFlying` and the
-  store. Any other value the seat copies at build rather than reads through the profile has the
-  same gap. *Fix shape:* on accept, push the profile back into every live seat the change belongs
-  to (the mouse scheme, and whatever else `FlightControllerBuild` copies), or make the controller
-  read the profile's field each frame. Audit the copy list in `FlightControllerBuild` for the rest.
-  *⚠ Traps:* the seat's capture decision (`WantsMouseCapture`) reads the scheme, so a live flip
-  must re-run it on the next unhalted frame. *Cross-refs:* `BL-960`.
 
 - `BL-965` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: spec]` **The Original wrap-up screen shows the
   stunt run's Danger Zone photographs.** *Evidence:* `StuntScoreboard` draws the run's latched

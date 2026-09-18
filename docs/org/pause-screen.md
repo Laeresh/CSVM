@@ -409,7 +409,8 @@ ACCEPT CHANGES, Back, or RETURN TO MAIN MENU) closes the leaf back onto the shee
 applied already in force. An accepted page writes the options file and applies the display and mix
 settings through the same route the menu takes, without the presentation teardown a menu-side apply
 does, since the flight is what the leaf returns to. The rebinding pages hold the menu's own
-`ControlsFeature`, so an in-flight rebind edits the one keymap. Built-in's board reaches the same
+`ControlsFeature`, so an in-flight rebind edits the one keymap, and an accepted one reaches the
+seats flying behind the leaf at once, mouse scheme included. Built-in's board reaches the same
 leaf through its PREFERENCES row. Where the install carries no decoded layout there is nothing to
 compose, so the Original strip is drawn and unbound and Built-in's row is left off.
 

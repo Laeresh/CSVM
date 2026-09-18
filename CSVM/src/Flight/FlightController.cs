@@ -439,13 +439,6 @@ public partial class FlightController : Node3D
     /// through the one reader, so a run can compare them.</summary>
     public Vector2 PinnedLook;
 
-    /// <summary>Whether this seat flies with the mouse, the third scheme beside the keyboard and the
-    /// pad. It arrives from the seat's saved keymap (<see cref="Bindings.BindingProfile.MouseFlying"/>)
-    /// and the Controls door is where a player turns it on. Holding the free-look control routes the
-    /// mouse to the head for as long as it is held, under this scheme and the other two alike.
-    /// False, the default, leaves the mouse to head-look and every other reader byte for byte.</summary>
-    public bool MouseFlying;
-
     /// <summary>The cursor offset the mouse-flying stick reads while set, +x right and +y down over
     /// the pane's half extent, so a suite flies the scheme with no window and no cursor. Null, the
     /// default, reads this seat's real pane.</summary>

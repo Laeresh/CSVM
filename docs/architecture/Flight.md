@@ -777,14 +777,14 @@ the screen tests off engine and this node owns the cursor, the pointer and the f
 seat's pointer shares the cursor: a hover moves it, a press holds the strip, the release on it fires, and the OS pointer gives way to the dialog's own. Its readout is a delegate, since the objectives follow the running mission. Preferences stands `PausePreferences` over the held world and `Reprime`s on its close, and photo mode does the same over the frozen world. Its control hint is a `ControlHintBar` child drawn after the composed screen, placed by `PauseScreens.HintBox` and worded by `BoardMenuView.Legend`, so both pause boards teach the same three controls; a glyph is neither a picture nor text the composition carries, which is why it is a control of its own. Decode: [../org/pause-screen.md](../org/pause-screen.md).
 
 ## src/Flight/PausePreferences.cs
-The Preferences leaf over a paused mission: an `OriginalShell` of its own opened on the Options
-screen, hosted over the held world on the board layer and drawn through `ComposedBoardView`, so its
-display rows are the `DisplaySettingRows` both Options screens draw. Either pause board's
-PREFERENCES opens it, the pausing player's reader drives it with that seat's mouse as its pointer,
-and every door out closes it back onto the sheet; an `OptionsApplyExit` reaches the Launcher's
-options writer first, so what it applied is already in force. The halt is never touched here. Its
-`FreeFlightFeature` and `PlayerSetupFeature` are throwaways and its `ControlsFeature` the menu's
-own; `Build` answers null with no decoded layout. Decode: [../org/pause-screen.md](../org/pause-screen.md).
+The Preferences leaf over a paused mission: an `OriginalShell` of its own on the Options screen,
+over the held world and drawn through `ComposedBoardView`, its display rows the `DisplaySettingRows`
+both Options screens draw. Either pause board's PREFERENCES opens it, the pausing player's reader
+drives it, and every door out closes it onto the sheet with an `OptionsApplyExit` already applied;
+the halt is never touched. Its other features are throwaways and its `ControlsFeature` the menu's
+own, whose `Accepted` it hands, while open, to the flying seats `Open` was given
+(`FlightController.ApplyProfile`), so a rebind or mouse scheme takes hold before the resume.
+`Build` answers null with no decoded layout. Decode: [../org/pause-screen.md](../org/pause-screen.md).
 
 ## src/Flight/IaWrapupBoard.cs
 Instant Action's wrap-up board on `ResultsBoard`'s shell, whole-window since the mission ends for
@@ -1082,7 +1082,8 @@ tree attachment. The roster keeps the data resolution and the lifecycle ordering
 controller keeps its runtime interface. `HoldSegments`, the scripted hold profile a caller may want,
 rides this DTO the same way `Pilot` does, so `FlightController` exposes a public field for neither;
 `Bind` copies it before resolving and storing the `IFlightInputSource`, alongside the `IWorldQuery`
-seam.
+seam. The same partial holds `ApplyProfile`, the one method a seat takes a player's keymap and
+mouse scheme through, at build and on a Controls page accepted in flight alike.
 
 ## src/Flight/IFlightInputSource.cs
 The seam a sim step reads this frame's pilot intent through: `Read(dt)` returns one `FlightInput`.

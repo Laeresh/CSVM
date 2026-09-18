@@ -1135,9 +1135,9 @@ The rebinding screen as a shared `IMenuFeature`, engine-free: which seat's keyma
 the capture in progress over the seat's own `IDeviceState`, and the steal it is about to perform.
 A capture that lands on a free control binds it; one that lands on a held control raises `Pending`
 naming every action that would lose it and moves nothing until `ConfirmSteal`, which keeps the
-original's conflict rule from happening behind the player's back. `UnbindSlot`, `ResetContext` and
-`Save` are the rest. Editing is scoped to one seat's profile, so two seats cannot reach each
-other's bindings. The binding model itself: [../org/input.md](../org/input.md).
+original's conflict rule from happening behind the player's back. `UnbindSlot`, `ResetContext`,
+`Save` and `Accepted` (each committed seat, for a host whose seats hold their own keymaps) are the
+rest. Editing is scoped to one seat's profile. Model: [../org/input.md](../org/input.md).
 
 ## src/UI/Menu/PlayerSetupFeature.cs
 Player setup as a shared `IMenuFeature`, device-neutral and engine-free. `Seats` are `PlayerSeat`s

@@ -109,7 +109,8 @@ box the original's Mouse Sensitivity slider stands in: the row reads **Look** fo
 the scheme above and **Fly** for this one. It is staged like every other edit
 there, so ACCEPT CHANGES is what keeps it and CANCEL CHANGES puts it back, and it
 is saved in that player's own keymap file (`bindings_p<n>.json`) beside the rows
-the KEYS AND BUTTONS page writes. A pad-only splitscreen seat cannot take it,
+the KEYS AND BUTTONS page writes. Accepted over the pause, it takes hold on the
+seat already flying, with no restart. A pad-only splitscreen seat cannot take it,
 having no mouse of its own. The Controls page is where the other two schemes are
 chosen, so the third one is chosen there too, rather than in a preferences row
 that no seat owns.
