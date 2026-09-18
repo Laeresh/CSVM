@@ -397,8 +397,8 @@ grace. Every drop, launch and door prints an `egen:` line. Decode:
 Runs a mission's zeppelins behind `--zeppelins`: a `ZeppelinDef` whose world node and net resolve has
 its hull switched on, is placed at its authored pose and flown by `ZeppelinMotion` over
 `AiNetFollower`; an animation-driven hull is neither placed nor stepped. `WireDamage` builds the
-per-part pools, `PollDamage` owns the kill, the Instant Action engine count and the generator
-disable; `CollectTargetParts` alone makes a structure selectable, and only under `TargetPool`'s
+per-part pools, `PollDamage` owns the kill (a healthy entry is dead when its pool is destroyed or
+its own node is switched off), the Instant Action engine count and the generator disable; `CollectTargetParts` alone makes a structure selectable, and only under `TargetPool`'s
 torpedo gate. A def whose net does not resolve is held out, zones unwired; `--zep=` grafts one on a
 synthetic net. Script arms: `SetStopPoint`, `Hold`, `Wake`, `SetNet` (nearest-node seat from where
 the hull stands) and `SetTeam` (one side over every pool and gun). Decode: [../formats/mission-entities.md](../formats/mission-entities.md).

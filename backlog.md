@@ -1231,21 +1231,6 @@ usual.
   timers", "The third volume, and where the leash is read"), `BL-522`'s closing commit
   (`git log --grep=BL-522`).
 
-- `BL-956` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` `[CM01]` **CM01's cargo zeppelin keeps
-  flying after its propane tanks are destroyed, wandering under power instead of crashing.**
-  *Evidence:* at the controls the zeppelin is "not really crashing but flying random after
-  destroying the propane tanks": it keeps steering, off its authored path, so the crash never takes
-  over. The mission authors `cargozep1_crash` beside its gasbag and engine sequences
-  (`extracted/C3/M01/mis_anim/cargozep1-*.json`), and the objective script retargets from
-  `propane` (`docs/formats/objectives.md`). *Fix shape:* decode the chain from the propane
-  objective's completion to the `cargozep1_crash` call and find which link CSVM drops: the
-  callback the objective posts, the prerequisite the crash sequence gates on, or the AI path that
-  is never stopped when the crash starts. A headless `--campaign` run with the tanks destroyed by
-  probe, logging the sequence starts, is the instrument. *⚠ Traps:* zeppelins have no crash
-  avoidance and an AI path keeps driving one until something stops it (`docs/org/aiPilot.md`), so a
-  crash that plays without stopping the path looks like this too. *Cross-refs:*
-  `docs/formats/anim-definitions.md`, `docs/org/sequences.md`.
-
 ## Tooling, platform & docs
 
 - `BL-033` `[Cleanup]` `[Blocked: SDL >= 3.4.4]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: data]` **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in
