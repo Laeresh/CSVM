@@ -698,17 +698,23 @@ twelve metres over the hit, while its ground ring (`call_he_ring`) is called at 
 ring definitions carry scale and opacity and no rotation of any kind
 ([`../formats/weapon-effects.md`](../formats/weapon-effects.md)), so the original draws the upper
 ring on the fixed world axis whatever the round's flight path, and `Crimson Skies 1.02 2026-07-31
-23-27-53.mp4` shows exactly that. A ring seen edge-on reads as a bright line rather than a ring,
-which is what the enhanced presentation changes and the faithful one keeps.
+23-27-53.mp4` shows exactly that. The two rings are not authored alike: the ground ring's model
+(`he_ringer`) is flat in its node's XZ plane, while the upper ring's (`he_ringer1`, model box
+±4.24 m in X and Y, ±0.5 m in Z) stands in its XY plane with its disc facing along Z. So the
+original's upper ring is a standing disc facing world Z, and a ring seen edge-on reads as a bright
+line rather than a ring, which is what the enhanced presentation changes and the faithful one keeps.
 
-Under Enhanced Graphics the remake places that one callee with world up rotated onto the reverse of
-the round's own flight direction, so the ring faces back up the path the rocket came down. Nothing
+Under Enhanced Graphics the remake places that one callee with the ring's own disc normal (node Z,
+`ProjectilePool.UpperRingDiscNormal`) rotated onto the reverse of the round's own flight direction,
+so the ring faces back up the path the rocket came down. Rotating world up instead turns the disc a
+quarter turn off the trail, since up lies in the disc's plane. Nothing
 else moves: the ground ring, the fireball, the trail columns and the `SURFACE_ANIMATION` rule above
 all keep their decoded placement, and the switch is the ordinary `graphics.mode` setting
 (`GraphicsMode.Enhanced`), so the faithful path is bit-identical with or without this rule. CSVM:
 `ProjectilePool.UpperRingOrient` decides and hands the basis through `EffectSink`;
 `AnimRuntime.OrientedCallAnimNames` (from `EffectCatalogue.ImpactUpperRingAnimNames`) is the one
-callee name it may re-base; the `impact-orientation` suite pins both presentations.
+callee name it may re-base; the `impact-orientation` suite pins both presentations, measuring the
+drawn mesh's disc normal against the reversed flight vector.
 
 ### Which row a burst reads
 

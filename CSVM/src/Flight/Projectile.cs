@@ -35,6 +35,11 @@ public sealed partial class ProjectilePool : Node3D
     /// <c>DETONATION_TIME</c> ends it long before.</summary>
     public const float DefaultRange = 500f;
 
+    /// <summary>The impact burst's upper ring's disc normal in its own node's frame. The
+    /// <c>he_ringer1</c> model's box is 8.48 m square in X and Y and 1 m deep in Z, so its disc stands
+    /// in the XY plane and faces along Z, where the ground ring's lies in XZ.</summary>
+    public static readonly Vector3 UpperRingDiscNormal = Vector3.Back;
+
     /// <summary>Where a hit's damage goes: given the struck collider and the weapon's
     /// <c>HEALTH_DAMAGE</c>, apply it to the destructible that collider belongs to. Wired to
     /// <c>AnimRuntime.DamageAt</c> in flight; null when there is no destructible system (the static
@@ -598,28 +603,34 @@ public sealed partial class ProjectilePool : Node3D
     /// (<c>FUN_0053fd40</c> from <c>(0,1,0)</c>) before spawning that slot. Identity on flat ground,
     /// so the rule shows only on a slope, and identity for a burst with no surface (a fuse, the range
     /// expiry). A normal straight down turns half a turn about X.</summary>
-    public static Basis SurfaceUpBasis(Vector3 normal)
+    public static Basis SurfaceUpBasis(Vector3 normal) => ShortestArc(Vector3.Up, normal);
+
+    /// <summary>Enhanced Graphics only: the basis the impact burst's upper ring is placed with, the
+    /// ring's own disc normal (<see cref="UpperRingDiscNormal"/>, not world up) rotated onto the
+    /// reverse of the round's flight direction, so the ring faces back up the path the rocket came
+    /// down. Null in the faithful presentation and for a round with no usable velocity, which leaves
+    /// the ring on the fixed axis the original spawns it on (docs/org/ordnanceTypes.md, "The upper
+    /// ring in Enhanced Graphics").</summary>
+    public static Basis? UpperRingOrient(Vector3 velocity) =>
+        GraphicsMode.Enhanced && velocity.LengthSquared() > 1e-6f
+            ? ShortestArc(UpperRingDiscNormal, -velocity.Normalized()) : null;
+
+    /// <summary>The shortest rotation taking unit <paramref name="from"/> onto <paramref name="to"/>;
+    /// a zero <paramref name="to"/> is identity, and an opposite one is half a turn about an axis
+    /// perpendicular to <paramref name="from"/>.</summary>
+    public static Basis ShortestArc(Vector3 from, Vector3 to)
     {
-        if (normal.LengthSquared() < 1e-6f)
+        if (to.LengthSquared() < 1e-6f)
             return Basis.Identity;
-        var to = normal.Normalized();
-        float dot = Vector3.Up.Dot(to);
+        to = to.Normalized();
+        float dot = from.Dot(to);
         if (dot > 1f - 1e-6f)
             return Basis.Identity;
         if (dot < -1f + 1e-6f)
-            return new Basis(Vector3.Right, Mathf.Pi);
-        var axis = Vector3.Up.Cross(to).Normalized();
+            return new Basis(Mathf.Abs(from.X) < 0.9f ? Vector3.Right : Vector3.Up, Mathf.Pi);
+        var axis = from.Cross(to).Normalized();
         return new Basis(axis, Mathf.Acos(Mathf.Clamp(dot, -1f, 1f)));
     }
-
-    /// <summary>Enhanced Graphics only: the basis the impact burst's upper ring is placed with, world
-    /// up rotated onto the reverse of the round's flight direction, so the ring faces back up the
-    /// path the rocket came down. Null in the faithful presentation and for a round with no usable
-    /// velocity, which leaves the ring on the fixed axis the original spawns it on
-    /// (docs/org/ordnanceTypes.md, "The upper ring in Enhanced Graphics").</summary>
-    public static Basis? UpperRingOrient(Vector3 velocity) =>
-        GraphicsMode.Enhanced && velocity.LengthSquared() > 1e-6f
-            ? SurfaceUpBasis(-velocity.Normalized()) : null;
 
     /// <summary>Whether a candidate lies inside an authored proximity-fuse forward cone.</summary>
     public static bool FuseDotAllows(float? minimumDot, Vector3 velocity, Vector3 towardTarget)

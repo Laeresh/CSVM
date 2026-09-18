@@ -640,23 +640,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   for a `LIGHT_STATE` that authors neither, as `he_light` does. *Cross-refs:*
   `docs/architecture/Mech3.md` (`WorldLights`).
 
-- `BL-962` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Under Enhanced Graphics the impact burst's
-  upper ring is turned a quarter turn off the rocket's trail instead of facing back along it.**
-  *Evidence:* the re-basing that closed `BL-293` (`git log --grep=BL-293`) hands the upper ring a
-  basis whose Y is the reversed flight vector, and the suite pins that Y within half a degree of it.
-  At the controls the ring's direction does change with the dive, but it stands edge-on to the
-  trail, "not toward the rocket trail but turned 90 degrees": the ring's plane is rotated across
-  the flight path rather than facing it. The four screenshots of the C1 airfield runs are
-  `Z:\CSVM\screenshots\crimsonskies_2026-09-18_15-56-04-789.png` through `-56-22-573.png`; the
-  last shows the ring standing as a vertical fan beside the burst. *Fix shape:* the ring's own
-  authored axis is not world up. `ProjectilePool.UpperRingOrient` rotates world up onto the
-  reversed velocity, which is right only if the ring's disc lies in the XZ plane of its own node;
-  read `he_ring1`'s mesh or the surface-animation orientation the faithful path applies and rotate
-  the basis's correct axis, then re-pin the live case in the impact-orientation suite to assert the
-  disc normal, not the basis Y. *⚠ Traps:* Enhanced only; the faithful presentation's flat ring is
-  the decoded rule and stays. Do not widen `OrientedCallAnimNames`. *Cross-refs:*
-  `git log --grep=BL-293` (the landing whose axis this corrects).
-
 ## Audio
 
 - `BL-269` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The 3D sound falloff between the authored `RANGE`

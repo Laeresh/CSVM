@@ -1655,7 +1655,8 @@ internal static class OrdnanceSuites
         "hands he_ground_effect a basis whose Y is the slope normal, the same round into flat " +
         "ground hands identity, and a wep_12's scatter_effect on the slope stays identity; the " +
         "faithful presentation hands the upper ring no basis at all, and Enhanced Graphics hands " +
-        "it one facing back along the round's own flight direction, the ground effect unchanged")]
+        "it one whose drawn disc faces back along the round's own flight direction, the ground " +
+        "effect unchanged")]
     internal static void ImpactOrientation(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
@@ -1714,7 +1715,7 @@ internal static class OrdnanceSuites
                 Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(a.Normalized().Dot(b.Normalized()), -1f, 1f)));
 
             static string Describe((string Name, Vector3 At, Basis Orient, Basis? Ring)? play) =>
-                play is { } p ? $"fx={p.Name} Y={p.Orient.Y} ring={(p.Ring is { } r ? r.Y.ToString() : "-")}" : "no play";
+                play is { } p ? $"fx={p.Name} Y={p.Orient.Y} ringNormal={(p.Ring is { } r ? (r * ProjectilePool.UpperRingDiscNormal).ToString() : "-")}" : "no play";
 
             var onSlope = Drop(he, origin + new Vector3(0f, 20f, 0f));
             ctx.Check(onSlope is { Name: "he_ground_effect" } s1 && DegreesBetween(s1.Orient.Y, slopeNormal) < 0.5f
@@ -1747,10 +1748,11 @@ internal static class OrdnanceSuites
             try
             {
                 ctx.Check(GraphicsMode.Enhanced, $"the graphics setting resolves to enhanced");
+                var discNormal = ProjectilePool.UpperRingDiscNormal;
                 ctx.Check(ProjectilePool.UpperRingOrient(down30) is { } pure
-                          && DegreesBetween(pure.Y, -down30) < 0.5f
+                          && DegreesBetween(pure * discNormal, -down30) < 0.5f
                           && Mathf.IsEqualApprox(pure.Determinant(), 1f),
-                    $"UpperRingOrient turns world up onto the reverse of the flight direction ({ProjectilePool.UpperRingOrient(down30)?.Y.ToString() ?? "-"} against {-down30})");
+                    $"UpperRingOrient turns the ring's disc normal onto the reverse of the flight direction ({(ProjectilePool.UpperRingOrient(down30) * discNormal)?.ToString() ?? "-"} against {-down30})");
                 ctx.Check(ProjectilePool.UpperRingOrient(Vector3.Zero) is null,
                     $"a round with no usable velocity still gets no basis");
 
@@ -1759,9 +1761,9 @@ internal static class OrdnanceSuites
                 var slanted = new Vector3(-1f, -1f, 0f).Normalized();
                 var enhancedOnSlope = Drop(he, origin + new Vector3(20f, 20f, 0f), slanted);
                 ctx.Check(enhancedOnSlope is { Name: "he_ground_effect", Ring: not null } e1
-                          && DegreesBetween(e1.Ring!.Value.Y, -slanted) < 15f
-                          && DegreesBetween(e1.Ring!.Value.Y, Vector3.Up) > 20f
-                          && DegreesBetween(e1.Ring!.Value.Y, slopeNormal) > 20f,
+                          && DegreesBetween(e1.Ring!.Value * discNormal, -slanted) < 15f
+                          && DegreesBetween(e1.Ring!.Value * discNormal, Vector3.Up) > 20f
+                          && DegreesBetween(e1.Ring!.Value * discNormal, slopeNormal) > 20f,
                     $"Enhanced hands the upper ring a basis facing back along the round's flight direction ({Describe(enhancedOnSlope)} launched along {slanted})");
                 ctx.Check(enhancedOnSlope is { Ring: not null } e2
                           && Mathf.IsEqualApprox(e2.Ring!.Value.Determinant(), 1f)
@@ -2775,18 +2777,30 @@ internal static class OrdnanceSuites
                 var ground = slot0.GetNodeOrNull<Node3D>("he_ring");
                 ctx.Check(upper != null && ground != null,
                     $"the burst's two ring roots are staged (upper={upper != null}, ground={ground != null})");
-                ctx.Check(upper != null && Degrees(upper.GlobalBasis.Y, Vector3.Up) < 0.5f,
-                    $"handed no basis, the upper ring keeps the fixed axis (Y={upper?.GlobalBasis.Y})");
+                var faithfulNormal = DiscNormalOf(upper);
+                ctx.Check(upper != null && Degrees(upper.GlobalBasis.Y, Vector3.Up) < 0.5f
+                          && faithfulNormal is { } fn && Degrees(fn, upper.GlobalBasis * ProjectilePool.UpperRingDiscNormal) < 0.5f,
+                    $"handed no basis, the upper ring keeps the fixed axis, its drawn disc facing the authored axis (Y={upper?.GlobalBasis.Y} disc={faithfulNormal})");
 
-                // The same burst with a basis in: the one the pool would build for a round coming
-                // down at 45°, which is nothing like the axis the faithful play just left it on.
+                // The same burst with the basis the pool builds under Enhanced for a rocket diving at
+                // 45° across both horizontal axes, measured on the drawn mesh rather than the basis.
                 // ⚠ A second burst at the SAME point is refused as already live, so move it.
-                var handed = ProjectilePool.SurfaceUpBasis(new Vector3(1f, 1f, 0f).Normalized());
-                ctx.Check(runtime.PlayEffectAt(anim, site + new Vector3(80f, 0f, 0f), callOrient: handed),
+                var flight = new Vector3(1f, -1.41421f, -1f).Normalized();
+                GraphicsMode.Resolve(GraphicsMode.EnhancedWord);
+                Basis? handed;
+                try
+                {
+                    handed = ProjectilePool.UpperRingOrient(flight);
+                }
+                finally
+                {
+                    GraphicsMode.Resolve(GraphicsMode.Default);
+                }
+                ctx.Check(handed != null && runtime.PlayEffectAt(anim, site + new Vector3(80f, 0f, 0f), callOrient: handed),
                     $"the enhanced burst played");
-                ctx.Check(upper != null && Degrees(upper.GlobalBasis.Y, handed.Y) < 0.5f
-                          && Degrees(upper.GlobalBasis.Y, Vector3.Up) > 40f,
-                    $"handed one, it takes it (Y={upper?.GlobalBasis.Y} against {handed.Y})");
+                var enhancedNormal = DiscNormalOf(upper);
+                ctx.Check(enhancedNormal is { } en && Mathf.Min(Degrees(en, -flight), Degrees(-en, -flight)) < 0.5f,
+                    $"handed one, the drawn disc faces back along the flight (disc={enhancedNormal} against {-flight})");
                 ctx.Check(ground != null && Degrees(ground.GlobalBasis.Y, Vector3.Up) < 0.5f,
                     $"the ground ring under it is left on its own axis (Y={ground?.GlobalBasis.Y})");
             }
@@ -2796,6 +2810,19 @@ internal static class OrdnanceSuites
                 stage.Free();
             }
         });
+    }
+
+    // The world-space normal of the first ring mesh drawn under `root`: its mesh box's thinnest
+    // local axis carried through the instance's global basis. A disc's normal is its thin axis
+    // whatever node basis or mesh transform put it there, which is what the basis alone cannot show.
+    private static Vector3? DiscNormalOf(Node3D? root)
+    {
+        if (root == null || Descendants(root).OfType<MeshInstance3D>().FirstOrDefault(m => m.Mesh != null) is not { } mesh)
+            return null;
+        var size = mesh.Mesh.GetAabb().Size;
+        var local = size.X <= size.Y && size.X <= size.Z ? Vector3.Right
+            : size.Y <= size.Z ? Vector3.Up : Vector3.Back;
+        return (mesh.GlobalBasis.Inverse().Transposed() * local).Normalized();
     }
 
     private static Node3D? EmitIn(Node3D slot, string rootName)
