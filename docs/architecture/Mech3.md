@@ -419,11 +419,10 @@ unchanged. Two entries exist install-wide (`fire1.flt` 12@10, `fire2.flt` 6@5).
 
 ## src/Mech3/WorldSounds.cs
 `SOUND_NODE` ambient looping 3D emitters: one pooled `AudioStreamPlayer3D` per live emitter,
-following its host's pose each frame. `PlayOneShot(name, worldPos, rng, bus)` is the one-shot
-`SOUND` half, fire-and-forget destruction and impact audio resolving a `SOUND_GROUPS` name to a
-member first; the overload taking a `Node3D` rides that source's pose per Tick. `bus` is read per
-play, because combat voice (`Session/AiVoiceRuntime.cs`) is the one caller not on Effects.
-`HasStream` answers availability after the prewarm, `OneShotsStarted` that a cue fired. Who hears
+following its host's pose each frame. `PlayOneShot(name, worldPos, rng)` is the one-shot
+`SOUND` half, fire-and-forget destruction and impact audio on Effects, resolving a `SOUND_GROUPS`
+name to a member first. Radio lines, combat voice included, never come here: they are flat and
+belong to `MissionRadio.cs`. `HasStream` answers availability after the prewarm, `OneShotsStarted` that a cue fired. Who hears
 an emitter is `UI/SplitScreen.cs`'s per-pane model, fed by `SetListeners`: `Tick` measures to the
 nearest and levels every player from `SoundFalloff.cs`, never Godot's. Next: `SoundFalloff.cs`.
 
@@ -625,14 +624,14 @@ times the duck and nothing else: the player's music level is the Music bus's gai
 are docs/org/music.md.
 
 ## src/Mech3/MissionRadio.cs
-The mission radio queue: the third playback channel, beside `MusicPlayer`'s streaming track and
-`WorldSounds`' pooled 3D emitters, and the one a mission's objective callouts speak on. `Cue(name)`
-takes a queued radio definition or a VO dialogue chain and returns how many lines it will speak, 0
-for a name this channel does not own, so a caller can fall through to the channel that does. One
-call speaks at a time: a chain runs its lines back to back as one call, a later cue queues behind
-rather than cutting in, `Cancel` is `STOP_QUEUED_SOUNDS`, and a call waiting past its definition's
-`QUEUE` tolerance is dropped unheard. Streams come from `WorldSounds.StreamFor`. The cue delay is
-docs/formats/objectives.md; the definition classes and the tolerance are docs/formats/sounds.md.
+The mission radio queue, the flat Voice channel beside `MusicPlayer` and `WorldSounds`' 3D
+emitters. `Cue(name)` queues an objective callout (a radio definition or a VO dialogue chain) and
+returns its line count, 0 for a name this channel does not own. `Speak(name)` queues a combat voice
+line on the same queue without the cue delay and returns the definition it will speak. One call
+speaks at a time: a chain runs back to back, a later call queues behind rather than cutting in,
+`Cancel` is `STOP_QUEUED_SOUNDS`, and a call waiting past its `QUEUE` tolerance is dropped. Streams
+come from `WorldSounds.StreamFor`. Cue delay: docs/formats/objectives.md; the one queue, the
+definition classes and the tolerance: docs/formats/sounds.md.
 
 ## src/Mech3/SoundDefs.cs
 sounds.json SETS parser: `snd_*` name to `SoundDef` (wav name, flags, range, volume); the entry
@@ -643,7 +642,7 @@ grammar and flag/key meanings are in docs/formats/sounds.md. `LoadGroups` parses
 ## src/Mech3/CombatVoice.cs
 The combat-voice resolver: roster `accentID` (slot 65) to a `voice.zrd` ACCENT row, to a pilot VO
 id pool, to clip defs. `PlayableFor(voId, family)` returns the one name to hand
-`WorldSounds.PlayOneShot`: the shipped `snd_<FAMILY>-A_id<N>_random` variant group where one is
+`MissionRadio.Speak`: the shipped `snd_<FAMILY>-A_id<N>_random` variant group where one is
 authored, else the bare def. `SessionPrewarmNames` is the flight session's mission-roster prewarm
 set, reached through `WorldSession.Options.VoiceClipNames` with CLI and Instant Action accents joined in. Dispatch
 sits above this seam, in `Flight/AiVoiceDispatcher.cs` (the rules) and `Session/AiVoiceRuntime.cs`

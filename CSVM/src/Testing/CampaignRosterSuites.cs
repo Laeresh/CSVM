@@ -763,6 +763,7 @@ internal static class CampaignRosterSuites
         var textures = new TextureArchive(texturesPath);
         using var archive = new SoundArchive(ctx.SoundsPath);
         WorldSounds? sounds = null;
+        MissionRadio? radio = null;
         AiVoiceRuntime? runtime = null;
         FlightRoster? roster = null;
         ProjectilePool? pool = null;
@@ -781,7 +782,9 @@ internal static class CampaignRosterSuites
             sounds.Prewarm(voice.PrewarmNames(new[] { 32 }));
             sounds.Loader = null;
 
-            runtime = new AiVoiceRuntime(voice, sounds, new System.Random(5));
+            radio = new MissionRadio(soundDefs, soundGroups, sounds.StreamFor);
+            ctx.Host.AddChild(radio);
+            runtime = new AiVoiceRuntime(voice, sounds, radio, new System.Random(5));
             ctx.Host.AddChild(runtime);
 
             // The exact conversion GameSession.RegisterAiVoice applies in production: a null
@@ -845,6 +848,7 @@ internal static class CampaignRosterSuites
                 rig.Free();
             }
             pool?.Free();
+            radio?.Free();
             if (sounds != null)
             {
                 sounds.FlushOneShots();
@@ -863,7 +867,7 @@ internal static class CampaignRosterSuites
         + "enemy blakepeace_2_1 authors accentID -1 and registers no speaker of its own, yet its "
         + "patrol-to-pursue commit against the human rig still rolls the computed bearing "
         + "call-out on one of the player's own voiced wingmen and reaches a playing stream on the "
-        + "Voice bus at that wingman's aircraft")]
+        + "mission radio's flat Voice-bus player, building no positional one-shot")]
     internal static void AiVoiceMission(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -900,6 +904,7 @@ internal static class CampaignRosterSuites
         var textures = new TextureArchive(texturesPath);
         using var archive = new SoundArchive(ctx.SoundsPath);
         WorldSounds? sounds = null;
+        MissionRadio? radio = null;
         AiVoiceRuntime? runtime = null;
         FlightRoster? roster = null;
         ProjectilePool? pool = null;
@@ -922,7 +927,9 @@ internal static class CampaignRosterSuites
             sounds.Prewarm(CombatVoice.SessionPrewarmNames(ctx.ZrdrPath, missionZrdr, soundDefs, soundGroups));
             sounds.Loader = null;
 
-            runtime = new AiVoiceRuntime(voice, sounds, new System.Random(5));
+            radio = new MissionRadio(soundDefs, soundGroups, sounds.StreamFor);
+            ctx.Host.AddChild(radio);
+            runtime = new AiVoiceRuntime(voice, sounds, radio, new System.Random(5));
             ctx.Host.AddChild(runtime);
 
             var playerPose = PlayerPose(blocks);
@@ -1023,16 +1030,16 @@ internal static class CampaignRosterSuites
             }
             ctx.Check(speakerRig != null,
                 $"…spoken by an aircraft on the player's own team, not by the accentless enemy whose mode moved speaker={played[0].Tag}");
-            ctx.Check(sounds.OneShotsStarted == startedBefore + 1,
-                $"…starting exactly one one-shot started={sounds.OneShotsStarted - startedBefore}");
-            var oneShot = AiSuites.LastOneShotPlayer(sounds);
-            ctx.Check(oneShot is { Stream: not null, Playing: true },
-                $"…on a playing stream stream={oneShot?.Stream != null} playing={oneShot?.Playing}");
-            ctx.Check(oneShot != null && oneShot.Bus.ToString() == AudioBuses.Voice,
-                $"…on the Voice bus, not with the Effects one-shots bus={oneShot?.Bus}");
-            ctx.Check(oneShot != null && speakerRig != null
-                && oneShot.GlobalPosition.DistanceTo(speakerRig.WorldPosition) < 1f,
-                $"…following the speaking aircraft rather than the enemy pos={oneShot?.GlobalPosition}");
+            radio.Tick(0.1f);
+            ctx.Check(radio.LinesStarted == 1 && radio.OnAir == played[0].Clip,
+                $"…starting exactly one radio line lines={radio.LinesStarted} on-air={radio.OnAir}");
+            ctx.Check(sounds.OneShotsStarted == startedBefore,
+                $"…and no positional one-shot started={sounds.OneShotsStarted - startedBefore}");
+            var radioPlayer = AiSuites.RadioPlayer(radio);
+            ctx.Check(radioPlayer is { Stream: not null, Playing: true },
+                $"…on a playing stream stream={radioPlayer?.Stream != null} playing={radioPlayer?.Playing}");
+            ctx.Check(radioPlayer != null && radioPlayer.Bus.ToString() == AudioBuses.Voice,
+                $"…on the Voice bus bus={radioPlayer?.Bus}");
             ctx.Note($"{BiasChapter}/{BiasMission}: '{PlainBlock}' carries no accent and no speaker, and its commit to the player has '{played[0].Tag}' speak trigger #{expected}");
         }
         finally
@@ -1045,6 +1052,7 @@ internal static class CampaignRosterSuites
             }
             player?.Free();
             pool?.Free();
+            radio?.Free();
             if (sounds != null)
             {
                 sounds.FlushOneShots();

@@ -639,8 +639,8 @@ against `BL-389` rather than against the wash routing.
   (it closed `BL-977`, `git log --grep=BL-977`). Menu path: Instant Action → C1 → Dogfighting an Ace.
   Let the ace commit to you, then shoot it down over a few passes. A scripted run shows the ace's
   own clips (VO id 29, accent 24) prewarmed and its forced death cry resolving to a streamed clip;
-  what no instrument shows is hearing it. Each line still plays positionally from the ace's
-  aircraft until `BL-978` lands, so listen while it is close.
+  what no instrument shows is hearing it. Each line plays flat on the radio channel, so distance
+  does not matter.
   *Look for:*
   - (a) a line from the ace as it commits to you;
   - (b) one or more distress calls as its health drops past 70, 50 and 30 %;
@@ -865,6 +865,24 @@ is a judgement on our own remake.
   leaving no photograph behind; (d) whether the framing reads like the original's photographs, a
   head-on view of the aeroplane from outside it. *Blocks:* nothing tracks the outcome; a
   missing photograph mints a new `BL`.
+
+### CM07 (C1/M02) · combat voice on the radio, sound on
+
+```powershell
+./RunGame.ps1 --campaign=<profile>:6 --log=sound:debug
+```
+
+- `PT-161` `[Own]` **A wingman's combat call plays flat, like the scripted radio, and is heard.**
+  Combat voice now speaks on the mission radio's queue instead of from the speaker's aircraft, as
+  the original does (`git log --grep=BL-978`); the `ai-voice` suite pins a flat Voice-bus player
+  at the def's authored level with the listener 5 km away, but only an ear hears a line. Stay in
+  the fight beside the enemy flight for a minute or two, taking and dealing hits. *Look for:*
+  (a) a wingman calling an enemy's clock bearing, centred and at one level wherever the wingman
+  is, including far off; (b) damage calls as you and the enemy take hits; (c) no combat line
+  cutting into a scripted line, a bark waiting up to 0.8 s and then dropped instead; (d) in the
+  session's log under `.scratch/logs/`, an `ai voice: <name>: trigger #` line for each call heard.
+  *Blocks:* `BL-934` (lines unheard at the controls); a silent sortie whose log carries the
+  `ai voice:` lines is that item's next cause.
 
 ## Everything else
 

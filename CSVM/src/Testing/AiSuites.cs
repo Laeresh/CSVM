@@ -18,6 +18,10 @@ internal static class AiSuites
     // WeaponSoundCue, so a build that culls an aircraft's gun loop at the RANGE pair itself fails.
     private const float VoiceCullMargin = 1.1f;
 
+    // Where the ai-voice suite moves its listener for the death cry: past 1.1 x every voice def's
+    // audible radius, so the positional law would hold the line at its floor.
+    private const float FarEarMetres = 5000f;
+
     [Suite("flight-roster-transaction",
         "FlightRoster owns human and AI assembly as atomic transactions: a late second-human " +
         "failure removes external bindings, a retry commits both humans in order with complete " +
@@ -2383,16 +2387,14 @@ internal static class AiSuites
 
     // The voice runtime against the real soundsh archive, reproducing the session's own lifecycle in
     // order: resolve the chain, prewarm that one pilot's clips, retire the loader as WorldSession.Build
-    // does, then prove a resolved line still plays while a def never prewarmed returns null. The
-    // source-following one-shot is asserted by position only; audibility is the user's half
-    // (docs/verification.md). Closes with the measured cost of prewarming the entire voice bank, the
+    // does, then prove a resolved line still speaks on the radio while a def never prewarmed returns
+    // null. Audibility is the user's half (docs/verification.md). Closes with the measured cost of prewarming the entire voice bank, the
     // number that justifies the roster-subset choice.
     [Suite("voice-runtime",
         "the B8 combat-voice runtime: the accent→voice.zrd→pilot-clip chain resolves against " +
         "the real archive, a roster-subset prewarm makes the lines playable after the loader " +
-        "is retired (a never-prewarmed def stays null), a source-following one-shot tracks a " +
-        "moving node and survives its source's death, and the full-set prewarm cost is " +
-        "measured and reported")]
+        "is retired (a never-prewarmed def stays null) and a resolved line speaks on the mission " +
+        "radio channel from that cache, and the full-set prewarm cost is measured and reported")]
     internal static void VoiceRuntime(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"shared zrdr");
@@ -2404,7 +2406,7 @@ internal static class AiSuites
 
         using var archive = new SoundArchive(ctx.SoundsPath);
         WorldSounds? sounds = null;
-        Node3D? mover = null;
+        MissionRadio? radio = null;
         try
         {
             sounds = new WorldSounds(defs, groups)
@@ -2432,30 +2434,19 @@ internal static class AiSuites
             ctx.Check(bearing != null && sounds.HasStream(bearing),
                 $"the bearing clip's stream survived the loader retirement name={bearing}");
 
-            // A prewarmed line plays from a MOVING source and tracks it across ticks.
-            mover = new Node3D();
-            ctx.Host.AddChild(mover);
-            mover.GlobalPosition = new Vector3(100f, 200f, 300f);
-            string? resolved = sounds.PlayOneShot(playable!, mover, new System.Random(2));
+            // A prewarmed line speaks on the radio after the archive closed, reading the same cache.
+            radio = new MissionRadio(defs, groups, sounds.StreamFor);
+            ctx.Host.AddChild(radio);
+            string? resolved = radio.Speak(playable!, new System.Random(2));
             ctx.Check(resolved != null && resolved.StartsWith("snd_id2_DI-LowDmg"),
-                $"a prewarmed voice line plays after the archive closed resolved={resolved}");
-            var player = LastOneShotPlayer(sounds);
-            ctx.Check(player != null && player.GlobalPosition.DistanceTo(mover.GlobalPosition) < 0.01f,
-                $"the one-shot starts at its source pos={player?.GlobalPosition}");
-            mover.GlobalPosition = new Vector3(-450f, 60f, 1200f);
-            sounds.Tick();
-            ctx.Check(player!.GlobalPosition.DistanceTo(mover.GlobalPosition) < 0.01f,
-                $"the one-shot follows the moved source pos={player.GlobalPosition}");
-            var lastPos = mover.GlobalPosition;
-            mover.Free();
-            mover = null;
-            sounds.Tick();
-            ctx.Check(GodotObject.IsInstanceValid(player) && player.GlobalPosition.DistanceTo(lastPos) < 0.01f,
-                $"a freed source leaves the line finishing at its last position");
+                $"a prewarmed voice line queues after the archive closed resolved={resolved}");
+            radio.Tick(0.1f);
+            ctx.Check(radio.LinesStarted == 1 && radio.OnAir == resolved,
+                $"…and starts on the channel's next step on-air={radio.OnAir}");
 
-            // The positional overload is untouched, and a def never prewarmed is null once the
-            // loader is gone: the exact failure the prewarm exists to prevent.
-            ctx.Check(sounds.PlayOneShot("snd_id26_TA-SucShk-A", Vector3.Zero, new System.Random(3)) == null,
+            // A def never prewarmed is null once the loader is gone: the exact failure the
+            // prewarm exists to prevent.
+            ctx.Check(radio.Speak("snd_id26_TA-SucShk-A", new System.Random(3)) == null,
                 $"an unprewarmed pilot's line stays null after the archive closed");
 
             // The cost of prewarm-everything, measured on a fresh archive so nothing is cached:
@@ -2482,7 +2473,7 @@ internal static class AiSuites
         }
         finally
         {
-            mover?.Free();
+            radio?.Free();
             if (sounds != null)
             {
                 sounds.FlushOneShots();
@@ -2496,14 +2487,14 @@ internal static class AiSuites
     // The talker chance is pinned to 1 so the assertions are about the dispatch rules, not the
     // dice; audibility itself is the user's half (docs/verification.md, "What this project
     // cannot verify itself"), what IS assertable is the dispatch decision, the resolved clip
-    // name and the PlayOneShot call.
+    // name, and the flat radio player it speaks on.
     [Suite("ai-voice",
         "the E16 trigger dispatch on a live AI plane against the real archive: a projectile "
-        + "hit crossing a DI threshold plays exactly ONE source-following line the pilot's "
-        + "accent owns (the 15 s slot cooldown swallowing the follow-up hits) on the Voice bus, "
-        + "the same clip replayed through the default bus lands on Effects instead, and the kill "
-        + "plays the dead pilot's own death cry through the force flag while an unforced "
-        + "dispatch on the same dead speaker stays silent")]
+        + "hit crossing a DI threshold plays exactly ONE line the pilot's accent owns (the 15 s "
+        + "slot cooldown swallowing the follow-up hits) flat on the mission radio's Voice-bus "
+        + "AudioStreamPlayer with no positional player built, and the kill plays the dead "
+        + "pilot's own death cry through the force flag at its authored level with the listener "
+        + "5 km away, while an unforced dispatch on the same dead speaker stays silent")]
     internal static void AiVoice(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -2528,6 +2519,7 @@ internal static class AiSuites
         var textures = new TextureArchive(texturesPath);
         using var archive = new SoundArchive(ctx.SoundsPath);
         WorldSounds? sounds = null;
+        MissionRadio? radio = null;
         Session.AiVoiceRuntime? runtime = null;
         FlightController? ai = null;
         try
@@ -2542,7 +2534,9 @@ internal static class AiSuites
             sounds.Prewarm(voice.PrewarmNames(new[] { 12 }));
             sounds.Loader = null;
 
-            runtime = new Session.AiVoiceRuntime(voice, sounds, new System.Random(5));
+            radio = new MissionRadio(defs, groups, sounds.StreamFor);
+            ctx.Host.AddChild(radio);
+            runtime = new Session.AiVoiceRuntime(voice, sounds, radio, new System.Random(5));
             ctx.Host.AddChild(runtime);
 
             var aiModel = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
@@ -2585,6 +2579,12 @@ internal static class AiSuites
             runtime.LinePlayed += (_, trigger, clip) => played.Add((trigger, clip));
             runtime.Step(3f); // past the decoded 2 s mute window
 
+            // The listener starts beside the speaker and is later moved past every voice def's
+            // audible radius, so a line that moved with distance would show it.
+            var ear = ai.WorldPosition + new Vector3(0f, 0f, 20f);
+            sounds.SetListeners(() => new[] { ear });
+            int oneShotsBefore = sounds.OneShotsStarted;
+
             // --- DI: hits through the pool's own entry point until the summary crosses 70 %.
             // The hits WALK the four zones (a single zone's exhausted pool floors the summary
             // at 75 % on this airframe and could never cross the threshold).
@@ -2604,22 +2604,18 @@ internal static class AiSuites
                 $"the sweep stopped inside the DI band health={fraction * 100f:0}%");
             ctx.Check(played.Count == 1 && played[0].Clip.StartsWith("snd_id2_DI-"),
                 $"crossing the threshold played exactly one DI line of the pilot's own played=[{string.Join(", ", played)}]");
-            var oneShot = LastOneShotPlayer(sounds);
-            ctx.Check(oneShot != null && oneShot.GlobalPosition.DistanceTo(ai.WorldPosition) < 1f,
-                $"…as a source-following one-shot at the aircraft pos={oneShot?.GlobalPosition}");
-            ctx.Check(oneShot != null && oneShot.Bus.ToString() == AudioBuses.Voice,
-                $"…on the Voice bus, not with the destruction one-shots actual={oneShot?.Bus}");
-
-            // The Voice argument must not survive the call it was passed on: the SAME clip replayed
-            // with the default argument has to come back on Effects, or a destruction sound handed
-            // a player that once carried a callout would speak an explosion through the voice mix.
-            int startedBefore = sounds.OneShotsStarted;
-            string? replay = sounds.PlayOneShot(played[0].Clip, ai.WorldPosition, new System.Random(7));
-            var defaultPlayer = LastOneShotPlayer(sounds);
-            ctx.Check(replay != null && sounds.OneShotsStarted == startedBefore + 1,
-                $"the same clip replays through the default bus resolved={replay}");
-            ctx.Check(defaultPlayer != null && defaultPlayer.Bus.ToString() == AudioBuses.Effects,
-                $"…and lands on Effects, so the bus is decided per play actual={defaultPlayer?.Bus}");
+            radio.Tick(0.1f);
+            var radioPlayer = RadioPlayer(radio);
+            ctx.Check(radio.OnAir == played[0].Clip && radioPlayer is { Playing: true },
+                $"…speaking on the radio channel on-air={radio.OnAir} playing={radioPlayer?.Playing}");
+            ctx.Check(radioPlayer != null && radioPlayer.Bus.ToString() == AudioBuses.Voice,
+                $"…on the Voice bus actual={radioPlayer?.Bus}");
+            ctx.Check(sounds.OneShotsStarted == oneShotsBefore,
+                $"…and no line built a positional player: no AudioStreamPlayer3D one-shot started ({sounds.OneShotsStarted - oneShotsBefore})");
+            float nearDb = radioPlayer?.VolumeDb ?? float.NaN;
+            ctx.Check(Mathf.IsEqualApprox(nearDb, FlatDb(defs, played[0].Clip)),
+                $"…at its def's authored level beside the speaker db={nearDb:0.00} want={FlatDb(defs, played[0].Clip):0.00}");
+            PumpRadio(radio);
 
             // Follow-up hits in the same tier stay silent: the slot cooldown swallowed them
             // (armed by the PLAY here; the failed-roll arming is the unit suite's,
@@ -2634,14 +2630,28 @@ internal static class AiSuites
                     $"a follow-up hit in the same tier is silent under the 15 s cooldown");
             }
 
+            // The channel is drained first, or a still-speaking DI line would hold the cry past its
+            // 0.8 s QUEUE tolerance and drop it.
+            PumpRadio(radio);
+
             // --- the kill: the dying pilot's own cry, dispatched with force (the speaker is
-            // already dead when it plays).
+            // already dead when it plays), heard from 5 km, far past any voice def's audible radius.
+            ear = ai.WorldPosition + new Vector3(0f, 0f, FarEarMetres);
             ai.DebugForceCrash();
             ctx.Check(!speaker.Alive, $"the Downed report marked the speaker dead");
             ctx.Check(played.Count >= before + 1 && played[^1].Clip.StartsWith("snd_id2_DE-"),
                 $"…and the death cry played THROUGH the dead state (force) clip={(played.Count > 0 ? played[^1].Clip : "none")}");
             ctx.Check(played[^1].Trigger == AiVoiceDispatcher.DeEnemy,
                 $"…as id 21 (DE): no team model puts an AI on the player's team, documented");
+            radio.Tick(0.1f);
+            sounds.Tick();
+            string cry = played[^1].Clip;
+            float farDb = radioPlayer?.VolumeDb ?? float.NaN;
+            float lawDb = SoundFalloff.GainDb(FarEarMetres, defs[cry].RangeMin, defs[cry].RangeMax, defs[cry].Volume);
+            ctx.Check(radio.OnAir == cry && Mathf.IsEqualApprox(farDb, FlatDb(defs, cry)),
+                $"…and speaks at its authored level with the listener {FarEarMetres:0} m away on-air={radio.OnAir} db={farDb:0.00} want={FlatDb(defs, cry):0.00} (the distance law would give {lawDb:0.00})");
+            ctx.Check(sounds.OneShotsStarted == oneShotsBefore,
+                $"…still with no positional player built ({sounds.OneShotsStarted - oneShotsBefore})");
 
             // The force flag is the death cry's alone: an ordinary dispatch on the same dead
             // speaker is gated out before anything rolls.
@@ -2656,6 +2666,7 @@ internal static class AiSuites
         {
             ai?.Free();
             runtime?.Free();
+            radio?.Free();
             if (sounds != null)
             {
                 sounds.FlushOneShots();
@@ -3165,18 +3176,31 @@ internal static class AiSuites
         }
     }
 
-    // The most recent one-shot player under a WorldSounds node.
-    internal static AudioStreamPlayer3D? LastOneShotPlayer(WorldSounds sounds)
+    // The radio's one player. Typed as the flat AudioStreamPlayer, so a channel rebuilt on a 3D
+    // player reads null here and fails the suites that use this.
+    internal static AudioStreamPlayer? RadioPlayer(MissionRadio radio)
     {
-        AudioStreamPlayer3D? last = null;
-        foreach (var child in sounds.GetChildren())
+        foreach (var child in radio.GetChildren())
         {
-            if (child is AudioStreamPlayer3D p)
+            if (child is AudioStreamPlayer p)
             {
-                last = p;
+                return p;
             }
         }
-        return last;
+        return null;
+    }
+
+    // The level MissionRadio plays a definition at: its authored VOLUME and nothing else.
+    internal static float FlatDb(IReadOnlyDictionary<string, SoundDef> defs, string name) =>
+        Mathf.LinearToDb(System.Math.Max(defs[name].Volume, 0.0001f));
+
+    // Steps the radio until its channel and queue are empty, at most a minute of clips.
+    internal static void PumpRadio(MissionRadio radio)
+    {
+        for (int i = 0; i < 600 && (radio.OnAir != null || radio.Pending > 0); i++)
+        {
+            radio.Tick(0.1f);
+        }
     }
 
     [Suite("ai-net-follow",

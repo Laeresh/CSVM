@@ -350,6 +350,7 @@ internal static class InstantActionSuites
 
         using var archive = new SoundArchive(ctx.SoundsPath);
         WorldSounds? sounds = null;
+        MissionRadio? radio = null;
         AiVoiceRuntime? runtime = null;
         try
         {
@@ -364,7 +365,9 @@ internal static class InstantActionSuites
             ctx.Check(deClips.Any(sounds.HasStream),
                 $"the ace's DE family has a stream after the loader is retired");
 
-            runtime = new AiVoiceRuntime(voice, sounds, new System.Random(5));
+            radio = new MissionRadio(defs, groups, sounds.StreamFor);
+            ctx.Host.AddChild(radio);
+            runtime = new AiVoiceRuntime(voice, sounds, radio, new System.Random(5));
             ctx.Host.AddChild(runtime);
             var speaker = runtime.Dispatcher.Register(900, vo, InstantActionRuntime.EnemyTeam,
                 isPlayer: false, talkerChance: 2f, constitutionChance: 0.5f);
@@ -375,6 +378,7 @@ internal static class InstantActionSuites
         finally
         {
             runtime?.Free();
+            radio?.Free();
             if (sounds != null)
             {
                 sounds.FlushOneShots();

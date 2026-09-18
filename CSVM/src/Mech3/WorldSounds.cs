@@ -204,30 +204,14 @@ public sealed partial class WorldSounds : Node3D
         return emitter;
     }
 
-    /// <summary>Fires a one-shot <c>SOUND</c> at a world point: fire-and-forget destruction/impact
-    /// audio, a player that frees itself when the clip ends. A <see cref="SoundGroup"/> name
-    /// resolves to one member by weight through <paramref name="rng"/> first. <paramref name="bus"/>
-    /// is this call's mix category, defaulted so every destruction caller stays on Effects and
-    /// combat voice alone asks for Voice; <paramref name="pitch"/> is the cutscene fast-forward's
-    /// rate, 1 everywhere else. Null when unknown or never prewarmed (<see cref="Prewarm"/>).</summary>
-    public string? PlayOneShot(string name, Vector3 worldPos, Random rng,
-        string bus = AudioBuses.Effects, float pitch = 1f) =>
-        Spawn(name, worldPos, null, rng, bus, pitch);
-
-    /// <summary>The source-following variant of <see cref="PlayOneShot(string, Vector3, Random, string)"/>:
-    /// the one-shot rides <paramref name="source"/>'s world pose each <see cref="Tick"/>. For a
-    /// voice line from a moving aircraft, where a once-written position would fall behind within a
-    /// second. When the source is freed mid-clip the sound holds its last position and finishes
-    /// there. Who hears it is the pinned per-pane listener model (<c>UI.SplitScreen</c>): the
-    /// nearest pane's volume wins, and following the source only keeps the range honest.</summary>
-    public string? PlayOneShot(string name, Node3D source, Random rng,
-        string bus = AudioBuses.Effects)
-    {
-        var pos = IsInstanceValid(source) && source.IsInsideTree()
-            ? source.GlobalPosition
-            : Vector3.Zero;
-        return Spawn(name, pos, source, rng, bus, 1f);
-    }
+    /// <summary>Fires a one-shot <c>SOUND</c> at a world point on the Effects bus: fire-and-forget
+    /// destruction/impact audio, a player that frees itself when the clip ends. A
+    /// <see cref="SoundGroup"/> name resolves to one member by weight through <paramref name="rng"/>
+    /// first. <paramref name="pitch"/> is the cutscene fast-forward's rate, 1 everywhere else. Null
+    /// when unknown or never prewarmed (<see cref="Prewarm"/>). Radio lines are not for this path:
+    /// they play flat on <see cref="MissionRadio"/>.</summary>
+    public string? PlayOneShot(string name, Vector3 worldPos, Random rng, float pitch = 1f) =>
+        Spawn(name, worldPos, rng, pitch);
 
     /// <summary>Attaches an emitter to the world node that gives it its position, the reader's
     /// <c>OBJECT_ADD_CHILD</c> or the compiled event's <c>AT_NODE</c>.</summary>
@@ -297,8 +281,7 @@ public sealed partial class WorldSounds : Node3D
         // One call for the whole pass: every emitter's level is a distance to the nearest of these.
         var ears = _listeners?.Invoke();
 
-        // Sweep finished one-shots. A stopped player past the start grace is done; free it. A
-        // source-following one rides its source's pose; a freed source leaves it at its last spot.
+        // Sweep finished one-shots. A stopped player past the start grace is done; free it.
         for (int i = _oneShots.Count - 1; i >= 0; i--)
         {
             var shot = _oneShots[i];
@@ -313,17 +296,6 @@ public sealed partial class WorldSounds : Node3D
                 shot.Player.QueueFree();
                 _oneShots.RemoveAt(i);
                 continue;
-            }
-            if (shot.Source is { } src)
-            {
-                if (IsInstanceValid(src) && src.IsInsideTree())
-                {
-                    shot.Player.GlobalPosition = src.GlobalPosition;
-                }
-                else
-                {
-                    shot.Source = null;   // finish where the source last was
-                }
             }
             ApplyFalloff(shot.Player, ears, shot.RangeMin, shot.RangeMax, shot.Volume);
         }
@@ -402,8 +374,7 @@ public sealed partial class WorldSounds : Node3D
         return (best, which);
     }
 
-    private string? Spawn(string name, Vector3 worldPos, Node3D? source, Random rng, string bus,
-        float pitch)
+    private string? Spawn(string name, Vector3 worldPos, Random rng, float pitch)
     {
         string resolved = _groups.TryGetValue(name, out var group)
             ? group.Pick(rng) ?? name
@@ -429,15 +400,12 @@ public sealed partial class WorldSounds : Node3D
             return null;
         }
 
-        // The bus comes from this call, since one call site serves two mix categories. A fresh
-        // player per one-shot makes that per-play by construction; keep the assignment here, or a
-        // later pooling of these players would speak an explosion through the Voice bus.
         var player = new AudioStreamPlayer3D
         {
             Stream = stream,
             VolumeDb = SoundFalloff.VolumeDb(def.Volume),
             AttenuationModel = AudioStreamPlayer3D.AttenuationModelEnum.Disabled,
-            Bus = bus,
+            Bus = AudioBuses.Effects,
             PitchScale = Mathf.Max(0.01f, pitch),
         };
         AddChild(player);
@@ -446,7 +414,6 @@ public sealed partial class WorldSounds : Node3D
         var shot = new OneShot
         {
             Player = player,
-            Source = source,
             RangeMin = def.RangeMin,
             RangeMax = def.RangeMax,
             Volume = def.Volume,
@@ -458,7 +425,7 @@ public sealed partial class WorldSounds : Node3D
         OneShotsStarted++;
         if (Debug)
         {
-            Log.Info("sound", $"sound one-shot: {name}{(resolved != name ? $" → {resolved}" : "")} @ {worldPos.Snapped(Vector3.One)}{(source != null ? " (following)" : "")}");
+            Log.Info("sound", $"sound one-shot: {name}{(resolved != name ? $" → {resolved}" : "")} @ {worldPos.Snapped(Vector3.One)}");
         }
         return resolved;
     }
@@ -499,13 +466,11 @@ public sealed partial class WorldSounds : Node3D
         }
     }
 
-    // One live fire-and-forget one-shot; Source non-null makes it follow
-    // that node's pose until the clip ends or the node dies.
+    // One live fire-and-forget one-shot, fixed where it was fired.
     private sealed class OneShot
     {
         public AudioStreamPlayer3D Player = null!;
         public float Age;
-        public Node3D? Source;
         public float RangeMin;    // RANGE's full-volume distance, m
         public float RangeMax;    // RANGE's audible distance, m
         public float Volume;      // VOLUME's linear gain

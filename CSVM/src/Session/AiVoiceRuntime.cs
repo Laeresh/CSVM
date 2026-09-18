@@ -10,9 +10,8 @@ namespace CSVM.Session;
 /// <summary>Wires the E16 voice dispatch into a running flight session: subscribes the decoded
 /// event sources on each registered aircraft, runs them through <see cref="AiVoiceDispatcher"/>,
 /// and plays every decision through <c>CombatVoice.PlayableFor</c> only, resolving the
-/// name, <c>WorldSounds.HasStream</c> answering availability, and the source-following
-/// <c>WorldSounds.PlayOneShot(name, Node3D, rng, Voice)</c> playing it from the speaker's own
-/// aircraft; that bus argument alone separates a callout from the Effects one-shots on that call.
+/// name, <c>WorldSounds.HasStream</c> answering availability, and <see cref="MissionRadio.Speak"/>
+/// queueing it on the flat Voice channel the objective callouts share, never at the speaker.
 /// The wired/unwired dispatch-site table is docs/formats/combat-voice.md "The remake's dispatch
 /// sites". Speakers register on their real <see cref="FlightController.Team"/>; a broadcast
 /// elects among a caller's own side.
@@ -27,6 +26,7 @@ public sealed partial class AiVoiceRuntime : Node
 
     private readonly CombatVoice _voice;
     private readonly WorldSounds _sounds;
+    private readonly MissionRadio _radio;
     private readonly AiVoiceDispatcher _dispatcher;
     private readonly Random _rng;
     private readonly Dictionary<int, FlightController> _bySpeaker = new();
@@ -35,16 +35,18 @@ public sealed partial class AiVoiceRuntime : Node
     private readonly HashSet<(int Speaker, string Family)> _noClipLogged = new();
     private float _now;
 
-    public AiVoiceRuntime(CombatVoice voice, WorldSounds sounds, Random rng)
+    public AiVoiceRuntime(CombatVoice voice, WorldSounds sounds, MissionRadio radio, Random rng)
     {
         _voice = voice;
         _sounds = sounds;
+        _radio = radio;
         _rng = rng;
         _dispatcher = new AiVoiceDispatcher(rng, ResolvePlayable);
     }
 
-    /// <summary>Every line actually played: (speaker node name, trigger id, resolved clip),
-    /// the observability seam the ai-voice suite counts.</summary>
+    /// <summary>Every line handed to the radio: (speaker tag, trigger id, resolved clip), the
+    /// observability seam the ai-voice suite counts. A line the busy channel keeps waiting past
+    /// its QUEUE tolerance is still dropped there, unheard.</summary>
     public event Action<string, int, string>? LinePlayed;
 
     /// <summary>The dispatcher, exposed for tests/probes (registration order, cooldown stamps).</summary>
@@ -191,12 +193,11 @@ public sealed partial class AiVoiceRuntime : Node
             return;
         }
         string tag = _bySpeaker.TryGetValue(speaker.Id, out var node) ? node.Name : $"#{speaker.Id}";
-        if (decision.Clip is { } clip && node != null)
+        if (decision.Clip is { } clip)
         {
-            // The one Voice caller on the one-shot path: combat voice has no player of its own, so
-            // its category is named on the call while the destruction and impact callers that share
-            // the path keep the Effects default.
-            string? resolved = _sounds.PlayOneShot(clip, node, _rng, AudioBuses.Voice);
+            // ⚠ Do not place a line at the speaker; the defs are QUEUE radio lines with no 3D flag,
+            // and the original plays them flat through the one queue the objective callouts use.
+            string? resolved = _radio.Speak(clip, _rng);
             Log.Info("sound", $"ai voice: {tag}: trigger #{decision.TriggerId} -> {clip}{(resolved != null && resolved != clip ? $" ({resolved})" : "")} ({decision.Outcome})");
             if (resolved != null)
             {

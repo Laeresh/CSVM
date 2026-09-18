@@ -51,6 +51,18 @@ nothing reads it. ⚠ The tolerance is a wait rule, not a deadline on the cue's 
 charging the delay against it drops every 0.5 s bark before it can speak. The cue delay and the
 `STOP_QUEUED_SOUNDS` cancellation are [objectives.md](objectives.md).
 
+⚠ **There is one queue, and combat voice speaks on it.** A combat line's play call
+(`FUN_004afc90`, reached from the talker gate `FUN_004afd00`) is `FUN_00593590(def, 1.0)`, which
+hands a non-streamed definition to `FUN_00593b80(def, gain, pos = 0, vel = 0)`. There, the
+definition's queued bit (flag word `+0x0c`, bit `0x200`, the `QUEUE` key) routes it to
+`FUN_00593a70`, which builds a queue item stamped `now + wait` and inserts it into the single
+global list `DAT_00639eac`. The pump `FUN_00593110` holds one item on air at a time
+(`DAT_00639eb4`), starts the next only after the current voice stops plus 0.3 s, and skips an item
+whose stamp has passed. The position pointer is null on this path, so a combat line is flat, never
+placed at the speaker. The remake's `MissionRadio` is that queue: objective cues enter it through
+`Cue` with their 1 s delay, and combat lines through `Speak` with none. ⚠ The 0.3 s gap between
+items is not modelled; `MissionRadio` starts a waiting call on the step after the last line ends.
+
 Beside the effect/UI sets (`COMMON`, the per-mission `c<x>m<nn>` sets, the `brief_*` and `DIALOG`
 sets), 35 sets named `id<N>` carry the combat-voice clips: `snd_id<N>_<TYPE>` →
 `VO_id<N>_<TYPE>.wav`, 1,414 defs. Their runtime chain and caveats (defs without WAVs, the

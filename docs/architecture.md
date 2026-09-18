@@ -74,7 +74,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/AnimDefs.cs`, the zrdr front-end: ANIMATION_DEFINITIONS reader files, normalized into one `AnimDefinition` model.
 - `src/Mech3/AnimProgram.cs`, merges the compiled + reader defs for one mission, holds `startanims`, resolves SI-script slots.
 - `src/Mech3/TextureCycler.cs`, runs the gamez material `cycle` flipbooks (water, surf, wakes) by swapping `albedo_tex`.
-- `src/Mech3/WorldSounds.cs`, `SOUND_NODE` ambient 3D emitters (one pooled player per host node) + `PlayOneShot` for destruction/impact audio and, on its bus argument, combat voice.
+- `src/Mech3/WorldSounds.cs`, `SOUND_NODE` ambient 3D emitters (one pooled player per host node) + `PlayOneShot` for destruction/impact audio.
 - `src/Mech3/WorldLights.cs`, packs the world's `LIGHT_STATE` point lights into the `csky_light_data` texture the fullbright world shader reads.
 - `src/Mech3/MissionSetup.cs`, parses + applies the per-mission `.gw` interp script deciding which world entities a mission shows.
 - `src/Mech3/AnimRuntime.cs`, the animation engine: bootstrap, live def instances, event dispatch, motions, conditions, lights, puffers, world effects.
@@ -100,7 +100,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/SoundArchive.cs`, WAV lookup over a sounds extraction → cached `AudioStreamWav` (forward loop when LOOPED).
 - `src/Mech3/SoundFalloff.cs`, the original's positional gain law: a distance, a `RANGE` pair and a `VOLUME` to decibels, pure and engine-free.
 - `src/Mech3/MusicPlayer.cs`, the state-driven score: one 2D streaming channel for menu, cabin and mission, with the decoded battle hold.
-- `src/Mech3/MissionRadio.cs`, the mission radio queue: the non-positional voice channel the campaign's objective callouts and VO dialogue chains speak on.
+- `src/Mech3/MissionRadio.cs`, the mission radio queue: the non-positional voice channel the campaign's objective callouts, VO dialogue chains and combat voice lines speak on.
 - `src/Mech3/SoundDefs.cs`, sounds.json parser: SETS `snd_*` → `SoundDef`; `LoadGroups` → the weighted-random `SOUND_GROUPS` + their dialogue chains.
 - `src/Mech3/CombatVoice.cs`, the combat-voice chain: roster `accentID` → `voice.zrd` pool → pilot VO id → clip defs, plus the mission's voice prewarm set.
 - `src/Mech3/Anim/TemplateStage.cs`, the effect-template stage as one module: pool-slot arithmetic, placement and following, copy identity, reveal and retire.
@@ -524,7 +524,7 @@ clusters they delegate to.
 - `src/Session/GeneratorCycle.cs`, the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel, the credit.
 - `src/Session/NetTrailerTargets.cs`, resolves a patrol net's trailer name (`player`, a zeppelin) to a live position, so an anchored net rides its target.
 - `src/Session/AiGeneratorRuntime.cs`, runs a mission's egen generators (`--generators`): the load drops, the cycle stepping, each launch's spawn or release.
-- `src/Session/AiVoiceRuntime.cs`, wires the combat-voice dispatcher into a session: the speakers, the damage sources, the sites each clip plays from and the Voice bus it plays on.
+- `src/Session/AiVoiceRuntime.cs`, wires the combat-voice dispatcher into a session: the speakers, the damage sources, and the flat radio queue every line plays on.
 - `src/Session/ZeppelinRuntime.cs`, runs a mission's zeppelins (`--zeppelins`): the placement, the net flight, the per-part damage and kill, the script's arms.
 - `src/Session/ZeppelinRuntime.Cannons.cs`, the broadside half of that partial: the cannon wiring, the target and arc gate, the anims and the rounds fired.
 - `src/Session/TurretEmplacementRuntime.cs`, the world AA emplacements: placed against the built world, in the shared aim pool, stepped after the airships.

@@ -2704,14 +2704,14 @@ public partial class GameSession : Node3D
         if (state.WorldRuntime?.Sounds is { } worldSounds
             && state.SoundDefs is { } vDefs && state.SoundGroups is { } vGroups)
         {
-            var combatVoice = new CombatVoice(vDefs, vGroups, CombatVoice.LoadAccents(state.ZrdrPath));
-            _aiVoice = new AiVoiceRuntime(combatVoice, worldSounds, Rng.NewSystemRandom(Rng.Ai));
-            _worldRoot!.AddChild(_aiVoice); // its realtime tick; freed with the world subtree
             // The radio plays the streams the world's prewarm already decoded, so a callout survives
             // the sound archive's build scope closing exactly as a one-shot does.
             _radio = new MissionRadio(vDefs, vGroups, worldSounds.StreamFor);
             worldSounds.Radio = _radio;
             _worldRoot!.AddChild(_radio);
+            var combatVoice = new CombatVoice(vDefs, vGroups, CombatVoice.LoadAccents(state.ZrdrPath));
+            _aiVoice = new AiVoiceRuntime(combatVoice, worldSounds, _radio, Rng.NewSystemRandom(Rng.Ai));
+            _worldRoot!.AddChild(_aiVoice); // its realtime tick; freed with the world subtree
             foreach (var rig in _rigs)
             {
                 if (rig.Controller is { } human)

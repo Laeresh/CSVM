@@ -752,13 +752,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   between the two radii"), `INSTR-87`, `git log --grep=BL-933`, `git log --grep=BL-793`,
   `git log --grep=BL-820`, `git log --grep=BL-846`.
 
-- `BL-934` `[Bug]` `[Blocked: BL-978]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` **The dynamic enemy and
+- `BL-934` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` **The dynamic enemy and
   ally voice lines dispatch in the suite and are still unheard at the controls: a campaign sitting
   after the subscription fix heard no ally and no enemy line, not even on friendly fire.**
   *Verdict at the controls:* "still no dynamic voice from friends or foes, not even on friendly
-  fire, nothing in the logs". One cause is filed and goes first: `BL-978` (a line is placed at the
-  speaker and attenuated by distance where it should play flat as radio). This is the re-listen
-  once it lands. ⚠ "Nothing in the logs" is not yet evidence of no dispatch: the `ai voice:` lines
+  fire, nothing in the logs". One cause is fixed: a line was placed at the speaker and attenuated
+  by distance, and now plays flat on the mission radio's queue (`git log --grep=BL-978`). The next
+  step is the re-listen, `PT-161`. ⚠ "Nothing in the logs" is not yet evidence of no dispatch: the `ai voice:` lines
   are `Log.Info` on the `sound` category, so run with `--log=sound:debug` and read for
   `ai voice: <name>: trigger #`. A speaker whose pilot owns a family's clips but had none
   prewarmed now warns once per family (`owns the clips but none was prewarmed`), so a silent pilot
@@ -771,48 +771,18 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `ai voice: ai2_player_pfighter: trigger #8 -> snd_id7_WA-Enemy-6 (Talker test passed. Play AI
   sound #8.)`, an accentless hostile committing to the human and a voiced ally speaking the bearing
   call-out, and the `ai-voice-mission` suite holds the same chain over C1/M02's shipped roster
-  through to a playing stream on the Voice bus; a playing stream is not an audible line
-  (`docs/verification.md`). *⚠ Traps:* the
-  scripted lines ride `Mech3/MissionRadio.cs`, a different channel, so their working proves nothing
-  about this one; the aircraft that speaks is never the enemy that was spotted, so a silent enemy
+  through to a playing stream on the radio's Voice-bus player; a playing stream is not an audible
+  line (`docs/verification.md`). *⚠ Traps:* combat lines and the scripted lines now share
+  `Mech3/MissionRadio.cs`'s one queue, so a scripted line on air holds a bark past its 0.8 s
+  tolerance and drops it, which is the original's rule and not a silence to fix; the aircraft that speaks is never the enemy that was spotted, so a silent enemy
   is not the symptom; a pilot silent on one trigger is often data, since VO 4 (accent 13) owns no
   `WA-*` or `TA-*` family and the DI tiers read the whole-vehicle health pool, so a wingman whose
-  armor soaked the hits stays at full health. *Playtest after fix:* fly C1/M02 from the campaign
-  with `--log=sound:debug`,
-  stay in the fight beside the enemy flight for a minute or two, and listen for a wingman calling
-  an enemy's clock bearing and for the tiered damage calls while you take and deal hits; keep the
-  log. *Cross-refs:* `BL-978`, `docs/formats/combat-voice.md`, `git log --grep=BL-934`,
+  armor soaked the hits stays at full health. *Playtest:* `PT-161` (C1/M02 from the campaign with
+  `--log=sound:debug`; keep the log). *Cross-refs:* `docs/formats/combat-voice.md`,
+  `git log --grep=BL-934`, `git log --grep=BL-978` (the flat radio path),
   `git log --grep=BL-977` (the Instant Action prewarm gap),
   the saved Voice level (`Utils/AudioMix.cs`, the `audio-buses` suite) if the lines dispatch and
   stay inaudible.
-
-- `BL-978` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: data]` **A combat voice line
-  is placed in the world at the speaker's aircraft and attenuated by distance; it is radio and
-  should play flat, like the scripted lines.** *Evidence:* heard at the controls, a wingman's
-  bearing call-out arrived as a positional sound from where the wingman flew. `AiVoiceRuntime.Play`
-  hands every line to the source-following `WorldSounds.PlayOneShot(name, Node3D, rng, Voice)`,
-  and `WorldSounds.Spawn` builds an `AudioStreamPlayer3D` at the aircraft for every one-shot, so
-  Godot pans the line by position whatever the attenuation model, and the one-shot's `Tick`
-  applies the distance law each frame. The voice defs author no `3D` flag:
-  `snd_id7_WA-Enemy-6` in `extracted/zrdr/sounds.zrd.json` is `PURGEABLE` and `QUEUE 0.5`, the
-  same shape as the scripted radio def `snd_c3-HW-M5_Zachary_3`, which `Mech3/MissionRadio.cs`
-  plays through a plain 2D `AudioStreamPlayer` on the Voice bus. A flagless def still inherits
-  `SoundDefs`' default `RANGE` of 130 to 1020 m, so a wingman calling from beyond a kilometre is
-  attenuated to the floor and lost, and one at a few hundred metres is quieter than a line beside
-  you. *Fix shape:* give combat voice a flat path on the Voice bus. Either `WorldSounds.Spawn`
-  builds a plain `AudioStreamPlayer` when the def carries no `3D` flag, which also covers any
-  other flat def routed through a one-shot, or the voice runtime keeps its own queued 2D player
-  the way `MissionRadio` does; the defs' `QUEUE` value points at one channel in the original, so
-  the second is the closer port. Pin it in the `ai-voice` suite: a played line's player is not an
-  `AudioStreamPlayer3D`, and its gain does not move with the speaker's distance. *⚠ Traps:* do
-  not fix it by widening the voice defs' range; the range is the symptom's instrument, not its
-  cause. The destruction and impact callers share `PlayOneShot` and must stay positional; the bus
-  argument alone tells them apart today. *Playtest after fix:* fly C2/M05 from the campaign and
-  let the Peacemakers commit to you; a wingman's clock call should sit in the centre at one level
-  wherever the wingman is. *Cross-refs:* `BL-934` (whether the lines are audible at the controls,
-  which this range law partly answers), `git log --grep=BL-977` (the Instant Action prewarm gap),
-  `docs/formats/combat-voice.md` ("The remake's dispatch sites"), `docs/formats/sounds.md` (the
-  `3D` flag and `RANGE`).
 
 ## Cameras & views
 
