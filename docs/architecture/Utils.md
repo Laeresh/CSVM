@@ -121,13 +121,13 @@ site vocabulary, the seeded call sites and the attribution terms a record carrie
 
 ## src/Utils/PaneReadback.cs
 One frame of a pilot's pane read back without stalling the frame that asks, the `PaneRequest` a live
-session hands `StuntCapture` and `CampaignSnapshot`. A synchronous `GetImage` plus a PNG encode of a
-5120x1440 pane costs the frame that runs them over a second. The request copies the
-viewport's render target through `RenderingDevice.TextureGetDataAsync`, whose callback arrives
-after the device's frame queue, and a worker builds the image (RGB8 for an opaque viewport, as
-`GetImage` answers) and runs the caller's continuation, which encodes there too and defers to the
-main thread for anything touching the scene. No rendering device, or a render target other than
-RGBA8, falls back to the synchronous read.
+session hands `StuntCapture` and `CampaignSnapshot`, and the screenshot key's frame. A synchronous
+`GetImage` plus a PNG encode of a 5120x1440 pane costs the frame that runs them over a second. The
+request copies the viewport's render target through `RenderingDevice.TextureGetDataAsync`, whose
+callback arrives after the device's frame queue, and a worker builds the image (RGB8 for an opaque
+viewport, as `GetImage` answers) and runs the caller's continuation, which encodes there too and
+defers to the main thread for anything touching the scene. No rendering device, or a render target
+other than RGBA8, falls back to the synchronous read.
 
 ## src/Utils/WallCostBank.cs
 One `--perf` cost meter: the open/close bracket, the banked wall milliseconds, the worst single

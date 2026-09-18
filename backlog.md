@@ -897,17 +897,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   camera is posed, mint the port with the pose. *Cross-refs:* `Utils/PaneReadback.cs` (the
   latch's asynchronous readback), `docs/formats/campaign-screens.md` ("The danger-zone slot"), `docs/org/debrief.md`.
 
-- `BL-968` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: data]` **An F12 screenshot stalls the frame
-  it is taken on.** *Evidence:* F12 (`Launcher`, `LaunchMenu`) calls
-  `CaptureDirector.SaveScreenshot`, which reads the viewport back with a synchronous
-  `GetTexture().GetImage()` and writes the PNG on the main thread. That is the path that cost a
-  Danger Zone photograph 1.3 to 1.7 s at 5120x1440, and a stall of that length crashed the game.
-  `BL-964` moved only the Danger Zone cameras off it. *Fix shape:* take the frame through
-  `PaneReadback.Request` and write the PNG on its worker, logging "screenshot saved" when the file
-  lands; keep the synchronous path for `--screenshot`/`--shots` captures, which exit on the file.
-  *⚠ Traps:* `MenuCaptureSuites` presses F12 and must wait for the file rather than read it on
-  the same frame. *Cross-refs:* `git log --grep=BL-964`, `Utils/PaneReadback.cs`.
-
 ## HUD & UI
 
 - `BL-113` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Compass tape**: two

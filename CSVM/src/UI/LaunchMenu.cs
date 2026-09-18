@@ -355,6 +355,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// it.</summary>
     public CampaignLayout? CampaignLayoutOverride { get; set; }
 
+    /// <summary>Where the screenshot key takes its frame from, or null for this menu's own viewport
+    /// read back off the frame path. A suite sets it, since a suite runs inside one frame and a live
+    /// readback lands only frames later; the game never sets it.</summary>
+    public PaneRequest? ScreenshotPane { get; set; }
+
     /// <summary>The hangar flow while one is open, or null. Read-only, for the same reason
     /// <see cref="Campaign"/> is: its screens are driven through it, not around it.</summary>
     public HangarFlow? Hangar => _hangar;
@@ -976,7 +981,15 @@ public sealed partial class LaunchMenu : CanvasLayer
 
         if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F12 })
         {
-            Testing.CaptureDirector.SaveScreenshot(GetViewport());
+            if (ScreenshotPane is { } pane)
+            {
+                Testing.CaptureDirector.SaveScreenshot(pane);
+            }
+            else
+            {
+                Testing.CaptureDirector.SaveScreenshot(GetViewport());
+            }
+
             GetViewport().SetInputAsHandled();
             return;
         }
