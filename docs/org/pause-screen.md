@@ -410,7 +410,11 @@ applied already in force. An accepted page writes the options file and applies t
 settings through the same route the menu takes, without the presentation teardown a menu-side apply
 does, since the flight is what the leaf returns to. The rebinding pages hold the menu's own
 `ControlsFeature`, so an in-flight rebind edits the one keymap, and an accepted one reaches the
-seats flying behind the leaf at once, mouse scheme included. Built-in's board reaches the same
+seats flying behind the leaf at once, mouse scheme included. Auto Head Turn takes effect mid-flight
+as the original's does (by the user's recall of it; the executable's caller of the settings apply is
+not decoded): every accepted page puts the saved value on each human seat, and the remake's Next
+Target switch with it, written into the live selection so its cycle and lock survive. The Default
+View and the difficulty are saved for the next sortie and leave the running flight alone. Built-in's board reaches the same
 leaf through its PREFERENCES row. Where the install carries no decoded layout there is nothing to
 compose, so the Original strip is drawn and unbound and Built-in's row is left off.
 

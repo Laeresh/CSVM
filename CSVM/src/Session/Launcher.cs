@@ -1818,10 +1818,10 @@ public partial class Launcher : Node3D
 
     // The options file's one writer, shared by the menu's apply above and by the pause leaf's:
     // every choice the screen took saved, then the display settings and the mix applied now.
-    // ⚠ The graphics word is saved and nothing more. GraphicsMode resolves once at launch, so the
-    // choice reaches the world on the next start; do not rebuild the world here. The opening view
-    // and the automatic head turn are saved and no more for the same reason: both are read when a
-    // flight is built, so a pause-sheet change takes the next sortie rather than this one.
+    // ⚠ The graphics word, the opening view and the difficulty are saved and no more: each is read
+    // once, at launch or when a flight is built, so do not rebuild anything here. The head turn and
+    // targeting switch are saved for the next sortie and put on the seats flying now by the pause
+    // leaf itself (PausePreferences.FeedGameOptions).
     private void PersistOptions(OptionsApplyExit applied)
     {
         var store = OptionsStore.UserOptions();

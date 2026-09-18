@@ -92,6 +92,121 @@ internal static class PausePreferencesSuites
         }
     }
 
+    [Suite("pause-preferences-live-options",
+        "Auto Head Turn and Next Target changed over the pause reach the seats already flying: two "
+        + "human seats in the cockpit with a sideslip to lean into and a live target selection, the "
+        + "real Preferences leaf opened over them, both Game Options switches toggled and ACCEPT "
+        + "CHANGES pressed, puts the applied values on both seats at once, the targeting switch "
+        + "written into the selection the seat already holds rather than a new one, the next "
+        + "frame's head target leans into the velocity where on and sits straight ahead where off, "
+        + "and an accept carrying never-set values hands the head turn back to the "
+        + "headLook.autohead config key and the targeting switch back to the decoded head rule")]
+    internal static void PausePreferencesLiveOptions(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        string dir = Path.Combine(ctx.ScratchDir, "pause-preferences-live-options");
+        if (Directory.Exists(dir))
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+
+        Directory.CreateDirectory(dir);
+        string? previous = OptionsStore.DirectoryOverride;
+        OptionsStore.DirectoryOverride = dir;
+        var savedClock = GameClock.Current;
+        var clock = new GameClock { Mode = GameClock.RunMode.Realtime };
+        GameClock.Current = clock;
+        var panes = new SubViewport { RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled };
+        ctx.Host.AddChild(panes);
+        var stats = PlaneStats.Load(ctx.ZrdrPath, "player_bhawk");
+        var one = CockpitSeat(ctx, panes, stats, 0);
+        var two = CockpitSeat(ctx, panes, stats, 1);
+        var seats = new[] { one, two };
+        var selection = one.Targeting;
+        OptionsApplyExit? applied = null;
+        // Launcher.PersistOptions' own write of the two fields, so the page reopens on what it saved.
+        var leaf = PausePreferences.Build(ctx.DataRoot, layout, null, a =>
+        {
+            applied = a;
+            var store = OptionsStore.UserOptions();
+            var options = store.Load();
+            options.AutoHeadTurn = a.AutoHeadTurn;
+            options.NearestAfterKill = a.NearestAfterKill;
+            store.Save(options);
+        });
+        try
+        {
+            ctx.Check(leaf != null, $"the leaf builds over the install's decoded layout");
+            if (leaf == null)
+            {
+                return;
+            }
+
+            bool fallback = Config.GetBool("headLook.autohead", false);
+            Frame(clock, seats);
+            ctx.Check(one.AutoHeadTurn == null && Leans(one) == fallback && Leans(two) == fallback,
+                $"ABLE-TO-FAIL CONTROL: with nothing saved both seats fly the config key's head turn ({fallback}; leaning {Leans(one)}, {Leans(two)})");
+            ctx.Check(!Nearest(one) && !Nearest(two),
+                $"ABLE-TO-FAIL CONTROL: and the decoded head rule after a kill ({Nearest(one)}, {Nearest(two)})");
+
+            AcceptGameOptions(leaf, seats, toggle: true);
+            ctx.Check(applied?.AutoHeadTurn == true && one.AutoHeadTurn == true && two.AutoHeadTurn == true,
+                $"toggling Auto Head Turn over the pause puts it on both flying seats at once (applied {applied?.AutoHeadTurn}, seats {one.AutoHeadTurn}, {two.AutoHeadTurn})");
+            ctx.Check(applied?.NearestAfterKill == true && Nearest(one) && Nearest(two),
+                $"and toggling Next Target puts both seats on the nearest target after a kill (applied {applied?.NearestAfterKill}, seats {Nearest(one)}, {Nearest(two)})");
+            ctx.Check(ReferenceEquals(one.Targeting, selection),
+                $"written into the selection the seat already held, so its cycle and lock survive the accept");
+            Frame(clock, seats);
+            ctx.Check(Leans(one) && Leans(two) && OnVelocity(one),
+                $"and the next frame's head target leans into the sideslip ({Target(one)} against {Expected(one)}, seat 2 {Target(two)})");
+
+            AcceptGameOptions(leaf, seats, toggle: true);
+            Frame(clock, seats);
+            ctx.Check(one.AutoHeadTurn == false && two.AutoHeadTurn == false && !Leans(one) && !Leans(two),
+                $"toggling the head turn off again puts the head straight ahead on the next frame (seats {one.AutoHeadTurn}, {two.AutoHeadTurn}; {Target(one)}, {Target(two)})");
+            ctx.Check(!Nearest(one) && !Nearest(two),
+                $"and toggling Next Target off puts both seats back on the head rule ({Nearest(one)}, {Nearest(two)})");
+
+            // Values the file never carried ride out as null on any accept, which must hand the seat
+            // back to the launch's own fallbacks rather than keep what it flew with.
+            OptionsStore.UserOptions().Save(new OptionsDef());
+            foreach (var seat in seats)
+            {
+                seat.AutoHeadTurn = !fallback;
+                seat.Targeting!.NearestAfterKill = true;
+            }
+
+            AcceptGameOptions(leaf, seats, toggle: false);
+            Frame(clock, seats);
+            ctx.Check(applied?.AutoHeadTurn == null && one.AutoHeadTurn == null && two.AutoHeadTurn == null
+                && Leans(one) == fallback && Leans(two) == fallback,
+                $"an accept carrying never-set values restores the config key's head turn on both seats (seats {one.AutoHeadTurn?.ToString() ?? "null"}, {two.AutoHeadTurn?.ToString() ?? "null"}; leaning {Leans(one)}, {Leans(two)})");
+            ctx.Check(applied?.NearestAfterKill == null && !Nearest(one) && !Nearest(two),
+                $"and the decoded head rule after a kill ({Nearest(one)}, {Nearest(two)})");
+        }
+        finally
+        {
+            leaf?.Close();
+            leaf?.Free();
+            one.QueueFree();
+            two.QueueFree();
+            ctx.Host.RemoveChild(panes);
+            panes.QueueFree();
+            GameClock.Current = savedClock;
+            OptionsStore.DirectoryOverride = previous;
+        }
+
+        ctx.Note($"the head turn and the targeting switch accepted over the pause reach every flying seat");
+    }
+
     // The whole journey in one viewport: pause, strip, leaf, page, apply, return, resize.
     private static void Walk(TestContext ctx, MenuLayout layout, PauseSheet sheet)
     {
@@ -329,6 +444,88 @@ internal static class PausePreferencesSuites
         report.AppendLine(
             $"resize: {FlightWindow.X}x{FlightWindow.Y} -> {ResizedWindow.X}x{ResizedWindow.Y}, "
             + $"the ACCEPT CHANGES row moved from {before} to {after}");
+    }
+
+    // The walk over the pause: Options, the GAME OPTIONS door, the Auto Head Turn and Next Target
+    // switches (pressed or passed by), then ACCEPT CHANGES, whose exit closes the leaf.
+    private static void AcceptGameOptions(PausePreferences leaf, IReadOnlyList<FlightController> seats, bool toggle)
+    {
+        var reader = new MenuInput { Keyboard = false, Pads = Array.Empty<int>() };
+        leaf.Open(new[] { reader, reader }, 0, seats);
+        WalkTo(leaf, OriginalOptionsScreen.GameOptionsDoorKey);
+        leaf.Drive(new MenuCommands { Accept = true });
+        if (toggle)
+        {
+            WalkTo(leaf, OriginalOptionsScreen.AutoHeadTurnKey);
+            leaf.Drive(new MenuCommands { Accept = true });
+            WalkTo(leaf, OriginalOptionsScreen.NearestAfterKillKey);
+            leaf.Drive(new MenuCommands { Accept = true });
+        }
+
+        WalkTo(leaf, OriginalOptionsScreen.GameOptionsAcceptKey);
+        leaf.Drive(new MenuCommands { Accept = true });
+    }
+
+    // One unhalted frame of each seat's view step, the one that asks the head for its idle aim.
+    // The sim step is left out so the sideslip the seats were given is the velocity it reads.
+    private static void Frame(GameClock clock, IReadOnlyList<FlightController> seats)
+    {
+        clock.BeginFrame(1f / 60f);
+        foreach (var seat in seats)
+        {
+            seat._Process(1f / 60f);
+        }
+    }
+
+    private static bool Nearest(FlightController seat) => seat.Targeting?.NearestAfterKill == true;
+
+    private static bool Leans(FlightController seat) =>
+        seat.Head is { } head && (Mathf.Abs(head.TargetAzimuth) > 1e-3f || Mathf.Abs(head.TargetElevation) > 1e-3f);
+
+    // The target the decoded lean names for this seat's own velocity, the shipped airframe's three
+    // autohead values applied.
+    private static (float Elevation, float Azimuth)? Expected(FlightController seat) =>
+        seat.Stats is { } stats
+            ? HeadLook.AutoheadTarget(seat.Attitude.Inverse() * seat.WorldVelocity,
+                stats.AutoheadTurnTime, stats.AutoheadTurnMax, stats.AutoheadTurnMinPitch)
+            : null;
+
+    private static bool OnVelocity(FlightController seat) =>
+        Expected(seat) is { } want && seat.Head is { } head
+        && Mathf.Abs(head.TargetElevation - want.Elevation) < 1e-4f
+        && Mathf.Abs(head.TargetAzimuth - want.Azimuth) < 1e-4f;
+
+    private static string Target(FlightController seat) =>
+        seat.Head is { } head ? $"({head.TargetElevation:0.####}, {head.TargetAzimuth:0.####})" : "no head";
+
+    // One human seat in the cockpit over its own camera, airborne and slipping to starboard and
+    // climbing, so an autohead that is on has a lean to aim along, holding the selection a launch
+    // with nothing saved builds. No roster: the head, its gate and the two fields are the subject.
+    private static FlightController CockpitSeat(TestContext ctx, SubViewport panes, PlaneStats stats, int index)
+    {
+        var camera = new Camera3D();
+        panes.AddChild(camera);
+        var model = new Node3D { Name = $"HeadTurnSeat{index}Model" };
+        var seat = new FlightController
+        {
+            PlaneModel = model,
+            PlayerIndex = index,
+            IsHumanPiloted = true,
+            UseKeyboard = false,
+            PadDevices = Array.Empty<int>(),
+            AllowPause = false,
+            PinnedViewMode = PilotViewMode.Cockpit,
+            Targeting = new TargetSelection(),
+            Name = $"HeadTurnSeat{index}",
+        };
+        seat.AddChild(model);
+        var spawn = new Vector3(index * 60f, 800f, 0f);
+        var flight = new FlightModel(stats);
+        seat.Setup(flight, camera, new CamParams(), spawn, spawn + Vector3.Forward);
+        flight.VelocityDir = new Vector3(0.3f, 0.2f, -1f).Normalized();
+        flight.Speed = 60f;
+        ctx.Host.AddChild(seat);
+        return seat;
     }
 
     // Walks the page's focus onto a key, the keyboard's own way across a screen.

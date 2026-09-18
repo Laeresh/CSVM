@@ -808,8 +808,8 @@ over the held world and drawn through `ComposedBoardView`, its display rows the 
 both Options screens draw. Either pause board's PREFERENCES opens it, the pausing player's reader
 drives it, and every door out closes it onto the sheet with an `OptionsApplyExit` already applied;
 the halt is never touched. Its other features are throwaways and its `ControlsFeature` the menu's
-own, whose `Accepted` it hands, while open, to the flying seats `Open` was given
-(`FlightController.ApplyProfile`), so a rebind or mouse scheme takes hold before the resume.
+own, whose `Accepted` it hands to the flying seats `Open` was given (`ApplyProfile`), so a rebind
+or mouse scheme takes hold before the resume, as do the head turn and targeting switch it carries.
 `Build` answers null with no decoded layout. Decode: [../org/pause-screen.md](../org/pause-screen.md).
 
 ## src/Flight/IaWrapupBoard.cs

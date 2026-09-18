@@ -135,11 +135,11 @@ public sealed partial class PausePreferences : Control
     }
 
     /// <summary>Raises the leaf on the Options screen, the original's own door out of the pause.
-    /// <paramref name="pollers"/> is one reader per seated player in player order, which is what the
-    /// rebinding pages register their rows from, and <paramref name="owner"/> names the player whose
-    /// reader drives the cursor: the one who paused, since only that player may resume.
-    /// <paramref name="flying"/> is every seat in the flight behind the leaf, which a rebinding page's
-    /// ACCEPT CHANGES puts on the accepted keymap and scheme at once (<see cref="FeedSeats"/>).</summary>
+    /// <paramref name="pollers"/> is one reader per seated player in order, which the rebinding pages
+    /// register their rows from; <paramref name="owner"/> is the player who paused, whose reader
+    /// drives the cursor. <paramref name="flying"/> is every seat behind the leaf, which an accepted
+    /// rebinding page puts on its keymap and scheme (<see cref="FeedSeats"/>) and any accepted page
+    /// on its head turn and targeting switch (<see cref="FeedGameOptions"/>), both at once.</summary>
     public void Open(IReadOnlyList<MenuInput> pollers, int owner, IReadOnlyList<FlightController>? flying = null)
     {
         ArgumentNullException.ThrowIfNull(pollers);
@@ -258,6 +258,7 @@ public sealed partial class PausePreferences : Control
             // then only at the next start.
             _audio?.EndMixPreview();
             _applied?.Invoke(applied);
+            FeedGameOptions(applied);
             Close();
             return false;
         }
@@ -317,6 +318,27 @@ public sealed partial class PausePreferences : Control
             if (IsInstanceValid(seat) && seat.IsHumanPiloted && seat.PlayerIndex + 1 == player)
             {
                 seat.ApplyProfile(profile);
+            }
+        }
+    }
+
+    // The Auto Head Turn and Next Target switches reaching the flight behind the leaf, the head turn
+    // taking effect mid-mission as the original's does. One saved value serves every human seat and
+    // both are read per frame or per kill, so the resume flies them. A never-set value falls back as
+    // a launch with nothing saved does: the head turn to the headLook.autohead config key, the
+    // targeting switch to the decoded head rule. The selection is written in place, never rebuilt,
+    // so the pilot keeps the cycle and lock the pause stood over. Difficulty takes the next sortie.
+    private void FeedGameOptions(OptionsApplyExit applied)
+    {
+        foreach (var seat in _flying)
+        {
+            if (IsInstanceValid(seat) && seat.IsHumanPiloted)
+            {
+                seat.AutoHeadTurn = applied.AutoHeadTurn;
+                if (seat.Targeting is { } targeting)
+                {
+                    targeting.NearestAfterKill = applied.NearestAfterKill == true;
+                }
             }
         }
     }

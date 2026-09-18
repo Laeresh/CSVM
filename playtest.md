@@ -241,6 +241,19 @@ draws its authored 800x600 space one-to-one.
   - (d) flying level inside the band, no popping as a sprite's own band swings across the cull.
   *Blocks:* nothing tracks the outcome; a fail mints a new `BL` naming which of (a)-(d) failed.
 
+- `PT-157` `[Own]` **Auto Head Turn and Next Target toggled over the pause take effect in the same
+  sortie.** An accepted Preferences page now puts the saved Auto Head Turn and Next Target on every
+  human seat flying behind the pause, the head turn as the original does mid-mission by the user's
+  recall of it; a suite pins both fields and the next frame's head target
+  (`git log --grep=BL-976`). Fly in the cockpit view (`--view=cockpit` or the Default View row),
+  bank into a turn, then pause, open PREFERENCES, GAME OPTIONS, tick Auto Head Turn and Next Target
+  and ACCEPT CHANGES. *Look for:* (a) on resume the head leaning into the turn at once, with no
+  restart; (b) unticking it the same way puts the head back straight ahead; (c) with Next Target
+  on, the target you held before the pause still selected on resume, and a kill moving the
+  selection to the nearest enemy rather than back to the cycle's head; (d) in a two-pilot
+  splitscreen run, both panes following the one setting. *Blocks:* nothing tracks the outcome; a
+  fail mints a new `BL`.
+
 ### C1 · Bloodhawk, the police car and the train, sound on
 
 ```powershell
