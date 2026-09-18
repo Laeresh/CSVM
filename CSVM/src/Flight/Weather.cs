@@ -155,7 +155,8 @@ public sealed class WeatherState
                     SunlightScalar(z, "SUNLIGHT_DIFFUSE", DefaultDiffuse),
                     SunlightScalar(z, "SUNLIGHT_AMBIENT", DefaultAmbient),
                     ParseColor(z.List("SUNLIGHT_COLOR_DIFFUSE")) ?? Colors.White,
-                    ParseColor(z.List("SUNLIGHT_COLOR_AMBIENT")) ?? Colors.White);
+                    ParseColor(z.List("SUNLIGHT_COLOR_AMBIENT")) ?? Colors.White,
+                    SunlightScalar(z, "SUNLIGHT_BICOLORED", 0f) != 0f);
                 var zf = w._zones[zone];
                 // The fields, not the record: a composite ToString() would escape Log's invariant
                 // formatting. Sun bearing logged in DEGREES, as the file authors it.
@@ -424,11 +425,11 @@ public sealed class WeatherState
 
     /// <summary>One day/night zone's weather: distance fog, the world-brightness scalar with the
     /// uncollapsed SUNLIGHT pair and colours beside it, and the sun bearing, written together in
-    /// one call by the original's zone-apply (docs/formats/weather.md).
-    /// <see cref="SunOrientation"/> is Godot euler RADIANS, assignable straight to a
-    /// <see cref="DirectionalLight3D"/>'s <c>Rotation</c>. ⚠ It is the shading direction, not the
-    /// gamez <c>sun</c> billboard's position; the two disagree in C3 by 90 degrees.</summary>
-    public readonly record struct ZoneWeather(Color FogColor, float FogNear, float FogFar, float FogLow, float FogHigh, float ClipFar, float WorldLight, Vector3 SunOrientation, float SunDiffuse, float SunAmbient, Color SunColorDiffuse, Color SunColorAmbient);
+    /// one call by the original's zone-apply (docs/formats/weather.md). <see cref="SunOrientation"/>
+    /// is Godot euler RADIANS, a <see cref="DirectionalLight3D"/> <c>Rotation</c>. ⚠ It is the
+    /// shading direction, not the <c>sun</c> billboard's position (90 degrees apart in C3).
+    /// <see cref="SunBicolored"/> is <c>SUNLIGHT_BICOLORED</c> (docs/org/vertexLighting.md).</summary>
+    public readonly record struct ZoneWeather(Color FogColor, float FogNear, float FogFar, float FogLow, float FogHigh, float ClipFar, float WorldLight, Vector3 SunOrientation, float SunDiffuse, float SunAmbient, Color SunColorDiffuse, Color SunColorAmbient, bool SunBicolored = false);
 
     /// <summary>The mission's precipitation, from the bare-scalar block at the end of
     /// weather.json. Only some missions carry one; C1/C5 IA1 have none. Consumed by

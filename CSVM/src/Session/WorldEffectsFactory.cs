@@ -456,10 +456,10 @@ public sealed class WorldEffectsFactory
             }
     }
 
-    // Built once per session (see the field): cullBackfaces matches PlaneBuilder's own builder,
-    // since these subtrees are authored as aircraft geometry.
+    // Built once per session (see the field): cullBackfaces and the sun term match PlaneBuilder's
+    // own builder, since these subtrees are authored as aircraft geometry and fly in the same world.
     private SceneBuilder PlanesScene(GameZ planesGamez, TextureArchive textures) =>
-        _planesScene ??= new SceneBuilder(planesGamez, textures, cullBackfaces: true);
+        _planesScene ??= new SceneBuilder(planesGamez, textures, cullBackfaces: true, sunVertexLit: true);
 
     // The world-scoped generalization of the per-player crash runtime: stages effect templates
     // under a dedicated subtree, keeps a live `IEmitterFactory`, and binds

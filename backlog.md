@@ -586,30 +586,25 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Playtest after fix:* any chapter under Enhanced Graphics, still and moving, over water and over
   ground. *Cross-refs:* `docs/architecture/Utils.md` (`GraphicsMode`).
 
-- `BL-981` `[Fidelity]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: footage]` **The aircraft reads
-  about three quarters as bright and purer in hue in the original than in ours, in every zone.**
-  Matched poses, the same Bloodhawk in the stock Fortune Hunters paint on both sides, red airframe
-  pixels averaged: C1 `IA1` spawn 3 under overcast day reads 88/6/19 in the original against
-  116/20/34 in ours (0.76), the C5 `IA1` tower spawn at night 98/7/21 against 145/24/43 (0.68).
-  The HUD gauge discs in the same frames read 0.98, so nothing frame-wide is in the ratio, and the
-  factor is the same order by day and by night, so it is not a night term the original has and we
-  lack. Originals: `OriginalScreenshots/C1 IA1 Zone1 environment Spawn3.png` and
-  `playtest/CAP-58/` still `232628`; ours beside them in `playtest/CAP-58/pairs/`
-  (`c1-spawn3-bhawk-fortune-csvm.png`, `pair2-bhawk-fortune-csvm.png`).
-  *Two terms in the numbers:* (1) a multiplicative shortfall, the original's aircraft being texture
-  times authored vertex colour times `SUNLIGHT_AMBIENT + SUNLIGHT_DIFFUSE × max(N·L, 0)` clamped
-  at white (`docs/org/vertexLighting.md`), where ours lights the full texture with
-  `WeatherRig.FaithfulEnergies`' day-level sun and ambient, picked by eye; (2) a shift toward grey,
-  the original's green and blue channels sitting at a third of ours, which a multiply cannot produce
-  and which the white `AmbientLightColor` and the `SceneBuilder.AircraftSpecular` 0.25 sheen can,
-  both neutral terms added on top of the texture and both the remake's own.
-  *Next, one decode:* what the vehicle draw multiplies into the diffuse byte, whether the airframe's
-  authored vertex colours sit below 255 as the `bldg` tower skins do, or the light term alone
-  accounts for the loss; the C1 zone 2 pair (1.2 / 0.25) and the C5 pair (1.5 / 0.5) give two
-  points to check the decoded law against. *Fix shape:* the faithful path shades the aircraft with
-  the decoded product per vertex, in place of the eye-picked energies, and the neutral ambient and
-  sheen are reviewed against the hue reading rather than kept as a look. It is not a night fix and
-  not a paint fix: the same pattern on both sides is what cleared those.
+- `BL-981` `[Fidelity]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: footage]` **The aircraft
+  now draws the original's per-vertex sun law, and still reads brighter than the original at the C5
+  night pose.** The law is decoded (`docs/org/vertexLighting.md`, "Aircraft: the same draw and the
+  same law"): the aircraft takes the world's hardware draw, its airframe vertex colours are all 255,
+  so a texel is drawn at `texel × min(SUNLIGHT_AMBIENT + SUNLIGHT_DIFFUSE × max(N·L, 0), 1)` with no
+  neutral term. Original mode now draws exactly that per vertex (`SceneBuilder`'s vertex-sun arm),
+  with no scene sun, ambient or sheen on the in-flight aircraft. Red airframe pixels (R > 2.5 G,
+  R > 1.5 B, over the airframe box), original / before / after, mean RGB:
+  C1 `IA1` spawn 3, 81.5/3.2/15.6 / 115.2/18.2/33.1 / 86.9/4.1/17.5;
+  C5 `IA1` spawn 7, 94.4/4.9/19.0 / 145.7/22.4/41.9 / 110.0/6.0/24.5.
+  The hue is settled on both (G/R 0.047 against 0.039, 0.055 against 0.052). At C1 the original
+  reads 0.94 of ours, and ours moved by 0.754, the law's own 0.25 + 1.2 × sin 25° = 0.757. C5 does
+  not land: the original reads 0.86 of ours, where the law clamps a level wing top at the texel itself, so the light term cannot hold the
+  residual. Candidates, none measured: the original's lower chase camera framing more of the
+  underside, and the paint texel itself. Originals: `OriginalScreenshots/C1 IA1 Zone1 environment
+  Spawn3.png` and `playtest/CAP-58/` still `232628`.
+  *The look:* fly C1 `IA1` and C5 `IA1` in the Bloodhawk in chase view and in the cockpit, judging
+  the airframe's brightness and the cockpit interior, which now darkens on faces turned from the sun,
+  against the original. The question for C5: does ours still read brighter than the original?
   *Playtest after fix:* the two poses above, and a day chapter with the sun on the wing top.
   *Cross-refs:* `BL-322` (the same product on the world), `BL-885` (the chase camera frames the
   aircraft larger in ours, so region placement differs per image).

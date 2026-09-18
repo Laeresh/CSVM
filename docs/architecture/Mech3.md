@@ -38,7 +38,7 @@ trimesh per surface class and soil and by sidedness, both halves on one body reg
 `WorldCollision`; `MissionStructureTeamMeta` is the channel `DestructibleRegistry` reads a pool's
 team through. A textured surface takes `csky_world_light` on its `lighting` flag alone, and every
 mip-mapped arm fetches through `SampleAlbedo`, the one `csky_sample_albedo` carrying the chapter's
-LOD bias, reused by `Clutter` and `MeshLab`. Arms and selection: [Root.md](Root.md), [../formats/gotchas.md](../formats/gotchas.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../org/textures.md](../org/textures.md).
+LOD bias, reused by `Clutter` and `MeshLab`. A `sunVertexLit` builder (the in-flight aircraft) draws original mode's shaded arm unshaded, with the original's per-vertex sun term. Arms and selection: [Root.md](Root.md), [../formats/gotchas.md](../formats/gotchas.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../org/textures.md](../org/textures.md).
 
 ## src/Mech3/ZoneGate.cs
 The original's per-node visibility gate (`FUN_0056c430`). `FUN_004d62d0` arms the camera each frame

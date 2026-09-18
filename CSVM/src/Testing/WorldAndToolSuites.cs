@@ -1269,7 +1269,7 @@ internal static class WorldAndToolSuites
     // ⚠ C1B against C1C is the install's OWN night/day pair. Do not fold this onto one mission:
     // two zones of one mission differ by cloud layer, which is not the difference under test.
     [Suite("sun-energy",
-        "the world's light takes its energy from the flown zone's authored SUNLIGHT, so C1B's night mission lights an aircraft dimmer than C1C's daylight, the ambient fill is colour-sourced from the zone's own SUNLIGHT_COLOR_AMBIENT rather than the sky, and a zone change carries the new energy (BL-332)")]
+        "the world's light takes its energy from the flown zone's authored SUNLIGHT, so C1B's night mission gets a dimmer scene sun than C1C's daylight, the ambient fill is colour-sourced from the zone's own SUNLIGHT_COLOR_AMBIENT rather than the sky, and a zone change carries the new energy (BL-332)")]
     internal static void SunEnergy(TestContext ctx)
     {
         string nightZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1B", "IA1");

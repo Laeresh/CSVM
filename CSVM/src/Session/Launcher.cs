@@ -650,6 +650,12 @@ public partial class Launcher : Node3D
             RenderingServer.GlobalShaderParameterType.Vec3, new Vector3(0f, 1f, 0f));
         RenderingServer.GlobalShaderParameterAdd("csky_sun_light",
             RenderingServer.GlobalShaderParameterType.Vec2, new Vector2(1f, 0f));
+        // The same pair with its colours (WeatherRig.SunVertexLight), which the faithful aircraft
+        // reads. SetupLighting replaces these registration defaults with the day pair.
+        RenderingServer.GlobalShaderParameterAdd("csky_sun_ambient_rgb",
+            RenderingServer.GlobalShaderParameterType.Vec3, Vector3.One);
+        RenderingServer.GlobalShaderParameterAdd("csky_sun_diffuse_rgb",
+            RenderingServer.GlobalShaderParameterType.Vec3, Vector3.Zero);
         // The world sampler's mip LOD bias. 0 is the original's own device default, so a chapter
         // authoring no MipBias renders exactly as it did (docs/org/textures.md).
         RenderingServer.GlobalShaderParameterAdd("csky_mip_bias",
@@ -1540,6 +1546,13 @@ public partial class Launcher : Node3D
         if (GraphicsMode.Enhanced)
             EnableSunShadows(_sun);
         AddChild(_sun);
+        // The faithful aircraft's per-vertex term gets the same defaults: the modal day pair under
+        // this bearing, so a view without mission weather shades a plane like a day zone would.
+        (Vector3 dayDiffuse, Vector3 dayAmbient) = WeatherRig.DefaultSunlightRgb;
+        RenderingServer.GlobalShaderParameterSet("csky_sun_dir",
+            (_sun.IsInsideTree() ? _sun.GlobalBasis : _sun.Basis).Z.Normalized());
+        RenderingServer.GlobalShaderParameterSet("csky_sun_ambient_rgb", dayAmbient);
+        RenderingServer.GlobalShaderParameterSet("csky_sun_diffuse_rgb", dayDiffuse);
 
         _env = new Godot.Environment
         {

@@ -281,12 +281,18 @@ void fragment() {
     // flicker, because it blurs a lost ray across its neighbours instead of dimming the water.
     private const float WaterRoughness = 0.25f;
     private const float WaterSpecular = 0.5f;
-    // What every aircraft surface reflects: skin, canopy, props and the cockpit interior all take
-    // the shaded arm, in both graphics modes. The original draws an aircraft with no specular term
-    // at all (docs/org/vertexLighting.md), so any highlight here is the remake's own, and this is
+    // What an aircraft surface reflects under the scene lights, which only enhanced mode's aircraft
+    // and a shaded builder without the per-vertex sun term draw under. The original has no
+    // specular term at all (docs/org/vertexLighting.md), so any highlight here is ours, and this is
     // the value picked by eye against the original's screenshots: sunlight reads as a sheen rather
     // than as gloss. Judged at the controls, not by a luminance distance.
     private const float AircraftSpecular = 0.25f;
+    // The per-vertex sun term's colour triples (WeatherRig.SunVertexLight), declared here and not
+    // in csky_atmosphere.gdshaderinc, which every world shader includes. ⚠ With them declared in
+    // that include, every headless probe saved its screenshot and then never exited; declared here,
+    // probes exit. The cause is not decoded (docs/verification.md SHELL-21).
+    private const string SunVertexLightDecl =
+        "global uniform vec3 csky_sun_ambient_rgb;\nglobal uniform vec3 csky_sun_diffuse_rgb;";
     // ⚠ Format every scale invariantly; a comma decimal separator emits shader text that will not
     // compile. Godot discards EMISSION on an `unshaded` material and the glow pass reads the HDR
     // colour buffer, so these arms reach it by scaling the colour rather than by writing EMISSION.
@@ -315,6 +321,9 @@ void fragment() {
     private readonly GameZ _gamez;
     private readonly TextureArchive _textures;
     private readonly bool _fullbright;
+    // Original mode, shaded builders only: draw the original's per-vertex sun term instead of the
+    // scene lights, the in-flight aircraft's light (docs/org/vertexLighting.md).
+    private readonly bool _sunVertexLit;
     private readonly bool _generateCollision;
     private readonly bool _cullBackfaces;
     private readonly Func<string, bool>? _blendTexture;
@@ -366,13 +375,14 @@ void fragment() {
         Func<string, bool>? billboardTexture = null, bool cullBackfaces = false,
         Func<string, bool>? glowTexture = null,
         Func<string, ImageTexture?, ImageTexture?>? textureSubstitute = null,
-        IReadOnlyDictionary<int, Vector2>? scrollOverrides = null)
+        IReadOnlyDictionary<int, Vector2>? scrollOverrides = null, bool sunVertexLit = false)
     {
         _textureSubstitute = textureSubstitute;
         _scrollOverrides = scrollOverrides;
         _gamez = gamez;
         _textures = textures;
         _fullbright = fullbright;
+        _sunVertexLit = sunVertexLit && !fullbright;
         _generateCollision = generateCollision;
         _blendTexture = blendTexture;
         _billboardTexture = billboardTexture;
@@ -1533,8 +1543,8 @@ void fragment() {
     // rather than driving a uniform on purpose: a lit, fogged surface then emits byte-for-byte
     // the shader text it always did, so honouring the flags cannot perturb the overwhelming
     // majority of the world through float rounding in a mix().
-    // Key bits: 1/2/4/8/16/32/64 the flags above, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048
-    // clutterFade, 4096 DebugClutterFlag, 8192 enhanced, 16384 enhanced water; next free 32768.
+    // Key bits: 1-64 the flags above, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048 clutterFade,
+    // 4096 DebugClutterFlag, 8192 enhanced, 16384 water, 32768 vertex sun; next free 65536.
     private Shader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp = UvClampAxes.None,
         bool clutterFade = false, bool water = false)
@@ -1547,10 +1557,13 @@ void fragment() {
         // ⚠ The water arm exists only inside the lit world arm, so original mode never sets its key
         // bit and its shader text cannot move.
         bool waterLit = worldLit && water;
+        // The original's own aircraft light: unshaded, the per-vertex sun term times the authored
+        // colour, clamped, then the texel (docs/org/vertexLighting.md). No Godot light reaches it.
+        bool sunLit = shaded && _sunVertexLit && !GraphicsMode.Enhanced;
         int key = (shaded ? 1 : 0) | (textured ? 2 : 0) | (blend ? 4 : 0) | (scissor ? 8 : 0) | (doubleSided ? 16 : 0)
             | (scroll ? 32 : 0) | (clampUv ? 64 : 0) | (lit ? 0 : 128) | (fogged ? 0 : 256)
             | ((int)edgeClamp << 9) | (clutterFade ? 2048 : 0) | (DebugClutterFlag ? 4096 : 0)
-            | (GraphicsMode.Enhanced ? 8192 : 0) | (waterLit ? 16384 : 0);
+            | (GraphicsMode.Enhanced ? 8192 : 0) | (waterLit ? 16384 : 0) | (sunLit ? 32768 : 0);
         if (BiasShaders.TryGetValue(key, out var cached))
             return cached;
 
@@ -1561,7 +1574,7 @@ void fragment() {
         sb.Append(doubleSided
             ? "render_mode skip_vertex_transform, cull_disabled"
             : "render_mode skip_vertex_transform, cull_front");
-        if (fullbright)
+        if (fullbright || sunLit)
             sb.Append(", unshaded");
         sb.AppendLine(";");
         sb.AppendLine("uniform float depth_bias = 0.0;");
@@ -1609,8 +1622,13 @@ void fragment() {
         // Both world arms: the original's DX7 pipeline multiplied texture × baked vertex colour in
         // GAMMA space, so linearising the vertex colour first reproduces that product
         // (docs/formats/gotchas.md). A linear multiply washes out every baked-dark corner.
-        if (!shaded)
+        if (!shaded || sunLit)
             sb.AppendLine(SrgbInclude);
+        if (sunLit)
+        {
+            sb.AppendLine(SunVertexLightDecl);
+            sb.AppendLine("varying vec3 v_sun_lit;");
+        }
         // ⚠ Keep NORMAL pre-negated on every lit path. Every visible fragment is back-facing under
         // cull_front and Godot negates NORMAL there, so without this every upward-facing surface
         // shades as though lit from underneath (docs/formats/gotchas.md).
@@ -1621,9 +1639,16 @@ void fragment() {
             ? "    v_clutter_alpha = csky_clutter_fade_alpha(MODEL_MATRIX[3].xyz, CAMERA_POSITION_WORLD, INSTANCE_CUSTOM);\n"
               + "    VERTEX *= step(0.004, v_clutter_alpha);\n"
             : "";
+        // Per vertex, on the authored normal in world space and before the view transform, and
+        // clamped as a product: the draw multiplies the authored colour by the light and clamps
+        // at white. A `lighting: false` model takes its authored colour unchanged.
+        string sunVertex = !sunLit ? ""
+            : lit ? "    v_sun_lit = clamp(COLOR.rgb * (csky_sun_ambient_rgb + csky_sun_diffuse_rgb\n"
+                    + "        * max(dot(normalize(MODEL_NORMAL_MATRIX * NORMAL), csky_sun_dir), 0.0)), 0.0, 1.0);\n"
+            : "    v_sun_lit = COLOR.rgb;\n";
         sb.AppendLine($@"
 void vertex() {{
-{clutterVertex}    VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+{clutterVertex}{sunVertex}    VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
     NORMAL = {normalSign}normalize(MODELVIEW_NORMAL_MATRIX * NORMAL);
     // Scale toward the eye (the view-space origin): identical projected position,
     // depth nudged nearer by bias × distance, a scale-invariant polygon offset.
@@ -1635,7 +1660,8 @@ void fragment() {{");
             sb.AppendLine("    if (!csky_clutter_dither_keep(FRAGCOORD.xy, v_clutter_alpha)) { discard; }");
         // Shaded (planes) keeps raw COLOR for the real-lighting path; fullbright (world) applies
         // the gamma-space vertex modulate (see SrgbToLinearFn above).
-        string vcol = shaded ? "COLOR" : "vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a)";
+        string vcol = sunLit ? "vec4(csky_srgb_to_linear(v_sun_lit), COLOR.a)"
+            : shaded ? "COLOR" : "vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a)";
         // The surface's own albedo is kept separately from the modulated result: a point light's
         // spill is light falling ON the surface, so it must be modulated by the same albedo
         // rather than added to the final colour (an unlit black texture stays black under a lamp).
@@ -1662,7 +1688,7 @@ void fragment() {{");
         // a scalar on ALBEDO would dim the surface a second time.
         if (fullbright && lit)
             sb.AppendLine("    ALBEDO *= csky_world_light;");
-        if (shaded)
+        if (shaded && !sunLit)
         {
             sb.AppendLine("    ROUGHNESS = 0.85;");
             sb.AppendLine("    METALLIC = 0.0;");

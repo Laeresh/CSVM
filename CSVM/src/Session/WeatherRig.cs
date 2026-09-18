@@ -29,11 +29,11 @@ public sealed class WeatherRig
     private const float AmbientEnergyPerAuthored = 1.8f;
 
     // ⚠ TUNE, judged at the controls, and NOT enhanced mode's pair. There a real sun lights the
-    // whole world through a tonemap; here it lights the aircraft alone over a fullbright world
-    // with none. This is the level a zone authoring the install's modal day SUNLIGHT keeps, and
-    // FaithfulEnergies caps there, so authored data only darkens a plane. No night cap either:
-    // the faithful world light ignores FOG_COLOR, so capping C5 would sink its plane below its
-    // own terrain.
+    // whole world through a tonemap; here it lights only the Godot-shaded surfaces of a faithful
+    // flight over a fullbright world. The in-flight aircraft is not one of them: it draws the
+    // decoded per-vertex term (SunVertexLight). This is the level a zone authoring the install's
+    // modal day SUNLIGHT keeps, and FaithfulEnergies caps there. No night cap either: the
+    // faithful world light ignores FOG_COLOR.
     private const float FaithfulSunEnergy = 1.6f;
     private const float FaithfulAmbientEnergy = 0.9f;
 
@@ -173,11 +173,10 @@ public sealed class WeatherRig
         _viewers = viewers ?? new ViewerSet();
     }
 
-    /// <summary>The faithful path's aircraft light with no mission weather to read: the sun's
+    /// <summary>The faithful path's scene light with no mission weather to read: the sun's
     /// <c>LightEnergy</c> and the Environment's <c>AmbientLightEnergy</c> the launcher builds
     /// with. It is what <see cref="FaithfulEnergies"/> resolves for a zone authoring the install's
-    /// modal day SUNLIGHT, so a mission carrying no weather.json lights a plane like a day
-    /// one.</summary>
+    /// modal day SUNLIGHT, so a mission carrying no weather.json lights like a day one.</summary>
     public static (float Sun, float Ambient) DefaultEnergies => (FaithfulSunEnergy, FaithfulAmbientEnergy);
 
     /// <summary>The install's modal day <c>SUNLIGHT</c> pair scaled by white, the shape
@@ -238,12 +237,23 @@ public sealed class WeatherRig
     }
 
     /// <summary>The faithful path's Godot energies for one zone's authored SUNLIGHT. Each scalar
-    /// scales its own day-level energy and is capped there, so a dim zone darkens the aircraft
-    /// while a bright one keeps the level every mission renders at today. Pure, so the mapping is
-    /// pinnable without a live scene.</summary>
+    /// scales its own day-level energy and is capped there, so a dim zone darkens what the scene
+    /// lights shade while a bright one keeps the day level. The in-flight aircraft does not read
+    /// them; it draws <see cref="SunVertexLight"/>. Pure, so the mapping is pinnable without a
+    /// live scene.</summary>
     public static (float Sun, float Ambient) FaithfulEnergies(WeatherState.ZoneWeather fog)
         => (FaithfulSunEnergy * MathF.Min(fog.SunDiffuse / WeatherState.DefaultDiffuse, 1f),
             FaithfulAmbientEnergy * MathF.Min(fog.SunAmbient / WeatherState.DefaultAmbient, 1f));
+
+    /// <summary>The original's per-vertex sun term for one zone as its two colour triples, the
+    /// ambient half and the half that <c>max(N·L, 0)</c> scales: the drawn diffuse is the authored
+    /// vertex colour times <c>Ambient + Diffuse × max(N·L, 0)</c>, clamped at white. With
+    /// <c>SUNLIGHT_BICOLORED</c> clear both halves carry the diffuse colour and the authored
+    /// ambient colour is never read; set, each half carries its own (docs/org/vertexLighting.md).
+    /// Pure, so the rule is pinnable without a live scene.</summary>
+    public static (Vector3 Ambient, Vector3 Diffuse) SunVertexLight(WeatherState.ZoneWeather fog)
+        => (Scaled(fog.SunAmbient, fog.SunBicolored ? fog.SunColorAmbient : fog.SunColorDiffuse),
+            Scaled(fog.SunDiffuse, fog.SunColorDiffuse));
 
     /// <summary>Whether a zone's authored <c>FOG_COLOR</c> puts it under a night sky, which is
     /// what caps its enhanced energies. Pure and public so the rule can be pinned and so a log
@@ -532,13 +542,13 @@ public sealed class WeatherRig
 
     // The resolved energies said out loud beside the world light, so a zone log says which
     // lighting the flight got and which authored pair produced it. Both modes print, since the
-    // faithful arm now moves per zone too and a night mission's plane is judged off this line.
+    // faithful arm moves per zone too.
     private static string LightSuffix(WeatherState.ZoneWeather fog)
     {
         if (!GraphicsMode.Enhanced)
         {
             (float sun, float ambient) = FaithfulEnergies(fog);
-            return Log.Format($"; aircraft sun energy {sun:0.00} (diffuse {fog.SunDiffuse:0.##}), ")
+            return Log.Format($"; scene sun energy {sun:0.00} (diffuse {fog.SunDiffuse:0.##}), ")
                    + Log.Format($"ambient energy {ambient:0.00} (ambient {fog.SunAmbient:0.##})");
         }
 
@@ -811,6 +821,10 @@ public sealed class WeatherRig
         RenderingServer.GlobalShaderParameterSet("csky_sun_dir", toSun);
         RenderingServer.GlobalShaderParameterSet("csky_sun_light",
             new Vector2(fog.SunAmbient, fog.SunDiffuse));
+        // The same term with its colours, for the faithful aircraft, which carries no collapse.
+        (Vector3 ambientRgb, Vector3 diffuseRgb) = SunVertexLight(fog);
+        RenderingServer.GlobalShaderParameterSet("csky_sun_ambient_rgb", ambientRgb);
+        RenderingServer.GlobalShaderParameterSet("csky_sun_diffuse_rgb", diffuseRgb);
         // The authored pair itself, published for the ground shadow, which derives its darkness
         // from the light rather than from either mode's energies.
         SunlightRgb = (Scaled(fog.SunDiffuse, fog.SunColorDiffuse),
@@ -845,9 +859,9 @@ public sealed class WeatherRig
                 fog.SunColorAmbient, fog.FogColor);
     }
 
-    // The faithful path's half of the zone apply: the authored SUNLIGHT pair drives the sun the
-    // aircraft is shaded by and the ambient that fills its shaded side. The world takes
-    // csky_world_light instead, being fullbright, and does not read this ambient at all.
+    // The faithful path's half of the zone apply: the authored SUNLIGHT pair drives the scene sun
+    // and ambient, which reach only the Godot-shaded surfaces. The in-flight aircraft takes the
+    // csky_sun_* globals instead, and the fullbright world takes csky_world_light.
     private void ApplyFaithfulLighting(WeatherState.ZoneWeather fog)
     {
         (float sunEnergy, float ambientEnergy) = FaithfulEnergies(fog);

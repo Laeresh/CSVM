@@ -70,7 +70,7 @@ public sealed class PlaneBuilder
         _painter = scheme != null ? painter : null;
         _patterns = patterns ?? PatternLibrary.Empty;
         _scene = new SceneBuilder(gamez, textures, blendTexture: IsPropBlurTexture, cullBackfaces: true,
-            textureSubstitute: (name, tex) => _painter?.Substitute(name, tex) ?? tex);
+            textureSubstitute: (name, tex) => _painter?.Substitute(name, tex) ?? tex, sunVertexLit: true);
         // ⚠ A builder of its own, never a field toggled on the airframe's: DepthBiasScale is baked
         // into cached meshes and materials, so one builder switching it mid-build would hand a
         // later caller a mesh biased for the wrong scale.
@@ -78,7 +78,7 @@ public sealed class PlaneBuilder
         {
             _interiorScene = new SceneBuilder(gamez, textures, blendTexture: IsInteriorBlendTexture,
                 cullBackfaces: true,
-                textureSubstitute: (name, tex) => _painter?.Substitute(name, tex) ?? tex)
+                textureSubstitute: (name, tex) => _painter?.Substitute(name, tex) ?? tex, sunVertexLit: true)
             {
                 DepthBiasScale = 1f / InteriorScale,
             };

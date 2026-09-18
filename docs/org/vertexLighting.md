@@ -66,6 +66,8 @@ else; `soil` never reaches the lighting code.
 | `FUN_0053cba0` | Transforms a model's normals by the current matrix's rotation, after the facade basis is installed; `FUN_00422690` renormalizes each one |
 | `FUN_00568790` | Per model, sorts the lights that reach it into the directional, the `0x04`-flagged and the remaining lists `FUN_005688a0` walks |
 | `FUN_0054e070` | The `SetVertexShading` GameGen setter (`DAT_00a05f08`), which boot sets to the hardware flag |
+| `FUN_004d33e0`, `FUN_004d35d0`, `FUN_004d37e0`, `FUN_004d39c0`, `FUN_004d3fa0` | The Object3d node draws, aircraft included: each calls the model draw through `DAT_00a07020` |
+| `FUN_00553f50` | The draw a node flagged `0x2000000` takes: a bounding-box debug outline, no lighting |
 | `FUN_005669b0` / `FUN_00566ae0` | The `DirectedLightFluctuate` enable, and the per-frame scroll of its lookup offsets |
 
 ## The light array (`FUN_00566be0`)
@@ -359,6 +361,38 @@ direction for. And `N` is the per-vertex normal only where the polygon carries o
 21,577 lit polygons and 43 % of C1's 16,580 do**, and the rest are shaded from the face normal, so
 a reproduction has to emit flat normals for the majority rather than smoothing them.
 
+## Aircraft: the same draw and the same law
+
+An aircraft is not drawn by a vehicle path. The Object3d draw variants `FUN_004d33e0`,
+`FUN_004d35d0`, `FUN_004d37e0`, `FUN_004d39c0` and `FUN_004d3fa0` each end in
+`(*DAT_00a07020)(node, mask)`, the model-draw pointer `FUN_0054dca0` sets to `FUN_00554550`, so a
+plane's nodes take the hardware draw above exactly as a building does. The only other draw a node
+can reach, `FUN_00553f50` behind node flag `0x2000000`, is a bounding-box debug outline. Nothing in
+the chain multiplies an aircraft-specific factor into the diffuse byte.
+
+Per vertex, then, the drawn diffuse is the authored colour times the accumulator, clamped at 255:
+`FUN_00568830` seeds 1.0, `FUN_005688a0` adds `(ambient + diffuse × max(N·L, 0)) × colour − 1`
+(with `SUNLIGHT_BICOLORED` clear both halves wear the diffuse colour, the flag test at
+`0x00568a7f`), and the textured branch multiplies the authored bytes at `0x00555289`, `0x00555295`
+and `0x005552a4` and clamps at `0x005552b2`-`0x00555349` against the 255.0 at `0x0060414c`. Stage 0
+MODULATE then multiplies the texel by that byte, in gamma space, and there is no specular term.
+
+The authored factor is identity on the airframe. Every vertex colour of every `lighting: true`
+exterior model of `player_bhawk` (wings, fuselage, flaps, engines, tail, head, body) is 255 in all
+three channels. The exceptions are small parts (props at 90 and up, `canopy2` at 120, `g442`, and
+`piece1`) and the cockpit dashboard and gauges, most of which are `lighting: false`: 5,359 of the
+aircraft's 5,776 vertex colours are 255. So an airframe texel is drawn at
+`texel × min(ambient + diffuse × max(N·L, 0), 1)`.
+
+The law accounts for the measured deficit. At `SUNLIGHT_ORIENTATION` pitch −25° a level wing top
+has `N·L = sin 25° = 0.42`. C1's zones author 1.2 / 0.25, giving `0.25 + 1.2 × 0.42 = 0.76`, the
+ratio of the original's red airframe to the remake's scene-lit one at the matched C1 pose. C5
+authors 1.5 / 0.5, which clamps to 1.0 on the same surface, so the original draws the top at the
+texel itself where the scene lights drew about 1.3 times it. The hue follows too: the product
+multiplies the texel's own channels and adds nothing, so a red texel stays red, where Godot's
+ambient, image light and specular added a neutral term that lifted green and blue to about three
+times the original's.
+
 ## Point lights: how a `LIGHT_STATE` range is applied
 
 An animation's `LIGHT_STATE` is dispatched through slot 4 of the event table `FUN_004ee1a0` fills,
@@ -427,12 +461,20 @@ its texture times a Lambert term, and nothing else.
 
 ### What CSVM does with that
 
-The remake shades aircraft through Godot's PBR material, which has no zero-gloss setting that also
-keeps the diffuse response, so the faithful reading is a floor rather than a value to copy. The
-shaded arm of `SceneBuilder.GetBiasShader` therefore carries `SPECULAR = 0.25` (`AircraftSpecular`)
-at roughness 0.85 and metallic 0.0, which is the remake's own choice: the value the user picked by
-eye off a sweep against `OriginalScreenshots/Fury from above.png`, low enough that sunlight reads as
-a sheen instead of gloss. The decode is the record behind it, not its source.
+In original mode the in-flight aircraft carries no specular term, like the original. `PlaneBuilder`
+and the shared planes builder pass `sunVertexLit`, and `SceneBuilder.GetBiasShader`'s shaded arm then
+draws `unshaded`: the vertex stage evaluates `clamp(COLOR × (ambient + diffuse × max(N·L, 0)), 0,
+1)` on the world normal against the zone's `csky_sun_dir`, `csky_sun_ambient_rgb` and
+`csky_sun_diffuse_rgb` (`WeatherRig.SunVertexLight`, which applies the bicolored rule), and the
+fragment multiplies the texel by it in gamma space. Neither the scene sun, the Environment ambient
+nor any sheen reaches it. An unlit model keeps its authored colour. The cockpit overlay pass keeps
+the world orientation, so the same world-space term serves the interior.
+
+Enhanced mode, and the hangar and menu stages, still shade aircraft through Godot's PBR material,
+which has no zero-gloss setting that also keeps the diffuse response. There the shaded arm carries
+`SPECULAR = 0.25` (`AircraftSpecular`) at roughness 0.85 and metallic 0.0, the remake's own choice:
+the value the user picked by eye off a sweep against `OriginalScreenshots/Fury from above.png`, low
+enough that sunlight reads as a sheen instead of gloss.
 
 ## Facades: the same gate, a different `N`
 
@@ -534,6 +576,9 @@ surface takes the `csky_world_light` term whatever its texture's alpha class, an
 sprite card. `TextureArchive` still reads the extractor's `alpha` field out of the archive's
 `manifest.json` and publishes it as an alpha class, which is the right reader for anything that
 needs the texture's own bit rather than its pixels.
+
+**The in-flight aircraft carries the term uncollapsed** in original mode, as "What CSVM does with
+that" describes: per vertex, on its own normals, with the product clamp.
 
 **On the `fvol` clutter cards the term behind the gate is reproduced.** `csky_world_light` is the
 collapse `AMBIENT + DIFFUSE × 0.46` calibrated on the predominantly up-facing world

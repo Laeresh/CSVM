@@ -172,6 +172,52 @@ public class SunlightEnergyTests
         Assert.Equal(1.6f, daySun, 2);
     }
 
+    // The bicolored bit decides which colour the ambient half wears. Clear, the binary reads only
+    // the diffuse colour for both halves, so an authored ambient colour must not reach the plane.
+    [Fact]
+    public void AnUnbicoloredZoneLightsBothHalvesWithTheDiffuseColour()
+    {
+        var zone = Zone(1.2f, 0.25f) with
+        {
+            SunColorDiffuse = new Color(1f, 0.8f, 0.7f),
+            SunColorAmbient = new Color(0.7f, 0.9f, 1f),
+        };
+        (Vector3 ambient, Vector3 diffuse) = WeatherRig.SunVertexLight(zone);
+        Assert.Equal(0.25f, ambient.X, 3);
+        Assert.Equal(0.2f, ambient.Y, 3);
+        Assert.Equal(0.175f, ambient.Z, 3);
+        Assert.Equal(1.2f, diffuse.X, 3);
+        Assert.Equal(0.96f, diffuse.Y, 3);
+    }
+
+    [Fact]
+    public void ABicoloredZoneLightsTheAmbientHalfWithItsOwnColour()
+    {
+        var zone = Zone(1.5f, 0.5f) with
+        {
+            SunColorDiffuse = new Color(1f, 0.8f, 0.7f),
+            SunColorAmbient = new Color(0.7f, 0.9f, 1f),
+            SunBicolored = true,
+        };
+        (Vector3 ambient, Vector3 diffuse) = WeatherRig.SunVertexLight(zone);
+        Assert.Equal(0.35f, ambient.X, 3);
+        Assert.Equal(0.45f, ambient.Y, 3);
+        Assert.Equal(0.5f, ambient.Z, 3);
+        Assert.Equal(1.05f, diffuse.Z, 3);
+    }
+
+    // The bit off the shipped data: C5's night zone authors it set, C1's day zones clear.
+    [ExtractedDataFact]
+    public void TheBicoloredBitParsesOffTheInstallsZones()
+    {
+        var c5 = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C5", "IA1"));
+        var c1 = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1", "IA1"));
+        Assert.NotNull(c5);
+        Assert.NotNull(c1);
+        Assert.True(c5!.Zone("zone1").SunBicolored);
+        Assert.False(c1!.Zone("zone1").SunBicolored);
+    }
+
     // The default fog is the install's modal DAY colour, so a case that says nothing about the
     // sky gets the day arm of the night rule.
     private static WeatherState.ZoneWeather Zone(float diffuse, float ambient, Color? fog = null)

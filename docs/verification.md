@@ -510,6 +510,10 @@ member, and it does not go here.
 - **SHELL-20**, **Under `$ErrorActionPreference = 'Stop'`, redirecting a native command's stderr
   makes its failure terminating, so a probe whose failure is the answer must lift the preference and
   read the exit code instead.**
+- **SHELL-21**, **Two new `global uniform` declarations in `csky_atmosphere.gdshaderinc` made every
+  headless `RunProbe.ps1` run save its screenshot and then never exit; the same declarations inside
+  one generated shader did not.** The cause is not decoded. Bisect a probe that hangs at exit
+  against the include first, and declare a global a single shader family needs in that family.
 
 ## INSTR, building instruments
 
