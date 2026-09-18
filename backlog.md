@@ -1125,36 +1125,6 @@ usual.
   race has a defined start (`StuntRace.cs`, `ScoreStore.GetBest`/`RecordIfBest`), and would want
   their own key namespace, since a countdown makes race and solo totals diverge again.
 
-- `BL-523` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **The AI's pursue cycle has no dwell: a revert on the return cylinder
-  re-promotes on the next tick with a fresh anchor, so a chase walks across the map and never flies
-  its net between chases, and no chase is capped at `attack_dwell`.** *Evidence:* the original's
-  promotion `FUN_0041f040` has no range, team or net gate; its one refusal is the `+0x300` dwell
-  stamp, lifted only for the assigned `primary_target`, and every other admission term lives in the
-  selection `FUN_0041fe10`. The stamp is armed to now + `attack_dwell` (60 s) on promotion, or 20 s
-  for a `jet`/`wingman` on a non-`TargetVehicle`; the pursue tail `FUN_0041d9f0` reverts when it
-  passes (`0x0041e674`) or on the cylinder, and re-arms it to now + `not_pursuit_dwell` (5 s), or
-  15 s on the same condition (`0x0041e6d7`–`0x0041e737`); a lost target re-arms it to now +
-  `not_pursuit_dwell` (`FUN_0041c270`, `0x0041c299`); the guard at `0x0041e5a6`–`0x0041e5bc` skips the
-  whole revert on the assigned `primary_target`. `AiModeMachine`'s `Patrol` case promotes on any
-  quarry within `min(ActivationRange, AttackRange)` with no stamp, and the `Pursue`/`LayOff`/`Evade`
-  case reverts on loss or the cylinder without re-arming one. The reported symptoms did not
-  reproduce headless on this tree: CM05's second patrol and CM07's friendlies both promote at about
-  2,000 m and engage (numbers in the decode commit, `git log --grep=BL-523`). CM09's fly-away is a
-  separate cause, `BL-974`. *Fix shape:* one stamp on `AiModeMachine`, read from `PlaneStats`'
-  `attack_dwell` and `not_pursuit_dwell` off the def chain. Promotion sets it to now + attack dwell
-  (20 s for a non-aircraft quarry) and is refused while now is at or before it unless the quarry is
-  the gunner's `PrimaryTargetName`; `Pursue` reverts when it passes; the cylinder revert sets it to
-  now + not-pursuit dwell (15 s for a non-aircraft quarry), and a lost target to now + not-pursuit
-  dwell; the whole revert is skipped for the assigned `primary_target`. Drop the machine's own
-  distance test, which the original does not have. ⚠ Port both ends or neither: the cap alone, without
-  the promotion's refusal, only churns the mode once a minute. *Owed:* the user's CM05 and CM07
-  sightings, and CM08 (C1B/M03) "third wave of enemy fighters only patrol and don't attack" and CM20
-  (C4/M05) "enemies were patrolling and not pursuing", are owed a look at the controls once the dwell
-  is in, since a headless run engages in all of them that were flown.
-  *Cross-refs:* `BL-974`, `docs/org/aiPilot.md` ("`attack_dwell` and `not_pursuit_dwell` are pursuit
-  timers", "The third volume, and where the leash is read", "The promotion has no range, team or net
-  gate of its own"), `git log --grep=BL-927`.
-
 - `BL-974` `[Bug]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: data]` `[CM09]` **C1/M04's `blakepeace_2_2` flies
   tens of kilometres out of the mission on `AiPilot.FlyPatrol`'s netless arm.** *Evidence:* its
   roster block authors slot 0 as an empty list, every volume as `0.0` and its spawn at the world
@@ -1165,7 +1135,7 @@ usual.
   the net table with no guard, so its behaviour there is not determinable statically. *Fix shape:*
   read the original's `blakepeace_2_2` under the debugger on C1/M04 (where it sits, whether it
   lives past spawn, what it flies), then port that; do not invent a leash or a despawn before the
-  read. *Cross-refs:* `BL-523`, `docs/org/aiPilot.md` (the headline, "Open"),
+  read. *Cross-refs:* `docs/org/aiPilot.md` (the headline, "Open"),
   `docs/formats/ai-rosters.md` ("Who is netless").
 
 ## Tooling, platform & docs

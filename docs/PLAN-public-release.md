@@ -183,7 +183,7 @@ could destroy the only route to primary 3 (`OBJECTIVE18`, `ANIM_STATE wingwalk E
 sitting that filed it walked CM02 through to CM24 (`git log --grep=BL-717`, commit `5b71d0ad`), so
 the mission was finished with the defect present. `BL-689`, CM13's
 flight check, withholds a plane grant and offers a button the original bars, which leaves the
-mission flyable in the aeroplane the profile already owns. `BL-565` plus `BL-523` can leave a
+mission flyable in the aeroplane the profile already owns. `BL-974` can leave a
 survivor an objective is waiting on kilometres outside the mission area, which is a long flight
 rather than an impossible one. Each is in the Known Issues appendix instead.
 
@@ -1065,10 +1065,10 @@ Anything A2 or a later wave closes comes off this list.
 
 ## Enemies and combat
 
-- **Some enemy patrols never turn to engage, and enemies that do engage can leave the mission area
-  by tens of kilometres.** Target a straggler and fly out to it, since an objective waiting on one
-  will not complete on its own. (`BL-523` and `BL-565`; no landing commit for either, and
-  `AiModeMachine.ActivationRange` still rests at the 2,000 m floor while `DedgMet` only counts.)
+- **One C1/M04 aircraft with no patrol net can fly tens of kilometres out of the mission area.**
+  Target it and fly out to it if an objective waits on it. (`BL-974`; the pursuit's walk across
+  the map is fixed, and whether other patrols still fail to engage is owed a look at the controls,
+  `PT-156`.)
 - **A zeppelin's turrets can shoot the player through the hull they are mounted on.** Break away
   from the hull rather than flying along it, since the fire stops once the ring loses its bearing.
   (`BL-714`; a probe confirmed a parked hull blocks its own rings correctly, so the item stayed

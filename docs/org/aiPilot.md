@@ -412,22 +412,56 @@ attack cylinder, the gasbag gate, the 20 s hold) therefore lives in the selectio
 is selected is chased the frame the dwell allows it. The enemy and the friendly side run the same
 path; nothing in either function reads the team beyond the scorer's own hostility test.
 
-CSVM ports the anchor and the cylinder. `AiModeMachine.PursuitAnchor` is taken on the promotion into
-pursue and dropped when the task reverts, `ReturnRange` is tested as the cylinder above, and the
-disengage reads no activation term. Where it diverges:
+### Where the activation and attack ranges are read
 
-- `AiModeMachine`'s `Patrol` case promotes on its own distance test, the quarry within
-  `min(ActivationRange, AttackRange)`, which the original does not have. Since the selection already
-  refuses anything past `AttackRange`, it binds only on a pilot whose activation radius is the
-  smaller of the two.
-- It has no `+0x300` refusal, so a revert on the return cylinder re-promotes on the next tick with a
-  fresh anchor at the pursuer's new position. A chase that keeps leaving its cylinder walks across
-  the map one return range at a time and never flies its net in between.
-- It has no dwell deadline in `Pursue`, so an unassigned chase is not capped at `attack_dwell`, and
-  neither the revert nor a lost target re-arms `not_pursuit_dwell` or the 15 s hold.
-- It has no `primary_target` exemption, so a pilot chasing its assigned target reverts on the
-  cylinder like any other.
+The range a pursuit starts inside belongs to the selection, and the promotion trusts it. The three
+functions on the path, in the order `FUN_0041c270` runs them each frame:
+
+| Step | Function | What it reads |
+|---|---|---|
+| select | `FUN_0041fe10` | the assigned `primary_target` (`+0x2fc`) first, re-scored through the scorer every frame and kept while the score is under `1e20` (a `wingman` skips this arm); then the standing target re-scored while the hold `+0x94c` stands; then the sweep `FUN_0041f9c0` |
+| score | `FUN_00421ad0` (`0x00421b47`), `FUN_00421950` (`0x004219ac`) | the attack cylinder `+0x328`/`+0x32c`/`+0x330`, outside which the rank is `1e21` and never picked |
+| promote | `FUN_0041f040` | the dwell stamp and the primary match (`0x0041f048`–`0x0041f07a`), no position at all |
+
+`min_ai_active_dist` is the global `DAT_0071c3ec`, written once by the level loader `FUN_004735b0`
+(`0x00474139`/`0x00474141`) and read only by the two activation clamps (`FUN_00476250` at
+`0x004763f4`, `FUN_0047c210` at `0x0047c922`). The activation triple it floors is read only by the
+world tick's awake test (`0x00489a28`, the table above). Neither reaches `FUN_0041c270`,
+`FUN_0041f040` or `FUN_0041d9f0`. So the attack radius gates a pursuit exactly once, as the
+scorers' admission, and the primary arm is held to it because it runs through the same scorer.
+
+CSVM applies that admission in `AiTargetRanking.Score` (a sphere of `AttackRange`, where the
+original tests a cylinder), in `SelectBest` and `KeepsStandingTarget`, and in the primary pick of
+`FlightController.SelectRankedTarget`. `FlightController.HoldsStandingTarget` keeps an assigned
+primary only while it is inside `AttackRange`, the port of the primary arm's per-frame re-score.
+`AiModeMachine` tests no range of its own.
+
+### What CSVM ports of the dwell and the leash
+
+`AiModeMachine` keeps the one stamp against its own clock (the sum of its `Update` steps) and reads
+`attack_dwell`/`not_pursuit_dwell` through `PlaneStats` from the def chain, whose compiled defaults
+are 60.0 and 3.0 (`FUN_00478a00`, `0x00478a93`/`0x00478a9a`) under `basic_airplane`'s authored 60
+and 5. A promotion (and any other path that opens a new pursue task, an ordered one included) arms
+the stamp to now + `attack_dwell`, or 20 s when `PursuitQuarry.IsVehicle` is false (a turret or a
+structure; aircraft and hulls are the `TargetVehicle` class). `Patrol` refuses the promotion while
+the stamp stands unless the quarry is the gunner's `PrimaryTargetName`. `Pursue`, `LayOff` and
+`Evade` with a pursue task revert when the stamp passes or the pursuer leaves the return cylinder,
+both skipped for the primary, and re-arm the stamp to now + `not_pursuit_dwell` (15 s for a
+non-vehicle). A lost target re-arms `not_pursuit_dwell`. The 20/15 s condition is the pursuer's
+`jet`/`wingman` mode in the original, which every shipped aeroplane def is, so the port tests the
+quarry's class alone. Where it still diverges:
+
 - The per-frame revert during an evasive program is deferred to the moment the program ends.
+- The `player_attack_time_factor` term is not ported. `+0x8f4` is def `+0x294` (parsed at
+  `0x0047b625`, token at `0x00628348`), constructor default 1.0 (`0x004b0313`), authored 0.8 on
+  `basic_airplane`, and a roster block's `+0xd8` overrides it (`0x0047d431`/`0x0047d445`). When the
+  quarry is the player and the player's own standing target is this vehicle, the deadline shrinks
+  by `(1 − 0.8) × 60` = 12 s (`0x0041e65c`/`0x0041e662`).
+- The other `+0x300` writers are not ported: the roster spawn's 0 to 10 s first wait (`FUN_00476250`,
+  `0x004764b9`, called from `FUN_0047c210` at `0x0047c77b`, `rand()/32767 × 10.0`), the world tick's
+  wake re-arm to `U(0,1) × +0x308` (`FUN_004897c0`, `0x00489b4f`), and the freeze-all/unfreeze-all
+  pair `FUN_0041f250`/`FUN_0041f2e0` (now + 3e10 with `+0x354` set, then now + `U(0,2)` s). The
+  constructor zeroes the stamp (`0x004b086a`), which the port matches.
 
 ### `rating_biases` returns rank units directly
 

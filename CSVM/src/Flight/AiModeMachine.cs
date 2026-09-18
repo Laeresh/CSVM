@@ -156,19 +156,37 @@ public sealed class AiModeMachine
     /// 2026-08-14: an enemy behind the player appearing to slow down).</summary>
     public const float LayOffSustainS = 1.5f;
 
+    /// <summary>The 20 s hold a promotion onto a turret or structure arms in place of
+    /// <see cref="AttackDwellS"/> (<c>0x006035e4</c>, read at <c>0x0041f0ea</c>). The original
+    /// takes it only for a <c>jet</c> or <c>wingman</c> pursuer, which every aeroplane def is.</summary>
+    public const float NonVehicleAttackDwellS = 20f;
+
+    /// <summary>The 15 s hold a pursuit revert off a turret or structure arms in place of
+    /// <see cref="NotPursuitDwellS"/> (<c>0x00603560</c>, read at <c>0x0041e713</c>).</summary>
+    public const float NonVehicleNotPursuitDwellS = 15f;
+
     /// <summary>Activation radius, metres, player.json's <c>min_ai_active_dist</c> (2000 shipped),
     /// the fallback for every roster whose own volume slots are unauthored (all of them).
     /// ⚠ Decoded, this volume gates whether the engine SIMULATES a vehicle at all, measured to the
-    /// player, and it reaches neither target admission nor the chase leash (docs/org/aiPilot.md
-    /// "Every reader of the attack and activation triples"). The pursue ENTRY floor below is
-    /// CSVM's own reading of it, and a <c>DEDG</c> widening raises that floor and nothing else.</summary>
+    /// player, and it reaches neither target admission, the promotion nor the chase leash
+    /// (docs/org/aiPilot.md "Every reader of the attack and activation triples"). Nothing in this
+    /// machine reads it; it is carried for the spawn and <c>DEDG</c> writers that set it.</summary>
     public float ActivationRange = 2000f;
 
     /// <summary>Attack radius, metres, vehicle.json's <c>attack</c> (2000 shipped, on
     /// <c>basic_airplane</c>, inherited install-wide). The decoded admission volume: both scorers
-    /// refuse a candidate outside it, so it is what <see cref="AiTargetRanking"/> is handed. Pursue
-    /// is entered when a target sits inside both this and <see cref="ActivationRange"/>.</summary>
+    /// refuse a candidate outside it, so it is what <see cref="AiTargetRanking"/> is handed.
+    /// ⚠ Do not test it again in <see cref="Update"/>: the original's promotion reads no range, and
+    /// a quarry the selection hands over is chased the tick the dwell allows it.</summary>
     public float AttackRange = 2000f;
+
+    /// <summary>vehicle.json's <c>attack_dwell</c>, seconds (60 shipped): how long a promotion holds
+    /// the chase before the pursuit reverts on its own.</summary>
+    public float AttackDwellS = 60f;
+
+    /// <summary>vehicle.json's <c>not_pursuit_dwell</c>, seconds (5 shipped): how long a revert or a
+    /// lost target keeps the pilot on its net before it may promote again.</summary>
+    public float NotPursuitDwellS = 5f;
 
     /// <summary>Chase leash, metres, vehicle.json's <c>return_range</c> (1200 shipped), decoded as
     /// a CYLINDER about the pursuit anchor: the squared horizontal radius at <c>+0x334</c> and the
@@ -246,6 +264,14 @@ public sealed class AiModeMachine
     // finished maneuver hands back to the same point. Null means the task is not pursue.
     private Vector3? _pursuitAnchor;
 
+    // The one dwell stamp (the original's +0x300) against this machine's own clock, the sum of
+    // every Update's dt. A promotion arms it to the chase's deadline, a revert or a lost target to
+    // the end of the wait before the next chase, so one field paces both ends.
+    private double _clock;
+    private double _dwellUntil;
+    private bool _quarryIsVehicle = true;
+    private bool _quarryIsPrimary;
+
     private Vector3 _lastPos;
     private Vector3 _lastVelocity;
     private Vector3? _nose;
@@ -295,6 +321,10 @@ public sealed class AiModeMachine
     /// measured from; null while the task is not pursue. Written once per promotion, so it is where
     /// the chase started rather than where the aircraft spawned.</summary>
     public Vector3? PursuitAnchor => _pursuitAnchor;
+
+    /// <summary>Seconds until the dwell stamp passes, zero once it has: while pursuing, what is left
+    /// of the chase; otherwise, what is left of the wait before a promotion is allowed.</summary>
+    public float DwellRemainingS => (float)Math.Max(0.0, _dwellUntil - _clock);
 
     /// <summary>Avoid-crash's climb-out altitude order (entry altitude + <see cref="ClimbOutM"/>).</summary>
     public float ClimbOutAltitude { get; private set; }
@@ -349,20 +379,26 @@ public sealed class AiModeMachine
         // An ordered engagement anchors where it was ordered, as a promotion does: without this a
         // scripted rejoin would be leashed to a point the aircraft left long ago.
         if (mode is AiMode.Pursue or AiMode.LayOff)
+        {
             _pursuitAnchor = _lastPos;
+            ArmChaseDeadline(); // or the stale stamp would revert the ordered chase next tick
+        }
         Transition(mode, reason);
     }
 
-    /// <summary>One sim tick's transitions. <paramref name="targetMode"/> is the standing target's
-    /// own mode when it is an AI aircraft, for the sixth-sense trigger; a human target reports
-    /// null, since that roll is undecoded against a human.
+    /// <summary>One sim tick's transitions. <paramref name="targetMode"/> is an AI target's own
+    /// mode for the sixth-sense trigger (null for a human, the roll being undecoded against one);
     /// <paramref name="targetVelocity"/>/<paramref name="targetIsHuman"/> feed the lay-off pursued
-    /// test, extended only to a human-piloted pursuer, <paramref name="targetNose"/> the evade
-    /// flag's alignment clear, and <paramref name="attitude"/> the frame the veto predicts in.</summary>
+    /// test, <paramref name="targetNose"/> the evade clear, <paramref name="attitude"/> the veto's
+    /// frame. A non-vehicle quarry takes the dwell's 20/15 s holds; the primary lifts the dwell.</summary>
     public AiMode Update(Vector3 pos, Vector3 velocity, Vector3? targetPos, AiMode? targetMode,
         float dt, Vector3? targetVelocity = null, bool targetIsHuman = false, Vector3? nose = null,
-        Vector3? targetNose = null, Basis? attitude = null)
+        Vector3? targetNose = null, Basis? attitude = null, bool quarryIsVehicle = true,
+        bool quarryIsPrimary = false)
     {
+        _clock += dt;
+        _quarryIsVehicle = quarryIsVehicle;
+        _quarryIsPrimary = targetPos is not null && quarryIsPrimary;
         _lastPos = pos;
         _lastVelocity = velocity;
         _nose = nose;
@@ -400,27 +436,33 @@ public sealed class AiModeMachine
 
         switch (Mode)
         {
+            // The promotion (FUN_0041f040) reads no range, team or net: whatever the selection
+            // handed over is chased once the dwell stamp has passed, at once for the assigned target.
             case AiMode.Patrol:
-                if (targetPos is { } t
-                    && pos.DistanceTo(t) <= Mathf.Min(ActivationRange, AttackRange))
+                if (targetPos is { } t && (_quarryIsPrimary || _clock > _dwellUntil))
                 {
                     Transition(AiMode.Pursue, FormattableString.Invariant($"target at {pos.DistanceTo(t):0} m"));
                 }
                 break;
 
             // Evade joins the engagement cases: the flag runs the same driver, so the target
-            // loss and the leash still apply while it stands.
+            // loss, the dwell and the leash still apply while it stands. The assigned target skips
+            // the dwell and the leash alike (FUN_0041d9f0, 0x0041e5a6).
             case AiMode.Pursue:
             case AiMode.LayOff:
             case AiMode.Evade:
                 if (targetPos is not { } tp)
                 {
-                    Transition(AiMode.Patrol, "target lost");
+                    RevertTask("target lost", NotPursuitDwellS);
                 }
-                else if (_pursuitAnchor is { } anchor && OutsideReturnCylinder(pos, anchor))
+                else if (!_quarryIsPrimary && _pursuitAnchor is not null && _clock > _dwellUntil)
                 {
-                    Transition(AiMode.Patrol, FormattableString.Invariant(
-                        $"{pos.DistanceTo(anchor):0} m from the pursuit anchor, beyond return range"));
+                    RevertTask("attack dwell ran out", RevertWaitS());
+                }
+                else if (!_quarryIsPrimary && _pursuitAnchor is { } anchor && OutsideReturnCylinder(pos, anchor))
+                {
+                    RevertTask(FormattableString.Invariant(
+                        $"{pos.DistanceTo(anchor):0} m from the pursuit anchor, beyond return range"), RevertWaitS());
                 }
                 else
                 {
@@ -584,12 +626,31 @@ public sealed class AiModeMachine
     private void ReturnFromReaction(Vector3 pos, Vector3? targetPos)
     {
         bool engaged = targetPos is not null && _pursuitAnchor is { } anchor
-            && !OutsideReturnCylinder(pos, anchor);
+            && (_quarryIsPrimary || (_clock <= _dwellUntil && !OutsideReturnCylinder(pos, anchor)));
         var back = _returnMode is AiMode.Pursue or AiMode.LayOff && engaged
             ? _returnMode
             : _returnMode == AiMode.ApproachingDangerZone ? _returnMode
             : AiMode.Patrol;
+        // A reaction that hands a pursuit back to the net is the task revert, deferred to here.
+        if (back == AiMode.Patrol && _pursuitAnchor is not null)
+            _dwellUntil = _clock + (targetPos is null ? NotPursuitDwellS : RevertWaitS());
         Transition(back, "reaction complete");
+    }
+
+    // The promotion's stamp (0x0041f0ea-0x0041f106): the chase's own deadline.
+    private void ArmChaseDeadline() =>
+        _dwellUntil = _clock + (_quarryIsVehicle ? AttackDwellS : NonVehicleAttackDwellS);
+
+    // The revert's re-arm (0x0041e6d7-0x0041e737): the wait before the next promotion.
+    private float RevertWaitS() => _quarryIsVehicle ? NotPursuitDwellS : NonVehicleNotPursuitDwellS;
+
+    // Only a pursue task re-arms (0x0041c299 tests task 1): an ordered evade off the net that
+    // loses its target leaves the promotion's wait where it stood.
+    private void RevertTask(string reason, float waitS)
+    {
+        if (_pursuitAnchor is not null)
+            _dwellUntil = _clock + waitS;
+        Transition(AiMode.Patrol, reason);
     }
 
     // The task revert's geometry (FUN_0041d9f0, 0x0041e69c-0x0041e6d5): a cylinder about the
@@ -811,8 +872,12 @@ public sealed class AiModeMachine
         // target), and a promotion into an engagement takes the anchor the leash is measured from.
         if (to is AiMode.Patrol or AiMode.ApproachingDangerZone or AiMode.NavigatingDangerZone)
             _pursuitAnchor = null;
-        else if (to is AiMode.Pursue or AiMode.LayOff)
-            _pursuitAnchor ??= _lastPos;
+        else if ((to is AiMode.Pursue or AiMode.LayOff) && _pursuitAnchor is null)
+        {
+            // A new task, whichever path took it, is a promotion and takes the chase's deadline.
+            _pursuitAnchor = _lastPos;
+            ArmChaseDeadline();
+        }
         if (to != AiMode.EvasiveManeuver)
             Executor = null;
         if (from == AiMode.Stunned)

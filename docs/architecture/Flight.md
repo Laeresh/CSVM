@@ -425,8 +425,8 @@ makes the hold a weave rather than a tight join. Engine-free and deterministic; 
 
 ## src/Flight/AiModeMachine.cs
 The nine-mode AI state machine, owned by `AiPilot.Machine` and stepped from its `Next`: the mode list and
-vocabulary are the engine's own debug-readout dispatch. It carries the three decoded cylinders as mutable fields: `AttackRange` is the decoded admission volume a picker is handed, `ReturnRange` is the chase leash, tested as a cylinder about `PursuitAnchor` (the pursuer's own pose where the promotion began) and the only geometry that ends a pursuit, and `ActivationRange` is the engine's simulation gate, so the pursue ENTRY floor reading it is CSVM's own.
-Decoded and wired are the promotion into pursue inside the shipped distances, the steady-hand roll a hit provokes as a power law over the bite it takes of
+vocabulary are the engine's own debug-readout dispatch. It carries the three decoded cylinders as mutable fields: `AttackRange` is the decoded admission volume a picker is handed, `ReturnRange` is the chase leash, tested as a cylinder about `PursuitAnchor` (the pursuer's own pose where the promotion began) and the only geometry that ends a pursuit, and `ActivationRange` is the engine's simulation gate, which nothing in the machine reads.
+Decoded and wired are the promotion into pursue on whatever quarry the selection hands over, paced by one dwell stamp (`AttackDwellS`/`NotPursuitDwellS`, 20/15 s for a non-vehicle quarry) that refuses a promotion while it stands, ends a chase when it passes and is lifted for the assigned target, the steady-hand roll a hit provokes as a power law over the bite it takes of
 the pre-hit pools, looping on the leftover (`RollLogged` reports every hit reaching the pilot, rolls taken
 and skipped alike, so its line count is the hit count), the `Evading` flag a failed test sets and the
 weighted library draw it enters under the natural-touch, injector and predicted-end altitude culls (that last one vetoing a program whose predicted end falls under the floor and sweeping the predicted path below the ceiling, from the position and attitude `Update` was last handed), chaining a fresh maneuver until
@@ -450,7 +450,7 @@ line from that barrel to the intercept point so wing guns converge, perturbed in
 draw per shot. Gates in the engine's order: the quick-draw cone off the target's nose-tail axis, the separation inside
 the slot's authored engagement window, then the airframe's traverse clamp on the lead with the residual the clamp
 leaves gated in turn, so the employable cone is the traverse limit plus that gate. It also carries the standing target:
-`TakeTarget` stamps the engine's 20 s `TargetHoldSeconds` and keeps the rank the host re-scores while the hold stands.
+`TakeTarget` stamps the engine's 20 s `TargetHoldSeconds` and keeps the rank the host re-scores while the hold stands, and `IsPrimaryTarget` says whether a target is the roster's assigned `PrimaryTargetName`.
 Engine-free; the live half is the `ai-gunnery` suite. Decode: [../org/aiPilot/aiWeapons.md](../org/aiPilot/aiWeapons.md).
 
 ## src/Flight/SurfaceGunMount.cs
@@ -492,8 +492,9 @@ score out, engine-free. `SelectBest` prefers the best candidate no ally holds; `
 
 ## src/Flight/PursuitQuarry.cs
 The flight law's snapshot of `AiGunner.Target` for one step, whatever its class: position, velocity,
-the nose axis of an aircraft or zero for a turret or structure, and the aircraft-only facts the merge
-rule, the lay-off assist and the sixth-sense trigger read. `Of` is the one place a standing target
+the nose axis of an aircraft or zero for a turret or structure, the aircraft-only facts the merge
+rule, the lay-off assist and the sixth-sense trigger read, and the vehicle and assigned-target facts
+the pursuit dwell reads. `Of` is the one place a standing target
 becomes this shape, so a pilot pursues a zeppelin engine through the same arm it pursues a fighter,
 which is the original's `Target` vtable read ([../org/aiPilot.md](../org/aiPilot.md) "What pursue
 does with a non-vehicle target").
@@ -518,7 +519,7 @@ the def's `turrets` block as `TurretMount`s, engines.json stock engine power, an
 globals, which are the flight constants plus the tuning the cue, aim-assist, head-look and damage
 paths read. It also carries the `crash` block's restitution ceiling, the engine sound defs and their
 curves, `destroyable_parts` as `DestroyablePart` records with the def-level injure anims, and the
-`collision` probe list, and `AiTargetBias`/`AiStructBias`, the def's two acquisition rank terms read off the chain the vehicle spawns as. `Load` resolves down the player chain, `LoadForAi` takes only the damage model off the AI chain, and the `With*` family layers roster, difficulty and hangar overrides on.
+`collision` probe list, and `AiTargetBias`/`AiStructBias`, the def's two acquisition rank terms, and `AiAttackDwell`/`AiNotPursuitDwell`, the pursuit timers, all read off the chain the vehicle spawns as. `Load` resolves down the player chain, `LoadForAi` takes only the damage model off the AI chain, and the `With*` family layers roster, difficulty and hangar overrides on.
 
 ## src/Flight/SpawnPoints.cs
 Reads the flight spawn from a mission's OWN zrdr, a different archive than the shared `--zrdr`, in

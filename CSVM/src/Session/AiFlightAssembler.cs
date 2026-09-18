@@ -115,6 +115,8 @@ internal sealed class AiFlightAssembler
         {
             machine.AttackRange = stats.AiAttackRange;
             machine.ReturnRange = stats.AiReturnRange;
+            machine.AttackDwellS = stats.AiAttackDwell;
+            machine.NotPursuitDwellS = stats.AiNotPursuitDwell;
         }
 
         FlightController controller;

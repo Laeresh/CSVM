@@ -156,6 +156,17 @@ public sealed class AiGunner
         TargetHoldUntil = now + TargetHoldSeconds;
     }
 
+    /// <summary>Whether <paramref name="target"/> is this gunner's assigned
+    /// <see cref="PrimaryTargetName"/>, by the same name match the picker's primary arm uses: the
+    /// node name, or any human aircraft for the <c>"player"</c> role. The original's test is the
+    /// standing target's object against the one at <c>+0x2fc</c>, and it is what lifts both ends of
+    /// the pursuit dwell (docs/org/aiPilot.md).</summary>
+    public bool IsPrimaryTarget(object? target) =>
+        target != null && PrimaryTargetName is { Length: > 0 } wanted
+        && (string.Equals(TargetPool.NameOf(target), wanted, System.StringComparison.OrdinalIgnoreCase)
+            || (target is FlightController { IsHumanPiloted: true }
+                && wanted.Equals(AiTargetRanking.PlayerRole, System.StringComparison.OrdinalIgnoreCase)));
+
     /// <summary>One tick's fire decision, in the original's gate order. All world-space;
     /// <paramref name="ownBasis"/> is the firing airframe's attitude (the traverse clamp is
     /// measured against ITS nose, not the muzzle axis), <paramref name="targetForward"/> the

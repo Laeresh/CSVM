@@ -9,7 +9,7 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The decoded mode machine's transition table, engine-free: the nine modes under fixed rolls
-/// (a pool-covering bite, a zero exponent) and seeded rngs. Pins activation into pursue, the
+/// (a pool-covering bite, a zero exponent) and seeded rngs. Pins the promotion and its dwell, the
 /// return-cylinder exit measured from the pursuit anchor and the anchor's own life, the
 /// steady-hand power law and the sixth-sense roll in the engine's own
 /// vocabulary, the evasive
@@ -43,20 +43,129 @@ public class AiModeMachineTests
         Assert.Equal("navigating danger zone", AiModeMachine.NameOf(AiMode.NavigatingDangerZone));
     }
 
+    /// <summary>The promotion reads no range: the attack radius is the selection's admission
+    /// test, so whatever quarry the machine is handed is chased the tick the dwell allows.</summary>
     [Fact]
-    public void PatrolActivatesIntoPursueInsideTheRadius()
+    public void PatrolPromotesAnyHandedQuarryWithNoRangeOfItsOwn()
     {
         var m = Machine();
+        m.ActivationRange = 1000f;
+        m.AttackRange = 1000f;
         var transitions = new List<(AiMode From, AiMode To)>();
         m.ModeChanged += (from, to, _) => transitions.Add((from, to));
 
-        // Outside min_ai_active_dist / attack (both 2000 shipped): stays on patrol.
-        Assert.Equal(AiMode.Patrol, m.Update(Home, Level, Home + new Vector3(2500f, 0f, 0f), null, 0.1f));
+        Assert.Equal(AiMode.Patrol, m.Update(Home, Level, null, null, 0.1f));
         Assert.Empty(transitions);
 
-        // Inside: pursue, announced as one patrol -> pursue transition.
-        Assert.Equal(AiMode.Pursue, m.Update(Home, Level, Home + new Vector3(1900f, 0f, 0f), null, 0.1f));
+        Assert.Equal(AiMode.Pursue, m.Update(Home, Level, Home + new Vector3(2500f, 0f, 0f), null, 0.1f));
         Assert.Equal((AiMode.Patrol, AiMode.Pursue), Assert.Single(transitions));
+    }
+
+    /// <summary>A promotion arms the chase's deadline to attack_dwell, and the pursuit reverts
+    /// the tick it passes; the revert re-arms not_pursuit_dwell, which refuses the next promotion
+    /// until it has passed too.</summary>
+    [Fact]
+    public void TheChaseRevertsAtTheAttackDwellAndThePromotionWaitsOutTheRearm()
+    {
+        var m = Machine();
+        m.AttackDwellS = 60f;
+        m.NotPursuitDwellS = 5f;
+        var target = Home + new Vector3(500f, 0f, 0f);
+        PursueFrom(m, target);
+        Assert.Equal(60f, m.DwellRemainingS, 3);
+
+        Assert.Equal(AiMode.Pursue, Step(m, target, 59.8f));
+        Assert.Equal(AiMode.Patrol, m.Update(Home, Level, target, null, 0.3f));
+        Assert.Equal(5f, m.DwellRemainingS, 3);
+
+        // Refused while the stamp stands, with the quarry still handed over every tick.
+        Assert.Equal(AiMode.Patrol, Step(m, target, 4.8f));
+        Assert.Equal(AiMode.Pursue, m.Update(Home, Level, target, null, 0.3f));
+    }
+
+    /// <summary>The return cylinder's revert re-arms the wait: the original's re-promotion on the
+    /// very next tick, with a fresh anchor, is exactly what this refuses.</summary>
+    [Fact]
+    public void TheCylinderRevertRearmsTheWaitAndATurretTakesTheFifteenSecondHold()
+    {
+        var m = Machine();
+        var target = Home + new Vector3(500f, 0f, 0f);
+        PursueFrom(m, target);
+        var strayed = Home + new Vector3(1300f, 0f, 0f);
+        Assert.Equal(AiMode.Patrol, m.Update(strayed, Level, target, null, 0.1f));
+        Assert.Equal(m.NotPursuitDwellS, m.DwellRemainingS, 3);
+        Assert.Equal(AiMode.Patrol, m.Update(strayed, Level, target, null, 0.1f));
+
+        // A structure quarry: 20 s to promote on, 15 s of wait after the cylinder.
+        var t = Machine();
+        Assert.Equal(AiMode.Pursue, t.Update(Home, Level, target, null, 0.1f, quarryIsVehicle: false));
+        Assert.Equal(AiModeMachine.NonVehicleAttackDwellS, t.DwellRemainingS, 3);
+        Assert.Equal(AiMode.Patrol, t.Update(strayed, Level, target, null, 0.1f, quarryIsVehicle: false));
+        Assert.Equal(AiModeMachine.NonVehicleNotPursuitDwellS, t.DwellRemainingS, 3);
+    }
+
+    /// <summary>A lost target re-arms not_pursuit_dwell, with no 15 s variant.</summary>
+    [Fact]
+    public void ALostTargetRearmsTheNotPursuitDwell()
+    {
+        var m = Machine();
+        m.NotPursuitDwellS = 5f;
+        var target = Home + new Vector3(500f, 0f, 0f);
+        Assert.Equal(AiMode.Pursue, m.Update(Home, Level, target, null, 0.1f, quarryIsVehicle: false));
+        Assert.Equal(AiMode.Patrol, m.Update(Home, Level, null, null, 0.1f));
+        Assert.Equal(5f, m.DwellRemainingS, 3);
+        Assert.Equal(AiMode.Patrol, m.Update(Home, Level, target, null, 1f));
+    }
+
+    /// <summary>The assigned primary_target lifts both ends: it is promoted onto inside the wait,
+    /// and neither the deadline nor the cylinder ends that chase.</summary>
+    [Fact]
+    public void TheAssignedTargetIsExemptFromTheDwellAndTheLeash()
+    {
+        var m = Machine();
+        var target = Home + new Vector3(500f, 0f, 0f);
+        PursueFrom(m, target);
+        Assert.Equal(AiMode.Patrol, m.Update(Home, Level, null, null, 0.1f));
+        Assert.True(m.DwellRemainingS > 0f);
+
+        Assert.Equal(AiMode.Pursue, m.Update(Home, Level, target, null, 0.1f, quarryIsPrimary: true));
+        var strayed = Home + new Vector3(5000f, 0f, 0f);
+        Assert.Equal(AiMode.Pursue,
+            m.Update(strayed, Level, target, null, 120f, quarryIsPrimary: true));
+
+        // Once the quarry is no longer the assigned one, the passed deadline ends it.
+        Assert.Equal(AiMode.Patrol, m.Update(strayed, Level, target, null, 0.1f));
+    }
+
+    /// <summary>An ordered engagement arms its own deadline, so a stamp left from the machine's
+    /// start does not revert it on the next tick.</summary>
+    [Fact]
+    public void AnOrderedPursuitArmsItsOwnDeadline()
+    {
+        var m = Machine();
+        var target = Home + new Vector3(500f, 0f, 0f);
+        m.Update(Home, Level, null, null, 100f);
+        m.Enter(AiMode.Pursue);
+        Assert.Equal(AiMode.Pursue, m.Update(Home, Level, target, null, 0.1f));
+    }
+
+    /// <summary>The dwell ends a pursue task only. An evade ordered off the net that loses its
+    /// target leaves the wait alone, and one that settles into pursue takes a fresh deadline
+    /// rather than reverting on a stamp left from the machine's start.</summary>
+    [Fact]
+    public void AnEvadeOffTheNetIsNoChaseForTheDwellToEnd()
+    {
+        var m = Machine();
+        var target = Home + new Vector3(500f, 0f, 0f);
+        m.Update(Home, Level, null, null, 100f);
+        m.Enter(AiMode.Evade);
+        Assert.Equal(AiMode.Patrol, m.Update(Home, Level, null, null, 0.1f));
+        Assert.Equal(0f, m.DwellRemainingS);
+
+        m.Enter(AiMode.Evade);
+        Assert.Equal(AiMode.Pursue, m.Update(Home, Level, target, null, 0.1f));
+        Assert.Equal(m.AttackDwellS, m.DwellRemainingS, 3);
+        Assert.Equal(AiMode.Pursue, m.Update(Home, Level, target, null, 0.1f));
     }
 
     [Fact]
@@ -935,6 +1044,15 @@ public class AiModeMachineTests
         Difficulty = 99,
         Steps = Array.Empty<ManeuverStep>(),
     };
+
+    // Holds position and quarry for the given seconds in 0.1 s ticks, returning the mode reached.
+    private static AiMode Step(AiModeMachine m, Vector3 target, float seconds)
+    {
+        var mode = m.Mode;
+        for (float t = 0f; t < seconds - 1e-4f; t += 0.1f)
+            mode = m.Update(Home, Level, target, null, 0.1f);
+        return mode;
+    }
 
     private static AiMode PursueFrom(AiModeMachine m, Vector3 target)
     {

@@ -3851,12 +3851,17 @@ public partial class FlightController : Node3D
     // every tick and kept while it scores valid, until the hold runs out, whereupon the pool is
     // swept whole (docs/org/aiPilot.md). A target written straight onto AiGunner.Target, a mission
     // order or an airframe swap's replacement, carries no rank snapshot and keeps the older rule
-    // that alive is enough, which is also what an assigned primary_target gets in the original.
+    // that alive is enough. An assigned primary_target is kept while it is inside the attack radius.
     private bool HoldsStandingTarget(AiGunner gunner, out Vector3 pos, out Vector3 vel, out Vector3 fwd)
     {
         if (!TryTargetGeometry(StandingTarget(gunner), out pos, out vel, out fwd, out bool live)
             || !live)
             return false;
+        float attack = Pilot?.Machine?.AttackRange ?? 2000f;
+        // The assigned target is re-scored every tick in the original (FUN_0041fe10's primary arm),
+        // so it stays only inside the attack volume. This is the range the promotion does not read.
+        if (gunner.AutoTarget && gunner.IsPrimaryTarget(gunner.Target))
+            return WorldPosition.DistanceSquaredTo(pos) <= attack * attack;
         if (!gunner.AutoTarget || !ReferenceEquals(gunner.TargetRankFor, gunner.Target))
             return true;
         if ((GameClock.Current?.Time ?? 0.0) >= gunner.TargetHoldUntil)
@@ -3867,7 +3872,7 @@ public partial class FlightController : Node3D
         // ⚠ The withdrawal argument is CSVM's layer, not the decode. Evaluated last, and only for a
         // structure target, so the aircraft walk costs nothing on the ordinary aeroplane duel.
         return AiTargetRanking.KeepsStandingTarget(WorldPosition, NoseDirection,
-            Pilot?.Machine?.AttackRange ?? 2000f, AiScorer.Jet,
+            attack, AiScorer.Jet,
             AiTargetRanking.AircraftFirst && rank.IsStructureClass && EnemyAircraftRanks(gunner),
             rank);
     }

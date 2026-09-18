@@ -286,7 +286,7 @@ public sealed class AiPilot
     /// one node read is a turret or structure quarry's position, which lives on its node alone.</summary>
     public FlightInput Next(FlightModel model, float dt)
     {
-        var quarry = PursuitQuarry.Of(Gunner?.Target);
+        var quarry = PursuitQuarry.Of(Gunner?.Target, Gunner);
         SteeringPatrol = false;   // SteerPatrol sets it when it actually flies the net
         RailPose = null;          // set again below only while the rail writes the pose
 
@@ -297,7 +297,9 @@ public sealed class AiPilot
             var mode = machine.Update(model.Position, model.VelocityDir * model.Speed,
                 quarry?.Position, quarry?.Mode, dt,
                 quarry?.Velocity, quarry?.IsHumanPiloted ?? false,
-                nose: -model.Attitude.Z, targetNose: quarry?.Nose, attitude: model.Attitude);
+                nose: -model.Attitude.Z, targetNose: quarry?.Nose, attitude: model.Attitude,
+                quarryIsVehicle: quarry?.IsVehicle ?? true,
+                quarryIsPrimary: quarry?.IsPrimaryTarget ?? false);
             // The two states the escort law itself short-circuits on come first, then the escort,
             // which is the whole dispatch for a wingman, a maneuver included, since the original
             // never reaches its maneuver arm from the mode-4 fork.

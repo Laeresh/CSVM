@@ -820,6 +820,27 @@ off numbers instead of guessed.
   *Blocks:* nothing tracks the outcome; a fail mints a new `BL`. The reasoning behind the fallback
   and the apply order is in the landing commits (`git log --grep=BL-768`).
 
+### CM05, CM07, CM08 and CM20 · enemies engage, break off and come back
+
+```powershell
+./RunGame.ps1 --campaign=<profile>:4
+./RunGame.ps1 --campaign=<profile>:6
+./RunGame.ps1 --campaign=<profile>:7
+./RunGame.ps1 --campaign=<profile>:19
+```
+
+- `PT-156` `[Own]` **Enemy and friendly fighters take up a chase, hold it for up to a minute, fly
+  their patrol for a few seconds after breaking off, and then come back.** The pursuit now carries
+  the original's dwell: a chase ends after 60 s or on leaving its 1,200 m leash, and the next one
+  waits 5 s, while a pilot's assigned target is chased without either limit
+  (`git log --grep=BL-523`). Headless runs of CM05, CM07 and CM09 engage in every case, which the
+  reports "only patrol and don't attack" (CM05's second patrol, CM07's friendlies, CM08's third
+  wave of fighters) and "enemies were patrolling and not pursuing" (CM20) contradict, so only an
+  eye at the controls settles them. *Look for:* (a) each of those groups turning onto you or your
+  wingmen once inside about 2 km; (b) a fighter that breaks off returning to the fight within
+  seconds rather than flying away; (c) no fighter trailing far out of the mission area.
+  *Blocks:* nothing tracks the outcome; a group that never engages mints a new `BL`.
+
 ### Any campaign mission · enemy skill under the difficulty offset
 
 ```powershell

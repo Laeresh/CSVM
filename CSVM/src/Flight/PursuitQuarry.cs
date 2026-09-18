@@ -25,6 +25,15 @@ public readonly struct PursuitQuarry
     /// sixth-sense trigger read (the original's <c>TargetVehicle</c> cast).</summary>
     public bool IsAircraft { get; init; }
 
+    /// <summary>Whether the quarry is on the original's vehicle list, an aeroplane or a hull: the
+    /// <c>TargetVehicle</c> cast the pursuit dwell's 20 s and 15 s holds test, which a turret or a
+    /// structure fails (docs/org/aiPilot.md).</summary>
+    public bool IsVehicle { get; init; }
+
+    /// <summary>Whether the quarry is the pursuer's assigned <c>primary_target</c>, which lifts the
+    /// dwell refusal and skips the whole pursuit revert (<see cref="AiGunner.IsPrimaryTarget"/>).</summary>
+    public bool IsPrimaryTarget { get; init; }
+
     /// <summary>A human at the quarry's controls, for the lay-off assist.</summary>
     public bool IsHumanPiloted { get; init; }
 
@@ -36,8 +45,9 @@ public readonly struct PursuitQuarry
     public bool IsGasbag { get; init; }
 
     /// <summary>The live target this snapshot was taken from, or null for a target that is not
-    /// in play this step (dead, out of the tree, dormant), in which case the pilot has no quarry.</summary>
-    public static PursuitQuarry? Of(object? target)
+    /// in play this step (dead, out of the tree, dormant), in which case the pilot has no quarry.
+    /// <paramref name="gunner"/> is the pursuer's own, read for its assigned target alone.</summary>
+    public static PursuitQuarry? Of(object? target, AiGunner? gunner = null)
     {
         if (!FlightController.TryTargetGeometry(target, out var position, out var velocity,
                 out var forward, out bool live) || !live)
@@ -51,6 +61,8 @@ public readonly struct PursuitQuarry
             Velocity = velocity,
             Nose = aircraft != null ? forward : Vector3.Zero,
             IsAircraft = aircraft != null,
+            IsVehicle = aircraft != null || target is Session.SurfaceVehicle,
+            IsPrimaryTarget = gunner?.IsPrimaryTarget(target) ?? false,
             IsHumanPiloted = aircraft?.IsHumanPiloted ?? false,
             Mode = aircraft?.Pilot?.Machine?.Mode,
             IsGasbag = target is Mech3.DestructibleRegistry.Instance { Gasbag: true },

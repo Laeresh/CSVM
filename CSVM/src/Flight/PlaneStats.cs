@@ -168,6 +168,12 @@ public sealed class PlaneStats
     public float AiAttackRange = 2000f;
     public float AiReturnRange = 1200f;
 
+    // The pursuit dwell pair, vehicle.json 'attack_dwell' / 'not_pursuit_dwell' (def +0x5c/+0x60),
+    // seconds: basic_airplane authors 60 / 5 and every aeroplane inherits them. The fallbacks are
+    // the def record's compiled defaults (FUN_00478a00, 0x00478a93 and 0x00478a9a).
+    public float AiAttackDwell = 60f;
+    public float AiNotPursuitDwell = 3f;
+
     // The AI control law's per-axis output stage (docs/org/aiControlLaw.md): roll, pitch and yaw
     // commands are multiplied by these scales, then clamped to these limits. Fallbacks are the
     // def initialiser's own compiled defaults, which is what every airframe in this install flies on.
@@ -635,6 +641,8 @@ public sealed class PlaneStats
             FlightCeiling = Prop("flight_ceiling", 2500f),
             AiAttackRange = Prop("attack", 2000f),
             AiReturnRange = Prop("return_range", 1200f),
+            AiAttackDwell = Prop("attack_dwell", 60f),
+            AiNotPursuitDwell = Prop("not_pursuit_dwell", 3f),
             // Fallbacks are the def initialiser's compiled defaults, not guesses, see the fields.
             AiInputScaleRoll = Prop("ai_input_scale_roll", 3.5f),
             AiInputScalePitch = Prop("ai_input_scale_pitch", 3.5f),
