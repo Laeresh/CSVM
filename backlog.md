@@ -1321,22 +1321,6 @@ usual.
   crash that plays without stopping the path looks like this too. *Cross-refs:*
   `docs/formats/anim-definitions.md`, `docs/org/sequences.md`.
 
-- `BL-957` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: data]` **An allied roster block that names its own
-  def wears that def's paint, so the Black Swan flies her own livery in CM16 and CM19.** *Evidence:*
-  the livery routing that closed `BL-394` withholds the player militia's default pattern from every
-  team but the player's, and lets a def's authored scheme through everywhere else; on the player's
-  own team nothing changed, so a friendly block with a def of its own still takes the player's
-  colours. CM16 (C4/M01) flies the Black Swan on the player's side and she wears the Fortune
-  Hunters' pattern ("Black Swan in CM16 should have her own livery, not that of the fortune
-  hunters"); `bsfury` authors `paint_pattern blckswan`. *Fix shape:* in
-  `AiFlightAssembler.MilitiaScheme`, an ally whose block resolves to a def that authors a
-  `paint_pattern` wears it; a plain wingman block with no def of its own keeps the player's
-  colours, which is the shipped-skins reading for the player's team. Pin it in
-  `CampaignMilitiaLiveryTests` over CM16's and CM19's rosters. *⚠ Traps:* the `bswingman_N` blocks
-  are the escort family (`docs/architecture/Flight.md`); check which def they resolve to before
-  assuming every friendly Fury is hers. *Cross-refs:* `git log --grep=BL-394`,
-  `docs/org/paint.md`.
-
 - `BL-964` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **A Danger Zone photograph freezes the frame
   it is taken on, and one such freeze crashed the game.** *Evidence:* "strong hitch/freeze while
   screenshotting, had a crash because of it". `StuntCapture.Latch` calls the pane delegate, which

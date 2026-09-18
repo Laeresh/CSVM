@@ -368,7 +368,7 @@ internal sealed class AiFlightAssembler
         scheme = MilitiaScheme(stats, spawn) ?? _liveries.SchemeFor(
             0, _aircraft.ZrdrPath, _aircraft.PaintRng,
             _liveries.PatternsForPlane(_aircraft.PlanesGamez, spawn.PlaneName),
-            useDefaultPattern: !spawn.ShippedSkins);
+            useDefaultPattern: !spawn.ShippedSkins && spawn.LiveryDef == null);
         return true;
     }
 
@@ -460,12 +460,12 @@ internal sealed class AiFlightAssembler
     // (docs/org/paint.md). Yields to --paint=, which is about this run, not about who the plane is.
     // ⚠ A NAMED militia def does not yield to ShippedSkins: that reading withholds only the player
     // militia's default pattern from another team, and gating the def's own livery on it left every
-    // campaign enemy and every generator launch in bare skins. A spawn naming no def keeps yielding,
-    // PlaneStats falling back to the base def and an Instant Action wave to the setup screen.
+    // campaign enemy and every generator launch in bare skins. A spawn naming no def keeps yielding.
+    // ⚠ A LiveryDef (bswingman on a Fury) outranks the base def standing in for the stats.
     private PaintScheme? MilitiaScheme(PlaneStats stats, AiSpawn spawn)
     {
-        if (_liveries.PaintRequested || stats.AiDefName is not { } def
-            || (spawn.ShippedSkins && spawn.AiDef == null))
+        if (_liveries.PaintRequested || (spawn.LiveryDef ?? stats.AiDefName) is not { } def
+            || (spawn.ShippedSkins && spawn.AiDef == null && spawn.LiveryDef == null))
             return null;
         var scheme = _liveries.DefScheme(_aircraft.ZrdrPath, def);
         if (_liveryDefsLogged.Add(def))

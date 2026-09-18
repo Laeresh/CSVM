@@ -48,6 +48,12 @@ public sealed class RosterSpawnPlan
     /// from the airframe's base def and the plain base def flies instead.</summary>
     public string? AiDef { get; init; }
 
+    /// <summary>The def the livery comes from when <see cref="AiDef"/> is null: the block's own
+    /// <see cref="Def"/>, whose paint slots the original's spawn reads whatever airframe flies it
+    /// (docs/org/paint.md). Null when the AI def resolved, since it carries the livery, and on a
+    /// hull.</summary>
+    public string? LiveryDef => Surface || AiDef != null ? null : Def;
+
     /// <summary>The resolved def's <c>mode</c>.</summary>
     public required string Mode { get; init; }
 
@@ -361,8 +367,8 @@ public sealed class CampaignRosterPlan
 
     /// <summary>The spawn record a planned block launches as: its representative rating arms the
     /// gunner and machine, its authored slots outrank the def's, its objective-marker slots ride
-    /// onto the aeroplane, and it wears the livery its <see cref="RosterSpawnPlan.AiDef"/>
-    /// authors whatever <c>ShippedSkins</c> says. ⚠ Leave <paramref name="nodeName"/> unset
+    /// onto the aeroplane, and it wears the livery its <see cref="RosterSpawnPlan.AiDef"/>, else
+    /// its <see cref="RosterSpawnPlan.LiveryDef"/>, authors whatever <c>ShippedSkins</c> says. ⚠ Leave <paramref name="nodeName"/> unset
     /// outside a generator launch: <c>primary_target</c> and <c>rating_biases</c> are authored
     /// against the block's own name. ⚠ Refuses a Surface plan: a hull has no airframe.</summary>
     public static AiSpawn SpawnFor(RosterSpawnPlan plan, Vector3 pos, Vector3 lookAt, AiPilot pilot,
@@ -371,7 +377,7 @@ public sealed class CampaignRosterPlan
             ? throw new ArgumentException($"'{plan.Name}' is a surface vehicle, not an aircraft", nameof(plan))
             : new(plan.PlaneNode, pos, lookAt, pilot, Scheme: plan.Scheme, Team: plan.Team,
             Inert: plan.Inert, ShippedSkins: plan.Team != AimAssist.PlayerTeam,
-            AiDef: plan.AiDef, Fit: plan.Fit,
+            AiDef: plan.AiDef, LiveryDef: plan.LiveryDef, Fit: plan.Fit,
             AttackRating: InstantActionRuntime.RepresentativeRating(plan.Skills),
             Nitro: plan.Nitro, RosterSkills: plan.Skills, NodeName: nodeName ?? plan.Name,
             PilotName: plan.Title, InitHealth: plan.InitHealth, Armor: plan.Armor, Ace: plan.Ace,

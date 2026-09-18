@@ -149,6 +149,71 @@ public class CampaignMilitiaLiveryTests
         Assert.NotEqual(fortune.Pattern, medusa.Pattern);
     }
 
+    /// <summary>Every campaign aircraft block whose own def the airframe cannot fly as its AI def,
+    /// on either team, with the def its livery is read off and what that def authors. CM16's
+    /// Black Swan is <c>bswingman_1</c>: her <c>bswingman</c> def authors no paint_pattern, so she
+    /// flies the Fury's shipped skins (her own black and white bars), not the player's colours and
+    /// not <c>bsfury</c>'s scheme, which no friendly block names.</summary>
+    [ExtractedDataFact]
+    public void ABlockTheAirframeCannotFlyIsPaintedOffItsOwnDef()
+    {
+        var defs = VehicleDefs.Load(ZrdrPath);
+        var rows = new List<string>();
+        foreach (var mission in CampaignSequence.Load(ZrdrPath))
+        {
+            var (chapter, folder) = Address(mission);
+            var plan = CampaignRosterPlan.Build(
+                AiSkills.LoadRoster(SessionPaths.MissionZrdr(TestData.DataRoot!, chapter, folder)),
+                defs, AiNets.Load(SessionPaths.ChapterZrdr(TestData.DataRoot!, chapter)));
+            foreach (var block in plan.Spawns)
+            {
+                if (block.LiveryDef is { } def)
+                {
+                    string pattern = PaintScheme.ForDef(ZrdrPath, def)?.Pattern ?? "-";
+                    rows.Add($"{chapter}/{folder} {block.Name} team {block.Team}: {def}:{pattern}");
+                }
+            }
+        }
+
+        Assert.Equal(new[]
+        {
+            "C4/M01 bswingman_1 team 1: bswingman:-",
+            "C4/M02 bswingman_1 team 1: bswingman:-",
+            "C4/M03 bswingman_1 team 1: bswingman:-",
+        }, rows);
+    }
+
+    /// <summary>CM16's and CM19's player-side blocks and the def each is painted off. The Black
+    /// Swan in CM16 wears her def's (no pattern, so the shipped skins); every Fortune Hunters
+    /// wingman in CM19 wears <c>player_fortune</c>, which is the player's own scheme. CM19 fields no
+    /// aeroplane of hers: she is rescued as the <c>p_swan</c> passenger.</summary>
+    [ExtractedDataFact]
+    public void TheBlackSwanAndTheFortuneHuntersWingmenWearTheirOwnDefsLivery()
+    {
+        var defs = VehicleDefs.Load(ZrdrPath);
+        foreach (var (address, want) in new[]
+                 {
+                     ("C4/M01", "bswingman_1=bswingman:-"),
+                     ("C4/M04", "wingman_4=wingman:player_fortune, devastator_1=devastator:player_fortune, "
+                         + "wingman_2=wingman:player_fortune, devastator_2=devastator:player_fortune, "
+                         + "wingman_3=wingman:player_fortune"),
+                 })
+        {
+            var parts = address.Split('/');
+            var plan = CampaignRosterPlan.Build(
+                AiSkills.LoadRoster(SessionPaths.MissionZrdr(TestData.DataRoot!, parts[0], parts[1])),
+                defs, AiNets.Load(SessionPaths.ChapterZrdr(TestData.DataRoot!, parts[0])));
+            var friends = plan.Spawns
+                .Where(p => !p.Surface && p.Team == AimAssist.PlayerTeam)
+                .Select(p =>
+                {
+                    string def = p.LiveryDef ?? p.AiDef ?? "-";
+                    return $"{p.Name}={def}:{PaintScheme.ForDef(ZrdrPath, def)?.Pattern ?? "-"}";
+                });
+            Assert.Equal(want, string.Join(", ", friends));
+        }
+    }
+
     // "<def>:<pattern> xN" per distinct militia def among a plan list's enemy aircraft, comma
     // separated in ordinal def order. Surface hulls carry no airframe and no livery, so they are
     // left out; so is everything on the player's own team, which draws the default pattern.
