@@ -400,7 +400,7 @@ context (`src/Bindings/`) from three readings of one seat: keyboard live, keyboa
 typeable keys, and the pad alone. Its pad rows sit on the seat-local `SeatPads` identity, since a
 seat reads a set of pads and no binding may hold a connection index. `Typed` and `Erase` serve a
 text field, `PadMove`/`PadMoveX` are the axes such a screen reads instead, since W, A, S and D
-are letters there. `TypeableKeys` is deliberately wider than any box's accept rule. `Device` and `DeviceMoved` come from an `ActiveDevice` over a fourth reading, the keyboard half alone, so a board hint names the side the seat last used and knows the tick it changed; `Hint` composes one such line. Wrapped by `Menu/BuiltIn/BuiltInSeat.cs`, bound by `MenuSeatDevices`; it also serves the in-flight boards.
+are letters there. `TypeableKeys` is deliberately wider than any box's accept rule, and Shift gives each key its US-layout shifted character. `Device` and `DeviceMoved` come from an `ActiveDevice` over a fourth reading, the keyboard half alone, so a board hint names the side the seat last used and knows the tick it changed; `Hint` composes one such line. Wrapped by `Menu/BuiltIn/BuiltInSeat.cs`, bound by `MenuSeatDevices`; it also serves the in-flight boards.
 
 ## src/UI/HudLayers.cs
 The canvas-layer ordering for everything drawn over the 3D view, in one place, so "does the collider

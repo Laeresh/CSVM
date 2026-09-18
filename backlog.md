@@ -1176,25 +1176,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   scripts are the decode for positions, the film only for the look. *Cross-refs:* `CAP-52`,
   `docs/org/menu-inventory.md`, `docs/formats/menu-layout.md` (`SCRAPBOOK.CSV`).
 
-- `BL-940` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **No shifted
-  punctuation can be typed into a menu text box, so the `crashcheat!` pilot name is unreachable and
-  the unlock cheat cannot be entered at all.** *Evidence:* reported at the controls as "cant enter
-  crashcheat because the input does not take ! as a key but takes only 1".
-  `MenuInput.CharFor` builds a character by casting the `Key` itself and applies the shift state to
-  letters alone (`CSVM/src/UI/MenuInput.cs:388`), so `Shift+1` reaches the box as `1` and every
-  shifted form of the digit row and of `BuildTextKeys`'s punctuation is unreachable. The model below
-  it is already right: `CampaignTextEntry.AcceptsNext` widens the alphanumeric-and-space rule by the
-  one character `CampaignCheats.UnlockName` ends in, and only while what stands in the box is that
-  name's own prefix (`CSVM/src/UI/CampaignTextEntry.cs:43-47`), which is dead code today because no
-  `!` ever arrives. *Fix shape:* give `CharFor` the US-layout shifted row for the digits and the
-  punctuation keys `BuildTextKeys` polls, so a shifted press produces the character the key prints.
-  *⚠ Traps:* the box's accept rule stays as it is, the original's own langui 707 alphabet; widening
-  what a profile name may carry is a different item and would reach `CampaignProfileStore.DirFor`'s
-  sanitisation. *Playtest after fix:* Original presentation, new campaign, type `crashcheat!` in the
-  roster name box and confirm 250000 cash and every airframe. *Cross-refs:* `git log --grep=BL-819`
-  (the four menu cheats as built), `docs/formats/campaign-screens.md` ("The pilot name `crashcheat!`
-  is a cheat, not dead code"), `PT-152`.
-
 - `BL-941` `[Bug]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: feel]` **The cabin cheat's
   mission pull-down is unreadable in the Original presentation: light text on a bright field, and no
   field background at all until it is clicked.** *Evidence:* reported at the controls as "Mission
