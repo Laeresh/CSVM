@@ -921,26 +921,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   forward-velocity drop in the lean is C22's port decision and reads right; do not widen the lean
   to fake a turn. *Cross-refs:* `BL-784` (c), `PLAN-cockpit-view` C22, `docs/org/cameraViews.md`.
 
-- `BL-963` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **The two head-look modes: in J (smooth)
-  a held numpad direction pans continuously and the head stays on release; in K (snap) it snaps and
-  returns; the mouse obeys the same two rules.** *Evidence:* the decode in
-  `docs/org/cameraViews.md` says state 1 integrates the hat angle at 2 rad/s and a frame with no
-  input leaves the angles where they are, while state 0 maps the direction to a fixed angle and
-  zeroes on release. `HeadLook.Step` ports the selectors (K and J write the mode on their press
-  edge) but reads the numpad through `SnapTargets` in both modes, so J changes only what the mouse
-  does. The user's account of the original at the controls: "J, smooth mode: pressing a button the
-  camera moves continuously and stays if the button is released; K, snap mode: the camera moves to
-  the position and snaps back on key release. There is no mouse look in the original." *Fix shape:*
-  in `HeadLook`, route the numpad direction through the free-look integrator when the mode is
-  FreeLook and through the snap targets when it is Snap, exactly the decode's two arms; the head
-  parks on release in J and returns in K. The mouse is a remake addition and keeps the same two
-  rules: in J a pan parks the head where it pointed and J or numpad 5 recentres it; in K the head
-  springs back to straight ahead when the free-look control is released. *⚠ Traps:* the mode is
-  written once per frame and the last writer wins (`SelectMode`); a numpad direction must not
-  itself write Snap in J, or the pan can never happen. Autohead never runs in free-look; keep that.
-  `docs/controls.md`'s numpad and free-look rows change with this. *Cross-refs:*
-  `git log --grep=BL-432` (the selectors), `docs/org/cameraViews.md` (head-look controller).
-
 - `BL-966` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: feel]` **Which camera the original's Danger
   Zone photograph is taken from.** *Evidence:* both remake cameras (`StuntCapture` for a stunt run,
   `CampaignSnapshot` for a campaign mission) photograph the pilot's own pane as it is drawn on the

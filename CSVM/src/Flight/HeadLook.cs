@@ -29,14 +29,15 @@ public enum LookMode
 /// DIRECTION only, so a half-deflected input pans exactly as fast as a full one, which is what the
 /// original's hat-switch input does. That rule does NOT bind <paramref name="PadRight"/>/<paramref
 /// name="PadUp"/>: those carry a MAGNITUDE, because the pad aims absolutely (docs/controls.md).
-/// <paramref name="Looking"/> claims the free-look arm on its own, so a held control over a still
-/// mouse holds the pose rather than reading as idle. <paramref name="TogglePadlock"/> is Track
-/// Target. Defaulted, so a caller forcing one of the other paths cannot leave a stale deflection on
-/// the frame.</summary>
+/// <paramref name="Looking"/> claims the pan on its own, so a held control over a still mouse holds
+/// the pose rather than reading as idle. <paramref name="TogglePadlock"/> is Track Target.
+/// <paramref name="ForceSnap"/> writes snap, so the cockpit's look-back reaches dead astern and
+/// returns in either mode. Defaulted, so a forced path leaves no stale deflection.</summary>
 public readonly record struct HeadLookInput(
     float SnapX, float SnapY, float FreeRight, float FreeUp, bool Center,
     float PadRight = 0f, float PadUp = 0f, bool Looking = false,
-    bool SelectSnapMode = false, bool SelectFreeLookMode = false, bool TogglePadlock = false);
+    bool SelectSnapMode = false, bool SelectFreeLookMode = false, bool TogglePadlock = false,
+    bool ForceSnap = false);
 
 /// <summary>
 /// The pilot's head, in the two first-person views and on the chase camera alike: where it is
@@ -98,8 +99,7 @@ public sealed class HeadLook
     private const float SettledWindowRad = 0.001745f;
 
     // The three mode keys as they stood last frame. The mode is written on the PRESS EDGE, as the
-    // original's command handlers fire, so a key held down does not pin the mode against the
-    // device inference that runs after it.
+    // original's command handlers fire, so a key held down writes it once and not every frame.
     private bool _snapKeyDown;
 
     private bool _smoothKeyDown;
@@ -126,8 +126,9 @@ public sealed class HeadLook
     public Func<Vector3?>? TargetOffset { get; set; }
 
     /// <summary>Which behaviour this frame runs, and the only thing that decides it: exactly one
-    /// mode is live per frame. Written by the two mode keys and then by whichever device moved, so
-    /// the key states a default and a device still takes it back.</summary>
+    /// mode is live per frame. Written only by the three mode keys, padlock's own exit and
+    /// <see cref="HeadLookInput.ForceSnap"/>, never by a device moving: the numpad and the mouse
+    /// both obey whichever mode the keys chose.</summary>
     public LookMode Mode { get; private set; }
 
     /// <summary>The lowest elevation this head may be told to look at:
@@ -248,15 +249,15 @@ public sealed class HeadLook
 
     /// <summary>One frame: settle <see cref="Mode"/>, pick this frame's target through that mode
     /// alone, then chase it. Padlock owns the whole frame and reads no look control, the centre key
-    /// included. Otherwise the centre key beats everything, snap then runs the direction table, the
-    /// pad's absolute aim, or the idle frame <see cref="IdleAim"/> owns, and free-look runs the pad,
-    /// the pan, or nothing at all, holding where the head was pointed. A centred pad claims no
-    /// frame, so a plugged-in stick blocks neither the mouse nor autohead.</summary>
+    /// included. Otherwise the centre key beats everything; snap runs the direction table, the pad,
+    /// the mouse pan or the idle frame <see cref="IdleAim"/> owns, and free-look integrates the
+    /// numpad direction, else the pad, else the mouse pan, else holds. A centred pad claims no frame.
+    /// </summary>
     public void Step(float dt, in HeadLookInput input)
     {
-        var snap = SnapTargets(input.SnapX, input.SnapY);
+        bool direction = input.SnapX != 0f || input.SnapY != 0f;
         bool panning = input.Looking || input.FreeRight != 0f || input.FreeUp != 0f;
-        SelectMode(input, snap != null, panning);
+        SelectMode(input);
         bool padlocked = Mode == LookMode.Padlock;
 
         if (padlocked)
@@ -264,7 +265,7 @@ public sealed class HeadLook
             PadlockFrame();
             // The exit scan runs AFTER the bearing, as the original's does, so the frame a look
             // direction arrives on still aims at the target and the snap state owns the next one.
-            if (snap != null || panning)
+            if (direction || panning)
             {
                 Mode = LookMode.Snap;
             }
@@ -275,7 +276,13 @@ public sealed class HeadLook
         }
         else if (Mode == LookMode.Snap)
         {
-            SnapFrame(snap, input);
+            SnapFrame(SnapTargets(input.SnapX, input.SnapY), panning, input, dt);
+        }
+        else if (direction)
+        {
+            // Free-look reads the numpad through the integrator, not the table: a held key pans at
+            // the decoded rate and a released one leaves the head where it was pointed.
+            FreeLook(input.SnapX, input.SnapY, dt);
         }
         else if (input.PadRight != 0f || input.PadUp != 0f)
         {
@@ -309,11 +316,10 @@ public sealed class HeadLook
         Mode = LookMode.Snap;
     }
 
-    // This frame's mode, in writer order: the two keys on their press edge first, then whichever
-    // device moved, so a key states a default and a device still takes it back. Of the two
-    // inferences the snap direction is written last, which is what decides a frame carrying a
-    // direction and a pan at once.
-    private void SelectMode(in HeadLookInput input, bool snapping, bool panning)
+    // This frame's mode, in writer order: the keys on their press edge, then the forced snap. ⚠ No
+    // device writes the mode. A numpad direction writing Snap would make the free-look pan
+    // impossible, and a mouse pan writing FreeLook would stop the head springing back in snap.
+    private void SelectMode(in HeadLookInput input)
     {
         if (input.SelectSnapMode && !_snapKeyDown)
         {
@@ -338,19 +344,8 @@ public sealed class HeadLook
         _snapKeyDown = input.SelectSnapMode;
         _padlockKeyDown = input.TogglePadlock;
         _smoothKeyDown = input.SelectFreeLookMode;
-        if (Mode == LookMode.Padlock)
-        {
-            // ⚠ Do not let the device inference below take the mode off padlock. That state is left
-            // by its own exit scan, which runs in Step after the frame's bearing, not before it.
-            return;
-        }
-
-        if (panning)
-        {
-            Mode = LookMode.FreeLook;
-        }
-
-        if (snapping)
+        // Padlock is left by its own exit scan, which runs in Step after the frame's bearing.
+        if (input.ForceSnap && Mode != LookMode.Padlock)
         {
             Mode = LookMode.Snap;
         }
@@ -379,10 +374,11 @@ public sealed class HeadLook
         }
     }
 
-    // The snap mode's frame: the direction table, else the pad's standing aim, else the idle rule.
-    // A released direction returns the head to straight ahead, which is this mode's whole
-    // difference from free-look, and the frame autohead is allowed to own.
-    private void SnapFrame((float Elevation, float Azimuth)? snap, in HeadLookInput input)
+    // The snap mode's frame: the direction table, else the pad's standing aim, else the mouse pan
+    // while its control is held, else the idle rule. A released input returns the head to straight
+    // ahead, which is this mode's whole difference from free-look, and the frame autohead may own.
+    private void SnapFrame(
+        (float Elevation, float Azimuth)? snap, bool panning, in HeadLookInput input, float dt)
     {
         if (snap != null)
         {
@@ -391,6 +387,10 @@ public sealed class HeadLook
         else if (input.PadRight != 0f || input.PadUp != 0f)
         {
             PadAim(input);
+        }
+        else if (panning)
+        {
+            FreeLook(input.FreeRight, input.FreeUp, dt);
         }
         else if (IdleAim?.Invoke() is { } idle)
         {

@@ -2230,7 +2230,7 @@ public partial class FlightController : Node3D
                 // head. Look-back stays IN the cockpit, the head snapped to dead astern while held,
                 // as the original does, so this arm sits above the look-behind cut below.
                 _cam.StepHead(simDt, _cam.BackActive(_padActions.Held(InputAction.LookBack))
-                    ? new HeadLookInput(0f, -1f, 0f, 0f, false)
+                    ? new HeadLookInput(0f, -1f, 0f, 0f, false, ForceSnap: true)
                     : HeadLookRead(), HeadLook.FirstPersonElevationFloor);
                 _cam.FirstPersonView(_renderPose);
                 _cam.ApplyFirstPersonFov();

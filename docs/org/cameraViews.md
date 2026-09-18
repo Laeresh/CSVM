@@ -368,8 +368,8 @@ the back flag set the routine never calls `FUN_0042d010` at all and writes the f
 `(0, 0, 1)` instead.
 
 - **State byte** `DAT_0064ef68`: `0` snap, `1` free-look, `2` padlock. CSVM carries all three as
-  `HeadLook.LookMode`, written by the same three keys and, outside padlock, by the device that
-  moved, one mode to a frame with the last writer winning.
+  `HeadLook.LookMode`, written by the same three keys and padlock's exit alone, never by a device
+  moving, so the numpad and the remake's mouse look both obey the mode the keys chose.
 - **Mode writers.** Three command handlers own the byte, and every change passes through one of
   them: `0x00489450` writes `0` (its keybind page's "Access Snap Look Mode", key `K`);
   `0x00489460` zeroes the targets and the shown angles (`DAT_0064ef60/64/58/5c`) and then writes
@@ -398,7 +398,12 @@ the back flag set the routine never calls `FUN_0042d010` at all and writes the f
   value in free-look).
 - **Free-look (state 1).** Elevation `+= 2·dt·cos(hat angle)`, azimuth `+= 2·dt·sin(hat angle)` per
   frame, a pan rate of **2 rad/s** (~114.6°/s), `DAT_009ad744` the per-frame dt (appears as
-  `dt + dt`).
+  `dt + dt`). The hat angle is negated first (`×−0.01×π/180`), so pointing right pans right. The
+  same eight key slots feed this arm: their composed (left, forward) pair is normalised by
+  `FUN_00538aa0` and used as the (sin, cos) pair directly, so a held numpad key pans the head at
+  the same rate, a diagonal included, and a frame with no slot held leaves the angles alone.
+  CSVM routes the numpad through this arm in `LookMode.FreeLook` and through the snap table in
+  `LookMode.Snap`.
 - **Padlock (state 2).** `0042d016`/`0042d020` (`CMP [0x0064ef68],2` / `JNZ 0042d2d1`) make the
   padlock arm the fall-through; it reads the local player's target wrapper at
   `DAT_0071c298 + 0x948` (`0042d026`-`0042d033`).
@@ -459,7 +464,7 @@ the back flag set the routine never calls `FUN_0042d010` at all and writes the f
 | **Death camera** | mode `8`: one spot from the `death_*` fields when the player is destroyed, held while the wreck falls | landed as `StaticCameras`, entered by the player's own destruction |
 | Static-camera terrain clearance | `crash_chord_y`/`crash_elev`, taken by the crash cut, the death camera and the flyby alike | landed as `StaticCameras.LiftClearOfWorld`, taken by all three |
 | Camera position | per-plane authored `cockpit_camera` offset, read from the model (`player_pfighter` `(0,0.75,−0.2)`) | landed: `MarkerRig.FindNamedMarker` / `PlaneBuilder.CockpitCameraOffset` (A2) |
-| Head-look controller | snap, free-look, padlock, center key, autohead, one shared state machine, three callers (first person + chase) | landed as `HeadLook`, one head for every view: the snap cluster, the centre key and the mouse aim the cockpit and swing the chase camera alike, each frame floored by the view that places it, and `K`/`L`/`J` state the mode the original's three selectors state |
+| Head-look controller | snap, free-look, padlock, center key, autohead, one shared state machine, three callers (first person + chase) | landed as `HeadLook`, one head for every view: the snap cluster, the centre key and the mouse aim the cockpit and swing the chase camera alike, each frame floored by the view that places it, and `K`/`L`/`J` state the mode the original's three selectors state, which the numpad and the mouse both obey |
 | Padlock (Track Target) | state `2`: the head snaps onto the selection's bearing every frame, floored by the caller and unlimited in azimuth, any look direction returning it to snap | landed as `LookMode.Padlock`, reading `TargetSelection.Current` through `HeadLook.TargetOffset` and following the same tail-crossing wrap |
 | Chase base elevation | the head's elevation plus the authored `thirdp_pitch`, i.e. dead astern at `0.29°` with the head settled | a hand-picked `15.7°` from `BaseUp`/`BaseBack` (`BL-885`) |
 
