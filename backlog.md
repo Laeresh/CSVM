@@ -752,16 +752,17 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   between the two radii"), `INSTR-87`, `git log --grep=BL-933`, `git log --grep=BL-793`,
   `git log --grep=BL-820`, `git log --grep=BL-846`.
 
-- `BL-934` `[Bug]` `[Blocked: BL-977, BL-978]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` **The dynamic enemy and
+- `BL-934` `[Bug]` `[Blocked: BL-978]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` **The dynamic enemy and
   ally voice lines dispatch in the suite and are still unheard at the controls: a campaign sitting
   after the subscription fix heard no ally and no enemy line, not even on friendly fire.**
   *Verdict at the controls:* "still no dynamic voice from friends or foes, not even on friendly
-  fire, nothing in the logs". Two causes are filed and go first: `BL-977` (an Instant Action
-  pilot's accent is never prewarmed, so every dispatch dies on "no clip") and `BL-978` (a line is
-  placed at the speaker and attenuated by distance where it should play flat as radio). This is the
-  re-listen once both land. ⚠ "Nothing in the logs" is not yet evidence of no dispatch: the
-  `ai voice:` lines are `Log.Info` on the `sound` category, so run with `--log=sound:debug` and
-  read for `ai voice: <name>: trigger #`. A campaign sortie that carries no such line with the
+  fire, nothing in the logs". One cause is filed and goes first: `BL-978` (a line is placed at the
+  speaker and attenuated by distance where it should play flat as radio). This is the re-listen
+  once it lands. ⚠ "Nothing in the logs" is not yet evidence of no dispatch: the `ai voice:` lines
+  are `Log.Info` on the `sound` category, so run with `--log=sound:debug` and read for
+  `ai voice: <name>: trigger #`. A speaker whose pilot owns a family's clips but had none
+  prewarmed now warns once per family (`owns the clips but none was prewarmed`), so a silent pilot
+  without that warning is not a prewarm gap. A campaign sortie that carries no such line with the
   category up is a third cause, the trigger evaluation itself (talker test, the human-quarry rule
   on the bearing and attack call-outs), and gets its own diagnosis here.
   *Evidence:* the first silence was the mode-machine subscription sitting inside `RegisterAi`'s voiced
@@ -774,41 +775,16 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`docs/verification.md`). *⚠ Traps:* the
   scripted lines ride `Mech3/MissionRadio.cs`, a different channel, so their working proves nothing
   about this one; the aircraft that speaks is never the enemy that was spotted, so a silent enemy
-  is not the symptom. *Playtest after fix:* fly C1/M02 from the campaign with `--log=sound:debug`,
+  is not the symptom; a pilot silent on one trigger is often data, since VO 4 (accent 13) owns no
+  `WA-*` or `TA-*` family and the DI tiers read the whole-vehicle health pool, so a wingman whose
+  armor soaked the hits stays at full health. *Playtest after fix:* fly C1/M02 from the campaign
+  with `--log=sound:debug`,
   stay in the fight beside the enemy flight for a minute or two, and listen for a wingman calling
   an enemy's clock bearing and for the tiered damage calls while you take and deal hits; keep the
-  log. *Cross-refs:* `BL-977`, `BL-978`, `docs/formats/combat-voice.md`, `git log --grep=BL-934`,
+  log. *Cross-refs:* `BL-978`, `docs/formats/combat-voice.md`, `git log --grep=BL-934`,
+  `git log --grep=BL-977` (the Instant Action prewarm gap),
   the saved Voice level (`Utils/AudioMix.cs`, the `audio-buses` suite) if the lines dispatch and
   stay inaudible.
-
-- `BL-977` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **An Instant Action
-  pilot never speaks: the ace's, the wingmen's and the wave enemies' accents are left out of the
-  voice prewarm set, so every one of their dispatches dies on "no clip".** *Evidence:*
-  `GameSession.BuildWorldStage` builds the set from `CombatVoice.SessionPrewarmNames(zrdr,
-  missionZrdr, defs, groups, cliAccents)`, the mission roster's `accentID`s plus the
-  `--ai=…:accent=N` spawns. `InstantActionDirector` registers the ace on `ia.Def.AceAccentId`,
-  each wingman slot on `slot.AccentId` and each wave enemy on `ResolveWaveAccentId`, and none of
-  those reach that call. `extracted/c1/ia1/zrdr/aiv.zrd.json` authors one accent, the player
-  block's 11, so a dogfight-ace session logs `prewarmed 22 combat-voice stream(s) of 24 roster
-  clip def(s)` and then `ai voice: ai1_player_peacemaker: accent 24 -> VO id 29 (talker 0.95)`, a
-  pilot with 74 clips of its own in `soundsh`. That ace absorbed 97.6, 59.2 and 82.4 damage,
-  evaded and was shot down without one `trigger #` line, the forced death cry included.
-  `AiVoiceRuntime.ResolvePlayable` returns null for an unprewarmed clip and the gate answers "no
-  clip" without logging, exactly as the warning on that member says. *Fix shape:* hand the
-  director's accents to the prewarm join: the ace id, every wingman slot id, and the wave range
-  12 to 16 (the roll happens at spawn, after the prewarm). Log the "no clip" refusal once per
-  speaker and family so the next silent pilot is visible. Pin it with a session test over
-  `c1/ia1` that a registered ace's `DE` family passes `WorldSounds.HasStream`. *⚠ Traps:* a
-  campaign pilot's silence on the same trigger is usually data, not this: VO 4 (accent 13) owns
-  no `WA-*` or `TA-*` family, the shipped rosters author `accentID` -1 on nearly every enemy
-  (`BL-934`), the DI tiers read the whole-vehicle health pool and a wingman whose armor soaked
-  the hits stays at full health, and the bearing and attack call-outs fire only on a human
-  quarry, so a wave that targets a wingman is silent by rule. *Playtest after fix:* launch a
-  dogfight-ace Instant Action, take the ace's fire and shoot it down; listen for its attack line,
-  its damage tiers and the death cry. *Cross-refs:* `BL-934` (the campaign dispatch, where the
-  same lines already play), `docs/formats/combat-voice.md` ("The remake's dispatch sites"),
-  `docs/formats/instant-action.md` (`ace_accentID`, `enemy_accentID` and the 12 + rand % 5
-  re-roll).
 
 - `BL-978` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: data]` **A combat voice line
   is placed in the world at the speaker's aircraft and attenuated by distance; it is radio and
@@ -834,7 +810,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   argument alone tells them apart today. *Playtest after fix:* fly C2/M05 from the campaign and
   let the Peacemakers commit to you; a wingman's clock call should sit in the centre at one level
   wherever the wingman is. *Cross-refs:* `BL-934` (whether the lines are audible at the controls,
-  which this range law partly answers), `BL-977` (the Instant Action prewarm gap),
+  which this range law partly answers), `git log --grep=BL-977` (the Instant Action prewarm gap),
   `docs/formats/combat-voice.md` ("The remake's dispatch sites"), `docs/formats/sounds.md` (the
   `3D` flag and `RANGE`).
 

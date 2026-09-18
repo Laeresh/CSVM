@@ -52,6 +52,9 @@ public sealed class AiVoiceDispatcher
 
     public const int TaSucShk = 27;
 
+    /// <summary>The gate's outcome when the resolver finds no playable clip for the speaker.</summary>
+    public const string NoClipOutcome = "no clip";
+
     private const int TriggerCount = 29;
 
     private readonly Random _rng;
@@ -226,7 +229,7 @@ public sealed class AiVoiceDispatcher
         string? clip = _resolve(speaker.VoId, family);
         if (clip == null)
         {
-            return new Decision(speaker, triggerId, null, "no clip", false);
+            return new Decision(speaker, triggerId, null, NoClipOutcome, false);
         }
         if (triggerId >= 0 && triggerId < TriggerCount && now < speaker.NextAllowed[triggerId])
         {

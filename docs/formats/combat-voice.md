@@ -234,7 +234,13 @@ Stand-ins and inventions, named:
   Only the index formula itself is decoded.
 - **Pilot identity**: an `--ai=` spawn takes an optional `accent=<id>` segment
   ([cli.md](../cli.md)); its accents join the mission roster's prewarm set. A spawn without one
-  is voiceless. A campaign roster spawn carries its own slot 65 (`CampaignDirector` hands
+  is voiceless. An Instant Action mission's actors join it the same way
+  (`InstantActionRuntime.VoiceAccentIds`): the ace's `ace_accentID` on `dogfight_ace`, each
+  configured wingman slot's accent, and a wave's `enemy_accentID`, whose value of 12 joins its
+  whole 12 to 16 re-roll range because the roll happens at spawn, after the archive has closed
+  ([instant-action.md](instant-action.md)). A dispatch refused for want of a clip is logged once
+  per speaker and family: a warning when the pilot owns the family's defs and none was prewarmed,
+  an info line when it owns none. A campaign roster spawn carries its own slot 65 (`CampaignDirector` hands
   `AiSpawn.AccentId` to `RegisterVoice`), and its talker and constitution slots reach the runtime
   the same way: `RegisterVoice` takes one override per stat, and `GameSession.RegisterAiVoice`
   looks up `talker_chance` at the block's own talker rating and `constitution_chance` at its own

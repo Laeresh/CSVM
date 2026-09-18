@@ -616,6 +616,28 @@ against `BL-389` rather than against the wash routing.
 
   *Blocks:* nothing tracks the outcome; a fail mints a new `BL` item.
 
+### C1 · Instant Action, Dogfighting an Ace, sound on
+
+```powershell
+./RunGame.ps1
+```
+
+- `PT-158` `[Own]` **The ace talks: its attack line, its damage calls and its death cry**
+  (it closed `BL-977`, `git log --grep=BL-977`). Menu path: Instant Action → C1 → Dogfighting an Ace.
+  Let the ace commit to you, then shoot it down over a few passes. A scripted run shows the ace's
+  own clips (VO id 29, accent 24) prewarmed and its forced death cry resolving to a streamed clip;
+  what no instrument shows is hearing it. Each line still plays positionally from the ace's
+  aircraft until `BL-978` lands, so listen while it is close.
+  *Look for:*
+  - (a) a line from the ace as it commits to you;
+  - (b) one or more distress calls as its health drops past 70, 50 and 30 %;
+  - (c) a death cry as it goes down;
+  - (d) in the session's log under `.scratch/logs/`, no `owns the clips but none was prewarmed`
+    warning for `ai1_player_peacemaker`.
+
+  *Blocks:* nothing tracks the outcome; a silent ace with that warning absent mints a new `BL`
+  naming the trigger that stayed silent.
+
 ### CM01 (C3/M01) · two to four pilots, join, flight check, death and skip
 
 ```powershell

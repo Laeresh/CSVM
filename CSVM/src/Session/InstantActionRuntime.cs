@@ -305,6 +305,36 @@ public sealed class InstantActionRuntime
     public static int ResolveWaveAccentId(int accentId, uint draw) =>
         accentId == 12 ? 12 + (int)(draw % 5) : accentId;
 
+    /// <summary>Every accent the mission's actor build can register: the ace's on dogfight_ace,
+    /// each configured wingman slot's, and every id a wave's re-roll can reach. The voice prewarm
+    /// joins these to the roster's. ⚠ Keep the whole re-roll range, since the draw happens at spawn,
+    /// after the sound archive has closed.</summary>
+    public static IReadOnlyCollection<int> VoiceAccentIds(InstantActionDef def)
+    {
+        var accents = new SortedSet<int>();
+        if (string.Equals(def.MissionType, "dogfight_ace", StringComparison.OrdinalIgnoreCase))
+        {
+            accents.Add(def.AceAccentId);
+        }
+        for (int i = 0; i < Math.Min(def.NumWingmen, 5); i++)
+        {
+            accents.Add(WingmanSlotFor(i).AccentId);
+        }
+        foreach (var wave in def.Waves)
+        {
+            if (wave.NumEnemies <= 0)
+            {
+                continue;
+            }
+            for (uint draw = 0; draw < 5; draw++)
+            {
+                accents.Add(ResolveWaveAccentId(wave.EnemyAccentId, draw));
+            }
+        }
+        accents.RemoveWhere(a => a < 0);
+        return accents;
+    }
+
     /// <summary>"Every player has completed their zone set", with lives folded in: a pilot out
     /// of lives can never clear another gate, so this is true once every pilot who can still fly
     /// has finished. False when nobody is left flying, that case is a loss, never a win.</summary>

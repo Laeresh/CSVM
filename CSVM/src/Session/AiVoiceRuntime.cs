@@ -32,6 +32,7 @@ public sealed partial class AiVoiceRuntime : Node
     private readonly Dictionary<int, FlightController> _bySpeaker = new();
     private readonly Dictionary<FlightController, float> _lastPlayerFraction = new();
     private readonly HashSet<int> _watched = new();
+    private readonly HashSet<(int Speaker, string Family)> _noClipLogged = new();
     private float _now;
 
     public AiVoiceRuntime(CombatVoice voice, WorldSounds sounds, Random rng)
@@ -164,8 +165,8 @@ public sealed partial class AiVoiceRuntime : Node
 
     // B8's availability contract: the resolved name must have a decoded stream behind it, for a
     // variant group that means a playable member, which the group name itself cannot answer.
-    // ⚠ A CLI accent must join the prewarm set (SessionPrewarmNames' extraAccents), unprewarmed,
-    // this returns null silently, with no error anywhere else.
+    // ⚠ An accent registered outside the roster (CLI, Instant Action) must join the prewarm set
+    // (SessionPrewarmNames' extraAccents); unprewarmed, this returns null and the pilot is silent.
     private string? ResolvePlayable(int voId, string family)
     {
         string? name = _voice.PlayableFor(voId, family);
@@ -202,11 +203,36 @@ public sealed partial class AiVoiceRuntime : Node
                 LinePlayed?.Invoke(tag, decision.TriggerId, resolved);
             }
         }
+        else if (decision.Outcome == AiVoiceDispatcher.NoClipOutcome)
+        {
+            LogNoClip(speaker, decision.TriggerId, tag);
+        }
         else if (decision.Rolled)
         {
-            // The engine logs both roll outcomes; gate short-circuits (cooling, no clip) are
-            // silent here, they fire at hit rate.
+            // The engine logs both roll outcomes; the other gate short-circuits (cooling, muted)
+            // are silent here, they fire at hit rate.
             Log.Info("sound", $"ai voice: {tag}: trigger #{decision.TriggerId} silent ({decision.Outcome})");
+        }
+    }
+
+    // Once per speaker and family, since the refusal fires at hit rate. A pilot owning the family's
+    // defs with none prewarmed is a missing prewarm accent, so it warns; owning none is data.
+    private void LogNoClip(AiVoiceDispatcher.Speaker speaker, int triggerId, string tag)
+    {
+        string family = triggerId >= 0 && triggerId < CombatVoice.TriggerFamilies.Count
+            ? CombatVoice.TriggerFamilies[triggerId]
+            : "";
+        if (!_noClipLogged.Add((speaker.Id, family)))
+        {
+            return;
+        }
+        if (_voice.ClipsFor(speaker.VoId, family).Count > 0)
+        {
+            Log.Warn("sound", $"ai voice: {tag}: trigger #{triggerId} ({family}) silent, VO id {speaker.VoId} owns the clips but none was prewarmed");
+        }
+        else
+        {
+            Log.Info("sound", $"ai voice: {tag}: trigger #{triggerId} ({family}) silent, VO id {speaker.VoId} owns no such clip");
         }
     }
 }

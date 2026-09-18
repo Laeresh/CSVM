@@ -115,14 +115,14 @@ the downed pilot's own device filter. A false result means that pane already has
 Candidate and tracking lists are optional for callers without a roster or rerun path.
 
 ## src/Session/InstantActionRuntime.cs
-Owns one Instant Action mission's actor set: the loaded `InstantActionDef`, the ace's spawn draw
-and rating, the wingmen's fan placement, each wave's per-member draws, the objective-zeppelin
-selection, and the mission's end with the decoded `WrapupHoldS` that `Advance` spends between that ending and the `WrapupDue` cue for the board. The static, engine-free helpers `InstantActionDirector` calls
-are here (`ChooseAceSpawn`, `RepresentativeRating`, `WingmanSlotFor`/`FlownWingmen`,
-`RandomPilotStats`/`ResolveWaveAccentId`, the zeppelin lookups, `FormatElapsed`/`ShotPercent`).
-The end half holds no engine type and calls no `GD.*`, the same construction rule `VersusMatch`
-follows, and the director owns every log line about it. Format and decode:
-[../formats/instant-action.md](../formats/instant-action.md).
+Owns one Instant Action mission's actor set: the loaded `InstantActionDef`, the ace's spawn draw and
+rating, the wingmen's fan placement, each wave's per-member draws, the objective-zeppelin selection,
+and the mission's end with the decoded `WrapupHoldS` that `Advance` spends before the `WrapupDue`
+cue for the board. The static, engine-free helpers `InstantActionDirector` calls are here
+(`ChooseAceSpawn`, `RepresentativeRating`, `WingmanSlotFor`/`FlownWingmen`, `RandomPilotStats`/
+`ResolveWaveAccentId`, `VoiceAccentIds` (voice prewarm), the zeppelin lookups, `FormatElapsed`/`ShotPercent`).
+The end half holds no engine type and calls no `GD.*`, like `VersusMatch`, and the director owns
+every log line about it. Format and decode: [../formats/instant-action.md](../formats/instant-action.md).
 
 ## src/Session/InstantActionWaves.cs
 The decoded wave sequencer's own selection, trigger and geometry logic (`FUN_0045b9d0`): pure
@@ -430,7 +430,7 @@ of EVERY AI handed over is watched, accented or not, because the bearing call-ou
 spoken by an aircraft other than the one whose mode moved. `RegisterAi` also mirrors `InPlay` into
 the speaker's liveness, the only place the engine-free dispatcher and a controller meet. Clips play through
 `WorldSounds.PlayOneShot` alone, passing Voice where that path's other callers take its Effects
-default, and every roll prints an `ai voice:` line. [../formats/combat-voice.md](../formats/combat-voice.md).
+default, and every roll and first "no clip" refusal prints an `ai voice:` line. [../formats/combat-voice.md](../formats/combat-voice.md).
 
 ## src/Session/FlightRoster.cs
 The session-owned aircraft aggregate. `BuildPlayers` commits the whole human field in ascending player order and `SpawnAi` commits one

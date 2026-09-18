@@ -1257,21 +1257,26 @@ public partial class GameSession : Node3D
         if (_spec.Fly && state.NodeSubtree == null
             && state.SoundDefs is { } voiceDefs && state.SoundGroups is { } voiceGroups)
         {
-            // CLI-assigned accents (--ai=…:accent=N) join the roster set: their clips are first
-            // reached at runtime too, so an unprewarmed accent would be a silent pilot.
-            List<int>? cliAccents = null;
+            // Accents assigned outside the roster (--ai=…:accent=N, the Instant Action actors) join
+            // the roster set: their clips are first reached at runtime too, so an unprewarmed
+            // accent would be a silent pilot.
+            var extraAccents = new List<int>();
             if (_spec.AiPlanes is { } aiEntries)
             {
                 foreach (var entry in aiEntries)
                 {
                     if (entry.Accent is { } accent)
                     {
-                        (cliAccents ??= new List<int>()).Add(accent);
+                        extraAccents.Add(accent);
                     }
                 }
             }
+            if (_iaDirector is { } iaVoice)
+            {
+                extraAccents.AddRange(InstantActionRuntime.VoiceAccentIds(iaVoice.Runtime.Def));
+            }
             voiceClips = CombatVoice.SessionPrewarmNames(
-                state.ZrdrPath, state.MissionZrdrPath, voiceDefs, voiceGroups, cliAccents);
+                state.ZrdrPath, state.MissionZrdrPath, voiceDefs, voiceGroups, extraAccents);
         }
         var session = WorldSession.Build(
             new WorldSession.Options

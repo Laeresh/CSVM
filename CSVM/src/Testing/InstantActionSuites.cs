@@ -290,6 +290,99 @@ internal static class InstantActionSuites
         }
     }
 
+    // The actors' accents reach the voice prewarm only through VoiceAccentIds, and a clip outside
+    // that set never plays once the archive closes, so the ace's death cry is asserted against a
+    // real prewarm over the join GameSession.BuildWorldStage builds.
+    [Suite("instant-action-voice",
+        "C1/IA1 as the wizard's dogfight_ace: the actors' accent join holds the ace's own accent, "
+        + "which the mission roster alone does not reach, so a session prewarm over roster plus "
+        + "join leaves a streamed DE clip for the ace's pilot and a speaker registered on that "
+        + "pilot resolves its forced death cry through the voice runtime after the loader is "
+        + "retired; the join also carries each configured wingman slot's accent and a wave "
+        + "enemy_accentID of 12's whole 12 to 16 re-roll, and nothing for an empty wave")]
+    internal static void InstantActionVoice(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
+        ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
+
+        var shipped = InstantAction.Load(missionZrdr);
+        var aceDef = InstantAction.BuildFromWizard(shipped, "dogfight_ace", shipped.PlayerPlane,
+            numWingmen: 3, shipped.WingmanPlane, shipped.Waves, shipped.Lives);
+        var aceAccents = InstantActionRuntime.VoiceAccentIds(aceDef);
+        ctx.Check(aceAccents.SequenceEqual(new[] { aceDef.AceAccentId }),
+            $"dogfight_ace joins the ace's accent alone: [{string.Join(",", aceAccents)}] ace={aceDef.AceAccentId}");
+
+        var wingmenOnly = InstantAction.BuildFromWizard(shipped, "dogfight_squadron",
+            shipped.PlayerPlane, numWingmen: 2, shipped.WingmanPlane,
+            new[] { new InstantActionWave(4, "w", "Fury", "ace", -1) }, shipped.Lives);
+        var wingmanAccents = InstantActionRuntime.VoiceAccentIds(wingmenOnly);
+        ctx.Check(wingmanAccents.SequenceEqual(new[] { 12, 14 }),
+            $"two wingmen join slots 0 and 1's accents, an accentless wave none: [{string.Join(",", wingmanAccents)}]");
+
+        var rerolled = InstantAction.BuildFromWizard(shipped, "dogfight_squadron",
+            shipped.PlayerPlane, numWingmen: 0, shipped.WingmanPlane,
+            new[]
+            {
+                new InstantActionWave(2, "w", "Fury", "ace", 12),
+                new InstantActionWave(0, "w", "Fury", "ace", 7),
+            }, shipped.Lives);
+        var waveAccents = InstantActionRuntime.VoiceAccentIds(rerolled);
+        ctx.Check(waveAccents.SequenceEqual(new[] { 12, 13, 14, 15, 16 }),
+            $"a wave on accent 12 joins its whole re-roll range, an empty wave nothing: [{string.Join(",", waveAccents)}]");
+
+        var defs = SoundDefs.Load(ctx.ZrdrPath);
+        var groups = SoundDefs.LoadGroups(ctx.ZrdrPath);
+        var voice = new CombatVoice(defs, groups, CombatVoice.LoadAccents(ctx.ZrdrPath));
+        int? acePilot = voice.PilotFor(aceDef.AceAccentId, new System.Random(1));
+        if (acePilot is not { } vo)
+        {
+            throw new SuiteSkippedException($"accent {aceDef.AceAccentId} resolves to no voiced pilot");
+        }
+        var deClips = voice.ClipsFor(vo, "DE");
+        ctx.Check(deClips.Count > 0, $"the ace's VO id {vo} owns DE clips: {deClips.Count}");
+
+        var rosterOnly = CombatVoice.SessionPrewarmNames(ctx.ZrdrPath, missionZrdr, defs, groups);
+        ctx.Check(!deClips.Any(rosterOnly.Contains),
+            $"the mission roster alone prewarms none of them ({rosterOnly.Count} names)");
+        var joined = CombatVoice.SessionPrewarmNames(ctx.ZrdrPath, missionZrdr, defs, groups, aceAccents);
+
+        using var archive = new SoundArchive(ctx.SoundsPath);
+        WorldSounds? sounds = null;
+        AiVoiceRuntime? runtime = null;
+        try
+        {
+            sounds = new WorldSounds(defs, groups)
+            {
+                Loader = (d, warn) => archive.Find(d.WavName, d.Looped, warn),
+            };
+            ctx.Host.AddChild(sounds);
+            int decoded = sounds.Prewarm(joined);
+            sounds.Loader = null;   // the session's build scope closing (WorldSession.Build)
+            ctx.Note($"roster + join prewarm: {joined.Count} names, {decoded} streams");
+            ctx.Check(deClips.Any(sounds.HasStream),
+                $"the ace's DE family has a stream after the loader is retired");
+
+            runtime = new AiVoiceRuntime(voice, sounds, new System.Random(5));
+            ctx.Host.AddChild(runtime);
+            var speaker = runtime.Dispatcher.Register(900, vo, InstantActionRuntime.EnemyTeam,
+                isPlayer: false, talkerChance: 2f, constitutionChance: 0.5f);
+            var cry = runtime.Dispatcher.DeathCry(speaker.Id, onPlayersTeam: false, now: 10f);
+            ctx.Check(cry.Clip != null,
+                $"the registered ace's forced death cry resolves a clip: {cry.Clip ?? "null"} ({cry.Outcome})");
+        }
+        finally
+        {
+            runtime?.Free();
+            if (sounds != null)
+            {
+                sounds.FlushOneShots();
+                sounds.Free();
+            }
+        }
+    }
+
     // The F12 zeppelin run: the objective-zeppelin selection, the builder's own switch,
     // and the wave arm that replaces E11's teleport. Everything runs over C1/IA1's real
     // `ia.zrd.json` / `egen.zrd.json` / `zeppelins.zrd.json`, on the same host +

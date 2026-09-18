@@ -645,7 +645,7 @@ The combat-voice resolver: roster `accentID` (slot 65) to a `voice.zrd` ACCENT r
 id pool, to clip defs. `PlayableFor(voId, family)` returns the one name to hand
 `WorldSounds.PlayOneShot`: the shipped `snd_<FAMILY>-A_id<N>_random` variant group where one is
 authored, else the bare def. `SessionPrewarmNames` is the flight session's mission-roster prewarm
-set, reached through `WorldSession.Options.VoiceClipNames` with CLI accents joined in. Dispatch
+set, reached through `WorldSession.Options.VoiceClipNames` with CLI and Instant Action accents joined in. Dispatch
 sits above this seam, in `Flight/AiVoiceDispatcher.cs` (the rules) and `Session/AiVoiceRuntime.cs`
 (the wiring), never in it. Decode: docs/formats/combat-voice.md.
 
