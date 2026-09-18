@@ -29,13 +29,19 @@ internal sealed class LightChannel
 
     private readonly Func<bool> _debugMotions;
 
+    // True when another runtime owns the set's frame (see WorldLights.AddSource).
+    private readonly Func<bool> _contributesOnly;
+
+    private Action<WorldLights>? _submit;
+
     public LightChannel(Func<WorldLights?> lights, Func<string, AnimDefinition, Node3D?, Node3D?> resolve,
-        Func<IReadOnlyList<Vector3>> viewers, Func<bool> debugMotions)
+        Func<IReadOnlyList<Vector3>> viewers, Func<bool> debugMotions, Func<bool> contributesOnly)
     {
         _worldLights = lights;
         _resolve = resolve;
         _viewers = viewers;
         _debugMotions = debugMotions;
+        _contributesOnly = contributesOnly;
     }
 
     /// <summary>How many point lights this channel has declared, for the bootstrap census.
@@ -45,6 +51,11 @@ internal sealed class LightChannel
     internal int ActiveCount => _lights.Values.Count(l => l.Active);
 
     internal IEnumerable<string> Names => _lights.Keys.Select(k => k.Name).Distinct();
+
+    /// <summary>Every declared light's current state, for suites that pin an authored ramp.</summary>
+    internal List<(string Name, bool Active, float RangeMin, float RangeMax, Color Color)> Snapshot() =>
+        _lights.Select(kv => (kv.Key.Name, kv.Value.Active, kv.Value.RangeMin, kv.Value.RangeMax, kv.Value.Color))
+            .ToList();
 
     // Applies one LIGHT_STATE. ⚠ Treat it as a PARTIAL update: apply every field only when present
     // and never default an absent one. A flicker is a stream of {name, range} events a few
@@ -105,7 +116,8 @@ internal sealed class LightChannel
         var range = ev.Data.Obj("range");
         var color = ev.Data.Obj("color");
         float dMin = range?.Num("min") ?? 0f, dMax = range?.Num("max") ?? 0f;
-        var dColor = new Color(color?.Num("r") ?? 0f, color?.Num("g") ?? 0f, color?.Num("b") ?? 0f);
+        // Alpha 0: a delta carries no alpha, and Color's default 1 would accumulate into it.
+        var dColor = new Color(color?.Num("r") ?? 0f, color?.Num("g") ?? 0f, color?.Num("b") ?? 0f, 0f);
         float runTime = ev.Data.Num("run_time") ?? 0f;
 
         if (instant || runTime <= 0f)
@@ -125,13 +137,13 @@ internal sealed class LightChannel
         return true;
     }
 
-    // Advances light tweens and submits every active light at its host's current world pose. Per
-    // frame, because hosts move (a muzzle flash rides its turret).
+    // Advances light tweens and, as the set's owner, submits every active light and commits the
+    // frame. Per frame, because hosts move (a muzzle flash rides its turret). A contributor only
+    // tweens here and registers Submit, which the owner's Commit calls.
     internal void Tick(float dt)
     {
         if (_worldLights() is not { } lights)
             return;
-        lights.Begin();
         foreach (var light in _lights.Values)
         {
             if (light.TweenLeft > 0f)
@@ -142,14 +154,14 @@ internal sealed class LightChannel
                 light.Color += light.ColorRate * step;
                 light.TweenLeft -= step;
             }
-            if (!light.Active || light.RangeMax <= 0f)
-                continue;
-            // ⚠ A light inside a deactivated subtree is off. A building's destroyed variant must
-            // not keep lighting the ground through its healthy twin.
-            if (light.Host is not { } host || !GodotObject.IsInstanceValid(host) || !host.IsVisibleInTree())
-                continue;
-            lights.Add(host.GlobalTransform * light.Offset, light.Color, light.RangeMin, light.RangeMax);
         }
+        if (_contributesOnly())
+        {
+            lights.AddSource(_submit ??= Submit);
+            return;
+        }
+        lights.Begin();
+        Submit(lights);
         lights.Commit(_viewers());
         if (_debugMotions())
             lights.LogOnce();
@@ -165,5 +177,21 @@ internal sealed class LightChannel
     {
         foreach (var key in _lights.Keys.Where(k => k.Anchor == anchor).ToList())
             _lights.Remove(key);
+    }
+
+    // Every active light at its host's current world pose.
+    private void Submit(WorldLights lights)
+    {
+        foreach (var light in _lights.Values)
+        {
+            if (!light.Active || light.RangeMax <= 0f)
+                continue;
+            // ⚠ A light inside a deactivated subtree is off. A building's destroyed variant must
+            // not keep lighting the ground through its healthy twin, and a retired burst copy
+            // must not keep lighting its last site.
+            if (light.Host is not { } host || !GodotObject.IsInstanceValid(host) || !host.IsVisibleInTree())
+                continue;
+            lights.Add(host.GlobalTransform * light.Offset, light.Color, light.RangeMin, light.RangeMax);
+        }
     }
 }

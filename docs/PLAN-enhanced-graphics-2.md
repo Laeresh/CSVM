@@ -389,6 +389,11 @@ hit beside a hangar: the hangar wall and the ground flash and settle. Faithful g
 **⚠ Traps.** The pool has no shadows and must stay that way (cost). A light that outlives its
 fireball reads as a bug; tie the life to the emitter's, not a timer. Do not touch the fireball's
 own sprite here; that is B12.
+⚠ **The authored burst light now draws on both presentations.** The world-effects runtime submits
+`he_ground_effect`'s `he_light`/`he_light1` ramp (4 to 20 m at ignition, a 104 to 320 m plateau, 400 m
+at its last frame) into the world's `WorldLights` through `AddSource`, so the faithful path is no
+longer dark and the Enhanced path already carries that ramp as an omni. Whether this envelope still
+layers over it or retires is the user's call; a merge must re-pin the `burst-light` suite to both.
 
 ## B12 ☐ The additive fireball frames bloom
 

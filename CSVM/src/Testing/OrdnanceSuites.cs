@@ -1787,6 +1787,109 @@ internal static class OrdnanceSuites
         UpperRingPlacement(ctx);
     }
 
+    // The authored detonation light, played the production way: a world-effects runtime that only
+    // contributes into a WorldLights another runtime owns, whose one Begin/Commit ranks the burst
+    // with its own light. The ranges are the def's signed deltas accumulated
+    // (extracted/C1/cam_anim/he_ring-he_ground_effect.json): (4,20), +(50,160), +(10,25), +(30,80),
+    // +(10,35) holds (104,320) until the @Event+0.2 pair adds (30,80) and (10,20), then INACTIVE.
+    [Suite("burst-light",
+        "he_ground_effect's authored he_light and he_light1 reach the world's WorldLights through " +
+        "the effects runtime on both presentations: the def's colour, the (104,320) m plateau its " +
+        "LIGHT_ANIMATION deltas accumulate to, a peak no wider than the authored 420 m, both " +
+        "committed beside the owner's own light and gone after their INACTIVE events; under " +
+        "Enhanced the same set mirrors onto omnis, on the faithful path onto none")]
+    internal static void BurstLight(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            EffectStageSuiteHelper.WithEffectStage(ctx, world, "he_ground_effect",
+                new[] { "he_ring", "he_ring1", "he_trails" }, (stage, runtime, point) =>
+            {
+                // One pool slot, so the second play reuses the first one's copy and its light keys.
+                BurstLightOn(ctx, runtime, point, enhanced: false);
+                BurstLightOn(ctx, runtime, point, enhanced: true);
+            });
+        });
+    }
+
+    internal static void BurstLightOn(TestContext ctx, AnimRuntime runtime, Vector3 point, bool enhanced)
+    {
+        const float Dt = 1f / 60f;
+        string mode = enhanced ? "Enhanced" : "faithful";
+        var omniParent = new Node3D { Name = "burst_light_omnis" };
+        ctx.Host.AddChild(omniParent);
+        if (enhanced)
+            GraphicsMode.Resolve(GraphicsMode.EnhancedWord);
+        var lights = new WorldLights(omniParent);
+        var viewers = new[] { point };
+        var ownerLight = point + new Vector3(30f, 0f, 0f);
+        try
+        {
+            runtime.ContributeLightsTo(lights);
+            ctx.Check(runtime.PlayEffectAt("he_ground_effect", point), $"{mode}: he_ground_effect plays");
+            float clock = 0f, firstLit = -1f, lastLit = -1f, peakMax = 0f, peakOmni = 0f;
+            int maxCommitted = 0;
+            var color = Colors.Black;
+            (float Min, float Max) plateau = (0f, 0f);
+            float burstOffset = float.MaxValue;
+            for (int i = 0; i < 90; i++)
+            {
+                runtime.Advance(Dt);
+                clock += Dt;
+                // The owner's frame: its own light, then the commit that asks the contributor in.
+                lights.Begin();
+                lights.Add(ownerLight, Colors.White, 2f, 10f);
+                lights.Commit(viewers);
+                maxCommitted = Mathf.Max(maxCommitted, lights.CommittedPositions.Count);
+                var he = runtime.LightSnapshot().FirstOrDefault(l => l.Name == "he_light");
+                if (he.Name != null && he.Active)
+                {
+                    if (firstLit < 0f)
+                    {
+                        color = he.Color;
+                        firstLit = clock;
+                    }
+                    lastLit = clock;
+                    peakMax = Mathf.Max(peakMax, he.RangeMax);
+                    if (Mathf.Abs(clock - 0.25f) < Dt / 2f)
+                    {
+                        plateau = (he.RangeMin, he.RangeMax);
+                        foreach (var p in lights.CommittedPositions)
+                            burstOffset = Mathf.Min(burstOffset, p.DistanceTo(point));
+                    }
+                }
+                foreach (var child in omniParent.GetChildren())
+                {
+                    if (child is OmniLight3D { Visible: true } omni)
+                        peakOmni = Mathf.Max(peakOmni, omni.OmniRange);
+                }
+            }
+            ctx.Note($"{mode}: he_light lit {firstLit:0.###} s to {lastLit:0.###} s, plateau ({plateau.Min:0.#},{plateau.Max:0.#}) m, peak max {peakMax:0.#} m, at most {maxCommitted} committed, omni reach {peakOmni:0.#} m");
+            ctx.Check(firstLit > 0f && firstLit <= 2f * Dt, $"{mode}: he_light lights on the burst's first frame ({firstLit:0.###} s)");
+            ctx.Check(color.IsEqualApprox(new Color(1f, 0.86f, 0.29f)), $"{mode}: with the def's own colour ({color})");
+            ctx.Check(Mathf.Abs(plateau.Min - 104f) < 0.5f && Mathf.Abs(plateau.Max - 320f) < 0.5f,
+                $"{mode}: the four opening deltas accumulate to the authored (104,320) m plateau ({plateau.Min:0.##},{plateau.Max:0.##})");
+            ctx.Check(peakMax >= 320f && peakMax <= 420.01f,
+                $"{mode}: the peak stays within the authored 420 m, never clamped below the plateau ({peakMax:0.##} m)");
+            ctx.Check(burstOffset < 1f, $"{mode}: a committed light sits on the burst ({burstOffset:0.###} m off)");
+            ctx.Same(3, maxCommitted, $"{mode}: the owner's light, he_light and he_light1 commit together");
+            ctx.Check(lastLit > 0.3f && lastLit < 0.6f, $"{mode}: he_light goes out on its INACTIVE event ({lastLit:0.###} s)");
+            ctx.Same(1, lights.CommittedPositions.Count, $"{mode}: once both bursts are out only the owner's light is left");
+            if (enhanced)
+                ctx.Check(peakOmni >= 320f, $"{mode}: the burst mirrors onto an omni of its authored reach ({peakOmni:0.#} m)");
+            else
+                ctx.Same(0, omniParent.GetChildCount(), $"{mode}: and spawns no omni");
+        }
+        finally
+        {
+            runtime.ContributeLightsTo(null);
+            lights.Dispose();
+            if (enhanced)
+                GraphicsMode.Resolve(GraphicsMode.Default);
+            omniParent.Free();
+        }
+    }
+
     // A fused burst reads the default IMPACT row, never the fused aircraft's (FUN_005ac3a0's hit
     // record carries surface id 0; docs/org/ordnanceTypes.md "Which row a burst reads"): a flak
     // fused on a rig draws flak_effect, a beeper fused on the same rig draws its empty default

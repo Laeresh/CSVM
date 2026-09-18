@@ -974,7 +974,9 @@ with seven ramps over 0.41 s.
 docklights, six reflights, the police light); every other chapter's light events sit in
 `ON_CALL` combat/destruction effects (`gunhit_lt`, `muzzle_lt`, `fuel_light`) that a bootstrap
 never reaches. C1 reports 35 lights at startup, growing to ~57 as delayed and looping
-sequences fire.
+sequences fire. The `ON_CALL` effect lights (`he_light`, `gunhit_lt`, `fuel_light`, `flak_light1`,
+`torp_light` and the rest the world-effects runtime binds) light in every chapter when a burst
+plays them: that runtime submits into the world's own `WorldLights`, on both presentations.
 
 **What a point light is FOR here.** The visible flare at a light's own position is *already*
 separate gamez geometry, C1's `docklight_flare` is a `Facade`/`SphericalY` mesh textured

@@ -6,7 +6,8 @@ using Godot;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// Packs the animated world's <c>LIGHT_STATE</c> point lights into a data texture the fullbright
+/// Packs the animated world's <c>LIGHT_STATE</c> point lights, and those of any runtime registered
+/// through <see cref="AddSource"/> (the world-effects bursts), into a data texture the fullbright
 /// world shader reads as spill onto nearby geometry (the flare itself is separate gamez geometry
 /// <see cref="SceneBuilder"/> already draws). In original mode that spill is the only consumer:
 /// the world renders unshaded, so a real <see cref="OmniLight3D"/> would contribute nothing to it
@@ -53,6 +54,10 @@ public sealed class WorldLights : IDisposable
     private readonly List<Vector3> _committedPositions = new();
     private readonly List<OmniLight3D> _omniPool = new();
 
+    // Runtimes that submit into this set without owning its frame: the world runtime owns
+    // Begin/Commit, and a second Begin/Commit pair on the same set would erase its lights.
+    private readonly List<Action<WorldLights>> _sources = new();
+
     // Non-null only in enhanced mode with a parent given; null keeps original mode's spill path
     // the only consumer and creates not one node, per the mode's zero-footprint contract.
     private readonly Node3D? _omniParent;
@@ -98,6 +103,15 @@ public sealed class WorldLights : IDisposable
     /// ride moving hosts (a muzzle flash on a turret, the train's firebox).</summary>
     public void Begin() => _pending.Clear();
 
+    /// <summary>Registers a submitter that <see cref="Commit"/> asks for its lights every frame,
+    /// before the fade and the budget, so its lights rank against the owner's in one set.
+    /// Registering the same delegate again is a no-op.</summary>
+    public void AddSource(Action<WorldLights> submit)
+    {
+        if (!_sources.Contains(submit))
+            _sources.Add(submit);
+    }
+
     /// <summary>Submits one active light. <paramref name="color"/> is the data's own sRGB
     /// value; it is linearised here, since the world shader works in linear space (the same
     /// conversion GameSession applies to FOG_COLOR).</summary>
@@ -116,6 +130,8 @@ public sealed class WorldLights : IDisposable
     /// the farthest, whose pools are the smallest on screen in every pane.</summary>
     public void Commit(IReadOnlyList<Vector3> viewerPositions)
     {
+        foreach (var submit in _sources)
+            submit(this);
         LiveCount = _pending.Count;
         // Fade before sort, so the budget only ever drops lights already contributing nothing.
         // Distance is to the nearest viewer, never a single camera.
@@ -202,6 +218,7 @@ public sealed class WorldLights : IDisposable
     public void Dispose()
     {
         _pending.Clear();
+        _sources.Clear();
         _committedPositions.Clear();
         RenderingServer.GlobalShaderParameterSet(CountParam, 0);
         _lastCount = 0;

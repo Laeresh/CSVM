@@ -438,13 +438,13 @@ are [../formats/sounds.md](../formats/sounds.md). Read `WorldSounds.cs` for the 
 
 ## src/Mech3/WorldLights.cs
 Packs the animated world's `LIGHT_STATE` point lights into the 2xN RGBAF texture the fullbright
-world shader reads as spill (`csky_light_data`, its loop bounded by `csky_light_count`). The
-uniform is session-global, so a lit light is lit for every pane, but `Commit`'s distance fade and
-its `MaxActive`-slot significance rank both answer to the NEAREST of every viewer position handed
-in rather than one camera, which is why a light beside player four stays lit with player one far
-away (`AnimRuntime.LightViewerPositions`, fed from `GameSession`'s `ViewerSet`); one position
-reduces to the single-viewer rule exactly. Given a parent `Node3D` and enhanced mode, `Commit` also
-mirrors the committed lights onto pooled `OmniLight3D` nodes. Enhanced mode: [Root.md](Root.md).
+world shader reads as spill (`csky_light_data`, looped to `csky_light_count`). The uniform is
+session-global, but `Commit`'s distance fade and `MaxActive`-slot significance rank answer to the
+NEAREST viewer handed in (`AnimRuntime.LightViewerPositions`, from `GameSession`'s `ViewerSet`).
+The world runtime owns the frame (`Begin`/`Add`/`Commit`); the world-effects runtime only
+contributes, registered through `AddSource` and asked inside `Commit`, so a burst ranks against the
+beacons in one set instead of a second `Begin` erasing them. With a parent `Node3D` in enhanced
+mode, `Commit` mirrors the committed set onto pooled `OmniLight3D` nodes ([Root.md](Root.md)).
 
 ## src/Mech3/MissionSetup.cs
 Parses + applies the per-mission `.gw` interp script that decides which world entities a mission
@@ -523,14 +523,14 @@ rather than a constructor snapshot. Ambient emitter plumbing is `WorldSounds.cs`
 grammar is docs/formats/sounds.md.
 
 ## src/Mech3/Anim/LightChannel.cs
-One runtime's `LIGHT_STATE`/`LIGHT_ANIMATION` events as a module: `HandleLightState` (the partial
-update that declares a light on first use and never defaults an absent field),
-`HandleLightAnimation` (the signed-delta tween over `run_time`), `Tick` (the per-frame advance and
-submission to `WorldLights`), `Reset` and `DiscardFor`. Both handlers report through their return
-value whether they applied, and the router adds that to its counters. `Lights` and
-`LightViewerPositions` stay public fields on `AnimRuntime` for callers to configure, read here
-through closures that fold in the single-camera fallback. `AnimLight` is this channel's own value
-type, constructed nowhere else. Read `WorldLights.cs` next.
+One runtime's `LIGHT_STATE`/`LIGHT_ANIMATION` events: `HandleLightState` (a partial update that
+never defaults an absent field), `HandleLightAnimation` (the signed-delta tween over `run_time`),
+`Tick` (the advance, then the owner's whole `WorldLights` frame or, under
+`AnimRuntime.ContributeLightsTo`, only a registered submission), `Reset` and `DiscardFor`, which
+`PlayEffectAt` also runs on a reused pooled copy so each call starts dark like the original's
+per-call clone. Both handlers report whether they applied through their return value. `Lights` and
+`LightViewerPositions` stay fields on `AnimRuntime`, read through closures that fold in the
+single-camera fallback. `AnimLight` is constructed nowhere else. Read `WorldLights.cs` next.
 
 ## src/Mech3/Anim/PoseChannel.cs
 One runtime's object-pose/visual events as a module: the nine `OBJECT_*` handler bodies, the pose

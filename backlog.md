@@ -737,29 +737,23 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`BL-118`'s note under the cloud items): judge the wisps by altitude and by their position
   ahead of the aircraft, never by texture. *Cross-refs:* [`docs/formats/effects.md`](docs/formats/effects.md)
   (the cue's data), `docs/org/puffer.md`.
-- `BL-928` `[Fidelity]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: data]` **The faithful presentation
-  should render the authored detonation light too; today only Enhanced Graphics lights a
-  fireball.** *Evidence:* `he_ground_effect` runs `he_light_seq`, which sets `LIGHT_STATE he_light`
-  ACTIVE at the `he_ring` node with `RANGE (4, 20)` and `COLOR (1.0, 0.86, 0.29)`, then walks six
-  `LIGHT_ANIMATION` range deltas from 20 m to 420 m over 0.41 s and switches it INACTIVE
-  (`docs/org/ordnanceTypes.md`, "The burst light in Enhanced Graphics"). The original renders that
-  as a real point light; CSVM's effects runtime is built with no `WorldLights`, so every
-  `LIGHT_STATE` a played effect declares is a no-op and the faithful path shows the sprite alone.
-  The enhanced burst light (`WorldLights.AddBurst`, `WorldEffectsFactory.RegisterBurstLight`) is
-  a remake envelope that borrows the authored colour and the ignition end of the range, not the
-  authored ramp. *Fix shape:* give the effects runtime a `WorldLights` (or route its `LIGHT_STATE`
-  and `LIGHT_ANIMATION` through the world's own, the way `Mech3/Anim/LightChannel.cs` already
-  drives beacons) so the authored `he_light` sequence plays as data on both presentations; then
-  decide whether the enhanced envelope stays as a layer over it or retires. *⚠ Traps:* the
-  authored ramp ends at 420 m, and the faithful lighting path is the spill add rather than an
-  omni, so measure what 420 m does to a whole chapter before trusting the data at face value; the
-  `burst-light` suite pins the faithful path at zero committed lights and must be re-pinned, and
-  the faithful goldens will move if any golden frame holds a live burst. Only
-  `he_ground_effect` authors a light; the other fireball defs do not, so the faithful path lights
-  HE bursts alone. *Playtest after fix:* `--fly --chapter=C1 --fire-rockets` at dusk over the
-  airfield on the faithful path, the hangar wall and tarmac flash with the burst. *Cross-refs:*
-  `docs/org/ordnanceTypes.md`, `docs/architecture/Mech3.md` (`WorldLights`), PLAN-enhanced-graphics-2
-  item B11 (the enhanced-only light this item generalises).
+- `BL-952` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The world
+  shader's point-light spill is shaped differently from the original's point-light term, so a
+  ground burst lights the walls facing it and barely the ground under it.** *Evidence:* the
+  original adds `weight(d) × (ambient + diffuse) × colour` per vertex, `weight` linear from the
+  light's near range to its far one, with no `N·L`, only on models whose `lighting` bit is set, and
+  clamps the product with the vertex colour (`FUN_005688a0`, `FUN_00566e00`;
+  `docs/org/vertexLighting.md`, "Point lights: how a `LIGHT_STATE` range is applied").
+  `CSVM/shaders/csky_lights.gdshaderinc` weights by `N·L × (1 − smoothstep(near, far, d))` and
+  `SceneBuilder` adds `base_colour × spill` to every fullbright surface, with no `lighting` gate and
+  no product clamp. A `he_ground_effect` burst beside C1's airfield (the light sits at ground level)
+  lifts the hangar walls facing it by up to 39 of 255 and leaves the flat ground around it nearly
+  unchanged, where the original's term, having no `N·L`, lights both. *Fix shape:* the linear
+  weight without `N·L`, gated by the model's `lighting` bit, applied as a factor on the vertex
+  colour before the clamp. *⚠ Traps:* the change moves every golden that holds a lit
+  `LIGHT_STATE`, `c5-city-night` and the C1 beacons first; ambient and diffuse default to 1.0 and 0
+  for a `LIGHT_STATE` that authors neither, as `he_light` does. *Cross-refs:*
+  `docs/architecture/Mech3.md` (`WorldLights`).
 
 ## Audio
 

@@ -362,6 +362,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// case LIGHT_STATE is tracked but never rendered.</summary>
     internal WorldLights? Lights;
 
+    /// <summary>Set by <see cref="ContributeLightsTo"/>: <see cref="Lights"/> belongs to another
+    /// runtime, which begins and commits its frame, and this one only submits into it.</summary>
+    internal bool LightsCommittedElsewhere;
+
     // The runtime's dice: RANDOM_WEIGHT verdicts, SOUND_GROUPS one-shot picks, crash-debris
     // scatter. One field rather than scattered GD.Randf() calls so the session's master seed can
     // pin the whole sequence. Any future WeaponHit/crash handler's randomness must route through
@@ -837,7 +841,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         var viewers = LightViewerPositions?.Invoke();
         return viewers != null && viewers.Count > 0 ? viewers : new[] { PlayerPos() };
-    }, () => DebugMotions);
+    }, () => DebugMotions, () => LightsCommittedElsewhere);
 
     /// <summary>This runtime's object-pose/visual family: the `OBJECT_*` pose, opacity and motion
     /// events, and the motion-builder role. It takes this runtime itself as one dependency, since
@@ -1573,6 +1577,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                     // the original instances per call, and its last run left it in its END pose.
                     ResetCheckedOutCopies(animName, roots);
                     var anchor = roots.FirstOrDefault();
+                    // The original clones a fresh, detached light per call (FUN_00520910), so a
+                    // reused copy's lights start dark. gunhit_lt, lit on a 20% roll with no
+                    // INACTIVE, would otherwise stay lit on every later hit that missed the roll.
+                    if (anchor != null)
+                        Light.DiscardFor(anchor);
                     bool governed = inputNode != null && IsInstanceValid(inputNode)
                                     && DefConditionsOnInputNode(def);
                     if (governed)
@@ -2028,6 +2037,19 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     internal void MarkLandingResume(Node3D target) => Pose.MarkLandingResume(target);
 
     internal void SetSubtreeOpacity(Node3D node, float alpha) => Pose.SetSubtreeOpacity(node, alpha);
+
+    /// <summary>Delivers this runtime's <c>LIGHT_STATE</c> lights into a set another runtime owns
+    /// (the world runtime's), so both rank in one frame's commit rather than erasing each other.
+    /// Null disconnects.</summary>
+    internal void ContributeLightsTo(WorldLights? lights)
+    {
+        Lights = lights;
+        LightsCommittedElsewhere = lights != null;
+    }
+
+    /// <summary>Every light this runtime has declared, with its live range and colour.</summary>
+    internal List<(string Name, bool Active, float RangeMin, float RangeMax, Color Color)> LightSnapshot() =>
+        Light.Snapshot();
 
     // How many of a DAMAGE_SEQUENCE's health thresholds hp has fallen at or below, the object's
     // current damage stage. Monotonic in falling HP, so it is a safe escalation gate.

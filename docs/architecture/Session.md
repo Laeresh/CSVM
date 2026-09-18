@@ -502,7 +502,7 @@ runtime for impacts and destruction, and the per-plane crash runtime, which desp
 every def that plays ON one aircraft (the crash-def vector, the destroy def, the panel damage shims,
 the prop choreography, and on a human rig the canopy holes, whose `PLAYER_1ST_PERSON` branch this rig's own pilot answers). Both stages are built in pool slots sized from `data/effect_pools.json`
 and handed to their runtime sealed, and both pre-warm their emitters after the bind so a first burst
-finds its puffers already made. `BeginFlightCrashRuntime` opens the crash build as a handle a caller
+finds its puffers already made; `EnsureWorldEffects` hands the effects runtime the world's `WorldLights` as a contributor, so a burst's authored `LIGHT_STATE` renders on both presentations. `BeginFlightCrashRuntime` opens the crash build as a handle a caller
 steps a phase at a time (`CrashRigQueue.cs`), where the pre-warm itself repeats a slice at a time so a rig's two hundred emitters never
 land on one frame, and `BuildFlightCrashRuntime` is the one-call form. The names it binds are `EffectCatalogue.cs`; the slot mechanism is `Mech3/TemplateStage.cs`.
 

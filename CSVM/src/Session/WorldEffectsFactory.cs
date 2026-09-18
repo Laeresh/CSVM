@@ -274,6 +274,9 @@ public sealed class WorldEffectsFactory
             }
         }
         var effects = _worldEffects;
+        // A burst's authored LIGHT_STATE (he_light and its kin) submits into the world's own set,
+        // so it rides the world's fade, budget and omni mirror on both presentations.
+        effects.ContributeLightsTo(worldRuntime.Lights);
         if (worldRuntime.ExternalEffect == null)
         {
             worldRuntime.ExternalEffect = (name, pt, node, follow) =>

@@ -359,6 +359,43 @@ direction for. And `N` is the per-vertex normal only where the polygon carries o
 21,577 lit polygons and 43 % of C1's 16,580 do**, and the rest are shaded from the face normal, so
 a reproduction has to emit flat normals for the majority rather than smoothing them.
 
+## Point lights: how a `LIGHT_STATE` range is applied
+
+An animation's `LIGHT_STATE` is dispatched through slot 4 of the event table `FUN_004ee1a0` fills,
+the handler at `0x004e7b60` (no function boundary in the database). It indexes the definition's
+own light table at `def+0xec` (stride `0x2c`: the light node at `+0x24`, an attached flag at
+`+0x28`). `ACTIVE` on an unattached light attaches its node under the world root
+(`FUN_004db380`, `DAT_009fd160`); `INACTIVE` on an attached one detaches it (`FUN_004db420`).
+`PointSource` goes through `FUN_004dbff0`. The event's field word at `+0x30` routes each present
+field to its setter: bit `0x08`, the range, to `FUN_004dc3c0`; `0x10`, the colour, to
+`FUN_004dc970`; `0x02`, the `AT_NODE` translate, to `FUN_004dc540` through `FUN_004cf490`.
+
+`FUN_004dc3c0` stores `near = min(r1, r2)` at `+0xe4` and `far = max(r1, r2)` at `+0xe8`, their
+squares at `+0xec`/`+0xf0` and `1 / (far − near)` at `+0xf4`. Equal ranges log
+`gwLightSetRanges r1==r2` and become `far = near + 10`. ⚠ **Nothing clamps the range**, here or in
+the draw, so a `LIGHT_STATE` range reaches the renderer at its authored width. The
+`LIGHT_ANIMATION` handler (`0x004e82b0`, slot 5) was not traced to its setter.
+
+At draw time `FUN_00566e00` tests the light against the model's bound sphere: the distance used is
+light-to-centre minus the radius, the light reaches the model when that is under `far`, and it is
+"fully inside" when distance plus radius is under `near`. `FUN_00568790` files a point light that
+authors no `0x04` flag into the list `FUN_005688a0` walks third (`DAT_00a06b28`), since its ambient
+defaults to 1.0. Per vertex that list adds
+
+    weight(d) × (ambient + diffuse) × colour,   weight = 1 inside near, (far − d) / (far − near) to far, 0 beyond
+
+into the accumulator: a linear fall-off with no `N·L`, and only on models whose `lighting` bit is
+set. The draw then multiplies the authored vertex colour by the accumulator and clamps the product,
+as for the sun.
+
+`FUN_00520910`, the clone every call of a definition makes, allocates a fresh light table and a
+new light node per entry (`FUN_004dba40`, defaults) with the attached flag clear, so every call owns
+its own light and starts it dark.
+
+⚠ **CSVM's spill is an approximation of this term.** `csky_lights.gdshaderinc` weights by
+`N·L × (1 − smoothstep(near, far, d))` and adds `base_colour × spill` to the fullbright albedo
+without the `lighting` gate or the product clamp. The ranges it is handed are the authored ones.
+
 ## Specular: the device turns it off and no material exists to turn it back on
 
 ⚠ **Nothing in the original carries a specular term, on an aircraft or on anything else.** Four
