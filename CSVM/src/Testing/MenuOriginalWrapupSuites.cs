@@ -30,7 +30,9 @@ internal static class MenuOriginalWrapupSuites
         + "above CONTINUE, a later ending's numbers never reach the page that is already standing, a "
         + "failed run leaves the box empty, a real camera's C4/IA1 photographs stand in marker order "
         + "beside the post-its under the rows and a frame landing after the page woke fills its "
-        + "print, and CONTINUE and Back both return to the Instant Action "
+        + "print, each landed print takes the cursor and the pointer and opens its PNG full size in "
+        + "the presentation's viewer, Back or a click closing it with the cursor back on the print "
+        + "while a pending print takes neither, and CONTINUE and Back both return to the Instant Action "
         + "screen with the run forgotten")]
     internal static void MenuOriginalWrapup(TestContext ctx)
     {
@@ -69,7 +71,7 @@ internal static class MenuOriginalWrapupSuites
             Handover(ctx, host, shell);
             Page(ctx, shell);
             Frozen(ctx, host, shell);
-            Photographs(ctx, host, shell);
+            Photographs(ctx, host, seat, shell, fit);
             Doors(ctx, host, seat, shell, fit);
         }
         finally
@@ -166,7 +168,7 @@ internal static class MenuOriginalWrapupSuites
 
     // A real camera's shots over C4/IA1's markers reach the page in marker order, beside the
     // post-its; the last frame is held back past the page waking and fills its print on landing.
-    private static void Photographs(TestContext ctx, MenuHost host, OriginalShell shell)
+    private static void Photographs(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit)
     {
         string gamez = SessionPaths.ChapterGamez(ctx.DataRoot, "C4");
         string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C4", "IA1");
@@ -180,7 +182,7 @@ internal static class MenuOriginalWrapupSuites
         try
         {
             StuntCapture.DirectoryOverride = Path.Combine(ctx.ScratchDir, "WrapupPhotographs");
-            PhotographsOver(ctx, host, shell, run);
+            PhotographsOver(ctx, host, seat, shell, fit, run);
         }
         finally
         {
@@ -188,7 +190,8 @@ internal static class MenuOriginalWrapupSuites
         }
     }
 
-    private static void PhotographsOver(TestContext ctx, MenuHost host, OriginalShell shell, StuntMission run)
+    private static void PhotographsOver(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, StuntMission run)
     {
         System.Action<Image?>? held = null;
         var last = run.Zones[^1];
@@ -231,6 +234,7 @@ internal static class MenuOriginalWrapupSuites
             $"beside the post-its in the band under the rows ({prints.Count} prints, rows end at y {lastRow}, post-its from x {leftmost})");
         ctx.Same(markers.Count - 1, Held(board), $"every landed photograph draws in its print, the held one's stays empty");
         ctx.Check(!shell.Wrapup.TakeLanded(), $"with nothing landed since the page woke, nothing asks for a repaint");
+        Viewer(ctx, host, seat, shell, fit, prints.Count - 1);
 
         held?.Invoke(Frame());
         capture.Settle();
@@ -239,6 +243,65 @@ internal static class MenuOriginalWrapupSuites
         ctx.Check(shell.Wrapup.TakeLanded() && !shell.Wrapup.TakeLanded(),
             $"its landing asks the page to repaint, once");
         ctx.Same(markers.Count, Held(shell.Compose()), $"…and the repainted page fills its print");
+        ctx.Check(shell.Rows.FirstOrDefault(r => r.Key == OriginalWrapupScreen.PrintKey(prints.Count - 1))?.Enabled == true,
+            $"…and its print takes the cursor from then on");
+    }
+
+    // The prints open full size: the cursor walks CONTINUE and the landed prints, confirm opens one
+    // in the presentation's viewer from its PNG, Back closes it with the cursor back on its print,
+    // and the pointer does the same, a click anywhere on the open photograph closing it. The print
+    // whose frame is still on its way takes neither.
+    private static void Viewer(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, int pending)
+    {
+        var prints = shell.Wrapup.Prints;
+        var presentation = host.Active as OriginalPresentation;
+        var rows = shell.Rows;
+        var printRows = Enumerable.Range(0, prints.Count)
+            .Select(i => rows.FirstOrDefault(r => r.Key == OriginalWrapupScreen.PrintKey(i))).ToList();
+        ctx.Check(rows.Count == prints.Count + 1 && printRows.All(r => r != null),
+            $"each print is a row on the page after CONTINUE ({rows.Count} rows, {prints.Count} prints)");
+        ctx.Check(printRows.Select((r, i) => r?.Enabled == (i != pending)).All(ok => ok),
+            $"…the landed ones enabled and the pending one ({prints[pending].Shot.DzName}) not");
+        ctx.Check(shell.FocusedKey == OriginalWrapupScreen.ContinueKey,
+            $"the cursor rests on CONTINUE ({shell.FocusedKey})");
+
+        shell.Step(new MenuCommands { MoveY = 1 });
+        ctx.Check(shell.FocusedKey == OriginalWrapupScreen.PrintKey(0),
+            $"down from CONTINUE reaches the first print ({shell.FocusedKey})");
+        ctx.Check(shell.Compose().Fills.Any(f => f.Border && f.X == prints[0].X && f.Y == prints[0].Y),
+            $"…which draws the focus box round it");
+        shell.Step(new MenuCommands { Accept = true });
+        host.Tick(1f / 60f);
+        var viewer = presentation?.PhotoViewer;
+        ctx.Check(shell.Wrapup.Viewing == prints[0].Shot && viewer is { IsOpen: true } && viewer.Shot == prints[0].Shot
+                && viewer.ImageSize == new Vector2I(64, 36),
+            $"confirm opens {prints[0].Shot.DzName} full size from its file: open={viewer?.IsOpen} size={viewer?.ImageSize}");
+        ctx.Check(shell.Rows.Count == 1 && shell.Rows[0].Key == OriginalWrapupScreen.ViewerKey,
+            $"…and the page stands as the one row the photograph covers ({shell.Rows.Count} rows)");
+        shell.Step(new MenuCommands { Back = true });
+        host.Tick(1f / 60f);
+        ctx.Check(shell.Screen == OriginalScreen.InstantActionWrapup && shell.Wrapup.Viewing == null
+                && viewer?.IsOpen == false && shell.FocusedKey == OriginalWrapupScreen.PrintKey(0),
+            $"Back closes it, on the page still, with the cursor back on its print ({shell.Screen}, {shell.FocusedKey})");
+
+        shell.Step(new MenuCommands { MoveY = -1 });
+        shell.Step(new MenuCommands { MoveY = -1 });
+        ctx.Check(shell.FocusedKey == OriginalWrapupScreen.PrintKey(pending - 1),
+            $"up past CONTINUE wraps to the last landed print, passing over the pending one ({shell.FocusedKey})");
+
+        var held = prints[pending];
+        Click(host, seat, fit, held.X + (held.Width / 2f), held.Y + (held.Height / 2f));
+        ctx.Check(shell.Wrapup.Viewing == null && viewer?.IsOpen == false,
+            $"a click on the pending print opens nothing");
+        var second = prints[1];
+        Click(host, seat, fit, second.X + (second.Width / 2f), second.Y + (second.Height / 2f));
+        ctx.Check(shell.Wrapup.Viewing == second.Shot && viewer?.IsOpen == true,
+            $"a click on a landed print opens it ({shell.Wrapup.Viewing?.DzName})");
+        Click(host, seat, fit, 796f, 4f);
+        ctx.Check(shell.Wrapup.Viewing == null && viewer?.IsOpen == false
+                && shell.FocusedKey == OriginalWrapupScreen.PrintKey(1),
+            $"a click on the open photograph closes it, the cursor on its print ({shell.FocusedKey})");
     }
 
     // How many photographs a composed board draws.

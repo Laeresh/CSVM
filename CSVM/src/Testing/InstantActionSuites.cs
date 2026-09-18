@@ -1136,7 +1136,9 @@ internal static class InstantActionSuites
         "the G14 wrap-up board's two shot counters, ScoredShooters-filtered exactly as the " +
         "decode's own 'the local player' is: a scored shooter's cannon round counts as both " +
         "fired and hit, an unscored (AI) shooter's identical shot moves neither counter, and " +
-        "a scored shooter's ROCKET (not CANNON) round is excluded from both")]
+        "a scored shooter's ROCKET (not CANNON) round is excluded from both; and over a C1/IA1 " +
+        "stunt run the board's three photographs stand in one row, the cursor enters them up off " +
+        "Photo Mode, opens one full size and closes it on its cell, and refuses a pending one")]
     internal static void InstantActionWrapup(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -1217,6 +1219,19 @@ internal static class InstantActionSuites
             pool?.Free();
             target?.Free();
             textures.Dispose();
+        }
+
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
+        ctx.RequireData(missionZrdr, $"C1/IA1 zrdr");
+        ctx.RequireData(ctx.MessagesPath, $"messages.json");
+        if (StuntMission.Load(GameZ.Load(SessionPaths.ChapterGamez(ctx.DataRoot, "C1")), missionZrdr,
+                Messages.Load(ctx.MessagesPath)) is { } run)
+        {
+            StuntCaptureSuites.CheckShortRunWrapup(ctx, run, "C1");
+        }
+        else
+        {
+            ctx.Check(false, $"C1/IA1 ships Danger Zones for the wrap-up board's photographs");
         }
     }
 

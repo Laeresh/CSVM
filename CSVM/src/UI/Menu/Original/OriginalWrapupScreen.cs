@@ -21,6 +21,12 @@ public sealed class OriginalWrapupScreen : IOriginalScreenModule
     /// <summary>The CONTINUE plaque, back to the Instant Action screen.</summary>
     public const string ContinueKey = InstantActionWrapupPage.ContinueKey;
 
+    /// <summary>The one row standing while a photograph is open, the whole page, which closes it.</summary>
+    public const string ViewerKey = "IAWU_VIEWER";
+
+    // Each print's row key is this and its index in marker order.
+    private const string PrintKeyPrefix = "IAWU_PRINT_";
+
     // The plaque's size where the file cannot be measured: GN_B_Continue.png's own frame.
     private const float FallbackPlaqueWidth = 112f;
     private const float FallbackPlaqueHeight = 34f;
@@ -36,6 +42,9 @@ public sealed class OriginalWrapupScreen : IOriginalScreenModule
     // The run the page is showing, frozen at the mission's ending. Null while no ended mission has
     // been handed over, which is every other moment the shell is alive.
     private IaWrapupSnapshot? _snapshot;
+
+    // The print row a photograph was opened from, where closing it puts the cursor back.
+    private string _viewedKey = string.Empty;
 
     /// <summary>A wrap-up module over <paramref name="layout"/>'s own section, measuring its plaque
     /// through <paramref name="measure"/> and calling back into <paramref name="host"/> for the
@@ -69,6 +78,13 @@ public sealed class OriginalWrapupScreen : IOriginalScreenModule
     public IReadOnlyList<WrapupPrint> Prints =>
         _snapshot is { } shown ? InstantActionWrapupPage.Prints(shown, _layout) : Array.Empty<WrapupPrint>();
 
+    /// <summary>The photograph open full size over the page, or null. The presentation shows it
+    /// in its <see cref="ShotViewer"/>; the page only decides when it opens and closes.</summary>
+    public StuntShot? Viewing { get; private set; }
+
+    /// <summary>A print's row key by its index in <see cref="Prints"/>.</summary>
+    public static string PrintKey(int index) => PrintKeyPrefix + index.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
     /// <summary>Whether a photograph the page drew as an empty print has landed since, answered once
     /// per landing: the caller's cue to compose the page again. A shot lands on the main thread
     /// (<see cref="StuntCapture.Settle"/>), which is where the presentation's tick reads this.</summary>
@@ -81,13 +97,24 @@ public sealed class OriginalWrapupScreen : IOriginalScreenModule
     public void ShowWrapup(IaWrapupSnapshot snapshot)
     {
         _snapshot = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
+        Viewing = null;
         _host.Open(OriginalScreen.InstantActionWrapup);
     }
 
-    /// <summary>The page's one row, the CONTINUE plaque at its authored corner.</summary>
+    /// <summary>The page's rows: the CONTINUE plaque at its authored corner, then one per print
+    /// in marker order, taking the cursor and the pointer once its frame has landed. While a
+    /// photograph is open the page is the one row the viewer covers, which closes it.</summary>
     public void BuildRows(List<OriginalRow> rows)
     {
         ArgumentNullException.ThrowIfNull(rows);
+        if (Viewing != null)
+        {
+            rows.Add(new OriginalRow(
+                ViewerKey, string.Empty, OriginalRowKind.Button, 0, 0, BoardFit.AuthoredWidth, BoardFit.AuthoredHeight,
+                true, 0, null));
+            return;
+        }
+
         if (_layout.Widget(WrapupSection, ContinueKey) == null)
         {
             rows.Add(_host.PlaqueRow(ContinueKey, "CONTINUE", 0, true, 0));
@@ -98,6 +125,14 @@ public sealed class OriginalWrapupScreen : IOriginalScreenModule
         var (x, y) = InstantActionWrapupPage.ContinueAt(_layout);
         var size = OriginalWidgets.StripSize(art, _measure, FallbackPlaqueWidth, FallbackPlaqueHeight);
         rows.Add(new OriginalRow(ContinueKey, string.Empty, OriginalRowKind.Button, x, y, size.Width, size.Height, true, 0, art));
+        var prints = Prints;
+        for (int i = 0; i < prints.Count; i++)
+        {
+            var print = prints[i];
+            rows.Add(new OriginalRow(
+                PrintKey(i), print.Shot.DzName, OriginalRowKind.Button, print.X, print.Y, print.Width, print.Height,
+                ShotViewer.CanOpen(print.Shot), 0, null));
+        }
     }
 
     /// <summary>The page carries no scrolling list.</summary>
@@ -112,7 +147,8 @@ public sealed class OriginalWrapupScreen : IOriginalScreenModule
     public bool CloseDropdown() => false;
 
     /// <summary>CONTINUE, the page's one door: back to the Instant Action screen the sortie was set
-    /// up on, the run forgotten on the way out.</summary>
+    /// up on, the run forgotten on the way out. A print opens its photograph full size, and the
+    /// open photograph's row closes it.</summary>
     public MenuExit? Activate(OriginalRow row)
     {
         ArgumentNullException.ThrowIfNull(row);
@@ -120,14 +156,29 @@ public sealed class OriginalWrapupScreen : IOriginalScreenModule
         {
             Leave();
         }
+        else if (row.Key == ViewerKey)
+        {
+            CloseViewer();
+        }
+        else if (PrintFor(row.Key) is { } shot && ShotViewer.CanOpen(shot))
+        {
+            Viewing = shot;
+            _viewedKey = row.Key;
+        }
 
         return null;
     }
 
-    /// <summary>Back leaves the page the way CONTINUE does: the mission is over either way and
-    /// there is nowhere else to stand.</summary>
+    /// <summary>Back closes an open photograph first. Otherwise it leaves the page the way CONTINUE
+    /// does: the mission is over either way and there is nowhere else to stand.</summary>
     public bool Back()
     {
+        if (Viewing != null)
+        {
+            CloseViewer();
+            return true;
+        }
+
         Leave();
         return true;
     }
@@ -195,6 +246,10 @@ public sealed class OriginalWrapupScreen : IOriginalScreenModule
                     plaque, row.X, row.Y, i, ComposedBoard.PlaqueFrame(plaque.Frames, i == focus, i == _host.PressedRow),
                     string.Empty, BoardInk.LabelNormal));
             }
+            else if (i == focus && row.Key.StartsWith(PrintKeyPrefix, StringComparison.Ordinal))
+            {
+                fills.Add(_host.FocusMark(row));
+            }
         }
 
         if (_host.SeatPanel(onPaper: true) is { } strip)
@@ -208,7 +263,28 @@ public sealed class OriginalWrapupScreen : IOriginalScreenModule
     private void Leave()
     {
         _snapshot = null;
+        Viewing = null;
         _pending.Clear();
         _openInstantAction();
+    }
+
+    // The cursor goes back to the print the photograph was opened from.
+    private void CloseViewer()
+    {
+        Viewing = null;
+        _host.FocusKey(_viewedKey);
+    }
+
+    private StuntShot? PrintFor(string key)
+    {
+        if (!key.StartsWith(PrintKeyPrefix, StringComparison.Ordinal)
+            || !int.TryParse(key.AsSpan(PrintKeyPrefix.Length), System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture, out int index))
+        {
+            return null;
+        }
+
+        var prints = Prints;
+        return index < prints.Count ? prints[index].Shot : null;
     }
 }

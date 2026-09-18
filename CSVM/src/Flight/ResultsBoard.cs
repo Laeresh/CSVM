@@ -29,6 +29,8 @@ public abstract partial class ResultsBoard : Control
     private CenterContainer _center = null!;
     private PanelContainer? _panel;
     private BoardMenuHost? _host;
+    private StuntShotStrip? _strip;
+    private ShotViewer _viewer = null!;
 
     /// <summary>Rerun the ended mode in place, chosen from the menu (or R / pad Y where the mode
     /// offers them directly).</summary>
@@ -45,6 +47,17 @@ public abstract partial class ResultsBoard : Control
     /// <summary>The standard menu while it is up, or null, the test harness's way to drive the
     /// activation routing without a device.</summary>
     internal BoardMenu? StandardMenu => _host?.Menu;
+
+    /// <summary>The board's photographs while it carries any, the second cursor region above the
+    /// menu, for the suites.</summary>
+    internal StuntShotStrip? ShotStrip => _strip;
+
+    /// <summary>The full-size photograph viewer the board opens over itself.</summary>
+    internal ShotViewer Viewer => _viewer;
+
+    /// <summary>Whether the menu rows draw the highlight, false while the cursor is on the
+    /// photographs.</summary>
+    internal bool RowsShowCursor => _host?.View.ShowsCursor == true;
 
     /// <summary>Whether the run this board reported is still over. A live flag here (the match's
     /// <c>Completed</c>, the race's <c>AllFinished</c>) makes a rerun retire the board from
@@ -67,7 +80,7 @@ public abstract partial class ResultsBoard : Control
             return;
         }
         if (Visible)
-            _host?.Poll((float)delta);
+            _host?.Poll((float)delta, input => HandleShots(input.Move, input.MoveX, input.Accept, input.Back));
     }
 
     /// <summary>The whole-window shell under any board: hides it, ignores input focus, and adds
@@ -156,6 +169,64 @@ public abstract partial class ResultsBoard : Control
         return sep;
     }
 
+    /// <summary>One frame of player 1's cursor where the photographs can take it, answering whether
+    /// they did; the menu rows read the frame otherwise. An open viewer takes every frame, and
+    /// confirm or back closes it. On the grid the cursor walks the landed cells, confirm opens one
+    /// and back returns to the rows; up from the first row enters the grid, down out of its last
+    /// row lands on the first row again. Back is Escape as well as pad B here, since the pause key
+    /// does nothing while a results board is up.</summary>
+    internal bool HandleShots(int move, int moveX, bool accept, bool back)
+    {
+        if (_viewer.IsOpen)
+        {
+            if (accept || back)
+            {
+                CloseViewer();
+            }
+
+            return true;
+        }
+
+        if (_strip is not { } strip || _host == null)
+        {
+            return false;
+        }
+
+        var cursor = strip.Cursor;
+        if (cursor.OnGrid)
+        {
+            if (back || cursor.Step(moveX, move) == ShotGridStep.Left)
+            {
+                LeaveGrid();
+                return true;
+            }
+
+            strip.Refresh();
+            if (accept && strip.Selected is { } shot)
+            {
+                _viewer.Open(shot);
+            }
+
+            return true;
+        }
+
+        // A relayout that took the cell away leaves the cursor on no region; the rows take it back.
+        if (!_host.View.ShowsCursor)
+        {
+            LeaveGrid();
+        }
+
+        // ⚠ Only from the first row: the resting row stays Photo Mode, and the grid is reached by
+        // stepping up off it, the way the photographs stand above the menu.
+        if (move < 0 && _host.Menu.Index == 0 && cursor.Enter())
+        {
+            ShowGridCursor();
+            return true;
+        }
+
+        return false;
+    }
+
     /// <summary>The board's own state for the Build methods: hidden, input-transparent, full-rect,
     /// with the backdrop and centre container underneath. Call once from the subclass Build.</summary>
     protected void InitShell(PauseState state, bool exitsToMenu, System.Func<int, MenuInput> inputFor)
@@ -164,6 +235,9 @@ public abstract partial class ResultsBoard : Control
         _exitLabel = exitsToMenu ? "Exit to Menu" : "Quit Game";
         _inputFor = inputFor;
         _center = BuildShell(this);
+        _viewer = ShotViewer.Build(clickCloses: true);
+        _viewer.Dismissed += CloseViewer;
+        AddChild(_viewer);
     }
 
     /// <summary>Shows the populated board and stops the world under it, rather than leaving the
@@ -179,6 +253,7 @@ public abstract partial class ResultsBoard : Control
     {
         Visible = false;
         _host = null;
+        _viewer.Close();
         _state.Clear(HaltReason.Ended);
     }
 
@@ -189,7 +264,25 @@ public abstract partial class ResultsBoard : Control
 
     /// <summary>Frees any previous panel, builds the styled panel at scale <paramref name="s"/>
     /// and returns its body. Populate implementations start here.</summary>
-    protected VBoxContainer BeginPanel(float s) => RebuildPanel(_center, ref _panel, s);
+    protected VBoxContainer BeginPanel(float s)
+    {
+        _strip = null;
+        _viewer.Close();
+        return RebuildPanel(_center, ref _panel, s);
+    }
+
+    /// <summary>Appends the run's photographs as a <see cref="StuntShotStrip"/> and takes them as
+    /// the cursor's second region, above the standard menu. Null <paramref name="shots"/> adds
+    /// nothing.</summary>
+    protected void AddShotStrip(VBoxContainer body, StuntCapture? shots, float s)
+    {
+        _strip = StuntShotStrip.Add(body, shots, s);
+        if (_strip != null)
+        {
+            _strip.CellPointed += OnCellPointed;
+            _strip.CellClicked += OnCellClicked;
+        }
+    }
 
     /// <summary>Appends the standard non-dismissable Photo Mode · Restart · Exit menu, driven by
     /// player 1: an ended run is a session-wide decision, and no single player raised the board.</summary>
@@ -223,6 +316,55 @@ public abstract partial class ResultsBoard : Control
             return;
         }
         OnRestartChosen();
+    }
+
+    // The pointer puts the cursor on a landed cell it comes over; a pending one refuses it.
+    private void OnCellPointed(int cell)
+    {
+        if (!_viewer.IsOpen && _strip != null && _strip.Cursor.MoveTo(cell))
+        {
+            ShowGridCursor();
+        }
+    }
+
+    private void OnCellClicked(int cell)
+    {
+        if (!_viewer.IsOpen && _strip != null && _strip.Cursor.MoveTo(cell) && _strip.Selected is { } shot)
+        {
+            ShowGridCursor();
+            _viewer.Open(shot);
+        }
+    }
+
+    // Closing leaves the cursor on the cell the photograph was opened from.
+    private void CloseViewer()
+    {
+        _viewer.Close();
+        _strip?.Refresh();
+    }
+
+    private void ShowGridCursor()
+    {
+        if (_host != null)
+        {
+            _host.View.ShowsCursor = false;
+            _host.View.Refresh();
+        }
+
+        _strip?.Refresh();
+    }
+
+    // Back onto the menu's first row, Photo Mode, the harmless one.
+    private void LeaveGrid()
+    {
+        _strip?.Cursor.Leave();
+        _strip?.Refresh();
+        if (_host != null)
+        {
+            _host.Menu.MoveTo(0);
+            _host.View.ShowsCursor = true;
+            _host.View.Refresh();
+        }
     }
 
     // A long course's splits and photographs stand taller than the window, and the centre

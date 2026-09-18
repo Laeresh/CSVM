@@ -224,7 +224,7 @@ keys: [../formats/menu-layout.md](../formats/menu-layout.md).
 The Instant Action wrap-up page's own content, engine-free over `CampaignLayout`: the heading, the four title/value pairs at `[@IA_WrapUp@]`'s authored rows, the magazine spread and the four
 brushstrokes, the CONTINUE plaque's art and corner, and three pieces of remake furniture. `PostIts` writes the further lines the shipped page has no row for (the context naming the chapter and the
 mission type, and the stunt run's splits without their total, which is the time row's figure again) onto yellow post-its: the first under the last value row and clear of the plaque, each further
-one to its left, the lines shared out evenly and each post-it as tall as what it holds. `Prints` lays a stunt run's photographs out in marker order to the left of the post-its. `TickStrokes` draws the outcome as a box above CONTINUE, ticked on a win and empty on a loss. Every value is
+one to its left, the lines shared out evenly and each post-it as tall as what it holds. `Prints` lays a stunt run's photographs out in marker order to the left of the post-its, in the grid `ShotGrid` picks for the room. `TickStrokes` draws the outcome as a box above CONTINUE, ticked on a win and empty on a loss. Every value is
 read off the `IaWrapupSnapshot` the ending froze and never recomputed; the geometry is read off the page's own rows, so a layout that spaces them differently moves the furniture with them.
 `Sample` and `LongSample` are the stand-in runs the `--menu=` aids and the coverage walk stand the page on. What the four numbers count:
 [../formats/instant-action/wrap-up.md](../formats/instant-action/wrap-up.md).
@@ -387,7 +387,8 @@ centres them in its own box; its items are composed one at a time so the device 
 ## src/UI/BoardMenuView.cs
 Draws a `BoardMenu`'s rows as `CursorRow`s inside the board style all five boards share, so the
 cursor reads the same wherever it appears and a layout fix lands once. `Refresh` recolours from the
-current highlight, touching only label overrides. A results board's footer is a `ControlHintBar`
+current highlight, touching only label overrides; `ShowsCursor` false draws no highlight while
+the board's cursor stands on its photographs. A results board's footer is a `ControlHintBar`
 over the seat's own Select and Confirm, composed off that seat's bindings and device rather than
 off the shipped defaults, since nothing else on such a board teaches the cursor; `Relegend`
 rewrites the row when the seat changes device. A pause board asks for no footer, as the original's
@@ -397,9 +398,27 @@ pause sheet carries none.
 `BoardMenu` plus `BoardMenuView` plus the reader, kept together so a board wires a menu in two lines
 rather than restating the poll, handle and repaint order five times. `Build` primes the reader, so a
 button still held from whatever raised the board is not read as a fresh press. It reads the pad's
-back button alone, Escape and Start reaching the pause toggle through `FlightController` instead. A
-poll that reports the seat moved device relegends the view, which is the one seam that gives every
+back button alone, Escape and Start reaching the pause toggle through `FlightController` instead.
+`Poll` can offer each frame first to a second cursor region on the board (a results board's
+photographs), which the rows then do not read. A poll that reports the seat moved device relegends the view, which is the one seam that gives every
 results board its control hint; `Build`'s legend flag is how the pause board declines one.
+
+## src/UI/ShotGrid.cs
+The Danger Zone photographs' grid rule, engine-free and shared by the built-in boards'
+`StuntShotStrip` and the Original page's `InstantActionWrapupPage.Prints`: `Fit` takes the fewest
+rows whose pictures come within `Slack` of the widest any grid in the room allows, capped at the
+thumbnail width, and the widest of those, so a few shots read as one strip and a long course wraps
+before its pictures shrink. `ShotGridCursor` walks such a grid for a board: sideways in reading
+order, up and down to the nearest cell by column, never onto a cell that refuses it (a frame not
+yet landed), and off the grid on a step down past its last row.
+
+## src/UI/ShotViewer.cs
+One Danger Zone photograph shown large over the board that opened it, the one viewer both
+presentations use: the camera's own PNG fitted to the window on a dark backdrop, with the marker,
+the run clock and the way out under it, and the strip thumbnail where the file cannot be read. It
+reads no device; the owner decides when it closes. A Built-in results board builds it to take
+clicks and raise `Dismissed`, and the Original presentation builds it to take none, since the shell
+polls its own pointer and closes it through the wrap-up page's rows.
 
 ## src/UI/MenuInput.cs
 One player's menu input source: the keyboard flag, a `Pads` binding and the edge and auto-repeat
@@ -1010,8 +1029,8 @@ decides the screen its exit returns to. It is one `IOriginalScreenModule` and re
 
 ## src/UI/Menu/Original/OriginalWrapupScreen.cs
 The Original Instant Action wrap-up page, one standalone module over the decoded `[@IA_WrapUp@]` section and `InstantActionWrapupPage.cs`'s content. It stands only while it holds a snapshot, which
-arrives as `InstantActionWrapupReturn` when a flown mission's hold ends and the session hands the menu its frozen numbers; `ShowWrapup` takes that run and opens the page. Its one row is the CONTINUE
-plaque at its authored corner, and both CONTINUE and Back drop the run and reopen the Instant Action screen through that screen's own door, so the sortie's roster and environment are re-read on the
+arrives as `InstantActionWrapupReturn` when a flown mission's hold ends and the session hands the menu its frozen numbers; `ShowWrapup` takes that run and opens the page. Its rows are the CONTINUE
+plaque at its authored corner and one per print, enabled once that print's frame has landed; a print opens its photograph as `Viewing`, which the presentation shows in its `ShotViewer`, and while one is open the page is a single row covering it, which closes it as Back does, the cursor returning to the print. Otherwise both CONTINUE and Back drop the run and reopen the Instant Action screen through that screen's own door, so the sortie's roster and environment are re-read on the
 way. `Compose` is the magazine spread as the backdrop, the four brushstrokes, the heading and the eight row lines, each post-it as fills under a shrinking `BoardNote` of its lines, the photographs as prints, the tick box as strokes, and the plaque. A print drawn empty because its shot has not landed is what `TakeLanded` reports once it has, which the presentation's tick reads to compose the page again. The
 built-in presentation keeps its in-flight `Flight/IaWrapupBoard.cs` instead and has no page here, which is why its own return lands on the Instant Action screen. It is one `IOriginalScreenModule`
 reaching the shell only through `IOriginalScreenHost` (`OriginalScreenHost.cs`); the shell exposes it as `Wrapup`. The page's own decode:
@@ -1043,7 +1062,7 @@ return destination onto it and applies the `--menu=` aid on the first show. `Tic
 while joining is closed, the join scan while the shell opens it), polls every seat, maps a window-pixel pointer into the
 authored space, steps the shell, requests its cues, states the AUDIO page's mix while that page is open and ends the
 preview on every door out and on `Hide`, drives the briefing's reveal, and runs the board's movies on the step the host was given,
-`DebugPointer` standing in for seat 0's pointer when the screenshot aid asks. The shell's art sizes come from `OriginalArtSizes`; `PaletteFor` is the inks, and `CabinPalette` writes the cabin's pull-down in the paper forms' list inks.
+`DebugPointer` standing in for seat 0's pointer when the screenshot aid asks. A `ShotViewer` over the view follows the wrap-up page's `Viewing` photograph. The shell's art sizes come from `OriginalArtSizes`; `PaletteFor` is the inks, and `CabinPalette` writes the cabin's pull-down in the paper forms' list inks.
 
 ## src/UI/Menu/Original/OriginalArtSizes.cs
 The art measurer every host of `OriginalShell` hands it, since the layout carries a widget's

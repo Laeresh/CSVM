@@ -111,10 +111,6 @@ public static class InstantActionWrapupPage
     private const float PrintGap = 6f;
     private const float PendingAspect = 3f / 4f;
 
-    // How much narrower than the widest possible a grid's pictures may be and still win by having
-    // fewer rows. A look, not a decode.
-    private const float StripSlack = 0.85f;
-
     // The tick box, on the notepad above the plaque: its side, its gap above the plaque, and its
     // outline weight in strokes one authored pixel apart.
     private const float TickBoxSide = 40f;
@@ -482,35 +478,10 @@ public static class InstantActionWrapupPage
         return (x, valueY + ExtraGap, System.Math.Clamp(plaqueX - PlaqueClearance - x, 1f, PostItSide));
     }
 
-    // The grid for that many prints in the room: the fewest rows whose pictures come within
-    // StripSlack of the widest any grid allows (itself capped at the thumbnail width), and the
-    // widest of those, so a few shots read as one strip rather than a stack.
-    private static (int Columns, float Picture) PrintGrid(int count, float width, float height, float aspect)
-    {
-        var grids = new List<(int Columns, int Rows, float Picture)>(count);
-        float widest = 0f;
-        for (int columns = 1; columns <= count; columns++)
-        {
-            int rows = (count + columns - 1) / columns;
-            float across = ((width - ((columns - 1) * PrintGap)) / columns) - (2f * PrintBorder);
-            float down = (((height - ((rows - 1) * PrintGap)) / rows) - (2f * PrintBorder)) / aspect;
-            float picture = System.Math.Min(StuntCapture.ThumbWidth, System.Math.Min(across, down));
-            grids.Add((columns, rows, picture));
-            widest = System.Math.Max(widest, picture);
-        }
-
-        (int Columns, int Rows, float Picture) best = (1, int.MaxValue, 0f);
-        foreach (var grid in grids)
-        {
-            if (grid.Picture >= widest * StripSlack
-                && (grid.Rows < best.Rows || (grid.Rows == best.Rows && grid.Picture > best.Picture)))
-            {
-                best = grid;
-            }
-        }
-
-        return (best.Columns, best.Picture);
-    }
+    // The shared grid rule over the room, a print's border on every side and the thumbnail width as
+    // the cap.
+    private static (int Columns, float Picture) PrintGrid(int count, float width, float height, float aspect) =>
+        ShotGrid.Fit(count, width, height, aspect, PrintGap, 2f * PrintBorder, 2f * PrintBorder, StuntCapture.ThumbWidth);
 
     // A split line's columns closed up to two spaces, the board's own three being more than a
     // post-it's width can spare before the renderer would wrap the line.

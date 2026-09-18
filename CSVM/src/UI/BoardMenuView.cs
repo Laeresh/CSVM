@@ -28,6 +28,10 @@ public sealed partial class BoardMenuView : VBoxContainer
     private ControlHintBar? _legend;
     private float _scale = 1f;
 
+    /// <summary>Whether a row carries the highlight. False while the board's cursor stands on
+    /// something else above the rows (a photograph), which <see cref="Refresh"/> then draws.</summary>
+    public bool ShowsCursor { get; set; } = true;
+
     /// <summary>Builds the rows for <paramref name="menu"/>, scaled by the board's own
     /// <paramref name="s"/> so a menu matches the panel it sits in, and under them the button
     /// legend where <paramref name="legend"/> asks for one. <paramref name="input"/> is the seat
@@ -76,7 +80,7 @@ public sealed partial class BoardMenuView : VBoxContainer
     {
         for (int i = 0; i < _rows.Length; i++)
         {
-            bool selected = i == _menu.Index;
+            bool selected = ShowsCursor && i == _menu.Index;
             _rows[i].Set(_menu.Items[i].Label, selected ? RowFocusColor : RowColor, selected);
         }
     }

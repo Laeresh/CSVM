@@ -202,6 +202,7 @@ public sealed class OriginalPresentation : IMenuPresentation
     private int _debugJoin;
     private CanvasLayer? _layer;
     private ComposedBoardView? _view;
+    private ShotViewer? _shotViewer;
     private OriginalShell? _shell;
     private MenuSeatDevices? _devices;
     private IMenuHost? _host;
@@ -255,6 +256,10 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// can write a real player's progress. Read on every open, so it may be set before the first
     /// show or between shows.</summary>
     public CampaignProfileStore? CampaignProfiles { get; set; }
+
+    /// <summary>The viewer showing the wrap-up page's open photograph, for a suite reading it back;
+    /// null while the presentation has no layer.</summary>
+    internal ShotViewer? PhotoViewer => _shotViewer;
 
     /// <summary>The board palette the shell's inks resolve to: list text in the file-wide
     /// disabled grey with the active white for the focused row, plaque labels in the paper
@@ -348,6 +353,9 @@ public sealed class OriginalPresentation : IMenuPresentation
             _layer = new CanvasLayer { Name = "original_menu", Layer = HudLayers.Board };
             _view = ComposedBoardView.Build(_dataRoot);
             _layer.AddChild(_view);
+            // The shell polls its own pointer, so the viewer over the page takes no click.
+            _shotViewer = ShotViewer.Build(clickCloses: false);
+            _layer.AddChild(_shotViewer);
             _parent.AddChild(_layer);
         }
 
@@ -712,6 +720,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         // A photograph landing after the wrap-up page woke fills its print, which is a new picture
         // on the board rather than new pixels in one already drawn, so the page is composed again.
         changed |= _shell.Screen == OriginalScreen.InstantActionWrapup && _shell.Wrapup.TakeLanded();
+        SyncShotViewer();
         if (changed)
         {
             Redraw();
@@ -729,6 +738,8 @@ public sealed class OriginalPresentation : IMenuPresentation
         {
             _layer.Visible = false;
         }
+
+        _shotViewer?.Close();
 
         // Off screen nothing types, so a seat left capturing on the name screen is released, and
         // nothing narrates: a launch from the briefing's flight check ends the voice with it.
@@ -757,6 +768,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         _layer.QueueFree();
         _layer = null;
         _view = null;
+        _shotViewer = null;
     }
 
     private static Color ToColor(MenuLayoutColor c) => new(c.R / 255f, c.G / 255f, c.B / 255f, 1f);
@@ -1037,6 +1049,31 @@ public sealed class OriginalPresentation : IMenuPresentation
                 : _shell.CampaignPage is { } campaign ? BoardPalette.For(campaign)
                 : _palette;
             _view.Show(_shell.Compose(), palette, string.Empty, string.Empty);
+        }
+    }
+
+    // The viewer follows the wrap-up page's open photograph, which the page's own rows open and
+    // close, so any other screen shows none.
+    private void SyncShotViewer()
+    {
+        if (_shotViewer == null || _shell == null)
+        {
+            return;
+        }
+
+        var shot = _shell.Screen == OriginalScreen.InstantActionWrapup ? _shell.Wrapup.Viewing : null;
+        if (shot == _shotViewer.Shot)
+        {
+            return;
+        }
+
+        if (shot == null)
+        {
+            _shotViewer.Close();
+        }
+        else
+        {
+            _shotViewer.Open(shot);
         }
     }
 }

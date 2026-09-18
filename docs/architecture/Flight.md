@@ -627,13 +627,13 @@ every other one. What it reports is `StuntMission`'s.
 
 ## src/Flight/ResultsBoard.cs
 The shared shell every results board is built on (`StuntScoreboard`, `StuntRaceBoard`,
-`VersusBoard`, `IaWrapupBoard`): the dimmed backdrop and centred panel, the board palette and
-label factories, the halt-and-retire contract on the sim clock, and the standard Photo Mode,
-Restart and Exit menu. A subclass keeps only its build signature, its completion event, its
-populate content and its still-ended test. A panel taller than the window (a long course's
-splits and photographs) is re-centred and shrunk about its centre to fit, so its total and menu
-stay on screen. `PauseBoard` shares the chrome statics but not the shell, since a held clock is
-not an ended run.
+`VersusBoard`, `IaWrapupBoard`): backdrop and centred panel, palette and label factories, the
+halt-and-retire contract on the sim clock, and the standard Photo Mode, Restart and Exit menu. A
+panel taller than the window is re-centred and shrunk about its centre to fit. Photographs added
+through `AddShotStrip` are the cursor's second region above the rows: up off Photo Mode (the
+resting row) enters the grid, confirm opens one in a `ShotViewer` over the board, back or a click
+closes it on its cell, and down out of the grid returns to Photo Mode. `PauseBoard` shares the
+chrome statics but not the shell, since a held clock is not an ended run.
 
 ## src/Flight/StuntScoreboard.cs
 Stunt Flying's end-of-run results overlay on `ResultsBoard`'s shell: the plane and chapter heading
@@ -657,12 +657,13 @@ on the main thread and raises `ShotLanded`. The pixels come from the caller's `P
 
 ## src/Flight/StuntShotStrip.cs
 A stunt run's Danger Zone photographs as a board section, shared by `StuntScoreboard` and
-`IaWrapupBoard`: a rule and one captioned thumbnail per shot in marker order, where the splits
-above are in the order flown, sized so the row fits the board. It follows its `StuntCapture` while
-in the tree. `FlightController` tests the run before the camera on one physics frame, so a marker
-latched on the frame that completes the run arrives after the board woke; `ShotLatched` draws the
-row again with it. A cell whose frame is still on its way is drawn empty and filled on
-`ShotLanded`, and one whose frame never arrived is left out. Hidden while there is no shot.
+`IaWrapupBoard`: one captioned thumbnail per shot in marker order, in the grid `ShotGrid` picks so
+a long course wraps into rows. `Cursor` walks the landed cells for the board; the pointer reaches
+them through `CellPointed` and `CellClicked`. It follows its `StuntCapture` in the tree: a marker
+latched on the frame that completes the run arrives after the board woke and `ShotLatched` draws
+the grid again with it. A pending cell is drawn empty and filled on `ShotLanded` (the first landing
+under a guessed aspect lays the grid out again), and a frame that never arrived is left out.
+Hidden while there is no shot.
 
 ## src/Flight/StuntSplits.cs
 The stunt run's split section, shared by `StuntScoreboard` and `IaWrapupBoard`: the per-zone rows

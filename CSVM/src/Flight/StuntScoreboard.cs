@@ -94,7 +94,7 @@ public sealed partial class StuntScoreboard : ResultsBoard
         body.AddChild(Separator(s));
 
         StuntSplits.Add(body, run, s, separatorBeforeTotal: true);
-        StuntShotStrip.Add(body, Shots, s);
+        AddShotStrip(body, Shots, s);
 
         body.AddChild(Separator(s));
         AddStandardMenu(body, s);

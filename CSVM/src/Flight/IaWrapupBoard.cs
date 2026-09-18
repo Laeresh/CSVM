@@ -112,7 +112,7 @@ public sealed partial class IaWrapupBoard : ResultsBoard
         {
             body.AddChild(Separator(s));
             StuntSplits.Add(body, run, s, separatorBeforeTotal: false);
-            StuntShotStrip.Add(body, shots, s);
+            AddShotStrip(body, shots, s);
         }
 
         body.AddChild(Separator(s));

@@ -28,7 +28,9 @@ internal static class StuntCaptureSuites
         + "once, lingering inside the radius latches nothing more, a later pass over a "
         + "photographed marker latches nothing more, the files land under screenshots/stunts/ "
         + "named by chapter, marker and run clock, a rerun makes every marker photographable "
-        + "again, the scoreboard's thumbnail strip lists the run's shots in marker order, and a "
+        + "again, the scoreboard's thumbnail strip lists the run's shots in marker order as a grid "
+        + "of more than one row whose landed cells the board's cursor and pointer select and open "
+        + "full size from the PNG (back closing it on the same cell, a pending cell refused), and a "
         + "frame landing after the crossing (and after the board woke) writes its file and fills "
         + "its cell while the sting and the pass mark stay on the crossing, a marker latched on "
         + "the frame the run completes joins the strip of the board that frame woke, a marker first "
@@ -74,6 +76,112 @@ internal static class StuntCaptureSuites
         {
             StuntCapture.DirectoryOverride = previous;
         }
+    }
+
+    // A short run on the Instant Action wrap-up board: three photographs, the last still on its
+    // way, stay one row, and the board's cursor works them the same as a long course's grid.
+    internal static void CheckShortRunWrapup(TestContext ctx, StuntMission run, string chapter)
+    {
+        string? previous = StuntCapture.DirectoryOverride;
+        var board = IaWrapupBoard.Build("instant-action-wrapup", exitsToMenu: true, new PauseState(), _ => new MenuInput());
+        try
+        {
+            StuntCapture.DirectoryOverride = Path.Combine(ctx.ScratchDir, "WrapupShots");
+            var pane = new PaneRig();
+            var capture = new StuntCapture(run, chapter, pane.Request);
+            int shots = System.Math.Min(3, run.Zones.Count);
+            for (int i = 0; i < shots; i++)
+            {
+                run.Tick(1f);
+                pane.Hold = i == shots - 1;
+                capture.Update(run.Zones[i].Position);
+                capture.Update(Elsewhere);
+            }
+
+            pane.Hold = false;
+            capture.Settle();
+            ctx.Host.AddChild(board);
+            board.Present(won: false, run.Elapsed, 0, run.CompletedCount, 0,
+                new StuntSummary(run, run.Elapsed, null, false), capture);
+            ctx.Check(board.ShotStrip is { } strip && strip.CellCount == shots && strip.Columns == shots,
+                $"{shots} photographs on the wrap-up board stand in one row: cells={board.ShotStrip?.CellCount} across={board.ShotStrip?.Columns}");
+            if (shots >= 2)
+            {
+                CheckCursor(ctx, board, shots - 1, "the wrap-up board, short run");
+            }
+
+            pane.Release(Pane());
+            capture.Settle();
+            ctx.Check(board.ShotStrip?.Cursor.MoveTo(shots - 1) == true,
+                $"…and the held cell takes the cursor once its frame lands");
+        }
+        finally
+        {
+            StuntCapture.DirectoryOverride = previous;
+            board.Free();
+        }
+    }
+
+    // The board's cursor over its photographs, driven as player 1's input would be: up off Photo
+    // Mode enters the grid's last row, confirm opens the PNG itself (64x48, not the thumbnail),
+    // back closes it on the same cell, a pending cell refuses the cursor and the pointer, and a
+    // step down out of the grid returns to Photo Mode.
+    internal static void CheckCursor(TestContext ctx, ResultsBoard board, int pendingCell, string who)
+    {
+        if (board.ShotStrip is not { } strip || board.StandardMenu is not { } menu)
+        {
+            ctx.Check(false, $"{who} carries a photograph grid and its menu");
+            return;
+        }
+
+        ctx.Check(menu.Index == 0 && !strip.Cursor.OnGrid && board.RowsShowCursor,
+            $"{who}: the cursor rests on Photo Mode, off the photographs (row {menu.Index}, cell {strip.Cursor.Cell})");
+        board.HandleShots(-1, 0, false, false);
+        int lastRow = (strip.CellCount - 1) / strip.Columns * strip.Columns;
+        int entered = lastRow != pendingCell ? lastRow
+            : lastRow + 1 < strip.CellCount ? lastRow + 1 : lastRow - strip.Columns;
+        ctx.Check(strip.Cursor.Cell == entered && !board.RowsShowCursor && menu.Index == 0,
+            $"{who}: up from Photo Mode enters the grid's last row at its leftmost landed cell ({strip.Cursor.Cell}, want {entered})");
+
+        board.HandleShots(0, 0, true, false);
+        var shot = strip.Selected;
+        ctx.Check(board.Viewer.IsOpen && board.Viewer.Shot == shot && board.Viewer.ImageSize == new Vector2I(64, 48),
+            $"{who}: confirm opens {shot?.DzName} full size from its file: open={board.Viewer.IsOpen} size={board.Viewer.ImageSize}");
+        board.HandleShots(-1, 0, false, false);
+        ctx.Check(board.Viewer.IsOpen && strip.Cursor.Cell == entered,
+            $"{who}: a step while the photograph is open moves nothing under it");
+        board.HandleShots(0, 0, false, true);
+        ctx.Check(!board.Viewer.IsOpen && strip.Cursor.Cell == entered,
+            $"{who}: back closes it and leaves the cursor on the cell (cell {strip.Cursor.Cell})");
+
+        ctx.Check(!strip.Cursor.MoveTo(pendingCell) && strip.Cursor.Cell == entered,
+            $"{who}: the cell whose frame has not landed refuses the cursor");
+        strip.Point(pendingCell);
+        strip.Click(pendingCell);
+        ctx.Check(!board.Viewer.IsOpen && strip.Cursor.Cell == entered,
+            $"{who}: …and the pointer, which neither moves onto it nor opens it");
+        for (int i = 0; i < strip.CellCount; i++)
+        {
+            board.HandleShots(0, 1, false, false);
+        }
+
+        ctx.Check(strip.Cursor.Cell != pendingCell,
+            $"{who}: sideways steps pass over the pending cell (cell {strip.Cursor.Cell})");
+
+        strip.Point(0);
+        strip.Click(0);
+        ctx.Check(strip.Cursor.Cell == 0 && board.Viewer.IsOpen && board.Viewer.Shot == strip.Selected,
+            $"{who}: the pointer puts the cursor on a landed cell and a click opens it");
+        board.HandleShots(0, 0, false, true);
+
+        int steps = 0;
+        while (strip.Cursor.OnGrid && steps++ <= strip.CellCount)
+        {
+            board.HandleShots(1, 0, false, false);
+        }
+
+        ctx.Check(!strip.Cursor.OnGrid && menu.Index == 0 && board.RowsShowCursor && !board.Viewer.IsOpen,
+            $"{who}: down out of the grid's last row returns the cursor to Photo Mode (row {menu.Index})");
     }
 
     private static void Drive(TestContext ctx, StuntMission run)
@@ -235,6 +343,13 @@ internal static class StuntCaptureSuites
             ctx.Check(string.Join(",", captions) == string.Join(",", markers),
                 $"the strip lists the run's shots in marker order: [{string.Join(" ", captions)}]");
             ctx.Same(markers.Count - 1, Pictures(board), $"…with a picture in every cell whose frame has landed");
+            if (board.ShotStrip is { } strip)
+            {
+                ctx.Check(strip.Columns > 1 && strip.CellCount > strip.Columns,
+                    $"…laid out as a grid of more than one row: {strip.CellCount} cells, {strip.Columns} across");
+            }
+
+            CheckCursor(ctx, board, markers.Count - 1, "the scoreboard");
 
             pane.Release(Pane());
             capture.Settle();
@@ -352,6 +467,7 @@ internal static class StuntCaptureSuites
             ctx.Check(string.Join(",", captions) == string.Join(",", markers),
                 $"the wrap-up board's strip lists player 1's shots in marker order, not the flown order: [{string.Join(" ", captions)}]");
             ctx.Same(markers.Count - 1, Pictures(board), $"…with the held frame's cell drawn empty");
+            CheckCursor(ctx, board, markers.Count - 1, "the wrap-up board");
 
             pane.Release(Pane());
             capture.Settle();
