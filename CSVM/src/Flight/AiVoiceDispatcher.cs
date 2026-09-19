@@ -32,6 +32,14 @@ public sealed class AiVoiceDispatcher
     /// pursue path").</summary>
     public const float LevelBandSin = 0.3f;
 
+    /// <summary>Decoded: a pursuer holding the player within this cosine of its own nose (about
+    /// 31.8 degrees) taunts the player's failed shake (docs/formats/combat-voice.md).</summary>
+    public const float TauntNoseCos = 0.85f;
+
+    /// <summary>Decoded: a pursuer holding the player within this cosine of dead astern (about
+    /// 45.6 degrees) taunts the player on its own tail.</summary>
+    public const float TauntTailCos = 0.7f;
+
     /// <summary>The trigger ids this dispatcher names at its call sites (the full 29-id table is
     /// <c>CombatVoice.TriggerFamilies</c>).</summary>
     public const int WaTurret = 0;
@@ -120,6 +128,24 @@ public sealed class AiVoiceDispatcher
         float rise = len > 1e-6f ? to.Y / len : 0f;
         int band = rise < -LevelBandSin ? 0 : rise > LevelBandSin ? 2 : 1;
         return BearingTriggerId(bearing, band);
+    }
+
+    /// <summary>The taunt the pursuer's own geometry against the player raises, decoded whole:
+    /// <see cref="TaFailShk"/> with the player inside the nose cone, <see cref="TaFailTail"/> with
+    /// the player inside the astern cone, null between them. ⚠ The original dots the line against
+    /// the vehicle's BACKWARD basis row, so a reading that takes that row for the nose swaps the
+    /// two (docs/formats/combat-voice.md, "The pursue path").</summary>
+    public static int? TauntTriggerFor(Vector3 ownPos, Vector3 ownForward, Vector3 playerPos)
+    {
+        var to = playerPos - ownPos;
+        if (to.LengthSquared() < 1e-6f || ownForward.LengthSquared() < 1e-6f)
+        {
+            return null;
+        }
+        float cos = to.Normalized().Dot(ownForward.Normalized());
+        return cos > TauntNoseCos ? TaFailShk
+            : cos < -TauntTailCos ? TaFailTail
+            : null;
     }
 
     /// <summary>Adds a speaker. <paramref name="team"/> uses the broadcast rule's vocabulary:

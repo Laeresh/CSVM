@@ -2505,9 +2505,9 @@ internal static class AiSuites
         + "silent, the killer speaks 22 over a victim on the player's team and 23 over one that "
         + "is not, and the player's own kill addresses 24 to a player rig that resolves no voice "
         + "set, silently, and broadcasts 16 to the player's flight, and an evade "
-        + "episode's end picks the taunt pair off the evade flag: a pursuer still inside the tail "
-        + "cone taunts 26 with 27 silent, a shaken one taunts 27, and a step between the two "
-        + "evade modes taunts nothing, and the ally distress (28) answers a round from the player "
+        + "episode's end speaks 27 only once the flag has cleared: an end with the pursuer still "
+        + "on the tail, a flag clearing outside the evade modes and a step between the two evade "
+        + "modes all say nothing, while a shaken end taunts 27, and the ally distress (28) answers a round from the player "
         + "alone and only on a teammate, spoken by the aircraft it struck; and a carried "
         + "gunner raises WA-Turret once per acquisition episode, not at all while it holds the "
         + "nearer AI, once when the player is the acquired target with a clear sight line, with "
@@ -2516,7 +2516,10 @@ internal static class AiSuites
         + "survives a mission start: a commit inside the 2 s mute window speaks nothing yet is "
         + "not lost, the pursuer's 14 and the flight's bearing call-out arriving as the window "
         + "lifts, a pursue re-entry from avoid crash in the same engagement stays silent, and a "
-        + "fresh engagement past the 15 s slot cooldown speaks the pair again")]
+        + "fresh engagement past the 15 s slot cooldown speaks the pair again; and the same raise "
+        + "addresses the taunt pair to the pursuer off its own nose against the human it holds: "
+        + "inside the nose cone taunts 26, on its own tail taunts 25, abeam taunts neither though "
+        + "the raise ran, and a pursuer in its own evade reaction taunts nothing nose-on")]
     internal static void AiVoice(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -2789,9 +2792,9 @@ internal static class AiSuites
             ctx.Check(!played.Exists(line => line.Trigger == AiVoiceDispatcher.GlPlyrDwn),
                 $"…and #24, addressed to a player rig that resolves no voice set, stays silent");
 
-            // --- the taunt pair (26/27): the evade episode's own end decides which one, off the
-            // evade flag, whose hold condition is the decoded tail cone. The machine is driven
-            // directly, the transitions being what the runtime watches.
+            // --- the shake taunt (27): the evade episode's end speaks it only once the flag has
+            // cleared, which is where the original raises it. The machine is driven directly, the
+            // transitions being what the runtime watches.
             PumpRadio(radio);
             var evader = Rig(FlightRoster.ShooterIdBase + 7, enemyTeam, human: false);
             var machine = new AiModeMachine(new System.Random(11));
@@ -2820,31 +2823,31 @@ internal static class AiSuites
                 $"a step between the two evade modes is the same episode and taunts nothing lines={played.Count - tauntsBefore}");
 
             // The end with the pursuer still inside the tail cone: the chase's own dwell reverts
-            // the task while the flag stands, so the evader taunts its failed shake, not the pair.
+            // the task while the flag stands, and nothing is spoken. That geometry belongs to the
+            // pursuer's own taunt below, not to the aircraft leaving the episode.
             machine.Update(evaderPos, Vector3.Forward, pursuerPos, AiMode.Pursue,
                 dt: machine.AttackDwellS + 1f, targetNose: onTail);
-            ctx.Check(played.Count == tauntsBefore + 1
-                && played[^1].Trigger == AiVoiceDispatcher.TaFailShk
-                && played[^1].Tag == evader.Name && played[^1].Clip.StartsWith("snd_id2_TA-FailShk"),
-                $"an evade ending with the pursuer still on the tail taunts #26, and #27 does not fire last={(played.Count > tauntsBefore ? played[^1].ToString() : "none")}");
+            ctx.Check(machine.Evading && machine.Mode is not (AiMode.Evade or AiMode.EvasiveManeuver)
+                && played.Count == tauntsBefore,
+                $"an evade ending with the pursuer still on the tail taunts nothing mode={AiModeMachine.NameOf(machine.Mode)} lines={played.Count - tauntsBefore}");
             PumpRadio(radio);
 
             // The flag clearing with the aircraft already off the two evade modes: nothing is
             // spoken, and the next hit opens a fresh episode.
             machine.Update(evaderPos, Vector3.Forward, pursuerPos, AiMode.Pursue, dt: 0.1f,
                 targetNose: -onTail);
-            ctx.Check(!machine.Evading && played.Count == tauntsBefore + 1,
+            ctx.Check(!machine.Evading && played.Count == tauntsBefore,
                 $"the flag clearing outside an evade mode taunts nothing lines={played.Count - tauntsBefore}");
 
             // …and the shaken end, the same aircraft: the pursuer's nose falls away while the
-            // evade stands, the reaction completes, and that is the pair's other half.
+            // evade stands, the reaction completes, and that is what 27 answers.
             machine.NotifyDamage(1e6f, 1e6f, 100f, 100f);
             machine.Update(evaderPos, Vector3.Forward, pursuerPos, AiMode.Pursue, dt: 0.1f,
                 targetNose: -onTail);
-            ctx.Check(played.Count == tauntsBefore + 2
+            ctx.Check(played.Count == tauntsBefore + 1
                 && played[^1].Trigger == AiVoiceDispatcher.TaSucShk
                 && played[^1].Tag == evader.Name && played[^1].Clip.StartsWith("snd_id2_TA-SucShk"),
-                $"…while one ending with the pursuer shaken taunts #27 instead last={played[^1]}");
+                $"…while one ending with the pursuer shaken taunts #27 last={(played.Count > tauntsBefore ? played[^1].ToString() : "none")}");
 
             // --- 28 (DS-Ally), the decoded friendly-fire arm: a round from the local player on a
             // friendly, spoken by the aircraft it STRUCK. The two silent cases run first, so the
@@ -2988,6 +2991,10 @@ internal static class AiSuites
             var aceModes = new AiModeMachine(new System.Random(12));
             ace.Pilot!.Machine = aceModes;
             ace.Pilot.Gunner = new AiGunner(new RandomNumberGenerator { Seed = 3 }) { Target = chased };
+            // Abeam the human, nose parallel: between the two taunt cones, so this leg measures
+            // the attack pair alone and the taunt geometry gets its own rigs below.
+            var abeamAt = chased.WorldPosition + new Vector3(300f, 0f, 0f);
+            ace.PlaceHeld(abeamAt, abeamAt + Vector3.Forward);
             attack.RegisterPlayer(chased);
             // ⚠ The flight mate is registered at 2: the bearing ids halve the talker chance, so a
             // chance of 1 would make every assertion below a coin flip on the dice rather than on
@@ -3031,6 +3038,60 @@ internal static class AiSuites
             ctx.Check(calls.Count == 4 && calls[2].Trigger == AiVoiceDispatcher.WaAttack
                 && calls[2].Tag == ace.Name && calls[3].Trigger is >= 1 and <= 12,
                 $"…while a fresh engagement past the cooldown raises the pair again lines=[{string.Join(", ", calls)}]");
+
+            // --- the taunt pair (25/26), the decoded geometry: the same raise, addressed to the
+            // pursuer, off its own NOSE against the human it holds. One pursuer per case, so the
+            // lines are read by aircraft rather than by position in the list.
+            PumpRadio(radio);
+            var chasedAt = chased.WorldPosition;
+            var asternAt = chasedAt + new Vector3(0f, 0f, 300f);
+            FlightController Pursuer(int index, Vector3 at, Vector3 lookAt)
+            {
+                var rig = Rig(index, enemyTeam, human: false);
+                rig.Pilot!.Gunner = new AiGunner(new RandomNumberGenerator { Seed = 4 })
+                {
+                    Target = chased,
+                };
+                attack.RegisterAi(rig, accentId: 12, talkerChance: 1f, constitutionChance: 1f);
+                rig.PlaceHeld(at, lookAt);
+                return rig;
+            }
+
+            var noseOn = Pursuer(FlightRoster.ShooterIdBase + 16, asternAt, chasedAt);
+            var tailed = Pursuer(FlightRoster.ShooterIdBase + 17, asternAt,
+                asternAt + (asternAt - chasedAt));
+            var abeam = Pursuer(FlightRoster.ShooterIdBase + 18, abeamAt, abeamAt + Vector3.Forward);
+
+            // …and the decoded refusal: a pursuer in its own evade reaction taunts nothing however
+            // its nose sits. ⚠ The episode opens BEFORE registration, or the commit's own raise
+            // would speak the taunt on the way into the pursue this aircraft evades out of.
+            var busy = Rig(FlightRoster.ShooterIdBase + 19, enemyTeam, human: false);
+            var busyModes = new AiModeMachine(new System.Random(14));
+            busy.Pilot!.Machine = busyModes;
+            busy.Pilot.Gunner = new AiGunner(new RandomNumberGenerator { Seed = 5 }) { Target = chased };
+            busy.PlaceHeld(asternAt, chasedAt);
+            busyModes.Enter(AiMode.Pursue, "ordered");
+            busyModes.NotifyDamage(1e6f, 1e6f, 100f, 100f);
+            attack.RegisterAi(busy, accentId: 12, talkerChance: 1f, constitutionChance: 1f);
+
+            attack.Step(0.1f);
+            bool Taunted(FlightController who, int trigger) => calls.Exists(line =>
+                line.Tag == who.Name && line.Trigger == trigger);
+            ctx.Check(Taunted(noseOn, AiVoiceDispatcher.TaFailShk)
+                && calls.Exists(line => line.Tag == noseOn.Name
+                    && line.Clip.StartsWith("snd_id2_TA-FailShk")),
+                $"a pursuer holding the human inside its own nose cone taunts #26 lines=[{string.Join(", ", calls)}]");
+            ctx.Check(Taunted(tailed, AiVoiceDispatcher.TaFailTail)
+                && calls.Exists(line => line.Tag == tailed.Name
+                    && line.Clip.StartsWith("snd_id2_TA-FailTail")),
+                $"…while one with the human on its OWN tail taunts #25 instead");
+            ctx.Check(!Taunted(abeam, AiVoiceDispatcher.TaFailShk)
+                && !Taunted(abeam, AiVoiceDispatcher.TaFailTail)
+                && Taunted(abeam, AiVoiceDispatcher.WaAttack),
+                $"…and one holding it abeam, between the two cones, taunts neither though the raise ran");
+            ctx.Check(busyModes.Evading && !Taunted(busy, AiVoiceDispatcher.TaFailShk)
+                && !Taunted(busy, AiVoiceDispatcher.TaFailTail),
+                $"…and a pursuer in its own evade reaction taunts nothing nose-on flag={busyModes.Evading}");
 
             ctx.Note($"lines: {string.Join(", ", played)}; attack pair: {string.Join(", ", calls)}");
         }

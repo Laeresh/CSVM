@@ -28,8 +28,8 @@ populates a pilot's voice slots runs `i` from `0` to `0x1d` exclusive.
 | 22 | `GL-AllyDwn-A` | gloat by the killer; the plane it downed was on the player's team |
 | 23 | `GL-EnemyDwn-A` | gloat by the killer; the plane it downed was not |
 | 24 | `GL-PlyrDwn-A` | gloat for the local player's own kill; raised on the player and broadcast |
-| 25 | `TA-FailTail-A` | taunt, a pursuer failed its tail check |
-| 26 | `TA-FailShk-A` | taunt, a shake attempt failed |
+| 25 | `TA-FailTail-A` | taunt by an aircraft holding the player as its target, with the player inside its own astern cone; it has failed to keep its tail clear |
+| 26 | `TA-FailShk-A` | taunt by an aircraft holding the player as its target, with the player inside its own nose cone; the player's shake attempt has failed |
 | 27 | `TA-SucShk-A` | taunt, the speaker shook its pursuer (fires as the reaction flag clears) |
 | 28 | `DS-Ally-A` | ally distress; the local player's round damaged a friendly, or the last of three tracked planes is alive |
 
@@ -229,7 +229,8 @@ aircraft.
 
 ## The pursue path raises the attack pair
 
-Triggers 14 and 1–12 are raised by the **pursuer**, from two sites, neither of them an edge.
+Triggers 14 and 1–12 are raised by the **pursuer**, from two sites, neither of them an edge, and
+the taunt pair 25 and 26 rides the second of them.
 
 **Trigger 14 is one call inside the AI's weapon pass** (`FUN_0041f420`, the push of `0xe` at
 `0x0041f7a1` and the gate call at `0x0041f7a5`). It sits on the branch that has just put a round
@@ -243,10 +244,7 @@ case the remake splits into patrol, pursue and the evade flag). Every frame, whe
 target answers the `Target` vtable's `+0x38` player predicate and the pursuer's own evade flag at
 `+0xba` is clear, the driver computes the index and broadcasts it (`0x0041dcfa`). Again no range
 and no edge: the rate is the 15 s slot cooldown alone, which is why the original's aces call the
-player's bearing every few seconds through a whole engagement. The same block first raises one of
-the taunt pair off the dot product of the line to the player with the pursuer's own forward axis
-(`+0x198`): under -0.85 raises 26 (`0x0041dc50`), over 0.7 raises 25 (`0x0041dc66`), between them
-neither.
+player's bearing every few seconds through a whole engagement.
 
 **The quantisation is decoded whole**, so nothing in it is invented any more. The band is the
 vertical component of the UNIT vector from the pursuer to the player, split at ±0.3
@@ -264,10 +262,45 @@ player's side (`FUN_004952f0`, the record's `+0x3c` against the local record's) 
 `0x00470849`, `0x004708e0`). That range belongs to the multiplayer path alone; the single-player
 driver applies none.
 
-⚠ **Both bearing sites read the taunt pair as a geometry test on the pursuer, which is not the
-reading rows 25 to 27 below are wired on.** Nothing here tests a tail check or a shake attempt;
-25 is the pursuer with the player ahead of its nose and 26 the pursuer with the player behind it.
-Reconciling the two readings is `BL-1011`, and until it lands the wired rows stay as they are.
+### The taunt pair 25 and 26 is the pursuer's own geometry
+
+**Both bearing sites first raise one of the taunt pair, addressed to the pursuer itself.** The block
+takes the dot product of the unit line to the player with the pursuer's `+0x198` basis row
+(`0x0041dc10`–`0x0041dc3b`, `0x004707de`–`0x00470809`), compares it against **-0.85**
+(`0x006035b4` single-player, the double at `0x00607e70` in multiplayer) and **0.7** (`0x006035b0`
+in both), and calls the gate with `ECX` holding the pursuer (`MOV ECX,ESI` at `0x0041dc68` and at
+`0x00470820`/`0x00470847`, force flag 0). The raise is **addressed, never broadcast**: the aircraft
+that speaks is the one whose own nose was measured, and no listener is tested, because the gate
+queues the line on the one flat voice channel. Only the bearing id that follows goes through the
+election helper.
+
+⚠ **`+0x198` is the vehicle's BACKWARD basis row, not its nose**
+([../org/aiControlLaw.md](../org/aiControlLaw.md), "Body frame"), so the two thresholds read the
+opposite way round from a forward-axis reading:
+
+- **under -0.85 raises 26** (`TA-FailShk`, `0x0041dc50` / `0x0047081e`): the player lies within
+  about **31.8° of the speaker's own nose**. The player has tried to shake this pursuer and is
+  still out in front of it, which is the trigger table's "a shake attempt failed" with the failure
+  being the player's.
+- **over 0.7 raises 25** (`TA-FailTail`, `0x0041dc66` / `0x00470845`): the player lies within about
+  **45.6° of dead astern** of the speaker. The speaker has the player on its own six and has failed
+  to keep its tail clear.
+- between the two cones, neither.
+
+**Nothing on the path reads a tail check, a shake attempt, a stun, or any state but 0.** The
+single-player block is gated on exactly two reads, both taken just above it: the `Target` vtable's
+`+0x38` predicate answering that the standing target is the local player (called at `0x0041dad8`),
+and the speaker's own evade flag `+0xba` being **clear** (`0x0041dc02`). An aircraft in its own
+evade reaction therefore taunts nothing, and neither does one whose target is not the player. The
+multiplayer block reads the side predicate and the 1695 m range in their place, plus one latch:
+25 also requires the net record's `+0x1082` byte (`0x00470829`) and clears it on the raise
+(`0x0047084e`), but the same block sets that byte again at `0x004708e8` on every frame it runs, so
+the latch suppresses only the first frame a remote hostile comes into range.
+
+**What the block does with the bearing id afterwards** is the quantisation above: it computes
+`1 + 3 * quadrant + band` and hands it to the broadcast helper (`0x0041dcfa`, `0x004708e0`), which
+elects one speaker from the local player's own flight. The taunt and the bearing are therefore two
+different speakers on the same frame, the pursuer and one of the player's wingmen.
 
 ## The remake's dispatch sites
 
@@ -276,24 +309,24 @@ halving, election, DI tiers, bearing index, engine-free, seeded) and wired by
 `CSVM/src/Session/AiVoiceRuntime.cs`. Where the original's dispatch site is
 decoded, the remake uses it; where only the trigger's meaning is decoded, the chosen stand-in
 site is recorded here. The runtime watches the mode machine of every AI the session hands it,
-whether or not that aircraft resolved a voice of its own: rows 1-12 and 25 below are spoken by an
-aircraft other than the one whose mode moved, and the shipped rosters leave nearly every enemy on
-`accentID` -1, so watching only the voiced aircraft leaves those rows silent for a whole mission.
+whether or not that aircraft resolved a voice of its own: rows 1-12 below are broadcast, so they
+are spoken by an aircraft other than the one whose mode moved, and the shipped rosters leave nearly
+every enemy on `accentID` -1, so watching only the voiced aircraft leaves those rows silent for a
+whole mission.
 Every aircraft's death report is watched for the same reason, human rigs included: rows 22 to 24
 are spoken by the killer, not by the aircraft that died.
 
 | ids | status | site / reason |
 |---|---|---|
 | 0 | wired | the gunner's own acquisition (`Flight/TurretController.cs`), carried mount and world emplacement alike: the first tick it holds a human player as its acquired target, by the entry's own `DETECTION_RANGE` and the shared target picker, with a clear sight line by its own rule. The report leaves through `ProjectilePool.TurretAcquiredPlayer`, the seam both turret families are built against, and `AiVoiceRuntime.WatchTurrets` broadcasts on the warned player's team |
-| 1–12, 14 | wired | the decoded sites above: the pursuer speaks `WA-Attack` and the flight broadcasts the bearing call-out computed in the warned player's frame, raised together while the pursuer's gunner holds a human quarry (`AiVoiceRuntime.RaiseAttackCallOuts`, off the sim clock, not off a mode edge). The original raises them every frame from the weapon pass and the combat driver; the remake raises at the 15 s slot-cooldown interval, since no slot can speak twice inside it. Losing the human re-arms the raise, so a fresh engagement speaks at once, and the mode machine's patrol→pursue commit raises the pair as well when it falls after the mute window |
+| 1–12, 14 | wired | the decoded sites above: the pursuer speaks `WA-Attack` and the flight broadcasts the bearing call-out computed in the warned player's frame, raised together while the pursuer's gunner holds a human quarry (`AiVoiceRuntime.RaiseAttackCallOuts`, off the sim clock, not off a mode edge). The original raises them every frame from the weapon pass and the combat driver; the remake raises at the 15 s slot-cooldown interval, since no slot can speak twice inside it. Losing the human re-arms the raise, so a fresh engagement speaks at once, and the mode machine's patrol→pursue commit raises the pair as well when it falls after the mute window. Rows 25 and 26 ride the same raise, ahead of `WA-Attack`, as they do in the original's own block |
 | 13 | wired | a human rig's summary health crossing 30 % on the projectile hit path (decoded threshold), broadcast |
 | 17–19 | wired | the speaker's own summary health on the projectile hit path, 70/50/30 % most-severe-first (decoded) |
 | 20–21 | wired | `FlightController.Downed`, with force: id 20 (`DA`) when the dying aircraft's `Team` is `AimAssist.PlayerTeam`, id 21 (`DE`) otherwise (`AiVoiceRuntime.RegisterAi`). Free flight and `--vs` still give every AI its own default team, so `DA` stays dormant there in practice, it fires once a mission places an AI on the player's team |
 | 22–24 | wired | the same `FlightController.Downed` report read for its killer (`AiVoiceRuntime.OnDowned`), the decoded order of the two predicates: friendly over shooter and victim and no gloat is chosen, else friendly over the victim and `AimAssist.PlayerTeam` picks 22, hostile picks 23, and the killer speaks it. A kill by a rig registered through `RegisterPlayer` takes the decoded player arm instead: 24 is addressed to that rig, and row 16 broadcasts after it. No player rig resolves a voice set today, so 24 is silent in practice, which is the original's own behaviour for a player vehicle with a null slot. A killer that resolved no voice of its own is silent |
 | 16 | wired | the second call of the same player arm (`AiVoiceRuntime.OnDowned`): the local player's kill of a hostile broadcasts it, elected on `AimAssist.PlayerTeam` rather than on the killer's or the victim's side. It runs unconditionally after row 24's addressed line, never as its else-branch, because the decoded null-slot test jumps into the broadcast. This is the reliable half of a player kill: 17 pilot ids ship a playable `PR-EnemyDwn` set |
-| 25 | wired | a pursuer's failed sixth-sense (tail) check stunning it, its evading AI target speaks; a human evader stays silent (the player speaks no AI lines) |
-| 26 | wired | our chosen stand-in for the undecoded shake-attempt check: the speaker's evade episode ending with the flag still up, which is the decoded tail-cone hold test (`AiModeMachine.EvadeClearAlignment`) answering that the pursuer's nose is still on it. The dwell reverting the task, a stun and an avoid-crash climb-out are the ends that reach it |
-| 27 | wired | the same episode end with the flag already cleared, the pursuer shaken ("fires as the reaction flag clears", decoded). An episode the speaker leaves with the flag still up is 26, not this. A target lost mid-reaction reads as a shake, the flag's own clear rule with no pursuer left to test |
+| 25–26 | wired | the decoded site above, on the same raise as rows 1–12 and 14 and addressed to the pursuer (`AiVoiceRuntime.RaiseAttackCallOut` through `AiVoiceDispatcher.TauntTriggerFor`): the cosine between the pursuer's nose and the line to the human it holds picks 26 above `TauntNoseCos` and 25 below `-TauntTailCos`, and neither between them. A pursuer in its own evade reaction is refused, as the decoded block's `+0xba` read refuses it; a pilot with no mode machine counts as not evading |
+| 27 | wired | the speaker's evade episode ending with the flag already cleared, the pursuer shaken ("fires as the reaction flag clears", decoded, and the original raises it where it clears the flag and nowhere else). An episode the speaker leaves with the flag still up says nothing here; that geometry is the pursuer's own row 26. A target lost mid-reaction reads as a shake, the flag's own clear rule with no pursuer left to test |
 | 28 | wired, one arm | the decoded first arm only: `FlightController.DamageApplied` carries the round's shooter, and a shooter registered through `RegisterPlayer` whose team the predicate calls friendly over the struck aircraft's makes that aircraft speak (`AiVoiceRuntime.OnFriendlyFire`). The second arm, the survivor count over `DAT_0071c4e4`/`e8`/`ec` with its default sound set, is left unwired: what those three globals are is undecoded (below) | 
 | 15 | unwired | the danger-zone modes are never entered (their gate data is undecoded, F17) |
 
@@ -329,10 +362,11 @@ Stand-ins and inventions, named:
   looks up `talker_chance` at the block's own talker rating and `constitution_chance` at its own
   constitution rating, each on its own curve. A rating a block does not author falls back to the
   session's skill rating, same as before.
-- **The taunt pair 26/27 is decided by the evade flag**, one dispatch point at the episode's end
-  (`AiVoiceRuntime.OnModeChanged`): the original's shake-attempt check is undecoded, so the stand-in
-  is the flag's own decoded hold test, the pursuer's nose inside the tail cone. A move between the
-  two evade modes is the same episode and speaks nothing.
+- **Row 27's dispatch point is the evade episode's end** (`AiVoiceRuntime.OnModeChanged`) rather
+  than the frame the flag drops, which is where the original raises it. The remake reads the flag
+  when the aircraft leaves the pair of evade modes and speaks only if it has cleared, so the line
+  can arrive a few frames late; a move between the two evade modes is the same episode and speaks
+  nothing.
 - The gate's "must not already be talking" is a hook (`AiVoiceDispatcher.IsTalking`) the session
   answers from the radio channel: every combat line is queued with the speaker it belongs to, and
   that speaker is talking while its own line waits or is on air, for the line's own length
@@ -347,9 +381,6 @@ Stand-ins and inventions, named:
   survivors, and they are on the hostile side of the team predicate, so the "the player's wingmen"
   reading of them does not hold (see the gloat/28 section above). *(Trigger 22–24's polarity, which
   this list carried as open, was settled there.)*
-- **What the taunt pair 25/26 really tests.** Both bearing sites raise them off the pursuer's own
-  geometry against the player, which the trigger table's "failed tail check" and "failed shake
-  attempt" readings do not describe; see the warning in "The pursue path" and `BL-1011`.
 - **How `Bail`/`NoBail` is chosen** below the family root (the natural candidate is the
   constitution roll, unconfirmed). The `-A`/`-B`/`-C` half closed : the shipped
   `snd_<FAMILY>-A_id<N>_random` groups pick the take, weighted-random with recency 0.5 (see

@@ -750,24 +750,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   off the mode edge, which was the largest single cause of the low rate) and `BL-991` (the one
   trigger id still unwired).
 
-- `BL-1011` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **Both of the
-  original's bearing-call-out sites raise the taunt pair 25/26 off the pursuer's own geometry
-  against the player, which is not the "failed tail check" and "failed shake attempt" the trigger
-  table and the remake's wiring read them as.** *Evidence:* in the combat driver `FUN_0041d9f0`
-  (state 0) and again in the multiplayer vehicle update `FUN_00470750`, the same block takes the
-  dot product of the unit line to the player with the pursuer's own forward axis (`+0x198`) and
-  raises 26 under -0.85 (`0x0041dc50`) or 25 over 0.7 (`0x0041dc66`), then broadcasts the bearing
-  id. Nothing there reads a tail check, a shake attempt or the evade flag, and the speaker is the
-  pursuer, not the pursued. The remake wires 25 on a pursuer's failed sixth-sense stun (spoken by
-  its AI target) and 26/27 on the evade episode's end. Both readings cannot be right.
-  *Fix shape:* decode who speaks 25 and 26 in the original, the geometry reading says the pursuer
-  with the player ahead of its nose speaks 25 and the one with the player behind it speaks 26,
-  then either rewire the two rows or record why the remake's sites stand. *⚠ Traps:* 27
-  (`TA-SucShk`) is not raised from either block, so it is not part of the same question; the
-  0.7/-0.85 pair is a dot product against a UNIT vector, not an angle in degrees.
-  *Cross-refs:* `docs/formats/combat-voice.md` ("The pursue path"), `git log --grep=BL-986`
-  (the decode that found it), `git log --grep=BL-987` (the evade-end split it questions).
-
 - `BL-991` `[Feature]` `[Blocked: danger-zone decode]` `[S]` `[Next: decode]` `[Impact: low]`
   `[Evidence: decoded]` **`PR-DngrZn` (id 15, a Danger Zone run, broadcast) has no dispatch site
   because the danger-zone modes are never entered.** *Evidence:*

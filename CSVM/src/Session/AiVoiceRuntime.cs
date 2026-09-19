@@ -73,9 +73,10 @@ public sealed partial class AiVoiceRuntime : Node
     }
 
     /// <summary>Takes an AI aircraft, voiced or not. ⚠ Hand over EVERY AI the session builds: the
-    /// mode machine is watched either way, because the bearing call-out and the taunt are spoken
-    /// by a different aircraft than the one whose mode changed. A null accent, or one resolving to
-    /// no voiced pilot, registers no speaker and is silent, not an error.</summary>
+    /// mode machine is watched either way, because the bearing call-out the commit raises is
+    /// broadcast and is spoken by a different aircraft than the one whose mode changed. A null
+    /// accent, or one resolving to no voiced pilot, registers no speaker and is silent, not an
+    /// error.</summary>
     public void RegisterAi(FlightController ai, int? accentId, float talkerChance,
         float constitutionChance)
     {
@@ -152,10 +153,10 @@ public sealed partial class AiVoiceRuntime : Node
     private void OnTurretAcquired(TurretController turret, FlightController player) =>
         Play(_dispatcher.Broadcast(AiVoiceDispatcher.WaTurret, player.Team, _now));
 
-    // ⚠ Subscribed for every AI, not only for the registered speakers. Two of the sites below
-    // dispatch on ANOTHER aircraft, and the shipped rosters leave nearly every enemy on accentID
-    // -1, so watching only the voiced ones silences the player's own flight. Idempotent per
-    // aircraft, since a spawn can be handed over more than once.
+    // ⚠ Subscribed for every AI, not only for the registered speakers. The commit below raises a
+    // broadcast bearing call-out that ANOTHER aircraft speaks, and the shipped rosters leave
+    // nearly every enemy on accentID -1, so watching only the voiced ones silences the player's
+    // own flight. Idempotent per aircraft, since a spawn can be handed over more than once.
     private void WatchModes(FlightController ai)
     {
         if (ai.Pilot?.Machine is not { } machine || !_watched.Add(ai.PlayerIndex))
@@ -177,22 +178,14 @@ public sealed partial class AiVoiceRuntime : Node
             RaiseAttackCallOut(ai, quarry);
         }
 
-        // A pursuer's failed sixth-sense (tail) check stuns it; its AI target taunts.
-        if (to == AiMode.Stunned && from is AiMode.Pursue or AiMode.LayOff
-            && ai.Pilot?.Gunner?.AircraftTarget is { IsHumanPiloted: false } evader
-            && _dispatcher.Find(evader.PlayerIndex) != null)
-        {
-            Play(_dispatcher.Dispatch(evader.PlayerIndex, AiVoiceDispatcher.TaFailTail, _now));
-        }
-
-        // The evade episode's end decides the taunt pair. A flag still standing is the pursuer's
-        // nose inside the decoded tail cone (26); a cleared flag is the shake (27). A step
-        // between the two evade modes is the same episode and stays silent.
+        // The shake taunt at the evade episode's end, and only with the flag already cleared: the
+        // original raises it where the flag drops and nowhere else. An episode left with the flag
+        // still up says nothing here, its pursuer speaks the pair off its own geometry instead.
         if (from is AiMode.Evade or AiMode.EvasiveManeuver
-            && to is not (AiMode.Evade or AiMode.EvasiveManeuver))
+            && to is not (AiMode.Evade or AiMode.EvasiveManeuver)
+            && !machine.Evading)
         {
-            Play(_dispatcher.Dispatch(speakerId,
-                machine.Evading ? AiVoiceDispatcher.TaFailShk : AiVoiceDispatcher.TaSucShk, _now));
+            Play(_dispatcher.Dispatch(speakerId, AiVoiceDispatcher.TaSucShk, _now));
         }
     }
 
@@ -220,7 +213,8 @@ public sealed partial class AiVoiceRuntime : Node
     }
 
     // One raise of the pair: the pursuer's own WA-Attack and the flight's bearing call-out,
-    // computed in the warned player's frame and broadcast on the player's side.
+    // computed in the warned player's frame and broadcast on the player's side. The taunt pair
+    // rides the same raise, addressed to the pursuer off its own nose against the quarry.
     // ⚠ The mute window is read here as well as in the gate. A raise the window refuses must not
     // consume the interval, or a pursuer that commits on the mission's first frame would stay
     // silent for the next fifteen seconds, which is the whole complaint.
@@ -231,6 +225,14 @@ public sealed partial class AiVoiceRuntime : Node
             return;
         }
         _nextCallOut[ai.PlayerIndex] = _now + AiVoiceDispatcher.SlotCooldownS;
+        // The decoded block refuses the taunt while the pursuer is itself in an evade reaction,
+        // and a pilot with no mode machine is not evading.
+        if (ai.Pilot?.Machine is not { Evading: true }
+            && AiVoiceDispatcher.TauntTriggerFor(ai.WorldPosition, ai.NoseDirection,
+                quarry.WorldPosition) is { } taunt)
+        {
+            Play(_dispatcher.Dispatch(ai.PlayerIndex, taunt, _now));
+        }
         Play(_dispatcher.Dispatch(ai.PlayerIndex, AiVoiceDispatcher.WaAttack, _now));
         int bearing = AiVoiceDispatcher.BearingTriggerFor(
             quarry.WorldPosition, quarry.NoseDirection, ai.WorldPosition);
