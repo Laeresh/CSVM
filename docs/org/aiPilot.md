@@ -28,16 +28,27 @@ by one authored key and one authored field:
 - a **formation escort**, which requires a `primary_target` and never looks at a net.
 
 An aircraft with no patrol net does not fly a degenerate straight line and does not loiter. It
-either flies a formation station on its leader, or it is a `jet` with no net, which the engine has no
-branch for.
+either flies a formation station on its leader, or it is a `jet` with no net, which the engine
+builds dead.
 
-⚠ **The shipped data does produce one netless `jet`.** C1/M04's `blakepeace_2_2` (team 2, group 4,
-enabled) authors slot 0 as an empty list, every volume as `0.0` and its spawn at the world origin.
-The spawn reader `FUN_0047c210` takes the id when the list count is 1, draws `rand() % count` when
-it is higher, and otherwise writes `-1` to `+0x2e4` (`0x0047c76d`); nothing on that path skips the
-block. The net follower `FUN_0041d1f0` then looks `-1` up in the chapter net table
-(`0x0041d20a`–`0x0041d228`), finds no match and indexes record `-1`, 100 bytes before the table's
-first record, with no guard. What the aeroplane does on that read is not determinable statically.
+⚠ **The shipped data does produce one netless `jet`, and the original builds it dead.** C1/M04's
+`blakepeace_2_2` (team 2, group 4, enabled, `deactivated 0`) authors slot 0 as an empty list, every
+volume as `0.0` and its spawn at the world origin. The spawn reader `FUN_0047c210` takes the id when
+the list count is 1, draws `rand() % count` when it is higher, and otherwise writes `-1` to `+0x2e4`
+(`0x0047c76d`); nothing on that path skips the block. What decides its fate is the vehicle build
+`FUN_00476250`: it sets the dead byte `+0x91d` to 1 and the current edge `+0x2ec` to `-1` before net
+assignment (`0x0047636b`), and clears the dead byte again (`0x004763df`) on exactly two paths, a
+block whose `mode` is still `wingman` after the demotion test below, or a `netids >= 0` whose
+assignment `FUN_00475fc0` left a real edge in `+0x2ec`. A `jet` with `netids == -1` takes neither,
+so it is built dead: the world tick skips it (`+0x91d == 0 || +0x91f != 0`), targeting skips it,
+`DEDG` does not count it, and `WAKEUP_ENEMIES` cannot revive it because the hidden bit `+0x945`
+stays clear. The net follower `FUN_0041d1f0` would look `-1` up in the chapter net table
+(`0x0041d20a`–`0x0041d228`), find no match and index record `-1`, 100 bytes before the table's first
+record, with no guard, but it is never reached for this vehicle. Read live under the debugger on
+C1/M04: the vehicle sits in `VehicleList` at (0, 0, 0) with `+0x91d = 1`, `+0x945 = 0`,
+`+0x944 = 0`, `+0x2ec = -1` and its spawn speed still in `+0x934`, and the 100 bytes before the net
+table hold a null node-array pointer, so the read would have faulted had it run. CSVM does not spawn
+the block (`CampaignRoster.cs`, the plan's `Skipped` list).
 
 ## `mode`, the dynamics class
 
@@ -791,9 +802,10 @@ the net-id table for the vehicle's `netids` value at `+0x2e4` and, **on no match
 indexing 100 bytes before the first element of the net array and dereferencing the node and edge
 pointers it finds there. There is no guard and no fallback path.
 
-This is latent rather than reachable: the shipped data never gives a `jet` a missing net (below),
-so the index −1 read is never executed by the retail game. It is recorded here because it is the
-positive proof that "netless patrol" is not a behaviour the engine has.
+This is latent rather than reachable: a `jet` with no net is built dead by `FUN_00476250` (the
+headline), so the follower never runs for it and the index −1 read is never executed by the retail
+game. It is recorded here because it is the positive proof that "netless patrol" is not a behaviour
+the engine has.
 
 Net assignment is `FUN_00475fc0`. On `netids == -1` it returns immediately, leaving the task
 untouched. On a valid net it:
@@ -1731,8 +1743,5 @@ law is a campaign behaviour and the wrong fix for a wingman that leaves the figh
   point into bank, pitch and rudder) is a separate decode, and it is what would replace
   `AiPilot`'s placeholder.
 - `mode_alt` has no identified consumer.
-- What a `jet` whose net resolved to `-1` flies (C1/M04's `blakepeace_2_2`, see the headline) is a
-  read of record `-1` outside the net table; only a debugger run of that mission can say what it
-  finds there.
 - Whether the original's Instant Action wingmen visibly hold station is untested. The code path says
   they do not.

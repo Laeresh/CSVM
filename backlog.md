@@ -787,6 +787,32 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* the numpad views' three level keys (`Kp2`/`Kp4`/`Kp6`), which sit at this same
   base elevation (`git log --grep=BL-150`), `docs/formats/camparam.md` (`thirdp_pitch`, and the Known limits paragraph this corrects),
   `docs/org/cameraViews.md` (head-look controller, the chase placement's own elevation).
+- `BL-1023` `[Feature]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: trace]` **In smooth look
+  mode (`J`) a released right stick leaves the view where it was aimed, in the chase view and in
+  first person alike, the way a released numpad direction or mouse pan already does.** Today the
+  stick is absolute in every look mode: stick position is view position and centring the stick
+  returns the view to its settled pose (`docs/controls.md`, the right-stick row). The `J` row lists
+  only the numpad and the mouse as the inputs whose released position persists, so a pad player
+  has no way to park the view off centre. *Evidence:* `CameraController.PadLook`
+  (`CSVM/src/Flight/CameraController.cs:316`) is the chase view's own rigid path, fed from
+  `FlightController`'s `_chaseLook` filter (`FlightController.cs:2268`), and `Chase` resumes the
+  instant the filter reads released, whatever `HeadLook.Mode` is. In first person `HeadLook`'s
+  smooth-mode branch (`CSVM/src/Flight/HeadLook.cs:301`) assigns the head target from the
+  filtered stick and runs nothing once the stick is back inside `PadAimCentreBand`, so the head
+  target stays near the stick's last filtered position there; whether that reads as parked or as
+  a stick that never quite centres is unjudged at the controls. *Fix shape:* one rule for both
+  views: in `LookMode.FreeLook` the stick's last aim is held on release (the chase path keeps the
+  last `PadLook` angle pair rather than resuming `Chase`), and in snap mode both views return as
+  they do now. A user decision first, since the absolute stick is a UX call of this port with no
+  original to match, and a persistent stick changes how `K` and the centre key read on a pad.
+  *⚠ Traps:* the persistence must take the stick's aim at the moment it crossed into the centre
+  band, not the filter's lagged value after it, or the parked view drifts a little toward centre
+  on every release; do not add a second mode key for the pad, `J` and `K` are the original's two
+  and the pad shares them. *Playtest after fix:* `.\RunGame.ps1`, press `J`, push the right stick
+  half over in chase then in Cockpit and let go: the view stays; press `K` and repeat: it returns.
+  *Cross-refs:* `PT-120` (g) (the look stick's steadiness, judged in snap mode only),
+  `docs/controls.md` (the `J`, `K` and right-stick rows), `docs/org/cameraViews.md` (head-look
+  controller).
 
 ## HUD & UI
 
@@ -976,18 +1002,6 @@ usual.
   race has a defined start (`StuntRace.cs`, `ScoreStore.GetBest`/`RecordIfBest`), and would want
   their own key namespace, since a countdown makes race and solo totals diverge again.
 
-- `BL-974` `[Bug]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: data]` `[CM09]` **C1/M04's `blakepeace_2_2` flies
-  tens of kilometres out of the mission on `AiPilot.FlyPatrol`'s netless arm.** *Evidence:* its
-  roster block authors slot 0 as an empty list, every volume as `0.0` and its spawn at the world
-  origin; `CampaignDirector` spawns it live with no net, it climbs out of avoid crash and holds its
-  standing heading with no target, since nothing hostile is within 2,000 m of the origin. It is
-  the only netless `jet` in the shipped data. The original does not skip the block: `FUN_0047c210`
-  writes net `-1` for a count of 0 (`0x0047c76d`), and `FUN_0041d1f0` then reads record `-1` outside
-  the net table with no guard, so its behaviour there is not determinable statically. *Fix shape:*
-  read the original's `blakepeace_2_2` under the debugger on C1/M04 (where it sits, whether it
-  lives past spawn, what it flies), then port that; do not invent a leash or a despawn before the
-  read. *Cross-refs:* `docs/org/aiPilot.md` (the headline, "Open"),
-  `docs/formats/ai-rosters.md` ("Who is netless").
 - `BL-1015` `[Cleanup]` `[L]` `[Next: decide]` `[Impact: none]` `[Evidence: trace]` **`GameSession.cs`
   is 4402 lines and changes for unrelated reasons; the build steps and the per-mode runtimes it
   hosts leave as real modules.** *Evidence:* one review range added 532 lines over scattered hunks

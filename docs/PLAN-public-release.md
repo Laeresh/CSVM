@@ -183,9 +183,8 @@ could destroy the only route to primary 3 (`OBJECTIVE18`, `ANIM_STATE wingwalk E
 sitting that filed it walked CM02 through to CM24 (`git log --grep=BL-717`, commit `5b71d0ad`), so
 the mission was finished with the defect present. `BL-689`, CM13's
 flight check, withholds a plane grant and offers a button the original bars, which leaves the
-mission flyable in the aeroplane the profile already owns. `BL-974` can leave a
-survivor an objective is waiting on kilometres outside the mission area, which is a long flight
-rather than an impossible one. Each is in the Known Issues appendix instead.
+mission flyable in the aeroplane the profile already owns. Each is in the Known Issues appendix
+instead.
 
 Three entries failed re-verification, which is the part of this item that earned its keep.
 `BL-079`'s opening claim, that all sound is own-plane and non-positional, is false: every AI
@@ -1065,9 +1064,6 @@ Anything A2 or a later wave closes comes off this list.
 
 ## Enemies and combat
 
-- **One C1/M04 aircraft with no patrol net can fly tens of kilometres out of the mission area.**
-  Target it and fly out to it if an objective waits on it. (`BL-974`; the pursuit's walk across
-  the map is fixed, and the other patrols engage, break off and come back at the controls.)
 - **A zeppelin's turrets can shoot the player through the hull they are mounted on.** Break away
   from the hull rather than flying along it, since the fire stops once the ring loses its bearing.
   (`BL-714`; a probe confirmed a parked hull blocks its own rings correctly, so the item stayed
