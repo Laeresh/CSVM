@@ -931,13 +931,23 @@ internal static class TargetingSuites
             f16.Toggle();
             ctx.Check(!pane1.MarkAll && !pane2.MarkAll,
                 $"and a second press switches them off again p1={pane1.MarkAll} p2={pane2.MarkAll}");
-            var noPanes = new UI.DebugMarkerToggle(() => new List<TargetHud>());
+            // A press with no pane to mark changes nothing and latches no state of its own. A pane
+            // can join the session after it, a splitscreen pane built late.
+            var latePanes = new List<TargetHud>();
+            var noPanes = new UI.DebugMarkerToggle(() => latePanes);
             noPanes.Toggle();
-            ctx.Check(true, $"CONTROL: a session with no flight pane takes the press without throwing");
+            ctx.Check(latePanes.Count == 0,
+                $"a session with no flight pane still has none after the press panes={latePanes.Count}");
+            var pane3 = new TargetHud { PlayerIndex = 0 };
+            latePanes.Add(pane3);
+            noPanes.Toggle();
+            ctx.Check(pane3.MarkAll,
+                $"and the pane that joins afterwards takes the next press on={pane3.MarkAll}");
             f16.Free();
             noPanes.Free();
             pane1.Free();
             pane2.Free();
+            pane3.Free();
         }
         finally
         {

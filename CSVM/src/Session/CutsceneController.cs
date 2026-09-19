@@ -755,11 +755,11 @@ public sealed partial class CutsceneController : Node
         Log.Info("anim", $"cutscene '{Anim}' fast-forwards while an input is held; this scene arms no skip");
     }
 
-    // BL-452: the bars are separately-called data (docs/formats/anim-definitions/cutscenes.md),
+    // The bars are separately-called data (docs/formats/anim-definitions/cutscenes.md),
     // so this controller never turns them on or off itself except in Restore below. While Playing
-    // is true they should transition AT MOST once, false->true, from the letterbox call site(s);
-    // a second flip in either direction inside a live episode is exactly the reported flicker, and
-    // costs one bool compare a tick to catch. Quiet unless it actually happens.
+    // is true they should transition AT MOST once, false->true, from the letterbox call site(s).
+    // A second flip in either direction inside a live episode is the reported flicker, and costs
+    // one bool compare a tick to catch. Quiet unless it actually happens.
     private void WatchBars()
     {
         if (_bars == null || _bars.Visible == _lastBarsVisible)
@@ -771,7 +771,7 @@ public sealed partial class CutsceneController : Node
         _barsFlipsThisEpisode++;
         if (_barsFlipsThisEpisode > 1 || !_bars.Visible)
         {
-            Log.Error("anim", $"cutscene: '{Anim}' letterbox bars flipped to {_bars.Visible} mid-episode (flip #{_barsFlipsThisEpisode}) at t={Utils.GameClock.Current?.Time ?? 0.0:0.###} -- BL-452, the reported mid-cutscene flicker");
+            Log.Error("anim", $"cutscene: '{Anim}' letterbox bars flipped to {_bars.Visible} mid-episode (flip #{_barsFlipsThisEpisode}) at t={Utils.GameClock.Current?.Time ?? 0.0:0.###} -- the bars may rise once per episode, so this is the mid-cutscene flicker");
         }
     }
 

@@ -441,7 +441,7 @@ public sealed class InstantActionDirector
         }
         else
         {
-            Log.Info("core", $"ia: zeppelin run: '{objectiveZep}' launches every wave ({claimed} generator(s) on the wave-credit budget). BL-350 is open and in this mission's way: a drop is not gated on the doors opening.");
+            Log.Info("core", $"ia: zeppelin run: '{objectiveZep}' launches every wave ({claimed} generator(s) on the wave-credit budget). A drop is not gated on the bay doors opening, so a wave can leave a zeppelin that is still shut.");
         }
         int firstZepWave = waves.Start();
         if (firstZepWave != 0)
@@ -900,7 +900,7 @@ public sealed class InstantActionDirector
         public Func<int, UI.MenuInput> MenuInputFor = null!;
         public Action<int> EnterPhotoMode = null!;
         public Action<Control> RegisterBoard = null!;
-        // Where the ending goes on a presentation with a wrap-up page of its own: the frozen numbers
+        // Where the ending goes on a presentation with a wrap-up page of its own. The final numbers
         // leave for the menu and no board is built. Null keeps the in-flight board.
         public Action<UI.Menu.IaWrapupSnapshot>? WrapupToMenu;
     }

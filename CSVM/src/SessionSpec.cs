@@ -139,13 +139,13 @@ public sealed record SessionSpec
     /// <summary><c>--vs-kills=N</c>: the kill target that ends a match early. Default 5; 0
     /// disables the kill limit (the match then runs to the time limit alone).</summary>
     public int VsKills { get; private set; } = 5;
-    /// <summary><b>Resolved.</b> <c>--vs-kills=</c> was spelled out, so the flag beats a kill
+    /// <summary>Resolved. <c>--vs-kills=</c> was spelled out, so the flag beats a kill
     /// target a menu screen chose (<see cref="FromMenu"/>).</summary>
     public bool VsKillsExplicit { get; private set; }
     /// <summary><c>--vs-time=minutes</c>: the match time limit, in MINUTES. Default 5; 0 disables
     /// the time limit (the match then runs to the kill target alone).</summary>
     public int VsTimeMinutes { get; private set; } = 5;
-    /// <summary><b>Resolved.</b> <c>--vs-time=</c> was spelled out, so the flag beats a time limit
+    /// <summary>Resolved. <c>--vs-time=</c> was spelled out, so the flag beats a time limit
     /// a menu screen chose (<see cref="FromMenu"/>).</summary>
     public bool VsTimeExplicit { get; private set; }
     /// <summary><b>Resolved.</b> Open the aircraft's per-part HP sliders at launch, a modifier on
@@ -209,7 +209,7 @@ public sealed record SessionSpec
     public string ModeName =>
         Mode == SessionMode.AnimLab ? "anim-lab"
         : DamageTest || EffectsTest || WeaponTest || RunTests ? "test"
-        : DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid || DumpDebris ? "dump"
+        : DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid ? "dump"
         : MovieName != null ? "movie"
         : Mode == SessionMode.Freecam ? "freecam"
         : Mode == SessionMode.Viewer ? "viewer"
@@ -224,7 +224,7 @@ public sealed record SessionSpec
     /// <c>--dump-flight</c> run turns the bundle on yet still asks for focus.</summary>
     public bool IsScripted =>
         NoFocus || ScreenshotPath != null || ExportGltfPath != null || RunTests
-        || DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid || DumpDebris
+        || DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid
         || DamageTest || EffectsTest || WeaponTest;
 
     /// <summary><b>Resolved.</b> The chapter world is built instead of a single parked plane.</summary>
@@ -406,9 +406,9 @@ public sealed record SessionSpec
     /// and writes per-part HP, which an AI airframe resolves none of.</summary>
     public float? AiHullDamage { get; private set; }
     /// <summary><c>--canopy-holes[=&lt;1-5&gt;]</c>: open this many of the five canopy glass holes on
-    /// the flown aircraft as it spawns, through the same cue and the same
-    /// <c>cockpit_bulletholes</c> defs an incoming burst opens them with, so a scripted shot catches
-    /// the glass already struck. Null when the flag was absent.</summary>
+    /// the flown aircraft as it spawns. It opens them through the same cue and
+    /// <c>cockpit_bulletholes</c> defs an incoming burst uses. A scripted shot then catches the
+    /// glass already struck. Null when the flag was absent.</summary>
     public int? CanopyHoles { get; private set; }
     /// <summary><c>--ai-attack[=&lt;1-9&gt;]</c>: arm every AI plane this session spawns with the
     /// D14 forward-gun gunnery at the given skill rating (dead-eye/quick-draw interpolated from
@@ -417,8 +417,8 @@ public sealed record SessionSpec
     public int? AiAttackSkill { get; private set; }
 
     /// <summary><c>--ai-targeting=&lt;aircraft-first|decoded&gt;</c>: whether both AI pickers rank
-    /// live enemy aircraft ahead of every turret and structure candidate (the default), or run the
-    /// decoded picker's own order, which has no class priority
+    /// live enemy aircraft ahead of every turret and structure candidate, which is the default.
+    /// The other word runs the decoded picker's own order, which has no class priority
     /// (<see cref="Flight.AiTargetRanking.AircraftFirst"/>). The class biases are spent either
     /// way.</summary>
     public bool AircraftFirstTargeting { get; private set; } = true;
@@ -509,7 +509,6 @@ public sealed record SessionSpec
         : DumpMips ? "--dump-mips"
         : DumpAi ? "--dump-ai"
         : DumpTileGrid ? "--dump-tilegrid"
-        : DumpDebris ? "--dump-debris"
         : DamageTest ? "--damage-test"
         : EffectsTest ? "--effects-test"
         : WeaponTest ? "--weapon-test"
@@ -583,12 +582,12 @@ public sealed record SessionSpec
     public Flight.PilotViewMode ViewMode { get; private set; }
     /// <summary>Whether <see cref="ViewMode"/> came from a <c>--view=</c> naming a mode rather than
     /// from the default. Held because Chase is both the default and a nameable mode, so the value
-    /// alone cannot say whether the command line asked for it, and
+    /// alone cannot say whether the command line asked for it. That matters because
     /// <see cref="WithSavedDefaultView"/> must not overrule a <c>--view=chase</c>.</summary>
     public bool ViewModeExplicit { get; private set; }
     /// <summary>Whether the pilot's head turns with the aircraft in the cockpit, as the options
-    /// file has it; null where never set, which leaves the <c>headLook.autohead</c> config key
-    /// deciding (<see cref="Flight.FlightController.AutoHeadTurn"/>). Dropped under
+    /// file has it. It is null where never set, which leaves the <c>headLook.autohead</c> config
+    /// key deciding (<see cref="Flight.FlightController.AutoHeadTurn"/>). Dropped under
     /// <c>--det</c> like every other saved option.</summary>
     public bool? AutoHeadTurn { get; private set; }
     /// <summary>The <c>--look=x,y</c> right-stick deflection held for the whole
@@ -643,15 +642,6 @@ public sealed record SessionSpec
     /// per-chapter name.</summary>
     public string DumpTileGridPath { get; private set; } = "";
 
-    /// <summary><c>--dump-debris=&lt;name&gt;</c>: build the chapter world, kill every destructible
-    /// the name matches, and report what shades each mesh under it, the model's <c>lighting</c>
-    /// flag, its sheets and their mean texel, the baked vertex colours, and the colour the
-    /// fullbright world shader lands on, marking which nodes flew. Needs a <c>--chapter</c>.</summary>
-    public bool DumpDebris { get; private set; }
-
-    /// <summary>Which destructible <c>--dump-debris=</c> kills, matched exactly as
-    /// <c>--destroy=</c> matches (def, animation or anchor <c>cs_name</c> substring).</summary>
-    public string DumpDebrisName { get; private set; } = "";
     public bool DamageTest { get; private set; }
     public string DamageTestFilter { get; private set; } = "";
     public float DamageHd { get; private set; }
@@ -714,7 +704,7 @@ public sealed record SessionSpec
     public bool DebugSpectate { get; private set; }
 
     /// <summary><c>--debug-load[=dir]</c>: stand the real load screen over a CLI launch, the way a
-    /// menu launch does, and write one PNG per presented pump frame into that folder. The only way
+    /// menu launch does. It writes one PNG per presented pump frame into that folder. The only way
     /// to watch the bar fill with nobody at the menu; empty string = screen but no captures.</summary>
     public string? DebugLoad { get; private set; }
     public int? DebugLivery { get; private set; }
@@ -852,14 +842,15 @@ public sealed record SessionSpec
     public float? Volume { get; private set; }
 
     /// <summary><c>--sound-range-scale=</c>: a diagnostic multiplier on every positional sound's
-    /// <c>RANGE</c> radii, read into <see cref="Mech3.SoundFalloff.RangeScale"/>. 1, the data's own
-    /// radii, when absent; a value that is not a positive number is ignored with a warning.</summary>
+    /// <c>RANGE</c> radii, read into <see cref="Mech3.SoundFalloff.RangeScale"/>. It is 1, the
+    /// data's own radii, when absent. A value that is not a positive number is ignored with a
+    /// warning.</summary>
     public float SoundRangeScale { get; private set; } = 1f;
 
     /// <summary><c>--cloud-jitter=</c>: a remake-only extra X/Z offset, in metres, on every
-    /// lattice-scattered <c>fvol</c> cloud card (<see cref="Effects.FogVolumeClutter"/>). 0, the
-    /// decoded field untouched, when absent; a value that is not a non-negative number is ignored
-    /// with a warning.</summary>
+    /// lattice-scattered <c>fvol</c> cloud card (<see cref="Effects.FogVolumeClutter"/>). It is 0,
+    /// the decoded field untouched, when absent. A value that is not a non-negative number is
+    /// ignored with a warning.</summary>
     public float CloudJitter { get; private set; }
 
     public bool NoVsync { get; private set; }
@@ -1135,7 +1126,7 @@ public sealed record SessionSpec
                     1, Flight.CanopyHoleCue.HoleCount);
             }
             // An unknown word keeps the default rather than picking a policy, the same rule
-            // --difficulty= follows: a misspelling must not quietly change what the AI fights.
+            // --difficulty= follows. A misspelling must not quietly change what the AI fights.
             else if (arg.StartsWith("--ai-targeting="))
             {
                 string mode = arg["--ai-targeting=".Length..];
@@ -1312,7 +1303,6 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--dump-mips=")) { s.DumpMips = true; s.DumpMipsFilter = arg["--dump-mips=".Length..]; }
             else if (arg == "--dump-ai") { s.DumpAi = true; }
             else if (arg.StartsWith("--dump-ai=")) { s.DumpAi = true; s.DumpAiChapter = arg["--dump-ai=".Length..]; }
-            else if (arg.StartsWith("--dump-debris=")) { s.DumpDebris = true; s.DumpDebrisName = arg["--dump-debris=".Length..]; s.HasContentArg = true; }
             else if (arg == "--dump-tilegrid") { s.DumpTileGrid = true; s.HasContentArg = true; }
             else if (arg.StartsWith("--dump-tilegrid=")) { s.DumpTileGrid = true; s.DumpTileGridPath = arg["--dump-tilegrid=".Length..]; s.HasContentArg = true; }
             else if (arg.StartsWith("--tex-override=")) { texOverrides.Add(arg["--tex-override=".Length..]); }
@@ -1427,12 +1417,12 @@ public sealed record SessionSpec
         return s;
     }
 
-    /// <summary>The spec for a launchscreen launch, one plane per player, derived from
-    /// <paramref name="cli"/>, the pristine command line, never the last session's spec.
-    /// ⚠ Does not re-resolve: every menu-settable field must be written here, or the pristine base
-    /// re-opens the carry-over bug. <paramref name="mode"/> is Free/Stunt/Versus, not a bool, the
-    /// &gt;= 2-player Dogfight lock is <see cref="UI.LaunchMenu"/>'s job. <paramref name="iaDef"/>,
-    /// when given, decides <see cref="Scenario"/>/<see cref="Stunt"/> instead; the two vs arguments are a screen's match rules, null where none offers them (<see cref="VsKillsExplicit"/>).</summary>
+    /// <summary>The spec for a launchscreen launch, one plane per player, derived from the pristine
+    /// command line <paramref name="cli"/>, never the last session's spec. ⚠ Does not re-resolve:
+    /// every menu-settable field must be written here, or the pristine base drops it. The 2-player
+    /// Dogfight lock is <see cref="UI.LaunchMenu"/>'s job. An <paramref name="iaDef"/> decides
+    /// <see cref="Scenario"/> and <see cref="Stunt"/> instead. The two vs arguments are a screen's
+    /// match rules, null where none offers them (<see cref="VsKillsExplicit"/>).</summary>
     public static SessionSpec FromMenu(SessionSpec cli, string chapter, IReadOnlyList<string> planeNodes,
         MenuMode mode, InstantActionDef? iaDef = null, IReadOnlyList<LoadoutChoice?>? loadouts = null,
         IReadOnlyList<CustomPlaneDef?>? customPlanes = null, int? vsKills = null, int? vsTimeMinutes = null)
@@ -1508,20 +1498,20 @@ public sealed record SessionSpec
         return this with { Difficulty = saved };
     }
 
-    /// <summary>The saved targeting setting folded in, the difficulty's own rules less the flag:
-    /// nothing on the command line names it, a never-set field leaves the decoded head rule
-    /// standing, and a <c>--det</c> run reads no saved option, since a golden shot must not depend
-    /// on one machine's options file. Applied per launch, so an Options apply reaches the next
-    /// flight without a restart.</summary>
+    /// <summary>The saved targeting setting folded in, on the difficulty's own rules less the
+    /// flag. Nothing on the command line names it, and a never-set field leaves the decoded head
+    /// rule standing. A <c>--det</c> run reads no saved option, since a golden shot must not
+    /// depend on one machine's options file. Applied per launch, so an Options apply reaches the
+    /// next flight without a restart.</summary>
     public SessionSpec WithSavedNearestAfterKill(bool? saved) =>
         Det || saved is not { } on ? this : this with { NearestAfterKill = on };
 
-    /// <summary>The saved opening view folded in, the difficulty's own rules with <c>--view=</c> in
-    /// the flag's place: a command line naming a mode beats the saved word, a word
-    /// <see cref="CSVM.Flight.PilotView.Parse"/> refuses (or null) changes nothing, and a
+    /// <summary>The saved opening view folded in, on the difficulty's own rules with <c>--view=</c>
+    /// in the flag's place. A command line naming a mode beats the saved word. A word
+    /// <see cref="CSVM.Flight.PilotView.Parse"/> refuses, or null, changes nothing, and a
     /// <c>--det</c> run reads no saved option. Not folded outside <see cref="Fly"/>, since the two
     /// first-person views sit on a flown aircraft's camera and the other modes have cameras of
-    /// their own; it runs after <c>Validate</c>, so it keeps that rule rather than warning.</summary>
+    /// their own. It runs after <c>Validate</c>, so it keeps that rule rather than warning.</summary>
     public SessionSpec WithSavedDefaultView(string? savedWord)
     {
         if (ViewModeExplicit || Det || !Fly
@@ -1534,8 +1524,8 @@ public sealed record SessionSpec
     }
 
     /// <summary>The saved automatic head turn folded in, on
-    /// <see cref="WithSavedNearestAfterKill"/>'s rules: nothing on the command line names it, a
-    /// never-set field leaves the <c>headLook.autohead</c> config key deciding, and a <c>--det</c>
+    /// <see cref="WithSavedNearestAfterKill"/>'s rules. Nothing on the command line names it, and
+    /// a never-set field leaves the <c>headLook.autohead</c> config key deciding. A <c>--det</c>
     /// run reads no saved option.</summary>
     public SessionSpec WithSavedAutoHeadTurn(bool? saved) =>
         Det || saved is not { } on ? this : this with { AutoHeadTurn = on };
@@ -1771,7 +1761,7 @@ public sealed record SessionSpec
         // --dump-tilegrid votes freecam for one reason: the map-edge extender is only built in the
         // freecam/fly/sky-zone arm, and the census is a report ABOUT that extender. A dump that
         // resolved to the viewer would build a world with no continuation and report nothing.
-        bool freecam = _freecamArg || DamageTest || EffectsTest || DumpTileGrid || DumpDebris;
+        bool freecam = _freecamArg || DamageTest || EffectsTest || DumpTileGrid;
         bool animLab = _animLabArg || PlayAnim != null || DebugAnimUi;
 
         // --vs and --stunt are both flight modifiers, but not composable, one match mode has to
@@ -1914,8 +1904,8 @@ public sealed record SessionSpec
             Warn("ui", "--ai-damage needs --ai=<plane> to spend on; no AI aircraft were asked for");
             AiHullDamage = null;
         }
-        // Same rule for the canopy: the cue and its defs belong to a flown aeroplane's own rig, and
-        // a parked viewer plane has no crash rig to run them through.
+        // Same rule for the canopy: the cue and its defs belong to a flown aeroplane's own rig. A
+        // parked viewer plane has no crash rig to run them through.
         if (CanopyHoles != null && !Fly && !Stunt)
         {
             Warn("ui", "--canopy-holes needs a flown aircraft (--fly/--stunt); ignoring it");
@@ -2106,8 +2096,8 @@ public sealed record SessionSpec
     private void Print(string message) => _notes.Add(new Note("", message));
 
     /// <summary>A parse- or resolve-time complaint, held rather than logged so the spec stays
-    /// engine-free. <paramref name="Category"/> is the <c>Log</c> category to emit it under, at
-    /// warning level; empty means the note has no category and <c>Launcher</c> logs it under
-    /// <c>core</c> at info, which is where an argument complaint sits in launch order.</summary>
+    /// engine-free. The <paramref name="Category"/> is the <c>Log</c> category to emit it under,
+    /// at warning level. Empty means the note has no category, and <c>Launcher</c> logs it under
+    /// <c>core</c> at info, where an argument complaint sits in launch order.</summary>
     public readonly record struct Note(string Category, string Message);
 }

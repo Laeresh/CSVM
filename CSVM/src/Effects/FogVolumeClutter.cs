@@ -245,7 +245,7 @@ public sealed partial class FogVolumeClutter : Node3D
 
     // One corner's authored normal, the geometry the original's per-vertex facade light runs on
     // (docs/org/vertexLighting.md). Every shipped card carries three under `normal_indices
-    // [1, 1, 0, 2]`: the top corners share one along the card's own +Y, the bottom two carry the
+    // [1, 1, 0, 2]`. The top corners share one along the card's own +Y; the bottom two carry the
     // pair pointing out of it along +Z. A card without them falls back to the quad's own facing,
     // which the unlit arm never reads.
     private static Vector3 CardNormal(GameZMesh mesh, GameZPolygon poly, int corner)
@@ -276,9 +276,9 @@ public sealed partial class FogVolumeClutter : Node3D
         string vertexLight = lit
             ? "\n    v_light = csky_sun_vertex_light(face * NORMAL);"
             : string.Empty;
-        // The product is clamped, not the factor: the original clamps after multiplying the
-        // authored colour, and it clamps in the framebuffer's own gamma space, which is the space
-        // COLOR is still in here.
+        // The product is clamped, not the factor. The original clamps after multiplying the
+        // authored colour, and it clamps in the framebuffer's own gamma space. COLOR is still in
+        // that space here.
         string vcol = lit ? "clamp(COLOR.rgb * v_light, 0.0, 1.0)" : "COLOR.rgb";
         string albedo = fogged
             ? "    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;\n"
@@ -297,8 +297,8 @@ public sealed partial class FogVolumeClutter : Node3D
             #include "res://shaders/csky_srgb.gdshaderinc"
             #include "res://shaders/csky_clutter_fade.gdshaderinc"
             #include "res://shaders/csky_facade.gdshaderinc"
-            // The chapter's mip LOD bias is one device render state in the original, so a card
-            // picks its level exactly as every other mip-mapped arm does.
+            // The chapter's mip LOD bias is one device render state in the original. A card picks
+            // its level as every other mip-mapped arm does.
             #include "res://shaders/csky_mip_bias.gdshaderinc"
 
             varying flat float v_alpha;{{varying}}
@@ -330,7 +330,7 @@ public sealed partial class FogVolumeClutter : Node3D
     }
 
     // The scatter: every authored face of every volume carries a staggered lattice in its own
-    // plane, `distance * sqrt(3)/2` by `distance`, and each point that falls inside that face's
+    // plane, `distance * sqrt(3)/2` by `distance`. Each point that falls inside that face's
     // outline places one sprite, weighted over the resolved clutter table. `distance` is still the
     // field's areal DENSITY, an authored mean spacing, not a lattice phase.
     // See docs/org/cloudCards.md for the decoded walk and docs/formats/fogvol.md for the density.
@@ -363,13 +363,13 @@ public sealed partial class FogVolumeClutter : Node3D
         // here, so world-anchoring and determinism are the same property.
         var rng = Rng.NewSystemRandom(Rng.Clouds);
 
-        // ⚠ Keep the band draws off Rng.Clouds entirely: one there, even taken before the loop,
-        // reseeds the placements of any later field built in the same process, which is how a
-        // suite that builds two chapters sees the second one's counts move.
+        // ⚠ Keep the band draws off Rng.Clouds entirely. One there, even taken before the loop,
+        // reseeds the placements of any later field built in the same process. A suite that builds
+        // two chapters then sees the second one's counts move.
         var bandRng = Rng.NewSystemRandom(Rng.CloudBands);
 
-        // The remake-only X/Z jitter draws off its own stream, and only when asked for, so every
-        // value of the knob lays the same decoded field and moves only where each card sits.
+        // The remake-only X/Z jitter draws off its own stream, and only when asked for. Every
+        // value of the knob lays the same decoded field, and moves only where each card sits.
         var jitterRng = jitter > 0f ? Rng.NewSystemRandom(Rng.CloudJitter) : null;
 
         // One pass per volume's own faces, not per clutter block, weights are already flattened
@@ -378,8 +378,8 @@ public sealed partial class FogVolumeClutter : Node3D
         foreach (var volume in volumes)
         {
             // The per-volume reference point the perpendicular offset runs away from. The decode
-            // reads it off the volume record and no further, and the direction it has to give on a
-            // slab's top face (up near the middle, tilting outward at the rim) is the centre's.
+            // reads it off the volume record and no further. On a slab's top face the direction it
+            // gives is the centre's: up near the middle, tilting outward at the rim.
             var reference = volume.Box.GetCenter();
             foreach (var face in volume.Polygons ?? Array.Empty<FogVolumeFace>())
             {
@@ -388,16 +388,16 @@ public sealed partial class FogVolumeClutter : Node3D
         }
 
         // Continue the map-spanning slab's own cell field past the base map. Runs after every
-        // authored volume above has drawn everything it draws, and touches no state the loop above
-        // reads, it never calls `rng` at all, so it cannot realign the interior placements.
+        // authored volume above has drawn, and touches no state that loop reads. It never calls
+        // `rng` at all, so it cannot realign the interior placements.
         ExtendPastMapEdge(volumes, kinds, period, cardHeight, totalWeight);
     }
 
     // One authored face's own staggered lattice, laid in the face's plane on the basis
-    // U = unit(v1 - v0), V = cross(U, n): steps `distance * sqrt(3)/2` along U and `distance`
-    // along V, each extent cut into a whole number of steps, every other row offset by half a
-    // step, every point tested against the face's own outline. The draws per accepted point are
-    // the decoded order: kind, band, perpendicular offset, perturbation, scale
+    // U = unit(v1 - v0), V = cross(U, n). It steps `distance * sqrt(3)/2` along U and `distance`
+    // along V, each extent cut into a whole number of steps. Every other row is offset by half a
+    // step, and every point is tested against the face's own outline. The draws per accepted point
+    // are the decoded order: kind, band, perpendicular offset, perturbation, scale
     // (docs/org/cloudCards.md).
     private void ScatterFace(in FogVolumeFace face, Vector3 reference, float period,
         List<Kind> kinds, float totalWeight, Random rng, Random bandRng, float jitter, Random? jitterRng)
@@ -454,9 +454,9 @@ public sealed partial class FogVolumeClutter : Node3D
 
                 var block = kind.Block;
                 float band = (float)bandRng.NextDouble();
-                // The offset runs along the direction from the volume's reference point, not along
-                // the face normal and not along +Y: on a slab's top face that is up in the middle
-                // and tilts outward at the rim, which is the shape the decode describes.
+                // The offset runs along the direction from the volume's reference point, not the
+                // face normal and not +Y. On a slab's top face that is up in the middle, tilting
+                // outward at the rim, which is the shape the decode describes.
                 var away = point - reference;
                 away = away.LengthSquared() > 0f ? away.Normalized() : face.Normal;
                 float perp = Lerp(block.PerpDistRange, (float)rng.NextDouble());
@@ -466,8 +466,8 @@ public sealed partial class FogVolumeClutter : Node3D
                 var displace = new Vector3(Rand(-0.5f, 0.5f), Rand(-0.5f, 0.5f), Rand(-0.5f, 0.5f))
                     * perturb;
                 float scale = Lerp(block.ScaleRange, (float)rng.NextDouble());
-                // Not the original's: the decoded ±10 m on a 130 m lattice leaves its rows standing,
-                // and this widens only the horizontal spread, after every decoded draw is taken.
+                // Not the original's: the decoded ±10 m on a 130 m lattice leaves its rows
+                // standing. This widens only the horizontal spread, after every decoded draw.
                 if (jitterRng != null)
                 {
                     displace += new Vector3(
@@ -485,11 +485,11 @@ public sealed partial class FogVolumeClutter : Node3D
     }
 
     // Identifies the chapter's map-spanning slab from data (FogVolumeSpec.FindMapSpanningSlab,
-    // pure geometry, never a chapter name or a hardcoded fvol1..9 range) and, if one exists, tiles
-    // its own `distance`-cell field outward past the map rim. C1C's build-ups and C5's strips are
-    // too tall to read as a sheet and are never extended; C1B/C2/C3 ship no fvol* at all
-    // (docs/formats/fogvol.md's Map-edge continuation section). ⚠ The ring continues the slab's
-    // TOP face alone, one authored face rather than the volume.
+    // pure geometry, never a chapter name or a hardcoded fvol1..9 range). If one exists, it tiles
+    // that slab's own `distance`-cell field outward past the map rim. C1C's build-ups and C5's
+    // strips are too tall to read as a sheet and are never extended. C1B/C2/C3 ship no fvol* at
+    // all (docs/formats/fogvol.md's Map-edge continuation section).
+    // ⚠ The ring continues the slab's TOP face alone, one authored face, not the volume.
     private void ExtendPastMapEdge(IReadOnlyList<FogVolumeBox> volumes, List<Kind> kinds,
         float period, float cardHeight, float totalWeight)
     {
@@ -504,9 +504,9 @@ public sealed partial class FogVolumeClutter : Node3D
             return;
         }
 
-        // Bounded at the largest authored far_fade, not at MapEdgeExtender's own reach: the shader
+        // Bounded at the largest authored far_fade, not at MapEdgeExtender's own reach. The shader
         // collapses a sprite once its band has dropped it, and the view-angle law reaches at most
-        // half that band horizontally, so a wider ring buys nothing (docs/formats/fogvol.md).
+        // half that band horizontally. A wider ring buys nothing (docs/formats/fogvol.md).
         float radius = 0f;
         foreach (var kind in kinds)
         {
@@ -594,9 +594,9 @@ public sealed partial class FogVolumeClutter : Node3D
                         x + (Mathf.Sin(bearing) * perturb),
                         topY + Lerp(block.PerpDistRange, (float)rng.NextDouble()),
                         z + (Mathf.Cos(bearing) * perturb))));
-                // The slab's own top face continues out here, so +Y like the face the interior
-                // scatters over. ⚠ The band draw comes last, after every draw a placement
-                // reads, so adding it left the ring's positions where they were.
+                // ⚠ The band draw comes last, after every draw a placement reads, so the ring's
+                // positions do not move. The slab's own top face continues out here: +Y, like the
+                // face the interior scatters over.
                 kind.Bands.Add(BandData(Vector3.Up, (float)rng.NextDouble()));
                 InstanceCount++;
                 ExtensionCount++;

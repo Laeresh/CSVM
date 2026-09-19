@@ -290,9 +290,9 @@ internal static class InstantActionSuites
         }
     }
 
-    // The actors' accents reach the voice prewarm only through VoiceAccentIds, and a clip outside
-    // that set never plays once the archive closes, so the ace's death cry is asserted against a
-    // real prewarm over the join GameSession.BuildWorldStage builds.
+    // The actors' accents reach the voice prewarm only through VoiceAccentIds. A clip outside that
+    // set never plays once the archive closes. So the ace's death cry is asserted against a real
+    // prewarm over the join GameSession.BuildWorldStage builds.
     [Suite("instant-action-voice",
         "C1/IA1 as the wizard's dogfight_ace: the actors' accent join holds the ace's own accent, "
         + "which the mission roster alone does not reach, so a session prewarm over roster plus "
@@ -405,8 +405,8 @@ internal static class InstantActionSuites
         }
     }
 
-    // Driven through the director's own BuildActors rather than hand-built AiSpawns, so the name
-    // each actor carries is the one the mission build writes, not one this suite chose.
+    // Driven through the director's own BuildActors rather than hand-built AiSpawns. The name each
+    // actor carries is then the one the mission build writes, not one this suite chose.
     [Suite("instant-action-marker-names",
         "the Instant Action actor build names its aircraft the way the original's marker does: "
         + "over C1/IA1 and C5/IA1 as dogfight_ace, the ace's display name is its ace_name resolved "
@@ -927,8 +927,8 @@ internal static class InstantActionSuites
                 $"…and the same report leaves a dogfight_squadron mission running: {notAceMission.Outcome}");
 
             // ---- the hold between the ending and the wrap-up board ---------------------------
-            // Its own ace and its own runtime, so the win still arrives through a real Downed
-            // report and the mission clock has run before it does.
+            // Its own ace and its own runtime. The win still arrives through a real Downed
+            // report, after the mission clock has run.
             const float HoldDt = 1f / 60f;
             var holdMission = new InstantActionRuntime(EndDef(ctx, "hold", "dogfight_ace"));
             var heldAce = SpawnAt(new Vector3(600f, 500f, 0f), InstantActionRuntime.EnemyTeam);
@@ -1028,7 +1028,7 @@ internal static class InstantActionSuites
             }
             ctx.Check(!probe.Crashed,
                 $"…and 5 s later the armed 3 s crash cam has respawned it, the able-to-fail control");
-            // ⚠ The respawn path must stay clear of the ending's hold: a death with a life left
+            // ⚠ The respawn path must stay clear of the ending's hold. A death with a life left
             // ends nothing, so nothing is armed and no board is ever due.
             lifeLedger.Advance(InstantActionRuntime.WrapupHoldS + 1f);
             ctx.Check(!lifeLedger.Ended && !lifeLedger.HoldingWrapup && respawnBoards.Count == 0,
@@ -1050,8 +1050,8 @@ internal static class InstantActionSuites
             ctx.Check(probe.Crashed,
                 $"…and 10 s later the wreck is still there: Spectating outranks the armed timer");
 
-            // ---- the hold's input half, on a real seat flying a scripted stick ---------------
-            // ⚠ Not a freeze: the seat still steps and still carries the lever it was left on.
+            // ---- the hold's input half -------------------------------------------------------
+            // ⚠ Not a halt: the seat still steps and still carries the lever it was left on.
             // What the hold takes away is the command, which is why the stick is full deflection.
             var seatStats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
             var seatModel = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
@@ -1126,8 +1126,8 @@ internal static class InstantActionSuites
             ctx.Check(seat.LastCommand.Pitch > 0.5f && seat.LastCommand.Roll > 0.5f,
                 $"…and the stick still flies it with nothing held at all: pitch={seat.LastCommand.Pitch:0.00} roll={seat.LastCommand.Roll:0.00}");
 
-            // A hull lost inside the win's hold falls for the rest of it: R is swallowed and the
-            // armed crash cam is held off with it, so nothing comes back before the board.
+            // A hull lost inside the win's hold falls for the rest of it. R is swallowed and the
+            // armed crash cam is held off with it. Nothing comes back before the board.
             seat.AutoRespawnAfter = 0.5f;
             seat.ControlHold = FlightControlHold.CommandsOnly;
             seat.HoldActionForTest(InputAction.Respawn, true);
@@ -1142,7 +1142,7 @@ internal static class InstantActionSuites
             seat.HoldActionForTest(InputAction.Respawn, false);
 
             // ---- the hold's handover to the board ---------------------------------------------
-            // The real board over the real hold, wired as the director wires it: no menu exists
+            // The real board over the real hold, wired as the director wires it. No menu exists
             // while the world flies, and the menu built with the board answers its first press.
             var handover = new InstantActionRuntime(EndDef(ctx, "handover", "dogfight_ace"));
             var boardState = new PauseState();
@@ -1638,9 +1638,10 @@ internal static class InstantActionSuites
     }
 
     // A solo Instant Action stunt run on the real seat, stepped through the win's hold the way the
-    // director wires it: no scoreboard, the run completing inside SimStep, CommandsOnly at the ending.
-    // The original flies on for the whole hold, and nothing is photographed after the completing
-    // frame. The control hands the same seat a solo scoreboard, which holds the finish pose.
+    // director wires it. There is no scoreboard, the run completes inside SimStep, and the ending
+    // sets CommandsOnly. The original flies on for the whole hold, and nothing is photographed
+    // after the completing frame. The control hands the same seat a solo scoreboard, which holds
+    // the finish pose.
     private static void StuntRunFliesOn(TestContext ctx, FlightController seat, string missionZrdr)
     {
         string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, "C1");
@@ -1772,11 +1773,11 @@ internal static class InstantActionSuites
         }
     }
 
-    // A two-pilot C1/IA1 stunt run built through the session's own roster and race board, once as
-    // Instant Action wires it and once as a plain splitscreen race, which is the control. In
-    // Instant Action the last pilot's finish wins the mission, both aircraft fly through the whole
-    // hold with no board and no halt, and the wrap-up follows; the race keeps its board and its
-    // finish hold.
+    // A two-pilot C1/IA1 stunt run built through the session's own roster and race board. It flies
+    // once as Instant Action wires it and once as a plain splitscreen race, the control.
+    // In Instant Action the last pilot's finish wins the mission. Both aircraft fly through the
+    // whole hold with no board and no halt, and the wrap-up follows. The race keeps its board and
+    // its finish hold.
     private static void SplitscreenStuntRunEndsOnTheHold(TestContext ctx, GameZ planesGamez,
         TextureArchive textures, ProjectilePool pool, string missionZrdr)
     {
@@ -1824,20 +1825,8 @@ internal static class InstantActionSuites
         var roster = new FlightRoster(FlightRosterPolicy.From(spec),
             new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
             new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host,
-            new AircraftAssemblyResources
-            {
-                PlanesGamez = planesGamez,
-                StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
-                CamParamsFor = _ => new CamParams(),
-                PaintRng = new RandomNumberGenerator(),
-                ZrdrPath = ctx.ZrdrPath,
-                StockLoadouts = StockLoadouts.Load(),
-                WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
-                WeaponMessages = Messages.Load(ctx.MessagesPath),
-                Textures = textures,
-                Shakes = ShakeDefs.Load(ctx.ZrdrPath),
-            },
+            SuiteConstants.AircraftResources(ctx, planesGamez, textures,
+                Messages.Load(ctx.MessagesPath), _ => new CamParams()),
             new FlightWorldBindings
             {
                 Projectiles = pool,

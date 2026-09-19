@@ -46,18 +46,7 @@ internal static class PlaneWobbleSuites
 
             var spec = SessionSpec.Parse(System.Array.Empty<string>());
             var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
-            var inputs = new AircraftAssemblyResources
-            {
-                PlanesGamez = planesGamez,
-                StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
-                PaintRng = new RandomNumberGenerator(),
-                ZrdrPath = ctx.ZrdrPath,
-                StockLoadouts = StockLoadouts.Load(),
-                WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
-                Textures = textures,
-                Shakes = ShakeDefs.Load(ctx.ZrdrPath),
-            };
+            var inputs = SuiteConstants.AircraftResources(ctx, planesGamez, textures);
             // worldEffects null!: never dereferenced here, as in FlightTelemetrySuites, because
             // CrashProgram/WorldScene stay null and the spawner's crash-runtime block is skipped.
             var spawner = new FlightRoster(FlightRosterPolicy.From(spec), liveries, null!, ctx.Host, inputs,

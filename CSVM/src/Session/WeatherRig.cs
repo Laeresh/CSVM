@@ -195,13 +195,6 @@ public sealed class WeatherRig
     /// aircraft blocks (<c>Flight/GroundShadowLaw</c>).</summary>
     public (Vector3 Diffuse, Vector3 Ambient) SunlightRgb { get; private set; } = DefaultSunlightRgb;
 
-    /// <summary>The applied zone's <c>csky_world_light</c>, the scalar the fullbright world shader
-    /// multiplies by, linearised exactly as the write to the global was. Published because
-    /// <c>RenderingServer.GlobalShaderParameterGet</c> answers with an empty Variant outside the
-    /// editor, so a reader that needs the live value cannot ask the server for it. 1 until a zone
-    /// is applied, and in enhanced mode, where a real sun carries that energy instead.</summary>
-    public float WorldLightLinear { get; private set; } = 1f;
-
     /// <summary>The deck's regime for one camera: the tiles' own world-fixed altitude in every
     /// regime, wearing the dimmed underside below <paramref name="bandCentre"/> and the undimmed
     /// top at or above it. Pure, so two cameras either side get independently correct answers.
@@ -826,7 +819,6 @@ public sealed class WeatherRig
         // docs/org/weather.md for the measured gamma-vs-linear difference.
         float worldLightLinear = new Color(fog.WorldLight, fog.WorldLight, fog.WorldLight).SrgbToLinear().R;
         RenderingServer.GlobalShaderParameterSet("csky_world_light", worldLightLinear);
-        WorldLightLinear = worldLightLinear;
         // The zone's authored SUNLIGHT_ORIENTATION, adopted unconditionally, no tune, no clamp.
         // It shades aircraft only; the world is fullbright and casts no shadow from it.
         // ⚠ One light for the whole session: in splitscreen both panes wear rig 0's zone.
@@ -860,7 +852,6 @@ public sealed class WeatherRig
     private void ApplyEnhancedLighting(WeatherState.ZoneWeather fog)
     {
         RenderingServer.GlobalShaderParameterSet("csky_world_light", 1f);
-        WorldLightLinear = 1f;
         // Shadows end where this zone's haze BEGINS, off the AUTHORED near, so a shadow fades out
         // before the ramp rather than mixing with it (docs/architecture.md). The session sun only:
         // a registered clone owns its own camera-relative distance (RegisterExtraLighting).

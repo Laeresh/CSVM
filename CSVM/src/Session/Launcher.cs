@@ -249,8 +249,8 @@ public partial class Launcher : Node3D
     // the mission ends inside the session's own physics step, which is no place to free it.
     private (string Profile, CampaignMissionResult Result)? _pendingDebrief;
 
-    // The numbers an ended Instant Action mission froze, acted on at the top of the next frame for
-    // the same reason the debrief is: the ending arrives inside the session's own step.
+    // The final numbers of an ended Instant Action mission, acted on at the top of the next frame.
+    // The reason is the debrief's: the ending arrives inside the session's own step.
     private IaWrapupSnapshot? _pendingWrapup;
 
     // The load screen and the deferred build behind it (BeginLaunch → _Process). A build is one
@@ -259,13 +259,13 @@ public partial class Launcher : Node3D
     // ⚠ Null/-1 means no launch is owed; a CLI launch does not come through here at all.
     private CanvasLayer? _loadLayer;
     private int _launchFramesWaited = -1;
-    // The load screen's second half: once the session is built, the work it ordered for the load
-    // is carried out one step a frame with the screen still up, which is what makes the screen a
-    // real yield of several frames. -1 means nothing is owed.
+    // This is the load screen's second half. Once the session is built, the work it ordered for the
+    // load is carried out one step a frame with the screen still up. That is what makes the screen
+    // a real yield of several frames. -1 means nothing is owed.
     private int _loadStepsRun = -1;
-    // The cover that bridges the load screen and the session's first real frame: raised with the
-    // screen (or, on a CLI launch, with the build), held opaque until the session says that frame
-    // is ready, then faded up from dark. Null under --det and once it has finished.
+    // The cover that bridges the load screen and the session's first real frame. It is raised with
+    // the screen, or with the build on a CLI launch. It stays opaque until the session says that
+    // frame is ready, then fades up from dark. Null under --det and once it has finished.
     private UI.SessionStartFade? _startFade;
 
     private double _perfClock;
@@ -453,8 +453,8 @@ public partial class Launcher : Node3D
         {
             Pads.Disabled = true;
         }
-        // Read by both AI pickers, for the same reason the two statics above are statics: it
-        // settles once per launch and no pilot or gunner chooses it for itself.
+        // Read by both AI pickers, for the same reason the two statics above are statics. It
+        // settles once per launch, and no pilot or gunner chooses it for itself.
         Flight.AiTargetRanking.AircraftFirst = _spec.AircraftFirstTargeting;
         _captureDirector = new Testing.CaptureDirector(_spec);
         _gltfExporter = new Testing.GltfExporter(_spec);
@@ -610,8 +610,8 @@ public partial class Launcher : Node3D
             Log.Info("sound", $"sound range scale=x{Mech3.SoundFalloff.RangeScale:0.###} via=--sound-range-scale, every positional RANGE pair and its cull multiplied (diagnostic)");
         }
         // The haptics toggle, read under the same rule and defaulting ON where nothing is saved.
-        // ⚠ A deterministic run never rumbles: a golden sweep or a scripted probe must not reach the
-        // hardware on the desk, and no screen is drawn from this.
+        // ⚠ A deterministic run never rumbles. A golden sweep or a scripted probe must not reach
+        // the hardware on the desk, and no screen is drawn from this.
         PadRumble.Enabled = !_spec.Det && OptionsStore.UserOptions().Load().Rumble != false;
         // The rocket carve, read the same way but defaulting OFF: the original carves nothing in play.
         // ⚠ --det reads no saved option, which keeps every pinned golden clear of a bowl; --craters is
@@ -780,8 +780,8 @@ public partial class Launcher : Node3D
                 Log.Info("core", $"gamepad: device {p} \"{Input.GetJoyName(p)}\" guid={Input.GetJoyGuid(p)} info={Input.GetJoyInfo(p)}");
 
         SetupLighting();
-        // The same two framings GameSession re-applies per launch: the decoded world base for
-        // every camera that draws the world, the viewer's own 50 for a model on a stage.
+        // GameSession re-applies these same two framings per launch. The decoded world base serves
+        // every camera that draws the world, and the viewer's own 50 a model on a stage.
         _camera = new Camera3D
         {
             Fov = _spec.Fly || _spec.Freecam || _spec.AnimLab ? CameraController.ExternalFovDeg : 50f,
@@ -854,7 +854,7 @@ public partial class Launcher : Node3D
             return;
         }
 
-        // --debug-load stands the real screen over a CLI launch, deferred build and all, which is
+        // --debug-load stands the real screen over a CLI launch, deferred build and all. That is
         // the only way to watch the bar with nobody at the menu.
         if (_spec.DebugLoad != null)
         {
@@ -1080,8 +1080,8 @@ public partial class Launcher : Node3D
     }
 
     // Where a flight left early lands, taken from the launch that starts it. Every menu launch path
-    // writes it here and ExitSession reads it back, so the rule stands in one place.
-    // ⚠ Keep it internal rather than private: nothing instantiates a Launcher headlessly, so the
+    // writes it here, ExitSession reads it back, and the rule stands in one place.
+    // ⚠ Keep it internal rather than private. Nothing instantiates a Launcher headlessly, so the
     // launch-return suite pins this round trip on the live node or not at all.
     internal void LaunchedFrom(MenuExit exit) => ExitDestination = MenuReturnDestination.ForLaunch(exit);
 
@@ -1159,9 +1159,9 @@ public partial class Launcher : Node3D
     // published clock, the world lights, the camera restore) cannot land on top of the new one.
     private void RunOwedLaunch()
     {
-        // The load screen's second half: the session exists, and what it ordered for the load is
-        // carried out a step a frame behind the same screen. A step is one wave aeroplane, so the
-        // launch frame that needs it later binds a finished one instead of building it.
+        // This is the load screen's second half. The session exists, and what it ordered for the
+        // load is carried out a step a frame behind the same screen. A step is one wave aeroplane,
+        // so the launch frame that needs it later binds a finished one instead of building it.
         if (_loadStepsRun >= 0)
         {
             if (_session is { } loading && loading.StepOwedLoad())
@@ -1183,7 +1183,7 @@ public partial class Launcher : Node3D
         _launchFramesWaited = -1;
         bool built = LaunchSession();
         // The screen stays up while the build's own owed steps run, and comes down on the frame
-        // they finish: a load screen left up past that would draw over the first frame of the
+        // they finish. A load screen left up past that would draw over the first frame of the
         // world, and over a --screenshot capture.
         if (built && _session is { } loaded && loaded.StepOwedLoad())
         {
@@ -1223,9 +1223,10 @@ public partial class Launcher : Node3D
         _launchFramesWaited = 0;
     }
 
-    // The cover, up before the load screen that hides it, so the frame the screen comes down on is
-    // already covered and no frame between the two shows the world. Replacing a cover still up (a
-    // relaunch straight out of a session) starts the hold again, which is what a fresh build wants.
+    // The cover goes up before the load screen that hides it. The frame the screen comes down on is
+    // then already covered, and no frame between the two shows the world. Replacing a cover still
+    // up (a relaunch straight out of a session) starts the hold again, which is what a fresh build
+    // wants.
     private void RaiseStartCover()
     {
         DropStartCover();
@@ -1395,7 +1396,7 @@ public partial class Launcher : Node3D
             && Flight.SpawnPoints.LoadPlayerInit(missionZrdr) is { } init)
         {
             // Through the readout's own conversion off a nose vector, never off the spawn's heading
-            // degrees: those are the mission data's yaw, which runs opposite the compass.
+            // degrees. Those are the mission data's yaw, which runs opposite the compass.
             var nose = new Basis(Vector3.Up, Mathf.DegToRad(init.Spawn.HeadingDeg)) * Vector3.Forward;
             if (UI.PauseReadout.Icon(
                 sheet.Shared.OwnShip, init.Spawn.Position.X, init.Spawn.Position.Z,
@@ -1415,8 +1416,8 @@ public partial class Launcher : Node3D
         return new UI.PauseReadout(rows, SeatedMemento(), icons);
     }
 
-    // The picture the seated profile hangs, read back off the store the cabin's chooser writes, so
-    // this screen, a real pause and the cabin wall all draw the one name. A launch or a door with
+    // The picture the seated profile hangs, read back off the store the cabin's chooser writes.
+    // This screen, a real pause and the cabin wall all draw the one name. A launch or a door with
     // no profile behind it draws the seeded keepsake (docs/org/pause-screen.md).
     private string SeatedMemento() =>
         CampaignMementos.BitmapFor(
@@ -1499,9 +1500,9 @@ public partial class Launcher : Node3D
         });
         AddChild(_session);
         bool built = _session.StartSession();
-        // A CLI launch has no load screen to yield behind, so what the build ordered for the load
-        // runs here, inside the same block the rest of the build ran in. The menu path steps it one
-        // a frame with the screen still up instead (RunOwedLaunch).
+        // A CLI launch has no load screen to yield behind. What the build ordered for the load runs
+        // here, inside the same block as the rest of the build. The menu path steps it one a frame
+        // with the screen still up instead (RunOwedLaunch).
         if (built && _loadLayer == null)
         {
             int steps = 0;
@@ -1524,8 +1525,8 @@ public partial class Launcher : Node3D
         // C8: the build's own scopes (loads, material creation) belong to no frame, and the frame
         // that closes over the build would otherwise report them all at once.
         PerfSample.Reset();
-        // Same boundary for every bracket: a build that spans the tail leaves a half-open tick,
-        // pass, AI walk or phase whose next close would charge the whole build to one step.
+        // Every bracket takes the same boundary. A build that spans the tail leaves a half-open
+        // tick, pass, AI walk or phase. Its next close would charge the whole build to one step.
         PhysicsTickCost.Reset();
         ProcessPassCost.Reset();
         AiStepCost.Reset();
@@ -1555,8 +1556,8 @@ public partial class Launcher : Node3D
         if (GraphicsMode.Enhanced)
             EnableSunShadows(_sun);
         AddChild(_sun);
-        // The faithful aircraft's per-vertex term gets the same defaults: the modal day pair under
-        // this bearing, so a view without mission weather shades a plane like a day zone would.
+        // The faithful aircraft's per-vertex term gets the same defaults, the modal day pair under
+        // this bearing. A view without mission weather then shades a plane like a day zone would.
         (Vector3 dayDiffuse, Vector3 dayAmbient) = WeatherRig.DefaultSunlightRgb;
         RenderingServer.GlobalShaderParameterSet("csky_sun_dir",
             (_sun.IsInsideTree() ? _sun.GlobalBasis : _sun.Basis).Z.Normalized());
@@ -1569,7 +1570,7 @@ public partial class Launcher : Node3D
         {
             BackgroundMode = Godot.Environment.BGMode.Sky,
             Sky = new Sky { SkyMaterial = new ProceduralSkyMaterial() },
-            // ⚠ Colour-sourced in BOTH modes, never AmbientSource.Sky: a sky ambient fills a night
+            // ⚠ Colour-sourced in BOTH modes, never AmbientSource.Sky. A sky ambient fills a night
             // chapter's aircraft off the same daylight gradient a day one gets, and ignores the
             // pair written here. Per-zone values: WeatherRig.ApplyZone (docs/architecture.md).
             AmbientLightSource = Godot.Environment.AmbientSource.Color,
@@ -1845,12 +1846,12 @@ public partial class Launcher : Node3D
         ShowMenu(MenuReturnDestination.TopLevel);
     }
 
-    // The options file's one writer, shared by the menu's apply above and by the pause leaf's:
-    // every choice the screen took saved, then the display settings and the mix applied now.
-    // ⚠ The graphics word, the opening view and the difficulty are saved and no more: each is read
-    // once, at launch or when a flight is built, so do not rebuild anything here. The head turn and
-    // targeting switch are saved for the next sortie and put on the seats flying now by the pause
-    // leaf itself (PausePreferences.FeedGameOptions).
+    // The options file's one writer, shared by the menu's apply above and by the pause leaf's.
+    // It saves every choice the screen took. The display settings and the mix are applied now.
+    // ⚠ The graphics word, the opening view and the difficulty are saved and no more. Each is
+    // read once, at launch or when a flight is built, so do not rebuild anything here. The head
+    // turn and targeting switch are saved for the next sortie and put on the seats flying now by
+    // the pause leaf itself (PausePreferences.FeedGameOptions).
     private void PersistOptions(OptionsApplyExit applied)
     {
         var store = OptionsStore.UserOptions();
@@ -1883,7 +1884,7 @@ public partial class Launcher : Node3D
         // The mix takes effect now too, through the same call the startup path makes. Apply is
         // idempotent, so an accept from a page that shows no slider rewrites the same three gains.
         AudioMix.Apply(applied.AudioMaster, applied.AudioMusic, applied.AudioEffects, applied.AudioVoice);
-        // The haptics toggle takes effect now for the same reason, so a pilot turning it off over the
+        // The haptics toggle takes effect now for the same reason. A pilot turning it off over the
         // pause sheet flies the rest of the sortie with a quiet pad.
         PadRumble.Enabled = !_spec.Det && applied.Rumble != false;
         // The carve arms now for the same reason, so a pilot turning it on over the pause sheet digs
@@ -1892,11 +1893,12 @@ public partial class Launcher : Node3D
         Log.Info("ui", $"options applied: {Utils.GraphicsMode.Key}={applied.Graphics} difficulty={applied.Difficulty}");
     }
 
-    // The in-flight Preferences leaf both pause boards open: the decoded layout the Original
-    // presentation composes from, the host's own rebinding feature so a rebind over the pause edits
-    // the keymap the menu edits and saves through the one writer, the menu's audio service for its
-    // cues, and PersistOptions as the apply. ⚠ No ShowMenu: the flight returns to the sheet over its
-    // own world rather than tearing down what the pause stands on. Null where no layout reads.
+    // The in-flight Preferences leaf both pause boards open. It takes the decoded layout the
+    // Original presentation composes from, and the menu's audio service for its cues. The host's
+    // own rebinding feature means a rebind over the pause edits the keymap the menu edits, saved
+    // through the one writer. PersistOptions is the apply. ⚠ No ShowMenu: the flight returns to
+    // the sheet over its own world, not tearing down what the pause stands on. Null where no
+    // layout reads.
     private Flight.PausePreferences? BuildPauseOptions()
     {
         OriginalAvailable(PresentationId.Original);
@@ -2127,8 +2129,8 @@ public partial class Launcher : Node3D
             _session = null;
         }
 
-        // The menu is not a session start, so a cover left over from one (a mission exited inside
-        // its own fade) has nothing left to uncover.
+        // The menu is not a session start. A cover left over from one (a mission exited inside its
+        // own fade) has nothing left to uncover.
         DropStartCover();
         // Same reason as the build in LaunchSession: a teardown legitimately stalls the loop.
         _hitchSidecar.Flush();
@@ -2313,7 +2315,7 @@ public partial class Launcher : Node3D
         double aiPlanes = aiSteps > 0 ? (double)aiPlaneSum / aiSteps : 0;
         double physHz = _perfClock > 0 ? physTicks / _perfClock : 0;
         double physTick = physTicks > 0 ? physTickMs / physTicks : 0;
-        // The split of the two whole-pass terms above by what ran: the sim step per TICK beside
+        // These split the two whole-pass terms above by what ran. The sim step goes per TICK beside
         // phys_tick_ms, the named _Process consumers per FRAME beside proc_ms (src/Utils/PhaseCost.cs).
         string simRow = SimPhaseCost.TakeRow(physTicks);
         string simAllocRow = SimPhaseCost.AllocRow();
@@ -2327,9 +2329,9 @@ public partial class Launcher : Node3D
         double maxMs = _perfFrameMsSorted[PerfWindowFrames - 1];
         double p95Ms = _perfFrameMsSorted[Perf95Index];
         Log.Info("perf", $"window sim_frame={simFrame} frames={_perfFrames} wall_ms={wallMs:0.00} fps={fps:0.0} frame_ms={frameMs:0.00} script_ms={scriptMs:0.00} proc_ms={procMs:0.000} proc_max_ms={procMaxMs:0.000} proc_passes={procPasses} ai_ms={aiMs:0.000} ai_planes={aiPlanes:0.0} render_cpu_ms={renderCpuMs:0.00} gpu_ms={gpuMs:0.00} physics_ms={physicsMs:0.00} phys_tick_ms={physTick:0.000} phys_tick_max_ms={physTickMaxMs:0.000} phys_hz={physHz:0.0} draws={draws:0.0} prims={prims:0.0} nodes={nodes:0.0} mem_mb={memMb:0.00} max_ms={maxMs:0.00} p95_ms={p95Ms:0.00} sim_ms={simRow} proc_sites_ms={procSites}");
-        // Its own line, not another term on the window above: the BYTE figure answers a different
-        // question from the millisecond one (which phase feeds the collector, rather than which
-        // phase the pause landed in, PERF-34), and the two are read side by side.
+        // Its own line, not another term on the window above. The BYTE figure answers a different
+        // question from the millisecond one: which phase feeds the collector, rather than which
+        // phase the pause landed in (PERF-34). The two are read side by side.
         Log.Info("perf", $"alloc sim_frame={simFrame} sim_alloc_b={simAllocRow}");
         _perfClock = 0; _perfFrames = 0; _perfProcess = _perfGpu = _perfCpuRender = _perfPhysics = 0;
         _perfDraws = _perfPrims = _perfNodes = _perfMem = 0;
@@ -2394,7 +2396,7 @@ public sealed class LauncherContext
     public System.Action<string, CampaignMissionResult>? CampaignMissionEnded { get; init; }
 
     /// <summary>Frees the session and shows the menu at the Instant Action wrap-up, carrying the
-    /// numbers frozen at the ending. Null when this process was not launched into the menu, and
+    /// final numbers the ending left. Null when this process was not launched into the menu, and
     /// unused by a presentation whose own board takes the ending inside the flight.</summary>
     public System.Action<IaWrapupSnapshot>? InstantActionWrapup { get; init; }
 

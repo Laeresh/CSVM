@@ -4,12 +4,12 @@ using CSVM.Flight;
 namespace CSVM.UI.Menu;
 
 /// <summary>
-/// The frozen numbers one ended Instant Action mission hands the menu: the outcome, the context
-/// line naming the chapter and mission type, the four counters the wrap-up screen draws, the
-/// stunt run's split table already flattened to text, and player 1's Danger Zone photographs in
-/// marker order. Every number is read at the ending and never again, so the record can outlive the
-/// session node that made it; the splits are strings rather than a <c>StuntSummary</c> for the
-/// same reason. The photographs are the camera's own records, which a thumbnail still on its way
+/// The final numbers one ended Instant Action mission hands the menu. They are the outcome, the
+/// context line naming the chapter and mission type, and the four counters the wrap-up screen
+/// draws. The stunt run's split table comes already flattened to text, with player 1's Danger Zone
+/// photographs in marker order. Every number is read at the ending and never again, so the record
+/// can outlive the session node that made it. The splits are strings rather than a
+/// <c>StuntSummary</c> for the same reason. The photographs are the camera's own records, which a thumbnail still on its way
 /// completes in place after the session is gone (<see cref="StuntShot.Landed"/>).
 /// </summary>
 public sealed record IaWrapupSnapshot(
@@ -59,8 +59,8 @@ public sealed record TopLevelReturn : MenuReturnDestination;
 /// <see cref="MenuReturnDestination.InstantAction"/>.</summary>
 public sealed record InstantActionReturn : MenuReturnDestination;
 
-/// <summary>Back to the Instant Action wrap-up, carrying one ended mission's frozen numbers: the
-/// outcome, the four counters and the stunt splits as they stood at the ending. The numbers travel
+/// <summary>Back to the Instant Action wrap-up, carrying one ended mission's final numbers. They
+/// are the outcome, the four counters and the stunt splits as they stood at the ending. They travel
 /// with the destination because the session that counted them is freed before the page draws. A
 /// presentation with no wrap-up page of its own lands on the Instant Action screen instead, which
 /// is where this page's CONTINUE goes.</summary>

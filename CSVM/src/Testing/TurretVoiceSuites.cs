@@ -41,7 +41,7 @@ internal static class TurretVoiceSuites
         + "each piratezep gun ring builds its OWN positional snd_chaingun emitter rather than one "
         + "shared per hull, levelled per frame by the decoded RANGE law over that definition's "
         + "authored audible distance and culled at 1.1 times it, the margin the sound manager "
-        + "leaves over the pair, rather than at the engine routine's 2000, carrying no engine "
+        + "leaves over the pair, rather than at the engine-audio routine's 2000, carrying no Godot "
         + "attenuation model and no MaxDistance of its own, on the Effects bus at its source "
         + "asset's pitch with Doppler tracking off; at 150 m it stands at the level "
         + "SoundFalloff gives that pair rather than at Godot's inverse-distance one; the voice "

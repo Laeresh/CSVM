@@ -391,7 +391,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         }
         else if (destination is InstantActionWrapupReturn wrapup)
         {
-            // The numbers were frozen at the ending and travel with the destination; the session
+            // The numbers are final at the ending and travel with the destination. The session
             // that counted them is already gone by the time this page draws.
             _shell.Wrapup.ShowWrapup(wrapup.Snapshot);
         }

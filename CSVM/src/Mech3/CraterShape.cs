@@ -5,21 +5,21 @@ using Godot;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// One crater as geometry: the rim ring laid at the impact, the two rings of the bowl under it, and
-/// the 2D footprint the no-overlap rule compares. Every crater in the shipped game is this one
-/// shape, because all six <c>CRATER</c> weapons author the block bare, which leaves the engine
-/// template's three randomisation spans at zero. Decode: docs/org/craters.md. The field that holds
-/// the carved ones is <see cref="CraterField"/>.
+/// One crater as geometry: the rim ring at the impact, the bowl's two rings under it, and the 2D
+/// footprint the no-overlap rule compares. Every crater the original ships is this one shape. All
+/// six <c>CRATER</c> weapons author the block bare, which leaves the original template's three
+/// randomisation spans at zero. Decode: docs/org/craters.md. The field that holds the carved ones
+/// is <see cref="CraterField"/>.
 /// </summary>
 public readonly struct CraterShape
 {
-    /// <summary>Rim vertices, the engine template's <c>POINTS</c> key.</summary>
+    /// <summary>Rim vertices, the original template's <c>POINTS</c> key.</summary>
     public const int RimPoints = 7;
 
-    /// <summary>Rim radius in m, the engine template's <c>RADIUS</c> key.</summary>
+    /// <summary>Rim radius in m, the original template's <c>RADIUS</c> key.</summary>
     public const float RimRadius = 20f;
 
-    /// <summary>The engine template's <c>DEPTH</c> key. The bowl is two rings deep, so its floor
+    /// <summary>The original template's <c>DEPTH</c> key. The bowl is two rings deep, so its floor
     /// sits at twice this below the impact, not at this.</summary>
     public const float BowlDepth = 3f;
 
@@ -76,7 +76,7 @@ public readonly struct CraterShape
         }
     }
 
-    /// <summary>Lays the ring for an impact. The defaults are the shipped engine template; the
+    /// <summary>Lays the ring for an impact. The defaults are the shipped original template; the
     /// parameters exist because the block can author min/span pairs, not because anything does.</summary>
     public static CraterShape At(Vector3 impact, int points = RimPoints, float radius = RimRadius,
         float depth = BowlDepth)

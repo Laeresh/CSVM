@@ -16,16 +16,15 @@ public sealed record WrapupPostIt(float X, float Y, float Width, float Height, I
 public sealed record WrapupPrint(float X, float Y, float Width, float Height, StuntShot Shot);
 
 /// <summary>
-/// The Original presentation's Instant Action wrap-up page, composed from <c>[@IA_WrapUp@]</c>'s
-/// own rows (<c>docs/formats/instant-action/wrap-up.md</c>): the magazine background, the four
-/// brushstroke panes, the screen title and the four title/value pairs. Three pieces of remake
-/// furniture stand in the space below them: yellow post-its carrying the further lines the shipped
-/// page has no row for (the context line and a stunt run's splits), a stunt run's photographs to
-/// the left of the post-its, and a tick box above CONTINUE saying whether the mission was won.
-/// Row titles are literal strings, following
-/// <see cref="IaWrapupBoard"/>'s own precedent; positions come through the
-/// <see cref="CampaignLayout"/> a caller hands in, with the shipped values as the fallback beside
-/// every read.
+/// The Original presentation's Instant Action wrap-up page,
+/// <c>docs/formats/instant-action/wrap-up.md</c>. It composes <c>[@IA_WrapUp@]</c>'s own rows: the
+/// magazine background, the four brushstroke panes, the screen title and the four title/value
+/// pairs. Three pieces of remake furniture stand in the space below them. The first is yellow
+/// post-its carrying the further lines the shipped page has no row for: the context line and a
+/// stunt run's splits. A stunt run's photographs sit to the left of the post-its, and a tick box
+/// above CONTINUE says whether the mission was won. Row titles are literal strings, following
+/// <see cref="IaWrapupBoard"/>'s precedent, and positions come through the
+/// <see cref="CampaignLayout"/> a caller hands in.
 /// </summary>
 public static class InstantActionWrapupPage
 {
@@ -50,7 +49,7 @@ public static class InstantActionWrapupPage
     /// <summary>A value's face, one step up from its title so the number reads as the answer.</summary>
     public const float ValueFont = 15f;
 
-    /// <summary>The further lines' face on a post-it, the size a post-it is measured against; the
+    /// <summary>The further lines' face on a post-it, the size a post-it is measured against. The
     /// renderer shrinks it only where a line is wider than the post-it.</summary>
     public const float ExtraFont = 11f;
 
@@ -58,16 +57,17 @@ public static class InstantActionWrapupPage
     public const float ExtraSpacing = 2f;
 
     // The shipped titles, langui 1133-1137. Literal text for the reason IaWrapupBoard's own copies
-    // are: ui_strings.json is a build-time extraction artifact, not one of the archives a session
-    // opens, and five lines do not earn a reader of their own here.
+    // are. The file ui_strings.json is a build-time extraction artifact, not one of the archives a
+    // session opens. Five lines do not earn a reader of their own here.
     private const string TitleText = "Instant Action";
     private const string TimeTitle = "Time to Complete Mission";
     private const string DestroyedTitle = "Enemies Shot Down";
     private const string ZonesTitle = "Danger Zones Completed";
     private const string ShotsTitle = "Shot %";
 
-    // The authored geometry, [@IA_WrapUp@]'s own, as the fallback beside every layout read: the
-    // heading, the title column, the value column, the four brushstroke panes and the plaque.
+    // The authored geometry, [@IA_WrapUp@]'s own, as the fallback beside every layout read. It
+    // carries the heading, the title column, the value column, the four brushstroke panes and the
+    // plaque.
     private const float TitleX = 467f;
     private const float TitleY = 98f;
     private const float ColumnX = 480f;
@@ -80,16 +80,16 @@ public static class InstantActionWrapupPage
     // centred over it.
     private const float ContinueFrameWidth = 112f;
 
-    // The gap between the last value row and the first post-it, the pitch the value rows themselves
-    // leave; how far the first post-it stands proud of the title column, so its writing still
-    // lines up with the rows; and how far it stops short of the plaque.
+    // The gap between the last value row and the first post-it, which is the pitch the value rows
+    // themselves leave. How far the first post-it stands proud of the title column, so its writing
+    // still lines up with the rows. How far it stops short of the plaque.
     private const float ExtraGap = 26f;
     private const float ColumnInset = 14f;
     private const float PlaqueClearance = 6f;
 
     // A post-it is at most square, the shape the paper is. Remake furniture, so every measure here
-    // is a look rather than a decode: the side, the gap between two post-its, the margins around
-    // the writing (the top one wider, where the glue strip is) and the pitch a line is planned at.
+    // is a look rather than a decode. The side, the gap between two post-its, the margins around
+    // the writing, and the pitch a line is planned at. The top margin is wider, for the glue strip.
     private const float PostItSide = 168f;
     private const float PostItGap = 12f;
     private const float PostItMargin = 6f;
@@ -98,7 +98,7 @@ public static class InstantActionWrapupPage
     private const float LinePitch = 16f;
 
     // How far a post-it's corner may sit from the page's left edge, and how far every second one
-    // drops, so a row of them reads as stuck on by hand rather than tiled.
+    // drops. A row of them then reads as stuck on by hand rather than tiled.
     private const float PageMargin = 8f;
     private const float PostItStagger = 10f;
 
@@ -111,7 +111,7 @@ public static class InstantActionWrapupPage
     private const float PrintGap = 6f;
     private const float PendingAspect = 3f / 4f;
 
-    // The tick box, on the notepad above the plaque: its side, its gap above the plaque, and its
+    // The tick box, on the notepad above the plaque. Its side, its gap above the plaque, and its
     // outline weight in strokes one authored pixel apart.
     private const float TickBoxSide = 40f;
     private const float TickBoxGap = 10f;
@@ -133,8 +133,8 @@ public static class InstantActionWrapupPage
         ("IAWU_T_SHOTSTITLE", ShotsTitle, 345f, "IAWU_T_SHOTS", 369f, "IAWU_LINE3", 359f),
     };
 
-    // The tick as a hand makes it, in the box's own pixels: down into the lower left, then a long
-    // stroke up past the box's top right corner.
+    // The tick as a hand makes it, in the box's own pixels. It goes down into the lower left, then
+    // a long stroke up past the box's top right corner.
     private static readonly (float X, float Y)[] Tick = { (7f, 19f), (16f, 31f), (41f, -7f) };
 
     private static readonly BoardArt Background = new(BoardArtLibrary.Ui, "IA_StatScreenBackground.jpg");
@@ -176,10 +176,10 @@ public static class InstantActionWrapupPage
     }
 
     /// <summary>The further lines the built-in board carries and the shipped page authors no row
-    /// for: the context line naming the chapter and the mission type, then the stunt run's splits
-    /// as the snapshot froze them. The outcome is the tick box's, not a line. ⚠ The splits' total
-    /// is left out: both clocks run from the start to the ending, so it is the time row's own
-    /// figure again.</summary>
+    /// for. First the context line naming the chapter and the mission type, then the stunt run's
+    /// splits as the final snapshot has them. The outcome is the tick box's, not a line.
+    /// ⚠ The splits' total is left out: both clocks run from the start to the ending, so it is the
+    /// time row's own figure again.</summary>
     public static IReadOnlyList<string> ExtraLines(IaWrapupSnapshot snapshot)
     {
         System.ArgumentNullException.ThrowIfNull(snapshot);
@@ -204,7 +204,7 @@ public static class InstantActionWrapupPage
     }
 
     /// <summary>How many post-its <paramref name="lines"/> further lines take: one per
-    /// <see cref="PostItCapacity"/> lines, no more than stand side by side from the first one's
+    /// <see cref="PostItCapacity"/> lines. No more than stand side by side from the first one's
     /// corner to the page's left edge, and none for no lines.</summary>
     public static int PostItCount(int lines, CampaignLayout? layout = null)
     {
@@ -220,7 +220,7 @@ public static class InstantActionWrapupPage
     }
 
     /// <summary>The post-its the further lines are written on, first to last. The first stands on
-    /// the notepad under the last value row and clear of the plaque; each further one stands to the
+    /// the notepad under the last value row and clear of the plaque. Each further one stands to the
     /// left of the one before. The lines are shared out evenly and each post-it is only as tall as
     /// what it holds, never taller than it is wide.</summary>
     public static IReadOnlyList<WrapupPostIt> PostIts(IaWrapupSnapshot snapshot, CampaignLayout? layout = null)
@@ -270,7 +270,7 @@ public static class InstantActionWrapupPage
     }
 
     /// <summary>The writing on one post-it: its lines flowed inside the paper's margins, in the
-    /// page's row ink, shrinking only where a line is wider than the post-it.</summary>
+    /// page's row ink. It shrinks only where a line is wider than the post-it.</summary>
     public static BoardNote PostItNote(WrapupPostIt postIt)
     {
         System.ArgumentNullException.ThrowIfNull(postIt);
@@ -280,10 +280,11 @@ public static class InstantActionWrapupPage
             ExtraSpacing, ExtraFont, BoardInk.Row, Italic: true, Shrink: true);
     }
 
-    /// <summary>The run's photographs as prints, in marker order, laid out as a grid in the band under
-    /// the rows to the left of the post-its, right against them. Each picture is as wide as the band
-    /// allows up to <see cref="StuntCapture.ThumbWidth"/>. A shot whose frame never arrived is left
-    /// out; one still on its way keeps its place. No photographs, no prints.</summary>
+    /// <summary>The run's photographs as prints, in marker order. They are laid out as a grid in
+    /// the band under the rows, to the left of the post-its and right against them. Each picture
+    /// is as wide as the band allows up to <see cref="StuntCapture.ThumbWidth"/>. A shot whose
+    /// frame never arrived is left out; one still on its way keeps its place. No photographs, no
+    /// prints.</summary>
     public static IReadOnlyList<WrapupPrint> Prints(IaWrapupSnapshot snapshot, CampaignLayout? layout = null)
     {
         System.ArgumentNullException.ThrowIfNull(snapshot);
@@ -435,14 +436,14 @@ public static class InstantActionWrapupPage
     public static (float X, float Y) ContinueAt(CampaignLayout? layout = null) =>
         (layout ?? CampaignLayout.Fallback).At(Section, ContinueKey, ContinueX, ContinueY);
 
-    /// <summary>A stand-in run for the screenshot aids and the coverage walk: a stunt flight with
-    /// three zones behind it, so the page shows every line family at once.</summary>
+    /// <summary>A stand-in run for the screenshot aids and the coverage walk. It is a stunt flight
+    /// with three zones behind it, so the page shows every line family at once.</summary>
     public static IaWrapupSnapshot Sample(bool won) => new(
         won, "C1   ·   Stunt Flying", 186f, 4, 3, 27,
         new[] { "1.  Pier    12.4    12.4", "2.  Bridge    15.1    27.5", "3.  Tower    18.6    46.1", StuntSplits.TotalLabel + "   46.1" });
 
-    /// <summary>A stand-in for the longest stunt run the install ships, seventeen zones with a new
-    /// best, so the screenshot aid shows the page carrying more than one post-it.</summary>
+    /// <summary>A stand-in for the longest stunt run the install ships: seventeen zones with a new
+    /// best. The screenshot aid then shows the page carrying more than one post-it.</summary>
     public static IaWrapupSnapshot LongSample()
     {
         string[] names =
@@ -483,7 +484,7 @@ public static class InstantActionWrapupPage
     private static (int Columns, float Picture) PrintGrid(int count, float width, float height, float aspect) =>
         ShotGrid.Fit(count, width, height, aspect, PrintGap, 2f * PrintBorder, 2f * PrintBorder, StuntCapture.ThumbWidth);
 
-    // A split line's columns closed up to two spaces, the board's own three being more than a
+    // A split line's columns closed up to two spaces. The board's own three are more than a
     // post-it's width can spare before the renderer would wrap the line.
     private static string Compact(string line)
     {

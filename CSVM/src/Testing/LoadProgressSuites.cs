@@ -9,9 +9,9 @@ using Godot;
 
 namespace CSVM.Testing;
 
-/// <summary>Suites over the load screen while a build holds the frame loop: the bar's fill and the
-/// propeller's frame at each of the sixteen authored milestones, on a real board over a real
-/// window, and the pump that draws them from inside the build.
+/// <summary>Suites over the load screen while a build holds the frame loop. The bar's fill and
+/// the propeller's frame at each of the sixteen authored milestones, on a real board over a real
+/// window. The pump draws them from inside the build.
 /// Decode: docs/org/loading-screen.md.</summary>
 internal static class LoadProgressSuites
 {
@@ -29,12 +29,12 @@ internal static class LoadProgressSuites
     // not a count of lamps, so this is what a watcher counts rather than what the fill computes.
     private const int LampCount = 6;
 
-    /// <summary>The load screen moving under a build: both families find their fill strip and
-    /// their propeller in the extraction, the fill at each authored milestone is the floored pixel
-    /// clip of that strip's own width, the propeller names one of its six frames at its authored
-    /// point, the still composition under the overlay is untouched at every step, the board
-    /// installs the pump for its own tree lifetime alone, and a reported step really does put a
-    /// frame on screen from inside the build.</summary>
+    /// <summary>The load screen moving under a build. Both families find their fill strip and
+    /// their propeller in the extraction. The fill at each authored milestone is the floored pixel
+    /// clip of that strip's own width. The propeller names one of its six frames at its authored
+    /// point. The still composition under the overlay is untouched at every step. The board
+    /// installs the pump for its own tree lifetime alone, and a reported step puts a frame on
+    /// screen from inside the build.</summary>
     [Suite("load-progress",
         "the load screen while a build holds the frame loop: the blackboard's prog_red and the "
         + "chart sheet's prog_redload both resolve at their authored width, the fill at each of "
@@ -115,8 +115,8 @@ internal static class LoadProgressSuites
         }
     }
 
-    // Every milestone in order: the fill is the floored clip, it never steps back, the propeller
-    // draws one of its own frames, and nothing under the overlay moves.
+    // Every milestone in order: the fill is the floored clip, and it never steps back. The
+    // propeller draws one of its own frames, and nothing under the overlay moves.
     private static void WalkMilestones(
         TestContext ctx, StringBuilder report, string family, ComposedBoard still,
         LoadMotion motion, Vector2 art, int stripWidth)
@@ -180,9 +180,9 @@ internal static class LoadProgressSuites
             + string.Join(",", motion.Propeller));
     }
 
-    // The pump belongs to the board and to nothing else: absent before one is up, the board's own
-    // while it is, and gone again once it leaves, which is what keeps every CLI launch from
-    // gaining a draw it never had.
+    // The pump belongs to the board and to nothing else. It is absent before one is up, the
+    // board's own while it is, and gone again once it leaves. That keeps every CLI launch from
+    // gaining a draw.
     private static void CheckPumpOwnership(TestContext ctx, StringBuilder report, LoadSheet? sheet)
     {
         var held = LoadProgress.Current;
@@ -197,14 +197,14 @@ internal static class LoadProgressSuites
             var view = board.GetChild(0) as ComposedBoardView;
 
             // The real path, pump and forced frame included: a build reports a step from inside
-            // the block that owns the loop, and the screen has to be repainted there or nowhere.
+            // the block that owns the loop. The screen has to be repainted there or nowhere.
             LoadProgress.Report(LoadStep.RenderState);
             int first = view is { } opening ? FillWidth(opening.Moving) : -1;
             ctx.Check(first > 0, $"the first step lights {first} px from inside the build");
 
-            // Reported at once, inside the pump's own 0.1 s window: a step the bar moved on is
-            // drawn whatever the clock says, or a fast build shows its first fraction and nothing
-            // after it.
+            // Reported at once, inside the pump's own 0.1 s window. A step the bar moved on is
+            // drawn whatever the clock says. A fast build would otherwise show its first fraction
+            // and nothing after it.
             LoadProgress.Report(LoadStep.Finished);
             int last = view is { } closing ? FillWidth(closing.Moving) : -1;
             ctx.Check(last > first, $"the last step lights {last} px, over the first's {first}");
@@ -221,8 +221,8 @@ internal static class LoadProgressSuites
     }
 
     // Every authored fraction on the glass, counted off the rendered frame rather than off the
-    // pump's own call count: the steps are reported back to back, which is the fast build the
-    // throttle used to swallow, and each one's frame is read back and its lamps counted.
+    // pump's own call count. The steps are reported back to back, which is the fast build a
+    // throttle would swallow. Each one's frame is read back and its lamps counted.
     private static void CheckEveryFractionReachesTheFrame(TestContext ctx, StringBuilder report)
     {
         var held = LoadProgress.Current;
@@ -269,9 +269,9 @@ internal static class LoadProgressSuites
                 return;
             }
 
-            // The point of the item, read off the glass: a build crossing every boundary inside one
-            // throttle window still lights the strip a lamp at a time, where a screen drawn once at
-            // the end would rise from nothing to six in a single frame.
+            // The point of the item, read off the glass. A build crossing every boundary inside one
+            // throttle window still lights the strip a lamp at a time. A screen drawn once at the
+            // end would rise from nothing to six in a single frame.
             ctx.Same(
                 LoadProgress.Milestones.Count, seen.Count,
                 $"the sixteen steps were each read back off the window");
@@ -290,7 +290,7 @@ internal static class LoadProgressSuites
 
     // How many lamps of the fill strip are lit on the frame just presented, or null where the
     // window hands back no image. Counted as runs of red across the strip's own middle row, which
-    // is what a watcher sees; the propeller sits outside the band on both families.
+    // is what a watcher sees. The propeller sits outside the band on both families.
     private static int? Lamps(TestContext ctx, BoardFit fit, LoadMotion motion, Vector2 art)
     {
         if (art.X <= 0f || art.Y <= 0f
@@ -320,8 +320,8 @@ internal static class LoadProgressSuites
         return runs;
     }
 
-    // The whole point of the item, driven for real: a world build holds the frame loop, and the
-    // screen standing over it has to be repainted from inside that block or not at all. The world
+    // The whole point of the item, driven for real. A world build holds the frame loop. The screen
+    // standing over it has to be repainted from inside that block or not at all. The world
     // is half-built at every forced draw, which is the case no composed-board check can reach.
     private static void CheckPumpDuringAWorldBuild(
         TestContext ctx, StringBuilder report, LoadSheet? sheet)

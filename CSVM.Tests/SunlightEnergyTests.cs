@@ -172,7 +172,7 @@ public class SunlightEnergyTests
         Assert.Equal(1.6f, daySun, 2);
     }
 
-    // The bicolored bit decides which colour the ambient half wears. Clear, the binary reads only
+    // The bicolored bit decides which colour the ambient half wears. Clear, the original reads only
     // the diffuse colour for both halves, so an authored ambient colour must not reach the plane.
     [Fact]
     public void AnUnbicoloredZoneLightsBothHalvesWithTheDiffuseColour()

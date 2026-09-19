@@ -12,16 +12,14 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The Original Instant Action module over the hand-authored layout fixture and a hand-written host:
-/// the rows it composes on its opening state, a contents row applying its preset and View Story
-/// writing the title, the contents window scrolling by its arrows, a dropdown opening as its list and
-/// picking by click or by a sideways step (a barred environment skipped), the enemy pages, the ace
-/// duel blanking every enemy control, the bands an open list and a closed box take under the pointer,
-/// the radio pair, Weapon Loadout opening the loadout screen for the seat the radio names, and Fly
-/// Mission leaving as the feature's exit with the pilot's fit on the seat. No <see cref="OriginalShell"/>
-/// stands behind these; what the module asks of one (the screen, the focus, the pointer, the hangar
-/// door, the seat walk) the host records. The top level's own door and the keyboard's column walk are
-/// the shell's, in <see cref="OriginalShellTests"/>. Every rectangle is the fixture's own geometry.
+/// The Original Instant Action module over the hand-authored layout fixture and a hand-written
+/// host. It drives the opening rows, the contents window and its presets, the dropdowns, the enemy
+/// pages, the ace duel's blanking and the radio pair. Weapon Loadout opens the loadout screen for
+/// the seat the radio names. Fly Mission is the feature's exit, leaving with the pilot's fit on the
+/// seat. No <see cref="OriginalShell"/> stands behind these: the host records what the module asks
+/// of one, the screen, focus, pointer, hangar door and seat walk. The top level's door and the
+/// keyboard's column walk are the shell's, in <see cref="OriginalShellTests"/>; every rectangle
+/// here is the fixture's geometry.
 /// </summary>
 public class OriginalInstantActionTests
 {
@@ -170,8 +168,8 @@ public class OriginalInstantActionTests
         list.ScrollTo(4);
         Assert.Equal(4, host.Module.ContentsTop);
 
-        // An open list takes the window from the contents, and a list that fits inside its own box
-        // scrolls nothing at all, so the eleven stock airframes leave the screen with no window.
+        // An open list takes the window from the contents. A list that fits inside its own box
+        // scrolls nothing, so the eleven stock airframes leave the screen with no window.
         Click(host, OriginalInstantActionScreen.PlayerPlaneKey);
         Assert.Empty(Lists(host));
     }
@@ -344,9 +342,9 @@ public class OriginalInstantActionTests
     [Fact]
     public void TheLivesBoxStepsTheSharedFeatureAndAPresetLeavesItWherePlayerPutIt()
     {
-        // The box takes the mission dropdown's left edge and height and the first clear line the
-        // setup stack leaves, which in this layout is the one between the environment row (Y 290,
-        // 20 high) and the enemy block (Y 330); the shipped layout leaves one higher up.
+        // The box takes the mission dropdown's left edge and height, and the first clear line the
+        // setup stack leaves. In this layout that is the line between the environment row (Y 290,
+        // 20 high) and the enemy block (Y 330). The shipped layout leaves one higher up.
         var host = Open(out var ia);
         var lives = Row(host, OriginalInstantActionScreen.LivesKey);
         Assert.Equal(OriginalRowKind.Dropdown, lives.Kind);
@@ -454,7 +452,7 @@ public class OriginalInstantActionTests
         Assert.Equal(OriginalScreen.InstantAction, host.Screen);
 
         // The screen's own way out is the shell's, so a second Back is declined and the shell's
-        // return takes it; the EXIT button is the module's and opens the top level itself.
+        // return takes it. The EXIT button is the module's and opens the top level itself.
         Assert.False(host.Module.Back());
         Assert.Equal(OriginalScreen.InstantAction, host.Screen);
 
@@ -484,7 +482,7 @@ public class OriginalInstantActionTests
         Assert.Equal("Test Ace", def.AceName);
 
         // With a second pilot aboard the launch is the shell's per-seat walk, not the module's own
-        // exit: the module hands it over and takes whatever the walk answers.
+        // exit. The module hands it over and takes whatever the walk answers.
         var seated = Host(out _, stock: false, out var setup);
         setup.SetRoster(OriginalRosters.Roster(Array.Empty<CustomPlaneDef>()));
         setup.Join(new ScriptedMenuSeat());
@@ -523,8 +521,8 @@ public class OriginalInstantActionTests
         Assert.Equal(-1, host.Module.LoadoutSeat);
         Assert.False(host.Module.OnSeatLoadout);
         // The fixture's section authors the first ammunition field, which the Autogyro's one gun
-        // slot takes, and three of the eight rocket fields, of which the Autogyro's two stock
-        // pylons (1 and 5) take the first and the fourth; the buttons are the section's own strips.
+        // slot takes, and three of the eight rocket fields. The Autogyro's two stock pylons (1 and
+        // 5) take the first and the fourth, and the buttons are the section's own strips.
         Assert.Equal(
             new[]
             {
@@ -623,15 +621,15 @@ public class OriginalInstantActionTests
         Assert.Equal(0, host.Module.LoadoutSeat);
         Assert.Same(seat.Fit, host.Module.LoadoutFit);
 
-        // The trip back lands on the picker rather than on Instant Action, which is what keeps the
-        // shell's own walk alive, and the module lets the seat go on its way out.
+        // The trip back lands on the picker rather than on Instant Action, which keeps the shell's
+        // own walk alive. The module lets the seat go on its way out.
         Click(host, OriginalInstantActionScreen.LoadoutAcceptKey);
         Assert.Equal(OriginalScreen.SeatPlane, host.Screen);
         Assert.False(host.Module.OnSeatLoadout);
         Assert.Equal(-1, host.Module.LoadoutSeat);
         Assert.Null(host.Module.LoadoutFit);
 
-        // A walk that loses its seat mid-edit forgets the fit without deciding where to go, and a
+        // A walk that loses its seat mid-edit forgets the fit without deciding where to go. A
         // screen the walk does not stand on drops the seat alone.
         host.Module.OpenSeatLoadout(seat);
         host.Module.ClearLoadoutSeat();
@@ -746,8 +744,8 @@ public class OriginalInstantActionTests
         Assert.False(host.Module.Back());
     }
 
-    // The module over a fresh feature and the layout fixture: with the committed stock table when
-    // the loadout screen is under test, and over a build store where the Pilot Plane list is.
+    // The module over a fresh feature and the layout fixture. It takes the committed stock table
+    // when the loadout screen is under test, and a build store where the Pilot Plane list is.
     private static InstantActionHost Host(out InstantActionFeature ia, bool stock, out PlayerSetupFeature setup, CustomPlaneStore? planes = null)
     {
         ia = new InstantActionFeature(_ => InstantActionFeatureTests.InstantActionDefFor("Test Ace"));
@@ -786,7 +784,7 @@ public class OriginalInstantActionTests
 
     private static BoardPicture Thumb(InstantActionHost host) => Compose(host).Pictures.Single(p => p.Art.Name == "PI_B_ScrollBar.png");
 
-    // One click as the shell reads it: the press puts the pointer and the focus on the row, the
+    // One click as the shell reads it: the press puts the pointer and the focus on the row. The
     // release on it activates, and the button is still held down on the frame that fires.
     private static MenuExit? Click(InstantActionHost host, int index)
     {
@@ -831,22 +829,15 @@ public class OriginalInstantActionTests
     }
 
     // The screen as the module draws it, assembled the way the shell assembles its own board. The
-    // pointer overlay is the shell's, the pen the seam offers is the campaign scrapbook's alone, and
-    // neither of these two pages writes a note, so both of those layers come back empty.
+    // pointer overlay is the shell's, and the pen the seam offers is the campaign scrapbook's
+    // alone. Neither of these two pages writes a note, so both of those layers come back empty.
     private static ComposedBoard Compose(InstantActionHost host)
     {
         var rows = host.Rows;
-        var backdrop = new List<BoardPicture>();
-        var pictures = new List<BoardPicture>();
-        var fills = new List<BoardFill>();
-        var strokes = new List<BoardStroke>();
-        var lines = new List<BoardLine>();
-        var plaques = new List<BoardPlaque>();
-        var notes = new List<BoardNote>();
-        var overlays = new List<BoardPanel>();
-        host.Module.Compose(rows, host.Focus, backdrop, pictures, fills, strokes, lines, plaques, notes, overlays);
-        return new ComposedBoard(pictures, strokes, lines, plaques, notes,
-            backdrop: backdrop, fills: fills, overlays: overlays);
+        var layers = new BoardLayers();
+        host.Module.Compose(rows, host.Focus, layers);
+        return new ComposedBoard(layers.Pictures, layers.Strokes, layers.Lines, layers.Plaques, layers.Notes,
+            backdrop: layers.Backdrop, fills: layers.Fills, overlays: layers.Overlays);
     }
 
     // The fixture's strips: the two big buttons 200x128 (four 32-pixel frames), the paper button
@@ -865,175 +856,52 @@ public class OriginalInstantActionTests
         _ => null,
     };
 
-    // The shell's side of the seam, hand-written: the screen showing, one focus per screen (the
-    // first live row where none was set, as the shell's own EnsureFocus rules), the pointer's row
-    // and position as a frame leaves them, and a count of each crossing into another family. The
-    // rows are the module's own only while the screen showing is one of its two, which is where the
-    // shell's own dispatch sends them.
-    private sealed class InstantActionHost : IOriginalScreenHost
+    // Instant Action's side of the seam, over the shared fake. It counts the seat walk, hands the
+    // roster re-read back to the module, and puts the pointer on a row. A focus put on a row stays
+    // there even once the row goes dark, which is what the paged enemy rows are read through.
+    private sealed class InstantActionHost : OriginalTestHost<OriginalInstantActionScreen>
     {
-        private readonly int[] _focus = new int[Enum.GetValues<OriginalScreen>().Length];
-        private int _hover = -1;
-        private int _pressed = -1;
-        private (float X, float Y)? _pointer;
-
         internal InstantActionHost()
+            : base(OriginalScreen.TopLevel, OriginalInstantActionTests.Measure)
         {
-            Array.Fill(_focus, -1);
         }
-
-        public OriginalInstantActionScreen Module { get; set; } = null!;
-
-        public OriginalScreen Screen { get; private set; } = OriginalScreen.TopLevel;
 
         public int SeatWalks { get; private set; }
 
-        public int HangarOpens { get; private set; }
+        protected override bool FocusLeavesDeadRows => false;
 
-        public bool CanBuildPlane { get; set; }
-
-        public bool DialogOpen => false;
-
-        public int PressedRow => _pressed;
-
-        public int HoveredRow => _hover;
-
-        public int FocusBeforeDialog => -1;
-
-        public (float X, float Y)? Pointer => _pointer;
-
-        public CustomPlaneStore? CampaignPlanes => null;
-
-        public UiStrings MenuStrings => UiStrings.Empty;
-
-        public IReadOnlyList<OriginalRow> Rows
+        // The shell hands the re-read back to the module whose list it is.
+        public override void RefreshInstantActionRoster()
         {
-            get
-            {
-                var rows = new List<OriginalRow>();
-                if (Module.Owns(Screen))
-                {
-                    Module.BuildRows(rows);
-                }
-
-                return rows;
-            }
+            base.RefreshInstantActionRoster();
+            Module.RefreshRoster();
         }
 
-        public int Focus
-        {
-            get
-            {
-                var rows = Rows;
-                int focus = _focus[(int)Screen];
-                if (focus >= 0 && focus < rows.Count)
-                {
-                    return focus;
-                }
-
-                focus = rows.ToList().FindIndex(r => r.Enabled);
-                _focus[(int)Screen] = focus;
-                return focus;
-            }
-        }
-
-        public string FocusedKey
-        {
-            get
-            {
-                int focus = Focus;
-                return focus >= 0 ? Rows[focus].Key : string.Empty;
-            }
-        }
-
-        public int FocusedRow
-        {
-            get => _focus[(int)Screen];
-            set => _focus[(int)Screen] = value;
-        }
-
-        public void Open(OriginalScreen screen) => Screen = screen;
-
-        public void FocusKey(string key)
-        {
-            var rows = Rows;
-            for (int i = 0; i < rows.Count; i++)
-            {
-                if (rows[i].Key == key)
-                {
-                    _focus[(int)Screen] = i;
-                    return;
-                }
-            }
-        }
-
-        public void RaiseDialog(string message, DialogIcon icon, params OriginalDialogAnswer[] answers)
-        {
-        }
-
-        public void CloseDialog()
-        {
-        }
-
-        // No frame loop behind this fake, so a module's own re-entrant press has nothing to run.
-        public void Frame(MenuCommands commands)
-        {
-        }
-
-        public void PlayFilm(Action<Action> play, Action then) => OriginalTestHost.PlayFilm(play, then);
-
-        public (int Width, int Height)? Measure(string art) => OriginalInstantActionTests.Measure(art);
-
-        public void ResumeCampaign()
-        {
-        }
-
-        public void RefreshInstantActionRoster() => Module.RefreshRoster();
-
-        public void RefreshRosterFromStore()
-        {
-        }
-
-        public void OpenHangar(IHangarWallet? wallet) => HangarOpens++;
-
-        public MenuExit? BeginSeatWalk()
+        public override MenuExit? BeginSeatWalk()
         {
             SeatWalks++;
             return null;
         }
 
-        public int CheatedMission(int ordinary) => OriginalTestHost.CheatedMission(ordinary);
-
-        public BoardPanel? SeatPanel(bool onPaper) => null;
-
-        public void ComposeGenericRow(
-            OriginalRow row, bool focused, bool pressed, int index,
-            List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPicture> pictures)
+        // A row kind the module has no drawing of its own for is a line, standing in for the
+        // shell's own plate rule.
+        public override void ComposeGenericRow(
+            OriginalRow row, bool focused, bool pressed, int index, BoardLayers layers)
         {
-            lines.Add(new BoardLine(row.Label, row.X, row.Y, row.Width, 12f, BoardInk.Row, index));
+            layers.Lines.Add(new BoardLine(row.Label, row.X, row.Y, row.Width, 12f, BoardInk.Row, index));
         }
 
-        public OriginalRow PlaqueRow(string key, string label, int row, bool enabled, int column) =>
-            OriginalTestHost.PlaqueRow(key, label, row, enabled, column);
-
-        public void ComposePlainPage(
-            string heading, IReadOnlyList<OriginalRow> rows, int focus,
-            List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques) =>
-            OriginalTestHost.ComposePlainPage(heading, rows, focus, lines);
-
-        public BoardFill FocusMark(OriginalRow row) => OriginalTestHost.FocusMark(row);
-
-        // The pointer put on one row, as a frame under the cursor leaves the shell: the row is
-        // hovered and, where it is live, focused, and a click frame holds it pressed until the
-        // frame after the release.
+        // The pointer put on one row, as a frame under the cursor leaves the shell. The row is
+        // hovered and, where it is live, focused. A click frame holds it pressed until the frame
+        // after the release.
         internal void PointAt(int index, OriginalRow row, bool pressed)
         {
-            _hover = index;
-            _pressed = pressed ? index : -1;
-            _pointer = (row.X + 3f, row.Y + 3f);
+            HoveredRow = index;
+            PressedRow = pressed ? index : -1;
+            Pointer = (row.X + 3f, row.Y + 3f);
             if (row.Enabled)
             {
-                _focus[(int)Screen] = index;
+                FocusedRow = index;
             }
         }
     }

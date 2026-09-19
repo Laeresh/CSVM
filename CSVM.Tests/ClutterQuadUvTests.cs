@@ -267,7 +267,7 @@ public class ClutterQuadUvTests
         var interp = Path.Combine(TestData.DataRoot!, "extracted", "interp.json");
         foreach (var name in ClutterBuilder.TemplateNames(interp, chapter))
         {
-            // A registered template the chapter does not carry is retail-data-normal: C2B
+            // A registered template the chapter does not carry is normal in the original's data: C2B
             // registers three of them.
             if (ClutterBuilder.FindTemplateRoot(gamez, name) is not { } root)
                 continue;

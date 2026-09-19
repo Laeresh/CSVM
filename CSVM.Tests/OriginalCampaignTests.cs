@@ -13,14 +13,15 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The campaign module alone over the hand-authored layout fixture and a scratch profile store: the
-/// profile screen's box, roster rows, refusals and its two-answer delete, the cabin's plaques under
-/// the pointer and the keyboard, the briefing, the flight check's launch, the ammo screen's way back,
-/// the hangar door the cabin asks the host for, the two flight returns' mapping, the book's doors and
-/// tabs, the EXPORT box and the screenshot aids' script. The top level's Campaign door, the seat walk
-/// and the messagebox's own drawing are the shell's, so the seams to them are wiring facts in
-/// <see cref="OriginalShellTests"/>; everything here drives the module over a hand-written host. Every
-/// rectangle is the fixture's invented geometry; the game's is read the same way.
+/// The campaign module alone over the hand-authored layout fixture and a scratch profile store. It
+/// covers the profile screen's box, roster rows, refusals and its two-answer delete, and the
+/// cabin's plaques under the pointer and the keyboard. The briefing, the flight check's launch, the
+/// ammo screen's way back and the hangar door the cabin asks the host for are here too. So are the
+/// two flight returns' mapping, the book's doors and tabs, the EXPORT box and the screenshot aids'
+/// script. The top level's Campaign door, the seat walk and the messagebox's drawing are the
+/// shell's, so their seams are wiring facts in <see cref="OriginalShellTests"/>. Everything here
+/// drives the module over a hand-written host, and every rectangle is the fixture's invented
+/// geometry, read as the original's is.
 /// </summary>
 public class OriginalCampaignTests : IDisposable
 {
@@ -122,7 +123,7 @@ public class OriginalCampaignTests : IDisposable
         // CAMPAIGN.SCRIPT raises langui 200 on the 0x1 mask, which is the warning icon.
         Assert.Equal(DialogIcon.Warning, host.Dialog.Icon);
         Assert.Null(_store.Load(string.Empty));
-        // The screen under the box draws itself with nothing focused and nothing picked, so the
+        // The screen under the box draws itself with nothing focused and nothing picked. The
         // roster's own bar and caret stand down while the box does.
         Assert.DoesNotContain(Compose(host).Lines, l => l.Text.EndsWith("_", StringComparison.Ordinal));
 
@@ -357,9 +358,9 @@ public class OriginalCampaignTests : IDisposable
         Assert.Contains(OriginalCues.Click, host.TakeCues());
     }
 
-    /// <summary>PLANE CONSTRUCTION is the one door out of the campaign that comes back: the module
-    /// asks the host for the hangar over the seated profile's own purse, and the return the host
-    /// makes re-reads that profile and lands on the plaque the door was pressed from.</summary>
+    /// <summary>PLANE CONSTRUCTION is the one door out of the campaign that comes back. The module
+    /// asks the host for the hangar over the seated profile's own purse. The return the host makes
+    /// re-reads that profile and lands on the plaque the door was pressed from.</summary>
     [Fact]
     public void PlaneConstructionAsksTheHostForTheHangarOverTheWalletAndTheReturnLandsOnTheCabin()
     {
@@ -498,7 +499,7 @@ public class OriginalCampaignTests : IDisposable
         Assert.NotNull(scratchPlanes.Load(campaign.Profile!.Planes[0].Name));
         Assert.Null(_planes.Load(campaign.Profile.Planes[0].Name));
 
-        // A second press off the screen does nothing: the box stands and the screen under it is
+        // A second press off the screen does nothing. The box stands and the screen under it is
         // left alone, the answers being the rows a player can reach.
         host.Module.PressExport();
         Assert.NotNull(host.Dialog);
@@ -585,7 +586,7 @@ public class OriginalCampaignTests : IDisposable
         return host.Release(rows, HitTest(rows, x, y));
     }
 
-    // One click as the shell reads it: the press arms the row and the release on it fires, so the
+    // One click as the shell reads it: the press arms the row and the release on it fires. The
     // step that carries the activation is the second one.
     private static MenuExit? Click(CampaignHost host, float x, float y)
     {
@@ -618,22 +619,15 @@ public class OriginalCampaignTests : IDisposable
 
     // The screen as the module draws it, assembled the way the shell assembles its own board. The
     // shell's own layers (the flag movie, the standing box and the pointer overlay) are not the
-    // module's, and the strokes the scrapbook writes ride the board like every other layer.
+    // module's. The strokes the scrapbook writes ride the board like every other layer.
     private static ComposedBoard Compose(CampaignHost host)
     {
         var rows = host.Rows;
-        var backdrop = new List<BoardPicture>();
-        var pictures = new List<BoardPicture>();
-        var fills = new List<BoardFill>();
-        var strokes = new List<BoardStroke>();
-        var lines = new List<BoardLine>();
-        var plaques = new List<BoardPlaque>();
-        var notes = new List<BoardNote>();
-        var overlays = new List<BoardPanel>();
+        var layers = new BoardLayers();
         int focus = host.Dialog == null ? host.Focus : -1;
-        host.Module.Compose(rows, focus, backdrop, pictures, fills, strokes, lines, plaques, notes, overlays);
-        return new ComposedBoard(pictures, strokes, lines, plaques, notes,
-            backdrop: backdrop, fills: fills, overlays: overlays);
+        host.Module.Compose(rows, focus, layers);
+        return new ComposedBoard(layers.Pictures, layers.Strokes, layers.Lines, layers.Plaques, layers.Notes,
+            backdrop: layers.Backdrop, fills: layers.Fills, overlays: layers.Overlays);
     }
 
     // The module over the layout fixture, a scripted seat, no extraction, and a campaign feature
@@ -651,136 +645,35 @@ public class OriginalCampaignTests : IDisposable
         return host;
     }
 
-    /// <summary>The shell's side of the seam, hand-written: the screen showing, one focus per screen
-    /// (the first live row where none was set, as the shell's own EnsureFocus rules), the pointer's
-    /// hover and hold, a standing messagebox opened on its first answer, and the cues a frame
-    /// collected. The rows are the module's own even while a box stands, the box's answers being the
-    /// shell's rows then, and the hangar door and the return through it are counted rather than
-    /// walked.</summary>
-    private sealed class CampaignHost : IOriginalScreenHost
+    // The campaign's side of the seam, over the shared fake: the cues a frame collected, the
+    // pointer's press and release, and the cursor's walk. The rows are the module's own even while
+    // a box stands, the box's answers being the shell's rows then. The build store and the words
+    // are the module's, which is what the cabin's wallet and its plaques read. Every campaign row
+    // is drawn by a shared board component, so the shell's own plate rule never runs behind it.
+    private sealed class CampaignHost : OriginalTestHost<OriginalCampaignScreen>
     {
-        private readonly int[] _focus = new int[Enum.GetValues<OriginalScreen>().Length];
         private readonly List<string> _cues = new();
-        private int _hover = -1;
-        private int _pressed = -1;
-        private int _focusBeforeDialog = -1;
-        private int _dialogFocus;
-        private (float X, float Y)? _pointer;
 
         internal CampaignHost()
+            : base(OriginalScreen.TopLevel, OriginalCampaignTests.Measure, canBuildPlane: true)
         {
-            Array.Fill(_focus, -1);
         }
 
-        public OriginalCampaignScreen Module { get; set; } = null!;
+        public override CustomPlaneStore? CampaignPlanes => Module.Planes;
 
-        public OriginalScreen Screen { get; private set; } = OriginalScreen.TopLevel;
+        public override UiStrings MenuStrings => Module.Strings ?? UiStrings.Empty;
 
-        public OriginalDialog? Dialog { get; private set; }
-
-        public IHangarWallet? HangarWallet { get; private set; }
-
-        public int HangarOpens { get; private set; }
-
-        public bool DialogOpen => Dialog != null;
-
-        public int PressedRow => _pressed;
-
-        public int HoveredRow => _hover;
-
-        public int FocusBeforeDialog => _focusBeforeDialog;
-
-        public (float X, float Y)? Pointer => _pointer;
-
-        public CustomPlaneStore? CampaignPlanes => Module.Planes;
-
-        public UiStrings MenuStrings => Module.Strings ?? UiStrings.Empty;
-
-        public bool CanBuildPlane => true;
-
-        public IReadOnlyList<OriginalRow> Rows
+        // A door onto another screen lets go of whatever the pointer was holding down.
+        public override void Open(OriginalScreen screen)
         {
-            get
-            {
-                var rows = new List<OriginalRow>();
-                if (Module.Owns(Screen))
-                {
-                    Module.BuildRows(rows);
-                }
-
-                return rows;
-            }
+            base.Open(screen);
+            PressedRow = -1;
         }
 
-        public int Focus
-        {
-            get
-            {
-                var rows = Rows;
-                int focus = _focus[(int)Screen];
-                if (focus >= 0 && focus < rows.Count && rows[focus].Enabled)
-                {
-                    return focus;
-                }
-
-                focus = rows.ToList().FindIndex(r => r.Enabled);
-                _focus[(int)Screen] = focus;
-                return focus;
-            }
-        }
-
-        public string FocusedKey
-        {
-            get
-            {
-                if (Dialog is { } dialog)
-                {
-                    return dialog.Answers[_dialogFocus].Key;
-                }
-
-                int focus = Focus;
-                return focus >= 0 ? Rows[focus].Key : string.Empty;
-            }
-        }
-
-        public int FocusedRow
-        {
-            get => _focus[(int)Screen];
-            set => _focus[(int)Screen] = value;
-        }
-
-        public void Open(OriginalScreen screen)
-        {
-            Screen = screen;
-            _pressed = -1;
-        }
-
-        public void FocusKey(string key)
-        {
-            var rows = Rows;
-            for (int i = 0; i < rows.Count; i++)
-            {
-                if (rows[i].Key == key)
-                {
-                    _focus[(int)Screen] = i;
-                    return;
-                }
-            }
-        }
-
-        public void RaiseDialog(string message, DialogIcon icon, params OriginalDialogAnswer[] answers)
-        {
-            _focusBeforeDialog = _focus[(int)Screen];
-            Dialog = new OriginalDialog(message, icon, answers);
-            _dialogFocus = 0;
-        }
-
-        public void CloseDialog() => Dialog = null;
-
-        /// <summary>One frame of the driving seat's commands, the shell's own ApplyFrame narrowed to
-        /// the presses a campaign screen takes: the typing, the axis, then Accept or Back. What the
-        /// screenshot aids' script replays through the module.</summary>
-        public void Frame(MenuCommands commands)
+        /// <summary>One frame of the driving seat's commands, the shell's own ApplyFrame narrowed
+        /// to the presses a campaign screen takes. Those are the typing, the axis, then Accept or
+        /// Back. What the screenshot aids' script replays through the module.</summary>
+        public override void Frame(MenuCommands commands)
         {
             ArgumentNullException.ThrowIfNull(commands);
             if (commands.Typed.Length > 0 || commands.Erase)
@@ -808,61 +701,11 @@ public class OriginalCampaignTests : IDisposable
             }
         }
 
-        public void PlayFilm(Action<Action> play, Action then) => OriginalTestHost.PlayFilm(play, then);
-
-        public (int Width, int Height)? Measure(string art) =>
-            art.Length > 0 ? OriginalCampaignTests.Measure(art) : null;
-
         // The hangar's own return, which the shell makes by handing it back to this module.
-        public void ResumeCampaign() => Module.ResumeCampaign();
-
-        public void RefreshInstantActionRoster()
+        public override void ResumeCampaign()
         {
-        }
-
-        public void RefreshRosterFromStore()
-        {
-        }
-
-        public void OpenHangar(IHangarWallet? wallet)
-        {
-            HangarWallet = wallet;
-            HangarOpens++;
-        }
-
-        public MenuExit? BeginSeatWalk() => null;
-
-        public int CheatedMission(int ordinary) => OriginalTestHost.CheatedMission(ordinary);
-
-        public BoardPanel? SeatPanel(bool onPaper) => null;
-
-        // Every campaign row is drawn by the shared board component, so no row of this module's ever
-        // falls back to the shell's own plate rule.
-        public void ComposeGenericRow(
-            OriginalRow row, bool focused, bool pressed, int index,
-            List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPicture> pictures)
-        {
-        }
-
-        public OriginalRow PlaqueRow(string key, string label, int row, bool enabled, int column) =>
-            OriginalTestHost.PlaqueRow(key, label, row, enabled, column);
-
-        public void ComposePlainPage(
-            string heading, IReadOnlyList<OriginalRow> rows, int focus,
-            List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques) =>
-            OriginalTestHost.ComposePlainPage(heading, rows, focus, lines);
-
-        public BoardFill FocusMark(OriginalRow row) => OriginalTestHost.FocusMark(row);
-
-        // One answer taken, the way the shell takes one: the box goes first, the focus behind it
-        // comes back, then the answer runs over the bare screen.
-        internal void Answer(string key)
-        {
-            var dialog = Dialog!;
-            var answer = dialog.Answers.Single(a => a.Key == key);
-            Dialog = null;
-            _focus[(int)Screen] = _focusBeforeDialog;
-            answer.Run?.Invoke();
+            base.ResumeCampaign();
+            Module.ResumeCampaign();
         }
 
         internal List<string> Type(MenuCommands commands)
@@ -879,15 +722,15 @@ public class OriginalCampaignTests : IDisposable
             return cues;
         }
 
-        // The cursor's walk, the shell's own rule restated: inside an open list the axis walks the
-        // list's entries and over a box its answers, else it steps within the focused row's column
-        // over enabled rows, wrapping at either end.
+        // The cursor's walk, the shell's own rule restated. Inside an open list the axis walks the
+        // list's entries, and over a box its answers. Otherwise it steps within the focused row's
+        // column over enabled rows, wrapping at either end.
         internal void Walk(int direction)
         {
             _cues.Clear();
             if (Dialog is { } dialog)
             {
-                _dialogFocus = (_dialogFocus + direction + dialog.Answers.Count) % dialog.Answers.Count;
+                DialogFocus = (DialogFocus + direction + dialog.Answers.Count) % dialog.Answers.Count;
                 return;
             }
 
@@ -909,7 +752,7 @@ public class OriginalCampaignTests : IDisposable
                 i = (i + direction + rows.Count) % rows.Count;
                 if (rows[i].Column == rows[focus].Column && rows[i].Enabled)
                 {
-                    _focus[(int)Screen] = i;
+                    FocusedRow = i;
                     return;
                 }
             }
@@ -942,17 +785,17 @@ public class OriginalCampaignTests : IDisposable
             Module.Back();
         }
 
-        // The pointer on one row, as a frame under the cursor leaves the shell: the row it lands on
-        // is hovered and, where it is live, focused and cued once, an open list's entry taking the
+        // The pointer on one row, as a frame under the cursor leaves the shell. The row it lands on
+        // is hovered and, where it is live, focused and cued once. An open list's entry takes the
         // list's own highlight instead of the focus.
         internal void Point(IReadOnlyList<OriginalRow> rows, int over, float x, float y, bool press)
         {
             _cues.Clear();
-            _pointer = (x, y);
-            _pressed = -1;
-            if (over != _hover)
+            Pointer = (x, y);
+            PressedRow = -1;
+            if (over != HoveredRow)
             {
-                _hover = over;
+                HoveredRow = over;
                 if (over >= 0 && rows[over].Enabled)
                 {
                     if (OriginalWidgets.HoverOnly(rows[over]))
@@ -961,7 +804,7 @@ public class OriginalCampaignTests : IDisposable
                     }
                     else
                     {
-                        _focus[(int)Screen] = over;
+                        FocusedRow = over;
                     }
 
                     if (rows[over].Kind != OriginalRowKind.ListRow)
@@ -973,17 +816,17 @@ public class OriginalCampaignTests : IDisposable
 
             if (press && over >= 0 && rows[over].Enabled)
             {
-                _pressed = over;
+                PressedRow = over;
             }
         }
 
-        // The release that fires: only on the row the press took hold of, and a click off every row
+        // The release that fires only on the row the press took hold of. A click off every row
         // closes an open list and picks nothing.
         internal MenuExit? Release(IReadOnlyList<OriginalRow> rows, int over)
         {
             _cues.Clear();
             MenuExit? exit = null;
-            if (over >= 0 && over == _pressed && rows[over].Enabled)
+            if (over >= 0 && over == PressedRow && rows[over].Enabled)
             {
                 exit = Fire(rows[over], byPointer: true);
             }
@@ -992,12 +835,12 @@ public class OriginalCampaignTests : IDisposable
                 Module.CloseDropdown();
             }
 
-            _pressed = -1;
+            PressedRow = -1;
             return exit;
         }
 
-        // The shell's own Activate: every press but a list row's cues the click, a standing box
-        // takes the answer whatever screen it stands over, and a click in an edit box puts the caret
+        // The shell's own Activate: every press but a list row's cues the click. A standing box
+        // takes the answer whatever screen it stands over. A click in an edit box puts the caret
         // there and does nothing else.
         private MenuExit? Fire(OriginalRow row, bool byPointer)
         {

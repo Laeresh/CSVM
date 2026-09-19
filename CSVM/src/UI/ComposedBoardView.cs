@@ -9,15 +9,16 @@ namespace CSVM.UI;
 
 /// <summary>
 /// Draws a <see cref="ComposedBoard"/> over the whole window: the authored 800x600 composition
-/// mapped through <see cref="BoardFit"/>, letterboxed, sampled nearest so the original's pixel grid
-/// stays hard instead of turning soft on a large display. Owns nothing but its texture cache; what
-/// a screen is made of is <see cref="CampaignBoards"/>'s, and where the cursor is the shell's.
+/// mapped through <see cref="BoardFit"/> and letterboxed. It samples nearest, so the original's
+/// pixel grid stays hard instead of turning soft on a large display. Owns nothing but its texture
+/// cache; what a screen is made of is <see cref="CampaignBoards"/>'s, and where the cursor is the
+/// shell's.
 /// </summary>
 public sealed partial class ComposedBoardView : Control
 {
     /// <summary>The smallest face a shrinking note is scaled to. A block that will not fit its box
-    /// even here is drawn at this size and runs past it, which is a visible fault rather than the
-    /// silent one of losing rows or words.</summary>
+    /// even here is drawn at this size and runs past it. That fault is visible, where losing rows
+    /// or words is silent.</summary>
     public const float MinNoteFont = 9f;
 
     // The controls hint and the focused row's description. Neither is the original's chrome, which
@@ -31,14 +32,14 @@ public sealed partial class ComposedBoardView : Control
     private const float HintBand = 32f;
 
     // The play count a board's movie takes. Every movie row on a screen composed here authors
-    // Loops 0, the layout's own spelling of a background that never ends (docs/formats/cinemas.md);
-    // the two rows that play a fixed number of times are cinema screens, which are a flow rather
-    // than a picture under one.
+    // Loops 0, the layout's own spelling of a background that never ends (docs/formats/cinemas.md).
+    // The two rows that play a fixed number of times are cinema screens. A cinema screen is a flow
+    // rather than a picture under one.
     private const int EndlessPlays = 0;
 
     // How far a synthetic italic leans, as the shear of one em. The extraction ships no italic
-    // face, so a slanted draw of the board's own face is the stand-in for the original's; the
-    // value is chosen to read like the reference screenshot's note, not decoded from anything.
+    // face, so a slanted draw of the board's own face stands in for the original's. The value is
+    // chosen to read like the reference screenshot's note, not decoded from anything.
     private const float Slant = 0.25f;
 
     // How long a text caret stays lit and then dark. Nothing in the layout or the shipped scripts
@@ -47,7 +48,7 @@ public sealed partial class ComposedBoardView : Control
 
     // How much heavier a bold draw is than the board's own face, as Godot's own embolden amount.
     // The extraction ships no second typeface either, so this stands in for the weight the load
-    // screen's two headings differ by; the value is chosen to read like that screenshot.
+    // screen's two headings differ by. The value is chosen to read like that screenshot.
     private const float Weight = 0.5f;
 
     // The OpenType weight and stretch classes a langui face is looked up at.
@@ -63,22 +64,22 @@ public sealed partial class ComposedBoardView : Control
     // The installed fonts langui faces resolved to, by tag, a machine lacking one caching null.
     private readonly Dictionary<string, Font?> _faces = new();
 
-    // The movies behind the boards, one per file, kept beside the texture cache rather than in it
-    // because a picture is drawn from the same ImageTexture forever and only the surface knows when
-    // that texture's pixels changed. A file that does not open caches a null so it is tried once.
+    // The movies behind the boards, one per file, kept beside the texture cache rather than in it.
+    // A picture is drawn from the same ImageTexture forever, and only the surface knows when that
+    // texture's pixels changed. A file that does not open caches a null so it is tried once.
     private readonly Dictionary<string, MovieSurface?> _movies = new();
 
-    // The moving layer's own canvas item, a child of this control's. Its commands are issued to
-    // the server as they are asked for, where a Control's own _Draw is a callback the main loop
-    // flushes, so this is the only part of a board a blocked frame loop can still change.
+    // The moving layer's own canvas item, a child of this control's. Its commands reach the server
+    // as they are asked for. A Control's own _Draw is a callback the main loop flushes. This layer
+    // is therefore the only part of a board a blocked frame loop can still change.
     private Rid _motion;
     private IReadOnlyList<BoardPicture> _moving = Array.Empty<BoardPicture>();
 
     private FontVariation? _slanted;
     private FontVariation? _emboldened;
 
-    // The caret's blink: how far into the current half-period the board is, whether that half is
-    // the lit one, and whether anything on the board carries a caret at all.
+    // The caret's blink: how far into the current half-period the board is, and whether that half
+    // is the lit one. The last says whether anything on the board carries a caret at all.
     private double _caretClock;
     private bool _caretLit = true;
     private bool _caretOnBoard;
@@ -132,8 +133,8 @@ public sealed partial class ComposedBoardView : Control
     }
 
     /// <summary>The note at the largest whole face size, its own or smaller, whose entries all fit
-    /// its box, for a note that may shrink; the note unchanged otherwise. A block that still will
-    /// not fit at <see cref="MinNoteFont"/> is drawn there rather than losing rows.</summary>
+    /// its box. A note that may not shrink comes back unchanged. A block that still will not fit
+    /// at <see cref="MinNoteFont"/> is drawn there rather than losing rows.</summary>
     public static BoardNote Fitted(BoardFit fit, Font font, BoardNote note)
     {
         ArgumentNullException.ThrowIfNull(note);
@@ -154,9 +155,10 @@ public sealed partial class ComposedBoardView : Control
     }
 
     /// <summary>Advances every movie this view has opened by that many seconds, answering whether
-    /// any of them put a new picture in its texture. ⚠ Hand it a step that does not come from the
-    /// wall clock on a deterministic run, or the picture a capture lands on is a property of the
-    /// machine rather than of the frame count (<c>docs/verification.md</c>'s DET-7).</summary>
+    /// any of them put a new picture in its texture. ⚠ On a deterministic run, hand it a step that
+    /// does not come from the wall clock. Otherwise the picture a capture lands on is a property
+    /// of the machine rather than of the frame count. See <c>docs/verification.md</c>'s
+    /// DET-7.</summary>
     public bool AdvanceMovies(double elapsedSeconds)
     {
         bool changed = false;
@@ -173,7 +175,7 @@ public sealed partial class ComposedBoardView : Control
 
     /// <summary>Advances the text caret's blink by that many seconds, answering whether the picture
     /// changed and the board wants repainting. Takes its step from the caller for the reason
-    /// <see cref="AdvanceMovies"/> does: a clock read here would make the frame a capture lands on
+    /// <see cref="AdvanceMovies"/> does. A clock read here would make the frame a capture lands on
     /// a property of the machine.</summary>
     public bool AdvanceCaret(double elapsedSeconds)
     {
@@ -201,8 +203,8 @@ public sealed partial class ComposedBoardView : Control
         bool caret = HasCaret(board);
         if (caret && !_caretOnBoard)
         {
-            // A box that has just taken the focus shows its caret at once, so the blink starts
-            // from the press rather than from wherever the last one left the phase.
+            // A box that has just taken the focus shows its caret at once. The blink starts from
+            // the press, not from wherever the last one left the phase.
             _caretClock = 0d;
             _caretLit = true;
         }
@@ -217,9 +219,9 @@ public sealed partial class ComposedBoardView : Control
     }
 
     /// <summary>Puts the pictures that move over the still board on screen at once, and asks for a
-    /// frame. The one repaint a caller holding the frame loop can still make: the pictures are
-    /// issued to the server here rather than queued for a redraw callback the loop would have to
-    /// reach. They stay up, over whatever the board draws, until the next call replaces them.
+    /// frame. This is the one repaint a caller holding the frame loop can still make. The pictures
+    /// reach the server here rather than being queued for a redraw callback that loop would have
+    /// to reach. They stay up until the next call replaces them.
     /// ⚠ Keep them out of the board handed to <see cref="Show"/>, or each one draws twice.</summary>
     public void PresentMoving(IReadOnlyList<BoardPicture> pictures)
     {
@@ -302,8 +304,8 @@ public sealed partial class ComposedBoardView : Control
 
         DrawHints(fit, font);
 
-        // The moving layer sits in its own canvas item, so a resize (which is what re-runs this)
-        // has to re-place it at the new fit; nothing else touches it between pumps.
+        // The moving layer sits in its own canvas item. A resize re-runs this draw, and has to
+        // re-place that layer at the new fit. Nothing else touches it between pumps.
         PaintMoving();
     }
 
@@ -362,8 +364,8 @@ public sealed partial class ComposedBoardView : Control
         return new Rect2(0f, top, size.X, height);
     }
 
-    // Greedy word wrap in one face at one size: the words that fit a width, in order, each authored
-    // line break starting a new line and an empty paragraph standing as an empty line. A single word
+    // Greedy word wrap in one face at one size: the words that fit a width, in order. Each authored
+    // line break starts a new line, and an empty paragraph stands as an empty line. A single word
     // longer than the width stands on its own line rather than being broken mid-word. A paragraph's
     // leading spaces are its indent and are kept.
     private static IEnumerable<string> Wrap(Font font, string text, int points, float width)
@@ -409,8 +411,6 @@ public sealed partial class ComposedBoardView : Control
         }
     }
 
-    // The palette a piece of text takes. A plaque's label is the one place the state is in the ink
-    // rather than in the art, which is what the original's three label fonts are.
     // Every entry of a wrapped block fits the box the note carries, in both axes.
     private static bool Fits(Func<string, float, Vector2> box, BoardNote note)
     {
@@ -429,6 +429,8 @@ public sealed partial class ComposedBoardView : Control
         return tall <= note.Height;
     }
 
+    // The palette a piece of text takes. A plaque's label is the one place the state is in the ink
+    // rather than in the art. That is what the original's three label fonts are.
     private Color InkOf(BoardInk ink) => ink switch
     {
         BoardInk.RowFocused => _palette.Focus,
@@ -533,13 +535,13 @@ public sealed partial class ComposedBoardView : Control
             return;
         }
 
-        // An outline of one authored pixel, which is at least one real one however small the board
-        // is drawn: a sub-pixel border is a border nobody sees.
+        // An outline of one authored pixel, at least one real one however small the board is
+        // drawn. A sub-pixel border is a border nobody sees.
         DrawRect(box, colour, filled: false, Mathf.Max(1f, fit.Length(1f)));
     }
 
     // Where one picture lands and which part of its bitmap it takes, both in this control's own
-    // pixels, or null where the extraction does not carry the art.
+    // pixels. The result is null where the extraction does not carry the art.
     private (Texture2D Texture, Rect2 Dest, Rect2 Src, Color Tint)? Placed(
         BoardFit fit, BoardPicture picture)
     {
@@ -564,8 +566,8 @@ public sealed partial class ComposedBoardView : Control
             at -= span / 2f;
         }
 
-        // Growing about the middle rather than the corner, so a scrap swelling under the cursor
-        // stays where the page put it instead of creeping down and to the right.
+        // Growing about the middle rather than the corner. A scrap swelling under the cursor then
+        // stays where the page put it, instead of creeping down and to the right.
         if (picture.Scale != 1f)
         {
             var grown = span * picture.Scale;
@@ -635,8 +637,8 @@ public sealed partial class ComposedBoardView : Control
             return;
         }
 
-        // A spin turns the element about its own middle, which is where the script's own centred
-        // placement puts it; drawing through a transform keeps the frame region intact.
+        // A spin turns the element about its own middle, where the script's own centred placement
+        // puts it. Drawing through a transform keeps the frame region intact.
         var span = placed.Dest.Size;
         DrawSetTransform(placed.Dest.Position + (span / 2f), picture.Revs * Mathf.Tau, Vector2.One);
         DrawTextureRectRegion(placed.Texture, new Rect2(-span / 2f, span), placed.Src, placed.Tint);
@@ -659,9 +661,9 @@ public sealed partial class ComposedBoardView : Control
             return;
         }
 
-        // A one-frame plaque bakes no words in, so the label is drawn over it, centred in the
-        // frame and shadowed the way the original's own outlined face reads. A strip that carries
-        // its own baseline is one whose plaque stands somewhere other than the middle of its frame.
+        // A one-frame plaque bakes no words in, so the label is drawn over it. It is centred in
+        // the frame and shadowed the way the original's own outlined face reads. A strip carrying
+        // its own baseline is one whose plaque stands somewhere other than its frame's middle.
         int points = Mathf.Max(1, Mathf.RoundToInt(fit.Length(13f)));
         float baseline = plaque.LabelBaseline > 0f
             ? at.Y + fit.Length(plaque.LabelBaseline)
@@ -699,8 +701,8 @@ public sealed partial class ComposedBoardView : Control
             return;
         }
 
-        // Wrapped, because a description panel's text is a block and a row's own text may still be
-        // longer than the widget it sits in; a single-line draw would run off the board.
+        // Wrapped, because a description panel's text is a block. A row's own text may still be
+        // longer than the widget it sits in, and a single-line draw would run off the board.
         var justify = line.Justify switch
         {
             BoardJustify.Right => HorizontalAlignment.Right,
@@ -736,7 +738,7 @@ public sealed partial class ComposedBoardView : Control
     }
 
     // Wrapped at the widget's own line pitch rather than the face's. Godot's multiline draw spaces
-    // by the font's metrics, which on a face other than the authored one runs a block past the
+    // by the font's metrics. On a face other than the authored one, that runs a block past the
     // artwork it was written to sit inside. A justification moves the block as a whole, its lines
     // left-aligned under the widest, which is how the original sets a centred multi-line title.
     private void DrawPitched(BoardFit fit, Font font, BoardLine line, int points, Vector2 at)
@@ -774,8 +776,8 @@ public sealed partial class ComposedBoardView : Control
         var height = Measure(fit, font, note);
         if (note.Counted is { } counted)
         {
-            // The measurement the composer could not make, handed back for the frame after this
-            // one: a scrolled box's window is counted in lines, and lines are a font metric.
+            // Hands back the measurement the composer could not make, for the frame after this
+            // one. A scrolled box's window is counted in lines, and lines are a font metric.
             var rows = note.Rows(height);
             counted(rows.Total, rows.Fits);
         }
@@ -805,7 +807,7 @@ public sealed partial class ComposedBoardView : Control
         if (_detail.Length > 0 || _footer.Length > 0)
         {
             // A scrim under the band, so it reads as something laid over the screen rather than as
-            // words stuck to the artwork, and stays legible on a light board and a dark one alike.
+            // words stuck to the artwork. It stays legible on a light board and a dark one alike.
             DrawRect(
                 new Rect2(fit.X(0f), fit.Y(0f), width, fit.Length(HintBand)),
                 new Color(0f, 0f, 0f, 0.45f));
@@ -851,8 +853,8 @@ public sealed partial class ComposedBoardView : Control
         Texture2D? texture = null;
         if (art.Library == BoardArtLibrary.Movie)
         {
-            // The surface rewrites this one texture in place for the life of the view, so the cache
-            // above needs no invalidation and the picture animates with nothing else done to it.
+            // The surface rewrites this one texture in place for the life of the view. The cache
+            // above needs no invalidation, and the picture animates with nothing else done to it.
             var movie = MovieSurface.Open(path, EndlessPlays);
             _movies[path] = movie;
             texture = movie?.Texture;
@@ -889,8 +891,8 @@ public sealed partial class ComposedBoardView : Control
         return texture;
     }
 
-    // Drops the textures of held pictures the new board no longer draws, so a page shown once per
-    // stunt run does not keep every earlier run's photographs alive.
+    // Drops the textures of held pictures the new board no longer draws. A page shown once per
+    // stunt run then keeps no earlier run's photographs alive.
     private void ForgetHeld(ComposedBoard board)
     {
         if (_held.Count == 0)

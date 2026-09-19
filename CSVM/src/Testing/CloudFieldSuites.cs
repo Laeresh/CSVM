@@ -11,7 +11,7 @@ internal static class CloudFieldSuites
     private const float NormalTolerance = 1e-3f;
 
     // Y above this is "straight up"; below this magnitude is "a wall". A flat top face lands
-    // exactly on 1 and nothing shipped reaches the second, which is itself the finding: every
+    // exactly on 1, and nothing shipped reaches the second. That is itself the finding: every
     // authored fvol face points upward, steeply or gently.
     private const float UpCosine = 0.99f;
     private const float WallCosine = 0.1f;
@@ -23,11 +23,11 @@ internal static class CloudFieldSuites
 
     // How far apart the two headings' away-side factors must land before the card counts as
     // directionally shaded. The authored bottom normals sit about 18 degrees off the card's own
-    // +Z, so a half-turn swings them right across the light and the real gap is far wider.
+    // +Z. A half-turn swings them right across the light, and the real gap is far wider.
     private const float DirectionalMargin = 0.05f;
 
     // A SUNLIGHT pair that neither flattens nor saturates the law, and below it the oblique
-    // bearing it runs on: a chapter's own numbers would make this a reading of one mission.
+    // bearing it runs on. A chapter's own numbers would make this a reading of one mission.
     private const float ProbeAmbient = 0.6f;
     private const float ProbeDiffuse = 0.4f;
 
@@ -36,12 +36,12 @@ internal static class CloudFieldSuites
 
     private static readonly Vector3 ProbeSun = new Vector3(0.62f, 0.3f, 0.72f).Normalized();
 
-    // Per chapter: the pinned placement counts (base, map-edge extension), the normal tally
-    // (sprites on a face pointing straight up, sprites on a sloped one) and the authored
-    // `lighting` flag of the chapter's own cloud card. C1's nine slab volumes author one flat top
-    // face each, so its whole field and its ring are +Y; C1C's build-ups and C5's ramped prisms
-    // carry sloped faces, which is what makes those two read as a shell. The base counts are
-    // docs/formats/fogvol.md's own, the flag is docs/org/vertexLighting.md's gate.
+    // Per chapter: the pinned placement counts (base, map-edge extension), the normal tally, and
+    // the authored `lighting` flag of the chapter's own cloud card. The tally is sprites on a face
+    // pointing straight up, and sprites on a sloped one. C1's nine slab volumes author one flat
+    // top face each, so its whole field and its ring are +Y. C1C's build-ups and C5's ramped
+    // prisms carry sloped faces, which is what makes those two read as a shell. The base counts
+    // are docs/formats/fogvol.md's own, the flag is docs/org/vertexLighting.md's gate.
     private static readonly (string Chapter, int Base, int Extension, int Up, int Sloped, bool Lit)[] Fields =
     {
         ("C1", 10524, 13176, 23700, 0, false),
@@ -73,8 +73,8 @@ internal static class CloudFieldSuites
                 using var textures = new TextureArchive(texturePath);
                 var spec = FogVolumeSpec.Load(zrdr);
                 var volumes = FogVolumeSpec.VolumesOf(world.Gamez);
-                // ⚠ Once per chapter, not once per suite: the scatter takes a fresh generator off
-                // the shared cloud stream, so a second field built in the same process draws a
+                // ⚠ Once per chapter, not once per suite. The scatter takes a fresh generator off
+                // the shared cloud stream. A second field built in the same process draws a
                 // different realization than a session's one-and-only field, off the pinned count.
                 Utils.Rng.Rewind();
                 var field = FogVolumeClutter.Create(world.Gamez, textures, spec, volumes);
@@ -112,9 +112,9 @@ internal static class CloudFieldSuites
         }
     }
 
-    // The per-instance half of the fade law: each sprite's custom data must decode to a unit
-    // normal and to a draw t that really spans [0, 1], because the shader interpolates BOTH
-    // authored far_fade_range pairs with that one t. A constant t would collapse the field's edge
+    // The per-instance half of the fade law. Each sprite's custom data must decode to a unit
+    // normal and to a draw t that really spans [0, 1]. The shader interpolates BOTH authored
+    // far_fade_range pairs with that one t. A constant t would collapse the field's edge
     // back into the rim the law exists to replace.
     private static void CheckBands(TestContext ctx, string chapter, FogVolumeClutter field,
         FogVolumeSpec spec, int expectUp, int expectSloped)
@@ -175,8 +175,8 @@ internal static class CloudFieldSuites
         ctx.Same(0, down + wall, $"{chapter} sprites on a downward or vertical face");
         ctx.Note($"{chapter} cloud normals: {up} up, {sloped} sloped, of {total}");
 
-        // The two pairs the shader interpolates are the reader's, not one of them twice: a block
-        // that lost a pair would fade every sprite in the same metres again.
+        // The two pairs the shader interpolates are the reader's, not one of them twice. A block
+        // missing a pair would fade every sprite in the same metres again.
         foreach (var block in spec.Clutter)
         {
             ctx.Check(block.FarFadeNear.Y > 0f && block.FarFade.Y > block.FarFadeNear.Y,
@@ -184,8 +184,8 @@ internal static class CloudFieldSuites
         }
     }
 
-    // The fade law wants each sprite scaled against the normal of the face it was scattered on, so
-    // a sprite naming a normal no face it touches carries is the stand-in this replaced. Measured
+    // The fade law scales each sprite against the normal of the face it was scattered on. A sprite
+    // naming a normal no face it touches carries is a stand-in, which this forbids. Measured
     // as a distance: a sprite must lie within the authored perpendicular offset plus half the
     // perturbation of a face whose normal is its own.
     private static void CheckNormalsAreTheirOwnFaces(TestContext ctx, string chapter,
@@ -244,8 +244,9 @@ internal static class CloudFieldSuites
         ctx.Note($"{chapter} worst sprite-to-own-face distance {worst:0.00} m of {budget:0.0} m allowed");
     }
 
-    // The remake-only jitter must lay the same decoded field and move only where each card sits:
-    // same kinds, counts, heights, scales and bands, X/Z within the knob, the map-edge ring still.
+    // The remake-only jitter must lay the same decoded field and move only where each card sits.
+    // Kinds, counts, heights, scales and bands hold, X/Z stays within the knob, and the map-edge
+    // ring stands still.
     private static void CheckJitter(TestContext ctx, string chapter, FogVolumeClutter plain,
         FogVolumeClutter? jittered)
     {
@@ -418,8 +419,8 @@ internal static class CloudFieldSuites
                           && toward <= ProbeAmbient + ProbeDiffuse + NormalTolerance,
                     $"{chapter} {child.Name} card light stays inside its authored pair");
             }
-            // Noted in both arms: the geometry is the same card either way, so the unlit chapters'
-            // numbers are what their authored flag is turning off, not a shortfall in the mesh.
+            // Noted in both arms: the geometry is the same card either way. The unlit chapters'
+            // numbers are what their authored flag turns off, not a shortfall in the mesh.
             ctx.Note($"{chapter} {child.Name} lighting={lit}: {toward:0.000} toward the light, {away:0.000} away, tops swing {flat:0.000}");
             examined++;
         }

@@ -7,10 +7,10 @@ using Godot;
 namespace CSVM.Testing;
 
 /// <summary>
-/// The mouse flight-control scheme through the seat's own stick reader: the decoded deadzone, the
-/// autogyro exchange over the shipped defs' own flag, the held free-look control that hands the
-/// mouse to head-look for as long as it is down, and the keyboard scheme underneath, which the
-/// mouse must leave exactly as it is.
+/// The mouse flight-control scheme through the seat's own stick reader. It carries the decoded
+/// deadzone and the autogyro exchange over the shipped defs' own flag. The held free-look control
+/// hands the mouse to head-look for as long as it is down. The mouse must leave the keyboard
+/// scheme underneath exactly as it is.
 /// </summary>
 internal static class MouseFlightSuites
 {
@@ -47,8 +47,8 @@ internal static class MouseFlightSuites
             gyro.MouseFlying = true;
             plane.MouseFlying = true;
 
-            // Inside the deadzone the cursor flies nothing at all, which is what lets a player let
-            // go of the mouse without the aeroplane holding a deflection.
+            // Inside the deadzone the cursor flies nothing at all. A player can let go of the
+            // mouse without the aeroplane holding a deflection.
             plane.MouseStickForTest = new Vector2(0.09f, 0.09f);
             var idle = plane.ReadKeyboard(Dt);
             ctx.Check(idle.Roll == 0f && idle.Pitch == 0f && idle.Yaw == 0f,
@@ -186,8 +186,8 @@ internal static class MouseFlightSuites
     }
 
     // The walk a pilot makes over the pause: Options, the CONTROLS door, the Mouse row, ACCEPT
-    // CHANGES. The rebind is staged through the feature rather than by a capture, since the scripted
-    // run presses no hardware and the keymap half only has to prove it rides the same accept.
+    // CHANGES. The rebind is staged through the feature rather than by a capture, since the
+    // scripted run presses no hardware. The keymap half only has to prove it rides the same accept.
     private static void AcceptOverThePause(
         TestContext ctx, PausePreferences leaf, UI.Menu.ControlsFeature controls, FlightController one, FlightController two)
     {
@@ -242,7 +242,7 @@ internal static class MouseFlightSuites
     }
 
     // The capture decision for an unhalted frame on a seat allowed the mouse, read and put back in
-    // one call: the harness must never leave a seat allowed, or its next frame would take the mouse.
+    // one call. The harness must never leave a seat allowed, or its next frame would take the mouse.
     private static bool CaptureDecision(FlightController seat)
     {
         seat.MouseCaptureAllowed = true;
@@ -279,8 +279,8 @@ internal static class MouseFlightSuites
             leaf.Drive(new UI.Menu.MenuCommands { MoveY = 1 });
     }
 
-    // Hold-to-look, the posture under both mouse schemes: while the free-look control is down the
-    // mouse is the head's and the stick reads nothing from it, and the frame it comes up the stick
+    // Hold-to-look, the posture under both mouse schemes. While the free-look control is down the
+    // mouse is the head's and the stick reads nothing from it. The frame it comes up, the stick
     // has it back. A hold rather than a toggle, so one tap cannot strand the mouse on the head.
     private static void FreeLookHold(TestContext ctx, FlightController plane)
     {
@@ -296,7 +296,7 @@ internal static class MouseFlightSuites
             $"the release hands the mouse straight back to the stick (held {plane.FreeLookActiveForTest()}, roll {released.Roll:0.###})");
 
         // The reading a toggle could not give: a second press takes the mouse off the stick AGAIN
-        // rather than handing it back, which is what the toggle did on its own second press.
+        // rather than handing it back. A toggle would hand it back on that second press.
         plane.HoldActionForTest(InputAction.FreeLook, true);
         var again = plane.ReadKeyboard(Dt);
         ctx.Check(plane.FreeLookActiveForTest() && again.Roll == 0f,
@@ -305,7 +305,7 @@ internal static class MouseFlightSuites
     }
 
     // The keys are not replaced by the mouse, they sum with it, which is what the original's arm
-    // does to the same slots: an autogyro pilot banks with the roll keys while the mouse yaws.
+    // does to the same slots. An autogyro pilot banks with the roll keys while the mouse yaws.
     private static void KeysSum(TestContext ctx, FlightController gyro)
     {
         gyro.MouseStickForTest = new Vector2(0.8f, 0f);
@@ -321,9 +321,9 @@ internal static class MouseFlightSuites
         gyro.HoldActionForTest(InputAction.RollLeft, false);
     }
 
-    // The control the whole feature has to leave alone: a seat that did not choose the scheme reads
-    // no stick from the mouse at all, whether the free-look control is down or up, and that control
-    // is the same hold head-look has always read.
+    // The control the whole feature has to leave alone. A seat that did not choose the scheme reads
+    // no stick from the mouse at all, whether the free-look control is down or up. That control
+    // is the same hold head-look reads.
     private static void KeyboardScheme(TestContext ctx, FlightController plane)
     {
         plane.MouseFlying = false;
@@ -341,12 +341,11 @@ internal static class MouseFlightSuites
             $"and releasing it leaves the stick on the keys, not on the cursor (roll {up.Roll:0.###}, pitch {up.Pitch:0.###})");
     }
 
-    // The reading the complaint at the controls was about: an ordinary cursor offset, a quarter of
-    // the way across the pane, flown into the real plant for three seconds. It sits inside the third
-    // axis's 0.3 dead band, where the autogyro used to read roll 0, pitch 0, yaw 0 and hold heading
-    // 0.0 while the same cursor banked the aeroplane 84.5 degrees over. The aeroplane is the control
-    // on both halves: its own lateral axis still answers, and its yaw, which is still fed by the
-    // absent third axis, still reads exactly zero.
+    // An ordinary cursor offset, a quarter of the way across the pane, flown into the real plant
+    // for three seconds. It sits inside the third axis's 0.3 dead band. A naive mapping there
+    // reads roll 0, pitch 0 and yaw 0, and holds heading 0.0. The same cursor banks the aeroplane
+    // 84.5 degrees over. The aeroplane is the control on both halves: its own lateral axis
+    // answers, and its yaw, fed by the absent third axis, reads exactly zero.
     private static void AutogyroFliesAnOrdinaryOffset(
         TestContext ctx, FlightController gyro, PlaneStats gyroStats, FlightController plane, PlaneStats planeStats)
     {
@@ -371,9 +370,10 @@ internal static class MouseFlightSuites
         plane.MouseStickForTest = null;
     }
 
-    // Three seconds of the seat's own stick into a throwaway plant on that airframe's shipped stats,
-    // reported as the heading it came round to and the pitch it climbed to. It is a plant rather
-    // than the rig's own model because what is under test is the deflection, not the seat's tick.
+    // Three seconds of the seat's own stick into a throwaway plant on that airframe's shipped
+    // stats. The result is the heading it came round to and the pitch it climbed to. It is a plant
+    // rather than the rig's own model because what is under test is the deflection, not the seat's
+    // tick.
     private static float FlownHeadingDeg(FlightController rig, PlaneStats stats, out float pitchDeg)
     {
         var model = new FlightModel(stats);
@@ -391,8 +391,8 @@ internal static class MouseFlightSuites
     }
 
     // The hand-back rule, read off the decision rather than off a capture this harness may not
-    // take: every state that stands a board or a free camera over the flight answers false, which
-    // is what gives the pause sheet, the preferences leaf, photo mode and a watcher their pointer.
+    // take. Every state that stands a board or a free camera over the flight answers false. That
+    // gives the pause sheet, the preferences leaf, photo mode and a watcher their pointer.
     private static void BoardsGetThePointerBack(TestContext ctx, FlightController seat)
     {
         seat.MouseCaptureAllowed = true;
@@ -418,8 +418,8 @@ internal static class MouseFlightSuites
         seat.MouseCaptureAllowed = false;
     }
 
-    // One flying seat over a plant and nothing else: no model to draw, no camera and no HUD, since
-    // every reading here comes out of the stick reader rather than off the screen. The capture suite
+    // One flying seat over a plant and nothing else: no model to draw, no camera and no HUD. Every
+    // reading here comes out of the stick reader rather than off the screen. The capture suite
     // asks for a human seat instead, the mouse being one of the things only a person is handed.
     private static FlightController Rig(TestContext ctx, PlaneStats stats, string name,
         bool human = false)

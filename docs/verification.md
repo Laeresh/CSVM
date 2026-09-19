@@ -480,8 +480,8 @@ member, and it does not go here.
   254, on a sheet whose mean texel is (63, 61, 64); at C1's 0.802 that is 0.375 of the sheet, which
   is the whole of the "37 % of its own colour" a texture census had measured. A census over textures
   cannot name the sheet a surface uses, because several sit inside its chromaticity tolerance; the
-  mesh's own material names it outright, and `--dump-debris=<name>` prints both halves of the
-  product per mesh under a destructible.
+  mesh's own material names it outright, and the `debris-shading` suite's probe prints both halves
+  of the product per mesh under a destructible.
 
 - **WORLD-48**, **A population authored `lighting: false` cannot show a directional light, so read
   the flag and the normal array on the actual nodes before attributing a directional look to the

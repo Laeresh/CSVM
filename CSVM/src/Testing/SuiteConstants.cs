@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -107,4 +108,25 @@ internal static class SuiteConstants
         "abld_shadow",                                // soft baked shadow overlay
     };
 
+    /// <summary>The aircraft resources a roster-building suite hands a flight roster, every field
+    /// read off the test context. Weapon messages and camera parameters are optional parameters,
+    /// since only some suites need them. Passing null leaves the field exactly as an omitted
+    /// initializer would, so no suite pays for a load it never reads.</summary>
+    internal static AircraftAssemblyResources AircraftResources(
+        TestContext ctx, GameZ planesGamez, TextureArchive textures,
+        Messages? weaponMessages = null, Func<string, CamParams>? camParamsFor = null) =>
+        new()
+        {
+            PlanesGamez = planesGamez,
+            StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
+            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+            CamParamsFor = camParamsFor!,
+            PaintRng = new RandomNumberGenerator(),
+            ZrdrPath = ctx.ZrdrPath,
+            StockLoadouts = StockLoadouts.Load(),
+            WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+            WeaponMessages = weaponMessages!,
+            Textures = textures,
+            Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+        };
 }

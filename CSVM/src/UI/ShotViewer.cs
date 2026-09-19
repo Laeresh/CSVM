@@ -15,7 +15,7 @@ namespace CSVM.UI;
 /// </summary>
 public sealed partial class ShotViewer : Control
 {
-    // The share of the window the picture may fill, the band under it holding the caption. TUNE.
+    // The share of the window the picture may fill, with the band under it holding the caption.
     private const float PictureTop = 0.04f;
     private const float PictureBottom = 0.88f;
     private const float PictureSide = 0.04f;

@@ -507,7 +507,7 @@ public sealed class AimCandidateSet
         }
     }
 
-    /// <summary>The engine's own <c>MStructList</c>, which is narrower than every destructible:
+    /// <summary>The original's own <c>MStructList</c>, which is narrower than every destructible:
     /// the original builds one object per scene node carrying the mission-structure flag and sets
     /// the acquisition byte <c>+0x8d</c> on those alone, so a pool no mission structure stands on
     /// is not in the AI's list at all (docs/org/aiPilot.md, "What reaches the struct list"). The

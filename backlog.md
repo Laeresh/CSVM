@@ -300,6 +300,22 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   fresh (`GodotWorldQuery`), so a re-measurement of the tick meets a different allocator than C22's.
   *Cross-refs:* `PLAN-M5-polish-6` C22, `docs/verification.md` PERF-1, PERF-19, PERF-20, PERF-23
   and PERF-34.
+- `BL-1014` `[Cleanup]` `[L]` `[Next: decide]` `[Impact: none]` `[Evidence: trace]` **`FlightController.cs`
+  is 4490 lines and changes for unrelated reasons; the responsibilities that have their own
+  state and rules leave as real modules.** *Evidence:* one review range added 1045 lines to the
+  file over about 90 scattered hunks for six reasons that share no state: the engine-out propeller
+  audio, mouse capture and the virtual cursor, the pilot view mode, contact resolution, the Danger
+  Zone photograph, and head-look with the pause. The class is already `partial` across
+  `FlightControllerBuild.cs`, `BeeperTags.cs` and `SmokeScreens.cs`, which hides the size without
+  reducing the public surface any caller sees. *Fix shape:* pick the responsibilities whose state
+  never crosses the flight tick (the view-mode dispatch, the mouse capture, the photograph
+  latch, head-look are the candidates) and give each a type with its own public members that the
+  controller composes, measuring the split by the controller's public member count before and
+  after. *⚠ Traps:* a new `partial` file is not a split; the repo's standing rule is that a partial
+  is not a deepening, and the existing three are accepted, not a pattern to extend. Do not move the
+  flight tick's own steps (forces, contact, damage) out; they share the accumulator and belong
+  together. *Cross-refs:* `BL-1015`, `BL-1016` (the same shape in `GameSession.cs` and
+  `OriginalOptionsScreen.cs`), `docs/architecture/Flight.md`.
 
 ## Environment & world
 
@@ -925,6 +941,22 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   https://discussions.unity.com/t/local-multiplayer-player-join-config-screen-using-ui-toolkit/1701038
   (the pattern as other local co-op games ship it, asked for by name).
 
+- `BL-1016` `[Cleanup]` `[L]` `[Next: decide]` `[Impact: none]` `[Evidence: trace]` **`OriginalOptionsScreen.cs`
+  is 2535 lines and 326 members after absorbing four screens; each page becomes its own module
+  behind the one form, and the two new `OriginalShell` partials fold into real types.** *Evidence:*
+  the Audio, Video, Game Options and Controls screens were deleted into this one class. Its own
+  summary argues it is one form, and the per-page `switch` arms near the row composer and the
+  accept handler are the counter-evidence: every page-specific rule goes through the same two
+  switches. The same review range added `OriginalCheats.cs` (140 lines) and
+  `OriginalShellDialog.cs` (149 lines) as `partial class OriginalShell`, while halving the shell's
+  other partials into the `IOriginalScreenModule` seam. *Fix shape:* one page module per former
+  screen behind `IOriginalScreenModule` or a page-sized sibling of it, the form keeping only the
+  frame, the ACCEPT/CANCEL plaques and the page switch; the cheats and the dialog become the
+  types their file names already suggest, owned by the shell rather than spliced into it. *⚠ Traps:*
+  the pages share the plaque-row pair and the section pitch table, so extract those first or the
+  four modules duplicate them; a page module that reaches back into the form's fields for its
+  layout is the form in another file. *Cross-refs:* `BL-1014`, `BL-1015`,
+  `docs/menu-presentations.md`, `docs/architecture/UI.md`.
 
 ## Splitscreen
 
@@ -1059,6 +1091,19 @@ usual.
   lives past spawn, what it flies), then port that; do not invent a leash or a despawn before the
   read. *Cross-refs:* `docs/org/aiPilot.md` (the headline, "Open"),
   `docs/formats/ai-rosters.md` ("Who is netless").
+- `BL-1015` `[Cleanup]` `[L]` `[Next: decide]` `[Impact: none]` `[Evidence: trace]` **`GameSession.cs`
+  is 4402 lines and changes for unrelated reasons; the build steps and the per-mode runtimes it
+  hosts leave as real modules.** *Evidence:* one review range added 532 lines over scattered hunks
+  for the load screen, the Instant Action and campaign flows, the results boards, the debris and
+  weather rigs and the debug dumps, none sharing state with the others beyond the `BuildState`. The
+  class is a single file with no partials, so its size is the plain measure. *Fix shape:* the
+  ordered build steps that read `BuildState` and write one subsystem each (the pattern
+  `WorldEffectsFactory` already follows) move behind a build pipeline the session composes, and
+  the mode-specific tails (Instant Action, campaign, versus) move onto the directors that already
+  own those modes. Measure by the session's public member count. *⚠ Traps:* a `partial` file is
+  not a split. The per-frame tick order across the runtimes is the one thing the session must
+  keep in one place; do not scatter it into the extracted modules. *Cross-refs:* `BL-1014`,
+  `BL-1016`, `docs/architecture/Session.md`.
 
 ## Tooling, platform & docs
 

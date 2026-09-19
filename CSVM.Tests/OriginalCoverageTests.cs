@@ -39,7 +39,7 @@ public class OriginalCoverageTests : IDisposable
     private const string JoinStep = "*join";
 
     // The wrap-up page is opened by a flown mission's ending, not by any row, so the walk hands the
-    // shell a frozen run the way the presentation's return does.
+    // shell an ended run the way the presentation's return does.
     private const string WrapupStep = "*wrapup";
 
     private static readonly MenuCommands Accept = new() { Accept = true };

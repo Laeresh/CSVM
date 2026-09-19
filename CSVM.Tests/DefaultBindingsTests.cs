@@ -7,9 +7,10 @@ using Xunit;
 
 namespace CSVM.Tests;
 
-/// <summary>The shipped default keymap: every action is either bound or on the deliberately-unbound
-/// list, no default is a hat binding, a control belongs to one action inside a context apart from
-/// the numpad snap-look diagonals, and a pad default lands on the seat's own pad.</summary>
+/// <summary>The shipped default keymap. Every action is either bound or on the
+/// deliberately-unbound list, and no default is a hat binding. Inside a context a control belongs
+/// to one action, apart from the numpad snap-look diagonals. A pad default lands on the seat's own
+/// pad.</summary>
 public class DefaultBindingsTests
 {
     private static readonly DeviceId Pad = DeviceId.Joypad("030000004c050000c405000000010000");
@@ -26,9 +27,9 @@ public class DefaultBindingsTests
     };
 
     /// <summary>The original's shipped keyboard rows, action by action, for
-    /// <see cref="TheFlightKeys_AreTheOriginalsOwnTable"/>. The rows it binds that this port has no
-    /// action for (level off, bail out, the external cameras, Track Target) are absent rather than
-    /// approximated, and the two actions it has no row for are pinned separately.</summary>
+    /// <see cref="TheFlightKeys_AreTheOriginalsOwnTable"/>. Rows it binds that this port has no
+    /// action for are absent, not approximated. Those are level off, bail out, the external
+    /// cameras and Track Target. The two actions it has no row for are pinned separately.</summary>
     public static TheoryData<InputAction, Key, KeyModifiers> TheOriginalsKeys => new()
     {
         { InputAction.PitchUp, Key.Down, KeyModifiers.None },
@@ -97,7 +98,8 @@ public class DefaultBindingsTests
             Assert.Empty(map.Bindings(action));
         }
 
-        Assert.Equal(new[] { InputAction.MenuJoin }, DefaultBindings.Unbound);
+        Assert.Equal(
+            new[] { InputAction.SelectChaseView, InputAction.MenuJoin }, DefaultBindings.Unbound);
     }
 
     [Fact]
@@ -208,7 +210,7 @@ public class DefaultBindingsTests
     }
 
     /// <summary>The nine absolute throttle settings are the digit row, 1 for idle through 9 for
-    /// full, which is why no targeting action may take a digit any more.</summary>
+    /// full. No targeting action may take a digit.</summary>
     [Fact]
     public void TheDigitRow_IsTheThrottleEighths()
     {
@@ -282,9 +284,9 @@ public class DefaultBindingsTests
     }
 
     /// <summary>The four weapon selectors are the original's own keys, by the name its keybind page
-    /// displays: F3/F4 the guns clockwise and counterclockwise, F5/F6 the rockets
+    /// displays. F3/F4 are the guns clockwise and counterclockwise, F5/F6 the rockets
     /// (`OriginalScreenshots/Keybinds Weapons.png`). Recorded key by key because the page's names
-    /// are inverted against the message keys behind them, so a later edit taking the direction off
+    /// are inverted against the message keys behind them. An edit taking the direction off
     /// `MSG_CMD_CANNON_PREV` would bind both pairs backwards.</summary>
     [Fact]
     public void TheFourWeaponSelectors_AreTheOriginalsOwnKeys()
@@ -305,7 +307,7 @@ public class DefaultBindingsTests
         }
     }
 
-    /// <summary>The two backward weapon selectors ship on the keyboard alone: the pad reaches that
+    /// <summary>The two backward weapon selectors ship on the keyboard alone. The pad reaches that
     /// direction by holding the forward button, as the original's joystick reaches it by going
     /// round. Recorded so a later edit cannot hand one a pad control by accident, which would step
     /// the cursor twice for one press.</summary>
@@ -322,30 +324,23 @@ public class DefaultBindingsTests
             map.Bindings(InputAction.SelectOrdnancePrev));
     }
 
-    /// <summary>Selecting the chase view is this port's own action, so it takes F2, the one key of
-    /// the original's function-key run left free (F1 is its View Help, F3 to F8 its selectors and
-    /// views). Recorded so it is not quietly handed back a key the original spends on a weapon
-    /// cycle or a camera.</summary>
+    /// <summary>Selecting the chase view is this port's own action and ships on no control at all.
+    /// The cockpit-view cycle on F8 reaches that view already, so a default would spend a key or a
+    /// pad button for a second way in. It stays a Flight action, so a pilot who wants it direct
+    /// binds it on the controls page.</summary>
     [Fact]
-    public void TheChaseView_TakesTheOneFreeFunctionKey()
+    public void TheChaseView_ShipsUnbound()
     {
         var map = DefaultBindings.MapFor(InputContext.Flight, Pad);
 
-        Assert.Contains(
-            new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.F2)),
-            map.Bindings(InputAction.SelectChaseView));
-        foreach (var key in new[] { Key.F1, Key.F3, Key.F4, Key.F5, Key.F6, Key.F7, Key.F8 })
-        {
-            Assert.DoesNotContain(
-                new Binding(DeviceId.Keyboard, BindingControl.Key((int)key)),
-                map.Bindings(InputAction.SelectChaseView));
-        }
+        Assert.Empty(map.Bindings(InputAction.SelectChaseView));
+        Assert.Equal(InputContext.Flight, DefaultBindings.ContextOf(InputAction.SelectChaseView));
     }
 
     /// <summary>The other two directions of each target class are the original's own Shift and Ctrl
-    /// on the class letter, and they ship on the keyboard alone: the pad keeps the cycle and the
+    /// on the class letter. They ship on the keyboard alone, the pad keeping the cycle and the
     /// crosshairs. Recorded so a later edit cannot hand one a pad control or move it back onto the
-    /// digit row, which the throttle eighths now own.</summary>
+    /// digit row, which the throttle eighths own.</summary>
     [Fact]
     public void ThePerClassPreviousAndNearest_AreTheModifiedClassKeysAndKeyboardOnly()
     {
@@ -375,7 +370,7 @@ public class DefaultBindingsTests
 
     /// <summary>The spyglass toggle ships on both devices, on the original's own Shift+S now that a
     /// binding carries the modifier. Misc1 is the pad's one free control, and the original spends a
-    /// joystick button on this too, so a pad-only pilot is not left without it.</summary>
+    /// joystick button on this too. A pad-only pilot is not left without it.</summary>
     [Fact]
     public void TheSpyglassToggle_ShipsOnBothDevices()
     {
@@ -389,10 +384,10 @@ public class DefaultBindingsTests
         Assert.Equal(2, bound.Count);
     }
 
-    /// <summary>The two look-mode selectors are the original's own K and J, and keyboard only, as
-    /// its Views 1 page has them: neither row carries a joystick button there. Recorded so neither
-    /// drifts onto a pad control, where it would state a mode a pad player cannot state back.
-    /// </summary>
+    /// <summary>The two look-mode selectors are the original's own K and J, and keyboard only. Its
+    /// Views 1 page has them that way: neither row carries a joystick button there. Recorded so
+    /// neither drifts onto a pad control, where it would state a mode a pad player cannot state
+    /// back.</summary>
     [Fact]
     public void TheTwoLookModeSelectors_AreTheOriginalsKeysAndKeyboardOnly()
     {
@@ -460,10 +455,9 @@ public class DefaultBindingsTests
         Assert.True(profile.Actions(InputContext.Menu).ReadsKeyboard);
     }
 
-    /// <summary>The two flight actions the original has no row for take keys it leaves free:
-    /// Backspace is out of the flying hand's reach for the respawn, which throws the airframe away,
-    /// and F2 is the gap in its function-key run for the chase view. Recorded so neither drifts onto
-    /// a key the original spends.</summary>
+    /// <summary>The respawn is this port's own flight action and takes a key the original leaves
+    /// free. Backspace is out of the flying hand's reach, which the action that throws the airframe
+    /// away needs. Recorded so it does not drift onto a key the original spends.</summary>
     [Fact]
     public void ThePortsOwnFlightActions_TakeKeysTheOriginalLeavesFree()
     {
@@ -472,16 +466,13 @@ public class DefaultBindingsTests
         Assert.Contains(
             new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.Backspace)),
             map.Bindings(InputAction.Respawn));
-        Assert.Contains(
-            new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.F2)),
-            map.Bindings(InputAction.SelectChaseView));
     }
 
-    /// <summary>F13 to F24 is the debug block (`docs/controls.md`): the overlays and lab panels
-    /// poll those keys raw, outside the action set, so no rebinding screen offers them and no
-    /// player can break their own diagnostics. A gameplay default landing in the range would give
-    /// one press two owners, the flight action and the instrument, with only the instrument's
-    /// author aware of it. F16 is the all-aircraft markers HUD and is the reason this is pinned.
+    /// <summary>F13 to F24 is the debug block (`docs/controls.md`). The overlays and lab panels
+    /// poll those keys raw, outside the action set. No rebinding screen offers them, and no player
+    /// can break their own diagnostics. A gameplay default landing in the range would give one
+    /// press two owners, the flight action and the instrument. Only the instrument's author would
+    /// be aware of it. F16 is the all-aircraft markers HUD and is the reason this is pinned.
     /// </summary>
     [Fact]
     public void NoDefault_TakesAKeyInTheDebugBlock()

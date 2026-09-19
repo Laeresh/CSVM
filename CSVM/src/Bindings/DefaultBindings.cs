@@ -37,6 +37,7 @@ public static class DefaultBindings
     /// keeps a migrating site from discovering a hole one call at a time.</summary>
     public static IReadOnlyList<InputAction> Unbound { get; } = new[]
     {
+        InputAction.SelectChaseView,
         InputAction.MenuJoin,
     };
 
@@ -152,10 +153,10 @@ public static class DefaultBindings
         b.Keys(InputAction.TargetClear, Key.T);
         b.Keys(InputAction.CycleCockpitViews, Key.F8).Buttons(InputAction.CycleCockpitViews, JoyButton.DpadDown);
 
-        // Selecting the chase view without walking the cycle is this port's own action; F2 is the
-        // one key in the original's function-key run it leaves free, F1 being its View Help and
-        // F3 to F8 its selectors and views.
-        b.Keys(InputAction.SelectChaseView, Key.F2).Buttons(InputAction.SelectChaseView, JoyButton.Back);
+        // Selecting the chase view without walking the cycle is this port's own action, and it
+        // ships unbound. The cycle on F8 reaches that view already, so a default here would spend a
+        // control on a second way in. It stays rebindable, which is what Leave keeps.
+        b.Leave(InputAction.SelectChaseView);
         // F7 is the original's own key for this camera ("Access Chase View", which its own decode
         // settles as the flyby rather than the following chase view); the pad has no spare button.
         b.Keys(InputAction.FlybyView, Key.F7);

@@ -38,7 +38,6 @@ public class FlightBindingMappingTests
         { Key.Key9, InputAction.ThrottleSet8 },
         { Key.F8, InputAction.CycleCockpitViews },
         { Key.F7, InputAction.FlybyView },
-        { Key.F2, InputAction.SelectChaseView },
         { Key.Kp0, InputAction.LookBack },
         { Key.Kp5, InputAction.LookCenter },
     };
@@ -69,7 +68,6 @@ public class FlightBindingMappingTests
         { JoyButton.Start, InputAction.Pause },
         { JoyButton.DpadUp, InputAction.TargetNextEnemy },
         { JoyButton.DpadDown, InputAction.CycleCockpitViews },
-        { JoyButton.Back, InputAction.SelectChaseView },
         { JoyButton.RightStick, InputAction.LookBack },
         { JoyButton.LeftShoulder, InputAction.YawLeft },
         { JoyButton.RightShoulder, InputAction.YawRight },
@@ -335,7 +333,8 @@ public class FlightBindingMappingTests
     }
 
     /// <summary>The view-mode inputs keep four independent edge slots, so the keyboard reader must
-    /// not see the pad's half of the same two actions.</summary>
+    /// not see the pad's half of the same two actions. The chase view ships unbound, so a pad
+    /// control is given to it here: what this pins is the reader split, not a default.</summary>
     [Fact]
     public void TheViewModeSlots_SplitTheKeyboardFromThePad()
     {
@@ -343,12 +342,16 @@ public class FlightBindingMappingTests
         state.Buttons.Add((Pad, (int)JoyButton.DpadDown));
         state.Buttons.Add((Pad, (int)JoyButton.Back));
 
-        var keyActions = new PlayerActions(FlightMap(), true);
+        var map = FlightMap();
+        map.Add(InputAction.SelectChaseView,
+            new Binding(Pad, BindingControl.Button((int)JoyButton.Back)));
+
+        var keyActions = new PlayerActions(map, true);
         keyActions.Poll(new PadMuted(state));
         Assert.False(keyActions.Held(InputAction.CycleCockpitViews));
         Assert.False(keyActions.Held(InputAction.SelectChaseView));
 
-        var padActions = new PlayerActions(FlightMap(), false);
+        var padActions = new PlayerActions(map, false);
         padActions.Poll(state);
         Assert.True(padActions.Held(InputAction.CycleCockpitViews));
         Assert.True(padActions.Held(InputAction.SelectChaseView));

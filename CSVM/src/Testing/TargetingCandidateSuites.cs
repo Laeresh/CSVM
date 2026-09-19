@@ -644,7 +644,7 @@ internal static class TargetingCandidateSuites
     // the pick off it.
     [Suite("ai-target-rescore",
         "the AI's standing target (BL-910): an unowned destructible never reaches the pilot's " +
-        "candidate scan, a picked target carries the engine's 20 s hold, the decoded order keeps " +
+        "candidate scan, a picked target carries the original's 20 s hold, the decoded order keeps " +
         "a still-valid camp through an enemy aeroplane arriving and sweeps the pool only once the " +
         "hold runs out, while the aircraft-first preference takes the aeroplane the moment it is " +
         "in reach; and the reach is the ATTACK radius, so a widened activation radius admits " +

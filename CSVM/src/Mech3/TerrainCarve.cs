@@ -5,16 +5,17 @@ using Godot;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// Cuts one crater bowl into one world node's terrain: the ring is subtracted from every ground
-/// triangle it covers, the hole's rim is re-laid on the ground it was clipped against, and the bowl
-/// is emitted as one further surface in that ground's own skin. The node gets a PRIVATE mesh and
-/// private collision shapes, un-shared from <see cref="SceneBuilder"/>'s per-mesh-index caches, so a
-/// carve never reaches the other instances of the same model. Decode: docs/org/craters.md.
-/// Called only by <see cref="CraterField"/>, which owns the refusal and the record list.
+/// Cuts one crater bowl into one world node's terrain. The ring is subtracted from every ground
+/// triangle it covers, and the hole's rim is re-laid on the ground it was clipped against. The
+/// bowl is emitted as one further surface in that ground's own skin. The node gets a PRIVATE mesh
+/// and private collision shapes, un-shared from <see cref="SceneBuilder"/>'s per-mesh-index
+/// caches. A carve therefore never reaches the other instances of the same model. Decode:
+/// docs/org/craters.md; called only by <see cref="CraterField"/>, which owns the refusal and the
+/// record list.
 /// </summary>
 internal static class TerrainCarve
 {
-    // Areas and barycentric weights under this are noise: a source triangle that degenerates in XZ
+    // Areas and barycentric weights under this are noise. A source triangle that degenerates in XZ
     // has no invertible ground map, and a clipped piece this small emits nothing worth a draw.
     private const float AreaEpsilon = 1e-4f;
 
@@ -87,9 +88,9 @@ internal static class TerrainCarve
         return ring;
     }
 
-    // One surface: every triangle whose XZ box meets the ring's and whose ground faces up is
-    // replaced by the convex pieces of itself outside the ring, everything else is copied through.
-    // Returns how many triangles were cut, and leaves `rebuilt` null when none were.
+    // One surface. A triangle whose XZ box meets the ring's and whose ground faces up is replaced
+    // by the convex pieces of itself outside the ring. Everything else is copied through. Returns
+    // how many triangles were cut, and leaves `rebuilt` null when none were.
     private static int CutSurface(ArrayMesh src, int surface, Godot.Collections.Array arrays,
         Transform3D toWorld, Transform3D toLocal, Vector2[] ring, Rect2 box, Vtx?[] samples,
         ref Vtx? centre, ref float winding, ref int removed, ref int added,
@@ -156,7 +157,7 @@ internal static class TerrainCarve
     }
 
     // Only upward ground takes a crater. The stored normal decides which side the source meant to
-    // be the sky, and the XZ area guard drops a wall, whose whole footprint is one line anyway.
+    // be the sky. The XZ area guard drops a wall, whose whole footprint is one line anyway.
     private static bool IsGround(in Vtx a, in Vtx b, in Vtx c)
     {
         var g = (b.Pos - a.Pos).Cross(c.Pos - a.Pos);
@@ -164,8 +165,9 @@ internal static class TerrainCarve
     }
 
     // The triangle minus the convex ring, as convex pieces. Incremental: each edge's outside half
-    // is one piece and what stays inside is clipped by the next edge, so the pieces tile the
-    // difference exactly and share the ring's own edges with the bowl. Null means nothing was cut.
+    // is one piece, and what stays inside is clipped by the next edge. The pieces therefore tile
+    // the difference exactly and share the ring's own edges with the bowl. Null means nothing was
+    // cut.
     private static List<List<Vector2>>? Difference(Vector3 a, Vector3 b, Vector3 c, Vector2[] ring,
         out List<Vector2> inside)
     {
@@ -235,7 +237,7 @@ internal static class TerrainCarve
         poly.Count < 3 ? 0f : Mathf.Abs(SignedArea(poly));
 
     // A new boundary vertex takes every channel from the triangle it was cut out of, by the
-    // barycentric weights of its XZ position, so the patched ground keeps its height and its skin.
+    // barycentric weights of its XZ position. The patched ground keeps its height and its skin.
     private static Vtx Lift(in Vtx a, in Vtx b, in Vtx c, Vector2 p)
     {
         Weights(a.Pos, b.Pos, c.Pos, p, out float wa, out float wb, out float wc);
@@ -264,7 +266,7 @@ internal static class TerrainCarve
         wc = 1f - wa - wb;
     }
 
-    // Records the ground under each rim vertex and under the centre, which is what makes the rim
+    // Records the ground under each rim vertex and under the centre. That is what makes the rim
     // follow the real terrain instead of a flat circle. Also settles, once, whether this mesh's
     // winding puts the face normal along or against the stored one, for the bowl to match.
     private static void Sample(in Vtx a, in Vtx b, in Vtx c, Vector2[] ring, Vtx?[] samples,
@@ -310,7 +312,7 @@ internal static class TerrainCarve
 
     // The bowl: the sampled rim, a mid ring halfway to a centre lowered by DEPTH and lowered again,
     // and an apex a further DEPTH down. Its base height is the LOWEST of the sampled rim and the
-    // sampled centre, so a crater on a slope still closes downward instead of turning inside out.
+    // sampled centre. A crater on a slope then closes downward instead of turning inside out.
     private static (Godot.Collections.Array Arrays, Vector3[] Faces) Bowl(in CraterShape shape,
         Vector2[] ring, Vtx?[] samples, Vtx? centre, float winding, Transform3D toLocal,
         out int rimOnGround)
@@ -365,7 +367,7 @@ internal static class TerrainCarve
     };
 
     // One bowl triangle, wound so its outward face points up under this mesh's own convention, and
-    // flat-shaded from that same normal: a bowl is concave, so every face of it does face upward.
+    // flat-shaded from that same normal. A bowl is concave, so every face of it does face upward.
     private static void Emit(Channels output, List<Vector3> faces, Vtx a, Vtx b, Vtx c, float winding)
     {
         var outward = (b.Pos - a.Pos).Cross(c.Pos - a.Pos) * (winding >= 0f ? 1f : -1f);
@@ -386,12 +388,11 @@ internal static class TerrainCarve
         faces.Add(c.Pos);
     }
 
-    // The struck body's own trimesh takes the SAME subtraction the skin took, and gains the bowl, in
-    // a NEW shape: SceneBuilder caches one shape per mesh index and shares it across every instance
-    // of that model, so writing the old one would dig a hole in every copy of the same hill.
-    // ⚠ Do not drop a face by asking whether its centroid is in the ring, the terrain's triangles
-    // are far larger than the crater and a centroid test removes nothing (docs/verification.md
-    // WORLD-46).
+    // The struck body's own trimesh takes the SAME subtraction the skin took, and gains the bowl,
+    // in a NEW shape. SceneBuilder caches one shape per mesh index and shares it across every
+    // instance of that model. Writing the old one would hole every copy of the same hill.
+    // ⚠ Do not drop a face by a centroid-in-ring test. The terrain's triangles are far larger than
+    // the crater, so a centroid test removes nothing (docs/verification.md WORLD-46).
     private static int CarveCollision(Node3D owner, CollisionObject3D? struck, in CraterShape shape,
         Vector3[] bowlFaces)
     {
@@ -467,9 +468,10 @@ internal static class TerrainCarve
     }
 
     // The bowl's walls added to the shape whose ground they replace, each face in both windings.
-    // ⚠ Do not give the bowl a CollisionShape3D of its own: a shape a node registers on entering the
-    // tree answers no ray in the same frame, so a carve and a probe in one frame read straight
-    // through the hole. The second winding is why the slot's own sidedness need not be guessed.
+    // The second winding is why the slot's own sidedness need not be guessed.
+    // ⚠ Do not give the bowl a CollisionShape3D of its own. A shape a node registers on entering
+    // the tree answers no ray in the same frame. A carve and a probe in one frame would then read
+    // straight through the hole.
     private static void Line(List<Vector3> kept, Vector3[] bowlFaces, Transform3D bodyToLocal)
     {
         for (int t = 0; t + 2 < bowlFaces.Length; t += 3)
@@ -488,7 +490,7 @@ internal static class TerrainCarve
 
     // Whether the part of a face that falls inside the ring stands at the impact's own height. A
     // wall or a roof carried by the same body reaches over the ring without being the ground the
-    // round struck, and this is what leaves it alone.
+    // round struck. This band is what leaves it alone.
     private static bool InBand(Vector3 a, Vector3 b, Vector3 c, List<Vector2> inside, float y,
         float band)
     {
@@ -502,8 +504,8 @@ internal static class TerrainCarve
         return false;
     }
 
-    // An XZ point lifted onto a triangle's own plane, which is how a clipped collision piece keeps
-    // the height of the ground it was cut out of. The skin's Lift does this and the channels too.
+    // An XZ point lifted onto a triangle's own plane. A clipped collision piece keeps the height of
+    // the ground it was cut out of. The skin's Lift does this and the channels too.
     private static Vector3 Raise(Vector3 a, Vector3 b, Vector3 c, Vector2 p)
     {
         Weights(a, b, c, p, out float wa, out float wb, out float wc);
@@ -511,9 +513,9 @@ internal static class TerrainCarve
     }
 
     /// <summary>What one carve did, for the suite and the log line. <c>Removed</c> and <c>Added</c>
-    /// count the ground triangles the subtraction replaced in the skin; <c>RimOnGround</c> counts the
-    /// rim vertices that found real ground under them rather than falling back to the impact's
-    /// height; <c>Opened</c> counts the collision faces the same subtraction replaced.</summary>
+    /// count the ground triangles the subtraction replaced in the skin. <c>RimOnGround</c> counts
+    /// the rim vertices that found real ground under them rather than falling back to the impact's
+    /// height. <c>Opened</c> counts the collision faces the same subtraction replaced.</summary>
     internal readonly record struct Cut(int Removed, int Added, int BowlTriangles, int RimOnGround,
         int Opened);
 
@@ -526,8 +528,8 @@ internal static class TerrainCarve
     }
 
     // One surface's channels as plain lists in WORLD space, read out of (and written back into) the
-    // ArrayMesh's own array form. Non-indexed on the way out: a carve rewrites one node's mesh once
-    // and the shared vertices it loses cost far less than a second pass to rebuild the index.
+    // ArrayMesh's own array form. Non-indexed on the way out: a carve rewrites one node's mesh
+    // once. The shared vertices it loses cost far less than a second pass to rebuild the index.
     private sealed class Channels
     {
         private readonly List<Vector3> _pos = new();

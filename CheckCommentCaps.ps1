@@ -6,11 +6,17 @@
 #   /// on a member         6
 #   // above a declaration  6
 #   // above a statement    3
+#   a sentence             25 words, and a block 6 sentences, in the blocks the commit touches
 #
 # A block over cap is a comment that has outgrown its subject: the fix is almost never to
 # reflow it, but to move the part that is really a decode into docs/ and keep the prohibition
 # on the member it binds. Exit code 1 when anything is over, so a PreToolUse hook can gate a
 # commit on it.
+#
+# The line caps cover the whole scope. The sentence caps cover only the comment blocks with a
+# changed line in the working tree (every block of a file named on the command line): the rule
+# is older than its check, the tree carries the debt, and a block is fixed by whoever next
+# edits it.
 #
 # Pure ASCII on purpose (PROJECT_CONTEXT.md): PowerShell 5.1 mangles a BOM-less non-ASCII
 # script before it runs. Files are READ only; nothing here writes.
@@ -20,7 +26,9 @@
 #   ./CheckCommentCaps.ps1 -Summary        one line per file, worst first
 #   ./CheckCommentCaps.ps1 -Root <path>    another worktree, with this copy's rules
 #   ./CheckCommentCaps.ps1 a.cs b.cs       just these files
-[CmdletBinding()]
+# PositionalBinding off: with it on, a bare file argument binds to -Root, the scan then finds no
+# files under that "root", and the run reports clean without reading anything.
+[CmdletBinding(PositionalBinding = $false)]
 param(
     [switch]$Summary,
     [string]$Root,
@@ -29,6 +37,8 @@ param(
 )
 
 $caps = @{ type = 12; member = 6; decl = 6; stmt = 3 }
+$sentenceCap = 25
+$blockCap = 6
 $labels = @{
     type   = '/// on a type'
     member = '/// on a member'
@@ -86,7 +96,8 @@ function Get-BlockKind {
     return @{ Kind = 'stmt'; Decl = $decl }
 }
 
-function Get-OverCap {
+# Every comment block in a file: where it starts, its lines, and what it is attached to.
+function Get-Blocks {
     param([string]$File)
     $lines = ([IO.File]::ReadAllText($File) -replace "`r`n", "`n") -split "`n"
     $out = @()
@@ -99,21 +110,117 @@ function Get-OverCap {
         $j = $i
         while ($j -lt $lines.Count -and $lines[$j] -match $pattern) { $j++ }
         $info = Get-BlockKind -Lines $lines -End $j -IsXml $xml
-        $n = $j - $i
-        if ($n -gt $caps[$info.Kind]) {
-            $out += [pscustomobject]@{
-                Line = $i + 1; Length = $n; Kind = $info.Kind; Decl = $info.Decl
-            }
+        $out += [pscustomobject]@{
+            Line = $i + 1; Length = $j - $i; Kind = $info.Kind; Decl = $info.Decl
+            Text = @($lines[$i..($j - 1)])
         }
         $i = $j
     }
     $out
 }
 
+function Get-OverCap {
+    param([string]$File)
+    @(Get-Blocks -File $File) | Where-Object { $_.Length -gt $caps[$_.Kind] }
+}
+
+# The sentences of a block: comment markers and XML tags stripped, abbreviations kept whole, split
+# where a terminator meets the next sentence's opening capital, quote or bracket. Lower-case
+# openers (an identifier) do not split, so the count errs short, never long.
+function Get-Sentences {
+    param([string[]]$Text)
+    $t = ($Text | ForEach-Object { $_ -replace '^\s*///?\s?', '' }) -join ' '
+    $t = $t -replace '<[^>]+>', ' '
+    $t = $t -replace '\b(e|i)\.(e|g)\.', '$1$2'
+    $t = $t -replace '\b(vs|cf|etc|approx|ca)\.', '$1'
+    $t = $t -replace '\s+', ' '
+    [regex]::Split($t.Trim(), '(?<=[.!?])\s+(?=["''(\[A-Z]|[^\x00-\x7F])') |
+        Where-Object { $_.Trim() -ne '' }
+}
+
+# Sentences over $sentenceCap words and blocks over $blockCap sentences, in the blocks that
+# $Ranges touch. The rule predates its check, so the tree carries old debt; the block you are
+# editing is the one you fix.
+function Get-LongSentences {
+    param([string]$File, $Ranges)
+    $out = @()
+    foreach ($b in @(Get-Blocks -File $File)) {
+        if (-not (Test-BlockChanged -Block $b -Ranges $Ranges)) { continue }
+        $sentences = @(Get-Sentences -Text $b.Text)
+        if ($sentences.Count -gt $blockCap) {
+            $out += [pscustomobject]@{
+                Line = $b.Line; Words = 0; Sentences = $sentences.Count; Head = $sentences[0]
+            }
+        }
+        foreach ($s in $sentences) {
+            $words = @($s -split ' ' | Where-Object { $_ -ne '' }).Count
+            if ($words -gt $sentenceCap) {
+                $out += [pscustomobject]@{ Line = $b.Line; Words = $words; Sentences = 0; Head = $s }
+            }
+        }
+    }
+    $out
+}
+
+# The lines a commit from $Root would carry, per file: the working tree's added lines against HEAD
+# (staged or not, since git commit -a takes both), and every line of an untracked file. A comment
+# block is in scope when one of its lines is among them, so a one-line fix in a file with old debt
+# is never blocked on the rest of the file.
+function Get-ChangedLines {
+    param([string]$Root)
+    $map = @{}
+    $file = $null
+    $diff = & git -C $Root diff HEAD -U0 -- CSVM/src CSVM.Tests 2>$null
+    foreach ($row in @($diff)) {
+        if ($row -match '^\+\+\+ b/(.*\.cs)$') {
+            $file = (Join-Path $Root ($Matches[1] -replace '/', '\'))
+            if (-not $map.ContainsKey($file)) { $map[$file] = @() }
+            continue
+        }
+        if ($row -match '^\+\+\+ ') { $file = $null; continue }
+        if ($file -and $row -match '^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@') {
+            $start = [int]$Matches[1]
+            $count = if ($Matches[2] -ne '') { [int]$Matches[2] } else { 1 }
+            if ($count -gt 0) { $map[$file] += ,@($start, ($start + $count - 1)) }
+        }
+    }
+    $untracked = & git -C $Root ls-files --others --exclude-standard -- CSVM/src CSVM.Tests 2>$null
+    foreach ($p in @($untracked)) {
+        if ($p -notmatch '\.cs$') { continue }
+        $map[(Join-Path $Root ($p -replace '/', '\'))] = @(,@(1, [int]::MaxValue))
+    }
+    $map
+}
+
+function Test-BlockChanged {
+    param($Block, $Ranges)
+    $first = $Block.Line
+    $last = $Block.Line + $Block.Length - 1
+    foreach ($r in $Ranges) {
+        if ($r[0] -le $last -and $r[1] -ge $first) { return $true }
+    }
+    $false
+}
+
 $targets = if ($Path) { $Path } else { Get-Scope -Root $root }
+# Named files are checked whole; without names, the sentence scope is the changed lines.
+$changed = if ($Path) { $null } else { Get-ChangedLines -Root $root }
+$sentenceSet = @{}
+if ($Path) {
+    foreach ($f in $Path) {
+        if (Test-Path -LiteralPath $f -PathType Leaf) {
+            $sentenceSet[(Resolve-Path -LiteralPath $f).Path] = @(,@(1, [int]::MaxValue))
+        }
+    }
+} else {
+    foreach ($k in $changed.Keys) {
+        if (Test-Path -LiteralPath $k -PathType Leaf) { $sentenceSet[(Resolve-Path -LiteralPath $k).Path] = $changed[$k] }
+    }
+}
 $rows = @()
 $totalBlocks = 0
 $totalExcess = 0
+$totalSentences = 0
 foreach ($f in $targets) {
     if (-not (Test-Path -LiteralPath $f -PathType Leaf)) { continue }
     # Resolve-Path (not the raw arg) goes to ReadAllText: it honors PowerShell's $PWD, while
@@ -121,31 +228,45 @@ foreach ($f in $targets) {
     # directory, which Set-Location does not keep in step with $PWD in a hosted session.
     $full = (Resolve-Path -LiteralPath $f).Path
     $bad = @(Get-OverCap -File $full)
-    if ($bad.Count -eq 0) { continue }
+    # The outer @() is not redundant: an if expression's result unrolls a one-element array to a
+    # scalar, whose .Count is null, so a file with exactly one long sentence would not fail the gate.
+    $long = @(if ($sentenceSet.ContainsKey($full)) {
+        Get-LongSentences -File $full -Ranges $sentenceSet[$full]
+    })
+    if ($bad.Count -eq 0 -and $long.Count -eq 0) { continue }
     $rel = $full.Replace($root + '\', '')
     $excess = ($bad | ForEach-Object { $_.Length - $caps[$_.Kind] } | Measure-Object -Sum).Sum
     $totalBlocks += $bad.Count
     $totalExcess += $excess
-    $rows += [pscustomobject]@{ Excess = $excess; Blocks = $bad.Count; File = $rel }
+    $totalSentences += $long.Count
+    $rows += [pscustomobject]@{ Excess = $excess; Blocks = $bad.Count; Sentences = $long.Count; File = $rel }
     if (-not $Summary) {
         foreach ($b in $bad) {
             $shortDecl = if ($b.Decl.Length -gt 60) { $b.Decl.Substring(0, 60) } else { $b.Decl }
             Write-Output ('{0}:{1}  {2} lines, cap {3} ({4})  {5}' -f
                 $rel, $b.Line, $b.Length, $caps[$b.Kind], $labels[$b.Kind], $shortDecl)
         }
+        foreach ($s in $long) {
+            $head = if ($s.Head.Length -gt 60) { $s.Head.Substring(0, 60) + '...' } else { $s.Head }
+            if ($s.Sentences -gt 0) {
+                Write-Output ('{0}:{1}  {2} sentences, cap {3}  {4}' -f $rel, $s.Line, $s.Sentences, $blockCap, $head)
+            } else {
+                Write-Output ('{0}:{1}  {2} words, cap {3}  {4}' -f $rel, $s.Line, $s.Words, $sentenceCap, $head)
+            }
+        }
     }
 }
 
 if ($Summary) {
-    foreach ($r in ($rows | Sort-Object Excess -Descending)) {
-        Write-Output ('{0,6} excess  {1,4} blocks  {2}' -f $r.Excess, $r.Blocks, $r.File)
+    foreach ($r in ($rows | Sort-Object Excess, Sentences -Descending)) {
+        Write-Output ('{0,6} excess  {1,4} blocks  {2,4} sentences  {3}' -f $r.Excess, $r.Blocks, $r.Sentences, $r.File)
     }
 }
 
-if ($totalBlocks -gt 0) {
+if ($totalBlocks -gt 0 -or $totalSentences -gt 0) {
     Write-Output ''
-    Write-Output ('{0} blocks over cap, {1} excess lines, {2} files' -f
-        $totalBlocks, $totalExcess, $rows.Count)
+    Write-Output ('{0} blocks over cap, {1} excess lines, {2} long sentences, {3} files' -f
+        $totalBlocks, $totalExcess, $totalSentences, $rows.Count)
     exit 1
 }
 Write-Output 'all comment blocks within cap'

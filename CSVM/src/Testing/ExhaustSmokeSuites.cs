@@ -48,8 +48,8 @@ internal static class ExhaustSmokeSuites
             ctx.Check(pilot.Throttle <= 0.001f,
                 $"{ctx.PlaneName} sits at idle before the first move, lever={pilot.Throttle:0.000}");
 
-            // The control the footage bounds the effect with: one eighth, which shows no plume in
-            // CAP-21. The trail may technically run for a few steps; what it draws must be unseeable.
+            // The control the footage bounds the effect with: one eighth, which shows no plume at
+            // all. The trail may technically run for a few steps; what it draws must be unseeable.
             pilot.HoldActionForTest(InputAction.ThrottleSet1, true);
             var eighth = Run(pilot, smoke, 180);
             ctx.Check(eighth.Peak < InvisibleOpacity && !smoke.StreamingForTest,
@@ -103,18 +103,7 @@ internal static class ExhaustSmokeSuites
             var roster = new FlightRoster(FlightRosterPolicy.From(spec),
                 new LiveryResolver(spec, System.IO.Path.Combine(ctx.DataRoot, "extracted", "rof")),
                 null, ctx.Host,
-                new AircraftAssemblyResources
-                {
-                    PlanesGamez = planesGamez,
-                    StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-                    AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
-                    PaintRng = new RandomNumberGenerator(),
-                    ZrdrPath = ctx.ZrdrPath,
-                    StockLoadouts = StockLoadouts.Load(),
-                    WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
-                    Textures = textures,
-                    Shakes = ShakeDefs.Load(ctx.ZrdrPath),
-                },
+                SuiteConstants.AircraftResources(ctx, planesGamez, textures),
                 new FlightWorldBindings { Projectiles = pool, Gamez = planesGamez },
                 new HumanRosterBindings());
 

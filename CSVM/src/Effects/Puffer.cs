@@ -486,7 +486,7 @@ public sealed partial class Puffer : Node3D
     internal float LateralSpreadScale { get; set; } = 1f;
 
     /// <summary>An opacity each particle takes at birth and keeps for its life, multiplying its
-    /// ramp. The engine's particle holds its own reference to the ramp current when it spawned, so
+    /// ramp. Godot's particle holds its own reference to the ramp current when it spawned, so
     /// a host that rewrites the ramp per frame changes only the particles born after the change.
     /// 1 for every authored emitter; <see cref="Flight.ExhaustSmoke"/> alone writes it.</summary>
     internal float BirthAlpha { get; set; } = 1f;

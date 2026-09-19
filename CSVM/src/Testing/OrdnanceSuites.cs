@@ -1546,9 +1546,9 @@ internal static class OrdnanceSuites
             Advance(7f);
             ctx.Check(Clear(0) && Clear(1) && Pristine(human0), $"and it clears; the ledger is still untouched");
 
-            // 2b. The shooter is not exempt from their own burst: P2's sonic into the AI 20 m off
-            // their wing stuns the AI and washes pane 2, since the original's self-hit guard sits
-            // below the no-damage arms and spares the damage pair alone.
+            // 2b. The shooter is not exempt from their own burst. P2's sonic into the AI 20 m off
+            // their wing stuns the AI and washes pane 2. The original's self-hit guard sits below
+            // the no-damage arms and spares the damage pair alone.
             before = washes.Count;
             live.Spawn(sonic, new Transform3D(Basis.LookingAt(Vector3.Forward, Vector3.Up), Tail(aiNear)), Vector3.Zero,
                 shooterId: 1);
@@ -1758,8 +1758,9 @@ internal static class OrdnanceSuites
                       && ProjectilePool.UpperRingOrient(Vector3.Zero) is null,
                 $"UpperRingOrient answers null in the faithful presentation");
 
-            // Enhanced Graphics from the setting itself, restored before this suite returns: the
-            // faithful path is what every pinned golden renders and nothing may leave it flipped.
+            // Enhanced Graphics comes from the setting itself, restored before this suite returns.
+            // The faithful path is what every pinned golden renders, and nothing may leave it
+            // flipped.
             GraphicsMode.Resolve(GraphicsMode.EnhancedWord);
             try
             {
@@ -1772,8 +1773,9 @@ internal static class OrdnanceSuites
                 ctx.Check(ProjectilePool.UpperRingOrient(Vector3.Zero) is null,
                     $"a round with no usable velocity still gets no basis");
 
-                // Fired down the slope's own -X lean at 45°, so the ring basis, the slope normal and
-                // world up are three different directions and no two of them can be confused.
+                // The round is fired down the slope's own -X lean at 45°. The ring basis, the slope
+                // normal and world up are then three different directions, and no two can be
+                // confused.
                 var slanted = new Vector3(-1f, -1f, 0f).Normalized();
                 var enhancedOnSlope = Drop(he, origin + new Vector3(20f, 20f, 0f), slanted);
                 ctx.Check(enhancedOnSlope is { Name: "he_ground_effect", Ring: not null } e1
@@ -1805,10 +1807,10 @@ internal static class OrdnanceSuites
         UpperRingPlacement(ctx);
     }
 
-    // The authored detonation light, played the production way: a world-effects runtime that only
+    // The authored detonation light is played the production way. A world-effects runtime only
     // contributes into a WorldLights another runtime owns, whose one Begin/Commit ranks the burst
     // with its own light. The ranges are the def's signed deltas accumulated
-    // (extracted/C1/cam_anim/he_ring-he_ground_effect.json): (4,20), +(50,160), +(10,25), +(30,80),
+    // (extracted/C1/cam_anim/he_ring-he_ground_effect.json). (4,20), +(50,160), +(10,25), +(30,80),
     // +(10,35) holds (104,320) until the @Event+0.2 pair adds (30,80) and (10,20), then INACTIVE.
     [Suite("burst-light",
         "he_ground_effect's authored he_light and he_light1 reach the world's WorldLights through " +
@@ -2091,7 +2093,7 @@ internal static class OrdnanceSuites
     // material's own soil byte and with nothing else (FUN_005ac7a0 at 0x005ac7a9,
     // docs/org/weaponImpact.md). The film lot's blocks and C1's zeppelin hangar carry soil
     // `default`, so the round plays the authored gunhit there. `buildings`(11) is reached only by
-    // C1's small airport buildings (`aphagar0N`), where the guns bind bld_damage.flt, a name no
+    // C1's small airport buildings (`aphagar0N`), where the guns bind bld_damage.flt. That name no
     // install file defines, so the original's slot is null and the round draws nothing.
     [Suite("impact-building-surface",
         "a gun round on a C2 film-lot building and on C1's zeppelin hangar reads default(0) off the " +
@@ -2391,8 +2393,8 @@ internal static class OrdnanceSuites
                 var slot0 = stage.GetNode<Node3D>("pool0");
                 var readings = new List<List<RingReading>>();
                 // A burst crosses the fade threshold once per ring, and a console line costs about
-                // 1.9 ms on the frame path (PERF-35), so the report must stay off the console tier.
-                // Vacuous when a filter has turned `anim` up.
+                // 1.9 ms on the frame path (PERF-35). The report must therefore stay off the
+                // console tier. Vacuous when a filter has turned `anim` up.
                 bool animTurnedUp = Utils.Log.ConsoleShows("anim", Utils.Log.Level.Debug);
                 var consoleFades = new List<string>();
                 using (Utils.Log.PushConsoleSink(line =>
@@ -2766,10 +2768,8 @@ internal static class OrdnanceSuites
         return rows;
     }
 
-    // One staged root's own `sonic_emit1`, or null: the burst stages three copies of the emitter
-    // rig and the whole question is which of them a definition drives.
     // The far end of the seam the pool's basis travels: the effects runtime placing the named
-    // callee with it. Worth its own world because a name the catalogue and the data disagree on
+    // callee with it. This needs its own world. A name the catalogue and the data disagree on
     // would leave the ring on its authored axis and report nothing at all.
     private static void UpperRingPlacement(TestContext ctx)
     {
@@ -2804,8 +2804,8 @@ internal static class OrdnanceSuites
                           && faithfulNormal is { } fn && Degrees(fn, upper.GlobalBasis * ProjectilePool.UpperRingDiscNormal) < 0.5f,
                     $"handed no basis, the upper ring keeps the fixed axis, its drawn disc facing the authored axis (Y={upper?.GlobalBasis.Y} disc={faithfulNormal})");
 
-                // The same burst with the basis the pool builds under Enhanced for a rocket diving at
-                // 45° across both horizontal axes, measured on the drawn mesh rather than the basis.
+                // The same burst gets the basis the pool builds under Enhanced for a rocket diving
+                // at 45° across both horizontal axes. The drawn mesh is measured, not the basis.
                 // ⚠ A second burst at the SAME point is refused as already live, so move it.
                 var flight = new Vector3(1f, -1.41421f, -1f).Normalized();
                 GraphicsMode.Resolve(GraphicsMode.EnhancedWord);
@@ -2847,6 +2847,8 @@ internal static class OrdnanceSuites
         return (mesh.GlobalBasis.Inverse().Transposed() * local).Normalized();
     }
 
+    // One staged root's own `sonic_emit1`, or null. The burst stages three copies of the emitter
+    // rig, and the whole question is which of them a definition drives.
     private static Node3D? EmitIn(Node3D slot, string rootName)
     {
         if (slot.GetNodeOrNull<Node3D>(rootName) is not { } root)
@@ -2962,9 +2964,9 @@ internal static class OrdnanceSuites
         }
     }
 
-    // C1's two building kinds, each struck from above by one 30 cal round: the zeppelin hangar
-    // (`hangar_left`/`hangar_right`/`mainhangar_roof`, soil default) and an airport building whose
-    // collider carries buildings(11).
+    // C1's two building kinds, each struck from above by one 30 cal round. One is the zeppelin
+    // hangar (`hangar_left`/`hangar_right`/`mainhangar_roof`, soil default), the other an airport
+    // building whose collider carries buildings(11).
     private static void StrafeAirport(TestContext ctx, TestWorld world, WeaponDef gun, string texturesPath)
     {
         var bodies = world.Session.Root.FindChildren("*", "StaticBody3D", recursive: true, owned: false)
@@ -2982,8 +2984,8 @@ internal static class OrdnanceSuites
         var onHangar = FireDownOnto(ctx, world, hangar, gun, texturesPath, sub);
         ctx.Check(onHangar is { Plays: ["3040slug_gunhit", ..] },
             $"a round into the zeppelin hangar hands 3040slug_gunhit to the effects runtime, the debris the original throws there (played={onHangar?.Plays.FirstOrDefault() ?? "nothing"})");
-        // A face of the body itself, not a ray down its mesh's middle: the sheds' roofs are
-        // aphagar03, a separate default(0) body since the soil split.
+        // The strike takes a face of the body itself, not a ray down its mesh's middle. The sheds'
+        // roofs are aphagar03, a separate default(0) body.
         var onEleven = eleven.Select(b => FaceOf(ctx, b)).FirstOrDefault(f => f != null) is { } ef
             ? FireAlong(ctx, world, ef.Point, ef.Dir, 40f, gun, texturesPath, sub)
             : null;
@@ -2998,8 +3000,8 @@ internal static class OrdnanceSuites
     }
 
     // The sheds' meshes mix `aphagar03` (soil default) with the soil-11 `aphagar0N` materials in
-    // one surface class. The original reads the soil off the struck polygon's own material, so the
-    // aphagar03 faces play the default gunhit while the soil-11 faces of the same shed play nothing.
+    // one surface class. The original reads the soil off the struck polygon's own material. The
+    // aphagar03 faces play the default gunhit, and the soil-11 faces of the same shed play nothing.
     private static void StrafeShedWalls(TestContext ctx, TestWorld world, List<StaticBody3D> bodies,
         WeaponDef gun, string texturesPath, AnimProgram sub)
     {
@@ -3045,8 +3047,9 @@ internal static class OrdnanceSuites
         ctx.Note($"C1: {onSheds.Count} shed colliders on {string.Join(" ", shedNames)}; aphagar03 struck at {wf.Point} on {wall.Body.GetParent().Name}/{wall.Body.Name}");
     }
 
-    // Drops one round straight down onto the first candidate a ray from above lands on, steps the
-    // pool until the round strikes (DamageSink reports it) and reads what the hit produced that step.
+    // Drops one round straight down onto the first candidate a ray from above lands on. Steps the
+    // pool until the round strikes (DamageSink reports it), then reads what the hit produced that
+    // step.
     private static (List<string> Plays, int Sprites, Vector3 Point)? FireDownOnto(TestContext ctx, TestWorld world,
         List<StaticBody3D> candidates, WeaponDef gun, string texturesPath, AnimProgram sub)
     {
@@ -3072,8 +3075,8 @@ internal static class OrdnanceSuites
         return found is { } point ? FireAlong(ctx, world, point, Vector3.Down, 60f, gun, texturesPath, sub) : null;
     }
 
-    // Fires one round along `dir` from `standoff` short of `point` and steps the pool until the
-    // round strikes (DamageSink reports it); returns what the hit produced that step.
+    // Fires one round along `dir` from `standoff` short of `point`. Steps the pool until the round
+    // strikes (DamageSink reports it) and returns what the hit produced that step.
     private static (List<string> Plays, int Sprites, Vector3 Point)? FireAlong(TestContext ctx, TestWorld world,
         Vector3 point, Vector3 dir, float standoff, WeaponDef gun, string texturesPath, AnimProgram sub)
     {
@@ -3111,8 +3114,9 @@ internal static class OrdnanceSuites
         }
     }
 
-    // A point on one of `body`'s own triangles that a ray from `Standoff` out along the face
-    // normal (either side) reaches before any other collider, and the direction that ray runs.
+    // A point on one of `body`'s own triangles, reached by a ray from `Standoff` along the face
+    // normal (either side) before any other collider. The direction that ray runs comes back with
+    // the point.
     private static (Vector3 Point, Vector3 Dir)? FaceOf(TestContext ctx, StaticBody3D body)
     {
         const float Standoff = 40f;

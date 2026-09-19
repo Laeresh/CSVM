@@ -672,7 +672,7 @@ public sealed class PlaneStats
         stats.VehicleArmor = PropOpt("armor");
         stats.VehicleHealth = PropOpt("health");
 
-        // Off the damage chain, because the def the vehicle SPAWNS as is what the engine copies
+        // Off the damage chain, because the def the vehicle SPAWNS as is what the original copies
         // these off: an AI variant's own chain for an AI aeroplane, and the player chain, where
         // player_airplane authors the -300, for a flown one.
         stats.AiTargetBias = PropOpt("target_bias") ?? 0f;

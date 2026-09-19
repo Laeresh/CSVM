@@ -824,9 +824,9 @@ public sealed class WorldEffectsFactory
             WireDamageStages(_controller, crashRuntime, _crashProgram);
         }
 
-        /// <summary>Builds the next slice of the rig's emitters and answers whether the last def is
-        /// behind it. Every emitter the rig's defs name is built off the frame that plays it, so a
-        /// crash or a damage stage finds its puffers and materials already made.</summary>
+        // Builds the next slice of the rig's emitters and answers whether the last def is behind it.
+        // Every emitter the rig's defs name is built off the frame that plays it. A crash or a
+        // damage stage then finds its puffers and materials already made.
         private bool PrewarmSome()
         {
             var crashRuntime = _crashRuntime!;

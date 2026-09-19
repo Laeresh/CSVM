@@ -4,13 +4,12 @@ using Xunit;
 
 namespace CSVM.Tests;
 
-/// <summary>The row rules the two Options screens share for the four display settings: a label per
-/// vocabulary entry, the forgiving reads (an unknown word reads as the setting's own default, a
-/// size the screen does not offer reads as the screen's own size, a size row borderless owns reads
-/// the screen's own whatever is saved), the size the options file names standing in the picker as
-/// an entry of its own, and the wrap a sideways step takes. Engine-free, so the
-/// multi-screen and other-screen cases this machine cannot show are proved by handing the rules a
-/// list.</summary>
+/// <summary>The row rules the two Options screens share for the four display settings, one label
+/// per vocabulary entry. The reads are forgiving: an unknown word reads as the setting's own
+/// default. A size the screen does not offer reads as the screen's own size. So does a size
+/// borderless owns, whatever is saved. A size the options file names stands in the picker as an
+/// entry of its own, and a sideways step wraps. Engine-free, so the multi-screen and other-screen
+/// cases this machine cannot show are proved by handing the rules a list.</summary>
 public class DisplaySettingRowsTests
 {
     /// <summary>One label per store word, in that order: a row reads and writes by index, so a
@@ -79,10 +78,10 @@ public class DisplaySettingRowsTests
         Assert.Equal("1600x900", offered.Fallback);
     }
 
-    /// <summary>Borderless owns the size, so the row reads the screen's own whatever is saved and
-    /// whatever the screen offers, and the two modes that leave the size to the player read the
-    /// saved one. A mode the vocabulary does not know, and none saved, both read as borderless,
-    /// which is the mode a launch with no options file runs in.</summary>
+    /// <summary>Borderless owns the size, so the row reads the screen's own, whatever is saved and
+    /// whatever the screen offers. The two modes that leave the size to the player read the saved
+    /// one. A mode the vocabulary does not know, and none saved, both read as borderless. That is
+    /// the mode a launch with no options file runs in.</summary>
     [Theory]
     [InlineData(DisplayWords.Borderless, "1600x900")]
     [InlineData(null, "1600x900")]
@@ -97,9 +96,9 @@ public class DisplaySettingRowsTests
         Assert.Equal(expected == offered.Fallback, ResolutionSetting.Pinned(mode));
     }
 
-    /// <summary>The plan the apply takes, which the row above has to agree with: the saved size
-    /// under windowed and under exclusive fullscreen, the screen's own under borderless, and a
-    /// source that names the mode as the layer that won rather than the file.</summary>
+    /// <summary>The plan the apply takes, which the row above has to agree with. The saved size
+    /// stands under windowed and under exclusive fullscreen, the screen's own under borderless.
+    /// The source names the mode as the layer that won, not the file.</summary>
     [Theory]
     [InlineData(DisplayWords.Windowed, 1280, 720, "options.json")]
     [InlineData(DisplayWords.Fullscreen, 1280, 720, "options.json")]
@@ -125,8 +124,8 @@ public class DisplaySettingRowsTests
         Assert.Equal(small.Fallback, small.Words[DisplaySettingRows.ResolutionIndex(small, "2560x1440", DisplayWords.Windowed)]);
     }
 
-    /// <summary>The standard table carries a 4:3 ladder rather than one rung, the original game's own
-    /// frame being 4:3, and every rung is offered where the screen holds it.</summary>
+    /// <summary>The standard table carries a 4:3 ladder rather than one rung, the original's own
+    /// frame being 4:3. Every rung is offered where the screen holds it.</summary>
     [Theory]
     [InlineData("800x600")]
     [InlineData("1024x768")]
@@ -153,10 +152,10 @@ public class DisplaySettingRowsTests
         }
     }
 
-    /// <summary>A size written into the options file by hand stands in the picker as an entry of its
-    /// own, where it sorts among the listed ones, and is what the row reads and the apply takes. The
-    /// row's own word is the saved one, so a page that shows it and saves writes it back unchanged
-    /// rather than replacing it with the nearest listed size.</summary>
+    /// <summary>A size written into the options file by hand stands in the picker as an entry of
+    /// its own. It sorts among the listed ones, the row reads it, and the apply takes it. The row's
+    /// own word is the saved one. A page that shows it and saves writes it back unchanged, never
+    /// the nearest listed size.</summary>
     [Theory]
     [InlineData("640x480", 0)]
     [InlineData("1152x864", 2)]
@@ -173,8 +172,9 @@ public class DisplaySettingRowsTests
         Assert.Equal("options.json", ResolutionSetting.Resolve(custom, screen, DisplayWords.Windowed).Source);
     }
 
-    /// <summary>A listed size, a word that is not a size and nothing saved at all each leave the list
-    /// as it stands, so the picker never doubles an entry or offers a word no window could take.</summary>
+    /// <summary>A listed size, a word that is not a size, and nothing saved at all each leave the
+    /// list as it stands. The picker never doubles an entry or offers a word no window could
+    /// take.</summary>
     [Theory]
     [InlineData("1024x768")]
     [InlineData("1152 x 864")]
@@ -187,9 +187,10 @@ public class DisplaySettingRowsTests
         Assert.Equal(screen.Words, screen.Including(word).Words);
     }
 
-    /// <summary>The screen filter holds over a hand-written size too: one the screen cannot hold is
-    /// not offered and falls back to the screen's own size, the same reading a listed size the screen
-    /// lost gets. A window larger than the screen would put its own controls off the edge.</summary>
+    /// <summary>The screen filter holds over a hand-written size too. One the screen cannot hold is
+    /// not offered and falls back to the screen's own size. That is the reading a listed size the
+    /// screen lost gets. A window larger than the screen would put its own controls off the
+    /// edge.</summary>
     [Fact]
     public void ASizeTheScreenCannotHoldIsNotOfferedHoweverItWasSaved()
     {
@@ -200,9 +201,9 @@ public class DisplaySettingRowsTests
         Assert.Equal(screen.Fallback, ResolutionSetting.Resolve("2560x1440", screen, DisplayWords.Windowed).Word);
     }
 
-    /// <summary>The display mode decides what a hand-written size means as it decides a listed one:
-    /// borderless owns the size, so the row reads the screen's own and the apply takes it, while
-    /// windowed and exclusive fullscreen both take the file's.</summary>
+    /// <summary>The display mode decides what a hand-written size means as it decides a listed one.
+    /// Borderless owns the size, so the row reads the screen's own and the apply takes it. Windowed
+    /// and exclusive fullscreen both take the file's.</summary>
     [Theory]
     [InlineData(DisplayWords.Windowed, "1152x864")]
     [InlineData(DisplayWords.Fullscreen, "1152x864")]

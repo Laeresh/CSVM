@@ -322,6 +322,18 @@ reasons that have nothing to do with any of these checks.
   - (c) nothing has moved at 16:9: the same sortie windowed looks exactly as it did.
   *Blocks:* nothing tracks the outcome; a fail mints a new `BL`. The per-element choice and the
   one-pixel tolerance are in the landing commit (`git log --grep=BL-778`).
+- `PT-174` `[Own]` **The original's keyboard table is under the hand on a fresh profile.** The flight
+  defaults are the original's decoded 64-entry table (`docs/org/input.md`, `git log
+  --grep=BL-901`): digits are the throttle eighths, targeting sits on E, W and R with Shift and
+  Ctrl as modifiers, Q and T nearest and clear, F8 the cockpit views. The table is pinned by unit
+  test and seen only on the Controls tabs; no sortie has been flown on it. Start a new pilot in
+  Player Setup so no saved bindings apply. *Look for:*
+  - (a) `1`..`9` set the throttle eighths and `=` / `-` step it, with nothing else on the digits;
+  - (b) E, Shift+E and Ctrl+E cycle enemy targets next, previous and nearest, W and R the same for
+    allies and non-aircraft, Q the nearest of anything and T clear, and a bare E does nothing while
+    Shift is held;
+  - (c) Space and X fire, Shift+S opens the spyglass, and F8 cycles the cockpit views to chase.
+  *Blocks:* nothing tracks the outcome; a fail mints a new `BL` item.
 
 ### C1 · two pilots, Dogfight (splitscreen VS)
 
@@ -568,6 +580,22 @@ against `BL-389` rather than against the wash routing.
   - (c) a marker either pilot enters during those 3 s takes no photograph and plays no camera sting.
 
   *Blocks:* nothing tracks the outcome; a fail mints a new `BL` item.
+- `PT-173` `[Own]` **A stunt run through every marker photographs each one, and any landed
+  photograph opens full size on both presentations.** One pilot is enough. Menu path: Instant
+  Action → C4 → Stunt Flying, then the same run with `--presentation=original`. The photographs
+  and the grid are proved by suite on a synthetic run where every marker is latched from a parked
+  aircraft (`git log --grep=BL-256`, `git log --grep=BL-970`); no human has flown the markers or
+  opened a photograph. *Look for:*
+  - (a) each marker crossed at speed takes one photograph with its sting, and the C4 run's 14
+    thumbnails wrap into a grid on the results board rather than one shrunken row;
+  - (b) on Built-in, up from Photo Mode enters the grid, arrows walk the landed cells, confirm
+    opens the photograph full size and Esc or pad B closes it with the cursor on the same cell;
+    mouse hover and click do the same;
+  - (c) on Original, the prints stand as rows after CONTINUE, a landed one opens in the
+    presentation's viewer and Back closes it with focus on that print;
+  - (d) a marker entered during the 3 s hold after the finish takes no photograph.
+  *Variations:* `--presentation=original` for (c). *Blocks:* nothing tracks the outcome; a fail
+  mints a new `BL` item.
 
 ### C1 · Instant Action, Dogfighting an Ace, sound on
 
@@ -729,6 +757,24 @@ is a judgement on our own remake.
     setting that can name something absent.
   *Blocks:* nothing tracks the outcome; a fail mints a new `BL`. The reasoning behind the fallback
   and the apply order is in the landing commits (`git log --grep=BL-768`).
+
+### The CONTROLS page · a pad plugged in
+
+```powershell
+./RunGame.ps1 --presentation=original --menu=controls
+```
+
+- `PT-172` `[Own]` **The pad glyphs on the controls page read as the original's.** The glyph set is
+  keyed per control the way `BindingControl` is and swaps behind one seam, as the item asked, but
+  it draws vector shapes in code (`PadVectorGlyphs`) rather than a texture set (`git log
+  --grep=BL-878`); nobody has judged the look. Open the Original presentation's controls page with
+  a pad connected and walk the pad column. *Look for:*
+  - (a) every pad control shows a glyph, none falls back to a text label;
+  - (b) the face buttons, bumpers, triggers, sticks and d-pad are told apart at a glance at the
+    page's own size, with the weight and colour of the surrounding plaque art;
+  - (c) a rebinding capture shows the new control's glyph as soon as it is pressed.
+  *Blocks:* a pass closes the question; a fail mints a `BL` for a texture set behind the same
+  seam (`ControlGlyphs.Set`), which is why the seam is kept.
 
 ### Any campaign mission · enemy skill under the difficulty offset
 

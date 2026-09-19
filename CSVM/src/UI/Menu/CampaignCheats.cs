@@ -5,10 +5,10 @@ namespace CSVM.UI.Menu;
 /// <summary>
 /// What the original's four menu cheats leave switched on, carried by <see cref="CampaignFeature"/>
 /// so both presentations read one answer. Three of them are typed into a screen through
-/// <see cref="TypedCheat"/> and the fourth is a pilot name on the profile screen; the words, the
-/// regions and the engine globals behind them are in <c>docs/formats/campaign-screens.md</c>.
-/// <see cref="RevealAll"/> is the engine's <c>fViewAll</c> and <see cref="AllowAll"/> its
-/// <c>fAllowAll</c>, both process-wide there and both kept for the rest of this menu session here.
+/// <see cref="TypedCheat"/> and the fourth is a pilot name on the profile screen. The words, the
+/// regions and the original's globals behind them are in <c>docs/formats/campaign-screens.md</c>.
+/// <see cref="RevealAll"/> is the original's <c>fViewAll</c> and <see cref="AllowAll"/> its
+/// <c>fAllowAll</c>. Both are process-wide there and both are kept for the rest of this menu session.
 /// The mission pick and the pull-down that sets it belong to the open campaign and go with it.
 /// </summary>
 public sealed class CampaignCheats
@@ -23,7 +23,7 @@ public sealed class CampaignCheats
     public const string CashWord = "gimme";
 
     /// <summary>The pilot name that unlocks everything, compared case-insensitively the way the
-    /// engine's own <c>lstrcmpiA</c> at <c>0x00407a1c</c> compares it.</summary>
+    /// original's own <c>lstrcmpiA</c> at <c>0x00407a1c</c> compares it.</summary>
     public const string UnlockName = "crashcheat!";
 
     /// <summary>What one grant is worth.</summary>
@@ -70,8 +70,8 @@ public sealed class CampaignCheats
     /// <summary>The pilot name matched, which stays on for the rest of the session.</summary>
     public void AllowEverything() => AllowAll = true;
 
-    /// <summary>Drops what belongs to the open campaign when it closes. The two engine globals are
-    /// not among them: the original never clears either short of leaving the game.</summary>
+    /// <summary>Drops what belongs to the open campaign when it closes. The original's two globals
+    /// are not among them: it never clears either short of the process exiting.</summary>
     public void CloseCampaign()
     {
         MissionListShown = false;

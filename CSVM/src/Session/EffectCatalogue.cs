@@ -138,7 +138,7 @@ public static class EffectCatalogue
     // Bound alongside the crash def for the same live puffer factory; unlike the crash/damage defs
     // above, FlightController plays these directly (spawn/engine-death), never through a CALL.
     // `spinprops` is the silent, instant restart the original's own bit-2 falling edge runs
-    // (docs/org/ordnanceTypes.md); `startprops` is named by no airframe def in the retail data.
+    // (docs/org/ordnanceTypes.md); `startprops` is named by no airframe def in the original's data.
     public static readonly string[] PropChoreographyAnims = { "startprops", "stopprops", "spinprops" };
 
     // The nitro boost's two defs (plane_props.zrd.json): the nitroprop discs cross-fade in over
