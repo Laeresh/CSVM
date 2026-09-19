@@ -900,8 +900,9 @@ order is what decides which types can ever deal damage:
    figure as the duration, and the colour: white for `FLASH` and **red for `SONIC`**. An AI gets
    `FUN_004200d0`, which is a **stun**. Either way both damage figures are then zeroed. CSVM:
    `ProjectilePool.ApplyDisabling`, run from `Apply` on every burst of a `SONIC`/`FLASH` weapon over
-   the same aircraft gather the splash uses; a human's pane through `ProjectilePool.WashSink`
-   (`ScreenFlash.PlayBlend`), an AI through `FlightController.TryStunPilot`.
+   the same aircraft gather the splash uses, with the shooter kept as a candidate where the damage
+   pass drops them; a human's pane through `ProjectilePool.WashSink` (`ScreenFlash.PlayBlend`), an
+   AI through `FlightController.TryStunPilot`.
 3. **`BEEPER`** (`0x4000`). Tests the shooter against the victim (`FUN_004b8ce0`), then tags the
    victim by handing `FUN_004b88a0` the shared `TIME` at `+0x18`. Zeroes both damage figures and
    returns.

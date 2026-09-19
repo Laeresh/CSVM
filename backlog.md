@@ -110,7 +110,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Damage & destruction
 
-- `BL-060` `[Feature]` `[L]` `[Next: decide]` `[Impact: low]` `[Evidence: feel]` **Improve on the original crash, the bespoke "breaking apart" (branch `bespoke-crash-animation`).**
+- `BL-060` `[Feature]` `[Blocked: the faithful crash settling]` `[L]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Improve on the original crash, the bespoke "breaking apart" (branch `bespoke-crash-animation`).**
+  *Decision:* stays parked on its branch; nothing is blended until the faithful recreation is settled.
   User's call (2026-07-23): the retired bespoke `CrashBreakup` wreck-scatter looked *better* than the
   faithful data-driven crash, so it was preserved on that branch rather than deleted. **The A/B playtest
   passed (2026-07-23), the faithful data-driven crash is confirmed as the default**, so this is now the
@@ -223,23 +224,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   clear and the hull does not (CM13's dbase arch on dzpath2) in both games; if the original passes,
   sweep the player's probes too. *Cross-refs:* `PlaneStats.CollisionProbes`, `docs/formats/vehicle.md`.
 
-- `BL-930` `[Fidelity]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **A pilot is not flashed, deafened or stunned by their own
-  `SONIC`/`FLASH` burst, where the original's own guard exempts the damage pair alone.**
-  *Evidence:* the original's self-hit guard is `CMP EBX,ESI` at `0x004b9e3e`, shooter against
-  victim, and it stands BELOW the four no-damage arms of `FUN_004b9bc0`, so a `SONIC`, `FLASH`,
-  `BEEPER` or `TANGLER` burst reaches its own shooter and only the damage pair is zeroed
-  (`docs/org/ordnanceTypes.md`). CSVM instead drops the shooter one level earlier, in the blast
-  pass's aircraft gather, and `ProjectilePool.ApplyDisabling` walks that same gather, so a pilot who
-  detonates a sonic or flash round beside themselves takes neither the wash nor the stun. The
-  choker cloud is already faithful here: `SpawnTanglerCloud` excludes nobody, so flying into your
-  own cloud chokes you. *Fix shape:* pass the shooter through `ApplyDisabling` as a candidate while
-  the damage gather keeps dropping it, which is one gather flag, not a second walk. *⚠ Traps:* this
-  is not the self-blast exemption itself, which is decoded, faithful and pinned by the `air-to-air`
-  suite; only the no-damage arms are at issue. The decide is whether a self-flash a player cannot
-  see past is worth the fidelity in a two-to-four-player Dogfight. *Cross-refs:*
-  `git log --grep=BL-301` (the VS tuning entry the exemption settled),
-  `ProjectilePool.GatherAircraftCandidates`.
-
 - `BL-983` `[Fidelity]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The proximity
   fuse's aircraft branch skips only the shooter's own plane, where `FUN_004b5fb0` skips every
   candidate on the shooter's side, so a player's rocket bursts beside a wingman.** *Evidence:* the
@@ -256,7 +240,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Flight model & collision physics
 
-- `BL-562` `[Perf]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: data]` `[CM11]` **CM11 (C2/M02) still spends a single physics tick of about 36 ms on the sortie's
+- `BL-562` `[Perf]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: data]` `[CM11]` **CM11 (C2/M02) still spends a single physics tick of about 36 ms on the sortie's
   first part destruction, and about 130 to 138 ms on the first tick after the world build.** *Evidence (traced):* the bracketed
   instrument (`PhysicsTickCost`, `--perf`'s `phys_tick_ms` / `phys_tick_max_ms` / `phys_hz`), with a
   temporary sub-scope Stopwatch splitting one whole `FlightController.SimStep`, over three
@@ -304,7 +288,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `IReadOnlyList`. The 50 ms `AnimRuntime.Advance` step is not a fourth class: window 240, two
   seconds in, reads 49 to 57 ms with only about 21 ms of it named by any simulation phase, and sits
   inside the first GC window's 211 ms of pause over 16 gen-0, 15 gen-1 and 7 gen-2 collections, so
-  it belongs with (a). *Fix shape:* (b) next. (b) is now a
+  it belongs with (a). *Decision:* measure a second part destruction in the same sortie first,
+  since whether the 36 ms is a per-destruction cost or the first one's warm-up is unmeasured and
+  decides which of the two is worth touching. *Fix shape:* (b) next. (b) is now a
   question about the damage presentation rather than about collision: decide whether the first
   damage-stage start is spread off the contact tick, which touches `SpendDamage` and the damage
   pools, not the sweep. (a) is worth a separate look only if a cutscene handoff or a mid-mission
@@ -832,7 +818,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
-- `BL-181` `[Tuning]` `[Blocked: a shared type scale]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: feel]` **Marker HUD + scoreboard layout is a provisional pass, not a
+- `BL-181` `[Tuning]` `[Blocked: a shared type scale]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Marker HUD + scoreboard layout is a provisional pass, not a
   fidelity sign-off.** Playtested 2026-07-30
   (`./RunGame.ps1 --stunt --chapter=C4 --plane=player_fury`): the stunt run HUD and scoreboard placement,
   fonts and distance units "work for now." The verdict is explicitly contingent: it says these read
@@ -844,7 +830,10 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   surface that defines those three things for chrome the original did not paint, which is what the
   menu-hub milestone was standing in for. Blocked on that surface, not on data.
   *Fix shape:* re-review `StuntRunHud.cs`/`TargetHud.cs`/`StuntScoreboard.cs` placement once such a type scale exists,
-  against it rather than in isolation. *Cross-refs:* `BL-449`, whose landing prompted this wording.
+  against it rather than in isolation. *Decision:* author that type scale (one font choice, a size
+  scale and a distance-unit convention for chrome the original never painted) as the first step of
+  this item, then re-review against it; the `BL-951` join board stands on the same scale.
+  *Cross-refs:* `BL-449`, whose landing prompted this wording.
 
 - `BL-765` `[Bug]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The inventory writes
   the plane's name and its airframe as one line at the airframe's row, leaving the name's own row
@@ -882,19 +871,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `CAP-52`, `docs/org/menu-inventory.md`.
 
 
-- `BL-946` `[Fidelity]` `[M]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The Weapon
-  Loadout screen maps rocket widget N to physical pylon N+1 where the original maps it to the saved
-  record's ordnance cell N, so a starboard pylon can draw in a port box.** *Evidence:* left open
-  deliberately when `BL-919` closed, which is where the mapping is written out: CSVM numbers the
-  boxes by physical pylon, the original numbers them by the record's cell and resolves the pylon
-  from the fit (`Loadout.PylonForCell`, resolve against the fit and never against `LeftWingPylons`
-  alone). *Fix shape:* the decision first: take the original's cell order, or keep the physical
-  order. *⚠ Traps:* the physical order is not an accident, it is what makes the rows agree with the
-  weapon gauge's belt lights, so taking the original's order contradicts that choice and the gauge
-  has to be answered in the same breath. *Cross-refs:* `git log --grep=BL-919`,
-  `docs/formats/campaign-screens.md` (the Ammo Selection screen).
-
-- `BL-951` `[Feature]` `[L]` `[Next: decide]` `[Impact: high]` `[Evidence: trace]` **A local
+- `BL-951` `[Feature]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **A local
   multiplayer door on the main menu, opening a join board where every controller claims its seat
   once and holds it for the whole session, instead of seats being decided implicitly on whichever
   flight screen happens to open joining.** *Evidence:* joining today is scattered across screens
@@ -918,7 +895,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   player's existence. Device loss and reassignment is the part that bites (the linked thread lands
   on it too, over batteries and devices claimed twice); `MenuSeatDevices`'s guid reconciliation and
   its grace already carry it for the current flow and should not be reimplemented on the board.
-  *Cross-refs:* `SeatStrip.cs` (the chip row that already names seated players, the board's
+  *Decision:* build it, art direction first: the board's chrome is designed on the type scale
+  `BL-181` authors before any of it is drawn. *Cross-refs:* `SeatStrip.cs` (the chip row that already names seated players, the board's
   nearest existing art), `MenuSeatDevices.cs`, `PlayerSetupFeature.cs`,
   https://discussions.unity.com/t/local-multiplayer-player-join-config-screen-using-ui-toolkit/1701038
   (the pattern as other local co-op games ship it, asked for by name).

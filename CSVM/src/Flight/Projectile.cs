@@ -2253,7 +2253,9 @@ public sealed partial class ProjectilePool : Node3D
     // The SONIC/FLASH hit against every aircraft the burst reaches: the same gather, cover test and
     // 32 cap as the blast (the original hands each splash entry to FUN_004b9bc0, whose branch runs
     // FUN_0042e840 on the entry's squared surface distance), then the victim's kind decides: a
-    // human's pane gets the wash, an AI pilot the stun, and neither takes a point of damage.
+    // human's pane gets the wash, an AI pilot the stun, and neither takes a point of damage. The
+    // shooter is a candidate here: the original's self-hit guard stands below the no-damage arms,
+    // so a pilot IS flashed and deafened by their own burst and only the damage pair is exempt.
     private void ApplyDisabling(WeaponDef weapon, Vector3 point, Vector3 normal, int shooter)
     {
         float radiusSq = weapon.ImpactProximitySqM ?? 0f;
@@ -2261,7 +2263,7 @@ public sealed partial class ProjectilePool : Node3D
             return;
         var space = GetWorld3D()?.DirectSpaceState;
         _blastCandidates.Clear();
-        GatherAircraftCandidates(point, radiusSq, shooter);
+        GatherAircraftCandidates(point, radiusSq, shooter, includeShooter: true);
         _blastCandidates.Sort(ByDistance);
         int accepted = 0;
         for (int i = 0; i < _blastCandidates.Count && accepted < MaxBlastTargets; i++)
@@ -2613,17 +2615,17 @@ public sealed partial class ProjectilePool : Node3D
         _blastCandidates.Clear();
     }
 
-    // Every registered flying plane inside the radius, never the shooter's own and never one out
-    // of play (same roster-walk caveat as the fuse), measured to the nearest point on its own
-    // collision boxes (0 inside, the engulf clamp) and struck at that box, so part mapping and
-    // kill attribution run the exact direct-hit path. ⚠ Keep the shooter's exemption here; the
-    // original guards the same case one level lower, on the vehicle hit path, and the departure
-    // is recorded in docs/org/ordnanceTypes.md.
-    private void GatherAircraftCandidates(Vector3 point, float radiusSq, int shooter)
+    // Every registered flying plane inside the radius, never one out of play (same roster-walk
+    // caveat as the fuse) and, for the damage pass, never the shooter's own, measured to the nearest
+    // point on its own collision boxes (0 inside, the engulf clamp) and struck at that box, so part
+    // mapping and kill attribution run the exact direct-hit path. ⚠ Keep the damage pass's shooter
+    // exemption here; the original guards it one level lower, BELOW the no-damage arms, which is
+    // why the disabling pass asks for the shooter back (docs/org/ordnanceTypes.md).
+    private void GatherAircraftCandidates(Vector3 point, float radiusSq, int shooter, bool includeShooter = false)
     {
         foreach (var plane in _aircraft)
         {
-            if (plane.PlayerIndex == shooter || !plane.Rig.InPlay)
+            if ((plane.PlayerIndex == shooter && !includeShooter) || !plane.Rig.InPlay)
                 continue;
             int shapeIdx = plane.NearestShape(point, out float distance, out var nearPoint);
             if (shapeIdx < 0 || distance * distance >= radiusSq)

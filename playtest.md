@@ -552,8 +552,8 @@ the constant: a decode is not contested with a measurement read off a running pi
     the near one when they are apart. Take that baseline **before** judging anything else in this
     section;
   - (c) **a real hit routes the same way**: with `--rocket=wep_08`, a pilot caught in the **other**
-    pilot's sonic burst washes their own pane alone. (A pilot's own burst never washes them: the
-    gather excludes the round's owner, `FUN_005aca30`.)
+    pilot's sonic burst washes their own pane alone. (A pilot caught in their own burst is washed
+    too, as in the original, whose self-hit guard exempts only the damage pair.)
 
   *Blocks:* nothing tracks the outcome; (a)/(b) passed at the controls and only (c) is still owed.
   a fail on routing mints a new
