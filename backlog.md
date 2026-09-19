@@ -629,7 +629,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   values; `docs/cli.md`'s bullet becomes a remake-only departure rather than a diagnostic, and
   `docs/formats/sounds.md`'s "No listener-side term scales the reach" keeps its decode and names
   the shipped factor; a suite that pins a level at the authored radii sets the factor it reads at.
-  Why the port needs the factor is `BL-1001`, not this item. *Evidence:* `SoundFalloff.cs` computes the decoded law and
+  No term in either build's level path accounts for the factor: the two chains are decoded and
+  compared stage by stage in `docs/formats/sounds.md`, "The whole level path, retail against the
+  remake", and the widest measured divergence is about four decibels, where 2.5 is worth up to
+  twenty inside the band. So the factor is a remake-only departure with nothing decoded behind it,
+  which is what this item records. *Evidence:* `SoundFalloff.cs` computes the decoded law and
   every positional play path levels from it. For the siren (`RANGE [200, 1200]`) that is 0 dB to
   325 m, -10 at 450, -20 at 700, -30 at 1200 and silent at 1320; for the train (`RANGE [600,
   1200]`) 0 dB to 675 m, -10 at 750, -20 at 900, -30 at 1200 (`docs/formats/sounds.md`, "The gain
@@ -646,8 +650,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`Projectile.DistanceGain`) run their own linear term, not this law, so the factor does not
   reach them. *Playtest after fix:* `./RunGame.ps1 --chapter=C1 --plane=player_bhawk --volume=1.0`
   with no range flag, the siren and the train first heard from as far off as at 2.5.
-  *Cross-refs:* `BL-933` (the gun voices on the same law, still failing at 2.5), `BL-1001` (why
-  the port needs the factor), `docs/formats/sounds.md`, `git log --grep=BL-269`.
+  *Cross-refs:* `BL-933` (the gun voices on the same law, still failing at 2.5),
+  `docs/formats/sounds.md`, `git log --grep=BL-269`, `git log --grep=BL-1001` (the stage-by-stage
+  comparison that found no term behind the factor).
 
 - `BL-281` `[Tuning]` `[Blocked: CAP-27]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The ricochet sounds are audible but very faint.** `PT-25` (c), 2026-08-05:
   `snd_ricochet1–4` play under the per-impact spark burst but sit too low to read. A mix-gain
@@ -786,19 +791,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   because the danger-zone modes are never entered.** *Evidence:*
   `docs/formats/combat-voice.md` row 15: the modes' gate data is undecoded (F17). *Fix shape:*
   lands with the mode decode; until then nothing to wire. *Cross-refs:* `BL-934`.
-
-- `BL-1001` `[Research]` `[M]` `[Next: decode]` `[Impact: none]` `[Evidence: decoded]` **Why the
-  port needs 2.5 times the authored `RANGE` radii to reach as far as the original does.**
-  *Evidence:* `BL-269`'s listen named 2.5 for the siren and the train, and that factor ships as a
-  departure; the decode behind it found no listener-side term (`docs/formats/sounds.md`, "No
-  listener-side term scales the reach"), so the difference is in what the port does with the same
-  level. *Candidates, none measured:* Godot's stereo pan law against DirectSound's `SetPan` of up
-  to 16 dB on the far channel; the bus chain and the master level the law's dB lands under;
-  the mapping of the law's gain into `volume_db`; the source assets' own loudness after the
-  archive's resampling. *Deliverable:* the term that accounts for the factor, or a measured
-  statement that no single term does and 2.5 is accepted; if a term is found, the default returns
-  to 1 and the term is ported. *Cross-refs:* `BL-269`, `BL-933` (the guns, which the factor does
-  not bring in), `docs/formats/sounds.md`.
 
 ## Cameras & views
 

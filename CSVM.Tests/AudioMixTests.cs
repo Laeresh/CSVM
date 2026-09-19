@@ -1,3 +1,4 @@
+using CSVM.Mech3;
 using CSVM.Utils;
 using Godot;
 using Xunit;
@@ -64,6 +65,21 @@ public class AudioMixTests
         // of 1 could reach and which the floor must leave alone.
         Assert.Equal(-40f, AudioMix.VolumeDb(1, AudioMix.MaxLevel), 3);
         Assert.Equal(-60f, AudioMix.VolumeDb(10, 1), 3);
+    }
+
+    // ⚠ The two builds convert a slider position on different curves, and the difference is the
+    // whole measured asymmetry between their level paths, so it is pinned rather than left to be
+    // rediscovered. The original's category level goes through the same ten-decibels-per-doubling
+    // conversion its definition volumes use; a bus goes through Godot's 20 log10. Reading them as
+    // interchangeable is what makes the remake look quieter than it is (docs/formats/sounds.md).
+    [Fact]
+    public void ACategoryBusIsNotTheOriginalsCategoryCurve()
+    {
+        Assert.Equal(-6.0206f, AudioMix.VolumeDb(AudioMix.DefaultEffects, AudioMix.DefaultMaster), 3);
+        Assert.Equal(-10f, SoundFalloff.VolumeDb(0.5f), 3);
+        float louder = AudioMix.VolumeDb(AudioMix.DefaultEffects, AudioMix.DefaultMaster)
+            - SoundFalloff.VolumeDb(0.5f);
+        Assert.Equal(3.9794f, louder, 3);
     }
 
     [Fact]

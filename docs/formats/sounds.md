@@ -169,6 +169,45 @@ Each plane def names its own engine loop via `engine_sound` / `cockpit_engine_so
 install-wide), not a second loop blended over it; the entry's two floats are a pitch-multiplier
 range drawn once per swap. See vehicle.md.
 
+### The whole level path, retail against the remake
+
+The two builds run the same curve under different mixers. Read end to end, from the definition's
+`VOLUME` to what one speaker is driven with, they stand within about four decibels of each other,
+and the only divergence that favours the retail build is three of those.
+
+| Stage | Retail | CSVM |
+|---|---|---|
+| definition level | `1000 log2(VOLUME x SoundVolume x category)` hundredths of a decibel, `FUN_00593620` called from `FUN_00597c20` and from the play entry `FUN_00593b80` | `SoundFalloff.VolumeDb`, the same ten-decibels-per-doubling conversion |
+| distance | the bands above, added in hundredths at `0x00597e98` (the ramp) and `0x00597e47` (the tail) | `SoundFalloff.AttenuationDb`, the same bands |
+| category level | `SfxVolume` 0.5, `MusicVolume` 0.65, `VoiceVolume` 0.75 as shipped (`FUN_0043fb50`, `0x3f000000` / `0x3f266666` / `0x3f400000`), chosen by the classifier at `0x004802e0`, whose tokens `NOROGUE`, `WINGMAN`, `VOICE`, `MUSIC`, `SFX` and `OPTIONAL` set bits 1, 2, 4, 8, 0x10 and 0x40 of def`+0x10`, read by the level callback at `0x004803c0` (installed at `0x004a811d`) | the `Effects`, `Music` and `Voice` buses at `20 log10(level/100 x master/100)`, `Utils/AudioMix.cs`, the same shipped level of 50 out of 100 |
+| output gain | `SoundVolume`, default 1.0 (`FUN_00591af0`) | bus 0, the developer `--volume=` |
+| per-voice ceiling | the play call's own gain through the same product, voice`+0x24`; a `SOUND` node plays at gain 1.0 (`FUN_004e0d60` passes `0x3f800000`), so it never bites | none |
+| write | `IDirectSoundBuffer::SetVolume`, vtable `+0x3c`, floored at `-10000` | `AudioStreamPlayer3D.VolumeDb`, the level at the listener while the attenuation model is `Disabled` and `MaxDistance` is 0 |
+| stereo | `SetPan`, vtable `+0x40`, `1600 x (offset . listener right axis) / dist` (`0x00597df8`, scale at `0x00609428`): the FAR channel loses up to 16 dB and the near one loses nothing, so a voice dead ahead drives both channels at the level above | the engine's own stereo law, cosine of half the azimuth at `panning_strength` 1, which is constant power: both channels 3.01 dB down dead ahead and astern, the near channel at the full level abeam and the far one silent |
+
+⚠ **No term in that chain is worth the reach a `--sound-range-scale` above 1 buys, so the factor
+stands as a remake-only departure rather than a ported constant.** The police siren
+(`RANGE [200, 1200]`, no `VOLUME` key) with both mixers at their maximum, in decibels at the near
+channel:
+
+| distance | retail | CSVM, dead ahead | CSVM, abeam | CSVM at 2.5 x the radii |
+|---|---|---|---|---|
+| 250 m, inside the shelf | 0.00 | -3.01 | 0.00 | 0.00 |
+| 700 m, mid band | -20.00 | -23.01 | -20.00 | 0.00 |
+| 1200 m, the audible radius | -30.00 | -33.01 | -30.00 | -11.63 |
+
+At the shipped levels instead (retail `SfxVolume` 0.5, CSVM `Effects` 50 under `Master` 100) the
+retail column reads -10.00, -30.00 and -40.00 against -9.03, -29.03 and -39.03 dead ahead, because
+the two option curves differ: the retail slider converts on the `VOLUME` scale above and the bus on
+Godot's `20 log10`, so the same slider position stands 3.98 dB louder here. The train
+(`RANGE [600, 1200]`) reads the same offsets at 650, 900 and 1200 m, the law and both mixers being
+shared. So the measured spread over the whole chain is 3.01 dB against the remake and 3.98 dB for
+it, where scaling the radii by 2.5 is worth up to 20 dB inside the band and moves the cull from
+1320 m to 3300 m. ⚠ The one number not measured here is the decoded PCM amplitude against what
+DirectSound gets from the same archive: both builds read `soundsh`, whose `PLAYBACK_FORMAT HIGH` is
+the 22050/16/1 the reader produces, and `WavFile` applies no gain of its own, but the samples have
+not been compared.
+
 ### A definition is pitched only when it carries FREQUENCY
 
 ⚠ **The flag is a capability on the buffer, not a hint, and a definition without it plays at its
