@@ -724,24 +724,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   episode that ends with the pursuer shaken; today 27 fires on every `reaction complete`
   regardless. Name the stand-in in the dispatch-site table. *Cross-refs:* `BL-986`, `BL-934`.
 
-- `BL-988` `[Feature]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **The three
-  gloats (ids 22–24) have no dispatch site: a killer never crows over a downed aircraft, and your
-  own kill draws no line from your flight.** *Evidence:* the polarity is decoded in
-  `docs/formats/combat-voice.md` ("The gloat triggers and trigger 28"): friendly kill silent,
-  otherwise the killer speaks 22 when the victim was on the player's team and 23 when not, and a
-  kill by the local player takes 24 and broadcasts on the player's team. The table row says "no
-  dispatch site chosen yet, left for a future item". *Fix shape:* `FlightController.Downed`
-  already carries shooter and victim (`ai: … downed (shooter id 100, killer 0)` in the log);
-  `AiVoiceRuntime` subscribes there for the death cry and can run the two team predicates beside
-  it. *Cross-refs:* `BL-986`, `BL-989` (the other decoded hit-path trigger).
-
 - `BL-989` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **`DS-Ally`
   (id 28) has no dispatch site, so a wingman hit by your round never complains.** *Evidence:*
   `docs/formats/combat-voice.md` decodes two arms in `FUN_004b9770`; the first fires when the
   local player's round damages a friendly and the struck aircraft speaks. The second counts
   survivors among three undecoded globals and is not answerable. *Fix shape:* wire the
   friendly-fire arm only, on `DamageApplied` where the shooter is the human and the victim shares
-  its team; leave the second arm to a decode. *Cross-refs:* `BL-988`, `BL-934` (its verdict
+  its team; leave the second arm to a decode. *Cross-refs:* `BL-934` (its verdict
   named friendly fire as a silent case).
 
 - `BL-990` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **`WA-Turret`

@@ -30,8 +30,11 @@ public sealed partial class AiVoiceRuntime : Node
     private readonly AiVoiceDispatcher _dispatcher;
     private readonly Random _rng;
     private readonly Dictionary<int, FlightController> _bySpeaker = new();
+    private readonly Dictionary<int, FlightController> _byIndex = new();
     private readonly Dictionary<FlightController, float> _lastPlayerFraction = new();
+    private readonly HashSet<int> _humans = new();
     private readonly HashSet<int> _watched = new();
+    private readonly HashSet<int> _watchedKills = new();
     private readonly HashSet<(int Speaker, string Family)> _noClipLogged = new();
     private float _now;
 
@@ -67,6 +70,7 @@ public sealed partial class AiVoiceRuntime : Node
         float constitutionChance)
     {
         WatchModes(ai);
+        WatchKills(ai);
         if (accentId is not { } accent)
         {
             return;
@@ -100,10 +104,13 @@ public sealed partial class AiVoiceRuntime : Node
         };
     }
 
-    /// <summary>Registers a human rig as a damage source only (the player never speaks AI
-    /// lines): its health crossing 30 % broadcasts <c>WA-HighDmg</c> to the flight.</summary>
+    /// <summary>Registers a human rig as an event source; the player itself never speaks an AI
+    /// line. Its health crossing 30 % broadcasts <c>WA-HighDmg</c> to the flight, and a kill of
+    /// its own draws the flight's gloat (id 24).</summary>
     public void RegisterPlayer(FlightController rig)
     {
+        _humans.Add(rig.PlayerIndex);
+        WatchKills(rig);
         _lastPlayerFraction[rig] = 1f;
         rig.DamageApplied += damaged =>
         {
@@ -163,6 +170,47 @@ public sealed partial class AiVoiceRuntime : Node
         {
             Play(_dispatcher.Dispatch(speakerId, AiVoiceDispatcher.TaSucShk, _now));
         }
+    }
+
+    // ⚠ Subscribed for every aircraft handed over, human rigs included. The gloat's speaker is the
+    // KILLER, so the site needs the victim's team and the shooter id the death report carries, and
+    // a killer with no voice of its own simply stays silent. Idempotent per aircraft.
+    private void WatchKills(FlightController plane)
+    {
+        _byIndex[plane.PlayerIndex] = plane;
+        if (!_watchedKills.Add(plane.PlayerIndex))
+        {
+            return;
+        }
+        plane.Downed += (_, killer) => OnDowned(plane, killer);
+    }
+
+    // The gloat, decoded polarity (combat-voice.md, "The gloat triggers and trigger 28"). The
+    // friendly predicate over shooter and victim comes first, so a friendly kill picks no gloat at
+    // all; the same predicate over the victim and the player's team then picks 22 or 23 for the
+    // killer to speak. A kill by a human rig takes 24 instead and broadcasts on the player's side.
+    private void OnDowned(FlightController victim, int? killer)
+    {
+        if (killer is not { } shooter || shooter == victim.PlayerIndex)
+        {
+            return;
+        }
+        int shooterTeam = _byIndex.TryGetValue(shooter, out var node)
+            ? node.Team
+            : AimAssist.TeamOfPilot(shooter);
+        if (!AimAssist.Hostile(shooterTeam, victim.Team))
+        {
+            return;
+        }
+        if (_humans.Contains(shooter))
+        {
+            Play(_dispatcher.Broadcast(AiVoiceDispatcher.GlPlyrDwn, AimAssist.PlayerTeam, _now));
+            return;
+        }
+        int trigger = AimAssist.Hostile(victim.Team, AimAssist.PlayerTeam)
+            ? AiVoiceDispatcher.GlEnemyDwn
+            : AiVoiceDispatcher.GlAllyDwn;
+        Play(_dispatcher.Dispatch(shooter, trigger, _now));
     }
 
     // B8's availability contract: the resolved name must have a decoded stream behind it, for a

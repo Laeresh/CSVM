@@ -207,6 +207,8 @@ site is recorded here. The runtime watches the mode machine of every AI the sess
 whether or not that aircraft resolved a voice of its own: rows 1-12 and 25 below are spoken by an
 aircraft other than the one whose mode moved, and the shipped rosters leave nearly every enemy on
 `accentID` -1, so watching only the voiced aircraft leaves those rows silent for a whole mission.
+Every aircraft's death report is watched for the same reason, human rigs included: rows 22 to 24
+are spoken by the killer, not by the aircraft that died.
 
 | ids | status | site / reason |
 |---|---|---|
@@ -214,12 +216,12 @@ aircraft other than the one whose mode moved, and the shipped rosters leave near
 | 13 | wired | a human rig's summary health crossing 30 % on the projectile hit path (decoded threshold), broadcast |
 | 17–19 | wired | the speaker's own summary health on the projectile hit path, 70/50/30 % most-severe-first (decoded) |
 | 20–21 | wired | `FlightController.Downed`, with force: id 20 (`DA`) when the dying aircraft's `Team` is `AimAssist.PlayerTeam`, id 21 (`DE`) otherwise (`AiVoiceRuntime.RegisterAi`). Free flight and `--vs` still give every AI its own default team, so `DA` stays dormant there in practice, it fires once a mission places an AI on the player's team |
+| 22–24 | wired | the same `FlightController.Downed` report read for its killer (`AiVoiceRuntime.OnDowned`), the decoded order of the two predicates: friendly over shooter and victim and no gloat is chosen, else friendly over the victim and `AimAssist.PlayerTeam` picks 22, hostile picks 23, and the killer speaks it. A kill by a rig registered through `RegisterPlayer` takes 24 instead and broadcasts on the player's team. A killer that resolved no voice of its own is silent |
 | 25 | wired | a pursuer's failed sixth-sense (tail) check stunning it, its evading AI target speaks; a human evader stays silent (the player speaks no AI lines) |
 | 27 | wired | the speaker's own evade/evasive-maneuver reaction completing ("fires as the reaction flag clears", decoded) |
 | 0 | unwired | turret acquisition is `TurretController`'s event; owned by C9's thread, not wired from here |
 | 15 | unwired | the danger-zone modes are never entered (their gate data is undecoded, F17) |
 | 16 | unwired | no dispatch site located in the binary (above) |
-| 22–24 | unwired | the polarity is decoded (above) and the 22/23 split is answerable now that a team model exists, no dispatch site chosen yet, left for a future item |
 | 26 | unwired | the original's shake-attempt check is undecoded; no machine transition maps to it without force-fitting |
 | 28 | unwired | both arms (above) are answerable now that a team model exists, no dispatch site chosen yet, left for a future item |
 

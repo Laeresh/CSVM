@@ -48,6 +48,12 @@ public sealed class AiVoiceDispatcher
 
     public const int DeEnemy = 21;
 
+    public const int GlAllyDwn = 22;
+
+    public const int GlEnemyDwn = 23;
+
+    public const int GlPlyrDwn = 24;
+
     public const int TaFailTail = 25;
 
     public const int TaSucShk = 27;

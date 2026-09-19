@@ -2494,7 +2494,10 @@ internal static class AiSuites
         + "slot cooldown swallowing the follow-up hits) flat on the mission radio's Voice-bus "
         + "AudioStreamPlayer with no positional player built, and the kill plays the dead "
         + "pilot's own death cry through the force flag at its authored level with the listener "
-        + "5 km away, while an unforced dispatch on the same dead speaker stays silent")]
+        + "5 km away, while an unforced dispatch on the same dead speaker stays silent, and the "
+        + "three gloats run the decoded polarity off the same kill report: a friendly kill is "
+        + "silent, the killer speaks 22 over a victim on the player's team and 23 over one that "
+        + "is not, and the player's own kill broadcasts 24 on the player's flight")]
     internal static void AiVoice(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -2522,6 +2525,7 @@ internal static class AiSuites
         MissionRadio? radio = null;
         Session.AiVoiceRuntime? runtime = null;
         FlightController? ai = null;
+        var gloatRigs = new List<FlightController>();
         try
         {
             // The session lifecycle: prewarm accent 12's pilot (VO id 2, the full clip set),
@@ -2575,8 +2579,8 @@ internal static class AiSuites
             ai.Inert = false;
             ctx.Check(speaker.Alive, $"…and activation puts it back");
 
-            var played = new List<(int Trigger, string Clip)>();
-            runtime.LinePlayed += (_, trigger, clip) => played.Add((trigger, clip));
+            var played = new List<(string Tag, int Trigger, string Clip)>();
+            runtime.LinePlayed += (tag, trigger, clip) => played.Add((tag, trigger, clip));
             runtime.Step(3f); // past the decoded 2 s mute window
 
             // The listener starts beside the speaker and is later moved past every voice def's
@@ -2660,10 +2664,96 @@ internal static class AiSuites
             ctx.Check(unforced.Clip == null && unforced.Outcome == "speaker dead",
                 $"an unforced dispatch on the dead speaker is refused outcome={unforced.Outcome}");
 
+            // --- the gloats (22-24), off the same kill report, with the decoded polarity. One
+            // victim per case, since a death is reported once, and every victim registers
+            // accentless, so the only line a kill can produce here is its killer's.
+            PumpRadio(radio);
+            FlightController Rig(int index, int team, bool human)
+            {
+                var rigModel = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+                var rig = new FlightController
+                {
+                    PlaneModel = rigModel,
+                    Collider = PlaneCollider.Build(rigModel),
+                    Damage = new PlaneDamage(stats.DestroyableParts),
+                    PlayerIndex = index,
+                    Team = team,
+                    IsHumanPiloted = human,
+                    Pilot = human ? null : new AiPilot(),
+                    UseKeyboard = false,
+                    PadDevices = System.Array.Empty<int>(),
+                    AllowPause = false,
+                };
+                rig.AddChild(rigModel);
+                var at = new Vector3(0f, 500f, 0f);
+                rig.Setup(new FlightModel(stats), null, new CamParams(), at, at + Vector3.Forward);
+                rig.Name = $"rig{index}";
+                ctx.Host.AddChild(rig);
+                gloatRigs.Add(rig);
+                return rig;
+            }
+
+            // Two mission teams hostile to each other and to the player's, so each case turns on
+            // the predicate alone: the killer flies for one of them and the player's flight for
+            // AimAssist.PlayerTeam.
+            const int enemyTeam = 2;
+            const int thirdTeam = 3;
+            var killer = Rig(FlightRoster.ShooterIdBase + 1, enemyTeam, human: false);
+            var wingman = Rig(FlightRoster.ShooterIdBase + 2, AimAssist.PlayerTeam, human: false);
+            var pilotRig = Rig(0, AimAssist.PlayerTeam, human: true);
+            runtime.RegisterAi(killer, accentId: 12, talkerChance: 1f, constitutionChance: 1f);
+            runtime.RegisterAi(wingman, accentId: 12, talkerChance: 1f, constitutionChance: 1f);
+            runtime.RegisterPlayer(pilotRig);
+
+            // The first predicate, over shooter and victim: a kill inside one team picks no gloat.
+            int gloatsBefore = played.Count;
+            var comrade = Rig(FlightRoster.ShooterIdBase + 3, enemyTeam, human: false);
+            runtime.RegisterAi(comrade, accentId: null, talkerChance: 0f, constitutionChance: 0f);
+            comrade.DebugForceCrash(killer.PlayerIndex);
+            ctx.Check(played.Count == gloatsBefore,
+                $"a friendly kill is silent: no gloat is chosen at all lines={played.Count - gloatsBefore}");
+            PumpRadio(radio);
+
+            // The second predicate, over victim and the player's team: hostile picks 23.
+            var stranger = Rig(FlightRoster.ShooterIdBase + 4, thirdTeam, human: false);
+            runtime.RegisterAi(stranger, accentId: null, talkerChance: 0f, constitutionChance: 0f);
+            stranger.DebugForceCrash(killer.PlayerIndex);
+            ctx.Check(played.Count == gloatsBefore + 1
+                && played[^1].Trigger == AiVoiceDispatcher.GlEnemyDwn
+                && played[^1].Tag == killer.Name && played[^1].Clip.StartsWith("snd_id2_GL-EnemyDwn"),
+                $"downing a plane on neither the killer's nor the player's team gloats as #23, spoken by the KILLER last={(played.Count > gloatsBefore ? played[^1].ToString() : "none")}");
+            PumpRadio(radio);
+
+            // …and friendly picks 22, the same killer, a different slot, so the 15 s cooldown the
+            // line above armed cannot be what decides this one.
+            var friendly = Rig(FlightRoster.ShooterIdBase + 5, AimAssist.PlayerTeam, human: false);
+            runtime.RegisterAi(friendly, accentId: null, talkerChance: 0f, constitutionChance: 0f);
+            friendly.DebugForceCrash(killer.PlayerIndex);
+            ctx.Check(played.Count == gloatsBefore + 2
+                && played[^1].Trigger == AiVoiceDispatcher.GlAllyDwn
+                && played[^1].Tag == killer.Name && played[^1].Clip.StartsWith("snd_id2_GL-AllyDwn"),
+                $"downing a plane on the player's team gloats as #22 instead last={played[^1]}");
+            PumpRadio(radio);
+
+            // The exception: the local player's own kill takes 24 and broadcasts, so the line
+            // comes from the player's flight, never from the killer's side and never from the
+            // player, who speaks no AI line.
+            var quarry = Rig(FlightRoster.ShooterIdBase + 6, enemyTeam, human: false);
+            runtime.RegisterAi(quarry, accentId: null, talkerChance: 0f, constitutionChance: 0f);
+            quarry.DebugForceCrash(pilotRig.PlayerIndex);
+            ctx.Check(played.Count == gloatsBefore + 3
+                && played[^1].Trigger == AiVoiceDispatcher.GlPlyrDwn
+                && played[^1].Tag == wingman.Name && played[^1].Clip.StartsWith("snd_id2_GL-PlyrDwn"),
+                $"the player's own kill broadcasts #24 on the player's team, elected onto the wingman last={played[^1]}");
+
             ctx.Note($"lines: {string.Join(", ", played)}");
         }
         finally
         {
+            foreach (var rig in gloatRigs)
+            {
+                rig.Free();
+            }
             ai?.Free();
             runtime?.Free();
             radio?.Free();

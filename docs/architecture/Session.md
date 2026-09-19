@@ -425,11 +425,11 @@ Format and decode, including the wake ordering and the awake-by-data census:
 Wires the combat-voice dispatcher into a running flight session, built with the rigs wherever the
 world has a `WorldSounds` and ticked on the sim clock: an accented AI spawn is registered as a
 speaker on its own `FlightController.Team`, each human rig as a damage source, and the mode machine
-of EVERY AI handed over is watched, accented or not, because the bearing call-out and the taunt are
-spoken by an aircraft other than the one whose mode moved. `RegisterAi` also mirrors `InPlay` into
-the speaker's liveness, the only place the engine-free dispatcher and a controller meet. Lines play
-flat through `MissionRadio.Speak`, the one queue the objective callouts share, never at the speaker,
-and every roll and first "no clip" refusal prints an `ai voice:` line. [../formats/combat-voice.md](../formats/combat-voice.md).
+and death report of EVERY aircraft handed over are watched, accented or not, because the bearing
+call-out, the taunt and the killer's gloat are spoken by an aircraft other than the one the event
+reached. `RegisterAi` also mirrors `InPlay` into the speaker's liveness, the only place the
+engine-free dispatcher and a controller meet. Lines play flat through `MissionRadio.Speak`, the one
+queue the objective callouts share, never at the speaker, and every roll and first "no clip" refusal prints an `ai voice:` line. [../formats/combat-voice.md](../formats/combat-voice.md).
 
 ## src/Session/FlightRoster.cs
 The session-owned aircraft aggregate. `BuildPlayers` commits the whole human field in ascending player order and `SpawnAi` commits one
