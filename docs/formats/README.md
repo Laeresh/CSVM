@@ -117,7 +117,10 @@ JSON file of nested arrays. Conventions that recur across every reader family:
   `defName, [properties…]`; a def's `kind_of` names its parent def and properties resolve
   nearest-first through the chain (`pbloodhawk` → `player_airplane` → `basic_airplane`).
 - **Name wildcards.** Where readers reference scene-node names (animation definitions),
-  `*`/`**` match any run of characters, `#` a run of digits, and the `.flt` model suffix
+  each `*` stands for at most one digit (`crate**` ↔ `crate01`, never `craterlake`; the
+  original stamps a digit per star, [org/sequences.md](../org/sequences.md), and its compiler
+  instanced `lkshadow*` as plain `lkshadow`), `#` a run of
+  digits, and the `.flt` model suffix
   is optional (`ap_radiotwr` ↔ node `ap_radiotwr.flt`). **Not only node names**, a
   `PUFFER_STATE`'s own `NAME`, which is a separate namespace, takes a `*` too and expands at
   compile time (`torch_puffer*` → `torch_puffer1`/`2`); see

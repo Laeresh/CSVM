@@ -210,8 +210,10 @@ Both wildcards act on the definition's own NAME at load, deciding **how many ani
 created**. Neither is a matcher, and no node name is ever compared as a pattern (see the `strcmp`
 rule above).
 
-- **`*` is a digit odometer.** `FUN_0059d610` scans the name right to left starting at `len-2`, so
-  the final character is excluded, and records up to **5** `*` positions, zeroing a counter for each.
+- **`*` is a digit odometer.** `FUN_0059d610` scans the name right to left from its last character
+  (`~uVar2 - 2` is `strlen - 1`, the same index `FUN_0051ff40` tests for a trailing `#`), so a
+  trailing `*` is a digit position like any other, and records up to **5** `*` positions, zeroing a
+  counter for each.
   `FUN_0059d6e0` steps the odometer (each digit runs 0 to 9, carrying, returning 0 when exhausted),
   and `FUN_0059d750` stamps the current counters into a copy of the name with `sprintf("%d", …)`,
   one character per `*`. `FUN_0051ff40` (with `FUN_0051fe60`) runs the whole instantiation once per
@@ -248,9 +250,12 @@ last tier the same way. Four differences remain and none of them is deliberate:
 - **`FindAll` compares `OrdinalIgnoreCase`**, where every tier of the original is case-sensitive; and
   it also matches a name against a `.flt`-stripped copy of each candidate, which the original has no
   counterpart for. Both widen a match the original would refuse.
-- **`Matcher` reads `*` and `#` as node-name patterns** (`*` any run, `#` a digit run), where in the
-  original they are instantiation controls on the definition's NAME and no node name is ever matched
-  as a pattern. This is the same multiplicity in the wrong place described above.
+- **`Matcher` reads `*` and `#` as node-name patterns** (`*` at most one digit, `#` a digit run), where in
+  the original they are instantiation controls on the definition's NAME and no node name is ever
+  matched as a pattern. This is the same multiplicity in the wrong place described above. The digit
+  reading of `*` is what keeps the shared `crate**` destructible off C3's `craterlake`; as an
+  any-run pattern it instanced there, and the lake's death switched every world `healthy` node off
+  through the global tier (`BL-985`).
 
 The scope of the subtree tiers is **not** among them any more. Ours searches the call anchor's
 subtree, which for a crash rig is a root shared with staged template copies, where the original's is
@@ -628,7 +633,11 @@ caller's node": the target is resolved by the caller and delivered as an input, 
 the callee's anchor. CSVM instead makes the call site the callee's Start anchor
 (`AnimRuntime`'s `CallAnimation` arm, `callAnchor = siteNode ?? anchor`), which is an undeliberate
 difference; it was investigated as a candidate cause of C3/M02's balloon kill-chain symptoms and
-confirmed to drive none of them, since none reproduced on the current build.
+confirmed to drive none of them, since none reproduced on the current build. It does reach the
+`NODE_UNDERCOVER` probe: CM01's `cargozep1_crash` is called by a hydrogen tank's death and so runs
+anchored on the tank, and a self-exclusion read off that anchor lets the hull's 65 m probe find its
+own gasbags at cruise altitude. `AnimRuntime` therefore excludes the callee's own root above the
+probed node (`anim_root_name`), and falls back to the anchor only when no such ancestor exists.
 
 ### Where the callee's site pose lives, and what the decode leaves open
 

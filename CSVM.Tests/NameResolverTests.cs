@@ -36,31 +36,36 @@ public class NameResolverTests
         Assert.DoesNotContain(lettered, found);
     }
 
-    // ---- '*' matches any run of characters, including the '**' template idiom ----
+    // ---- '*' matches at most one digit: the original's odometer stamps one digit per star, and
+    // its compiler instanced `lkshadow*` as plain `lkshadow` ----
 
     [Fact]
-    public void StarMatchesAnyRunOfCharacters()
+    public void StarMatchesAtMostOneDigit()
     {
+        var bare = Node("fly_trail");
         var t1 = Node("fly_trail1");
-        var t10 = Node("fly_trail10"); // two-char run: '*' must not quietly mean "one character"
+        var t10 = Node("fly_trail10"); // two digits need two stars
+        var lettered = Node("fly_trailx");
         var unrelated = Node("healthy");
         var resolver = Build(
-            (t1, "fly_trail1", null), (t10, "fly_trail10", null), (unrelated, "healthy", null));
+            (bare, "fly_trail", null), (t1, "fly_trail1", null), (t10, "fly_trail10", null),
+            (lettered, "fly_trailx", null), (unrelated, "healthy", null));
 
         var found = resolver.FindAll("fly_trail*", null);
 
-        Assert.Contains(t1, found);
-        Assert.Contains(t10, found);
-        Assert.DoesNotContain(unrelated, found);
+        Assert.Equal(new[] { bare, t1 }, found);
     }
 
     [Fact]
-    public void DoubleStarTemplateFormMatchesAnyRun()
+    public void DoubleStarTemplateFormMatchesTwoDigitsNotALetterRun()
     {
-        var node = Node("call_hetrails_up");
-        var resolver = Build((node, "call_hetrails_up", null));
+        // C3's shape: the shared `crate**` destructible must instance on the numbered crates and
+        // never on `craterlake`, whose death would switch every world `healthy` node off.
+        var crate01 = Node("crate01");
+        var lake = Node("craterlake");
+        var resolver = Build((crate01, "crate01", null), (lake, "craterlake", null));
 
-        Assert.Contains(node, resolver.FindAll("call_**", null));
+        Assert.Equal(new[] { crate01 }, resolver.FindAll("crate**", null));
     }
 
     // ---- plain names compare case-insensitively ----
@@ -119,7 +124,7 @@ public class NameResolverTests
         var root = Node("m_build01");
         var resolver = Build((root, "m_build01", null));
 
-        Assert.Equal(new[] { root }, resolver.FindAll("m_build*", root));
+        Assert.Equal(new[] { root }, resolver.FindAll("m_build**", root));
     }
 
     // ---- FindAll's memoized result is the same list instance on repeat, read-only-list semantics ----
@@ -542,7 +547,7 @@ public class NameResolverTests
         Assert.Equal(0, resolver.FreedRows());
         var (staged, hook) = StageWarhawk(resolver);
 
-        Assert.Equal(new[] { staged }, resolver.FindAll("player_*", null));
+        Assert.Equal(new[] { staged }, resolver.FindAll("player_warhawk", null));
         Assert.Equal(new[] { hook }, resolver.FindAll("hook", staged));
         Assert.Equal(new[] { hook }, resolver.FindAll("hook", null));
     }
