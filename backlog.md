@@ -763,8 +763,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `git log --grep=BL-977` (the Instant Action prewarm gap),
   the saved Voice level (`Utils/AudioMix.cs`, the `audio-buses` suite) if the lines dispatch and
   stay inaudible; `git log --grep=BL-986` (the attack pair now raised off the quarry rather than
-  off the mode edge, which was the largest single cause of the low rate),
-  `BL-991` and `BL-996` (the unwired trigger ids).
+  off the mode edge, which was the largest single cause of the low rate) and `BL-991` (the one
+  trigger id still unwired).
 
 - `BL-1011` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **Both of the
   original's bearing-call-out sites raise the taunt pair 25/26 off the pursuer's own geometry
@@ -789,25 +789,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   because the danger-zone modes are never entered.** *Evidence:*
   `docs/formats/combat-voice.md` row 15: the modes' gate data is undecoded (F17). *Fix shape:*
   lands with the mode decode; until then nothing to wire. *Cross-refs:* `BL-934`.
-
-- `BL-996` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]`
-  **`PR-EnemyDwn` (id 16) is unwired and `GL-PlyrDwn` (id 24) is broadcast where the original
-  addresses it, so downing an enemy draws no "enemy down" from your flight.** *Evidence:*
-  `docs/formats/combat-voice.md`, "A kill by the local player takes a different arm". The original
-  compares the killer against the local player's vehicle (`0x004b9d54`) and, on the player's side of
-  that flag (`0x004ba15c`), addresses 24 to the player's own aircraft (`0x004ba173`, guarded by the
-  slot read at `vehicle + 0x850`) and then broadcasts 16 to the flight (`0x004ba17a`), reached
-  whether or not slot 24 held a line. `Session/AiVoiceRuntime.cs`'s `OnDowned` broadcasts 24 on
-  `AimAssist.PlayerTeam` in the `_humans.Contains(shooter)` arm and never raises 16. 17 pilot ids
-  ship a playable `PR-EnemyDwn` set, so the clips are there. *Fix shape:* add the trigger constant to
-  `Flight/AiVoiceDispatcher.cs`, dispatch 24 to the human rig's own speaker (silent until a player
-  rig resolves a voice set, which is the original's behaviour) and broadcast 16 on
-  `AimAssist.PlayerTeam` in the same arm. *⚠ Traps:* the broadcast runs unconditionally, do not make
-  it the else-branch of the slot-24 test; the broadcast helper always elects from the local player's
-  team, never from the raiser's. *Playtest after fix:* Instant Action → C1 → Dogfighting an Ace with
-  `--log=sound:debug`; expect a `trigger #16` line as the ace dies. *Cross-refs:* `BL-934`,
-  `git log --grep=BL-992` (the decode that located the site).
-
 
 - `BL-1000` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: footage]` **The
   damaged engine loop plays at a lower pitch than the original's.** *Evidence:* the three-phase

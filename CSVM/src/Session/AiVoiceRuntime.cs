@@ -117,7 +117,8 @@ public sealed partial class AiVoiceRuntime : Node
 
     /// <summary>Registers a human rig as an event source; the player itself never speaks an AI
     /// line. Its health crossing 30 % broadcasts <c>WA-HighDmg</c> to the flight, and a kill of
-    /// its own draws the flight's gloat (id 24).</summary>
+    /// its own addresses the gloat (id 24) to the rig itself, silent until a player rig resolves a
+    /// voice set, and broadcasts <c>PR-EnemyDwn</c> (id 16) to the flight.</summary>
     public void RegisterPlayer(FlightController rig)
     {
         _humans.Add(rig.PlayerIndex);
@@ -252,7 +253,7 @@ public sealed partial class AiVoiceRuntime : Node
     // The gloat, decoded polarity (combat-voice.md, "The gloat triggers and trigger 28"). The
     // friendly predicate over shooter and victim comes first, so a friendly kill picks no gloat at
     // all; the same predicate over the victim and the player's team then picks 22 or 23 for the
-    // killer to speak. A kill by a human rig takes 24 instead and broadcasts on the player's side.
+    // killer to speak. A kill by a human rig takes the player arm instead, 24 and then 16.
     private void OnDowned(FlightController victim, int? killer)
     {
         if (killer is not { } shooter || shooter == victim.PlayerIndex)
@@ -268,7 +269,11 @@ public sealed partial class AiVoiceRuntime : Node
         }
         if (_humans.Contains(shooter))
         {
-            Play(_dispatcher.Broadcast(AiVoiceDispatcher.GlPlyrDwn, AimAssist.PlayerTeam, _now));
+            // ⚠ Do not make the broadcast the else-branch of the addressed line: the decoded
+            // null-slot test jumps INTO it, so 16 runs whether or not the player's own rig
+            // resolved a voice set, and it always elects from the local player's team.
+            Play(_dispatcher.Dispatch(shooter, AiVoiceDispatcher.GlPlyrDwn, _now));
+            Play(_dispatcher.Broadcast(AiVoiceDispatcher.PrEnemyDwn, AimAssist.PlayerTeam, _now));
             return;
         }
         int trigger = AimAssist.Hostile(victim.Team, AimAssist.PlayerTeam)

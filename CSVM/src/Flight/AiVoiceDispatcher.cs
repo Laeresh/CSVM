@@ -40,6 +40,8 @@ public sealed class AiVoiceDispatcher
 
     public const int WaAttack = 14;
 
+    public const int PrEnemyDwn = 16;
+
     public const int DiLowDmg = 17;
 
     public const int DiMedDmg = 18;

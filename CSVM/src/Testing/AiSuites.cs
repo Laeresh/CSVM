@@ -2503,7 +2503,8 @@ internal static class AiSuites
         + "5 km away, while an unforced dispatch on the same dead speaker stays silent, and the "
         + "three gloats run the decoded polarity off the same kill report: a friendly kill is "
         + "silent, the killer speaks 22 over a victim on the player's team and 23 over one that "
-        + "is not, and the player's own kill broadcasts 24 on the player's flight, and an evade "
+        + "is not, and the player's own kill addresses 24 to a player rig that resolves no voice "
+        + "set, silently, and broadcasts 16 to the player's flight, and an evade "
         + "episode's end picks the taunt pair off the evade flag: a pursuer still inside the tail "
         + "cone taunts 26 with 27 silent, a shaken one taunts 27, and a step between the two "
         + "evade modes taunts nothing, and the ally distress (28) answers a round from the player "
@@ -2775,16 +2776,18 @@ internal static class AiSuites
                 $"downing a plane on the player's team gloats as #22 instead last={played[^1]}");
             PumpRadio(radio);
 
-            // The exception: the local player's own kill takes 24 and broadcasts, so the line
-            // comes from the player's flight, never from the killer's side and never from the
-            // player, who speaks no AI line.
+            // The exception: the local player's own kill addresses 24 to the player's own rig,
+            // silent here because that rig resolved no voice set, and broadcasts 16 either way,
+            // elected onto the wingman rather than onto the killer's side or onto the player.
             var quarry = Rig(FlightRoster.ShooterIdBase + 6, enemyTeam, human: false);
             runtime.RegisterAi(quarry, accentId: null, talkerChance: 0f, constitutionChance: 0f);
             quarry.DebugForceCrash(pilotRig.PlayerIndex);
             ctx.Check(played.Count == gloatsBefore + 3
-                && played[^1].Trigger == AiVoiceDispatcher.GlPlyrDwn
-                && played[^1].Tag == wingman.Name && played[^1].Clip.StartsWith("snd_id2_GL-PlyrDwn"),
-                $"the player's own kill broadcasts #24 on the player's team, elected onto the wingman last={played[^1]}");
+                && played[^1].Trigger == AiVoiceDispatcher.PrEnemyDwn
+                && played[^1].Tag == wingman.Name && played[^1].Clip.StartsWith("snd_id2_PR-EnemyDwn"),
+                $"the player's own kill broadcasts #16 on the player's team, elected onto the wingman last={played[^1]}");
+            ctx.Check(!played.Exists(line => line.Trigger == AiVoiceDispatcher.GlPlyrDwn),
+                $"…and #24, addressed to a player rig that resolves no voice set, stays silent");
 
             // --- the taunt pair (26/27): the evade episode's own end decides which one, off the
             // evade flag, whose hold condition is the decoded tail cone. The machine is driven
