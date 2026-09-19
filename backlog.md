@@ -1020,6 +1020,15 @@ usual.
   lives past spawn, what it flies), then port that; do not invent a leash or a despawn before the
   read. *Cross-refs:* `docs/org/aiPilot.md` (the headline, "Open"),
   `docs/formats/ai-rosters.md` ("Who is netless").
+- `BL-984` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The Danger Zone
+  photograph draws the aircraft without the original's fill light.** *Evidence:* on the hardware
+  renderer the original's photograph frame gives the player model a fill light of the scene
+  light's intensity times 1.5 plus 0.1 (`FUN_004ccfd0`, `FUN_004cd060`) and restores it before the
+  normal frame; `DangerZonePhotograph` takes the same pose but lights the aircraft with the
+  ordinary scene light, so the photograph reads darker than the original's.
+  *Fix shape:* read both functions for the light's kind, direction and colour, then apply it to
+  the aircraft in the photograph's viewport for that frame only, leaving the pane untouched.
+  *Cross-refs:* `docs/formats/campaign-screens.md` (the photograph pose).
 
 ## Tooling, platform & docs
 
