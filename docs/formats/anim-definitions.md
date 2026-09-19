@@ -931,7 +931,8 @@ a light name is scoped to the definition instance (two refineries each own an `o
 | `translate` | `{AtNode:{name,pos}}` (761×) or null (707×), a gamez node plus a local offset, the same shape and frame as a puffer's `AT_NODE`. |
 | `range` | `{min,max}`, full brightness inside `min`, nothing past `max`. Present on exactly the 1147 "on" events. **Every startup light in this install has a `max` between 2 and 22 m.** |
 | `color` | `{r,g,b}`, present 765×. A DX7 sRGB value, so it needs linearising like `FOG_COLOR`. |
-| `directional`, `saturated`, `subdivide`, `lightmap`, `static_`, `bicolored`, `orientation`, `ambient*`, `diffuse` | Null or false almost everywhere; nothing in this install depends on them. |
+| `ambient`, `diffuse` | Null except on the 20 MP2 flag-light events (0.3 / 1.0). An absent one keeps the light's value, 1.0 / 0 on a fresh light; the point term scales the colour by their sum ([`../org/vertexLighting.md`](../org/vertexLighting.md)). |
+| `directional`, `saturated`, `subdivide`, `lightmap`, `static_`, `bicolored`, `orientation`, `ambient_color` | Null or false almost everywhere; nothing in this install depends on them. |
 
 **The semantic that matters is that a `LIGHT_STATE` is a PARTIAL update.** A fire or refinery
 flicker is a stream of `{name, range}` events 0.03–0.07 s apart that must leave position,
@@ -985,9 +986,10 @@ plays them: that runtime submits into the world's own `WorldLights`, on both pre
 separate gamez geometry, C1's `docklight_flare` is a `Facade`/`SphericalY` mesh textured
 `dock_liteflare.tif`, and the refinery's `flame01` is a `Facade`/`CylindricalY` mesh textured
 `fire101.tif`. Both render without any animation. So `LIGHT_STATE` is not what draws the lamp;
-it is the **spill onto surrounding geometry**, which is what the original's DX7 point lights
-did to the same baked vertex lighting our world shader reads. Rendering notes in
-`docs/architecture.md` under `WorldLights.cs`.
+it is the **light falling on surrounding geometry**, the per-vertex point term the original adds
+to the same authored vertex colour our world shader reads (the law is in
+[`../org/vertexLighting.md`](../org/vertexLighting.md), "Point lights"). Rendering notes in
+`docs/architecture/Mech3.md` under `WorldLights.cs`.
 
 **Cost warning for anyone adding a handler here.** These events are not occasional. C1 fires
 ~2,700 `LIGHT_STATE`s per second at steady state, because each fire's flicker re-issues its

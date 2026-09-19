@@ -437,14 +437,14 @@ full-volume radius. `SessionGainDb` is what the play paths call: the law at the 
 `Flight/AiWeaponAudio.cs`.
 
 ## src/Mech3/WorldLights.cs
-Packs the animated world's `LIGHT_STATE` point lights into the 2xN RGBAF texture the fullbright
-world shader reads as spill (`csky_light_data`, looped to `csky_light_count`). The uniform is
-session-global, but `Commit`'s distance fade and `MaxActive`-slot significance rank answer to the
-NEAREST viewer handed in (`AnimRuntime.LightViewerPositions`, from `GameSession`'s `ViewerSet`).
-The world runtime owns the frame (`Begin`/`Add`/`Commit`); the world-effects runtime only
-contributes, registered through `AddSource` and asked inside `Commit`, so a burst ranks against the
-beacons in one set instead of a second `Begin` erasing them. With a parent `Node3D` in enhanced
-mode, `Commit` mirrors the committed set onto pooled `OmniLight3D` nodes ([Root.md](Root.md)).
+Packs the `LIGHT_STATE` point lights, each as colour times ambient + diffuse, into the 2xN texture
+(`csky_light_data`, `csky_light_count`) the original-mode world and aircraft shaders read as the
+per-vertex point term ([../org/vertexLighting.md](../org/vertexLighting.md)). `Commit`'s distance
+fade and `MaxActive` significance rank answer to the NEAREST viewer handed in
+(`AnimRuntime.LightViewerPositions`, from `GameSession`'s `ViewerSet`). The world runtime owns the
+frame (`Begin`/`Add`/`Commit`); the world-effects runtime contributes through `AddSource`, so a
+burst ranks against the beacons in one set. With a parent `Node3D` in enhanced mode, `Commit`
+mirrors the committed set onto pooled `OmniLight3D` nodes ([Root.md](Root.md)).
 
 ## src/Mech3/MissionSetup.cs
 Parses + applies the per-mission `.gw` interp script that decides which world entities a mission

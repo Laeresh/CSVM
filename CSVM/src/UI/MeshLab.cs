@@ -966,7 +966,7 @@ public sealed partial class MeshLab : Node
     // The override material for one surface: the surface's OWN shader with the cull token
     // swapped and a normal rewrite injected, plus every parameter copied across. Deriving beats
     // re-implementing, the world's fullbright variants carry fog, the sRGB vertex modulate, the
-    // LIGHT_STATE spill and UV scroll, and a stand-in shader that dropped any of those would
+    // LIGHT_STATE point term and UV scroll, and a stand-in shader that dropped any of those would
     // change what you are inspecting instead of only what you asked to test.
     private ShaderMaterial OverrideMaterial(Surf s)
     {

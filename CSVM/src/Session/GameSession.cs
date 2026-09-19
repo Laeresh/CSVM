@@ -695,7 +695,7 @@ public partial class GameSession : Node3D
             // Beside the clock, and for the same reason: a static book of this world's nodes would
             // otherwise be the next session's starting membership.
             RenderPoses.Clear();
-            // Clears csky_light_count so the next world does not inherit this one's light spill;
+            // Clears csky_light_count so the next world does not inherit this one's lights;
             // idempotent, and null-guarded (a failed build never set it).
             _worldLights?.Dispose();
             _worldLights = null;

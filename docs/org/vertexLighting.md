@@ -402,7 +402,12 @@ own light table at `def+0xec` (stride `0x2c`: the light node at `+0x24`, an atta
 (`FUN_004db380`, `DAT_009fd160`); `INACTIVE` on an attached one detaches it (`FUN_004db420`).
 `PointSource` goes through `FUN_004dbff0`. The event's field word at `+0x30` routes each present
 field to its setter: bit `0x08`, the range, to `FUN_004dc3c0`; `0x10`, the colour, to
-`FUN_004dc970`; `0x02`, the `AT_NODE` translate, to `FUN_004dc540` through `FUN_004cf490`.
+`FUN_004dc970`; `0x02`, the `AT_NODE` translate, to `FUN_004dc540` through `FUN_004cf490`;
+`0x20`, the ambient at event `+0x90`, to `FUN_004dbce0` (`0x004e7d7e`); `0x40`, the diffuse at
+`+0x94`, to `FUN_004dbdb0` (`0x004e7d97`). A fresh light node carries ambient 1.0 and diffuse 0, so
+a `LIGHT_STATE` that authors neither scales its colour by exactly 1. Of the 1,468 compiled
+`LIGHT_STATE` events, 20 author either, all 0.3 / 1.0: the MP2 flag lights (`cs_flg_light1`/`2`,
+`flite1`/`2`).
 
 `FUN_004dc3c0` stores `near = min(r1, r2)` at `+0xe4` and `far = max(r1, r2)` at `+0xe8`, their
 squares at `+0xec`/`+0xf0` and `1 / (far − near)` at `+0xf4`. Equal ranges log
@@ -426,9 +431,25 @@ as for the sun.
 new light node per entry (`FUN_004dba40`, defaults) with the attached flag clear, so every call owns
 its own light and starts it dark.
 
-⚠ **CSVM's spill is an approximation of this term.** `csky_lights.gdshaderinc` weights by
-`N·L × (1 − smoothstep(near, far, d))` and adds `base_colour × spill` to the fullbright albedo
-without the `lighting` gate or the product clamp. The ranges it is handed are the authored ones.
+CSVM evaluates the same term per vertex. `LightChannel` hands `WorldLights` the authored colour and
+`ambient + diffuse`, which packs their product unconverted; `csky_point_light` in
+`csky_lights.gdshaderinc` sums `weight(d) × factor` with no `N·L`. `SceneBuilder.GetBiasShader`
+includes it only on a `lighting: true` surface in the two original-mode arms that evaluate the
+vertex light:
+
+- **World (fullbright arm).** The vertex stage forms `clamp(COLOR × (csky_world_light + P))` and
+  passes the fragment the difference from the unlit `COLOR × csky_world_light`, both linearised, as
+  `v_point_gain`; the fragment adds `texel × v_point_gain` before the fog. With no light live the
+  gain is exactly zero, so an unlit frame's shader output is unchanged.
+- **Aircraft (vertex-sun arm).** `P` joins the sun term inside the clamp:
+  `clamp(COLOR × (ambient + diffuse × max(N·L, 0) + P))`. The world position is
+  `MODEL_MATRIX × VERTEX + light_origin`; `light_origin` is zero in the world and the eye position
+  in the cockpit overlay's own `World3D`, which `CockpitOverlay.Sync` sets each frame, so a light
+  submitted in world space reaches the interior at its true distance.
+
+⚠ The term is per vertex, as in the original, so a light smaller than a surface's vertex spacing
+lights that surface only where it reaches a vertex. Billboard and cylindrical facade materials take
+no point term, and in enhanced mode the omnis light the world instead.
 
 ## Specular: the device turns it off and no material exists to turn it back on
 
@@ -579,6 +600,10 @@ needs the texture's own bit rather than its pixels.
 
 **The in-flight aircraft carries the term uncollapsed** in original mode, as "What CSVM does with
 that" describes: per vertex, on its own normals, with the product clamp.
+
+**The `LIGHT_STATE` point term is reproduced per vertex** on the world and the aircraft, gated by
+`lighting` and inside the product clamp, as "Point lights" above describes. Only the sun half of the
+world's vertex light is still the collapsed scalar.
 
 **On the `fvol` clutter cards the term behind the gate is reproduced.** `csky_world_light` is the
 collapse `AMBIENT + DIFFUSE × 0.46` calibrated on the predominantly up-facing world

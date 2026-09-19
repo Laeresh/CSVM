@@ -258,9 +258,9 @@ the built `cockpit1` node into a `SubViewport` with a `World3D` of its own, on t
 `PlaneBuilder` gave it, and puts the pass camera at that world's origin aimed by
 `CameraController.FirstPersonPose` with the plane position and `cockpit_camera` offset both zero,
 since those cancel between eye and panel, so the projection is the main world's exactly. The
-transparent-backed viewport sits on `HudLayers.CockpitPass`; its lighting is a re-aimed copy of the
-world's sun plus a duplicated Environment that enhanced graphics mode extends with shadow settings.
-`GameSession.BuildCockpitPasses` builds one per `PlayerRig`; `Sync` follows the interior `Visible`.
+viewport sits on `HudLayers.CockpitPass`, lit by a re-aimed copy of the world's sun and a
+duplicated Environment (enhanced adds shadows). `GameSession.BuildCockpitPasses` builds one per `PlayerRig`; `Sync` follows
+the interior `Visible` and sets each material's `light_origin` to the eye for the point lights.
 
 ## src/Flight/CockpitGauges.cs
 The authored instrument panel inside the pilot's own `cockpit1` interior: five needle nodes take an

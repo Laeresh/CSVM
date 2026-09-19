@@ -1591,8 +1591,11 @@ void fragment() {
             sb.AppendLine(ClutterFadeInclude);
             sb.AppendLine("varying flat float v_clutter_alpha;");
         }
-        if (fullbright)
-            sb.AppendLine(LightsInclude); // LIGHT_STATE spill, fullbright passes only
+        // The point-light term reaches only the two original-mode arms that evaluate the original's
+        // vertex light, and only on a model authored `lighting: true`.
+        bool pointLit = lit && (fullbright || sunLit);
+        if (pointLit)
+            sb.AppendLine(LightsInclude);
         if (textured)
         {
             // Anisotropic mipmap filtering: the world is viewed at grazing angles from the air,
@@ -1628,7 +1631,13 @@ void fragment() {
         {
             sb.AppendLine(SunVertexLightDecl);
             sb.AppendLine("varying vec3 v_sun_lit;");
+            // Where this frame's origin sits in the world, for a model drawn in a frame of its own
+            // (the cockpit pass, CockpitOverlay); zero for anything drawn in the world itself.
+            if (lit)
+                sb.AppendLine("uniform vec3 light_origin = vec3(0.0);");
         }
+        if (fullbright && lit)
+            sb.AppendLine("varying vec3 v_point_gain;");
         // ⚠ Keep NORMAL pre-negated on every lit path. Every visible fragment is back-facing under
         // cull_front and Godot negates NORMAL there, so without this every upward-facing surface
         // shades as though lit from underneath (docs/formats/gotchas.md).
@@ -1639,16 +1648,27 @@ void fragment() {
             ? "    v_clutter_alpha = csky_clutter_fade_alpha(MODEL_MATRIX[3].xyz, CAMERA_POSITION_WORLD, INSTANCE_CUSTOM);\n"
               + "    VERTEX *= step(0.004, v_clutter_alpha);\n"
             : "";
-        // Per vertex, on the authored normal in world space and before the view transform, and
-        // clamped as a product: the draw multiplies the authored colour by the light and clamps
-        // at white. A `lighting: false` model takes its authored colour unchanged.
+        // Per vertex in world space, the sun and the point lights (csky_point_light) summed into one
+        // factor on the authored colour, clamped as a product at white, as the draw does. A
+        // `lighting: false` model takes its authored colour unchanged.
         string sunVertex = !sunLit ? ""
             : lit ? "    v_sun_lit = clamp(COLOR.rgb * (csky_sun_ambient_rgb + csky_sun_diffuse_rgb\n"
-                    + "        * max(dot(normalize(MODEL_NORMAL_MATRIX * NORMAL), csky_sun_dir), 0.0)), 0.0, 1.0);\n"
+                    + "        * max(dot(normalize(MODEL_NORMAL_MATRIX * NORMAL), csky_sun_dir), 0.0)\n"
+                    + "        + csky_point_light((MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz + light_origin)), 0.0, 1.0);\n"
             : "    v_sun_lit = COLOR.rgb;\n";
+        // The fullbright world keeps its collapsed sun, csky_world_light, and takes the point lights
+        // as the linear gain they make on the clamped product, per vertex as the original evaluates
+        // them. Zero where no light reaches, so an unlit frame draws exactly what it did.
+        string pointVertex = !(fullbright && lit) ? ""
+            : "    v_point_gain = vec3(0.0);\n"
+              + "    if (csky_light_count > 0) {\n"
+              + "        vec3 point = csky_point_light((MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz);\n"
+              + "        v_point_gain = csky_srgb_to_linear(clamp(COLOR.rgb * (csky_world_light + point), 0.0, 1.0))\n"
+              + "            - csky_srgb_to_linear(COLOR.rgb * csky_world_light);\n"
+              + "    }\n";
         sb.AppendLine($@"
 void vertex() {{
-{clutterVertex}{sunVertex}    VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+{clutterVertex}{sunVertex}{pointVertex}    VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
     NORMAL = {normalSign}normalize(MODELVIEW_NORMAL_MATRIX * NORMAL);
     // Scale toward the eye (the view-space origin): identical projected position,
     // depth nudged nearer by bias × distance, a scale-invariant polygon offset.
@@ -1663,7 +1683,7 @@ void fragment() {{");
         string vcol = sunLit ? "vec4(csky_srgb_to_linear(v_sun_lit), COLOR.a)"
             : shaded ? "COLOR" : "vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a)";
         // The surface's own albedo is kept separately from the modulated result: a point light's
-        // spill is light falling ON the surface, so it must be modulated by the same albedo
+        // term is light falling ON the surface, so it must be modulated by the same albedo
         // rather than added to the final colour (an unlit black texture stays black under a lamp).
         if (textured && edgeClamp != UvClampAxes.None)
         {
@@ -1710,21 +1730,12 @@ void fragment() {{");
             sb.AppendLine("    SPECULAR = 0.0;");
         }
         // Distance fog, cylindrical: VERTEX is the view-space position here under
-        // skip_vertex_transform, and INV_VIEW_MATRIX lifts it back to world. The fullbright path
-        // needs that world position for the light spill, so an unfogged world surface computes it.
-        if (fogged || fullbright)
+        // skip_vertex_transform, and INV_VIEW_MATRIX lifts it back to world.
+        if (fogged)
             sb.AppendLine("    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;");
-        // Point lights go in before the fog mix and are not scaled by csky_world_light: a lamp does
-        // not dim at night. ⚠ Keep the braces, unguarded this lands in the SHADED shader too,
-        // where light_n does not exist and every aircraft falls back to Godot's default material.
-        if (fullbright)
-        {
-            // The world's normals reach here flipped for the same reason the aircraft's do: its
-            // single-sided polygons render with cull_front, so every visible fragment is
-            // back-facing and Godot negates NORMAL. Same cancelling minus as the shaded path.
-            sb.AppendLine("    vec3 light_n = normalize(-(INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);");
-            sb.AppendLine("    ALBEDO += base_col.rgb * csky_light_spill(fog_world, light_n);");
-        }
+        // Point lights go in before the fog mix, on the same texel as the vertex colour they scale.
+        if (fullbright && lit)
+            sb.AppendLine("    ALBEDO += base_col.rgb * v_point_gain;");
         // A model authored `fog: false` is exempt from distance fog entirely; the instance-level
         // csky_fog_on stays the per-instance opt-out beside it (see the uniform block).
         if (fogged)

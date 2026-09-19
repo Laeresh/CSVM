@@ -642,24 +642,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 - `BL-537` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **Effect pools at four players, judged in play.** The pool sizes in `CSVM/data/effect_pools.json` were re-judged on a build with no first-use construction cost: rockets and the sonic burst never wrap, a four-object simultaneous death wraps `flame_ball_01` at 4 and 6 slots and is quiet at 8 (now shipped), and seven or more identical deaths in one frame wrap at the 16 ceiling and cannot be sized away. At the controls the single-player half reads right: four fireballs burn out in place, and the seven-death wrap is not visible under the debris. Still owed: a 4-player splitscreen session with everyone firing, judged for anything that reads as shared between panes, and the ceiling for many-player builds (at 16 players the default root wants 19 and gets 16). The instrument is `AnimRuntime.PoolRecycles` and the `anim: effect pool for '<name>' recycled slot` DEBUG line in the log file sink; the sizes staged print on the world-effects build line. ⚠ Raise only a root that logs a recycle, never the default; the three gun roots stay at 1; a root sized 0 clamps to 1. Each slot copies the root's subtree (155 templates at 1 player, 263 at 4).
   *Cross-refs:* `PT-129` (the four-player flight that judges it), `BL-296` (the other splitscreen-scoped item).
 
-- `BL-952` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The world
-  shader's point-light spill is shaped differently from the original's point-light term, so a
-  ground burst lights the walls facing it and barely the ground under it.** *Evidence:* the
-  original adds `weight(d) × (ambient + diffuse) × colour` per vertex, `weight` linear from the
-  light's near range to its far one, with no `N·L`, only on models whose `lighting` bit is set, and
-  clamps the product with the vertex colour (`FUN_005688a0`, `FUN_00566e00`;
-  `docs/org/vertexLighting.md`, "Point lights: how a `LIGHT_STATE` range is applied").
-  `CSVM/shaders/csky_lights.gdshaderinc` weights by `N·L × (1 − smoothstep(near, far, d))` and
-  `SceneBuilder` adds `base_colour × spill` to every fullbright surface, with no `lighting` gate and
-  no product clamp. A `he_ground_effect` burst beside C1's airfield (the light sits at ground level)
-  lifts the hangar walls facing it by up to 39 of 255 and leaves the flat ground around it nearly
-  unchanged, where the original's term, having no `N·L`, lights both. *Fix shape:* the linear
-  weight without `N·L`, gated by the model's `lighting` bit, applied as a factor on the vertex
-  colour before the clamp. *⚠ Traps:* the change moves every golden that holds a lit
-  `LIGHT_STATE`, `c5-city-night` and the C1 beacons first; ambient and diffuse default to 1.0 and 0
-  for a `LIGHT_STATE` that authors neither, as `he_light` does. *Cross-refs:*
-  `docs/architecture/Mech3.md` (`WorldLights`).
-
 ## Audio
 
 - `BL-269` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: decoded]` **Positional sounds

@@ -93,6 +93,8 @@ internal sealed class LightChannel
         }
         if (ev.Data.Obj("color") is { } color)
             light.Color = new Color(color.Num("r") ?? 0f, color.Num("g") ?? 0f, color.Num("b") ?? 0f);
+        light.Ambient = ev.Data.Num("ambient") ?? light.Ambient;
+        light.Diffuse = ev.Data.Num("diffuse") ?? light.Diffuse;
         if (ev.Data.Has("active_state"))
         {
             light.Active = ev.Data.Bool("active_state");
@@ -191,7 +193,8 @@ internal sealed class LightChannel
             // must not keep lighting its last site.
             if (light.Host is not { } host || !GodotObject.IsInstanceValid(host) || !host.IsVisibleInTree())
                 continue;
-            lights.Add(host.GlobalTransform * light.Offset, light.Color, light.RangeMin, light.RangeMax);
+            lights.Add(host.GlobalTransform * light.Offset, light.Color, light.RangeMin, light.RangeMax,
+                light.Ambient + light.Diffuse);
         }
     }
 }

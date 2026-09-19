@@ -23,7 +23,7 @@ ambient are driven from the mission's authored `SUNLIGHT_DIFFUSE`/`SUNLIGHT_AMBI
 colours instead of the launcher's hardcoded numbers (`WeatherRig.cs`); the sun casts PSSM shadow
 maps, with each zone's authored fog pushed out 2x and the shadow's max distance following that
 pushed far so shadows never end in clear air; `LIGHT_STATE` point lights are mirrored onto real
-`OmniLight3D` nodes that light the world and the aircraft, not only a fullbright spill texture
+`OmniLight3D` nodes that light the world and the aircraft, not only the per-vertex point term's data texture
 (`WorldLights.cs`); the light-source class of glow-arm sprites (flares, beacons, signal lamps)
 scales its colour above 1.0 to feed an Environment glow pass, and an AgX tonemap rolls the
 resulting HDR scene off instead of clipping it; SSAO adds contact shading in ambient light, and

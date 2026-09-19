@@ -240,7 +240,7 @@ public sealed class WorldSession
             Setup = missionSetup,
             EmitterFactory = o.EmitterFactory
                 ?? new Anim.PufferEmitterFactory(textures, o.EffectsParent, o.Ambience),
-            // Where LIGHT_STATE spill reaches the fullbright world shader. Owned by the caller so a
+            // Where the LIGHT_STATE point term reaches the world shaders. Owned by the caller so a
             // teardown drops the previous world's lights.
             Lights = lights,
             // The world's ambient SOUND_NODE emitters. Null when muted or soundless, which makes
@@ -690,7 +690,7 @@ public sealed class WorldSession
         /// 50 m radius). Null → both fall back to <see cref="PlayerPosition"/>.</summary>
         public Func<IReadOnlyList<Vector3>>? PlayerPositions { get; init; }
 
-        /// <summary>Every pane's camera, for budgeting the world's <c>LIGHT_STATE</c> spill
+        /// <summary>Every pane's camera, for budgeting the world's <c>LIGHT_STATE</c> lights
         /// against the nearest one, the draw-rule seam (`ViewerSet.Positions`),
         /// not <see cref="PlayerPositions"/>. Null → the runtime falls back to
         /// <see cref="PlayerPosition"/> alone.</summary>

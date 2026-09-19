@@ -1714,7 +1714,8 @@ internal static class WorldAndToolSuites
         + "against the NEAREST of every pane's camera, not player 1's alone (B13, BL-366): a "
         + "light 2000 m from a lone P1 stays committed once a second viewer sits 100 m from it, "
         + "the able-to-fail control against P1 alone drops the same light, and the one-viewer "
-        + "case reads exactly what it read before; given a parent node the same commit mirrors "
+        + "case reads exactly what it read before; the packed factor is the authored colour times "
+        + "ambient + diffuse and the shader term takes no dot product; given a parent node the same commit mirrors "
         + "one OmniLight3D per committed light in enhanced mode and none at all in original mode")]
     internal static void WorldLightsNearestViewer(TestContext ctx)
     {
@@ -1766,6 +1767,28 @@ internal static class WorldAndToolSuites
         lights.Commit(new[] { p1 });
         ctx.Check(lights.CommittedPositions.Count == 1 && lights.CommittedPositions.Contains(nearP1),
             $"one viewer (single player) uses the single-viewer distance rule");
+
+        // The packed factor is the authored colour times ambient + diffuse, unconverted: the MP2 flag
+        // lights' 0.3 + 1.0 scale it by 1.3, and a light authoring neither (scalar 1) packs its colour.
+        var heLight = new Color(1f, 0.86f, 0.29f);
+        lights.Begin();
+        lights.Add(nearP1, heLight, 1f, 10f);
+        lights.Add(new Vector3(0f, 0f, -6f), heLight, 1f, 10f, 0.3f + 1.0f);
+        lights.Commit(new[] { p1 });
+        ctx.Check(lights.CommittedFactors.Count == 2
+                  && lights.CommittedFactors[0].IsEqualApprox(heLight)
+                  && lights.CommittedFactors[1].IsEqualApprox(heLight * 1.3f),
+            $"the factor is colour x (ambient + diffuse), unlinearised: {string.Join(", ", lights.CommittedFactors)}");
+        ctx.Check(!lights.CommittedFactors[0].IsEqualApprox(heLight.SrgbToLinear()),
+            $"ABLE-TO-FAIL CONTROL: the packed factor is not the linearised colour the enhanced omni takes");
+
+        // The term has no N.L: the include never takes a dot product, so a surface facing away from
+        // the light gains exactly what a surface facing it does.
+        string include = Godot.FileAccess.GetFileAsString("res://shaders/csky_lights.gdshaderinc");
+        ctx.Check(include.Contains("csky_point_light", System.StringComparison.Ordinal)
+                  && !include.Contains("dot(", System.StringComparison.Ordinal)
+                  && !include.Contains("smoothstep", System.StringComparison.Ordinal),
+            $"csky_lights.gdshaderinc defines csky_point_light with no dot product and no smoothstep");
 
         // Same instance, same commit shape, gated on the launch's own graphics mode: enhanced
         // mirrors the committed set onto one OmniLight3D per light, original spawns none at all.

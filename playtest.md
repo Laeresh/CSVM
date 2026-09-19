@@ -222,6 +222,18 @@ draws its authored 800x600 space one-to-one.
   - (d) flying level inside the band, no popping as a sprite's own band swings across the cull.
   *Blocks:* nothing tracks the outcome; a fail mints a new `BL` naming which of (a)-(d) failed.
 
+- `PT-168` `[Own]` **A rocket burst on the airfield lights the ground and the aircraft, not only
+  the walls facing it.** Point lights now use the original's per-vertex term, a linear fall-off
+  with no facing term, gated by the model's `lighting` flag and clamped with the vertex colour
+  (`git log --grep=BL-952`, `docs/org/vertexLighting.md`, "Point lights"). Headless renders show a
+  ground burst beside the airfield lifting grass, tarmac, roofs and walls alike by about 26 to 31
+  of 255, where before it lifted only the walls facing it. *Launch:*
+  `./RunGame.ps1 --fly --chapter=C1 --fire-rockets`, which launches a rocket a second; put them
+  into the ground beside the hangars. *Look for:* (a) for about 0.4 s the whole area around the burst warms, ground included,
+  and fades back; (b) your own aircraft picks up the same warm light when close; (c) no surface
+  flashes to flat white, and nothing stays lit after the burst ends.
+  *Blocks:* nothing tracks the outcome; a fail mints a new `BL` naming which of (a)-(c) failed.
+
 - `PT-157` `[Own]` **Auto Head Turn and Next Target toggled over the pause take effect in the same
   sortie.** An accepted Preferences page now puts the saved Auto Head Turn and Next Target on every
   human seat flying behind the pause, the head turn as the original does mid-mission by the user's
