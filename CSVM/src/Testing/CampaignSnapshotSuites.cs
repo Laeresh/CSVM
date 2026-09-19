@@ -23,6 +23,13 @@ internal static class CampaignSnapshotSuites
     private const string Pilot = "Zachary";
     private const string Zone = "dzpath1";
     private const string MountName = "DZ_generic_corners";
+    private const string ZoomMountName = "DZ_ZOOMgrimeframe";
+
+    // The page region a capture is forced into, and the zoom's inset offset off its mount.
+    private const float PageRegionWidth = 164f;
+    private const float PageRegionHeight = 123f;
+    private const float ZoomInsetDx = 10f;
+    private const float ZoomInsetDy = 8f;
 
     // Well outside every stunt marker's radius, so the control run's latch is a crossing.
     private static readonly Vector3 Elsewhere = new(0f, 60000f, 0f);
@@ -32,8 +39,9 @@ internal static class CampaignSnapshotSuites
         + "dzones.zrd binds the zone to the objective number SCRAPBOOK.CSV's Snap_1_18 row names, "
         + "a crossing of the authored gates stages the pilot's photograph under that name in a scratch "
         + "profile directory, winning the mission keeps it at the row's own name and sets the "
-        + "zone's mask bit, the written file is the forced 164x123 region, the scrapbook resolves "
-        + "and draws it under its photo-corner mount, a spread composed without the file on disk "
+        + "zone's mask bit, the written file is the 640x480 every retail photograph is, the "
+        + "scrapbook forces the print into its 164x123 page region and draws it under its "
+        + "photo-corner mount with the zoom's torn mount over it, a spread composed without the file on disk "
         + "skips the row, a stunt Instant Action run writes its own shots and no Snap_ file, and a "
         + "frame landing after the mission-end sweep takes that sweep's keep or drop")]
     internal static void CampaignDangerZoneSnapshot(TestContext ctx)
@@ -97,9 +105,8 @@ internal static class CampaignSnapshotSuites
             return;
         }
 
-        string forced = $"{CampaignSnapshot.Width}x{CampaignSnapshot.Height}";
         ctx.Check(row.Scrap.Region == null,
-            $"row {mission.Ordinal}_{row.Spread}_{row.Scrap.Item} forces no region of its own, so the engine's {forced} applies");
+            $"row {mission.Ordinal}_{row.Spread}_{row.Scrap.Item} forces no region of its own, so the engine's page region applies");
         report.AppendLine($"{Chapter}/{Mission} ordinal {mission.Ordinal}: '{Zone}' -> objective {objective} "
             + $"-> row {mission.Ordinal}_{row.Spread}_{row.Scrap.Item} '{row.Scrap.ImageName}'");
 
@@ -134,7 +141,7 @@ internal static class CampaignSnapshotSuites
             $"exactly one Snap_ file stands in the profile directory");
         if (Image.LoadFromFile(kept) is { } written)
         {
-            ctx.Same(CampaignSnapshot.Width, written.GetWidth(), $"the file is the forced region's width");
+            ctx.Same(CampaignSnapshot.Width, written.GetWidth(), $"the file is the written width every retail photograph is");
             ctx.Same(CampaignSnapshot.Height, written.GetHeight(), $"…and its height");
         }
 
@@ -210,7 +217,47 @@ internal static class CampaignSnapshotSuites
         int mount = IndexOfMount(all, row.Scrap);
         ctx.Check(capture >= 0 && mount > capture,
             $"the photo-corner mount draws over the photograph (capture at {capture}, mount at {mount})");
+        if (capture >= 0)
+        {
+            ctx.Check(all[capture].Width == PageRegionWidth && all[capture].Height == PageRegionHeight,
+                $"the print is forced into the page's own region, which is what the smudge strip is cut for");
+        }
+
+        ZoomDraws(ctx, flow, mission, row, kept, report);
         report.AppendLine($"spread {row.Spread}: {drawn.Count} pictures gated, {all.Count} with every row revealed");
+    }
+
+    // The detail view of the same row: the print at the torn mount's own inset offset and at the
+    // written size, with the mount over it, which is where the scrapbook's tint comes from.
+    private static void ZoomDraws(TestContext ctx, CampaignFlow flow, CampaignMission mission,
+        (int Spread, ScrapbookScrap Scrap) row, string kept, StringBuilder report)
+    {
+        flow.SetScrapbookZoom(mission.Ordinal, row.Spread, row.Scrap.Item);
+        flow.GoTo(CampaignScreen.ScrapbookZoom);
+        var zoom = flow.Page.Pictures;
+        int print = IndexOfLoose(zoom, kept);
+        int mount = -1;
+        for (int i = 0; i < zoom.Count; i++)
+        {
+            if (zoom[i].Art.Name.Contains(ZoomMountName, StringComparison.OrdinalIgnoreCase))
+            {
+                mount = i;
+            }
+        }
+
+        ctx.Check(print >= 0 && mount > print,
+            $"the zoom's torn mount draws over the print (print at {print}, mount at {mount})");
+        if (print >= 0)
+        {
+            ctx.Check(zoom[print].Width == CampaignSnapshot.Width && zoom[print].Height == CampaignSnapshot.Height,
+                $"…at the written size, which is what the mount's window is cut for");
+            ctx.Check(mount >= 0 && zoom[print].X == zoom[mount].X + ZoomInsetDx
+                && zoom[print].Y == zoom[mount].Y + ZoomInsetDy,
+                $"…and at the mount's own position plus the script's ten and eight");
+        }
+
+        flow.GoTo(CampaignScreen.Scrapbook);
+        report.AppendLine($"zoom: print at {print}, mount at {mount} of {zoom.Count} pictures");
     }
 
     // The control: a stunt run's camera writes under screenshots/stunts/ and touches no Snap_ name,

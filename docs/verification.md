@@ -166,6 +166,17 @@ member, and it does not go here.
   effect-off pair is what separates the effect's own flipping from ordinary parallax: without it
   every texel the camera move uncovers is counted as flicker.
 
+- **SHOT-41**, **A complaint that one screen tints what another shows plainly is first a question
+  about the art drawn over it and the order it draws in, so measure the overlay's own alpha and read
+  the layout's Z before adding a colour transform.** The scrapbook's photographs read warm and the
+  file EXPORT TO DESKTOP writes reads plain, and no colour matrix exists anywhere: the page wash
+  `SB_P_GRIME` is neutral (a grey 128 under it comes out R/G 1.000, B/G 1.000) and the original's
+  own spread draws it at gain 0.974/0.980/0.980 with the shipped scraps at 1.0126/1.0125/1.0125,
+  while the zoom's mount `DZ_ZOOMgrimeframe` is a cream window of alpha 0.137 to 0.894 over
+  (188.8, 173.0, 131.0), which is R/G 1.092 and B/G 0.757, and `LAYOUT.CSV` gives it a Z of 200
+  against the print's 0. A matrix fitted to the measured ratio would have been a second tint on top
+  of the one piece of art that already makes it.
+
 ## GOLD, golden images
 
 - **GOLD-1**, **Update moved hashes with the visual change, and explain each moved shot in the

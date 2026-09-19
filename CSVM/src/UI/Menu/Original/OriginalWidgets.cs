@@ -30,9 +30,10 @@ internal static class OriginalWidgets
     private const float FallbackPlaqueWidth = 113f;
     private const float FallbackPlaqueHeight = 34f;
 
-    // A capture with no authored region is forced to 164x123 and drawn at a quarter on the page.
-    private const float CaptureRegionWidth = 41f;
-    private const float CaptureRegionHeight = 31f;
+    // A capture with no authored region of its own stands in the page's forced region, which is
+    // also the rectangle it is drawn in.
+    private const float CaptureRegionWidth = 164f;
+    private const float CaptureRegionHeight = 123f;
 
     // The name box's own height where the row carries none.
     private const float FallbackFieldHeight = 20f;

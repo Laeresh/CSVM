@@ -82,6 +82,33 @@ public class CampaignScrapbookZoomPageTests
         Assert.Equal(BoardJustify.Left, body.Justify); // SBZ_T_TEXTB's Justify 4, no reading of its own
     }
 
+    /// <summary>A player capture's detail view: the print at the mount's own inset offset and at
+    /// the size every retail photograph is, with the torn mount drawn over it, since
+    /// <c>SBZ_GRIME</c>'s Z of 200 stands above <c>SBZ_IMAGE</c>'s 0. The mount's translucent
+    /// middle is the tint the scrapbook shows and the exported file does not.</summary>
+    [Fact]
+    public void ACapturesZoomDrawsTheTornMountOverThePrint()
+    {
+        string root = ScrapbookCompositionFixture.WriteDangerZoneSpread(TestData.TempDir(), mission: 1);
+        var flow = FlowOnScrapbook(root);
+        File.WriteAllBytes(Path.Combine(flow.Store.DirFor("Zachary"), "Snap_1_18.PNG"), new byte[] { 0 });
+        flow.SetScrapbookZoom(mission: 1, spread: 1, item: 2);
+        flow.GoTo(CampaignScreen.ScrapbookZoom);
+
+        var pictures = flow.Page.Pictures;
+        Assert.Equal(3, pictures.Count);
+        Assert.Equal("SCRAPBOOK/SB_BG_Q.jpg", pictures[0].Art.Name);
+        Assert.EndsWith("Snap_1_18.PNG", pictures[1].Art.Name);
+        Assert.Equal(BoardArtLibrary.Loose, pictures[1].Art.Library);
+        Assert.Equal(50f, pictures[1].X); // SBZ_GRIME's own 40, plus the script's ten
+        Assert.Equal(24f, pictures[1].Y); // and its 16, plus eight
+        Assert.Equal(640f, pictures[1].Width);
+        Assert.Equal(480f, pictures[1].Height);
+        Assert.Equal("DZ_ZOOMgrimeframe.png", pictures[2].Art.Name);
+        Assert.Equal(40f, pictures[2].X);
+        Assert.Equal(16f, pictures[2].Y);
+    }
+
     [Fact]
     public void CloseReturnsToTheScrapbookPage()
     {

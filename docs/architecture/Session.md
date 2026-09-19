@@ -172,8 +172,8 @@ each in either order, the rule `Flight/StuntMission.cs` reads off `ia.json`'s zo
 Gate decode: [../formats/missions.md](../formats/missions.md).
 
 ## src/Session/CampaignSnapshot.cs
-The campaign Danger Zone photograph through `Flight/DangerZonePhotograph.cs`, scaled to the 164x123
-region the scrapbook forces, written into the flying profile's directory under the
+The campaign Danger Zone photograph through `Flight/DangerZonePhotograph.cs`, scaled to the 640x480
+every retail photograph is, written into the flying profile's directory under the
 `Snap_<mission>_<objective>` name a capture row resolves against. `Stage` requests one zone's still on the crossing frame, and a worker
 writes it under a `.PN_` pending name when the frame lands. `Commit` sweeps ids 10 to 31 at mission
 end, keeping them under their scrapbook names on a win and deleting them on a loss (the original's

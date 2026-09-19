@@ -33,6 +33,7 @@ choreography in [objectives.md](objectives.md).
 - [Plane selection: `PLANESELECTION.SCRIPT`](#plane-selection-planeselectionscript)
 - [Ammo selection: `ORDINANCELAYOUT.SCRIPT`](#ammo-selection-ordinancelayoutscript)
 - [The scrapbook: `SCRAPBOOK.SCRIPT`, `SCRAPBOOKZOOM.SCRIPT`, `SCRAPBOOK_TOC.SCRIPT`](#the-scrapbook-scrapbookscript-scrapbookzoomscript-scrapbook_tocscript)
+  - [The zoom view's sepia](#the-zoom-views-sepia)
   - [Export to Desktop](#export-to-desktop)
   - [Entry, exit and the table of contents](#entry-exit-and-the-table-of-contents)
 - [Callback reference](#callback-reference)
@@ -707,8 +708,9 @@ unreached slot showing langui 1219 `Not yet flown`.
 ### The danger-zone slot
 
 A scrap whose name begins `Snap_` is a player capture, not shipped art: it resolves against the
-profile directory instead of `assets\graphics\`, is skipped when the file is not on disk, is forced
-to a 164×123 region, and is drawn at 25% on the page but full size in the zoom. 167 of the 461 rows
+profile directory instead of `assets\graphics\`, is skipped when the file is not on disk, and is
+drawn into a fixed 164×123 rectangle on the page and at its written size in the zoom, that written
+size being the 640×480 every file the retail game wrote is. 167 of the 461 rows
 are these, named `Snap_<mission>_<objective>` and gated on that objective, with a
 `DZ_generic_corners` row at identical coordinates one step higher in draw order supplying the
 photo-corner mount.
@@ -820,6 +822,29 @@ seeds from `(mission << 8) | spread` and clears a ten-bit used-mask; called with
 returns an unused value 0 to 9 and marks it used, resetting once all ten are taken; called with -2
 it reseeds from the clock. The overlay is therefore stable for a given page and varies between
 pages, and `SB_P_GRIME` is drawn one z above the scrap it dirties.
+
+### The zoom view's sepia
+
+A photograph reads warm and faded in the book and plain in the file EXPORT TO DESKTOP writes, and
+no draw anywhere applies a colour matrix. The warmth is one piece of art drawn over the print.
+
+`SB_P_GRIME`, the page wash, is a neutral stain: a 5 px opaque white border around an interior of
+alpha 0.067 to 1.0 (median 0.149) whose colour is (11.7, 11.4, 11.2), so a grey 128 under it comes
+out at R/G 1.000 and B/G 1.000. It darkens without tinting. The original's own page confirms that
+nothing else colours the print: fitting that border's opaque white in a reference spread puts the
+drawn wash at gain R 0.9740, G 0.9799, B 0.9800 and the shipped scraps beside it at R 1.0126,
+G 1.0125, B 1.0125, neutral within a percent both times.
+
+The zoom's own mount is where the sepia comes from. `DZ_ZOOMgrimeframe.png` is a cream torn photo
+mount with a translucent 585×419 window at mount-local (37, 37): alpha 0.137 to 0.894 (median
+0.302) over the colour (188.8, 173.0, 131.0), which is R/G 1.092 and B/G 0.757. Over a grey 128 the
+window reads R 146.4, G 141.6, B 128.9, a ratio of R/G 1.034 and B/G 0.910. `LAYOUT.CSV` gives
+`SBZ_GRIME` a Z of 200 against `SBZ_IMAGE`'s 0, so the mount draws over the print rather than under
+it, and `SCRAPBOOKZOOM.SCRIPT` places the print at the mount's own position plus ten and eight
+instead of at the row's authored `ZoomX`/`ZoomY`. The window is cut for a 640×480 print at that
+offset, so a file of another shape lands inside the opaque mount instead of behind the window.
+EXPORT TO DESKTOP copies the file, which never meets the mount, and the exported PNG is therefore
+the plain print.
 
 ### Export to Desktop
 

@@ -30,13 +30,20 @@ public sealed class CampaignScrapbookZoomPage : CampaignPage
     private const float TitleFont = 16f;
     private const float BodyFont = 12f;
 
-    // SBZ_GRIME, the torn frame a player capture is mounted in, and where the inset then sits:
-    // the script places it at the frame's own position plus ten and eight, ignoring the row's
-    // authored ZoomX/ZoomY.
+    // SBZ_GRIME, the torn mount a player capture is shown in, and where the print then sits: the
+    // script places it at the mount's own position plus ten and eight, ignoring the row's authored
+    // ZoomX/ZoomY.
     private const float GrimeX = 40f;
     private const float GrimeY = 16f;
     private const float GrimeInsetDx = 10f;
     private const float GrimeInsetDy = 8f;
+
+    // The size a Danger Zone photograph is drawn at here, which every file the retail game wrote is
+    // and which the mount's translucent window is cut for. ⚠ Do not draw the print at its file's
+    // own size; a file of another shape lands inside the opaque mount instead of behind its window
+    // (docs/formats/campaign-screens.md, "The zoom view's sepia").
+    private const float PrintWidth = 640f;
+    private const float PrintHeight = 480f;
 
     // A langui row's inline bold and italic runs, <B>...<b> and <I>...<i>.
     private static readonly Regex InlineStyle = new("<[BbIi]>", RegexOptions.Compiled);
@@ -62,8 +69,10 @@ public sealed class CampaignScrapbookZoomPage : CampaignPage
     public override int RowCount => Source() == null ? 1 : 2;
 
     /// <summary>The family background, then the inset image: a shipped scrap at its own
-    /// <c>ZoomX</c>/<c>ZoomY</c>, a player capture inside the torn frame instead, at the position
-    /// that frame dictates.</summary>
+    /// <c>ZoomX</c>/<c>ZoomY</c>, a player capture at the position the torn mount dictates with
+    /// that mount drawn over it, <c>SBZ_GRIME</c>'s Z of 200 standing above <c>SBZ_IMAGE</c>'s 0.
+    /// The mount's translucent middle is what tints the print, and the file EXPORT TO DESKTOP
+    /// copies never sees it.</summary>
     public override IReadOnlyList<BoardPicture> Pictures
     {
         get
@@ -84,9 +93,10 @@ public sealed class CampaignScrapbookZoomPage : CampaignPage
                 {
                     var (grimeX, grimeY) = Flow.Layout.At(CampaignLayout.ZoomSection, "SBZ_GRIME", GrimeX, GrimeY);
                     pictures.Add(new BoardPicture(
-                        Flow.Layout.Art(CampaignLayout.ZoomSection, "SBZ_GRIME", GrimeFrame), grimeX, grimeY));
+                        new BoardArt(BoardArtLibrary.Loose, path), grimeX + GrimeInsetDx, grimeY + GrimeInsetDy,
+                        Width: PrintWidth, Height: PrintHeight));
                     pictures.Add(new BoardPicture(
-                        new BoardArt(BoardArtLibrary.Loose, path), grimeX + GrimeInsetDx, grimeY + GrimeInsetDy));
+                        Flow.Layout.Art(CampaignLayout.ZoomSection, "SBZ_GRIME", GrimeFrame), grimeX, grimeY));
                 }
 
                 return pictures;

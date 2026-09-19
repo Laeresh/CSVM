@@ -80,6 +80,12 @@ public static class ScrapbookComposition
     private const float CaptureNudgeX = 3f;
     private const float CaptureNudgeY = 4f;
 
+    // The region a capture is forced into on the page, which is the grime strip's own frame size.
+    // ⚠ Do not draw the print at its file's own size; the smudge is cut for this rectangle and
+    // lands beside the print otherwise (docs/formats/campaign-screens.md, "The danger-zone slot").
+    private const float CaptureWidth = 164f;
+    private const float CaptureHeight = 123f;
+
     // What the pointer does to the scrap it is over, SCRAPBOOK.SCRIPT's own 10002 handler: two
     // percent onto the scrap's authored scale, and z + 1000 so it stands over its neighbours. 10001
     // puts both back. A capture's grime frame goes with it, scaled 100 to 102 in the same handler.
@@ -157,7 +163,8 @@ public static class ScrapbookComposition
                 float x = scrap.X + CaptureNudgeX;
                 float y = scrap.Y + CaptureNudgeY;
                 pictures.Add(new BoardPicture(
-                    new BoardArt(BoardArtLibrary.Loose, capturePath(scrap) ?? string.Empty), x, y));
+                    new BoardArt(BoardArtLibrary.Loose, capturePath(scrap) ?? string.Empty), x, y,
+                    Width: CaptureWidth, Height: CaptureHeight));
                 pictures.Add(new BoardPicture(GrimeArt, x, y, grime.Next(pictures.Count)));
             }
 

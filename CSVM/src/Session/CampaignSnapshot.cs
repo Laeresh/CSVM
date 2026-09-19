@@ -19,14 +19,14 @@ namespace CSVM.Session;
 /// </summary>
 public static class CampaignSnapshot
 {
-    /// <summary>The region the scrapbook forces a capture into, so the file is written at exactly
-    /// that size: the page draws it at 25% and the zoom at full size, both off this one bitmap.
-    /// A pane of any other shape is squashed into it, which is what the original's own forced
-    /// region does to whatever the file holds.</summary>
-    public const int Width = 164;
+    /// <summary>The size a photograph is written at, which every file the retail game wrote is,
+    /// whatever resolution it displayed at. The page then forces the print into its 164x123 region
+    /// and the zoom draws it at this size, where the torn mount's window is cut for it. A pane of
+    /// any other shape is squashed into it.</summary>
+    public const int Width = 640;
 
-    /// <summary>The forced region's height, the partner of <see cref="Width"/>.</summary>
-    public const int Height = 123;
+    /// <summary>The written height, the partner of <see cref="Width"/>.</summary>
+    public const int Height = 480;
 
     // The objective-number band the original's commit sweep walks (FUN_004072a0): every pending
     // file in it is renamed on a win and deleted on a loss. Wider than the 18-31 the shipped
@@ -51,9 +51,9 @@ public static class CampaignSnapshot
 
     /// <summary>Requests one zone's photograph through <paramref name="pane"/> (the session hands
     /// the pilot's <see cref="Flight.DangerZonePhotograph"/>), written into
-    /// <paramref name="directory"/> as a pending file scaled to the forced region once the frame
-    /// lands. Answers the path it will be staged at, or null when there was no pane to
-    /// photograph.</summary>
+    /// <paramref name="directory"/> as a pending file scaled to <see cref="Width"/> by
+    /// <see cref="Height"/> once the frame lands. Answers the path it will be staged at, or null
+    /// when there was no pane to photograph.</summary>
     public static string? Stage(string directory, int mission, int objective, PaneRequest? pane)
     {
         string staged = Path.Combine(directory, Pending(mission, objective));

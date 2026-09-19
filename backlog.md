@@ -1016,19 +1016,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   will not fit tightens rather than grows the plate again. *Cross-refs:* `git log --grep=BL-954`,
   `git log --grep=BL-976` (the two rows that are live now).
 
-- `BL-1008` `[Fidelity]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: feel]` **The
-  scrapbook's photographs carry a light sepia tint in the original; the exported file does not.**
-  *Evidence:* "the photographs in the scrapbook have a light sepia effect on them, probably to
-  copy the photo quality of the era. its only in the scrapbook, exporting the screenshot to the
-  desktop does not have this effect". The stunt and Danger Zone photographs land as plain RGB
-  (`DangerZonePhotograph`, `ScrapbookExport`), and the scrapbook draws them as they are. *Fix
-  shape:* measure the tint from `CAP-52.mkv`'s open scraps and from an original photograph beside
-  its export (`playtest/CAP-58/` if it holds one), then a colour matrix on the scrapbook's
-  photograph draw (page and zoom), not on the PNG. *⚠ Traps:* the tint may be the scrapbook's
-  paper grime layer over the print (`ScrapbookGrime`) rather than a photo effect; separate the
-  two before adding either. *Cross-refs:* `git log --grep=BL-966`, `git log --grep=BL-984`
-  (the photograph's own lighting), `docs/formats/campaign-screens.md`.
-
 ## Splitscreen
 
 Our splitscreen mode (2–4 players) has no counterpart in the original, so every rule it authored

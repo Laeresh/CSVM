@@ -225,6 +225,17 @@ public class ScrapbookCompositionTests
         Assert.InRange(pictures[1].Frame, 0, 9);
     }
 
+    /// <summary>The print is forced into the page's own 164x123 region rather than drawn at the
+    /// file's size, so the smudge strip, which is cut at exactly that size, lands on it.</summary>
+    [Fact]
+    public void ACaptureIsForcedIntoThePagesOwnRegionSoItsGrimeCoversIt()
+    {
+        var pictures = ScrapbookComposition.Pictures(Root(), 4, 1, bestMask: 1, scrap => OnDisk(scrap));
+
+        Assert.Equal(164f, pictures[0].Width);
+        Assert.Equal(123f, pictures[0].Height);
+    }
+
     /// <summary>The grime generator hands out each of the ten frames once before repeating, and a
     /// page's own sequence is the same every time it is turned to.</summary>
     [Fact]

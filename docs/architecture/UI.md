@@ -112,10 +112,10 @@ The ten campaign screens, one file each, every one an `ICampaignPage` over `Camp
 player roster with its name field and confirmed delete, the cabin hub, the memento chooser its wall
 opens over `Session/CampaignMementos.cs`, the previous-missions contents list, the briefing with its
 revealed map and parchment note, the flight check, ammo selection, plane selection with its ratings
-and export, the scrapbook and one scrap's zoom view. Each names its own `LAYOUT.CSV` script and
-reads geometry through `CampaignLayout`, so a page holds rows, detail text and its own refusals and
-nothing about pixels. The chrome: [../org/campaign-board.md](../org/campaign-board.md) and
-[../org/debrief.md](../org/debrief.md); the scripts: [../formats/campaign-screens.md](../formats/campaign-screens.md).
+and export, the scrapbook and one scrap's zoom view, whose torn mount over a photograph is the
+book's sepia. Each names its own `LAYOUT.CSV` script and reads geometry through `CampaignLayout`, so
+a page holds rows, detail text and its own refusals and nothing about pixels. The chrome:
+[../org/campaign-board.md](../org/campaign-board.md) and [../org/debrief.md](../org/debrief.md); the scripts: [../formats/campaign-screens.md](../formats/campaign-screens.md).
 
 ## src/UI/CampaignCombo.cs
 A campaign screen's drop-down field (`PS_D_PILOTPLANE`, `OL_D_AMMO0`): the authored rectangle, the
@@ -150,7 +150,8 @@ The scrapbook's per-spread scrap layout, read from the shipped `SCRAPBOOK.CSV` r
 does; `Pictures` gates each row against the mission's merged best-to-date mask and stacks the
 survivors by draw order; `Openable` narrows the same gate to the rows that open a detail view;
 `ZoomFamily` reads a family's three text boxes. A player capture resolves through a caller-supplied
-path rather than the asset library and is skipped when no file is there. Parsed rows are cached
+path rather than the asset library, is forced into the page's own 164x123 region so the smudge cut
+for that rectangle lands on the print, and is skipped when no file is there. Parsed rows are cached
 per file behind a lock. The columns and the gate: [../formats/campaign-screens.md](../formats/campaign-screens.md).
 
 ## src/UI/ScrapbookExport.cs
