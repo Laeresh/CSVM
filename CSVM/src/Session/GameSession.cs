@@ -2237,6 +2237,10 @@ public partial class GameSession : Node3D
         // screen-space rule over one shared world mesh, so a single viewer sizes every round
         // against that pane and draws the same geometry oversized in all the others.
         projectiles.Viewers = _viewers;
+        // The first-person muzzle pair joins the world's point lights, which is how it reaches
+        // the cockpit interior; the empty stage has no set and keeps the omni flash.
+        if (_worldLights != null)
+            projectiles.BindPointLights(_worldLights);
         _worldRoot!.AddChild(projectiles);
         _projectiles = projectiles;
 

@@ -289,12 +289,12 @@ the two fuses and the three end conditions), the swept hit ray over world and ai
 impact that follows, the struck material's `IMPACT` row for a ray hit and the `default` row for a
 self-ended round ([../org/ordnanceTypes.md](../org/ordnanceTypes.md), "Which row a burst reads").
 Visuals: tracers and tip discs, the flash triad (none from the firing pilot's Cockpit view), the
-per-surface `IMPACT` effect, sound, stand-in burst and water splash. Damage and presentation leave
-through the sinks (`DamageSink` behind `WorldDamageGate`, `EffectSink`, `WashSink`, `BeeperTags`);
-a burst gathers bodies and aircraft nearest-first and cover-tested via `Collect*`, never the firing
-plane. Remake-own rules: the inherited-velocity decay ignores the held target (`InheritedFraction`);
-the tracer's pixel floor draws rounds the LOD would cut ([../org/tracers.md](../org/tracers.md));
-Enhanced Graphics alone faces a burst's upper ring back along the round's flight (`UpperRingOrient`).
+muzzle light (the first-person pair joins the `WorldLights` point term in original mode via
+`BindPointLights`), the `IMPACT` effect, sound, stand-in burst and water splash. Damage and
+presentation leave through the sinks (`DamageSink` behind `WorldDamageGate`, `EffectSink`,
+`WashSink`, `BeeperTags`); a burst gathers bodies and aircraft nearest-first, cover-tested, never
+the firing plane. Remake-own rules: the velocity decay ignores the held target (`InheritedFraction`);
+the tracer's pixel floor ([../org/tracers.md](../org/tracers.md)); Enhanced's astern burst ring.
 
 ## src/Flight/ProjectileFlyoutAnim.cs
 The `FLYOUT` `MODEL_ANIMATION` half of `ProjectilePool`, a partial-class file. Every ordnance round

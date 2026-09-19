@@ -271,6 +271,18 @@ draws its authored 800x600 space one-to-one.
   view, the screen-space tape's letters squeezed toward the ends like the ticks. *Blocks:* nothing
   tracks the outcome; a fail mints a new `BL` quoting which of (a)-(c) failed.
 
+- `PT-169` `[A/B: OriginalScreenshots/Videos/CAP-39 1.mkv + CAP-39 2.mkv]` **Gunfire lights the
+  cockpit struts for one frame a shot.** The first-person muzzle pair now feeds the per-vertex
+  point term the cockpit interior draws with (`git log --grep=BL-286`), so each shot drives the
+  canopy struts to their fully lit colour and leaves the gauge faces alone. Headless renders put
+  the lit strut at the clamp and the dash and gauge panel at about 1.00, as the clips do; the one-frame
+  flicker at the controls is what they cannot judge. CAP-39's labels are swapped: clip 1 is the
+  Bloodhawk (wood-and-black panel), clip 2 the Devastator (diamond plate, burl, red wings). Fly
+  with `--view=cockpit` in the Bloodhawk, then `--plane=player_pfighter`, guns held. *Look for:*
+  (a) the struts flickering warm-yellow with the gun rate, the way the clips do; (b) no
+  flat-white strut and no glow left between shots; (c) the gauge faces and the sky unchanged.
+  *Blocks:* nothing tracks the outcome; a fail mints a new `BL` quoting which of (a)-(c) failed.
+
 ### C1 · Bloodhawk vs AI, the kill sequence, sound on
 
 ```powershell

@@ -1032,6 +1032,67 @@ internal static class CombatSuites
         }
     }
 
+    [Suite("muzzle-light-first-person-point-term",
+        "in original mode a first-person shot's bigmuzzle_lt/muzzle_lt pair reaches the bound WorldLights set with its authored near/far and colour and lights no omni, while an unbound pool keeps the omni pair")]
+    internal static void MuzzleLightFirstPersonPointTerm(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var gun = WeaponDefs.Load(ctx.ZrdrPath, null).All.FirstOrDefault(w => w.IsGun);
+        var textures = new TextureArchive(texturesPath);
+        var pools = new List<ProjectilePool>();
+        try
+        {
+            ctx.Check(gun != null, $"a gun weapon loaded from the catalogue");
+            if (gun == null)
+                return;
+            var muzzle = new Transform3D(Basis.Identity, new Vector3(-7065f, 326f, -5519f));
+            ProjectilePool Fire(WorldLights? lights)
+            {
+                var p = new ProjectilePool(textures, null, null) { FirstPersonView = () => true };
+                pools.Add(p);
+                ctx.Host.AddChild(p);
+                if (lights != null)
+                    p.BindPointLights(lights);
+                p.Spawn(gun, muzzle, Vector3.Zero, shooterId: 0);
+                p._Process(1f / 60f);
+                return p;
+            }
+
+            var set = new WorldLights();
+            var bound = Fire(set);
+            ctx.Same(0, bound.ActiveMuzzleLights().Count(), $"the bound pool lights no omni");
+            var pending = bound.PendingPointFlashes().OrderByDescending(f => f.Far).ToList();
+            ctx.Same(2, pending.Count, $"the shot holds the first-person pair for the point term");
+            if (pending.Count == 2)
+            {
+                ctx.Check(pending[0].Near == 13.5f && pending[0].Far == 21.25f
+                          && pending[0].Color == new Color(0.88f, 0.78f, 0.36f),
+                    $"bigmuzzle_lt keeps its authored 13.5/21.25 and colour: {pending[0]}");
+                ctx.Check(pending[1].Near == 12.9f && pending[1].Far == 18.25f
+                          && pending[1].Color == new Color(0.93f, 0.78f, 0.36f),
+                    $"muzzle_lt keeps its authored 12.9/18.25 and colour: {pending[1]}");
+            }
+            set.Begin();
+            set.Commit(new[] { muzzle.Origin });
+            ctx.Same(2, set.CommittedPositions.Count, $"the commit carries the pair");
+            ctx.Check(pending.All(f => set.CommittedPositions.Contains(f.Position)),
+                $"…at the positions the shot queued");
+
+            var unbound = Fire(null);
+            ctx.Same(2, unbound.ActiveMuzzleLights().Count(),
+                $"ABLE-TO-FAIL CONTROL: with no point set bound the pair falls back to two omnis");
+            ctx.Same(0, unbound.PendingPointFlashes().Count(), $"…and queues nothing");
+        }
+        finally
+        {
+            foreach (var p in pools)
+                p.Free();
+            textures.Dispose();
+        }
+    }
+
     // Trail-world-anchor's own shape, for a death fire: PUFFER_STATE anchored on
     // TurretController.Site, the node a real destroy sequence targets. Site sits under a carrier
     // posed off-axis and translated between two ticks, the ZeppelinRuntime.Place shape (a plain

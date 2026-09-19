@@ -445,7 +445,10 @@ vertex light:
   `clamp(COLOR × (ambient + diffuse × max(N·L, 0) + P))`. The world position is
   `MODEL_MATRIX × VERTEX + light_origin`; `light_origin` is zero in the world and the eye position
   in the cockpit overlay's own `World3D`, which `CockpitOverlay.Sync` sets each frame, so a light
-  submitted in world space reaches the interior at its true distance.
+  submitted in world space reaches the interior at its true distance. The first-person muzzle pair
+  (`bigmuzzle_lt`/`muzzle_lt`, `docs/formats/weapon-effects.md`) is submitted this way by
+  `ProjectilePool`, which is how a shot lights the struts and the `lighting: true` dashboard; the
+  gauge faces are `lighting: false` and take nothing.
 
 ⚠ The term is per vertex, as in the original, so a light smaller than a surface's vertex spacing
 lights that surface only where it reaches a vertex. Billboard and cylindrical facade materials take

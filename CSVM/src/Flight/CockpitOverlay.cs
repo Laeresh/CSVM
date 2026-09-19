@@ -245,8 +245,9 @@ public sealed partial class CockpitOverlay : CanvasLayer
         _view.AddChild(interior);
     }
 
-    // The muzzle flashes are OmniLight3Ds in the main world, which this world cannot see, so each
-    // lit one gets a twin here at the same eye-relative place; twins past the lit count go dark.
+    // The omni muzzle flashes live in the main world, which this world cannot see, so each lit one
+    // gets a twin here at the same eye-relative place; twins past the lit count go dark. Only the
+    // enhanced interior is shaded and takes them; the original-mode interior takes the point term.
     private void MirrorFlashes(
         IEnumerable<(Vector3 Position, float Range, Color Color, float Energy)>? flashes, Vector3 eye)
     {

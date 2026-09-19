@@ -212,12 +212,12 @@ public sealed partial class ProjectilePool : Node3D
     // shared anchor under AnimRuntime's already-live gate would swallow all but one per RUN_TIME.
     private const int MaxCasings = 128;
 
-    // The muzzle light flash (muzzle_burst's `testfp`): real dynamic lights per shot, range/colour
-    // from the def's variants. The data deactivates them on the next event tick, so a flash lives
-    // ~2 frames here; energy is ours to pick (TUNE) for both the first- and third-person variants.
+    // The muzzle light flash (muzzle_burst's `testfp`) as pooled OmniLight3Ds: the third-person
+    // variants, and the first-person pair in enhanced mode or with no point term bound. The data
+    // deactivates them on the next event tick, so a flash lives ~2 frames here.
     private const int MaxMuzzleLights = 8;
     private const float MuzzleLightLife = 0.03f;   // s
-    private const float MuzzleLightEnergy = 2.5f;  // TUNE: no def carries energy, so the big first-person pair starts at the third-person stand-in's brightness
+    private const float MuzzleLightEnergy = 2.5f;  // TUNE: no def carries energy; Godot's omni needs one
 
     // The authored water-splash playback, verbatim from splash1.flt/bsplsh.flt (identical shapes).
     // See docs/formats/weapon-effects/ordnance.md "Water splash playback" for the source events.
@@ -240,6 +240,15 @@ public sealed partial class ProjectilePool : Node3D
     private static readonly string[] SplashFlipbookTextures = { "splash01", "splash02", "splash03" };
 
     private static readonly Color MuzzleSmokeTint = new(0.85f, 0.85f, 0.85f);
+
+    // muzzle_burst's 1stperson_lts pair, bigmuzzle_lt then muzzle_lt, verbatim: the AT_NODE offset
+    // on the effects root, the near/far range and the colour. Neither authors ambient or diffuse, so
+    // each adds its colour at weight 1 (docs/org/vertexLighting.md, "Point lights").
+    private static readonly (Vector3 At, float Near, float Far, Color Color)[] FirstPersonLights =
+    {
+        (new Vector3(11f, -1f, -5f), 13.5f, 21.25f, new Color(0.88f, 0.78f, 0.36f)),
+        (new Vector3(-11f, -1f, -5f), 12.9f, 18.25f, new Color(0.93f, 0.78f, 0.36f)),
+    };
 
     // Where a gun shot's three secondaries sit, in the firing muzzle node's own frame, -Z forward.
     // The casing, the muzzlepuffer smoke and the muzzle lights hang off the muzzleburst_effects
@@ -327,6 +336,10 @@ public sealed partial class ProjectilePool : Node3D
     // Pooled muzzle-light flashes: real OmniLight3Ds, reused round-robin.
     private readonly List<LightFlash> _lights = new();
 
+    // The first-person pair's lights waiting for, or inside, their one drawn frame of the point
+    // term (SubmitPointFlashes). Empty unless BindPointLights was called.
+    private readonly List<PointFlash> _pointFlashes = new();
+
     // The session's wind, read by the rocket-trail puffers this pool builds. Rocket trails
     // carry FRICTION and no WIND_FACTOR, so they take the engine default of 1, fully carried.
     private readonly Effects.EffectAmbience _ambience = Effects.EffectAmbience.Still;
@@ -401,6 +414,7 @@ public sealed partial class ProjectilePool : Node3D
     // after the first frame.
     private readonly List<ScreenSize.ViewerSample> _viewerScratch = new();
 
+    private WorldLights? _pointLights;         // the session's point set, null until BindPointLights
     private int _projHigh;                     // highest slot ever used (bounds the scan)
     private Node3D _flyoutModels = null!;   // container for the live rocket-body instances
     private Node3D _impactFxModels = null!;  // container for the short-lived impact-effect instances
@@ -907,6 +921,23 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
+    /// <summary>Routes the first-person muzzle pair into <paramref name="lights"/>, the session's
+    /// point-light set, in original mode: the world and the aircraft, the cockpit interior included,
+    /// then take it as the per-vertex point term rather than an <see cref="OmniLight3D"/>.</summary>
+    public void BindPointLights(WorldLights lights)
+    {
+        _pointLights = lights;
+        lights.AddSource(SubmitPointFlashes);
+    }
+
+    /// <summary>The first-person muzzle lights the point term holds now: world position, near and
+    /// far range and colour. Diagnostics for the suite; the shaders read the packed set.</summary>
+    public IEnumerable<(Vector3 Position, float Near, float Far, Color Color)> PendingPointFlashes()
+    {
+        foreach (var f in _pointFlashes)
+            yield return (AnchorPoint(f.Anchor, f.Local, out var at) ? at : f.At, f.Near, f.Far, f.Color);
+    }
+
     public override void _Ready()
     {
         // Tracers are velocity-aligned streaks, not billboarded, or a long streak would collapse
@@ -1332,6 +1363,7 @@ public sealed partial class ProjectilePool : Node3D
             l.Light.Visible = false;
             l.Anchor = null;
         }
+        _pointFlashes.Clear();
         foreach (var f in _impactFx)
             f.Model.QueueFree();
         _impactFx.Clear();
@@ -1716,14 +1748,16 @@ public sealed partial class ProjectilePool : Node3D
     // Where a flash's anchor puts it right now. False when it carries no anchor, or the node that
     // fired it has been freed or unparented mid-flash, which leaves the light where it last stood
     // for its remaining frames rather than snapping it to the world origin.
-    private static bool MuzzleFrame(LightFlash flash, out Vector3 world)
+    private static bool MuzzleFrame(LightFlash flash, out Vector3 world) =>
+        AnchorPoint(flash.Anchor, flash.Local, out world);
+
+    private static bool AnchorPoint(Node3D? anchor, Vector3 local, out Vector3 world)
     {
         world = Vector3.Zero;
-        if (flash.Anchor is not { } anchor
-            || !GodotObject.IsInstanceValid(anchor) || !anchor.IsInsideTree())
+        if (anchor is null || !GodotObject.IsInstanceValid(anchor) || !anchor.IsInsideTree())
             return false;
         var xf = anchor.GlobalTransform;
-        world = xf.Origin + (xf.Basis.Orthonormalized() * flash.Local);
+        world = xf.Origin + (xf.Basis.Orthonormalized() * local);
         return true;
     }
 
@@ -2736,10 +2770,9 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    // The dynamic muzzle-light flash: pooled OmniLight3Ds set from the muzzle_burst def's testfp
-    // branch, shown for a couple of frames, the two big 1stperson_lts lights in a first-person
-    // view, otherwise one of the three small 3rdperson_lts variants. Both branches sit at
-    // MuzzleSecondaryOffset, the displaced effects root, rather than at the muzzle node.
+    // The dynamic muzzle-light flash, the muzzle_burst def's testfp branch: the two big
+    // 1stperson_lts lights in a first-person view, otherwise one of the three small 3rdperson_lts
+    // variants. Both branches sit at MuzzleSecondaryOffset, the displaced effects root.
     // ⚠ A LIGHT_STATE RANGE is a falloff PAIR, not a band to roll in (WorldLights.Add): the outer
     // value is where the pool reaches zero, the OmniLight3D range. A rolled range pulsed per shot.
     private void FlashMuzzleLight(Transform3D muzzle, Node3D? anchor)
@@ -2750,13 +2783,16 @@ public sealed partial class ProjectilePool : Node3D
             return;
         if (FirstPersonView?.Invoke() == true)
         {
-            // testfp's PLAYER_1ST_PERSON branch: bigmuzzle_lt and muzzle_lt at the def's own
-            // AT_NODE offsets, one either side of the gun line, big enough to light the cockpit
-            // interior from a shot, strongest on the canopy struts (docs/formats/weapon-effects.md).
-            EmitLight(muzzle, anchor, MuzzleSecondaryOffset + new Vector3(11f, -1f, -5f),
-                21.25f, new Color(0.88f, 0.78f, 0.36f));
-            EmitLight(muzzle, anchor, MuzzleSecondaryOffset + new Vector3(-11f, -1f, -5f),
-                18.25f, new Color(0.93f, 0.78f, 0.36f));
+            // In original mode the pair is the point term, which is what lights the unshaded
+            // cockpit interior; an omni reaches nothing there (docs/formats/weapon-effects.md).
+            bool pointTerm = _pointLights != null && !GraphicsMode.Enhanced;
+            foreach (var (at, near, far, tint) in FirstPersonLights)
+            {
+                if (pointTerm)
+                    QueuePointFlash(muzzle, anchor, MuzzleSecondaryOffset + at, near, far, tint);
+                else
+                    EmitLight(muzzle, anchor, MuzzleSecondaryOffset + at, far, tint);
+            }
             return;
         }
         // The def's 3rdperson_lts variants: RANDOM_WEIGHT 0.333 / 0.333 / else, each a range band
@@ -2823,6 +2859,42 @@ public sealed partial class ProjectilePool : Node3D
         slot.Local = local;
         slot.LitAt = slot.Light.GlobalPosition;
         slot.Frames = 0;
+    }
+
+    // Holds one first-person light for the point term. Drops it when the set is already full,
+    // which is more than the shader can draw in one frame anyway.
+    private void QueuePointFlash(Transform3D muzzle, Node3D? anchor, Vector3 local, float near, float far, Color color)
+    {
+        if (_pointFlashes.Count >= WorldLights.MaxActive)
+            return;
+        _pointFlashes.Add(new PointFlash
+        {
+            Anchor = anchor,
+            Local = local,
+            At = muzzle.Origin + (muzzle.Basis.Orthonormalized() * local),
+            Near = near,
+            Far = far,
+            Color = color,
+        });
+    }
+
+    // The point set's per-commit call. Each light is submitted through the one rendered frame of
+    // its first commit, then dropped, as the def's INACTIVE on the next event tick leaves it lit for
+    // one drawn frame. It rides its firing node the way the omni flashes do.
+    private void SubmitPointFlashes(WorldLights lights)
+    {
+        ulong frame = Engine.GetProcessFrames();
+        for (int i = _pointFlashes.Count - 1; i >= 0; i--)
+        {
+            var f = _pointFlashes[i];
+            if (f.Frame is { } lit && lit != frame)
+            {
+                _pointFlashes.RemoveAt(i);
+                continue;
+            }
+            f.Frame = frame;
+            lights.Add(AnchorPoint(f.Anchor, f.Local, out var at) ? at : f.At, f.Color, f.Near, f.Far);
+        }
     }
 
     private void AgeCasings(float dt)
@@ -3379,5 +3451,16 @@ public sealed partial class ProjectilePool : Node3D
         public Vector3 Local;   // the light's placement in the anchor's own frame
         public Vector3 LitAt;   // where the muzzle stood when it was lit, for the placement breadcrumb
         public int Frames;      // drawn frames this flash has lived, for the placement breadcrumb
+    }
+
+    // One first-person muzzle light held for the point term (SubmitPointFlashes).
+    private sealed class PointFlash
+    {
+        public Node3D? Anchor;  // the node that fired, resolved at each commit like LightFlash's
+        public Vector3 Local;   // the light's placement in the anchor's own frame
+        public Vector3 At;      // where it was lit, used when the anchor is gone
+        public float Near, Far; // the authored range pair, weight 1 inside Near and 0 past Far
+        public Color Color;
+        public ulong? Frame;    // the process frame of its first commit; null until then
     }
 }

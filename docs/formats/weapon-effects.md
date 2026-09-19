@@ -51,7 +51,12 @@ already-live gate would drop every ejection but one per 2 s window):
   `RANDOM_WEIGHT` variants' range/colour verbatim (1–2 / 1.25–3.25 / 2–3.75 m; 0.88–0.93,
   0.78, 0.36); the def deactivates it on the next event tick, rendered as a ~2-frame flash.
   The `PLAYER_1ST_PERSON` branch is the `bigmuzzle_lt`/`muzzle_lt` pair at `AT_NODE` (±11, −1, −5)
-  (range 21.25 / 18.25 m), lit while a pilot holds a first-person view.
+  (near/far 13.5/21.25 and 12.9/18.25 m, colours (0.88, 0.78, 0.36) and (0.93, 0.78, 0.36), no
+  ambient or diffuse so the scalar is 1), lit while a pilot holds a first-person view. In original
+  mode that pair is not an omni: it joins the session's `WorldLights` set as the per-vertex point
+  term (`docs/org/vertexLighting.md` "Point lights") for the one drawn frame of its first commit,
+  which is what lights the unshaded cockpit interior through `light_origin`. An omni reaches nothing
+  there. Enhanced mode, and a pool with no set bound (the empty stage), keep the omni pair.
   Every one of them is **anchored to the firing muzzle node** and re-placed on that node's drawn
   pose each frame, the way the flash quads are: a light left at the world point it was lit at ends
   a frame of travel astern of the muzzle, ~1.7 m at 100 m/s over the two frames it lives. The pool
