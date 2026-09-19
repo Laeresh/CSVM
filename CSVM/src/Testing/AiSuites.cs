@@ -2499,7 +2499,10 @@ internal static class AiSuites
         + "5 km away, while an unforced dispatch on the same dead speaker stays silent, and the "
         + "three gloats run the decoded polarity off the same kill report: a friendly kill is "
         + "silent, the killer speaks 22 over a victim on the player's team and 23 over one that "
-        + "is not, and the player's own kill broadcasts 24 on the player's flight")]
+        + "is not, and the player's own kill broadcasts 24 on the player's flight, and an evade "
+        + "episode's end picks the taunt pair off the evade flag: a pursuer still inside the tail "
+        + "cone taunts 26 with 27 silent, a shaken one taunts 27, and a step between the two "
+        + "evade modes taunts nothing")]
     internal static void AiVoice(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -2767,6 +2770,63 @@ internal static class AiSuites
                 && played[^1].Trigger == AiVoiceDispatcher.GlPlyrDwn
                 && played[^1].Tag == wingman.Name && played[^1].Clip.StartsWith("snd_id2_GL-PlyrDwn"),
                 $"the player's own kill broadcasts #24 on the player's team, elected onto the wingman last={played[^1]}");
+
+            // --- the taunt pair (26/27): the evade episode's own end decides which one, off the
+            // evade flag, whose hold condition is the decoded tail cone. The machine is driven
+            // directly, the transitions being what the runtime watches.
+            PumpRadio(radio);
+            var evader = Rig(FlightRoster.ShooterIdBase + 7, enemyTeam, human: false);
+            var machine = new AiModeMachine(new System.Random(11));
+            evader.Pilot!.Machine = machine;
+            runtime.RegisterAi(evader, accentId: 12, talkerChance: 1f, constitutionChance: 1f);
+            var evaderPos = evader.WorldPosition;
+            var pursuerPos = evaderPos + new Vector3(0f, 0f, 300f);
+            var onTail = (evaderPos - pursuerPos).Normalized();  // the pursuer's nose on the evader
+            int tauntsBefore = played.Count;
+
+            // The episode: an ordered chase takes the anchor and the chase deadline, then a hit
+            // whose bite covers the whole pool fails the steady-hand roll outright, and with no
+            // maneuver library the reaction is the flag alone.
+            machine.Enter(AiMode.Pursue, "ordered");
+            machine.NotifyDamage(1e6f, 1e6f, 100f, 100f);
+            ctx.Check(machine.Mode == AiMode.Evade && machine.Evading,
+                $"the failed steady-hand roll opened an evade episode mode={AiModeMachine.NameOf(machine.Mode)} flag={machine.Evading}");
+
+            // A step inside the episode: an ordered program with nothing left to fly hands
+            // straight back to evade, and neither transition is an outcome.
+            machine.Enter(AiMode.EvasiveManeuver, "ordered");
+            machine.Update(evaderPos, Vector3.Forward, pursuerPos, AiMode.Pursue, dt: 0.1f,
+                targetNose: onTail);
+            ctx.Check(machine.Mode == AiMode.Evade && machine.Evading
+                && played.Count == tauntsBefore,
+                $"a step between the two evade modes is the same episode and taunts nothing lines={played.Count - tauntsBefore}");
+
+            // The end with the pursuer still inside the tail cone: the chase's own dwell reverts
+            // the task while the flag stands, so the evader taunts its failed shake, not the pair.
+            machine.Update(evaderPos, Vector3.Forward, pursuerPos, AiMode.Pursue,
+                dt: machine.AttackDwellS + 1f, targetNose: onTail);
+            ctx.Check(played.Count == tauntsBefore + 1
+                && played[^1].Trigger == AiVoiceDispatcher.TaFailShk
+                && played[^1].Tag == evader.Name && played[^1].Clip.StartsWith("snd_id2_TA-FailShk"),
+                $"an evade ending with the pursuer still on the tail taunts #26, and #27 does not fire last={(played.Count > tauntsBefore ? played[^1].ToString() : "none")}");
+            PumpRadio(radio);
+
+            // The flag clearing with the aircraft already off the two evade modes: nothing is
+            // spoken, and the next hit opens a fresh episode.
+            machine.Update(evaderPos, Vector3.Forward, pursuerPos, AiMode.Pursue, dt: 0.1f,
+                targetNose: -onTail);
+            ctx.Check(!machine.Evading && played.Count == tauntsBefore + 1,
+                $"the flag clearing outside an evade mode taunts nothing lines={played.Count - tauntsBefore}");
+
+            // …and the shaken end, the same aircraft: the pursuer's nose falls away while the
+            // evade stands, the reaction completes, and that is the pair's other half.
+            machine.NotifyDamage(1e6f, 1e6f, 100f, 100f);
+            machine.Update(evaderPos, Vector3.Forward, pursuerPos, AiMode.Pursue, dt: 0.1f,
+                targetNose: -onTail);
+            ctx.Check(played.Count == tauntsBefore + 2
+                && played[^1].Trigger == AiVoiceDispatcher.TaSucShk
+                && played[^1].Tag == evader.Name && played[^1].Clip.StartsWith("snd_id2_TA-SucShk"),
+                $"…while one ending with the pursuer shaken taunts #27 instead last={played[^1]}");
 
             ctx.Note($"lines: {string.Join(", ", played)}");
         }

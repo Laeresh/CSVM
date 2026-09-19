@@ -248,11 +248,11 @@ are spoken by the killer, not by the aircraft that died.
 | 20–21 | wired | `FlightController.Downed`, with force: id 20 (`DA`) when the dying aircraft's `Team` is `AimAssist.PlayerTeam`, id 21 (`DE`) otherwise (`AiVoiceRuntime.RegisterAi`). Free flight and `--vs` still give every AI its own default team, so `DA` stays dormant there in practice, it fires once a mission places an AI on the player's team |
 | 22–24 | wired | the same `FlightController.Downed` report read for its killer (`AiVoiceRuntime.OnDowned`), the decoded order of the two predicates: friendly over shooter and victim and no gloat is chosen, else friendly over the victim and `AimAssist.PlayerTeam` picks 22, hostile picks 23, and the killer speaks it. A kill by a rig registered through `RegisterPlayer` takes 24 instead and broadcasts on the player's team, which is a stand-in: the original addresses 24 to the player's own aircraft and broadcasts 16 (row 16). A killer that resolved no voice of its own is silent |
 | 25 | wired | a pursuer's failed sixth-sense (tail) check stunning it, its evading AI target speaks; a human evader stays silent (the player speaks no AI lines) |
-| 27 | wired | the speaker's own evade/evasive-maneuver reaction completing ("fires as the reaction flag clears", decoded) |
+| 26 | wired | our chosen stand-in for the undecoded shake-attempt check: the speaker's evade episode ending with the flag still up, which is the decoded tail-cone hold test (`AiModeMachine.EvadeClearAlignment`) answering that the pursuer's nose is still on it. The dwell reverting the task, a stun and an avoid-crash climb-out are the ends that reach it |
+| 27 | wired | the same episode end with the flag already cleared, the pursuer shaken ("fires as the reaction flag clears", decoded). An episode the speaker leaves with the flag still up is 26, not this. A target lost mid-reaction reads as a shake, the flag's own clear rule with no pursuer left to test |
 | 0 | unwired | turret acquisition is `TurretController`'s event; owned by C9's thread, not wired from here |
 | 15 | unwired | the danger-zone modes are never entered (their gate data is undecoded, F17) |
 | 16 | unwired | the original broadcasts it on the local player's kill of a hostile (above). The remake broadcasts 24 on that event instead of addressing 24 to the player's own rig, so the two rows move together, left for a future item |
-| 26 | unwired | the original's shake-attempt check is undecoded; no machine transition maps to it without force-fitting |
 | 28 | unwired | both arms (above) are answerable now that a team model exists, no dispatch site chosen yet, left for a future item |
 
 Stand-ins and inventions, named:
@@ -280,6 +280,10 @@ Stand-ins and inventions, named:
   looks up `talker_chance` at the block's own talker rating and `constitution_chance` at its own
   constitution rating, each on its own curve. A rating a block does not author falls back to the
   session's skill rating, same as before.
+- **The taunt pair 26/27 is decided by the evade flag**, one dispatch point at the episode's end
+  (`AiVoiceRuntime.OnModeChanged`): the original's shake-attempt check is undecoded, so the stand-in
+  is the flag's own decoded hold test, the pursuer's nose inside the tail cone. A move between the
+  two evade modes is the same episode and speaks nothing.
 - The gate's "must not already be talking" is a hook (`AiVoiceDispatcher.IsTalking`) the session
   answers from the radio channel: every combat line is queued with the speaker it belongs to, and
   that speaker is talking while its own line waits or is on air, for the line's own length

@@ -56,6 +56,8 @@ public sealed class AiVoiceDispatcher
 
     public const int TaFailTail = 25;
 
+    public const int TaFailShk = 26;
+
     public const int TaSucShk = 27;
 
     /// <summary>The gate's outcome when the resolver finds no playable clip for the speaker.</summary>

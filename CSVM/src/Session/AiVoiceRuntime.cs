@@ -141,10 +141,10 @@ public sealed partial class AiVoiceRuntime : Node
         {
             return;
         }
-        machine.ModeChanged += (from, to, why) => OnModeChanged(ai, from, to, why);
+        machine.ModeChanged += (from, to, _) => OnModeChanged(ai, machine, from, to);
     }
 
-    private void OnModeChanged(FlightController ai, AiMode from, AiMode to, string why)
+    private void OnModeChanged(FlightController ai, AiModeMachine machine, AiMode from, AiMode to)
     {
         int speakerId = ai.PlayerIndex;
         // Acquisition (our chosen dispatch point, marked in combat-voice.md): committing to an
@@ -167,11 +167,14 @@ public sealed partial class AiVoiceRuntime : Node
             Play(_dispatcher.Dispatch(evader.PlayerIndex, AiVoiceDispatcher.TaFailTail, _now));
         }
 
-        // The evade flag clearing on the pursuer's nose falling away: the decoded TA-SucShk
-        // dispatch point, one call per evade episode however many maneuvers it chained.
-        if (from is AiMode.Evade or AiMode.EvasiveManeuver && why == "reaction complete")
+        // The evade episode's end decides the taunt pair. A flag still standing is the pursuer's
+        // nose inside the decoded tail cone (26); a cleared flag is the shake (27). A step
+        // between the two evade modes is the same episode and stays silent.
+        if (from is AiMode.Evade or AiMode.EvasiveManeuver
+            && to is not (AiMode.Evade or AiMode.EvasiveManeuver))
         {
-            Play(_dispatcher.Dispatch(speakerId, AiVoiceDispatcher.TaSucShk, _now));
+            Play(_dispatcher.Dispatch(speakerId,
+                machine.Evading ? AiVoiceDispatcher.TaFailShk : AiVoiceDispatcher.TaSucShk, _now));
         }
     }
 

@@ -688,7 +688,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `git log --grep=BL-977` (the Instant Action prewarm gap),
   the saved Voice level (`Utils/AudioMix.cs`, the `audio-buses` suite) if the lines dispatch and
   stay inaudible; `BL-986` (the spawn-time commit is muted and never re-arms, the largest single
-  cause of the low rate), `BL-987`, `BL-989` to `BL-991` and `BL-996` (the unwired trigger ids).
+  cause of the low rate), `BL-989` to `BL-991` and `BL-996` (the unwired trigger ids).
 
 - `BL-986` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: trace]` **An ace commits to
   the player on the first frame, inside the 2 s mute window, so `WA-Attack` and the bearing
@@ -710,18 +710,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   which happens every few seconds near terrain and would flood the 15 s slot cooldown with
   failed rolls. *Playtest after fix:* Instant Action → C1 → Dogfighting an Ace with
   `--log=sound:debug`; expect a `trigger #14` line as the ace closes, and one per re-engagement.
-  *Cross-refs:* `BL-934` (the campaign-side silence, same runtime), `BL-987` (the missing
-  failed-shake taunt, the other half of a 1v1's chatter).
-
-- `BL-987` `[Feature]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **`TA-FailShk`
-  (id 26, the speaker failed to shake its pursuer) has no dispatch site, so an ace that stays in
-  your gunsight through an evade never taunts.** *Evidence:* `docs/formats/combat-voice.md`'s
-  dispatch-site table marks 26 unwired because the original's shake-attempt check is undecoded;
-  its pair, `TA-SucShk` (27), is wired to the evade reaction completing. In a 1v1 27 is the only
-  taunt that can fire at all (25 needs an AI evader). *Fix shape:* the evade episode ending with
-  the pursuer still inside its tail cone is the natural stand-in for 26, with 27 kept for the
-  episode that ends with the pursuer shaken; today 27 fires on every `reaction complete`
-  regardless. Name the stand-in in the dispatch-site table. *Cross-refs:* `BL-986`, `BL-934`.
+  *Cross-refs:* `BL-934` (the campaign-side silence, same runtime).
 
 - `BL-989` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **`DS-Ally`
   (id 28) has no dispatch site, so a wingman hit by your round never complains.** *Evidence:*
