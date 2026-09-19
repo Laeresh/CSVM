@@ -83,6 +83,7 @@ public sealed class TurretController
     private Vector3 _lastPos;
     private bool _hasLastPos;
     private bool _firstShotLogged;
+    private FlightController? _acquisitionReported; // the human this gunner has already warned about
     private Godot.Collections.Array<Rid>? _platformColliders;
     private Godot.Collections.Array<Rid>? _siteColliders;
 
@@ -535,9 +536,11 @@ public sealed class TurretController
         if (!AcquireTarget(out var targetPos, out var targetVel))
         {
             Gate = TurretGate.NoTarget;
+            _acquisitionReported = null; // an empty field re-arms the warning, as a new target does
             return; // nothing in the detection field: hold the current pose
         }
         TargetPosition = targetPos;
+        ReportAcquisition(targetPos);
 
         // The base frame the arcs are authored in: the yaw node's rest orientation on the host.
         var baseBasis = BaseBasis();
@@ -767,6 +770,26 @@ public sealed class TurretController
         return best < float.MaxValue;
     }
 
+    // The WA-Turret dispatch site (docs/formats/combat-voice.md): one report per acquisition
+    // episode, on the first tick this gunner both holds a human player and sees it. Losing that
+    // target re-arms it, so a gunner tracking one player warns the flight once.
+    // ⚠ Keep this sight line uncached. The fire path's cached verdict is stamped out of the RNG
+    // stream that also draws the scatter. A refresh here would move every round this gun fires.
+    private void ReportAcquisition(Vector3 targetPos)
+    {
+        if (TargetSource is not FlightController { IsHumanPiloted: true } player)
+        {
+            _acquisitionReported = null;
+            return;
+        }
+        if (ReferenceEquals(player, _acquisitionReported) || SightLineBlocked(targetPos))
+        {
+            return;
+        }
+        _acquisitionReported = player;
+        _pool.ReportTurretAcquisition(this, player);
+    }
+
     // The original casts from the platform to 0.2 m above the target and caches the verdict for
     // a random 1–2 s before re-testing; a failed test blocks firing. World geometry only,
     // another aircraft in the way is not cover. C9a applies the cached test to whatever target
@@ -777,12 +800,16 @@ public sealed class TurretController
         if (now >= _losNext)
         {
             _losNext = now + RandRange(1f, 2f);
-            _losBlocked = _worldQuery != null
-                ? WorldBlocksLine(_worldQuery, WorldPosition, targetPos + Vector3.Up * 0.2f)
-                : WorldRayBlocked(WorldPosition, targetPos + Vector3.Up * 0.2f);
+            _losBlocked = SightLineBlocked(targetPos);
         }
         return _losBlocked;
     }
+
+    // The cast itself, either family's rule: a carried gunner reads the host's IWorldQuery seam,
+    // an emplacement its own space with its rig excluded.
+    private bool SightLineBlocked(Vector3 targetPos) => _worldQuery != null
+        ? WorldBlocksLine(_worldQuery, WorldPosition, targetPos + Vector3.Up * 0.2f)
+        : WorldRayBlocked(WorldPosition, targetPos + Vector3.Up * 0.2f);
 
     // FlightController.WorldBlocksLine's twin for a gunner with no host rig, against the space its
     // own node lives in. The exclusion is the site subtree, which is the gun's rig and nothing

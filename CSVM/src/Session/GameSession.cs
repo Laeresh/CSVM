@@ -2716,6 +2716,9 @@ public partial class GameSession : Node3D
             var combatVoice = new CombatVoice(vDefs, vGroups, CombatVoice.LoadAccents(state.ZrdrPath));
             _aiVoice = new AiVoiceRuntime(combatVoice, worldSounds, _radio, Rng.NewSystemRandom(Rng.Ai));
             _worldRoot!.AddChild(_aiVoice); // its realtime tick; freed with the world subtree
+            // WA-Turret: subscribed to the pool, not to a turret list, so the emplacements built
+            // further down and every carried gunner report through one seam.
+            _aiVoice.WatchTurrets(projectiles);
             foreach (var rig in _rigs)
             {
                 if (rig.Controller is { } human)

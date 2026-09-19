@@ -112,7 +112,7 @@ the nearest hostile out of the vehicle list and then the mission structures, sto
 pass while `AiTargetRanking.AircraftFirst` holds and an aircraft is in reach, solves the lead through
 `AimAssist.TryIntercept`, slews the PARTS nodes inside the authored arcs, and runs the fire gates:
 activation, the attack window, the barrel-on-solution cone, a cached line of sight and the
-`FIRE_RATE` redraw, each round renewing its `GunVoice` off `SOUNDS.CANNON`. Aliveness, teams, and what a gun's own mount is to its sight line and to its rounds sit at their members: [../org/targeting.md](../org/targeting.md), [../formats/turrets.md](../formats/turrets.md).
+`FIRE_RATE` redraw, each round renewing its `GunVoice` off `SOUNDS.CANNON`. An acquired human player is reported once per episode to `ProjectilePool`, the combat voice's `WA-Turret` site. Aliveness, teams, and what a gun's own mount is to its sight line and to its rounds sit at their members: [../org/targeting.md](../org/targeting.md), [../formats/turrets.md](../formats/turrets.md), [../formats/combat-voice.md](../formats/combat-voice.md).
 
 ## src/Flight/WeaponCursor.cs
 `FireControl`'s internal ammo-slot index math, an `internal` class nothing else may call: `NextArmed`
@@ -290,11 +290,11 @@ impact that follows, the struck material's `IMPACT` row for a ray hit and the `d
 self-ended round ([../org/ordnanceTypes.md](../org/ordnanceTypes.md), "Which row a burst reads").
 Visuals: tracers and tip discs, the flash triad (none from the firing pilot's Cockpit view), the
 muzzle light (the first-person pair joins the `WorldLights` point term in original mode via
-`BindPointLights`), the `IMPACT` effect, sound, stand-in burst and water splash. Damage and
-presentation leave through the sinks (`DamageSink` behind `WorldDamageGate`, `EffectSink`,
-`WashSink`, `BeeperTags`); a burst gathers bodies and aircraft nearest-first, cover-tested, never
-the firing plane. Remake-own rules: the velocity decay ignores the held target (`InheritedFraction`);
-the tracer's pixel floor ([../org/tracers.md](../org/tracers.md)); Enhanced's astern burst ring.
+`BindPointLights`), the `IMPACT` effect, sound, stand-in burst and water splash. Damage and presentation
+leave through the sinks (`DamageSink` behind `WorldDamageGate`, `EffectSink`, `WashSink`, `BeeperTags`, and
+`TurretAcquiredPlayer`, the seam both turret families report an acquired player through); a burst gathers
+bodies and aircraft nearest-first, cover-tested, never the firing plane. Remake-own rules: the velocity decay
+ignores the held target (`InheritedFraction`); the tracer's pixel floor ([../org/tracers.md](../org/tracers.md)); Enhanced's astern burst ring.
 
 ## src/Flight/ProjectileFlyoutAnim.cs
 The `FLYOUT` `MODEL_ANIMATION` half of `ProjectilePool`, a partial-class file. Every ordnance round

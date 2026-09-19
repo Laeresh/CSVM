@@ -22,6 +22,10 @@ internal static class AiSuites
     // audible radius, so the positional law would hold the line at its floor.
     private const float FarEarMetres = 5000f;
 
+    // The airframe the turret decode uses as its own worked example of a thirdp mount, so the
+    // WA-Turret leg has a gunner to build without a chapter world's emplacements.
+    private const string TurretCarrier = "player_fbrand";
+
     [Suite("flight-roster-transaction",
         "FlightRoster owns human and AI assembly as atomic transactions: a late second-human " +
         "failure removes external bindings, a retry commits both humans in order with complete " +
@@ -2503,7 +2507,11 @@ internal static class AiSuites
         + "episode's end picks the taunt pair off the evade flag: a pursuer still inside the tail "
         + "cone taunts 26 with 27 silent, a shaken one taunts 27, and a step between the two "
         + "evade modes taunts nothing, and the ally distress (28) answers a round from the player "
-        + "alone and only on a teammate, spoken by the aircraft it struck")]
+        + "alone and only on a teammate, spoken by the aircraft it struck; and a carried "
+        + "gunner raises WA-Turret once per acquisition episode, not at all while it holds the "
+        + "nearer AI, once when the player is the acquired target with a clear sight line, with "
+        + "the flight rather than the gun speaking id 0 on the player's team, nothing further "
+        + "while it keeps tracking, and again after it has lost and re-acquired the player")]
     internal static void AiVoice(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -2531,6 +2539,7 @@ internal static class AiSuites
         MissionRadio? radio = null;
         Session.AiVoiceRuntime? runtime = null;
         FlightController? ai = null;
+        ProjectilePool? turretPool = null;
         var gloatRigs = new List<FlightController>();
         try
         {
@@ -2850,6 +2859,112 @@ internal static class AiSuites
                 && played[^1].Tag == wingman.Name && played[^1].Clip.StartsWith("snd_id2_DS-Ally"),
                 $"…while the player's round on a TEAMMATE draws #28 from the struck aircraft last={(played.Count > allyBefore ? played[^1].ToString() : "none")}");
 
+            // --- WA-Turret (id 0): the gunner's own acquisition, warned once per episode and
+            // spoken by the flight rather than by the gun. A carried gunner and a live pool: an
+            // emplacement wants a world this suite has none of, and the pool is the vehicle list.
+            PumpRadio(radio);
+            var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
+            var carrierStats = PlaneStats.Load(ctx.ZrdrPath, TurretCarrier);
+            var live = turretPool = new ProjectilePool(textures, null, null);
+            ctx.Host.AddChild(live);
+            runtime.WatchTurrets(live);
+
+            FlightController PoolRig(int index, int team, bool human, string plane,
+                PlaneStats rigStats, Vector3 at)
+            {
+                var poolModel = new PlaneBuilder(planesGamez, textures).Build(plane);
+                var rig = new FlightController
+                {
+                    PlaneModel = poolModel,
+                    Collider = PlaneCollider.Build(poolModel),
+                    Damage = new PlaneDamage(rigStats.DestroyableParts),
+                    PlayerIndex = index,
+                    Team = team,
+                    IsHumanPiloted = human,
+                    Pilot = human ? null : new AiPilot(),
+                    Projectiles = live,
+                    UseKeyboard = false,
+                    PadDevices = System.Array.Empty<int>(),
+                    AllowPause = false,
+                };
+                rig.AddChild(poolModel);
+                rig.Setup(new FlightModel(rigStats), null, new CamParams(), at, at + Vector3.Forward);
+                rig.Name = $"gunrig{index}";
+                ctx.Host.AddChild(rig);
+                rig.PlaceHeld(at, at + Vector3.Forward); // parked: no phantom spawn velocity
+                gloatRigs.Add(rig);
+                return rig;
+            }
+
+            // 20 km off the rigs above, so the gunner's detection field holds these three alone.
+            var gunAt = new Vector3(20000f, 500f, 0f);
+            var carrier = PoolRig(FlightRoster.ShooterIdBase + 10, enemyTeam, human: false,
+                TurretCarrier, carrierStats, gunAt);
+            var carried = TurretController.BuildCarried(turretDefs, carrierStats,
+                carrier.PlaneModel!, weapons, carrier, live);
+            ctx.Check(carried.Length > 0,
+                $"the {TurretCarrier}'s carried gunner builds count={carried.Length}");
+            if (carried.Length == 0)
+                return;
+            var gunner = carried[0];
+            float reach = gunner.Def.DetectionRange;
+            int acquisitions = 0;
+            FlightController? warnedAbout = null;
+            live.TurretAcquiredPlayer += (_, about) =>
+            {
+                acquisitions++;
+                warnedAbout = about;
+            };
+
+            // The AI decoy sits nearer than the player, so the gunner's own picker holds it: an
+            // acquisition against an AI raises nothing however close it is.
+            var decoy = PoolRig(FlightRoster.ShooterIdBase + 11, AimAssist.PlayerTeam, human: false,
+                ctx.PlaneName, stats, gunAt + new Vector3(reach * 0.3f, 0f, 0f));
+            var flown = PoolRig(FlightRoster.ShooterIdBase + 12, AimAssist.PlayerTeam, human: true,
+                ctx.PlaneName, stats, gunAt + new Vector3(reach * 0.6f, 0f, 0f));
+            var outOfReach = gunAt + new Vector3(reach * 4f, 0f, 0f);
+
+            // Only the gunner is stepped: an unstepped pool moves no round, so nothing this leg
+            // fires can damage a rig and add a line of its own.
+            void StepGun(int frames)
+            {
+                for (int i = 0; i < frames; i++)
+                {
+                    gunner.SimStep(1f / 60f);
+                }
+            }
+
+            int turretBefore = played.Count;
+            StepGun(60);
+            ctx.Check(ReferenceEquals(gunner.TargetSource, decoy) && acquisitions == 0
+                && played.Count == turretBefore,
+                $"a gunner holding the nearer AI raises nothing target={(gunner.TargetSource as FlightController)?.Name} events={acquisitions}");
+
+            decoy.PlaceHeld(outOfReach, gunAt);
+            StepGun(60);
+            ctx.Check(acquisitions == 1 && ReferenceEquals(warnedAbout, flown),
+                $"the player alone in the field raises the site once events={acquisitions} about={warnedAbout?.Name.ToString() ?? "none"}");
+            ctx.Check(played.Count == turretBefore + 1
+                && played[^1].Trigger == AiVoiceDispatcher.WaTurret
+                && played[^1].Tag == wingman.Name
+                && played[^1].Clip.StartsWith("snd_id2_WA-Turret"),
+                $"…and the flight, not the gun, broadcasts WA-Turret on the player's team last={(played.Count > turretBefore ? played[^1].ToString() : "none")}");
+
+            StepGun(300);
+            ctx.Check(acquisitions == 1,
+                $"holding the same player raises nothing further: one event per episode, not per tick events={acquisitions}");
+
+            // The re-arm, both halves: losing the target and acquiring it again. The line itself
+            // stays silent, the slot's own 15 s cooldown, which is why the EVENT is counted here.
+            flown.PlaceHeld(outOfReach, gunAt);
+            StepGun(60);
+            ctx.Check(gunner.TargetSource == null && acquisitions == 1,
+                $"the gunner loses the player with nothing new raised gate={gunner.Gate} events={acquisitions}");
+            flown.PlaceHeld(gunAt + new Vector3(reach * 0.6f, 0f, 0f), gunAt);
+            StepGun(60);
+            ctx.Check(acquisitions == 2,
+                $"…and re-acquiring it warns the flight again events={acquisitions}");
+
             ctx.Note($"lines: {string.Join(", ", played)}");
         }
         finally
@@ -2860,6 +2975,7 @@ internal static class AiSuites
             }
             ai?.Free();
             runtime?.Free();
+            turretPool?.Free();
             radio?.Free();
             if (sounds != null)
             {

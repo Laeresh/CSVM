@@ -133,6 +133,18 @@ public sealed partial class AiVoiceRuntime : Node
         };
     }
 
+    /// <summary>Wires the <c>WA-Turret</c> site (id 0): every gunner in the session, carried or
+    /// emplaced, reports its first clear sight of a human player through the shared pool, and the
+    /// flight broadcasts on that player's team through the ordinary gate. Called once per
+    /// session, since the pool is what both turret families are built against.</summary>
+    public void WatchTurrets(ProjectilePool projectiles) =>
+        projectiles.TurretAcquiredPlayer += OnTurretAcquired;
+
+    // The turret warning is a broadcast, so the gunner is not the speaker: one of the warned
+    // player's own flight says it, elected on that player's team (decoded, id 0 broadcasts).
+    private void OnTurretAcquired(TurretController turret, FlightController player) =>
+        Play(_dispatcher.Broadcast(AiVoiceDispatcher.WaTurret, player.Team, _now));
+
     // ⚠ Subscribed for every AI, not only for the registered speakers. Two of the sites below
     // dispatch on ANOTHER aircraft, and the shipped rosters leave nearly every enemy on accentID
     // -1, so watching only the voiced ones silences the player's own flight. Idempotent per

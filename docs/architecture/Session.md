@@ -429,7 +429,7 @@ and death report of EVERY aircraft handed over are watched, accented or not, bec
 call-out, the taunt and the killer's gloat are spoken by an aircraft other than the one the event reached.
 An evade episode's end picks the taunt pair off the machine's own evade flag: still standing is the failed shake, cleared is the successful one.
 `RegisterAi` also mirrors `InPlay` into the speaker's liveness, the only place the engine-free dispatcher and a controller meet.
-Lines play flat through `MissionRadio.Speak` (the queue the objective callouts share) with the speaker id that answers the "already talking" hook; every roll and first "no clip" refusal prints an `ai voice:` line. [../formats/combat-voice.md](../formats/combat-voice.md).
+Lines play flat through `MissionRadio.Speak` (the queue the objective callouts share) with the speaker id that answers the "already talking" hook; every roll and first "no clip" refusal prints an `ai voice:` line. `WatchTurrets` adds the one non-aircraft source, a gunner's acquisition of a human player off the shared `ProjectilePool`, broadcast on that player's team. [../formats/combat-voice.md](../formats/combat-voice.md).
 
 ## src/Session/FlightRoster.cs
 The session-owned aircraft aggregate. `BuildPlayers` commits the whole human field in ascending player order and `SpawnAi` commits one

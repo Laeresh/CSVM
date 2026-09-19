@@ -242,6 +242,7 @@ are spoken by the killer, not by the aircraft that died.
 
 | ids | status | site / reason |
 |---|---|---|
+| 0 | wired | the gunner's own acquisition (`Flight/TurretController.cs`), carried mount and world emplacement alike: the first tick it holds a human player as its acquired target, by the entry's own `DETECTION_RANGE` and the shared target picker, with a clear sight line by its own rule. The report leaves through `ProjectilePool.TurretAcquiredPlayer`, the seam both turret families are built against, and `AiVoiceRuntime.WatchTurrets` broadcasts on the warned player's team |
 | 1–12, 14 | wired | our chosen site: the mode machine's patrol→pursue transition against a human target ("committing to an attack"), the attacker speaks `WA-Attack`, and the flight broadcasts the bearing call-out computed in the warned player's frame. The original's exact "enemy spotted" event is undecoded; this is the closest transition the machine has |
 | 13 | wired | a human rig's summary health crossing 30 % on the projectile hit path (decoded threshold), broadcast |
 | 17–19 | wired | the speaker's own summary health on the projectile hit path, 70/50/30 % most-severe-first (decoded) |
@@ -250,8 +251,7 @@ are spoken by the killer, not by the aircraft that died.
 | 25 | wired | a pursuer's failed sixth-sense (tail) check stunning it, its evading AI target speaks; a human evader stays silent (the player speaks no AI lines) |
 | 26 | wired | our chosen stand-in for the undecoded shake-attempt check: the speaker's evade episode ending with the flag still up, which is the decoded tail-cone hold test (`AiModeMachine.EvadeClearAlignment`) answering that the pursuer's nose is still on it. The dwell reverting the task, a stun and an avoid-crash climb-out are the ends that reach it |
 | 27 | wired | the same episode end with the flag already cleared, the pursuer shaken ("fires as the reaction flag clears", decoded). An episode the speaker leaves with the flag still up is 26, not this. A target lost mid-reaction reads as a shake, the flag's own clear rule with no pursuer left to test |
-| 28 | wired, one arm | the decoded first arm only: `FlightController.DamageApplied` carries the round's shooter, and a shooter registered through `RegisterPlayer` whose team the predicate calls friendly over the struck aircraft's makes that aircraft speak (`AiVoiceRuntime.OnFriendlyFire`). The second arm, the survivor count over `DAT_0071c4e4`/`e8`/`ec` with its default sound set, is left unwired: what those three globals are is undecoded (below) |
-| 0 | unwired | turret acquisition is `TurretController`'s event; owned by C9's thread, not wired from here |
+| 28 | wired, one arm | the decoded first arm only: `FlightController.DamageApplied` carries the round's shooter, and a shooter registered through `RegisterPlayer` whose team the predicate calls friendly over the struck aircraft's makes that aircraft speak (`AiVoiceRuntime.OnFriendlyFire`). The second arm, the survivor count over `DAT_0071c4e4`/`e8`/`ec` with its default sound set, is left unwired: what those three globals are is undecoded (below) | 
 | 15 | unwired | the danger-zone modes are never entered (their gate data is undecoded, F17) |
 | 16 | unwired | the original broadcasts it on the local player's kill of a hostile (above). The remake broadcasts 24 on that event instead of addressing 24 to the player's own rig, so the two rows move together, left for a future item | 
 
@@ -261,6 +261,11 @@ Stand-ins and inventions, named:
   Free flight and `--vs` still give every pilot its own default team (`AimAssist.TeamOfPilot`, pilot
   N = team N+1), so a broadcast only ever elects a "teamless" match there in practice; it goes live
   the moment a mission puts two AI, or an AI and the player, on the same explicit team.
+- **The turret warning's cadence is ours**: the trigger's meaning is decoded, how often the
+  original raises it is not, so a gunner reports once per acquisition episode and re-arms only
+  when it loses that target. Its sight-line cast is taken uncached, beside the fire path's cached
+  verdict rather than through it: that verdict is stamped out of the gunner's own RNG stream, and
+  refreshing it on the ticks the fire gates skip would move every round the gun fires.
 - **`Bail`/`NoBail` is a constitution roll** (`constitution_chance`, 0.35→0.95), the open
   item's natural-candidate reading, implemented and marked unconfirmed.
 - **Bearing quantisation**: the four clock quadrants split at ±45° (the natural reading of a

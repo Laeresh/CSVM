@@ -712,14 +712,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `--log=sound:debug`; expect a `trigger #14` line as the ace closes, and one per re-engagement.
   *Cross-refs:* `BL-934` (the campaign-side silence, same runtime).
 
-- `BL-990` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **`WA-Turret`
-  (id 0, a turret has acquired the player with line of sight) has no dispatch site.**
-  *Evidence:* `docs/formats/combat-voice.md` marks 0 unwired because acquisition is
-  `TurretController`'s event and was owned by another thread. *Fix shape:* raise an acquisition
-  event from the turret controller and broadcast id 0 on the player's team from
-  `AiVoiceRuntime`; matters on the zeppelin missions, where the turret sits are the fight.
-  *Cross-refs:* `docs/formats/turrets.md`.
-
 - `BL-991` `[Feature]` `[Blocked: danger-zone decode]` `[S]` `[Next: decode]` `[Impact: low]`
   `[Evidence: decoded]` **`PR-DngrZn` (id 15, a Danger Zone run, broadcast) has no dispatch site
   because the danger-zone modes are never entered.** *Evidence:*

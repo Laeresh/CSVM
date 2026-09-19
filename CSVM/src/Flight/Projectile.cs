@@ -456,6 +456,14 @@ public sealed partial class ProjectilePool : Node3D
         ProcessPriority = DrawPriority;
     }
 
+    /// <summary>One of this session's gunners, carried or emplaced, has acquired a human player
+    /// and has line of sight to it, once per acquisition episode
+    /// (<see cref="TurretController"/>). The pool is the seam every gunner already holds and the
+    /// one list both turret families reach, so a session-wide listener subscribes once here
+    /// instead of per gunner as each is built; <c>Session.AiVoiceRuntime</c> broadcasts
+    /// <c>WA-Turret</c> on it.</summary>
+    public event Action<TurretController, FlightController>? TurretAcquiredPlayer;
+
     /// <summary>Every camera that can see this pool's tracers, feeding the
     /// <see cref="TracerMinPixels"/> distance floor, a screen-space rule applied to one shared
     /// world-space mesh, so it takes the NEAREST bound viewer. Unbound (weapon bench, suite
@@ -1368,6 +1376,12 @@ public sealed partial class ProjectilePool : Node3D
             f.Model.QueueFree();
         _impactFx.Clear();
     }
+
+    /// <summary>Raises <see cref="TurretAcquiredPlayer"/>. Internal, and called from
+    /// <see cref="TurretController"/> alone: the gunner owns the episode rule (once per
+    /// acquisition, re-armed by losing the target), this only carries the report.</summary>
+    internal void ReportTurretAcquisition(TurretController turret, FlightController player) =>
+        TurretAcquiredPlayer?.Invoke(turret, player);
 
     internal void UnregisterAircraft(AircraftBody body) => _aircraft.Remove(body);
 
