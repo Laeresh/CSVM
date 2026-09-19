@@ -286,7 +286,13 @@ public sealed record BoardPlaque(
 public sealed record BoardLine(
     string Text, float X, float Y, float Width, float Size, BoardInk Ink, int Row = -1,
     bool Italic = false, BoardJustify Justify = BoardJustify.Left, BoardCaret? Caret = null,
-    bool Bold = false, float Leading = 0f, LanguiFace? Face = null, BoardTint? Colour = null);
+    bool Bold = false, float Leading = 0f, LanguiFace? Face = null, BoardTint? Colour = null)
+{
+    /// <summary>The authored box height a wrapped block is asked to fit inside, 0 for a line
+    /// drawn at its own size whatever it comes to. A block taller than this is stepped down a
+    /// point at a time by the renderer, which is the only half that can measure it.</summary>
+    public float Height { get; init; }
+}
 
 /// <summary>
 /// A list widget's entries and the box they flow inside, in authored pixels (the briefing

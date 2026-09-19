@@ -861,29 +861,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the one with no width, which is the shape of a short label rather than a name. *Cross-refs:*
   `BL-764`'s landing (`git log --grep=BL-764`), which settled the same screen's buttons.
 
-- `BL-809` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **An opened scrap's
-  composition and faces now read like the original's, and some scraps' text runs past the page.**
-  *Verdict at the controls:* "Mostly pass. some texts are longer then the page and need a smaller
-  font size to fit." The faces, sizes, positions, pitch and weight are accepted as drawn; what is
-  left is a text box whose block, at its langui row's authored size, overflows the page. *Fix
-  shape:* find which scraps overflow (the zoom page can log a block taller than its box), then
-  either the original's own rule if it has one (does the original shrink, clip or scroll, read
-  from `CAP-52.mkv`'s scraps and the zoom-page decode) or, if it never overflows because its
-  shipped text is shorter, a step-down of the point size until the block fits, recorded as a
-  departure. ⚠ Traps: the raw `IDS_SB_...` placeholders are longer than any shipped text, so
-  first check whether the overflowing scraps carry real text or the placeholder. *Evidence:* reported
-  at the controls as "Scrapbook Texts look different in the original", detailed as "Typeface, the
-  image not showing but another one like the header of a newspaper and then the text". `CAP-52.mkv`
-  t=46 to 88.8 opens the scraps full page. The composition is now the decode's
-  (`docs/formats/campaign-screens.md`, "Resolving a row to a file"): a `P0` scrap draws the family
-  background alone (the "newspaper header" is `SB_BG_B.jpg`'s masthead) with no inset and no EXPORT,
-  and each text box takes its langui row's `[FONTID]` face at points times 4/3 in pixels, pitched at
-  that size, in the box row's colour, a centred block justified as a whole
-  (`docs/formats/strings.md`, "Font prefix"). The montages (film | ours before | ours after) that
-  settled the faces are `montage_{wanted,diary,letter,medal,hawaii,aloha,bristol}.png` under
-  `.scratch/orch-8/BL-809/`; the authored `0xFF444040`-class grey stays as drawn.
-  *Cross-refs:* `CAP-52`, `docs/org/menu-inventory.md`, `git log --grep=BL-809`.
-
 - `BL-951` `[Feature]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **A local
   multiplayer door on the main menu, opening a join board where every controller claims its seat
   once and holds it for the whole session, instead of seats being decided implicitly on whichever

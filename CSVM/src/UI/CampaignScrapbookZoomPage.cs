@@ -133,11 +133,11 @@ public sealed class CampaignScrapbookZoomPage : CampaignPage
 
             var lines = new List<BoardLine>();
             AddIfPresent(lines, scrap.TitleKey, $"SBZ_T_TITLE{scrap.Zoom}",
-                (boxes.TitleX, boxes.TitleY, boxes.TitleWidth), TitleFont, BoardInk.Heading);
+                (boxes.TitleX, boxes.TitleY, boxes.TitleWidth, boxes.TitleHeight), TitleFont, BoardInk.Heading);
             AddIfPresent(lines, scrap.CaptionKey, $"SBZ_T_CAPTION{scrap.Zoom}",
-                (boxes.CaptionX, boxes.CaptionY, boxes.CaptionWidth), BodyFont, BoardInk.Row);
+                (boxes.CaptionX, boxes.CaptionY, boxes.CaptionWidth, boxes.CaptionHeight), BodyFont, BoardInk.Row);
             AddIfPresent(lines, scrap.TextKey, $"SBZ_T_TEXT{scrap.Zoom}",
-                (boxes.TextX, boxes.TextY, boxes.TextWidth), BodyFont, BoardInk.Row);
+                (boxes.TextX, boxes.TextY, boxes.TextWidth, boxes.TextHeight), BodyFont, BoardInk.Row);
             return lines;
         }
     }
@@ -189,9 +189,12 @@ public sealed class CampaignScrapbookZoomPage : CampaignPage
 
     // "0" is the CSV's own absent-text sentinel (docs/formats/campaign-screens.md), so a genuine
     // key is anything else. The words take the face their langui row names, one line per face
-    // height as the original pitches them, and the box row's own colour and justification.
+    // height as the original pitches them. They also take the box row's own colour and
+    // justification, and its authored height. A block too tall for that height is fitted down, a
+    // departure the original does not make (campaign-screens.md, "Fitting a block to its box").
     private void AddIfPresent(
-        List<BoardLine> lines, string key, string box, (float X, float Y, float Width) at, float size, BoardInk ink)
+        List<BoardLine> lines, string key, string box, (float X, float Y, float Width, float Height) at,
+        float size, BoardInk ink)
     {
         if (key.Length == 0 || key == "0")
         {
@@ -207,7 +210,10 @@ public sealed class CampaignScrapbookZoomPage : CampaignPage
         lines.Add(new BoardLine(
             Words(key, id), at.X, at.Y, at.Width, face?.Pixels ?? size, ink,
             Justify: Flow.Layout.Justify(CampaignLayout.ZoomSection, box, BoardJustify.Left),
-            Leading: face?.Pixels ?? 0f, Face: face, Colour: colour));
+            Leading: face?.Pixels ?? 0f, Face: face, Colour: colour)
+        {
+            Height = at.Height,
+        });
     }
 
     // A scrap's own words: the langui text its symbol names, or the symbol itself when RESRC1.H or

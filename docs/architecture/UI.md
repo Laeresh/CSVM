@@ -149,10 +149,10 @@ The scrapbook's per-spread scrap layout, read from the shipped `SCRAPBOOK.CSV` r
 `Items` walks a spread from item 1 and stops at the first missing key, the way the original's reader
 does; `Pictures` gates each row against the mission's merged best-to-date mask and stacks the
 survivors by draw order; `Openable` narrows the same gate to the rows that open a detail view;
-`ZoomFamily` reads a family's three text boxes. A player capture resolves through a caller-supplied
+`ZoomFamily` reads a family's three text boxes, each with the height its row authors beside its
+width, which is what the zoom page's blocks are fitted against. A player capture resolves through a caller-supplied
 path rather than the asset library, is forced into the page's own 164x123 region so the smudge cut
-for that rectangle lands on the print, and is skipped when no file is there. Parsed rows are cached
-per file behind a lock. The columns and the gate: [../formats/campaign-screens.md](../formats/campaign-screens.md).
+for that rectangle lands on the print, and is skipped when no file is there. Parsed rows are cached per file behind a lock. The columns and the gate: [../formats/campaign-screens.md](../formats/campaign-screens.md).
 
 ## src/UI/ScrapbookExport.cs
 EXPORT TO DESKTOP's copy: the open scrap's own file to the desktop under its own base name,
@@ -199,7 +199,7 @@ plaques and flowed list widgets, each in draw order. The backdrop is its own lay
 sit over the background and stay under the page's pictures, where a selection bar goes. `BoardNote`
 is a widget's entries plus its wrap box (cut at a word where the box has no room for the rest, shrunk
 to a face the whole list fits in, or no box at all where the widget's own list stops nowhere), its
-marks, and `BoardCaret` an edit box's cursor on the line it follows, all placed by a caller that can measure text. `PlaqueFrame` and `PlaqueInk` are a plaque's states, and a plaque whose art leaves
+marks, and `BoardCaret` an edit box's cursor on the line it follows, all placed by a caller that can measure text. A `BoardLine` carrying a `Height` names the box its block is fitted to, the renderer stepping its face down until the block fits, since only the renderer can measure. `PlaqueFrame` and `PlaqueInk` are a plaque's states, and a plaque whose art leaves
 part of its frame empty carries its label's own baseline. `BoardArt` names a file and its frame count and the renderer resolves it; one of its libraries is a movie, so a background film reaches the backdrop with no engine type here, and one is an image already in memory (`Held`), a stunt photograph's thumbnail. `BoardCrop` takes a region of the source instead of the whole frame, which is a chart sheet's own window.
 
 ## src/UI/CampaignBoards.cs
@@ -238,7 +238,7 @@ extraction roots, and caches a miss so an absent extraction is probed once per n
 to a `MovieSurface`, whose one texture the cache holds and the surface rewrites in place, so the
 picture animates with nothing invalidated; a held image gets one texture per image, dropped once a shown board stops drawing it; `AdvanceMovies` runs their clocks off the caller's own step and
 `AdvanceCaret` blinks a text cursor off it, each saying whether to repaint. A line naming a `LanguiFace` draws in that installed Windows face, cached per tag, and keeps the board's own where the machine lacks it; a pitched block honours authored line breaks and indents and justifies as a whole, its lines left-aligned under the widest. Supplies the font metric a flowed
-`BoardNote` and a caret cannot take, `Fitted` shrinking a note's face until its list fits its box rather than losing a row, the two-line hint band a pad needs, and `ArtSize` for a caller that must clip against a bitmap's own authored width. `PresentMoving` is the one repaint a caller holding the frame loop can still make: its pictures go on a canvas item of the view's own, fitted by the same maths and re-fitted on a resize, rather than through a queued redraw callback the blocked loop would never reach, so a load screen's build can move the bar it draws.
+`BoardNote` and a caret cannot take, `Fitted` shrinking a note's face until its list fits its box rather than losing a row and stepping a `BoardLine` carrying a box height down a point at a time until its wrapped block fits, `Block` being that measurement on its own, the two-line hint band a pad needs, and `ArtSize` for a caller that must clip against a bitmap's own authored width. `PresentMoving` is the one repaint a caller holding the frame loop can still make: its pictures go on a canvas item of the view's own, fitted by the same maths and re-fitted on a resize, rather than through a queued redraw callback the blocked loop would never reach, so a load screen's build can move the bar it draws.
 
 ## src/UI/CinemaScreen.cs
 One cinema on screen: a `CinemaPlayback`, the `ImageTexture` its pictures upload into, and the

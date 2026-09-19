@@ -21,6 +21,15 @@ public sealed partial class ComposedBoardView : Control
     /// or words is silent.</summary>
     public const float MinNoteFont = 9f;
 
+    /// <summary>The smallest face a block fitted to <see cref="BoardLine.Height"/> is stepped down
+    /// to. A block that will not fit its box even here is drawn at this size and runs past it. A
+    /// fault that shows is better than words silently dropped.</summary>
+    public const int MinBlockPoints = 8;
+
+    // A langui face's size is authored in points and drawn in pixels at 96 dpi. A whole-point step
+    // is therefore this many pixels, and LanguiFace.Pixels is the same ratio.
+    private const float PixelsPerPoint = 96f / 72f;
+
     // The controls hint and the focused row's description. Neither is the original's chrome, which
     // said both with a mouse pointer; a pad player has no pointer, so the board says it in words.
     private const float HintFont = 12f;
@@ -132,6 +141,55 @@ public sealed partial class ComposedBoardView : Control
             text, HorizontalAlignment.Left, fit.Length(width), points) / fit.Scale;
     }
 
+    /// <summary>How tall a line's wrapped block draws, in authored pixels, at the size and pitch it
+    /// carries. How many lines the words wrap to is a font metric, so this is a measurement a
+    /// composed board cannot make for itself.</summary>
+    public static float Block(BoardFit fit, Font font, BoardLine line)
+    {
+        ArgumentNullException.ThrowIfNull(font);
+        ArgumentNullException.ThrowIfNull(line);
+        int points = Mathf.Max(1, Mathf.RoundToInt(fit.Length(line.Size)));
+        float pitch = line.Leading > 0f ? line.Leading : font.GetHeight(points) / fit.Scale;
+        if (line.Width <= 0f || line.Text.Length == 0)
+        {
+            return pitch;
+        }
+
+        int rows = 0;
+        foreach (var _ in Wrap(font, line.Text, points, fit.Length(line.Width)))
+        {
+            rows++;
+        }
+
+        return rows * pitch;
+    }
+
+    /// <summary>The line at the largest whole point size, its own or smaller, whose wrapped block
+    /// fits <see cref="BoardLine.Height"/>. A line carrying no box, no wrap width or no words comes
+    /// back as it stands. One that still will not fit at <see cref="MinBlockPoints"/> is returned
+    /// there rather than clipped.</summary>
+    public static BoardLine Fitted(BoardFit fit, Font font, BoardLine line)
+    {
+        ArgumentNullException.ThrowIfNull(font);
+        ArgumentNullException.ThrowIfNull(line);
+        if (line.Height <= 0f || line.Width <= 0f || line.Size <= 0f || line.Text.Length == 0)
+        {
+            return line;
+        }
+
+        int authored = Mathf.Max(1, Mathf.RoundToInt(line.Size / PixelsPerPoint));
+        for (int points = authored; points > MinBlockPoints; points--)
+        {
+            var candidate = points == authored ? line : Sized(line, points * PixelsPerPoint);
+            if (Block(fit, font, candidate) <= line.Height)
+            {
+                return candidate;
+            }
+        }
+
+        return Sized(line, MinBlockPoints * PixelsPerPoint);
+    }
+
     /// <summary>The note at the largest whole face size, its own or smaller, whose entries all fit
     /// its box. A note that may not shrink comes back unchanged. A block that still will not fit
     /// at <see cref="MinNoteFont"/> is drawn there rather than losing rows.</summary>
@@ -195,6 +253,33 @@ public sealed partial class ComposedBoardView : Control
     /// carry it. The one measurement a composed board cannot make for itself: a progress fill is a
     /// pixel clip against the fill bitmap's own width.</summary>
     public Vector2 ArtSize(BoardArt art) => Load(art) is { } texture ? texture.GetSize() : Vector2.Zero;
+
+    /// <summary>The installed font a langui face names, or null on a machine without the family.
+    /// A miss keeps the board's own face rather than the system's arbitrary substitute. Looked up
+    /// once per tag, a miss included. A caller measuring a composed line measures in this face:
+    /// the board's own sets to another width and wraps to another line count.</summary>
+    public Font? Installed(LanguiFace face)
+    {
+        if (_faces.TryGetValue(face.Tag, out var cached))
+        {
+            return cached;
+        }
+
+        int weight = face.Bold ? BoldWeight : RegularWeight;
+        Font? font = null;
+        if (OS.GetSystemFontPath(face.Family, weight, FullStretch, face.Italic).Length > 0)
+        {
+            font = new SystemFont
+            {
+                FontNames = new[] { face.Family },
+                FontWeight = weight,
+                FontItalic = face.Italic,
+            };
+        }
+
+        _faces[face.Tag] = font;
+        return font;
+    }
 
     /// <summary>Puts a composed board on screen, with the two lines the shell adds under it.</summary>
     public void Show(ComposedBoard board, BoardPalette palette, string detail, string footer)
@@ -411,6 +496,14 @@ public sealed partial class ComposedBoardView : Control
         }
     }
 
+    // One line at another face size, its authored pitch scaled with it. A block the original
+    // pitches at its own face size stays pitched at whatever size it ends up drawn at.
+    private static BoardLine Sized(BoardLine line, float size) => line with
+    {
+        Size = size,
+        Leading = line.Leading > 0f ? line.Leading * size / line.Size : 0f,
+    };
+
     // Every entry of a wrapped block fits the box the note carries, in both axes.
     private static bool Fits(Func<string, float, Vector2> box, BoardNote note)
     {
@@ -465,31 +558,6 @@ public sealed partial class ComposedBoardView : Control
         }
 
         return line.Italic ? Slanted(font) : line.Bold ? Emboldened(font) : font;
-    }
-
-    // The installed font a langui face names, looked up once per tag, a miss included. A machine
-    // without the family keeps the board's own face rather than the system's arbitrary substitute.
-    private Font? Installed(LanguiFace face)
-    {
-        if (_faces.TryGetValue(face.Tag, out var cached))
-        {
-            return cached;
-        }
-
-        int weight = face.Bold ? BoldWeight : RegularWeight;
-        Font? font = null;
-        if (OS.GetSystemFontPath(face.Family, weight, FullStretch, face.Italic).Length > 0)
-        {
-            font = new SystemFont
-            {
-                FontNames = new[] { face.Family },
-                FontWeight = weight,
-                FontItalic = face.Italic,
-            };
-        }
-
-        _faces[face.Tag] = font;
-        return font;
     }
 
     // The board's own face at a heavier weight, built once, for a screen that writes two authored
@@ -681,6 +749,7 @@ public sealed partial class ComposedBoardView : Control
             return;
         }
 
+        line = Fitted(fit, font, line);
         int points = Mathf.Max(1, Mathf.RoundToInt(fit.Length(line.Size)));
         var at = new Vector2(fit.X(line.X), fit.Y(line.Y) + points);
         DrawCaret(fit, font, line, points);
