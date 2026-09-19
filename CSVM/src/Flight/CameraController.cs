@@ -307,12 +307,12 @@ public sealed class CameraController
         _camera.Basis = renderPose.Basis * Basis.LookingAt(-dir, Vector3.Up);
     }
 
-    /// <summary>Analog look-around: the right stick swings the view around the plane at the
-    /// dynamic radius every forward-facing external pose shares, through the same
-    /// <see cref="ChaseSwing"/> geometry the head swings it by. Pre-curved and dead-zoned, so both
-    /// axes at 0 reduce to the ordinary chase direction. Rigid and instant, and releasing it lets
-    /// <see cref="Chase"/> resume. ⚠ Its own path, not the head's: the stick aims ABSOLUTELY in
-    /// both views (docs/controls.md) and must keep doing so.</summary>
+    /// <summary>Analog look-around: the right stick swings the view around the plane at the dynamic
+    /// radius every forward-facing external pose shares, through the same <see cref="ChaseSwing"/>
+    /// geometry the head swings it by. Pre-curved, dead-zoned and <see cref="StickLookFilter"/>ed,
+    /// so both axes at 0 reduce to the ordinary chase direction and no stick noise reaches this
+    /// pose. Rigid and instant, and releasing it lets <see cref="Chase"/> resume. ⚠ Its own path,
+    /// not the head's: the stick aims ABSOLUTELY in both views (docs/controls.md).</summary>
     public void PadLook(in Transform3D renderPose, float stickX, float stickY)
     {
         float yaw = Mathf.DegToRad(stickX * HeadLook.PadLookYawMaxDeg);

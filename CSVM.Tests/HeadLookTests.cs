@@ -14,6 +14,12 @@ public class HeadLookTests
 {
     private const float Tol = 1e-4f;
 
+    // A live frame at 60 Hz, and long enough of them for the look stick's lag to arrive inside Tol
+    // (its time constant is 40 ms, so one second leaves nothing of it).
+    private const float StepDt = 1f / 60f;
+
+    private const int HoldFrames = 60;
+
     // HeadLook.AutoheadTarget's shipped constants (extracted/zrdr/player.zrd.json via
     // PlaneStatsFlightGlobalsTests' own loader assertion), reused by the lead-law tests near the
     // bottom of this file.
@@ -87,7 +93,7 @@ public class HeadLookTests
     public void ThePadLooksBelowLevelWhereTheOtherPathsCannot()
     {
         var head = new HeadLook();          // first person: ElevationFloor 0, level
-        head.Step(0.1f, Pad(0f, -1f));
+        HoldStick(head, 0f, -1f);           // held, so the stick's own lag has arrived
         Assert.Equal(Mathf.DegToRad(-HeadLook.PadLookPitchMaxDeg), head.TargetElevation, Tol);
 
         head = new HeadLook();
@@ -121,6 +127,82 @@ public class HeadLookTests
         head.Step(0.1f, Idle);
         Assert.Equal(0f, head.TargetAzimuth, Tol);
         Assert.Equal(0f, head.TargetElevation, Tol);
+    }
+
+    // The filter's whole law: one time constant of a held deflection leaves the filtered pair at
+    // 1 - 1/e of it, whatever step size the frames arrive in, and a few more put it on the stick.
+    [Fact]
+    public void TheStickFilterReachesOneTimeConstantOfAHeldDeflection()
+    {
+        var filter = new StickLookFilter();
+        float tau = 1f / HeadLook.PadAimSmoothRate;
+        const int steps = 20;
+        for (int i = 0; i < steps; i++)
+        {
+            filter.Step(tau / steps, 1f, 0f);
+        }
+
+        Assert.True(filter.Active);
+        Assert.Equal(1f - Mathf.Exp(-1f), filter.X, Tol);
+        Assert.Equal(0f, filter.Y, Tol);
+
+        for (int i = 0; i < 5 * steps; i++)
+        {
+            filter.Step(tau / steps, 1f, 0f);
+        }
+
+        Assert.Equal(1f, filter.X, 1e-2f);
+    }
+
+    // The centre band, the noise gate: a stick inside it is a stick at rest, so the filter reads
+    // zero on both axes and the head's own idle rule owns the frame.
+    [Theory]
+    [InlineData(HeadLook.PadAimCentreBand * 0.5f, 0f)]
+    [InlineData(0f, -HeadLook.PadAimCentreBand * 0.5f)]
+    [InlineData(HeadLook.PadAimCentreBand * 0.7f, HeadLook.PadAimCentreBand * 0.7f)]
+    public void AStickInsideTheCentreBandReadsAsNoStickAtAll(float x, float y)
+    {
+        var filter = new StickLookFilter();
+        filter.Step(0.1f, x, y);
+        Assert.False(filter.Active);
+        Assert.Equal(0f, filter.X, Tol);
+        Assert.Equal(0f, filter.Y, Tol);
+
+        var head = new HeadLook();
+        head.Step(0.1f, Pad(x, y));
+        Assert.Equal(0f, head.TargetAzimuth, Tol);
+        Assert.Equal(0f, head.TargetElevation, Tol);
+    }
+
+    // The filter is on the stick and nowhere else: the mouse pan still integrates at the decoded
+    // 2 rad/s and the numpad still lands on the table's own angle, with a below-band stick over both.
+    [Fact]
+    public void TheFilterLeavesTheNumpadAndTheMousePathsAlone()
+    {
+        const float idle = HeadLook.PadAimCentreBand * 0.5f;
+        var head = new HeadLook();
+        head.Step(0.5f, new HeadLookInput(0f, 0f, 0f, 1f, false, idle, 0f));
+        Assert.Equal(1f, head.TargetElevation, Tol);
+
+        head = new HeadLook();
+        head.Step(0.1f, new HeadLookInput(-1f, 0f, 0f, 0f, false, idle, 0f));   // Kp4
+        Assert.Equal(Mathf.Pi / 2f, head.TargetAzimuth, Tol);
+    }
+
+    // Release is not slowed by the filter: on the frame the stick centres the targets are back at
+    // straight ahead and the shown angle is already decaying at the decoded azimuth rate alone.
+    [Fact]
+    public void ReleasingTheStickIsAsFastAsItWasBeforeTheFilter()
+    {
+        var head = new HeadLook();
+        HoldStick(head, -1f, 0f);
+        float shown = head.Azimuth;
+        Assert.True(shown > 1f);
+
+        head.Step(StepDt, Idle);
+        Assert.Equal(0f, head.TargetAzimuth, Tol);
+        Assert.Equal(
+            HeadLook.Approach(shown, 0f, HeadLook.AzimuthSmoothRate, StepDt), head.Azimuth, Tol);
     }
 
     // The pad reaches the same angles the chase camera swings through, which is the whole
@@ -548,7 +630,11 @@ public class HeadLookTests
         Assert.Equal(0f, centred.TargetAzimuth, Tol);
 
         var aimed = new HeadLook();
-        aimed.Step(0.1f, new HeadLookInput(0f, 0f, 0f, 0f, false, 1f, 0f, true));
+        for (int i = 0; i < HoldFrames; i++)    // held, so the stick's own lag has arrived
+        {
+            aimed.Step(StepDt, new HeadLookInput(0f, 0f, 0f, 0f, false, 1f, 0f, true));
+        }
+
         Assert.Equal(-Mathf.DegToRad(HeadLook.PadLookYawMaxDeg), aimed.TargetAzimuth, Tol);
     }
 
@@ -894,6 +980,16 @@ public class HeadLookTests
     private static HeadLookInput Free(float right, float up) => new(0f, 0f, right, up, false);
 
     private static HeadLookInput Pad(float right, float up) => new(0f, 0f, 0f, 0f, false, right, up);
+
+    // A stick held long enough for its filter to arrive, at a live frame rate, so what is read
+    // afterwards is the stick's position and not the lag on the way to it.
+    private static void HoldStick(HeadLook head, float right, float up)
+    {
+        for (int i = 0; i < HoldFrames; i++)
+        {
+            head.Step(StepDt, Pad(right, up));
+        }
+    }
 
     // The free-look control held, carrying whatever the mouse moved this frame: zero is the still
     // mouse a held button cannot otherwise be told apart from a released one.

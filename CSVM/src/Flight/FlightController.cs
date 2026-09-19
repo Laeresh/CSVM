@@ -514,6 +514,9 @@ public partial class FlightController : Node3D
     // The desktop mouse this seat holds while it flies, and the virtual cursor standing in for the
     // OS one for as long as it does. Idle on every seat that never takes it (MouseCaptureAllowed).
     private readonly MouseCapture _mouse = new();
+    // The look stick as the CHASE swing reads it. Its own filter rather than the head's, because
+    // that swing is rigid and instant and takes the stick on the frames the head is not given it.
+    private readonly StickLookFilter _chaseLook = new();
     private readonly AimCandidateSet _aimCandidates = new(); // rebuilt once per fire call (B4/B5)
     private readonly AimCandidateSet _gunnerScan = new();    // the AI gunner's acquisition scan (D14)
     private readonly AimCandidateSet _rescoreScan = new();   // the aircraft-only walk the re-score's withdrawal reads
@@ -2260,11 +2263,12 @@ public partial class FlightController : Node3D
                 // left out: it keeps the absolute PadLook path below, in both views.
                 _cam.StepHead(simDt, HeadLookRead(includePad: false), HeadLook.ChaseElevationFloor);
                 var (lookX, lookY) = PadLookInput();
-                if (lookX != 0f || lookY != 0f)
+                _chaseLook.Step(simDt, lookX, lookY);
+                if (_chaseLook.Active)
                 {
                     // E42: the right stick swings the view around the plane instead of
                     // the usual chase pose, see CameraController.PadLook.
-                    _cam.PadLook(_renderPose, lookX, lookY);
+                    _cam.PadLook(_renderPose, _chaseLook.X, _chaseLook.Y);
                     logged = CameraView.PadLook;
                 }
                 else

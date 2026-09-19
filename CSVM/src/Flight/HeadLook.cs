@@ -89,6 +89,18 @@ public sealed class HeadLook
     /// parallel to the view. Widening it here gimbals chase.</summary>
     public const float PadLookYawMaxDeg = 150f, PadLookPitchMaxDeg = 60f;
 
+    /// <summary>How fast the filtered look stick catches its raw position, 1/s, a time constant of
+    /// 40 ms. Short enough to stay under the hand, long enough to bury the noise a stick reports
+    /// around any held position, which an absolute aim otherwise shows frame for frame. TUNE: the
+    /// original binds no axis to look at all, so there is nothing to decode.</summary>
+    public const float PadAimSmoothRate = 25f;
+
+    /// <summary>How far the look stick must leave centre before it aims anything, as a fraction of
+    /// full deflection, measured radially so no direction is favoured. Crossing it moves the aim by
+    /// 3° round and 1.2° up and down, under the wobble it gates out. TUNE, for the same reason
+    /// <see cref="PadAimSmoothRate"/> is.</summary>
+    public const float PadAimCentreBand = 0.02f;
+
     // How near a direction must be to dead ahead, and to a 45° diagonal, for the snap to lift the
     // head: 0.1° and 0.09° respectively. Windows rather than equalities because the original's
     // input is a POV angle in hundredths of a degree; a digital key cluster hits them exactly.
@@ -97,6 +109,10 @@ public sealed class HeadLook
 
     // How near centre counts as at rest, 0.1°: the window Settled reads.
     private const float SettledWindowRad = 0.001745f;
+
+    // The look stick's own filter, stepped on every frame this head is stepped so its state never
+    // lags the mode that is about to read it.
+    private readonly StickLookFilter _padFilter = new();
 
     // The three mode keys as they stood last frame. The mode is written on the PRESS EDGE, as the
     // original's command handlers fire, so a key held down writes it once and not every frame.
@@ -252,12 +268,15 @@ public sealed class HeadLook
     /// alone, then chase it. Padlock owns the whole frame and reads no look control, the centre key
     /// included. Otherwise the centre key beats everything; snap runs the direction table, the pad,
     /// the mouse pan or the idle frame <see cref="IdleAim"/> owns, and free-look integrates the
-    /// numpad direction, else the pad, else the mouse pan, else holds. A centred pad claims no frame.
-    /// </summary>
+    /// numpad direction, else the pad, else the mouse pan, else holds. A pad inside its centre band
+    /// claims no frame.</summary>
     public void Step(float dt, in HeadLookInput input)
     {
         bool direction = input.SnapX != 0f || input.SnapY != 0f;
         bool panning = input.Looking || input.FreeRight != 0f || input.FreeUp != 0f;
+        // Ahead of the modes, so the filter advances on every frame and a mode that takes the pad
+        // over from another path reads this frame's deflection rather than the last one it saw.
+        _padFilter.Step(dt, input.PadRight, input.PadUp);
         SelectMode(input);
         bool padlocked = Mode == LookMode.Padlock;
 
@@ -285,9 +304,9 @@ public sealed class HeadLook
             // the decoded rate and a released one leaves the head where it was pointed.
             FreeLook(input.SnapX, input.SnapY, dt);
         }
-        else if (input.PadRight != 0f || input.PadUp != 0f)
+        else if (_padFilter.Active)
         {
-            PadAim(input);
+            PadAim();
         }
         else if (panning)
         {
@@ -385,9 +404,9 @@ public sealed class HeadLook
         {
             SetTargets(snap.Value.Elevation, snap.Value.Azimuth);
         }
-        else if (input.PadRight != 0f || input.PadUp != 0f)
+        else if (_padFilter.Active)
         {
-            PadAim(input);
+            PadAim();
         }
         else if (panning)
         {
@@ -405,11 +424,11 @@ public sealed class HeadLook
     }
 
     // The pad's absolute aim, this port's own path: a standing instruction, so it sits below the
-    // discrete commands and above the pan. Assigned rather than SetTargets'd, since it owns its
-    // own bounds.
-    private void PadAim(in HeadLookInput input)
+    // discrete commands and above the pan. Read off the filter rather than the raw pair, and
+    // assigned rather than SetTargets'd, since it owns its own bounds.
+    private void PadAim()
     {
-        var (elevation, azimuth) = PadAimTargets(input.PadRight, input.PadUp);
+        var (elevation, azimuth) = PadAimTargets(_padFilter.X, _padFilter.Y);
         TargetElevation = elevation;
         TargetAzimuth = azimuth;
     }
@@ -432,5 +451,43 @@ public sealed class HeadLook
     {
         TargetElevation = Mathf.Clamp(elevation, ElevationFloor, MaxElevation);
         TargetAzimuth = ClampAzimuth(azimuth);
+    }
+}
+
+/// <summary>What sits between the raw look stick and every view it aims: a radial centre band, then
+/// a first-order lag at <see cref="HeadLook.PadAimSmoothRate"/> on each component. The pair is the
+/// stick's own and carries no direction of its own, because the head reads it as right and up while
+/// the chase swing reads it as right and down.
+/// ⚠ Ask <see cref="Active"/> whether the stick is being used, never the filtered pair. The lag
+/// never lands on its input exactly, so a held stick's pair is never its raw one, while inside the
+/// band the state is zeroed and both read exactly 0, which is what lets a reader's own return to
+/// centre start on the frame the stick was let go.</summary>
+public sealed class StickLookFilter
+{
+    /// <summary>The filtered deflection along the stick's first axis.</summary>
+    public float X { get; private set; }
+
+    /// <summary>The filtered deflection along the stick's second axis.</summary>
+    public float Y { get; private set; }
+
+    /// <summary>Whether the raw stick sat outside the centre band on the last <see cref="Step"/>,
+    /// which is the whole test of whether it is claiming a view this frame.</summary>
+    public bool Active { get; private set; }
+
+    /// <summary>Advance one frame over the raw pair. Inside the band the state is zeroed, so
+    /// nothing of a held deflection survives letting go.</summary>
+    public void Step(float dt, float x, float y)
+    {
+        if (Mathf.Sqrt((x * x) + (y * y)) <= HeadLook.PadAimCentreBand)
+        {
+            X = 0f;
+            Y = 0f;
+            Active = false;
+            return;
+        }
+
+        X = HeadLook.Approach(X, x, HeadLook.PadAimSmoothRate, dt);
+        Y = HeadLook.Approach(Y, y, HeadLook.PadAimSmoothRate, dt);
+        Active = true;
     }
 }

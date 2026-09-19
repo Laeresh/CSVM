@@ -171,8 +171,8 @@ draws its authored 800x600 space one-to-one.
   stale numbers, a missing stamp or scrap, a scrap that will not open, an arrow or the bookmark
   appearing where it should not (or not appearing where it should), or landing straight on the cabin
   means the debrief screen is broken.
-- `PT-120` `[Own]` **The pad sitting: three axis-capture constants and the rumble, both judged with a
-  real pad in hand (`BL-693`).** `ControlCapture.RestBand` 0.25, `MoveThreshold` 0.6 and
+- `PT-120` `[Own]` **The pad sitting: three axis-capture constants, the look stick's own filter and
+  the rumble, all judged with a real pad in hand (`BL-693`).** `ControlCapture.RestBand` 0.25, `MoveThreshold` 0.6 and
   `CapturedDeadzone` 0.5 decide whether a stick or a trigger a player pushes becomes a binding, and
   none of them has a decode behind it: the original cannot bind an axis to a command at all, so there
   is nothing to match. The rumble does have one, the original's own effect table
@@ -193,6 +193,11 @@ draws its authored 800x600 space one-to-one.
     lasts and stop when it does, without stuttering at the refresh seam;
   - (f) the Game Options Rumble row turns all of it off and back on, and the choice survives a
     restart;
+  - (g) the look stick is steady: in snap mode (`K`), with the right stick held a little off centre,
+    first in the chase view and then in Cockpit, the view sits still instead of shimmering, a small
+    push still takes it where you meant, and letting go returns it at the speed it always did.
+    `HeadLook.PadAimSmoothRate` 25/s (a 40 ms lag) and `PadAimCentreBand` 0.02 are the two to raise
+    if it still shimmers and to lower if the view feels like it is catching up with your thumb;
   *Blocks:* `BL-693`. ⚠ Capturing the right trigger takes it from both Camera Boost and Camera
   Dolly Out rather than stacking a third reading (`ActionMap.SameControl` ignores the deadzone on
   purpose): that is not a fault of these three numbers and must not be tuned against.
