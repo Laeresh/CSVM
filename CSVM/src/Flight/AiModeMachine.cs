@@ -40,9 +40,9 @@ public enum AiMode
     /// everything else waits.</summary>
     AvoidCrash,
 
-    /// <summary>Flying at a <c>dzpathN</c> ribbon's entry point on the emergency table: the
-    /// original's state 2, entered by <see cref="AiPilot"/> off a reached net node's danger-zone
-    /// tag, and left for <see cref="NavigatingDangerZone"/> inside 105 m of that point.</summary>
+    /// <summary>Flying at a <c>dzpathN</c> ribbon's entry point on the emergency table, the
+    /// original's state 2. Entered off a reached net node's danger-zone tag or a hit pilot's
+    /// proximity pick, and left inside 105 m for <see cref="NavigatingDangerZone"/>.</summary>
     ApproachingDangerZone,
 
     /// <summary>On rails along the ribbon: the pose is written off <see cref="DangerZoneRail"/>
@@ -53,16 +53,14 @@ public enum AiMode
 
 /// <summary>The nine-mode AI state machine, owned by an <see cref="AiPilot"/> and stepped
 /// once per sim tick from <see cref="AiPilot.Next"/>. The mode list and its vocabulary are
-/// decoded (docs/formats/ai-rosters.md "AI modes, engine-side"); which transitions are decoded
-/// and which are invented is recorded in docs/architecture.md's entry for this file, and each
-/// invented constant below says so at its own declaration.
+/// decoded (docs/formats/ai-rosters.md "AI modes, engine-side"), and each invented constant
+/// below says so at its own declaration.
 /// Config fields are plain and mutable BY DESIGN, mission scripts rewrite them at runtime
 /// (<c>SET_AI_ATTACK_RADIUS</c> and friends). All randomness is this machine's own seeded
 /// stream, so a fixed-seed run transitions identically. The obstacle probe is an injected
-/// delegate and target state arrives as a snapshot, so the transition table unit-tests without
-/// a scene tree (<c>AiModeMachineTests</c>).
-/// The danger-zone modes are entered by <see cref="AiPilot"/> alone, off a reached net node's
-/// tag (docs/org/aiPilot.md "The danger-zone run"). ⚠ Do not add a second entry here.</summary>
+/// delegate and target state a snapshot, so the table unit-tests without a scene tree.
+/// ⚠ The danger-zone modes are <see cref="AiPilot"/>'s to enter and none of them here: this
+/// machine only rolls and stamps (docs/org/aiPilot.md "The danger-zone run").</summary>
 public sealed class AiModeMachine
 {
     /// <summary>The evade flag's clear threshold, decoded: the flag is dropped once the cosine
@@ -97,6 +95,15 @@ public sealed class AiModeMachine
 
     /// <summary>Invented: minimum probe length, metres (a slow plane still looks ahead).</summary>
     public const float ProbeMinLookaheadM = 120f;
+
+    /// <summary>The hold a refused danger-zone look arms before the next one, seconds. Decoded:
+    /// the original stamps <c>+0x8a0</c> with the clock plus 5 on every arm that finds no run
+    /// (<c>FUN_004210e0</c>, <c>0x00421443</c>).</summary>
+    public const float DangerZoneRetryS = 5f;
+
+    /// <summary>The vehicle constructor's own <c>daredevil_chance</c> (<c>+0x954</c>, written
+    /// 0.2 at <c>0x004b03c2</c>), carried by a pilot whose spawn resolved no rating.</summary>
+    public const float DefaultDaredevilChance = 0.2f;
 
     /// <summary>The avoid-crash climb-out altitude gain, metres, decoded: the original's climb-out
     /// aim is the aeroplane's own position with Y + 1000 (<c>FUN_0041d1f0</c> case 3), which is the
@@ -224,8 +231,16 @@ public sealed class AiModeMachine
     public bool AssistEnabled = true;
 
     /// <summary>The pilot's 1–9 <c>natural_touch</c>, compared directly against maneuver
-    /// difficulty (no interpolation table, by design).</summary>
+    /// difficulty (no interpolation table, by design). The proximity pick compares it against a
+    /// ribbon's own difficulty the same way (<c>FUN_004210e0</c>, <c>+0x958</c> against
+    /// <c>+0x44</c>).</summary>
     public int NaturalTouch = 1;
+
+    /// <summary>The pilot's resolved <c>daredevil_chance</c> (<c>+0x954</c>, 0.35 → 0.99 over the
+    /// rating): the probability one look for a danger zone gets past the roll. A spawn whose def
+    /// is not a <c>jet</c> is given zero. That is the original's own <c>+0x67c</c> test on the
+    /// arm that rolls (<c>FUN_0041d9f0</c>, <c>0x0041da07</c>).</summary>
+    public float DaredevilChance = DefaultDaredevilChance;
 
     /// <summary>The maneuver library, or null for a maneuver-less pilot (a failed
     /// steady-hand test then evades plainly instead).</summary>
@@ -269,6 +284,7 @@ public sealed class AiModeMachine
     // arms it to the end of the wait before the next chase, so one field paces both ends.
     private double _clock;
     private double _dwellUntil;
+    private double _dangerZoneRetryUntil;
     private bool _quarryIsVehicle = true;
     private bool _quarryIsPrimary;
 
@@ -545,6 +561,29 @@ public sealed class AiModeMachine
             return;
         Stun(StunRecoveryIntervalS, FormattableString.Invariant($"for {StunRecoveryIntervalS:0.0} s"));
     }
+
+    /// <summary>The daredevil roll that opens the proximity pick (<c>FUN_004210e0</c>'s unforced
+    /// arm): true means the pilot may look for a zone this step. The 5 s stamp is read first, so
+    /// a refused look costs one roll per <see cref="DangerZoneRetryS"/>, not one per frame. A
+    /// failed roll arms the stamp again. ⚠ This rolls only, and <see cref="AiPilot"/> owns both
+    /// entries into the run.</summary>
+    public bool RollDaredevil()
+    {
+        if (DaredevilChance <= 0f || _clock < _dangerZoneRetryUntil)
+            return false;
+        bool passed = _rng.NextDouble() < DaredevilChance;
+        RollLogged?.Invoke("Dare devil test " + (passed
+            ? "passed. Looking for danger zones."
+            : "failed. Not looking for danger zones."));
+        if (!passed)
+            StampDangerZoneRetry();
+        return passed;
+    }
+
+    /// <summary>Arms the retry hold after a look that started no run. The original stamps it on
+    /// every arm of the pick that falls through. Those arms are a difficulty over the pilot's
+    /// natural touch, an occupied lane, and no end in range.</summary>
+    public void StampDangerZoneRetry() => _dangerZoneRetryUntil = _clock + DangerZoneRetryS;
 
     /// <summary>The stun handler (decoded: <c>FUN_004200d0</c>, shared by the failed sixth-sense
     /// test, a <c>SONIC</c>/<c>FLASH</c> hit and the smoke screen): controls neutral for

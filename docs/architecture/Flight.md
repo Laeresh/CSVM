@@ -360,10 +360,8 @@ cruise speed. Every constant is read out of the image and named at its declarati
 A mission's ribbon set read straight off the chapter gamez, independent of `--debug-dzpaths`: every
 `dzpathN` node's route polygon by the route-versus-gate-pair material rule
 ([../formats/missions.md](../formats/missions.md)), never by polygon index, its children as lanes,
-and `dzones.zrd`'s `disable` list as the inactive flag. `ByIndex` serves a numbered net tag and
-`NearestEnd` the negative one. One instance per session, shared through `AiPilot.DangerZones`,
-because lanes are occupancy-counted across pilots; `CampaignDirector.Attach` builds it and hands it
-to every roster pilot. Read `DangerZoneRibbon.cs` for one route's geometry.
+and `dzones.zrd`'s `disable` list as the inactive flag. `ByIndex` serves a numbered net tag, `NearestEnd` the negative one, and `ProximityPick` the daredevil roll's own walk, the active, free-lane and difficulty admission and then the end inside 500 m whose ribbon leads away best.
+One instance per session, shared through `AiPilot.DangerZones`, because lanes are occupancy-counted across pilots; `CampaignDirector.Attach` builds it and hands it to every roster pilot. Read `DangerZoneRibbon.cs` for one route's geometry.
 
 ## src/Flight/DangerZonePhotograph.cs
 The Danger Zone camera's eye, one per human pilot, the `PaneRequest` `StuntCapture` and
@@ -410,8 +408,8 @@ an optional `Machine` and an optional `Escort`), one `FlightInput` per sim step 
 `FlightController` whose `Pilot` is set. A `Machine` is stepped first and picks this step's aim point
 and parameter table; an `Escort` whose leader is in play takes the dispatch away from every mode but
 stunned and avoid crash, which is the original's own wingman fork. `Stun` is the AI stun's entry,
-leaving the throttle lever where it was so the aircraft coasts under power. Pure and seeded, so a
-fixed-dt run is deterministic. Decode: [../org/aiPilot.md](../org/aiPilot.md).
+leaving the throttle lever where it was so the aircraft coasts under power. Both danger-zone entries are here and share one `StartDangerZoneRun`: the reached net node's tag, and the decoded daredevil roll's proximity pick, which is offered only while a combat mode carries the machine's `Evading` flag.
+Pure and seeded, so a fixed-dt run is deterministic. Decode: [../org/aiPilot.md](../org/aiPilot.md).
 
 ## src/Flight/AiControlLaw.cs
 The original's own AI steering law, documented in
@@ -440,7 +438,7 @@ Decoded and wired are the promotion into pursue on whatever quarry the selection
 the pre-hit pools, looping on the leftover (`RollLogged` reports every hit reaching the pilot, rolls taken
 and skipped alike, so its line count is the hit count), the `Evading` flag a failed test sets and the
 weighted library draw it enters under the natural-touch, injector and predicted-end altitude culls (that last one vetoing a program whose predicted end falls under the floor and sweeping the predicted path below the ceiling, from the position and attitude `Update` was last handed), chaining a fresh maneuver until
-the pursuer's nose falls off, the sixth-sense roll and its stun, the `Stun` entry, the rubber-band `lay off` `--no-assist` disables, and `avoid crash`'s bands. Engine-free, inventions marked where declared.
+the pursuer's nose falls off, the sixth-sense roll and its stun, the `Stun` entry, the rubber-band `lay off` `--no-assist` disables, `avoid crash`'s bands, and `RollDaredevil` with the 5 s stamp every refusal re-arms, which is the danger-zone look's own roll. Engine-free, inventions marked where declared.
 Decode: [../org/aiPilot.md](../org/aiPilot.md), [../org/aiControlLaw.md](../org/aiControlLaw.md).
 
 ## src/Flight/ManeuverExecutor.cs

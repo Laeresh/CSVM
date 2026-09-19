@@ -1328,17 +1328,34 @@ forced arm. Neither arm rolls anything, tests a range or reads a difficulty:
   vertex is closer). A refused entry sets a 5 s retry stamp (`+0x8a0`) and nothing else.
 - the forced arm of `FUN_004210e0` takes the nearest end of ANY active zone, at any range.
 
-**The proximity roll** (`FUN_004210e0`'s unforced arm) is a different thing and a narrow one: it
-runs from the PURSUE arm alone (`FUN_0041d9f0`, its first statement), and only while the vehicle
-is a `jet` in state 0 with byte `+0xba` set, which the damage handler sets on a FAILED steady-hand
-test (`FUN_004b9bc0`, "Absorbed %f damage, steady hand test failed") and pursue clears when the
-player is no longer behind it. Every 5 s (`+0x8a0`) it rolls `rand()/32767 <
-daredevil_chance` (`+0x954`, default 0.2), "Dare devil test passed. Looking for danger zones.",
-then over every active zone with a FREE lane and a difficulty at or under the pilot's
-`natural_touch` (`+0x958`, default 4; "Choosing danger zone. Natural touch test failed") it takes
-the end inside **500 m** whose into-ribbon tangent best lines up with the direction from the
-aeroplane to it. So the roll is an evasion: a hit pilot being chased dives into a nearby zone.
-The only other caller is the debug console's `force_dz` (`FUN_0043d640`), on the player's target.
+**The proximity roll** (`FUN_004210e0`'s unforced arm) is a different thing and a narrow one. Its
+gate is the head of the combat driver `FUN_0041d9f0`, five tests before anything else that driver
+does, each falling through to `0x0041da43`: the global suspend flag `DAT_0064f66e` is clear
+(`0x0041d9f9`), the vehicle class `+0x67c` is 0, a `jet` (`0x0041da07`), the state `+0x358` is 0
+(`0x0041da11`), the hit byte `+0xba` is set (`0x0041da1b`), and the mission clock `DAT_0071c470`
+has reached the retry stamp `+0x8a0` (`0x0041da25`, `FCOMP` then `TEST AH,1`, so the call is taken
+on clock at or past stamp). Then `FUN_004210e0(0, 0)` at `0x0041da3e`. The hit byte is the damage
+handler's, set on a FAILED steady-hand test (`FUN_004b9bc0`, "Absorbed %f damage, steady hand test
+failed") and cleared by pursue when the player is no longer behind it, so the roll is an evasion:
+a hit pilot being chased dives into a nearby zone.
+
+The unforced arm rolls `rand() × 3.051851e-05 < daredevil_chance` (`+0x954`, written from the def
+at `0x0047ce4e`, constructor default 0.2 at `0x004b03c2`), logging "Dare devil test passed.
+Looking for danger zones." or "Dare devil test failed. Not looking for danger zones.". On a pass
+it walks every zone whose active byte `+0x48` is set, whose difficulty `+0x44` is at or under the
+pilot's `natural_touch` (`+0x958`, written at `0x0047ce92`, default 4 at `0x004b03cc`; "Choosing
+danger zone. Natural touch test failed") and which has a free lane (`FUN_00446510`), reads both
+ends through `FUN_00446790`/`FUN_00446850`, and takes the end within **500 m** (the squared test
+`local_4c <= 250000.0`) whose into-ribbon tangent best lines up with the direction from the
+aeroplane to it. Every path that does not enter stamps `+0x8a0 = DAT_0071c470 + 5.0` at
+`LAB_00421443`. The only other caller is the debug console's `force_dz` (`FUN_0043d640`), on the
+player's target.
+
+The suspend flag is not a danger-zone term and reads 0 for the whole of a played mission: the
+mission load clears it (`0x00464693`) as does the new-game path (`0x004654fa`), the debug
+console's `suspend` command writes it (`0x0043db4d`), and the state core raises it only once a
+deadline of 1,000,000,000 ticks stamped at load has passed (`0x004a0252`, the constant at
+`DAT_00622bb4`).
 
 Both entries end the same way: the run record is written to `+0x9bc`, the state to **2**, and the
 standing target `+0x948` is released. `FUN_004897c0` then re-arms state 2 from a non-null
@@ -1424,6 +1441,15 @@ edge pick (`FUN_00431e40`) excluding the edge the walk was on when the run began
 crash checks are both gated on state < 4 / < 2 in `FUN_004897c0`, so nothing interrupts a rail
 run but a stun write, after which `+0x9bc` re-arms the approach at the cursor's current point.
 
+⚠ **The `PR-DngrZn` line belongs to the gate count, not to the AI's run.** The zone module's own
+completion routine `FUN_00446990` broadcasts combat-voice trigger 15 through `FUN_004b86a0(0xf)`
+at `0x004469ff`, inside the branch that needs more than one gate crossed (`0x004469dc`) and right
+after the loop that clears each gate's crossed byte `+0x10` (`FUN_00446930` sets it). The same
+branch flags matching `DANGER_ZONES_COMPLETED` objective names, increments the completion count
+`_DAT_0071d328` and arms the snapshot `DAT_0064fb78`. `FUN_0048e580` reaches that routine for the
+local player's vehicle alone (`CMP EDI,[0x0071c298]` at `0x0048ea1f`), so the line is the flight
+praising the player's run through the gates, and an AI's own rail run never speaks it.
+
 ### What CSVM ports of this
 
 `Flight/DangerZoneRibbon.cs` is the spline, the run cursor and the rail integrator with every
@@ -1436,6 +1462,16 @@ re-seats the follower through `AiNetFollower.Reseat`, which is handed the leg th
 the entry and refuses it, the exclusion above. Measured on C2/M03 with the world's colliders up
 (the `campaign-racers` suite, 208 s of sim): all six racers fly `dzpath1, 2, 3, 10, 6, 7, 9` in
 the net's tag order, each once, through approach, lock and exit.
+
+The proximity roll is ported beside the tag entry. `AiModeMachine.RollDaredevil` is the roll and
+the 5 s stamp, with the original's own log strings; `DangerZoneRibbons.ProximityPick` is the zone
+walk, the difficulty and free-lane admission and the 500 m best-facing end; `AiPilot` calls them
+from the combat modes with `Evading` up, which is the remake's `+0xba`, and both entries then run
+through one `StartDangerZoneRun`. The class gate lives where the chance is assembled
+(`AiFlightAssembler`, a non-`jet` gets a chance of 0), so a wingman escort keeps its station under
+fire. The trigger 15 line rides the player's own completion report:
+`CampaignDirector.NotifyDangerZoneCompleted` raises `WorldInputs.DangerZoneSpoken`, which
+`GameSession` turns into `AiVoiceRuntime.DangerZoneCompleted` for the flown aeroplane.
 
 ⚠ **The exclusion is what carries a racer out of a zone.** Without it the seat pick after a run
 is free to take the leg back toward the tagged node, and `dzpath3`'s exit sets the aeroplane
@@ -1463,8 +1499,8 @@ install's one tagged node on a generator's net. The `generator-launch-danger-zon
 off the Dante over the mission's built world, seats him on `M4MilesRun` the way OBJECTIVE60 does and
 reads the entry off his pilot.
 
-Not ported: the proximity roll (it needs the `+0xba` hit flag the mode machine does not carry;
-`DangerZoneRibbon.ProximityRangeM` and `HasFreeLane` are its admission terms, kept for it), the
+Not ported: the suspend flag the roll's gate reads first (nothing in CSVM suspends a mission that
+way), the zone difficulty term (implemented, but every shipped `dzpath` node reads 0), the
 target release at the lock (CSVM's gunner target is the host's), the altitude-floor bypass on the
 approach solve, the lane table past the zero lane (no shipped node has one), and the vertical nose a
 bay launch seats its net with (CSVM seats a launched follower on its first update, from the

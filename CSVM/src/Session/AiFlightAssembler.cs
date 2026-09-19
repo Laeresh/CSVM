@@ -447,6 +447,14 @@ internal sealed class AiFlightAssembler
                 StunRecoveryIntervalS = _aiSkills.At("stun_recovery_interval",
                     SkillFor(defSkills.StunRecovery, rating, roster.StunRecovery)),
                 NaturalTouch = SkillFor(defSkills.NaturalTouch, rating, roster.NaturalTouch),
+                // The proximity pick's roll, on the original's own class gate: only a jet rolls
+                // (FUN_0041d9f0, 0x0041da07 reads +0x67c). A wingman escort therefore keeps its
+                // station under fire.
+                DaredevilChance = defStats.VehicleMode is null
+                    || defStats.VehicleMode.Equals(VehicleDefs.JetMode, StringComparison.OrdinalIgnoreCase)
+                    ? _aiSkills.At("daredevil_chance",
+                        SkillFor(defSkills.DareDevil, rating, roster.DareDevil))
+                    : 0f,
                 Library = _maneuvers,
                 AssistEnabled = !_policy.NoAssist,
             };

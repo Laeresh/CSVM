@@ -2049,7 +2049,9 @@ internal static class AiSuites
         "hit sets the evade flag and enters an evasive maneuver, a pursuer pointed elsewhere " +
         "clears the flag and releases the reaction while a nose-on one holds it and chains a " +
         "second program, an ordered evade carries no flag and leaves the next hit its roll " +
-        "while a hit with nothing eligible sets and holds one, a failed " +
+        "while a hit with nothing eligible sets and holds one, a hit pilot whose dare devil test " +
+        "passes dives into a danger-zone ribbon 300 m off its nose rather than flying the " +
+        "engagement out, a failed " +
         "sixth-sense roll stuns (gunner silent) and recovers after stun_recovery_interval, " +
         "the avoid-crash override climbs out on a blocked probe and releases, and the D15 " +
         "rubber-band assist: a chasing human fallen behind puts the machine in lay off " +
@@ -2378,6 +2380,33 @@ internal static class AiSuites
             ctx.Check(machine.Mode == AiMode.Pursue,
                 $"a non-pursuing target releases lay off after the hold mode={AiModeMachine.NameOf(machine.Mode)}");
 
+            // --- the proximity pick (FUN_004210e0's unforced arm), last, since the dive takes
+            // the aeroplane off its engagement. The roll is pinned to a certainty, so what is
+            // measured is the gate and the entry rather than the dice.
+            var lead = ai.NoseDirection.Normalized();
+            var zoneEntry = ai.WorldPosition + (lead * 300f);
+            pilot.DangerZones = DangerZoneRibbons.Of(new[]
+            {
+                DangerZoneRibbon.FromPolyline("dzpath1", 1, new[]
+                {
+                    zoneEntry, zoneEntry + (lead * 400f), zoneEntry + (lead * 800f),
+                }),
+            });
+            machine.DaredevilChance = 1f;
+            machine.Library = null;
+            target.PlaceHeld(targetPos, ai.WorldPosition);   // nose-on, so the fresh flag stands
+            machine.SteadyHandExponent = float.PositiveInfinity;
+            ai.TakeProjectileHit(gun, ai.WorldPosition + new Vector3(2f, 0f, 0f), "fuselage", 0);
+            machine.SteadyHandExponent = 0f;
+            ctx.Check(machine.Mode == AiMode.Evade && machine.Evading,
+                $"a hit pilot with nothing eligible flies its engagement marked mode={AiModeMachine.NameOf(machine.Mode)}");
+            Step(1);
+            ctx.Check(machine.Mode == AiMode.ApproachingDangerZone
+                && pilot.ZoneRun?.Ribbon.Name == "dzpath1",
+                $"…and a passed dare devil test dives into the zone off its nose instead mode={AiModeMachine.NameOf(machine.Mode)} run={pilot.ZoneRun?.Ribbon.Name ?? "none"}");
+            ctx.Check(transitions.Contains("evade>approaching danger zone"),
+                $"…logged in the engine's own vocabulary transitions=[{string.Join(" ", transitions)}]");
+
             ctx.Note($"transitions: {string.Join(" ", transitions)}");
         }
         finally
@@ -2519,7 +2548,8 @@ internal static class AiSuites
         + "fresh engagement past the 15 s slot cooldown speaks the pair again; and the same raise "
         + "addresses the taunt pair to the pursuer off its own nose against the human it holds: "
         + "inside the nose cone taunts 26, on its own tail taunts 25, abeam taunts neither though "
-        + "the raise ran, and a pursuer in its own evade reaction taunts nothing nose-on")]
+        + "the raise ran, and a pursuer in its own evade reaction taunts nothing nose-on; and a "
+        + "Danger Zone the player has flown broadcasts 15 to that player's own flight")]
     internal static void AiVoice(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -3092,6 +3122,17 @@ internal static class AiSuites
             ctx.Check(busyModes.Evading && !Taunted(busy, AiVoiceDispatcher.TaFailShk)
                 && !Taunted(busy, AiVoiceDispatcher.TaFailTail),
                 $"…and a pursuer in its own evade reaction taunts nothing nose-on flag={busyModes.Evading}");
+
+            // --- the Danger Zone praise (15): the player flying a zone out is the original's
+            // own site. The line is broadcast, so one of the player's flight speaks it.
+            PumpRadio(radio);
+            int zoneBefore = calls.Count;
+            attack.DangerZoneCompleted(chased);
+            ctx.Check(calls.Count == zoneBefore + 1
+                && calls[^1].Trigger == AiVoiceDispatcher.PrDngrZn
+                && calls[^1].Tag == flightMate.Name
+                && calls[^1].Clip.StartsWith("snd_id2_PR-D"),
+                $"a Danger Zone the player completed is praised by its flight, not by the player last={(calls.Count > zoneBefore ? calls[^1].ToString() : "none")}");
 
             ctx.Note($"lines: {string.Join(", ", played)}; attack pair: {string.Join(", ", calls)}");
         }

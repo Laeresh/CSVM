@@ -705,14 +705,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `git log --grep=BL-977` (the Instant Action prewarm gap),
   the saved Voice level (`Utils/AudioMix.cs`, the `audio-buses` suite) if the lines dispatch and
   stay inaudible; `git log --grep=BL-986` (the attack pair now raised off the quarry rather than
-  off the mode edge, which was the largest single cause of the low rate) and `BL-991` (the one
-  trigger id still unwired).
-
-- `BL-991` `[Feature]` `[Blocked: danger-zone decode]` `[S]` `[Next: decode]` `[Impact: low]`
-  `[Evidence: decoded]` **`PR-DngrZn` (id 15, a Danger Zone run, broadcast) has no dispatch site
-  because the danger-zone modes are never entered.** *Evidence:*
-  `docs/formats/combat-voice.md` row 15: the modes' gate data is undecoded (F17). *Fix shape:*
-  lands with the mode decode; until then nothing to wire. *Cross-refs:* `BL-934`.
+  off the mode edge, which was the largest single cause of the low rate) and `git log --grep=BL-991`
+  (`PR-DngrZn`, the last trigger id to be wired).
 
 ## Cameras & views
 

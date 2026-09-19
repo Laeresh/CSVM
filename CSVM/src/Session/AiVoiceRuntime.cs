@@ -117,14 +117,19 @@ public sealed partial class AiVoiceRuntime : Node
     }
 
     /// <summary>Registers a human rig as an event source; the player itself never speaks an AI
-    /// line. Its health crossing 30 % broadcasts <c>WA-HighDmg</c> to the flight, and a kill of
-    /// its own addresses the gloat (id 24) to the rig itself, silent until a player rig resolves a
-    /// voice set, and broadcasts <c>PR-EnemyDwn</c> (id 16) to the flight.</summary>
+    /// line. Its health crossing 30 % broadcasts <c>WA-HighDmg</c> to the flight. A kill of its
+    /// own addresses the gloat (id 24) to the rig itself and broadcasts <c>PR-EnemyDwn</c>
+    /// (id 16). The gloat is silent until a player rig resolves a voice set. A stunt run the rig
+    /// already carries is watched for its completed zones (id 15).</summary>
     public void RegisterPlayer(FlightController rig)
     {
         _humans.Add(rig.PlayerIndex);
         WatchKills(rig);
         _lastPlayerFraction[rig] = 1f;
+        if (rig.Stunt is { } stunt)
+        {
+            stunt.ZoneCompleted += _ => DangerZoneCompleted(rig);
+        }
         rig.DamageApplied += (damaged, _) =>
         {
             if (damaged.Damage is not { } dmg)
@@ -147,6 +152,14 @@ public sealed partial class AiVoiceRuntime : Node
     /// session, since the pool is what both turret families are built against.</summary>
     public void WatchTurrets(ProjectilePool projectiles) =>
         projectiles.TurretAcquiredPlayer += OnTurretAcquired;
+
+    /// <summary>The <c>PR-DngrZn</c> site (id 15): a Danger Zone the player has just flown, praised
+    /// by one of that player's own flight. The original raises it inside the zone's completion
+    /// routine, where both gates read crossed (<c>FUN_00446990</c>, <c>0x004469ff</c>). That
+    /// routine is reached for the local player's vehicle alone (<c>FUN_0048e580</c>,
+    /// <c>0x0048ea1f</c>), so no AI completion speaks it.</summary>
+    public void DangerZoneCompleted(FlightController player) =>
+        Play(_dispatcher.Broadcast(AiVoiceDispatcher.PrDngrZn, player.Team, _now));
 
     // The turret warning is a broadcast, so the gunner is not the speaker: one of the warned
     // player's own flight says it, elected on that player's team (decoded, id 0 broadcasts).

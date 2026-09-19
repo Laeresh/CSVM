@@ -3194,6 +3194,15 @@ public partial class GameSession : Node3D
                     : PaneReadback.Request(_rigs[0].Viewport ?? (IsInsideTree() ? GetViewport() : null), landed)),
             Humans = HumanAircraft,
             Aircraft = AllAircraft,
+            // The flight's Danger Zone praise (id 15), elected on P1's team. The original raises
+            // it in the zone's completion routine, for the local player's vehicle alone.
+            DangerZoneSpoken = () =>
+            {
+                if (_aiVoice is { } voice && _rigs.Count > 0 && _rigs[0].Controller is { } flown)
+                {
+                    voice.DangerZoneCompleted(flown);
+                }
+            },
             BeginSpectate = BeginCampaignSpectate,
             Rng = Rng.NewSystemRandom(Rng.Ai),
         });

@@ -100,6 +100,42 @@ public sealed class DangerZoneRibbons
         return best;
     }
 
+    /// <summary>The pick a hit pilot's passed daredevil roll makes (<c>FUN_004210e0</c>'s
+    /// unforced arm). Admitted: an active ribbon with a free lane whose difficulty
+    /// <paramref name="naturalTouch"/> covers. Taken: the end inside
+    /// <see cref="DangerZoneRibbon.ProximityRangeM"/> whose into-ribbon tangent best lines up
+    /// with the line from <paramref name="position"/> to it, so the run continues the dive.
+    /// Null when nothing qualifies, which arms the pilot's own retry hold.</summary>
+    public (DangerZoneRibbon Ribbon, bool FarEnd)? ProximityPick(Vector3 position, int naturalTouch)
+    {
+        (DangerZoneRibbon, bool)? best = null;
+        float bestDot = -1f;
+        const float Reach = DangerZoneRibbon.ProximityRangeM * DangerZoneRibbon.ProximityRangeM;
+        foreach (var ribbon in _byIndex.Values)
+        {
+            if (!ribbon.Active || ribbon.Difficulty > naturalTouch || !ribbon.HasFreeLane)
+                continue;
+            for (int end = 0; end < 2; end++)
+            {
+                bool far = end == 1;
+                var toEnd = ribbon.End(far) - position;
+                var tangent = ribbon.EndTangentInto(far);
+                if (toEnd.LengthSquared() > Reach || toEnd.LengthSquared() < 1e-4f
+                    || tangent.LengthSquared() < 1e-4f)
+                {
+                    continue;
+                }
+                float facing = toEnd.Normalized().Dot(tangent.Normalized());
+                if (facing >= bestDot)
+                {
+                    bestDot = facing;
+                    best = (ribbon, far);
+                }
+            }
+        }
+        return best;
+    }
+
     private static bool TryIndexOf(string name, out int index)
     {
         index = -1;

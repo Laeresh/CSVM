@@ -213,6 +213,43 @@ public class DangerZoneRibbonTests
         Assert.False(pick.Value.FarEnd);
     }
 
+    /// <summary>The proximity pick a hit pilot's passed roll makes: the end inside 500 m whose
+    /// tangent leads AWAY, not always the nearest one. Its admission terms are pinned here too:
+    /// range, a free lane, the active byte.</summary>
+    [Fact]
+    public void TheProximityPickTakesTheEndThatLeadsAwayInsideFiveHundredMetres()
+    {
+        var from = new Vector3(0f, 400f, 0f);
+        var ahead = DangerZoneRibbon.FromPolyline("dzpath1", 1, new[]
+        {
+            new Vector3(300f, 400f, 0f), new Vector3(800f, 400f, 0f),
+        });
+        // Nearer, but its ribbon runs back past the aeroplane: entering here would double back.
+        var behind = DangerZoneRibbon.FromPolyline("dzpath2", 2, new[]
+        {
+            new Vector3(-200f, 400f, 0f), new Vector3(700f, 400f, 0f),
+        });
+        var zones = DangerZoneRibbonsFor(ahead, behind);
+
+        var pick = zones.ProximityPick(from, naturalTouch: 9);
+        Assert.NotNull(pick);
+        Assert.Same(ahead, pick!.Value.Ribbon);
+        Assert.False(pick.Value.FarEnd);
+
+        // The only free lane taken by a run in progress drops the ribbon out of the pick.
+        var run = new DangerZoneRun(ahead, reversed: false);
+        Assert.False(ahead.HasFreeLane);
+        Assert.Same(behind, zones.ProximityPick(from, 9)!.Value.Ribbon);
+        run.Release();
+
+        // Beyond 500 m nothing qualifies, however well the end lines up.
+        Assert.Null(zones.ProximityPick(from + new Vector3(-1000f, 0f, 0f), 9));
+
+        ahead.Active = false;
+        behind.Active = false;
+        Assert.Null(zones.ProximityPick(from, 9));
+    }
+
     [Fact]
     public void AnInterruptedRunResumesAsAnApproachAndTheRailIgnoresTheProbe()
     {
