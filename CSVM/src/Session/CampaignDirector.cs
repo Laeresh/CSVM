@@ -977,7 +977,7 @@ public sealed class CampaignDirector
         if (_world.Player() is { } player && !ReferenceEquals(player, _damageWiredTo))
         {
             _damageWiredTo = player;
-            player.DamageApplied += _ => Music?.NoteCombat();
+            player.DamageApplied += (_, _) => Music?.NoteCombat();
         }
 
         if (Music.State == MusicState.Battle)

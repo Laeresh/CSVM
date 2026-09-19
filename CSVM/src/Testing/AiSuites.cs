@@ -2502,7 +2502,8 @@ internal static class AiSuites
         + "is not, and the player's own kill broadcasts 24 on the player's flight, and an evade "
         + "episode's end picks the taunt pair off the evade flag: a pursuer still inside the tail "
         + "cone taunts 26 with 27 silent, a shaken one taunts 27, and a step between the two "
-        + "evade modes taunts nothing")]
+        + "evade modes taunts nothing, and the ally distress (28) answers a round from the player "
+        + "alone and only on a teammate, spoken by the aircraft it struck")]
     internal static void AiVoice(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -2827,6 +2828,27 @@ internal static class AiSuites
                 && played[^1].Trigger == AiVoiceDispatcher.TaSucShk
                 && played[^1].Tag == evader.Name && played[^1].Clip.StartsWith("snd_id2_TA-SucShk"),
                 $"…while one ending with the pursuer shaken taunts #27 instead last={played[^1]}");
+
+            // --- 28 (DS-Ally), the decoded friendly-fire arm: a round from the local player on a
+            // friendly, spoken by the aircraft it STRUCK. The two silent cases run first, so the
+            // 15 s cooldown the played line arms cannot be what silenced them.
+            PumpRadio(radio);
+            var mate = Rig(FlightRoster.ShooterIdBase + 8, AimAssist.PlayerTeam, human: false);
+            runtime.RegisterAi(mate, accentId: null, talkerChance: 0f, constitutionChance: 0f);
+            int allyBefore = played.Count;
+            var grazed = wingman.WorldPosition + new Vector3(0f, 0f, 2f);
+            wingman.TakeProjectileHit(gun, grazed, "fuselage", mate.PlayerIndex, damageScale: 0.02f);
+            ctx.Check(played.Count == allyBefore,
+                $"an AI round on a teammate draws nothing from this site lines={played.Count - allyBefore}");
+            killer.TakeProjectileHit(gun, killer.WorldPosition + new Vector3(0f, 0f, 2f), "fuselage",
+                pilotRig.PlayerIndex, damageScale: 0.02f);
+            ctx.Check(played.Count == allyBefore,
+                $"…and the player's round on an ENEMY draws nothing from it either lines={played.Count - allyBefore}");
+            wingman.TakeProjectileHit(gun, grazed, "fuselage", pilotRig.PlayerIndex, damageScale: 0.02f);
+            ctx.Check(played.Count == allyBefore + 1
+                && played[^1].Trigger == AiVoiceDispatcher.DsAlly
+                && played[^1].Tag == wingman.Name && played[^1].Clip.StartsWith("snd_id2_DS-Ally"),
+                $"…while the player's round on a TEAMMATE draws #28 from the struck aircraft last={(played.Count > allyBefore ? played[^1].ToString() : "none")}");
 
             ctx.Note($"lines: {string.Join(", ", played)}");
         }

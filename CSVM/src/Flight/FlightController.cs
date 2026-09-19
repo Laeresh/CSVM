@@ -699,11 +699,12 @@ public partial class FlightController : Node3D
     public event Action<FlightController>? InertChanged;
 
     /// <summary>Raised on every projectile hit that moved this plane's damage state without
-    /// destroying it (the destroying hit reports through <see cref="Downed"/> instead), the
-    /// E16 voice runtime reads the whole-vehicle summary off it for the DI distress tiers and
-    /// the player's WA-HighDmg crossing. Terrain grazes do not raise it; the decoded distress
-    /// sites are the combat hit path's.</summary>
-    public event Action<FlightController>? DamageApplied;
+    /// destroying it (the destroying hit reports through <see cref="Downed"/> instead), carrying
+    /// the round's shooter as <see cref="Downed"/> carries its killer, null for a round nobody
+    /// owns. The E16 voice runtime reads the whole-vehicle summary off it for the DI distress
+    /// tiers and the player's WA-HighDmg crossing, and the shooter for the ally distress line.
+    /// Terrain grazes do not raise it; the decoded distress sites are the combat hit path's.</summary>
+    public event Action<FlightController, int?>? DamageApplied;
 
     /// <summary>This aircraft's team, everywhere "is this hostile" is asked reads this instead of
     /// deriving a team from <see cref="PlayerIndex"/> (shooter ids are not team ids). Unset, it
@@ -1740,7 +1741,7 @@ public partial class FlightController : Node3D
                 killer: shooter != ProjectilePool.NoShooter ? shooter : null);
             return;
         }
-        DamageApplied?.Invoke(this);
+        DamageApplied?.Invoke(this, shooter != ProjectilePool.NoShooter ? shooter : null);
         if (!IsHumanPiloted && Pilot?.Machine is { } machine)
         {
             machine.NotifyDamage((weapon.ArmorDamage ?? 0f) * damageScale,

@@ -35,6 +35,7 @@ public sealed partial class AiVoiceRuntime : Node
     private readonly HashSet<int> _humans = new();
     private readonly HashSet<int> _watched = new();
     private readonly HashSet<int> _watchedKills = new();
+    private readonly HashSet<int> _watchedFriendlyFire = new();
     private readonly HashSet<(int Speaker, string Family)> _noClipLogged = new();
     private float _now;
 
@@ -74,6 +75,7 @@ public sealed partial class AiVoiceRuntime : Node
     {
         WatchModes(ai);
         WatchKills(ai);
+        WatchFriendlyFire(ai);
         if (accentId is not { } accent)
         {
             return;
@@ -93,7 +95,7 @@ public sealed partial class AiVoiceRuntime : Node
         ai.InertChanged += plane => speaker.Alive = plane.InPlay;
         Log.Info("sound", $"ai voice: {ai.Name}: accent {accent} -> VO id {vo} (talker {talkerChance:0.00})");
 
-        ai.DamageApplied += damaged =>
+        ai.DamageApplied += (damaged, _) =>
         {
             if (damaged.Damage is { } dmg)
             {
@@ -115,7 +117,7 @@ public sealed partial class AiVoiceRuntime : Node
         _humans.Add(rig.PlayerIndex);
         WatchKills(rig);
         _lastPlayerFraction[rig] = 1f;
-        rig.DamageApplied += damaged =>
+        rig.DamageApplied += (damaged, _) =>
         {
             if (damaged.Damage is not { } dmg)
             {
@@ -217,6 +219,37 @@ public sealed partial class AiVoiceRuntime : Node
             ? AiVoiceDispatcher.GlEnemyDwn
             : AiVoiceDispatcher.GlAllyDwn;
         Play(_dispatcher.Dispatch(shooter, trigger, _now));
+    }
+
+    // ⚠ Subscribed for AI only: the struck aircraft is the speaker here, and a human rig speaks no
+    // AI line, so a player hit by a wingman's round stays silent. Idempotent per aircraft.
+    private void WatchFriendlyFire(FlightController ai)
+    {
+        if (!_watchedFriendlyFire.Add(ai.PlayerIndex))
+        {
+            return;
+        }
+        ai.DamageApplied += OnFriendlyFire;
+    }
+
+    // The ally distress, the decoded first arm (combat-voice.md, "The gloat triggers and trigger
+    // 28"): a round from the local player damages an aircraft the team predicate calls friendly,
+    // and the STRUCK aircraft speaks. The second arm counts survivors among three undecoded
+    // globals and waits on that decode.
+    private void OnFriendlyFire(FlightController victim, int? shooter)
+    {
+        if (shooter is not { } id || !_humans.Contains(id))
+        {
+            return;
+        }
+        int shooterTeam = _byIndex.TryGetValue(id, out var node)
+            ? node.Team
+            : AimAssist.TeamOfPilot(id);
+        if (AimAssist.Hostile(shooterTeam, victim.Team))
+        {
+            return;
+        }
+        Play(_dispatcher.Dispatch(victim.PlayerIndex, AiVoiceDispatcher.DsAlly, _now));
     }
 
     // B8's availability contract: the resolved name must have a decoded stream behind it, for a

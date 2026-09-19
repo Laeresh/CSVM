@@ -250,10 +250,10 @@ are spoken by the killer, not by the aircraft that died.
 | 25 | wired | a pursuer's failed sixth-sense (tail) check stunning it, its evading AI target speaks; a human evader stays silent (the player speaks no AI lines) |
 | 26 | wired | our chosen stand-in for the undecoded shake-attempt check: the speaker's evade episode ending with the flag still up, which is the decoded tail-cone hold test (`AiModeMachine.EvadeClearAlignment`) answering that the pursuer's nose is still on it. The dwell reverting the task, a stun and an avoid-crash climb-out are the ends that reach it |
 | 27 | wired | the same episode end with the flag already cleared, the pursuer shaken ("fires as the reaction flag clears", decoded). An episode the speaker leaves with the flag still up is 26, not this. A target lost mid-reaction reads as a shake, the flag's own clear rule with no pursuer left to test |
+| 28 | wired, one arm | the decoded first arm only: `FlightController.DamageApplied` carries the round's shooter, and a shooter registered through `RegisterPlayer` whose team the predicate calls friendly over the struck aircraft's makes that aircraft speak (`AiVoiceRuntime.OnFriendlyFire`). The second arm, the survivor count over `DAT_0071c4e4`/`e8`/`ec` with its default sound set, is left unwired: what those three globals are is undecoded (below) |
 | 0 | unwired | turret acquisition is `TurretController`'s event; owned by C9's thread, not wired from here |
 | 15 | unwired | the danger-zone modes are never entered (their gate data is undecoded, F17) |
-| 16 | unwired | the original broadcasts it on the local player's kill of a hostile (above). The remake broadcasts 24 on that event instead of addressing 24 to the player's own rig, so the two rows move together, left for a future item |
-| 28 | unwired | both arms (above) are answerable now that a team model exists, no dispatch site chosen yet, left for a future item |
+| 16 | unwired | the original broadcasts it on the local player's kill of a hostile (above). The remake broadcasts 24 on that event instead of addressing 24 to the player's own rig, so the two rows move together, left for a future item | 
 
 Stand-ins and inventions, named:
 

@@ -424,7 +424,7 @@ Format and decode, including the wake ordering and the awake-by-data census:
 ## src/Session/AiVoiceRuntime.cs
 Wires the combat-voice dispatcher into a running flight session, built with the rigs wherever the
 world has a `WorldSounds` and ticked on the sim clock: an accented AI spawn is registered as a
-speaker on its own `FlightController.Team`, each human rig as a damage source, and the mode machine
+speaker on its own `FlightController.Team`, each human rig as a damage source whose rounds draw the ally distress out of a teammate they strike, and the mode machine
 and death report of EVERY aircraft handed over are watched, accented or not, because the bearing
 call-out, the taunt and the killer's gloat are spoken by an aircraft other than the one the event reached.
 An evade episode's end picks the taunt pair off the machine's own evade flag: still standing is the failed shake, cleared is the successful one.

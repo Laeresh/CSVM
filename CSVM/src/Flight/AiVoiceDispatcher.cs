@@ -60,6 +60,8 @@ public sealed class AiVoiceDispatcher
 
     public const int TaSucShk = 27;
 
+    public const int DsAlly = 28;
+
     /// <summary>The gate's outcome when the resolver finds no playable clip for the speaker.</summary>
     public const string NoClipOutcome = "no clip";
 

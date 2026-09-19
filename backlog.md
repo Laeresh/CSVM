@@ -688,7 +688,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `git log --grep=BL-977` (the Instant Action prewarm gap),
   the saved Voice level (`Utils/AudioMix.cs`, the `audio-buses` suite) if the lines dispatch and
   stay inaudible; `BL-986` (the spawn-time commit is muted and never re-arms, the largest single
-  cause of the low rate), `BL-989` to `BL-991` and `BL-996` (the unwired trigger ids).
+  cause of the low rate), `BL-990`, `BL-991` and `BL-996` (the unwired trigger ids).
 
 - `BL-986` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: trace]` **An ace commits to
   the player on the first frame, inside the 2 s mute window, so `WA-Attack` and the bearing
@@ -711,15 +711,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   failed rolls. *Playtest after fix:* Instant Action → C1 → Dogfighting an Ace with
   `--log=sound:debug`; expect a `trigger #14` line as the ace closes, and one per re-engagement.
   *Cross-refs:* `BL-934` (the campaign-side silence, same runtime).
-
-- `BL-989` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **`DS-Ally`
-  (id 28) has no dispatch site, so a wingman hit by your round never complains.** *Evidence:*
-  `docs/formats/combat-voice.md` decodes two arms in `FUN_004b9770`; the first fires when the
-  local player's round damages a friendly and the struck aircraft speaks. The second counts
-  survivors among three undecoded globals and is not answerable. *Fix shape:* wire the
-  friendly-fire arm only, on `DamageApplied` where the shooter is the human and the victim shares
-  its team; leave the second arm to a decode. *Cross-refs:* `BL-934` (its verdict
-  named friendly fire as a silent case).
 
 - `BL-990` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **`WA-Turret`
   (id 0, a turret has acquired the player with line of sight) has no dispatch site.**
