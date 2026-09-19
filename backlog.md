@@ -531,22 +531,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Playtest after fix:* any chapter under Enhanced Graphics, still and moving, over water and over
   ground. *Cross-refs:* `docs/architecture/Utils.md` (`GraphicsMode`).
 
-- `BL-998` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` **The cloud cards
-  roll with the camera: rolling the aircraft turns every card about the view axis.** *Evidence:*
-  reported at the controls as "Clouds should not rotate around the forward axis toward the camera,
-  this looks weird while rolling". The `fvol` deck cards are a hand-rolled camera-facing billboard
-  (`Effects/FogVolumeClutter.cs`, "Camera-facing billboard (hand-rolled: a MultiMesh cannot use
-  Godot's billboard flag)") whose basis is the camera's, so the camera's roll enters the card.
-  *Decode question:* whether the original's card keeps its up along the world's up while facing
-  the camera (the usual sprite in a 1999 renderer, a rotation about world Y only) or takes the
-  camera's full basis; `FUN_0044c780` builds the cards and the draw path poses them. *Fix shape:*
-  the card's up from world Y, its right from the cross with the camera direction, in the shader;
-  the same read for the `cloudparent` facades and the speed-cue wisps, which are separate
-  populations (`BL-325`'s vocabulary) and may already differ. *⚠ Traps:* a card facing along a
-  fixed world up degenerates when looked at from straight above or below, the original's own
-  answer for that pose is part of the decode; `csky_world_light` reads the card's turned normals,
-  so the lighting arm moves with this. *Cross-refs:* `BL-325` (the same cards, the jitter
-  default), `docs/org/cloudCards.md`.
 
 - `BL-1012` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **The Devastator's
   fuselage sides never take the pattern's colours; they stay the shipped red ZBD skin under
@@ -570,6 +554,24 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* `docs/formats/paint.md` "Implementing this in the remake",
   `docs/org/hangar.md` "The type-8 spawn message is paint", the friend's handoff under
   `.scratch/Uebergabe_Gabriel_2026-09-19/`.
+
+- `BL-1013` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The
+  templates clutter's spherical glow stamps still take the camera's whole basis, so they roll with
+  the aircraft while every other `SphericalY` sprite no longer does.** *Evidence:*
+  `Clutter.FaceBasisLines(spherical: true)` (`Mech3/Clutter.cs:726`) emits
+  `mat3 face = mat3(INV_VIEW_MATRIX[0].xyz, ...)`, which is the camera's own basis and carries its
+  roll into the card. The original's `SphericalY` facade never reads the eye's basis: it steps a
+  per-card quaternion by the shortest arc to the eye's position (`FUN_00539390`, decoded in
+  `docs/org/cloudCards.md`). The `fvol` deck cards, the placed `cloudparent` facades and
+  `SceneBuilder`'s glow flares now take that law through `csky_facade_spherical`; this one branch
+  was left because the file was under another item's edit at the time. *Fix shape:* include
+  `res://shaders/csky_facade.gdshaderinc` in the clutter shader and call
+  `csky_facade_spherical(origin, CAMERA_POSITION_WORLD)` in the spherical branch. *⚠ Traps:* the
+  `CylindricalY` branch beside it is the tree and lamp-post pose and is already right, do not
+  touch it; the spherical branch carries C5's 15,618 `cblock7` glow stamps, so `clutter-mesh-lift`
+  and the `c5-city-night` golden are the checks, and the golden moves by a few rim pixels because
+  a round glow's roll is invisible in a still. *Cross-refs:* `docs/org/cloudCards.md` (the pose
+  decode), `BL-325` (the population vocabulary).
 
 ## Effects & animation runtime
 

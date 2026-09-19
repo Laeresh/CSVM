@@ -210,8 +210,8 @@ runs.
 `cloudsprite1`/`cloudsprite2` are ordinary [clutter template roots](clutter.md), parentless
 `Object3d` nodes resolved by name (`ClutterBuilder.FindTemplateRoot`, shared with the trees) with
 one child carrying the card. The card is a single 4-vertex, 1-polygon tri-strip quad,
-`model_type: Facade` + `facade_mode: SphericalY` (full camera-facing, not the trees' upright
-`CylindricalY`), skinned `cloud1.tif` / `cloud2.tif`, vertex colours 240/240/240, centred on its
+`model_type: Facade` + `facade_mode: SphericalY` (turned to face the eye in any direction, not the
+trees' upright `CylindricalY`), skinned `cloud1.tif` / `cloud2.tif`, vertex colours 240/240/240, centred on its
 own quad centre to within 3 mm.
 
 ⚠ **We render those cards at the authored 240, and no colour term is applied to them at all.**
@@ -242,12 +242,12 @@ and their range-gated `0.6` opacity.
 
 ⚠ **`lighting: true` admits a per-vertex directional term, not a brightness scalar.** The card
 carries three authored normals (`normal_indices [1, 1, 0, 2]`, the top two corners sharing the one
-that runs up the card and the bottom two the pair that points out of it), the billboard basis turns
-them with the camera, and the original evaluates `AMBIENT + DIFFUSE × max(N·L, 0)` per vertex on
-them. So a lit card is shaded across its face and swings with the heading, which is what
-`FogVolumeClutter` builds: the authored normals reach the card mesh, the shader turns them through
-the billboard basis and evaluates the same expression per vertex off the zone's uncollapsed
-`SUNLIGHT` pair. The decode is in [`../org/vertexLighting.md`](../org/vertexLighting.md).
+that runs up the card and the bottom two the pair that points out of it), the card's own facade
+pose turns them, and the original evaluates `AMBIENT + DIFFUSE × max(N·L, 0)` per vertex on them.
+So a lit card is shaded across its face and swings as the eye moves around it, which is what
+`FogVolumeClutter` builds: the authored normals reach the card mesh, the shader turns them by the
+same `csky_facade_spherical` basis the quad takes and evaluates the same expression per vertex off
+the zone's uncollapsed `SUNLIGHT` pair. The decode is in [`../org/vertexLighting.md`](../org/vertexLighting.md).
 
 ⚠ Every card is authored `fog: false`, the sprites are exempt from the mission distance fog and
 carry `far_fade_range` instead. That is a deliberate reversal of what `CloudPuffs` did (it fogged
@@ -279,7 +279,7 @@ template, no `clutter` key, degenerate ranges).
   ⚠ The card's `lighting` flag is not part of this and is decoded rather than open: it gates the
   sun on a facade exactly as it does on any model, but what it admits is a per-vertex
   `AMBIENT + DIFFUSE × max(N·L, 0)` evaluated on the card's own three authored normals carried
-  through the billboard basis, never a flat `WorldLight` multiply
+  through the card's facade pose, never a flat `WorldLight` multiply
   ([`../org/vertexLighting.md`](../org/vertexLighting.md)'s facade section). C1 and C4, whose
   footage the 208.8 plateau was measured in, author `lighting: false`, so no lighting term reaches
   their cards at all.

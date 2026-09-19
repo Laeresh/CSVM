@@ -165,6 +165,8 @@ public sealed class SceneBuilder
         "#include \"res://shaders/csky_time.gdshaderinc\"";
     internal const string MipBiasInclude =
         "#include \"res://shaders/csky_mip_bias.gdshaderinc\"";
+    internal const string FacadeInclude =
+        "#include \"res://shaders/csky_facade.gdshaderinc\"";
 
     /// <summary>The animation runtime's <c>OBJECT_OPACITY_STATE</c> translucency, a per-instance
     /// multiplier on ALPHA, because materials are cached and this changes at runtime. Declared in
@@ -1829,13 +1831,15 @@ void fragment() {{");
         if (blend || scissor)
             sb.AppendLine(InstanceUniformsInclude);
         sb.AppendLine(SrgbInclude); // DX7 gamma-space vertex modulate (world/cloud pass)
+        sb.AppendLine(FacadeInclude);
         sb.AppendLine($@"
 void vertex() {{
-    // Camera-facing billboard keeping the instance scale (Godot's billboard_keep_scale, by
+    // The SphericalY facade pose, keeping the instance scale (Godot's billboard_keep_scale, by
     // hand, the bias shader can't billboard, like FogVolumeClutter). The mesh was recentered on its
     // quad centre and the instance placed there, so the quad pivots at its centre.
+    mat3 face = csky_facade_spherical(MODEL_MATRIX[3].xyz, CAMERA_POSITION_WORLD);
     MODELVIEW_MATRIX = VIEW_MATRIX * mat4(
-        INV_VIEW_MATRIX[0], INV_VIEW_MATRIX[1], INV_VIEW_MATRIX[2], MODEL_MATRIX[3]);
+        vec4(face[0], 0.0), vec4(face[1], 0.0), vec4(face[2], 0.0), MODEL_MATRIX[3]);
     MODELVIEW_MATRIX[0] *= length(MODEL_MATRIX[0].xyz);
     MODELVIEW_MATRIX[1] *= length(MODEL_MATRIX[1].xyz);
     MODELVIEW_MATRIX[2] *= length(MODEL_MATRIX[2].xyz);

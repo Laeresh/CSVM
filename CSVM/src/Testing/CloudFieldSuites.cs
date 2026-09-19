@@ -91,6 +91,7 @@ internal static class CloudFieldSuites
                     CheckBands(ctx, chapter, field, spec!, expectUp, expectSloped);
                     CheckNormalsAreTheirOwnFaces(ctx, chapter, field, spec!, volumes);
                     CheckCardSampler(ctx, chapter, field);
+                    CheckCardPose(ctx, chapter, field);
                     CheckVertexLight(ctx, chapter, field, lit);
                     Utils.Rng.Rewind();
                     var jittered = FogVolumeClutter.Create(world.Gamez, textures, spec, volumes, ProbeJitter);
@@ -331,14 +332,40 @@ internal static class CloudFieldSuites
         ctx.Check(examined > 0, $"{chapter} cloud card materials examined count={examined}");
     }
 
+    // ⚠ The pose reads the eye's POSITION and never its basis. A billboard assembled from
+    // INV_VIEW_MATRIX's columns carries the camera's roll into every card, which is the one thing
+    // the original's shortest-arc tracker cannot do (docs/org/cloudCards.md).
+    private static void CheckCardPose(TestContext ctx, string chapter, FogVolumeClutter field)
+    {
+        int examined = 0;
+        foreach (var child in field.GetChildren())
+        {
+            if (child is not MultiMeshInstance3D { MaterialOverride: ShaderMaterial { Shader: { } shader } })
+            {
+                continue;
+            }
+
+            string code = shader.Code;
+            ctx.Check(code.Contains("csky_facade_spherical(", System.StringComparison.Ordinal),
+                $"{chapter} {child.Name} card poses through the facade arc");
+            ctx.Check(!code.Contains("INV_VIEW_MATRIX[0]", System.StringComparison.Ordinal)
+                      && !code.Contains("INV_VIEW_MATRIX[1]", System.StringComparison.Ordinal)
+                      && !code.Contains("INV_VIEW_MATRIX[2]", System.StringComparison.Ordinal),
+                $"{chapter} {child.Name} card never builds a basis from the camera's columns");
+            examined++;
+        }
+
+        ctx.Check(examined > 0, $"{chapter} cloud card materials examined for the pose count={examined}");
+    }
+
     // The lit arm, checked where the collapsed csky_world_light cannot reach: a card's authored
-    // normals turn with the camera, so one card reads down toward AMBIENT on the side it turns
+    // normals turn with its pose, so one card reads down toward AMBIENT on the side it turns
     // away from the light and up toward AMBIENT + DIFFUSE on the side it turns toward it
     // (docs/org/vertexLighting.md). A card authored `lighting: false` takes no term at all.
     private static void CheckVertexLight(TestContext ctx, string chapter, FogVolumeClutter field, bool lit)
     {
-        var facing = BillboardBasis(ProbeSun);
-        var turned = BillboardBasis(-ProbeSun);
+        var facing = FacadeBasis(ProbeSun);
+        var turned = FacadeBasis(-ProbeSun);
         int examined = 0;
         foreach (var child in field.GetChildren())
         {
@@ -363,8 +390,8 @@ internal static class CloudFieldSuites
             for (int v = 0; v < normals.Length && v < vertices.Length; v++)
             {
                 // The card's lower corners carry the pair pointing out of it, the normals a turn
-                // swings across the light; its top corners carry the one along its own +Y, which a
-                // turn about the world's up axis barely moves.
+                // swings across the light; its top corners carry the one along the card's own +Y,
+                // which the arc holds perpendicular to the eye, and so to a probe sun placed there.
                 if (vertices[v].Y < 0f)
                 {
                     toward += VertexLight(facing * normals[v]);
@@ -399,14 +426,24 @@ internal static class CloudFieldSuites
         ctx.Check(examined > 0, $"{chapter} cloud card meshes examined for the vertex law count={examined}");
     }
 
-    // The basis the card is drawn through, the one the shader builds out of INV_VIEW_MATRIX's
-    // columns: local X to the camera's right, local Y to its up, local Z out of the screen toward
-    // it. A card's authored normals reach the world through this, never through a model transform.
-    private static Basis BillboardBasis(Vector3 towardCamera)
+    // The basis the card is drawn through, csky_facade_spherical's shortest arc: the rotation
+    // carrying the card's authored +Z onto the direction to the eye with no twist about it. The
+    // eye's own basis never enters it (docs/org/cloudCards.md), and a card's authored normals
+    // reach the world through this, never through a model transform.
+    private static Basis FacadeBasis(Vector3 towardCamera)
     {
-        var back = towardCamera.Normalized();
-        var right = Vector3.Up.Cross(back).Normalized();
-        return new Basis(right, back.Cross(right).Normalized(), back);
+        var f = towardCamera.Normalized();
+        float d = 1f + f.Z;
+        if (d < 1e-6f)
+        {
+            return new Basis(new Vector3(1f, 0f, 0f), new Vector3(0f, -1f, 0f), new Vector3(0f, 0f, -1f));
+        }
+
+        float k = 1f / d;
+        return new Basis(
+            new Vector3(1f - (k * f.X * f.X), -(k * f.X * f.Y), -f.X),
+            new Vector3(-(k * f.X * f.Y), 1f - (k * f.Y * f.Y), -f.Y),
+            f);
     }
 
     // The decoded per-vertex term itself, on one world-space normal.

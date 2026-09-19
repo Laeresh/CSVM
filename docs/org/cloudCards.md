@@ -36,7 +36,12 @@ statistical ramp and never a rim.
 | `FUN_0044c310` | Point-in-polygon test in the polygon's own plane, over its edges against its normal |
 | `FUN_004db010` | Files the finished instance in the world's clutter grid cell |
 | `FUN_0044c1c0` | The per-instance view-angle term: `max(0, dot(polygon normal, unit(eye - sprite)))` |
-| `FUN_004d5de0` | The per-instance clutter draw: evaluates the fade, sets the global opacity around the draw, restores it after |
+| `FUN_004d5de0` | The per-instance clutter draw: evaluates the fade, sets the global opacity around the draw, restores it after, and lends the template node this instance's own facade quaternion |
+| `FUN_00553700` | The model-type switch at the head of the draw: `1` is a facade, and the mode word at model `+0x04` picks which pose routine runs |
+| `FUN_00539390` | The `SphericalY` pose: the shortest-arc tracker, and the per-instance quaternion it accumulates |
+| `FUN_0053fd40` | The shortest-arc quaternion between two unit vectors, and the antiparallel fallback |
+| `FUN_00539040` | That fallback's arbitrary perpendicular |
+| `FUN_005408e0` | The `CylindricalY` pose: a turn about the model's own Y by the camera heading less the model's |
 | `FUN_004d6010` | The clutter quadtree walk, which culls a whole subtree on the **unscaled** band |
 | `FUN_0054e0e0` | Writes the global opacity `DAT_00a06f98` (default 1.0) |
 | `FUN_004d2120` | Writes the clutter distance factor `DAT_0062d170` |
@@ -47,6 +52,44 @@ statistical ramp and never a rim.
 | `FUN_00552020` | The per-model mask the draw keys on (lighting, distance fog, band fog) |
 | `FUN_005a0e00` | Device set-up: stage 0 colour op MODULATE of texture by diffuse |
 | `0x005a6160` | The transparent-queue drain, which sets the blend states a card is drawn under |
+
+## The pose: a shortest-arc tracker, and the camera's basis never enters it
+
+A cloud card is a `Facade` model in `SphericalY` mode (`model_type` 1, the mode word at model
+`+0x04` = 1; the census is in [`../formats/gamez.md`](../formats/gamez.md)). The draw reaches
+`FUN_00553700`, which switches on those two words and hands a `SphericalY` model to `FUN_00539390`
+before the geometry is submitted.
+
+`FUN_00539390` does **not** build a basis out of the camera's. It keeps a **quaternion per card**,
+a lazily allocated 16 bytes hanging off the node at `+0xc8`, seeded from the identity at
+`DAT_006379a0` = `(1, 0, 0, 0)`. Each frame it rotates the reference facing `DAT_006379d0` =
+`(0, 0, 1)` by the stored quaternion (`FUN_0053fb40`) to recover where the card is pointing now,
+takes the direction from the card to the eye (read out of the modelview translation and brought
+back out of view space by the 3x3 inverse `FUN_0053dfc0`, which is where the camera's own basis
+cancels), builds the **shortest arc** between those two directions (`FUN_0053fd40`, the half-vector
+construction), composes it onto the stored quaternion (`FUN_0053f920`), normalizes
+(`FUN_0053f850`), stores it back, and turns it into the model's basis (`FUN_0053fa40`). Since the
+arc is the minimal rotation from the card's own previous facing, nothing about the eye except its
+**position** reaches the card, and rolling the aircraft leaves every card exactly where it was.
+
+The per-card quaternion is per **instance**, not per template: the clutter draw `FUN_004d5de0`
+swaps the instance's own slot at `+0x44` into the shared template node's `+0xc8` before the draw
+and writes it back after, so ten thousand scattered cards each track their own facing through one
+model.
+
+⚠ **There is no up vector, so the pose has no zenith or nadir degeneracy.** A card looked at from
+straight above is an ordinary shortest arc like any other, which is the opposite of what a
+`lookAt(world up)` billboard does. The single degenerate input is the exact 180 degree reversal, an
+eye directly behind the card's current facing: `FUN_0053fd40` finds `1 + dot` at zero, sets `w = 0`
+and takes an arbitrary perpendicular from `FUN_00539040` (which returns `(1, 0, 0)` unless the
+vector's own x is nonzero), giving a half turn about it. Reaching it requires the eye to cross the
+card's facing exactly, and the frame after it the tracker is continuous again.
+
+For contrast, a `CylindricalY` facade (`FUN_005408e0`, the tree and lamppost cards) is not a
+tracker at all: it is a single yaw about the model's own Y by the camera heading
+`*(float *)(DAT_009fddc4 + 0x3c)` less the model's own heading (`atan2` via `FUN_0053def0`),
+applied by `FUN_0053ac80`. Its up is the model's Y by construction, and it likewise never sees the
+camera's roll.
 
 ## The colour: the authored 240 and nothing else
 
@@ -237,12 +280,25 @@ underside and the walls too and place several times the field.
 
 ## Where CSVM stands
 
-`FogVolumeClutter` and its generated card shader carry the colour path and the alpha path above.
+`FogVolumeClutter` and its generated card shader carry the pose, the colour path and the alpha path
+above.
 
+- **The pose is the shortest arc, taken from the card's authored facing.** `csky_facade_spherical`
+  in [`../../CSVM/shaders/csky_facade.gdshaderinc`](../../CSVM/shaders/csky_facade.gdshaderinc)
+  builds the rotation that carries local `+Z` onto the direction from the card to the eye with no
+  twist about it, in closed form, and every `SphericalY` population takes it: the `fvol` deck
+  cards, the `cloudparent` facades, and the glow sprites that share their dispatch. The eye's basis
+  is not read, so the camera's roll cannot reach a card, which is the property the decode above
+  turns on. Two differences from the original remain, both structural: a shader holds no state, so
+  the arc is taken from the authored facing every frame instead of accumulating from the previous
+  one (the same pose the original shows on its first frame, differing afterwards only by the twist
+  a looping camera path would have transported), and the singularity therefore sits at a fixed
+  `f = -Z` rather than following the tracker. For a deck card, whose authored normal points up,
+  that direction lies inside the set the view-angle term has already culled.
 - **The colour is the authored 240, unscaled, and the only thing that ever multiplies it is the
   original's own per-vertex directional term.** A chapter authoring its card `lighting: true` (C1C,
   C2B and C5) takes `AMBIENT + DIFFUSE · max(N·L, 0)` per corner on the card's three authored
-  normals, turned into the world by the billboard basis, clamped after the multiply the way the
+  normals, turned by the same facade basis the quad takes, clamped after the multiply the way the
   original clamps it ([`vertexLighting.md`](vertexLighting.md)); a chapter authoring it false (C1,
   C4) reaches the shader as the data authors it. There is no other colour term and no brightness
   constant: a brightness gap on this population is read as coverage rather than corrected as a

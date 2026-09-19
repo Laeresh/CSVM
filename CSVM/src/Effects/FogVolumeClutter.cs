@@ -261,21 +261,20 @@ public sealed partial class FogVolumeClutter : Node3D
         return Vector3.Back;
     }
 
-    // Camera-facing billboard (hand-rolled: a MultiMesh cannot use Godot's billboard flag), plus
-    // the clutter fade, whose draw distance is scaled by the viewing angle against each sprite's
-    // own polygon normal. `cull` collapses the quad to a point once the fade has dropped it, so a
-    // sprite outside its draw distance costs no fragments, what lets the whole field be one static
-    // MultiMesh with no streaming. ⚠ The fade distance is the true 3D one, not the fog's
-    // horizontal cylinder: a cloud overhead is as far away as one on the horizon.
+    // The card's SphericalY facade pose (hand-rolled: a MultiMesh cannot use Godot's billboard
+    // flag), plus the clutter fade, whose draw distance is scaled by the viewing angle against
+    // each sprite's own polygon normal. `cull` collapses the quad to a point once the fade has
+    // dropped it, so a sprite outside its draw distance costs no fragments, what lets the whole
+    // field be one static MultiMesh with no streaming. ⚠ The fade distance is the true 3D one, not
+    // the fog's horizontal cylinder: a cloud overhead is as far away as one on the horizon.
     private static string ShaderCode(bool lit, bool fogged)
     {
-        // ⚠ A `lighting: true` card takes the original's PER-VERTEX term, never the collapsed
-        // csky_world_light: a card's authored normals turn with the camera, so no single factor
-        // describes one (docs/org/vertexLighting.md). C1 and C4 author false and take nothing.
+        // ⚠ A `lighting: true` card takes the original's PER-VERTEX term on normals turned by the
+        // same `face` the quad takes, never the collapsed csky_world_light and never another basis
+        // (docs/org/vertexLighting.md). C1 and C4 author false and take nothing.
         string varying = lit ? "\nvarying float v_light;" : string.Empty;
         string vertexLight = lit
-            ? "\n    v_light = csky_sun_vertex_light(mat3(INV_VIEW_MATRIX[0].xyz, "
-              + "INV_VIEW_MATRIX[1].xyz, INV_VIEW_MATRIX[2].xyz) * NORMAL);"
+            ? "\n    v_light = csky_sun_vertex_light(face * NORMAL);"
             : string.Empty;
         // The product is clamped, not the factor: the original clamps after multiplying the
         // authored colour, and it clamps in the framebuffer's own gamma space, which is the space
@@ -297,6 +296,7 @@ public sealed partial class FogVolumeClutter : Node3D
             #include "res://shaders/csky_atmosphere.gdshaderinc"
             #include "res://shaders/csky_srgb.gdshaderinc"
             #include "res://shaders/csky_clutter_fade.gdshaderinc"
+            #include "res://shaders/csky_facade.gdshaderinc"
             // The chapter's mip LOD bias is one device render state in the original, so a card
             // picks its level exactly as every other mip-mapped arm does.
             #include "res://shaders/csky_mip_bias.gdshaderinc"
@@ -313,8 +313,9 @@ public sealed partial class FogVolumeClutter : Node3D
                 v_alpha = csky_clutter_fade_alpha_angled(
                     origin, CAMERA_POSITION_WORLD, fade, INSTANCE_CUSTOM.xyz * 2.0 - 1.0);
                 float cull = step(0.004, v_alpha);
+                mat3 face = csky_facade_spherical(origin, CAMERA_POSITION_WORLD);
                 MODELVIEW_MATRIX = VIEW_MATRIX * mat4(
-                    INV_VIEW_MATRIX[0], INV_VIEW_MATRIX[1], INV_VIEW_MATRIX[2], MODEL_MATRIX[3]);
+                    vec4(face[0], 0.0), vec4(face[1], 0.0), vec4(face[2], 0.0), MODEL_MATRIX[3]);
                 MODELVIEW_MATRIX[0] *= length(MODEL_MATRIX[0].xyz) * cull;
                 MODELVIEW_MATRIX[1] *= length(MODEL_MATRIX[1].xyz) * cull;
                 MODELVIEW_MATRIX[2] *= length(MODEL_MATRIX[2].xyz);{{vertexLight}}

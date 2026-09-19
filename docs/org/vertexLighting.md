@@ -518,6 +518,8 @@ What the facade path changes is the **geometry the gate admits**, in three steps
    it replaces the model's basis with a camera-facing one chosen by the mode word at `+0x04`
    (`0` CylindricalY through `FUN_005408e0`, `1` SphericalY through `FUN_00539390`, which caches
    its quaternion on the node at `+0xc8`, `2` and `3` through `FUN_005398b0` / `FUN_00539c70`).
+   What those two routines compute, and why neither of them lets the camera's roll reach a card, is
+   decoded in [`cloudCards.md`](cloudCards.md).
    When the model carries flag bit `0x80` the rotation is wrapped in a translate to and from the
    centroid `FUN_00552180` averages out of the polygon vertices.
 2. `FUN_00554550` then skips, for a facade whose mode is `0` or `1`, the per-polygon block that
@@ -532,8 +534,8 @@ What the facade path changes is the **geometry the gate admits**, in three steps
 
 `FUN_005688a0` reads the face normal at the submit record's `+0x08` and the per-vertex array at
 `+0x0c`, preferring the array. A lit facade is therefore shaded per vertex from normals that
-**rotate with the camera**, which is a directional term that tracks where the player is looking, not
-a constant per-mission multiply.
+**turn with the card's pose**, which is a directional term that tracks where the player is standing,
+not a constant per-mission multiply.
 
 ### The ambient-only bit
 
@@ -611,12 +613,12 @@ world's vertex light is still the collapsed scalar.
 **On the `fvol` clutter cards the term behind the gate is reproduced.** `csky_world_light` is the
 collapse `AMBIENT + DIFFUSE × 0.46` calibrated on the predominantly up-facing world
 ([`weather.md`](weather.md)), and a camera-facing card is the one surface that averaging does not
-describe: the original shades it per vertex from normals that turn with the camera, between
+describe: the original shades it per vertex from normals that turn with the card's pose, between
 `AMBIENT` where a corner faces away from the sun and `AMBIENT + DIFFUSE` where one faces it. So
 `FogVolumeClutter` builds the card with its three authored normals and, on the chapters authoring
-`lighting: true`, evaluates `AMBIENT + DIFFUSE × max(N·L, 0)` per vertex on the normal turned into
-the world by the billboard basis, clamping the product against the authored colour rather than the
-factor. `WeatherRig` publishes the zone's own `SUNLIGHT_AMBIENT`, `SUNLIGHT_DIFFUSE` and sun bearing
+`lighting: true`, evaluates `AMBIENT + DIFFUSE × max(N·L, 0)` per vertex on the normal turned by
+the same `csky_facade_spherical` basis the quad takes, clamping the product against the authored
+colour rather than the factor. `WeatherRig` publishes the zone's own `SUNLIGHT_AMBIENT`, `SUNLIGHT_DIFFUSE` and sun bearing
 uncollapsed for it; the collapsed scalar is not read on this population in either arm.
 
 ⚠ **Every other camera-facing surface still takes the flat multiply.** `SceneBuilder`'s billboard
