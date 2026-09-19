@@ -185,6 +185,7 @@ public class MenuLayoutReaderTests
                 + "#define IDS_GO_HEAD_TITLE 263\n#define IDS_GO_DIFF_DESC 264\n#define IDS_GO_VIEW_DESC 265\n"
                 + "#define IDS_GO_HEAD_DESC 266\n"
                 + "#define IDS_VP_TITLE 270\n#define IDS_VP_SHADOWS_TITLE 271\n#define IDS_VP_SHADOWS_DESC 272\n"
+                + "#define IDS_VP_CLUTTER_TITLE 281\n#define IDS_VP_CLUTTER_DESC 282\n"
                 + "#define IDS_VP_EFFECTS_TITLE 273\n#define IDS_VP_EFFECTS_DESC 274\n"
                 + "#define IDS_VP_VIEW_TITLE 275\n#define IDS_VP_VIEW_DESC 276\n"
                 + "#define IDS_VP_DISPLAY_TITLE 277\n#define IDS_VP_DISPLAY_DESC 278\n"

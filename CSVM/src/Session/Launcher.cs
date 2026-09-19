@@ -613,6 +613,11 @@ public partial class Launcher : Node3D
         // ⚠ A deterministic run never rumbles: a golden sweep or a scripted probe must not reach the
         // hardware on the desk, and no screen is drawn from this.
         PadRumble.Enabled = !_spec.Det && OptionsStore.UserOptions().Load().Rumble != false;
+        // The rocket carve, read the same way but defaulting OFF: the original carves nothing in play.
+        // ⚠ --det reads no saved option, which keeps every pinned golden clear of a bowl; --craters is
+        // the one source that survives a deterministic run, for a probe that photographs one.
+        CraterGate.Enabled = _spec.Craters
+            || (!_spec.Det && OptionsStore.UserOptions().Load().RocketCraters == true);
         // Before the first PreferUnzipped call and process-wide, so every later resolution (the
         // chapter paths in StartSession, the menu pages' own lookups) takes the same asset shape.
         SessionPaths.ForceZipped = _spec.ZipAssets;
@@ -1864,6 +1869,7 @@ public partial class Launcher : Node3D
         options.AudioMusic = applied.AudioMusic;
         options.AudioEffects = applied.AudioEffects;
         options.AudioVoice = applied.AudioVoice;
+        options.RocketCraters = applied.RocketCraters;
         store.Save(options);
         // The display settings take effect now instead of at the next start, through the same calls
         // the startup path makes and in the order the window needs them: the screen it sits on, the
@@ -1880,6 +1886,9 @@ public partial class Launcher : Node3D
         // The haptics toggle takes effect now for the same reason, so a pilot turning it off over the
         // pause sheet flies the rest of the sortie with a quiet pad.
         PadRumble.Enabled = !_spec.Det && applied.Rumble != false;
+        // The carve arms now for the same reason, so a pilot turning it on over the pause sheet digs
+        // the rest of the sortie's bowls. ⚠ --craters still holds it on; a flag beats a row.
+        CraterGate.Enabled = _spec.Craters || (!_spec.Det && applied.RocketCraters == true);
         Log.Info("ui", $"options applied: {Utils.GraphicsMode.Key}={applied.Graphics} difficulty={applied.Difficulty}");
     }
 

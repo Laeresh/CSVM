@@ -449,6 +449,13 @@ public sealed record SessionSpec
     /// machine gets <c>AssistEnabled</c> false, so the lay-off mode is never entered (pursue
     /// only). Default off: the assist is the original's shipped behaviour.</summary>
     public bool NoAssist { get; private set; }
+
+    /// <summary><c>--craters</c>: arm the Enhanced Graphics page's Rocket Craters row for this run,
+    /// so every rocket warhead's ground burst carves. Off by default and saved nowhere; it is the
+    /// one source of the carve that survives <c>--det</c>, which reads no saved option, so a probe
+    /// can photograph a bowl without any pinned golden ever seeing one.</summary>
+    public bool Craters { get; private set; }
+
     /// <summary><c>--generators[=plane]</c>: run the mission's egen enemy generators;
     /// each surviving generator spawns AI aircraft on its decoded wave/period cycle through the
     /// same runtime spawn seam <c>--ai=</c> uses. The optional value picks the airframe of a
@@ -1154,6 +1161,7 @@ public sealed record SessionSpec
                 }
             }
             else if (arg == "--no-assist") { s.NoAssist = true; }
+            else if (arg == "--craters") { s.Craters = true; }
             else if (arg == "--generators") { s.Generators = true; }
             else if (arg.StartsWith("--generators=")) { s.Generators = true; s.GeneratorsPlane = arg["--generators=".Length..]; }
             else if (arg == "--zeppelins") { s.Zeppelins = true; }

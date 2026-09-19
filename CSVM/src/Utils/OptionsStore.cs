@@ -39,7 +39,7 @@ public static class DisplayWords
     public static readonly IReadOnlyList<string> VSyncChoices = new[] { VSyncOn, VSyncOff, "60", "120", "144" };
 }
 
-/// <summary>The process-wide options: the requested graphics mode, the difficulty setting, the nearest-after-a-kill targeting setting, the opening view, the
+/// <summary>The process-wide options: the requested graphics mode, the rocket carve, the difficulty setting, the nearest-after-a-kill targeting setting, the opening view, the
 /// automatic head turn, the four display settings (the monitor, the window size, the display mode
 /// and the V-Sync choice) and the four volume levels. A missing field means "never set"; the
 /// caller, not this def, decides what that falls back to.
@@ -57,6 +57,12 @@ public sealed class OptionsDef
     public string? MenuPresentation { get; set; }
 
     public string? GraphicsMode { get; set; }
+
+    /// <summary>Whether a rocket warhead's ground burst carves the terrain
+    /// (<see cref="Flight.CraterGate"/>), the Enhanced Graphics page's Rocket Craters row.
+    /// ⚠ Nullable because null is "never set", which reads as OFF: the original carves nothing in
+    /// play, so the row is remake-only chrome nobody gets without asking for it.</summary>
+    public bool? RocketCraters { get; set; }
 
     /// <summary>The difficulty word (<see cref="Flight.Difficulty.Word"/>): the campaign
     /// selector's tier the launch reads when no flag names one.</summary>
@@ -237,6 +243,7 @@ public sealed class OptionsStore
             w.WriteNumber("version", Version);
             Write(w, "menuPresentation", def.MenuPresentation);
             Write(w, "graphicsMode", def.GraphicsMode);
+            WriteFlag(w, "rocketCraters", def.RocketCraters);
             Write(w, "difficulty", def.Difficulty);
             WriteFlag(w, "nearestAfterKill", def.NearestAfterKill);
             WriteFlag(w, "rumble", def.Rumble);
@@ -281,6 +288,7 @@ public sealed class OptionsStore
             {
                 MenuPresentation = Read(root, "menuPresentation", ValidPresentations),
                 GraphicsMode = Read(root, "graphicsMode", ValidGraphicsModes),
+                RocketCraters = ReadFlag(root, "rocketCraters"),
                 Difficulty = Read(root, "difficulty", ValidDifficulties),
                 NearestAfterKill = ReadFlag(root, "nearestAfterKill"),
                 Rumble = ReadFlag(root, "rumble"),

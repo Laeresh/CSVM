@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using CSVM.Flight;
 using CSVM.Mech3;
@@ -11,8 +12,10 @@ namespace CSVM.Testing;
 /// private mesh one surface longer, the column over the bowl drops by about the decoded floor, the
 /// decorations inside the radius stop standing, and a second request beside the first is refused by
 /// the clearance rule. Those requests go to the field directly, since a played round never reaches
-/// it: the round's gate is the struck node's can_modify flag, which no shipped node carries. The
-/// world is private, because a carved chapter must not ride into a later suite's census.</summary>
+/// it on the original's own rule: the round's gate is the struck node's can_modify flag, which no
+/// shipped node carries. The Enhanced Graphics page's Rocket Craters row is the remake's second
+/// door, read here as a live rocket dropped on untouched ground with the option off and then on.
+/// The world is private, because a carved chapter must not ride into a later suite's census.</summary>
 internal static class CraterSuites
 {
     private const string Chapter = "C1";
@@ -37,7 +40,9 @@ internal static class CraterSuites
         "surface longer and un-shared, the column 3 m off centre dropping into the bowl, every " +
         "decoration inside the radius destroyed, and a second crater inside the 5 m clearance " +
         "refused while the first one stays carved; a live wep_12 on the same ground first carves " +
-        "nothing and plays its default scatter_effect, since no C1 node carries can_modify")]
+        "nothing and plays its default scatter_effect, since no C1 node carries can_modify, and a " +
+        "live rocket on untouched ground carves nothing with the Rocket Craters option off and a " +
+        "bowl with it on, its burst playing the same row either way")]
     internal static void CraterCarve(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -160,7 +165,87 @@ internal static class CraterSuites
             $"the first crater still refuses a second bomb on the same ground");
         ctx.Check(ColumnY(space, probe, out _) < first.At.Y - 3f,
             $"the first bowl is still cut into the terrain after the second carve");
+
+        // The option's own door, on ground neither carve has touched, so the clearance rule plays no
+        // part in what it proves.
+        int spare = -1;
+        for (int i = 0; i < spots.Count && spare < 0; i++)
+        {
+            spare = spots[i].At.DistanceTo(first.At) >= SecondSpotM
+                && spots[i].At.DistanceTo(far.At) >= SecondSpotM ? i : spare;
+        }
+
+        ctx.Check(spare >= 0, $"the scan found a third spot clear of both carves");
+        if (spare >= 0)
+        {
+            OptionalCarve(ctx, world, spots[spare], field, space, report);
+        }
+
         ctx.Note($"C1: one crater carved on {owner.Name}, {census} decorations flattened, the clearance refusing the repeat");
+    }
+
+    // The Enhanced Graphics page's Rocket Craters row, read where it decides: a live rocket warhead
+    // dropped on untouched C1 ground with the option off, which is what every shipped run and every
+    // pinned golden sees, and the same round with it on. The second one carves although the struck
+    // node carries no can_modify stamp, which is the whole of the option, and still plays its burst,
+    // because only the original's own AND suppresses a weapon's impact row (docs/org/craters.md).
+    private static void OptionalCarve(TestContext ctx, TestWorld world, (Vector3 At, StaticBody3D Body) spot,
+        CraterField field, PhysicsDirectSpaceState3D space, StringBuilder report)
+    {
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var rocket = weapons.All.FirstOrDefault(w =>
+            w.IsRocket && !w.Crater && w.DetonationDotProduct is null && w.CannonSpread is not > 0f);
+        ctx.Check(rocket != null, $"a plain rocket warhead that carries no CRATER exists in the data");
+        if (rocket == null)
+        {
+            return;
+        }
+
+        ctx.Check(!SceneBuilder.CanModify(spot.Body), $"the spot's node carries no can_modify stamp ({spot.Body.GetParent()?.Name})");
+        var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, Chapter));
+        var plays = new List<(string Name, Vector3 At)>();
+        int asked = 0;
+        var pool = new ProjectilePool(textures, null, null)
+        {
+            CraterSink = (at, struck) =>
+            {
+                asked++;
+                return field.TryCarve(at, struck);
+            },
+            EffectSink = (name, at, orient, ring, ttl) => plays.Add((name, at)),
+        };
+        bool armed = CraterGate.Enabled;
+        int before = field.Craters.Count;
+        try
+        {
+            ctx.Host.AddChild(pool);
+            CraterGate.Enabled = false;
+            var off = Drop(pool, rocket, spot.At + new Vector3(0f, 30f, 0f), plays);
+            report.AppendLine($"live {rocket.Id} with the option off: sink asked {asked}, "
+                + $"{field.Craters.Count} craters, fx={off?.Name ?? "-"}");
+            ctx.Same(0, asked, $"with the option off the gate refuses the rocket before the field is asked");
+            ctx.Same(before, field.Craters.Count, $"and the ground is left intact, the behaviour every golden is pinned on");
+            ctx.Check(off != null, $"the round still burst where it struck ({off?.Name ?? "no play"})");
+
+            CraterGate.Enabled = true;
+            var on = Drop(pool, rocket, spot.At + new Vector3(0f, 30f, 0f), plays);
+            report.AppendLine($"live {rocket.Id} with the option on: sink asked {asked}, "
+                + $"{field.Craters.Count} craters, fx={on?.Name ?? "-"}");
+            ctx.Same(1, asked, $"with the option on the same round is handed to the field");
+            ctx.Same(before + 1, field.Craters.Count, $"which carves, although no node here carries the stamp");
+            ctx.Check(on != null && on.Value.Name == off?.Name,
+                $"and the burst plays the same row it played uncarved, since the option suppresses nothing ({on?.Name ?? "no play"} vs {off?.Name ?? "no play"})");
+            float floor = ColumnY(space, spot.At, out _);
+            report.AppendLine($"column over the optional impact: {spot.At.Y:0.00} before, {floor:0.00} after");
+            ctx.Check(floor < spot.At.Y - 3f,
+                $"the ground under the burst has dropped into the bowl before={spot.At.Y:0.00} after={floor:0.00}");
+        }
+        finally
+        {
+            CraterGate.Enabled = armed;
+            pool.Free();
+            textures.Dispose();
+        }
     }
 
     // A live wep_12 dropped through a ProjectilePool whose sink is a real field on this world. No C1

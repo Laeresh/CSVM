@@ -53,11 +53,11 @@ public sealed partial class ProjectilePool : Node3D
     /// hurt a gasbag); null gates nothing.</summary>
     public System.Func<Node?, WeaponDef, bool>? WorldDamageGate;
 
-    /// <summary>Where a <c>CRATER</c> weapon's ground strike goes: given the impact point and the
-    /// struck collider, carve the bowl and flatten the decorations in it, returning whether the
-    /// carve landed. Asked only for a collider whose node carries <see cref="SceneBuilder.CanModifyMeta"/>,
-    /// which no shipped node does. Wired to <c>CraterField.TryCarve</c> in a collidable flight; null
-    /// in a build with no world colliders.</summary>
+    /// <summary>Where a ground strike that passed <see cref="CraterGate"/> goes: given the impact
+    /// point and the struck collider, carve the bowl and flatten the decorations in it, returning
+    /// whether the carve landed. The faithful rule asks only for a collider whose node carries
+    /// <see cref="SceneBuilder.CanModifyMeta"/>, which no shipped node does; the Rocket Craters
+    /// option asks for any rocket. Wired to <c>CraterField.TryCarve</c> in a collidable flight.</summary>
     public System.Func<Vector3, Node?, bool>? CraterSink;
 
     /// <summary>Plays a named IMPACT effect (its puffer half) at a hit point through the world-effects
@@ -2076,12 +2076,16 @@ public sealed partial class ProjectilePool : Node3D
         // feeds the resolve, so Apply performs a row already stripped of what the hook silenced.
         var suppression = RunImpactHook(weapon, point);
         // The terrain carve runs between the hook and the row's own bindings, under the hook's
-        // Effects bit. ⚠ Do not drop the CanModify test: no shipped node carries the flag, so it is
-        // what keeps every played round off the carve, as in the original (docs/org/craters.md).
-        bool cratered = weapon.Crater && shapeIdx >= 0 && collider is not AircraftBody
+        // Effects bit. ⚠ Do not answer the gate here: CraterGate holds both rules, and the
+        // faithful one refuses every played round as the original does (docs/org/craters.md).
+        var ask = shapeIdx >= 0 && collider is not AircraftBody
             && (suppression & ImpactSuppression.Effects) == 0
-            && SceneBuilder.CanModify(collider)
-            && (CraterSink?.Invoke(point, collider) ?? false);
+            ? CraterGate.For(weapon, SceneBuilder.CanModify(collider), CraterGate.Enabled)
+            : CraterAsk.None;
+        bool carved = ask != CraterAsk.None && (CraterSink?.Invoke(point, collider) ?? false);
+        // ⚠ Only the faithful carve suppresses the burst. The option is remake-only chrome and adds
+        // a bowl under a burst that still plays, where the original's AND drops both slots.
+        bool cratered = carved && ask == CraterAsk.Faithful;
         // The decision, taken once and read twice. `modelResolved` cannot be known before the
         // attempt, so the first resolve is only for the effect NAME to attempt; the second carries
         // the answer. Everything after this line obeys `outcome`, Impact itself decides nothing.

@@ -195,20 +195,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`PLAN-m3-polish-10` A1), `DamageVisuals.cs` (the consumer),
   `extracted/zrdr/vehicle.zrd.json` (the authority).
 
-- `BL-1009` `[Feature]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **An Enhanced
-  Graphics option, off by default, that lets rocket bursts carve the terrain, and perhaps crashing
-  aircraft too.** *Decision:* on the faithful path nothing carves and the Choker plays its burst
-  (`git log --grep=BL-938`, the `can_modify` gate no shipped node carries); asked whether the carve
-  should come back as an option: "Yes can be in Enhanced Graphics but not default but optional and
-  for more rockets and perhaps crashing planes too". *Evidence:* `CraterField`, `TerrainCarve` and
-  `ClutterCull` are intact behind the gate; `ProjectilePool.Impact` asks the `CraterSink` only for
-  stamped colliders. *Fix shape:* an Enhanced Graphics row (default off) under which every rocket
-  warhead's ground burst carves, the gate answered from the option rather than the collider stamp;
-  an aircraft's ground crash carving is a second step to judge once the first is seen, since the
-  crash fireball's own scorch is authored. *⚠ Traps:* the option must leave every golden untouched
-  at its default; the original never carves in play, so the row is remake-only chrome and says so.
-  *Cross-refs:* `BL-803` (Enhanced Graphics' other terrain departure), `docs/org/craters.md`.
-
 ## Weapons & combat
 
 - `BL-693` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The rebinding screen's three axis-capture constants are

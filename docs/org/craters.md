@@ -355,19 +355,31 @@ defaults.
 
 ## How CSVM builds it
 
-**The gate is the original's, so no played round carves.** `GameZ` reads each node's
+**The gate is the original's, so no played round carves by default.** `GameZ` reads each node's
 `flags.can_modify`, `SceneBuilder` stamps `CanModifyMeta` on every collider it attaches to a node
-carrying it, and `ProjectilePool.Impact` tests that stamp on the struck collider before it asks
-`CraterField` for anything ("No shipped detonation reaches the carve"). No shipped node carries the
-flag, so a `CRATER` round on the ground leaves it intact and plays its `IMPACT` row, which for the
-Choker is `scatter_effect` ("What a Choker ground hit shows"). `ImpactOutcome.Resolve`'s arm for a
-carve that landed, which drops both animation slots and the stand-in as the original's AND does,
+carrying it, and `CraterGate.For` tests that stamp on the struck collider before `ProjectilePool`
+asks `CraterField` for anything ("No shipped detonation reaches the carve"). No shipped node carries
+the flag, so a `CRATER` round on the ground leaves it intact and plays its `IMPACT` row, which for
+the Choker is `scatter_effect` ("What a Choker ground hit shows"). `ImpactOutcome.Resolve`'s arm for
+a carve that landed, which drops both animation slots and the stand-in as the original's AND does,
 therefore never fires in play either.
 
 ⚠ **Do not remove the gate to get the bowl back.** Without it the first round on a fresh patch of
 ground digs a crater and, through that same AND, loses its whole burst. The carve itself is kept
 complete and callable directly (`CraterField.Request`, which the `crater-carve` suite drives), and
 what it builds when asked, below, is what the original's own debug key builds.
+
+**The Rocket Craters row is the remake's own door, and nothing in the original answers to it.** The
+Enhanced Graphics (VIDEO) page carries a checkbox, off in a shipped default and off wherever nothing
+is saved, under which every rocket warhead's ground burst carves whatever the struck node's flag
+says. It is remake-only chrome: the original never pits the ground in play, so a run that leaves the
+row alone behaves exactly as the paragraphs above describe, which is also what keeps every pinned
+golden clear of a bowl (`--det` reads no saved option, and `--craters` is the one source that
+survives it). The ask is typed rather than boolean (`CraterAsk`) so the option's carve stays purely
+additive: the burst plays its own row over the new bowl, where the faithful path's AND drops both
+animation slots. An aircraft's ground crash carving the same way is the next step if it is wanted;
+it is deliberately not built, because the crash fireball authors a scorch of its own and the two
+would have to be judged together.
 
 What is faithful:
 

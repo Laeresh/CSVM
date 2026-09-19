@@ -85,14 +85,16 @@ AP_S_VVOLUME=Z,130,441,100,1,100,50,PP_B_SliderSlot.png,PP_B_Slider.png,0,-10,1,
 
 ;The VIDEO page behind the Preferences page's third door: the shipped section's keys and both
 ;return edges on invented lines and art, with the rows the page carries on the authored Viewing
-;Range, Effects Level and Shadows lines and its own on the authored Resolution line, so each row's
-;shape is read off the section rather than hard-coded.
+;Range, Effects Level, Clutter Detail and Shadows lines and its own on the authored Resolution
+;line, so each row's shape is read off the section rather than hard-coded. The two checkbox lines
+;stand in the shipped section's own order, Clutter Detail above Shadows.
 [@Video@]
 V1=TCOLOR,0xFFFFDDC4
 VP_BACKGROUND=P,PP_VpBack.png,100,200,0,1,0,1,0
 VP_B_ACCEPTCHANGES=B,PP_B_Accept.png,500,470,0,0,Preferences,0x1020,1,,,,,,
 VP_B_CANCELCHANGES=B,PP_B_Cancel.png,500,520,0,0,Preferences,0x1020,1,,,,,,
-VP_B_SHADOWS=B,PP_B_Check8.png,260,420,0,0,,0x1000,0,,,,,1,0
+VP_B_CLUTTER=B,PP_B_Check8.png,260,420,0,0,,0x1000,0,,,,,1,0
+VP_B_SHADOWS=B,PP_B_Check8.png,260,465,0,0,,0x1000,0,,,,,1,0
 VP_T_TITLE=T,IDS_VP_TITLE,120,220,50,200,28,0XFFC0BAAD,1
 VP_T_VideoTitle=T,IDS_VP_DEVICE_TITLE,130,245,50,90,20,<TCOLOR>,0
 VP_T_DEVICEDESC=T,IDS_VP_DEVICE_DESC,340,245,50,310,40,<TCOLOR>,0
@@ -106,8 +108,10 @@ VP_D_View=D,PP_B_ScrollBar.png,PP_B_ScrollUp.png,PP_B_ScrollDown.png,PP_B_DropUp
 VP_T_EffectsTitle=T,IDS_VP_EFFECTS_TITLE,130,380,50,162,20,<TCOLOR>,0
 VP_T_EffectsDESC=T,IDS_VP_EFFECTS_DESC,340,380,50,310,40,<TCOLOR>,0
 VP_D_Effects=D,PP_B_ScrollBar.png,PP_B_ScrollUp.png,PP_B_ScrollDown.png,PP_B_DropUp.png,PP_B_DropDown.png,260,380,0,70,17,4
-VP_T_ShadowsTitle=T,IDS_VP_SHADOWS_TITLE,130,425,50,162,20,<TCOLOR>,0
-VP_T_ShadowsDESC=T,IDS_VP_SHADOWS_DESC,340,425,50,0,0,<TCOLOR>,0
+VP_T_ClutterTitle=T,IDS_VP_CLUTTER_TITLE,130,425,50,162,20,<TCOLOR>,0
+VP_T_ClutterDESC=T,IDS_VP_CLUTTER_DESC,340,425,50,0,0,<TCOLOR>,0
+VP_T_ShadowsTitle=T,IDS_VP_SHADOWS_TITLE,130,470,50,162,20,<TCOLOR>,0
+VP_T_ShadowsDESC=T,IDS_VP_SHADOWS_DESC,340,470,50,0,0,<TCOLOR>,0
 
 ;The CONTROLS page behind the Preferences page's fourth door: the shipped section's keys and both
 ;return edges on invented lines and art, with the Controller Type dropdown the seat chooser takes,
