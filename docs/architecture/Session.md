@@ -507,8 +507,8 @@ steps a phase at a time (`CrashRigQueue.cs`), where the pre-warm itself repeats 
 land on one frame, and `BuildFlightCrashRuntime` is the one-call form. The names it binds are `EffectCatalogue.cs`; the slot mechanism is `Mech3/TemplateStage.cs`.
 
 ## src/Session/WeatherRig.cs
-Applies the flown mission's weather, driving each rig's skydome, whiteout, deck regime and zone gate
-every frame. `ApplyZone` writes the zone's authored fog and its `SUNLIGHT` pair through one arm per
+Applies the flown mission's weather, driving each rig's skydome, whiteout, deck regime and zone gate every frame; the whiteout is one pane-filling overlay per rig, carrying the cloud band and the fog-volume curtain on `HudLayers.Whiteout`, under that pane's own cockpit pass, so the window whites out and the interior stays clear.
+`ApplyZone` writes the zone's authored fog and its `SUNLIGHT` pair through one arm per
 graphics mode, mirrored onto every registered extra (sun, env) pair so a cockpit overlay crosses
 zones too; both arms put the ambient half through `WriteColorAmbient`, colour-sourced and never a sky
 contribution, so a night zone's scene fill is darker than a day zone's. `ApplyFogState` is the

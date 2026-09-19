@@ -12,20 +12,30 @@ namespace CSVM.UI;
 /// </summary>
 internal static class HudLayers
 {
-    /// <summary>The cockpit interior's own render pass (<c>Flight/CockpitOverlay</c>), under everything
-    /// else: 3D always draws before any canvas layer, so a negative layer still composites over
-    /// the world while the whiteout, the screen wash and the HUD keep drawing over the panel,
-    /// exactly as they do when the interior is in the main world.</summary>
+    /// <summary>The lens-flare sprites, core glow and the three rings. Under
+    /// <see cref="Whiteout"/>, so flying into a cloud swallows the flare with everything else
+    /// outside, and under <see cref="CockpitPass"/> with it, since both depict the sky the panel
+    /// stands in front of.</summary>
+    public const int FlareSprites = -3;
+
+    /// <summary>The cloud-band and fog-volume whiteout (<c>Session/WeatherRig.cs</c>), the air
+    /// between the eye and the world.
+    /// ⚠ Keep it under <see cref="CockpitPass"/>: the original's whiteout is a fog term on the
+    /// world draw, which the interior never takes, so the canopy, panel and gauges stay clear
+    /// while the window whites out.</summary>
+    public const int Whiteout = -2;
+
+    /// <summary>The cockpit interior's own render pass (<c>Flight/CockpitOverlay</c>), under the
+    /// chrome and over the two world overlays above: 3D always draws before any canvas layer, so
+    /// a negative layer still composites over the world, while the screen wash and the HUD keep
+    /// drawing over the panel as they do when the interior is in the main world.</summary>
     public const int CockpitPass = -1;
 
-    /// <summary>Screen-space effects that belong to the world picture and sit *under* the HUD:
-    /// the cloud whiteout (<c>Session/WeatherRig.cs</c>) and the splitscreen pane root.</summary>
+    /// <summary>Screen-space effects that belong to the world picture, sit *under* the HUD and
+    /// wash the cockpit with the rest of the frame: the splitscreen pane root and the
+    /// <c>FBFX_COLOR_FROM_TO</c> burst wash (<c>UI/ScreenFlash.cs</c>), which the original runs
+    /// over its whole framebuffer.</summary>
     public const int WorldOverlay = 0;
-
-    /// <summary>The lens-flare sprites, core glow and the three rings. Shares
-    /// <see cref="WorldOverlay"/> with the cloud whiteout and is ordered under it in tree order,
-    /// so flying into a cloud swallows the flare with everything else.</summary>
-    public const int FlareSprites = WorldOverlay;
 
     /// <summary>The flight HUD and cockpit overlay, compass, gauges, reticle, readouts. Also the
     /// <c>--viewer</c> lab panels, which never coexist with it.</summary>

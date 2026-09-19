@@ -134,16 +134,15 @@ public sealed class LensFlareRig
 
             var inst = new Instance { Rig = rig, Sun = sun };
 
-            // Sprites: under the HUD, and ordered under the cloud whiteout on the same layer so
-            // flying into a cloud swallows the flare with everything else.
+            // Sprites: under the HUD, and on their own layer below the cloud whiteout's, so flying
+            // into a cloud swallows the flare with everything else outside the canopy. The layer
+            // numbers carry that order, never the build order of the two rigs.
             var spriteCanvas = new CanvasLayer { Layer = HudLayers.FlareSprites, Name = "flare" };
             var spriteRoot = new Control { MouseFilter = Control.MouseFilterEnum.Ignore };
             spriteRoot.SetAnchorsPreset(Control.LayoutPreset.FullRect);
             spriteCanvas.AddChild(spriteRoot);
             rig.HudParent.AddChild(spriteCanvas);
             rig.WorldOverlays.Add(spriteCanvas);
-            // Godot adds children last-on-top within a layer; the whiteout canvas is added later
-            // (WeatherRig runs after this), so it already wins. Nothing to reorder.
 
             for (int i = 0; i < Elements.Length && i < names.Count; i++)
             {

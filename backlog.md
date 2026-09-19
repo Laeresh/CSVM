@@ -582,18 +582,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   so the lighting arm moves with this. *Cross-refs:* `BL-325` (the same cards, the jitter
   default), `docs/org/cloudCards.md`.
 
-- `BL-999` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **The cloud-band
-  whiteout paints over the cockpit interior; it should whiten only the world outside.**
-  *Evidence:* reported at the controls as "Whiteout should not affect the cockpit, only outside".
-  `PlayerRig.Whiteout` is a full-pane `ColorRect` on the player's screen-space `CanvasLayer`,
-  which draws over everything in the pane, the cockpit pass included; the original's whiteout is a
-  fog term on the world draw, which the interior does not take. *Fix shape:* the overlay moves
-  under the cockpit pass (the interior draws after it, or the whiteout becomes the world pane's
-  own post step), so the canopy, panel and gauges stay clear while the window whites out; the
-  HUD stays where it is. *⚠ Traps:* the in-cloud flicker (`BL-329`) and the `fvol` interior
-  density both drive this one overlay and move with it; `--no-fog` must still clear it.
-  *Cross-refs:* `docs/org/weather.md`, `BL-434` (the cockpit subtree per pane).
-
 ## Effects & animation runtime
 
 - `BL-674` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: data]` `[CM10]` **CM10's attack-balloon wave flies from 990 m down to water level and back up

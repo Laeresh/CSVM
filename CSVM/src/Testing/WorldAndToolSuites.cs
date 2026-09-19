@@ -1508,6 +1508,122 @@ internal static class WorldAndToolSuites
         }
     }
 
+    // The whiteout is the air OUTSIDE the canopy: the original applies it as a fog term on the
+    // world draw, which the interior never takes, so the window whites out and the panel does not.
+    // Both are canvas layers here, so the order between them is what decides it, and the drawn
+    // frame is out of a suite's reach (see SessionStartCoverSuites). Able to fail: a whiteout back
+    // on a layer above the pass (where it painted the panel), a flare canvas left above the
+    // whiteout, one overlay shared by two panes, and a --no-fog run still painting the band.
+    [Suite("weather-cockpit-whiteout",
+        "the cloud-band whiteout draws under each pane's own cockpit pass, so a full-opacity band whites the window out and leaves the canopy, panel and gauges clear, in cockpit view and in chase view alike, while --no-fog clears it")]
+    internal static void WeatherCockpitWhiteout(TestContext ctx)
+    {
+        string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
+        ctx.RequireData(zrdr, $"C1/IA1 mission zrdr");
+
+        // The order the picture is composed in, asserted on the constants themselves: the flare
+        // and the whiteout are the sky, the pass is the cockpit in front of it, and the HUD is the
+        // chrome over both.
+        ctx.Check(HudLayers.FlareSprites < HudLayers.Whiteout,
+            $"the flare sprites draw under the whiteout, so a cloud swallows them flare={HudLayers.FlareSprites} whiteout={HudLayers.Whiteout}");
+        ctx.Check(HudLayers.Whiteout < HudLayers.CockpitPass,
+            $"the whiteout draws under the cockpit pass whiteout={HudLayers.Whiteout} pass={HudLayers.CockpitPass}");
+        ctx.Check(HudLayers.CockpitPass < HudLayers.Hud && HudLayers.CockpitPass < HudLayers.SunWash,
+            $"and the pass stays under the HUD and the sun wash pass={HudLayers.CockpitPass} hud={HudLayers.Hud} wash={HudLayers.SunWash}");
+
+        var pane0 = new Node { Name = "whiteout-pane-0" };
+        var pane1 = new Node { Name = "whiteout-pane-1" };
+        var camera0 = new Camera3D { Name = "whiteout-camera-0" };
+        var camera1 = new Camera3D { Name = "whiteout-camera-1" };
+        var sun = new DirectionalLight3D { Name = "whiteout-sun" };
+        ctx.Host.AddChild(pane0);
+        ctx.Host.AddChild(pane1);
+        ctx.Host.AddChild(camera0);
+        ctx.Host.AddChild(camera1);
+        ctx.Host.AddChild(sun);
+        CockpitOverlay? pass = null;
+        try
+        {
+            var spec = SessionSpec.Parse(new[] { "--chapter=C1", "--mission=IA1" });
+            var rigs = new List<PlayerRig>
+            {
+                new PlayerRig { Index = 0, Camera = camera0, HudParent = pane0 },
+                new PlayerRig { Index = 1, Camera = camera1, HudParent = pane1 },
+            };
+            var weather = new WeatherRig(spec, ctx.Host, sun);
+            weather.Build(zrdr, rigs, System.Array.Empty<HorizonZone>(), _ => { });
+
+            foreach (var rig in rigs)
+            {
+                var canvas = rig.Whiteout?.GetParent() as CanvasLayer;
+                ctx.Check(canvas != null && canvas.Layer == HudLayers.Whiteout,
+                    $"player {rig.Index}'s whiteout sits on the whiteout layer layer={canvas?.Layer}");
+                ctx.Check(canvas != null && canvas.GetParent() == rig.HudParent,
+                    $"and hangs under that player's own pane, so a splitscreen pane whites out alone");
+                ctx.Check(rig.Whiteout != null && rig.Whiteout.AnchorRight == 1f
+                    && rig.Whiteout.AnchorBottom == 1f,
+                    $"and fills its pane rather than a corner of it");
+            }
+
+            // C1/IA1's band is 970-1124 m with a 1032-1062 m opaque core, so the centre is a
+            // total whiteout and the flicker's own guard leaves it there untouched.
+            camera0.Position = new Vector3(0f, 1047f, 0f);
+            camera1.Position = Vector3.Zero;
+            weather.Tick(rigs);
+            float inside = rigs[0].Whiteout?.Color.A ?? -1f;
+            float outside = rigs[1].Whiteout?.Color.A ?? -1f;
+            ctx.Note($"band centre alpha {inside:0.000}, below the band {outside:0.000}");
+            ctx.Check(Mathf.IsEqualApprox(inside, 1f),
+                $"a camera in the band's core paints a total whiteout alpha={inside:0.000}");
+            ctx.Check(Mathf.IsEqualApprox(outside, 0f),
+                $"and the other pane, below the band, paints nothing alpha={outside:0.000}");
+
+            // The pass over that same pane, with the whiteout at full: cockpit view draws the
+            // interior over it, chase view takes the pass off and leaves the pane white.
+            var panel = new Node3D { Name = "whiteout-panel" };
+            pane0.AddChild(panel);
+            pass = CockpitOverlay.Build(pane0, panel, null, null);
+            if (pass == null)
+            {
+                ctx.Check(false, $"the cockpit pass builds over the pane");
+                return;
+            }
+            var cam = new CameraController(camera0, new CamParams(), _ => false, -1,
+                PilotViewMode.Cockpit);
+            pass.Sync(Basis.Identity, cam, 0f);
+            int whiteoutLayer = (rigs[0].Whiteout?.GetParent() as CanvasLayer)?.Layer ?? 0;
+            ctx.Check(pass.Visible && pass.Layer > whiteoutLayer,
+                $"in cockpit view the interior draws over the full whiteout pass={pass.Layer} whiteout={whiteoutLayer}");
+            ctx.Check(pass.GetParent() == pane0,
+                $"and it is this pane's own pass, not a shared one");
+            pass.Deactivate();
+            weather.Tick(rigs);
+            ctx.Check(!pass.Visible && Mathf.IsEqualApprox(rigs[0].Whiteout?.Color.A ?? -1f, 1f),
+                $"in chase view the pass is down and the whiteout covers the whole pane");
+
+            // --no-fog covers the whiteout as it covers the fog, at the same altitude.
+            var clearSpec = SessionSpec.Parse(
+                new[] { "--chapter=C1", "--mission=IA1", "--no-fog" });
+            var clearRigs = new List<PlayerRig>
+                { new PlayerRig { Index = 0, Camera = camera0, HudParent = pane1 } };
+            var clearWeather = new WeatherRig(clearSpec, ctx.Host, sun);
+            clearWeather.Build(zrdr, clearRigs, System.Array.Empty<HorizonZone>(), _ => { });
+            clearWeather.Tick(clearRigs);
+            float cleared = clearRigs[0].Whiteout?.Color.A ?? -1f;
+            ctx.Check(Mathf.IsEqualApprox(cleared, 0f),
+                $"--no-fog clears the band whiteout at the same altitude alpha={cleared:0.000}");
+        }
+        finally
+        {
+            pass?.QueueFree();
+            camera0.QueueFree();
+            camera1.QueueFree();
+            sun.QueueFree();
+            pane0.QueueFree();
+            pane1.QueueFree();
+        }
+    }
+
     // The lens flare's gating, chapter by chapter. ⚠ Gate it on chapter data, never on a chapter
     // name: it reads a gamez sun node in the horizon subtree and init.gw's LensFlareTexture slot
     // registrations, both true of C2 and C3 and of nothing else. Both directions are asserted, because

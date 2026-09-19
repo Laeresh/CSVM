@@ -332,7 +332,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/CursorRow.cs`, one centred list row and its cursor marker, shared by the launchscreen's lists and every board menu.
 - `src/UI/ControlGlyphs.cs`, the swappable per-control picture set, keyed by kind, index and sign the way a binding's control is.
 - `src/UI/ControlLine.cs`, one prompt line with a control in the message table's own `%1` slot, as words or as a glyph, and the hint row boards draw.
-- `src/UI/HudLayers.cs`, the canvas-layer order for everything drawn over the 3D view: whiteout, HUD, sun wash, debug overlays, labs, boards, cinemas.
+- `src/UI/HudLayers.cs`, the canvas-layer order for everything drawn over the 3D view: flare, whiteout, cockpit pass, HUD, sun wash, debug overlays, labs, boards, cinemas.
 - `src/UI/SplitScreen.cs`, the splitscreen rig: one SubViewport pane per player (2-4), a shared `World3D`, every pane a 3D audio listener.
 - `src/UI/LaunchMenu.cs`, the Built-in presentation's launchscreen: the screen graph, the Godot controls, per-seat polling, and the hangar and campaign doors.
 - `src/UI/MenuZones.cs`, how the launchscreen divides a window: a fixed header and footer, the list in what is left, one shared scale. Engine-free.

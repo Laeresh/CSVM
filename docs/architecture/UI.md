@@ -433,8 +433,11 @@ are letters there. `TypeableKeys` is deliberately wider than any box's accept ru
 The canvas-layer ordering for everything drawn over the 3D view, in one place, so "does the collider
 overlay draw above the cloud whiteout?" is answered by reading one file rather than nine literals.
 The order is measured off the original's footage rather than chosen, except for the debug and lab
-layers, which the original never had and which sit above the sun wash on purpose. The evidence for
-the wash-over-HUD ordering is a verification rule; the weather decode is [../org/weather.md](../org/weather.md).
+layers, which the original never had and which sit above the sun wash on purpose. The three negative
+tiers are the world seen from the seat: the flare sprites and the cloud whiteout are the sky, and the
+cockpit pass draws over both, since the original's whiteout is a fog term the interior never takes.
+The burst wash stays above the pass, being a framebuffer effect over the whole picture. The evidence
+for the wash-over-HUD ordering is a verification rule; the weather decode is [../org/weather.md](../org/weather.md).
 
 ## src/UI/SplitScreen.cs
 The splitscreen rig for two to four players (one player never constructs it): the black gutter
