@@ -3336,6 +3336,10 @@ internal static class AiSuites
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
 
+        // Every cull and level below is the cue's own authored one. This suite reads at 1, not at
+        // the reach the session ships.
+        using var authored = TestContext.AtAuthoredSoundRadii();
+
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
         var soundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath);

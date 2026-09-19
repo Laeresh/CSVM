@@ -558,42 +558,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## Audio
 
-- `BL-269` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **Positional sounds
-  are heard from far closer in than in the original although the level law is the original's own
-  curve; at the controls `--sound-range-scale=2.5` matches the original's reach for the world
-  emitters, and that factor becomes the default as a recorded departure.** *Verdict at the
-  controls:* the police chase car and the track train fly-pasts on C1 were each heard only near
-  the emitter at 1; flown at 1, 2 and 4, "--sound-range-scale=2.5 works good for environmental
-  sounds". The guns do not come in at that factor, which is `BL-933`'s own second cause. *Fix
-  shape:* `SessionSpec.SoundRangeScale` defaults to 2.5 and the flag stays for a listen at other
-  values; `docs/cli.md`'s bullet becomes a remake-only departure rather than a diagnostic, and
-  `docs/formats/sounds.md`'s "No listener-side term scales the reach" keeps its decode and names
-  the shipped factor; a suite that pins a level at the authored radii sets the factor it reads at.
-  No term in either build's level path accounts for the factor: the two chains are decoded and
-  compared stage by stage in `docs/formats/sounds.md`, "The whole level path, retail against the
-  remake", and the widest measured divergence is about four decibels, where 2.5 is worth up to
-  twenty inside the band. So the factor is a remake-only departure with nothing decoded behind it,
-  which is what this item records. *Evidence:* `SoundFalloff.cs` computes the decoded law and
-  every positional play path levels from it. For the siren (`RANGE [200, 1200]`) that is 0 dB to
-  325 m, -10 at 450, -20 at 700, -30 at 1200 and silent at 1320; for the train (`RANGE [600,
-  1200]`) 0 dB to 675 m, -10 at 750, -20 at 900, -30 at 1200 (`docs/formats/sounds.md`, "The gain
-  between the two radii"). The decode of a listener-side term that would stretch that reach found
-  none: the retail build never runs the DirectSound 3D listener path, so no distance or rolloff
-  factor is set; `RANGE` loads unscaled; the listener is the camera node's world position and an
-  emitter its sound node's world origin, both in the world units the port uses; and every gain
-  multiplier is at most 1 (addresses and the four ruled-out places in `docs/formats/sounds.md`,
-  "No listener-side term scales the reach"). The diagnostic `--sound-range-scale=<f>` (default 1,
-  `docs/cli.md`) multiplies both radii and the cull at every `SoundFalloff` play path and prints
-  the factor in the `sound` lines. *⚠ Traps:* do not move the curve's own numbers; the factor
-  scales the radii and nothing else. The C1 refinery flare is not a candidate emitter: neither
-  `refinery_fire_always` nor `refinery_fire.zrd` authors a sound. Weapon impact one-shots
-  (`Projectile.DistanceGain`) run their own linear term, not this law, so the factor does not
-  reach them. *Playtest after fix:* `./RunGame.ps1 --chapter=C1 --plane=player_bhawk --volume=1.0`
-  with no range flag, the siren and the train first heard from as far off as at 2.5.
-  *Cross-refs:* `BL-933` (the gun voices on the same law, still failing at 2.5),
-  `docs/formats/sounds.md`, `git log --grep=BL-269`, `git log --grep=BL-1001` (the stage-by-stage
-  comparison that found no term behind the factor).
-
 - `BL-281` `[Tuning]` `[Blocked: CAP-27]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: feel]` **The ricochet sounds are audible but very faint.** `PT-25` (c), 2026-08-05:
   `snd_ricochet1–4` play under the per-impact spark burst but sit too low to read. A mix-gain
   question with no reference recording behind it, to be judged at the controls rather than derived. ⚠ Judge only after `CAP-27` decides
@@ -635,8 +599,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the range factor that brings the world emitters in: a shooting enemy aeroplane or turret should
   be clearly audible at about 1 km and is heard only close by.**
   *Verdict at the controls:* the listen after the law landed failed, and harder than the world
-  emitters (`BL-269`) on the same law, "worse than BL-269, I can't hear shooting enemies or
-  turrets, only within ~10 meters"; and at `--sound-range-scale=2.5`, the factor that brings the
+  emitters on the same law, "I can't hear shooting enemies or
+  turrets, only within ~10 meters"; and at the shipped range factor of 2.5, which brings the
   siren and the train in, "enemy shots are still only hearable if I'm really close. They should be
   clearly audible if i'm in range ~1km". At 2.5 a turret's `snd_turretgun` `RANGE [30, 400]` is
   audible to 1,000 m by the law, so the gun sites carry a second cause of their own. *What moves
@@ -645,8 +609,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   the controls three times before the law landed, after `BL-793` landed a positional loop per mount ("cant hear guns
   of turrets. And planes only when very near. Too much falloff perhaps?"), after `BL-820` gave the
   hulls a voice ("Cant hear them. They fire but there is no sound") and against `BL-846` ("i can
-  only hear them if they are shooting right beside me"). The cause found then was the mapping `BL-269` named:
-  every gun voice built its player with `UnitSize = RANGE`'s full-volume distance and
+  only hear them if they are shooting right beside me"). The cause found then was the mapping onto
+  Godot's own model: every gun voice built its player with `UnitSize = RANGE`'s full-volume distance and
   `MaxDistance` = its audible one on Godot's inverse-distance model, which multiplies a second
   linear fade onto the level, reaches silence exactly at the audible radius where the decoded law
   still plays to 1.1x, and brings a low-pass of up to 24 dB above 5 kHz that guts a gun's crack.
@@ -661,13 +625,14 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *⚠ Traps:* `WeaponSoundCue.CullMargin` (1.1) is `SoundFalloff.CullFactor`, decoded from the
   compare, and is not the knob; `BL-846`'s closing note says the same. Do not retune a level by
   ear: every constant here is the decode's or the authored `RANGE`, and the reach that is missing
-  is `BL-269`'s term.
+  is beyond what the shipped range factor already buys.
   *Playtest after fix:* CM17 (`--campaign=<profile>:16`) for the pirate zeppelin's gun rings at a
   couple of hundred metres, CM21 (`:20`) for the patrol boats and turret trucks across the docks,
   an Instant Action wave for an enemy aeroplane's guns from further off than beside you, all with
   `--volume=1.0 --no-det --log=sound:debug`; and nothing too loud at a cue's own audible radius.
-  *Cross-refs:* `BL-269` (the shared law and the knob), `docs/formats/sounds.md` ("The gain
-  between the two radii"), `INSTR-87`, `git log --grep=BL-933`, `git log --grep=BL-793`,
+  *Cross-refs:* `docs/formats/sounds.md` ("The gain
+  between the two radii", "No listener-side term scales the reach" for the shipped factor),
+  `INSTR-87`, `git log --grep=BL-269` (the shipped factor), `git log --grep=BL-933`, `git log --grep=BL-793`,
   `git log --grep=BL-820`, `git log --grep=BL-846`.
 
 - `BL-934` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` **The dynamic enemy and

@@ -60,6 +60,10 @@ internal static class TurretVoiceSuites
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, VoiceChapter);
         ctx.RequireData(texturesPath, $"{VoiceChapter} textures");
 
+        // Every distance below is the cue's own authored one. This suite reads at 1, not at the
+        // reach the session ships.
+        using var authored = TestContext.AtAuthoredSoundRadii();
+
         var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         var soundDefs = SoundDefs.Load(ctx.ZrdrPath);

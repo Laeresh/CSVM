@@ -1,5 +1,6 @@
 using System.Linq;
 using CSVM;
+using CSVM.Mech3;
 using CSVM.Utils;
 using Godot;
 using Xunit;
@@ -919,9 +920,13 @@ public class SessionSpecTests
     }
 
     [Fact]
-    public void TheSoundRangeScaleDefaultsToTheAuthoredRadii()
+    public void TheSoundRangeScaleDefaultsToTheShippedFactor()
     {
-        Assert.Equal(1f, S("--fly").SoundRangeScale);
+        // The one assertion of the shipped departure's value: a session nobody passes the flag to
+        // plays every positional voice at 2.5 times its authored radii.
+        Assert.Equal(2.5f, SoundFalloff.ShippedRangeScale);
+        Assert.Equal(SoundFalloff.ShippedRangeScale, S("--fly").SoundRangeScale);
+        Assert.Equal(1f, S("--sound-range-scale=1").SoundRangeScale);
         Assert.Equal(2f, S("--sound-range-scale=2").SoundRangeScale);
         Assert.Equal(0.5f, S("--sound-range-scale=0.5").SoundRangeScale);
         Assert.Empty(S("--sound-range-scale=4").Warnings);
@@ -933,7 +938,7 @@ public class SessionSpecTests
         foreach (string bad in new[] { "0", "-1", "far", "2,5" })
         {
             var s = S($"--sound-range-scale={bad}");
-            Assert.Equal(1f, s.SoundRangeScale);
+            Assert.Equal(SoundFalloff.ShippedRangeScale, s.SoundRangeScale);
             Assert.Contains(s.Warnings, w => w.Category == "core" && w.Message.Contains("not a positive number"));
         }
     }

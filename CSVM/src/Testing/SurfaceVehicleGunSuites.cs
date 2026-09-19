@@ -249,6 +249,10 @@ internal static class SurfaceVehicleGunSuites
         ctx.RequireData(chapterZrdr, $"{VoiceChapter} zrdr");
         ctx.RequireData(texturesPath, $"{VoiceChapter} textures");
 
+        // Every distance below is the cue's own authored one. This suite reads at 1, not at the
+        // reach the session ships.
+        using var authored = TestContext.AtAuthoredSoundRadii();
+
         var mission = MissionOf(ctx, VoiceChapter, VoiceMission);
         var script = ObjectiveScript.Load(missionZrdr);
         var defs = VehicleDefs.Load(ctx.ZrdrPath);

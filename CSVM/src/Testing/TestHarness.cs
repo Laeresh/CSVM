@@ -787,6 +787,13 @@ public sealed class TestContext
     /// hits happened rather than only that the wall time moved.</summary>
     internal (int Hits, int Misses) DecodeCounts => (_decode.Hits, _decode.Misses);
 
+    /// <summary>Reads every positional sound level and cull at the data's own <c>RANGE</c> radii
+    /// until the returned handle is disposed, whatever factor the session carries. A suite that
+    /// pins the decoded law's numbers has to say which factor it reads them at. The shipped
+    /// <see cref="Mech3.SoundFalloff.ShippedRangeScale"/> is a departure from the radii the law was
+    /// decoded against. The session's factor comes back on dispose.</summary>
+    public static IDisposable AtAuthoredSoundRadii() => new SoundRangeScope(1f);
+
     /// <summary>Records a check. A false verdict fails the suite but does not stop it, the rest of
     /// the checks still run, so one report names every broken thing rather than the first.</summary>
     public void Check(bool ok, FormattableString what)
@@ -1069,6 +1076,26 @@ public sealed class TestContext
             WorldBuildPhases += PhaseAttribution.Categorize(profile.Phases, buildWatch.Elapsed.TotalMilliseconds);
             WorldBuildSeconds += buildWatch.Elapsed.TotalSeconds;
             WorldsBuilt++;
+        }
+    }
+
+    // Holds SoundFalloff at one factor for a suite's duration and puts the session's own back.
+    // Disposing twice restores nothing a second time, so a nested scope cannot outlive its owner.
+    private sealed class SoundRangeScope : IDisposable
+    {
+        private readonly float _previous = Mech3.SoundFalloff.RangeScale;
+        private bool _restored;
+
+        internal SoundRangeScope(float scale) => Mech3.SoundFalloff.SetRangeScale(scale);
+
+        public void Dispose()
+        {
+            if (_restored)
+            {
+                return;
+            }
+            _restored = true;
+            Mech3.SoundFalloff.SetRangeScale(_previous);
         }
     }
 }

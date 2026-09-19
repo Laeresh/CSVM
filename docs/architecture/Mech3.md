@@ -433,10 +433,10 @@ The original's positional gain law, engine-free: what a listener distance, a def
 pair and its `VOLUME` come to in decibels. `AttenuationDb` is the distance term alone, `VolumeDb`
 the linear-gain conversion (ten decibels per doubling, not `20 log10`), `GainDb` the sum with the
 silence floor. No Godot attenuation model expresses the shape, since the ramp is measured from the
-full-volume radius. `SessionGainDb` is what the play paths call: the law at the session's
-`--sound-range-scale` diagnostic, the one piece of state here. The decode and its addresses are
-[../formats/sounds.md](../formats/sounds.md). Callers: `WorldSounds`, `Flight/GunVoice.cs`,
-`Flight/AiWeaponAudio.cs`.
+full-volume radius. `SessionGainDb` is what the play paths call: the law at `RangeScale`, the one
+piece of state here, shipping at the remake-only `ShippedRangeScale` (`--sound-range-scale=`). The
+decode and its addresses are [../formats/sounds.md](../formats/sounds.md). Callers: `WorldSounds`,
+`Flight/GunVoice.cs`, `Flight/AiWeaponAudio.cs`.
 
 ## src/Mech3/WorldLights.cs
 Packs the `LIGHT_STATE` point lights, each as colour times ambient + diffuse, into the 2xN texture

@@ -841,11 +841,12 @@ public sealed record SessionSpec
     /// At volume 0 every sound still loads, plays, counts and logs; it is simply inaudible.</para></summary>
     public float? Volume { get; private set; }
 
-    /// <summary><c>--sound-range-scale=</c>: a diagnostic multiplier on every positional sound's
-    /// <c>RANGE</c> radii, read into <see cref="Mech3.SoundFalloff.RangeScale"/>. It is 1, the
-    /// data's own radii, when absent. A value that is not a positive number is ignored with a
-    /// warning.</summary>
-    public float SoundRangeScale { get; private set; } = 1f;
+    /// <summary><c>--sound-range-scale=</c>: the multiplier on every positional sound's <c>RANGE</c>
+    /// radii, read into <see cref="Mech3.SoundFalloff.RangeScale"/>. It is
+    /// <see cref="Mech3.SoundFalloff.ShippedRangeScale"/>, the remake-only departure that gives the
+    /// world emitters the original's reach, when absent; 1 is the data's own radii. A value that is
+    /// not a positive number is ignored with a warning.</summary>
+    public float SoundRangeScale { get; private set; } = Mech3.SoundFalloff.ShippedRangeScale;
 
     /// <summary><c>--cloud-jitter=</c>: a remake-only extra X/Z offset, in metres, on every
     /// lattice-scattered <c>fvol</c> cloud card (<see cref="Effects.FogVolumeClutter"/>). It is 0,
@@ -1346,7 +1347,7 @@ public sealed record SessionSpec
                 }
                 else
                 {
-                    notes.Add(new Note("core", $"--sound-range-scale={want} is not a positive number, leaving the RANGE radii as authored"));
+                    notes.Add(new Note("core", $"--sound-range-scale={want} is not a positive number, leaving the shipped factor in place"));
                 }
             }
             else if (arg.StartsWith("--cloud-jitter="))
