@@ -224,20 +224,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   clear and the hull does not (CM13's dbase arch on dzpath2) in both games; if the original passes,
   sweep the player's probes too. *Cross-refs:* `PlaneStats.CollisionProbes`, `docs/formats/vehicle.md`.
 
-- `BL-983` `[Fidelity]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The proximity
-  fuse's aircraft branch skips only the shooter's own plane, where `FUN_004b5fb0` skips every
-  candidate on the shooter's side, so a player's rocket bursts beside a wingman.** *Evidence:* the
-  sweep compares the round wrapper's `+0x8` with the candidate's `+0x8`, and the wrapper's copy is
-  the firing vehicle's team (`FUN_004b6820` passes its `+0x8` to `FUN_00441830` at `0x004b6e8c` and
-  `0x004b7298`; `FUN_00441b90` stores it), written up in
-  [`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md) "The proximity fuse". The hull branch of
-  `ProjectilePool.ProximityFuseTriggered` already tests the side. The question for the user is
-  whether Dogfight, where every pilot is on a side of their own, and the campaign wingmen should
-  both follow the decode, or whether the aircraft branch keeps the shooter-only test. *⚠ Traps:*
-  the blast's own aircraft gather (`GatherAircraftCandidates`) exempts only the shooter on purpose
-  and is a separate question; changing the fuse leaves it alone. *Cross-refs:* the `air-to-air` and
-  `vessel-fuse` suites.
-
 ## Flight model & collision physics
 
 - `BL-562` `[Perf]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: data]` `[CM11]` **CM11 (C2/M02) still spends a single physics tick of about 36 ms on the sortie's

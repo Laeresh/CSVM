@@ -2407,7 +2407,8 @@ internal static class CombatSuites
         "weapon's own values, downs it when whole-vehicle health exhausts (a lone dead critical " +
         "part no longer kills: the decoded rule, D14) with the kill attributed through the " +
         "Downed event (never hits the shooter's own geometry), a rocket fuses on a passing " +
-        "plane, blasting with falloff and attributing the kill, a burst beside the plane that " +
+        "plane, blasting with falloff and attributing the kill, flies on past planes on its own " +
+        "side while another Dogfight pilot's rocket still fuses, a burst beside the plane that " +
         "fired the round costs it nothing while a plane the same distance out takes the " +
         "falloff share, concentrated fire on ONE " +
         "bearing kills through the decoded redirect + whole-pool overflow (the 2026-08-14 " +
@@ -2774,6 +2775,41 @@ internal static class CombatSuites
             ctx.Check(Combined(target) < beforeNear,
                 $"an unowned rocket fuses like any other moved={beforeNear - Combined(target):0.##}");
             ctx.Check(Pristine(shooter), $"zero blast outside the radius (the shooter's plane, 500 m out)");
+
+            // --- the fuse skips the round's whole side. Every rig keeps its per-pilot default team,
+            // the Dogfight shape, so the pass flies on only once the target and bystander join the
+            // shooter's side, and a pilot-2 round still fuses on pilot 1.
+            ctx.Check(shooter.Team == AimAssist.TeamOfPilot(0) && target.Team == AimAssist.TeamOfPilot(1)
+                      && bystander.Team == AimAssist.TeamOfPilot(2)
+                      && shooter.Team != target.Team && target.Team != bystander.Team,
+                $"precondition: the three rigs are on three sides, as Dogfight pilots are (teams {shooter.Team}, {target.Team}, {bystander.Team})");
+            int targetTeam = target.Team, bystanderTeam = bystander.Team;
+            target.Respawn();
+            bystander.Respawn();
+            target.Team = shooter.Team;
+            bystander.Team = shooter.Team;
+            live.Spawn(rocket, crossMuzzle, Vector3.Zero, shooter.PlayerIndex);
+            var wingPass = new List<(Vector3 Pos, Vector3 Velocity)>();
+            bool passedWing = false;
+            for (int i = 0; i < 60 && !passedWing; i++)
+            {
+                live.SimStep(1f / 60f);
+                wingPass.Clear();
+                live.CollectLiveRounds(wingPass);
+                passedWing = wingPass.Count == 1 && wingPass[0].Pos.X > passPoint.X + fuseRange;
+            }
+            live.Clear();
+            target.Team = targetTeam;
+            bystander.Team = bystanderTeam;
+            ctx.Check(passedWing && Pristine(target) && Pristine(bystander),
+                $"a round passing two planes on its own side inside the fuse flies on past them (past={passedWing}), and neither takes a blast");
+
+            target.Respawn();
+            bystander.Respawn();
+            float beforeVersus = Combined(target);
+            FireRocket(crossMuzzle, bystander.PlayerIndex);
+            ctx.Check(Combined(target) < beforeVersus,
+                $"a pilot-{bystander.PlayerIndex} rocket (team {bystander.Team}) still fuses on pilot {target.PlayerIndex} (team {target.Team}) moved={beforeVersus - Combined(target):0.##}");
 
             // The attributed blast kill: fused passes across the critical nose until it zeroes, with the Downed
             // report carrying the shooter through the same seam the gun kill used. Counters entering this

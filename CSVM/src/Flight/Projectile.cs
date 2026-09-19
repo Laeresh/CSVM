@@ -2343,12 +2343,12 @@ public sealed partial class ProjectilePool : Node3D
     }
 
 
-    // ⚠ Do not re-add a world fuse. It detonates every rocket short of its target and locks every
-    // hardpoint weapon out of its per-surface IMPACT entry. The candidates are VehicleList's:
-    // aircraft and surface hulls, never world bodies or zeppelins (docs/org/ordnanceTypes.md).
-    // Detonates at CLOSEST APPROACH within the swept step, not first entry, or most rockets would
-    // detonate where the blast falls to zero and never hurt anything. ⚠ These walks are the pool's
-    // own rosters, not a physics query, so each needs its own liveness test.
+    // ⚠ Do not re-add a world fuse: it detonates rockets short and locks hardpoint weapons out of
+    // their per-surface IMPACT entry. Candidates are VehicleList's aircraft and hulls, never world
+    // bodies or zeppelins, and both walks skip the round's whole side by plain id equality
+    // (docs/org/ordnanceTypes.md "The proximity fuse"). Detonates at CLOSEST APPROACH within the
+    // swept step, not first entry, or most rockets would burst where the blast falls to zero.
+    // ⚠ These walks are the pool's own rosters, not a physics query, so each needs a liveness test.
     private bool ProximityFuseTriggered(WeaponDef weapon, int shooter, int team, Vector3 from,
         Vector3 to, out Vector3 detonationPoint, out AircraftBody? fused, out Vector3 towardHull)
     {
@@ -2360,7 +2360,7 @@ public sealed partial class ProjectilePool : Node3D
         float best = float.PositiveInfinity;
         foreach (var plane in _aircraft)
         {
-            if (plane.PlayerIndex == shooter || !plane.Rig.InPlay)
+            if (plane.PlayerIndex == shooter || plane.Rig.Team == team || !plane.Rig.InPlay)
                 continue;
             // Cheap reject: the segment cannot come within fuse range of any box while it stays
             // outside the plane's bounding sphere by more than that range.

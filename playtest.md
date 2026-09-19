@@ -692,6 +692,18 @@ against `BL-389` rather than against the wash routing.
 
   *Blocks:* nothing tracks the outcome; a wrong or missing name mints a new `BL`.
 
+- `PT-170` `[Own]` **A rocket flies on past a wingman and bursts beside an enemy**
+  (it closed `BL-983`, `git log --grep=BL-983`). Menu path: Instant Action → C1 → Dogfighting a
+  Squadron with wingmen, on an aircraft whose loadout carries proximity-fused rockets. The
+  `air-to-air` suite pins the fuse skipping the round's side; what no instrument shows is how a
+  furball reads with it. Fire rockets through the fight so some pass close by a wingman.
+  *Look for:*
+  - (a) a rocket passing a wingman flies on instead of bursting beside it;
+  - (b) a rocket passing an enemy still bursts beside it;
+  - (c) in a two-pilot Dogfight (`--vs`), a rocket passing the other pilot still bursts.
+
+  *Blocks:* nothing tracks the outcome; a burst beside a wingman mints a new `BL`.
+
 ### CM01 (C3/M01) · two to four pilots, join, flight check, death and skip
 
 ```powershell

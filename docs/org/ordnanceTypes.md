@@ -448,7 +448,18 @@ the burst through `FUN_005ac3a0`, and the loop breaks.
 CSVM keeps two departures. It detonates at the closest approach within the round's swept step
 rather than at the first frame in range, since several rockets author a trigger distance equal to their
 blast radius and a burst at first entry would deal nothing. An aircraft is measured to its airframe hulls and a surface hull to its
-origin, the decoded point. The aircraft branch excludes the shooter's own plane rather than its side.
+origin, the decoded point. Both branches skip the round's side as the original does, by plain id
+equality with no neutral clause, and the aircraft branch also skips the shooter's own plane, which
+only matters for a shooter whose team changed while its round was in flight.
+
+The side is the one team space every combat object shares ([`targeting.md`](targeting.md) "The team
+space"), so the skip follows each mode's team assignment. A campaign's humans and wingmen are team
+1 and its AI take their roster or `SET_AI_TEAM` id; Instant Action's humans and wingmen are team 1
+and its waves the enemy id; co-op splitscreen (`--coop`, and every co-op campaign) puts every human
+on team 1. Dogfight (`--vs`) and plain splitscreen flight give each pilot its own default
+(`AimAssist.TeamOfPilot`: pilot 0 is team 1, pilot N is `10 + N`), so two Dogfight pilots still
+fuse on each other. The per-pilot ladder is a remake rule, since the original's network sides are
+not decoded; the fuse reads whatever `+0x8` the mode wrote.
 
 `VehicleList` holds aircraft and the AI ground/sea vehicles ([`aim-assist.md`](aim-assist.md) "The
 four lists"), and **no zeppelin**. Its one inserter is `FUN_0047c210`, which allocates the 0xa20-byte
