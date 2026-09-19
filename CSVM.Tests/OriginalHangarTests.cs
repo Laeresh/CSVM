@@ -612,6 +612,39 @@ public class OriginalHangarTests : IDisposable
         Assert.Equal(OriginalScreen.HangarAirframe, host.Screen);
     }
 
+    /// <summary>The inventory's plane line stands on the row <c>HANGAR.SCRIPT</c> binds,
+    /// <c>HA_T_PLANE</c> at the box's own left edge with no width. The wide
+    /// <c>HA_T_PILOTPLANE</c> the shipped build authors and never draws stays empty.</summary>
+    [Fact]
+    public void TheInventoryWritesThePlaneLineOnTheRowTheScriptBinds()
+    {
+        _store.Save(new CustomPlaneDef { Name = "Old", Airframe = 2, Engine = 1 });
+        var host = Host(out _);
+        OpenHub(host, "Ace");
+
+        Click(host, OriginalHangarScreen.SellPlanesKey);
+        var board = Compose(host);
+        var line = board.Lines.Single(l => l.Text == "Old   Airframe 2");
+        Assert.Equal((138f, 108f, 0f), (line.X, line.Y, line.Width));
+        Assert.DoesNotContain(board.Lines, l => l.X == 236f && l.Y == 110f);
+    }
+
+    /// <summary>A plane named for its airframe is one fact: the row writes the name once rather
+    /// than the doubled title the concatenated line read.</summary>
+    [Fact]
+    public void TheInventoryWritesAPlaneNamedForItsAirframeOnce()
+    {
+        _store.Save(new CustomPlaneDef { Name = "Airframe 3", Airframe = 3, Engine = 1 });
+        var host = Host(out _);
+        OpenHub(host, "Ace");
+
+        Click(host, OriginalHangarScreen.SellPlanesKey);
+        var board = Compose(host);
+        var line = board.Lines.Single(l => l.X == 138f && l.Y == 108f);
+        Assert.Equal("Airframe 3", line.Text);
+        Assert.DoesNotContain(board.Lines, l => l.Text.Contains("Airframe 3   Airframe 3", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void TheWalletsInventoryKeepsExportWhoseConfirmationKeepsThePlane()
     {

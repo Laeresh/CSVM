@@ -526,6 +526,15 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
         }
     }
 
+    // A named aircraft and its airframe, the compound the campaign's plane selection writes on one
+    // row too. Where the two are the same word it stands once, since "Devastator   Devastator" is
+    // not a second fact.
+    private static string PlaneLine(HangarFeature hangar, CustomPlaneDef plane)
+    {
+        string airframe = hangar.AirframeName(plane.Airframe);
+        return plane.Name == airframe ? airframe : plane.Name + "   " + airframe;
+    }
+
     private static void InventoryLine(MenuLayoutScreen screen, List<BoardLine> lines, string key, string text, float size)
     {
         if (screen.Widget(key) is { } widget)
@@ -2035,7 +2044,10 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
                     icon.Int("X"), icon.Int("Y"), Math.Clamp(plane.Airframe, 0, Math.Max(0, icon.Frames - 1))));
             }
 
-            InventoryLine(screen, lines, "HA_T_PILOTPLANE", plane.Name + "   " + hangar.AirframeName(plane.Airframe), HubLabelFont);
+            // ⚠ The plane line belongs at HA_T_PLANE. HANGAR.SCRIPT binds both its text objects
+            // there and none to HA_T_PILOTPLANE, which the shipped build authors and never draws.
+            // The wide row starts the line inside the box and wraps it onto the pull-down.
+            InventoryLine(screen, lines, "HA_T_PLANE", PlaneLine(hangar, plane), HubLabelFont);
             InventoryLine(screen, lines, "HA_T_AGILITYP", "AGILITY: " + Rating(bill.AgilityStars), HubTextFont);
             InventoryLine(screen, lines, "HA_T_ARMORP", "ARMOR: " + Rating(bill.ArmourStars), HubTextFont);
             // ⚠ Draw no Value row without a wallet. A sale is what 1258 prices, and a plane built on

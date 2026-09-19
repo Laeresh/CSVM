@@ -1036,6 +1036,9 @@ internal static class MenuHangarSuites
         var picked = shell.Compose();
         ctx.Check(InventoryFigure(layout, picked, "HA_T_AGILITYP") != null && InventoryFigure(layout, picked, "HA_T_VALUEP") == null,
             $"whose figures stand without the Value row, this door pricing nothing ({InventoryFigure(layout, picked, "HA_T_VALUEP")?.Text})");
+        ctx.Check(InventoryFigure(layout, picked, "HA_T_PLANE") is { } named && named.Text.StartsWith(scratch, StringComparison.Ordinal)
+            && InventoryFigure(layout, picked, "HA_T_PILOTPLANE") == null,
+            $"and the plane line on the row HANGAR.SCRIPT binds, the wide one unused ({InventoryFigure(layout, picked, "HA_T_PLANE")?.Text})");
         var sellButton = Row(shell, OriginalHangarScreen.InventorySellKey)!;
         Click(host, seat, Pointer(fit, sellButton.X + 5f, sellButton.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Dialog != null && shell.FocusedKey == OriginalShell.DialogYesKey && store.Load(scratch) != null,

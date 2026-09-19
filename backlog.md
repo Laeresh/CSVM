@@ -842,24 +842,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   this item, then re-review against it; the `BL-951` join board stands on the same scale.
   *Cross-refs:* `BL-449`, whose landing prompted this wording.
 
-- `BL-765` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The inventory writes
-  the plane's name and its airframe as one line at the airframe's row, leaving the name's own row
-  unused, so the title runs off its box and over the pull-down.** *Evidence:* reported at the
-  controls over `PLAN-M5-polish-13`'s closing sortie, "The Plane name is not aligned correctly",
-  and again on the Sell or Export page: "the title of the plane not aligned correctly with the
-  background. Textbox could be wider and more to the left"
-  (`Screenshots/crimsonskies_2026-09-19_00-38-57-752.png`: the title row reads "William & Colt
-  Peacemaker 370   William & Colt Peacemaker 370", wrapping onto the pull-down beneath it, and
-  starts right of the box's left edge). The section authors two text rows a couple of pixels apart,
-  `HA_T_PLANE` at 138,108 with no width and `HA_T_PILOTPLANE` at 236,110 across 400
-  (`extracted/rof/ASSETS/LAYOUT.CSV`, `[@Hangar@]`); ours concatenates both texts into
-  `HA_T_PILOTPLANE` with three spaces between them
-  (`CSVM/src/UI/Menu/Original/OriginalHangar.cs:1612`) and never draws `HA_T_PLANE`, whose key
-  appears nowhere in the tree. *Fix shape:* one text per authored row. *⚠ Traps:* **which row takes
-  which text is not settled by the keys' names**, and there is no capture of the INVENTORY screen
-  under `OriginalScreenshots/`, so the first step is a shot of it; `HA_T_PLANE` is the left row and
-  the one with no width, which is the shape of a short label rather than a name. *Cross-refs:*
-  `BL-764`'s landing (`git log --grep=BL-764`), which settled the same screen's buttons.
 
 - `BL-951` `[Feature]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **A local
   multiplayer door on the main menu, opening a join board where every controller claims its seat
