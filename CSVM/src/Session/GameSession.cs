@@ -1579,7 +1579,12 @@ public partial class GameSession : Node3D
             if (cloudField != null)
             {
                 _worldRoot!.AddChild(cloudField);
-                Log.Info("world", $"fogvol clouds: {cloudField.InstanceCount} sprites ({cloudField.BaseCount} base + {cloudField.ExtensionCount} map-edge extension) over {fogVolumes.Count} volume(s), {cloudField.Summary}{(_spec.CloudJitter > 0f ? $", remake jitter {_spec.CloudJitter:0.#} m" : "")}");
+                // The jitter is named on every launch, not only when a flag moved it. The shipped
+                // offset is a departure from the decoded lattice, so a run's record has to say
+                // which field it drew.
+                string jitterVia = _spec.CloudJitter > 0f
+                    ? $", remake jitter {_spec.CloudJitter:0.#} m" : ", decoded lattice, no jitter";
+                Log.Info("world", $"fogvol clouds: {cloudField.InstanceCount} sprites ({cloudField.BaseCount} base + {cloudField.ExtensionCount} map-edge extension) over {fogVolumes.Count} volume(s), {cloudField.Summary}{jitterVia}");
             }
             // ⚠ Read the fvol zone from the data, never assume it: a chapter authoring -1 keeps the
             // default layer and renders below its deck, which is authored and not a bug. One

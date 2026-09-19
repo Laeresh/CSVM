@@ -1,5 +1,6 @@
 using System.Linq;
 using CSVM;
+using CSVM.Effects;
 using CSVM.Mech3;
 using CSVM.Utils;
 using Godot;
@@ -944,9 +945,9 @@ public class SessionSpecTests
     }
 
     [Fact]
-    public void TheCloudJitterDefaultsToTheDecodedLattice()
+    public void TheCloudJitterDefaultsToTheShippedOffset()
     {
-        Assert.Equal(0f, S("--fly").CloudJitter);
+        Assert.Equal(FogVolumeClutter.ShippedJitter, S("--fly").CloudJitter);
         Assert.Equal(40f, S("--cloud-jitter=40").CloudJitter);
         Assert.Equal(0f, S("--cloud-jitter=0").CloudJitter);
         Assert.Empty(S("--cloud-jitter=12.5").Warnings);
@@ -958,7 +959,7 @@ public class SessionSpecTests
         foreach (string bad in new[] { "-1", "wide", "2,5", "NaN" })
         {
             var s = S($"--cloud-jitter={bad}");
-            Assert.Equal(0f, s.CloudJitter);
+            Assert.Equal(FogVolumeClutter.ShippedJitter, s.CloudJitter);
             Assert.Contains(s.Warnings, w => w.Category == "core" && w.Message.Contains("--cloud-jitter"));
         }
     }

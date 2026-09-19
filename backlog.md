@@ -399,55 +399,26 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   controls and not a luminance distance.
   *Playtest after fix:* the C5 night poses in `playtest/CAP-11/README.md`.
 
-- `BL-325` `[Tuning]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: footage]` **The deck-top
-  cloud cards' rows are judged, `--cloud-jitter=30` becomes the default as a recorded departure;
-  the C1B night clouds are still lit flat where the original's footage may show a moon side.**
-  *Judged at the controls:* the cards sitting directly on the cloud deck (the `fvol` scatter,
-  `cloudsprite1`/`cloudsprite2`, not the placed `cloudparent` groups above it) lined up into
-  visible rows depending on the perspective; flown at 0, 30 and 65 along the C1 and C1C decks the
-  user named 30 m. *Fix shape:* `SessionSpec.CloudJitter` defaults to 30, the flag stays; the
-  `docs/cli.md` bullet, `docs/org/cloudCards.md` and the Effects entry say the shipped field is the
-  decoded lattice plus that offset; every cloud golden re-pins, with a control render at
-  `--cloud-jitter=0` proving nothing but the cards moved. The rows half closes with that landing;
-  the moon-side half below stays and needs the capture it names.
-  *What the footage shows:* `CAP-12`'s grazing takes along the C1 deck (t 33, 58, 88, 103 to 131,
-  the tops at 3,560 to 4,000 ft) and the C4 take (t 26 to 58, among the tops) read as soft
-  continuous mottling, with no rows visible in any frame. That is weak evidence: the chase camera
-  sits 50 to 200 m above tops that are washed into the band's fog, a card's edge is soft at that
-  range, and a still frame loses the parallax that shows a lattice in motion. The frames judged
-  from are in the orch-8 scratch folder for this item.
-  *What the decode shows:* the perturbation port is faithful. `FUN_0044c780` draws one magnitude
-  `m` over `perturb_dist_range` and moves each axis by `(rand() · 3.051851e-05 − 0.5) · m`
-  (`0x0044cde0`..`0x0044ce50`), exactly `ScatterFace`'s half-draw per axis, so on C1 and C1C
-  (`distance` 130, `perturb_dist_range` [10, 20]) the original's own lattice is regular to within
-  ±10 m, and it lays the same rows ours does. Whether they show is therefore a look question, not
-  a bug. Two small lattice differences the re-decode found (the whole-number step fit with its
-  half-step row start, and the outline test on the perturbed point rather than the lattice point)
-  are recorded in `docs/org/cloudCards.md`; neither bears on rows, and fixing either moves every
-  cloud golden.
-  *What is built:* `--cloud-jitter=<m>` (default 0, `docs/cli.md`) adds a uniform X/Z offset of up
-  to `m` metres per axis to each lattice card after every decoded draw, off its own
-  `Rng.CloudJitter` stream, so every value lays the same seeded field; the `cloudparent` groups,
-  the map-edge ring and the speed cue are untouched (`cloud-field-fade` checks all of it). At 0 all
-  19 goldens are hash-identical.
-  *Second half, the C1B moon side:* the original was read as lighting a night cloud by which side
-  of it faces the moon, where we light the population flat. *Evidence:* `CAP-11` C1B
-  (`playtest/CAP-11/`): cloud cores p90 **218** at t16 against **70** at t5, and our spawn pose
-  (`--chapter=C1B --pos=-5406,55,-7200 --direction=-0.391,0,-0.921`) at p90 173.0 whole frame,
-  165.7 on the moon side, 175.3 away. ⚠ **The measured split may not be a moon side at all.** At
-  t5 the dim cloud hangs directly beside the moon, far off and deep in the night fog; at t16 the
-  bright cloud is close to the aircraft and also on the moon's bearing. Both frames put their
+- `BL-325` `[Research]` `[Blocked: CAP-59]` `[M]` `[Next: look]` `[Impact: low]`
+  `[Evidence: footage]` **The C1B night clouds are lit flat, where the original's footage may show
+  a cloud lit by which side of it turns to the moon.**
+  *Evidence:* `CAP-11` C1B (`playtest/CAP-11/`): cloud cores p90 **218** at t16 against **70** at
+  t5, and our spawn pose (`--chapter=C1B --pos=-5406,55,-7200 --direction=-0.391,0,-0.921`) at
+  p90 173.0 whole frame, 165.7 on the moon side, 175.3 away.
+  ⚠ **The measured split may not be a moon side at all.** At t5 the dim cloud hangs directly
+  beside the moon, far off and deep in the night fog; at t16 the bright cloud is close to the
+  aircraft and also on the moon's bearing. Both frames put their
   cloud on the moon's side, so the 218/70 split reads as distance through the fog, not as the side
-  a cloud turns to the moon. Moderately sure, from two stills. And the mechanism cannot reach that
-  frame in any case: C1B ships **no `fvol` volumes** (`FogVolumeTests`
-  `C1B "0|-|206.25|bare|cloudsprite:absent"`), and its **70 placed `cloudparent` facades** (1,620
-  card nodes) are authored `lighting: false` with an empty normal array, so the original's
-  per-vertex term has neither the gate nor the geometry. What that term does buy is on the `fvol`
-  cards, and `FogVolumeClutter` applies it for the chapters authoring `lighting: true` (C1C, C2B,
-  C5), per vertex off the zone's uncollapsed `SUNLIGHT`, while C1B moves by nothing. Nothing here
-  touches `SceneBuilder` or `WeatherRig` lighting. What would settle this half is a capture of one
-  C1B cloud from two headings at the same range, one with the moon behind the camera and one with
-  it behind the cloud.
+  a cloud turns to the moon. Moderately sure, from two stills.
+  *What the mechanism can reach:* not that frame in any case. C1B ships **no `fvol` volumes**
+  (`FogVolumeTests` `C1B "0|-|206.25|bare|cloudsprite:absent"`), and its **70 placed
+  `cloudparent` facades** (1,620 card nodes) are authored `lighting: false` with an empty normal
+  array, so the original's per-vertex term has neither the gate nor the geometry. What that term
+  does buy is on the `fvol` cards, and `FogVolumeClutter` applies it for the chapters authoring
+  `lighting: true` (C1C, C2B, C5), per vertex off the zone's uncollapsed `SUNLIGHT`, while C1B
+  moves by nothing. Nothing here touches `SceneBuilder` or `WeatherRig` lighting.
+  *What would settle it:* `CAP-59`, one C1B cloud filmed from two headings at the same range, one
+  with the moon behind the camera and one with it behind the cloud.
   ⚠ **Vocabulary, three populations, never one phrase for two:** **`cloudsprite1`/`cloudsprite2`**
   are the `fvol*` clutter scatter (the deck field, world-locked and tiled); **`cloudparent`** are
   discrete world-placed clusters (C1B's 70, C1's 28, C4's 45); and the **plane-local ambient
@@ -458,13 +429,13 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ⚠ Traps: `csky_world_light` is CAP-11-calibrated on terrain, so a directional cloud term must be
   cloud-local. Nothing in the original scales a cloud card's colour except its own per-vertex term
   (decoded, `docs/org/cloudCards.md`), so this must not become a global cloud brightness knob.
-  *Playtest after fix:* the C1B night spawn above against
-  `playtest/CAP-11/`'s t5 and t16 frames, saying for every puff how far off it is and which side
-  of the moon it faces; and one lit chapter (C1C above the band) for a verdict on whether the
-  per-vertex shading on the `fvol` cards reads like the original.
-  *Cross-refs:* `docs/org/cloudCards.md` (the lattice and the perturbation), `CAP-12`,
-  `docs/formats/effects.md`'s speed-cue section (the third population),
-  `docs/org/vertexLighting.md`'s facade section, `CAP-11`.
+  *Playtest after fix:* the C1B night spawn above against `playtest/CAP-11/`'s t5 and t16 frames,
+  saying for every puff how far off it is and which side of the moon it faces; and one lit chapter
+  (C1C above the band) for a verdict on whether the per-vertex shading on the `fvol` cards reads
+  like the original.
+  *Cross-refs:* `docs/org/cloudCards.md` (the deck field's lattice, its decoded perturbation and
+  the shipped 30 m offset over it), `docs/formats/effects.md`'s speed-cue section (the third
+  population), `docs/org/vertexLighting.md`'s facade section, `CAP-11`, `CAP-59`.
 
 - `BL-329` `[Tuning]` `[Owed-playtest]` `[S]` `[Next: look]` `[Impact: low]` `[Evidence: decoded]` **The D32 in-cloud flicker's rate and ramp are declared
   TUNE, not decoded** (`PLAN-weather-decompile-match` D32, 2026-08-09;

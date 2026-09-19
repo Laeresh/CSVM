@@ -64,8 +64,8 @@
     {
       "name": "c1-cloud-field",
       "frame": 120,
-      "hash": "8f7a5c0098cfa117ad4b3b07fae60be1",
-      "exercises": "the fvol cloud field along its own deck: cards on the staggered lattice of each authored face, turned by the facade arc, each fading between both far_fade_range pairs against its own face's normal, and the deck sheet past the field's edge.",
+      "hash": "8e1930973dbc656ea1ecc587bf8aff9e",
+      "exercises": "the fvol cloud field along its own deck: cards on each authored face's staggered lattice plus the shipped 30 m X/Z offset, turned by the facade arc, fading between both far_fade_range pairs against their own face normal, over the deck sheet.",
       "args": ["--freecam", "--chapter=C1", "--pos=-6144,1208,-6144", "--direction=0,0,-1", "--det", "--mute"]
     },
     {

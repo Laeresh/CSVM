@@ -327,11 +327,15 @@ The perturbation itself is the original's to the constant: one magnitude, then `
 axis. Fixing either difference moves the placed field and every cloud golden, and is a separate
 change.
 
-**`--cloud-jitter=<m>` is a remake-only departure, default 0.** Because the original's own ±10 m on
-a 130 m lattice leaves its rows standing, a regular lattice seen along the deck can read as rows in
-either build. The knob adds a uniform X/Z offset of up to `m` metres per axis to each lattice card
-after every decoded draw, off its own `cloudjitter` stream, so every value lays the same seeded
+**The shipped field is the decoded lattice plus a remake-only 30 m offset** (`--cloud-jitter=<m>`,
+default 30, `FogVolumeClutter.ShippedJitter`). Because the original's own ±10 m on a 130 m lattice
+leaves its rows standing, a regular lattice seen along the deck reads as rows in either build. At
+30 m the rows stop reading along the C1 and C1C decks at the controls, which is what sets the
+value. The offset is uniform on X/Z, up to `m` metres per axis, applied to each lattice card after
+every decoded draw off its own `cloudjitter` stream, so every value of the knob lays the same seeded
 field; the map-edge ring, whose cards are already uniform in their cells, is left alone.
+`--cloud-jitter=0` renders the decoded lattice itself, which is the control a cloud render is
+differenced against.
 
 ⚠ **Two quantities are still inferred.** The per-volume reference point the perpendicular offset
 runs away from is taken as the volume's own bounds centre, which gives the direction the decode

@@ -849,10 +849,11 @@ public sealed record SessionSpec
     public float SoundRangeScale { get; private set; } = Mech3.SoundFalloff.ShippedRangeScale;
 
     /// <summary><c>--cloud-jitter=</c>: a remake-only extra X/Z offset, in metres, on every
-    /// lattice-scattered <c>fvol</c> cloud card (<see cref="Effects.FogVolumeClutter"/>). It is 0,
-    /// the decoded field untouched, when absent. A value that is not a non-negative number is
-    /// ignored with a warning.</summary>
-    public float CloudJitter { get; private set; }
+    /// lattice-scattered <c>fvol</c> cloud card (<see cref="Effects.FogVolumeClutter"/>). It is
+    /// <see cref="Effects.FogVolumeClutter.ShippedJitter"/>, the offset that breaks the decoded
+    /// lattice's rows, when absent; 0 is the decoded field untouched. A value that is not a
+    /// non-negative number is ignored with a warning.</summary>
+    public float CloudJitter { get; private set; } = Effects.FogVolumeClutter.ShippedJitter;
 
     public bool NoVsync { get; private set; }
     public bool Perf { get; private set; }
@@ -1360,7 +1361,7 @@ public sealed record SessionSpec
                 }
                 else
                 {
-                    notes.Add(new Note("core", $"--cloud-jitter={want} is not a non-negative number of metres, leaving the cloud lattice as decoded"));
+                    notes.Add(new Note("core", $"--cloud-jitter={want} is not a non-negative number of metres, leaving the shipped offset in place"));
                 }
             }
             else if (arg == "--debug-collision") { s.DebugCollision = true; }
