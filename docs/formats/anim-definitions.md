@@ -57,7 +57,7 @@ bare flag (`LOCAL_NODES_ONLY`).
 
 | Key | Value | Meaning |
 |---|---|---|
-| `NAME` | 1 string | The world/object node(s) this def anchors to. Wildcards make one anim instance per matching node: `*`/`**` = any run of characters (`ftank0*`, `s_build**`), `#` = run of digits (`air_gen#`). Node names may be given without their `.flt` model suffix (`ap_radiotwr` ↔ gamez node `ap_radiotwr.flt`). |
+| `NAME` | 1 string | The world/object node(s) this def anchors to. Wildcards make one anim instance per matching node: each `*` = at most one digit (`ftank0*` ↔ `ftank01`, `s_build**` ↔ `s_build12`, `lkshadow*` ↔ the compiled `lkshadow`; the original's odometer stamps one digit per star, [org/sequences.md](../org/sequences.md), so `crate**` never reaches `craterlake`), `#` = run of digits (`air_gen#`). Node names may be given without their `.flt` model suffix (`ap_radiotwr` ↔ gamez node `ap_radiotwr.flt`). |
 | `NAME1` | list of (wildcard, [path…]) pairs | Multi-target form (zeppelin nacelle/turret sets): maps anim-instance name patterns to node paths inside a parent object. Per-object anims, part 2 scope. |
 | `ANIMATION_NAME` | 1 string | The name `startanims.json` / `CALL_ANIMATION` refer to. May itself carry a wildcard in template defs (`ftank_boom*`). |
 | `ANIMATION_ROOT_NAME` | 1 string | The node inside each instance the anim attaches to (`s_bld_healthy`, bare `healthy`). Needed to locate instances whose roots have free names: `m_build**` instances in C1 are `apbuild01.flt`/`aphngr01.flt`/…, found via their `m_bld_healthy` child. |

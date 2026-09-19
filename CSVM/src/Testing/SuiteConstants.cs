@@ -71,14 +71,14 @@ internal static class SuiteConstants
     // mission list names registers nothing in either scope (AnimProgram), holding C2 and C5 down.
     internal static readonly (string Chapter, int Instances, int Anchors)[] Census =
     {
-        ("C1", 186, 117),
+        ("C1", 174, 105),
         ("C1B", 28, 28),
         ("C1C", 28, 28),
         ("C2", 176, 109),
         ("C2B", 28, 28),
-        ("C3", 210, 133),
+        ("C3", 209, 133),
         ("C4", 92, 67),
-        ("C5", 158, 94),
+        ("C5", 157, 93),
     };
 
     // Partition cells whose centre answers a downward ray, and how many of those also answer one

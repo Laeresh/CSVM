@@ -248,7 +248,7 @@ public sealed class NameResolver<TNode>
     }
 
     /// <summary>Every indexed node matching a NAME pattern, optionally restricted to one node's
-    /// subtree. Wildcards: <c>*</c> any run, <c>#</c> a digit run including zero; a plain name
+    /// subtree. Wildcards: <c>*</c> at most one digit, <c>#</c> a digit run including zero; a plain name
     /// compares case-insensitively, also against a <c>.flt</c>-stripped copy. Memoized on
     /// <c>(pattern, scope)</c>, the returned list is read-only, the same instance on every repeat
     /// query. ⚠ The scope filter reads each node's <see cref="Add"/>-time parent snapshot; a node
@@ -762,8 +762,11 @@ public sealed class NameResolver<TNode>
 
     private TNode? ParentOf(TNode node) => _parentOf.TryGetValue(node, out var p) ? p : null;
 
-    // Wildcard NAME -> predicate: '*' matches any run of characters, '#' a run of digits (including
-    // zero). Plain names compare exactly, case-insensitively.
+    // Wildcard NAME -> predicate: '*' matches at most one digit, '#' a run of digits (including
+    // zero). Plain names compare exactly, case-insensitively. ⚠ '*' is not "any run": the original
+    // stamps one digit per star (docs/org/sequences.md, the odometer), so a shared `crate**`
+    // destructible must never attach to `craterlake` and switch every world `healthy` off. The
+    // digit is optional because the shipped compiler instanced `lkshadow*` as plain `lkshadow`.
     private Func<string, bool> Matcher(string pattern)
     {
         if (_matcherCache.TryGetValue(pattern, out var cached))
@@ -773,7 +776,7 @@ public sealed class NameResolver<TNode>
         Func<string, bool> match;
         if (pattern.Contains('*') || pattern.Contains('#'))
         {
-            var re = new Regex("^" + Regex.Escape(pattern).Replace("\\*", ".*").Replace("\\#", "[0-9]*") + "$",
+            var re = new Regex("^" + Regex.Escape(pattern).Replace("\\*", "[0-9]?").Replace("\\#", "[0-9]*") + "$",
                 RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
             match = re.IsMatch;
         }
