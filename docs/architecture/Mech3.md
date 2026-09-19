@@ -550,9 +550,9 @@ the index, the wildcard `Matcher`, the memoized `FindAll`, the scoped tier chain
 (`Resolve`/`ResolveScoped`), the symbol authority (`SymbolClaims`/`NarrowToSymbolRoot`), `Anchors`
 (NAME match, symbol narrowing, root lift) and the bind census. Node identity is
 constructor-supplied, never the node type's inherited `Equals`, and `DropFreed` retires the rows
-naming a freed node. Every tier is filtered by `AdmissibleStaging`, the owner's verdict on one
-pooled copy; that filter and its limits are on the members. Decode:
-[../org/sequences.md](../org/sequences.md), "The definition owns a private copy of its subtree".
+naming a freed node. `AdmissibleStaging` filters every tier, the owner's verdict on one pooled
+copy, and `RefusesGlobalTier` withholds the last tier from a plain name written by a definition
+the world holds several instances of. Decode: [../org/sequences.md](../org/sequences.md).
 
 ## src/Mech3/Anim/CutsceneFastForward.cs
 The rate one cutscene episode's own definitions run at while the player holds a key through a scene

@@ -47,7 +47,15 @@ public sealed class NameResolver<TNode>
 
     private const int CensusCap = 12;
 
+    // The two NAME wildcards, read here as "one authored definition, several world instances"
+    // rather than as a matcher (docs/org/sequences.md, the odometer).
+    private static readonly char[] Wildcards = { '*', '#' };
+
     private readonly List<IndexRow> _index = new();
+
+    // Definitions Anchors resolved through the ANIMATION_ROOT_NAME lift, by reference: the other
+    // half of RefusesGlobalTier, which cannot be read off the definition alone.
+    private readonly HashSet<AnimDefinition> _rootLifted = new();
 
     private readonly Dictionary<TNode, TNode?> _parentOf;
 
@@ -135,6 +143,11 @@ public sealed class NameResolver<TNode>
             }
         }
     }
+
+    /// <summary>How many writes <see cref="ResolveScoped"/> has refused the global tier, the
+    /// measure of how often one instance's generic name would have reached the whole world. Never
+    /// reset, so read it as a running total.</summary>
+    public int GlobalTierRefused { get; private set; }
 
     /// <summary>Adds one row: a node's source name, its parent (the ancestry snapshot
     /// <see cref="FindAll"/> reads instead of the live tree), and its gamez-index slot if any.
@@ -298,11 +311,11 @@ public sealed class NameResolver<TNode>
     }
 
     /// <summary>Resolves a NAME path, narrowest scope first: the call anchor's subtree, then the
-    /// definition's OWN template roots (<c>ownRootsOf</c>), then, unless <c>LOCAL_NODES_ONLY</c>,
-    /// the whole index, every tier filtered by <see cref="AdmissibleStaging"/>. A null or dead
-    /// anchor skips the scoped tiers. ⚠ This order is structural: <see cref="ResolvePath"/> is
-    /// private, so no caller can compose it differently, it once diverged and an authored stop
-    /// never reached its emitter. Callers must treat the result as read-only.</summary>
+    /// definition's OWN template roots (<c>ownRootsOf</c>), then the whole index. That last tier is
+    /// refused under <c>LOCAL_NODES_ONLY</c> and by <see cref="RefusesGlobalTier"/>.
+    /// Every tier is filtered by <see cref="AdmissibleStaging"/>, and a null or dead anchor skips
+    /// the scoped ones. ⚠ Keep this order: <see cref="ResolvePath"/> is private so no caller can
+    /// compose it differently. Callers must treat the result as read-only.</summary>
     public List<TNode> ResolveScoped(IReadOnlyList<string> path, AnimDefinition def, TNode? anchor)
     {
         if (anchor == null || !_isLive(anchor))
@@ -316,9 +329,38 @@ public sealed class NameResolver<TNode>
         }
         if (found.Count == 0 && !def.LocalNodesOnly)
         {
-            found = AdmissibleStaging(ResolvePath(path, null, localOnly: true), def, anchor);
+            if (RefusesGlobalTier(def, path))
+            {
+                GlobalTierRefused++;
+            }
+            else
+            {
+                found = AdmissibleStaging(ResolvePath(path, null, localOnly: true), def, anchor);
+            }
         }
         return found;
+    }
+
+    /// <summary>Whether <see cref="ResolveScoped"/> refuses this write the global tier. It does when
+    /// the world holds several instances of the definition and the name carries no wildcard. Several
+    /// instances means a NAME wildcard or an <see cref="Anchors"/> root lift. Such a plain name
+    /// (<c>healthy</c>, <c>door1</c>) is that one instance's, so a miss there resolves to nothing
+    /// instead of reaching every twin. A wildcard in the name stands in for the digit the original
+    /// stamps into it, and keeps the tier. Decode: docs/org/sequences.md, the tier chain.</summary>
+    public bool RefusesGlobalTier(AnimDefinition def, IReadOnlyList<string> path)
+    {
+        if (def.Name.IndexOfAny(Wildcards) < 0 && !_rootLifted.Contains(def))
+        {
+            return false;
+        }
+        foreach (var element in path)
+        {
+            if (element.IndexOfAny(Wildcards) >= 0)
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     /// <summary>The world nodes a definition anchors to: NAME matches, narrowed to the twin holding
@@ -343,6 +385,12 @@ public sealed class NameResolver<TNode>
             return multi;
         }
         var (anchors, how) = ComputeAnchors(def);
+        // Outside the census gate on purpose: RefusesGlobalTier reads this on every resolve,
+        // where the census is closed and ReportResolution is off.
+        if (how == AnchorKind.ByRootLift)
+        {
+            _rootLifted.Add(def);
+        }
         RecordAnchoring(def, how);
         return anchors;
     }

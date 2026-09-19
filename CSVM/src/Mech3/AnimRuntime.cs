@@ -598,6 +598,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     private int _opsApplied, _opsUnresolved;
 
+    // Cap on the per-write lines Targets logs when a shared definition's name misses its own
+    // instance. A world holds hundreds of such instances, and the first few name the definition.
+    private int _instanceMissesLogged;
+
     private int _hookSeeds, _hookSeedsBound;
 
     // Whether the ambient passes have already run, set when Bootstrap runs them inline
@@ -4554,7 +4558,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         if (targets.Count == 0)
         {
             _opsUnresolved++;
-            _resolver.RecordMissingTarget(def, string.Join("/", path), "name-no-match");
+            string named = string.Join("/", path);
+            bool confined = anchor != null && _resolver.RefusesGlobalTier(def, path);
+            _resolver.RecordMissingTarget(def, named, confined ? "outside-own-instance" : "name-no-match");
+            // The original's own no-op, logged: a shared definition's name that its instance does
+            // not carry must not be searched for in the world (docs/org/sequences.md).
+            if (confined && _instanceMissesLogged++ < 12)
+                Log.Info("anim", $"anim: '{def.AnimName ?? def.Name}' names '{named}', which its own instance under '{NameOf(anchor!)}' does not carry; the write is a no-op");
         }
         return targets;
     }

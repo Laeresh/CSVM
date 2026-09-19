@@ -239,7 +239,21 @@ else returns nothing. No name comparison happens on the event path.
 ### Where CSVM stands against this
 
 `NameResolver`'s scope chain is the same shape as tiers 1, 2 and 5, and `LOCAL_NODES_ONLY` gates the
-last tier the same way. Four differences remain and none of them is deliberate:
+last tier the same way. A second gate stands beside it, and that one has no counterpart in the
+original because it is a consequence of resolving late: **a plain name written by a definition the
+world holds several instances of is refused the global tier** (`NameResolver.RefusesGlobalTier`;
+several instances means a NAME carrying a `*` or `#`, or an `ANIMATION_ROOT_NAME` root lift). The
+original binds each event's name once, at load, inside the instance's own copy of the subtree, and
+logs a name it cannot find as *"Animation error: Unable to find animation node."*; ours resolves at
+dispatch, so without that gate a generic name the instance lacks (`healthy`, `destroyed`, `door1`)
+falls to the whole index and the write lands on every same-named node in the world. Refused, it
+resolves to nothing and the write is a counted, logged no-op (`AnimRuntime.Targets`,
+`NameResolver.GlobalTierRefused`). Two names keep the tier: one written by a definition anchored by
+an exact NAME, which is one object, and one carrying a wildcard of its own, which stands in for the
+digit the odometer stamps into it and so still names the instance's own family
+(`locklear_gasbag.zrd.json`'s `lkshw*` writing `lkshb*` is the install's only such write).
+
+Four differences remain and none of them is deliberate:
 
 - `Resolve` and `AnimRuntime.Targets` consult the symbol table **first**, where the original consults
   its interned lists at tiers 3 and 4.
@@ -253,9 +267,8 @@ last tier the same way. Four differences remain and none of them is deliberate:
 - **`Matcher` reads `*` and `#` as node-name patterns** (`*` at most one digit, `#` a digit run), where in
   the original they are instantiation controls on the definition's NAME and no node name is ever
   matched as a pattern. This is the same multiplicity in the wrong place described above. The digit
-  reading of `*` is what keeps the shared `crate**` destructible off C3's `craterlake`; as an
-  any-run pattern it instanced there, and the lake's death switched every world `healthy` node off
-  through the global tier (`BL-985`).
+  reading of `*` is what keeps the shared `crate**` destructible off C3's `craterlake`; read as an
+  any-run pattern it instances there, on a node with no `healthy` model under it.
 
 The scope of the subtree tiers is **not** among them any more. Ours searches the call anchor's
 subtree, which for a crash rig is a root shared with staged template copies, where the original's is
