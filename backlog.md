@@ -889,34 +889,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   base elevation (`git log --grep=BL-150`), `docs/formats/camparam.md` (`thirdp_pitch`, and the Known limits paragraph this corrects),
   `docs/org/cameraViews.md` (head-look controller, the chase placement's own elevation).
 
-- `BL-1002` `[Feature]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: feel]` **The smooth (J)
-  and snap (K) look-mode selectors have no pad control.** *Evidence:* asked after the J/K rules
-  landed (`git log --grep=BL-963`): "J and K should work for controller too". `DefaultBindings`
-  binds `SmoothLookMode`, `SnapLookMode` and `TrackTarget` to J, K and L on the keyboard alone.
-  Rebinding them onto a pad button already works: all three are rows on the Controls screen's
-  Views 1 tab (`OriginalOptionsScreen`) and `ControlCapture` scans Godot's whole SDL button range,
-  so what is missing is a shipped default and nothing else.
-  *What the scheme leaves:* the flight context already names fifteen of Godot's twenty-one SDL
-  buttons (A, B, X, Y, Back, Start, both stick clicks, both shoulders, all four d-pad directions,
-  Misc1). The six it does not name are Guide, the four paddles and the touchpad, and none is on a
-  stock pad: Guide belongs to the shell, the paddles are premium-pad only, the touchpad is Sony
-  only. A shipped default therefore has to share a control that is already spoken for, which is a
-  feel call rather than a coding one.
-  *The decision, which of these or a third you name:*
-  (a) **Tap against hold on the right-stick click.** A hold stays the look-back and a short tap
-  steps the look mode. It costs the look-back its instant start, since a press cannot be told from
-  a tap until the tap window has passed, and it yields ONE gesture, so the three selectors become a
-  cycle rather than three rows a player can rebind apart.
-  (b) **The right-stick click held as a modifier over the d-pad.** Four chords, enough for all
-  three selectors, needing a pad-modifier rule in `Binding`/`ActionMap` (the keyboard's
-  `ContestedFor` generalised) so the d-pad's own four actions stand down while the click is held,
-  plus the same delay (a) needs so the look-back does not fire on the way down.
-  *⚠ Traps:* the right-stick click is the look-back and forces snap mode, so anything built on it
-  must not fire the look-back on the way down. ⚠ Do not free a d-pad direction by moving Target
-  Next Enemy or a weapon selector off it; those are the original's own joystick slots.
-  *Cross-refs:* `BL-963` (the rules), `docs/controls.md`,
-  `CSVM/src/Bindings/DefaultBindings.cs` (the flight scheme as it stands).
-
 ## HUD & UI
 
 - `BL-181` `[Tuning]` `[Blocked: a shared type scale]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Marker HUD + scoreboard layout is a provisional pass, not a
