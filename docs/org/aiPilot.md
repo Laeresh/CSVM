@@ -1316,6 +1316,15 @@ Per zone: `+0x44` is a difficulty, the node's flag word `+0x28 >> 23`; `+0x48` i
 cleared by `dzones.zrd`'s `disable` list (`FUN_00445da0`) and by the script's zone on/off op;
 `+0x49` is cleared by `nosnapshot`; `+0x4c` is the objective slot from `objective_numbers`.
 
+The difficulty read is the whole word shifted right as an unsigned quantity, with no mask and no
+sign extension: `MOV ECX,[EBX+0x28]` then `SHR ECX,0x17` then `MOV [EDX+0x44],ECX` at
+`0x00445f7d`–`0x00445f8e`, so bits 23 to 31 and nothing else. The pick then refuses a zone on the
+signed test `natural_touch < difficulty` (`0x004210e0`'s unforced arm), which admits an exact
+match. **Every one of the install's 80 `dzpath` nodes authors no flag word at all**, six in C1,
+seven in C1B, thirteen in C2, five in C3, fifteen in C4 and thirty-four in C5, with none in C1C or
+C2B, so every shipped zone is difficulty 0 and the term admits every pilot. The field is read
+anyway: the authored bits are the only thing allowed to set it.
+
 ### Two entries, and which one the shipped data uses
 
 **The node tag** (`FUN_0041d1f0`, right after the walk step `FUN_0041d8f0`): the node just
@@ -1454,7 +1463,8 @@ praising the player's run through the gates, and an AI's own rail run never spea
 
 `Flight/DangerZoneRibbon.cs` is the spline, the run cursor and the rail integrator with every
 constant above; `Flight/DangerZoneRibbons.cs` reads every `dzpathN` of the chapter gamez by the
-route-versus-gate material rule and applies `dzones.zrd`'s `disable` list. `AiNetFollower`
+route-versus-gate material rule, takes each zone's difficulty off its node's flag word and applies
+`dzones.zrd`'s `disable` list. `AiNetFollower`
 reports the node it just reached (`ArrivedNode`), `AiPilot` takes the node-tag entry into
 `AiModeMachine.ApproachingDangerZone`, locks at 105 m into `NavigatingDangerZone` and publishes
 `RailPose`, which `FlightController.SimStep` applies in place of the model step; the exit
@@ -1500,9 +1510,9 @@ off the Dante over the mission's built world, seats him on `M4MilesRun` the way 
 reads the entry off his pilot.
 
 Not ported: the suspend flag the roll's gate reads first (nothing in CSVM suspends a mission that
-way), the zone difficulty term (implemented, but every shipped `dzpath` node reads 0), the
-target release at the lock (CSVM's gunner target is the host's), the altitude-floor bypass on the
-approach solve, the lane table past the zero lane (no shipped node has one), and the vertical nose a
+way), the target release at the lock (CSVM's gunner target is the host's), the altitude-floor
+bypass on the approach solve, the lane table past the zero lane (no shipped node has one), and the
+vertical nose a
 bay launch seats its net with (CSVM seats a launched follower on its first update, from the
 aeroplane's live nose, so a drop's first leg is the best-aligned one rather than the first-listed).
 

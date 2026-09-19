@@ -21,9 +21,10 @@ public sealed class DangerZoneRibbons
 
     public IReadOnlyCollection<DangerZoneRibbon> All => _byIndex.Values;
 
-    /// <summary>Reads every ribbon of the world. <paramref name="disabled"/> is the mission's
-    /// <c>dzones.zrd</c> <c>disable</c> list, which switches the named zones off for the AI
-    /// as it does for the player. Null when the world carries no ribbon at all.</summary>
+    /// <summary>Reads every ribbon of the world, each at the difficulty its own node authors.
+    /// The disabled set is the mission's dzones.zrd disable list. It switches the named zones
+    /// off for the AI as it does for the player. Null when the world carries no ribbon at
+    /// all.</summary>
     public static DangerZoneRibbons? Load(GameZ gamez, IReadOnlySet<string>? disabled = null)
     {
         var set = new DangerZoneRibbons();
@@ -52,7 +53,8 @@ public sealed class DangerZoneRibbons
             }
             if (offsets.Count > 0)
                 lanes.Add($"{node.Name} x{offsets.Count}");
-            var ribbon = DangerZoneRibbon.FromPolyline(node.Name, index, vertices, offsets);
+            var ribbon = DangerZoneRibbon.FromPolyline(
+                node.Name, index, vertices, offsets, node.DangerZoneDifficulty);
             if (disabled != null && disabled.Contains(node.Name))
                 ribbon.Active = false;
             set._byIndex[index] = ribbon;

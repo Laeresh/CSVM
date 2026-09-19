@@ -360,7 +360,8 @@ cruise speed. Every constant is read out of the image and named at its declarati
 A mission's ribbon set read straight off the chapter gamez, independent of `--debug-dzpaths`: every
 `dzpathN` node's route polygon by the route-versus-gate-pair material rule
 ([../formats/missions.md](../formats/missions.md)), never by polygon index, its children as lanes,
-and `dzones.zrd`'s `disable` list as the inactive flag. `ByIndex` serves a numbered net tag, `NearestEnd` the negative one, and `ProximityPick` the daredevil roll's own walk, the active, free-lane and difficulty admission and then the end inside 500 m whose ribbon leads away best.
+the node's own flag word as the zone difficulty, and `dzones.zrd`'s `disable` list as the inactive
+flag. `ByIndex` serves a numbered net tag, `NearestEnd` the negative one, and `ProximityPick` the daredevil roll's own walk, the active, free-lane and difficulty admission and then the end inside 500 m whose ribbon leads away best.
 One instance per session, shared through `AiPilot.DangerZones`, because lanes are occupancy-counted across pilots; `CampaignDirector.Attach` builds it and hands it to every roster pilot. Read `DangerZoneRibbon.cs` for one route's geometry.
 
 ## src/Flight/DangerZonePhotograph.cs

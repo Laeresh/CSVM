@@ -41,8 +41,8 @@ public sealed class DangerZoneRibbon
     public bool Active { get; set; } = true;
 
     /// <summary>The authored difficulty a pilot's <c>natural_touch</c> is compared against on the
-    /// proximity pick (the node's flag word <c>+0x28 &gt;&gt; 23</c>). Zero on every shipped zone
-    /// this loader has read; the node-tag entry never tests it.</summary>
+    /// proximity pick, off the node's flag word (<c>+0x28 &gt;&gt; 23</c>). Zero on every shipped
+    /// zone; the node-tag entry never tests it.</summary>
     public int Difficulty { get; init; }
 
     public IReadOnlyList<Segment> Segments { get; }
@@ -66,11 +66,12 @@ public sealed class DangerZoneRibbon
     }
 
     /// <summary>Builds the ribbon from the route polygon's vertices in polygon order. Each pair of
-    /// consecutive vertices becomes a cubic with the neighbouring chords averaged into the end
-    /// tangents and the parameter rescaled to the chord length, the original's <c>dzpath.cpp</c>
-    /// build (<c>FUN_00445ef0</c>).</summary>
+    /// consecutive vertices becomes a cubic, the neighbouring chords averaged into its end
+    /// tangents. The parameter is then rescaled to the chord length, the original's dzpath.cpp
+    /// build (<c>FUN_00445ef0</c>). The difficulty is the node's own, see
+    /// <see cref="Difficulty"/>.</summary>
     public static DangerZoneRibbon FromPolyline(string name, int index, IReadOnlyList<Vector3> vertices,
-        IReadOnlyList<Vector3>? laneOffsets = null)
+        IReadOnlyList<Vector3>? laneOffsets = null, int difficulty = 0)
     {
         if (vertices.Count < 2)
             throw new ArgumentException($"'{name}': a ribbon needs at least two vertices", nameof(vertices));
@@ -97,7 +98,7 @@ public sealed class DangerZoneRibbon
         var lanes = new List<Vector3> { Vector3.Zero };
         if (laneOffsets != null)
             lanes.AddRange(laneOffsets);
-        return new DangerZoneRibbon(name, index, segments, lanes);
+        return new DangerZoneRibbon(name, index, segments, lanes) { Difficulty = difficulty };
     }
 
     /// <summary>The point <paramref name="t"/> metres into segment <paramref name="segment"/>,
