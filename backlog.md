@@ -533,25 +533,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Playtest after fix:* any chapter under Enhanced Graphics, still and moving, over water and over
   ground. *Cross-refs:* `docs/architecture/Utils.md` (`GraphicsMode`).
 
-
-- `BL-1013` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The
-  templates clutter's spherical glow stamps still take the camera's whole basis, so they roll with
-  the aircraft while every other `SphericalY` sprite no longer does.** *Evidence:*
-  `Clutter.FaceBasisLines(spherical: true)` (`Mech3/Clutter.cs:726`) emits
-  `mat3 face = mat3(INV_VIEW_MATRIX[0].xyz, ...)`, which is the camera's own basis and carries its
-  roll into the card. The original's `SphericalY` facade never reads the eye's basis: it steps a
-  per-card quaternion by the shortest arc to the eye's position (`FUN_00539390`, decoded in
-  `docs/org/cloudCards.md`). The `fvol` deck cards, the placed `cloudparent` facades and
-  `SceneBuilder`'s glow flares now take that law through `csky_facade_spherical`; this one branch
-  was left because the file was under another item's edit at the time. *Fix shape:* include
-  `res://shaders/csky_facade.gdshaderinc` in the clutter shader and call
-  `csky_facade_spherical(origin, CAMERA_POSITION_WORLD)` in the spherical branch. *⚠ Traps:* the
-  `CylindricalY` branch beside it is the tree and lamp-post pose and is already right, do not
-  touch it; the spherical branch carries C5's 15,618 `cblock7` glow stamps, so `clutter-mesh-lift`
-  and the `c5-city-night` golden are the checks, and the golden moves by a few rim pixels because
-  a round glow's roll is invisible in a still. *Cross-refs:* `docs/org/cloudCards.md` (the pose
-  decode), `BL-325` (the population vocabulary).
-
 ## Effects & animation runtime
 
 - `BL-674` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: data]` `[CM10]` **CM10's attack-balloon wave flies from 990 m down to water level and back up

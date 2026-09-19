@@ -287,7 +287,8 @@ above.
   in [`../../CSVM/shaders/csky_facade.gdshaderinc`](../../CSVM/shaders/csky_facade.gdshaderinc)
   builds the rotation that carries local `+Z` onto the direction from the card to the eye with no
   twist about it, in closed form, and every `SphericalY` population takes it: the `fvol` deck
-  cards, the `cloudparent` facades, and the glow sprites that share their dispatch. The eye's basis
+  cards, the `cloudparent` facades, the stamped clutter glows, and the glow sprites that share
+  their dispatch. The eye's basis
   is not read, so the camera's roll cannot reach a card, which is the property the decode above
   turns on. Two differences from the original remain, both structural: a shader holds no state, so
   the arc is taken from the authored facing every frame instead of accumulating from the previous

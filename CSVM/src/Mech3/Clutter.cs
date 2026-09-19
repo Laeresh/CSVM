@@ -38,6 +38,11 @@ public sealed class ClutterBuilder
         + "    float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);\n"
         + "    ALBEDO = mix(ALBEDO, csky_fog_color, csky_fog_on * fog_amt);\n";
 
+    // The SphericalY pose, single-sourced with every other facade population so the law cannot
+    // drift. Emitted into the spherical variant alone; a CylindricalY card poses off its own
+    // vertical and calls nothing from it.
+    private const string FacadeInclude = "#include \"res://shaders/csky_facade.gdshaderinc\"";
+
     // The cutout the scissor variant applies, at Godot's own default threshold. ⚠ Emit it only when
     // the archive calls the card's alpha hard: a cut through soft ink both erases what sits under
     // the threshold and solidifies what sits above it, and the original cuts nothing at all.
@@ -690,6 +695,7 @@ public sealed class ClutterBuilder
         #include "res://shaders/csky_srgb.gdshaderinc"
         #include "res://shaders/csky_clutter_fade.gdshaderinc"
         #include "res://shaders/csky_mip_bias.gdshaderinc"
+        {{(spherical ? FacadeInclude : "")}}
 
         // ⚠ Never declare an instance uniform below this include. Godot indexes them by declaration
         // order and merges the mapping across one GeometryInstance3D's materials, so two shaders
@@ -719,13 +725,13 @@ public sealed class ClutterBuilder
         {{(blend ? "" : ScissorLine)}}}
         """;
 
-    // The camera-facing basis one card's vertices are turned by, the rendering half of its
-    // decoration model's own FacadeMode (docs/org/vertexLighting.md, "Facades: the same gate, a
-    // different N"). A SphericalY glow takes the camera's whole basis and so keeps a round face
-    // from any angle, a nadir included; a CylindricalY card spins about its planted point's
-    // vertical alone, so a tree or a lamp post stays upright instead of tipping toward the eye.
+    // The basis a card's vertices are turned by, the rendering half of its decoration model's own
+    // FacadeMode (docs/org/vertexLighting.md, "Facades: the same gate, a different N").
+    // A SphericalY glow takes the original's shortest-arc facade, which reads the eye's position
+    // and never its basis, so a roll leaves it alone. A CylindricalY card spins about its planted
+    // point's vertical alone, so a tree or a lamp post stays upright.
     private static string FaceBasisLines(bool spherical) => spherical
-        ? "    mat3 face = mat3(INV_VIEW_MATRIX[0].xyz, INV_VIEW_MATRIX[1].xyz, INV_VIEW_MATRIX[2].xyz);"
+        ? "    mat3 face = csky_facade_spherical(origin, CAMERA_POSITION_WORLD);"
         : "    vec2 to_cam = CAMERA_POSITION_WORLD.xz - origin.xz;\n"
             + "    float len = length(to_cam);\n"
             + "    vec2 dir = len > 1e-4 ? to_cam / len : vec2(0.0, 1.0);\n"
