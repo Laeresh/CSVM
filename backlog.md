@@ -857,21 +857,36 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   stick first rather than by anyone saying so, and the binding is only read out at launch
   (`Launcher.BindMenuPads`). Two bugs came straight out of that implicitness: the claim taking a
   pad another player had joined on (`git log --grep=BL-949`) and a device blip reshuffling the
-  seats (`git log --grep=BL-950`). *Fix shape:* a door on the top level opening a board of four
-  slots, each showing its device name and its player tag; Start on an unclaimed pad takes the next
-  free slot, Back leaves it; the resulting roster is what every later screen and the session itself
-  read, so the flight screens stop being where seats are decided. *⚠ Traps:* the original has no
-  such screen, so this is remake-only chrome and needs its own art direction decided before any of
-  it is drawn; the wrap-up page's post-its and tick box (`git log --grep=BL-945`) are the nearest
-  precedent, procedural furniture in the page's own inks since no shipped art fits. The existing
-  per-screen join must become the board's own gesture rather than a second path, or the two disagree about who is
-  seated. Seat 0 keeps the keyboard whatever the board says, so a slot is a pad's claim, not a
-  player's existence. Device loss and reassignment is the part that bites (the linked thread lands
-  on it too, over batteries and devices claimed twice); `MenuSeatDevices`'s guid reconciliation and
-  its grace already carry it for the current flow and should not be reimplemented on the board.
-  *Decision:* build it, art direction first: the board's chrome is designed on the type scale
-  `BL-181` authors before any of it is drawn. *Cross-refs:* `SeatStrip.cs` (the chip row that already names seated players, the board's
-  nearest existing art), `MenuSeatDevices.cs`, `PlayerSetupFeature.cs`,
+  seats (`git log --grep=BL-950`). *Fix shape:* a door on the top level opening the board, and
+  the board is the only place a pad joins: `OriginalSeats.JoiningOpen` and the Start-to-join
+  gesture go from Free Flight, Dogfight, Instant Action, the campaign flight check and the
+  controls page, so those screens only read the roster. The board is the open scrapbook
+  (`SB_BackGround.jpg`, the `Album` palette), settled on the prototype branch below. Left page,
+  CREW MANIFEST, "four seats, no stowaways": four entries, one per seat, each a chip in the
+  seat's colour with its player tag, then the device name over "signed on", or "open seat" over
+  the A glyph and "to sign on". Every entry is a pad seat; the keyboard is never listed, it holds
+  seat 1 implicitly and the first pad to sign on shares that seat with it. Right page, ARTICLES
+  OF THE CREW, three lines with the pad glyphs inline: "First [A] takes the captain's chair.",
+  "[A] and your name goes in the log.", "[B] and you walk the plank.", then "Captain, press
+  [Start] to cast off.", with BACK and CONTINUE plaques at the page's lower right. A joins (not
+  Start), B on a seated pad gives its seat up and the entries above it stay put, Start on the
+  captain's pad continues, CONTINUE is the same for keyboard and mouse, BACK leaves the board and
+  drops the sign-ons. The roster is what every later screen and the session itself read, so the
+  flight screens stop being where seats are decided. *⚠ Traps:* the prototype draws a glyph on a
+  board line through a prototype-only face tag resolved inside `ComposedBoardView`, and sets the
+  gap after a glyph by hand because a module cannot measure text; the real board needs a glyph
+  route the composed board owns, or the line breaks on another font. Seat 0 keeps the keyboard
+  whatever the board says, so a slot is a pad's claim, not a player's existence. Device loss and
+  reassignment is the part that bites (the linked thread lands on it too, over batteries and
+  devices claimed twice); `MenuSeatDevices`'s guid reconciliation and its grace already carry it
+  for the current flow and should not be reimplemented on the board. *Decision:* build it as the
+  prototype shows; its sizes (26 heading, 17 device, 15 rules, 13 status) are the starting point
+  and the type scale `BL-181` authors overrides them once it exists. *Cross-refs:* branch
+  `proto-bl951-join-board` (the throwaway prototype, `--presentation=original
+  --menu=join-board:c:2` opens the chosen variant with two pads seated; variants a and b are the
+  clipboards it lost to), `SeatStrip.cs` (the chip row that already names seated players),
+  `MenuSeatDevices.cs`, `PlayerSetupFeature.cs`, `docs/controls.md` (the Start row that this
+  retires),
   https://discussions.unity.com/t/local-multiplayer-player-join-config-screen-using-ui-toolkit/1701038
   (the pattern as other local co-op games ship it, asked for by name).
 
