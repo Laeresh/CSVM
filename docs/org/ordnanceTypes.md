@@ -437,6 +437,19 @@ on the shooter's own side, and tests range against the round's weapon def `+0x44
 a candidate: the loop never touches world geometry, which decodes what was previously a
 recollection, that the original fuses on aircraft and never on terrain.
 
+The side test compares the round wrapper's `+0x8` with the candidate's `+0x8`, the team. The
+wrapper's copy is the shooter's own: `FUN_004b6820` hands `FUN_00441830` the address of the firing
+vehicle's `+0x8` (`0x004b6e8c`, `0x004b7298`) and the wrapper's base constructor `FUN_00441b90`
+stores it. The range test is point to point: `FUN_00538880` returns the squared distance between the
+round's and the candidate's slot-0 positions, and the test passes below the squared distance at
+`+0x44`. The first candidate in list order that passes both tests (and the dot test below) fires
+the burst through `FUN_005ac3a0`, and the loop breaks.
+
+CSVM keeps two departures. It detonates at the closest approach within the round's swept step
+rather than at the first frame in range, since several rockets author a trigger distance equal to their
+blast radius and a burst at first entry would deal nothing. An aircraft is measured to its airframe hulls and a surface hull to its
+origin, the decoded point. The aircraft branch excludes the shooter's own plane rather than its side.
+
 `VehicleList` holds aircraft and the AI ground/sea vehicles ([`aim-assist.md`](aim-assist.md) "The
 four lists"), and **no zeppelin**. Its one inserter is `FUN_0047c210`, which allocates the 0xa20-byte
 vehicle object and links it in through `FUN_005b3330` at `0x0047c543`; every other reference to
@@ -745,7 +758,7 @@ that record differently:
 - **Every fused burst reads `default`(0).** Both fuse paths end in `FUN_005ac3a0`: the round's own
   fuse against its held target in `FUN_005afd50` (squared distance to the target at or under
   `+0x44`) and the vehicle-side sweep in `FUN_004b5fb0` (every live round whose `+0x44` exceeds
-  0.01, against every VehicleList entry but the shooter, under the optional dot gate of flag
+  0.01, against every VehicleList entry off the shooter's side, under the optional dot gate of flag
   `0x80000`). `FUN_005ac3a0` builds a synthetic hit record on its stack from the round's position and
   a material stub whose id field is zero, and the aircraft the round fused on is not on it; that
   aircraft takes its share through the splash gather like any other candidate. So a fuse burst

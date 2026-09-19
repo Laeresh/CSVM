@@ -333,6 +333,7 @@
     "turret-vessel-targets": 1.171,
     "versus-spawn-net-table": 0.03,
     "versus-spawn-rotation": 0.9,
+    "vessel-fuse": 2.31,
     "voice-runtime": 0.681,
     "wait-for-completion": 0.015,
     "warhawk-torpedo-run": 0.419,

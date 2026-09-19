@@ -294,28 +294,19 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `git log --grep=BL-301` (the VS tuning entry the exemption settled),
   `ProjectilePool.GatherAircraftCandidates`.
 
-- `BL-982` `[Fidelity]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The proximity
-  fuse sweep differs from `FUN_004b5fb0` twice: it never fuses on a surface vessel, and its
-  `DETONATION_DOT_PRODUCT` cone is the round's forward cone rather than the candidate's rear one.**
-  *Evidence:* the original's sweep walks `VehicleList` (head `DAT_0071dabc`), which holds aircraft
-  and AI ground/sea vehicles; `ProjectilePool.ProximityFuseTriggered` walks the aircraft roster
-  alone, so a rocket passing a patrol boat inside `DETONATION_DISTANCE` flies on, where
-  `CollectVehicleList` already offers those hulls to the assist. The dot test dots
-  `unit(round - candidate)` against the candidate's `+0x198` row, its backward axis, while
-  `FuseDotAllows` dots the round's velocity against the direction to the hull, and the
-  `CSVM.Tests` fact on `FuseDotAllows` pins the velocity form. Three entries author the key
-  (`docs/formats/weapons.md`), the choker among them. Zeppelins are settled: they are not in
-  `VehicleList` at all ([`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md) "The proximity
-  fuse", with the writers). *Fix shape:* take the candidates from the same pool
-  `CollectVehicleList` reads, give a vessel the segment-distance query an `AircraftBody` has, and
-  pass the candidate's basis into the dot test. *⚠ Traps:* (a) the six plain rockets author
-  `DETONATION_DISTANCE == IMPACT_PROXIMITY`, so a first-entry-into-range fuse always detonates
-  where the blast falls to zero and deals nothing; keep closest approach for every candidate class.
-  (b) A world-armed fuse re-detonates every rocket 15 to 50 m short of terrain; never widen the
-  candidates to world bodies. (c) The choker's mid-air detonation is still an open decode
-  ([`docs/org/tracers.md`](docs/org/tracers.md)), so a changed cone is judged against the decode,
-  not against its footage. *Cross-refs:* `SurfaceVehicleRuntime.CollectVehicles`, the
-  `air-to-air` and `zeppelin-fuse` suites.
+- `BL-983` `[Fidelity]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: decoded]` **The proximity
+  fuse's aircraft branch skips only the shooter's own plane, where `FUN_004b5fb0` skips every
+  candidate on the shooter's side, so a player's rocket bursts beside a wingman.** *Evidence:* the
+  sweep compares the round wrapper's `+0x8` with the candidate's `+0x8`, and the wrapper's copy is
+  the firing vehicle's team (`FUN_004b6820` passes its `+0x8` to `FUN_00441830` at `0x004b6e8c` and
+  `0x004b7298`; `FUN_00441b90` stores it), written up in
+  [`docs/org/ordnanceTypes.md`](docs/org/ordnanceTypes.md) "The proximity fuse". The hull branch of
+  `ProjectilePool.ProximityFuseTriggered` already tests the side. The question for the user is
+  whether Dogfight, where every pilot is on a side of their own, and the campaign wingmen should
+  both follow the decode, or whether the aircraft branch keeps the shooter-only test. *⚠ Traps:*
+  the blast's own aircraft gather (`GatherAircraftCandidates`) exempts only the shooter on purpose
+  and is a separate question; changing the fuse leaves it alone. *Cross-refs:* the `air-to-air` and
+  `vessel-fuse` suites.
 
 ## Flight model & collision physics
 

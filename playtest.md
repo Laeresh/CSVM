@@ -860,6 +860,21 @@ is a judgement on our own remake.
   seconds rather than flying away; (c) no fighter trailing far out of the mission area.
   *Blocks:* nothing tracks the outcome; a group that never engages mints a new `BL`.
 
+### CM08 (C1B/M03) · rockets past the patrol boats
+
+```powershell
+./RunGame.ps1 --campaign=<profile>:7
+```
+
+- `PT-167` `[Own]` **A rocket passing close over a patrol boat bursts beside it and hurts it.** The
+  proximity fuse now arms against surface hulls as well as aircraft, measured to the hull's origin
+  (`git log --grep=BL-982`). *Look for:* (a) once the boats are awake, a rocket fired to pass a few
+  metres over one bursts at its closest point rather than flying on, and the boat shows damage or
+  sinks after a few such passes; (b) a rocket skimming low over the water away from any boat still
+  flies on to the water; (c) rockets fired at an aircraft with a boat below do not burst early on
+  the boat when the aircraft was the nearer candidate. *Blocks:* nothing tracks the outcome; a
+  wrong burst mints a new `BL`.
+
 ### Any campaign mission · enemy skill under the difficulty offset
 
 ```powershell

@@ -625,26 +625,34 @@ public sealed partial class ProjectilePool : Node3D
         return new Basis(axis, Mathf.Acos(Mathf.Clamp(dot, -1f, 1f)));
     }
 
-    /// <summary>Whether a candidate lies inside an authored proximity-fuse forward cone.</summary>
-    public static bool FuseDotAllows(float? minimumDot, Vector3 velocity, Vector3 towardTarget)
+    /// <summary>The <c>DETONATION_DOT_PRODUCT</c> gate: unit(round - candidate) dotted with the
+    /// candidate's backward axis must reach the threshold, so a positive one admits a round behind
+    /// the candidate whatever way the round flies. A zero offset stays zero and dots to 0, as the
+    /// original's normalise leaves it (docs/org/ordnanceTypes.md "The proximity fuse").</summary>
+    public static bool FuseDotAllows(float? minimumDot, Vector3 candidateBackward, Vector3 roundFromCandidate)
     {
         if (minimumDot is null)
             return true;
-        if (velocity.LengthSquared() <= 1e-6f || towardTarget.LengthSquared() <= 1e-6f)
-            return true;
-        return velocity.Normalized().Dot(towardTarget.Normalized()) >= minimumDot.Value;
+        var dir = roundFromCandidate.LengthSquared() > 0f ? roundFromCandidate.Normalized() : Vector3.Zero;
+        return dir.Dot(candidateBackward) >= minimumDot.Value;
     }
+
+    /// <summary>A fuse candidate's <c>+0x198</c> row, m[2], which is minus the nose: Godot's +Z
+    /// basis column, unit length.</summary>
+    public static Vector3 BackwardAxis(Node3D body) => body.GlobalBasis.Z.Normalized();
     /// <summary>Distance from point <paramref name="p"/> to the segment <paramref name="a"/>→
     /// <paramref name="b"/>. The fuse's cheap reject wants a round's whole step, not its endpoints:
     /// a gun round covers ~8 m per 60 Hz frame.</summary>
-    public static float SegmentPointDistance(Vector3 a, Vector3 b, Vector3 p)
+    public static float SegmentPointDistance(Vector3 a, Vector3 b, Vector3 p) =>
+        (p - (a + (b - a) * SegmentClosestFraction(a, b, p))).Length();
+
+    /// <summary>The fraction along <paramref name="a"/>→<paramref name="b"/> of the segment point
+    /// nearest <paramref name="p"/>, clamped to the segment; 0 for a degenerate one.</summary>
+    public static float SegmentClosestFraction(Vector3 a, Vector3 b, Vector3 p)
     {
         var seg = b - a;
         float lenSq = seg.LengthSquared();
-        if (lenSq <= 1e-12f)
-            return (p - a).Length();
-        float t = Mathf.Clamp((p - a).Dot(seg) / lenSq, 0f, 1f);
-        return (p - (a + seg * t)).Length();
+        return lenSq <= 1e-12f ? 0f : Mathf.Clamp((p - a).Dot(seg) / lenSq, 0f, 1f);
     }
 
     /// <summary>The struck collider's numeric surface id, the index the weapon's <c>IMPACT</c>
@@ -1244,7 +1252,7 @@ public sealed partial class ProjectilePool : Node3D
                 // Checked AFTER the ray, so a round that would strike its target keeps the direct
                 // hit. Damage arrives through the blast's aircraft pass, not this branch (shapeIdx
                 // -1 keeps it out of the direct-hit path and off the aircraft's IMPACT row).
-                if (ProximityFuseTriggered(p.Weapon, p.Shooter, prev, next, vel,
+                if (ProximityFuseTriggered(p.Weapon, p.Shooter, p.Team, prev, next,
                         out var fusePoint, out var fused, out var towardHull))
                 {
                     var fuseNormal = towardHull.LengthSquared() > 1e-8f
@@ -2300,13 +2308,13 @@ public sealed partial class ProjectilePool : Node3D
 
 
     // ⚠ Do not re-add a world fuse. It detonates every rocket short of its target and locks every
-    // hardpoint weapon out of its per-surface IMPACT entry. Armed against aircraft only.
+    // hardpoint weapon out of its per-surface IMPACT entry. The candidates are VehicleList's:
+    // aircraft and surface hulls, never world bodies or zeppelins (docs/org/ordnanceTypes.md).
     // Detonates at CLOSEST APPROACH within the swept step, not first entry, or most rockets would
-    // detonate where the blast falls to zero and never hurt a plane. The shooter's own
-    // plane and a wreck/INERT airframe are never candidates. ⚠ This walk is the pool's own roster,
-    // not a physics query, so it needs FlightController.InPlay itself.
-    private bool ProximityFuseTriggered(WeaponDef weapon, int shooter, Vector3 from, Vector3 to,
-        Vector3 velocity, out Vector3 detonationPoint, out AircraftBody? fused, out Vector3 towardHull)
+    // detonate where the blast falls to zero and never hurt anything. ⚠ These walks are the pool's
+    // own rosters, not a physics query, so each needs its own liveness test.
+    private bool ProximityFuseTriggered(WeaponDef weapon, int shooter, int team, Vector3 from,
+        Vector3 to, out Vector3 detonationPoint, out AircraftBody? fused, out Vector3 towardHull)
     {
         detonationPoint = to;
         fused = null;
@@ -2327,14 +2335,38 @@ public sealed partial class ProjectilePool : Node3D
             if (d > fuseRange || d >= best || t >= StillClosingFraction)
                 continue;
             var candidate = from + (to - from) * t;
-            if (!FuseDotAllows(weapon.DetonationDotProduct, velocity, hull - candidate))
+            if (!FuseDotAllows(weapon.DetonationDotProduct, BackwardAxis(plane),
+                    candidate - plane.GlobalPosition))
                 continue;
             best = d;
             detonationPoint = candidate;
             fused = plane;
             towardHull = hull - candidate;
         }
-        return fused != null;
+        if (SurfaceVehicles == null)
+            return fused != null;
+        // A hull is measured to its origin, the decoded point-to-point distance: it has no airframe
+        // hull set, and its colliders are world bodies the fuse must never query.
+        foreach (var vessel in SurfaceVehicles.Vessels)
+        {
+            if (!GodotObject.IsInstanceValid(vessel.Body) || vessel.Inert || vessel.IsDestroyed
+                || (vessel.Team ?? AimAssist.NeutralTeam) == team)
+                continue;
+            var origin = vessel.Position;
+            float t = SegmentClosestFraction(from, to, origin);
+            var candidate = from + (to - from) * t;
+            float d = candidate.DistanceTo(origin);
+            if (d > fuseRange || d >= best || t >= StillClosingFraction)
+                continue;
+            if (!FuseDotAllows(weapon.DetonationDotProduct, BackwardAxis(vessel.Body),
+                    candidate - origin))
+                continue;
+            best = d;
+            detonationPoint = candidate;
+            fused = null;
+            towardHull = origin - candidate;
+        }
+        return best < float.PositiveInfinity;
     }
 
     // The one exit every self-ended round takes, so the range expiry and both fuses share the
