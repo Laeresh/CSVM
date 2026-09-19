@@ -479,7 +479,8 @@ The combat-voice trigger dispatch, engine-free
 decisions out, over the talker roll, the hardcoded halving on the bearing ids, the broadcast speaker
 election where a failed roll passes to the next candidate, the damage tiers taken most-severe-first,
 the death cries with force, and the computed bearing trigger id. Availability comes from the injected
-resolver rather than from def presence. Pinned by `AiVoiceDispatcherTests` and the `ai-voice` suite.
+resolver rather than from def presence, and the "already talking" test from the `IsTalking` hook the
+session answers off the radio channel. Pinned by `AiVoiceDispatcherTests` and the `ai-voice` suite.
 
 ## src/Flight/AiTargetRanking.cs
 The decoded target-ranking formula ([../org/aiPilot.md](../org/aiPilot.md) "Target acquisition"): a

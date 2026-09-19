@@ -2492,7 +2492,9 @@ internal static class AiSuites
         "the E16 trigger dispatch on a live AI plane against the real archive: a projectile "
         + "hit crossing a DI threshold plays exactly ONE line the pilot's accent owns (the 15 s "
         + "slot cooldown swallowing the follow-up hits) flat on the mission radio's Voice-bus "
-        + "AudioStreamPlayer with no positional player built, and the kill plays the dead "
+        + "AudioStreamPlayer with no positional player built, a second line from that same "
+        + "speaker while its own line is on air is refused as already talking though another "
+        + "speaker on the busy channel is not, and the kill plays the dead "
         + "pilot's own death cry through the force flag at its authored level with the listener "
         + "5 km away, while an unforced dispatch on the same dead speaker stays silent, and the "
         + "three gloats run the decoded polarity off the same kill report: a friendly kill is "
@@ -2619,7 +2621,27 @@ internal static class AiSuites
             float nearDb = radioPlayer?.VolumeDb ?? float.NaN;
             ctx.Check(Mathf.IsEqualApprox(nearDb, FlatDb(defs, played[0].Clip)),
                 $"…at its def's authored level beside the speaker db={nearDb:0.00} want={FlatDb(defs, played[0].Clip):0.00}");
+
+            // The gate's already-talking test, answered from the radio's own line: while this
+            // speaker's line is on air a second line from it is refused before the cooldown is
+            // even read, and a second pilot sharing the channel is not held by it.
+            int spokenTrigger = played[0].Trigger;
+            int otherSpeaker = ai.PlayerIndex + 1;
+            runtime.Dispatcher.Register(otherSpeaker, speaker.VoId, ai.Team,
+                isPlayer: false, talkerChance: 1f, constitutionChance: 1f);
+            float armedBefore = speaker.NextAllowedAt(spokenTrigger);
+            var over = runtime.Dispatcher.Dispatch(ai.PlayerIndex, spokenTrigger, runtime.Now);
+            ctx.Check(over.Clip == null && over.Outcome == "already talking",
+                $"a second line from the speaker whose own line is on air is refused outcome={over.Outcome}");
+            ctx.Check(Mathf.IsEqualApprox(speaker.NextAllowedAt(spokenTrigger), armedBefore),
+                $"…and the refusal re-arms nothing, the played line's own cooldown still stands");
+            var other = runtime.Dispatcher.Dispatch(otherSpeaker, spokenTrigger, runtime.Now);
+            ctx.Check(other.Clip != null,
+                $"…while another speaker on the same busy channel still speaks clip={other.Clip}");
             PumpRadio(radio);
+            var freed = runtime.Dispatcher.Dispatch(ai.PlayerIndex, spokenTrigger, runtime.Now);
+            ctx.Check(freed.Outcome == "slot cooling",
+                $"…and once the line's length has elapsed the same speaker reaches the slot cooldown instead outcome={freed.Outcome}");
 
             // Follow-up hits in the same tier stay silent: the slot cooldown swallowed them
             // (armed by the PLAY here; the failed-roll arming is the unit suite's,

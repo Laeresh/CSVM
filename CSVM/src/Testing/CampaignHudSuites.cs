@@ -138,8 +138,9 @@ internal static class CampaignHudSuites
         + "wake/complete cue the mission authors is a queued radio line or a chain of them and "
         + "none is a positional definition, a chain speaks all of its lines in order, a second "
         + "cue queues behind the one speaking instead of cutting in, the whole queue drains "
-        + "without starting a positional player, and STOP_QUEUED_SOUNDS drops a call that has "
-        + "not begun")]
+        + "without starting a positional player, STOP_QUEUED_SOUNDS drops a call that has "
+        + "not begun, and a line queued for a named speaker reports that one speaker as talking "
+        + "for its length and nobody else")]
     internal static void MissionRadioCallouts(TestContext ctx)
     {
         var missions = CampaignSequence.Load(ctx.ZrdrPath);
@@ -254,6 +255,18 @@ internal static class CampaignHudSuites
         int spoken = radio.LinesStarted;
         Pump(radio, 60f);
         ctx.Same(spoken, radio.LinesStarted, $"the cancelled call never speaks");
+
+        // What the combat-voice gate's "already talking" test reads: a line carries the pilot it
+        // belongs to, and that pilot holds the channel only for the length of its own line.
+        int pilot = 7;
+        ctx.Check(radio.Speak(lineCue, new System.Random(4), pilot) != null,
+            $"a combat line queues for a named speaker cue='{lineCue}'");
+        radio.Tick(0.1f);
+        ctx.Check(radio.IsSpeaking(pilot), $"…and that speaker reads as talking while it is on air");
+        ctx.Check(!radio.IsSpeaking(pilot + 1),
+            $"…while another pilot sharing the busy channel does not");
+        Pump(radio, 240f);
+        ctx.Check(!radio.IsSpeaking(pilot), $"…and is free again once the line's length has elapsed");
         report.AppendLine($"radio: {radio.LinesStarted} lines started, {radio.Dropped} dropped, "
             + $"{sounds.OneShotsStarted - queuedBefore} positional one-shots");
     }

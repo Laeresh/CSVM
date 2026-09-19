@@ -428,8 +428,8 @@ speaker on its own `FlightController.Team`, each human rig as a damage source, a
 and death report of EVERY aircraft handed over are watched, accented or not, because the bearing
 call-out, the taunt and the killer's gloat are spoken by an aircraft other than the one the event
 reached. `RegisterAi` also mirrors `InPlay` into the speaker's liveness, the only place the
-engine-free dispatcher and a controller meet. Lines play flat through `MissionRadio.Speak`, the one
-queue the objective callouts share, never at the speaker, and every roll and first "no clip" refusal prints an `ai voice:` line. [../formats/combat-voice.md](../formats/combat-voice.md).
+engine-free dispatcher and a controller meet. Lines play flat through `MissionRadio.Speak` (the queue
+the objective callouts share) with the speaker id that answers the "already talking" hook; every roll and first "no clip" refusal prints an `ai voice:` line. [../formats/combat-voice.md](../formats/combat-voice.md).
 
 ## src/Session/FlightRoster.cs
 The session-owned aircraft aggregate. `BuildPlayers` commits the whole human field in ascending player order and `SpawnAi` commits one

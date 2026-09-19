@@ -688,8 +688,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `git log --grep=BL-977` (the Instant Action prewarm gap),
   the saved Voice level (`Utils/AudioMix.cs`, the `audio-buses` suite) if the lines dispatch and
   stay inaudible; `BL-986` (the spawn-time commit is muted and never re-arms, the largest single
-  cause of the low rate), `BL-987` to `BL-993` (the nine unwired trigger ids and the
-  already-talking hook), `BL-994`/`BL-995` (Instant Action pilots with no voice).
+  cause of the low rate), `BL-987` to `BL-992` (the unwired trigger ids),
+  `BL-994`/`BL-995` (Instant Action pilots with no voice).
 
 - `BL-986` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: trace]` **An ace commits to
   the player on the first frame, inside the 2 s mute window, so `WA-Attack` and the bearing
@@ -752,14 +752,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   reachable or unused.** *Evidence:* `docs/formats/combat-voice.md`, "What is not pinned down".
   *Fix shape:* cross-reference the slot-16 read in `crimson.exe` (`vehicle + 0x730 + 12 * 16`);
   a hit names the site, no hit closes the id as unused and the table row says so.
-
-- `BL-993` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The gate's
-  "must not already be talking" test is a hook with nothing behind it, so a speaker can queue a
-  second line over its own first, which the radio's 0.8 s tolerance then drops.** *Evidence:*
-  `AiVoiceDispatcher.IsTalking` is null in the runtime; `docs/formats/combat-voice.md` records
-  the radio channel carrying no per-speaker playing state. *Fix shape:* `MissionRadio` knows the
-  cue on air and its length (`radio line=… len=2.1s` in the log); hand the speaker id in with the
-  cue and answer the hook from it. *Cross-refs:* `BL-978` (the flat radio path), `BL-986`.
 
 - `BL-994` `[Research]` `[S]` `[Next: decode]` `[Impact: high]` `[Evidence: data]` **Every
   Instant Action wave enemy is voiceless (`accentID` -1); decide whether the original's setup

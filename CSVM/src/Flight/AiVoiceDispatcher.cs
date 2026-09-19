@@ -77,8 +77,9 @@ public sealed class AiVoiceDispatcher
         _resolve = resolve;
     }
 
-    /// <summary>Optional: whether a speaker is mid-line (the gate's "must not already be
-    /// talking"). Null = never; the remake's one-shots carry no per-speaker playing state yet.</summary>
+    /// <summary>Whether a speaker is mid-line (the gate's "must not already be talking"). The
+    /// session answers it from the radio channel, which holds the queued and on-air line's own
+    /// speaker and length; null = never, for a dispatcher driven without a channel.</summary>
     public Func<int, bool>? IsTalking { get; set; }
 
     /// <summary>Registered speakers, in registration order, the broadcast election's list.</summary>

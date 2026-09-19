@@ -625,14 +625,14 @@ times the duck and nothing else: the player's music level is the Music bus's gai
 are docs/org/music.md.
 
 ## src/Mech3/MissionRadio.cs
-The mission radio queue, the flat Voice channel beside `MusicPlayer` and `WorldSounds`' 3D
-emitters. `Cue(name)` queues an objective callout (a radio definition or a VO dialogue chain) and
-returns its line count, 0 for a name this channel does not own. `Speak(name)` queues a combat voice
-line on the same queue without the cue delay and returns the definition it will speak. One call
-speaks at a time: a chain runs back to back, a later call queues behind rather than cutting in,
-`Cancel` is `STOP_QUEUED_SOUNDS`, and a call waiting past its `QUEUE` tolerance is dropped. Streams
-come from `WorldSounds.StreamFor`. Cue delay: docs/formats/objectives.md; the one queue, the
-definition classes and the tolerance: docs/formats/sounds.md.
+The mission radio queue, the flat Voice channel beside `MusicPlayer` and `WorldSounds`' 3D emitters.
+`Cue(name)` queues an objective callout (a radio definition or a VO dialogue chain) and returns its
+line count, 0 for a name this channel does not own. `Speak(name, rng, speakerId)` queues a combat
+voice line on the same queue without the cue delay; `IsSpeaking(speakerId)` answers the voice gate
+whether that pilot's own line still holds the channel. One call speaks at a time: a chain runs back
+to back, a later call queues behind rather than cutting in, `Cancel` is `STOP_QUEUED_SOUNDS`, and a
+call waiting past its `QUEUE` tolerance is dropped. Streams come from `WorldSounds.StreamFor`. Cue
+delay: docs/formats/objectives.md; the queue, classes and tolerance: docs/formats/sounds.md.
 
 ## src/Mech3/SoundDefs.cs
 sounds.json SETS parser: `snd_*` name to `SoundDef` (wav name, flags, range, volume); the entry

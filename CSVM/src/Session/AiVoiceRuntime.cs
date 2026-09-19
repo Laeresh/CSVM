@@ -44,7 +44,10 @@ public sealed partial class AiVoiceRuntime : Node
         _sounds = sounds;
         _radio = radio;
         _rng = rng;
-        _dispatcher = new AiVoiceDispatcher(rng, ResolvePlayable);
+        _dispatcher = new AiVoiceDispatcher(rng, ResolvePlayable)
+        {
+            IsTalking = radio.IsSpeaking,
+        };
     }
 
     /// <summary>Every line handed to the radio: (speaker tag, trigger id, resolved clip), the
@@ -245,7 +248,8 @@ public sealed partial class AiVoiceRuntime : Node
         {
             // ⚠ Do not place a line at the speaker; the defs are QUEUE radio lines with no 3D flag,
             // and the original plays them flat through the one queue the objective callouts use.
-            string? resolved = _radio.Speak(clip, _rng);
+            // The speaker rides along so the gate's already-talking test can read it back.
+            string? resolved = _radio.Speak(clip, _rng, speaker.Id);
             Log.Info("sound", $"ai voice: {tag}: trigger #{decision.TriggerId} -> {clip}{(resolved != null && resolved != clip ? $" ({resolved})" : "")} ({decision.Outcome})");
             if (resolved != null)
             {

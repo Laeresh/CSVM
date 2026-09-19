@@ -250,8 +250,11 @@ Stand-ins and inventions, named:
   looks up `talker_chance` at the block's own talker rating and `constitution_chance` at its own
   constitution rating, each on its own curve. A rating a block does not author falls back to the
   session's skill rating, same as before.
-- The gate's "must not already be talking" is a hook (`AiVoiceDispatcher.IsTalking`), unwired:
-  the radio channel carries no per-speaker playing state yet.
+- The gate's "must not already be talking" is a hook (`AiVoiceDispatcher.IsTalking`) the session
+  answers from the radio channel: every combat line is queued with the speaker it belongs to, and
+  that speaker is talking while its own line waits or is on air, for the line's own length
+  (`MissionRadio.IsSpeaking`). A refused line arms no cooldown, and a broadcast passes a talking
+  candidate over to the next one. The suppressed state has no counterpart here.
 - **Force bypasses only the aliveness check**, as decoded, a forced death cry still respects
   the slot cooldown and still rolls talker (`AiVoiceDispatcherTests` pins this).
 
