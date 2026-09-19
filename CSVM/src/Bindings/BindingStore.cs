@@ -113,8 +113,9 @@ public sealed class BindingStore
     /// <summary>The profile a JSON text describes, starting from the shipped defaults for
     /// <paramref name="pad"/> and replacing every action the text gives a readable row for. Text
     /// that is not valid JSON, an unknown context or action name, and a binding token this build
-    /// cannot read all leave the action at its default. A file naming no mouse-flying flag leaves the
-    /// seat on the keyboard and pad schemes, and one naming no sensitivity leaves it unscaled.</summary>
+    /// cannot read all leave the action at its default. A control the file names is taken off any
+    /// action still holding it by default. A file naming no mouse-flying flag leaves the seat on the
+    /// keyboard and pad schemes, and one naming no sensitivity leaves it unscaled.</summary>
     public static BindingProfile Deserialize(string json, DeviceId pad, bool readsKeyboard)
     {
         var profile = BindingProfile.Defaults(pad, readsKeyboard);
@@ -242,6 +243,7 @@ public sealed class BindingStore
 
     private static void ReadContext(ActionMap map, InputContext context, JsonElement element, DeviceId pad)
     {
+        var saved = new List<(InputAction Action, List<Binding> Bindings)>();
         foreach (var entry in element.EnumerateObject())
         {
             if (!Enum.TryParse(entry.Name, ignoreCase: true, out InputAction action)
@@ -256,6 +258,39 @@ public sealed class BindingStore
             foreach (var binding in bindings)
             {
                 map.Add(action, binding);
+            }
+
+            saved.Add((action, bindings));
+        }
+
+        TakeControlsTheFileClaims(map, saved);
+    }
+
+    // A control the file names belongs to the action the file gives it, so a default row left over
+    // on that control loses it. Without this a shipped table that moves a control between actions
+    // puts it on two at once for a file that names only one of them, which is the state the map's
+    // own steal rule forbids. Rows the file names keep sharing a control, since a saved snap-look
+    // diagonal is deliberately two actions.
+    private static void TakeControlsTheFileClaims(
+        ActionMap map, List<(InputAction Action, List<Binding> Bindings)> saved)
+    {
+        var named = new HashSet<InputAction>();
+        foreach (var row in saved)
+        {
+            named.Add(row.Action);
+        }
+
+        foreach (var (action, bindings) in saved)
+        {
+            foreach (var binding in bindings)
+            {
+                foreach (var owner in map.OwnersOf(binding))
+                {
+                    if (owner != action && !named.Contains(owner))
+                    {
+                        map.Unassign(owner, binding);
+                    }
+                }
             }
         }
     }

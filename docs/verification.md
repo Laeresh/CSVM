@@ -779,6 +779,11 @@ member, and it does not go here.
   AUDIO page logged `mix master=100 music=50 effects=0 voice=50` on an accept and the bus was at
   -6.021 dB a moment later, the preview's restore having run after the apply, which is why the level
   was heard only at the next start.
+- **INSTR-90**, **Moving a control from one action to another in a shipped default table puts it on
+  BOTH for any saved keymap that names only one of the two, because a load merges saved rows into a
+  default map action by action: let the saved row take the control off every action the file does
+  not name, and test the partial file, not only the whole one.** A file naming the free-look row
+  alone would have held the free look and the rockets on one mouse button.
 
 ## SRC, sources and documents
 

@@ -4773,8 +4773,8 @@ public partial class FlightController : Node3D
         return (((PinnedView - 1) % 3) - 1, ((PinnedView - 1) / 3) - 1);
     }
 
-    // Free-look direction: the mouse while its right button is held (the RMB-to-look posture the
-    // freecam already uses). Only the DIRECTION is read, at the decoded fixed pan rate. The pad
+    // Free-look direction: the mouse while the FreeLook action is held (the middle button by
+    // default). Only the DIRECTION is read, at the decoded fixed pan rate. The pad
     // deliberately does NOT feed this path: its stick aims absolutely (HeadLook.PadAimTargets),
     // which is what makes the cockpit read like the chase view. A mouse has no absolute position
     // to map, so it keeps the original's relative law.

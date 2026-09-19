@@ -406,16 +406,42 @@ public class DefaultBindingsTests
             map.Bindings(InputAction.SmoothLookMode));
     }
 
-    /// <summary>Free look is the held right mouse button, the one action the model had no kind for
-    /// until <see cref="BindingControl.Mouse"/> existed.</summary>
+    /// <summary>The three mouse rows the shipped table carries: the left button fires the guns, the
+    /// right fires the rockets, and the free-look pan is the held middle button between them.
+    /// Recorded button by button, since the whole row is this port's own pick.</summary>
     [Fact]
-    public void FreeLook_IsTheRightMouseButton()
+    public void TheMouseDefaults_AreGunsRocketsAndTheMiddleButtonPan()
     {
         var map = DefaultBindings.MapFor(InputContext.Flight, Pad);
 
+        Assert.Contains(
+            new Binding(DeviceId.Mouse, BindingControl.Mouse((int)MouseButton.Left)),
+            map.Bindings(InputAction.FireGuns));
+        Assert.Contains(
+            new Binding(DeviceId.Mouse, BindingControl.Mouse((int)MouseButton.Right)),
+            map.Bindings(InputAction.FireRockets));
         Assert.Equal(
-            new[] { new Binding(DeviceId.Mouse, BindingControl.Mouse((int)MouseButton.Right)) },
+            new[] { new Binding(DeviceId.Mouse, BindingControl.Mouse((int)MouseButton.Middle)) },
             map.Bindings(InputAction.FreeLook));
+    }
+
+    /// <summary>And no other action takes a mouse button, so the three rows above are the whole
+    /// mouse column of the shipped table in every context.</summary>
+    [Fact]
+    public void NoOtherAction_TakesAMouseButton()
+    {
+        var owners = new List<InputAction>();
+        foreach (var (action, binding) in AllDefaults())
+        {
+            if (binding.Control.Kind == ControlKind.Mouse && !owners.Contains(action))
+            {
+                owners.Add(action);
+            }
+        }
+
+        owners.Sort();
+        Assert.Equal(
+            new[] { InputAction.FireGuns, InputAction.FireRockets, InputAction.FreeLook }, owners);
     }
 
     /// <summary>The whole seat: three contexts, each with its own live actions, and the keyboard

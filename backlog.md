@@ -238,20 +238,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   clear and the hull does not (CM13's dbase arch on dzpath2) in both games; if the original passes,
   sweep the player's probes too. *Cross-refs:* `PlaneStats.CollisionProbes`, `docs/formats/vehicle.md`.
 
-- `BL-1007` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **The default
-  mouse bindings: left button guns, right button rockets, middle button the head-look pan hold.**
-  *Decision:* after the mouse scale and sensitivity landed, "change default binding for mouse,
-  left mouse button: guns, right mouse button: rockets, camera middle mouse button". *Evidence:*
-  the only mouse default today is the free-look pan on the right button
-  (`Bindings/DefaultBindings.cs`, `b.Mouse(InputAction.FreeLook, MouseButton.Right)`); guns and
-  rockets have no mouse row. *Fix shape:* three `b.Mouse` rows in `DefaultBindings`, the pan hold
-  moved to the middle button, `docs/controls.md`'s mouse table and the CONTROLS page's Mouse row
-  labels following; the head-look rules (`git log --grep=BL-963`) read the action, not the button,
-  so they need no change. *⚠ Traps:* a keymap saved before this change may carry the old right
-  button pan; check whether the saved keymap stores mouse rows and, if it does, whether a missing
-  row falls back to the new default. *Cross-refs:* `git log --grep=BL-960` (the sensitivity row on
-  the same page), `docs/controls.md`.
-
 ## Flight model & collision physics
 
 - `BL-562` `[Perf]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: data]` `[CM11]` **CM11 (C2/M02) still spends a single physics tick of about 36 ms on the sortie's

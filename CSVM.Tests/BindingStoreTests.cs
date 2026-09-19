@@ -140,12 +140,87 @@ public class BindingStoreTests
         var profile = BindingProfile.Defaults(Pad, readsKeyboard: true);
         var json = BindingStore.Serialize(1, profile);
 
-        Assert.Contains("mouse/mouse:Right", json, StringComparison.Ordinal);
+        Assert.Contains("mouse/mouse:Middle", json, StringComparison.Ordinal);
+        Assert.Contains("mouse/mouse:Left", json, StringComparison.Ordinal);
 
         var loaded = BindingStore.Deserialize(json, Pad, readsKeyboard: true).Map(InputContext.Flight);
         Assert.Equal(
+            new[] { new Binding(DeviceId.Mouse, BindingControl.Mouse((int)MouseButton.Middle)) },
+            loaded.Bindings(InputAction.FreeLook));
+        Assert.Contains(
+            new Binding(DeviceId.Mouse, BindingControl.Mouse((int)MouseButton.Right)),
+            loaded.Bindings(InputAction.FireRockets));
+    }
+
+    /// <summary>A keymap saved before the mouse rows moved keeps every row it saved: the free look
+    /// stays on the right button the player's file names, the two weapons keep their saved keys and
+    /// pad buttons and gain no mouse row, and nothing the file bound is left unbound.</summary>
+    [Fact]
+    public void AKeymapSavedBeforeTheMouseRowsMoved_KeepsItsOwnRightButtonPan()
+    {
+        var loaded = BindingStore.Deserialize(SavedBeforeTheMove(), Pad, readsKeyboard: true)
+            .Map(InputContext.Flight);
+
+        Assert.Equal(
             new[] { new Binding(DeviceId.Mouse, BindingControl.Mouse((int)MouseButton.Right)) },
             loaded.Bindings(InputAction.FreeLook));
+        Assert.Equal(
+            new[]
+            {
+                new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.Space)),
+                new Binding(Pad, BindingControl.Button((int)JoyButton.B)),
+            },
+            loaded.Bindings(InputAction.FireGuns));
+        Assert.Equal(
+            new[]
+            {
+                new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.X)),
+                new Binding(Pad, BindingControl.Button((int)JoyButton.A)),
+            },
+            loaded.Bindings(InputAction.FireRockets));
+    }
+
+    /// <summary>A file naming the free-look row alone: the saved right button is the free look's, so
+    /// the default rockets row loses that button rather than holding it at the same time, and the
+    /// rockets keep their key and their pad button.</summary>
+    [Fact]
+    public void ASavedRow_TakesItsControlOffTheDefaultActionThatHeldIt()
+    {
+        var json = """
+        {
+          "version": 2,
+          "player": 1,
+          "contexts": { "flight": { "FreeLook": ["mouse/mouse:Right"] } }
+        }
+        """;
+        var loaded = BindingStore.Deserialize(json, Pad, readsKeyboard: true).Map(InputContext.Flight);
+        var right = new Binding(DeviceId.Mouse, BindingControl.Mouse((int)MouseButton.Right));
+
+        Assert.Equal(new[] { InputAction.FreeLook }, loaded.OwnersOf(right));
+        Assert.Equal(
+            new[]
+            {
+                new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.X)),
+                new Binding(Pad, BindingControl.Button((int)JoyButton.A)),
+            },
+            loaded.Bindings(InputAction.FireRockets));
+        Assert.Contains(
+            new Binding(DeviceId.Mouse, BindingControl.Mouse((int)MouseButton.Left)),
+            loaded.Bindings(InputAction.FireGuns));
+    }
+
+    /// <summary>The claim is one action's over a default's, not over another saved row's: the four
+    /// snap-look diagonals are one key the file names on two actions, and both keep it.</summary>
+    [Fact]
+    public void ASavedRow_TakesNothingOffAnotherRowTheSameFileNames()
+    {
+        var loaded = BindingStore.Deserialize(
+            BindingStore.Serialize(1, BindingProfile.Defaults(Pad, readsKeyboard: true)),
+            Pad,
+            readsKeyboard: true).Map(InputContext.Flight);
+        var kp7 = new Binding(DeviceId.Keyboard, BindingControl.Key((int)Key.Kp7));
+
+        Assert.Equal(new[] { InputAction.LookUp, InputAction.LookLeft }, loaded.OwnersOf(kp7));
     }
 
     /// <summary>A hand-written file from a bumped version: the version says how the tokens are
@@ -365,6 +440,21 @@ public class BindingStoreTests
 
     private static string Row(string context, string body) =>
         "{\"version\": 1, \"player\": 1, \"contexts\": {\"" + context + "\": {" + body + "}}}";
+
+    // A whole file as the build before the mouse rows moved wrote one: every action of the context,
+    // the free look on the right button, and no mouse row on either weapon.
+    private static string SavedBeforeTheMove()
+    {
+        var profile = BindingProfile.Defaults(Pad, readsKeyboard: true);
+        var map = profile.Map(InputContext.Flight);
+        map.Unassign(
+            InputAction.FireGuns, new Binding(DeviceId.Mouse, BindingControl.Mouse((int)MouseButton.Left)));
+        map.Unassign(
+            InputAction.FireRockets, new Binding(DeviceId.Mouse, BindingControl.Mouse((int)MouseButton.Right)));
+        map.Clear(InputAction.FreeLook);
+        map.Add(InputAction.FreeLook, new Binding(DeviceId.Mouse, BindingControl.Mouse((int)MouseButton.Right)));
+        return BindingStore.Serialize(1, profile);
+    }
 
     private static void AssertSameMaps(BindingProfile expected, BindingProfile actual)
     {

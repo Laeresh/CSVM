@@ -192,10 +192,10 @@ The keymap file: versioned JSON, one per player under `user://`, written atomica
 file and a rename. Named and versioned against the original, which writes 2400 unversioned raw bytes
 to the registry and points its live array at the loaded buffer, so a record-layout change there
 reinterprets an old save. `Encode` and `Decode` are the token grammar; version 2 is the key token's
-optional modifier prefix, and a version 1 file still loads whole because a bare key token means the
-same in both, which is why the reader checks no version; a file without `mouseSensitivity` loads at
-the default. Its shape, tokens and unreadable rows: [../org/input.md](../org/input.md).
-`DirectoryOverride` is what keeps a suite off the keymap saved at this machine's controls.
+optional modifier prefix, and a version 1 file still loads whole, which is why the reader checks no
+version; a file without `mouseSensitivity` loads at the default. A control the file names is taken
+off any action still holding it by default. Its shape, tokens and unreadable rows:
+[../org/input.md](../org/input.md). `DirectoryOverride` keeps a suite off this machine's own keymap.
 
 ## src/Bindings/LaunchBindings.cs
 Where a seat's keymap comes from when the seat is built: the player's saved file, or the shipped

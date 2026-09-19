@@ -112,8 +112,13 @@ public static class DefaultBindings
             b.Keys(InputAction.ThrottleSet0 + eighths, (Key)((int)Key.Key1 + eighths));
         }
 
-        b.Keys(InputAction.FireGuns, Key.Space).Buttons(InputAction.FireGuns, JoyButton.B);
-        b.Keys(InputAction.FireRockets, Key.X).Buttons(InputAction.FireRockets, JoyButton.A);
+        // The two weapons sit under the mouse hand as well, the left button firing the guns and the
+        // right the rockets, which is where a pilot flying with the mouse reaches for them. This
+        // port's own rows: the original binds no mouse button to anything.
+        b.Keys(InputAction.FireGuns, Key.Space).Buttons(InputAction.FireGuns, JoyButton.B)
+            .Mouse(InputAction.FireGuns, MouseButton.Left);
+        b.Keys(InputAction.FireRockets, Key.X).Buttons(InputAction.FireRockets, JoyButton.A)
+            .Mouse(InputAction.FireRockets, MouseButton.Right);
         b.Keys(InputAction.SelectGunGroup, Key.F3).Buttons(InputAction.SelectGunGroup, JoyButton.DpadRight);
         b.Keys(InputAction.SelectOrdnance, Key.F5).Buttons(InputAction.SelectOrdnance, JoyButton.DpadLeft);
 
@@ -170,9 +175,10 @@ public static class DefaultBindings
         b.Stick(InputAction.LookAimLeft, JoyAxis.RightX, -1, 0f);
         b.Stick(InputAction.LookAimRight, JoyAxis.RightX, 1, 0f);
 
-        // The first-person free look is the held right mouse button (docs/controls.md), the same
-        // control the freecam look posture reads (SpectatorCamera).
-        b.Mouse(InputAction.FreeLook, MouseButton.Right);
+        // The first-person free look is the held middle mouse button (docs/controls.md), the guns
+        // and the rockets taking the two beside it. The freecam's own look posture stays on the
+        // right button, read as an event rather than through this table (SpectatorCamera).
+        b.Mouse(InputAction.FreeLook, MouseButton.Middle);
 
         // The three look-mode selectors on the original's own keys, which its keybind page calls
         // Access Snap Look Mode, Track Target and Access Smooth Look Mode. Keyboard only, as the
