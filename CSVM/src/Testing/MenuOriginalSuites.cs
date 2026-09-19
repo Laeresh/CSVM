@@ -55,7 +55,8 @@ internal static class MenuOriginalSuites
         + "FLY leaves as one LaunchExit, the return re-enters the top level, PREFERENCES and its "
         + "GAME OPTIONS door open the decoded page whose Difficulty dropdown stands first and whose "
         + "five rows take every choice, none of them the menu presentation, on a plate grown a band "
-        + "to hold them and whose CANCEL CHANGES "
+        + "to hold them where each row stands wholly inside one band and one band carries the pair "
+        + "the canvas leaves no band for, and whose CANCEL CHANGES "
         + "drops them, a wheel step over the "
         + "aircraft column and over Instant Action's contents window moves each one row and clamps "
         + "at the head, a drag down each thumb's track lands the window on its last row without "
@@ -792,7 +793,8 @@ internal static class MenuOriginalSuites
     // The grown plate and what stands on it: the page carries more rows than the section's three, so
     // the plate is drawn as a head, the repeated row band and a tail instead of one picture, it
     // reaches a whole band further down than the art it is cut from, the two plaques stand that same
-    // band below their authored line, and no row's own reach crosses the moved plaque line.
+    // band below their authored line, every row stands wholly inside one band with a single band
+    // carrying two of them, and no row's own reach crosses the moved plaque line.
     private static void OriginalGameOptionsPlate(TestContext ctx, OriginalShell shell, ComposedBoard board)
     {
         var plate = new List<BoardPicture>();
@@ -824,13 +826,34 @@ internal static class MenuOriginalSuites
         ctx.Check(Math.Abs(accept - (AuthoredPlaqueY + AuthoredGameOptionPitch)) < 0.5f && Math.Abs(cancel - accept) < 0.5f,
             $"with ACCEPT CHANGES and CANCEL CHANGES that same band below their authored line ({accept}, {cancel})");
 
+        // The first band opens one band above the head crop's bottom edge, so every band after it is
+        // a whole pitch down from there; a row wholly inside one of them stands on drawn panel.
+        float first = plate.Count > 0 ? plate[0].Y + (plate[0].Crop?.Height ?? 0f) - AuthoredGameOptionPitch : 0f;
+        var held = new int[Math.Max(1, plate.Count)];
+        bool banded = plate.Count > 0;
         float lowest = 0f;
         foreach (var row in shell.Rows)
         {
-            lowest = row.Key is OriginalOptionsScreen.GameOptionsAcceptKey or OriginalOptionsScreen.GameOptionsCancelKey
-                ? lowest : Math.Max(lowest, row.Y + row.Height);
+            if (row.Key is OriginalOptionsScreen.GameOptionsAcceptKey or OriginalOptionsScreen.GameOptionsCancelKey)
+            {
+                continue;
+            }
+
+            lowest = Math.Max(lowest, row.Y + row.Height);
+            int band = (int)Math.Floor((row.Y - first) / AuthoredGameOptionPitch);
+            banded &= band >= 0 && band < held.Length
+                && row.Y + row.Height <= first + ((band + 1) * AuthoredGameOptionPitch);
+            held[Math.Clamp(band, 0, held.Length - 1)]++;
         }
 
+        int shared = 0;
+        foreach (int count in held)
+        {
+            shared += count > 1 ? 1 : 0;
+        }
+
+        ctx.Check(banded && shared == 1,
+            $"every option row standing wholly inside one band, one band carrying the pair the canvas leaves no band for ({banded}, {shared} shared)");
         ctx.Check(lowest > 0f && lowest <= accept,
             $"and no option row reaching past that line, which would take one press for two rows ({lowest} of {accept})");
     }

@@ -217,6 +217,10 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     private const int GameOptionPlateBandY = 116;
     private const int GameOptionPlateBandHeight = 62;
 
+    // The first authored row's own inset from the top of the band it stands on, used where the plate
+    // is not there to measure it from. A band opens one band above the head crop's bottom edge.
+    private const float GameOptionBandInset = 14f;
+
     // The AUDIO page's authored row shape, used where a layout does not carry the section or one of
     // its rows: the title column and its box, the slider column and the distance from a title's line
     // down to its own slider's, and the description column and its width. Each row's own line is
@@ -1327,14 +1331,22 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         float below = Math.Max(descDy + GameOptionDescFont,
             Math.Max(dropDy + dropHeight, checkDy + checkHeight));
         int extraRows = ExtraGameOptionRows(screen);
-        pitch = FitGameOptionPitch(pitch > 0f ? pitch : GameOptionPitch, firstY, below,
-            screen.Widget(GameOptionsAcceptKey), extraRows * GameOptionPlateBandHeight);
+        float plaqueDy = extraRows * GameOptionPlateBandHeight;
+        var accept = screen.Widget(GameOptionsAcceptKey);
+        pitch = pitch > 0f ? pitch : GameOptionPitch;
+        var lines = BandedGameOptionLines(
+            firstY, pitch, BandInset(screen, firstY), checkHeight, GameOptionAuthoredRows + extraRows);
+        if (lines == null || !LinesClearThePlaques(lines, below, accept, plaqueDy))
+        {
+            lines = TightGameOptionLines(firstY, FitGameOptionPitch(pitch, firstY, below, accept, plaqueDy));
+        }
+
         return new GameOptionsPage(
             titleX,
             first?.Int("Width", (int)GameOptionTitleWidth) ?? GameOptionTitleWidth,
             third?.Int("Width", (int)GameOptionCheckTitleWidth) ?? GameOptionCheckTitleWidth,
             firstY,
-            pitch,
+            lines,
             drop?.Int("X", (int)GameOptionDropX) ?? GameOptionDropX,
             dropDy,
             drop?.Int("Width", (int)GameOptionDropWidth) ?? GameOptionDropWidth,
@@ -1349,12 +1361,104 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
             extraRows);
     }
 
+    // Where each row's own line falls on the plate, or null where the rows do not fit its bands. A
+    // dropdown takes a band to itself, its open list standing under the box. The checkbox rows take
+    // the bands left over, paired from the top of their run where there are more of them than
+    // bands, so the bottom band keeps one row and its description stays clear of the plaques under
+    // it. A pair's upper row stands at its band's own top (inset above the authored line) and the
+    // lower one a checkbox below, which is the only way two boxes fit a band drawn for one.
+    private static float[]? BandedGameOptionLines(
+        float firstY, float pitch, float inset, float checkHeight, int bands)
+    {
+        int drops = 0;
+        foreach (var option in GameOptions)
+        {
+            drops += option.Kind == OriginalRowKind.Dropdown ? 1 : 0;
+        }
+
+        int spare = bands - drops;
+        if (spare < 1 || GameOptions.Length - drops > 2 * spare)
+        {
+            return null;
+        }
+
+        var lines = new float[GameOptions.Length];
+        int pairs = Math.Max(0, GameOptions.Length - drops - spare);
+        int band = -1;
+        int held = 0;
+        int allow = 0;
+        for (int i = 0; i < GameOptions.Length; i++)
+        {
+            bool drop = GameOptions[i].Kind == OriginalRowKind.Dropdown;
+            if (drop || held >= allow)
+            {
+                band++;
+                held = 0;
+                allow = !drop && pairs > 0 ? 2 : 1;
+                pairs -= allow == 2 ? 1 : 0;
+            }
+
+            if (band >= bands)
+            {
+                return null;
+            }
+
+            float line = firstY + (band * pitch);
+            lines[i] = allow == 1 ? line : line - inset + (held * checkHeight);
+            held++;
+        }
+
+        return lines;
+    }
+
+    // The first authored row's own inset from the top of its band, measured off the plate: the head
+    // crop ends one band below that band's own top, so the band opens at the plate's corner plus the
+    // difference. Clamped at zero, a layout standing its first row above its own plate stating
+    // nothing about where a band opens.
+    private static float BandInset(MenuLayoutScreen screen, float firstY) =>
+        screen.Widget("GO_BACKGROUND") is { } plate
+            ? Math.Max(0f, firstY - plate.Int("Y") - (GameOptionPlateBandY - GameOptionPlateBandHeight))
+            : GameOptionBandInset;
+
+    // The rows one under another at a single pitch, the placement a page falls back to when its rows
+    // outrun the plate's bands.
+    private static float[] TightGameOptionLines(float firstY, float pitch)
+    {
+        var lines = new float[GameOptions.Length];
+        for (int i = 0; i < lines.Length; i++)
+        {
+            lines[i] = firstY + (i * pitch);
+        }
+
+        return lines;
+    }
+
+    // Whether every row's reach stops above the moved plaque line. ⚠ Never draw a row over the
+    // button: the press regions would overlap and one pointer press would land on two rows.
+    private static bool LinesClearThePlaques(float[] lines, float below, MenuLayoutWidget? accept, float plaqueDy)
+    {
+        if (accept == null)
+        {
+            return true;
+        }
+
+        float limit = accept.Int("Y") + plaqueDy;
+        foreach (float line in lines)
+        {
+            if (line + below > limit)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     // The authored section carries three rows and this page holds more. The plate grows a whole band
     // per extra row and takes the plaques down with it, so the authored pitch stands for as many
     // rows as the canvas holds bands; past that the rows tighten into the space between the first
     // line and the moved button (below is how far a row reaches under its own line, plaqueDy how far
-    // the growth took the button down). ⚠ Never draw a row over the button: the press regions would
-    // overlap and one pointer press would land on two rows.
+    // the growth took the button down).
     private static float FitGameOptionPitch(
         float authored, float firstY, float below, MenuLayoutWidget? accept, float plaqueDy)
     {
@@ -1518,7 +1622,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
             lines.Add(new BoardLine(option.Title, page.TitleX, page.RowY(i), page.TitleWidthFor(option.Kind),
                 GameOptionTitleFont, BoardInk.Row, -1, false,
                 option.Kind == OriginalRowKind.Radio ? BoardJustify.Center : BoardJustify.Left));
-            lines.Add(new BoardLine(option.Description(this), page.DescX, page.RowY(i) + page.DescDy, page.DescWidth,
+            lines.Add(new BoardLine(option.Description(this), page.DescX, page.DescY(i), page.DescWidth,
                 GameOptionDescFont, BoardInk.Row));
         }
 
@@ -2774,10 +2878,10 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         Func<OriginalOptionsScreen, int> Read, Action<OriginalOptionsScreen, int> Write);
 
     // The Game Options page's row shape in authored pixels, every number off the section's own
-    // widgets: the title column, the first row's line and the pitch between rows, the dropdown box,
+    // widgets: the title column, the first row's line and every row's own line, the dropdown box,
     // the checkbox's offset from its row, the description column, and the two controls' strips.
     private sealed record GameOptionsPage(
-        float TitleX, float TitleWidth, float CheckTitleWidth, float FirstY, float Pitch,
+        float TitleX, float TitleWidth, float CheckTitleWidth, float FirstY, IReadOnlyList<float> Lines,
         float DropX, float DropDy, float DropWidth, float ItemHeight,
         float CheckDx, float CheckDy, float DescX, float DescDy, float DescWidth,
         BoardArt? Arrow, BoardArt? Box, int ExtraRows)
@@ -2786,7 +2890,20 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         // bottom band down from their authored line.
         public float PlaqueDy => ExtraRows * GameOptionPlateBandHeight;
 
-        public float RowY(int row) => FirstY + (row * Pitch);
+        public float RowY(int row) => Lines[Math.Clamp(row, 0, Lines.Count - 1)];
+
+        // Where a row's description stands in the column beside it. That column is one window rather
+        // than a row of panels, so the paragraphs are spread evenly from the first row's own line to
+        // the last row's instead of crowding where two rows share a band; each still stands beside
+        // its own control. With every row on a band of its own this is the authored offset again.
+        public float DescY(int row)
+        {
+            float first = RowY(0) + DescDy;
+            float last = RowY(Lines.Count - 1) + DescDy;
+            return Lines.Count < 2
+                ? first
+                : MathF.Floor(first + ((last - first) * Math.Clamp(row, 0, Lines.Count - 1) / (Lines.Count - 1)));
+        }
 
         // A checkbox row takes the head-turn row's own narrower title box, which is what leaves the
         // box beside it clear of the words; a dropdown row takes the wide one.

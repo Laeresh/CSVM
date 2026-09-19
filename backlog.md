@@ -1003,18 +1003,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   cause fixed where it is. *Cross-refs:* `docs/formats/hud.md` (the cockpit instruments),
   `BL-1004`.
 
-- `BL-1006` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **The Original Game
-  Options page's respaced rows sit wrong on the plate: Default View outside its square, Auto Head
-  Turn and Next Target in separate squares, Rumble's plaque over its text.** *Evidence:* after the
-  presentation row went (`git log --grep=BL-954`) `FitGameOptionPitch` tightened the five rows on
-  the grown plate; judged at the controls: "Move default view inside the background square. Move
-  Auto Head Turn and Next Target inside one square if possible. Move Rumble a bit up so that the
-  text on the right is not behind the buttons". *Fix shape:* per-row placement against the plate's
-  bands in `OriginalOptionsScreen` (the authored three rows, then the two added ones inside the
-  bands the grown plate has), a crop of the page before and after for the look. *⚠ Traps:* the
-  plate's growth is capped by the canvas under its corner (`ExtraGameOptionRows`), so a row that
-  will not fit tightens rather than grows the plate again. *Cross-refs:* `git log --grep=BL-954`,
-  `git log --grep=BL-976` (the two rows that are live now).
 
 ## Splitscreen
 

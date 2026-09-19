@@ -695,9 +695,9 @@ public class OriginalOptionsTests
         host.Module.OpenGameOptions();
 
         // Row one's dropdown box at the authored Difficulty dropdown's corner and width, the Default
-        // View row's one row down at the pitch, then the two decoded plaques.
+        // View row's one whole band down, then the two decoded plaques.
         Assert.Equal((135f, 295f, 144f, 17f), Rect(Row(host, OriginalOptionsScreen.DifficultyKey)));
-        Assert.Equal((135f, 350f, 144f, 17f), Rect(Row(host, OriginalOptionsScreen.DefaultViewKey)));
+        Assert.Equal((135f, 355f, 144f, 17f), Rect(Row(host, OriginalOptionsScreen.DefaultViewKey)));
         // The exit pair side by side on one line, ACCEPT left of CANCEL, which is the arrangement
         // this section authors and the film shows; the VIDEO page's own section stacks them instead.
         // Both stand one whole band below their authored 470, the band the plate grew by.
@@ -717,20 +717,25 @@ public class OriginalOptionsTests
         Assert.Contains(board.Lines, l => l.Text == "GAME OPTIONS" && l.X == 120f && l.Justify == BoardJustify.Center);
         Assert.Contains(board.Lines, l => l.Text == "Difficulty" && l.X == 130f && l.Y == 280f && l.Width == 170f);
         Assert.Contains(board.Lines, l => l.Text == "Select the difficulty level for a solo campaign." && l.X == 340f && l.Y == 290f && l.Width == 310f);
-        // Five rows over a three-row section, so the plate grows and the rows tighten the pitch from
-        // the authored 60 to the 55 that keeps the last row clear of the moved ACCEPT CHANGES.
-        Assert.Contains(board.Lines, l => l.Text == "Default View" && l.X == 130f && l.Y == 335f && l.Width == 170f);
-        Assert.Contains(board.Lines, l => l.Text == "Select your default view." && l.X == 340f && l.Y == 345f && l.Width == 310f);
-        // The checkbox rows take the narrower title box the authored head-turn row carries, which
-        // is what leaves the box beside the words clear of them.
-        Assert.Contains(board.Lines, l => l.Text == "Auto Head Turn" && l.X == 130f && l.Y == 390f && l.Width == 112f);
+        // Five rows over a three-row section, so the plate grows one band and each row stands on a
+        // band of its own bar the two checkboxes sharing the third. The descriptions are spread
+        // evenly down their own window, so this one stands above its row rather than under it.
+        Assert.Contains(board.Lines, l => l.Text == "Default View" && l.X == 130f && l.Y == 340f && l.Width == 170f);
+        Assert.Contains(board.Lines, l => l.Text == "Select your default view." && l.X == 340f && l.Y == 335f && l.Width == 310f);
+        // A checkbox row takes the narrower title box the authored head-turn row carries. The pair
+        // opens at its band's own top, the first row's 26-pixel inset above the authored line, and
+        // steps by one 16-pixel checkbox, which is what fits two into a band painted for one.
+        Assert.Contains(board.Lines, l => l.Text == "Auto Head Turn" && l.X == 130f && l.Y == 374f && l.Width == 112f);
         // No row offers the menu presentation: the command line alone chooses it.
         Assert.DoesNotContain(board.Lines, l => l.Text is "Menu" or "Select the menu presentation.");
-        Assert.Contains(board.Lines, l => l.Text == "Next Target" && l.X == 130f && l.Y == 445f && l.Width == 112f);
+        Assert.Contains(board.Lines, l => l.Text == "Next Target" && l.X == 130f && l.Y == 390f && l.Width == 112f);
         Assert.Contains(board.Lines,
             l => l.Text == "Take the nearest target after a kill instead of the first of the list."
-                && l.X == 340f && l.Y == 455f && l.Width == 310f);
-        Assert.Contains(board.Lines, l => l.Text == "Rumble" && l.X == 130f && l.Y == 500f && l.Width == 112f);
+                && l.X == 340f && l.Y == 425f && l.Width == 310f);
+        // The bottom band keeps one row, so Rumble's own description clears the moved plaques.
+        Assert.Contains(board.Lines, l => l.Text == "Rumble" && l.X == 130f && l.Y == 460f && l.Width == 112f);
+        Assert.Contains(board.Lines,
+            l => l.Text.StartsWith("Rumble the gamepad", StringComparison.Ordinal) && l.Y == 470f);
         // Five titles, five descriptions and the page's own tab title.
         Assert.Equal(11, board.Lines.Count(l => l.Row < 0));
 
@@ -741,7 +746,7 @@ public class OriginalOptionsTests
             board.Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));
         Down(host);
         Assert.Equal(
-            new[] { (135f, 350f, 144f, 17f) },
+            new[] { (135f, 355f, 144f, 17f) },
             Compose(host).Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));
     }
 
