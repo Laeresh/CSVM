@@ -830,6 +830,32 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Cross-refs:* the numpad views' three level keys (`Kp2`/`Kp4`/`Kp6`), which sit at this same
   base elevation (`git log --grep=BL-150`), `docs/formats/camparam.md` (`thirdp_pitch`, and the Known limits paragraph this corrects),
   `docs/org/cameraViews.md` (head-look controller, the chase placement's own elevation).
+- `BL-1023` `[Feature]` `[S]` `[Next: decide]` `[Impact: low]` `[Evidence: trace]` **In smooth look
+  mode (`J`) a released right stick leaves the view where it was aimed, in the chase view and in
+  first person alike, the way a released numpad direction or mouse pan already does.** Today the
+  stick is absolute in every look mode: stick position is view position and centring the stick
+  returns the view to its settled pose (`docs/controls.md`, the right-stick row). The `J` row lists
+  only the numpad and the mouse as the inputs whose released position persists, so a pad player
+  has no way to park the view off centre. *Evidence:* `CameraController.PadLook`
+  (`CSVM/src/Flight/CameraController.cs:316`) is the chase view's own rigid path, fed from
+  `FlightController`'s `_chaseLook` filter (`FlightController.cs:2268`), and `Chase` resumes the
+  instant the filter reads released, whatever `HeadLook.Mode` is. In first person `HeadLook`'s
+  smooth-mode branch (`CSVM/src/Flight/HeadLook.cs:301`) assigns the head target from the
+  filtered stick and runs nothing once the stick is back inside `PadAimCentreBand`, so the head
+  target stays near the stick's last filtered position there; whether that reads as parked or as
+  a stick that never quite centres is unjudged at the controls. *Fix shape:* one rule for both
+  views: in `LookMode.FreeLook` the stick's last aim is held on release (the chase path keeps the
+  last `PadLook` angle pair rather than resuming `Chase`), and in snap mode both views return as
+  they do now. A user decision first, since the absolute stick is a UX call of this port with no
+  original to match, and a persistent stick changes how `K` and the centre key read on a pad.
+  *⚠ Traps:* the persistence must take the stick's aim at the moment it crossed into the centre
+  band, not the filter's lagged value after it, or the parked view drifts a little toward centre
+  on every release; do not add a second mode key for the pad, `J` and `K` are the original's two
+  and the pad shares them. *Playtest after fix:* `.\RunGame.ps1`, press `J`, push the right stick
+  half over in chase then in Cockpit and let go: the view stays; press `K` and repeat: it returns.
+  *Cross-refs:* `PT-120` (g) (the look stick's steadiness, judged in snap mode only),
+  `docs/controls.md` (the `J`, `K` and right-stick rows), `docs/org/cameraViews.md` (head-look
+  controller).
 
 ## HUD & UI
 
