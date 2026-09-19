@@ -688,8 +688,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `git log --grep=BL-977` (the Instant Action prewarm gap),
   the saved Voice level (`Utils/AudioMix.cs`, the `audio-buses` suite) if the lines dispatch and
   stay inaudible; `BL-986` (the spawn-time commit is muted and never re-arms, the largest single
-  cause of the low rate), `BL-987` to `BL-992` (the unwired trigger ids),
-  `BL-994`/`BL-995` (Instant Action pilots with no voice).
+  cause of the low rate), `BL-987` to `BL-992` (the unwired trigger ids).
 
 - `BL-986` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: trace]` **An ace commits to
   the player on the first frame, inside the 2 s mute window, so `WA-Attack` and the bearing
@@ -753,28 +752,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Fix shape:* cross-reference the slot-16 read in `crimson.exe` (`vehicle + 0x730 + 12 * 16`);
   a hit names the site, no hit closes the id as unused and the table row says so.
 
-- `BL-994` `[Research]` `[S]` `[Next: decode]` `[Impact: high]` `[Evidence: data]` **Every
-  Instant Action wave enemy is voiceless (`accentID` -1); decide whether the original's setup
-  screen gives a militia's wave an accent.** *Evidence:* a C4 dogfight_squadron round logs
-  `ai3..ai8: accent -1 resolves to no voiced pilot, silent`, so no enemy line can play in that
-  mode. The shipped `ia.zrd` authors no `enemy_accentID` and `Mech3/InstantAction.cs` falls back
-  to -1 (`docs/formats/instant-action.md`, "parsed but authored by no chapter"). The retail
-  screen's writes into the record are decoded for the militia (`ia_d_egroupN`), the plane and the
-  skill, not for an accent. *Fix shape:* decode whether the militia pick, or the wave build,
-  writes `enemy_accentID`; if it does, add the militia→accent mapping to the wizard and the
-  prewarm set already takes the 12 to 16 range. If it does not, the original's squadrons are
-  silent too and the item closes as data. *Cross-refs:* `git log --grep=BL-977` (named this as a
-  limit), `BL-995`.
-
-- `BL-995` `[Bug]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: data]` **A second Instant
-  Action wingman on slot accent 14 resolves to no voiced pilot and flies silent.** *Evidence:*
-  `ai2_player_peacemaker: accent 14 resolves to no voiced pilot, silent` in a C4 squadron round;
-  the first wingman on accent 12 resolves to VO id 2 and speaks. `InstantActionRuntime` assigns
-  the wingman slots 12, 14, 15, 13, 16 in order. *Fix shape:* read `zrdr/voice.zrd` row 14 and
-  the pilot pool it names against the clip survey; either the row is empty in data (then the
-  original's second wingman is silent too, close as data) or the pool names pilot ids the
-  resolver drops. *Cross-refs:* `BL-994`, `docs/formats/combat-voice.md` ("Where a pilot's voice
-  comes from").
 
 ## Cameras & views
 

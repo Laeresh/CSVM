@@ -137,6 +137,9 @@ The extraction shows:
   and Utah Blacke (30), across seven missions. Two further ace blocks author no accent at all. A
   named ace's combat chatter therefore cannot be assumed to exist; where an ace speaks in the
   original it is usually the mission's own dialogue chain, which is a different system (below).
+  Instant Action pays the same price on its **second wingman**, whose slot accent 14 is one of the
+  seven dead single-id rows ([instant-action.md](instant-action.md), "The player and the
+  wingmen"); its other four slots and all thirteen militia wave accents reach live ids.
 
 **Runtime (`CSVM/src/Mech3/CombatVoice.cs`).** The chain above is a queryable service:
 `accentID` → pool → `PilotFor` (random pick, clipless ids skipped) → `PlayableFor(voId, family)`,

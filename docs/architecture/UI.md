@@ -1191,12 +1191,12 @@ an accepted rebind is felt at once. Read `src/UI/Menu/ControlsFeature.cs` for th
 ## src/UI/Menu/InstantActionFeature.cs
 Instant Action as a shared `IMenuFeature`, owned by the host's feature set and configured by both
 presentations. The option sets are static and decoded: the environments, the mission types with
-the bans a chapter and stunt flying impose, the eleven airframes, the militias with the aircraft
-each allows, the skills and the preset table. The setup is typed state with semantic operations:
-select and confirm an environment (which re-fits the mission type and loads the chapter's own base
-def), the mission type, the lives, the four waves, the wingmen and both plane picks, and apply a
-preset. `Refusal`/`CanLaunch`, `BuildDef` and `BuildExit` are the gate and the launch, `Discard`
-resets every field, and the decode is [../formats/instant-action.md](../formats/instant-action.md).
+the bans a chapter and stunt flying impose, the eleven airframes, the militias with their
+aircraft and wave accent, the skills and the preset table. The setup is typed state with semantic
+operations: select and confirm an environment (which re-fits the mission type and loads the
+chapter's own base def), the mission type, the lives, the four waves, the wingmen, both plane
+picks and a preset. `Refusal`/`CanLaunch`, `BuildDef` and `BuildExit` are the gate and the launch.
+`Discard` resets every field. Decode: [../formats/instant-action.md](../formats/instant-action.md).
 
 ## src/UI/MovieSurface.cs
 A movie as something a composition can draw: a `CSVM.Video.MoviePlayback` and the `ImageTexture`

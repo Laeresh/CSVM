@@ -16,8 +16,11 @@ public readonly record struct InstantActionMissionType(string Label, string Key)
 /// <summary>One stock airframe: its display name and the planes.zbd node the launch builds.</summary>
 public readonly record struct InstantActionAirframe(string Name, string Node);
 
-/// <summary>One militia and the aircraft it flies, in the airframe dropdown's order.</summary>
-public readonly record struct InstantActionMilitia(string Name, IReadOnlyList<string> Aircraft);
+/// <summary>One militia, the aircraft it flies in the airframe dropdown's order, and the accent
+/// id its wave speaks with. The militia is the only thing that gives a wave a voice: the setup
+/// screen writes the accent beside the livery, so picking a militia picks the pilots
+/// (docs/formats/instant-action.md, "A militia also picks the wave's voice").</summary>
+public readonly record struct InstantActionMilitia(string Name, IReadOnlyList<string> Aircraft, int AccentId);
 
 /// <summary>One wave as the setup holds it: how many enemies (0 is unconfigured), and the
 /// militia, aircraft and skill cursors. The aircraft index is into the militia's own list.</summary>
@@ -102,21 +105,23 @@ public sealed class InstantActionFeature : IMenuFeature
 
     // The thirteen militias in the langui 3670 order, each with the aircraft FUN_00410420's mask
     // allows it, in the airframe order above; the mask filters the dropdown, never reorders it.
+    // The accent is the same switch's own write, one per militia; Fortune Hunter's 12 is the
+    // wingman range's base and is re-rolled to 12..16 per aircraft at spawn.
     private static readonly InstantActionMilitia[] MilitiaRows =
     {
-        new("Black Hat", new[] { "Autogyro", "Brigand", "Warhawk" }),
-        new("Black Swan", new[] { "Fury" }),
-        new("Blake Aviation", new[] { "Bloodhawk", "Peacemaker" }),
-        new("British", new[] { "Balmoral", "Peacemaker" }),
-        new("Fortune Hunter", AirframeNames),
-        new("Hollywood Knight", new[] { "Firebrand" }),
-        new("Hughes Aviation", new[] { "Bloodhawk", "Fury", "Kestrel" }),
-        new("Medusa", new[] { "Brigand", "Kestrel" }),
-        new("Russian", new[] { "Devastator" }),
-        new("Sacred Trust", new[] { "Hellhound", "Warhawk" }),
-        new("German", new[] { "Hellhound" }),
-        new("Studio Security", new[] { "Autogyro", "Fury" }),
-        new("Broadway Bomber", new[] { "Peacemaker" }),
+        new("Black Hat", new[] { "Autogyro", "Brigand", "Warhawk" }, 0),
+        new("Black Swan", new[] { "Fury" }, 1),
+        new("Blake Aviation", new[] { "Bloodhawk", "Peacemaker" }, 2),
+        new("British", new[] { "Balmoral", "Peacemaker" }, 3),
+        new("Fortune Hunter", AirframeNames, 12),
+        new("Hollywood Knight", new[] { "Firebrand" }, 7),
+        new("Hughes Aviation", new[] { "Bloodhawk", "Fury", "Kestrel" }, 10),
+        new("Medusa", new[] { "Brigand", "Kestrel" }, 8),
+        new("Russian", new[] { "Devastator" }, 5),
+        new("Sacred Trust", new[] { "Hellhound", "Warhawk" }, 9),
+        new("German", new[] { "Hellhound" }, 6),
+        new("Studio Security", new[] { "Autogyro", "Fury" }, 10),
+        new("Broadway Bomber", new[] { "Peacemaker" }, 4),
     };
 
     private static readonly string[] SkillRows = { "novice", "veteran", "ace" };
@@ -263,7 +268,9 @@ public sealed class InstantActionFeature : IMenuFeature
     /// <summary>One wave slot as the <see cref="InstantActionWave"/> the def stores: the empty
     /// wave at 0 enemies whatever the cursors, so an unconfigured slot matches an omitted
     /// <c>groupN</c> byte for byte; else the militia's aircraft at the skill, with a plain label
-    /// for the name and no accent.</summary>
+    /// for the name and the militia's own accent.
+    /// ⚠ Keep the accent on the configured wave alone. A slot at 0 enemies must stay byte-equal to
+    /// the empty wave, whose accent is the record reset's -1.</summary>
     public static InstantActionWave WaveFor(int count, int militiaIndex, int aircraftIndex, int skillIndex)
     {
         if (count <= 0)
@@ -273,7 +280,8 @@ public sealed class InstantActionFeature : IMenuFeature
 
         var militia = MilitiaRows[militiaIndex];
         string aircraft = militia.Aircraft[aircraftIndex];
-        return new InstantActionWave(count, $"{militia.Name} {aircraft}", aircraft, SkillRows[skillIndex], -1);
+        return new InstantActionWave(
+            count, $"{militia.Name} {aircraft}", aircraft, SkillRows[skillIndex], militia.AccentId);
     }
 
     /// <summary>Picks an environment row. The mission type is not re-fitted until

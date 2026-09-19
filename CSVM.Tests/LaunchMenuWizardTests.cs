@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using CSVM.Flight;
 using CSVM.Mech3;
 using Xunit;
@@ -81,8 +82,18 @@ public class LaunchMenuWizardTests
         Assert.Equal("Autogyro", wave.EnemyPlane); // Black Hat's first aircraft in the 3700 order
         Assert.Equal("ace", wave.EnemySkill);
         Assert.Equal("Black Hat Autogyro", wave.EnemyName);
-        Assert.Equal(-1, wave.EnemyAccentId);
+        Assert.Equal(0, wave.EnemyAccentId); // Black Hat's own accent, the militia switch's write
     }
+
+    /// <summary>The thirteen militia accent ids the setup screen writes into a wave's record, in
+    /// the same langui 3670 order (docs/formats/instant-action.md, "A militia also picks the
+    /// wave's voice"). Fortune Hunter's 12 is the wingman range's base, re-rolled per aircraft at
+    /// spawn; a wave's voice is otherwise fixed by its militia alone.</summary>
+    [Fact]
+    public void EachMilitiaCarriesItsDecodedWaveAccent() =>
+        Assert.Equal(
+            new[] { 0, 1, 2, 3, 12, 7, 10, 8, 5, 9, 6, 10, 4 },
+            UI.Menu.InstantActionFeature.Militias.Select(m => m.AccentId));
 
     [Fact]
     public void WaveForAnUnconfiguredSlotIsTheEmptyWaveWhateverTheCursorsAre()

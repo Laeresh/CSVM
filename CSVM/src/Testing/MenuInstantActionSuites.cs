@@ -407,9 +407,10 @@ internal static class MenuInstantActionSuites
         ctx.Check(def.WingmanLoadout == null, $"with the stock fit");
         ctx.Check(def.Lives == 1, $"one life ({def.Lives})");
         ctx.Check(def.Waves.Count == 4, $"four wave slots ({def.Waves.Count})");
-        ctx.Check(def.Waves[0] == new InstantActionWave(5, "Russian Devastator", "Devastator", "ace", -1),
+        // The trailing id is the militia's own wave accent, Russian's and Black Swan's.
+        ctx.Check(def.Waves[0] == new InstantActionWave(5, "Russian Devastator", "Devastator", "ace", 5),
             $"the first wave as edited ({def.Waves[0]})");
-        ctx.Check(def.Waves[1] == new InstantActionWave(2, "Black Swan Fury", "Fury", "ace", -1),
+        ctx.Check(def.Waves[1] == new InstantActionWave(2, "Black Swan Fury", "Fury", "ace", 1),
             $"the second as the preset had it ({def.Waves[1]})");
         ctx.Check(def.Waves[2] == InstantAction.EmptyWave && def.Waves[3] == InstantAction.EmptyWave,
             $"the two unused slots as the empty wave");

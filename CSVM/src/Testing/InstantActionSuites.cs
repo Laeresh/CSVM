@@ -299,7 +299,9 @@ internal static class InstantActionSuites
         + "join leaves a streamed DE clip for the ace's pilot and a speaker registered on that "
         + "pilot resolves its forced death cry through the voice runtime after the loader is "
         + "retired; the join also carries each configured wingman slot's accent and a wave "
-        + "enemy_accentID of 12's whole 12 to 16 re-roll, and nothing for an empty wave")]
+        + "enemy_accentID of 12's whole 12 to 16 re-roll, and nothing for an empty wave; and the "
+        + "shipped accent table answers for every militia's wave accent, while among the five "
+        + "wingman slots only 14 reaches no voiced pilot, its row naming the clipless pilot id 5")]
     internal static void InstantActionVoice(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -342,6 +344,22 @@ internal static class InstantActionSuites
         }
         var deClips = voice.ClipsFor(vo, "DE");
         ctx.Check(deClips.Count > 0, $"the ace's VO id {vo} owns DE clips: {deClips.Count}");
+
+        // Every accent the wizard's own actors can reach, against the shipped accent table. The
+        // thirteen militia accents all speak; among the five wingman slots only 14 does not, its
+        // row being the single pilot id the install ships no clip for.
+        var mute = UI.Menu.InstantActionFeature.Militias
+            .Where(m => voice.PilotFor(m.AccentId, new System.Random(1)) == null)
+            .Select(m => m.Name).ToList();
+        ctx.Check(mute.Count == 0,
+            $"every militia's wave accent reaches a voiced pilot; silent: [{string.Join(",", mute)}]");
+        var silentSlots = Enumerable.Range(0, 5)
+            .Select(i => InstantActionRuntime.WingmanSlotFor(i).AccentId)
+            .Where(a => voice.PilotFor(a, new System.Random(1)) == null).ToList();
+        ctx.Check(silentSlots.SequenceEqual(new[] { 14 }),
+            $"wingman slot accent 14 alone reaches no voiced pilot: [{string.Join(",", silentSlots)}]");
+        ctx.Check(voice.Pool(14).SequenceEqual(new[] { 5 }) && voice.ClipsFor(5, "DA").Count == 0,
+            $"accent 14 is the single pilot id 5, which owns no clip def: [{string.Join(",", voice.Pool(14))}]");
 
         var rosterOnly = CombatVoice.SessionPrewarmNames(ctx.ZrdrPath, missionZrdr, defs, groups);
         ctx.Check(!deClips.Any(rosterOnly.Contains),

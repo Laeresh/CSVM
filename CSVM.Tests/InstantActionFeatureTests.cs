@@ -232,8 +232,9 @@ public class InstantActionFeatureTests
         Assert.Equal("Fury", def.PlayerPlane);
         Assert.Equal(2, def.NumWingmen);
         Assert.Equal("Peacemaker", def.WingmanPlane);
-        Assert.Equal(new InstantActionWave(5, "Medusa Kestrel", "Kestrel", "veteran", -1), def.Waves[0]);
-        Assert.Equal(new InstantActionWave(2, "Black Swan Fury", "Fury", "ace", -1), def.Waves[1]);
+        // The trailing id is the militia's own wave accent, Medusa's and Black Swan's.
+        Assert.Equal(new InstantActionWave(5, "Medusa Kestrel", "Kestrel", "veteran", 8), def.Waves[0]);
+        Assert.Equal(new InstantActionWave(2, "Black Swan Fury", "Fury", "ace", 1), def.Waves[1]);
         Assert.Equal(InstantAction.EmptyWave, def.Waves[2]);
         Assert.Equal(2, def.Lives);
         Assert.Null(def.WingmanLoadout);

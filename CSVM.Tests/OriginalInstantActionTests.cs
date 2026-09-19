@@ -479,7 +479,8 @@ public class OriginalInstantActionTests
         Assert.Equal("stunt_flying", def.MissionType);
         Assert.Equal("Bloodhawk", def.PlayerPlane);
         Assert.Equal(0, def.NumWingmen);
-        Assert.Equal(new InstantActionWave(4, "Blake Aviation Bloodhawk", "Bloodhawk", "veteran", -1), def.Waves[0]);
+        // 2 is Blake Aviation's own wave accent, which the militia pick carries.
+        Assert.Equal(new InstantActionWave(4, "Blake Aviation Bloodhawk", "Bloodhawk", "veteran", 2), def.Waves[0]);
         Assert.Equal("Test Ace", def.AceName);
 
         // With a second pilot aboard the launch is the shell's per-seat walk, not the module's own

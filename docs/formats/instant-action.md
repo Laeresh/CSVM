@@ -240,6 +240,38 @@ aircraft inside its own militia's set.
 | Studio Security | `studio` | Fury, Autogyro |
 | Broadway Bomber | `BROADWAY` | Peacemaker |
 
+### A militia also picks the wave's voice
+
+⚠ **The militia is the only thing that gives an Instant Action wave a voice.** The same switch that
+writes a wave's pattern, three decals and nine colour components writes that wave's
+`enemy_accentID` beside them, one literal per militia, at wave record dword 6
+(`0x00718dc4 + wave·0x60`). The thirteen writes are `0x00417ead`, `0x00417fe1`, `0x00418112`,
+`0x00418249`, `0x00418367`, `0x0041847c`, `0x004185b6`, `0x004186c8`, `0x004187fb`, `0x00418926`,
+`0x00418a51`, `0x00418b84` and `0x00418c14`, in militia order:
+
+| Militia | Pattern | `enemy_accentID` |
+|---|---|---|
+| Black Hat | `blackhat` | 0 |
+| Black Swan | `blckswan` | 1 |
+| Blake Aviation | `blake` | 2 |
+| British | `british` | 3 |
+| Fortune Hunter | `fortune` | 12 |
+| Hollywood Knight | `hollywd` | 7 |
+| Hughes Aviation | `hughes` | 10 |
+| Medusa | `medusas` | 8 |
+| Russian | `cccp` | 5 |
+| Sacred Trust | `sactrust` | 9 |
+| German | `german` | 6 |
+| Studio Security | `studio` | 10 |
+| Broadway Bomber | `broadway` | 4 |
+
+Two militias share accent 10, and Fortune Hunter's 12 is the wingman range's own base, so a wave
+flying the player's militia speaks with the wingmen's voices, re-rolled to 12 to 16 per aircraft at
+spawn (see "The ace and the waves"). Every one of these ids is a row in `voice.zrd`'s multi-id
+range 0 to 10, so all thirteen reach a pilot who owns clips
+([combat-voice.md](combat-voice.md)). A wave whose enemy count is 0 is skipped before the switch
+runs, so its accent stays at the record reset's -1.
+
 `ITSTAXI` is a fourteenth pattern folder and covers the Autogyro, but no militia string names it,
 so it is not an Instant Action militia. `BROADWAY` and `ITSTAXI` ship no `paint_pattern` in
 `vehicle.json` and therefore have no canonical colours; `PatternLibrary` already offers them with
@@ -272,6 +304,21 @@ fills the per-mission-type spawn table, then calls the key parser `FUN_00459390`
 record) and the mission is built by `FUN_0045a390`. The setup record is the global at
 **`0x00718cd8`**; the per-mission-type table is `0x00718fe0`, five entries of 20 bytes, holding an
 availability flag `disallow_missions` clears and that scenario's spawn-point vector.
+
+### The setup screen is written over the file, every time
+
+⚠ **The key parser's last act is to copy the setup screen over the record it has just filled.**
+`FUN_00459390` ends with an unconditional call to `FUN_004175f0` at `0x00459e0c`, which reads the
+screen's own live setup struct at `0x0064ab5c` (the same struct a Table of Contents preset is
+copied into) and writes: the mission type, the player and wingman aircraft, the wingman count, the
+player's three decals and three packed colours, and then per wave the enemy count
+(`0x0064abac[wave]`), the aircraft (`0x0064abe4[wave]`), the skill (`0x0064abcc[wave]`), the
+enemy's display name, and everything the militia (`0x0064abbc[wave]`) decides. A wave whose count
+is 0 skips straight to the next, which is why a preset's unset-wave substitutions never reach a
+mission.
+
+So a shipped `ia.zrd` value is a *default*, not the launch: for every key the screen also writes,
+the file's value survives only on a path that never opens the screen.
 
 ### Mission types have internal ids, and they are not the dropdown order
 
@@ -384,6 +431,11 @@ Wingman `i` (0-based) is built as:
 | 3 | `<plane>` | `<plane>_ia3` | 13 | `player` | `0x32cc`, `MSG_BJOHN_NAME`, Big John |
 | 4 | `w<plane>` | `w<plane>_ia4` | 16 | `<plane>_ia3` | `0x32e4`, `MSG_BETTY_NAME`, Betty |
 
+⚠ **Slot 1's accent 14 is silent in the original too.** `voice.zrd` row 14 is the single pilot VO
+id 5, for which the install ships neither a clip def nor a WAV, so Tex has no combat line to say
+whatever the trigger ([combat-voice.md](combat-voice.md), "Where a pilot's voice comes from"). The
+other four slots reach ids 2, 6, 4 and 7, all of which own clips. This is data, not a resolver gap.
+
 The title is the block's `+0xc`, the name the target marker prints ([targeting.md](../org/targeting.md)):
 each switch case of the wingman loop resolves its hardcoded string id through `FUN_0059ce40`
 (`0x0045a502`, `0x0045a565`, `0x0045a5c8`, `0x0045a642`, `0x0045a6a2`) and `_strdup`s the text into
@@ -403,9 +455,10 @@ from the player's spawn at `±45°` off its heading, the sign being `+` when `i 
 `−` otherwise, at the player's altitude. The same 100 m / 45° fan the wave sequencer uses.
 
 Its livery is the **`fortune`** pattern with three decals from record dwords 6 to 8 and three RGB
-triples unpacked from packed dwords 9 to 11. The `ia.zrd` parser never writes those six, so they
-come from elsewhere in the UI; that they are the player's own livery is an inference from their
-position and from `fortune` being the player's own militia pattern, not something this path states.
+triples unpacked from packed dwords 9 to 11. The `ia.zrd` parser never writes those six; the
+screen overlay does, from `0x0064ac50`…`0x0064ac64`, which is offset `0x5c` onward inside the
+screen struct's own **player** plane record at `0x0064abf4`. So the wingmen wear the player's
+livery, which is what `fortune` being the player's militia pattern already suggested.
 
 ### The ace and the waves
 
@@ -745,9 +798,10 @@ built-in skill default of 1 (`veteran`) whatever the file says. Same class of fi
 [turrets.md](turrets.md)'s unread `HEALTH`.
 
 The reverse also holds. `wingman_plane`, `enemy_accentID`, `ground_target_name` and
-`ground_target_node` are parsed but authored by no chapter. In retail that mostly does not show,
-because the setup screen writes into the same record before the mission is built (`ia_d_planew` is
-the wingman aircraft, `ia_d_egroupN` the wave's militia livery, `ia_d_difficultyN` the wave skill).
+`ground_target_node` are parsed but authored by no chapter. In retail none of the first two shows,
+because the setup screen is written over the same record before the mission is built ("The setup
+screen is written over the file, every time"): `ia_d_planew` is the wingman aircraft, and
+`ia_d_egroupN` the wave's militia, which carries the livery **and the wave's `enemy_accentID`**.
 It shows on any path that skips the screen: then the wingmen fly the **Devastator**, every wave
 enemy has `accentID` -1 and skill `veteran`, and the wave livery is whatever the record last held.
 
