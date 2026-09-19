@@ -503,6 +503,46 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`CaptureDirector.cs:96`), so judge this at the controls or on an undithered capture.
   *Playtest after fix:* any chapter under Enhanced Graphics, still and moving, over water and over
   ground. *Cross-refs:* `docs/architecture/Utils.md` (`GraphicsMode`).
+- `BL-1027` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` `[C1]` **A far tree card
+  still paints over a ridge polygon and the trees ahead of it in C1, after BL-997's depth prepass.**
+  *Evidence:* at the controls on c24653b6 at `--pos="-1595.425,182.281,-4843.352"
+  --direction="-0.21242,0.01919,-0.97699"` (`Screenshots/crimsonskies_2026-09-19_23-41-17-262.png`,
+  local): "still the same". The user's read of the frame: of two ground polygons behind one tree
+  card, one shows darkened through the card and the other full bright, as if one variant blends and
+  the other scissors against different polygons behind the same sprite. BL-997 fixed card against
+  card (`depth_prepass_alpha` on the blended MultiMesh variant, `Clutter.cs` `ShaderCode`); the
+  blend-or-scissor verdict is per texture family (`TextureArchive.SoftAlphaTrees`), and
+  `SceneBuilder`'s world-surface blended variants still carry `depth_draw_never`, noted at BL-997's
+  landing. *Fix shape:* a `--freecam` capture at the pose with each variant isolated (scissor cards
+  off, then blended cards off, then the terrain's blended surfaces off) to name the pair that paints
+  wrong, then the same prepass or a sort key for that pair. *⚠ Traps:* BL-997's `clutter-card-depth`
+  suite measures card over card only, so it passes on this frame; do not re-tune the fade.
+  *Playtest after fix:* the same pose. *Cross-refs:* BL-997's record (`git log --grep=BL-997`).
+- `BL-1028` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` **Aircraft and
+  zeppelins beyond the cloud band stay visible from the other side of it.** *Evidence:* CM06
+  (`C1C/M01`) flown under the band, in both presentations: planes and zeppelins above the band are
+  drawn as if no band stood between. The user recalls the original hiding them until the climb into
+  the band. The port's whiteout is one pane-filling overlay per rig, its opacity driven by the
+  camera's own altitude alone (`WeatherRig.Tick`, `WeatherState.WhiteoutAmount`), so an object's
+  altitude relative to the band changes nothing about how it draws. *Fix shape:* decode what the
+  original does with an object on the far side of the `CLOUD_COVER` band (a per-object cull against
+  the band's altitudes, a fog term keyed on the object's height, or the band's own fog range), then
+  port it to the drawn aircraft, zeppelins and their effects; the overlay stays as it is. *⚠ Traps:*
+  the deck field (BL-325) is a separate mechanism and CM06 ships none, so this is the band alone;
+  `--no-fog` disables the overlay and must disable this too. *Playtest after fix:*
+  `--campaign=C1C:1`, hold under the band with a zeppelin above it, then climb through.
+  *Cross-refs:* `docs/formats/weather/atmosphere.md` (the band), BL-999's record (the whiteout
+  over the cockpit), `BL-380` (fog per rig).
+- `BL-1029` `[Bug]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: feel]` `[C5]` **A C5 building
+  shows a side wall from one side and none from the other.** *Evidence:*
+  `--pos="-9908.636,58.366,-3458.637" --direction="-0.99932,0.03675,-0.00233"`
+  (`Screenshots/crimsonskies_2026-09-19_23-49-33-491.png` and `-37-461.png`, local, the same
+  building from two sides): the face is there from one side and gone from the other, a culled or
+  reverse-wound face rather than a dropped mesh. *Fix shape:* `--freecam` at the pose, name the
+  mesh, check the face's winding and its material's cull mode against the archive's flags; if the
+  original draws it two-sided, that material takes `cull_disabled`. *⚠ Traps:* measure this one
+  building first; do not switch every building material to `cull_disabled`. *Playtest after fix:*
+  the same pose, both sides.
 
 ## Effects & animation runtime
 
@@ -851,6 +891,39 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   four modules duplicate them; a page module that reaches back into the form's fields for its
   layout is the form in another file. *Cross-refs:* `BL-1014`, `BL-1015`,
   `docs/menu-presentations.md`, `docs/architecture/UI.md`.
+- `BL-1030` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Game Options: Auto
+  Head Turn stands above its band, and the three checkbox labels are centred instead of
+  left-aligned.** *Evidence:* at the controls on 74d613e5 against
+  `.scratch\orch-9\BL-1006\side-by-side.png` (local): Default View is right; Auto Head Turn should
+  move down so its label stands inside the background square on the checkbox's own line; the Auto
+  Head Turn, Next Target and Rumble labels should be left-aligned like Difficulty and Default View.
+  `OriginalOptionsScreen.BandedGameOptionLines` lays the pair out (the upper at the band's top, the
+  lower a 29 px checkbox below, `GameOptionPlateBandHeight` 62). *Fix shape:* the label's y to its
+  checkbox's centre line, the label's x to the left inset the dropdown rows use; `menu-original-tracer`
+  asserts the banding, extend it with the alignment. *⚠ Traps:* the checkboxes touch the panel rims by
+  about 2 px, the art's limit, so the boxes stay and the labels move. *Cross-refs:* BL-1006's record
+  (`git log --grep=BL-1006`).
+- `BL-1031` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **INVENTORY: the plane
+  line sits low in its dashed box.** *Evidence:* at the controls on e20bb109: "better but move it up
+  so that it's centred on the box" (`.scratch\orch-9\BL-765\inventory-title-before-after.png`,
+  local). The line starts at the box's left edge now, its baseline sits on the box's bottom.
+  `OriginalHangarScreen` writes it through `InventoryLine` at `HA_T_PLANE` (138,108). *Fix shape:*
+  centre the line vertically on the dashed box (measure the box's rows in the art);
+  `menu-original-hangar` holds the check. *⚠ Traps:* no original still of the INVENTORY screen
+  exists, so the box, not a capture, is the reference. *Cross-refs:* BL-765's record
+  (`git log --grep=BL-765`).
+- `BL-1032` `[Cleanup]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **The Rocket
+  Craters row leaves the VIDEO page and the launcher; `options.json`'s `rocketCraters` and
+  `--craters` stay as the door.** *Evidence:* the user's call after BL-1009: the carve is not offered
+  in the menu, and stays testable by hand. Sites: `OriginalOptionsScreen.VideoOptions`'s
+  `RocketCratersKey` row (on `VP_B_CLUTTER`), `LaunchMenu`'s stepper (case 6, "Rocket craters:"),
+  and the walks in `MenuOriginalSuites` and `DisplaySettingsSuites`. `OptionsStore.RocketCraters` and
+  `CraterGate.Enabled`'s two sources stay. *Fix shape:* remove the two rows and their suite walks,
+  keep the store field, the flag and the crater suites; `docs/org/craters.md` names the json key as
+  the only door. *⚠ Traps:* not the carve path itself (`CraterGate`, `Projectile.Impact`) and not
+  the Faithful stamped-node path. Whether the 20 m, 3 m dish reads under the burst's smoke and
+  whether crashing planes should carve stay unjudged; the door is how to try it, and no playtest
+  row tracks it. *Cross-refs:* BL-1009's record (`git log --grep=BL-1009`).
 
 ## Splitscreen
 
@@ -922,6 +995,27 @@ usual.
   cross-pane body-hide visually at the controls with 2+ cockpit-view pilots in the same session.
   *Cross-refs:* `PLAN-cockpit-view` B11 ("Splitscreen posture"), `BL-389` (splitscreen weapon
   mix, same playtest family).
+- `BL-1034` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Local co-op: player
+  2's landing plays the docking with no visible hook.** *Evidence:* at the controls, P2 lands, the
+  docking animation completes, no hook shows on their aircraft; the user's read is that the hook
+  plays on P1's. `player_extend_hook` is one `test_player` sequence of eleven `IF NODE_ACTIVE[n]`
+  arms over the player airframe nodes (`docs/formats/cutscenes.md`): with two player nodes active
+  the sequence resolves an arm for one airframe, seat 0's. *Fix shape:* play the extend on the
+  landing pilot's own node (the runtime's lookup for that pilot's airframe rather than the
+  sequence's first active arm); `LandingApproachSuites` holds the one-play check, extend it with a
+  two-seat case. *⚠ Traps:* the `cg_hookup_player` CALLBACK fires once per landing and must stay
+  once. *Playtest after fix:* two pads, C1 M01 to the landing, P2 lands first. *Cross-refs:*
+  `BL-434` (splitscreen behaviour unprofiled).
+- `BL-1035` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **Local co-op: player
+  2's campaign ammo pick is not kept for the next mission.** *Evidence:* P2 picked ammo on the
+  campaign's loadout page; the next mission offered stock again while P1's pick held.
+  `CampaignFeature.CommitLoadout` writes the picks into the record and saves the profile only for
+  `Field.Current == 0`; a guest's record is session-scoped and belongs to no profile, by its own
+  summary. *Fix shape:* keep the guest's record, picks included, across missions within the session,
+  and save it into P2's own profile when they are seated with one; `MenuPlayerSetupSuites` covers
+  seat 1's own loadout for one launch only, extend it across a mission boundary. *⚠ Traps:* never
+  write a guest's pick into seat 0's plane. *Playtest after fix:* two pads, pick ammo for P2, fly a
+  mission, open the next mission's loadout page. *Cross-refs:* `BL-434`.
 
 ## Missions, modes & campaign
 
@@ -986,6 +1080,16 @@ usual.
   not a split. The per-frame tick order across the runtimes is the one thing the session must
   keep in one place; do not scatter it into the extracted modules. *Cross-refs:* `BL-1014`,
   `BL-1016`, `docs/architecture/Session.md`.
+- `BL-1033` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: data]` **A danger zone
+  photograph is the whole pane squeezed into 640x480, so a wide window's print is squished.**
+  *Evidence:* `Snap_1_18.PNG` from a 5120x1440 flight (`Screenshots/`, local) is a 640x480 file
+  holding the full 32:9 frame, everything narrowed. `CampaignSnapshot.Develop` calls
+  `frame.Resize(640, 480)` on the pane readback with no crop. The fill and the sepia pass. *Fix
+  shape:* crop a centred 4:3 window at the pane's full height before the resize, what a 640x480
+  original would frame, the flanks dropped; a unit on a 32:9 and a 4:3 source, and
+  `campaign-danger-zone-snapshot` asserts the aspect. *⚠ Traps:* not a letterbox, the print fills
+  the mount's window. *Playtest after fix:* a C1 mission 1 danger zone at 32:9, then the scrapbook
+  zoom and the exported file. *Cross-refs:* BL-1008's record (`git log --grep=BL-1008`).
 
 ## Tooling, platform & docs
 
