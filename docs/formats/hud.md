@@ -269,6 +269,18 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   [../org/textures.md](../org/textures.md)). Blended, the lit comb spans about 0.87 of the
   window's inner width at 720p, against 0.84 measured on the original's cockpit footage and 0.74
   with the cut.
+- ⚠ **The artificial horizon's face, `horizonindicator`, must blend and never scissor.** That
+  128×128 texture is the glass in front of the ball, not the ball: its RGB carries the bezel ring,
+  the fixed wings bar, the pitch-ladder rungs and the top tick, and its alpha is the mask that lets
+  the ball through, opaque over the ring and the painted marks, zero over the dome. Inside the
+  dome's upper rim it paints a golden haze on an alpha ramp that crosses 0.5, and it measures 0.51
+  opaque over its ink, just over the port's soft-alpha cutoff, so the pixel rule alone classifies it
+  as a 1-bit cutout. Scissored, that ramp becomes a hard opaque band of the haze across the top of
+  the dome, which is a golden line the original does not draw; blended, the dome reads as the clean
+  disc with its thin top tick that
+  `OriginalScreenshots/ArtificalHorizonDevastatorCockpit.png` shows. The original alpha-tests
+  nothing ([../org/textures.md](../org/textures.md)), so `PlaneBuilder` blends this name in the
+  interior the same way it blends `compasstxt`.
 - ⚠ **`nitrogauge` is the one dial not authored in normalized dial coords.** Its
   `nitro_backplate` mesh spans x ±1.4489 and y −0.1292…3.6746, so the bezel is centred at
   y ≈ 2.2078 with radius ≈ 1.4489 rather than at the origin with radius 1; the plate carries
@@ -357,6 +369,20 @@ The functional children, and how `cockpit.gw` drives each:
   beyond "not a smoothstep", so a pure constant-rate sweep runs a 90° step in ~533 ms
   against the capture's ~633 ms; owed a follow-up if the still-outstanding capture A/B
   reads as visibly off at the sweep's ends.
+
+⚠ **The belt-light art is alpha-only, its alpha never reaches zero, and the panel must blend it
+in GAMMA space.** `greenhilite.tif` and its two siblings are 32×16 with one flat saturated colour
+across the whole RGB plane; the bar's whole shape is the alpha channel, a crescent peaking at
+162/255 over a surround that never falls below about 20/255. `greenindicator.tif` and its siblings
+are 32×32 four-point star glows built the same way. Two rules follow. A 1-bit cut on an alpha with
+no zero paints the entire quad, so these must stay blended. And the blend itself has to reproduce
+the original's, which mixed sRGB values straight into the framebuffer: that surround contributes
+8 % of its colour there, against about 31 % when the same texel is mixed in the linear space Godot
+composites in, and 31 % of a saturated green over a dark dial is the square block the bar is not.
+`SceneBuilder.GammaBlendAlpha`, which the interior builder sets, linearises ALPHA so the composite
+lands where the original's did; the screen-space dials need nothing, since 2D canvas draws already
+blend in gamma space. Measured on the guns dial, texel alpha 20/255 reads 29 in the screen-space
+dial and 61 in the uncorrected panel, and the arc's 162/255 peak reads 158 against 201.
 
 ⚠ The digit/letter/indicator textures (`zero.tif`…, `A.tif`…, `greenindicator.tif`,
 `greenhilite.tif`, `smallneedle.tif`, `gungauge.tif`, `missilegauge.tif`) live in

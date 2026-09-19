@@ -200,6 +200,14 @@ public sealed class SceneBuilder
     /// meshes and materials: set it before building, never between builds.</summary>
     internal float DepthBiasScale = 1f;
 
+    /// <summary>Blend this builder's soft-alpha surfaces in GAMMA space, the way the original's
+    /// framebuffer mixed sRGB values, instead of the linear space Godot composites in: the same
+    /// correction <c>csky_srgb.gdshaderinc</c> makes for the DX7 vertex MODULATE, applied to the
+    /// other gamma-space operation. Without it a decal's faint surround lands near 31 % opacity
+    /// where the original put 8 %, which reads as a solid block (docs/formats/hud.md).
+    /// ⚠ Set before building, like <see cref="DepthBiasScale"/>: it keys the shader.</summary>
+    internal bool GammaBlendAlpha;
+
     /// <summary>The world's conflict ranks (<see cref="ConflictRank"/>), set by the caller before
     /// building. Null, every aircraft, every <c>--node=</c> subtree, any build with no conflict
     /// graph, leaves the cross-node tie-break on the flat node index, which is what those builds
@@ -1558,7 +1566,7 @@ void fragment() {
     // the shader text it always did, so honouring the flags cannot perturb the overwhelming
     // majority of the world through float rounding in a mix().
     // Key bits: 1-64 the flags above, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048 clutterFade,
-    // 4096 DebugClutterFlag, 8192 enhanced, 16384 water, 32768 vertex sun; next free 65536.
+    // 4096 DebugClutterFlag, 8192 enhanced, 16384 water, 32768 sun, 65536 gamma blend; free 131072.
     private Shader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp = UvClampAxes.None,
         bool clutterFade = false, bool water = false)
@@ -1574,10 +1582,14 @@ void fragment() {
         // The original's own aircraft light: unshaded, the per-vertex sun term times the authored
         // colour, clamped, then the texel (docs/org/vertexLighting.md). No Godot light reaches it.
         bool sunLit = shaded && _sunVertexLit && !GraphicsMode.Enhanced;
+        // Only a blending surface has an alpha to correct; a scissor compares against a fixed 0.5
+        // and moving its alpha would move the cutout silhouette instead of the composite.
+        bool gammaBlend = blend && GammaBlendAlpha;
         int key = (shaded ? 1 : 0) | (textured ? 2 : 0) | (blend ? 4 : 0) | (scissor ? 8 : 0) | (doubleSided ? 16 : 0)
             | (scroll ? 32 : 0) | (clampUv ? 64 : 0) | (lit ? 0 : 128) | (fogged ? 0 : 256)
             | ((int)edgeClamp << 9) | (clutterFade ? 2048 : 0) | (DebugClutterFlag ? 4096 : 0)
-            | (GraphicsMode.Enhanced ? 8192 : 0) | (waterLit ? 16384 : 0) | (sunLit ? 32768 : 0);
+            | (GraphicsMode.Enhanced ? 8192 : 0) | (waterLit ? 16384 : 0) | (sunLit ? 32768 : 0)
+            | (gammaBlend ? 65536 : 0);
         if (BiasShaders.TryGetValue(key, out var cached))
             return cached;
 
@@ -1639,7 +1651,7 @@ void fragment() {
         // Both world arms: the original's DX7 pipeline multiplied texture × baked vertex colour in
         // GAMMA space, so linearising the vertex colour first reproduces that product
         // (docs/formats/gotchas.md). A linear multiply washes out every baked-dark corner.
-        if (!shaded || sunLit)
+        if (!shaded || sunLit || gammaBlend)
             sb.AppendLine(SrgbInclude);
         if (sunLit)
         {
@@ -1770,7 +1782,9 @@ void fragment() {{");
         // fogged texture, which C5's night art would otherwise swallow whole.
         sb.AppendLine(DebugClutterFlag && !shaded ? ClutterFlagTintLine : TintLine);
         if (blend || scissor)
-            sb.AppendLine($"    ALPHA = col.a{OpacityTerm};");
+            sb.AppendLine(gammaBlend
+                ? $"    ALPHA = csky_srgb_to_linear(vec3(col.a)).r{OpacityTerm};"
+                : $"    ALPHA = col.a{OpacityTerm};");
         if (scissor)
             sb.AppendLine("    ALPHA_SCISSOR_THRESHOLD = 0.5;");
         sb.AppendLine("}");

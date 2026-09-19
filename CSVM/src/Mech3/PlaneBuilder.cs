@@ -81,6 +81,9 @@ public sealed class PlaneBuilder
                 textureSubstitute: (name, tex) => _painter?.Substitute(name, tex) ?? tex, sunVertexLit: true)
             {
                 DepthBiasScale = 1f / InteriorScale,
+                // The panel is a wall of soft-alpha decals over dark instruments, which is where
+                // the linear-space composite departs visibly from the original's (see the field).
+                GammaBlendAlpha = true,
             };
         }
         _spinningProps = spinningProps;
@@ -245,11 +248,14 @@ public sealed class PlaneBuilder
     private static bool IsPropBlurTexture(string tex) =>
         tex.Contains("blur", StringComparison.OrdinalIgnoreCase);
 
-    // ⚠ compasstxt must alpha-blend in the interior, never scissor: the panel's compass window
-    // fades the drum's ends under two quads sampling that atlas' black alpha ramp, which a scissor
-    // turns into opaque bars over the outer comb (docs/formats/hud.md).
+    // ⚠ compasstxt and horizonindicator must alpha-blend in the interior, never scissor. The
+    // compass window fades the drum's ends under two quads sampling that atlas' black alpha ramp,
+    // and the artificial horizon's glass carries a golden haze inside its upper rim on a ramp that
+    // crosses the cutout threshold, so a scissor turns each into an opaque bar (docs/formats/hud.md).
     private static bool IsInteriorBlendTexture(string tex) =>
-        IsPropBlurTexture(tex) || tex.StartsWith("compasstxt", StringComparison.OrdinalIgnoreCase);
+        IsPropBlurTexture(tex)
+        || tex.StartsWith("compasstxt", StringComparison.OrdinalIgnoreCase)
+        || tex.StartsWith("horizonindicator", StringComparison.OrdinalIgnoreCase);
 
     // ⚠ pdpN_h (the healthy twin, see IsHealthyPanel) must always render: skipping all of
     // player_damage_on amputates real airframe sections, not just the torn-skin state.

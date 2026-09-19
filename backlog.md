@@ -939,29 +939,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   https://discussions.unity.com/t/local-multiplayer-player-join-config-screen-using-ui-toolkit/1701038
   (the pattern as other local co-op games ship it, asked for by name).
 
-- `BL-1004` `[Fidelity]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: feel]` **The cockpit
-  gauges' green, yellow and red bands are square-cornered where the chase view's dials round
-  them.** *Evidence:* "in cockpit view the color marked on the outside of the gauges (green,
-  yellow, red) are squares, can they be rounded off on the outside to match the gauges better,
-  similar to the ones on chase view?". The cockpit gauges are the authored `cockpit1` interior's
-  own surfaces (`Flight/CockpitGauges.cs`), so the first question is whether the bands are the
-  original's own texture (then the squares are faithful and this is a departure to decide) or a
-  remake overlay. *Fix shape:* if authored, an Enhanced Graphics-only rounding or nothing; if
-  ours, arcs like `GaugeCluster`'s. *Cross-refs:* `docs/formats/hud.md`, `BL-1005` (the same
-  panel's horizon).
-
-- `BL-1005` `[Bug]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: footage]` **The cockpit's
-  artificial horizon shows a thin golden line at its upper right that the original's does not.**
-  *Evidence:* "The artificial horizon has some yellow golden thin on the right upper side thats not
-  present in the original", against `OriginalScreenshots/ArtificalHorizonDevastatorCockpit.png`
-  (the Devastator's ball, a clean disc with its ladder and no line). The ball is the authored
-  `pfhorizon` node posed by `CockpitGauges.Horizon`; candidates are the ball texture's seam at the
-  pose we hold it in, a mip edge on the disc's rim, and a sibling surface (the ladder or the
-  needle) left at its authored rest instead of hidden. *Fix shape:* a render of the Devastator's
-  cockpit at the shot's attitude, the line's surface found by hiding surfaces in turn, then the
-  cause fixed where it is. *Cross-refs:* `docs/formats/hud.md` (the cockpit instruments),
-  `BL-1004`.
-
 
 ## Splitscreen
 
