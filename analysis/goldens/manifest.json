@@ -15,7 +15,7 @@
     {
       "name": "c1-waterfall",
       "frame": 120,
-      "hash": "3712964f77a21f3029466176cb8e7cc6",
+      "hash": "1362aa7cb4890bd45431c77f9f5f1e0d",
       "exercises": "UV scroll on the falls sheet, the mist puffer carried on the mission wind and drawn farthest-first, the alpha-textured spray under the zone's world light, and the ridge's conifer cards blended rather than cut; frame-sensitive 1.28 % at 120 vs 121.",
       "args": ["--freecam", "--chapter=C1", "--pos=-7720,60,-3380", "--lookat=-7868,40,-3449", "--det", "--mute"]
     },
@@ -36,7 +36,7 @@
     {
       "name": "c2-city",
       "frame": 120,
-      "hash": "8c23fcf677d0cf5a74917362a5efbbd8",
+      "hash": "412b50878c0c02b37efeabcf1ede9cfa",
       "exercises": "C2's solid 3D city blocks, backlot geometry, daylight fog, wake spray with far puffs culled, alpha sprites lit like the rest, Eiffel lattice and bridge cables blended not cut, two mesh point lights, no fade band; near-static, 51 px at 120 vs 121.",
       "args": ["--freecam", "--chapter=C2", "--pos=-5722,186,-3457", "--direction=-0.438,-0.15,-0.899", "--det", "--mute"]
     },
@@ -50,7 +50,7 @@
     {
       "name": "c4-snow",
       "frame": 120,
-      "hash": "dc5e35918a1155c3b2b013c4d01bc0a8",
+      "hash": "5903639311a792c9d2565017b966e6d0",
       "exercises": "snow precipitation plus the chapter carrying 6 UV-scroll models, with a stack plume culled past its authored far band and its near puffs on the mission wind; frame-sensitive 3.74 %, the largest of the freecam set.",
       "args": ["--freecam", "--chapter=C4", "--pos=-3330,958,-9181", "--direction=-0.682,-0.2,0.731", "--det", "--mute"]
     },
@@ -85,14 +85,14 @@
     {
       "name": "c1-flight-kill",
       "frame": 280,
-      "hash": "e78e57033057dbfba2e86c3bff45997d",
+      "hash": "5b904bb4d3c455b37803004f7f4f49e7",
       "exercises": "Chase-camera flight firing at two AIs then banking: one shot down 3 s earlier, its fireball and kill line up, the live one bracketed, the gun's smoke, tracers and shot light drawn on this frame's poses, exhaust, shadow; frame-sensitive 78.07 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--ai=player_kestrel,player_fury", "--ai-damage=0.02", "--target=ai2_player_fury", "--debug-markers", "--fire", "--hold=0,0,0,1@2.5;0.05,0.1,0,1", "--det", "--mute"]
     },
     {
       "name": "c1-cockpit",
       "frame": 120,
-      "hash": "d25f29c14de5bfa1cc7822c1c7974f9d",
+      "hash": "1b08b468477bad3a6748568a1a3199eb",
       "exercises": "Held pitch-and-roll flight seen from the pilot's seat: the cockpit1 interior in the pass's own SubViewport world under its re-aimed sun, needles, drum, belts and readouts, canopy frame and gunsight over world-lit C1; frame-sensitive 43.35 %.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--view=cockpit", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
@@ -106,7 +106,7 @@
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "99ae2179624c7d199e32fa3f4e7cc061",
+      "hash": "8cae3ea668b584d45f8372c6805f11ff",
       "exercises": "player_crash_default five steps in: corrected pre-crash attitude, crash rig and airframe, texture-flag puffers, ranged tumble, vector pieces, flydirt delta, pooled repeats, the crash notice and respawn prompt over the hidden HUD, on lit C1 scenery.",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
@@ -120,14 +120,14 @@
     {
       "name": "c1-stunt-marker",
       "frame": 90,
-      "hash": "5eb7e9c3173e3248b1108fb16c3b9c61",
+      "hash": "5ede305f60415259f769eaccc624f55f",
       "exercises": "A stunt run's Danger Zone off screen on the pilot's own target cycle: the spyglass disc at the marker anchor, the shaft leaving its rim under the 20-by-10 head, the label in the objective's blue, the run clock, the plane's ground shadow below.",
       "args": ["--chapter=C1", "--stunt", "--plane=player_fury", "--pos=-5300,300,-6300", "--direction=0,0,-1", "--det", "--mute"]
     },
     {
       "name": "campaign-4p-grid",
       "frame": 120,
-      "hash": "314aedaf3447fe39602cee48a788fafa",
+      "hash": "043b2e4d143977642904ea8e9a5d1343",
       "exercises": "Four humans launch a co-op campaign mission on StartGrid with no profile to load, so no director: four render targets, HUDs, gauges and target labels, the lit C1 world, the player-shaped shadow under each pane's own pilot; frame-sensitive 73.79%.",
       "args": ["--campaign=csvm-golden:6", "--players=4", "--plane=player_bhawk,player_bhawk,player_bhawk,player_bhawk", "--det", "--mute"]
     },

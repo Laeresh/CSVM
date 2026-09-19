@@ -187,7 +187,7 @@ measurements: [../formats/world-structure.md](../formats/world-structure.md). Re
 Stamps the boot-script clutter templates across placed polygons carrying the template's ground texture,
 one stamp per integer UV repeat of the polygon's UV lattice: sprites become one fullbright billboard
 MultiMesh per kind, turned toward the camera as that kind's own `FacadeMode` says, solids go through
-`SceneBuilder.SharedMesh`, `ClassifyBillboard` the split. A card blends or scissors on the archive's own alpha verdict, one shader variant each. Every stamp carries its far fade as MultiMesh custom
+`SceneBuilder.SharedMesh`, `ClassifyBillboard` the split. A card blends or scissors on the archive's own alpha verdict, one shader variant each, and the blended variant writes its body's depth through a prepass: a kind is one MultiMesh, a single draw in buffer order that sorts nothing, so a card writing no depth at all is painted over by every later card and kind whatever their distances. Every stamp carries its far fade as MultiMesh custom
 data under `EffectsLevel`, and samples through `SceneBuilder.SampleAlbedo` for the chapter's mip bias. `TemplateNames` reads `AddClutterTemplates` unfiltered, the per-polygon `no_clutter` gate deciding
 which patch a district dresses; `OverrideTemplateNames` is `--clutter-templates=`'s replacement.
 A decoration is a node chain, and `FirstWithMesh` hands back the translation down to the node carrying the mesh, so a stamp lands where the chain puts the drawn card: C5's lamp glow rides 4.75 m up its post.

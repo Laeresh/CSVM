@@ -675,9 +675,11 @@ public sealed class ClutterBuilder
     // are one-sided quads that would vanish edge-on. Fullbright, SceneBuilder's cylindrical fog, and
     // the archive's own blend-or-scissor verdict. `lit` and `fogged` are the decoration model's own
     // authored flags, emitted as variants so a lit, fogged kind gets the base form.
+    // ⚠ A blended card takes depth_prepass_alpha, never depth_draw_never: a kind is one MultiMesh,
+    // one draw in buffer order, so a card writing no depth is painted over by every later card.
     private static string ShaderCode(bool lit, bool fogged, bool clampUv, bool spherical, bool blend) => $$"""
         shader_type spatial;
-        render_mode skip_vertex_transform, unshaded, cull_disabled, shadows_disabled{{(blend ? ", blend_mix, depth_draw_never" : "")}};
+        render_mode skip_vertex_transform, unshaded, cull_disabled, shadows_disabled{{(blend ? ", blend_mix, depth_prepass_alpha" : "")}};
 
         uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, {{(clampUv ? "repeat_disable" : "repeat_enable")}};
 

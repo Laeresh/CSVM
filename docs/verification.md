@@ -784,6 +784,15 @@ member, and it does not go here.
   default map action by action: let the saved row take the control off every action the file does
   not name, and test the partial file, not only the whole one.** A file naming the free-look row
   alone would have held the free look and the rockets on one mouse button.
+- **INSTR-91**, **A suite photographs 3D geometry in an off-screen `SubViewport` of its own, which a
+  canvas item cannot do, but three things about that pane are not what they look like: an ordinary
+  `MeshInstance3D` renders at the identity until `ForceUpdateTransform` is called on the subtree,
+  because a transform notification waits for a scene-tree flush no single-frame suite reaches; a
+  `MultiMesh`'s instance buffer reaches the GPU with the frame AFTER the write, so one forced draw
+  photographs the previous pose; and the pane reads back as `Rgb8`, three bytes to the pixel, so a
+  comparison striding four reports every frame as wholly changed.** A tree card's occlusion pane
+  read a card that drew 0 pixels and a ground quad that filled 6912 of 9216, both artifacts of this,
+  before any of the three was accounted for.
 
 ## SRC, sources and documents
 

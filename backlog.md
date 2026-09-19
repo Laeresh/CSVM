@@ -531,26 +531,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Playtest after fix:* any chapter under Enhanced Graphics, still and moving, over water and over
   ground. *Cross-refs:* `docs/architecture/Utils.md` (`GraphicsMode`).
 
-- `BL-997` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: trace]` `[C1]` **Trees along
-  a far ridge draw in front of terrain polygons that stand between them and the camera.**
-  *Evidence:* reported at the controls on a C1 stunt run as "some polygons are rendered before
-  trees", with two shots, red boxes on the ridge
-  (`Screenshots/crimsonskies_2026-09-19_09-45-49-525.png`, the ridge left of the crosshair at
-  719 ft, and `crimsonskies_2026-09-19_09-46-05-776.png`, the tree line across the whole left
-  half at 570 ft): the trees stand whole over the hillside behind and beside them where the
-  ground polygons should hide their trunks, and the far ones read against the fog band as if
-  drawn after it. The tree cards are `ClutterBuilder`'s billboard MultiMesh, turned toward the
-  camera in the shader (`Mech3/Clutter.cs`, "the billboard shader swings verts outside the
-  MultiMesh's static AABB"), so the candidates are the card's depth write and test against the
-  terrain, the transparency mode the cards draw with (an alpha-blended card sorts by its origin
-  and draws after every opaque polygon), and the cull's AABB letting a card draw when its terrain
-  is already gone. *Fix shape:* reproduce at the shots' poses (`--fly --chapter=C1 --pos=` from
-  the runs' logs), read which of the three it is, then the card's material flags (alpha scissor
-  with depth write is the usual answer for foliage cards). *⚠ Traps:* the C1 trees are
-  `CylindricalY` cards, so a fix must not turn them spherical; the fog term on the card is
-  `csky_fog_amount`'s and is not the sort order. *Cross-refs:* `docs/architecture/Mech3.md`
-  (Clutter), `BL-341` (the same population's `no_clutter` gate).
-
 - `BL-998` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` **The cloud cards
   roll with the camera: rolling the aircraft turns every card about the view axis.** *Evidence:*
   reported at the controls as "Clouds should not rotate around the forward axis toward the camera,

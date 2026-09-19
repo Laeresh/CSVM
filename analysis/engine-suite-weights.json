@@ -124,6 +124,7 @@
     "carried-turrets": 0.457,
     "chapter-census": 9.767,
     "cloud-field-fade": 4.46,
+    "clutter-card-depth": 2.0,
     "clutter-determinism": 0.583,
     "clutter-mesh-lift": 1.17,
     "cockpit-interior": 0.28,
