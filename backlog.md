@@ -1086,18 +1086,6 @@ usual.
   race has a defined start (`StuntRace.cs`, `ScoreStore.GetBest`/`RecordIfBest`), and would want
   their own key namespace, since a countdown makes race and solo totals diverge again.
 
-- `BL-974` `[Bug]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: data]` `[CM09]` **C1/M04's `blakepeace_2_2` flies
-  tens of kilometres out of the mission on `AiPilot.FlyPatrol`'s netless arm.** *Evidence:* its
-  roster block authors slot 0 as an empty list, every volume as `0.0` and its spawn at the world
-  origin; `CampaignDirector` spawns it live with no net, it climbs out of avoid crash and holds its
-  standing heading with no target, since nothing hostile is within 2,000 m of the origin. It is
-  the only netless `jet` in the shipped data. The original does not skip the block: `FUN_0047c210`
-  writes net `-1` for a count of 0 (`0x0047c76d`), and `FUN_0041d1f0` then reads record `-1` outside
-  the net table with no guard, so its behaviour there is not determinable statically. *Fix shape:*
-  read the original's `blakepeace_2_2` under the debugger on C1/M04 (where it sits, whether it
-  lives past spawn, what it flies), then port that; do not invent a leash or a despawn before the
-  read. *Cross-refs:* `docs/org/aiPilot.md` (the headline, "Open"),
-  `docs/formats/ai-rosters.md` ("Who is netless").
 - `BL-1015` `[Cleanup]` `[L]` `[Next: decide]` `[Impact: none]` `[Evidence: trace]` **`GameSession.cs`
   is 4402 lines and changes for unrelated reasons; the build steps and the per-mode runtimes it
   hosts leave as real modules.** *Evidence:* one review range added 532 lines over scattered hunks

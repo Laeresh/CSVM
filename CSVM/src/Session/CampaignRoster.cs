@@ -281,6 +281,14 @@ public sealed class CampaignRosterPlan
             // that walks the graph, so a block never carries both.
             bool escorts = netIds.Count == 0
                 && mode.Equals(VehicleDefs.WingmanMode, StringComparison.OrdinalIgnoreCase);
+            if (netIds.Count == 0 && !escorts && AiSkills.RosterEnabled(fields))
+            {
+                // Built dead in the original (docs/org/aiPilot.md): the dead byte is set before net
+                // assignment, and only a resolved net or the wingman mode clears it. A generator
+                // template is not gated, since its launch flies the generator's own net.
+                skipped.Add((name, $"'{def}' ({mode}) authors no net and is no wingman: the original builds it dead"));
+                continue;
+            }
 
             spawns.Add(new RosterSpawnPlan
             {

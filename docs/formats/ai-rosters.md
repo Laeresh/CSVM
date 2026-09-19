@@ -78,7 +78,8 @@ authored defaults, not signal.
 Across all 53 `aiv.zrd.json` files (414 blocks), `netids` is `-1` on exactly 106 of
 them and every one is the player or a wingman. ⚠ One more block is netless without authoring `-1`:
 C1/M04's `blakepeace_2_2` authors an empty list, zero volumes and a spawn at the origin, and the
-spawn reader resolves it to `-1` as well, which gives the only netless `jet` in the shipped data
+spawn reader resolves it to `-1` as well, which gives the only netless `jet` in the shipped data.
+The original builds it dead at spawn, so it never flies, and CSVM does not spawn it
 ([`org/aiPilot.md`](../org/aiPilot.md), the headline).
 
 | node name | blocks | `netids` |
@@ -98,7 +99,8 @@ constants.
 
 **What CSVM reads of this.** A campaign session initially spawns every enabled non-`player` block
 of the mission's roster (`Session/CampaignRoster.cs` plans it, `CampaignDirector.BuildRoster`
-places it). Disabled blocks remain generator templates: `egen.json`'s `vehicle.params` selects one
+places it), except a block with no net that is not a `mode wingman`, which the plan lists as
+skipped because the original builds it dead. Disabled blocks remain generator templates: `egen.json`'s `vehicle.params` selects one
 by its positional header label when the mission later credits that generator. The block
 name resolves to its `vehicle.json` def by stripping trailing `_N` ordinals (`blakepeace_2_1` →
 `blakepeace_2`), and the def's `mode` plus slot 0 decide the fork above. Read at spawn: slots 0–7,
