@@ -1067,8 +1067,7 @@ Anything A2 or a later wave closes comes off this list.
 
 - **One C1/M04 aircraft with no patrol net can fly tens of kilometres out of the mission area.**
   Target it and fly out to it if an objective waits on it. (`BL-974`; the pursuit's walk across
-  the map is fixed, and whether other patrols still fail to engage is owed a look at the controls,
-  `PT-156`.)
+  the map is fixed, and the other patrols engage, break off and come back at the controls.)
 - **A zeppelin's turrets can shoot the player through the hull they are mounted on.** Break away
   from the hull rather than flying along it, since the fire stops once the ring loses its bearing.
   (`BL-714`; a probe confirmed a parked hull blocks its own rings correctly, so the item stayed
