@@ -125,8 +125,10 @@ session share a decode. `.BM` layout: [../formats/rof.md](../formats/rof.md).
 
 ## src/Mech3/PlanePainter.cs
 Applies a `PaintScheme` to one aircraft: composites its skins from the pattern's region masks and
-swaps the three decal placeholders. The composite formula, the shading-plane choice and the
-bottom-up `.BM` rows are decode, and belong to [../formats/paint.md](../formats/paint.md),
+swaps the three decal placeholders. `SkinNameFor` decides which `.BM` a model texture is painted
+from, the original pairing the two by table rather than by name. The composite formula, the
+shading-plane choice and the bottom-up `.BM` rows are decode, and belong to
+[../formats/paint.md](../formats/paint.md),
 [../formats/rof.md](../formats/rof.md) and [../org/paint.md](../org/paint.md). Read those before changing a composite step.
 
 ## src/Mech3/MilitiaPaint.cs

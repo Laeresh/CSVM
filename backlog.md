@@ -532,29 +532,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   ground. *Cross-refs:* `docs/architecture/Utils.md` (`GraphicsMode`).
 
 
-- `BL-1012` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **The Devastator's
-  fuselage sides never take the pattern's colours; they stay the shipped red ZBD skin under
-  FORTUNE and CCCP alike.** *Evidence:* the model's fuselage-side texture is `dev_fusalage`, the
-  pattern folders ship `DEV_FUSALAGE1.BM`, and `PlanePainter.PaintedSkin`
-  (`Mech3/PlanePainter.cs:138`) looks the model's name up literally through
-  `PatternLibrary.Skin` (`Mech3/PatternLibrary.cs:178`), gets null, and keeps the ZBD texture.
-  The original does not derive BM names from the model at all: `FUN_00401e80` walks a static
-  per-airframe table (pointer array `0x0060329c`, Devastator = airframe 5 at `0x0060315c`) of
-  (BM file, model texture to replace) pairs, and the Devastator's second pair is
-  `dev_fusalage1.bm` → `dev_fusalage` (strings `0x006197dc`/`0x006197f0`). The Devastator is the
-  only airframe whose two names differ; every other pair in the table is name-identical, which
-  is why literal matching works everywhere else. `dev_fusalagetop` has no pair and no `.BM`, so
-  the top keeping its shipped texture is correct. *Fix shape:* one alias in the lookup, a
-  `dev_fusalage` → `dev_fusalage1` remap where `PaintedSkin` forms the skin name, or the
-  original's table transcribed as data if a second divergence ever appears. *⚠ Traps:* do not
-  rename the ZBD texture or the `.BM`; both names are the original's. Do not paint
-  `dev_fusalagetop` from the side atlas, its UVs tile to about U = 4.45 and it has no mask.
-  *Playtest after fix:* `--viewer --plane=player_pfighter --paint=CCCP --screenshot=…`; the
-  fuselage sides should carry CCCP's grey body and red trim instead of Fortune red.
-  *Cross-refs:* `docs/formats/paint.md` "Implementing this in the remake",
-  `docs/org/hangar.md` "The type-8 spawn message is paint", the friend's handoff under
-  `.scratch/Uebergabe_Gabriel_2026-09-19/`.
-
 - `BL-1013` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The
   templates clutter's spherical glow stamps still take the camera's whole basis, so they roll with
   the aircraft while every other `SphericalY` sprite no longer does.** *Evidence:*

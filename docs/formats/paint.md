@@ -338,6 +338,23 @@ where the two agree on dimensions, so `SceneBuilder`'s blend-vs-scissor choice s
 Decals are unchanged: `<prefix>_noselogo`/`_taillogo`/`_winglogo` swap for the numbered decal
 via `TextureArchive.FindByDecalIndex`.
 
+### Which `.BM` a model texture is painted from
+
+The original does not derive one name from the other. `FUN_00401e80` walks a static per-airframe
+table of (`.BM` file, model texture to replace) pairs, reached through the pointer array at
+`0x0060329c` (one entry per airframe id, the Devastator being id 5 at `0x0060315c`), and its
+strings occupy `0x00619470` to `0x00619b93`. Read whole, the eleven tables hold 62 pairs, and
+**exactly one of them differs on the two sides**: the Devastator's fuselage sides are
+`dev_fusalage1.bm` → `dev_fusalage` (`0x006197dc` / `0x006197f0`). Every other pair is
+name-identical, which is why a literal lookup is right everywhere else.
+
+`PlanePainter.SkinNameFor` is that one divergence, as a single alias rather than the whole table
+transcribed. ⚠ Neither name is a mistake to correct: the ZBD texture really is `dev_fusalage` and
+every pattern folder really ships `DEV_FUSALAGE1.BM`, so renaming either side breaks the other
+consumer. `dev_fusalagetop` appears in no pair and no pattern ships a `.BM` for it, so the
+fuselage spine keeping its shipped ZBD skin is the original's behaviour; it is also a separate
+64x64 texture whose UVs tile to about U = 4.45, so the side atlas would not fit it.
+
 ### Patterns are per aircraft
 
 A pattern covers only the planes it ships skins for, which is why the original's paint UI
