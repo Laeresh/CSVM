@@ -29,5 +29,6 @@ instance uniform float csky_fog_on = 1.0;     // 0 = opt out of distance fog (th
 instance uniform float csky_light_fade = 1.0; // 0 = no range fade (skydome stars)
 instance uniform float csky_opacity = 1.0;    // OBJECT_OPACITY_STATE; only the alpha-writing variants USE it
 instance uniform vec4 csky_tint = vec4(0.0);  // debug overlays: rgb = colour, a = strength (0 = untinted)
+instance uniform vec4 csky_photo_eye = vec4(0.0); // Danger Zone photograph: xyz = its eye, w = 1 while its fill is on
 
 #endif

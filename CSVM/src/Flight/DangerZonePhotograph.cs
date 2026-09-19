@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using CSVM.Mech3;
 using CSVM.UI;
 using CSVM.Utils;
 using Godot;
@@ -30,9 +32,11 @@ public sealed partial class DangerZonePhotograph : SubViewport
     /// eye otherwise stands level with the aircraft.</summary>
     public const float ScatterUp = 0.25f;
 
+    private readonly List<GeometryInstance3D> _filled = new();
     private Camera3D _camera = null!;
     private Camera3D? _pane;
     private CockpitVisibility? _cockpit;
+    private Node? _airframe;
     private Func<Transform3D> _aircraft = null!;
     private Func<float> _unit = null!;
     private float _dist;
@@ -53,13 +57,18 @@ public sealed partial class DangerZonePhotograph : SubViewport
     /// <summary>Whether a request is waiting for its frame to be drawn or read.</summary>
     public bool Busy => _pending != null;
 
+    /// <summary>The instances the photograph's fill light is armed on, empty outside the frame it
+    /// draws. Read by the suite.</summary>
+    public IReadOnlyList<GeometryInstance3D> Filled => _filled;
+
     /// <summary>The eye for one pilot. <paramref name="pane"/> lends its clip planes, cull mask and
     /// environment and names the world drawn; <paramref name="aircraft"/> answers the aircraft's
     /// drawn pose; <paramref name="dist"/> is its <c>camparam</c> <c>dist</c>;
-    /// <paramref name="random"/> answers a uniform draw in [0, 1). Add it anywhere in the tree the
-    /// pane's world is reachable from.</summary>
+    /// <paramref name="random"/> answers a uniform draw in [0, 1); <paramref name="airframe"/> is
+    /// the subtree the photograph's fill light reaches, the pilot's own aircraft. Add it anywhere
+    /// in the tree the pane's world is reachable from.</summary>
     public static DangerZonePhotograph Build(Camera3D? pane, CockpitVisibility? cockpit,
-        Func<Transform3D> aircraft, float dist, Func<float> random)
+        Func<Transform3D> aircraft, float dist, Func<float> random, Node? airframe = null)
     {
         var view = new DangerZonePhotograph
         {
@@ -73,6 +82,7 @@ public sealed partial class DangerZonePhotograph : SubViewport
         };
         view._pane = pane;
         view._cockpit = cockpit;
+        view._airframe = airframe;
         view._aircraft = aircraft;
         view._dist = dist;
         view._unit = () => (random() * 2f) - 1f;
@@ -161,6 +171,7 @@ public sealed partial class DangerZonePhotograph : SubViewport
         _camera.Attributes = _pane.Attributes;
         _camera.CullMask = _pane.CullMask | SplitScreen.PhotographLayer;
         _cockpit?.ShowForPhotograph(SplitScreen.PhotographLayer);
+        Fill(_camera.Transform.Origin);
         RenderTargetUpdateMode = UpdateMode.Once;
         _drawing = true;
         RenderingServer.Singleton.Connect(RenderingServer.SignalName.FramePostDraw,
@@ -178,8 +189,55 @@ public sealed partial class DangerZonePhotograph : SubViewport
         if (_drawing)
         {
             _cockpit?.EndPhotograph();
+            Unfill();
         }
         Land(null);
+    }
+
+    // The original's fill light, on the hardware renderer: for the photograph frame the player's
+    // node raises the scene's directional light's ambient to ambient × 1.5 + 0.1 while its subtree
+    // draws (docs/formats/campaign-screens.md, "The fill light"). Armed per instance with this
+    // eye, so a pane drawing the same aircraft on the same frame keeps the zone's ambient.
+    private void Fill(Vector3 eye)
+    {
+        Unfill();
+        if (_airframe == null || !IsInstanceValid(_airframe))
+        {
+            return;
+        }
+
+        var armed = new Vector4(eye.X, eye.Y, eye.Z, 1f);
+        var pending = new Stack<Node>();
+        pending.Push(_airframe);
+        while (pending.Count > 0)
+        {
+            var node = pending.Pop();
+            if (node is GeometryInstance3D instance)
+            {
+                instance.SetInstanceShaderParameter(SceneBuilder.PhotoEyeParam, armed);
+                _filled.Add(instance);
+            }
+
+            foreach (var child in node.GetChildren())
+            {
+                if (child is not Viewport)
+                {
+                    pending.Push(child);
+                }
+            }
+        }
+    }
+
+    private void Unfill()
+    {
+        foreach (var instance in _filled)
+        {
+            if (IsInstanceValid(instance))
+            {
+                instance.SetInstanceShaderParameter(SceneBuilder.PhotoEyeParam, Vector4.Zero);
+            }
+        }
+        _filled.Clear();
     }
 
     // After the draw that rendered the pose: the airframe goes back to what the pilot's view drew,
@@ -187,6 +245,7 @@ public sealed partial class DangerZonePhotograph : SubViewport
     private void Drawn()
     {
         _cockpit?.EndPhotograph();
+        Unfill();
         if (!IsInstanceValid(this) || !IsInsideTree())
         {
             Land(null);

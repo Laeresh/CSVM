@@ -56,6 +56,11 @@ public sealed class SceneBuilder
     // logged, not silently collapsed.
     public const int ConflictRankCap = 7;
 
+    /// <summary>How near the drawing camera must stand to the eye <see cref="PhotoEyeParam"/>
+    /// carries, in metres, to draw the photograph's fill. It separates the photograph's camera
+    /// from every pane's, which never stands two and a half chase distances ahead of the nose.</summary>
+    public const float PhotoEyeReach = 0.5f;
+
     /// <summary>Meta key a collider carries when its surface class is water or buildings.
     /// StringName, not <c>const string</c>, as every meta key here (see <c>AnimRuntime.NameMeta</c>).</summary>
     public static readonly StringName SurfaceMeta = "csky_surface";
@@ -85,6 +90,12 @@ public sealed class SceneBuilder
     public static readonly StringName MissionStructureGasbagMeta = "csky_mstruct_gasbag";
 
     public static readonly StringName OpacityParam = "csky_opacity";
+
+    /// <summary>Instance shader parameter the Danger Zone photograph arms on its own pilot's
+    /// aircraft for the one frame it draws: xyz is the photograph's eye, w is 1 while armed. A
+    /// faithful aircraft surface then takes <c>csky_sun_fill_rgb</c> as its ambient half, but only
+    /// for a camera within <see cref="PhotoEyeReach"/> of that eye.</summary>
+    public static readonly StringName PhotoEyeParam = "csky_photo_eye";
 
     /// <summary>The albedo sampler every generated shader here declares, as a ready
     /// <see cref="StringName"/>. ⚠ Use this, never the bare string, wherever the write is on a
@@ -292,7 +303,8 @@ void fragment() {
     // that include, every headless probe saved its screenshot and then never exited; declared here,
     // probes exit. The cause is not decoded (docs/verification.md SHELL-21).
     private const string SunVertexLightDecl =
-        "global uniform vec3 csky_sun_ambient_rgb;\nglobal uniform vec3 csky_sun_diffuse_rgb;";
+        "global uniform vec3 csky_sun_ambient_rgb;\nglobal uniform vec3 csky_sun_diffuse_rgb;\n"
+        + "global uniform vec3 csky_sun_fill_rgb;";
     // ⚠ Format every scale invariantly; a comma decimal separator emits shader text that will not
     // compile. Godot discards EMISSION on an `unshaded` material and the glow pass reads the HDR
     // colour buffer, so these arms reach it by scaling the colour rather than by writing EMISSION.
@@ -1648,11 +1660,14 @@ void fragment() {
             ? "    v_clutter_alpha = csky_clutter_fade_alpha(MODEL_MATRIX[3].xyz, CAMERA_POSITION_WORLD, INSTANCE_CUSTOM);\n"
               + "    VERTEX *= step(0.004, v_clutter_alpha);\n"
             : "";
-        // Per vertex in world space, the sun and the point lights (csky_point_light) summed into one
-        // factor on the authored colour, clamped as a product at white, as the draw does. A
-        // `lighting: false` model takes its authored colour unchanged.
+        // Per vertex in world space, the sun (its ambient half the photograph's fill at an armed eye,
+        // PhotoEyeParam) and the point lights summed into one factor on the authored colour, clamped
+        // at white as the draw does. A `lighting: false` model takes its authored colour unchanged.
         string sunVertex = !sunLit ? ""
-            : lit ? "    v_sun_lit = clamp(COLOR.rgb * (csky_sun_ambient_rgb + csky_sun_diffuse_rgb\n"
+            : lit ? "    vec3 sun_ambient = csky_photo_eye.w > 0.5 && distance(CAMERA_POSITION_WORLD, csky_photo_eye.xyz) < "
+                    + PhotoEyeReach.ToString("0.0##", System.Globalization.CultureInfo.InvariantCulture) + "\n"
+                    + "        ? csky_sun_fill_rgb : csky_sun_ambient_rgb;\n"
+                    + "    v_sun_lit = clamp(COLOR.rgb * (sun_ambient + csky_sun_diffuse_rgb\n"
                     + "        * max(dot(normalize(MODEL_NORMAL_MATRIX * NORMAL), csky_sun_dir), 0.0)\n"
                     + "        + csky_point_light((MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz + light_origin)), 0.0, 1.0);\n"
             : "    v_sun_lit = COLOR.rgb;\n";
