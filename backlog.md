@@ -687,7 +687,113 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `git log --grep=BL-934`, `git log --grep=BL-978` (the flat radio path),
   `git log --grep=BL-977` (the Instant Action prewarm gap),
   the saved Voice level (`Utils/AudioMix.cs`, the `audio-buses` suite) if the lines dispatch and
-  stay inaudible.
+  stay inaudible; `BL-986` (the spawn-time commit is muted and never re-arms, the largest single
+  cause of the low rate), `BL-987` to `BL-993` (the nine unwired trigger ids and the
+  already-talking hook), `BL-994`/`BL-995` (Instant Action pilots with no voice).
+
+- `BL-986` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: trace]` **An ace commits to
+  the player on the first frame, inside the 2 s mute window, so `WA-Attack` and the bearing
+  call-outs never play, and the site does not re-arm until the attack dwell runs out a minute
+  later.** *Evidence:* a C1 dogfight against Blake logs `ai1_player_peacemaker: patrol -> pursue
+  (target at 2498 m) t=0.14`, the remake's only dispatch site for ids 1–12 and 14
+  (`Session/AiVoiceRuntime.cs`, `OnModeChanged`), and the gate refuses anything before the
+  mission clock reaches 2 s (`Flight/AiVoiceDispatcher.cs`, `MuteWindowS`) without a log line. The
+  next patrol→pursue is `t=60.15 (attack dwell ran out)`, one second before the ace dies. A C4
+  squadron round shows the same: all six wave-1 commits at `t=0.13`, muted, and the only bearing
+  call-out of the round is wave 2's commit at `t=95.11`. Every talker roll in that sitting passed,
+  so the roll is not the limiter; the ace speaks four lines in 65 s where the original's Blake
+  talks every few seconds. *Fix shape:* the original's "enemy spotted" event is undecoded
+  (`docs/formats/combat-voice.md`, dispatch-site row 1–12, 14); decode it out of the pursue path.
+  Before that, the cheap stand-in: dispatch `WA-Attack` and the bearing broadcast when the
+  committed pursuer first closes inside an engagement range of the human, or on its first shot
+  at the human, and re-arm per engagement rather than per patrol→pursue edge. *⚠ Traps:* do not
+  drop the mute window, it is decoded; do not fire on every pursue re-entry from `avoid crash`,
+  which happens every few seconds near terrain and would flood the 15 s slot cooldown with
+  failed rolls. *Playtest after fix:* Instant Action → C1 → Dogfighting an Ace with
+  `--log=sound:debug`; expect a `trigger #14` line as the ace closes, and one per re-engagement.
+  *Cross-refs:* `BL-934` (the campaign-side silence, same runtime), `BL-987` (the missing
+  failed-shake taunt, the other half of a 1v1's chatter).
+
+- `BL-987` `[Feature]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **`TA-FailShk`
+  (id 26, the speaker failed to shake its pursuer) has no dispatch site, so an ace that stays in
+  your gunsight through an evade never taunts.** *Evidence:* `docs/formats/combat-voice.md`'s
+  dispatch-site table marks 26 unwired because the original's shake-attempt check is undecoded;
+  its pair, `TA-SucShk` (27), is wired to the evade reaction completing. In a 1v1 27 is the only
+  taunt that can fire at all (25 needs an AI evader). *Fix shape:* the evade episode ending with
+  the pursuer still inside its tail cone is the natural stand-in for 26, with 27 kept for the
+  episode that ends with the pursuer shaken; today 27 fires on every `reaction complete`
+  regardless. Name the stand-in in the dispatch-site table. *Cross-refs:* `BL-986`, `BL-934`.
+
+- `BL-988` `[Feature]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: decoded]` **The three
+  gloats (ids 22–24) have no dispatch site: a killer never crows over a downed aircraft, and your
+  own kill draws no line from your flight.** *Evidence:* the polarity is decoded in
+  `docs/formats/combat-voice.md` ("The gloat triggers and trigger 28"): friendly kill silent,
+  otherwise the killer speaks 22 when the victim was on the player's team and 23 when not, and a
+  kill by the local player takes 24 and broadcasts on the player's team. The table row says "no
+  dispatch site chosen yet, left for a future item". *Fix shape:* `FlightController.Downed`
+  already carries shooter and victim (`ai: … downed (shooter id 100, killer 0)` in the log);
+  `AiVoiceRuntime` subscribes there for the death cry and can run the two team predicates beside
+  it. *Cross-refs:* `BL-986`, `BL-989` (the other decoded hit-path trigger).
+
+- `BL-989` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **`DS-Ally`
+  (id 28) has no dispatch site, so a wingman hit by your round never complains.** *Evidence:*
+  `docs/formats/combat-voice.md` decodes two arms in `FUN_004b9770`; the first fires when the
+  local player's round damages a friendly and the struck aircraft speaks. The second counts
+  survivors among three undecoded globals and is not answerable. *Fix shape:* wire the
+  friendly-fire arm only, on `DamageApplied` where the shooter is the human and the victim shares
+  its team; leave the second arm to a decode. *Cross-refs:* `BL-988`, `BL-934` (its verdict
+  named friendly fire as a silent case).
+
+- `BL-990` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **`WA-Turret`
+  (id 0, a turret has acquired the player with line of sight) has no dispatch site.**
+  *Evidence:* `docs/formats/combat-voice.md` marks 0 unwired because acquisition is
+  `TurretController`'s event and was owned by another thread. *Fix shape:* raise an acquisition
+  event from the turret controller and broadcast id 0 on the player's team from
+  `AiVoiceRuntime`; matters on the zeppelin missions, where the turret sits are the fight.
+  *Cross-refs:* `docs/formats/turrets.md`.
+
+- `BL-991` `[Feature]` `[Blocked: danger-zone decode]` `[S]` `[Next: decode]` `[Impact: low]`
+  `[Evidence: decoded]` **`PR-DngrZn` (id 15, a Danger Zone run, broadcast) has no dispatch site
+  because the danger-zone modes are never entered.** *Evidence:*
+  `docs/formats/combat-voice.md` row 15: the modes' gate data is undecoded (F17). *Fix shape:*
+  lands with the mode decode; until then nothing to wire. *Cross-refs:* `BL-934`.
+
+- `BL-992` `[Research]` `[S]` `[Next: decode]` `[Impact: none]` `[Evidence: decoded]`
+  **`PR-EnemyDwn` (id 16) has no located dispatch site in the binary; decide whether it is
+  reachable or unused.** *Evidence:* `docs/formats/combat-voice.md`, "What is not pinned down".
+  *Fix shape:* cross-reference the slot-16 read in `crimson.exe` (`vehicle + 0x730 + 12 * 16`);
+  a hit names the site, no hit closes the id as unused and the table row says so.
+
+- `BL-993` `[Fidelity]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]` **The gate's
+  "must not already be talking" test is a hook with nothing behind it, so a speaker can queue a
+  second line over its own first, which the radio's 0.8 s tolerance then drops.** *Evidence:*
+  `AiVoiceDispatcher.IsTalking` is null in the runtime; `docs/formats/combat-voice.md` records
+  the radio channel carrying no per-speaker playing state. *Fix shape:* `MissionRadio` knows the
+  cue on air and its length (`radio line=… len=2.1s` in the log); hand the speaker id in with the
+  cue and answer the hook from it. *Cross-refs:* `BL-978` (the flat radio path), `BL-986`.
+
+- `BL-994` `[Research]` `[S]` `[Next: decode]` `[Impact: high]` `[Evidence: data]` **Every
+  Instant Action wave enemy is voiceless (`accentID` -1); decide whether the original's setup
+  screen gives a militia's wave an accent.** *Evidence:* a C4 dogfight_squadron round logs
+  `ai3..ai8: accent -1 resolves to no voiced pilot, silent`, so no enemy line can play in that
+  mode. The shipped `ia.zrd` authors no `enemy_accentID` and `Mech3/InstantAction.cs` falls back
+  to -1 (`docs/formats/instant-action.md`, "parsed but authored by no chapter"). The retail
+  screen's writes into the record are decoded for the militia (`ia_d_egroupN`), the plane and the
+  skill, not for an accent. *Fix shape:* decode whether the militia pick, or the wave build,
+  writes `enemy_accentID`; if it does, add the militia→accent mapping to the wizard and the
+  prewarm set already takes the 12 to 16 range. If it does not, the original's squadrons are
+  silent too and the item closes as data. *Cross-refs:* `git log --grep=BL-977` (named this as a
+  limit), `BL-995`.
+
+- `BL-995` `[Bug]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: data]` **A second Instant
+  Action wingman on slot accent 14 resolves to no voiced pilot and flies silent.** *Evidence:*
+  `ai2_player_peacemaker: accent 14 resolves to no voiced pilot, silent` in a C4 squadron round;
+  the first wingman on accent 12 resolves to VO id 2 and speaks. `InstantActionRuntime` assigns
+  the wingman slots 12, 14, 15, 13, 16 in order. *Fix shape:* read `zrdr/voice.zrd` row 14 and
+  the pilot pool it names against the clip survey; either the row is empty in data (then the
+  original's second wingman is silent too, close as data) or the pool names pilot ids the
+  resolver drops. *Cross-refs:* `BL-994`, `docs/formats/combat-voice.md` ("Where a pilot's voice
+  comes from").
 
 ## Cameras & views
 
