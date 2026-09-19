@@ -1054,6 +1054,19 @@ usual.
   not a split. The per-frame tick order across the runtimes is the one thing the session must
   keep in one place; do not scatter it into the extracted modules. *Cross-refs:* `BL-1014`,
   `BL-1016`, `docs/architecture/Session.md`.
+- `BL-1024` `[Fidelity]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: decoded]` **Every danger
+  zone reads difficulty 0, so the daredevil pick's `natural_touch` test is ported but never
+  exercised.** *Evidence:* the original's proximity pick admits a zone only when its difficulty
+  (`+0x44`, read from the `dzpath` node's flag word `+0x28 >> 23`) is within the pilot's
+  `natural_touch` (`docs/org/aiPilot.md`, "Per zone"). `DangerZoneRibbon.Difficulty` is init-only
+  and `DangerZoneRibbon.FromPolyline` never sets it, so `DangerZoneRibbons.ProximityPick` compares
+  every pilot against 0 and admits every active zone with a free lane. *Fix shape:* read the flag
+  word's upper bits off the node the ribbon loader walks and set the difficulty from it; a unit
+  over every shipped chapter's `dzpath` nodes reports the difficulties found. If every shipped zone
+  authors 0, the term is inert in the original too and the item closes on that measurement with
+  the field still read. *⚠ Traps:* do not invent a difficulty from the zone's shape or gate count;
+  the value is the authored bits or nothing. *Cross-refs:* `git log --grep=BL-991` (the pick and
+  the term's port), `docs/org/aiPilot.md`.
 
 ## Tooling, platform & docs
 
