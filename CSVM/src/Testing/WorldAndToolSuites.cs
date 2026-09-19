@@ -309,6 +309,92 @@ internal static class WorldAndToolSuites
         }
     }
 
+    // The photograph's fill light. A suite cannot read pixels back, so it proves the three things
+    // the pixels follow from: the faithful aircraft shader swaps its ambient half for the fill only
+    // at an armed eye, the photograph's frame arms that eye on its own pilot's instances alone and
+    // the pane stands out of reach of it, and the end of the frame disarms every one. The fill's
+    // level is C1's zone through the decoded law. Able to fail: an unarmed airframe, a stranger's
+    // plane armed, a pane within reach, or an instance left armed after the frame.
+    [Suite("danger-zone-photograph-fill",
+        "the Danger Zone photograph's frame raises its own pilot's aircraft to the decoded fill ambient for its eye alone: the pane on the same frame is out of reach, another plane is never armed, and the next frame is disarmed")]
+    internal static void DangerZonePhotographFill(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var weather = WeatherState.Load(SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1"));
+        ctx.Check(weather != null, $"C1 IA1's weather loads");
+        if (weather != null)
+        {
+            var zone = weather.Zone("zone1");
+            (Vector3 ambient, _) = WeatherRig.SunVertexLight(zone);
+            Vector3 fill = WeatherRig.PhotographFill(zone);
+            float expected = Mathf.Clamp(Mathf.Floor((((zone.SunAmbient * 1.5f) + 0.1f) * 255f) + 0.5f), 0f, 255f) / 255f;
+            ctx.Check(Mathf.Abs(WeatherRig.PhotographFillAmbient(zone.SunAmbient) - expected) < 1e-5f,
+                $"the fill scalar is the stored byte A={zone.SunAmbient:0.###} fill={expected:0.####}");
+            ctx.Check(fill.X > ambient.X && fill.Y > ambient.Y && fill.Z > ambient.Z,
+                $"the fill lights brighter than the zone's ambient half ambient={ambient} fill={fill}");
+        }
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var textures = new TextureArchive(texturesPath);
+        var controller = new Node3D { Name = "photo_fill_pilot" };
+        var stranger = new Node3D { Name = "photo_fill_stranger", Position = new Vector3(40f, 0f, 0f) };
+        var paneView = new SubViewport { Size = new Vector2I(64, 48), RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled };
+        DangerZonePhotograph? photo = null;
+        try
+        {
+            controller.AddChild(new PlaneBuilder(planesGamez, textures, spinningProps: true).Build(ctx.PlaneName));
+            stranger.AddChild(new PlaneBuilder(planesGamez, textures, spinningProps: true).Build(ctx.PlaneName));
+            ctx.Host.AddChild(controller);
+            ctx.Host.AddChild(stranger);
+            // The chase pane, where a pilot's view stands: behind and above the tail.
+            var pane = new Camera3D { Position = new Vector3(0f, 3f, 18f) };
+            paneView.AddChild(pane);
+            ctx.Host.AddChild(paneView);
+
+            var shaders = ShadersUnder(controller);
+            int gated = shaders.Count(s => s.Code.Contains("csky_sun_fill_rgb : csky_sun_ambient_rgb", System.StringComparison.Ordinal)
+                && s.Code.Contains("distance(CAMERA_POSITION_WORLD, csky_photo_eye.xyz)", System.StringComparison.Ordinal));
+            ctx.Check(gated > 0, $"the aircraft's faithful shaders swap the ambient half at an armed eye gated={gated} of {shaders.Count}");
+
+            photo = DangerZonePhotograph.Build(pane, null, () => controller.GlobalTransform, 18.5f, () => 0.5f,
+                airframe: controller);
+            controller.AddChild(photo);
+            ctx.Check(photo.Request(_ => { }), $"the photograph takes the request");
+            photo._Process(0);
+
+            var instances = Meshes(controller).OfType<GeometryInstance3D>().ToList();
+            Vector3 eye = photo.Eye.Origin;
+            var armed = new Vector4(eye.X, eye.Y, eye.Z, 1f);
+            int hit = instances.Count(i => i.GetInstanceShaderParameter(SceneBuilder.PhotoEyeParam).AsVector4() == armed);
+            ctx.Check(instances.Count > 0 && hit == instances.Count && photo.Filled.Count == instances.Count,
+                $"the frame arms every instance of its own pilot's aircraft at its eye armed={hit} of {instances.Count}");
+            int strays = Meshes(stranger).OfType<GeometryInstance3D>()
+                .Count(i => i.GetInstanceShaderParameter(SceneBuilder.PhotoEyeParam).AsVector4().W > 0.5f);
+            ctx.Check(strays == 0, $"another plane's instances are never armed strays={strays}");
+            float paneReach = pane.GlobalPosition.DistanceTo(eye);
+            ctx.Check(paneReach > SceneBuilder.PhotoEyeReach * 10f,
+                $"the pane drawing the same frame stands out of the fill's reach pane={paneReach:0.#}m reach={SceneBuilder.PhotoEyeReach}m");
+
+            // The frame's end: leaving the tree before the draw lands takes the same disarm the
+            // post-draw callback does.
+            controller.RemoveChild(photo);
+            int left = instances.Count(i => i.GetInstanceShaderParameter(SceneBuilder.PhotoEyeParam).AsVector4() != Vector4.Zero);
+            ctx.Check(left == 0 && photo.Filled.Count == 0,
+                $"the next frame draws every instance disarmed left={left}");
+        }
+        finally
+        {
+            photo?.Free();
+            controller.QueueFree();
+            stranger.QueueFree();
+            paneView.QueueFree();
+            textures.Dispose();
+        }
+    }
+
     // The interior's own render pass (--cockpit-pass): the panel leaves the plane model for a
     // world of its own, where both it and the camera sit at the origin, so no chapter-scale
     // coordinate enters its transform chain. Able to fail: a pass that shares the main World3D, one

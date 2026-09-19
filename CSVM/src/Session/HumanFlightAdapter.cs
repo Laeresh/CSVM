@@ -514,7 +514,7 @@ internal sealed class HumanFlightAdapter
         // the controller draws, which is the controller node's own transform.
         var scatter = Rng.Stream(Rng.Photograph);
         controller.Photograph = DangerZonePhotograph.Build(rig.Camera, controller.Cockpit,
-            () => controller.GlobalTransform, camParams.Dist, scatter.Randf);
+            () => controller.GlobalTransform, camParams.Dist, scatter.Randf, airframe: controller);
         controller.AddChild(controller.Photograph);
         // --weapon-lab: a flight session whose aircraft is pinned at the spawn pose. Set after
         // Setup, so the pin, captured at the first held sim step, takes the pose Setup just wrote.

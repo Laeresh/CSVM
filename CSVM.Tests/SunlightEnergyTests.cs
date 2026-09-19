@@ -218,6 +218,33 @@ public class SunlightEnergyTests
         Assert.False(c1!.Zone("zone1").SunBicolored);
     }
 
+    // The photograph's fill: the byte FUN_004a0220 stores, ftol((A * 1.5 + 0.1) * 255 + 0.5)
+    // clamped to 255, read back through the 1/255 the draw multiplies it by.
+    [Theory]
+    [InlineData(0.25f, 121)]
+    [InlineData(0.5f, 217)]
+    [InlineData(0f, 26)]
+    [InlineData(0.6f, 255)]
+    [InlineData(1.5f, 255)]
+    public void ThePhotographFillIsTheStoredByte(float ambient, int stored)
+        => Assert.Equal(stored * 0.003921569f, WeatherRig.PhotographFillAmbient(ambient), 6);
+
+    // The fill replaces the ambient scalar alone, so it keeps the colour the ambient half is
+    // lit with, bicoloured or not.
+    [Fact]
+    public void ThePhotographFillKeepsTheAmbientHalfsColour()
+    {
+        var zone = Zone(1.5f, 0.25f) with
+        {
+            SunColorDiffuse = new Color(1f, 0.8f, 0.7f),
+            SunColorAmbient = new Color(0.7f, 0.9f, 1f),
+        };
+        float fill = 121 * 0.003921569f;
+        Assert.Equal(new Vector3(1f, 0.8f, 0.7f) * fill, WeatherRig.PhotographFill(zone));
+        Assert.Equal(new Vector3(0.7f, 0.9f, 1f) * fill,
+            WeatherRig.PhotographFill(zone with { SunBicolored = true }));
+    }
+
     // The default fog is the install's modal DAY colour, so a case that says nothing about the
     // sky gets the day arm of the night rule.
     private static WeatherState.ZoneWeather Zone(float diffuse, float ambient, Color? fog = null)

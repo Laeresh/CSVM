@@ -255,6 +255,23 @@ public sealed class WeatherRig
         => (Scaled(fog.SunAmbient, fog.SunBicolored ? fog.SunColorAmbient : fog.SunColorDiffuse),
             Scaled(fog.SunDiffuse, fog.SunColorDiffuse));
 
+    /// <summary>The ambient scalar the Danger Zone photograph lights its pilot's aircraft with, off
+    /// the zone's <c>SUNLIGHT_AMBIENT</c>: <c>ambient × 1.5 + 0.1</c> rounded to a byte, clamped to
+    /// 0..255 and read back as a 1/255 fraction, which caps it at 1 (docs/formats/campaign-screens.md,
+    /// "The fill light"). Double arithmetic, as the original's 53-bit x87 evaluates it. Pure.</summary>
+    public static float PhotographFillAmbient(float ambient)
+    {
+        double level = ((((double)ambient * 1.5) + 0.1f) * 255.0) + 0.5;
+        int stored = level >= 255.0 ? 255 : level <= 0.0 ? 0 : (int)level;
+        return stored * 0.003921569f;
+    }
+
+    /// <summary>The photograph's ambient half as a colour triple: <see cref="PhotographFillAmbient"/>
+    /// in place of the zone's ambient scalar, on the colour <see cref="SunVertexLight"/> gives that
+    /// half. The diffuse half is the zone's own. Pure.</summary>
+    public static Vector3 PhotographFill(WeatherState.ZoneWeather fog)
+        => Scaled(PhotographFillAmbient(fog.SunAmbient), fog.SunBicolored ? fog.SunColorAmbient : fog.SunColorDiffuse);
+
     /// <summary>Whether a zone's authored <c>FOG_COLOR</c> puts it under a night sky, which is
     /// what caps its enhanced energies. Pure and public so the rule can be pinned and so a log
     /// line can say which side of it a zone fell on.</summary>
@@ -825,6 +842,7 @@ public sealed class WeatherRig
         (Vector3 ambientRgb, Vector3 diffuseRgb) = SunVertexLight(fog);
         RenderingServer.GlobalShaderParameterSet("csky_sun_ambient_rgb", ambientRgb);
         RenderingServer.GlobalShaderParameterSet("csky_sun_diffuse_rgb", diffuseRgb);
+        RenderingServer.GlobalShaderParameterSet("csky_sun_fill_rgb", PhotographFill(fog));
         // The authored pair itself, published for the ground shadow, which derives its darkness
         // from the light rather than from either mode's energies.
         SunlightRgb = (Scaled(fog.SunDiffuse, fog.SunColorDiffuse),

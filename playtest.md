@@ -658,6 +658,23 @@ against `BL-389` rather than against the wash routing.
 
   *Blocks:* nothing tracks the outcome; a fail mints a new `BL` item.
 
+### C1 · Instant Action stunt run, the stunt camera's photographs
+
+```powershell
+./RunGame.ps1
+```
+
+- `PT-171` `[A/B: a stunt photograph the original takes on the same C1 stunt run, same plane]`
+  **The photograph lights the aircraft brighter than the flight view, as the original's does.**
+  Menu path: Instant Action → C1 → Stunt Flying, graphics mode Original. The photograph's frame
+  raises the sun's ambient half on the pilot's own aircraft to `SUNLIGHT_AMBIENT × 1.5 + 0.1`
+  (C1's 0.25 draws at 0.47 instead of 0.25), for that frame only
+  (`docs/formats/campaign-screens.md`, "The fill light"). Fly through two or three danger zones
+  and open the photographs under `screenshots/stunts/` beside the original's from the same run.
+  *Look for:* (a) the aircraft's shaded side in the remake's photograph about as bright as in the
+  original's, neither darker nor washed out; (b) the flight view on the frames around each sting
+  not flashing brighter. *Blocks:* nothing tracks the outcome; a fail mints a new `BL` item.
+
 ### C1 · Instant Action, Dogfighting an Ace, sound on
 
 ```powershell

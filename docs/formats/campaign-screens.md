@@ -743,8 +743,8 @@ camera's mode, FOV, position and orientation, then for one frame:
   positions), set through `FUN_004d2710` and `FUN_004d2490`;
 - sets the FOV to 60° (`FUN_0042b570(0x3f860a92)`), turns the cockpit and HUD chrome off
   (`FUN_00455800(0)`), and draws the player model and `cockpit1` opaque (`FUN_0049cc00`);
-- on the hardware renderer, gives the player model a fill light of the scene light's intensity
-  times 1.5 plus 0.1 (`FUN_004ccfd0`, `FUN_004cd060`);
+- on the hardware renderer, raises the sun's ambient scalar to `SUNLIGHT_AMBIENT × 1.5 + 0.1`
+  while the player model draws (`FUN_004ccfd0`, `FUN_004cd060`; "The fill light" below);
 - renders without the screen tint (`FUN_0049fe70(0)`) and saves the back buffer through
   `FUN_005a9800` as `<profile>\Snap_<mission>_<objective>.PN_`.
 
@@ -769,12 +769,49 @@ photographed.
 
 The remake takes the same pose in `DangerZonePhotograph`, a viewport of its own that shares the
 pane's world, so the pane is never moved. A pilot in a first-person view has the hidden airframe
-groups shown for that one frame on a visual layer no pane draws. The fill light is not ported. A
-run that draws no frames (headless) photographs the pane instead.
+groups shown for that one frame on a visual layer no pane draws, and the fill light below lights
+the pilot's own aircraft for that frame. A run that draws no frames (headless) photographs the pane
+instead.
 
 Authoring gaps stay as they are: CM18 numbers a zone 19 with no row for it, CM19 numbers one 31
 with no row, CM23 ships rows 27 and 28 for zones it disables, and every `_31` row is dead because
 the debrief's mask loop stops at 30 (`docs/org/debrief.md`).
+
+#### The fill light
+
+[Evidence: decoded] The fill is not a new light. It is the per-node ambient override every
+`Object3d` node carries in the flag word `+0x2c`: bit 7 enables it (`FUN_004ccfd0` sets it,
+`FUN_004cd020` reads it) and bits 9 to 16 hold its level as a byte (`FUN_004cd060` writes it,
+`FUN_004cd0b0` reads it). The script commands `NodeSetOverrideAmbient` and
+`NodeSetOverrideAmbientValue` (the latter's value times 255) drive the same two setters, and
+`NodeSetOverrideDiffuse` is the matching diffuse override (`FUN_004cd0f0`), which the photograph
+does not use.
+
+`FUN_004a0220` sets it on the player's node (`player+0xc`) from `0x004a0593` to `0x004a0649`,
+only when the hardware renderer flag `DAT_009be708` is up and the sunlight node `DAT_0071c2b8` (the
+one the zone apply `FUN_00472ea0` writes) has its class data. It saves the node's flag and byte,
+reads the sun's ambient scalar `A` (class data `+0xa0`, the zone's `SUNLIGHT_AMBIENT`), enables
+the override and stores `ftol((A × 1.5 + 0.1) × 255 + 0.5)` clamped to 0..255 (the constants at
+`0x00603460`, `0x006034a8`, `0x0060414c`, `0x006032e0`; `ftol` is `0x005f6e60`). After the save it
+puts the old flag and byte back (`0x004a08e3` to `0x004a0909`).
+
+The consumer is the `Object3d` draw `FUN_004d39c0`. For a node with the override set, when the
+gathered directional light (`FUN_0056bc40`, the sun) exists, it saves that light's ambient scalar
+and `DAT_0071ea14`, sets `DAT_0071ea14` to 1, sets the ambient scalar to `byte × 0.003921569`
+through `FUN_004dbce0` (which recomputes the light's premultiplied ambient and combined colour
+triples from its own colours), draws the node's model and every child, and restores both. The
+whole aircraft subtree therefore draws with the sun's ambient half raised to the fill and its
+direction, colour and diffuse half unchanged. C1's day `A` of 0.25 draws at 121/255, C5's 0.5 at
+217/255, and any `A` from about 0.6 up saturates at 1. The software renderer takes no fill. What
+`DAT_0071ea14` gates is not decoded.
+
+The remake's faithful aircraft shader takes the fill as a second ambient triple,
+`csky_sun_fill_rgb` (`WeatherRig.PhotographFill`, the same colour rule as the ambient half), in
+place of `csky_sun_ambient_rgb` when its instance's `csky_photo_eye` is armed and the drawing
+camera stands within `SceneBuilder.PhotoEyeReach` of that eye. `DangerZonePhotograph` arms its own
+pilot's instances with its eye for the frame it draws and disarms them after that draw, so the
+pane drawing the same aircraft on the same frame, and every later frame, keeps the zone's ambient.
+Enhanced mode's lit aircraft takes no fill.
 
 ### The grime
 
