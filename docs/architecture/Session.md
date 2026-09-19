@@ -422,12 +422,12 @@ Format and decode, including the wake ordering and the awake-by-data census:
 [../formats/turrets.md](../formats/turrets.md).
 
 ## src/Session/AiVoiceRuntime.cs
-Wires the combat-voice dispatcher into a running flight session, built with the rigs wherever the
-world has a `WorldSounds` and ticked on the sim clock: an accented AI spawn is registered as a
-speaker on its own `FlightController.Team`, each human rig as a damage source whose rounds draw the ally distress out of a teammate they strike, and the mode machine
-and death report of EVERY aircraft handed over are watched, accented or not, because the bearing
-call-out, the taunt and the killer's gloat are spoken by an aircraft other than the one the event reached.
+Wires the combat-voice dispatcher into a running flight session, built with the rigs wherever the world has a `WorldSounds`
+and ticked on the sim clock: an accented AI spawn is registered as a speaker on its own `FlightController.Team`, each human
+rig as a damage source whose rounds draw the ally distress out of a teammate they strike, and the mode machine and death report of EVERY aircraft handed over are watched, accented or not,
+because the bearing call-out, the taunt and the killer's gloat are spoken by an aircraft other than the one the event reached.
 An evade episode's end picks the taunt pair off the machine's own evade flag: still standing is the failed shake, cleared is the successful one.
+`Step` also raises the attack pair, the pursuer's `WA-Attack` and the flight's bearing call-out, for every AI whose gunner holds a human, at the slot cooldown's own interval rather than on a mode edge, so a commit inside the mute window is not lost.
 `RegisterAi` also mirrors `InPlay` into the speaker's liveness, the only place the engine-free dispatcher and a controller meet.
 Lines play flat through `MissionRadio.Speak` (the queue the objective callouts share) with the speaker id that answers the "already talking" hook; every roll and first "no clip" refusal prints an `ai voice:` line. `WatchTurrets` adds the one non-aircraft source, a gunner's acquisition of a human player off the shared `ProjectilePool`, broadcast on that player's team. [../formats/combat-voice.md](../formats/combat-voice.md).
 

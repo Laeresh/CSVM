@@ -762,30 +762,27 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `git log --grep=BL-934`, `git log --grep=BL-978` (the flat radio path),
   `git log --grep=BL-977` (the Instant Action prewarm gap),
   the saved Voice level (`Utils/AudioMix.cs`, the `audio-buses` suite) if the lines dispatch and
-  stay inaudible; `BL-986` (the spawn-time commit is muted and never re-arms, the largest single
-  cause of the low rate), `BL-990`, `BL-991` and `BL-996` (the unwired trigger ids).
+  stay inaudible; `git log --grep=BL-986` (the attack pair now raised off the quarry rather than
+  off the mode edge, which was the largest single cause of the low rate),
+  `BL-991` and `BL-996` (the unwired trigger ids).
 
-- `BL-986` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: trace]` **An ace commits to
-  the player on the first frame, inside the 2 s mute window, so `WA-Attack` and the bearing
-  call-outs never play, and the site does not re-arm until the attack dwell runs out a minute
-  later.** *Evidence:* a C1 dogfight against Blake logs `ai1_player_peacemaker: patrol -> pursue
-  (target at 2498 m) t=0.14`, the remake's only dispatch site for ids 1–12 and 14
-  (`Session/AiVoiceRuntime.cs`, `OnModeChanged`), and the gate refuses anything before the
-  mission clock reaches 2 s (`Flight/AiVoiceDispatcher.cs`, `MuteWindowS`) without a log line. The
-  next patrol→pursue is `t=60.15 (attack dwell ran out)`, one second before the ace dies. A C4
-  squadron round shows the same: all six wave-1 commits at `t=0.13`, muted, and the only bearing
-  call-out of the round is wave 2's commit at `t=95.11`. Every talker roll in that sitting passed,
-  so the roll is not the limiter; the ace speaks four lines in 65 s where the original's Blake
-  talks every few seconds. *Fix shape:* the original's "enemy spotted" event is undecoded
-  (`docs/formats/combat-voice.md`, dispatch-site row 1–12, 14); decode it out of the pursue path.
-  Before that, the cheap stand-in: dispatch `WA-Attack` and the bearing broadcast when the
-  committed pursuer first closes inside an engagement range of the human, or on its first shot
-  at the human, and re-arm per engagement rather than per patrol→pursue edge. *⚠ Traps:* do not
-  drop the mute window, it is decoded; do not fire on every pursue re-entry from `avoid crash`,
-  which happens every few seconds near terrain and would flood the 15 s slot cooldown with
-  failed rolls. *Playtest after fix:* Instant Action → C1 → Dogfighting an Ace with
-  `--log=sound:debug`; expect a `trigger #14` line as the ace closes, and one per re-engagement.
-  *Cross-refs:* `BL-934` (the campaign-side silence, same runtime).
+- `BL-1011` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **Both of the
+  original's bearing-call-out sites raise the taunt pair 25/26 off the pursuer's own geometry
+  against the player, which is not the "failed tail check" and "failed shake attempt" the trigger
+  table and the remake's wiring read them as.** *Evidence:* in the combat driver `FUN_0041d9f0`
+  (state 0) and again in the multiplayer vehicle update `FUN_00470750`, the same block takes the
+  dot product of the unit line to the player with the pursuer's own forward axis (`+0x198`) and
+  raises 26 under -0.85 (`0x0041dc50`) or 25 over 0.7 (`0x0041dc66`), then broadcasts the bearing
+  id. Nothing there reads a tail check, a shake attempt or the evade flag, and the speaker is the
+  pursuer, not the pursued. The remake wires 25 on a pursuer's failed sixth-sense stun (spoken by
+  its AI target) and 26/27 on the evade episode's end. Both readings cannot be right.
+  *Fix shape:* decode who speaks 25 and 26 in the original, the geometry reading says the pursuer
+  with the player ahead of its nose speaks 25 and the one with the player behind it speaks 26,
+  then either rewire the two rows or record why the remake's sites stand. *⚠ Traps:* 27
+  (`TA-SucShk`) is not raised from either block, so it is not part of the same question; the
+  0.7/-0.85 pair is a dot product against a UNIT vector, not an angle in degrees.
+  *Cross-refs:* `docs/formats/combat-voice.md` ("The pursue path"), `git log --grep=BL-986`
+  (the decode that found it), `git log --grep=BL-987` (the evade-end split it questions).
 
 - `BL-991` `[Feature]` `[Blocked: danger-zone decode]` `[S]` `[Next: decode]` `[Impact: low]`
   `[Evidence: decoded]` **`PR-DngrZn` (id 15, a Danger Zone run, broadcast) has no dispatch site

@@ -2511,7 +2511,11 @@ internal static class AiSuites
         + "gunner raises WA-Turret once per acquisition episode, not at all while it holds the "
         + "nearer AI, once when the player is the acquired target with a clear sight line, with "
         + "the flight rather than the gun speaking id 0 on the player's team, nothing further "
-        + "while it keeps tracking, and again after it has lost and re-acquired the player")]
+        + "while it keeps tracking, and again after it has lost and re-acquired the player; and the attack pair "
+        + "survives a mission start: a commit inside the 2 s mute window speaks nothing yet is "
+        + "not lost, the pursuer's 14 and the flight's bearing call-out arriving as the window "
+        + "lifts, a pursue re-entry from avoid crash in the same engagement stays silent, and a "
+        + "fresh engagement past the 15 s slot cooldown speaks the pair again")]
     internal static void AiVoice(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -2538,6 +2542,7 @@ internal static class AiSuites
         WorldSounds? sounds = null;
         MissionRadio? radio = null;
         Session.AiVoiceRuntime? runtime = null;
+        Session.AiVoiceRuntime? attack = null;
         FlightController? ai = null;
         ProjectilePool? turretPool = null;
         var gloatRigs = new List<FlightController>();
@@ -2965,7 +2970,66 @@ internal static class AiSuites
             ctx.Check(acquisitions == 2,
                 $"…and re-acquiring it warns the flight again events={acquisitions}");
 
-            ctx.Note($"lines: {string.Join(", ", played)}");
+
+            // --- the attack pair (14 and 1-12), raised off the quarry rather than off a mode
+            // edge, so a commit inside the 2 s mute window costs nothing. The second runtime
+            // carries its own clock, the only way to put a transition inside that window here.
+            PumpRadio(radio);
+            attack = new Session.AiVoiceRuntime(voice, sounds, radio, new System.Random(9));
+            ctx.Host.AddChild(attack);
+            var calls = new List<(string Tag, int Trigger, string Clip)>();
+            attack.LinePlayed += (tag, trigger, clip) => calls.Add((tag, trigger, clip));
+            var chased = Rig(FlightRoster.ShooterIdBase + 13, AimAssist.PlayerTeam, human: true);
+            var flightMate = Rig(FlightRoster.ShooterIdBase + 14, AimAssist.PlayerTeam, human: false);
+            var ace = Rig(FlightRoster.ShooterIdBase + 15, enemyTeam, human: false);
+            var aceModes = new AiModeMachine(new System.Random(12));
+            ace.Pilot!.Machine = aceModes;
+            ace.Pilot.Gunner = new AiGunner(new RandomNumberGenerator { Seed = 3 }) { Target = chased };
+            attack.RegisterPlayer(chased);
+            // ⚠ The flight mate is registered at 2: the bearing ids halve the talker chance, so a
+            // chance of 1 would make every assertion below a coin flip on the dice rather than on
+            // the raise. The halving itself is pinned by AiVoiceDispatcherTests.
+            attack.RegisterAi(flightMate, accentId: 12, talkerChance: 2f, constitutionChance: 1f);
+            attack.RegisterAi(ace, accentId: 12, talkerChance: 1f, constitutionChance: 1f);
+
+            // The mission start: the ace takes the human on the first frame, well inside the
+            // window, and nothing may speak yet.
+            attack.Step(0.1f);
+            aceModes.Enter(AiMode.Pursue, "ordered");
+            ctx.Check(calls.Count == 0,
+                $"a commit inside the 2 s mute window speaks nothing lines={calls.Count}");
+
+            // …and the pair is not lost with it: the first step past the window raises both, the
+            // pursuer's own #14 and one bearing call-out elected from the player's flight.
+            attack.Step(2f);
+            ctx.Check(calls.Count == 2 && calls[0].Trigger == AiVoiceDispatcher.WaAttack
+                && calls[0].Tag == ace.Name && calls[0].Clip.StartsWith("snd_id2_WA-Attack"),
+                $"…and the pursuer speaks #14 as the window lifts lines=[{string.Join(", ", calls)}]");
+            ctx.Check(calls.Count == 2 && calls[1].Trigger is >= 1 and <= 12
+                && calls[1].Tag == flightMate.Name && calls[1].Clip.StartsWith("snd_id2_WA-Enemy-"),
+                $"…with the bearing call-out broadcast onto the player's flight last={(calls.Count > 1 ? calls[^1].ToString() : "none")}");
+            PumpRadio(radio);
+
+            // A pursue re-entry from avoid crash is the same engagement, and near terrain it
+            // happens every few seconds: the raise interval must hold it silent.
+            aceModes.Enter(AiMode.AvoidCrash, "ordered");
+            aceModes.Enter(AiMode.Pursue, "ordered");
+            attack.Step(0.1f);
+            ctx.Check(calls.Count == 2,
+                $"a pursue re-entry from avoid crash in the same engagement speaks nothing lines={calls.Count - 2}");
+
+            // A fresh engagement speaks again: losing the human re-arms the raise, and the 15 s
+            // slot cooldown has run out by the time the ace takes it back.
+            ace.Pilot.Gunner.Target = null;
+            attack.Step(AiVoiceDispatcher.SlotCooldownS);
+            ctx.Check(calls.Count == 2, $"…and nothing is raised while it holds no human lines={calls.Count - 2}");
+            ace.Pilot.Gunner.Target = chased;
+            attack.Step(0.1f);
+            ctx.Check(calls.Count == 4 && calls[2].Trigger == AiVoiceDispatcher.WaAttack
+                && calls[2].Tag == ace.Name && calls[3].Trigger is >= 1 and <= 12,
+                $"…while a fresh engagement past the cooldown raises the pair again lines=[{string.Join(", ", calls)}]");
+
+            ctx.Note($"lines: {string.Join(", ", played)}; attack pair: {string.Join(", ", calls)}");
         }
         finally
         {
@@ -2974,6 +3038,7 @@ internal static class AiSuites
                 rig.Free();
             }
             ai?.Free();
+            attack?.Free();
             runtime?.Free();
             turretPool?.Free();
             radio?.Free();

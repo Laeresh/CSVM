@@ -17,7 +17,7 @@ populates a pilot's voice slots runs `i` from `0` to `0x1d` exclusive.
 | 0 | `WA-Turret-A` | a turret acquires the player and has line of sight, broadcast |
 | 1–12 | `WA-Enemy-{12,3,6,9}{L,·,H}` | bearing call-out; see the index formula below, broadcast |
 | 13 | `WA-HighDmg-A` | the player's health crosses a 30 % threshold, broadcast |
-| 14 | `WA-Attack-A` | a pilot commits to an attack on the player |
+| 14 | `WA-Attack-A` | a pilot puts a round at the player ("The pursue path") |
 | 15 | `PR-DngrZn-A` | a Danger Zone run, broadcast |
 | 16 | `PR-EnemyDwn-A` | the local player downs an aircraft hostile to the player, broadcast |
 | 17 | `DI-LowDmg-A` | the speaker's health drops below **70 %** |
@@ -227,6 +227,48 @@ Triggers 0, 13, 15, 16 and the bearing call-outs dispatch this way, at the call 
 `0x004708e0` and `0x0041dcfa`; the gloat, distress, death and taunt triggers address a specific
 aircraft.
 
+## The pursue path raises the attack pair
+
+Triggers 14 and 1–12 are raised by the **pursuer**, from two sites, neither of them an edge.
+
+**Trigger 14 is one call inside the AI's weapon pass** (`FUN_0041f420`, the push of `0xe` at
+`0x0041f7a1` and the gate call at `0x0041f7a5`). It sits on the branch that has just put a round
+away, past that weapon record's own next-fire stamp, under a single guard: the standing target's
+vehicle against the local player's (`DAT_0071c298`). So "a pilot commits to an attack on the
+player" is literally *shoots at the player*, with no acquisition edge, no range and no promotion
+test, and the slot's 15 s cooldown is the entire re-arm.
+
+**The bearing call-outs are raised from the combat driver** (`FUN_0041d9f0`, state 0, the steering
+case the remake splits into patrol, pursue and the evade flag). Every frame, when the pursuer's
+target answers the `Target` vtable's `+0x38` player predicate and the pursuer's own evade flag at
+`+0xba` is clear, the driver computes the index and broadcasts it (`0x0041dcfa`). Again no range
+and no edge: the rate is the 15 s slot cooldown alone, which is why the original's aces call the
+player's bearing every few seconds through a whole engagement. The same block first raises one of
+the taunt pair off the dot product of the line to the player with the pursuer's own forward axis
+(`+0x198`): under -0.85 raises 26 (`0x0041dc50`), over 0.7 raises 25 (`0x0041dc66`), between them
+neither.
+
+**The quantisation is decoded whole**, so nothing in it is invented any more. The band is the
+vertical component of the UNIT vector from the pursuer to the player, split at ±0.3
+(`0x006034ac`/`0x006035ac`, read at `0x0041dc72`), about 17.5°: an angle, so the band does not
+widen with separation. Above +0.3 the player is the higher of the two and the call-out takes the
+`L` variant. The quadrant is the player's own heading minus the bearing to the pursuer, wrapped
+into one turn, scaled by 2/π (`0x006035a8`), 0.5 added (`0x006032e0`) and truncated, with 4
+folding back to 0: round-to-nearest, so the split falls at ±45°.
+
+**Multiplayer raises the same pair from its own vehicle update** (`FUN_00470750`, called per frame
+by `FUN_00470210`, the remote-vehicle interpolation, which the local simulation path never
+reaches). There the condition is explicit rather than implied: the actor is not on the local
+player's side (`FUN_004952f0`, the record's `+0x3c` against the local record's) and sits within
+**1695 m** of the player, and the same taunt pair and bearing broadcast follow (`0x00470822`,
+`0x00470849`, `0x004708e0`). That range belongs to the multiplayer path alone; the single-player
+driver applies none.
+
+⚠ **Both bearing sites read the taunt pair as a geometry test on the pursuer, which is not the
+reading rows 25 to 27 below are wired on.** Nothing here tests a tail check or a shake attempt;
+25 is the pursuer with the player ahead of its nose and 26 the pursuer with the player behind it.
+Reconciling the two readings is `BL-1011`, and until it lands the wired rows stay as they are.
+
 ## The remake's dispatch sites
 
 The rules above are represented in `CSVM/src/Flight/AiVoiceDispatcher.cs` (the gate, cooldowns,
@@ -243,7 +285,7 @@ are spoken by the killer, not by the aircraft that died.
 | ids | status | site / reason |
 |---|---|---|
 | 0 | wired | the gunner's own acquisition (`Flight/TurretController.cs`), carried mount and world emplacement alike: the first tick it holds a human player as its acquired target, by the entry's own `DETECTION_RANGE` and the shared target picker, with a clear sight line by its own rule. The report leaves through `ProjectilePool.TurretAcquiredPlayer`, the seam both turret families are built against, and `AiVoiceRuntime.WatchTurrets` broadcasts on the warned player's team |
-| 1–12, 14 | wired | our chosen site: the mode machine's patrol→pursue transition against a human target ("committing to an attack"), the attacker speaks `WA-Attack`, and the flight broadcasts the bearing call-out computed in the warned player's frame. The original's exact "enemy spotted" event is undecoded; this is the closest transition the machine has |
+| 1–12, 14 | wired | the decoded sites above: the pursuer speaks `WA-Attack` and the flight broadcasts the bearing call-out computed in the warned player's frame, raised together while the pursuer's gunner holds a human quarry (`AiVoiceRuntime.RaiseAttackCallOuts`, off the sim clock, not off a mode edge). The original raises them every frame from the weapon pass and the combat driver; the remake raises at the 15 s slot-cooldown interval, since no slot can speak twice inside it. Losing the human re-arms the raise, so a fresh engagement speaks at once, and the mode machine's patrol→pursue commit raises the pair as well when it falls after the mute window |
 | 13 | wired | a human rig's summary health crossing 30 % on the projectile hit path (decoded threshold), broadcast |
 | 17–19 | wired | the speaker's own summary health on the projectile hit path, 70/50/30 % most-severe-first (decoded) |
 | 20–21 | wired | `FlightController.Downed`, with force: id 20 (`DA`) when the dying aircraft's `Team` is `AimAssist.PlayerTeam`, id 21 (`DE`) otherwise (`AiVoiceRuntime.RegisterAi`). Free flight and `--vs` still give every AI its own default team, so `DA` stays dormant there in practice, it fires once a mission places an AI on the player's team |
@@ -268,9 +310,11 @@ Stand-ins and inventions, named:
   refreshing it on the ticks the fire gates skip would move every round the gun fires.
 - **`Bail`/`NoBail` is a constitution roll** (`constitution_chance`, 0.35→0.95), the open
   item's natural-candidate reading, implemented and marked unconfirmed.
-- **Bearing quantisation**: the four clock quadrants split at ±45° (the natural reading of a
-  nearest-quadrant index), and "level" is ±100 m (`AiVoiceDispatcher.LevelBandM`, invented).
-  Only the index formula itself is decoded.
+- **The raise interval** is the remake's only departure on the attack pair: the original re-raises
+  every frame and lets the gate refuse, and `AiVoiceRuntime` raises once per
+  `AiVoiceDispatcher.SlotCooldownS` per pursuer instead, because the broadcast election walks and
+  resolves every registered speaker on each raise. A raise the mute window refuses consumes no
+  interval, so a pursuer that commits on the mission's first frame speaks as the window lifts.
 - **Pilot identity**: an `--ai=` spawn takes an optional `accent=<id>` segment
   ([cli.md](../cli.md)); its accents join the mission roster's prewarm set. A spawn without one
   is voiceless. An Instant Action mission's actors join it the same way
@@ -303,6 +347,9 @@ Stand-ins and inventions, named:
   survivors, and they are on the hostile side of the team predicate, so the "the player's wingmen"
   reading of them does not hold (see the gloat/28 section above). *(Trigger 22–24's polarity, which
   this list carried as open, was settled there.)*
+- **What the taunt pair 25/26 really tests.** Both bearing sites raise them off the pursuer's own
+  geometry against the player, which the trigger table's "failed tail check" and "failed shake
+  attempt" readings do not describe; see the warning in "The pursue path" and `BL-1011`.
 - **How `Bail`/`NoBail` is chosen** below the family root (the natural candidate is the
   constitution roll, unconfirmed). The `-A`/`-B`/`-C` half closed : the shipped
   `snd_<FAMILY>-A_id<N>_random` groups pick the take, weighted-random with recency 0.5 (see

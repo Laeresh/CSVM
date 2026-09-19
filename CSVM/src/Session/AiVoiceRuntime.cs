@@ -37,6 +37,7 @@ public sealed partial class AiVoiceRuntime : Node
     private readonly HashSet<int> _watchedKills = new();
     private readonly HashSet<int> _watchedFriendlyFire = new();
     private readonly HashSet<(int Speaker, string Family)> _noClipLogged = new();
+    private readonly Dictionary<int, float> _nextCallOut = new();
     private float _now;
 
     public AiVoiceRuntime(CombatVoice voice, WorldSounds sounds, MissionRadio radio, Random rng)
@@ -63,8 +64,13 @@ public sealed partial class AiVoiceRuntime : Node
     public float Now => _now;
 
     /// <summary>Advances the mission clock one sim step (the 2 s mute window and every cooldown
-    /// run on this, so a halted clock halts the chatter too). Called by SessionSimulation.</summary>
-    public void Step(float dt) => _now += dt;
+    /// run on this, so a halted clock halts the chatter too), then raises the attack pair for
+    /// every pursuer holding a human. Called by SessionSimulation.</summary>
+    public void Step(float dt)
+    {
+        _now += dt;
+        RaiseAttackCallOuts();
+    }
 
     /// <summary>Takes an AI aircraft, voiced or not. ⚠ Hand over EVERY AI the session builds: the
     /// mode machine is watched either way, because the bearing call-out and the taunt are spoken
@@ -161,16 +167,13 @@ public sealed partial class AiVoiceRuntime : Node
     private void OnModeChanged(FlightController ai, AiModeMachine machine, AiMode from, AiMode to)
     {
         int speakerId = ai.PlayerIndex;
-        // Acquisition (our chosen dispatch point, marked in combat-voice.md): committing to an
-        // attack on a human, the attacker's WA-Attack, and the flight's computed bearing
-        // call-out in the warned player's own frame.
+        // The commit itself, for the case where it falls after the mute window. ⚠ Only out of
+        // patrol: a re-entry from avoid crash happens every few seconds near terrain and is the
+        // same engagement, which the raise interval would absorb anyway.
         if (to == AiMode.Pursue && from == AiMode.Patrol
             && ai.Pilot?.Gunner?.AircraftTarget is { IsHumanPiloted: true } quarry)
         {
-            Play(_dispatcher.Dispatch(speakerId, AiVoiceDispatcher.WaAttack, _now));
-            int bearing = AiVoiceDispatcher.BearingTriggerFor(
-                quarry.WorldPosition, quarry.NoseDirection, ai.WorldPosition);
-            Play(_dispatcher.Broadcast(bearing, quarry.Team, _now));
+            RaiseAttackCallOut(ai, quarry);
         }
 
         // A pursuer's failed sixth-sense (tail) check stuns it; its AI target taunts.
@@ -190,6 +193,47 @@ public sealed partial class AiVoiceRuntime : Node
             Play(_dispatcher.Dispatch(speakerId,
                 machine.Evading ? AiVoiceDispatcher.TaFailShk : AiVoiceDispatcher.TaSucShk, _now));
         }
+    }
+
+    // The decoded raise condition for the attack pair: the original's combat driver raises them
+    // every frame its pursuer's target is the local player, and leans on the 15 s slot cooldown
+    // for the rate (docs/formats/combat-voice.md, "The pursue path"). ⚠ Do not raise every tick
+    // here: the broadcast election walks and resolves every speaker, and no slot can speak twice
+    // inside that cooldown anyway, so the raise runs at the cooldown's own interval. Losing the
+    // human clears the stamp, so a fresh engagement raises at once.
+    private void RaiseAttackCallOuts()
+    {
+        foreach (var ai in _byIndex.Values)
+        {
+            if (ai.Pilot?.Gunner?.AircraftTarget is not { IsHumanPiloted: true } quarry)
+            {
+                _nextCallOut.Remove(ai.PlayerIndex);
+                continue;
+            }
+            if (_nextCallOut.TryGetValue(ai.PlayerIndex, out float next) && _now < next)
+            {
+                continue;
+            }
+            RaiseAttackCallOut(ai, quarry);
+        }
+    }
+
+    // One raise of the pair: the pursuer's own WA-Attack and the flight's bearing call-out,
+    // computed in the warned player's frame and broadcast on the player's side.
+    // ⚠ The mute window is read here as well as in the gate. A raise the window refuses must not
+    // consume the interval, or a pursuer that commits on the mission's first frame would stay
+    // silent for the next fifteen seconds, which is the whole complaint.
+    private void RaiseAttackCallOut(FlightController ai, FlightController quarry)
+    {
+        if (_now < AiVoiceDispatcher.MuteWindowS)
+        {
+            return;
+        }
+        _nextCallOut[ai.PlayerIndex] = _now + AiVoiceDispatcher.SlotCooldownS;
+        Play(_dispatcher.Dispatch(ai.PlayerIndex, AiVoiceDispatcher.WaAttack, _now));
+        int bearing = AiVoiceDispatcher.BearingTriggerFor(
+            quarry.WorldPosition, quarry.NoseDirection, ai.WorldPosition);
+        Play(_dispatcher.Broadcast(bearing, quarry.Team, _now));
     }
 
     // ⚠ Subscribed for every aircraft handed over, human rigs included. The gloat's speaker is the
