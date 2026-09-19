@@ -19,7 +19,7 @@ populates a pilot's voice slots runs `i` from `0` to `0x1d` exclusive.
 | 13 | `WA-HighDmg-A` | the player's health crosses a 30 % threshold, broadcast |
 | 14 | `WA-Attack-A` | a pilot commits to an attack on the player |
 | 15 | `PR-DngrZn-A` | a Danger Zone run, broadcast |
-| 16 | `PR-EnemyDwn-A` | *(no dispatch site located)* |
+| 16 | `PR-EnemyDwn-A` | the local player downs an aircraft hostile to the player, broadcast |
 | 17 | `DI-LowDmg-A` | the speaker's health drops below **70 %** |
 | 18 | `DI-MedDmg-A` | …below **50 %** |
 | 19 | `DI-HighDmg-A` | …below **30 %** |
@@ -57,9 +57,31 @@ the speaker** (`0x004ba125`–`0x004ba194`, in the take-hit body `FUN_004b9bc0`,
 the victim's health has just crossed zero). The dispatch runs the predicate twice. First over
 shooter and victim: friendly, and **no gloat is chosen at all**, so a friendly kill is silent.
 Otherwise over victim and the local player: friendly picks 22, hostile picks 23, and either way the
-call is made with the **shooter** as the speaker. The one exception is a kill by the local player,
-which takes 24 instead and broadcasts. This closes the polarity question the page left
+call is made with the **shooter** as the speaker. This closes the polarity question the page left
 open.
+
+**A kill by the local player takes a different arm, and that arm carries trigger 16.** The killer is
+compared against the local player's vehicle once, early in the same function (`0x004b9d54`), and the
+result is held in a flag the death branch reads at `0x004ba15c`. On the player's side of that flag,
+two calls run in order:
+
+- **Trigger 24 is addressed to the player's own aircraft**, not broadcast (`0x004ba173`, guarded by
+  the slot read at `vehicle + 0x850`, which is slot 24). The player rig is the speaker, so the line
+  exists only when the player's own vehicle resolved a voice set.
+- **Trigger 16 (`PR-EnemyDwn`) is then broadcast to the flight** (`0x004ba178`, the push of `0x10`
+  into the broadcast helper at `0x004b86a0`). It runs whether or not slot 24 held a line, because
+  the null-slot test at `0x004ba16b` jumps *into* the broadcast rather than around it. So the
+  flight's "enemy down" call is the reliable half of a player kill and the player's own gloat is the
+  conditional half. The clips back this: **17 pilot ids ship a `PR-EnemyDwn` set** (1, 2, 4, 6, 7,
+  12, 14, 20, 24, 26, 27, 28, 29, 31, 42, 44, 48), 51 WAVs of three takes each with their
+  `snd_PR-EnemyDwn-A_id<N>_random` groups, and none of them is one of the def-only ids, so every
+  authored set is playable.
+
+⚠ **Slot 16 is never read at an immediate offset, so searching for `vehicle + 0x7f0` finds nothing.**
+Every dispatch reaches a slot through the trigger id: the gate scales it at `0x004afdd9` and the
+broadcast helper at `0x004b872e`, both as `base + 3 * id * 4 + 0x730`. The immediate slot offsets
+that do appear (`0x838`, `0x844`, `0x850`) are the gloat triggers' own null tests, inlined because
+those three are dispatched to a named aircraft rather than elected.
 
 **Trigger 28 has two dispatch arms**, both in `FUN_004b9770` and both on a hit rather than a death.
 The first (`0x004b98e0`) fires when the local player's round damages an aircraft the predicate calls
@@ -188,17 +210,22 @@ which describes `talker` only as a volume-of-chatter stat.
 ### Broadcasts elect one speaker
 
 Several triggers are not addressed to a pilot at all, they are broadcast to the flight. The
-broadcast helper:
+broadcast helper (`0x004b86a0`):
 
-1. collects every AI pilot that is **alive**, **not the player**, on the caller's team or teamless,
-   and **owns a non-null slot for that trigger**;
+1. collects every AI pilot that is **alive**, **not the player**, on the **local player's** team or
+   teamless, and **owns a non-null slot for that trigger**;
 2. picks one **at random**;
 3. runs the gate above on it, and **if the talker roll fails, moves to the next pilot in the list**,
    wrapping, until one succeeds or every candidate has been tried.
 
 So the flight speaks with one voice per event, and a quiet pilot passes the line along rather than
-swallowing it. Triggers 0, 13, 15, 24 and the bearing call-outs dispatch this way; the distress,
-death and taunt triggers address a specific aircraft.
+swallowing it. ⚠ **The team the helper compares against is always the local player's**, not the
+team of whatever raised the event: the helper takes only a trigger id and reads the player vehicle
+itself, so a broadcast raised by a hostile still elects a speaker from the player's own flight.
+Triggers 0, 13, 15, 16 and the bearing call-outs dispatch this way, at the call sites `0x004ab098`,
+`0x004ba316`, `0x004469ff`, `0x004ba17a` and (with the index computed rather than pushed)
+`0x004708e0` and `0x0041dcfa`; the gloat, distress, death and taunt triggers address a specific
+aircraft.
 
 ## The remake's dispatch sites
 
@@ -219,12 +246,12 @@ are spoken by the killer, not by the aircraft that died.
 | 13 | wired | a human rig's summary health crossing 30 % on the projectile hit path (decoded threshold), broadcast |
 | 17–19 | wired | the speaker's own summary health on the projectile hit path, 70/50/30 % most-severe-first (decoded) |
 | 20–21 | wired | `FlightController.Downed`, with force: id 20 (`DA`) when the dying aircraft's `Team` is `AimAssist.PlayerTeam`, id 21 (`DE`) otherwise (`AiVoiceRuntime.RegisterAi`). Free flight and `--vs` still give every AI its own default team, so `DA` stays dormant there in practice, it fires once a mission places an AI on the player's team |
-| 22–24 | wired | the same `FlightController.Downed` report read for its killer (`AiVoiceRuntime.OnDowned`), the decoded order of the two predicates: friendly over shooter and victim and no gloat is chosen, else friendly over the victim and `AimAssist.PlayerTeam` picks 22, hostile picks 23, and the killer speaks it. A kill by a rig registered through `RegisterPlayer` takes 24 instead and broadcasts on the player's team. A killer that resolved no voice of its own is silent |
+| 22–24 | wired | the same `FlightController.Downed` report read for its killer (`AiVoiceRuntime.OnDowned`), the decoded order of the two predicates: friendly over shooter and victim and no gloat is chosen, else friendly over the victim and `AimAssist.PlayerTeam` picks 22, hostile picks 23, and the killer speaks it. A kill by a rig registered through `RegisterPlayer` takes 24 instead and broadcasts on the player's team, which is a stand-in: the original addresses 24 to the player's own aircraft and broadcasts 16 (row 16). A killer that resolved no voice of its own is silent |
 | 25 | wired | a pursuer's failed sixth-sense (tail) check stunning it, its evading AI target speaks; a human evader stays silent (the player speaks no AI lines) |
 | 27 | wired | the speaker's own evade/evasive-maneuver reaction completing ("fires as the reaction flag clears", decoded) |
 | 0 | unwired | turret acquisition is `TurretController`'s event; owned by C9's thread, not wired from here |
 | 15 | unwired | the danger-zone modes are never entered (their gate data is undecoded, F17) |
-| 16 | unwired | no dispatch site located in the binary (above) |
+| 16 | unwired | the original broadcasts it on the local player's kill of a hostile (above). The remake broadcasts 24 on that event instead of addressing 24 to the player's own rig, so the two rows move together, left for a future item |
 | 26 | unwired | the original's shake-attempt check is undecoded; no machine transition maps to it without force-fitting |
 | 28 | unwired | both arms (above) are answerable now that a team model exists, no dispatch site chosen yet, left for a future item |
 
@@ -267,8 +294,6 @@ Stand-ins and inventions, named:
   survivors, and they are on the hostile side of the team predicate, so the "the player's wingmen"
   reading of them does not hold (see the gloat/28 section above). *(Trigger 22–24's polarity, which
   this list carried as open, was settled there.)*
-- **Trigger 16 (`PR-EnemyDwn`) has no located dispatch site.** It may be reached through a path not
-  covered, or be unused.
 - **How `Bail`/`NoBail` is chosen** below the family root (the natural candidate is the
   constitution roll, unconfirmed). The `-A`/`-B`/`-C` half closed : the shipped
   `snd_<FAMILY>-A_id<N>_random` groups pick the take, weighted-random with recency 0.5 (see

@@ -688,7 +688,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `git log --grep=BL-977` (the Instant Action prewarm gap),
   the saved Voice level (`Utils/AudioMix.cs`, the `audio-buses` suite) if the lines dispatch and
   stay inaudible; `BL-986` (the spawn-time commit is muted and never re-arms, the largest single
-  cause of the low rate), `BL-987` to `BL-992` (the unwired trigger ids).
+  cause of the low rate), `BL-987`, `BL-989` to `BL-991` and `BL-996` (the unwired trigger ids).
 
 - `BL-986` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: trace]` **An ace commits to
   the player on the first frame, inside the 2 s mute window, so `WA-Attack` and the bearing
@@ -746,11 +746,23 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `docs/formats/combat-voice.md` row 15: the modes' gate data is undecoded (F17). *Fix shape:*
   lands with the mode decode; until then nothing to wire. *Cross-refs:* `BL-934`.
 
-- `BL-992` `[Research]` `[S]` `[Next: decode]` `[Impact: none]` `[Evidence: decoded]`
-  **`PR-EnemyDwn` (id 16) has no located dispatch site in the binary; decide whether it is
-  reachable or unused.** *Evidence:* `docs/formats/combat-voice.md`, "What is not pinned down".
-  *Fix shape:* cross-reference the slot-16 read in `crimson.exe` (`vehicle + 0x730 + 12 * 16`);
-  a hit names the site, no hit closes the id as unused and the table row says so.
+- `BL-996` `[Feature]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: decoded]`
+  **`PR-EnemyDwn` (id 16) is unwired and `GL-PlyrDwn` (id 24) is broadcast where the original
+  addresses it, so downing an enemy draws no "enemy down" from your flight.** *Evidence:*
+  `docs/formats/combat-voice.md`, "A kill by the local player takes a different arm". The original
+  compares the killer against the local player's vehicle (`0x004b9d54`) and, on the player's side of
+  that flag (`0x004ba15c`), addresses 24 to the player's own aircraft (`0x004ba173`, guarded by the
+  slot read at `vehicle + 0x850`) and then broadcasts 16 to the flight (`0x004ba17a`), reached
+  whether or not slot 24 held a line. `Session/AiVoiceRuntime.cs`'s `OnDowned` broadcasts 24 on
+  `AimAssist.PlayerTeam` in the `_humans.Contains(shooter)` arm and never raises 16. 17 pilot ids
+  ship a playable `PR-EnemyDwn` set, so the clips are there. *Fix shape:* add the trigger constant to
+  `Flight/AiVoiceDispatcher.cs`, dispatch 24 to the human rig's own speaker (silent until a player
+  rig resolves a voice set, which is the original's behaviour) and broadcast 16 on
+  `AimAssist.PlayerTeam` in the same arm. *⚠ Traps:* the broadcast runs unconditionally, do not make
+  it the else-branch of the slot-24 test; the broadcast helper always elects from the local player's
+  team, never from the raiser's. *Playtest after fix:* Instant Action → C1 → Dogfighting an Ace with
+  `--log=sound:debug`; expect a `trigger #16` line as the ace dies. *Cross-refs:* `BL-934`,
+  `git log --grep=BL-992` (the decode that located the site).
 
 
 ## Cameras & views
