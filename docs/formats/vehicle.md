@@ -91,8 +91,8 @@ holds **two** sound handles per vehicle. Both are positional or not by the sound
 | Slot | Definition key | Notes |
 |---|---|---|
 | 0 | `engine_sound` | pitch and volume off the player-global `engine_sound` throttle curves |
-| 0, in the Cockpit view | `cockpit_engine_sound` | swapped in while the camera is in the full Cockpit mode only, the Nose view keeps the plain def, confirmed at the controls of the original (an earlier "either cockpit mode" reading is retired); CSVM keys this to the pilot's SELECTED view being Cockpit, not the per-frame camera pose, so a held numpad key or look-behind does not retrigger it |
-| 0, while damaged | `damaged_engine_sound[]` | the damage edge silences the slot and a random entry replaces the definition once the re-arm timer fires, then holds while the vehicle's disabled-systems mask is nonzero (below, "What makes an airframe damaged" and "The damaged engine's phases"); the entry's pitch range is drawn once and multiplies the throttle pitch curve; CSVM's port decision is that this wins over the cockpit swap when both apply, since no def authors a damaged cockpit variant and the interaction is not itself decoded |
+| 0, in the Cockpit view | `cockpit_engine_sound` | swapped in while the camera is in the full Cockpit mode only, the Nose view keeps the plain def, confirmed at the controls of the original (an earlier "either cockpit mode" reading is retired); CSVM keys this to the pilot's SELECTED view being Cockpit, not the per-frame camera pose, so a held numpad key or look-behind does not retrigger it. No `*_cp` definition carries `FREQUENCY`, so the throttle pitch curve does not reach this one |
+| 0, while damaged | `damaged_engine_sound[]` | the damage edge silences the slot and a random entry replaces the definition once the re-arm timer fires, then holds while the vehicle's disabled-systems mask is nonzero (below, "What makes an airframe damaged" and "The damaged engine's phases"); the entry's pitch range is drawn once and multiplies the throttle pitch curve, and on the shipped `snd_damagedengine` that product reaches nothing, since the definition carries no `FREQUENCY` flag ([sounds.md](sounds.md#a-definition-is-pitched-only-when-it-carries-frequency)); CSVM's port decision is that this wins over the cockpit swap when both apply, since no def authors a damaged cockpit variant and the interaction is not itself decoded |
 | 1 | `prop_sound` | the overspeed whine, off the player-global `prop_sound` speed curves |
 
 An AI vehicle's arm adds exactly one thing: both handles stop past **2000 world units** from the
@@ -151,10 +151,22 @@ veh[+0x68] = lo + (hi - lo) * rand() / 32767        ; lo = entry[+0x14], hi = en
 ```
 
 which then multiplies the throttle pitch curve's output every frame until the mask clears, at which
-point `0x004b1b33` puts the multiplier back to 1.0. Nothing in the expression reads how hurt the
-airframe is: the shipped entry's 0.0-to-1.0 range means a damaged engine lands anywhere between the
-mixer's frequency floor and normal, and stays there. A cleared flag byte leaves the multiplier at 1
-rather than drawing a zero.
+point `0x004b1b33` puts the multiplier back to 1.0 (the product reaches
+`IDirectSoundBuffer::SetFrequency` through `FUN_00597740`, called at `0x004b1e03`). Nothing in the
+expression reads how hurt the airframe is, and the shipped entry's range is the full 0.0 to 1.0.
+A cleared flag byte leaves the multiplier at 1 rather than drawing a zero.
+
+⚠ **Nobody hears the draw in the retail install, and a port that plays it runs the damaged engine
+too low.** `snd_damagedengine` carries no `FREQUENCY` flag, so its buffer is created without
+`DSBCAPS_CTRLFREQUENCY` and every frequency write on it is refused
+([sounds.md](sounds.md#a-definition-is-pitched-only-when-it-carries-frequency)). The loop sounds at
+`engine_damaged.wav`'s own 22050 Hz, the multiplier and the throttle curve alike. The footage
+confirms it: across six windows of three separate damaged flights in the CAP-14 captures, a
+log-frequency spectral fit of the loop against the asset puts the playback ratio at 0.997 to 1.002
+and the band peak at 183.0 Hz, the asset's own. The draw would have spread those samples from 0.18
+(the mixer's floor) to 1.0. The port therefore computes the multiplier, so the decode stays
+modelled, and passes the slot's pitch only where the definition accepts a write
+(`EngineAudioCurves.SlotIsPitched`).
 
 **The mask's edges do the swapping, not a per-frame comparison.** `FUN_004b1690` stops the slot-0
 handle and re-runs the audio routine when the mask goes from zero to nonzero, and on the way back
@@ -205,7 +217,8 @@ of slot 0 and one cue. There is no sputter or restart sound on the slot.
 The original's Balmoral nose-graze capture (under `OriginalScreenshots/Videos`) shows the sequence. The healthy
 band runs to the graze at about 23.7 s, the slot is quiet but for the graze's own low impact pulses,
 and at about 26.8 s a steady band at 180 to 220 Hz and 340 Hz with the `engine_damaged.wav` spectrum
-starts and holds. The 3.1 s gap matches the timer's floor from zero.
+starts and holds. The 3.1 s gap matches the timer's floor from zero, and the band's 183.0 Hz peak
+matches the asset played at its own rate (above, the pitch multiplier's draw).
 
 ### The engine slot's pitch and gain are not throttle alone
 

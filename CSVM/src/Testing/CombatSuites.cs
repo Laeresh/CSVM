@@ -2249,8 +2249,11 @@ internal static class CombatSuites
         ctx.Check(Mathf.IsEqualApprox(stats.EngineVolume.MinY, stats.EngineVolume.MaxY),
             $"…and its volume curve is FLAT at {stats.EngineVolume.MinY:0.##}, which is what makes the 0.26 term inert");
 
-        float Pitch(EngineDrive d) => EngineAudioCurves.Engine(stats, d, 1f).Pitch;
-        float Volume(EngineDrive d) => EngineAudioCurves.Engine(stats, d, 1f).Volume;
+        // pitchable: the plain engine_sound definitions all carry FREQUENCY, which is what lets the
+        // curve below reach the voice at all; the damaged and cockpit loops that do not are pinned
+        // in the unit tier (EngineAudioModelTests).
+        float Pitch(EngineDrive d) => EngineAudioCurves.Engine(stats, d, 1f, true).Pitch;
+        float Volume(EngineDrive d) => EngineAudioCurves.Engine(stats, d, 1f, true).Volume;
         var level = new EngineDrive(1f, 0f, 0f);
         float baseline = Pitch(level);
         ctx.Check(Mathf.IsEqualApprox(baseline, 1f),
@@ -3095,7 +3098,7 @@ internal static class CombatSuites
 
         // The original hands both loops the same 1.0; the port plays the rattle 1.3x the engine
         // slot's gain, a chosen departure, so nothing about the rattle is quieter than the engine.
-        float engine = EngineAudioCurves.Engine(stats, new EngineDrive(1f, 0f, 0f), 1f).Volume;
+        float engine = EngineAudioCurves.Engine(stats, new EngineDrive(1f, 0f, 0f), 1f, true).Volume;
         ctx.Check(Mathf.IsEqualApprox(at, engine * 1.3f),
             $"…and sits 1.3x the engine slot's own gain, {at:0.0000} against {engine:0.0000}");
     }

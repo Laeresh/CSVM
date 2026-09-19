@@ -43,6 +43,7 @@ public partial class FlightAudio : Node
     private EngineSlotPhase _enginePhase;     // Healthy holds the plain or cockpit stream
     private bool _engineCockpitView;
     private float _enginePitchMul = 1f;       // the damaged swap's one-off pitch draw
+    private bool _enginePitchable;            // whether the def on the slot takes a frequency write
     private AudioStreamPlayer? _crash;
     private AudioStreamPlayer? _groundExp, _waterExp;
     private float _groundExpVol = 1f, _waterExpVol = 1f;
@@ -109,6 +110,9 @@ public partial class FlightAudio : Node
         }
         _engine = MakeLoop(archive, defs, stats.EngineSound, out _engineVol);
         _engineStream = _engine?.Stream as AudioStreamWav;
+        // The slot starts on the plain definition, and only a swap goes through the two paths that
+        // re-read this, so the opening state has to be set here rather than left at its default.
+        _enginePitchable = EngineAudioCurves.SlotIsPitched(defs, stats.EngineSound);
         // Not built as a player of its own: this stream replaces the engine's on the one slot, so a
         // second player would be the blend the decode refuted.
         if (stats.DamagedEngineSound is { } damagedName)
@@ -237,7 +241,8 @@ public partial class FlightAudio : Node
         {
             if (_enginePhase == EngineSlotPhase.Healthy && !_engine.Playing)
                 StartEngine(); // respawn after a crash: propstart + fresh volume ramp-in
-            var (pitch, volume) = EngineAudioCurves.Engine(_stats, drive, _enginePitchMul);
+            var (pitch, volume) = EngineAudioCurves.Engine(
+                _stats, drive, _enginePitchMul, _enginePitchable);
             _engine.PitchScale = pitch;
             float baseVol = _enginePhase == EngineSlotPhase.Damaged ? _damagedVol
                 : _engineCockpitView ? _cockpitVol : _engineVol;
@@ -467,11 +472,12 @@ public partial class FlightAudio : Node
         {
             var (name, pitchMul) = EngineAudioCurves.EngineDefFor(_stats, true, rng);
             _enginePitchMul = pitchMul;
+            _enginePitchable = EngineAudioCurves.SlotIsPitched(_defs, name);
             _engine.Stop();
             _engine.Stream = _damagedStream;
             _engineRamp = 1f; // the original starts it at full level, with no start cue
             _engine.Play();
-            Log.Info("sound", $"engine sound: slot 0 -> {name} pitchMul={_enginePitchMul:0.000}");
+            Log.Info("sound", $"engine sound: slot 0 -> {name} pitchMul={_enginePitchMul:0.000} pitched={_enginePitchable}");
         }
         else if (_enginePhase == from)
         {
@@ -506,12 +512,14 @@ public partial class FlightAudio : Node
         var (name, pitchMul) = EngineAudioCurves.EngineDefFor(
             _stats, false, Rng.Stream(Rng.FlightAudio), _engineCockpitView);
         _enginePitchMul = pitchMul;
+        _enginePitchable = EngineAudioCurves.SlotIsPitched(_defs, name);
         _engine!.Stop();
         _engine.Stream = _engineCockpitView ? _cockpitStream : _engineStream;
         if (play)
             _engine.Play();
-        // The headless observable for a swap nobody can screenshot: which def the slot took.
-        Log.Info("sound", $"engine sound: slot 0 -> {name} pitchMul={_enginePitchMul:0.000}");
+        // The headless observable for a swap nobody can screenshot: which def the slot took, and
+        // whether that def accepts the throttle curve's pitch at all.
+        Log.Info("sound", $"engine sound: slot 0 -> {name} pitchMul={_enginePitchMul:0.000} pitched={_enginePitchable}");
     }
 
     // A dead aircraft's slot goes back to healthy and silent, so the respawn's own start cue is
@@ -525,6 +533,8 @@ public partial class FlightAudio : Node
         _engine.Stop();
         _enginePhase = EngineSlotPhase.Healthy;
         _enginePitchMul = 1f;
+        _enginePitchable = EngineAudioCurves.SlotIsPitched(
+            _defs, _engineCockpitView ? _stats.CockpitEngineSound : _stats.EngineSound);
         _engine.Stream = _engineCockpitView ? _cockpitStream : _engineStream;
     }
 

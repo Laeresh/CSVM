@@ -35,6 +35,8 @@ public sealed partial class AiEngineAudio : Node3D
     private float _nitroKeyedS;    // s the keyed nitro loop has left before it expires
     private EngineSlotPhase _phase;
     private float _enginePitchMul = 1f;
+    private bool _enginePitchable;     // whether the def on the slot takes a frequency write
+    private IReadOnlyDictionary<string, SoundDef>? _defs;
     private bool _culled = true;   // starts culled so the first in-range frame logs its start
 
     /// <summary>Whether the engine loop is sounding, read off the live player rather than off a
@@ -74,8 +76,11 @@ public sealed partial class AiEngineAudio : Node3D
     public void Setup(SoundArchive archive, IReadOnlyDictionary<string, SoundDef> defs, PlaneStats stats)
     {
         _stats = stats;
+        _defs = defs;
         _engine = MakeLoop(archive, defs, stats.EngineSound, out _engineVol);
         _engineStream = _engine?.Stream as AudioStreamWav;
+        // The slot opens on the plain definition, and only a swap re-reads this below.
+        _enginePitchable = EngineAudioCurves.SlotIsPitched(defs, stats.EngineSound);
         // No player of its own: this stream replaces the engine's on the one slot.
         if (stats.DamagedEngineSound is { } damagedName)
             _damagedStream = LoadStream(archive, defs, damagedName, out _damagedVol);
@@ -121,7 +126,8 @@ public sealed partial class AiEngineAudio : Node3D
         }
         if (_engine != null && StepEngineSlot(_engine, damaged, dt))
         {
-            var (pitch, volume) = EngineAudioCurves.Engine(_stats, drive, _enginePitchMul);
+            var (pitch, volume) = EngineAudioCurves.Engine(
+                _stats, drive, _enginePitchMul, _enginePitchable);
             UpdateLoop(_engine, volume * (_phase == EngineSlotPhase.Damaged ? _damagedVol : _engineVol), pitch);
         }
         if (_whine != null)
@@ -212,9 +218,10 @@ public sealed partial class AiEngineAudio : Node3D
         {
             var (name, pitchMul) = EngineAudioCurves.EngineDefFor(_stats, true, rng);
             _enginePitchMul = pitchMul;
+            _enginePitchable = EngineAudioCurves.SlotIsPitched(_defs, name);
             engine.Stop();
             engine.Stream = _damagedStream;
-            Log.Debug("sound", $"ai engine {Aircraft()} slot 0 -> {name} pitchMul={_enginePitchMul:0.000}");
+            Log.Debug("sound", $"ai engine {Aircraft()} slot 0 -> {name} pitchMul={_enginePitchMul:0.000} pitched={_enginePitchable}");
         }
         else if (_phase == EngineSlotPhase.Out)
         {
@@ -233,12 +240,13 @@ public sealed partial class AiEngineAudio : Node3D
         _phase = EngineSlotPhase.Healthy;
         var (name, pitchMul) = EngineAudioCurves.EngineDefFor(_stats, false, Rng.Stream(Rng.FlightAudio));
         _enginePitchMul = pitchMul;
+        _enginePitchable = EngineAudioCurves.SlotIsPitched(_defs, name);
         bool wasPlaying = _engine!.Playing;
         _engine.Stop();
         _engine.Stream = _engineStream;
         if (wasPlaying)
             _engine.Play();
-        Log.Debug("sound", $"ai engine {Aircraft()} slot 0 -> {name} pitchMul={_enginePitchMul:0.000}");
+        Log.Debug("sound", $"ai engine {Aircraft()} slot 0 -> {name} pitchMul={_enginePitchMul:0.000} pitched={_enginePitchable}");
     }
 
     // RANGE is [full-volume distance, audible distance], mapped onto Godot's inverse-distance curve

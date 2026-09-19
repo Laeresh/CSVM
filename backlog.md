@@ -801,20 +801,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `docs/formats/combat-voice.md` row 15: the modes' gate data is undecoded (F17). *Fix shape:*
   lands with the mode decode; until then nothing to wire. *Cross-refs:* `BL-934`.
 
-- `BL-1000` `[Research]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: footage]` **The
-  damaged engine loop plays at a lower pitch than the original's.** *Evidence:* the three-phase
-  engine machine passed at the controls (`git log --grep=BL-955`); on the same sitting, "just
-  rechecked it with the original and the pitch is different, ours is lower". The loop's pitch is
-  `EngineAudioCurves.DamagedPitchMul` over a uniform draw when the def's
-  `DamagedEnginePitchRandom` is set (`Flight/EngineAudioCurves.cs`), so a single flight is one
-  sample of that range. *Deliverable:* the original's base rate for `snd_damagedengine` and the
-  range its draw covers, against ours, and whether the multiplier applies to the loop's sample
-  rate the way ours applies it; judged against CAP-14 `Balmoral nose Graze.mp4` (the damaged loop
-  from about 26.8 s) and any further original recording of the loop. *⚠ Traps:* `PT-84` (c) has
-  the draw landing anywhere from a near-normal note to a barely-there rumble, so one flight
-  each side proves nothing; compare the range, or several flights. *Cross-refs:*
-  `git log --grep=BL-955`, `docs/formats/vehicle.md` (the engine sound rows).
-
 - `BL-1001` `[Research]` `[M]` `[Next: decode]` `[Impact: none]` `[Evidence: decoded]` **Why the
   port needs 2.5 times the authored `RANGE` radii to reach as far as the original does.**
   *Evidence:* `BL-269`'s listen named 2.5 for the siren and the train, and that factor ships as a

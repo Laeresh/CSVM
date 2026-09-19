@@ -20,7 +20,9 @@ volume and pitch curves, and the WAV container. The readers are `SoundDefs.cs`, 
 ```
 
 - **Bare flags:** `LOOPED` (plays as a forward loop), `3D` (positional), `FREQUENCY`
-  (the engine may pitch-shift this sound), `SFX`, `PURGEABLE`, `OPTIONAL`.
+  (the buffer gets the frequency control, without which every pitch write on it is refused, see
+  [below](#a-definition-is-pitched-only-when-it-carries-frequency)), `SFX`, `PURGEABLE`,
+  `OPTIONAL`.
 - **Valued keys:** `RANGE [fullVolumeDist, audibleDist]` (meters), `VOLUME [gain]`,
   `QUEUE [waitSeconds]`, `QPRIORITY [n]`.
 
@@ -166,6 +168,33 @@ Each plane def names its own engine loop via `engine_sound` / `cockpit_engine_so
 `damaged_engine_sound` is an array of swap candidates for that same slot (`snd_damagedengine`
 install-wide), not a second loop blended over it; the entry's two floats are a pitch-multiplier
 range drawn once per swap. See vehicle.md.
+
+### A definition is pitched only when it carries FREQUENCY
+
+⚠ **The flag is a capability on the buffer, not a hint, and a definition without it plays at its
+WAV's own rate whatever pitch the caller computes.** `FUN_0059b950` builds the definition's master
+buffer, and the `DSBUFFERDESC` it fills gets `DSBCAPS_CTRLFREQUENCY` (`0x20`) only when the flag
+byte at def+0xc has bit 5 set (`TEST AL,0x20` at `0x0059b9c6`, `OR` at `0x0059b9ca`, the create at
+`0x0059ba0b`); the bit is what the `FREQUENCY` token sets in the parser `FUN_00592c90`. Every
+voice is a `DuplicateSoundBuffer` copy of that master (`FUN_00593490` at `0x00593520`, master
+handle at def+0x54), and a duplicate inherits the master's caps, so the capability is decided once
+per definition and no voice can opt back in.
+
+The write itself is `FUN_00597740`: it forms `(int)(def[+0x2c] * pitch)`, where def+0x2c is a float
+holding the WAV header's own `nSamplesPerSec` (stored at `0x0059bbd1`), clamps the result to
+**55200 Hz** (`0xd7a0`, at `0x005977f5`) and **4000 Hz** (`0xfa0`, at `0x00597803`), and calls
+`IDirectSoundBuffer::SetFrequency` (vtable +0x44) at `0x00597813`. On a buffer created without the
+control that call returns `DSERR_CONTROLUNAVAIL`, which the error decoder `FUN_005992c0` names and
+`zsnd_parm.cpp:315` logs; the loop keeps playing, unpitched. Since every shipped WAV is 22050 Hz,
+those two bounds are a playback-rate multiplier of 0.181 to 2.503.
+
+⚠ **The shipped engine loops split on this flag, and the damaged one is on the wrong side of it.**
+All eleven `engine_sound` definitions carry `FREQUENCY`, so the throttle curve reaches them.
+`snd_damagedengine` (`engine_damaged.wav`, `LOOPED 3D SFX RANGE [130, 420]`) does not, and neither
+does any `*_cp` cockpit loop, so the drawn damaged-engine multiplier and the throttle curve are
+both refused and those loops run at 22050 Hz flat. A port that applies the multiplier anyway runs
+the damaged engine roughly half an octave under the original. The multiplier's own decode is
+[vehicle.md](vehicle.md#what-makes-an-airframe-damaged).
 
 ## Sound groups
 

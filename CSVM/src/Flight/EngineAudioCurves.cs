@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using CSVM.Mech3;
 using Godot;
 
 namespace CSVM.Flight;
@@ -14,7 +16,7 @@ public enum EngineSlotPhase
     /// <summary>Damaged, and the slot is silent until the re-arm timer fires.</summary>
     Out,
 
-    /// <summary>The <c>damaged_engine_sound</c> loop, at its drawn pitch multiplier.</summary>
+    /// <summary>The <c>damaged_engine_sound</c> loop, at whatever pitch its definition accepts.</summary>
     Damaged,
 }
 
@@ -59,9 +61,12 @@ public static class EngineAudioCurves
     private const float DamagedRearmMin = 3f;
     private const float DamagedRearmSpread = 2f;
 
-    // The mixer clamps the played frequency rather than letting a multiplier reach zero; Godot has
-    // no such floor, and a PitchScale of 0 stalls the stream instead of bottoming out.
-    private const float MinPitch = 0.01f;
+    // The frequency handed to the voice is clamped to 4000..55200 Hz, and every install WAV is
+    // 22050 Hz, so as a PitchScale the mixer's own bounds are these. Godot clamps nothing, and a
+    // PitchScale of 0 stalls the stream instead of bottoming out.
+    // Decode: docs/formats/sounds.md, "A definition is pitched only when it carries FREQUENCY".
+    private const float MinPitch = 4000f / 22050f;
+    private const float MaxPitch = 55200f / 22050f;
 
     // The two added terms and the clamp they sit under, all read out of the image rather than tuned
     // (docs/formats/vehicle.md carries each address). Volume and pitch differ only in the turn-rate
@@ -94,10 +99,20 @@ public static class EngineAudioCurves
     public static bool EngineDamaged(float worstHealthFraction, bool engineDead = false) =>
         engineDead || worstHealthFraction < DamagedEngineHealthFraction;
 
+    /// <summary>Whether the definition on a slot accepts a frequency write at all. The original
+    /// gives a definition's buffer the frequency control only when its entry carries
+    /// <c>FREQUENCY</c>, so on one without it every pitch these curves compute is refused and the
+    /// loop runs at its own sample rate. In the shipped install that silences the pitch on
+    /// <c>snd_damagedengine</c> and on every <c>*_cp</c> cockpit loop.
+    /// Decode: docs/formats/sounds.md, "A definition is pitched only when it carries FREQUENCY".</summary>
+    public static bool SlotIsPitched(IReadOnlyDictionary<string, SoundDef>? defs, string? name) =>
+        name != null && defs != null && defs.TryGetValue(name, out var def) && def.Frequency;
+
     /// <summary>The damaged swap's pitch multiplier, drawn once per swap and then held:
     /// <paramref name="u"/> is the original's <c>rand() / 32767</c> and the entry's own two floats
     /// bound it linearly. A CLEAR flag byte leaves the multiplier at 1 rather than drawing, which
-    /// is why the flag is not a range of zero width.</summary>
+    /// is why the flag is not a range of zero width. ⚠ Nobody hears this on the shipped entry:
+    /// <c>snd_damagedengine</c> takes no frequency write (<see cref="SlotIsPitched"/>).</summary>
     public static float DamagedPitchMul(PlaneStats stats, float u) =>
         stats.DamagedEnginePitchRandom
             ? stats.DamagedEnginePitchLo + ((stats.DamagedEnginePitchHi - stats.DamagedEnginePitchLo) * u)
@@ -177,12 +192,14 @@ public static class EngineAudioCurves
         model.Attitude.Z.Y,
         boosting);
 
-    /// <summary>Slot 0, the engine loop. Each curve's normalised parameter is the throttle lever
-    /// plus a turn-rate term and a climb-attitude term, clamped to [0, 1.5] BEFORE the curve maps it
-    /// to an output (docs/formats/vehicle.md, "The engine slot's pitch and gain are not throttle
-    /// alone"); the pitch then carries the damaged-swap multiplier. The returned volume is the curve
-    /// alone, the caller still applies the definition's own VOLUME, its ramp and any mix gain.</summary>
-    internal static (float Pitch, float Volume) Engine(PlaneStats stats, in EngineDrive drive, float pitchMul)
+    /// <summary>Slot 0, the engine loop. Each curve's parameter is the throttle lever plus a
+    /// turn-rate and a climb-attitude term, clamped to [0, 1.5] BEFORE the curve maps it
+    /// (docs/formats/vehicle.md, "The engine slot's pitch and gain are not throttle alone"); the
+    /// pitch then carries the swap multiplier and the mixer's clamp, or is 1 when
+    /// <paramref name="pitchable"/> (<see cref="SlotIsPitched"/>) is clear. The volume is the curve
+    /// alone: the caller still applies the definition's own VOLUME, its ramp and any mix gain.</summary>
+    internal static (float Pitch, float Volume) Engine(
+        PlaneStats stats, in EngineDrive drive, float pitchMul, bool pitchable)
     {
         float tVol = drive.Boosting ? BoostVolumeParam
             : Mathf.Clamp(stats.EngineVolume.Frac(drive.Throttle) + (TurnRateIntoVolume * drive.TurnRate)
@@ -190,7 +207,9 @@ public static class EngineAudioCurves
         float tPitch = drive.Boosting ? BoostPitchParam
             : Mathf.Clamp(stats.EnginePitch.Frac(drive.Throttle) + (TurnRateIntoPitch * drive.TurnRate)
                 - (ClimbAttitudeIntoParam * drive.ClimbAttitude), 0f, ParamMax);
-        return (Mathf.Max(MinPitch, stats.EnginePitch.Remap(tPitch) * pitchMul),
+        return (pitchable
+                    ? Mathf.Clamp(stats.EnginePitch.Remap(tPitch) * pitchMul, MinPitch, MaxPitch)
+                    : 1f,
                 stats.EngineVolume.Remap(tVol));
     }
 

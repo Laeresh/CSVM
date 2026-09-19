@@ -849,8 +849,9 @@ for the player and every AI vehicle: whether an airframe counts as damaged, the 
 (`StepEnginePhase`: Healthy, Out while the re-arm timer runs, Damaged), which definition it holds
 and the swap's one-off pitch draw, each slot's pitch and gain off the `PlaneStats` curves, the
 rattle gate, the drive parameter and the cull distance. The drive adds a turn rate and a climb
-attitude to each curve's normalised parameter under a clamp with headroom above 1, which is why
-`SoundCurve` exposes its steps separately from a plain evaluation. Decode: [../formats/vehicle.md](../formats/vehicle.md), [../org/shakes.md](../org/shakes.md).
+attitude to each curve's parameter under a clamp with headroom above 1, which is why `SoundCurve`
+exposes its steps separately. A pitch reaches the voice only where the definition accepts a
+frequency write (`SlotIsPitched`), leaving the damaged and cockpit loops at their own rate. Decode: [../formats/vehicle.md](../formats/vehicle.md), [../formats/sounds.md](../formats/sounds.md), [../org/shakes.md](../org/shakes.md).
 
 ## src/Flight/AiEngineAudio.cs
 The positional twin of `FlightAudio` an AI-flown aircraft carries instead of it: the same two engine

@@ -258,12 +258,13 @@ reasons that have nothing to do with any of these checks.
   back without combat, `--fly --damage=nose:0.30` then `--fly --damage=nose:0.20`.
   *Look for:*
   - (a) the first hits, and a scrape along a cliff, leave the engine note untouched;
-  - (b) once a zone is deep into the red the note drops and stays dropped, at one pitch rather than
-    drifting;
-  - (c) the drawn pitch is not always the same on a fresh flight, and can land anywhere from a
-    near-normal note to a barely-there rumble.
-  ⚠ The pitch is a uniform draw with nothing about the damage in it, so a run that lands a mild
-  multiplier is not evidence the gate is wrong. Judge (c) across several flights.
+  - (b) once a zone is deep into the red the loop changes to the rough one and holds, at one pitch
+    rather than drifting;
+  - (c) that rough loop sounds the same on every fresh flight, and reads as an engine running
+    rough rather than as a slowed-down recording.
+  ⚠ The original refuses the pitch write on this definition, so the loop runs at its own rate and
+  the drawn multiplier is computed but never heard. A damaged note that differs from flight to
+  flight is a fault rather than the draw.
   *Blocks:* nothing; a fail on (a) says the gate reads the wrong pool, a fail on (b) says something
   is re-evaluating the swap per frame.
 
