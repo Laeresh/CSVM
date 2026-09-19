@@ -3625,7 +3625,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             "NodeUndercover" => obj != null
                                 && ConditionNode(obj.Get("node_index") ?? obj.Get("node"), def, anchor)
                                    is { } n3
-                                && NodeUndercover(n3, anchor, UndercoverReach(obj.Num("distance") ?? 0f)),
+                                && NodeUndercover(n3, def, anchor, UndercoverReach(obj.Num("distance") ?? 0f)),
             _ => false,
         };
         CountCondition(kind, result);
@@ -3661,7 +3661,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // The condition's probe: a vertical segment of `reach` metres from the node, positive up and
     // negative down, true when it meets world geometry. No mask wired means no collision world,
     // which the original answers false the same way (docs/org/sequences.md).
-    private bool NodeUndercover(Node3D node, Node3D? anchor, float reach)
+    private bool NodeUndercover(Node3D node, AnimDefinition def, Node3D? anchor, float reach)
     {
         if (ContactMask == 0 || Mathf.IsZeroApprox(reach) || !IsInstanceValid(node))
             return false;
@@ -3673,10 +3673,28 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         var from = node.IsInsideTree() ? VisualOriginOf(node) : WorldPos(node);
         using var query = PhysicsRayQueryParameters3D.Create(
             from, from + new Vector3(0f, reach, 0f), ContactMask);
-        query.Exclude = UndercoverExclusion(
-            anchor != null && IsInstanceValid(anchor) ? anchor : node);
+        query.Exclude = UndercoverExclusion(UndercoverHost(node, def, anchor));
         using var hit = space.IntersectRay(query);
         return hit.Count > 0;
+    }
+
+    // The body the probe must not see: the definition's own root above the probed node, else the
+    // anchor. ⚠ Never the anchor alone. A callee runs on its CALL SITE's anchor here
+    // (docs/org/sequences.md, CALL_ANIMATION), so cargozep1_crash, called by a hydrogen tank's
+    // death, is anchored on the tank; an exclusion read off that anchor leaves the hull's own
+    // gasbags under the 65 m probe, main_altitude_check opens at cruise altitude, and the stop it
+    // issues freezes the wreck 300 m up with its splash playing in the air.
+    private Node3D UndercoverHost(Node3D node, AnimDefinition def, Node3D? anchor)
+    {
+        if (def.RootName is { } root)
+        {
+            for (Node? n = node; n is Node3D n3; n = n.GetParent())
+            {
+                if (string.Equals(NameOf(n3), root, StringComparison.OrdinalIgnoreCase))
+                    return n3;
+            }
+        }
+        return anchor != null && IsInstanceValid(anchor) ? anchor : node;
     }
 
     // The original clears the probed node's own collidable bit for the duration of the cast, so a

@@ -628,7 +628,11 @@ caller's node": the target is resolved by the caller and delivered as an input, 
 the callee's anchor. CSVM instead makes the call site the callee's Start anchor
 (`AnimRuntime`'s `CallAnimation` arm, `callAnchor = siteNode ?? anchor`), which is an undeliberate
 difference; it was investigated as a candidate cause of C3/M02's balloon kill-chain symptoms and
-confirmed to drive none of them, since none reproduced on the current build.
+confirmed to drive none of them, since none reproduced on the current build. It does reach the
+`NODE_UNDERCOVER` probe: CM01's `cargozep1_crash` is called by a hydrogen tank's death and so runs
+anchored on the tank, and a self-exclusion read off that anchor lets the hull's 65 m probe find its
+own gasbags at cruise altitude. `AnimRuntime` therefore excludes the callee's own root above the
+probed node (`anim_root_name`), and falls back to the anchor only when no such ancestor exists.
 
 ### Where the callee's site pose lives, and what the decode leaves open
 

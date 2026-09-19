@@ -24,6 +24,13 @@ internal static class CampaignZeppelinCrashSuites
     private const string Crash = "cargozep1_crash";
     private const float Tick = 1f / 30f;
 
+    // main_altitude_check's first true-branch event, the node its downward probe is cast from
+    // (the definition's node 1) and the probe's authored length (the compiled operand 3263430656
+    // is the bit pattern of -65).
+    private const string GateOpened = "main_altitude_check:CallSequence(rotatezep)";
+    private const string ProbeNode = "gasbag5";
+    private const float ProbeReachM = 65f;
+
     // The tank's call of the crash sits 35 s after 2.1 s of chained offsets; the burns' own
     // finish lands at 36 s. This outlasts both, the fall from the record's 300 m, and a stretch
     // of the wreck standing still afterwards.
@@ -119,7 +126,9 @@ internal static class CampaignZeppelinCrashSuites
 
         ctx.Check(runtime.DamageAt(tank.DamageNode, tank.MaxHealth + 1f),
             $"a lethal hit lands on the tank");
-        float t = 0f, crashAt = -1f, deadAt = -1f;
+        var probe = runtime.FindNodes(ProbeNode, host).FirstOrDefault();
+        ctx.Check(probe != null, $"the crash's probe node '{ProbeNode}' resolves under '{Hull}'");
+        float t = 0f, crashAt = -1f, deadAt = -1f, gateAt = -1f, gateY = float.NaN, probeY = float.NaN;
         Vector3 crashPos = default;
         float maxDrift = 0f, lowest = host.GlobalPosition.Y;
         bool everBoom = false;
@@ -127,7 +136,16 @@ internal static class CampaignZeppelinCrashSuites
         {
             runtime.Advance(Tick);
             zeps.SimStep(Tick);
+            // A real session's physics bodies follow the hull; one engine frame's do not, and
+            // colliders left where the world built them hide what the crash's own probe sees.
+            SyncColliders(host);
             t += Tick;
+            if (gateAt < 0f && fired.Contains(GateOpened))
+            {
+                gateAt = t;
+                gateY = host.GlobalPosition.Y;
+                probeY = probe?.GlobalPosition.Y ?? gateY;
+            }
             everBoom |= runtime.AnimStateOf(TankDeath) is 2 or 3 or 4;
             if (deadAt < 0f && zeps.IsDead(Hull))
             {
@@ -155,7 +173,8 @@ internal static class CampaignZeppelinCrashSuites
         int poolsDestroyed = bagPools.Count(i => i.Status == DestructibleRegistry.State.Destroyed);
         report.AppendLine($"tank death ran={everBoom}; hull dead at {deadAt:0.0} s; crash started at " +
             $"{crashAt:0.0} s from ({crashPos.X:0},{crashPos.Y:0},{crashPos.Z:0}); max horizontal drift " +
-            $"after it {maxDrift:0.0} m; lowest y {lowest:0}; gasbag pools destroyed {poolsDestroyed} of {bagPools.Count}");
+            $"after it {maxDrift:0.0} m; lowest y {lowest:0}; gasbag pools destroyed {poolsDestroyed} of {bagPools.Count}; " +
+            $"altitude gate opened at {gateAt:0.0} s with the hull at y={gateY:0} and '{ProbeNode}' at y={probeY:0}");
         foreach (string line in fired.Distinct())
         {
             report.AppendLine($"{Crash} {line}");
@@ -171,10 +190,30 @@ internal static class CampaignZeppelinCrashSuites
             $"…whose floatdown takes the hull's own transform");
         ctx.Check(lowest < crashPos.Y - 50f,
             $"the wreck sinks under floatdown ({crashPos.Y:0} -> {lowest:0} m)");
+        // The probe is 65 m down from the hull. Its own gasbags hang under that origin, and a
+        // probe that sees them opens the gate at cruise altitude: the splash plays in the air
+        // and the stop on floatdown freezes the wreck where the burns left it.
+        ctx.Check(gateAt > 0f && probeY <= ProbeReachM + 10f,
+            $"main_altitude_check opens only once the sea is inside its {ProbeReachM:0} m probe, not at the hull's own colliders: at {gateAt:0.0} s with '{ProbeNode}' at y={probeY:0} (hull y={gateY:0})");
         ctx.Check(maxDrift < DriftCapM,
             $"and never moves off along its net again: {maxDrift:0.0} m horizontal from the crash start, cap {DriftCapM:0}");
         ctx.Note($"'{Hull}' dead at {deadAt:0.0} s, crash at {crashAt:0.0} s, drift {maxDrift:0.0} m, sank to y={lowest:0}");
     }
 
     private static float Flat(Vector3 v) => new Vector2(v.X, v.Z).Length();
+
+    // A suite runs its ticks inside one engine frame, so a StaticBody3D's physics-server transform
+    // never follows its moving node. A real session's does.
+    private static void SyncColliders(Node n)
+    {
+        if (n is CollisionObject3D body)
+        {
+            PhysicsServer3D.BodySetState(body.GetRid(), PhysicsServer3D.BodyState.Transform, body.GlobalTransform);
+        }
+
+        foreach (var child in n.GetChildren())
+        {
+            SyncColliders(child);
+        }
+    }
 }
