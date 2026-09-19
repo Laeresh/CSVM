@@ -3,27 +3,27 @@ using System.Collections.Generic;
 
 namespace CSVM.UI.Menu.Original;
 
-/// <summary>One answer of a dialog standing over a screen: its row key, the messagebox
+/// <summary>One answer of a dialog standing over a screen. It carries its row key, the messagebox
 /// button row it draws at, its words, and what answering it runs.</summary>
 public sealed record OriginalDialogAnswer(string Key, string LayoutKey, string Label, Action? Run);
 
-/// <summary>A dialog standing over a screen, the original's <c>messagebox.script</c>
-/// over whatever screen was showing: its words, the icon its message class draws, its one, two or
-/// three answers and the widget set it is drawn from (null for the shared <c>mb_</c> box). While
-/// one stands the rows are its answers alone.</summary>
+/// <summary>A dialog standing over a screen, the original's <c>messagebox.script</c> over whatever
+/// screen is showing. It carries its words, the icon its message class draws, and its one, two or
+/// three answers. It also carries the widget set it is drawn from, null for the shared <c>mb_</c>
+/// box. While one stands the rows are its answers alone.</summary>
 public sealed record OriginalDialog(
     string Message, DialogIcon Icon, IReadOnlyList<OriginalDialogAnswer> Answers,
     CampaignBoards.DialogChrome? Chrome = null);
 
 /// <summary>
 /// The standing dialog, the shell's own partial rather than any screen family's: the original's
-/// <c>messagebox.script</c> over whatever screen is showing, raised by the campaign and hangar
-/// modules through <see cref="IOriginalScreenHost.RaiseDialog"/> and by the credits screen's About
-/// box in its own widget set. The shell owns it because the shell answers for it:
-/// while a box stands its answers are the only rows, <c>Compose</c> draws it over the screen's own
-/// picture, an Activate on one of its rows is the answer and Back takes the declining one. The
-/// answers' words come from the string table whichever feature carries one (langui 100 to 103),
-/// and the focus the raise took is put back where it was when the box is answered.
+/// <c>messagebox.script</c> over whatever screen is showing. The campaign and hangar modules raise
+/// it through <see cref="IOriginalScreenHost.RaiseDialog"/>; the credits screen's About box uses
+/// its own widget set. The shell owns it because the shell answers for it: while a box stands its
+/// answers are the only rows. <c>Compose</c> draws it over the screen's own picture, an Activate on
+/// one of its rows is the answer, and Back takes the declining one. The answers' words come from
+/// the string table whichever feature carries one (langui 100 to 103). The focus the raise took is
+/// put back when the box is answered.
 /// </summary>
 public sealed partial class OriginalShell
 {
@@ -40,8 +40,8 @@ public sealed partial class OriginalShell
     public const string DialogCancelKey = "DIALOG:CANCEL";
 
     // How far outside an answer's own rectangle its focus mark stands. The strip fills its frame
-    // corner to corner but for the pill's rounded ends, so a mark on the rectangle itself would be
-    // drawn under the art and lost; three pixels clear puts it on the box's black ground.
+    // corner to corner but for the pill's rounded ends. A mark on the rectangle itself would be
+    // drawn under the art and lost. Three pixels clear puts it on the box's black ground.
     private const float DialogMarkOutset = 3f;
 
     private OriginalDialog? _dialog;
@@ -50,9 +50,9 @@ public sealed partial class OriginalShell
     /// <summary>The dialog standing over the screen, or null.</summary>
     public OriginalDialog? Dialog => _dialog;
 
-    // The messagebox script's own answer words, read here through whichever feature carries the
-    // string table: langui 100 (OK) for the one-button box, 102 and 103 (Yes, No) for the
-    // two-button pair, and 102, 103 and 101 across all three slots of the 0x8 box.
+    // The messagebox script's own answer words, read through whichever feature carries the string
+    // table. The one-button box takes langui 100 (OK), the two-button pair 102 and 103 (Yes, No).
+    // The 0x8 box takes 102, 103 and 101 across all three slots.
     private OriginalDialogAnswer Ok(Action? run = null) =>
         new(DialogOkKey, CampaignBoards.DialogCenterKey, DialogWord(100, "OK"), run);
 
@@ -62,7 +62,7 @@ public sealed partial class OriginalShell
     private OriginalDialogAnswer No() =>
         new(DialogNoKey, CampaignBoards.DialogRightKey, DialogWord(103, "No"), null);
 
-    // The 0x8 box's own two extra answers: its No moves onto the centre slot the two-button box
+    // The 0x8 box's own two extra answers. Its No moves onto the centre slot the two-button box
     // leaves empty, and Cancel takes the right one (MESSAGEBOX.SCRIPT's gui_init).
     private OriginalDialogAnswer NoCentred(Action run) =>
         new(DialogNoKey, CampaignBoards.DialogCenterKey, DialogWord(103, "No"), run);
@@ -97,8 +97,8 @@ public sealed partial class OriginalShell
 
     // The standing dialog as the shared board component's messagebox panel.
     // ⚠ Do not take the strip frame off the focus. Every raise focuses an answer, so a frame read
-    // from it would stand on the default answer for the life of the box, which is not what the
-    // original draws; the pointer owns the rollover frame and the cursor gets the focus mark
+    // from it would stand on the default answer for the life of the box. That is not what the
+    // original draws. The pointer owns the rollover frame and the cursor gets the focus mark
     // instead (docs/org/campaign-board.md). The ink is the box's own rather than the screen's,
     // which on a paper screen would hide the label on the dark strip.
     private void ComposeDialog(IReadOnlyList<OriginalRow> rows, int focus, List<BoardPanel> overlays)
@@ -108,8 +108,8 @@ public sealed partial class OriginalShell
         var marks = new List<BoardFill>();
         for (int i = 0; i < dialog.Answers.Count; i++)
         {
-            // The hit is re-checked rather than trusted, since the hover index outlives the frame
-            // that set it and the answers are not the rows it was measured against.
+            // The hit is re-checked rather than trusted. The hover index outlives the frame that
+            // set it, and the answers are not the rows it was measured against.
             var row = i < rows.Count ? rows[i] : null;
             bool lit = i == _hover && row != null && _pointer is { } at && row.Contains(at.X, at.Y);
             bool held = i == _pressed;
@@ -126,9 +126,9 @@ public sealed partial class OriginalShell
         overlays.Add(CampaignBoards.Dialog(dialog.Message, buttons, dialog.Icon, _campaignLayout, dialog.Chrome));
         if (marks.Count > 0)
         {
-            // The mark rides its own panel over the box rather than the box's fill layer, which a
-            // panel draws before its pictures: the messagebox's background covers the whole panel,
-            // so a mark inside it would be drawn and then painted over.
+            // The mark rides its own panel over the box rather than the box's fill layer. A panel
+            // draws its fills before its pictures, and the messagebox's background covers the
+            // whole panel. A mark inside it would be drawn and then painted over.
             overlays.Add(new BoardPanel(marks, Array.Empty<BoardPicture>(), Array.Empty<BoardLine>()));
         }
     }

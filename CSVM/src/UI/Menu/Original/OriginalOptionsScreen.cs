@@ -8,13 +8,13 @@ namespace CSVM.UI.Menu.Original;
 /// <summary>
 /// The five pages behind the Options hub's doors, one standalone module over the decoded
 /// <c>[@GameOptions@]</c>, <c>[@Audio@]</c>, <c>[@Video@]</c>, <c>[@ControlsPrefs@]</c> and
-/// <c>[@Keys@]</c> sections. They are one module because they are one form: the module reads the
-/// saved options once per entry and every page's ACCEPT CHANGES leaves as the same apply exit
-/// carrying every setting, the ones it does not show included, which is what keeps
+/// <c>[@Keys@]</c> sections. They are one module because they are one form, read from the saved
+/// options once per entry. Every page's ACCEPT CHANGES leaves as the same apply exit, carrying
+/// every setting, the ones it does not show included. That keeps
 /// <see cref="CSVM.Utils.OptionsStore"/>'s one writer the only writer. The rebinding pages stage
 /// their edits in the shared <see cref="ControlsFeature"/> instead, so their CANCEL CHANGES drops a
-/// whole visit. The hub itself stays the shell's. What each page draws and the decode behind it:
-/// <c>docs/architecture/UI.md</c> and <c>docs/org/menu-inventory.md</c>.
+/// whole visit, and the hub itself stays the shell's. What each page draws and the decode behind it
+/// are in <c>docs/architecture/UI.md</c> and <c>docs/org/menu-inventory.md</c>.
 /// </summary>
 public sealed class OriginalOptionsScreen : IOriginalScreenModule
 {
@@ -172,7 +172,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     private const float FallbackThumbHeight = 21f;
 
     // The authored insets from the slot to the region a press has to land in, negative where the
-    // region grows: three pixels of slot become twenty-three, which is what makes the whole thumb
+    // region grows. Three pixels of slot become twenty-three, which is what makes the whole thumb
     // pressable. Every shipped slider row authors these four.
     private const int SliderInsetLeft = 0;
     private const int SliderInsetTop = -10;
@@ -180,13 +180,14 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     private const int SliderInsetBottom = -10;
 
     // The one dropdown the Game Options section authors, whose box, window and scroll art every
-    // option row of that page takes: the page authors a single D row and our rows stand at its column.
+    // option row of that page takes. The page authors a single D row, and the rows stand at its
+    // column.
     private const string GameOptionDropKey = "GO_D_DIFFICULTY";
 
-    // The Game Options page's authored row shape, used where a layout does not carry the section:
-    // the title column and its box, the first row's line and the 62-pixel pitch, the dropdown box,
-    // the checkbox's offset from its own row and the description column.
-    // docs/org/menu-inventory.md holds the decode these come from.
+    // The Game Options page's authored row shape, used where a layout does not carry the section.
+    // It is the title column and its box, the first row's line and the 62-pixel pitch, and the
+    // dropdown box. The checkbox's offset from its own row and the description column follow.
+    // The decode these come from is in docs/org/menu-inventory.md.
     private const float GameOptionTitleX = 138f;
     private const float GameOptionTitleWidth = 170f;
     private const float GameOptionCheckTitleWidth = 112f;
@@ -205,22 +206,23 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     private const float GameOptionTitleFont = 14f;
     private const float GameOptionDescFont = 12f;
 
-    // The plate the section authors and how many rows it holds: GO_BackGround.png draws three
+    // The plate the section authors and how many rows it holds. GO_BackGround.png draws three
     // raised row panels at the authored pitch over one grey description window, and the section
     // stands three rows on it. A page carrying more grows the plate by whole bands of its own art.
     private const int GameOptionAuthoredRows = 3;
 
-    // The band a repeat takes, in the plate art's own pixels: y 116 to 178 is one whole row panel
-    // with both seams inside the dark gaps the art leaves between panels (112 to 119 and 174 to
-    // 181), so a repeat cuts no rivet, no panel edge and no window border, and the description
-    // window grows with the rows. The alternative was a vertical stretch, which smears all three.
+    // The band a repeat takes, in the plate art's own pixels. Y 116 to 178 is one whole row panel,
+    // both seams inside the dark gaps the art leaves between panels. Those gaps are 112 to 119 and
+    // 174 to 181. A repeat therefore cuts no rivet, no panel edge and no window border, and the
+    // description window grows with the rows. A vertical stretch would smear all three.
     private const int GameOptionPlateBandY = 116;
     private const int GameOptionPlateBandHeight = 62;
 
     // The AUDIO page's authored row shape, used where a layout does not carry the section or one of
-    // its rows: the title column and its box, the slider column and the distance from a title's line
-    // down to its own slider's, and the description column and its width. Each row's own line is
-    // on its table entry instead, the authored pitch being 58, 57, 53 and 53 rather than one number.
+    // its rows. It is the title column and its box, the slider column, and the distance from a
+    // title's line down to its own slider's. The description column and its width follow. Each
+    // row's own line is on its table entry instead, the authored pitch being four different numbers
+    // rather than one (docs/org/menu-inventory.md).
     private const float AudioTitleX = 137f;
     private const float AudioTitleWidth = 170f;
     private const float AudioSliderX = 137f;
@@ -231,16 +233,16 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     private const float AudioTitleFont = 14f;
     private const float AudioDescFont = 12f;
 
-    // The aid's four levels, one per row and all distinct, so a single shot shows the thumb at
+    // The aid's four levels, one per row and all distinct. A single shot then shows the thumb at
     // four places on the track rather than at the shipped default three times over.
     private const int AudioPoseMaster = 100;
     private const int AudioPoseMusic = 25;
     private const int AudioPoseEffects = 60;
     private const int AudioPoseVoice = 85;
 
-    // The VIDEO page's authored row shape, used where a layout does not carry the section: the title
-    // column and the Shadows row's line, the checkbox's offset from its title, the dropdown column
-    // and box, and the description column with the width the plaque column leaves it.
+    // The VIDEO page's authored row shape, used where a layout does not carry the section. It is
+    // the title column and the Shadows row's line, the checkbox's offset from its title, and the
+    // dropdown column and box. The description column takes the width the plaque column leaves it.
     private const float VideoTitleX = 18f;
     private const float VideoTitleWidth = 162f;
     private const float VideoShadowsY = 565f;
@@ -260,8 +262,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     private const string KeysCellA = "KB:A:";
     private const string KeysCellB = "KB:B:";
 
-    // The KEYS AND BUTTONS page's authored geometry, used where a layout does not carry the section:
-    // the list's corner, pitch and window, the three column heads and the tab strip's corner and pitch.
+    // The KEYS AND BUTTONS page's authored geometry, used where a layout does not carry the
+    // section. It is the list's corner, pitch and window, the three column heads, and the tab
+    // strip's corner and pitch.
     private const float KeysListX = 200f;
     private const float KeysListY = 310f;
     private const float KeysItemHeight = 16f;
@@ -307,8 +310,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     };
 
     // The Default View dropdown's own three items, the words and the order the original's list
-    // carries (CSVM.Flight.PilotView.Selectable and .Label, decoded from uiData 2127 in
-    // crimson.exe; docs/org/menu-inventory.md holds the addresses).
+    // carries. They come from CSVM.Flight.PilotView.Selectable and .Label, decoded from uiData 2127
+    // in crimson.exe (docs/org/menu-inventory.md holds the addresses).
     private static readonly string[] DefaultViewWords =
     {
         CSVM.Flight.PilotView.Label(CSVM.Flight.PilotView.Selectable[0]),
@@ -322,11 +325,11 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
 
     private static readonly string[] GraphicsWords = { "FAITHFUL", "ENHANCED" };
 
-    // The Game Options page's options in their authored row order, each a title, a control, a
-    // description and the words of the store field it reads and writes. A page never saves: the
-    // apply exit carries every choice and Launcher.ApplyOptions is the options file's one writer.
-    // The difficulty row's title and description are IDS_GO_DIFFICULTY_TITLE and _DESC as authored;
-    // the setting scales enemy armour and health at spawn and nothing about how the enemy flies.
+    // The Game Options page's options in their authored row order. Each is a title, a control, a
+    // description and the words of the store field it reads and writes. A page never saves. The
+    // apply exit carries every choice, and Launcher.ApplyOptions is the options file's one writer.
+    // The difficulty row's title and description are IDS_GO_DIFFICULTY_TITLE and _DESC as authored.
+    // The setting scales enemy armour and health at spawn and nothing about how the enemy flies.
     private static readonly GameOption[] GameOptions =
     {
         new(DifficultyKey, "Difficulty", _ => "Select the difficulty level for a solo campaign.",
@@ -355,11 +358,12 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
             (s, i) => s._rumble = i == 1),
     };
 
-    // The AUDIO page's levels, in the authored order of the rows they stand on, since the cursor
-    // walks the table and a form is read top to bottom. Each is a title, the authored title, control
-    // and description widgets it stands on, a description, the authored lines those two texts fall
-    // back to, and how the store field is read and written. A level is never a vocabulary word, so a
-    // row reads a never-set field as the shipped default rather than as a first word.
+    // The AUDIO page's levels, in the authored order of the rows they stand on. The cursor walks
+    // the table, and a form is read top to bottom. Each is a title, the authored title, control and
+    // description widgets it stands on, and a description. Each also carries the authored lines
+    // those two texts fall back to, and how the store field is read and written. A level is never a
+    // vocabulary word, so a row reads a never-set field as the shipped default rather than as a
+    // first word.
     private static readonly AudioOption[] AudioOptions =
     {
         new(AudioMasterKey, MenuMixLevel.Master, "Master", "AP_T_MusicTitle", null, "AP_T_MusicDesc",
@@ -381,9 +385,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     };
 
     // The first authored slider row, which is where the AUDIO page's slider geometry is read from.
-    // The Master row has no authored slider of its own: its authored row carries the In-Game Music
-    // checkbox, which stands at another column and on the title's own line, so a Master slider
-    // placed at that widget's corner would sit 122 pixels right of the three below it.
+    // The Master row has no authored slider of its own. Its authored row carries the In-Game Music
+    // checkbox, which stands at another column and on the title's own line. A Master slider placed
+    // at that widget's corner would sit 122 pixels right of the three below it.
     private static readonly AudioOption AudioSliderRow = AudioOptions[1];
 
     // The VIDEO page's settings, in the authored order of the rows they stand on. Each is a title,
@@ -420,9 +424,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
 
     // The six named tabs are the original's own action categories, over this port's flight actions,
     // each in that page's own row order (`OriginalScreenshots/Keybinds *.png`). The seventh, Other,
-    // takes its own flight rows first and then every action the six leave over, in context then enum
-    // order, so a new action lands on a page rather than nowhere. docs/org/menu-inventory.md holds
-    // the reading.
+    // takes its own flight rows first, then every action the six leave over, in context then enum
+    // order. A new action therefore lands on a page rather than nowhere. The reading is in
+    // docs/org/menu-inventory.md.
     private static readonly InputAction[][] KeysFlightGroups =
     {
         new[]
@@ -487,8 +491,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     private string? _goOpen;
     private int _goListTop;
     // Which level a row's slider moved, cleared by the host's read of it. The control writes only
-    // where the value actually changed, so this stands at None through every frame of a drag that
-    // held the thumb still, which is what keeps a preview off a pointer's frame rate.
+    // where the value actually changed. This stands at None through every frame of a drag that held
+    // the thumb still, which keeps a preview off a pointer's frame rate.
     private MenuMixLevel _audioMoved;
     private string? _vpOpen;
     private int _vpListTop;
@@ -496,31 +500,31 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     private int _keysTop;
     private string _graphics = CSVM.Utils.GraphicsMode.Default;
     private int _difficulty = CSVM.Flight.Difficulty.Normal;
-    // The targeting setting as saved, null while never set, which the consumer reads as off. Held
-    // nullable rather than as the checkbox's own 0/1 so a page that never showed it hands back
-    // "never set" instead of writing a choice the player did not make.
+    // The targeting setting as saved, null while never set, which the consumer reads as off. It is
+    // held nullable rather than as the checkbox's own 0/1. A page that never showed it then hands
+    // back "never set" instead of writing a choice the player did not make.
     private bool? _nearestAfterKill;
-    // The haptics setting as saved, held the same way but read the other way round: null is "never
+    // The haptics setting as saved, held the same way but read the other way round. Null is "never
     // set", which the consumer reads as ON, since the original ships force feedback on.
     private bool? _rumble;
     // The opening view as saved, the --view= word, null while never set, which the flight reads as
     // Chase. Held as the word rather than the mode for the reason the store holds one.
     private string? _defaultView;
-    // The automatic head turn as saved, null while never set, which leaves the headLook.autohead
+    // The automatic head turn as saved, null while never set. Null leaves the headLook.autohead
     // config key deciding rather than overruling it with a default of this page's own.
     private bool? _autoHeadTurn;
     // The four display settings as they were saved. A page that shows a setting still has to hand
-    // back the ones it does not, or the one writer's save would clear them; carrying them here is
+    // back the ones it does not, or the one writer's save would clear them. Carrying them here is
     // what lets every page's apply do that.
     private string? _monitorIndex;
     private string? _resolution;
     // The size the options file named when the pages last read it, which the size row offers as an
-    // entry of its own (Sizes). Held apart from the stepped choice so a hand-written size stays in
-    // the list after a step lands elsewhere, and a step back reaches it again.
+    // entry of its own (Sizes). It is held apart from the stepped choice, so a hand-written size
+    // stays in the list after a step lands elsewhere. A step back then reaches it again.
     private string? _savedResolution;
     private string? _displayMode;
     private string? _vsync;
-    // The four saved volume levels, carried for the same reason: the AUDIO page shows them and the
+    // The four saved volume levels, carried for the same reason. The AUDIO page shows them and the
     // other pages do not, and every page's apply hands back the settings it does not show.
     private int? _audioMaster;
     private int? _audioMusic;
@@ -528,11 +532,11 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     private int? _audioVoice;
 
     /// <summary>An options module over <paramref name="layout"/>'s own five sections, calling back
-    /// into <paramref name="host"/> for the state every screen family shares.
-    /// <paramref name="options"/> reads the saved settings the pages show back (null opens them on
-    /// the shipped defaults, which is what an engine-free test wants), <paramref name="screenSizes"/>
-    /// and <paramref name="screens"/> the VIDEO page's two enumerated rows, and
-    /// <paramref name="controls"/> the feature the CONTROLS pages stage in. It never writes.</summary>
+    /// into <paramref name="host"/> for the state every screen family shares. The reader
+    /// <paramref name="options"/> reads the saved settings the pages show back, null opening them on
+    /// the shipped defaults, which an engine-free test wants. The VIDEO page's two enumerated rows
+    /// come from <paramref name="screenSizes"/> and <paramref name="screens"/>, and the CONTROLS
+    /// pages stage in <paramref name="controls"/>. It never writes.</summary>
     public OriginalOptionsScreen(
         MenuLayout layout,
         IOriginalScreenHost host,
@@ -560,8 +564,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     public string? OpenVideoOption => _vpOpen;
 
     /// <summary>The sizes the resolution row offers, which is what the window's own screen can
-    /// hold, plus the size the options file names where that is not among them. Every other row's
-    /// words are a fixed vocabulary; this one's are enumerated per screen, so a shell with no
+    /// hold. The size the options file names is added where that is not among them. Every other
+    /// row's words are a fixed vocabulary. This one's are enumerated per screen, so a shell with no
     /// screen to ask offers every candidate size instead.</summary>
     public IReadOnlyList<string> ResolutionWords => Sizes.Words;
 
@@ -570,15 +574,16 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     /// can name.</summary>
     public IReadOnlyList<string> MonitorWords => Screens.Labels;
 
-    /// <summary>Whether the display mode standing on the page owns the size, which borderless does:
-    /// the row then reads the screen's own size, takes no press and draws dead. The saved size is
+    /// <summary>Whether the display mode standing on the page owns the size, which borderless does.
+    /// The row then reads the screen's own size, takes no press and draws dead. The saved size is
     /// left where it is, so picking Windowed or Fullscreen again gives the player it back.</summary>
     public bool ResolutionPinned => CSVM.Utils.ResolutionSetting.Pinned(_displayMode);
 
-    /// <summary>The mix the AUDIO page stands at while it is open, for the host to apply so a level
-    /// can be judged by ear as it moves, and null on every other screen, which is what makes leaving
-    /// this page by any door drop the preview. The module states four levels and nothing more: which
-    /// bus each reaches, and whether a preview sounds at all, are the audio service's.</summary>
+    /// <summary>The mix the AUDIO page stands at while it is open. The host applies it, so a level
+    /// can be judged by ear as it moves. It is null on every other screen, which is what makes
+    /// leaving this page by any door drop the preview. The module states four levels and nothing
+    /// more. Which bus each reaches, and whether a preview sounds at all, are the audio
+    /// service's.</summary>
     public CSVM.Utils.AudioLevels? AudioPreviewMix =>
         _host.Screen == OriginalScreen.Audio
             ? new CSVM.Utils.AudioLevels(
@@ -644,7 +649,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     /// row has been touched.</summary>
     public string? DefaultViewChoice => _defaultView;
 
-    /// <summary>The automatic head turn the Game Options page would apply, or null while nothing
+    /// <summary>The automatic head turn the Game Options page would apply. It is null while nothing
     /// has been saved and no row has been touched, which leaves the config key deciding.</summary>
     public bool? AutoHeadTurnChoice => _autoHeadTurn;
 
@@ -685,9 +690,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         }
     }
 
-    /// <summary>The showing page's scrolling lists for the pointer: an open option list where one
-    /// stands, the action list on the KEYS AND BUTTONS page, and nothing on the AUDIO page, whose
-    /// rows are all in view.</summary>
+    /// <summary>The showing page's scrolling lists for the pointer. They are an open option list
+    /// where one stands, and the action list on the KEYS AND BUTTONS page. The AUDIO page has none,
+    /// its rows all in view.</summary>
     public void Lists(List<OriginalList> lists)
     {
         switch (_host.Screen)
@@ -704,10 +709,10 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         }
     }
 
-    /// <summary>A sideways step on the focused row where it changes a value there: an option's next
-    /// word with wrap, the next registered seat, the other flying scheme. False on anything else, so
-    /// the step crosses columns. The AUDIO page's sliders are the shell's own step, which runs
-    /// ahead of this one.</summary>
+    /// <summary>A sideways step on the focused row where it changes a value there. That is an
+    /// option's next word with wrap, the next registered seat, or the other flying scheme. False on
+    /// anything else, so the step crosses columns. The AUDIO page's sliders are the shell's own
+    /// step, which runs ahead of this one.</summary>
     public bool StepSideways(IReadOnlyList<OriginalRow> rows, int focus, int direction) =>
         _host.Screen switch
         {
@@ -733,9 +738,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
             _ => null,
         };
 
-    /// <summary>Back on the showing page: on Game Options and VIDEO the first one closes an open
-    /// list and the next leaves, on the AUDIO page (which carries no list) and the two rebinding
-    /// pages the first one leaves. Every page answers it, each the way its own CANCEL CHANGES does,
+    /// <summary>Back on the showing page. On Game Options and VIDEO the first one closes an open
+    /// list and the next leaves. On the AUDIO page, which carries no list, and on the two rebinding
+    /// pages, the first one leaves. Every page answers it, each the way its own CANCEL CHANGES does,
     /// since that is the declining answer the layout gives them.</summary>
     public bool Back()
     {
@@ -759,37 +764,33 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         }
     }
 
-    /// <summary>The showing page as drawn. None of the five writes a note or a stroke, the prose
-    /// layer being the hangar's description box alone and the pen the campaign scrapbook's, so
-    /// <paramref name="notes"/> and <paramref name="strokes"/> stand unused; both are here because
-    /// one signature serves every module's dispatch.</summary>
-    public void Compose(
-        IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> backdrop, List<BoardPicture> pictures,
-        List<BoardFill> fills, List<BoardStroke> strokes, List<BoardLine> lines, List<BoardPlaque> plaques,
-        List<BoardNote> notes, List<BoardPanel> overlays)
+    /// <summary>The showing page as drawn. No page writes a note or a stroke, since the prose
+    /// layer is the hangar's description box alone and the pen is the campaign scrapbook's.
+    /// Those two layers of <paramref name="layers"/> stand untouched here.</summary>
+    public void Compose(IReadOnlyList<OriginalRow> rows, int focus, BoardLayers layers)
     {
         switch (_host.Screen)
         {
             case OriginalScreen.GameOptions:
-                ComposeGameOptions(rows, focus, backdrop, pictures, fills, lines, plaques, overlays);
+                ComposeGameOptions(rows, focus, layers);
                 break;
             case OriginalScreen.Audio:
-                ComposeAudio(rows, focus, backdrop, pictures, fills, lines, plaques);
+                ComposeAudio(rows, focus, layers);
                 break;
             case OriginalScreen.Video:
-                ComposeVideo(rows, focus, backdrop, pictures, fills, lines, plaques, overlays);
+                ComposeVideo(rows, focus, layers);
                 break;
             case OriginalScreen.ControlsPrefs:
-                ComposeControlsPrefs(rows, focus, backdrop, pictures, fills, lines, plaques);
+                ComposeControlsPrefs(rows, focus, layers);
                 break;
             case OriginalScreen.Keys:
-                ComposeKeys(rows, focus, backdrop, pictures, fills, lines, plaques);
+                ComposeKeys(rows, focus, layers);
                 break;
         }
     }
 
     /// <summary>Re-reads the saved settings where the screen just opened is one of the three pages
-    /// that show them back. The shell calls it from every Open, since a page opened by a door, by a
+    /// that show them back. The shell calls it from every Open. A page opened by a door, by a
     /// return or by a screenshot aid owes the player the same words.</summary>
     public void ScreenOpened(OriginalScreen screen)
     {
@@ -799,9 +800,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         }
     }
 
-    /// <summary>Keeps the KEYS AND BUTTONS page's list window over the cursor at the end of a frame,
-    /// so the cell the player is looking at is the cell a capture binds. Nothing on any other
-    /// screen.</summary>
+    /// <summary>Keeps the KEYS AND BUTTONS page's list window over the cursor at the end of a
+    /// frame. The cell the player is looking at is then the cell a capture binds. Nothing on any
+    /// other screen.</summary>
     public void SyncWindows()
     {
         if (_host.Screen == OriginalScreen.Keys)
@@ -810,10 +811,10 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         }
     }
 
-    /// <summary>Opens the Game Options page on the saved options with its first row focused, which
-    /// is what the hub's GAME OPTIONS door and the screenshot aid both go through. The page is a
-    /// form, not a list, so it opens on its first option rather than on wherever the cursor stood
-    /// when it was last left.</summary>
+    /// <summary>Opens the Game Options page on the saved options with its first row focused. The
+    /// hub's GAME OPTIONS door and the screenshot aid both go through it. The page is a form, not a
+    /// list. It opens on its first option rather than on wherever the cursor stood when it was last
+    /// left.</summary>
     public void OpenGameOptions()
     {
         _goOpen = null;
@@ -856,8 +857,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         return moved;
     }
 
-    /// <summary>Opens the VIDEO page on the saved options with its first row focused, which is what
-    /// the hub's VIDEO door and the screenshot aid both go through.</summary>
+    /// <summary>Opens the VIDEO page on the saved options with its first row focused. The hub's
+    /// VIDEO door and the screenshot aid both go through it.</summary>
     public void OpenVideo()
     {
         _vpOpen = null;
@@ -935,16 +936,16 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         return (a, BindingLabels.Row(rest, 1));
     }
 
-    // The rest of this class stays in the five pages' own narrative order (a helper beside the entry
-    // point it serves, one page's half after another's) rather than hoisted into blocks for the
-    // ordering rules' sake, the same trade OriginalInstantActionScreen.cs makes.
+    // The rest of this class stays in the five pages' own narrative order. A helper stands beside
+    // the entry point it serves, and one page's half after another's. Nothing is hoisted into
+    // blocks for the ordering rules' sake, the same trade OriginalInstantActionScreen.cs makes.
 #pragma warning disable SA1201, SA1202, SA1204
 
-    // The saved options every page shows back: what was asked for, not what this process resolved,
-    // since a flag or the config key can have decided either and the page still owes the player the
-    // words their own ACCEPT CHANGES saved. Every page reads every setting, since each one's apply
-    // carries the settings it does not show unchanged. A module with no reader opens on the shipped
-    // defaults, which is what an engine-free test wants.
+    // The saved options every page shows back. They are what was asked for, not what this process
+    // resolved. A flag or the config key can have decided either, and the page still owes the
+    // player the words their own ACCEPT CHANGES saved. Every page reads every setting, since each
+    // one's apply carries the settings it does not show unchanged. A module with no reader opens
+    // on the shipped defaults, which is what an engine-free test wants.
     private void ReadSavedOptions()
     {
         var saved = _options?.Invoke();
@@ -965,9 +966,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         _audioVoice = saved?.AudioVoice;
     }
 
-    // The apply exit every option page leaves through, carrying every setting the store holds: a
-    // page writes the ones it shows and hands the rest back as ReadSavedOptions read them, which
-    // is what keeps Launcher.ApplyOptions the options file's one writer.
+    // The apply exit every option page leaves through, carrying every setting the store holds. A
+    // page writes the ones it shows and hands the rest back as ReadSavedOptions read them. That
+    // keeps Launcher.ApplyOptions the options file's one writer.
     private OptionsApplyExit AppliedOptions() =>
         new(_graphics, CSVM.Flight.Difficulty.Word(_difficulty),
             _monitorIndex, _resolution, _displayMode, _vsync,
@@ -981,7 +982,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         _host.Open(OriginalScreen.Options);
     }
 
-    // The n-th art a row names as a strip, the shared drop-list rule's own reading: the option
+    // The n-th art a row names as a strip, the shared drop-list rule's own reading. The option
     // pages and the Keys page name their arrows, bars and checkbox strips this way.
     private static BoardArt? StripArt(IReadOnlyList<string> art, int index, int frames = 4) =>
         OriginalDropLists.StripArt(art, index, frames);
@@ -998,8 +999,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     }
 
     // One of a section's own button strips as a row, at its authored corner in its measured size.
-    // <paramref name="dy"/> moves it down from that corner, which is what takes a plaque standing on
-    // a grown plate's bottom band down with the plate; 0 leaves it exactly where it is authored.
+    // The offset <paramref name="dy"/> moves it down from that corner, which takes a plaque standing
+    // on a grown plate's bottom band down with the plate. A dy of 0 leaves it where it is authored.
     private void AddStrip(
         MenuLayoutScreen screen, List<OriginalRow> rows, string key, OriginalRowKind kind, bool enabled,
         int column, float dy = 0f)
@@ -1040,10 +1041,10 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         return first;
     }
 
-    // A slider row from its authored widget: the slot at the widget's corner in its own art's
-    // measured size, the thumb measured from its own art, and the row's rectangle the region the
-    // widget insets the slot into, which is what the pointer has to hit. The page supplies the range
-    // its setting spans, the level it stands at and where a new level goes; the shell's own
+    // A slider row from its authored widget. The slot stands at the widget's corner in its own
+    // art's measured size, the thumb in its own art's. The row's rectangle is the region the widget
+    // insets the slot into, which is what the pointer has to hit. The page supplies the range its
+    // setting spans, the level it stands at and where a new level goes. The shell's own
     // SliderControl drives it and the shell draws it, this row being one of its kinds.
     private OriginalRow SliderRow(
         MenuLayoutWidget? widget, string key, float fallbackX, float fallbackY,
@@ -1062,10 +1063,10 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
             Slider: new OriginalSlider(track, track.Clamp(value), setValue, slot));
     }
 
-    // The rectangle a slider row authors: its slot art's own at the row's corner, moved in by the
-    // four insets the row carries and out where one is negative. That is the region a press has to
-    // land in, so it is what any row standing in such a box takes for its box, its words and its
-    // hit area alike, a Z row stating no width and no height of its own.
+    // The rectangle a slider row authors is its slot art's own at the row's corner. The four insets
+    // the row carries move it in, and out where one is negative. That is the region a press has to
+    // land in. Any row standing in such a box takes it for its box, its words and its hit area
+    // alike. A Z row states no width and no height of its own.
     private static (float X, float Y, float Width, float Height) SliderRegion(
         MenuLayoutWidget? widget, float x, float y, (float Width, float Height) slot)
     {
@@ -1076,8 +1077,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         return (left, top, Math.Max(1f, right - left), Math.Max(1f, bottom - top));
     }
 
-    // The n-th art a slider row names, falling back to the shipped file name so the control still
-    // has a name to draw where the section is absent. Neither art is a strip.
+    // The n-th art a slider row names, falling back to the shipped file name. The control then
+    // still has a name to draw where the section is absent. Neither art is a strip.
     private static BoardArt SliderArt(MenuLayoutWidget? widget, int index, string fallback)
     {
         var art = widget?.Art;
@@ -1085,10 +1086,10 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         return new BoardArt(BoardArtLibrary.Ui, name, 1);
     }
 
-    // Every page draws the hub's logo, its own section authoring none, and puts its own plate in the
-    // backdrop rather than among the pictures: a board draws its fills between the two layers, so a
-    // plate among the pictures paints over each row's own focus mark and the page then shows no
-    // focused row at all, whatever the mark is, because the mark is under opaque art.
+    // Every page draws the hub's logo, its own section authoring none. Each puts its own plate in
+    // the backdrop rather than among the pictures. A board draws its fills between the two layers.
+    // A plate among the pictures would paint over each row's own focus mark. The page would then
+    // show no focused row at all, whatever the mark is, the mark being under opaque art.
     private void ComposePreferencesLogo(List<BoardPicture> backdrop)
     {
         if (_layout.Screen(HubSection)?.Widget("PF_LOGO") is { Art.Count: > 0 } logo)
@@ -1098,11 +1099,11 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         }
     }
 
-    // The Game Options plate, grown by whole bands of its own art rather than stretched, so a page
-    // carrying more rows than the section authors still stands on art at its authored scale: the
-    // head above the repeated band, that band once per row, then the tail from the band's bottom
-    // edge down. <paramref name="extraRows"/> of 0 draws the one authored picture and nothing else.
-    // ⚠ The band is the art's, not the row pitch a layout reads: the seams are chosen against the
+    // The Game Options plate grows by whole bands of its own art rather than stretching. A page
+    // with more rows than the section authors still stands on art at its authored scale. The pieces
+    // are the head above the band, that band once per row, then the tail below it. An
+    // <paramref name="extraRows"/> of 0 draws the one authored picture and nothing else.
+    // ⚠ The band is the art's, not the row pitch a layout reads. The seams are chosen against the
     // bitmap's own gaps, so a section authoring another pitch still repeats these 62 pixels.
     private void ComposeGameOptionsPlate(MenuLayoutScreen screen, int extraRows, List<BoardPicture> backdrop)
     {
@@ -1132,10 +1133,10 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
             Crop: new BoardCrop(0f, below, size.Width, size.Height - below)));
     }
 
-    // How many whole bands the plate grows by: one per row past the three the section authors,
-    // capped at what the authored canvas still holds under the plate's own corner. A grown plate
-    // that ran off the canvas would put its bottom band and the two plaques on it out of sight, so
-    // the rows past the cap tighten instead (FitGameOptionPitch).
+    // How many whole bands the plate grows by, one per row past the three the section authors. The
+    // count is capped at what the authored canvas still holds under the plate's own corner. A grown
+    // plate that ran off the canvas would put its bottom band and the two plaques on it out of
+    // sight. The rows past the cap tighten instead (FitGameOptionPitch).
     private int ExtraGameOptionRows(MenuLayoutScreen screen)
     {
         int wanted = Math.Max(0, GameOptions.Length - GameOptionAuthoredRows);
@@ -1169,11 +1170,11 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         }
     }
 
-    // An open option list as the overlay, drawn by both dropdown pages: the panel over the rows the
-    // window shows, each item's words on it, and once the list outruns the window the two arrows in
-    // their state frames and the thumb on its track. The panel runs the authored box's full width,
-    // the scroll column included, since the rows gave that column up so their words and their marks
-    // keep off the chrome, not the panel.
+    // An open option list as the overlay, drawn by both dropdown pages. It is the panel over the
+    // rows the window shows, with each item's words on it. Once the list outruns the window it also
+    // draws the two arrows in their state frames and the thumb on its track. The panel runs the
+    // authored box's full width, the scroll column included. The rows gave that column up so their
+    // words and their marks keep off the chrome, not the panel.
     private BoardPanel ComposeOptionList(OpenDropList drop, int top, IReadOnlyList<OriginalRow> rows, int focus)
     {
         var panelFills = new List<BoardFill>();
@@ -1189,7 +1190,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
             }
         }
 
-        // A dark panel in the plate's own key, not the white one the paper pages open: these pages
+        // A dark panel in the plate's own key, not the white one the paper pages open. These pages
         // write in the section's pale text colour, which no white ground would carry.
         if (head < foot)
         {
@@ -1229,9 +1230,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         return new BoardPanel(panelFills, panelPictures, panelLines);
     }
 
-    // The Game Options rows: an open list's items alone while one is open, else the option controls
-    // at their authored rows and the two plaques under them, all one column. Without the section the
-    // controls stand as text buttons so the page is still walkable.
+    // The Game Options rows. An open list's items stand alone while one is open. Otherwise the
+    // option controls stand at their authored rows with the two plaques under them, all one column.
+    // Without the section the controls stand as text buttons so the page is still walkable.
     private void BuildGameOptionsRows(List<OriginalRow> rows)
     {
         var screen = _layout.Screen(GameOptionsSection);
@@ -1258,8 +1259,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         BuildGameOptionsControls(screen, ReadGameOptionsPage(screen), rows);
     }
 
-    // The open option's list, or null while none is open: that option's words under the authored
-    // dropdown's box on its own row, windowed by the TotalDisplayed the section authors.
+    // The open option's list, or null while none is open. It is that option's words under the
+    // authored dropdown's box on its own row, windowed by the TotalDisplayed the section authors.
     private OpenDropList? OpenGameOptionDrop()
     {
         if (_goOpen is not { } key || _layout.Screen(GameOptionsSection) is not { } screen
@@ -1304,9 +1305,10 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         AddStrip(screen, rows, GameOptionsCancelKey, OriginalRowKind.Button, true, 0, page.PlaqueDy);
     }
 
-    // The page's row shape off the section's own widgets, each falling back to the authored number
-    // when the row is not there: the title column, the first row's line and the pitch between the
-    // authored rows, the dropdown box, the checkbox's offset from its row, the description column.
+    // The page's row shape off the section's own widgets, each number falling back to the authored
+    // one when the row is not there. It is the title column, the first row's line and the pitch
+    // between the authored rows. The dropdown box, the checkbox's offset from its row and the
+    // description column follow.
     private GameOptionsPage ReadGameOptionsPage(MenuLayoutScreen screen)
     {
         var first = screen.Widget("GO_T_DIFFTITLE");
@@ -1349,12 +1351,12 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
             extraRows);
     }
 
-    // The authored section carries three rows and this page holds more. The plate grows a whole band
-    // per extra row and takes the plaques down with it, so the authored pitch stands for as many
-    // rows as the canvas holds bands; past that the rows tighten into the space between the first
-    // line and the moved button (below is how far a row reaches under its own line, plaqueDy how far
-    // the growth took the button down). ⚠ Never draw a row over the button: the press regions would
-    // overlap and one pointer press would land on two rows.
+    // The authored section carries three rows and this page holds more. The plate grows a whole
+    // band per extra row and takes the plaques down with it. The authored pitch stands for as many
+    // rows as the canvas holds bands. Past that the rows tighten into the space between the first
+    // line and the moved button. Here below is how far a row reaches under its own line, plaqueDy
+    // how far the growth took the button down. ⚠ Never draw a row over the button, since the press
+    // regions would overlap and one pointer press would land on two rows.
     private static float FitGameOptionPitch(
         float authored, float firstY, float below, MenuLayoutWidget? accept, float plaqueDy)
     {
@@ -1404,8 +1406,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         return at >= 0 ? GameOptions[at] : null;
     }
 
-    // A press: a list item picks and closes, a dropdown opens its list, a checkbox flips, ACCEPT
-    // CHANGES leaves as the apply exit and CANCEL CHANGES drops the edits and goes back.
+    // What a press does. A list item picks and closes, a dropdown opens its list, a checkbox flips.
+    // ACCEPT CHANGES leaves as the apply exit, and CANCEL CHANGES drops the edits and goes back.
     private MenuExit? ActivateGameOptions(OriginalRow row)
     {
         int colon = row.Key.IndexOf(':');
@@ -1482,8 +1484,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         return true;
     }
 
-    // Back from the page: an open list closes first, then the page leaves the way CANCEL CHANGES
-    // does, since GO_B_CANCELCHANGES is the declining answer the layout gives the page.
+    // Back from the page. An open list closes first, then the page leaves the way CANCEL CHANGES
+    // does. GO_B_CANCELCHANGES is the declining answer the layout gives the page.
     private void BackGameOptions()
     {
         if (!CloseGameOptionsDropdown())
@@ -1492,46 +1494,42 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         }
     }
 
-    // The page as drawn: the hub's logo, the page's background, its title, then each option's title
-    // and description at their authored columns, the controls, and an open list as the overlay.
-    // ⚠ The logo and the plate are backdrop, not pictures, for the reason ComposePreferencesLogo
-    // states: a board draws its fills between the two layers, so a plate among the pictures buries
-    // every focus mark the rows compose under opaque art.
-    private void ComposeGameOptions(
-        IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> backdrop, List<BoardPicture> pictures,
-        List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPanel> overlays)
+    // The page as drawn. It is the hub's logo, the page's background and its title, then each
+    // option's title and description at their authored columns. The controls and an open list as
+    // the overlay follow. ⚠ The logo and the plate are backdrop, not pictures, for the reason
+    // ComposePreferencesLogo states. A board draws its fills between the two layers, so a plate
+    // among the pictures buries every focus mark the rows compose.
+    private void ComposeGameOptions(IReadOnlyList<OriginalRow> rows, int focus, BoardLayers layers)
     {
-        ComposePreferencesLogo(backdrop);
+        ComposePreferencesLogo(layers.Backdrop);
         var screen = _layout.Screen(GameOptionsSection);
         if (screen == null)
         {
-            _host.ComposePlainPage("GAME OPTIONS", rows, focus, fills, lines, plaques);
+            _host.ComposePlainPage("GAME OPTIONS", rows, focus, layers);
             return;
         }
 
         var page = ReadGameOptionsPage(screen);
-        ComposeGameOptionsPlate(screen, page.ExtraRows, backdrop);
-        ComposePageTitle(screen, "GO_T_TITLE", "GAME OPTIONS", lines);
+        ComposeGameOptionsPlate(screen, page.ExtraRows, layers.Backdrop);
+        ComposePageTitle(screen, "GO_T_TITLE", "GAME OPTIONS", layers.Lines);
         for (int i = 0; i < GameOptions.Length; i++)
         {
             var option = GameOptions[i];
-            lines.Add(new BoardLine(option.Title, page.TitleX, page.RowY(i), page.TitleWidthFor(option.Kind),
+            layers.Lines.Add(new BoardLine(option.Title, page.TitleX, page.RowY(i), page.TitleWidthFor(option.Kind),
                 GameOptionTitleFont, BoardInk.Row, -1, false,
                 option.Kind == OriginalRowKind.Radio ? BoardJustify.Center : BoardJustify.Left));
-            lines.Add(new BoardLine(option.Description(this), page.DescX, page.RowY(i) + page.DescDy, page.DescWidth,
+            layers.Lines.Add(new BoardLine(option.Description(this), page.DescX, page.RowY(i) + page.DescDy, page.DescWidth,
                 GameOptionDescFont, BoardInk.Row));
         }
 
-        ComposeGameOptionsControls(screen, page, rows, focus, fills, lines, plaques, pictures, overlays);
+        ComposeGameOptionsControls(screen, page, rows, focus, layers);
     }
 
     // The controls in their states. With a list open the page under it is drawn from the closed
-    // controls with the open one focused, and the items become the overlay, as the Instant Action
+    // controls with the open one focused. The items become the overlay, as the Instant Action
     // screen's own list does.
     private void ComposeGameOptionsControls(
-        MenuLayoutScreen screen, GameOptionsPage page, IReadOnlyList<OriginalRow> rows, int focus,
-        List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPicture> pictures,
-        List<BoardPanel> overlays)
+        MenuLayoutScreen screen, GameOptionsPage page, IReadOnlyList<OriginalRow> rows, int focus, BoardLayers layers)
     {
         var controls = rows;
         int controlFocus = focus;
@@ -1553,23 +1551,23 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
                 // An eight-state strip: the four button states unchecked, then the same four checked.
                 int state = control.Enabled ? (i == controlPressed ? 3 : i == controlFocus ? 2 : 1) : 0;
                 int frame = (GameOptionFor(control.Key)?.Read(this) == 1 ? 4 : 0) + state;
-                plaques.Add(new BoardPlaque(control.Art, control.X, control.Y, i, frame, string.Empty, BoardInk.LabelNormal));
+                layers.Plaques.Add(new BoardPlaque(control.Art, control.X, control.Y, i, frame, string.Empty, BoardInk.LabelNormal));
                 continue;
             }
 
-            _host.ComposeGenericRow(control, i == controlFocus, i == controlPressed, i, fills, lines, plaques, pictures);
+            _host.ComposeGenericRow(control, i == controlFocus, i == controlPressed, i, layers);
         }
 
         if (OpenGameOptionDrop() is { } drop && rows.Count > 0)
         {
-            overlays.Add(ComposeOptionList(drop, _goListTop, rows, focus));
+            layers.Overlays.Add(ComposeOptionList(drop, _goListTop, rows, focus));
         }
     }
 
     // The AUDIO rows: each level's slider on its authored line and the two plaques beside them, all
-    // one column. Without the section the levels stand as text buttons carrying their own value, so
-    // the page is still walkable and still says what the mix is; the pageless composer draws no
-    // slider, which is why the fallback is not one.
+    // one column. Without the section the levels stand as text buttons carrying their own value.
+    // The page is then still walkable and still says what the mix is. The pageless composer draws
+    // no slider, which is why the fallback is not one.
     private void BuildAudioRows(List<OriginalRow> rows)
     {
         var screen = _layout.Screen(AudioSection);
@@ -1595,9 +1593,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         {
             var place = PlaceAudioRow(screen, option);
             var control = option.ControlKey is { } key ? screen.Widget(key) : null;
-            // The moved level is recorded here rather than in the table's own write, because the
-            // control calls this only where the value actually changed: a drag that held the thumb
-            // on the same whole number records nothing, and the host sounds nothing for it.
+            // The moved level is recorded here rather than in the table's own write. The control
+            // calls this only where the value actually changed. A drag that held the thumb on the
+            // same whole number records nothing, and the host sounds nothing for it.
             rows.Add(SliderRow(control, option.Key, place.SliderX, place.SliderY,
                 CSVM.Utils.AudioMix.MinLevel, CSVM.Utils.AudioMix.MaxLevel,
                 option.Read(this),
@@ -1614,7 +1612,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
 
     // The level a row stands at, found through its own table entry so a level and its shipped
     // fallback keep one definition. Every member but None is in the table, so the last answer is
-    // unreachable; it is the resting level rather than silence, a preview being no place to invent
+    // unreachable. It is the resting level rather than silence, a preview being no place to invent
     // a mute.
     private int AudioLevel(MenuMixLevel level)
     {
@@ -1631,8 +1629,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
 
     // One row's shape off the section's own widgets, each number falling back to the authored one
     // when the row is not there. The lines are read per row rather than off a first row and a
-    // pitch: this section's pitch is 58, 57, 53 and 53, so a single pitch would misplace the rows
-    // under the second by up to five pixels each.
+    // pitch. This section's pitch changes from row to row (docs/org/menu-inventory.md). A single
+    // pitch would misplace the rows under the second by up to five pixels each.
     private AudioPlacement PlaceAudioRow(MenuLayoutScreen screen, AudioOption option)
     {
         var title = screen.Widget(option.TitleKey);
@@ -1651,7 +1649,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
 
     // The column every slider stands in, and the drop from a title's line to its own slider's, both
     // read off the first authored slider row. They place the Master row, whose own authored widget
-    // is the checkbox; a row with a slider of its own is placed by that widget and reaches these
+    // is the checkbox. A row with a slider of its own is placed by that widget, and reaches these
     // only when the layout has dropped it.
     private float SliderColumnX(MenuLayoutScreen screen) =>
         screen.Widget(AudioSliderRow.ControlKey!)?.Int("X", (int)AudioSliderX) ?? AudioSliderX;
@@ -1663,10 +1661,10 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         return title != null && slider != null ? slider.Int("Y") - title.Int("Y") : AudioSliderOffset;
     }
 
-    // A press: ACCEPT CHANGES leaves as the apply exit carrying every saved choice (the settings
-    // this page does not show ride it unchanged, read back when the page opened) and CANCEL CHANGES
-    // drops the edits and goes back. A slider row answers nothing: its value moves under the
-    // pointer or by a sideways step, and an Accept that also moved it would have no opposite.
+    // ACCEPT CHANGES leaves as the apply exit carrying every saved choice. The settings this page
+    // does not show ride it unchanged, read back when the page opened. CANCEL CHANGES drops the
+    // edits and goes back. A slider row answers nothing. Its value moves under the pointer or by a
+    // sideways step, and an Accept that also moved it would have no opposite.
     private MenuExit? ActivateAudio(OriginalRow row)
     {
         switch (row.Key)
@@ -1681,44 +1679,43 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         return null;
     }
 
-    // The page as drawn: the hub's logo, the page's background, its title, then each level's title
-    // and description at their authored columns and the sliders and plaques over them.
-    private void ComposeAudio(
-        IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> backdrop, List<BoardPicture> pictures,
-        List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques)
+    // The page as drawn. It is the hub's logo, the page's background and its title. Each level's
+    // title and description follow at their authored columns, with the sliders and plaques over
+    // them.
+    private void ComposeAudio(IReadOnlyList<OriginalRow> rows, int focus, BoardLayers layers)
     {
-        ComposePreferencesLogo(backdrop);
+        ComposePreferencesLogo(layers.Backdrop);
         var screen = _layout.Screen(AudioSection);
         if (screen == null)
         {
-            _host.ComposePlainPage("AUDIO", rows, focus, fills, lines, plaques);
+            _host.ComposePlainPage("AUDIO", rows, focus, layers);
             return;
         }
 
-        ComposePlate(screen, "AP_BACKGROUND", backdrop);
-        ComposePageTitle(screen, "AP_T_TITLE", "AUDIO", lines);
+        ComposePlate(screen, "AP_BACKGROUND", layers.Backdrop);
+        ComposePageTitle(screen, "AP_T_TITLE", "AUDIO", layers.Lines);
 
-        // The focused row's title in the focused ink, the mark a list row takes, so the cursor shows
-        // where the eye already reads the row's name. The rows are built from this table in this
-        // order, so a level's index is its row's.
+        // The focused row's title in the focused ink, the mark a list row takes. The cursor then
+        // shows where the eye already reads the row's name. The rows are built from this table in
+        // this order, so a level's index is its row's.
         for (int i = 0; i < AudioOptions.Length; i++)
         {
             var option = AudioOptions[i];
             var place = PlaceAudioRow(screen, option);
-            lines.Add(new BoardLine(option.Title, place.TitleX, place.TitleY, place.TitleWidth,
+            layers.Lines.Add(new BoardLine(option.Title, place.TitleX, place.TitleY, place.TitleWidth,
                 AudioTitleFont, i == focus ? BoardInk.RowFocused : BoardInk.Row));
-            lines.Add(new BoardLine(option.Description, place.DescX, place.DescY, place.DescWidth,
+            layers.Lines.Add(new BoardLine(option.Description, place.DescX, place.DescY, place.DescWidth,
                 AudioDescFont, BoardInk.Row));
         }
 
         for (int i = 0; i < rows.Count; i++)
         {
-            _host.ComposeGenericRow(rows[i], i == focus, i == _host.PressedRow, i, fills, lines, plaques, pictures);
+            _host.ComposeGenericRow(rows[i], i == focus, i == _host.PressedRow, i, layers);
         }
     }
 
-    // The size row's description says what the size does under the mode standing beside it, since
-    // it does something different in each: the window's own size, nothing at all, or the size the
+    // The size row's description says what the size does under the mode standing beside it. It does
+    // something different in each. It is the window's own size, nothing at all, or the size the
     // game draws at inside a fullscreen window Godot will not resize.
     private string ResolutionDescription()
     {
@@ -1733,9 +1730,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     }
 
     // The graphics row's description says whether a restart is still owed. The mode is resolved
-    // once at launch, so a choice that differs from the running one reaches the world on the next
-    // start and nothing on the page can show it sooner; a player who saved it and came back
-    // otherwise sees the box checked and a world unchanged, and reads that as a failed switch.
+    // once at launch. A choice that differs from the running one reaches the world on the next
+    // start, and nothing on the page can show it sooner. A player who saved it and came back would
+    // otherwise see the box checked and a world unchanged. They would read that as a failed switch.
     private string GraphicsDescription()
     {
         bool running = CSVM.Utils.GraphicsMode.Enhanced;
@@ -1745,23 +1742,23 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
             : $"Select the lit world. This run is {(running ? "enhanced" : "original")}; restart to apply.";
     }
 
-    // The screen's sizes and the one a saved size it lacks falls back to, read through the reader
-    // on every access like the screens below, widened with the size the options file named so a
-    // hand-written one stands on the row where it sorts. The row's value falls back through this
-    // list's own fallback, the same word ResolutionSetting.Resolve lands on, so the row cannot name
-    // a size the window would not be standing at.
+    // The screen's sizes and the one a saved size it lacks falls back to. They are read through the
+    // reader on every access, like the screens below. The list is widened with the size the options
+    // file named, so a hand-written one stands on the row where it sorts. The row's value falls
+    // back through this list's own fallback, the same word ResolutionSetting.Resolve lands on. The
+    // row therefore cannot name a size the window would not be standing at.
     private CSVM.Utils.SizeList Sizes =>
         (_screenSizes?.Invoke() ?? CSVM.Utils.ResolutionSetting.Unknown).Including(_savedResolution);
 
-    // The machine's screens and the one a saved index that names none falls back to. Read through
-    // the reader on every access, since a monitor can be plugged in while the page stands open. The
-    // row's value goes through MonitorSetting.Resolve over this, the same call the apply makes, so
-    // the row cannot show a screen the window would not be moved to.
+    // The machine's screens and the one a saved index that names none falls back to. It is read
+    // through the reader on every access, since a monitor can be plugged in while the page stands
+    // open. The row's value goes through MonitorSetting.Resolve over this, the same call the apply
+    // makes. The row therefore cannot show a screen the window would not be moved to.
     private CSVM.Utils.ScreenList Screens => _screens?.Invoke() ?? CSVM.Utils.MonitorSetting.Unknown;
 
-    // The VIDEO rows: an open list's items alone while one is open, else each setting's control on
-    // its authored row and the two plaques beside them, all one column. Without the section the
-    // controls stand as text buttons so the page is still walkable.
+    // The VIDEO rows. An open list's items stand alone while one is open. Otherwise each setting's
+    // control stands on its authored row with the two plaques beside them, all one column. Without
+    // the section the controls stand as text buttons so the page is still walkable.
     private void BuildVideoRows(List<OriginalRow> rows)
     {
         var screen = _layout.Screen(VideoSection);
@@ -1789,9 +1786,10 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         BuildVideoControls(screen, rows);
     }
 
-    // The open setting's list, or null while none is open: that row's words under its own authored
-    // control box, windowed by the TotalDisplayed that row authors. The Resolution row's words are
-    // enumerated per screen and can outrun that window; every other row's vocabulary fits it.
+    // The open setting's list, or null while none is open. It is that row's words under its own
+    // authored control box, windowed by the TotalDisplayed that row authors. The Resolution row's
+    // words are enumerated per screen and can outrun that window. Every other row's vocabulary
+    // fits it.
     private OpenDropList? OpenVideoDrop()
     {
         if (_vpOpen is not { } key || _layout.Screen(VideoSection) is not { } screen
@@ -1831,10 +1829,10 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     }
 
     // One row's shape off the section's own widgets, each number falling back to the authored one
-    // when the row is not there. Two of them are derived rather than read: the title box stops at
-    // the control beside it, since every Video title but the Graphics one is authored the same 162
-    // wide whatever stands to its right, and a description the section gives no width wraps at the
-    // plaque column, the two widthless rows being the two the plaques stand beside.
+    // when the row is not there. Two of them are derived rather than read. The title box stops at
+    // the control beside it. Every Video title but the Graphics one is authored the same 162 wide,
+    // whatever stands to its right. A description the section gives no width wraps at the plaque
+    // column, the two widthless rows being the two the plaques stand beside.
     private VideoPlacement PlaceVideoRow(MenuLayoutScreen screen, VideoOption option)
     {
         var title = screen.Widget(option.TitleKey);
@@ -1901,10 +1899,10 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         return at >= 0 ? VideoOptions[at] : null;
     }
 
-    // A press: a list item picks and closes, a dropdown opens its list, a checkbox flips, ACCEPT
-    // CHANGES leaves as the apply exit carrying every saved choice (the settings this page does not
-    // show ride it unchanged, read back when the page opened) and CANCEL CHANGES drops the edits
-    // and goes back.
+    // A list item picks and closes, a dropdown opens its list, a checkbox flips. ACCEPT CHANGES
+    // leaves as the apply exit carrying every saved choice. The settings this page does not show
+    // ride it unchanged, read back when the page opened. CANCEL CHANGES drops the edits and goes
+    // back.
     private MenuExit? ActivateVideo(OriginalRow row)
     {
         int colon = row.Key.IndexOf(':');
@@ -1955,7 +1953,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
 
     // A sideways step on a focused setting picks the next value with wrap, as the Game Options
     // page's rows do. False on anything else, so the step crosses columns. The Accept and pointer
-    // paths read a row's own Enabled flag; this one reads the option behind it, since a dead row
+    // paths read a row's own Enabled flag. This one reads the option behind it, since a dead row
     // must not take a value from a key that never presses it.
     private bool StepVideoValue(IReadOnlyList<OriginalRow> rows, int focus, int direction)
     {
@@ -1983,8 +1981,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         return true;
     }
 
-    // Back from the page: an open list closes first, then the page leaves the way CANCEL CHANGES
-    // does, since VP_B_CANCELCHANGES is the declining answer the layout gives the page.
+    // Back from the page. An open list closes first, then the page leaves the way CANCEL CHANGES
+    // does. VP_B_CANCELCHANGES is the declining answer the layout gives the page.
     private void BackVideo()
     {
         if (!CloseVideoDropdown())
@@ -1993,42 +1991,38 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         }
     }
 
-    // The page as drawn: the hub's logo, the background, the title, each setting's title and
-    // description at their authored columns, the controls over them, and an open list as the
-    // overlay. ⚠ Keep the logo and the plate in the backdrop, never among the pictures, for the
-    // reason ComposePreferencesLogo states: art there buries every focus mark the rows compose.
-    private void ComposeVideo(
-        IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> backdrop, List<BoardPicture> pictures,
-        List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPanel> overlays)
+    // The page as drawn. It is the hub's logo, the background and the title, then each setting's
+    // title and description at their authored columns. The controls stand over them, and an open
+    // list is the overlay. ⚠ Keep the logo and the plate in the backdrop, never among the pictures.
+    // ComposePreferencesLogo states the reason: art there buries every focus mark the rows compose.
+    private void ComposeVideo(IReadOnlyList<OriginalRow> rows, int focus, BoardLayers layers)
     {
-        ComposePreferencesLogo(backdrop);
+        ComposePreferencesLogo(layers.Backdrop);
         var screen = _layout.Screen(VideoSection);
         if (screen == null)
         {
-            _host.ComposePlainPage("VIDEO", rows, focus, fills, lines, plaques);
+            _host.ComposePlainPage("VIDEO", rows, focus, layers);
             return;
         }
 
-        ComposePlate(screen, "VP_BACKGROUND", backdrop);
-        ComposePageTitle(screen, "VP_T_TITLE", "VIDEO", lines);
+        ComposePlate(screen, "VP_BACKGROUND", layers.Backdrop);
+        ComposePageTitle(screen, "VP_T_TITLE", "VIDEO", layers.Lines);
         foreach (var option in VideoOptions)
         {
             var place = PlaceVideoRow(screen, option);
-            lines.Add(new BoardLine(option.Title, place.TitleX, place.TitleY, place.TitleWidth,
+            layers.Lines.Add(new BoardLine(option.Title, place.TitleX, place.TitleY, place.TitleWidth,
                 VideoTitleFont, BoardInk.Row));
-            lines.Add(new BoardLine(option.Description(this), place.DescX, place.DescY, place.DescWidth,
+            layers.Lines.Add(new BoardLine(option.Description(this), place.DescX, place.DescY, place.DescWidth,
                 VideoDescFont, BoardInk.Row));
         }
 
-        ComposeVideoControls(screen, rows, focus, fills, lines, plaques, pictures, overlays);
+        ComposeVideoControls(screen, rows, focus, layers);
     }
 
     // The controls in their states. With a list open the page under it is drawn from the closed
-    // controls with the open one focused, and the items become the overlay, as the Game Options
-    // page's own list does.
-    private void ComposeVideoControls(
-        MenuLayoutScreen screen, IReadOnlyList<OriginalRow> rows, int focus, List<BoardFill> fills,
-        List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPicture> pictures, List<BoardPanel> overlays)
+    // controls with the open one focused. The items become the overlay, as the Game Options page's
+    // own list does.
+    private void ComposeVideoControls(MenuLayoutScreen screen, IReadOnlyList<OriginalRow> rows, int focus, BoardLayers layers)
     {
         var controls = rows;
         int controlFocus = focus;
@@ -2050,16 +2044,16 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
                 // An eight-state strip: the four button states unchecked, then the same four checked.
                 int state = row.Enabled ? (i == controlPressed ? 3 : i == controlFocus ? 2 : 1) : 0;
                 int frame = (VideoOptionFor(row.Key)?.Read(this) == 1 ? 4 : 0) + state;
-                plaques.Add(new BoardPlaque(row.Art, row.X, row.Y, i, frame, string.Empty, BoardInk.LabelNormal));
+                layers.Plaques.Add(new BoardPlaque(row.Art, row.X, row.Y, i, frame, string.Empty, BoardInk.LabelNormal));
                 continue;
             }
 
-            _host.ComposeGenericRow(row, i == controlFocus, i == controlPressed, i, fills, lines, plaques, pictures);
+            _host.ComposeGenericRow(row, i == controlFocus, i == controlPressed, i, layers);
         }
 
         if (OpenVideoDrop() is { } drop && rows.Count > 0)
         {
-            overlays.Add(ComposeOptionList(drop, _vpListTop, rows, focus));
+            layers.Overlays.Add(ComposeOptionList(drop, _vpListTop, rows, focus));
         }
     }
 
@@ -2067,8 +2061,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     // cells and the two whole-keymap buttons stand disabled rather than drawing somebody's blanks.
     private bool ControlsSeated => _controls is { } controls && controls.Players.Count > 0;
 
-    // Whether the flying-scheme row can be pressed at all: a seat has to be registered, and it has
-    // to read the keyboard, since a pad-only splitscreen seat holds no mouse to hand the stick.
+    // Whether the flying-scheme row can be pressed at all. A seat has to be registered, and it has
+    // to read the keyboard. A pad-only splitscreen seat holds no mouse to hand the stick.
     private bool MouseSchemeLive => ControlsSeated && _controls!.ReadsKeyboard;
 
     // The seven tabs: the six named ones over their own flight actions, then every action they
@@ -2111,8 +2105,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         return tabs;
     }
 
-    // A leading [FONTID] tag is a renderer directive the extractor left on this one multi-line row,
-    // and the newline inside it is the original's own break, which a wrapped line does not need.
+    // A leading [FONTID] tag is a renderer directive the extractor left on this one multi-line row.
+    // The newline inside it is the original's own break, which a wrapped line does not need.
     private static string KeysDescription(string text)
     {
         string line = text.Replace('\n', ' ');
@@ -2151,10 +2145,10 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
             : null;
     }
 
-    // The CONTROLS page: the seat chooser on the Controller Type row, the flying scheme on the Mouse
-    // Sensitivity panel's title line with the authored slider under it, the KEYS AND BUTTONS door
-    // and the exit pair, all one column. Without the section they stand as text buttons so the page
-    // is still walkable.
+    // The CONTROLS page has the seat chooser on the Controller Type row. The flying scheme stands
+    // on the Mouse Sensitivity panel's title line with the authored slider under it. The KEYS AND
+    // BUTTONS door and the exit pair follow, all one column. Without the section they stand as text
+    // buttons so the page is still walkable.
     private void BuildControlsPrefsRows(List<OriginalRow> rows)
     {
         var screen = _layout.Screen(ControlsPrefsSection);
@@ -2193,9 +2187,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         AddStrip(screen, rows, ControlsCancelKey, OriginalRowKind.Button, true, 0);
     }
 
-    // The KEYS AND BUTTONS page's rows in cursor order: the seven tabs in their own column, then
-    // each action's two control cells interleaved so a sideways step crosses from Control A to
-    // Control B of the same action, then RESET and CANCEL under the left column with ACCEPT under
+    // The KEYS AND BUTTONS page's rows in cursor order. The seven tabs stand in their own column.
+    // Each action's two control cells are interleaved, so a sideways step crosses from Control A to
+    // Control B of the same action. RESET and CANCEL stand under the left column with ACCEPT under
     // the right. A cell outside the list's window keeps its place for the cursor, unseen and unhit.
     private void BuildKeysRows(List<OriginalRow> rows)
     {
@@ -2239,8 +2233,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     }
 
     // The page's row shape off the section's own widgets, each falling back to the authored number
-    // where the row is absent. ⚠ Two authored widths run past the plate: the list's 644 puts its
-    // scrollbar at 844 and the Control B column's 174 ends at 815, against a plate that ends at 797.
+    // where the row is absent. ⚠ Two authored widths run past the plate. The list's 644 puts its
+    // scrollbar at 844, and the Control B column's 174 ends at 815, against a plate ending at 797.
     // Both are clamped to the plate, which is what the page's own still shows.
     private KeysPage ReadKeysPage(MenuLayoutScreen? screen)
     {
@@ -2291,8 +2285,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
 
     // The CONTROLS page's scheme chooser, on the Mouse Sensitivity title's own line, since the
     // authored slider keeps the panel's only other line. It takes the right half of the Controller
-    // Type box's column at that box's item height, so its arrow ends where the seat row's does and
-    // the panel's title keeps the left half. It stops short of the slider's press region, which
+    // Type box's column at that box's item height. Its arrow then ends where the seat row's does,
+    // and the panel's title keeps the left half. It stops short of the slider's press region, which
     // reaches ten pixels above the slot.
     private (float X, float Y, float Width, float Height) ControlsMouseBox(MenuLayoutScreen screen)
     {
@@ -2349,9 +2343,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         return null;
     }
 
-    // A press on the KEYS AND BUTTONS page: a pending steal takes the answer first, a tab stands
-    // its category, a cell arms a capture on that control's position, RESET restages this seat's
-    // whole keymap from the shipped defaults, and the exit pair writes or drops the visit.
+    // A press on the KEYS AND BUTTONS page. A pending steal takes the answer first, and a tab
+    // stands its category. A cell arms a capture on that control's position. RESET restages this
+    // seat's whole keymap from the shipped defaults, and the exit pair writes or drops the visit.
     private MenuExit? ActivateKeys(OriginalRow row)
     {
         if (_controls is not { } controls)
@@ -2403,7 +2397,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
 
     // Points the feature at the control the cell stands for: the tab's context and action, then the
     // slot the column is. Control B is the second position, which on an action holding one control
-    // is the empty slot past it, so a press there adds rather than replaces.
+    // is the empty slot past it. A press there therefore adds rather than replaces.
     private void FocusCell(int row, bool second)
     {
         if (_controls is not { } controls || row < 0 || row >= KeysTabs[_keysTab].Rows.Count)
@@ -2421,8 +2415,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         }
     }
 
-    // The seat chooser steps to the next registered player with wrap; a lone seat has nobody to
-    // step to and the row stays where it is.
+    // The seat chooser steps to the next registered player with wrap. A lone seat has nobody to
+    // step to, and the row stays where it is.
     private bool StepControlsPlayer(int direction)
     {
         if (_controls is not { } controls || controls.Players.Count < 2)
@@ -2461,8 +2455,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     }
 
     // A sideways step on the seat chooser picks the next player and one on the scheme row flips it;
-    // anything else crosses columns. The slider is the shell's own step and never reaches here, but
-    // the text-button page drawn without the section has no slider, so its sensitivity row steps here.
+    // anything else crosses columns. The slider is the shell's own step and never reaches here. The
+    // text-button page drawn without the section has no slider, so its sensitivity row steps here.
     private bool StepControlsValue(IReadOnlyList<OriginalRow> rows, int focus, int direction)
     {
         if (focus < 0 || focus >= rows.Count)
@@ -2491,8 +2485,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         return true;
     }
 
-    // Back from either rebinding page: a pending steal is dropped first, then the page leaves the
-    // way its own CANCEL CHANGES does, since that is the declining answer the layout gives each of
+    // Back from either rebinding page. A pending steal is dropped first, then the page leaves the
+    // way its own CANCEL CHANGES does. That is the declining answer the layout gives each of
     // them.
     private void BackControls()
     {
@@ -2561,23 +2555,23 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         lists.Add(new OriginalList(KeysListKey, window, line => _keysTop = line));
     }
 
-    // The CONTROLS page as drawn: the hub's logo and this section's plate as backdrop, the page
-    // title, the seat and mouse rows' own titles and descriptions, the KEYS AND BUTTONS description
-    // as authored, then the rows, the Mouse Sensitivity slider among them in its own slot and thumb.
-    private void ComposeControlsPrefs(
-        IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> backdrop, List<BoardPicture> pictures,
-        List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques)
+    // The CONTROLS page as drawn. The hub's logo and this section's plate are the backdrop, then
+    // the page title. The seat and mouse rows carry their own titles and descriptions, and the KEYS
+    // AND BUTTONS description stands as authored. The rows follow, the Mouse Sensitivity slider
+    // among them in its own slot and thumb.
+    private void ComposeControlsPrefs(IReadOnlyList<OriginalRow> rows, int focus, BoardLayers layers)
     {
-        ComposePreferencesLogo(backdrop);
+        ComposePreferencesLogo(layers.Backdrop);
         var screen = _layout.Screen(ControlsPrefsSection);
         if (screen == null)
         {
-            _host.ComposePlainPage("CONTROLS", rows, focus, fills, lines, plaques);
+            _host.ComposePlainPage("CONTROLS", rows, focus, layers);
             return;
         }
 
-        ComposePlate(screen, "CP_BACKGROUND", backdrop);
-        ComposePageTitle(screen, "CP_T_TITLE", "CONTROLS", lines);
+        ComposePlate(screen, "CP_BACKGROUND", layers.Backdrop);
+        ComposePageTitle(screen, "CP_T_TITLE", "CONTROLS", layers.Lines);
+        var lines = layers.Lines;
         if (screen.Widget("CP_T_JoystickTitle") is { } title)
         {
             lines.Add(new BoardLine("Player", title.Int("X", (int)ControlsTitleX), title.Int("Y"),
@@ -2622,34 +2616,33 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
             var row = rows[i];
             if (row.Kind == OriginalRowKind.Button && row.Art != null)
             {
-                plaques.Add(new BoardPlaque(row.Art, row.X, row.Y, i,
+                layers.Plaques.Add(new BoardPlaque(row.Art, row.X, row.Y, i,
                     row.Enabled ? ComposedBoard.PlaqueFrame(row.Art.Frames, i == focus, i == _host.PressedRow) : 0,
                     string.Empty, BoardInk.LabelNormal));
                 continue;
             }
 
-            _host.ComposeGenericRow(row, i == focus, i == _host.PressedRow, i, fills, lines, plaques, pictures);
+            _host.ComposeGenericRow(row, i == focus, i == _host.PressedRow, i, layers);
         }
     }
 
-    // The KEYS AND BUTTONS page as drawn: the plate, the title, the three column heads, the tab
-    // strip with the standing tab in its depressed frame, the category heading over its rows in the
-    // list's window, the two control columns, and the instruction line the status replaces while
-    // the feature has something to say.
-    private void ComposeKeys(
-        IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> backdrop, List<BoardPicture> pictures,
-        List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques)
+    // The KEYS AND BUTTONS page as drawn. It is the plate, the title, the three column heads, and
+    // the tab strip with the standing tab in its depressed frame. The category heading stands over
+    // its rows in the list's window, beside the two control columns. The instruction line closes
+    // it, replaced by the status while the feature has something to say.
+    private void ComposeKeys(IReadOnlyList<OriginalRow> rows, int focus, BoardLayers layers)
     {
-        ComposePreferencesLogo(backdrop);
+        ComposePreferencesLogo(layers.Backdrop);
         var screen = _layout.Screen(KeysSection);
         if (screen == null)
         {
-            _host.ComposePlainPage("KEYS AND BUTTONS", rows, focus, fills, lines, plaques);
+            _host.ComposePlainPage("KEYS AND BUTTONS", rows, focus, layers);
             return;
         }
 
-        ComposePlate(screen, "KB_BACKGROUND", backdrop);
-        ComposePageTitle(screen, "KB_T_TITLE", "KEYS AND BUTTONS", lines);
+        ComposePlate(screen, "KB_BACKGROUND", layers.Backdrop);
+        ComposePageTitle(screen, "KB_T_TITLE", "KEYS AND BUTTONS", layers.Lines);
+        var lines = layers.Lines;
         var page = ReadKeysPage(screen);
         foreach (var (key, fallbackX, fallbackWidth) in new[]
         {
@@ -2678,8 +2671,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
             lines.Add(new BoardLine(text.B, page.ControlBX, y, page.ControlBWidth, KeysRowFont, BoardInk.Row));
         }
 
-        ComposeKeysRows(rows, focus, fills, plaques);
-        ComposeKeysBar(page, tab.Rows.Count, fills, pictures, screen);
+        ComposeKeysRows(rows, focus, layers);
+        ComposeKeysBar(page, tab.Rows.Count, layers, screen);
         if (screen.Widget("KB_T_DEFAULTDESC") is { } instruction)
         {
             string status = _controls?.Status ?? string.Empty;
@@ -2689,9 +2682,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         }
     }
 
-    // The page's own rows: the tabs and the three buttons as plaques, the standing tab in the
-    // depressed frame it never leaves, and the focused control cell marked with the focus box.
-    private void ComposeKeysRows(IReadOnlyList<OriginalRow> rows, int focus, List<BoardFill> fills, List<BoardPlaque> plaques)
+    // The page's own rows. The tabs and the three buttons draw as plaques, the standing tab in the
+    // depressed frame it never leaves. The focused control cell is marked with the focus box.
+    private void ComposeKeysRows(IReadOnlyList<OriginalRow> rows, int focus, BoardLayers layers)
     {
         for (int i = 0; i < rows.Count; i++)
         {
@@ -2701,17 +2694,17 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
                 int frame = row.Key == KeysTabKey(_keysTab)
                     ? 3
                     : ComposedBoard.PlaqueFrame(row.Art.Frames, i == focus, i == _host.PressedRow);
-                // A tab's label takes the page's own text pair rather than the paper plaque's:
-                // the strip authors ColorActive as the description cream and ColorRollover as the
-                // file-wide ACTIVE, which is what those two palette roles already carry.
-                plaques.Add(new BoardPlaque(row.Art, row.X, row.Y, i, frame, row.Label,
+                // A tab's label takes the page's own text pair rather than the paper plaque's.
+                // The strip authors ColorActive as the description cream and ColorRollover as
+                // the file-wide ACTIVE. Those two palette roles already carry exactly that.
+                layers.Plaques.Add(new BoardPlaque(row.Art, row.X, row.Y, i, frame, row.Label,
                     i == focus || i == _host.PressedRow ? BoardInk.RowFocused : BoardInk.Row));
                 continue;
             }
 
             if (row.Art != null && row.Kind == OriginalRowKind.Button)
             {
-                plaques.Add(new BoardPlaque(row.Art, row.X, row.Y, i,
+                layers.Plaques.Add(new BoardPlaque(row.Art, row.X, row.Y, i,
                     row.Enabled ? ComposedBoard.PlaqueFrame(row.Art.Frames, i == focus, i == _host.PressedRow) : 0,
                     string.Empty, BoardInk.LabelNormal));
                 continue;
@@ -2719,16 +2712,15 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
 
             if (i == focus && row.Visible && row.Enabled)
             {
-                fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, 0, 0, 0, 0.10f));
-                fills.Add(_host.FocusMark(row));
+                layers.Fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, 0, 0, 0, 0.10f));
+                layers.Fills.Add(_host.FocusMark(row));
             }
         }
     }
 
     // The list's scrollbar, at the plate's own right edge rather than at the authored list width,
     // which stands past it. Nothing is drawn while the standing tab fits its window.
-    private void ComposeKeysBar(
-        KeysPage page, int count, List<BoardFill> fills, List<BoardPicture> pictures, MenuLayoutScreen screen)
+    private void ComposeKeysBar(KeysPage page, int count, BoardLayers layers, MenuLayoutScreen screen)
     {
         if (count <= page.Rows)
         {
@@ -2746,36 +2738,37 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         if (up != null && down != null && bar != null
             && _host.Measure(up.Name) != null && _host.Measure(down.Name) != null && _host.Measure(bar.Name) != null)
         {
-            pictures.Add(new BoardPicture(up, page.BarX, top));
-            pictures.Add(new BoardPicture(down, page.BarX, top + (page.Rows * page.ItemHeight) - page.ArrowHeight));
-            pictures.Add(new BoardPicture(bar, page.BarX, thumbY));
+            layers.Pictures.Add(new BoardPicture(up, page.BarX, top));
+            layers.Pictures.Add(new BoardPicture(down, page.BarX, top + (page.Rows * page.ItemHeight) - page.ArrowHeight));
+            layers.Pictures.Add(new BoardPicture(bar, page.BarX, thumbY));
             return;
         }
 
-        fills.Add(new BoardFill(page.BarX, top, page.ArrowWidth, page.Rows * page.ItemHeight, 255, 255, 255, 0.3f, Border: true));
-        fills.Add(new BoardFill(page.BarX, thumbY, page.ArrowWidth, page.ThumbHeight, 255, 255, 255, 0.6f));
+        layers.Fills.Add(new BoardFill(page.BarX, top, page.ArrowWidth, page.Rows * page.ItemHeight, 255, 255, 255, 0.3f, Border: true));
+        layers.Fills.Add(new BoardFill(page.BarX, thumbY, page.ArrowWidth, page.ThumbHeight, 255, 255, 255, 0.6f));
     }
 
     /// <summary>One row of a category tab: which keymap it belongs to and which action it names.
     /// The two travel together because the seven tabs are the original's action groups and this
-    /// port holds three keymaps, so one tab can list rows from more than one of them.</summary>
+    /// port holds three keymaps. One tab can therefore list rows from more than one of them.</summary>
     public readonly record struct ControlsTabRow(InputContext Context, InputAction Action);
 
     /// <summary>One category tab of the KEYS AND BUTTONS page: the word on its button and the rows
     /// it lists.</summary>
     public sealed record ControlsTab(string Name, IReadOnlyList<ControlsTabRow> Rows);
 
-    // One option of the Game Options page: its title, its description (read off the module, since a
-    // row can say something about its saved state), the control it takes, the words of the store
-    // field it shows, and how that field is read and written.
+    // One option of the Game Options page. It carries its title and its description, read off the
+    // module since a row can say something about its saved state. The control it takes, the words
+    // of the store field it shows, and how that field is read and written follow.
     private sealed record GameOption(
         string Key, string Title, Func<OriginalOptionsScreen, string> Description, OriginalRowKind Kind,
         IReadOnlyList<string> Words,
         Func<OriginalOptionsScreen, int> Read, Action<OriginalOptionsScreen, int> Write);
 
     // The Game Options page's row shape in authored pixels, every number off the section's own
-    // widgets: the title column, the first row's line and the pitch between rows, the dropdown box,
-    // the checkbox's offset from its row, the description column, and the two controls' strips.
+    // widgets. It is the title column, the first row's line and the pitch between rows. The
+    // dropdown box, the checkbox's offset from its row, the description column and the two
+    // controls' strips follow.
     private sealed record GameOptionsPage(
         float TitleX, float TitleWidth, float CheckTitleWidth, float FirstY, float Pitch,
         float DropX, float DropDy, float DropWidth, float ItemHeight,
@@ -2788,8 +2781,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
 
         public float RowY(int row) => FirstY + (row * Pitch);
 
-        // A checkbox row takes the head-turn row's own narrower title box, which is what leaves the
-        // box beside it clear of the words; a dropdown row takes the wide one.
+        // A checkbox row takes the head-turn row's own narrower title box, which leaves the box
+        // beside it clear of the words. A dropdown row takes the wide one.
         public float TitleWidthFor(OriginalRowKind kind) =>
             kind == OriginalRowKind.Radio ? CheckTitleWidth : TitleWidth;
 
@@ -2797,29 +2790,29 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
             (DropX, RowY(Math.Max(0, row)) + DropDy, DropWidth, ItemHeight);
     }
 
-    // One level of the AUDIO page: its key, which of the mix's levels it is (for the host that hears
-    // one move), its title, the authored widgets it composes over (the title, the slider and the
-    // description, the slider null on the row that has none), its description, the authored lines
-    // the title and the description fall back to, and how the store field is read and written. The
-    // description is a fixed string: unlike the VIDEO page's graphics row, no level says anything
-    // about its saved state that the thumb does not already show.
+    // One level of the AUDIO page, by its key and which of the mix's levels it is for the host
+    // that hears one move. Its title and the authored widgets it composes over: the title, the
+    // slider and the description, the slider null where the row has none. Its description, the
+    // authored lines the title and description fall back to, and how the store field is read and
+    // written follow. The description is a fixed string. No level says anything about its saved
+    // state that the thumb does not already show, unlike the VIDEO page's graphics row.
     private sealed record AudioOption(
         string Key, MenuMixLevel Level, string Title, string TitleKey, string? ControlKey,
         string DescriptionKey, string Description, float TitleY, float DescY,
         Func<OriginalOptionsScreen, int> Read, Action<OriginalOptionsScreen, int> Write);
 
-    // One AUDIO row's place in authored pixels: the title box, the corner its slider stands at where
-    // the row authors no slider of its own, and the description box.
+    // One AUDIO row's place in authored pixels. It is the title box, the corner its slider stands
+    // at where the row authors no slider of its own, and the description box.
     private sealed record AudioPlacement(
         float TitleX, float TitleY, float TitleWidth,
         float SliderX, float SliderY,
         float DescX, float DescY, float DescWidth);
 
-    // One setting of the VIDEO page: its title, the authored widgets it composes over (the title,
-    // the control and the description), its description (read off the module, since a row can say
-    // something about its saved state), the control it takes, the words of the store field it shows,
-    // how that field is read and written, and whether the row is live. The words come off the module
-    // too, the resolution row's being enumerated per screen rather than a vocabulary held as an array.
+    // One setting of the VIDEO page, by its title and the authored widgets it composes over: the
+    // title, the control and the description. Its description is read off the module, since a row
+    // can say something about its saved state. The control it takes, the words of the store field
+    // it shows, how it is read and written, and whether the row is live. The words come off the
+    // module too, the resolution row's being enumerated per screen rather than held as an array.
     private sealed record VideoOption(
         string Key, string Title, string TitleKey, string ControlKey, string DescriptionKey,
         Func<OriginalOptionsScreen, string> Description, OriginalRowKind Kind,
@@ -2827,9 +2820,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         Func<OriginalOptionsScreen, int> Read, Action<OriginalOptionsScreen, int> Write,
         Func<OriginalOptionsScreen, bool>? Live = null)
     {
-        // Whether the row takes a press at all. A row another setting owns the value of is dead:
-        // the cursor walks past it, the pointer cannot arm it, and it draws in its disabled frame,
-        // which is what every other unavailable row on these pages already does.
+        // Whether the row takes a press at all. A row another setting owns the value of is dead.
+        // The cursor walks past it, the pointer cannot arm it, and it draws in its disabled frame.
+        // Every other unavailable row on these pages already does that.
         public bool Editable(OriginalOptionsScreen options) => Live?.Invoke(options) ?? true;
     }
 
@@ -2840,9 +2833,9 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         float BoxX, float BoxY, float BoxWidth, float BoxHeight,
         float DescX, float DescY, float DescWidth, BoardArt? Box);
 
-    // The KEYS AND BUTTONS page's row shape in authored pixels: the list's corner, pitch and the
-    // rows it shows under the category heading, the three columns, the head line, and the
-    // scrollbar's own column at the plate's right edge.
+    // The KEYS AND BUTTONS page's row shape in authored pixels. It is the list's corner, its pitch,
+    // and the rows it shows under the category heading. The three columns, the head line, and the
+    // scrollbar's own column at the plate's right edge follow.
     private sealed record KeysPage(
         float ListX, float ListY, float ItemHeight, int Rows,
         float ActionX, float ActionWidth, float ControlAX, float ControlAWidth,
@@ -2850,7 +2843,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         float BarX, float ArrowWidth, float ArrowHeight, float ThumbHeight)
     {
         // The window's own first line, where the scrollbar stands. ⚠ Do not anchor the bar at
-        // LineY(0, top): a scrolled-away first row's line sits above the window, so the bar would
+        // LineY(0, top). A scrolled-away first row's line sits above the window. The bar would then
         // slide up with the list instead of holding still under its thumb.
         public float WindowY => ListY + ItemHeight;
 

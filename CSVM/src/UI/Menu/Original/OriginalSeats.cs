@@ -426,11 +426,11 @@ public sealed partial class OriginalShell
     // The sortie screen's own words: the heading, the column labels, the seat strip, the scroll
     // marks, the hint and the controls line, plus the aircraft column's scrollbar as an overlay.
     // The rows themselves are drawn by Compose's row loop.
-    private void ComposeSortie(IReadOnlyList<OriginalRow> rows, List<BoardLine> lines, List<BoardPanel> overlays)
+    private void ComposeSortie(IReadOnlyList<OriginalRow> rows, BoardLayers layers)
     {
         if (AirframeWindowFor(_setup.Roster.Count) is { } window)
         {
-            overlays.Add(new BoardPanel(
+            layers.Overlays.Add(new BoardPanel(
                 new[]
                 {
                     new BoardFill(window.ThumbX, window.TrackTop, window.ThumbWidth, window.TrackHeight, 0x40, 0x40, 0x40, 0.5f),
@@ -440,6 +440,7 @@ public sealed partial class OriginalShell
                 Array.Empty<BoardLine>()));
         }
 
+        var lines = layers.Lines;
         lines.Add(new BoardLine(_screen == OriginalScreen.Dogfight ? "DOGFIGHT" : "FREE FLIGHT",
             LeftColumnX, ListTop - 44f, 0f, HeadingFont, BoardInk.Heading));
         lines.Add(new BoardLine("MAP", LeftColumnX, ListTop - 20f, 0f, RowFont, BoardInk.Detail));

@@ -382,9 +382,9 @@ internal static class DestroyChoreographySuites
 
     // ---- what shades the pieces a death flings --------------------------------------------------
 
-    // C1's refuel tanks draw their launched pieces near-black over their own fire column, which is
-    // what the data asks for and what the original draws (docs/verification.md WORLD-47). Pinned so
-    // the reading is not re-opened as a lighting bug: the pieces take the SAME shading path as the
+    // C1's refuel tanks draw their launched pieces near-black over their own fire column. The data
+    // asks for that and the original draws it (docs/verification.md WORLD-47). Pinned so the
+    // reading is not re-opened as a lighting bug. The pieces take the SAME shading path as the
     // intact tank beside them, and the darkness is the authored vertex colour alone.
     // Subject: C1's refuel-tank destructibles; able to fail by clearing the debris model's
     // `lighting` flag, by dropping the vertex-colour pass, or by the authored colours changing.
@@ -1230,11 +1230,11 @@ internal static class DestroyChoreographySuites
     }
 
     // Every edge that reaches the original's two prop anim slots, on the rig a session builds and
-    // through the flight step: the disabled-systems mask's bit-2 pair (the choke puts the wind-down
-    // on the slot, the timer expiring puts the silent restart back), the death, and the respawn.
-    // The AI arm runs beside the human one because the original's choker branch has no player guard.
-    // ⚠ The third arm is the pair's only interaction: a choked aircraft that then crashes must not
-    // replay the wind-down, which is why it asserts an EXECUTED state stays EXECUTED.
+    // through the flight step. The disabled-systems mask's bit-2 pair: the choke puts the wind-down
+    // on the slot, and the timer expiring puts the silent restart back. The death and the respawn
+    // are the other two edges. The AI arm runs beside the human one because the original's choker
+    // branch has no player guard. ⚠ The third arm is the pair's only interaction: a choked aircraft
+    // that then crashes must not replay the wind-down. It asserts an EXECUTED state stays EXECUTED.
     [Suite("prop-slot-edges",
         "an aircraft's two propeller slots on a session-built rig, on the human rig and the AI one alike: the choke plays stopprops, which cross-fades the blur discs out to the still blade and holds the slot for as long as the engine is out, the timer expiring plays the silent spinprops back with its endless XYZ_ROTATION suppressed so PropAnimator stays the only writer on those discs, a crash on an already choked aircraft leaves the wind-down where it is instead of playing a second one, a kill winds the discs down on the same once-per-death event the engine-stop cue rides, and a respawn taken inside that wind-down puts the spinning discs back rather than flying the still blade")]
     internal static void ChokePropEdges(TestContext ctx)
@@ -1286,7 +1286,7 @@ internal static class DestroyChoreographySuites
                         return null;
                     }
                     runtime.ManualAdvance = true;
-                    // The spawn choreography, replayed the way both assemblers do: Setup ran before
+                    // The spawn choreography, replayed the way both assemblers do. Setup ran before
                     // this runtime existed, so the rig would otherwise fly with no definition ever
                     // having touched its two prop presentations.
                     runtime.Play("startprops", planeModel, applyReset: false);
@@ -1315,8 +1315,8 @@ internal static class DestroyChoreographySuites
                 }
 
                 // Flies until what is being waited on has landed, rather than for a duration read
-                // off the definition, whose authored RUN_TIME is not when its state lands. Reaching
-                // the cap is the failure the check that follows then reports.
+                // off the definition. The authored RUN_TIME is not when a definition's state lands.
+                // Reaching the cap is the failure the check that follows then reports.
                 float FlyUntil(System.Func<bool> settled, float capSeconds)
                 {
                     float flown = 0f;
@@ -1330,7 +1330,7 @@ internal static class DestroyChoreographySuites
 
                 // Whether a named disc under this aeroplane is on the screen. ⚠ Both channels, not
                 // the active bit alone: each cross-fade drives the opacity first and clears the bit
-                // after, so a disc faded to nothing is gone to the eye whatever its bit says.
+                // after. A disc faded to nothing is gone to the eye whatever its bit says.
                 // Absent reads as not shown, and a subtree nothing has faded reads as solid.
                 static bool Shown(FlightController rig, string node)
                 {
@@ -1343,8 +1343,8 @@ internal static class DestroyChoreographySuites
                     return alpha < 0f || alpha > 0.01f;
                 }
 
-                // ⚠ The spawn definition's own end, not the moment the discs look right: its last
-                // OBJECT_ACTIVE_STATE lands a frame after the fade it follows, and a choke taken on
+                // ⚠ The spawn definition's own end, not the moment the discs look right. Its last
+                // OBJECT_ACTIVE_STATE lands a frame after the fade it follows. A choke taken on
                 // that frame would have its own staticpropN activation undone by it.
                 float open = FlyUntil(() => human.CrashRuntime!.AnimStateOf("startprops") == Executed
                                             && ai.CrashRuntime!.AnimStateOf("startprops") == Executed, 20f);
@@ -1389,18 +1389,18 @@ internal static class DestroyChoreographySuites
                 Fly(0.5f);
                 foreach (var rig in built)
                 {
-                    // The restart is spinprops and not startprops, whose snd_propstart the retail
-                    // data plays nowhere; EXECUTED rather than RUNNING because its only sustain was
-                    // the endless motion this rig suppresses (docs/verification.md, INSTR-74).
+                    // The restart is spinprops and not startprops, whose snd_propstart the
+                    // original's data plays nowhere. EXECUTED rather than RUNNING, because its only
+                    // sustain is the endless motion this rig suppresses (docs/verification.md, INSTR-74).
                     ctx.Same(Executed, rig.CrashRuntime!.AnimStateOf("spinprops"),
                         $"{rig.Name}: the restart ran spinprops");
                     ctx.Check(rig.CrashRuntime!.SuppressedMotionAnims.Contains("spinprops"),
                         $"{rig.Name}: …with its endless XYZ_ROTATION suppressed, so PropAnimator stays the only writer on the discs");
                 }
 
-                // The third arm: choke, let the wind-down finish, then crash. ⚠ A choke long enough
-                // to outlast the whole wind-down, or a restart inside it would clear the slot and
-                // the crash below would be entitled to the second stopprops this arm forbids.
+                // The third arm: choke, let the wind-down finish, then crash. ⚠ The choke outlasts
+                // the whole wind-down. A shorter choke or a restart inside it would clear the
+                // slot, and the crash below would take the second stopprops this arm forbids.
                 foreach (var rig in built)
                 {
                     rig.TryChokeEngine(60f);
@@ -1417,7 +1417,7 @@ internal static class DestroyChoreographySuites
                         $"{rig.Name}: the crash on a choked aeroplane left that wind-down where it was rather than playing a second state={rig.CrashRuntime!.AnimStateOf("stopprops")}");
                 }
 
-                // Back in the air off the stopped presentation the crash above left behind, which is
+                // Back in the air off the stopped presentation the crash above left behind. That is
                 // the spawn choreography's own job: nothing else writes those opacities back.
                 foreach (var rig in built)
                 {
@@ -1433,7 +1433,7 @@ internal static class DestroyChoreographySuites
                 }
 
                 // The fourth arm, the death: a kill with no choke anywhere near it winds the discs
-                // down, because the visual half rides the same once-per-death shutdown that plays
+                // down. The visual half rides the same once-per-death shutdown that plays
                 // snd_propstop (docs/org/ordnanceTypes.md). Read on the kill's own frame.
                 foreach (var rig in built)
                 {
@@ -1450,8 +1450,8 @@ internal static class DestroyChoreographySuites
                         $"{rig.Name}: the kill put stopprops on the slot on its own frame destroyed={rig.Destroyed} stopped={rig.PropsStopped} state={rig.CrashRuntime!.AnimStateOf("stopprops")}");
                 }
 
-                // ⚠ Read the kill's cross-fade as OPACITY, never as visibility: the destroy def
-                // plays over the wind-down and deactivates the healthy hull's own nodes, so a dead
+                // ⚠ Read the kill's cross-fade as OPACITY, never as visibility. The destroy def
+                // plays over the wind-down and deactivates the healthy hull's own nodes. A dead
                 // aeroplane carries no propeller of either kind to look at.
                 static float DiscAlpha(FlightController rig, string node) =>
                     Find(rig.PlaneModel!, node) is { } found ? Alpha(found) : -9f;
@@ -1467,7 +1467,7 @@ internal static class DestroyChoreographySuites
                         $"{rig.Name}: …and the kill's wind-down ran the authored cross-fade to its ends prop1={DiscAlpha(rig, "prop1"):0.00} staticprop1={DiscAlpha(rig, "staticprop1"):0.00} after={dead:0.00} s");
                 }
 
-                // The fifth arm, the respawn taken INSIDE the wind-down rather than after it: the
+                // The fifth arm, the respawn taken INSIDE the wind-down rather than after it. The
                 // two definitions would otherwise write the same discs at once, one fading
                 // staticpropN in while the other fades it out.
                 foreach (var rig in built)
@@ -1575,7 +1575,7 @@ internal static class DestroyChoreographySuites
                 }
                 rig.ManualAdvance = true;
 
-                // One tick first, so the machine knows where the aeroplane is: the selection vetoes
+                // One tick first, so the machine knows where the aeroplane is. The selection vetoes
                 // a program predicted to end under the altitude floor, and an unseated machine
                 // would read the origin.
                 machine.Update(spawn, Vector3.Forward, null, null, Dt, attitude: Basis.Identity);
@@ -2798,8 +2798,8 @@ internal static class DestroyChoreographySuites
     }
 
     // The strongest translucency an OBJECT_OPACITY event has left anywhere in this subtree, read
-    // off the per-instance shader parameter the fade writes; -1 where nothing has been faded, which
-    // a caller reads as solid rather than as transparent.
+    // off the per-instance shader parameter the fade writes. It is -1 where nothing has been
+    // faded, which a caller reads as solid rather than as transparent.
     private static float Alpha(Node node)
     {
         float best = -1f;

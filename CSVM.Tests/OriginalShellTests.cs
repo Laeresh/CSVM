@@ -10,11 +10,11 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The Original presentation's engine-free shell over the hand-authored layout fixture: the top
-/// level's rows and states, pointer hit-testing and rollover, keyboard and pad focus by column,
-/// the Free Flight picks and launch, the Options chooser, the exits, and the composition each
-/// state draws. Every rectangle here is the fixture's invented geometry; the game's is read the
-/// same way.
+/// The Original presentation's engine-free shell over the hand-authored layout fixture. It covers
+/// the top level's rows and states, pointer hit-testing and rollover, and keyboard and pad focus
+/// by column. The Free Flight picks and launch, the Options chooser, the exits, and the
+/// composition each state draws are here too. Every rectangle here is the fixture's invented
+/// geometry; the original's is read the same way.
 /// </summary>
 public class OriginalShellTests
 {
@@ -316,10 +316,10 @@ public class OriginalShellTests
         Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
     }
 
-    /// <summary>The seam to the options module (<see cref="OriginalOptionsTests"/> drives the module
-    /// alone): each of the hub's doors opens the page it names on that page's own first row, the
-    /// cursor's walk down a page is over the module's rows, and Back on one is the module's answer.
-    /// </summary>
+    /// <summary>The seam to the options module (<see cref="OriginalOptionsTests"/> drives the
+    /// module alone). Each of the hub's doors opens the page it names on that page's own first row.
+    /// The cursor's walk down a page is over the module's rows, and Back on one is the module's
+    /// answer.</summary>
     [Fact]
     public void ThePreferencesDoorsOpenTheModulesPagesAndTheWalkIsOverItsRows()
     {
@@ -330,7 +330,7 @@ public class OriginalShellTests
         Assert.Equal(OriginalScreen.GameOptions, shell.Screen);
         Assert.Equal(OriginalOptionsScreen.DifficultyKey, shell.FocusedKey);
 
-        // Down is the shell's own column walk over the page's rows and Right the module's own
+        // Down is the shell's own column walk over the page's rows. Right is the module's own
         // sideways step, which changes the value there and keeps the focus.
         shell.Step(Down);
         Assert.Equal(OriginalOptionsScreen.DefaultViewKey, shell.FocusedKey);
@@ -563,8 +563,8 @@ public class OriginalShellTests
     }
 
     /// <summary>The seam to the Instant Action module (<see cref="OriginalInstantActionTests"/>
-    /// drives the module alone): the top level's own door opens the module's first screen with the
-    /// environment confirmed, and its rows are the ones the shell composes and walks.</summary>
+    /// drives the module alone). The top level's own door opens the module's first screen with the
+    /// environment confirmed. Its rows are the ones the shell composes and walks.</summary>
     [Fact]
     public void TheInstantActionDoorOpensTheModulesScreenOnItsFirstRow()
     {
@@ -585,7 +585,7 @@ public class OriginalShellTests
         var shell = Shell(out _);
         Click(shell, "MM_B_INSTANTACTION");
 
-        // Down is the shell's own column walk down the contents window and Right its crossing into
+        // Down is the shell's own column walk down the contents window. Right is its crossing into
         // the module's second column, landing on the dropdown level with the row it left. A further
         // Right is the module's own sideways step, changing that value and keeping the focus.
         shell.Step(Down);
@@ -604,8 +604,8 @@ public class OriginalShellTests
     }
 
     /// <summary>The seam to the hangar module (<see cref="OriginalHangarTests"/> drives the module
-    /// alone): the Build door opens it on the screen the door stands on, a dialog it raises is the
-    /// shell's messagebox, its typing goes through the shell's one text seam, and a commit comes
+    /// alone). The Build door opens it on the screen the door stands on. A dialog it raises is the
+    /// shell's messagebox, and its typing goes through the shell's one text seam. A commit comes
     /// back to the door's screen with both rosters re-read off the store.</summary>
     [Fact]
     public void TheBuildDoorOpensTheHangarModuleAndACommitComesBackWithTheRostersReRead()
@@ -624,7 +624,7 @@ public class OriginalShellTests
             Assert.True(shell.CapturingText);
             Assert.Equal(OriginalHangarScreen.NameFieldKey, shell.FocusedKey);
 
-            // The refusal the module raises is the shell's messagebox: its rows are the answer
+            // The refusal the module raises is the shell's messagebox. Its rows are the answer
             // alone, it is drawn as an overlay, and its OK hands the focus back to the box.
             Click(shell, OriginalHangarScreen.NameOkKey);
             Assert.NotNull(shell.Dialog);
@@ -661,8 +661,8 @@ public class OriginalShellTests
             shell.OpenHangarTab(OriginalScreen.HangarAirframe, "Ace");
             Assert.Equal(OriginalHangarScreen.AirframeDropKey, shell.FocusedKey);
 
-            // Down is the shell's own column walk and Right along the bar the module's sideways
-            // step; the standing tab is a sibling like the other five, so the walk steps onto it.
+            // Down is the shell's own column walk, and Right along the bar is the module's sideways
+            // step. The standing tab is a sibling like the other five, so the walk steps onto it.
             shell.Step(Down);
             Assert.Equal("PX_B_AIRFRAME", shell.FocusedKey);
             shell.Step(Right);
@@ -680,8 +680,9 @@ public class OriginalShellTests
     }
 
     /// <summary>The seam to the campaign module (<see cref="OriginalCampaignTests"/> drives the
-    /// module alone): the top level's own door opens its profile screen, the box there takes seat 0's
-    /// typed characters through the shell's one text seam, and the rows are the module's own.</summary>
+    /// module alone). The top level's own door opens its profile screen. The box there takes seat
+    /// 0's typed characters through the shell's one text seam, and the rows are the module's
+    /// own.</summary>
     [Fact]
     public void TheCampaignDoorOpensTheModulesProfileScreen()
     {
@@ -711,7 +712,7 @@ public class OriginalShellTests
         {
             Seat(shell, "Zachary");
 
-            // Down is the shell's own column walk over the cabin's plaques, and the door it ends on
+            // Down is the shell's own column walk over the cabin's plaques. The door it ends on
             // is the module's own way out of the campaign.
             Assert.Equal("NextMission", shell.FocusedKey);
             shell.Step(Down);
@@ -726,9 +727,10 @@ public class OriginalShellTests
         });
     }
 
-    /// <summary>The two-answer box as the campaign raises it: the box is the shell's, so its answers
-    /// are the rows the pointer and the cursor see, at the messagebox pane's own places, with the mark
-    /// on the one Accept would take and the rollover frame on whichever the pointer rests on.</summary>
+    /// <summary>The two-answer box as the campaign raises it. The box is the shell's, so its
+    /// answers are the rows the pointer and the cursor see, at the messagebox pane's own places.
+    /// The mark stands on the one Accept would take, and the rollover frame on whichever the
+    /// pointer rests on.</summary>
     [Fact]
     public void TheCampaignsTwoAnswerBoxIsTheShellsOwnMessagebox()
     {
@@ -752,14 +754,14 @@ public class OriginalShellTests
             Assert.Contains(box.Lines, l => l.Text == shell.Dialog!.Message);
             Assert.Equal((int)DialogIcon.Query, DialogIconTests.IconFrame(box));
 
-            // Raised from a click, the pointer resting where DELETE PLAYER was: neither answer is
+            // Raised from a click, the pointer resting where DELETE PLAYER was. Neither answer is
             // lit, so both keep the normal frame and the mark alone says which Accept would take.
             Assert.Equal(new[] { 1, 1 }, box.Pictures.Skip(2).Select(p => p.Frame));
             var mark = Assert.Single(Marks(shell));
             Assert.True(mark.Border);
             Assert.Equal((yes.X - 3f, yes.Y - 3f), (mark.X, mark.Y));
 
-            // The pointer carries the rollover frame and the cursor with it, so a hovered answer is
+            // The pointer carries the rollover frame and the cursor with it. A hovered answer is
             // the lit one and wears no mark, and the answer left behind is back on its normal frame.
             shell.Step(Pointer(no.X + 4f, no.Y + 4f));
             Assert.Equal(new[] { 1, 2 }, Box(shell).Pictures.Skip(2).Select(p => p.Frame));
@@ -768,8 +770,8 @@ public class OriginalShellTests
         });
     }
 
-    /// <summary>A box raised over a campaign screen keeps the messagebox's own inks and strip frames
-    /// rather than taking the paper palette the page under it is drawn in.</summary>
+    /// <summary>A box raised over a campaign screen keeps the messagebox's own inks and strip
+    /// frames. It does not take the paper palette the page under it is drawn in.</summary>
     [Fact]
     public void TheBoxOverAPaperCampaignScreenKeepsTheMessageboxsOwnInk()
     {
@@ -800,9 +802,9 @@ public class OriginalShellTests
         });
     }
 
-    /// <summary>The cabin's own crossing into the hangar module: the door opens it over the seated
-    /// profile's purse, and the way back out of the hangar comes through the host onto the cabin
-    /// with its profile re-read.</summary>
+    /// <summary>The cabin's own crossing into the hangar module. The door opens it over the seated
+    /// profile's purse. The way back out of the hangar comes through the host onto the cabin, with
+    /// its profile re-read.</summary>
     [Fact]
     public void PlaneConstructionOpensTheHangarOverTheWalletWithTheCabinAsItsReturn()
     {
@@ -825,11 +827,12 @@ public class OriginalShellTests
         });
     }
 
-    /// <summary>The check standing on a guest belongs to that guest's device and to the mouse riding
-    /// seat 0's source, nothing else of seat 0's: its cursor, Accept and Back would otherwise change
-    /// a pilot's ammunition, aircraft and readiness from another chair. Seat 0 keeps the whole frame
-    /// on its own check, which is what the field's index answers. The per-seat walk is the shell's,
-    /// so the fact stands here rather than over the module alone.</summary>
+    /// <summary>The check standing on a guest belongs to that guest's device and to the mouse
+    /// riding seat 0's source, nothing else of seat 0's. Its cursor, Accept and Back would
+    /// otherwise change a pilot's ammunition, aircraft and readiness from another chair. Seat 0
+    /// keeps the whole frame on its own check, which is what the field's index answers. The
+    /// per-seat walk is the shell's, so the fact stands here rather than over the module
+    /// alone.</summary>
     [Fact]
     public void SeatZeroDrivesItsOwnCheckAndOnlyItsPointerReachesAGuests()
     {
@@ -849,7 +852,7 @@ public class OriginalShellTests
             shell.Step(Back);
             Assert.Equal(OriginalScreen.CampaignFlightCheck, shell.Screen);
 
-            // FLY MISSION hands the screen to the guest, and seat 0's cursor, Accept and Back then
+            // FLY MISSION hands the screen to the guest. Seat 0's cursor, Accept and Back then
             // move nothing: no row, no ammo screen, no retreat off the guest's check.
             var fly = Row(shell, "FlyMission");
             Assert.Null(Click(shell, fly.X + 2f, fly.Y + 2f).Exit);
@@ -871,8 +874,8 @@ public class OriginalShellTests
             Assert.Equal(OriginalScreen.CampaignFlightCheck, shell.Screen);
             Assert.Equal(1, campaign.Field.Current);
 
-            // Seat 0's pointer still reaches the guest's check, the one device a pilot with no pad of
-            // their own has, so the last check's FLY MISSION is the launch for both seats.
+            // Seat 0's pointer still reaches the guest's check, the one device a pilot with no pad
+            // of their own has. The last check's FLY MISSION is the launch for both seats.
             fly = Row(shell, "FlyMission");
             var exit = Assert.IsType<CampaignMissionExit>(Click(shell, fly.X + 2f, fly.Y + 2f).Exit);
             Assert.Equal(2, exit.Seats.Count);
@@ -915,8 +918,8 @@ public class OriginalShellTests
     }
 
     // A shell with the hangar behind its Build door, over a scratch store in a temp directory
-    // that goes with the test: the hangar's own art measure, since the door's screens are the
-    // module's, and the Devastator as the Instant Action pick a default build inherits.
+    // that goes with the test. It takes the hangar's own art measure, since the door's screens are
+    // the module's. The Devastator is the Instant Action pick a default build inherits.
     private static void WithHangarShell(System.Action<OriginalShell, HangarFeature, PlayerSetupFeature, CSVM.Flight.CustomPlaneStore> test)
     {
         string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "csvm-original-shell-hangar-" + System.Guid.NewGuid().ToString("N"));
@@ -943,8 +946,9 @@ public class OriginalShellTests
         }
     }
 
-    // A shell with the campaign behind its own door, over a scratch profile store and build store in
-    // a temp directory that goes with the test, and a hangar behind the cabin's PLANE CONSTRUCTION.
+    // A shell with the campaign behind its own door. The profile store and build store are
+    // scratch, in a temp directory that goes with the test. A hangar stands behind the cabin's
+    // PLANE CONSTRUCTION.
     private static void WithCampaignShell(
         System.Action<OriginalShell, CampaignFeature, HangarFeature, PlayerSetupFeature, CampaignProfileStore> test)
     {

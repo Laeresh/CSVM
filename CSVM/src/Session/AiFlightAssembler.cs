@@ -296,7 +296,7 @@ internal sealed class AiFlightAssembler
         return controller;
     }
 
-    // The spawn-independent half of an AI aeroplane, in the order the launch used to build it: the
+    // The spawn-independent half of an AI aeroplane, in the order a launch builds it: the
     // painted model, the prop and surface animators, the wing lamps and the collision hulls. The
     // pool runs this at load and a claim-less launch runs it in place, so both produce one tree.
     private AiAirframePool.Prepared BuildAirframe(string planeName, PaintScheme? scheme)

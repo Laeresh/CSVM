@@ -240,14 +240,12 @@ public sealed class PlaneShake
         }
     }
 
-    /// <summary>
-    /// One of the original's seven camera component blocks, ported whole: a roll VELOCITY the
-    /// kickers walk at random and the POSITION it integrates into, which is what renders.
-    /// The authored <c>sawtooth</c> picks both laws, the kick's waveform factor and the
-    /// integrator's, so a source's rate and decay fall out of its own law rather than a
-    /// hand-picked envelope. Decode with every address: docs/org/shakes.md.
-    /// ⚠ The kick is a velocity, not an angle: the rendered wobble is a fraction of it, set by
-    /// how far the ramp travels before the reversal test turns it round.</summary>
+    // One of the original's seven camera component blocks, ported whole. A roll VELOCITY the kickers
+    // walk at random, and the POSITION it integrates into, which is what renders. The authored
+    // sawtooth picks both laws, the kick's waveform factor and the integrator's, so a source's rate
+    // and decay fall out of its own law. Decode with every address: docs/org/shakes.md.
+    // ⚠ The kick is a velocity, not an angle. The rendered wobble is a fraction of it, set by how
+    // far the ramp travels before the reversal test turns it round.
     private sealed class Block
     {
         // The original integrates at this fixed substep inside whatever its frame was, and runs

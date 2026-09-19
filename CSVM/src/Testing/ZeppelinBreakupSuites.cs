@@ -66,7 +66,7 @@ internal static class ZeppelinBreakupSuites
         "65 m. The gate stays shut while the wreck is still high, opens as floatdown's -3.5 " +
         "descent brings it down, and rotatezep, breakupzep's six gasbag drops and the stop on " +
         "floatdown all follow from it. The stop halts the wreck where it stands and all six " +
-        "gasbags come to rest on the sea instead of falling through it. What the engine gates leave behind is read off the nodes " +
+        "gasbags come to rest on the sea instead of falling through it. What the original's gates leave behind is read off the nodes " +
         "themselves: all twelve engine healthy models lose their active bit, six from the " +
         "breakup's own calls and six from the burning bays")]
     internal static void ZeppelinBreakup(TestContext ctx)

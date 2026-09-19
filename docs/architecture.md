@@ -304,6 +304,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/Menu/Original/OriginalShellDialog.cs`, the shell's own standing messagebox (a `partial`): `RaiseDialog`, the `DIALOG:*` answer keys, the box's rows and how it composes over the screen.
 - `src/UI/Menu/Original/OriginalCheats.cs`, the shell's three typed cheats (a `partial`): each screen's authored region, its latch, the arming click and what a word fires.
 - `src/UI/Menu/Original/OriginalScreenHost.cs`, the two sides of the screen-module seam: what a module reads off the shell, and the dispatch members the shell calls on a module.
+- `src/UI/Menu/Original/BoardLayers.cs`, the eight lists a composed board is built out of, gathered into one collector every Original composer takes.
 - `src/UI/Menu/Original/OriginalWidgets.cs`, the layout-widget readings two screen modules share: a numbered widget key's slot, a section's background pane, a strip's size, a board page's rows.
 - `src/UI/Menu/Original/OriginalDropList.cs`, the one open-dropdown window rule every Original page stands on: the authored window, the hidden rows outside it, the arrows and the thumb.
 - `src/UI/Menu/Original/SliderControl.cs`, the shell's continuous control: a slider row's hold-and-move under the pointer, and the clamped sideways step.

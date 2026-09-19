@@ -944,6 +944,14 @@ the modules' own, and each module's tests implement it as a fake and build the m
 side, what the shell calls on a module: `Owns` plus the seven dispatch members (`BuildRows`, `Lists`, `StepSideways`, `CloseDropdown`, `Activate`,
 `Back`, `Compose`). The shell holds its modules as these alone, so a further family is one more entry in its list and no new dispatch arm.
 
+## src/UI/Menu/Original/BoardLayers.cs
+The eight lists a `ComposedBoard` is built out of (backdrop, fills, pictures, strokes, lines, plaques, notes, overlays) gathered into one collector, so
+every composer in the Original presentation takes one parameter instead of the same eight in an order of its own. It is lists and nothing else: no
+drawing rule, no clear, since the shell builds a fresh set per compose and hands them to the board. A composer adds to the layer its shape belongs to by
+name, which is what keeps a misordered argument list from moving a shape between layers; draw order stays the board's own and is not this type's to
+state. A helper that writes one layer still takes that one list, so its signature names the layer it writes and no reader has to open it to find out.
+The seam that carries it across the shell/module boundary is `OriginalScreenHost.cs`, and the board it fills is `ComposedBoard.cs`.
+
 ## src/UI/Menu/Original/OriginalWidgets.cs
 The layout-widget readings more than one Original screen module needs, a file-level static because a module is a sealed class of its own and a rule
 two of them follow can live in neither: the slot number a numbered widget key carries (`AR_D_POINT2`, `OL_D_AMMO1`, and the same key behind a

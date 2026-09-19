@@ -14,12 +14,12 @@ namespace CSVM.Testing;
 internal static class AiSuites
 {
     // The margin the sound manager leaves over a definition's audible distance before it silences
-    // the voice (docs/formats/sounds.md). Held here as the decode's own figure rather than read off
-    // WeaponSoundCue, so a build that culls an aircraft's gun loop at the RANGE pair itself fails.
+    // the voice (docs/formats/sounds.md). Held here as the decode's own figure rather than read
+    // off WeaponSoundCue. A build that culls an aircraft's gun loop at the RANGE pair then fails.
     private const float VoiceCullMargin = 1.1f;
 
     // Where the ai-voice suite moves its listener for the death cry: past 1.1 x every voice def's
-    // audible radius, so the positional law would hold the line at its floor.
+    // audible radius. The positional law would hold the line at its floor there.
     private const float FarEarMetres = 5000f;
 
     [Suite("flight-roster-transaction",
@@ -684,9 +684,9 @@ internal static class AiSuites
                 world.Runtime.SetTargetActive(aagun.Site, true);
                 ctx.Check(aagun.Alive, $"…and alive once its site is switched on");
 
-                // ⚠ Sync the space before anything here casts. The site stood hidden when the
-                // world joined the tree, so its colliders were disabled, and re-enabling one only
-                // QUEUES the broadphase rebuild the next physics step would run.
+                // ⚠ Sync the space before anything here casts. The site is hidden when the world
+                // joins the tree, so its colliders are disabled. Re-enabling one only QUEUES the
+                // broadphase rebuild the next physics step would run.
                 ctx.SyncPhysics();
                 var mountSpace = ctx.Host.GetWorld3D().DirectSpaceState;
                 var mountShapes = aagun.Site.FindChildren("*", "StaticBody3D", true, false)
@@ -826,16 +826,16 @@ internal static class AiSuites
                     mp1[0].Visible = true;
                     ctx.SyncPhysics();
                     int ZepShots() => mp1Rings.Sum(t => t.ShotsFired);
-                    // ⚠ Park the bait OUTSIDE the hull's own envelope, which is 657 m long and 136 m
-                    // deep: a plane placed a couple of hundred metres off one ring is inside it, and
-                    // every ring then reads its own hull as cover and holds fire.
+                    // ⚠ Park the bait OUTSIDE the hull's own envelope, which is 657 m long and 136
+                    // m deep. A plane placed a couple of hundred metres off one ring is inside it.
+                    // Every ring then reads its own hull as cover and holds fire.
                     var envelope = new Aabb(mp1[0].GlobalPosition, Vector3.Zero);
                     foreach (var mesh in mp1[0].FindChildren("*", "MeshInstance3D", true, false).OfType<MeshInstance3D>())
                     {
                         envelope = envelope.Merge(mesh.GlobalTransform * mesh.GetAabb());
                     }
                     // Offset along the hull as well as under it: a rig looking straight up has no
-                    // heading, and the look basis refuses a target colinear with up.
+                    // heading. The look basis refuses a target colinear with up.
                     var baitAt = envelope.GetCenter()
                         + new Vector3(0f, -((envelope.Size.Y * 0.5f) + 100f), 150f);
                     zepBait = BuildRig(ctx.PlaneName, 0, baitAt, envelope.GetCenter());
@@ -857,9 +857,9 @@ internal static class AiSuites
                 // a 1.0-1.8 s fire rate can hold one shot before a 3-5 s bored window outlasts the leg.
                 aagun.Def.BoredMin = 0f;
                 aagun.Def.BoredMax = 0f;
-                // The leg below only exercises the own-rig exclusion while the mount is solid, so
-                // the UNEXCLUDED cast has to read blocked first: that is the gun's own rig in the
-                // way, the thing the exclusion removes and nothing else does.
+                // The leg below only exercises the own-rig exclusion while the mount is solid. The
+                // UNEXCLUDED cast has to read blocked first. That is the gun's own rig in the way,
+                // the thing the exclusion removes and nothing else does.
                 var sightSpace = ctx.Host.GetWorld3D().DirectSpaceState;
                 ctx.Check(TurretController.WorldBlocksEmplacementLine(
                         sightSpace, aagun.WorldPosition, targetPos + Vector3.Up * 0.2f),
@@ -2050,7 +2050,7 @@ internal static class AiSuites
         "the avoid-crash override climbs out on a blocked probe and releases, and the D15 " +
         "rubber-band assist: a chasing human fallen behind puts the machine in lay off " +
         "(throttle eased, fire held) and --no-assist's switch never enters it under the " +
-        "same geometry, every transition in the engine's own mode vocabulary")]
+        "same geometry, every transition in the original's own mode vocabulary")]
     internal static void AiModes(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -2114,8 +2114,8 @@ internal static class AiSuites
                 ActivationRange = skills.MinAiActiveDist,
                 AttackRange = stats.AiAttackRange,
                 ReturnRange = stats.AiReturnRange,
-                // Scripted per phase at the power law's two limits: a zero exponent passes every
-                // roll whatever the bite, an infinite one fails every roll that bites at all.
+                // Scripted per phase at the power law's two limits. A zero exponent passes every
+                // roll whatever the bite, and an infinite one fails every roll that bites at all.
                 SteadyHandExponent = 0f,
                 SixthSenseChance = 1f,
                 StunRecoveryIntervalS = skills.At("stun_recovery_interval", 5),
@@ -2123,8 +2123,8 @@ internal static class AiSuites
                 Library = library,
                 ProbeBlocked = (_, _) => terrainBlocked ? "suite/terrain" : null,
                 // The injector cull is injected too, open: these phases are about the mode
-                // vocabulary, and culling the library's nitro entry would only change which
-                // maneuver the seeded draw flies. The cull itself is covered by nitro-ai-edges.
+                // vocabulary. Culling the library's nitro entry would only change which maneuver
+                // the seeded draw flies. The cull itself is covered by nitro-ai-edges.
                 NitroUsable = () => true,
             };
             var transitions = new List<string>();
@@ -2236,8 +2236,8 @@ internal static class AiSuites
             ctx.Check(!machine.Evading && machine.Executor == null,
                 $"the pursuer turning away ends the chain mode={AiModeMachine.NameOf(machine.Mode)}");
 
-            // --- an ORDERED evade, no damage: the flag belongs to the damage routine alone, so a
-            // scripted entry into the mode leaves it clear and the next hit still gets its roll.
+            // --- an ORDERED evade, no damage: the flag belongs to the damage routine alone. A
+            // scripted entry into the mode leaves it clear, and the next hit still gets its roll.
             machine.Enter(AiMode.Evade, "test: ordered, no damage");
             ctx.Check(machine.Mode == AiMode.Evade && !machine.Evading,
                 $"an ordered evade sets no flag evading={machine.Evading}");
@@ -2255,9 +2255,9 @@ internal static class AiSuites
             ctx.Check(!machine.Evading,
                 $"…which the turned-away pursuer then clears mode={AiModeMachine.NameOf(machine.Mode)}");
 
-            // --- the damage arm's own entry into the marked engagement: with nothing in the
-            // library eligible the hit sets flag and mode together, and a nose-on pursuer holds
-            // both while the pilot flies its engagement, taking no second roll.
+            // --- the damage arm's own entry into the marked engagement. With nothing in the
+            // library eligible, the hit sets flag and mode together. A nose-on pursuer holds both
+            // while the pilot flies its engagement, taking no second roll.
             var savedLibrary = machine.Library;
             machine.Library = null;
             target.PlaceHeld(targetPos, ai.WorldPosition);
@@ -2284,8 +2284,8 @@ internal static class AiSuites
                 $"the pursuer turning away releases it mode={AiModeMachine.NameOf(machine.Mode)}");
             machine.Library = savedLibrary;
 
-            // Fly the engagement out before the phases that read the aeroplane's own flight: a
-            // program ends in whatever attitude its last step left, and a descending entry is not
+            // Fly the engagement out before the phases that read the aeroplane's own flight. A
+            // program ends in whatever attitude its last step left. A descending entry is not
             // what the climb-out below means to measure.
             Step(180);
 
@@ -2580,7 +2580,7 @@ internal static class AiSuites
             runtime.Step(3f); // past the decoded 2 s mute window
 
             // The listener starts beside the speaker and is later moved past every voice def's
-            // audible radius, so a line that moved with distance would show it.
+            // audible radius. A line that moved with distance would show it.
             var ear = ai.WorldPosition + new Vector3(0f, 0f, 20f);
             sounds.SetListeners(() => new[] { ear });
             int oneShotsBefore = sounds.OneShotsStarted;
@@ -2956,7 +2956,7 @@ internal static class AiSuites
                 ctx.Check(culls.Count(l => l.Contains(" audible ")) == 2,
                     $"both voices logged the transition into earshot (got {culls.Count(l => l.Contains(" audible "))})");
 
-                // The cull, driven from the listener rather than by moving the aeroplane: the two
+                // The cull, driven from the listener rather than by moving the aeroplane. The two
                 // ears below straddle the 1.1x, which is what separates this cull from one taken at
                 // the RANGE pair itself. Each ratio is measured after its step, the aeroplane flies.
                 float audible = here.Count > 0 ? here[0].RangeMax : 0f;
@@ -2974,9 +2974,9 @@ internal static class AiSuites
                 ctx.Check(weaponA.LoopSounding && justOut > 1f && justOut < VoiceCullMargin,
                     $"…and {justOut:0.00}x it is heard again, inside that cull");
 
-                // The level inside the band, which no cull verdict can see: at the distance this
-                // caliber calls audible the decoded law is thirty down where the old mapping's
-                // MaxDistance fade was zero. The decibel of slack is the step the aeroplane flies.
+                // The level inside the band, which no cull verdict can see. At the distance this
+                // caliber calls audible the decoded law is thirty down, where a MaxDistance fade
+                // would be zero. The decibel of slack is the step the aeroplane flies.
                 ears[0] = a.GlobalPosition + new Vector3(audible, 0f, 0f);
                 a.SimStep(dt);
                 float atEdge = a.GlobalPosition.DistanceTo(ears[0]);

@@ -738,7 +738,7 @@ internal static class MenuCampaignSuites
             $"--menu=campaign-hangar opens the hangar over the scratch profile's wallet with the cabin behind it ({menu.ShownScreen})");
     }
 
-    // Built-in's two campaign films and the press that ends one, in the order the engine runs them:
+    // Built-in's two campaign films and the press that ends one, in the order the runtime runs them:
     // the cinema's own handler stops a film and hands off inside the input flush, and the seat poll
     // that reads the press runs after it in the same frame. The Stop calls below stand for that
     // flush and the Drive that follows each for that poll, so one press spans the hand-back. Its own

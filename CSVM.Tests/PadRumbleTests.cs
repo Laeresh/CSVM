@@ -7,11 +7,11 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// <see cref="PadRumble"/>: the effect table as the original authors it, the bands that pick a row,
-/// and the routing that keeps one pane's rumble on its own pilot's pad. Engine-free, because the
+/// <see cref="PadRumble"/>: the effect table as the original authors it, and the bands that pick a
+/// row. The routing keeps one pane's rumble on its own pilot's pad. Engine-free, because the
 /// one call that needs an engine sits behind <see cref="IRumbleSink"/> and a recording stub stands
-/// in for it here. Every magnitude asserted below is the original's own effect strength over 10000
-/// or the gain its code writes over it; docs/org/input.md carries where each came from.
+/// in for it here. Every magnitude asserted below is the original's own effect strength over 10000,
+/// or the gain its code writes over it. Where each came from is in docs/org/input.md.
 /// </summary>
 public class PadRumbleTests : IDisposable
 {
@@ -40,8 +40,8 @@ public class PadRumbleTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    /// <summary>The three gun-fire effects on the original's own calibre edges, each carrying its
-    /// authored magnitude on the weak motor and the 0.3 s the original's timer stops it after.
+    /// <summary>The three gun-fire effects on the original's own calibre edges. Each carries its
+    /// authored magnitude on the weak motor. The original's timer stops it after 0.3 s.
     /// </summary>
     [Fact]
     public void GunFireSplitsOnCalibreAndBuzzesTheWeakMotor()
@@ -55,8 +55,8 @@ public class PadRumbleTests : IDisposable
         Assert.Equal(new RumbleShape(0.95f, 0f, 0.30f), PadRumble.Shape(RumbleEvent.GunFireLarge));
     }
 
-    /// <summary>The three launch effects, each a push on the strong motor: a torpedo is the biggest
-    /// and the longest, a rearward mount the smallest, and everything else sits between them.
+    /// <summary>The three launch effects, each a push on the strong motor. A torpedo is the biggest
+    /// and the longest, a rearward mount the smallest. Everything else sits between them.
     /// </summary>
     [Fact]
     public void ALaunchTakesTheTorpedoRowFirstAndTheRearRowNext()
@@ -70,7 +70,7 @@ public class PadRumbleTests : IDisposable
     }
 
     /// <summary>The three damage edges, each the original's own number: 6 on a gun round, 100 on
-    /// anything else, and 50.5 on a contact, which takes the larger of the damage pair.</summary>
+    /// anything else, 50.5 on a contact. A contact takes the larger of the damage pair.</summary>
     [Fact]
     public void TheDamageEdgesPickTheHeavyRow()
     {
@@ -84,8 +84,8 @@ public class PadRumbleTests : IDisposable
         Assert.Equal(new RumbleShape(0.80f, 0.80f, 0.50f), PadRumble.Shape(RumbleEvent.OrdnanceHitLight));
     }
 
-    /// <summary>A contact splits on duration rather than on strength: the original writes full gain
-    /// into both effects and the heavy one is simply twice as long.</summary>
+    /// <summary>A contact splits on duration rather than on strength. The original writes full gain
+    /// into both effects, and the heavy one is twice as long.</summary>
     [Fact]
     public void BothContactRowsRunFullAndDifferOnlyInLength()
     {
@@ -103,8 +103,8 @@ public class PadRumbleTests : IDisposable
         Assert.Equal(new RumbleShape(0.35f, 0f, 0.20f), PadRumble.Shape(RumbleEvent.TurretFire));
     }
 
-    /// <summary>Every event has a row: the table is indexed by the enum, so a value added without a
-    /// row would throw here rather than at the controls.</summary>
+    /// <summary>Every event has a row. The table is indexed by the enum, so a value added without a
+    /// row throws here, not at the controls.</summary>
     [Fact]
     public void EveryEventHasARow()
     {
@@ -147,8 +147,8 @@ public class PadRumbleTests : IDisposable
         Assert.Equal(new[] { 3, 7 }, _sink.Devices);
     }
 
-    /// <summary>The toggle off produces nothing, and so does the pad gate <c>--no-pads</c> and an
-    /// unfocused window act on, which is what keeps a deterministic run off the hardware.</summary>
+    /// <summary>The toggle off produces nothing. So does the pad gate <c>--no-pads</c> and an
+    /// unfocused window act on, which keeps a deterministic run off the hardware.</summary>
     [Fact]
     public void NothingPlaysWithTheToggleOffOrThePadsGated()
     {
@@ -173,7 +173,7 @@ public class PadRumbleTests : IDisposable
         Assert.Equal(new[] { 0 }, _sink.Devices);
     }
 
-    /// <summary>The overspeed drive restarts the loop on a cadence rather than every tick, and stops
+    /// <summary>The overspeed drive restarts the loop on a cadence rather than every tick. It stops
     /// asking the moment the dive ends, so the next entry past the gate plays at once.</summary>
     [Fact]
     public void TheOverspeedDriveRefreshesOnACadenceAndResetsWhenItEnds()
@@ -193,9 +193,9 @@ public class PadRumbleTests : IDisposable
         Assert.Equal(3, _sink.Devices.Count);
     }
 
-    /// <summary>⚠ The hands gate: a seat whose last input came off the keyboard sends nothing to the
-    /// pad in its roster, however hard the event, and the first pad press on that seat hands the
-    /// rumble back, the same reading that moves the seat's control prompts.</summary>
+    /// <summary>⚠ The hands gate: a seat whose last input came off the keyboard sends nothing to
+    /// its roster's pad, however hard the event. The first pad press on that seat hands the rumble
+    /// back. That is the reading that moves the seat's control prompts.</summary>
     [Fact]
     public void AKeyboardDrivenSeatIsSilentUntilItsPadIsPressed()
     {
@@ -213,7 +213,7 @@ public class PadRumbleTests : IDisposable
         Assert.Equal(new RumbleShape(1f, 1f, 1.00f), _sink.Shapes[0]);
     }
 
-    /// <summary>A key press takes the rumble back off the pad, so a player who puts the pad down and
+    /// <summary>A key press takes the rumble back off the pad. A player who puts the pad down and
     /// flies on the keyboard stops being buzzed the moment the keys speak.</summary>
     [Fact]
     public void AKeyPressSilencesThePadAgain()

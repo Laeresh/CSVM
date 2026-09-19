@@ -42,7 +42,7 @@ public sealed partial class StuntShotStrip : VBoxContainer
     private GridContainer _grid = null!;
     private float _scale;
 
-    // Whether the grid was laid out on a landed picture's own proportions rather than the guess.
+    // Whether the grid was laid out on a landed picture's own proportions rather than the tune.
     private bool _measured;
 
     /// <summary>A cell the pointer came over, by grid index.</summary>
@@ -245,7 +245,7 @@ public sealed partial class StuntShotStrip : VBoxContainer
         else
         {
             // A frame that never arrived leaves the grid, the cells after it moving up one, and the
-            // first to arrive under a guessed layout sets the grid's real proportions.
+            // first to arrive under a tuned layout sets the grid's real proportions.
             Rebuild();
         }
     }

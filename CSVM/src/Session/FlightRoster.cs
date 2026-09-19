@@ -252,7 +252,7 @@ public sealed class FlightRoster
             if (spawn.Pilot.Machine is { } modes)
             {
                 string tag = controller.Name;
-                // The game clock on every line: a chase's length and a revert's re-promotion are
+                // The sim clock on every line: a chase's length and a revert's re-promotion are
                 // read straight off the trace, which a bare transition list cannot show.
                 modeChanged = (from, to, why) => Log.Info("flight",
                     $"ai mode: {tag}: {AiModeMachine.NameOf(from)} -> {AiModeMachine.NameOf(to)} ({why}) t={GameClock.Current?.Time ?? 0.0:0.00}");

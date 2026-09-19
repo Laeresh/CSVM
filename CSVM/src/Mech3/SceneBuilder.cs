@@ -66,7 +66,7 @@ public sealed class SceneBuilder
     public static readonly StringName SurfaceMeta = "csky_surface";
 
     /// <summary>Meta key EVERY collider carries: an <c>int</c>, the original's numeric surface
-    /// type id (<see cref="GameZMaterial.SoilId"/>) that every polygon in the body shares, since
+    /// type id (<see cref="GameZMaterial.SoilId"/>). Every polygon in the body shares it, since
     /// bodies are split by soil as well as class (<see cref="CollidersForMesh"/>). A different
     /// name space from <see cref="SurfaceMeta"/>'s texture-derived class, so it is never spelled
     /// as that string.</summary>
@@ -78,7 +78,7 @@ public sealed class SceneBuilder
     public static readonly StringName CanModifyMeta = "csky_can_modify";
 
     /// <summary>Meta key a mission-structure node carries when the mission being built is one it
-    /// authors an owner for: an <c>int</c>, that owner's team
+    /// authors an owner for. The value is an <c>int</c>, that owner's team
     /// (<see cref="GameZNode.MissionStructureTeam"/>). A flagged node authoring no owner for this
     /// mission carries none, since an unowned object is nobody's target either way. Read by
     /// <see cref="DestructibleRegistry.Register"/>.</summary>
@@ -92,9 +92,9 @@ public sealed class SceneBuilder
     public static readonly StringName OpacityParam = "csky_opacity";
 
     /// <summary>Instance shader parameter the Danger Zone photograph arms on its own pilot's
-    /// aircraft for the one frame it draws: xyz is the photograph's eye, w is 1 while armed. A
-    /// faithful aircraft surface then takes <c>csky_sun_fill_rgb</c> as its ambient half, but only
-    /// for a camera within <see cref="PhotoEyeReach"/> of that eye.</summary>
+    /// aircraft for the one frame it draws. Its xyz is the photograph's eye, and w is 1 while
+    /// armed. A faithful aircraft surface then takes <c>csky_sun_fill_rgb</c> as its ambient half,
+    /// but only for a camera within <see cref="PhotoEyeReach"/> of that eye.</summary>
     public static readonly StringName PhotoEyeParam = "csky_photo_eye";
 
     /// <summary>The albedo sampler every generated shader here declares, as a ready
@@ -294,14 +294,14 @@ void fragment() {
     private const float WaterSpecular = 0.5f;
     // What an aircraft surface reflects under the scene lights, which only enhanced mode's aircraft
     // and a shaded builder without the per-vertex sun term draw under. The original has no
-    // specular term at all (docs/org/vertexLighting.md), so any highlight here is ours, and this is
-    // the value picked by eye against the original's screenshots: sunlight reads as a sheen rather
-    // than as gloss. Judged at the controls, not by a luminance distance.
+    // specular term at all (docs/org/vertexLighting.md), so any highlight here is ours. A TUNE
+    // picked by eye against the original's screenshots, at the controls and not by a luminance
+    // distance. Sunlight reads as a sheen, not as gloss.
     private const float AircraftSpecular = 0.25f;
-    // The per-vertex sun term's colour triples (WeatherRig.SunVertexLight), declared here and not
-    // in csky_atmosphere.gdshaderinc, which every world shader includes. ⚠ With them declared in
-    // that include, every headless probe saved its screenshot and then never exited; declared here,
-    // probes exit. The cause is not decoded (docs/verification.md SHELL-21).
+    // The per-vertex sun term's colour triples (WeatherRig.SunVertexLight).
+    // ⚠ Declare them here, never in csky_atmosphere.gdshaderinc, which every world shader
+    // includes. Declared in that include, a headless probe never exits; the cause is not decoded
+    // (docs/verification.md SHELL-21).
     private const string SunVertexLightDecl =
         "global uniform vec3 csky_sun_ambient_rgb;\nglobal uniform vec3 csky_sun_diffuse_rgb;\n"
         + "global uniform vec3 csky_sun_fill_rgb;";
@@ -555,9 +555,9 @@ void fragment() {
 
     /// <summary>The one biased albedo fetch every mip-mapped arm emits, defined in
     /// <c>csky_mip_bias.gdshaderinc</c> beside the global it reads.
-    /// ⚠ Never emit a bare <c>texture(albedo_tex, ...)</c> beside it. The original applies the
-    /// chapter's bias as one device render state, so an arm sampling unbiased draws that chapter
-    /// at a mip level the original never chose (docs/org/textures.md).</summary>
+    /// ⚠ Never emit a bare <c>texture(albedo_tex, ...)</c> anywhere. The original applies the
+    /// chapter's bias as one device render state. An arm sampling unbiased draws that chapter at a
+    /// mip level the original never chose (docs/org/textures.md).</summary>
     internal static string SampleAlbedo(string uv) => $"csky_sample_albedo(albedo_tex, {uv})";
 
     internal static bool UvsWithinUnitSquare(List<GameZPolygon> polys, int pass) =>
@@ -1058,8 +1058,8 @@ void fragment() {
             foreach (var (key, faces) in soils)
             {
                 // A polygon is solid from the side it is seen from and no other, the test the
-                // original runs (docs/org/weaponRay.md): the winding is per polygon, and
-                // `chapter-census` is the tripwire for a down-wound tile a plane would fall through.
+                // original runs (docs/org/weaponRay.md). The winding is per polygon, and
+                // `chapter-census` is the tripwire for a down-wound tile a plane falls through.
                 var shapes = new List<ConcavePolygonShape3D>();
                 AddShape(shapes, faces.OneSided, backface: false);
                 AddShape(shapes, faces.TwoSided, backface: true);
@@ -1556,7 +1556,7 @@ void fragment() {
     // the shader text it always did, so honouring the flags cannot perturb the overwhelming
     // majority of the world through float rounding in a mix().
     // Key bits: 1-64 the flags above, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048 clutterFade,
-    // 4096 DebugClutterFlag, 8192 enhanced, 16384 water, 32768 vertex sun; next free 65536.
+    // 4096 DebugClutterFlag, 8192 enhanced, 16384 water, 32768 vertex sun. Next free is 65536.
     private Shader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp = UvClampAxes.None,
         bool clutterFade = false, bool water = false)
@@ -1644,7 +1644,7 @@ void fragment() {
             sb.AppendLine(SunVertexLightDecl);
             sb.AppendLine("varying vec3 v_sun_lit;");
             // Where this frame's origin sits in the world, for a model drawn in a frame of its own
-            // (the cockpit pass, CockpitOverlay); zero for anything drawn in the world itself.
+            // (the cockpit pass, CockpitOverlay). Zero for anything drawn in the world itself.
             if (lit)
                 sb.AppendLine("uniform vec3 light_origin = vec3(0.0);");
         }
@@ -1660,9 +1660,9 @@ void fragment() {
             ? "    v_clutter_alpha = csky_clutter_fade_alpha(MODEL_MATRIX[3].xyz, CAMERA_POSITION_WORLD, INSTANCE_CUSTOM);\n"
               + "    VERTEX *= step(0.004, v_clutter_alpha);\n"
             : "";
-        // Per vertex in world space, the sun (its ambient half the photograph's fill at an armed eye,
-        // PhotoEyeParam) and the point lights summed into one factor on the authored colour, clamped
-        // at white as the draw does. A `lighting: false` model takes its authored colour unchanged.
+        // Per vertex in world space: the sun and the point lights, summed into one factor on the
+        // authored colour and clamped at white. The sun's ambient half is the photograph's fill at
+        // an armed eye (PhotoEyeParam); `lighting: false` takes the authored colour unchanged.
         string sunVertex = !sunLit ? ""
             : lit ? "    vec3 sun_ambient = csky_photo_eye.w > 0.5 && distance(CAMERA_POSITION_WORLD, csky_photo_eye.xyz) < "
                     + PhotoEyeReach.ToString("0.0##", System.Globalization.CultureInfo.InvariantCulture) + "\n"
@@ -1671,9 +1671,9 @@ void fragment() {
                     + "        * max(dot(normalize(MODEL_NORMAL_MATRIX * NORMAL), csky_sun_dir), 0.0)\n"
                     + "        + csky_point_light((MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz + light_origin)), 0.0, 1.0);\n"
             : "    v_sun_lit = COLOR.rgb;\n";
-        // The fullbright world keeps its collapsed sun, csky_world_light, and takes the point lights
+        // The fullbright world keeps its collapsed sun, csky_world_light. It takes the point lights
         // as the linear gain they make on the clamped product, per vertex as the original evaluates
-        // them. Zero where no light reaches, so an unlit frame draws exactly what it did.
+        // them. Zero where no light reaches, so an unlit frame is untouched.
         string pointVertex = !(fullbright && lit) ? ""
             : "    v_point_gain = vec3(0.0);\n"
               + "    if (csky_light_count > 0) {\n"
@@ -1816,7 +1816,7 @@ void fragment() {{");
         // hairline artifact UvsWithinUnitSquare exists for.
         sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, "
             + (clampUv ? "repeat_disable;" : "repeat_enable;"));
-        // The same chapter mip bias the world mesh takes: the original's is one device render
+        // The same chapter mip bias the world mesh takes. The original's is one device render
         // state, so a billboard samples at the level the terrain under it does.
         sb.AppendLine(MipBiasInclude);
         // Same global distance-fog params as the world shader. Clouds always fog, so this shader
@@ -1906,8 +1906,8 @@ void fragment() {{
         // Clamp when the facade's UVs never leave the unit square, see GetBillboardShader.
         sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, "
             + (clampUv ? "repeat_disable;" : "repeat_enable;"));
-        // The chapter mip bias, as in GetBillboardShader: a facade stands in the same street as
-        // the walls beside it and must choose its level the same way.
+        // The chapter mip bias, as in GetBillboardShader. A facade stands in the same street as
+        // the walls beside it, and must choose its level the same way.
         sb.AppendLine(MipBiasInclude);
         // csky_world_light arrives with the atmosphere include and is READ only when !glow
         // (a light source does not dim with the mission's SUNLIGHT); declaring it either way

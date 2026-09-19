@@ -12,12 +12,13 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The options module alone over the hand-authored layout fixture: the five leaves behind the
-/// Preferences hub (Game Options, AUDIO, VIDEO, CONTROLS and KEYS AND BUTTONS), the words each page
-/// opens on and the settings its one apply carries, the dropdown lists and their windows, the four
-/// sliders and the mix they preview, the seven rebinding tabs and the captures their cells arm, and
-/// what every page draws. The hub itself is the shell's screen, so the seam to it is one wiring fact
-/// in <see cref="OriginalShellTests"/>; everything here drives the module over a hand-written host.
+/// The options module alone over the hand-authored layout fixture, and what every page draws.
+/// It drives the five leaves behind the Preferences hub: Game Options, AUDIO, VIDEO, CONTROLS
+/// and KEYS AND BUTTONS. It covers the words each page opens on, the settings its one apply
+/// carries, and the dropdown lists and their windows. The four sliders and the mix they preview
+/// are here, with the seven rebinding tabs and the captures their cells arm. The hub itself is
+/// the shell's screen, so the seam to it is one wiring fact in <see cref="OriginalShellTests"/>.
+/// Everything here drives the module over a hand-written host.
 /// </summary>
 public class OriginalOptionsTests
 {
@@ -49,8 +50,8 @@ public class OriginalOptionsTests
         StepX(host, 1);
         Assert.Equal(CSVM.Flight.Difficulty.Hard, host.Module.DifficultyChoice);
 
-        // The second row is the original's own Default View dropdown, over the three views its own
-        // list carries in its own order: Cockpit, First Person, Exterior.
+        // The second row is the original's own Default View dropdown. Its own list carries the
+        // three views in its own order: Cockpit, First Person, Exterior.
         Down(host);
         Assert.Equal(OriginalOptionsScreen.DefaultViewKey, host.FocusedKey);
         Assert.Null(host.Module.DefaultViewChoice);
@@ -59,7 +60,7 @@ public class OriginalOptionsTests
         Assert.Equal(OriginalOptionsScreen.DefaultViewKey, host.Module.OpenGameOption);
         Assert.Equal(new[] { "Cockpit", "First Person", "Exterior" }, host.Rows.Select(r => r.Label));
         // The list opens on the item the row stands at, which with nothing saved is Exterior, the
-        // last of the three; two steps up reach the first.
+        // last of the three. Two steps up reach the first.
         MoveY(host, -1);
         MoveY(host, -1);
         Accept(host);
@@ -72,9 +73,9 @@ public class OriginalOptionsTests
         StepX(host, 1);
         Assert.Equal("cockpit", host.Module.DefaultViewChoice);
 
-        // The third row is the original's own Auto Head Turn checkbox, which reads OFF while nothing
-        // is saved, since an unset field leaves the headLook.autohead config key deciding and that
-        // ships off.
+        // The third row is the original's own Auto Head Turn checkbox, which reads OFF while
+        // nothing is saved. An unset field leaves the headLook.autohead config key deciding, and
+        // that ships off.
         Down(host);
         Assert.Equal(OriginalOptionsScreen.AutoHeadTurnKey, host.FocusedKey);
         Assert.Null(host.Module.AutoHeadTurnChoice);
@@ -85,9 +86,9 @@ public class OriginalOptionsTests
         StepX(host, 1);
         Assert.True(host.Module.AutoHeadTurnChoice);
 
-        // The fourth row is the remake-only Next Target checkbox, straight under the head turn: the
-        // page offers no menu presentation row, the command line alone choosing one. Accept flips
-        // it, and a sideways step is the same flip, so the row is walkable with either gesture.
+        // The fourth row is the remake-only Next Target checkbox, straight under the head turn.
+        // The page offers no menu presentation row, the command line alone choosing one. Accept
+        // flips it, and a sideways step is the same flip, so the row is walkable either way.
         Down(host);
         Assert.Equal(OriginalOptionsScreen.NearestAfterKillKey, host.FocusedKey);
         Assert.Null(host.Module.NearestAfterKillChoice);
@@ -115,8 +116,8 @@ public class OriginalOptionsTests
         Assert.True(exit.Rumble);
         Assert.Equal("cockpit", exit.DefaultView);
         Assert.True(exit.AutoHeadTurn);
-        // The graphics word rides this page's apply unchanged: it is the VIDEO page's row now, and
-        // the apply carries every saved choice whichever page sends it.
+        // The graphics word rides this page's apply unchanged. It is the VIDEO page's row, and the
+        // apply carries every saved choice whichever page sends it.
         Assert.Equal(GraphicsMode.Default, exit.Graphics);
         Assert.Equal("hard", exit.Difficulty);
     }
@@ -157,7 +158,7 @@ public class OriginalOptionsTests
         Accept(host);
         Assert.Equal(OriginalOptionsScreen.DifficultyKey, host.Module.OpenGameOption);
         // The open list is only as tall as its own items: three tiers, three rows, and the panel
-        // under them no taller, which is how the original draws a list shorter than its box allows.
+        // under them no taller. That is how the original draws a list shorter than its box allows.
         var open = Assert.Single(Compose(host).Overlays);
         Assert.Equal(3, open.Lines.Count);
         Assert.Equal(3f * 17f, open.Fills[0].Height);
@@ -168,9 +169,9 @@ public class OriginalOptionsTests
         Assert.Equal(OriginalScreen.Options, host.Screen);
     }
 
-    /// <summary>The AUDIO page: it opens on the saved mix with Master focused, a sideways step moves
-    /// the focused level and clamps rather than wrapping, and ACCEPT CHANGES leaves as the one apply
-    /// exit carrying the four levels beside the settings the page never showed.</summary>
+    /// <summary>The AUDIO page opens on the saved mix with Master focused. A sideways step moves
+    /// the focused level and clamps rather than wrapping. ACCEPT CHANGES leaves as the one apply
+    /// exit, carrying the four levels beside the settings the page never showed.</summary>
     [Fact]
     public void TheAudioPageMovesALevelAndAppliesTheMixAsOneExit()
     {
@@ -190,7 +191,7 @@ public class OriginalOptionsTests
         Assert.Equal(55, host.Module.AudioEffectsChoice);
         Assert.Equal(5, host.Module.AudioVoiceChoice);
 
-        // A sideways step moves the focused level by the control's own step and clamps at silence
+        // A sideways step moves the focused level by the control's own step. It clamps at silence
         // instead of wrapping to full, which is what every other stepped row on this shell does.
         StepX(host, 1);
         Assert.Equal(85, host.Module.AudioMasterChoice);
@@ -219,8 +220,8 @@ public class OriginalOptionsTests
         Assert.Equal("120", exit.VSync);
     }
 
-    /// <summary>A level the options file has never carried opens the row on the shipped default,
-    /// and CANCEL CHANGES and Back both leave with the edits dropped.</summary>
+    /// <summary>A level the options file has never carried opens the row on the shipped default.
+    /// CANCEL CHANGES and Back both leave with the edits dropped.</summary>
     [Fact]
     public void TheAudioPageOpensOnTheShippedDefaultsAndDropsAnEditOnCancelAndOnBack()
     {
@@ -255,10 +256,10 @@ public class OriginalOptionsTests
         Assert.Null(host.Module.AudioMasterChoice);
     }
 
-    /// <summary>The AUDIO page's live preview as the module states it: while the page is open it
-    /// names the four levels it stands at, off the page it names no mix at all, and it names the
-    /// level a frame moved only on the frames that actually moved one, so a host cannot sound a
-    /// category once per pointer frame of a drag.</summary>
+    /// <summary>The AUDIO page's live preview as the module states it. While the page is open it
+    /// names the four levels it stands at, and off the page it names no mix at all. It names the
+    /// level a frame moved only on the frames that moved one. A host cannot sound a category once
+    /// per pointer frame of a drag.</summary>
     [Fact]
     public void TheAudioPageStatesItsMixWhileOpenAndNamesAMovedLevelOnlyWhenOneMoved()
     {
@@ -270,7 +271,7 @@ public class OriginalOptionsTests
             host.Module.AudioPreviewMix);
         Assert.Equal(MenuMixLevel.None, host.Module.TakeAudioMoved());
 
-        // A sideways step on the Effects row names Effects, and names it once: the moved level is
+        // A sideways step on the Effects row names Effects, and names it once. The moved level is
         // taken rather than read, so a second ask cannot sound the same move again.
         Down(host);
         Down(host);
@@ -280,8 +281,8 @@ public class OriginalOptionsTests
         Assert.Equal(MenuMixLevel.None, host.Module.TakeAudioMoved());
         Assert.Equal(AudioMix.DefaultEffects - SliderControl.KeyStep, host.Module.AudioPreviewMix!.Value.Effects);
 
-        // A drag: the frame that takes hold moves the level and names it, a held frame at the same
-        // point moves nothing and names nothing, and the same holds at the far end of the track.
+        // A drag: the frame that takes hold moves the level and names it. A held frame at the same
+        // point moves nothing and names nothing. The same holds at the far end of the track.
         var row = Row(host, OriginalOptionsScreen.AudioEffectsKey);
         float left = row.X + 1f;
         float right = row.X + row.Width - 1f;
@@ -305,17 +306,18 @@ public class OriginalOptionsTests
     }
 
     /// <summary>The AUDIO page over its own section: four sliders in the section's slider column,
-    /// each on its own authored line (the pitch is uneven, so a first row and one pitch would
-    /// misplace the rows below the second), the Master row on the In-Game Music line at the slider
-    /// offset rather than at that row's checkbox corner, and the two plaques under them.</summary>
+    /// each on its own authored line. The pitch is uneven, so a first row and one pitch would
+    /// misplace the rows below the second. The Master row stands on the In-Game Music line at the
+    /// slider offset, not at that row's checkbox corner. The two plaques stand under them.
+    /// </summary>
     [Fact]
     public void TheAudioPageIsComposedOverItsSectionsOwnRowShape()
     {
         var host = Host();
         host.Module.OpenAudio();
 
-        // Each row is the authored slot inset by 0, -10, 1 and -10: 137 wide of press region over a
-        // three-pixel line, standing at the slider column and 26 pixels under its own title.
+        // Each row is the authored slot inset by 0, -10, 1 and -10. That is 137 wide of press
+        // region over a three-pixel line, at the slider column and 26 pixels under its own title.
         var master = Row(host, OriginalOptionsScreen.AudioMasterKey);
         Assert.Equal((130f, 266f, 170f, 23f), Rect(master));
         Assert.Equal((130f, 326f, 170f, 23f), Rect(Row(host, OriginalOptionsScreen.AudioMusicKey)));
@@ -324,9 +326,9 @@ public class OriginalOptionsTests
         Assert.Equal((200f, 500f, 240f, 50f), Rect(Row(host, OriginalOptionsScreen.AudioAcceptKey)));
 
         var board = Compose(host);
-        // The logo and the plate are the backdrop, not pictures. A board draws its fills between the
-        // two layers, so a plate among the pictures would paint over the focused row's own mark and
-        // the page would show no focus at all. The flag under them is the shell's own movie layer.
+        // The logo and the plate are the backdrop, not pictures. A board draws its fills between
+        // the two layers, so a plate among the pictures would bury the focused row's own mark. The
+        // page would then show no focus at all. The flag under them is the shell's own movie layer.
         Assert.Equal(new[] { "PM_Logo.png", "PP_ApBack.png" }, board.Backdrop.Select(p => p.Art.Name));
         Assert.DoesNotContain(board.Pictures, p => p.Art.Name is "PM_Logo.png" or "PP_ApBack.png");
         Assert.Contains(board.Lines, l => l.Text == "AUDIO" && l.X == 120f && l.Justify == BoardJustify.Center);
@@ -338,9 +340,9 @@ public class OriginalOptionsTests
         Assert.Contains(board.Lines, l => l.Text == "Voice Volume" && l.X == 130f && l.Y == 415f && l.Width == 170f);
         Assert.Equal(9, board.Lines.Count(l => l.Row < 0));
 
-        // The focused row is marked twice and the others not at all: an outline around the row the
-        // page opens on, and that row's title alone in the focused ink. Both halves are asserted
-        // because either alone is a mark a player at a pad reported not seeing.
+        // The focused row is marked twice and the others not at all. There is an outline around the
+        // row the page opens on, and that row's title alone in the focused ink. Both halves are
+        // asserted because either alone is a mark a player at a pad can miss.
         Assert.Equal(
             new[] { (130f, 266f, 170f, 23f) },
             board.Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));
@@ -369,8 +371,8 @@ public class OriginalOptionsTests
         Assert.Equal(194f, board.Pictures.Single(p => p.Art.Name == "PP_B_Slider.png" && p.Y == 327f).X);
     }
 
-    /// <summary>The VIDEO page: it opens on the saved words with its first row focused, the checkbox
-    /// under that flips the graphics word, and ACCEPT CHANGES leaves as the one apply exit carrying
+    /// <summary>The VIDEO page opens on the saved words with its first row focused. The checkbox
+    /// under that flips the graphics word. ACCEPT CHANGES leaves as the one apply exit, carrying
     /// both display choices beside the two the Game Options page owns.</summary>
     [Fact]
     public void TheVideoPageFlipsEnhancedGraphicsAndAppliesItAsOneExit()
@@ -387,7 +389,7 @@ public class OriginalOptionsTests
         Assert.Equal(GraphicsMode.Default, host.Module.GraphicsChoice);
 
         // Three steps, not four: the size row is dead under the borderless default, which owns the
-        // size, and a dead row is out of the walk.
+        // size. A dead row is out of the walk.
         Down(host);
         Down(host);
         Down(host);
@@ -414,7 +416,7 @@ public class OriginalOptionsTests
     }
 
     /// <summary>The display-mode row: its list opens over the three words at the authored Viewing
-    /// Range dropdown's own box, picking one closes the list on it, and ACCEPT CHANGES carries the
+    /// Range dropdown's own box. Picking one closes the list on it. ACCEPT CHANGES carries the
     /// store word rather than the label the row draws.</summary>
     [Fact]
     public void TheVideoPageDisplayModeRowPicksAWordAndCarriesItOnTheApply()
@@ -452,7 +454,7 @@ public class OriginalOptionsTests
     }
 
     /// <summary>The V-Sync row's dropdown: Accept opens the list over every choice at the row's own
-    /// box, picking closes it on that word, and Back closes an open list before it leaves the
+    /// box. Picking closes it on that word. Back closes an open list before it leaves the
     /// page.</summary>
     [Fact]
     public void TheVideoPageVSyncRowOpensItsListPicksAndCloses()
@@ -466,7 +468,7 @@ public class OriginalOptionsTests
         Accept(host);
         Assert.Equal(OriginalOptionsScreen.VSyncKey, host.Module.OpenVideoOption);
         // Five words in the row's authored four-row window, so the list carries its two arrows
-        // beside the five item rows and the rows narrow by the column those stand in.
+        // beside the five item rows. The rows narrow by the column those stand in.
         Assert.Equal(DisplayWords.VSyncChoices.Count + 2, host.Rows.Count);
         Assert.Equal((260f, 397f, 54f, 17f), Rect(host.Rows[0]));
         Down(host);
@@ -486,9 +488,9 @@ public class OriginalOptionsTests
         Assert.Equal(OriginalScreen.Options, host.Screen);
     }
 
-    /// <summary>A leaf's list that fits the window its own row authors stands exactly as tall as its
-    /// items and carries no chrome: no arrows, no thumb, no column given up and nothing for the
-    /// pointer to scroll.</summary>
+    /// <summary>A leaf's list that fits the window its own row authors stands exactly as tall as
+    /// its items. It carries no chrome: no arrows, no thumb, no column given up and nothing for
+    /// the pointer to scroll.</summary>
     [Fact]
     public void AnOptionListInsideItsWindowIsAsTallAsItsItemsAndCarriesNoBar()
     {
@@ -506,10 +508,10 @@ public class OriginalOptionsTests
         Assert.Empty(Box(host).Pictures);
     }
 
-    /// <summary>A leaf's list longer than the window its own row authors: every word is still a row
-    /// so the walk reaches it, only the window's are drawn and hit, the arrows and the thumb stand
-    /// inside the box's own right edge, and a wheel step, an arrow press and a press on a hidden
-    /// row each do what they should.</summary>
+    /// <summary>A leaf's list longer than the window its own row authors. Every word is still a
+    /// row, so the walk reaches it, and only the window's are drawn and hit. The arrows and the
+    /// thumb stand inside the box's own right edge. A wheel step, an arrow press and a press on a
+    /// hidden row each do what they should.</summary>
     [Fact]
     public void AnOptionListPastItsWindowScrollsOnItsOwnBarInsideTheBox()
     {
@@ -525,9 +527,9 @@ public class OriginalOptionsTests
         Assert.False(up.Enabled);
         Assert.True(down.Enabled);
 
-        // The chrome stands inside the box, whose right edge is at 260 + 70: a 16-wide arrow at its
-        // head and its foot, the thumb between them, and the two arrow pictures and the thumb on
-        // the list's own panel.
+        // The chrome stands inside the box, whose right edge is at 260 + 70. A 16-wide arrow stands
+        // at its head and its foot, the thumb between them. The two arrow pictures and the thumb
+        // ride the list's own panel.
         Assert.Equal((314f, 397f, 16f, 11f), Rect(up));
         Assert.Equal((314f, 454f, 16f, 11f), Rect(down));
         var window = Assert.Single(Lists(host)).Window;
@@ -536,7 +538,7 @@ public class OriginalOptionsTests
         Assert.Equal(3, Box(host).Pictures.Count);
 
         // A wheel over the window moves it by a row, and the word that was outside it is the one
-        // drawn; both arrows then have somewhere to go but the down one does not.
+        // drawn. The up arrow then has somewhere to go and the down one does not.
         Wheel(host, window.X + 2f, window.Y + 2f, 1);
         Assert.True(Row(host, OriginalOptionsScreen.VSyncKey + ":4").Visible);
         Assert.False(Row(host, OriginalOptionsScreen.VSyncKey + ":0").Visible);
@@ -550,8 +552,8 @@ public class OriginalOptionsTests
         Assert.Equal(OriginalOptionsScreen.VSyncKey, host.Module.OpenVideoOption);
         Assert.Null(host.Module.VSyncChoice);
 
-        // A press on the row outside the window lands on no row at all: it is built for the walk
-        // and hidden, so the list closes on nothing rather than picking the word under the pointer.
+        // A press on the row outside the window lands on no row at all. That row is built for the
+        // walk and hidden, so the list closes on nothing rather than picking the word under it.
         var hidden = Row(host, OriginalOptionsScreen.VSyncKey + ":4");
         Assert.False(hidden.Visible);
         Assert.Equal(string.Empty, HitTestKey(host, hidden.X + 2f, hidden.Y + 2f));
@@ -599,8 +601,8 @@ public class OriginalOptionsTests
         Assert.Equal(GraphicsMode.Default, host.Module.GraphicsChoice);
     }
 
-    /// <summary>Opening a page shows back the saved words, not what this process resolved: a flag or
-    /// the config key can have decided the running mode, and the rows owe the player the choices
+    /// <summary>Opening a page shows back the saved words, not what this process resolved. A flag
+    /// or the config key can have decided the running mode. The rows owe the player the choices
     /// their own ACCEPT CHANGES saved. The module never writes the options file.</summary>
     [Fact]
     public void TheRowsOpenOnTheSavedWords()
@@ -638,9 +640,9 @@ public class OriginalOptionsTests
         Assert.Equal("0", host.Module.MonitorChoice);
         Assert.Equal("Screen 0", Row(host, OriginalOptionsScreen.MonitorKey).Label);
 
-        // A file that never set the fields opens the rows on the shipped defaults, each row agreeing
-        // with its own setting's fallback rule: off and borderless rather than either vocabulary's
-        // first word, the size list's fallback (the project size, with no screen to ask), the standing screen.
+        // A file that never set the fields opens the rows on the shipped defaults, each agreeing
+        // with its own setting's fallback rule. That is off and borderless, not either vocabulary's
+        // first word; the size list's project size, with no screen to ask; the standing screen.
         saved.GraphicsMode = null;
         saved.Difficulty = null;
         saved.NearestAfterKill = null;
@@ -665,10 +667,10 @@ public class OriginalOptionsTests
         Assert.Equal("Screen 0", Row(host, OriginalOptionsScreen.MonitorKey).Label);
     }
 
-    /// <summary>The graphics row's description reads the choice against the running mode, so a
-    /// saved word the world has not picked up yet says a restart is owed rather than repeating
-    /// the next-start note. Which of the two words is the running one depends on the process, so
-    /// the fact checks that exactly one of them owes the restart.</summary>
+    /// <summary>The graphics row's description reads the choice against the running mode. A saved
+    /// word the world has not picked up says a restart is owed, rather than repeating the
+    /// next-start note. Which of the two words is the running one depends on the process, so the
+    /// fact checks that exactly one of them owes the restart.</summary>
     [Fact]
     public void TheGraphicsRowSaysWhenARestartIsStillOwed()
     {
@@ -694,18 +696,18 @@ public class OriginalOptionsTests
         var host = Host();
         host.Module.OpenGameOptions();
 
-        // Row one's dropdown box at the authored Difficulty dropdown's corner and width, the Default
-        // View row's one row down at the pitch, then the two decoded plaques.
+        // Row one's dropdown box stands at the authored Difficulty dropdown's corner and width.
+        // The Default View row's is one row down at the pitch, then the two decoded plaques.
         Assert.Equal((135f, 295f, 144f, 17f), Rect(Row(host, OriginalOptionsScreen.DifficultyKey)));
         Assert.Equal((135f, 350f, 144f, 17f), Rect(Row(host, OriginalOptionsScreen.DefaultViewKey)));
-        // The exit pair side by side on one line, ACCEPT left of CANCEL, which is the arrangement
-        // this section authors and the film shows; the VIDEO page's own section stacks them instead.
-        // Both stand one whole band below their authored 470, the band the plate grew by.
+        // The exit pair stands side by side on one line, ACCEPT left of CANCEL. That is the
+        // arrangement this section authors and the film shows, while the VIDEO page's own section
+        // stacks them. Both stand one whole band below their authored 470, the band the plate grew by.
         Assert.Equal((200f, 532f, 240f, 50f), Rect(Row(host, OriginalOptionsScreen.GameOptionsAcceptKey)));
         Assert.Equal((450f, 532f, 240f, 50f), Rect(Row(host, OriginalOptionsScreen.GameOptionsCancelKey)));
 
         var board = Compose(host);
-        // Backdrop, not pictures, for the reason the AUDIO page's own case states: a fill is drawn
+        // Backdrop, not pictures, for the reason the AUDIO page's own case states. A fill is drawn
         // between the layers, so a plate among the pictures buries every focus mark. It arrives as
         // four crops (head, row band twice, tail), this page holding more rows than the section has.
         Assert.Equal(new[] { "PM_Logo.png", "PP_GoBack.png", "PP_GoBack.png", "PP_GoBack.png", "PP_GoBack.png" },
@@ -717,8 +719,8 @@ public class OriginalOptionsTests
         Assert.Contains(board.Lines, l => l.Text == "GAME OPTIONS" && l.X == 120f && l.Justify == BoardJustify.Center);
         Assert.Contains(board.Lines, l => l.Text == "Difficulty" && l.X == 130f && l.Y == 280f && l.Width == 170f);
         Assert.Contains(board.Lines, l => l.Text == "Select the difficulty level for a solo campaign." && l.X == 340f && l.Y == 290f && l.Width == 310f);
-        // Five rows over a three-row section, so the plate grows and the rows tighten the pitch from
-        // the authored 60 to the 55 that keeps the last row clear of the moved ACCEPT CHANGES.
+        // Five rows over a three-row section, so the plate grows and the rows tighten the pitch.
+        // The authored 60 becomes the 55 that keeps the last row clear of the moved ACCEPT CHANGES.
         Assert.Contains(board.Lines, l => l.Text == "Default View" && l.X == 130f && l.Y == 335f && l.Width == 170f);
         Assert.Contains(board.Lines, l => l.Text == "Select your default view." && l.X == 340f && l.Y == 345f && l.Width == 310f);
         // The checkbox rows take the narrower title box the authored head-turn row carries, which
@@ -745,12 +747,12 @@ public class OriginalOptionsTests
             Compose(host).Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));
     }
 
-    /// <summary>The VIDEO page over its own section: the dropdowns at the authored Graphics,
-    /// Resolution, Viewing Range and Effects Level boxes and the checkbox at the authored Shadows
-    /// box, each title box stopped at the control beside it and each description at the description
-    /// column, the Shadows one wrapped at the plaque column since that authored row carries no width
-    /// of its own. The Graphics title keeps its authored width, that row's title already stopping
-    /// before the control beside it.</summary>
+    /// <summary>The VIDEO page over its own section. The dropdowns stand at the authored Graphics,
+    /// Resolution, Viewing Range and Effects Level boxes, and the checkbox at the authored Shadows
+    /// box. Each title box stops at the control beside it and each description at the description
+    /// column. The Shadows description wraps at the plaque column, since that authored row carries
+    /// no width of its own. The Graphics title keeps its authored width, that row's title already
+    /// stopping before the control beside it.</summary>
     [Fact]
     public void TheVideoPageIsComposedOverItsSectionsOwnRowShape()
     {
@@ -769,8 +771,8 @@ public class OriginalOptionsTests
         Assert.Equal((500f, 520f, 240f, 50f), Rect(Row(host, OriginalOptionsScreen.VideoCancelKey)));
 
         var board = Compose(host);
-        // Backdrop, not pictures, for the reason the AUDIO page's own case states: a board draws its
-        // fills between the two layers, so a plate among the pictures buries every focus mark.
+        // Backdrop, not pictures, for the reason the AUDIO page's own case states. A board draws
+        // its fills between the two layers, so a plate among the pictures buries every focus mark.
         Assert.Equal(new[] { "PM_Logo.png", "PP_VpBack.png" }, board.Backdrop.Select(p => p.Art.Name));
         Assert.DoesNotContain(board.Pictures, p => p.Art.Name is "PM_Logo.png" or "PP_VpBack.png");
         Assert.Contains(board.Lines, l => l.Text == "VIDEO" && l.X == 120f && l.Justify == BoardJustify.Center);
@@ -857,8 +859,8 @@ public class OriginalOptionsTests
         }
     }
 
-    /// <summary>The Movement tab is the six attitude half-axes in the original page's own order,
-    /// which begins with Point Nose Down rather than with the enum's first member
+    /// <summary>The Movement tab is the six attitude half-axes in the original page's own order.
+    /// That order begins with Point Nose Down, not with the enum's first member
     /// (<c>OriginalScreenshots/Keybinds Movement.png</c>).</summary>
     [Fact]
     public void TheMovementTabIsTheSixAttitudeHalfAxesInTheOriginalsOrder()
@@ -890,9 +892,10 @@ public class OriginalOptionsTests
     }
 
     /// <summary>The Targeting tab lists all eleven of the original's targeting actions in the
-    /// original page's own order, Next then Previous then Nearest per class and the two class-less
-    /// ones last (<c>OriginalScreenshots/Keybinds Targeting.png</c>). Pinned because the order is
-    /// read off that page rather than off the enum, which appends new members at its end.</summary>
+    /// original page's own order. That is Next then Previous then Nearest per class, and the two
+    /// class-less ones last (<c>OriginalScreenshots/Keybinds Targeting.png</c>). Pinned because the
+    /// order is read off that page rather than off the enum, which appends new members at its end.
+    /// </summary>
     [Fact]
     public void TheTargetingTabIsTheOriginalsElevenInItsOwnOrder()
     {
@@ -1000,10 +1003,10 @@ public class OriginalOptionsTests
         Assert.Equal(1, controls.Players.Count);
     }
 
-    /// <summary>Each CONTROLS row takes its rectangle from its own layout entry: the seat chooser
-    /// from the Controller Type dropdown's box, the sensitivity slider from the Mouse Sensitivity
-    /// slider's own press region, and the scheme chooser from the right half of the seat box's
-    /// column on the Mouse Sensitivity title's line.</summary>
+    /// <summary>Each CONTROLS row takes its rectangle from its own layout entry. The seat chooser
+    /// takes the Controller Type dropdown's box, and the sensitivity slider the Mouse Sensitivity
+    /// slider's own press region. The scheme chooser takes the right half of the seat box's
+    /// column, on the Mouse Sensitivity title's line.</summary>
     [Fact]
     public void TheControlsRowsTakeTheirBoxesFromTheirOwnLayoutEntries()
     {
@@ -1015,8 +1018,8 @@ public class OriginalOptionsTests
         Assert.Equal((136f, 371f, 170f, 23f), Rect(Row(host, OriginalOptionsScreen.ControlsSensitivityKey)));
     }
 
-    /// <summary>The scheme chooser's arrow ends where the seat row's does, and the panel's title
-    /// stops where the chooser on its line starts, so the two share the line without touching.
+    /// <summary>The scheme chooser's arrow ends where the seat row's does. The panel's title stops
+    /// where the chooser on its line starts, so the two share the line without touching.
     /// </summary>
     [Fact]
     public void TheFlyingSchemeRowSharesTheTitleLineAndTheSeatRowsArrowColumn()
@@ -1037,8 +1040,8 @@ public class OriginalOptionsTests
         Assert.Equal(scheme.X, title.X + title.Width);
     }
 
-    /// <summary>The authored Mouse Sensitivity slider is drawn as authored, slot and thumb, standing
-    /// at the default's level in the middle of its scale, and moving it stages the seat's
+    /// <summary>The authored Mouse Sensitivity slider is drawn as authored, slot and thumb. It
+    /// stands at the default's level in the middle of its scale. Moving it stages the seat's
     /// sensitivity until ACCEPT CHANGES writes it.</summary>
     [Fact]
     public void TheSensitivitySliderStagesTheMultiplierAndAcceptWritesIt()
@@ -1063,7 +1066,7 @@ public class OriginalOptionsTests
         Assert.Equal(2f, controls.MouseSensitivity);
     }
 
-    /// <summary>The scheme row is the Controls door's own: a press flips it, a sideways step flips
+    /// <summary>The scheme row is the Controls door's own. A press flips it, a sideways step flips
     /// it back, and neither reaches the seat until ACCEPT CHANGES.</summary>
     [Fact]
     public void TheFlyingSchemeRowStagesTheChoiceAndAcceptWritesIt()
@@ -1137,9 +1140,9 @@ public class OriginalOptionsTests
         ControlsRowsAreClearOfEachOther(InstallLayout(out var measure), measure);
     }
 
-    // The Game Options page's seven rows share one plate, so no two of them may overlap, and no
-    // control may sit over a title or a description. The first three are the original's own, in its
-    // order; the two under them are this port's.
+    // The Game Options page's seven rows share one plate, so no two of them may overlap. No control
+    // may sit over a title or a description. The first three are the original's own, in its order;
+    // the two under them are this port's.
     private static void GameOptionRowsAreClearOfEachOther(MenuLayout layout, Func<string, (int Width, int Height)?> measure)
     {
         var host = Host(layout, measure);
@@ -1158,9 +1161,9 @@ public class OriginalOptionsTests
     }
 
     // The AUDIO page's rows, the same rule over its own plate. Its press regions are the widest of
-    // any option page (the authored slot grown ten pixels above and below), and the Master row's
-    // slider stands on a line the layout authors for a checkbox, so a row that took the checkbox's
-    // own corner would land in the title column beside the words rather than under them.
+    // any option page, the authored slot grown ten pixels above and below. The Master row's slider
+    // stands on a line the layout authors for a checkbox. A row that took the checkbox's own corner
+    // would land in the title column beside the words, not under them.
     private static void AudioRowsAreClearOfEachOther(MenuLayout layout, Func<string, (int Width, int Height)?> measure)
     {
         var host = Host(layout, measure);
@@ -1177,10 +1180,10 @@ public class OriginalOptionsTests
         RowsAreClearOfEachOther(host, rows, "AUDIO", 8);
     }
 
-    // The VIDEO page's rows, the same rule over its own plate: each control must stand clear of the
-    // title beside it and the description must stop before the plaque column, which is what makes
-    // the authored Shadows row carry a longer title and a longer description than it was written
-    // for. The rows come back in authored order, since that is the order the cursor walks.
+    // The VIDEO page's rows, the same rule over its own plate. Each control must stand clear of the
+    // title beside it, and the description must stop before the plaque column. That is what makes
+    // the authored Shadows row carry a longer title and description than it was written for. The
+    // rows come back in authored order, since that is the order the cursor walks.
     private static void VideoRowsAreClearOfEachOther(MenuLayout layout, Func<string, (int Width, int Height)?> measure)
     {
         var host = Host(layout, measure);
@@ -1197,10 +1200,10 @@ public class OriginalOptionsTests
         RowsAreClearOfEachOther(host, rows, "VIDEO", 10);
     }
 
-    // The CONTROLS page's rows, the same rule over its own plate, with the sensitivity slider pinned
-    // to the Mouse Sensitivity row's own authored press region (the slot art at that row's corner,
-    // the four insets applied), so a layout whose entries differ in size or column puts the slider
-    // where its own entry says and the scheme chooser on the title line above it.
+    // The CONTROLS page's rows, the same rule over its own plate. The sensitivity slider is pinned
+    // to the Mouse Sensitivity row's own authored press region. The slot art stands at that row's
+    // corner, with the four insets applied. A layout whose entries differ in size or column puts
+    // the slider where its own entry says. The scheme chooser goes on the title line above it.
     private static void ControlsRowsAreClearOfEachOther(MenuLayout layout, Func<string, (int Width, int Height)?> measure)
     {
         var host = Host(layout, measure, controls: Controls(out _, out _));
@@ -1229,9 +1232,9 @@ public class OriginalOptionsTests
     }
 
     // No row of an option page may overlap another, and no control may sit over a title or a
-    // description: a control that covered the words beside it is what sent the options off the
-    // Preferences page in the first place. The authored space scales uniformly, so disjoint here is
-    // disjoint at every window size.
+    // description. A control that covered the words beside it is what sent the options off the
+    // Preferences page. The authored space scales uniformly, so disjoint here is disjoint at every
+    // window size.
     private static void RowsAreClearOfEachOther(OptionsHost host, OriginalRow[] rows, string pageTitle, int wordCount)
     {
         var words = Compose(host).Lines.Where(l => l.Row < 0 && l.Text != pageTitle).ToArray();
@@ -1262,7 +1265,7 @@ public class OriginalOptionsTests
     }
 
     // The install's own decoded layout and the art beside it, which the three clearance facts walk
-    // as well as the fixture: the authored rectangles there are the game's, not this repo's.
+    // as well as the fixture. The authored rectangles there are the original's, not this repo's.
     private static MenuLayout InstallLayout(out Func<string, (int Width, int Height)?> measure)
     {
         string dataRoot = TestData.DataRoot!;
@@ -1272,8 +1275,8 @@ public class OriginalOptionsTests
         return layout!;
     }
 
-    // The module over the layout fixture and the fixture's own art sizes. With no options reader the
-    // pages open on the shipped defaults, which is what an engine-free test wants, and no test can
+    // The module over the layout fixture and the fixture's own art sizes. With no options reader
+    // the pages open on the shipped defaults, which is what an engine-free test wants. No test can
     // reach the player's own user://options.json.
     private static OptionsHost Host(Func<OptionsDef>? options = null, ControlsFeature? controls = null) =>
         Host(MenuLayoutReaderTests.OriginalLayout(), Measure, options, controls);
@@ -1288,7 +1291,7 @@ public class OriginalOptionsTests
     }
 
     // The shared rebinding feature with one seat on the shipped keymaps and a save that only
-    // counts: the two CONTROLS pages stage their edits in it and ACCEPT CHANGES is the one writer.
+    // counts. The two CONTROLS pages stage their edits in it, and ACCEPT CHANGES is the one writer.
     private static ControlsFeature Controls(out OriginalControlsTests.FakeCaptureDevices devices, out List<int> written)
     {
         var saved = new List<int>();
@@ -1346,9 +1349,9 @@ public class OriginalOptionsTests
         EndFrame(host);
     }
 
-    // A sideways step, the shell's own cascade restated as far as this module reaches: a slider
-    // first, since it belongs to no one screen, then the page's own row. Where neither takes it the
-    // shell crosses columns, which is its business and not the module's.
+    // A sideways step, the shell's own cascade restated as far as this module reaches. A slider
+    // comes first, since it belongs to no one screen, then the page's own row. Where neither takes
+    // it the shell crosses columns, which is its business and not the module's.
     private static bool StepX(OptionsHost host, int direction)
     {
         var rows = host.Rows;
@@ -1373,8 +1376,8 @@ public class OriginalOptionsTests
         return answered;
     }
 
-    // One click at a point, as the shell reads it: the topmost visible row the point lands on takes
-    // the press and the release on it activates, and a click on no row at all closes an open list.
+    // One click at a point, as the shell reads it. The topmost visible row the point lands on takes
+    // the press, and the release on it activates. A click on no row at all closes an open list.
     private static MenuExit? ClickAt(OptionsHost host, float x, float y)
     {
         var rows = host.Rows;
@@ -1402,7 +1405,7 @@ public class OriginalOptionsTests
         return ClickAt(host, row.X + (row.Width / 2f), row.Y + (row.Height / 2f));
     }
 
-    // One frame of the pointer against a slider, which is the shell's own hold-and-move: it has the
+    // One frame of the pointer against a slider, which is the shell's own hold-and-move. It has the
     // press before any row does, so the click that took hold of a track is spent on it.
     private static void Drag(OptionsHost host, float x, float y, bool pressed, bool clicked = false)
     {
@@ -1469,32 +1472,26 @@ public class OriginalOptionsTests
     private static BoardPanel Box(OptionsHost host) => Compose(host).Overlays.First(o => o.Lines.Count > 0);
 
     // The page as the module draws it, assembled the way the shell assembles its own board. The
-    // shell's own layers (the flag movie, the strokes and the pointer overlay) are not the module's,
-    // and none of the five pages writes a note, so the note layer comes back empty.
+    // shell's own layers (the flag movie, the strokes and the pointer overlay) are not the
+    // module's. None of the five pages writes a note, so the note layer comes back empty.
     private static ComposedBoard Compose(OptionsHost host)
     {
         var rows = host.Rows;
-        var backdrop = new List<BoardPicture>();
-        var pictures = new List<BoardPicture>();
-        var fills = new List<BoardFill>();
-        var lines = new List<BoardLine>();
-        var plaques = new List<BoardPlaque>();
-        var notes = new List<BoardNote>();
-        var overlays = new List<BoardPanel>();
         // The pen the seam offers is the campaign scrapbook's alone, so no option page writes a stroke.
-        var strokes = new List<BoardStroke>();
-        host.Module.Compose(rows, host.Focus, backdrop, pictures, fills, strokes, lines, plaques, notes, overlays);
-        return new ComposedBoard(pictures, strokes, lines, plaques, notes,
-            backdrop: backdrop, fills: fills, overlays: overlays);
+        var layers = new BoardLayers();
+        host.Module.Compose(rows, host.Focus, layers);
+        return new ComposedBoard(layers.Pictures, layers.Strokes, layers.Lines, layers.Plaques, layers.Notes,
+            backdrop: layers.Backdrop, fills: layers.Fills, overlays: layers.Overlays);
     }
 
     // The fixture's strips: every button strip 240x200 (four 50-pixel frames), the checkbox 16x128
-    // (eight 16-pixel frames), the dropdown arrows 15x56, the tab strip 120x148, the slider's slot
-    // and thumb and the scroll art at their shipped sizes, the other two plates unmeasured.
+    // (eight 16-pixel frames). The dropdown arrows are 15x56 and the tab strip 120x148. The
+    // slider's slot and thumb and the scroll art stand at their shipped sizes, the other two
+    // plates unmeasured.
     private static (int Width, int Height)? Measure(string art) => art switch
     {
-        // The Game Options plate at the shipped size, the one plate this fixture measures: an
-        // unmeasured plate has no band to repeat and no height to cap the growth against, so leaving
+        // The Game Options plate at the shipped size, the one plate this fixture measures. An
+        // unmeasured plate has no band to repeat and no height to cap the growth against. Leaving
         // it out would take the whole plate-growth rule out of these facts.
         "PP_GoBack.png" => (566, 289),
         "PM_B_Paper.png" => (160, 112),
@@ -1505,7 +1502,7 @@ public class OriginalOptionsTests
         "PP_B_ScrollUp.png" or "PP_B_ScrollDown.png" or "PP_B_KbUp.png" or "PP_B_KbDown.png" => (16, 44),
         "PP_B_ScrollBar.png" or "PP_B_KbBar.png" => (16, 11),
         // The section's own slider art and the shipped names a row with no slider widget falls
-        // back to, both at the shipped sizes: a three-pixel slot and a thumb that clears it.
+        // back to, both at the shipped sizes. That is a three-pixel slot and a thumb that clears it.
         "PP_B_SliderSlot.png" or "PF_B_SliderSlot.png" => (171, 3),
         "PP_B_Slider.png" or "PF_B_Slider.png" => (43, 21),
         _ when art.StartsWith("PM_B_", StringComparison.Ordinal) => (240, 200),
@@ -1513,12 +1510,10 @@ public class OriginalOptionsTests
         _ => null,
     };
 
-    /// <summary>The shell's side of the seam, hand-written: the screen showing, one focus per screen
-    /// (the first live row where none was set, as the shell's own EnsureFocus rules), the pointer's
-    /// row as a frame leaves it, and the slider the shell drives ahead of its rows. The rows are the
-    /// module's own only while the screen showing is one of its five, which is where the shell's own
-    /// dispatch sends them.</summary>
-    private sealed class OptionsHost : IOriginalScreenHost
+    // The options pages' side of the seam, over the shared fake. It holds the slider the shell
+    // drives ahead of its rows, the plate-row rule a page's drawing is read through, and the
+    // pointer. Every screen opened is told to the module, which re-reads the saved settings.
+    private sealed class OptionsHost : OriginalTestHost<OriginalOptionsScreen>
     {
         // The shell's own plate-page numbers, so a row this fake places or marks stands where the
         // shell would place or mark it.
@@ -1526,159 +1521,37 @@ public class OriginalOptionsTests
         private const float ArrowHeight = 14f;
         private const float ItemFont = 13f;
 
-        private readonly Func<string, (int Width, int Height)?> _measure;
-        private readonly int[] _focus = new int[Enum.GetValues<OriginalScreen>().Length];
-        private int _hover = -1;
-        private int _pressed = -1;
-        private (float X, float Y)? _pointer;
-
         internal OptionsHost(Func<string, (int Width, int Height)?> measure)
+            : base(OriginalScreen.Options, measure)
         {
-            _measure = measure;
-            Array.Fill(_focus, -1);
-        }
-
-        public OriginalOptionsScreen Module { get; set; } = null!;
-
-        public OriginalScreen Screen { get; private set; } = OriginalScreen.Options;
-
-        public bool DialogOpen => false;
-
-        public int PressedRow => _pressed;
-
-        public int HoveredRow => _hover;
-
-        public int FocusBeforeDialog => -1;
-
-        public (float X, float Y)? Pointer => _pointer;
-
-        public CSVM.Flight.CustomPlaneStore? CampaignPlanes => null;
-
-        public UiStrings MenuStrings => UiStrings.Empty;
-
-        public bool CanBuildPlane => false;
-
-        public IReadOnlyList<OriginalRow> Rows
-        {
-            get
-            {
-                var rows = new List<OriginalRow>();
-                if (Module.Owns(Screen))
-                {
-                    Module.BuildRows(rows);
-                }
-
-                return rows;
-            }
-        }
-
-        public int Focus
-        {
-            get
-            {
-                var rows = Rows;
-                int focus = _focus[(int)Screen];
-                if (focus >= 0 && focus < rows.Count && rows[focus].Enabled)
-                {
-                    return focus;
-                }
-
-                focus = rows.ToList().FindIndex(r => r.Enabled);
-                _focus[(int)Screen] = focus;
-                return focus;
-            }
-        }
-
-        public string FocusedKey
-        {
-            get
-            {
-                int focus = Focus;
-                return focus >= 0 ? Rows[focus].Key : string.Empty;
-            }
-        }
-
-        public int FocusedRow
-        {
-            get => _focus[(int)Screen];
-            set => _focus[(int)Screen] = value;
         }
 
         /// <summary>The shell's one slider, which is no module's: a page's four tracks are driven
         /// through it because the pointer's hold crosses screens.</summary>
         internal SliderControl Slider { get; } = new();
 
-        public void Open(OriginalScreen screen)
+        public override void Open(OriginalScreen screen)
         {
-            Screen = screen;
+            base.Open(screen);
             Slider.LetGo();
-            _pressed = -1;
+            PressedRow = -1;
             // The shell tells the module every screen it opens, which is what re-reads the saved
             // settings the three showing pages owe the player.
             Module.ScreenOpened(screen);
         }
 
-        public void FocusKey(string key)
+        /// <summary>⚠ Keep this in step with <c>OriginalShell.ComposePlateRow</c>. The facts that
+        /// pin a row's art, its words and its focus mark read what this writes. It restates the
+        /// shell's own plate-row rule, so a page's drawing can be read with no shell behind it. A
+        /// dropdown's value stands in its box under the focus outline. A slider's slot and thumb
+        /// stand over the wash, and the two plaque kinds in their state frames.</summary>
+        public override void ComposeGenericRow(
+            OriginalRow row, bool focused, bool pressed, int index, BoardLayers layers)
         {
-            var rows = Rows;
-            for (int i = 0; i < rows.Count; i++)
-            {
-                if (rows[i].Key == key)
-                {
-                    _focus[(int)Screen] = i;
-                    return;
-                }
-            }
-        }
-
-        public void RaiseDialog(string message, DialogIcon icon, params OriginalDialogAnswer[] answers)
-        {
-        }
-
-        public void CloseDialog()
-        {
-        }
-
-        // No frame loop behind this fake, so a module's own re-entrant press has nothing to run.
-        public void Frame(MenuCommands commands)
-        {
-        }
-
-        public void PlayFilm(Action<Action> play, Action then) => OriginalTestHost.PlayFilm(play, then);
-
-        public (int Width, int Height)? Measure(string art) => art.Length > 0 ? _measure(art) : null;
-
-        public void ResumeCampaign()
-        {
-        }
-
-        public void RefreshInstantActionRoster()
-        {
-        }
-
-        public void RefreshRosterFromStore()
-        {
-        }
-
-        public void OpenHangar(IHangarWallet? wallet)
-        {
-        }
-
-        public MenuExit? BeginSeatWalk() => null;
-
-        public int CheatedMission(int ordinary) => OriginalTestHost.CheatedMission(ordinary);
-
-        public BoardPanel? SeatPanel(bool onPaper) => null;
-
-        /// <summary>The shell's own plate-row rule restated, so a page's drawing can be read with no
-        /// shell behind it: a dropdown's value in its box under the focus outline, a slider's slot
-        /// and thumb over the wash, and the two plaque kinds in their state frames. ⚠ Keep it in
-        /// step with <c>OriginalShell.ComposePlateRow</c>: the facts that pin a row's art, its words
-        /// and its focus mark read what this writes.</summary>
-        public void ComposeGenericRow(
-            OriginalRow row, bool focused, bool pressed, int index,
-            List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPicture> pictures)
-        {
+            var fills = layers.Fills;
+            var lines = layers.Lines;
+            var plaques = layers.Plaques;
+            var pictures = layers.Pictures;
             switch (row.Kind)
             {
                 case OriginalRowKind.Dropdown:
@@ -1701,7 +1574,7 @@ public class OriginalOptionsTests
                         ItemFont, focused ? BoardInk.RowFocused : BoardInk.Row, index));
                     break;
                 case OriginalRowKind.Slider:
-                    ComposeSlider(row, focused, fills, pictures);
+                    ComposeSlider(row, focused, layers);
                     break;
                 case OriginalRowKind.TextButton when row.Art != null:
                     plaques.Add(new BoardPlaque(
@@ -1718,39 +1591,31 @@ public class OriginalOptionsTests
             }
         }
 
-        public OriginalRow PlaqueRow(string key, string label, int row, bool enabled, int column) =>
-            OriginalTestHost.PlaqueRow(key, label, row, enabled, column);
-
-        public void ComposePlainPage(
-            string heading, IReadOnlyList<OriginalRow> rows, int focus,
-            List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques) =>
-            OriginalTestHost.ComposePlainPage(heading, rows, focus, lines);
-
-        public BoardFill FocusMark(OriginalRow row) => OriginalTestHost.FocusMark(row);
-
-        // The pointer put on one row, as a frame under the cursor leaves the shell: the row is
-        // hovered, pressed and, where it is live, focused, since the frame a click fires on is the
-        // one that still holds the row down.
+        // The pointer put on one row, as a frame under the cursor leaves the shell. The row is
+        // hovered, pressed and, where it is live, focused. The frame a click fires on is the one
+        // that still holds the row down.
         internal void PointAt(int index, OriginalRow row)
         {
-            _hover = index;
-            _pressed = index;
-            _pointer = (row.X + 3f, row.Y + 3f);
+            HoveredRow = index;
+            PressedRow = index;
+            Pointer = (row.X + 3f, row.Y + 3f);
             if (row.Enabled)
             {
-                _focus[(int)Screen] = index;
+                FocusedRow = index;
             }
         }
 
-        // A slider as the shell draws one: the slot, then the thumb at the value's own place on it,
-        // with the wash and the outline under a focused row and rectangles where the art is missing.
-        private void ComposeSlider(OriginalRow row, bool focused, List<BoardFill> fills, List<BoardPicture> pictures)
+        // A slider as the shell draws one: the slot, then the thumb at the value's own place on it.
+        // The wash and the outline stand under a focused row, and rectangles where art is missing.
+        private void ComposeSlider(OriginalRow row, bool focused, BoardLayers layers)
         {
             if (row.Slider is not { } slider)
             {
                 return;
             }
 
+            var fills = layers.Fills;
+            var pictures = layers.Pictures;
             var track = slider.Track;
             if (focused)
             {

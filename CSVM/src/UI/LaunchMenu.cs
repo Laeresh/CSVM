@@ -91,10 +91,10 @@ public sealed partial class LaunchMenu : CanvasLayer
     // onto the 19 presets (docs/formats/instant-action.md, "Screen controls"). Decoded, not a fit
     // to our own layout, do not "tidy" it to the item count.
     private const int PresetWindow = 14;
-    // The Controls list's window, and the three stepper rows above it (the seat, its mouse
-    // sensitivity, and which of the three keymaps is being edited, last so it stands over the list it
-    // picks). Flight alone owns 35 actions, so the list is windowed like the Table of Contents rather
-    // than shrinking the whole band to fit. TUNE.
+    // The Controls list's window, and the three stepper rows above it. The rows are the seat, its
+    // mouse sensitivity, and which of the three keymaps is being edited. The keymap row stands
+    // last, over the list it picks. Flight alone owns 35 actions, so the list is windowed like the
+    // Table of Contents rather than shrinking the whole band to fit. TUNE.
     private const int ControlsWindow = 14;
     private const int ControlsHeaderRows = 3;
     private const int ControlsPlayerRow = 0;
@@ -104,16 +104,16 @@ public sealed partial class LaunchMenu : CanvasLayer
     // abandon every staged edit, commit them. The original draws these as persistent buttons on
     // every category page; here they are the tail of the one list this presentation has. TUNE.
     private const int ControlsFooterRows = 3;
-    // The Options screen's stepper rows, above the Controls door and the apply row. The screen is a
-    // form the cursor walks top to bottom: the five gameplay settings (the three the Original
-    // presentation's GAME OPTIONS page draws, in its order, then the targeting switch and the
-    // rumble), the graphics mode, the four display settings in the order the Original
-    // presentation's VIDEO page draws them, the four volume levels in the order its AUDIO page draws
-    // them, then the two doors.
+    // The Options screen's stepper rows, above the Controls door and the apply row. The screen
+    // is a form the cursor walks top to bottom. First the five gameplay settings: the three the
+    // Original presentation's GAME OPTIONS page draws, in its order, then the targeting switch
+    // and the rumble. Then the graphics mode, and the four display settings in the order the
+    // Original presentation's VIDEO page draws them. Then the four volume levels in the order
+    // its AUDIO page draws them, then the two doors.
     private const int OptionsStepperRows = 14;
-    // How many Options rows show at once. Sixteen rows do not fit the band at 720p, and a band sized
-    // to all of them shrinks every row, so the screen is windowed at the Controls list's height,
-    // which is known to fit.
+    // How many Options rows show at once. Sixteen rows do not fit the band at 720p, and a band
+    // sized to all of them shrinks every row. The screen is windowed at the Controls list's
+    // height, which is known to fit.
     private const int OptionsWindow = ControlsWindow;
     // The Controls list's two column widths and the extra band width they need, in ems of the row
     // font and in 720p points. TUNE: measured against the longest shipped action name and the
@@ -121,10 +121,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     private const float ControlsLabelEms = 11f;
     private const float ControlsValueEms = 20f;
     private const float ControlsExtraWidth = 260f;
-    // The chip strip's separation, in authored board points like the rest of its shape, scaled
-    // through the same BoardFit the board itself draws at so the chips read like part of that
-    // screen. The face, the corner inset and the colours are SeatStrip's, shared with Original's
-    // own strip; the separation is Built-in's alone, since only this row measures its own text.
+    // The chip strip's separation, in authored board points like the rest of its shape. It is
+    // scaled through the same BoardFit the board itself draws at, so the chips read like part of
+    // that screen. The face, the corner inset and the colours are SeatStrip's, shared with
+    // Original's own strip. The separation is Built-in's alone, since only this row measures its
+    // own text.
     private const float ChipSeparation = 10f;
 
     // The three top-level modes, in MenuMode's ordinal order so the row index doubles as the
@@ -205,8 +206,8 @@ public sealed partial class LaunchMenu : CanvasLayer
     // The opening view as saved, null while never set, which the flight reads as Chase. Held as the
     // --view= word rather than the enum, the spelling the store carries.
     private string? _defaultViewChoice;
-    // The automatic head turn as saved, null while never set, which leaves the headLook.autohead
-    // config key deciding rather than overruling it with a default of this screen's own.
+    // The automatic head turn as saved, null while never set. Null leaves the headLook.autohead
+    // config key deciding, rather than overruling it with a default of this screen's own.
     private bool? _autoHeadTurnChoice;
     private string _graphicsChoice = GraphicsMode.Default;
     // The four display settings, stepped by the four rows under the graphics one. Each is stored as
@@ -215,8 +216,8 @@ public sealed partial class LaunchMenu : CanvasLayer
     // stale position.
     private string? _monitorChoice, _resolutionChoice, _displayModeChoice, _vsyncChoice;
     // The size the options file named when this screen opened, which the size row offers as an entry
-    // of its own (ResolutionSizes). Held apart from the stepped choice so a hand-written size stays
-    // in the list after a step lands elsewhere, and a step back reaches it again.
+    // of its own (ResolutionSizes). It is held apart from the stepped choice, so a hand-written
+    // size stays in the list after a step lands elsewhere. A step back then reaches it again.
     private string? _savedResolution;
     // The four volume levels as saved, null while never set, which the mixer reads as the shipped
     // default. A step that moves nothing leaves the field null, so walking a row writes no level
@@ -419,9 +420,10 @@ public sealed partial class LaunchMenu : CanvasLayer
     // instead (its own environment list is decoded, not this table's alphabetic one).
     private (string Name, string Code, bool DangerZones)[] CurrentChapters => ChaptersFor(_mode);
 
-    // Dogfight's two match rows under the map list, on the same screen rather than a step of their
-    // own: the setup is a map and two numbers, and a screen carrying one row would read as a step
-    // the pilot has to walk through. Free Flight draws neither, so its map screen is unchanged.
+    // Dogfight's two match rows sit under the map list, on the same screen rather than a step of
+    // their own. The setup is a map and two numbers, and a screen carrying one row would read as a
+    // step the pilot has to walk through. Free Flight draws neither, so its map screen is
+    // unchanged.
     private int MatchRowCount => _mode == MenuMode.Versus ? 2 : 0;
 
     // The mission types the picked environment's chapter actually offers: all four, minus Stunt
@@ -602,10 +604,10 @@ public sealed partial class LaunchMenu : CanvasLayer
         Names(InstantActionFeature.AircraftFor(militiaName), a => a);
 
     /// <summary>The pylons the Ammo Selection list offers for <paramref name="def"/>, in the
-    /// order it lists them: fill order under their PHYSICAL number, so the screen agrees with the
-    /// weapon gauge's belt lights rather than renumbering them 1..N. A fill-order entry the fit
-    /// leaves empty is left out, since it is a pylon the build never bought and the original
-    /// draws no field for one (docs/formats/campaign-screens.md, the ammo screen).</summary>
+    /// order it lists them. They stand in fill order under their PHYSICAL number, so the screen
+    /// agrees with the weapon gauge's belt lights rather than renumbering them 1..N. A fill-order
+    /// entry the fit leaves empty is left out. It is a pylon the build never bought, and the
+    /// original draws no field for one (docs/formats/campaign-screens.md, the ammo screen).</summary>
     public static IReadOnlyList<int> AmmoPylons(LoadoutDef? def)
     {
         var hp = def?.Hardpoints;
@@ -675,7 +677,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         }
 
         // The map screen's two match rows exist under Dogfight alone, so its own aid forces the
-        // mode the way the wizard's aids force theirs; plain `chapter` still opens on Free Flight.
+        // mode the way the wizard's aids force theirs. Plain `chapter` still opens on Free Flight.
         if (startScreen == "dogfight")
         {
             _modeIndex = (int)MenuMode.Versus;
@@ -1021,8 +1023,8 @@ public sealed partial class LaunchMenu : CanvasLayer
     private static int Wrap(int index, int count) => ((index % count) + count) % count;
 
     // One volume row's step, on the Original AUDIO page's own terms so the two presentations write
-    // the same levels: the keyboard step of that page's slider, clamped at both ends where every
-    // other row here wraps, since a step from silence must not land on full volume. A step that
+    // the same levels. It is the keyboard step of that page's slider, clamped at both ends where
+    // every other row here wraps. A step from silence must not land on full volume. A step that
     // moves nothing hands back the field unchanged, so a never-set level stays never set.
     private static int? StepLevel(int? level, int shipped, int dir)
     {
@@ -1291,11 +1293,12 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     // --- navigation ---
 
-    // Whether a campaign film owns this frame rather than the screen behind it: one standing in
-    // front of that screen does, and so does the tail of the press that ended one, which the screen
-    // never saw go down and would read as an edge of its own. swallowed says that frame still asks
-    // for a redraw, the screen having changed unread behind the film. The pointer's tail lasts
-    // until its button comes up, where every other press is spent on the frame it lands on.
+    // Whether a campaign film owns this frame rather than the screen behind it. One standing in
+    // front of that screen does, and so does the tail of the press that ended one. The screen
+    // never saw that press go down and would read it as an edge of its own. The swallowed flag
+    // says that frame still asks for a redraw, the screen having changed unread behind the film.
+    // The pointer's tail lasts until its button comes up, where every other press is spent on the
+    // frame it lands on.
     private bool CampaignFilmOwnsFrame(out bool swallowed)
     {
         swallowed = false;
@@ -1799,7 +1802,7 @@ public sealed partial class LaunchMenu : CanvasLayer
                 break;
             case Screen.Chapter:
                 // A match row's Accept is its own sideways step, so a row is walkable with one
-                // gesture; only a map row leaves the screen, which keeps the cursor on a map
+                // gesture. Only a map row leaves the screen, which keeps the cursor on a map
                 // whenever anything downstream reads the pick.
                 if (_chapterIndex >= CurrentChapters.Length)
                 {
@@ -2583,8 +2586,8 @@ public sealed partial class LaunchMenu : CanvasLayer
         content.AddThemeConstantOverride("separation", (int)(ZoneSeparation * s));
         content.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         // A windowed screen (the contents list, Controls, Options) draws a slice, and Row keeps
-        // taking the ABSOLUTE index (which is what the cursor comparison and the row text both
-        // read); every other screen draws its whole roster.
+        // taking the ABSOLUTE index. That index is what the cursor comparison and the row text
+        // both read. Every other screen draws its whole roster.
         int count = CurrentCount();
         int first = _screen switch
         {
@@ -2993,7 +2996,7 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     private string NearestAfterKillChoiceLabel() => _nearestAfterKillChoice == true ? "On" : "Off";
 
-    // The same two-way toggle read the other way round: a never-set rumble is ON, the way the
+    // The same two-way toggle read the other way round. A never-set rumble is ON, the way the
     // original ships force feedback, so a first press has to turn it off.
     private void ToggleRumbleChoice() => _rumbleChoice = _rumbleChoice == false;
 
@@ -3026,8 +3029,8 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     // The sizes the resolution row offers: the standing screen's own list, widened with the size the
     // options file named when the screen opened. A size written in by hand therefore stands in the
-    // row where it sorts for as long as the page is open, so a step off it can step back onto it,
-    // and only a step the player makes replaces it.
+    // row where it sorts for as long as the page is open. A step off it can step back onto it, and
+    // only a step the player makes replaces it.
     private SizeList ResolutionSizes() => ResolutionSetting.ScreenSizes().Including(_savedResolution);
 
     private string DisplayModeChoiceLabel() =>
@@ -3047,8 +3050,8 @@ public sealed partial class LaunchMenu : CanvasLayer
     }
 
     // Dead while the display mode owns the size, which borderless does. The saved size is left
-    // where it is rather than overwritten with the screen's, so picking Windowed or Fullscreen
-    // again gives the player back the size they chose.
+    // where it is rather than overwritten with the screen's. Picking Windowed or Fullscreen again
+    // then gives the player back the size they chose.
     private void StepResolutionChoice(int dir)
     {
         if (ResolutionSetting.Pinned(_displayModeChoice))
@@ -3075,9 +3078,9 @@ public sealed partial class LaunchMenu : CanvasLayer
         _vsyncChoice = words[DisplaySettingRows.Step(at, dir, words.Count)];
     }
 
-    // The size row's detail says what the size does under the mode standing with it, since it does
-    // something different in each and under borderless the row does not step at all; a stepper that
-    // refuses without saying why reads as a broken row.
+    // The size row's detail says what the size does under the mode standing with it. The size does
+    // something different in each mode, and under borderless the row does not step at all. A
+    // stepper that refuses without saying why reads as a broken row.
     private string ResolutionDetail()
     {
         if (ResolutionSetting.Pinned(_displayModeChoice))
@@ -3395,8 +3398,8 @@ public sealed partial class LaunchMenu : CanvasLayer
     }
 
     // The fit behind a roster row, or null when the table has no def flying that model. A custom
-    // row stands on its own build over that airframe's stock def, so its Ammo Selection list is
-    // the pylons it bought rather than the airframe's. Wingman indices land here too: wingmen
+    // row stands on its own build over that airframe's stock def. Its Ammo Selection list is the
+    // pylons it bought, not the airframe's. Wingman indices land here too: wingmen
     // are stock-only, and the roster's first eleven rows ARE the stock table in its order.
     private LoadoutDef? FitFor(int planeIndex)
     {
@@ -3621,8 +3624,8 @@ public sealed partial class LaunchMenu : CanvasLayer
         };
     }
 
-    // One Dogfight match row: the kill target, then the match clock. 0 on either reads as no
-    // limit, the meaning VersusMatch and the two flags already give it, and a match with neither
+    // One Dogfight match row: the kill target, then the match clock. A 0 on either reads as no
+    // limit, the meaning VersusMatch and the two flags already give it. A match with neither
     // limit set runs until somebody leaves.
     private string MatchRowText(int row) => row == 0
         ? $"Kill target     {LimitLabel(_setup.KillTarget, "")}"
@@ -3859,7 +3862,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             Screen.MissionType => "↑↓  Choose mission       ←→  Lives",
             Screen.WaveEdit or Screen.Wingmen or Screen.Options => "↑↓  Choose field       ←→  Change",
             // Dogfight's map screen carries the two match rows, whose stepper is an unbound axis
-            // nobody can guess at; Free Flight's map screen has nothing sideways and says so.
+            // nobody can guess at. Free Flight's map screen has nothing sideways and says so.
             Screen.Chapter when MatchRowCount > 0 => "↑↓  Choose map or rule       ←→  Change",
             _ => "↑↓  Navigate",
         };
@@ -3920,7 +3923,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         Screen.Hangar => _hangar?.Page.Detail(focus) ?? "",
         Screen.Campaign => _campaign?.Page.Detail(focus) ?? "",
         // One arm per row of the Options screen, in the order RowText writes them. A row that lost
-        // its arm would take the one under it and every row below would read one line wrong, so the
+        // its arm would take the one under it, and every row below would read one line wrong. The
         // two lists stay the same length.
         Screen.Options => focus switch
         {

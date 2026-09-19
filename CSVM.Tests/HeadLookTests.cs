@@ -5,10 +5,10 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The head-look laws: the snap direction table, the 2 rad/s
-/// free-look integration, the elevation clamp and azimuth wrap, the padlock's target bearing and
-/// its exit scan, and the exponential smoothing at the decoded rates (elevation 3.0/s, azimuth
-/// 5.0/s). <see cref="HeadLook"/> is engine-free, so none of this needs a live camera.
+/// The head-look laws: the snap direction table, the 2 rad/s free-look integration, the elevation
+/// clamp and azimuth wrap. The padlock's target bearing and its exit scan are here too, with the
+/// exponential smoothing at the decoded rates (elevation 3.0/s, azimuth 5.0/s).
+/// Everything in <see cref="HeadLook"/> is engine-free, so none of this needs a live camera.
 /// </summary>
 public class HeadLookTests
 {
@@ -280,9 +280,9 @@ public class HeadLookTests
         Assert.InRange(head.Azimuth, -Mathf.Pi, Mathf.Pi);
     }
 
-    // The two modes differ exactly here, which is the whole reason the original carries the state
-    // byte: a released pan holds the head where it was pointed in free-look, and the snap key puts
-    // the head back on the mode whose released direction returns it to straight ahead.
+    // The two modes differ exactly here, which is why the original carries the state byte. In
+    // free-look a released pan holds the head where it was pointed. The snap key puts the head
+    // back on the mode whose released direction returns it to straight ahead.
     [Fact]
     public void AReleasedPanHoldsTheHeadInFreeLookAndTheSnapKeyBringsItBack()
     {
@@ -306,9 +306,9 @@ public class HeadLookTests
         Assert.Equal(0f, head.TargetAzimuth, Tol);
     }
 
-    // The mode keys, the original's Access Snap Look Mode and Access Smooth Look Mode: each states
-    // which behaviour is live, and the smooth one centres the head on the way in, targets and shown
-    // angles together, as its own handler does.
+    // The mode keys are the original's Access Snap Look Mode and Access Smooth Look Mode. Each
+    // states which behaviour is live. The smooth one centres the head on the way in, targets and
+    // shown angles together, as its own handler does.
     [Fact]
     public void TheModeKeysStateTheModeAndTheSmoothOneCentresTheHead()
     {
@@ -345,8 +345,8 @@ public class HeadLookTests
         Assert.Equal(HeadLook.FreeLookRate * 0.1f, head.TargetAzimuth, Tol);
     }
 
-    // J: a held numpad direction pans at the decoded 2 rad/s along its own direction and the
-    // released key leaves the head where it was pointed, the original's state 1 read of the slots.
+    // J: a held numpad direction pans at the decoded 2 rad/s along its own direction. The released
+    // key leaves the head where it was pointed, the original's state 1 read of the slots.
     [Fact]
     public void InSmoothModeAHeldNumpadKeyPansAtTwoRadiansPerSecondAndTheHeadStaysOnRelease()
     {
@@ -393,8 +393,8 @@ public class HeadLookTests
         Assert.Equal(0f, head.TargetAzimuth, Tol);
     }
 
-    // The mouse follows the same two rules: in K it pans while its control is held and the head
-    // springs back when the control is released; in J it parks where it pointed.
+    // The mouse follows the same two rules. In K it pans while its control is held, and the head
+    // springs back when the control is released. In J it parks where it pointed.
     [Fact]
     public void TheMouseSpringsBackInSnapModeAndParksInSmoothMode()
     {
@@ -435,7 +435,7 @@ public class HeadLookTests
     }
 
     // One source owns the frame, so a numpad direction and a mouse pan arriving together do not
-    // both move the head: the numpad decides in either mode, and the pan is not added on top.
+    // both move the head. The numpad decides in either mode, and the pan is not added on top.
     [Fact]
     public void OneSourceOwnsTheFrameWhenBothDevicesMoveAtOnce()
     {
@@ -460,8 +460,8 @@ public class HeadLookTests
         Assert.NotEqual(0f, panOnly.TargetElevation);
     }
 
-    // Autohead is gated on the snap state in the original, so the idle hook is not consulted at all
-    // while free-look owns the head: that mode's idle frame holds the pose instead.
+    // Autohead is gated on the snap state in the original, so the idle hook is not consulted while
+    // free-look owns the head. That mode's idle frame holds the pose instead.
     [Fact]
     public void TheIdleHookIsSilentInFreeLookMode()
     {
@@ -477,8 +477,8 @@ public class HeadLookTests
         Assert.Equal(2, calls);
     }
 
-    // The held control is its own claim on the free-look arm: a mouse that has stopped moving is
-    // not a released button, so the head stays where the mouse put it and the shown angles settle
+    // The held control is its own claim on the free-look arm. A mouse that has stopped moving is
+    // not a released button. The head stays where the mouse put it, and the shown angles settle
     // onto that pose rather than chasing the centre.
     [Fact]
     public void AHeldControlOverAStillMouseHoldsTheLook()
@@ -500,8 +500,8 @@ public class HeadLookTests
         Assert.Equal(elevation, head.Elevation, 1e-3f);
     }
 
-    // In free-look, releasing the control leaves the head where the mouse put it, and the centre
-    // key is what brings it back: the original's state 1 zeroes the angles on that key alone.
+    // In free-look, releasing the control leaves the head where the mouse put it. The centre key
+    // brings it back: the original's state 1 zeroes the angles on that key alone.
     [Fact]
     public void ReleasingTheHeldControlHoldsTheLookAndTheCentreKeyBringsItBack()
     {
@@ -524,8 +524,8 @@ public class HeadLookTests
         Assert.Equal(LookMode.FreeLook, head.Mode);
     }
 
-    // The head still takes the delta while the control is held: the flag decides who owns the
-    // frame, not how far the pan goes, so a held pan reads exactly as the motion-only path did.
+    // The head still takes the delta while the control is held. The flag decides who owns the
+    // frame, not how far the pan goes, so a held pan reads as the motion-only path does.
     [Fact]
     public void AHeldControlStillPansAtTheDecodedRate()
     {
@@ -537,8 +537,8 @@ public class HeadLookTests
         Assert.Equal(motionOnly.TargetElevation, held.TargetElevation, Tol);
     }
 
-    // The arms above free-look keep their place: the centre key and the pad's absolute aim both
-    // claim the frame off a held control, so neither is stranded while the button is down.
+    // The arms above free-look keep their place. The centre key and the pad's absolute aim both
+    // claim the frame off a held control. Neither is stranded while the button is down.
     [Fact]
     public void TheCentreKeyAndThePadStillBeatAHeldControl()
     {
@@ -636,7 +636,7 @@ public class HeadLookTests
     [Fact]
     public void AutoheadAimsWhereTheNoseWillBeAfterTurnTimeBelowTheCap()
     {
-        // 0.04 half-angle rad/s of yaw: the lead's half-angle is 0.03, under the 0.0998 cap, so the
+        // 0.04 half-angle rad/s of yaw: the lead's half-angle is 0.03, under the 0.0998 cap. The
         // head turns by the full 2 × 0.03, the angle the plant's own step turns the nose by.
         var t = Lead(0f, 0.04f, 0f);
         Assert.Equal(2f * 0.04f * ShippedTurnTime, t.Azimuth, Tol);
@@ -646,7 +646,7 @@ public class HeadLookTests
     [Fact]
     public void AutoheadCapsTheLeadAtTwiceTurnMax()
     {
-        // A hard pull well past the cap: the half-angle stops at turn_max, so the head rises by
+        // A hard pull well past the cap: the half-angle stops at turn_max. The head rises by
         // twice it (the quaternion's doubling), not by the uncapped 2 × 1.5.
         var t = Lead(2f, 0f, 0f);
         Assert.Equal(2f * ShippedTurnMax, t.Elevation, Tol);
@@ -671,10 +671,10 @@ public class HeadLookTests
         Assert.True(t.Elevation > 0f, $"elevation {t.Elevation} under a pull");
     }
 
-    /// <summary>The shipped Black Hawk flown by the real plant in a sustained 60° banked pull each way:
-    /// the head leads into the turn, on the side the nose is heading, and settles back to centre once
-    /// the wings are rolled level and the stick released. The lead's direction is also checked
-    /// against where the nose really is <c>turn_time</c> later.</summary>
+    /// <summary>The shipped Black Hawk flown by the real plant in a sustained 60° banked pull each
+    /// way. The head leads into the turn, on the side the nose is heading. It settles back to
+    /// centre once the wings are rolled level and the stick released. The lead's direction is also
+    /// checked against where the nose really is <c>turn_time</c> later.</summary>
     [ExtractedDataTheory]
     [InlineData(1f)]    // right bank
     [InlineData(-1f)]   // left bank
@@ -722,8 +722,8 @@ public class HeadLookTests
             model.Step(new FlightInput { Throttle = 1f }, dt);
         }
 
-        // The plant keeps a small residual pitch and yaw rate after the roll-out, so "centre" is a
-        // small fraction of the turn's own lead rather than zero.
+        // The plant keeps a small residual pitch and yaw rate after the roll-out. "Centre" is
+        // therefore a small fraction of the turn's own lead, not zero.
         var level = HeadLook.AutoheadTarget(model.BodyRates, stats.AutoheadTurnTime,
             stats.AutoheadTurnMax, stats.AutoheadTurnMinPitch);
         float turning = new Vector2(elevation, azimuth).Length();
@@ -732,8 +732,8 @@ public class HeadLookTests
             $"bank {right}: wings level, the head must be back near centre, lead {settled} against the turn's {turning}, rates {model.BodyRates}");
     }
 
-    // Track Target (the original's state 2): the head holds the selected target's own bearing every
-    // frame, with no rate of its own, and the shown angles do all the smoothing there is.
+    // Track Target (the original's state 2): the head holds the selected target's own bearing
+    // every frame, with no rate of its own. The shown angles do all the smoothing there is.
 
     [Theory]
     [InlineData(0f, 0f, -100f, 0f, 0f)]                          // dead ahead
@@ -786,8 +786,8 @@ public class HeadLookTests
         Assert.Equal(Mathf.Pi / 2f, head.Azimuth, 1e-3f);
     }
 
-    // The only bound the padlock law carries is the placing view's own floor, so a target below a
-    // cockpit head holds at level while the chase camera's head follows it down.
+    // The only bound the padlock law carries is the placing view's own floor. A target below a
+    // cockpit head holds at level, while the chase camera's head follows it down.
     [Fact]
     public void TheViewsFloorIsTheOnlyClampAPadlockedHeadTakes()
     {
@@ -800,9 +800,9 @@ public class HeadLookTests
         Assert.Equal(-Mathf.Pi / 4f, chase.TargetElevation, Tol);
     }
 
-    // A target crossing dead astern flips the bearing's sign, and the head crosses the ±π seam by
-    // the short arc rather than unwinding through the nose: the wrap the original applies before
-    // every chase, which only this state reaches.
+    // A target crossing dead astern flips the bearing's sign. The head crosses the ±π seam by the
+    // short arc rather than unwinding through the nose. That is the wrap the original applies
+    // before every chase, which only this state reaches.
     [Fact]
     public void ATargetPassingBehindIsFollowedAcrossTheTailNotThroughTheFront()
     {
@@ -857,7 +857,7 @@ public class HeadLookTests
         Assert.Equal(-0.0524f, leaning.TargetElevation, Tol);
     }
 
-    // The exit scan is the eight direction slots and nothing else: the centre key and the pad's
+    // The exit scan is the eight direction slots and nothing else. The centre key and the pad's
     // absolute aim are polled and discarded while padlocked, as the original's own arm does.
     [Fact]
     public void ASnapDirectionLeavesPadlockWhileTheCentreKeyAndThePadDoNot()
@@ -895,8 +895,8 @@ public class HeadLookTests
 
     private static HeadLookInput Pad(float right, float up) => new(0f, 0f, 0f, 0f, false, right, up);
 
-    // The free-look control held, carrying whatever the mouse moved this frame: zero is the still
-    // mouse a held button cannot otherwise be told apart from a released one.
+    // The free-look control held, carrying whatever the mouse moved this frame. Zero stands for a
+    // still mouse, which the held flag tells apart from a released button.
     private static HeadLookInput Looking(float right = 0f, float up = 0f) =>
         new(0f, 0f, right, up, false, 0f, 0f, true);
 

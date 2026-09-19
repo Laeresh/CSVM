@@ -9,13 +9,13 @@ namespace CSVM.Session;
 
 /// <summary>
 /// The campaign Danger Zone photograph: one still per zone, written into the flying profile's own
-/// directory under the <c>Snap_&lt;mission&gt;_&lt;objective&gt;</c> name the scrapbook's capture
-/// rows resolve against (<c>docs/formats/campaign-screens.md</c>, "The danger-zone slot"). The
-/// objective number is the mission's own <c>dzones.zrd</c> <c>objective_numbers</c> entry, so the
-/// file the pilot writes and the row that draws it are named by the same data.
+/// directory. Its <c>Snap_&lt;mission&gt;_&lt;objective&gt;</c> name is the one the scrapbook's
+/// capture rows resolve against (<c>docs/formats/campaign-screens.md</c>, "The danger-zone slot").
+/// The objective number is the mission's own <c>dzones.zrd</c> <c>objective_numbers</c> entry.
+/// The file the pilot writes and the row that draws it are named by the same data.
 ///
-/// <para>A latch stages the file under a pending extension and <see cref="Commit"/> keeps it only
-/// for a won mission, which is how the original drops the photographs of a failed attempt.</para>
+/// A latch stages the file under a pending extension, and <see cref="Commit"/> keeps it only
+/// for a won mission. That is how the original drops the photographs of a failed attempt.
 /// </summary>
 public static class CampaignSnapshot
 {

@@ -22,16 +22,16 @@ namespace CSVM.Testing;
 internal static class MenuOriginalSuites
 {
     private const float Dt = 1f / 60f;
-    // A connection index past anything the platform hands out, so a seat placed on it is off the
+    // A connection index past anything the platform hands out. A seat placed on it is off the
     // roster whatever is plugged into the machine running the suite.
     private const int AbsentPad = 99;
 
-    // The scrapbook's Current Mission tab, the one plaque a campaign board puts in the top band:
-    // its art starts at authored x 558 and is 114 wide, so a chip row in the corner clears this.
+    // The scrapbook's Current Mission tab, the one plaque a campaign board puts in the top band.
+    // Its art starts at authored x 558 and is 114 wide, so a chip row in the corner clears this.
     private const float BookTabRight = 672f;
 
-    // The corner the [@GameOptions@] section authors its plate at, the art's own height, the pitch
-    // between its row panels and the line its two plaques stand on. Held here rather than read off
+    // The [@GameOptions@] section's authored plate: its corner, the art's own height, the pitch
+    // between row panels, and the line its two plaques stand on. Held here rather than read off
     // the layout so the check has something of its own to compare the composed page against.
     private const float AuthoredPlateY = 215f;
     private const float AuthoredPlateHeight = 289f;
@@ -402,7 +402,7 @@ internal static class MenuOriginalSuites
 
     // Seat 0 borrows every unclaimed pad, so a guest steering the menu before they press Start
     // leaves their own pad in its last-active reading. Both halves of what keeps a later claim off
-    // that pad: the claim skips a pad another seat holds, and a rebind of seat 0's set drops the
+    // that pad. The claim skips a pad another seat holds, and a rebind of seat 0's set drops the
     // reading it was taken from.
     private static void GuestPadClaim(
         TestContext ctx, MenuHost host, PlayerSetupFeature setup, MenuSeatDevices devices, MenuInput player1)
@@ -429,7 +429,7 @@ internal static class MenuOriginalSuites
 
     // Steam Input re-enumerates its virtual pads mid-menu, and a seat that leaves on every blip is
     // the join flow coming apart. The roster is live here because --no-pads has none to come back
-    // to, over a pad index no real device can hold, so the grace is what decides.
+    // to. The pad index is one no real device can hold, so the grace is what decides.
     private static void PadBlipGrace(
         TestContext ctx, MenuHost host, PlayerSetupFeature setup, MenuSeatDevices devices, MenuInput player1)
     {
@@ -472,7 +472,7 @@ internal static class MenuOriginalSuites
     }
 
     // Whether the strip is the chip row Built-in draws: the player tags alone, each in its own
-    // seat's ink, on one line of the corner and beginning right of the book tab.
+    // seat's ink. The row sits on one line of the corner and begins right of the book tab.
     private static bool StripIsChipRow(OriginalShell shell, out string report)
     {
         var chips = new List<BoardLine>();
@@ -501,7 +501,7 @@ internal static class MenuOriginalSuites
         return ok;
     }
 
-    // The host's switch between presentations, Deactivate, Select and Show: from mid-setup on the
+    // The host's switch between presentations: Deactivate, Select and Show. From mid-setup on the
     // Free Flight screen, Deactivate discards the feature's pick and Built-in opens on its Mode screen.
     private static void SwitchToBuiltIn(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell)
     {
@@ -523,12 +523,12 @@ internal static class MenuOriginalSuites
         ctx.Check(menu?.ShownRowCount == 6, $"whose sixth row is the Options door ({menu?.ShownRowCount})");
     }
 
-    // Built-in's Options route: the last Mode row opens Options, Right steps the difficulty to
-    // Hard, the two rows under it step the opening view and the automatic head turn, the two under
-    // those the targeting setting and the rumble, then the graphics mode (no presentation row: the
-    // command line alone chooses one), the four display rows step over the machine's own screens
-    // and sizes, the four volume rows step the levels the AUDIO page writes, and the apply row's
-    // Accept leaves as the one exit the launcher persists every choice from.
+    // Built-in's Options route: the last Mode row opens Options, and Right steps the difficulty to
+    // Hard. The two rows under it step the opening view and the automatic head turn, the two under
+    // those the targeting setting and the rumble. The graphics mode row comes next; the command
+    // line alone chooses a presentation, so no row does. The four display rows step over the
+    // machine's own screens and sizes. The four volume rows step the levels the AUDIO page writes.
+    // The apply row's Accept is the one exit the launcher persists every choice from.
     private static void BuiltInOptionsRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, List<MenuExit> exits)
     {
         var menu = (host.Active as BuiltInPresentation)?.Menu;
@@ -650,7 +650,7 @@ internal static class MenuOriginalSuites
         ctx.Check(menu.ShownRowText == "Display mode: Fullscreen",
             $"Right steps it one word along the vocabulary ({menu.ShownRowText})");
 
-        // Back up to the size row, which exclusive fullscreen leaves to the player: the pin above
+        // Back up to the size row, which exclusive fullscreen leaves to the player. The pin above
         // is the mode's and not the row's, and this mode flies at the size the row names.
         Press(host, seat, Up);
         Press(host, seat, Right);
@@ -675,7 +675,7 @@ internal static class MenuOriginalSuites
         return (MonitorSetting.Word(stepped), size, DisplayWords.Fullscreen, "144");
     }
 
-    // The four volume rows, walked from the V-Sync row on a mix nothing has saved: each shows the
+    // The four volume rows, walked from the V-Sync row on a mix nothing has saved. Each shows the
     // shipped level, steps by the AUDIO page's own keyboard step, and clamps at both ends. A step
     // that moves nothing writes nothing, so Master stepped up off full stays never set.
     private static void BuiltInAudioRows(TestContext ctx, MenuHost host, ScriptedSeat seat, LaunchMenu menu)
@@ -722,10 +722,10 @@ internal static class MenuOriginalSuites
         return false;
     }
 
-    // Original's own Options route over the install's decoded sections: PREFERENCES opens the
-    // Preferences page, its GAME OPTIONS door the decoded page, whose rows take every choice and
-    // whose CANCEL CHANGES drops them; the walk leaves the top level as it found it. The first
-    // three rows are the original's own, in its order, the two after them this port's.
+    // Original's own Options route over the install's decoded sections. PREFERENCES opens the
+    // Preferences page, and its GAME OPTIONS door the decoded page. That page's rows take every
+    // choice, and its CANCEL CHANGES drops them. The walk leaves the top level as it found it.
+    // The first three rows are the original's own, in its order, the two after them this port's.
     private static void OriginalOptionsRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, List<MenuExit> exits)
     {
         WalkTo(host, seat, shell, "MM_B_PREFERENCES");
@@ -761,7 +761,7 @@ internal static class MenuOriginalSuites
         ctx.Check(shell.Options.OpenGameOption == OriginalOptionsScreen.DefaultViewKey && shell.Rows.Count == 3,
             $"Accept on the Default View row under it opens the dropdown over the original's three views ({shell.Options.OpenGameOption}, {shell.Rows.Count})");
         // The list opens on the item the row stands at, which with nothing saved is the last of the
-        // three, so one step down wraps onto the first.
+        // three. One step down wraps onto the first.
         Press(host, seat, Down);
         Press(host, seat, Accept);
         ctx.Check(shell.Options.DefaultViewChoice == CSVM.Flight.PilotView.Name(CSVM.Flight.PilotViewMode.Cockpit),
@@ -789,10 +789,10 @@ internal static class MenuOriginalSuites
         WalkTo(host, seat, shell, OriginalShell.FreeFlightKey);
     }
 
-    // The grown plate and what stands on it: the page carries more rows than the section's three, so
-    // the plate is drawn as a head, the repeated row band and a tail instead of one picture, it
-    // reaches a whole band further down than the art it is cut from, the two plaques stand that same
-    // band below their authored line, and no row's own reach crosses the moved plaque line.
+    // The grown plate and what stands on it. The page carries more rows than the section's three.
+    // The plate is drawn as a head, the repeated row band and a tail rather than one picture. It
+    // reaches a whole band further down than the art it is cut from. The two plaques stand that
+    // same band below their authored line, and no row's own reach crosses the moved plaque line.
     private static void OriginalGameOptionsPlate(TestContext ctx, OriginalShell shell, ComposedBoard board)
     {
         var plate = new List<BoardPicture>();
@@ -911,7 +911,7 @@ internal static class MenuOriginalSuites
         ctx.Check(shell.Options.MonitorChoice != null
             && OptionsStore.TryParseMonitorIndex(shell.Options.MonitorChoice, out int picked) && picked < shell.Options.MonitorWords.Count,
             $"and a sideways step on it takes a screen this machine has ({shell.Options.MonitorChoice ?? "unset"} of {shell.Options.MonitorWords.Count})");
-        // The size row under the borderless default, which owns the size: it draws dead and the
+        // The size row under the borderless default, which owns the size. It draws dead and the
         // walk cannot land on it, so the row the walk ends on is what the check names.
         WalkTo(host, seat, shell, OriginalOptionsScreen.ResolutionKey);
         ctx.Check(shell.Options.ResolutionPinned && Row(shell, OriginalOptionsScreen.ResolutionKey) is { Enabled: false }
@@ -930,7 +930,7 @@ internal static class MenuOriginalSuites
         ctx.Check(shell.Options.DisplayModeChoice == DisplayWords.Fullscreen,
             $"a sideways step on the focused row takes the display mode after the borderless default ({shell.Options.DisplayModeChoice ?? "unset"})");
         // The row's own words are this machine's screen sizes, so what it steps to is read back off
-        // the shell rather than named: the claim is that the step lands on a size the screen offers
+        // the shell rather than named. The claim is that the step lands on a size the screen offers,
         // and not on the screen's own size the row opened at.
         WalkTo(host, seat, shell, OriginalOptionsScreen.ResolutionKey);
         Press(host, seat, Right);

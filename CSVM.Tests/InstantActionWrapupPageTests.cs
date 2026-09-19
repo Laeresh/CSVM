@@ -6,9 +6,10 @@ using Xunit;
 
 namespace CSVM.Tests;
 
-/// <summary>The Original presentation's Instant Action wrap-up page, read off one frozen snapshot:
-/// the heading, the four decoded rows against <c>[@IA_WrapUp@]</c>'s own geometry, and the further
-/// lines the built-in board carries (<c>docs/formats/instant-action/wrap-up.md</c>).</summary>
+/// <summary>The Original presentation's Instant Action wrap-up page, read off one ended mission's
+/// snapshot. It checks the heading, the four decoded rows against <c>[@IA_WrapUp@]</c>'s own
+/// geometry, and the further lines the built-in board carries
+/// (<c>docs/formats/instant-action/wrap-up.md</c>).</summary>
 public class InstantActionWrapupPageTests
 {
     // A won stunt flight: 3:06 flown, four kills, three zones, 27% of the rounds on target.

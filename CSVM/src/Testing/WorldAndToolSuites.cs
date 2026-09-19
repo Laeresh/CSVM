@@ -233,7 +233,7 @@ internal static class WorldAndToolSuites
                 ctx.Check(node != null, $"the interior carries {panel}");
                 ctx.Check(node is not { Visible: true }, $"{panel} is built hidden (torn state off)");
             }
-            // ⚠ The windshield bullet-hole quads and the two warning lamps ship active:true, so an
+            // ⚠ The windshield bullet-hole quads and the two warning lamps ship active:true. An
             // unparked build renders white splats across the sky on a pristine plane. The parking
             // follows reset_bulletholes: the bulNx quads dark, the bulletN groups over them drawn.
             foreach (var lamp in new[] { "lowalt_on", "stallwarning_on" })
@@ -309,12 +309,12 @@ internal static class WorldAndToolSuites
         }
     }
 
-    // The photograph's fill light. A suite cannot read pixels back, so it proves the three things
-    // the pixels follow from: the faithful aircraft shader swaps its ambient half for the fill only
-    // at an armed eye, the photograph's frame arms that eye on its own pilot's instances alone and
-    // the pane stands out of reach of it, and the end of the frame disarms every one. The fill's
-    // level is C1's zone through the decoded law. Able to fail: an unarmed airframe, a stranger's
-    // plane armed, a pane within reach, or an instance left armed after the frame.
+    // The photograph's fill light, proved in the three things the pixels follow from, since a
+    // suite cannot read pixels back. The faithful aircraft shader swaps its ambient half for the
+    // fill only at an armed eye. The photograph's frame arms that eye on its own pilot's instances
+    // alone, and the pane stands out of reach of it. The end of the frame disarms every one. The
+    // fill's level is C1's zone through the decoded law. Able to fail: an unarmed airframe, a
+    // stranger's plane armed, a pane within reach, or an instance left armed after the frame.
     [Suite("danger-zone-photograph-fill",
         "the Danger Zone photograph's frame raises its own pilot's aircraft to the decoded fill ambient for its eye alone: the pane on the same frame is out of reach, another plane is never armed, and the next frame is disarmed")]
     internal static void DangerZonePhotographFill(TestContext ctx)
@@ -450,7 +450,7 @@ internal static class WorldAndToolSuites
                     - CameraController.HorizontalToVerticalFovDeg(80f)) < 0.001f,
                 $"the pass's FOV law is the camera's own per-mode law");
             // The other half of that table: every pose outside the interior takes the one decoded
-            // base, whatever FOV the camera arrived carrying, so no caller writes its own number
+            // base, whatever FOV the camera arrived carrying. No caller writes its own number
             // beside the camera and expects the controller to hand it back.
             var probeCam = new Camera3D { Fov = 12f };
             host.AddChild(probeCam);
@@ -492,7 +492,7 @@ internal static class WorldAndToolSuites
         }
     }
 
-    // The authored panel driven off live readings (PLAN-cockpit-panel): the needles take an absolute angle and
+    // The authored panel driven off live readings: the needles take an absolute angle and
     // the two lamps follow the cluster's own blink state. Able to fail: a needle left at its modeled
     // rest rotation, a lamp still parked while its condition holds, or a drive that moves the panel
     // geometry around the needle instead of the needle itself.
@@ -545,7 +545,7 @@ internal static class WorldAndToolSuites
             ctx.Check(Mathf.Abs(Mathf.AngleDifference(speed.Transform.Basis.GetEuler().Z, wantSpeed)) < 0.01f,
                 $"a second frame writes the same absolute angle rather than turning again");
 
-            // The horizon (PLAN-cockpit-panel B12): N = Rz(-roll) . Rx(pitch), no gain/offset/clamp. A zero
+            // The horizon: N = Rz(-roll) . Rx(pitch), no gain/offset/clamp. A zero
             // attitude first, since that has to equal the authored rest basis exactly.
             ctx.Check(horizon != null && horizonRest != null, $"the interior carries pfhorizon");
             if (horizon != null && horizonRest != null)
@@ -611,7 +611,7 @@ internal static class WorldAndToolSuites
         }
     }
 
-    // The belt lights take the loadout's colour tier (PLAN-cockpit-panel). A pristine plane reads all-green,
+    // The belt lights take the loadout's colour tier. A pristine plane reads all-green,
     // which proves nothing, so this drives a spent belt and reads the material back. Able to fail:
     // a drive that recolours nothing, or one that writes the shared built material and so repaints
     // every indicator at once instead of the one position. Binds through CockpitGauges.Bind(builder),
@@ -858,8 +858,8 @@ internal static class WorldAndToolSuites
 
     // ---- needs a chapter world ------------------------------------------------------------------
 
-    // The four every-chapter censuses in one pass, because the world build is nearly the whole
-    // cost of each and four suites building the same eight chapters paid it four times over.
+    // The four every-chapter censuses in one pass. The world build is nearly the whole cost of
+    // each, and four suites building the same eight chapters pay it four times over.
     [Suite("chapter-census",
         "every chapter's built world, once each with collision: nothing a chapter hides is left "
         + "solid (no enabled collider under an invisible node), the ground answers a ray from "
@@ -1168,10 +1168,10 @@ internal static class WorldAndToolSuites
         ctx.Note($"{chapter} bare firtree1={bareFir1} firtree2={bareFir2}; dressed firtree1={dressedFir1} firtree2={dressedFir2}; scales {lo:0.000}-{hi:0.000}");
     }
 
-    // A decoration model is a node chain, and the mesh node under its `.flt` top may translate: C5's
-    // w_lightglow sits 4.75 m up, the lamp head's height. Asserted as an A/B against the same build
-    // with that chain transform cleared, which is the state the stamp had while it dropped it, so
-    // the control both fails able and shows the move is confined to the glow.
+    // A decoration model is a node chain, and the mesh node under its `.flt` top may translate.
+    // C5's w_lightglow sits 4.75 m up, the lamp head's height. Asserted as an A/B against the same
+    // build with that chain transform cleared. The control both fails able and shows the move is
+    // confined to the glow.
     [Suite("clutter-mesh-lift",
         "C5's lamp glow stamps 4.75 m up its own decoration chain, and clearing that chain moves the glow alone")]
     internal static void ClutterMeshLift(TestContext ctx)
@@ -1374,8 +1374,8 @@ internal static class WorldAndToolSuites
             $"C1B's night zone lights the aircraft under half as hard as C1C's day zone");
         ctx.Check(nightAmbient < dayAmbient * 0.5f,
             $"and its ambient fill is under half of C1C's too");
-        // The energy counts only where the renderer reads it, which is a colour-sourced ambient:
-        // on the sky source Godot takes the fill off the procedural cubemap and both the colour
+        // The energy counts only where the renderer reads it, which is a colour-sourced ambient.
+        // On the sky source Godot takes the fill off the procedural cubemap. Both the colour
         // and the energy written here are ignored (docs/verification.md WORLD-32).
         ctx.Check(night.Source == Godot.Environment.AmbientSource.Color,
             $"the zone apply leaves the Environment's ambient colour-sourced (got {night.Source})");
@@ -1854,8 +1854,9 @@ internal static class WorldAndToolSuites
         ctx.Check(lights.CommittedPositions.Count == 1 && lights.CommittedPositions.Contains(nearP1),
             $"one viewer (single player) uses the single-viewer distance rule");
 
-        // The packed factor is the authored colour times ambient + diffuse, unconverted: the MP2 flag
-        // lights' 0.3 + 1.0 scale it by 1.3, and a light authoring neither (scalar 1) packs its colour.
+        // The packed factor is the authored colour times ambient + diffuse, unconverted. The MP2
+        // flag lights' 0.3 + 1.0 scale it by 1.3, and a light authoring neither (scalar 1) packs
+        // its colour.
         var heLight = new Color(1f, 0.86f, 0.29f);
         lights.Begin();
         lights.Add(nearP1, heLight, 1f, 10f);
@@ -1868,7 +1869,7 @@ internal static class WorldAndToolSuites
         ctx.Check(!lights.CommittedFactors[0].IsEqualApprox(heLight.SrgbToLinear()),
             $"ABLE-TO-FAIL CONTROL: the packed factor is not the linearised colour the enhanced omni takes");
 
-        // The term has no N.L: the include never takes a dot product, so a surface facing away from
+        // The term has no N.L: the include never takes a dot product. A surface facing away from
         // the light gains exactly what a surface facing it does.
         string include = Godot.FileAccess.GetFileAsString("res://shaders/csky_lights.gdshaderinc");
         ctx.Check(include.Contains("csky_point_light", System.StringComparison.Ordinal)
@@ -1946,7 +1947,7 @@ internal static class WorldAndToolSuites
             long perNode = PerNodeWalkCost(effectRoot);
 
             // The same cycle before anything unrelated is faded, which is the comparison the
-            // process-wide fast path used to turn on: reported, not asserted, since a suite that
+            // process-wide fast path turns on: reported, not asserted, since a suite that
             // ran earlier in this process may already have left a faded root of its own behind.
             WorldCollision.TakeWalkSteps();
             Fade(effectRoot, faded);
@@ -2075,10 +2076,10 @@ internal static class WorldAndToolSuites
         return (meshes, merged);
     }
 
-    // One mission's ZONE1 lighting, off a rig of its own so the two missions cannot share state:
-    // the two energies, the ambient as the renderer will read it (source and colour), and the
-    // authored colour it should be, read straight off the file for comparison. The Environment is
-    // a bare one, so every field returned is a value the zone apply itself wrote.
+    // One mission's ZONE1 lighting, off a rig of its own so the two missions cannot share state.
+    // The two energies come back, with the ambient as the renderer will read it (source and
+    // colour). The authored colour it should be is read straight off the file for comparison. The
+    // Environment is a bare one, so every field returned is a value the zone apply itself wrote.
     // ⚠ --sky-zone=zone1 on purpose. The default request is zone2, the ABOVE-cloud zone, and
     // comparing two missions' cloud tops is not the night-against-day question.
     private static (float Sun, float Ambient, Godot.Environment.AmbientSource Source, Color Color, Color Authored) ZoneEnergies(
@@ -2179,9 +2180,9 @@ internal static class WorldAndToolSuites
     }
 
 
-    // Every distinct Shader a subtree draws through, over all four seats a built world uses: a
-    // GeometryInstance3D's override and overlay, a MeshInstance3D's per-surface materials, and a
-    // MultiMeshInstance3D's shared mesh surfaces.
+    // Every distinct Shader a subtree draws through, over all four seats a built world uses. That
+    // covers a GeometryInstance3D's override and overlay, a MeshInstance3D's per-surface
+    // materials, and a MultiMeshInstance3D's shared mesh surfaces.
     private static void CollectShaders(Node node, HashSet<Shader> found)
     {
         if (node is GeometryInstance3D geo)
@@ -2225,10 +2226,10 @@ internal static class WorldAndToolSuites
         }
     }
 
-    // Which generator emitted a shader, by a token only that generator writes: the world mesh alone
-    // carries a depth bias, the templates clutter alone dithers its far fade, of the two remaining
-    // spinning arms only the cylindrical facade builds a spin basis, and the ambient cloud field
-    // alone declares far_fade. Anything else is the camera-facing billboard.
+    // Which generator emitted a shader, by a token only that generator writes. The world mesh
+    // alone carries a depth bias, and the templates clutter alone dithers its far fade. Of the two
+    // remaining spinning arms only the cylindrical facade builds a spin basis. The ambient cloud
+    // field alone declares far_fade. Anything else is the camera-facing billboard.
     private static string ArmOf(string code) =>
         code.Contains("uniform float depth_bias", System.StringComparison.Ordinal) ? "world"
         : code.Contains("csky_clutter_dither_keep", System.StringComparison.Ordinal) ? "clutter"
@@ -2241,9 +2242,9 @@ internal static class WorldAndToolSuites
         : string.Join(" ", byArm.OrderBy(p => p.Key, System.StringComparer.Ordinal)
             .Select(p => $"{p.Key}={p.Value}"));
 
-    // The Danger Zone camera's frame over a Nose view, which hides the most: every hidden airframe
-    // group shows for the photograph on a layer no pane draws, the interior stays out, and the end of
-    // the frame puts every group's visibility and every mesh's layers back exactly.
+    // The Danger Zone camera's frame over a Nose view, which hides the most. Every hidden airframe
+    // group shows for the photograph on a layer no pane draws, and the interior stays out. The end
+    // of the frame puts every group's visibility and every mesh's layers back exactly.
     private static void PhotographFrame(TestContext ctx, CockpitVisibility cockpit, Node3D interior,
         Node3D? body, Node3D? markers, Node3D? dontmove)
     {

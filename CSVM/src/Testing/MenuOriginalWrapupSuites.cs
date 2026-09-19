@@ -13,9 +13,9 @@ using Godot;
 namespace CSVM.Testing;
 
 /// <summary>
-/// The Original presentation's Instant Action wrap-up page over the install's decoded layout: a
-/// real <see cref="InstantActionRuntime"/> is ended and held, the frozen snapshot crosses the
-/// session boundary the way the launcher hands it over, the page draws the four decoded rows and
+/// The Original presentation's Instant Action wrap-up page over the install's decoded layout.
+/// A real <see cref="InstantActionRuntime"/> is ended and held. The ending's snapshot crosses the
+/// session boundary the way the launcher hands it over. The page draws the four decoded rows and
 /// the further lines the built-in board carries, and CONTINUE lands back on the Instant Action
 /// screen. Readings: docs/formats/instant-action/wrap-up.md.
 /// </summary>
@@ -23,7 +23,7 @@ internal static class MenuOriginalWrapupSuites
 {
     [Suite("menu-original-wrapup",
         "Original's Instant Action wrap-up page end to end over the install's decoded layout: a real "
-        + "runtime's ending freezes the four counters and holds, nothing leaves for the menu until "
+        + "runtime's ending records the four counters as final and holds, nothing leaves for the menu until "
         + "the hold ends, the handover then opens the decoded [@IA_WrapUp@] page with the magazine "
         + "spread, the four brushstrokes, the heading and the eight row lines off the snapshot, the "
         + "context and the stunt splits (without their total) on a yellow post-it and a ticked box "
@@ -81,8 +81,8 @@ internal static class MenuOriginalWrapupSuites
         }
     }
 
-    // The seam the director and the launcher make between them: the numbers are read once at the
-    // ending, the hold runs with the world still up, and only the hold's end sends them to the menu.
+    // The seam the director and the launcher make between them. The numbers are read once at the
+    // ending, and the hold runs with the world still up. Only the hold's end sends them to the menu.
     private static void Handover(TestContext ctx, MenuHost host, OriginalShell shell)
     {
         var run = new InstantActionRuntime(
@@ -102,7 +102,7 @@ internal static class MenuOriginalWrapupSuites
         run.Advance(186f);
         run.ReportObjective(InstantActionObjective.AceDown);
         ctx.Check(frozen != null && shell.Screen != OriginalScreen.InstantActionWrapup,
-            $"the ending freezes the numbers with the world still up and no page yet ({shell.Screen})");
+            $"the ending makes the numbers final with the world still up and no page yet ({shell.Screen})");
         run.Advance(InstantActionRuntime.WrapupHoldS);
         ctx.Check(shell.Screen == OriginalScreen.InstantActionWrapup && shell.Wrapup.Snapshot != null,
             $"the hold's end hands the snapshot to the menu's own page ({shell.Screen})");
@@ -117,10 +117,10 @@ internal static class MenuOriginalWrapupSuites
         var text = board.Lines.Select(l => l.Text).ToList();
         ctx.Check(text.Contains("Instant Action"), $"the decoded heading stands over the page ({text.Count} lines)");
         ctx.Check(text.Contains("Time to Complete Mission") && text.Contains("03:06"),
-            $"the time row reads the frozen clock ({string.Join(" / ", text)})");
-        ctx.Check(text.Contains("Enemies Shot Down") && text.Contains("4"), $"the kill row reads the frozen tally");
-        ctx.Check(text.Contains("Danger Zones Completed") && text.Contains("3"), $"the zone row reads the frozen count");
-        ctx.Check(text.Contains("Shot %") && text.Contains("27%"), $"the shot row reads the frozen percentage");
+            $"the time row reads the final clock ({string.Join(" / ", text)})");
+        ctx.Check(text.Contains("Enemies Shot Down") && text.Contains("4"), $"the kill row reads the final tally");
+        ctx.Check(text.Contains("Danger Zones Completed") && text.Contains("3"), $"the zone row reads the final count");
+        ctx.Check(text.Contains("Shot %") && text.Contains("27%"), $"the shot row reads the final percentage");
 
         var backdrop = board.Backdrop.FirstOrDefault();
         ctx.Check(backdrop != null && backdrop.Art.Name.Length > 0,
@@ -167,7 +167,7 @@ internal static class MenuOriginalWrapupSuites
     }
 
     // A real camera's shots over C4/IA1's markers reach the page in marker order, beside the
-    // post-its; the last frame is held back past the page waking and fills its print on landing.
+    // post-its. The last frame is held back past the page waking and fills its print on landing.
     private static void Photographs(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit)
     {
         string gamez = SessionPaths.ChapterGamez(ctx.DataRoot, "C4");
@@ -247,9 +247,9 @@ internal static class MenuOriginalWrapupSuites
             $"…and its print takes the cursor from then on");
     }
 
-    // The prints open full size: the cursor walks CONTINUE and the landed prints, confirm opens one
-    // in the presentation's viewer from its PNG, Back closes it with the cursor back on its print,
-    // and the pointer does the same, a click anywhere on the open photograph closing it. The print
+    // The prints open full size. The cursor walks CONTINUE and the landed prints. Confirm opens one
+    // in the presentation's viewer from its PNG. Back closes it with the cursor back on its print.
+    // The pointer does the same, a click anywhere on the open photograph closing it. The print
     // whose frame is still on its way takes neither.
     private static void Viewer(
         TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, BoardFit fit, int pending)

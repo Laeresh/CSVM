@@ -168,24 +168,11 @@ public sealed partial class GunVoice : Node3D
     internal (string Name, Vector3 Position, float RangeMax, float Cull) Emitter() =>
         (_cue, _player.GlobalPosition, _rangeMax, _cull);
 
-    // ⚠ The cull is the cue's OWN WeaponSoundCue.CullDistance, not EngineAudioCurves.CullDistance:
-    // a turret loop is authored audible to 200 m, far inside the engine routine's 2000, so that
-    // number could never bite first and reading it here would be a borrowed constant.
     private void Sound()
     {
         float dist = Mathf.Sqrt(AudioListeners.NearestDistanceSq(this, _listeners));
-        bool culled = dist > _cull;
+        bool culled = GunLoopSound.Apply(_player, dist, _cull, _rangeMin, _rangeMax, _volume);
         SetCulled(culled, dist);
-        if (culled)
-        {
-            _player.Stop();
-            return;
-        }
-        _player.VolumeDb = SoundFalloff.SessionGainDb(dist, _rangeMin, _rangeMax, _volume);
-        if (!_player.Playing)
-        {
-            _player.Play();
-        }
     }
 
     // The first shot and every transition after it, always logged: audio cannot be
@@ -199,5 +186,33 @@ public sealed partial class GunVoice : Node3D
         }
         _culled = culled;
         Log.Debug("sound", $"gun voice {_label} {(culled ? "culled" : "audible")} at {dist:0} m, {SoundFalloff.SessionGainDb(dist, _rangeMin, _rangeMax, _volume):0.0} dB (cull {_cull:0} m, range x{SoundFalloff.RangeScale:0.###})");
+    }
+}
+
+/// <summary>The cull test and per-frame level every gun firing loop shares: a mount's voice here
+/// and an AI aircraft's caliber loop alike. The cull is the cue's own
+/// <see cref="WeaponSoundCue.CullDistance"/>, never EngineAudioCurves.CullDistance. A gun loop is
+/// authored audible to 150-550 m, far inside the engine-audio routine's 2000 m. That number never
+/// bites first, so reading it here would be a borrowed constant.</summary>
+internal static class GunLoopSound
+{
+    /// <summary>Stops <paramref name="player"/> past <paramref name="cull"/> metres, and otherwise
+    /// levels it by the decoded law and starts it. True when the distance culled it. The level is
+    /// written on every call, not once at the start. Emitter and listener are both flying, so one
+    /// level is the level of wherever they were then.</summary>
+    internal static bool Apply(AudioStreamPlayer3D player, float dist, float cull, float rangeMin,
+        float rangeMax, float volume)
+    {
+        if (dist > cull)
+        {
+            player.Stop();
+            return true;
+        }
+        player.VolumeDb = SoundFalloff.SessionGainDb(dist, rangeMin, rangeMax, volume);
+        if (!player.Playing)
+        {
+            player.Play();
+        }
+        return false;
     }
 }

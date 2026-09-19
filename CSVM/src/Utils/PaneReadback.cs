@@ -59,7 +59,7 @@ public static class PaneReadback
         return true;
     }
 
-    // The render target formats the bytes can be taken as-is from. Anything else keeps the engine's
+    // The render target formats the bytes can be taken as-is from. Anything else keeps Godot's
     // own conversion by reading synchronously.
     private static bool IsRgba8(RenderingDevice.DataFormat format) =>
         format is RenderingDevice.DataFormat.R8G8B8A8Unorm or RenderingDevice.DataFormat.R8G8B8A8Srgb;

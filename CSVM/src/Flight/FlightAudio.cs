@@ -445,10 +445,10 @@ public partial class FlightAudio : Node
         return name;
     }
 
-    /// <summary>Steps the slot's damage phase (<see cref="EngineAudioCurves.StepEnginePhase"/>, the
-    /// rule <see cref="AiEngineAudio"/> runs too) and acts on a change: the edge silences the slot,
-    /// the fired re-arm timer starts <c>damaged_engine_sound</c> at a drawn multiplier, and a
-    /// cleared mask restores the healthy loop at once. While healthy, the view picks the stream.</summary>
+    // Steps the slot's damage phase with EngineAudioCurves.StepEnginePhase, the rule AiEngineAudio
+    // runs too, and acts on a change. The edge silences the slot, the fired re-arm timer starts
+    // damaged_engine_sound at a drawn multiplier, and a cleared mask restores the healthy loop at
+    // once. While healthy, the view picks the stream.
     private void UpdateEngineSlot(float dt, bool damaged, bool cockpitView)
     {
         if (_engine == null)

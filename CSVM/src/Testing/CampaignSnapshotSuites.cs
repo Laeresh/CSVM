@@ -99,7 +99,7 @@ internal static class CampaignSnapshotSuites
 
         string forced = $"{CampaignSnapshot.Width}x{CampaignSnapshot.Height}";
         ctx.Check(row.Scrap.Region == null,
-            $"row {mission.Ordinal}_{row.Spread}_{row.Scrap.Item} forces no region of its own, so the engine's {forced} applies");
+            $"row {mission.Ordinal}_{row.Spread}_{row.Scrap.Item} forces no region of its own, so the original's {forced} applies");
         report.AppendLine($"{Chapter}/{Mission} ordinal {mission.Ordinal}: '{Zone}' -> objective {objective} "
             + $"-> row {mission.Ordinal}_{row.Spread}_{row.Scrap.Item} '{row.Scrap.ImageName}'");
 

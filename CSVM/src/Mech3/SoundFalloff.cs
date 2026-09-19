@@ -4,7 +4,7 @@ namespace CSVM.Mech3;
 
 /// <summary>
 /// The original's positional gain law: what a listener distance, a definition's <c>RANGE</c> pair
-/// and its <c>VOLUME</c> turn into, in decibels. Ported from the retail sound manager's own 3D
+/// and its <c>VOLUME</c> turn into, in decibels. Decoded from the original's own sound manager 3D
 /// update; the addresses, the constants and the shape of each band are in docs/formats/sounds.md.
 /// Engine-free on purpose, so the table can be pinned without a live
 /// <see cref="Godot.AudioStreamPlayer3D"/>, and because no Godot attenuation model expresses it:
@@ -12,7 +12,7 @@ namespace CSVM.Mech3;
 /// </summary>
 public static class SoundFalloff
 {
-    /// <summary>Silence, DirectSound's own minimum in the path this is ported from.</summary>
+    /// <summary>Silence, DirectSound's own minimum in the path this is decoded from.</summary>
     public const float FloorDb = -100f;
 
     /// <summary>Past this multiple of the audible radius nothing is heard at all.</summary>
@@ -42,7 +42,7 @@ public static class SoundFalloff
     public static float RangeScale { get; private set; } = 1f;
 
     /// <summary>A definition's linear <c>VOLUME</c> as decibels on the original's own scale. Not
-    /// the usual 20 log10: the retail converter is ten decibels per doubling, so 0.5 is 10 dB down
+    /// the usual 20 log10: the original's converter is ten decibels per doubling, so 0.5 is 10 dB down
     /// rather than 6, and a gain at or below a thousandth is written as silence outright.</summary>
     public static float VolumeDb(float volume)
     {

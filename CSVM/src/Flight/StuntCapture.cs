@@ -92,7 +92,7 @@ public sealed class StuntCapture
     /// <summary>How many photographs this run has latched.</summary>
     public int Count { get; private set; }
 
-    /// <summary><c>screenshots/stunts/</c> beside the saves: the engine's writable user directory,
+    /// <summary><c>screenshots/stunts/</c> beside the saves: Godot's writable user directory,
     /// where <c>stunt_scores.json</c> and the profiles already live.</summary>
     public static string ShotDir() => Path.Combine(
         DirectoryOverride ?? ProjectSettings.GlobalizePath("user://"), "screenshots", "stunts");

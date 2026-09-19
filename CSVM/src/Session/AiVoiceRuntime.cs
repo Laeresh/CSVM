@@ -210,7 +210,7 @@ public sealed partial class AiVoiceRuntime : Node
         }
         else if (decision.Rolled)
         {
-            // The engine logs both roll outcomes; the other gate short-circuits (cooling, muted)
+            // Both roll outcomes are logged; the other gate short-circuits (cooling, muted)
             // are silent here, they fire at hit rate.
             Log.Info("sound", $"ai voice: {tag}: trigger #{decision.TriggerId} silent ({decision.Outcome})");
         }

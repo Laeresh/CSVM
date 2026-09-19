@@ -9,9 +9,9 @@ using Godot;
 namespace CSVM.Testing;
 
 /// <summary>The Danger Zone camera over C4/IA1's fourteen authored markers: one photograph per
-/// marker per run, the sting with it, no second latch while the aircraft stays inside the radius
-/// and none on a later pass through the same marker, and the scoreboard's thumbnail strip in
-/// marker order. Writes into the run's own scratch directory, never beside the player's
+/// marker per run, with the sting. No second latch lands while the aircraft stays inside the
+/// radius, and none on a later pass through the same marker. The scoreboard's thumbnail strip
+/// stands in marker order. Writes into the run's own scratch directory, never beside the player's
 /// saves.</summary>
 internal static class StuntCaptureSuites
 {
@@ -50,7 +50,7 @@ internal static class StuntCaptureSuites
             ?? throw new SuiteSkippedException($"{Chapter}/{Mission} ships no Danger Zones");
 
         // The sting has something to play: the definition is a data orphan no SOUND_GROUPS entry
-        // and no world data names, so nothing else in the build would notice it going missing.
+        // and no world data names. Nothing else in the build would notice it going missing.
         var defs = SoundDefs.Load(ctx.ZrdrPath);
         ctx.Check(defs.TryGetValue(StingDef, out var sting) && sting.WavName.Length > 0,
             $"the camera sting '{StingDef}' is a real sounds.json definition");
@@ -79,7 +79,7 @@ internal static class StuntCaptureSuites
     }
 
     // A short run on the Instant Action wrap-up board: three photographs, the last still on its
-    // way, stay one row, and the board's cursor works them the same as a long course's grid.
+    // way, stay one row. The board's cursor works them the same as a long course's grid.
     internal static void CheckShortRunWrapup(TestContext ctx, StuntMission run, string chapter)
     {
         string? previous = StuntCapture.DirectoryOverride;
@@ -122,10 +122,10 @@ internal static class StuntCaptureSuites
         }
     }
 
-    // The board's cursor over its photographs, driven as player 1's input would be: up off Photo
-    // Mode enters the grid's last row, confirm opens the PNG itself (64x48, not the thumbnail),
-    // back closes it on the same cell, a pending cell refuses the cursor and the pointer, and a
-    // step down out of the grid returns to Photo Mode.
+    // The board's cursor over its photographs, driven as player 1's input would be. Up off Photo
+    // Mode enters the grid's last row, and confirm opens the PNG itself (64x48, not the
+    // thumbnail). Back closes it on the same cell. A pending cell refuses the cursor and the
+    // pointer. A step down out of the grid returns to Photo Mode.
     internal static void CheckCursor(TestContext ctx, ResultsBoard board, int pendingCell, string who)
     {
         if (board.ShotStrip is not { } strip || board.StandardMenu is not { } menu)
@@ -233,7 +233,7 @@ internal static class StuntCaptureSuites
     }
 
     // Each shot is on disk under screenshots/stunts/ with the name its chapter, marker and run
-    // clock make, which is the deterministic name a scripted run writes every time.
+    // clock make. That is the deterministic name a scripted run writes every time.
     private static void CheckFiles(TestContext ctx, IReadOnlyList<(string DzName, float At)> latched)
     {
         int found = 0;
@@ -273,8 +273,8 @@ internal static class StuntCaptureSuites
             $"the run's shots read back in marker order: [{string.Join(" ", shots)}]");
     }
 
-    // A rerun makes every marker photographable again, but not while the aircraft is still standing
-    // inside one: a restart under a marker must fly through it again to photograph it.
+    // A rerun makes every marker photographable again, but not while the aircraft is still
+    // standing inside one. A restart under a marker must fly through it again to photograph it.
     private static void CheckRerun(TestContext ctx, StuntMission run, StuntCapture capture)
     {
         var zone = run.Zones[0];
@@ -292,7 +292,7 @@ internal static class StuntCaptureSuites
             $"…while the next crossing of that marker photographs it again: shots={capture.Count}");
     }
 
-    // The strip on the real board: built from the run's own shots when the run completes, one cell
+    // The strip on the real board, built from the run's own shots when the run completes. One cell
     // per photograph, captioned and ordered by marker rather than by the order they were flown. The
     // last marker's frame is held back past the board waking, the way a live readback lands frames
     // after the crossing that completes the run.
@@ -363,10 +363,10 @@ internal static class StuntCaptureSuites
         }
     }
 
-    // FlightController tests the run before the camera on one physics frame, so the gate pair that
+    // FlightController tests the run before the camera on one physics frame. The gate pair that
     // completes the run wakes the board before the camera latches a marker crossed on that frame.
     // That frame's test is the camera's last: a marker first entered on a later frame is not
-    // photographed, as the original photographs only inside a zone's first completion.
+    // photographed. The original photographs only inside a zone's first completion.
     private static void CheckLatchAfterCompletion(TestContext ctx, StuntMission run, StuntCapture capture,
         System.Func<int> stings, PaneRig pane)
     {
@@ -428,8 +428,8 @@ internal static class StuntCaptureSuites
         }
     }
 
-    // Instant Action's shared wrap-up board over player 1's camera: the markers are flown last to
-    // first so marker order and flown order differ, and the first one flown is held back past the
+    // Instant Action's shared wrap-up board over player 1's camera. The markers are flown last to
+    // first, so marker order and flown order differ. The first one flown is held back past the
     // board appearing. A board handed no camera, or one with no shot, draws no strip.
     private static void CheckWrapupStrip(TestContext ctx, StuntMission run, StuntCapture capture, PaneRig pane)
     {
@@ -521,8 +521,8 @@ internal static class StuntCaptureSuites
         return captions;
     }
 
-    // The pane this suite photographs: a small solid frame, so the suite's verdict rests on the
-    // latch policy and the file it writes rather than on what a test host happened to render.
+    // The pane this suite photographs: a small solid frame. The suite's verdict rests on the
+    // latch policy and the file it writes rather than on what a test host renders.
     private static Image Pane()
     {
         var img = Image.CreateEmpty(64, 48, false, Image.Format.Rgba8);
@@ -530,8 +530,8 @@ internal static class StuntCaptureSuites
         return img;
     }
 
-    // The suite's pane request: lands the synthetic frame at once, or holds it until Release, which
-    // stands in for a live readback landing frames after the crossing.
+    // The suite's pane request lands the synthetic frame at once, or holds it until Release. The
+    // hold stands in for a live readback landing frames after the crossing.
     private sealed class PaneRig
     {
         private System.Action<Image?>? _held;

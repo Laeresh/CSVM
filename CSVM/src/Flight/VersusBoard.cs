@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Linq;
 using CSVM.UI;
 using CSVM.Utils;
@@ -94,9 +95,9 @@ public sealed partial class VersusBoard : ResultsBoard
             AddCell(grid, $"#{st.Rank}", font, color, HorizontalAlignment.Left, rankW);
             AddCell(grid, SplitScreen.PlayerTag(st.PlayerIndex), font, SplitScreen.PlayerColor(st.PlayerIndex),
                 HorizontalAlignment.Left, tagW);
-            AddCell(grid, st.Score.ToString(), font, color, HorizontalAlignment.Right, scoreW);
-            AddCell(grid, st.Kills.ToString(), font, color, HorizontalAlignment.Right, killsW);
-            AddCell(grid, st.Deaths.ToString(), font, color, HorizontalAlignment.Right, deathsW);
+            AddCell(grid, st.Score.ToString(CultureInfo.InvariantCulture), font, color, HorizontalAlignment.Right, scoreW);
+            AddCell(grid, st.Kills.ToString(CultureInfo.InvariantCulture), font, color, HorizontalAlignment.Right, killsW);
+            AddCell(grid, st.Deaths.ToString(CultureInfo.InvariantCulture), font, color, HorizontalAlignment.Right, deathsW);
         }
 
         body.AddChild(Separator(s));

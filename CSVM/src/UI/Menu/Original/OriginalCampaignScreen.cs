@@ -6,21 +6,21 @@ using CSVM.Session;
 namespace CSVM.UI.Menu.Original;
 
 /// <summary>
-/// The Original campaign, one standalone module over the shared <see cref="CampaignFeature"/>: the
-/// decoded profile, cabin, memento, table of contents, briefing, flight check, ammo, plane selection,
-/// scrapbook and zoom screens. The screen graph, the hit rectangles, the rollover and pressed frames,
-/// the cues and every door out are this module's; what each screen draws is the shared board component,
-/// <c>CampaignBoards.For</c> over the campaign pages, which this module hosts in a <c>CampaignFlow</c>
-/// of its own over the feature and the campaign layout. That flow is never walked: its screen mirrors
-/// the one showing and its row the focus, and a page naming a destination or raising a dialog has both
-/// read off it and re-entered through this graph, while a page's own editing state (a loadout, a pick,
-/// a page turn) stays the page's, since a commit is what the feature writes. The standing box is the
-/// shell's, raised through the host seam, as are the hangar the cabin opens and the profile re-read.
+/// The Original campaign's decoded screens: the profile, cabin, memento, table of contents,
+/// briefing, flight check, ammo, plane selection, scrapbook and zoom. This one standalone module
+/// over the shared <see cref="CampaignFeature"/> owns their screen graph, hit rectangles, rollover
+/// and pressed frames, cues and every door out. What each screen draws is the shared board
+/// component, <c>CampaignBoards.For</c> over the campaign pages, hosted in a <c>CampaignFlow</c>
+/// over the feature and the campaign layout. ⚠ That flow is never walked: its
+/// screen mirrors the one showing and its row the focus. A page's destination or dialog is read
+/// off it and re-entered through this graph, and its editing state waits on the feature's commit.
+/// The standing box, the hangar the cabin opens and the profile re-read are the shell's, raised
+/// through the host seam.
 /// </summary>
 public sealed class OriginalCampaignScreen : IOriginalScreenModule
 {
-    // The roster's own list colours, CAMPAIGN.SCRIPT's sub-script VB: the selection bar behind the
-    // picked row (0xff800000) and the frame around the row under the pointer (0xffff0000).
+    // The roster's own list colours, CAMPAIGN.SCRIPT's sub-script VB. The selection bar behind the
+    // picked row is 0xff800000, the frame around the row under the pointer 0xffff0000.
     private const byte RosterBarRed = 0x80;
     private const byte RosterFrameRed = 0xff;
 
@@ -40,11 +40,11 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     private OriginalScreen _bookReturn = OriginalScreen.CampaignCabin;
 
     /// <summary>A campaign module over <paramref name="campaign"/> and the campaign layout read off
-    /// the shell's own. <paramref name="profiles"/> is the user's profile store, which the Campaign
-    /// row's door opens over; <paramref name="planes"/> the build store an EXPORT inside writes into;
-    /// <paramref name="setup"/> and <paramref name="flightDevices"/> the joined seats a launch
-    /// carries. Without a feature or a store the Campaign row stands disabled and every door here
-    /// does nothing.</summary>
+    /// the shell's own. The store <paramref name="profiles"/> is the user's profiles, which the
+    /// Campaign row's door opens over. The store <paramref name="planes"/> takes what an EXPORT
+    /// inside writes. Then <paramref name="setup"/> and <paramref name="flightDevices"/> are the
+    /// joined seats a launch carries. Without a feature or a store the Campaign row stands disabled
+    /// and every door here does nothing.</summary>
     public OriginalCampaignScreen(
         CampaignFeature? campaign,
         PlayerSetupFeature setup,
@@ -89,18 +89,18 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     public string NarrationWav =>
         _host.Screen == OriginalScreen.CampaignBriefing ? _campaign?.Briefing?.NarrationWav ?? string.Empty : string.Empty;
 
-    /// <summary>The seated profile as the hangar's wallet, or null with nobody seated: what the
-    /// cabin's PLANE CONSTRUCTION opens the hangar over, and what the campaign-hangar aid takes.</summary>
+    /// <summary>The seated profile as the hangar's wallet, or null with nobody seated. The cabin's
+    /// PLANE CONSTRUCTION opens the hangar over it, and the campaign-hangar aid takes it.</summary>
     public IHangarWallet? Wallet => _campaign?.Wallet();
 
     /// <summary>What the menu's typed cheats have switched on, or null over a shell with no campaign
     /// feature. The latches themselves are the shell's, the screens carrying them crossing this
-    /// module and the hangar's; what a completed word turns on is kept here, on the feature both
+    /// module and the hangar's. What a completed word turns on is kept here, on the feature both
     /// presentations commit through.</summary>
     public CampaignCheats? Cheats => _campaign?.Cheats;
 
-    /// <summary>Whether the Campaign row on the top level stands at all: a feature and a store
-    /// together, since the door opens over the player's own profiles.</summary>
+    /// <summary>Whether the Campaign row on the top level stands at all. It needs a feature and a
+    /// store together, the door opening over the player's own profiles.</summary>
     internal bool CanOpen => _campaign != null && _profiles != null;
 
     /// <summary>The campaign's string table where one is loaded, or null: the words the shell's own
@@ -116,13 +116,13 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
 
     /// <summary>The seat whose flight check is showing, as its index, or -1 off the check's screens.
     /// The check and the ammo and plane screens its own rows open all stand for one player at a
-    /// time, so the seat the field names owns them; the guest that opened ammo selection is still the
+    /// time. The seat the field names owns them. The guest that opened ammo selection is still the
     /// seat whose aircraft it edits.</summary>
     internal int CheckSeat => OnCheck && _campaign is { } campaign ? campaign.Field.Current : -1;
 
     /// <summary>The open drop-down list on the campaign screen showing, or null. The shell drives it
-    /// with the axis and closes it on a click off the list, the same rule its own per-seat aircraft
-    /// screen's list takes.</summary>
+    /// with the axis and closes it on a click off the list. Its own per-seat aircraft screen's list
+    /// takes the same rule.</summary>
     internal CampaignCombo? OpenCombo =>
         _flow != null && !_host.DialogOpen && PageFocus >= 0 && _flow.Page.Combo(PageFocus) is { Open: true } combo
             ? combo
@@ -165,11 +165,11 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         }
     }
 
-    /// <summary>Opens the campaign over <paramref name="store"/>, the aids' and the suites' door,
-    /// and lands on the profile screen with the name box pre-filled with the last player seated,
-    /// the way <c>CAMPAIGN.SCRIPT</c> pre-fills it from the registry. <paramref name="planes"/>
-    /// stands in for the shell's build store while this campaign is open, which is how an aid's
-    /// EXPORT writes into a scratch store.</summary>
+    /// <summary>Opens the campaign over <paramref name="store"/>, the aids' and the suites' door.
+    /// It lands on the profile screen with the name box pre-filled with the last player seated,
+    /// the way <c>CAMPAIGN.SCRIPT</c> pre-fills it from the registry. The store
+    /// <paramref name="planes"/> stands in for the shell's build store while this campaign is
+    /// open, which is how an aid's EXPORT writes into a scratch store.</summary>
     public void OpenCampaignOver(CampaignProfileStore store, CSVM.Flight.CustomPlaneStore? planes = null)
     {
         ArgumentNullException.ThrowIfNull(store);
@@ -189,8 +189,8 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     }
 
     /// <summary>Seats the named profile re-read from the store and lands on the cabin, the door a
-    /// flight return and the campaign screenshot aids take; false, on the profile screen, when the
-    /// profile cannot be read. True says the profile is seated, not that the cabin is showing: a
+    /// flight return and the campaign screenshot aids take. False, on the profile screen, when the
+    /// profile cannot be read. True says the profile is seated, not that the cabin is showing. A
     /// chapter cinema plays first where one is due, and the cabin arrives when it stops.</summary>
     public bool ShowCabin(string profile)
     {
@@ -204,10 +204,10 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     }
 
     /// <summary>Seats the named profile and opens the book on a mission's first spread with the
-    /// cabin on its far side, the mission end's own door and the book's screenshot aid; false when
-    /// the profile cannot be read. True says the profile is seated, not that the book is showing:
-    /// the closing cinema plays first after a win on the campaign's last mission, and the book
-    /// arrives when it stops.</summary>
+    /// cabin on its far side. That is the mission end's own door and the book's screenshot aid.
+    /// False when the profile cannot be read. True says the profile is seated, not that the book is
+    /// showing. The closing cinema plays first after a win on the campaign's last mission, and the
+    /// book arrives when it stops.</summary>
     public bool ShowScrapbook(string profile, int seq, bool missionWon)
     {
         if (_flow == null || _campaign == null || !_campaign.SeatProfile(profile))
@@ -240,8 +240,9 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     }
 
     /// <summary>Opens one of the screens past the cabin on the seated profile's next mission, the
-    /// aids' door: the table of contents, the briefing, the flight check, ammo selection on the
-    /// pilot's aircraft or plane selection on the pilot's slot. Nothing happens with nobody seated.</summary>
+    /// aids' door. That screen is the table of contents, the briefing, the flight check, ammo
+    /// selection on the pilot's aircraft or plane selection on the pilot's slot. Nothing happens
+    /// with nobody seated.</summary>
     public void ShowMissionScreen(OriginalScreen screen)
     {
         if (_flow == null || _campaign?.Profile == null || !Owns(screen))
@@ -263,10 +264,10 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
 
     /// <summary>Replays a screenshot aid's colon argument on the campaign screen showing, the words
     /// <see cref="CampaignAidScript"/> reads for Built-in, so one string poses both presentations.
-    /// The flow here is never walked, so a cursor verb is one command frame through this graph and
-    /// a button word is that button's row taking the focus and the confirm. False for a script
+    /// The flow here is never walked. A cursor verb is one command frame through this graph, and a
+    /// button word is that button's row taking the focus and the confirm. False for a script
     /// spelling the secondary verb x, which is refused whole because Original binds no such press,
-    /// its lists selecting by click; its caller ends the run.</summary>
+    /// its lists selecting by click. Its caller ends the run.</summary>
     public bool RunAidScript(string script)
     {
         if (CampaignAidScript.Presses(script, CampaignAidScript.VerbsWithoutSecondary, "the Original presentation")
@@ -287,7 +288,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     }
 
     /// <summary>Moves the briefing's reveal on by a frame's worth of seconds while the briefing
-    /// shows, the presentation's clock; returns whether the reveal is still running, which is when
+    /// shows, the presentation's clock. Returns whether the reveal is still running, which is when
     /// the board has to repaint on the frame clock.</summary>
     public bool AdvanceBriefing(double seconds)
     {
@@ -300,8 +301,8 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         return !briefing.Complete;
     }
 
-    /// <summary>Drops the open campaign, if any: the feature's transient state and the pages, and
-    /// re-reads the build store into the sortie roster, since an EXPORT inside may have crossed a
+    /// <summary>Drops the open campaign, if any: the feature's transient state and the pages.
+    /// Re-reads the build store into the sortie roster, since an EXPORT inside may have crossed a
     /// plane into it. Every door out of the campaign and every return to the top level comes
     /// through here.</summary>
     public void CloseCampaign()
@@ -310,7 +311,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         _flow = null;
         _host.CloseDialog();
 
-        // An EXPORT inside the campaign just crossed a plane into the sortie lists, and those are
+        // An EXPORT inside the campaign just crossed a plane into the sortie lists. Those are
         // reached from the top level without another Activate to re-read the store on.
         if (_planes != null)
         {
@@ -343,8 +344,8 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             return;
         }
 
-        // The contents page pulls its window over the flow's cursor, which mirrors this graph's
-        // focus only on a compose, so the mirror is brought up to date first.
+        // The contents page pulls its window over the flow's cursor. That cursor mirrors this
+        // graph's focus only on a compose, so the mirror is brought up to date first.
         if (PageFocus >= 0)
         {
             _flow.FocusRow(PageFocus);
@@ -427,9 +428,10 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         }
     }
 
-    /// <summary>Back through the campaign's own graph: a guest's check retreats to the player
-    /// before, and each screen returns to the one that opened it, the profile screen leaving the
-    /// campaign. Always answered, the campaign having no screen the shell's own way out serves.</summary>
+    /// <summary>Back through the campaign's own graph. A guest's check retreats to the player
+    /// before, and each screen returns to the one that opened it. The profile screen leaves the
+    /// campaign. Always answered, the campaign having no screen the shell's own way out
+    /// serves.</summary>
     public bool Back()
     {
         if (_flow == null || _campaign == null)
@@ -466,8 +468,8 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
                 break;
             case OriginalScreen.CampaignAmmo:
             case OriginalScreen.CampaignPlaneSelection:
-                // The page's own Back: an open list closes, else the working copy is dropped or
-                // the picks restored, and the screen falls back to the check.
+                // The page's own Back. An open list closes, else the working copy is dropped or
+                // the picks restored. The screen then falls back to the check.
                 _flow.FocusRow(Math.Max(0, PageFocus));
                 if (!_flow.Page.Back())
                 {
@@ -487,15 +489,12 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     }
 
     /// <summary>The screen as the shared board component composes it over the page, with this
-    /// graph's own additions: the roster's list colours and its box's words, and the seat strip.
-    /// The standing box is drawn by the shell, over everything here.</summary>
-    public void Compose(
-        IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> backdrop, List<BoardPicture> pictures,
-        List<BoardFill> fills, List<BoardStroke> strokes, List<BoardLine> lines, List<BoardPlaque> plaques,
-        List<BoardNote> notes, List<BoardPanel> overlays)
+    /// graph's own additions. Those are the roster's list colours, its box's words, and the seat
+    /// strip. The standing box is drawn by the shell, over everything here.</summary>
+    public void Compose(IReadOnlyList<OriginalRow> rows, int focus, BoardLayers layers)
     {
         ArgumentNullException.ThrowIfNull(rows);
-        ArgumentNullException.ThrowIfNull(overlays);
+        ArgumentNullException.ThrowIfNull(layers);
         if (_flow == null)
         {
             return;
@@ -511,8 +510,8 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         bool pressed = !_host.DialogOpen && _host.PressedRow >= 0 && _host.PressedRow == focus;
         string detail = page.Screen == CampaignScreen.Ammo && pageFocus >= 0 ? page.Detail(pageFocus) : string.Empty;
         var board = CampaignBoards.For(page, pageFocus, pressed, detail, null, _layout);
-        backdrop.AddRange(board.Backdrop);
-        fills.AddRange(board.Fills);
+        layers.Backdrop.AddRange(board.Backdrop);
+        layers.Fills.AddRange(board.Fills);
 
         // The cabin's painting is the page's own picture, not a backdrop pane, so the pull-down's
         // paper would land under it. PASSENGERCABIN.SCRIPT's field is drawn over the scene, so the
@@ -520,25 +519,25 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         int scene = page.Screen == CampaignScreen.Cabin ? page.Pictures.Count : 0;
         for (int i = 0; i < board.Pictures.Count; i++)
         {
-            (i < scene ? backdrop : pictures).Add(board.Pictures[i]);
+            (i < scene ? layers.Backdrop : layers.Pictures).Add(board.Pictures[i]);
         }
 
-        strokes.AddRange(board.Strokes);
-        plaques.AddRange(board.Plaques);
-        notes.AddRange(board.Notes);
-        overlays.AddRange(board.Overlays);
+        layers.Strokes.AddRange(board.Strokes);
+        layers.Plaques.AddRange(board.Plaques);
+        layers.Notes.AddRange(board.Notes);
+        layers.Overlays.AddRange(board.Overlays);
         if (page.Screen == CampaignScreen.Roster)
         {
-            ComposeRoster(rows, focus, board.Lines, fills, lines);
+            ComposeRoster(rows, focus, board.Lines, layers);
         }
         else
         {
-            lines.AddRange(board.Lines);
+            layers.Lines.AddRange(board.Lines);
         }
 
         if (_host.SeatPanel(false) is { } strip)
         {
-            overlays.Add(strip);
+            layers.Overlays.Add(strip);
         }
     }
 
@@ -639,10 +638,10 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         return false;
     }
 
-    // Enters a campaign screen: the pages' host is moved onto its page (its cursor landing on the
-    // page's own opening row, which is where this screen's focus opens too), no dialog stands, and
+    // Enters a campaign screen. The pages' host is moved onto its page, its cursor landing on the
+    // page's own opening row, which is where this screen's focus opens too. No dialog stands, and
     // the pointer state starts afresh. A way back onto a screen keeps the focus where it stood, on
-    // the plaque that opened what is being left, so a round trip lands where it started.
+    // the plaque that opened what is being left. A round trip then lands where it started.
     private void ShowCampaign(OriginalScreen screen, bool keepFocus = false)
     {
         if (_flow == null)
@@ -673,7 +672,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     }
 
     // The cabin's NEXT MISSION is disabled once the campaign is finished, the script's own
-    // mail(10000) when uiData 2600 answers 0; every other button is live as the page offers it.
+    // mail(10000) when uiData 2600 answers 0. Every other button is live as the page offers it.
     private bool RowEnabled(ICampaignPage page, int row) =>
         !(page.Screen == CampaignScreen.Cabin && page.Button(row).Button == BoardButton.NextMission && _campaign?.CampaignComplete == true);
 
@@ -692,8 +691,8 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         return -1;
     }
 
-    // The contents list's window moved to top: the page pulls its own cursor inside, and this
-    // graph's focus takes the cursor back, so the window is not pulled home on the next compose.
+    // The contents list's window moved to top. The page pulls its own cursor inside, and this
+    // graph's focus takes the cursor back. The window is then not pulled home on the next compose.
     private void ScrollContents(CampaignPreviousMissionsPage contents, int top)
     {
         int focus = PageFocus;
@@ -709,8 +708,9 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         }
     }
 
-    // A press handed to the page: the page edits its own state, and whatever it named on the way
-    // (a destination, a dialog, a refusal) is read off the host and re-entered through this graph.
+    // A press handed to the page. The page edits its own state, and whatever it named on the way
+    // (a destination, a dialog, a refusal) is read off the host. That is re-entered through this
+    // graph.
     private void PagePress(int pageRow)
     {
         if (_flow == null)
@@ -725,8 +725,8 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
     }
 
     // One script step as this graph's own presses. A cursor verb is a command frame, so the focus,
-    // the cues and every door out are the ones a player's press takes. x never arrives here, the
-    // script carrying one having been refused whole.
+    // the cues and every door out are the ones a player's press takes. The verb x never arrives
+    // here, the script carrying one having been refused whole.
     private void PressAidStep(CampaignAidScript.Step press)
     {
         if (press.Button != BoardButton.None)
@@ -793,7 +793,7 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         else if (_flow.TakeMessage() is { Length: > 0 } message)
         {
             // A refusal band raised as a box is the plane screen's langui 710 and the sell path's
-            // 701, both of them 0x1 masks, so it takes the warning.
+            // 701. Both are 0x1 masks, so it takes the warning.
             _host.RaiseDialog(message, DialogIcon.Warning, Ok());
         }
 
@@ -808,8 +808,8 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         }
     }
 
-    // The destination a page named, entered through this graph with its own return remembered:
-    // a replay's briefing goes back to where it was pressed, the book remembers whether the
+    // The destination a page named, entered through this graph with its own return remembered.
+    // A replay's briefing goes back to where it was pressed. The book remembers whether the
     // table of contents or the cabin opened it.
     private void EnterFromPage(CampaignScreen to, CampaignScreen from)
     {
@@ -844,11 +844,11 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         }
     }
 
-    // The profile screen: CONTINUE and Enter in the box both start on the name in the box (the box
-    // names CM_B_START as its default button, which is the script's own commit path), a roster row
-    // fills the box and a second press on the filled row starts (the double-click), DELETE PLAYER
-    // asks, CANCEL leaves. A click in the box reaches none of this: an edit box takes the caret and
-    // nothing else, which the shell's Activate rules for every box on every screen.
+    // On the profile screen, CONTINUE and Enter in the box both start on the name in the box. The
+    // box names CM_B_START as its default button, the script's own commit path. A roster row fills
+    // the box, and a second press on the filled row starts (the double-click). DELETE PLAYER asks,
+    // CANCEL leaves. A click in the box reaches none of this: an edit box takes the caret and
+    // nothing else. The shell's Activate rules that for every box on every screen.
     private void ActivateRoster(OriginalRow row, int pageRow)
     {
         if (RosterEntry is not { } entry || _campaign == null)
@@ -916,11 +916,12 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         OpenCabin();
     }
 
-    // Every door onto the cabin, inside the campaign and out: CONTINUE above, the flight return and
-    // the screenshot aids through ShowCabin, and each screen's RETURN TO CABIN and back press. The
-    // seated profile's chapter cinema plays first where one is due, and the cabin opens on the frame
-    // the film stops. A position inside a chapter, and a shell with no cinema (every suite), opens
-    // the cabin straight away. keepFocus is the way back's, landing on the plaque that was left.
+    // Every door onto the cabin, inside the campaign and out. CONTINUE above, the flight return and
+    // the screenshot aids come through ShowCabin, and so do each screen's RETURN TO CABIN and back
+    // press. The seated profile's chapter cinema plays first where one is due, and the cabin opens
+    // on the frame the film stops. A position inside a chapter, and a shell with no cinema (every
+    // suite), opens the cabin straight away. The keepFocus flag is the way back's, landing on the
+    // plaque that was left.
     private void OpenCabin(bool keepFocus = false)
     {
         if (_campaign?.ChapterCinema is { } cinema && _campaign.Profile is { } seated)
@@ -955,9 +956,9 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         ShowCampaign(OriginalScreen.CampaignScrapbook);
     }
 
-    // DELETE PLAYER: the original's question (langui 201) as the two-answer box, on CAMPAIGN.SCRIPT's
-    // 0x4 mask and so under the query icon, the deletion taking the profile's own directory alone
-    // and clearing the box.
+    // DELETE PLAYER raises the original's question (langui 201) as the two-answer box.
+    // CAMPAIGN.SCRIPT's 0x4 mask puts it under the query icon. The deletion takes the profile's
+    // own directory alone and clears the box.
     private void BeginDelete()
     {
         if (_campaign == null || RosterEntry is not { } entry)
@@ -1033,9 +1034,9 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         }
     }
 
-    // The flight check: CHANGE AMMO and CHANGE PLANE name their crew slot and open their screen,
-    // RETURN TO BRIEFING abandons the walk, and FLY MISSION advances to the next joined human's
-    // check or, on the last, leaves as the feature's launch with every seat's devices.
+    // The flight check. CHANGE AMMO and CHANGE PLANE name their crew slot and open their screen,
+    // and RETURN TO BRIEFING abandons the walk. FLY MISSION advances to the next joined human's
+    // check. On the last it leaves as the feature's launch with every seat's devices.
     private MenuExit? ActivateFlightCheck(OriginalRow row)
     {
         if (_campaign == null || _flow == null)
@@ -1079,12 +1080,12 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         }
     }
 
-    // The profile screen's own list drawing, CAMPAIGN.SCRIPT's sub-script: the selection bar
-    // behind the row the box names and the frame around the row under the pointer, over the
-    // list rows the board component wrote; the box shows the typed name itself with a caret while
-    // it is the focused row. ⚠ None of the three stands while a box does: its answers are the rows
+    // The profile screen's own list drawing, CAMPAIGN.SCRIPT's sub-script. The selection bar goes
+    // behind the row the box names, the frame around the row under the pointer. Both go over the
+    // list rows the board component wrote. The box shows the typed name with a caret while it is
+    // the focused row. ⚠ None of the three stands while a box does. Its answers are the rows
     // then, and the page under it is drawn with nothing focused and nothing hovered.
-    private void ComposeRoster(IReadOnlyList<OriginalRow> rows, int focus, IReadOnlyList<BoardLine> composed, List<BoardFill> fills, List<BoardLine> lines)
+    private void ComposeRoster(IReadOnlyList<OriginalRow> rows, int focus, IReadOnlyList<BoardLine> composed, BoardLayers layers)
     {
         string name = RosterName;
         int picked = -1;
@@ -1103,13 +1104,13 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
         if (picked >= 0)
         {
             var bar = rows[picked];
-            fills.Add(new BoardFill(bar.X, bar.Y, bar.Width, bar.Height, RosterBarRed, 0, 0));
+            layers.Fills.Add(new BoardFill(bar.X, bar.Y, bar.Width, bar.Height, RosterBarRed, 0, 0));
         }
 
         if (!_host.DialogOpen && hover >= 0 && hover < rows.Count && rows[hover].Kind == OriginalRowKind.ListRow)
         {
             var framed = rows[hover];
-            fills.Add(new BoardFill(framed.X, framed.Y, framed.Width, framed.Height, RosterFrameRed, 0, 0, Border: true));
+            layers.Fills.Add(new BoardFill(framed.X, framed.Y, framed.Width, framed.Height, RosterFrameRed, 0, 0, Border: true));
         }
 
         foreach (var line in composed)
@@ -1117,22 +1118,22 @@ public sealed class OriginalCampaignScreen : IOriginalScreenModule
             if (line.Row == 0)
             {
                 bool caret = !_host.DialogOpen && focus == 0;
-                lines.Add(line with { Text = caret ? name + "_" : name });
+                layers.Lines.Add(line with { Text = caret ? name + "_" : name });
             }
             else if (line.Row > 0 && line.Text.StartsWith("✓ ", StringComparison.Ordinal))
             {
-                lines.Add(line with { Text = line.Text[2..] });
+                layers.Lines.Add(line with { Text = line.Text[2..] });
             }
             else
             {
-                lines.Add(line);
+                layers.Lines.Add(line);
             }
         }
     }
 
-    // The messagebox script's own answer words, read here through the campaign's own string table:
-    // langui 100 (OK) for the one-button box and 102 and 103 (Yes, No) for the two-button pair. The
-    // keys are the shell's own, the box being the shell's: a key of this module's invention would
+    // The messagebox script's own answer words, read through the campaign's own string table. The
+    // one-button box takes langui 100 (OK), the two-button pair 102 and 103 (Yes, No). The keys
+    // are the shell's own, the box being the shell's: a key of this module's invention would
     // leave its answers unanswerable.
     private OriginalDialogAnswer Ok(Action? run = null) =>
         new(OriginalShell.DialogOkKey, CampaignBoards.DialogCenterKey, DialogWord(100, "OK"), run);

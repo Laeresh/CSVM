@@ -858,7 +858,7 @@ internal static class CampaignRosterSuites
         }
     }
 
-    // BL-934: the hand-built speaker in the ai-voice suite cannot see this, because the aircraft
+    // The hand-built speaker in the ai-voice suite cannot see this, because the aircraft
     // that speaks is not the one whose mode moved. The mission's own roster decides both, so the
     // suite spawns C1/M02's through the director and drives the site a flown mission drives.
     [Suite("ai-voice-mission",

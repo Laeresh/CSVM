@@ -185,18 +185,7 @@ internal static class CampaignMilitiaLiverySuites
     private static FlightRoster Spawner(TestContext ctx, SessionSpec spec, LiveryResolver liveries,
         GameZ planesGamez, TextureArchive textures, ProjectilePool pool) =>
         new(FlightRosterPolicy.From(spec), liveries, null, ctx.Host,
-            new AircraftAssemblyResources
-            {
-                PlanesGamez = planesGamez,
-                StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-                AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
-                PaintRng = new RandomNumberGenerator(),
-                ZrdrPath = ctx.ZrdrPath,
-                StockLoadouts = StockLoadouts.Load(),
-                WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
-                Textures = textures,
-                Shakes = ShakeDefs.Load(ctx.ZrdrPath),
-            },
+            SuiteConstants.AircraftResources(ctx, planesGamez, textures),
             new FlightWorldBindings { Projectiles = pool, Gamez = planesGamez },
             new HumanRosterBindings());
 }

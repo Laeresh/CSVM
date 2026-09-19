@@ -10,12 +10,11 @@ namespace CSVM.Tests;
 /// <summary>
 /// The decoded mode machine's transition table, engine-free: the nine modes under fixed rolls
 /// (a pool-covering bite, a zero exponent) and seeded rngs. Pins the promotion and its dwell, the
-/// return-cylinder exit measured from the pursuit anchor and the anchor's own life, the
-/// steady-hand power law and the sixth-sense roll in the engine's own
-/// vocabulary, the evasive
-/// maneuver playing to Done and returning, the avoid-crash override on an injected probe, the
-/// signature-maneuver weighting, the D15 lay-off entry/exit (a chasing human fallen behind,
-/// gated by the AssistEnabled switch), and seed determinism.
+/// return-cylinder exit measured from the pursuit anchor, and the anchor's own life. The
+/// steady-hand power law and the sixth-sense roll are pinned in the original's own vocabulary. So
+/// are the evasive maneuver playing to Done and returning, the avoid-crash override on an injected
+/// probe, and the signature-maneuver weighting. The D15 lay-off entry and exit (a chasing human
+/// fallen behind, gated by the AssistEnabled switch) and seed determinism are pinned too.
 /// </summary>
 public class AiModeMachineTests
 {
@@ -43,7 +42,7 @@ public class AiModeMachineTests
         Assert.Equal("navigating danger zone", AiModeMachine.NameOf(AiMode.NavigatingDangerZone));
     }
 
-    /// <summary>The promotion reads no range: the attack radius is the selection's admission
+    /// <summary>The promotion reads no range. The attack radius is the selection's admission
     /// test, so whatever quarry the machine is handed is chased the tick the dwell allows.</summary>
     [Fact]
     public void PatrolPromotesAnyHandedQuarryWithNoRangeOfItsOwn()
@@ -62,7 +61,7 @@ public class AiModeMachineTests
     }
 
     /// <summary>A promotion arms the chase's deadline to attack_dwell, and the pursuit reverts
-    /// the tick it passes; the revert re-arms not_pursuit_dwell, which refuses the next promotion
+    /// the tick it passes. The revert re-arms not_pursuit_dwell, which refuses the next promotion
     /// until it has passed too.</summary>
     [Fact]
     public void TheChaseRevertsAtTheAttackDwellAndThePromotionWaitsOutTheRearm()
@@ -150,8 +149,8 @@ public class AiModeMachineTests
     }
 
     /// <summary>The dwell ends a pursue task only. An evade ordered off the net that loses its
-    /// target leaves the wait alone, and one that settles into pursue takes a fresh deadline
-    /// rather than reverting on a stamp left from the machine's start.</summary>
+    /// target leaves the wait alone. One that settles into pursue takes a fresh deadline rather
+    /// than reverting on a stamp left from the machine's start.</summary>
     [Fact]
     public void AnEvadeOffTheNetIsNoChaseForTheDwellToEnd()
     {
@@ -176,8 +175,8 @@ public class AiModeMachineTests
         PursueFrom(m, Home + new Vector3(1500f, 0f, 0f));
         Assert.Equal(AiMode.Patrol, m.Update(Home, Level, null, null, 0.1f));
 
-        // The decoded leash reverts on its own: outside the cylinder from the anchor, with the
-        // target 300 m off and deep inside the activation radius the condition no longer reads.
+        // The decoded leash reverts on its own: outside the cylinder from the anchor. The target
+        // is 300 m off, deep inside the activation radius the condition no longer reads.
         var m2 = Machine();
         PursueFrom(m2, Home + new Vector3(1500f, 0f, 0f));
         var strayed = Home + new Vector3(1300f, 0f, 0f); // > 1200 from the anchor
@@ -191,8 +190,8 @@ public class AiModeMachineTests
         Assert.Equal(AiMode.Pursue, m3.Update(Home + new Vector3(900f, 0f, 0f), Level, farTarget, null, 0.1f));
     }
 
-    /// <summary>The leash is the decoded CYLINDER, not a sphere: the corner between the horizontal
-    /// radius and the vertical band is inside it, and the band alone recalls a pursuer that has
+    /// <summary>The leash is the decoded CYLINDER, not a sphere. The corner between the horizontal
+    /// radius and the vertical band is inside it. The band alone recalls a pursuer that has
     /// climbed away without straying at all.</summary>
     [Fact]
     public void TheReturnLeashIsACylinderAboutTheAnchor()
@@ -213,8 +212,8 @@ public class AiModeMachineTests
     }
 
     /// <summary>The anchor is taken once, where the promotion happened, and nothing while the task
-    /// stands moves it: a pilot leashed to where it caught its quarry rather than to where it
-    /// spawned, and a finished evasive program handing back to that same point.</summary>
+    /// stands moves it. A pilot is leashed to where it caught its quarry, not to where it spawned.
+    /// A finished evasive program hands back to that same point.</summary>
     [Fact]
     public void ThePursuitAnchorIsWhereTheChaseBeganAndSurvivesAReaction()
     {
@@ -274,8 +273,8 @@ public class AiModeMachineTests
         Assert.Contains("steady hand test passed. Not evading.", logged2);
     }
 
-    /// <summary>The roll is the decoded power law over the bite, not a flat chance: the same round
-    /// evades far more often out of a worn-down pool than a fresh one, and the exponent a higher
+    /// <summary>The roll is the decoded power law over the bite, not a flat chance. The same round
+    /// evades far more often out of a worn-down pool than a fresh one. The exponent a higher
     /// rating resolves to evades MORE rather than less.</summary>
     [Fact]
     public void TheSteadyHandRollRisesWithTheBiteAndWithTheRating()
@@ -285,8 +284,8 @@ public class AiModeMachineTests
         Assert.Equal(3.7058f, AiModeMachine.ExponentFor(0.2666667f), 3);
         Assert.Equal(7.0813f, AiModeMachine.ExponentFor(0.08f), 3);
 
-        // A wep_130 round (1.5 armour, 1.5 health) on a hostile Fury at Normal: 108 of pool at
-        // full health, a tenth of that worn down to.
+        // A wep_130 round (1.5 armour, 1.5 health) on a hostile Fury at Normal meets 108 of pool
+        // at full health. Worn down, it meets a tenth of that.
         float e0 = AiModeMachine.ExponentFor(0.5f), e9 = AiModeMachine.ExponentFor(0.08f);
         double fresh0 = 1d - AiModeMachine.PassChance(1.5f, 108f, e0);
         double fresh9 = 1d - AiModeMachine.PassChance(1.5f, 108f, e9);
@@ -305,8 +304,8 @@ public class AiModeMachineTests
         Assert.Equal(0d, AiModeMachine.PassChance(30f, 30f, e0));
     }
 
-    /// <summary>One impact takes several rolls when the pair outlives the pools it meets: the
-    /// wrapper's leftover loop, each pass against a pool the last one shrank.</summary>
+    /// <summary>One impact takes several rolls when the pair outlives the pools it meets. The
+    /// wrapper's leftover loop runs each pass against a pool the last one shrank.</summary>
     [Fact]
     public void LeftoverDamageTakesAFurtherRollAgainstAShrunkPool()
     {
@@ -317,7 +316,7 @@ public class AiModeMachineTests
         m.SteadyHandExponent = 0f; // every roll passes, so the loop is what the count shows
 
         // Armour 10 against 20 of armour damage: half the health damage is shielded, the rest
-        // spends, and both leftovers re-enter against what is left of the pair.
+        // spends. Both leftovers re-enter against what is left of the pair.
         m.NotifyDamage(20f, 40f, 10f, 100f);
         Assert.True(rolls.Count >= 2, $"the leftover re-entered rolls={rolls.Count}");
         Assert.False(m.Evading);
@@ -332,8 +331,8 @@ public class AiModeMachineTests
         Assert.Single(single);
     }
 
-    /// <summary>The picker's injector cull: <c>nitro_evade</c> is difficulty 0, so only the
-    /// injector keeps a pilot that cannot boost from flying six wings-level seconds as its
+    /// <summary>The picker's injector cull: <c>nitro_evade</c> is difficulty 0. Only the injector
+    /// keeps a pilot that cannot boost from flying six wings-level seconds as its
     /// evade.</summary>
     [Fact]
     public void ANitroFlaggedManeuverIsDrawnOnlyWithTheInjector()
@@ -394,7 +393,8 @@ public class AiModeMachineTests
         Assert.Equal(AiMode.Evade, m.Mode);
 
         // A second hit rolls nothing at all while the flag stands, and says so rather than falling
-        // silent, so a trace can tell a pilot that is never hit from one hit while already evading.
+        // silent. A trace can then tell a pilot that is never hit from one hit while already
+        // evading.
         string? logged = null;
         m.RollLogged += line => logged = line;
         m.NotifyDamage(0f, 8f, 0f, 8f);
@@ -414,7 +414,7 @@ public class AiModeMachineTests
         Assert.Equal(AiMode.Patrol, m2.Mode);
     }
 
-    /// <summary>The flag is the damage routine's to write: an ordered entry into the evade state
+    /// <summary>The flag is the damage routine's to write. An ordered entry into the evade state
     /// leaves it clear, so the hit that follows still takes its own steady-hand roll.</summary>
     [Fact]
     public void AnOrderedEvadeCarriesNoFlag()
@@ -650,9 +650,9 @@ public class AiModeMachineTests
     }
 
     /// <summary>The stun cannot strand a pilot: an external mode override during it releases the
-    /// controls. The damage handler gates on the evade flag alone, so a hit taken while stunned
-    /// still rolls and a failure overwrites the stun; the sixth-sense roll is the one a stunned
-    /// pilot does not take, because its trigger needs pursue or lay off.</summary>
+    /// controls. The damage handler gates on the evade flag alone. A hit taken while stunned still
+    /// rolls, and a failure overwrites the stun. The sixth-sense roll is the one a stunned pilot
+    /// does not take, because its trigger needs pursue or lay off.</summary>
     [Fact]
     public void AStunnedPilotStillRollsOnAHitAndIsReleasedByAnOverride()
     {
@@ -706,7 +706,7 @@ public class AiModeMachineTests
     [Fact]
     public void AltitudeVetoCullsAProgramPredictedToEndBelowTheFloor()
     {
-        // The shipped split_s ends one prediction step lower than it started, so the veto turns on
+        // The shipped split_s ends one prediction step lower than it started. The veto turns on
         // the altitude it is flown at and on nothing else.
         foreach (float altitude in new[] { 60f, 600f })
         {

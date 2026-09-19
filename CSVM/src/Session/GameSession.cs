@@ -37,8 +37,8 @@ public partial class GameSession : Node3D
     private const int NodeSuggestCap = 20;
 
     // How many aeroplanes one generator's wave is built ahead for, and how many one airframe and
-    // livery holds however many generators order it. A wave arrives a second or more apart and a
-    // quiet frame refills one, so a few deep covers a burst without lengthening the load screen.
+    // livery holds however many generators order it. A wave arrives a second or more apart, and a
+    // quiet frame refills one. A few deep covers a burst without lengthening the load screen.
     private const int WaveAirframeDepth = 4;
     private const int WaveAirframeCap = 8;
 
@@ -131,8 +131,8 @@ public partial class GameSession : Node3D
     // outside a menu-driven process (a --campaign= run from the command line has no cabin to
     // return to and simply stays in the flown world).
     private readonly Action<string, CampaignMissionResult>? _campaignMissionEnded;
-    // Where an ended Instant Action mission's frozen numbers go on a presentation with a wrap-up
-    // page of its own, routed by the Launcher; null leaves the ending to the in-flight board.
+    // Where an ended Instant Action mission's final numbers go on a presentation with a wrap-up
+    // page of its own, routed by the Launcher. Null leaves the ending to the in-flight board.
     private readonly Action<UI.Menu.IaWrapupSnapshot>? _instantActionWrapup;
     // The process's music channel, owned by the Launcher so one channel outlives every session.
     // Handed to CampaignDirector, which is what routes the mission's own music cues into it.
@@ -251,10 +251,10 @@ public partial class GameSession : Node3D
     // end/return flow (see CampaignDirector). Built at the top of StartSession alongside the
     // Instant Action one, null outside a --campaign= launch.
     private CampaignDirector? _campaign;
-    // The name the HUD kill line prints when the player is the one shot down: the flying campaign
-    // profile's, and outside a campaign the profile last used, which is where the original's
-    // startup takes its PlayerName from (docs/org/vehicleDamage.md "The kill message"). ⚠ The
-    // second arm is refused under --det: a record of who played last is machine state, and a
+    // The name the HUD kill line prints when the player is the one shot down. It is the flying
+    // campaign profile's, and outside a campaign the profile last used. That is where the
+    // original's startup takes its PlayerName from (docs/org/vehicleDamage.md "The kill message").
+    // ⚠ The second arm is refused under --det. A record of who played last is machine state, and a
     // pinned run reads none of it. No profile on disk leaves the line its unnamed fall-through.
     private string? _pilotName;
     // The cutscene host: built for any flown chapter session, since a story mission's intro
@@ -376,10 +376,11 @@ public partial class GameSession : Node3D
     /// launchscreen only once a world is actually up).</summary>
     public bool InSession { get; private set; }
 
-    /// <summary>Has the session drawn the first frame the player is meant to see: an intro's
-    /// camera posed onto the rigs, or the flown aeroplane on its spawn under its own HUD. Latched
-    /// at the end of the frame that reaches it, and what the start cover holds for, so no frame
-    /// between the load screen and the mission shows the world still assembling.</summary>
+    /// <summary>Has the session drawn the first frame the player is meant to see. That frame is
+    /// an intro's camera posed onto the rigs, or the flown aeroplane on its spawn under its own
+    /// HUD. It latches at the end of the frame that reaches it, and it is what the start cover
+    /// holds for. No frame between the load screen and the mission then shows the world still
+    /// assembling.</summary>
     internal bool FirstFrameReady { get; private set; }
 
     /// <summary>The session's per-player rigs, the Launcher's F11 placement print reads them.</summary>
@@ -448,7 +449,7 @@ public partial class GameSession : Node3D
         GameClock.Current = _clock;
         LoadProgress.Report(LoadStep.Scaffold);
         // Every world camera outside the cockpit interior draws at the one decoded base
-        // (CameraController.ExternalFovDeg); the 50 is the static viewer's own framing, which
+        // (CameraController.ExternalFovDeg). The 50 is the static viewer's own framing, which
         // shows a model rather than the world and is not one of the original's views.
         _camera.Fov = _spec.Fly || _spec.Freecam || _spec.AnimLab
             ? CameraController.ExternalFovDeg : 50f;
@@ -619,9 +620,9 @@ public partial class GameSession : Node3D
                 _cutscene?.BindRigs(_rigs, () => AiPlanes);
                 if (_cutscene != null)
                 {
-                    // The original parks the AI at the start of a mission of every type, before its
-                    // start list runs, and lifts it from the bootstrap definition. Missions only:
-                    // free flight has no counterpart there, so nothing outside a mission is held.
+                    // The original parks the AI at the start of a mission of every type, before
+                    // its start list runs. The park comes from the bootstrap definition. Missions
+                    // only: free flight has no counterpart, so nothing outside a mission is held.
                     if (_iaDirector != null || _campaign != null)
                     {
                         _cutscene.ParkAtMissionStart();
@@ -644,11 +645,6 @@ public partial class GameSession : Node3D
             LoadProgress.Report(LoadStep.PlayerRigs);
             ApplyDestroyOverride(state);
             ApplyObjectiveOverride(state);
-            if (!ApplyDebrisShadingDump(state))
-            {
-                return false;
-            }
-
             LogBuildSummary(state, sw);
         }
         catch (Exception e)
@@ -835,7 +831,7 @@ public partial class GameSession : Node3D
         // itself must never reach this, so that it always reads the simulation pose
         // (docs/architecture.md, src/Utils/RenderPoses.cs).
         RenderPoses.Draw();
-        // After the pose draw, because that is the state this frame renders: the cover the launcher
+        // After the pose draw, because that is the state this frame renders. The cover the launcher
         // holds over the start comes off on what the player is meant to see, not on the build
         // finishing.
         FirstFrameReady = FirstFrameReady || ShowsFirstRealFrame();
@@ -872,15 +868,15 @@ public partial class GameSession : Node3D
 
     // Whether a session binds the mission's own targets.zrd, read with nothing editing it while the
     // session runs. The director owns that channel when one exists, so this asks for the director
-    // and not for the launch: a --campaign= launch whose profile did not load flies without one and
-    // still gets the table its mission ships. ⚠ Keep the stunt term; a stunt run binds the same
+    // and not for the launch. A --campaign= launch whose profile did not load flies without one and
+    // still gets the table its mission ships. ⚠ Keep the stunt term. A stunt run binds the same
     // channel per pane. Internal so the mode-target-table suite pins the rule the build runs.
     internal static bool BindsMissionTargetTable(
         SessionSpec spec, bool hasDirector, bool stunting, bool hasWorld, int rigs) =>
         !hasDirector && spec.WorldMode && !spec.EmptyStage && !stunting && hasWorld && rigs > 0;
 
     // The splitscreen stunt race's shared results board, or none in Instant Action. ⚠ Never build
-    // one there: it wakes on the last pilot's finish, which is also the mission's win, and its halt
+    // one there. It wakes on the last pilot's finish, which is also the mission's win. Its halt
     // stops the clock the director's hold counts down on, so the wrap-up never comes. Internal so
     // the instant-action-end suite builds the board the session builds.
     internal static StuntRaceBoard? RaceBoardFor(StuntRace race, bool instantAction, string context,
@@ -888,7 +884,7 @@ public partial class GameSession : Node3D
         instantAction ? null : StuntRaceBoard.Build(race, context, exitsToMenu, pauseState, inputFor);
 
     /// <summary>Orders the aeroplanes this mission's generators will launch, off the roster blocks
-    /// they launch from, so the loading screen builds them instead of the launch frame. Depth is the
+    /// they launch from. The load screen builds them instead of the launch frame. Depth is the
     /// generator's own authored wave size: that is how many arrive before the cycle rests, and a
     /// quiet frame refills one. Internal so the wave-launch hitch suite orders exactly as a launch
     /// does rather than modelling it.</summary>
@@ -920,8 +916,8 @@ public partial class GameSession : Node3D
         }
     }
 
-    /// <summary>Carries out one step of the build the loading screen still owes and answers
-    /// whether more is left. The wave aeroplanes are that work: they belong to the load, where
+    /// <summary>Carries out one step of the build the load screen still owes and answers
+    /// whether more is left. The wave aeroplanes are that work. They belong to the load, where
     /// there is no frame budget, rather than to the launch frame that needs one.</summary>
     internal bool StepOwedLoad() => _flightRoster?.BuildOrderedAirframe() ?? false;
 
@@ -1047,7 +1043,7 @@ public partial class GameSession : Node3D
     }
 
     // What the start cover waits for. An intro owns the eye, so its camera having posed the rigs is
-    // the frame; otherwise it is the flown aeroplane placed under a live rig. A mode with no rig at
+    // the frame. Otherwise it is the flown aeroplane placed under a live rig. A mode with no rig at
     // all (viewer, freecam) has nothing to wait for beyond the built world's first processed frame.
     private bool ShowsFirstRealFrame()
     {
@@ -1258,7 +1254,7 @@ public partial class GameSession : Node3D
             && state.SoundDefs is { } voiceDefs && state.SoundGroups is { } voiceGroups)
         {
             // Accents assigned outside the roster (--ai=…:accent=N, the Instant Action actors) join
-            // the roster set: their clips are first reached at runtime too, so an unprewarmed
+            // the roster set. Their clips are first reached at runtime too, so an unprewarmed
             // accent would be a silent pilot.
             var extraAccents = new List<int>();
             if (_spec.AiPlanes is { } aiEntries)
@@ -2226,8 +2222,8 @@ public partial class GameSession : Node3D
             // muzzle_burst's PLAYER_1ST_PERSON: the same closure the world runtime gets, so the
             // shot's lights pick the same testfp branch the anim data would.
             FirstPersonView = AnyPilotFirstPerson,
-            // The Cockpit view's own rule, per shooter rather than per session: the pilot in the
-            // canopy loses their own flash quads, every other aeroplane keeps theirs.
+            // The Cockpit view's own rule is per shooter, not per session. The pilot in the canopy
+            // loses their own flash quads, and every other aeroplane keeps theirs.
             CockpitViewOfPilot = PilotInCockpitView,
             BeeperTags = _beeperTags,
             WashSink = _screenFlash != null ? _screenFlash.PlayBlend : null,
@@ -2238,7 +2234,7 @@ public partial class GameSession : Node3D
         // against that pane and draws the same geometry oversized in all the others.
         projectiles.Viewers = _viewers;
         // The first-person muzzle pair joins the world's point lights, which is how it reaches
-        // the cockpit interior; the empty stage has no set and keeps the omni flash.
+        // the cockpit interior. The empty stage has no set and keeps the omni flash.
         if (_worldLights != null)
             projectiles.BindPointLights(_worldLights);
         _worldRoot!.AddChild(projectiles);
@@ -2246,7 +2242,7 @@ public partial class GameSession : Node3D
 
         // The original's per-frame ground shadow, one quad under every aircraft. Roster and rigs
         // are read fresh, so waves are covered and each pane's own pilot takes the player's shape
-        // there; enhanced graphics mode builds nothing here and casts real shadow maps instead.
+        // there. Enhanced graphics mode builds nothing here and casts real shadow maps instead.
         GroundShadowPass.Build(_worldRoot!, AllAircraft, PlayerPositionsSnapshot, () => _rigs,
             () => _weatherRig?.SunlightRgb ?? WeatherRig.DefaultSunlightRgb);
 
@@ -2495,9 +2491,9 @@ public partial class GameSession : Node3D
             Log.Info("flight", $"damage lab: '{_spec.PlaneName}' has no destroyable_parts");
         }
 
-        // --canopy-holes=: struck glass from the spawn frame on, so a scripted shot of the cockpit
-        // does not wait on an AI burst and a 0.3 draw. Every human pane, a splitscreen canopy being
-        // per pilot, and through the cue's own ledger, so a later round picks up where this left off.
+        // --canopy-holes= gives struck glass from the spawn frame on. A scripted cockpit shot need
+        // not wait on an AI burst and a 0.3 draw. Every human pane, a splitscreen canopy being per
+        // pilot, and through the cue's own ledger, so a later round picks up where this left off.
         if (_spec.CanopyHoles is { } holes)
         {
             foreach (var rig in _rigs)
@@ -2584,14 +2580,14 @@ public partial class GameSession : Node3D
         }
 
         // Dogfight (--vs): the match bookkeeping, fed by every rig's Downed report. A killer inside
-        // the roster scores a kill, anything else is a death with no killer and costs a point.
-        // ⚠ Do not guard post-completion events here; the match ignores them, rigs report facts.
+        // the roster scores a kill. Anything else is a death with no killer and costs a point.
+        // ⚠ Do not guard post-completion events here. The match ignores them, and rigs report facts.
         if (versus is { } match)
         {
             _versus = match;
-            // Spawn rotation: a downed seat comes back on a point picked against the living field
-            // rather than on the fixed one it can be camped at. Its Rng is seeded from the master
-            // alone, so no pick here draws from Rng.Spawn and shifts the launch spawn index.
+            // Spawn rotation: a downed seat comes back on a point picked against the living field.
+            // The fixed spawn can be camped at. The rotation's Rng is seeded from the master alone,
+            // so no pick here draws from Rng.Spawn and shifts the launch spawn index.
             _versusSpawns = VersusSpawnRotation.For(spawnList, spawnBase, _rigs.Count,
                 new Random(Rng.IntSeedFor(Rng.VersusSpawn)));
             // Who downed each seat last, which the rotation weighs heaviest: the Downed report
@@ -2652,7 +2648,7 @@ public partial class GameSession : Node3D
         _flightRoster = flightRoster;
 
         // A spent hull posts one line into every pane's stack, worded and coloured as that pane
-        // reads it (docs/org/vehicleDamage.md); one flown into the world takes the notice instead.
+        // reads it (docs/org/vehicleDamage.md). One flown into the world takes the notice instead.
         // ⚠ The roster hook too: an aircraft a wave releases never passes through the _rigs loop.
         void PostKillLine(FlightController victim, int victimId, int? killer)
         {
@@ -2667,7 +2663,7 @@ public partial class GameSession : Node3D
                 {
                     continue;
                 }
-                // Dogfight words a death by seat, so the gate is the VICTIM being one: the decoded
+                // Dogfight words a death by seat, so the gate is the VICTIM being one. The decoded
                 // post reads nothing off the killer, and an unattributed death (a mid-air, the
                 // ground) still posts its line. An AI in a match keeps the decoded wording.
                 if (_versus is { } m && victimId >= 0 && victimId < m.PlayerCount)
@@ -3114,7 +3110,7 @@ public partial class GameSession : Node3D
             MenuInputFor = MenuInputFor,
             EnterPhotoMode = EnterPhotoMode,
             RegisterBoard = _boards.Add,
-            // Only the Original presentation has a wrap-up page to go to; everywhere else, and on a
+            // Only the Original presentation has a wrap-up page to go to. Everywhere else, and on a
             // command-line launch with no menu behind it, the in-flight board takes the ending.
             WrapupToMenu = _menuDriven && _presentation == UI.Menu.PresentationId.Original
                 ? _instantActionWrapup : null,
@@ -3187,8 +3183,8 @@ public partial class GameSession : Node3D
                 ? pilot.WorldPosition
                 : Vector3.Zero,
             PlayerAircraft = () => _rigs.Count > 0 ? _rigs[0].Controller : null,
-            // P1's Danger Zone photograph, taken the way the stunt camera takes its own: through the
-            // pilot's posed eye, or with no frames drawn, off the seat's pane.
+            // P1's Danger Zone photograph, taken the way the stunt camera takes its own. It goes
+            // through the pilot's posed eye, or, with no frames drawn, off the seat's pane.
             PlayerPane = landed => _rigs.Count != 0
                 && (_rigs[0].Controller?.Photograph is { } eye && DangerZonePhotograph.Drawable
                     ? eye.Request(landed)
@@ -3264,7 +3260,7 @@ public partial class GameSession : Node3D
             }
 
             // The mission clock running out posts its two notices into the same stack a kill line
-            // lands in, every pane's, since every seat is flying the mission that just expired.
+            // lands in, every pane's. Every seat is flying the mission that just expired.
             if (campaign.Graph is { } timerGraph)
             {
                 timerGraph.TimerExpired += () =>
@@ -3295,7 +3291,7 @@ public partial class GameSession : Node3D
                                          state.WorldRuntime != null, _rigs.Count))
         {
             // Instant Action, the multiplayer modes, and a campaign launch flying without a
-            // director: the same site feed with no graph behind it, so the table's own objective
+            // director take the same site feed with no graph behind it. The table's own objective
             // and other_target keys are the whole answer (see BindsMissionTargetTable).
             var sites = new ObjectiveSites(Messages.Load(state.MessagesPath),
                 MissionTargets.Load(state.MissionZrdrPath,
@@ -3403,37 +3399,6 @@ public partial class GameSession : Node3D
         {
             Log.Info("world", $"--destroy='{_spec.DestroyName}' ignored: no chapter world (pair it with --freecam/--fly + --chapter=)");
         }
-    }
-
-    // --dump-debris=<name>: kill the named destructibles, then report what shades every mesh under
-    // them and which of those the death flung. Runs after the build so the pieces read the same
-    // materials a screenshot draws, and ends the session, nothing is rendered.
-    // Returns false when the session is over.
-    private bool ApplyDebrisShadingDump(BuildState state)
-    {
-        if (!_spec.DumpDebris)
-        {
-            return true;
-        }
-
-        if (state.WorldRuntime == null || state.WorldScene == null)
-        {
-            Log.Error("world", $"--dump-debris='{_spec.DumpDebrisName}': no chapter world (pair it with --chapter=)");
-            GetTree().Quit(1);
-            return false;
-        }
-
-        _worldEffectsFactory.EnsureWorldEffects(state.Gamez, state.WorldScene, state.Textures, state.CrashProgram!, state.WorldRuntime);
-        // The scalar as the rig applied it, not recomputed here, so the report cannot disagree with
-        // what the same frame would draw. 1 when no rig ran, which is what an unwritten global is.
-        float worldLight = _weatherRig?.WorldLightLinear ?? 1f;
-        var report = Testing.Probes.DebrisShading(state.WorldRuntime, state.Gamez, state.Textures,
-            _spec.Chapter, _spec.DumpDebrisName, worldLight);
-        Log.Raw(report.Text);
-        _probeRunner.WriteScratch($"debris_shading_{_spec.Chapter}.txt", report.Text);
-        Log.Info("world", $"--dump-debris: {report.Summary}");
-        GetTree().Quit(report.Ok ? 0 : 1);
-        return false;
     }
 
     // The "loaded ..." summary line and the per-pane/texture-census follow-ups, printed once the
@@ -3976,8 +3941,8 @@ public partial class GameSession : Node3D
             rig.Controller?.Respawn();
     }
 
-    // Where a downed dogfight seat comes back: the rotation's pick against the field as it stands
-    // at the respawn, so a seat still on its own crash camera neither holds a point nor pulls one
+    // Where a downed dogfight seat comes back, the rotation's pick against the field as it stands
+    // at the respawn. A seat still on its own crash camera neither holds a point nor pulls one
     // away. Null with no rotation built, which leaves the seat on the pose it was given.
     private (Vector3 Pos, Vector3 LookAt)? VersusRespawn(int seat, int? killer)
     {
@@ -4196,7 +4161,7 @@ public partial class GameSession : Node3D
         }
         _photoPilot = null;
         RestoreBoards();
-        // The sheet's pointer too, for the reason the options leaf re-primes it: a mouse button
+        // The sheet's pointer too, for the reason the options leaf re-primes it. A mouse button
         // still down as the mode is left reads as a fresh click on the strip it rests over.
         _originalPause?.Reprime();
         // ⚠ Prime every board reader: MenuInput POLLS raw keys, so the Escape still under the
@@ -4479,10 +4444,10 @@ public partial class GameSession : Node3D
         }
     }
 
-    // Gives a spawned AI aircraft its voice: each chance comes from ai_skill_parameters at its
+    // Gives a spawned AI aircraft its voice. Each chance comes from ai_skill_parameters at its
     // own override when given, else the session's skill rating, so talker and constitution read
     // two independent curves. A missing accent or skills table means a silent pilot whose mode
-    // machine is still watched; no voice runtime at all means nothing, never an error.
+    // machine is still watched. No voice runtime at all means nothing, never an error.
     private void RegisterAiVoice(FlightController? ai, int? accentId, int? talkerOverride = null,
         int? constitutionOverride = null)
     {
@@ -4496,8 +4461,8 @@ public partial class GameSession : Node3D
         }
         _aiSkills ??= _flightRoster?.AiSkills;
         // ⚠ Hand over every AI, accent or none. The runtime watches an accentless aircraft's mode
-        // machine, and the shipped rosters leave nearly every enemy on accentID -1, so dropping
-        // those here silences the call-outs the player's own flight speaks about them.
+        // machine, and the shipped rosters leave nearly every enemy on accentID -1. Dropping those
+        // here silences the call-outs the player's own flight speaks about them.
         if (_aiSkills is not { } skills)
         {
             _aiVoice.RegisterAi(ai, null, 0f, 0f);

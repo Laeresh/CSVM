@@ -122,7 +122,9 @@ internal static class WeaponSelectorSuites
             $"the pad's rocket button splits the same way, its hold walking the belt back to pylon {rockets.SelectedPylon}");
     }
 
-    // The two keys the selectors took back, from the side of whatever used to hold them.
+    // The chase view ships unbound (the cockpit-view cycle reaches it), so it can take none of the
+    // keys the weapon selectors own. The loop stays: a default handed back here must still keep off
+    // them.
     private static void ChaseView(TestContext ctx, FlightController rig)
     {
         var chase = rig.FlightKeymap.Bindings(InputAction.SelectChaseView);
@@ -136,21 +138,8 @@ internal static class WeaponSelectorSuites
             }
         }
 
-        ctx.Check(!onWeaponKey && Bound(chase, Key.F2),
-            $"the chase view sits on F2 and on no key the original spends on a weapon cycle");
-    }
-
-    private static bool Bound(IReadOnlyList<Binding> bindings, Key key)
-    {
-        foreach (var binding in bindings)
-        {
-            if (binding.Control.Kind == ControlKind.Key && binding.Control.Index == (int)key)
-            {
-                return true;
-            }
-        }
-
-        return false;
+        ctx.Check(chase.Count == 0 && !onWeaponKey,
+            $"the chase view ships on no control at all ({chase.Count}), so no weapon cycle's key is spent on it");
     }
 
     // One tick with at most one key and at most one pad button down, read through the seat's own

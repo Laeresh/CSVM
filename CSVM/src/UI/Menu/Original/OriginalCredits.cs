@@ -47,7 +47,7 @@ public sealed partial class OriginalShell
     // The box's words: langui 1301 over the product identification number. The original reads that
     // number out of the installer's registry key and falls back to this when the key is absent.
     // This port never reads that key, by decision: the fallback is faithful on every machine and
-    // a registry dependency is not worth a retail installer's id, so do not add one.
+    // a registry dependency is not worth the original installer's id, so do not add one.
     private const int AboutStringId = 1301;
     private const string AboutProductId = "???";
 
@@ -99,18 +99,18 @@ public sealed partial class OriginalShell
         }
     }
 
-    private void ComposeCredits(List<BoardPicture> pictures, List<BoardLine> lines)
+    private void ComposeCredits(BoardLayers layers)
     {
         if (_layout.Screen(CreditsSection)?.Widget(CreditsBackgroundKey) is { Art.Count: > 0 } pane)
         {
-            pictures.Add(new BoardPicture(
+            layers.Pictures.Add(new BoardPicture(
                 new BoardArt(BoardArtLibrary.Ui, pane.Art[0], Math.Max(1, pane.Frames)),
                 pane.Int("X"), pane.Int("Y")));
         }
 
         if (_secretShown)
         {
-            lines.Add(new BoardLine(SecretLine(), SecretX, SecretY, 0f, SecretFont, BoardInk.Secret));
+            layers.Lines.Add(new BoardLine(SecretLine(), SecretX, SecretY, 0f, SecretFont, BoardInk.Secret));
         }
     }
 

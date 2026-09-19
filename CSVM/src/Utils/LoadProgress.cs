@@ -101,7 +101,7 @@ public sealed class LoadProgress
     }
 
     /// <summary>The sixteen authored fractions, one per <see cref="LoadStep"/> in step order.
-    /// Monotonic, and the highest is 0.90: the engine measures nothing and never sets 1.0, so a
+    /// Monotonic, and the highest is 0.90: the original measures nothing and never sets 1.0, so a
     /// full bar is never drawn.</summary>
     public static IReadOnlyList<float> Milestones { get; } = new[]
     {

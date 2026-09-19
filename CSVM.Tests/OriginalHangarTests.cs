@@ -21,7 +21,7 @@ namespace CSVM.Tests;
 /// stands behind these; what the module asks of one (the screen, the focus, a dialog, a roster
 /// re-read) the host records. The door from Instant Action and the keyboard's column walk are the
 /// shell's and are in <see cref="OriginalShellTests"/>. Every rectangle here is the fixture's
-/// invented geometry; the game's is read the same way.
+/// invented geometry; the original's is read the same way.
 /// </summary>
 public class OriginalHangarTests : IDisposable
 {
@@ -835,18 +835,11 @@ public class OriginalHangarTests : IDisposable
     private static ComposedBoard Compose(HangarHost host)
     {
         var rows = host.Rows;
-        var backdrop = new List<BoardPicture>();
-        var pictures = new List<BoardPicture>();
-        var fills = new List<BoardFill>();
-        var lines = new List<BoardLine>();
-        var plaques = new List<BoardPlaque>();
-        var notes = new List<BoardNote>();
-        var overlays = new List<BoardPanel>();
         // The pen the seam offers is the campaign scrapbook's alone, so the hangar writes no stroke.
-        var strokes = new List<BoardStroke>();
-        host.Module.Compose(rows, host.Focus, backdrop, pictures, fills, strokes, lines, plaques, notes, overlays);
-        return new ComposedBoard(pictures, strokes, lines, plaques, notes,
-            backdrop: backdrop, fills: fills, overlays: overlays);
+        var layers = new BoardLayers();
+        host.Module.Compose(rows, host.Focus, layers);
+        return new ComposedBoard(layers.Pictures, layers.Strokes, layers.Lines, layers.Plaques, layers.Notes,
+            backdrop: layers.Backdrop, fills: layers.Fills, overlays: layers.Overlays);
     }
 
     // The airframe tab's own swap, through the presses a pilot has: the closed box opens its list
@@ -913,179 +906,33 @@ public class OriginalHangarTests : IDisposable
         return host;
     }
 
-    // The shell's side of the seam, hand-written: the screen showing, one focus per screen (the
-    // first live row where none was set, as the shell's own EnsureFocus rules), a standing dialog
-    // opened on its first answer, and a count of each re-read the module asks for. Rows the module
-    // has no drawing of its own for become a plaque or a line, standing in for the shell's rule.
-    private sealed class HangarHost : IOriginalScreenHost
+    // The hangar's side of the seam, over the shared fake. Its rows are the module's whatever screen
+    // stands, because the hangar draws over the screen it was opened from. A focus put on a row
+    // stays there even once the row goes dark. Rows the module has no drawing of its own for become
+    // a plaque or a line, standing in for the shell's rule.
+    private sealed class HangarHost : OriginalTestHost<OriginalHangarScreen>
     {
-        private readonly int[] _focus = new int[Enum.GetValues<OriginalScreen>().Length];
-        private int _focusBeforeDialog = -1;
-        private int _dialogFocus;
-
         internal HangarHost()
-        {
-            Array.Fill(_focus, -1);
-        }
-
-        public OriginalHangarScreen Module { get; set; } = null!;
-
-        public OriginalScreen Screen { get; private set; } = OriginalScreen.InstantAction;
-
-        public OriginalDialog? Dialog { get; private set; }
-
-        public int RosterRefreshes { get; private set; }
-
-        public int InstantActionRefreshes { get; private set; }
-
-        public int CampaignResumes { get; private set; }
-
-        public bool DialogOpen => Dialog != null;
-
-        public int PressedRow => -1;
-
-        public int HoveredRow => -1;
-
-        public int FocusBeforeDialog => _focusBeforeDialog;
-
-        public (float X, float Y)? Pointer => null;
-
-        public CustomPlaneStore? CampaignPlanes => null;
-
-        public UiStrings MenuStrings => UiStrings.Empty;
-
-        public bool CanBuildPlane => true;
-
-        public int HangarOpens { get; private set; }
-
-        public IReadOnlyList<OriginalRow> Rows
-        {
-            get
-            {
-                var rows = new List<OriginalRow>();
-                Module.BuildRows(rows);
-                return rows;
-            }
-        }
-
-        public int Focus
-        {
-            get
-            {
-                var rows = Rows;
-                int focus = _focus[(int)Screen];
-                if (focus >= 0 && focus < rows.Count)
-                {
-                    return focus;
-                }
-
-                focus = rows.ToList().FindIndex(r => r.Enabled);
-                _focus[(int)Screen] = focus;
-                return focus;
-            }
-        }
-
-        public string FocusedKey
-        {
-            get
-            {
-                if (Dialog != null)
-                {
-                    return Dialog.Answers[_dialogFocus].Key;
-                }
-
-                int focus = Focus;
-                return focus >= 0 ? Rows[focus].Key : string.Empty;
-            }
-        }
-
-        public int FocusedRow
-        {
-            get => _focus[(int)Screen];
-            set => _focus[(int)Screen] = value;
-        }
-
-        public void Open(OriginalScreen screen) => Screen = screen;
-
-        public void FocusKey(string key)
-        {
-            var rows = Rows;
-            for (int i = 0; i < rows.Count; i++)
-            {
-                if (rows[i].Key == key)
-                {
-                    _focus[(int)Screen] = i;
-                    return;
-                }
-            }
-        }
-
-        public void RaiseDialog(string message, DialogIcon icon, params OriginalDialogAnswer[] answers)
-        {
-            _focusBeforeDialog = _focus[(int)Screen];
-            Dialog = new OriginalDialog(message, icon, answers);
-            _dialogFocus = 0;
-        }
-
-        public void CloseDialog() => Dialog = null;
-
-        // No frame loop behind this fake, so a module's own re-entrant press has nothing to run.
-        public void Frame(MenuCommands commands)
+            : base(OriginalScreen.InstantAction, OriginalHangarTests.Measure, canBuildPlane: true)
         {
         }
 
-        public void PlayFilm(Action<Action> play, Action then) => OriginalTestHost.PlayFilm(play, then);
+        protected override bool RowsFollowOwnership => false;
 
-        // One answer taken, the way the shell takes one: the box goes first, the focus behind it
-        // comes back, then the answer runs over the bare screen.
-        public void Answer(string key)
-        {
-            var dialog = Dialog!;
-            var answer = dialog.Answers.Single(a => a.Key == key);
-            Dialog = null;
-            _focus[(int)Screen] = _focusBeforeDialog;
-            answer.Run?.Invoke();
-        }
+        protected override bool FocusLeavesDeadRows => false;
 
-        public (int Width, int Height)? Measure(string art) => OriginalHangarTests.Measure(art);
-
-        public void ResumeCampaign() => CampaignResumes++;
-
-        public void RefreshInstantActionRoster() => InstantActionRefreshes++;
-
-        public void RefreshRosterFromStore() => RosterRefreshes++;
-
-        public void OpenHangar(IHangarWallet? wallet) => HangarOpens++;
-
-        public MenuExit? BeginSeatWalk() => null;
-
-        public int CheatedMission(int ordinary) => OriginalTestHost.CheatedMission(ordinary);
-
-        public BoardPanel? SeatPanel(bool onPaper) => null;
-
-        public void ComposeGenericRow(
-            OriginalRow row, bool focused, bool pressed, int index,
-            List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPicture> pictures)
+        public override void ComposeGenericRow(
+            OriginalRow row, bool focused, bool pressed, int index, BoardLayers layers)
         {
             if (row.Art != null)
             {
                 int frame = row.Enabled ? ComposedBoard.PlaqueFrame(row.Art.Frames, focused, pressed) : 0;
-                plaques.Add(new BoardPlaque(row.Art, row.X, row.Y, index, frame, row.Label, BoardInk.Row));
+                layers.Plaques.Add(new BoardPlaque(row.Art, row.X, row.Y, index, frame, row.Label, BoardInk.Row));
                 return;
             }
 
-            lines.Add(new BoardLine(row.Label, row.X, row.Y, row.Width, 12f, BoardInk.Row, index));
+            layers.Lines.Add(new BoardLine(row.Label, row.X, row.Y, row.Width, 12f, BoardInk.Row, index));
         }
-
-        public OriginalRow PlaqueRow(string key, string label, int row, bool enabled, int column) =>
-            OriginalTestHost.PlaqueRow(key, label, row, enabled, column);
-
-        public void ComposePlainPage(
-            string heading, IReadOnlyList<OriginalRow> rows, int focus,
-            List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques) =>
-            OriginalTestHost.ComposePlainPage(heading, rows, focus, lines);
-
-        public BoardFill FocusMark(OriginalRow row) => OriginalTestHost.FocusMark(row);
     }
 
     // A wallet with a stated purse and no aircraft, for the pages whose subject is the money: what

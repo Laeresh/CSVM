@@ -12,17 +12,17 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// Which militia def each campaign enemy block resolves to, and the livery that def authors. The
-/// spawner loads <see cref="PlaneStats.LoadForAi"/> with the block's own def name, so this table
-/// decides the enemy's damage model, its <c>weapons</c> fit, its pilot vector and its paint
-/// (docs/org/paint.md, docs/formats/vehicle.md). The resolution is a function of the mission and
-/// the block alone: nothing here reads a spawn order or a running count.
+/// spawner loads <see cref="PlaneStats.LoadForAi"/> with the block's own def name. This table
+/// therefore decides the enemy's damage model, its <c>weapons</c> fit, its pilot vector and its
+/// paint (docs/org/paint.md, docs/formats/vehicle.md). The resolution is a function of the
+/// mission and the block alone: nothing here reads a spawn order or a running count.
 /// </summary>
 public class CampaignMilitiaLiveryTests
 {
     // CM01 to CM24 in story order: the storage address, then each distinct
-    // "<militia def>:<paint_pattern>" the mission's enemy aircraft resolve to with how many blocks
-    // take it, ordinal-ascending by def name. Surface hulls and ground vehicles are not aircraft
-    // and are absent; a def whose chain authors no paint_pattern reads ":-".
+    // "<militia def>:<paint_pattern>" the mission's enemy aircraft resolve to. Each carries how
+    // many blocks take it, ordinal-ascending by def name. Surface hulls and ground vehicles are not
+    // aircraft and are absent; a def whose chain authors no paint_pattern reads ":-".
     private static readonly (string Address, string Enemies)[] EnemyDefsByMission =
     {
         ("C3/M01", "medkestrel:medusas x3"),
@@ -71,9 +71,9 @@ public class CampaignMilitiaLiveryTests
         SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
 
     /// <summary>The campaign's own enemy set, mission by mission. Every enemy aeroplane of every
-    /// shipped mission resolves the militia def its block name carries, and all but two of those
-    /// defs author a <c>paint_pattern</c>; the two that do not are base defs a mission fields
-    /// directly, and they keep the shipped skins rather than being given invented colours.</summary>
+    /// shipped mission resolves the militia def its block name carries. All but two of those defs
+    /// author a <c>paint_pattern</c>. The two that do not are base defs a mission fields directly,
+    /// and they keep the shipped skins rather than invented colours.</summary>
     [ExtractedDataFact]
     public void EveryCampaignEnemyBlockResolvesItsMilitiaDefAndLivery()
     {
@@ -94,9 +94,9 @@ public class CampaignMilitiaLiveryTests
         }
     }
 
-    /// <summary>The same resolution on the generator half: a mission's disabled parameter blocks
-    /// are planned the way its live ones are, so an aircraft a generator launches carries the same
-    /// militia def and the same livery as one standing on the roster at mission start.</summary>
+    /// <summary>The same resolution on the generator half. A mission's disabled parameter blocks
+    /// are planned the way its live ones are. An aircraft a generator launches carries the same
+    /// militia def and livery as one standing on the roster at mission start.</summary>
     [ExtractedDataFact]
     public void EveryGeneratorTemplateResolvesItsMilitiaDefAndLivery()
     {
@@ -117,10 +117,10 @@ public class CampaignMilitiaLiveryTests
         }
     }
 
-    /// <summary>The two defs a campaign mission fields that author no livery at all, and the
-    /// reason no colours are invented for them: the shipped data names the pattern nowhere. The
-    /// Broadway Bomber is the same case one step further out, its masks shipping under no vehicle
-    /// def at all, which is why no def name below can be written for it.</summary>
+    /// <summary>The two defs a campaign mission fields that author no livery at all. No colours
+    /// are invented for them: the shipped data names the pattern nowhere. The Broadway Bomber is
+    /// the same case one step further out, its masks shipping under no vehicle def at all. No def
+    /// name below can be written for it.</summary>
     [ExtractedDataFact]
     public void TheDefsThatAuthorNoLiveryStayUnpainted()
     {
@@ -131,9 +131,9 @@ public class CampaignMilitiaLiveryTests
             s => s.Pattern.Contains("broadway", StringComparison.OrdinalIgnoreCase));
     }
 
-    /// <summary>The livery a militia def authors is the whole scheme, not the pattern alone: the
-    /// Medusa Kestrels CM01 fields carry three colours and three decals out of their own def, and
-    /// they are not the player militia's.</summary>
+    /// <summary>The livery a militia def authors is the whole scheme, not the pattern alone. The
+    /// Medusa Kestrels CM01 fields carry three colours and three decals out of their own def. They
+    /// are not the player militia's.</summary>
     [ExtractedDataFact]
     public void AMilitiaDefAuthorsItsColoursAndDecalsTooNotJustThePattern()
     {
@@ -150,10 +150,11 @@ public class CampaignMilitiaLiveryTests
     }
 
     /// <summary>Every campaign aircraft block whose own def the airframe cannot fly as its AI def,
-    /// on either team, with the def its livery is read off and what that def authors. CM16's
-    /// Black Swan is <c>bswingman_1</c>: her <c>bswingman</c> def authors no paint_pattern, so she
-    /// flies the Fury's shipped skins (her own black and white bars), not the player's colours and
-    /// not <c>bsfury</c>'s scheme, which no friendly block names.</summary>
+    /// on either team. Each row carries the def its livery is read off and what that def authors.
+    /// CM16's Black Swan is <c>bswingman_1</c>, and her <c>bswingman</c> def authors no
+    /// paint_pattern. She flies the Fury's shipped skins, her own black and white bars. She wears
+    /// neither the player's colours nor <c>bsfury</c>'s scheme, which no friendly block
+    /// names.</summary>
     [ExtractedDataFact]
     public void ABlockTheAirframeCannotFlyIsPaintedOffItsOwnDef()
     {
@@ -184,8 +185,8 @@ public class CampaignMilitiaLiveryTests
     }
 
     /// <summary>CM16's and CM19's player-side blocks and the def each is painted off. The Black
-    /// Swan in CM16 wears her def's (no pattern, so the shipped skins); every Fortune Hunters
-    /// wingman in CM19 wears <c>player_fortune</c>, which is the player's own scheme. CM19 fields no
+    /// Swan in CM16 wears her def's, which has no pattern, so the shipped skins. Every Fortune
+    /// Hunters wingman in CM19 wears <c>player_fortune</c>, the player's own scheme. CM19 fields no
     /// aeroplane of hers: she is rescued as the <c>p_swan</c> passenger.</summary>
     [ExtractedDataFact]
     public void TheBlackSwanAndTheFortuneHuntersWingmenWearTheirOwnDefsLivery()
@@ -216,7 +217,7 @@ public class CampaignMilitiaLiveryTests
 
     // "<def>:<pattern> xN" per distinct militia def among a plan list's enemy aircraft, comma
     // separated in ordinal def order. Surface hulls carry no airframe and no livery, so they are
-    // left out; so is everything on the player's own team, which draws the default pattern.
+    // left out. So is everything on the player's own team, which draws the default pattern.
     private static string Table(IReadOnlyList<RosterSpawnPlan> plans, Dictionary<string, string> patterns)
     {
         var counts = new SortedDictionary<string, int>(StringComparer.Ordinal);

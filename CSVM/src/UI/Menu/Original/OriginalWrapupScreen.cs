@@ -7,7 +7,7 @@ namespace CSVM.UI.Menu.Original;
 /// <summary>
 /// The Original presentation's Instant Action wrap-up page, a standalone module over the decoded
 /// <c>[@IA_WrapUp@]</c> section: the magazine spread, the notepad's heading, the four decoded rows
-/// off the frozen snapshot, the further lines on post-its, a stunt run's photographs beside them,
+/// off the final snapshot, the further lines on post-its, a stunt run's photographs beside them,
 /// the outcome's tick box, and a CONTINUE
 /// plaque back to the Instant Action screen. The page stands only while a snapshot is held, which the session
 /// hands over when the wrap-up hold ends; the built-in presentation keeps its own board instead.
@@ -39,7 +39,7 @@ public sealed class OriginalWrapupScreen : IOriginalScreenModule
     // The photographs the page last drew as empty prints, whose landing is what repaints it.
     private readonly List<StuntShot> _pending = new();
 
-    // The run the page is showing, frozen at the mission's ending. Null while no ended mission has
+    // The run the page is showing, final at the mission's ending. Null while no ended mission has
     // been handed over, which is every other moment the shell is alive.
     private IaWrapupSnapshot? _snapshot;
 
@@ -93,7 +93,7 @@ public sealed class OriginalWrapupScreen : IOriginalScreenModule
     /// <summary>Whether a screen is this module's.</summary>
     public bool Owns(OriginalScreen screen) => screen == OriginalScreen.InstantActionWrapup;
 
-    /// <summary>Stands the page on one ended mission's frozen numbers and opens it.</summary>
+    /// <summary>Stands the page on one ended mission's final numbers and opens it.</summary>
     public void ShowWrapup(IaWrapupSnapshot snapshot)
     {
         _snapshot = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
@@ -187,47 +187,37 @@ public sealed class OriginalWrapupScreen : IOriginalScreenModule
     /// the heading and the eight row lines, the post-its as fills with their further lines as one
     /// flowed note each, the photographs as prints (empty until each lands), the tick box as
     /// strokes, and the plaque.</summary>
-    public void Compose(
-        IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> backdrop, List<BoardPicture> pictures,
-        List<BoardFill> fills, List<BoardStroke> strokes, List<BoardLine> lines, List<BoardPlaque> plaques,
-        List<BoardNote> notes, List<BoardPanel> overlays)
+    public void Compose(IReadOnlyList<OriginalRow> rows, int focus, BoardLayers layers)
     {
         ArgumentNullException.ThrowIfNull(rows);
-        ArgumentNullException.ThrowIfNull(backdrop);
-        ArgumentNullException.ThrowIfNull(pictures);
-        ArgumentNullException.ThrowIfNull(fills);
-        ArgumentNullException.ThrowIfNull(strokes);
-        ArgumentNullException.ThrowIfNull(lines);
-        ArgumentNullException.ThrowIfNull(plaques);
-        ArgumentNullException.ThrowIfNull(notes);
-        ArgumentNullException.ThrowIfNull(overlays);
+        ArgumentNullException.ThrowIfNull(layers);
         if (_snapshot is not { } shown || _layout.Widget(WrapupSection, ContinueKey) == null)
         {
-            _host.ComposePlainPage("INSTANT ACTION", rows, focus, fills, lines, plaques);
+            _host.ComposePlainPage("INSTANT ACTION", rows, focus, layers);
             return;
         }
 
         var art = InstantActionWrapupPage.Pictures(_layout);
-        backdrop.Add(art[0]);
+        layers.Backdrop.Add(art[0]);
         for (int i = 1; i < art.Count; i++)
         {
-            pictures.Add(art[i]);
+            layers.Pictures.Add(art[i]);
         }
 
-        lines.AddRange(InstantActionWrapupPage.Rows(shown, _layout));
+        layers.Lines.AddRange(InstantActionWrapupPage.Rows(shown, _layout));
         foreach (var postIt in InstantActionWrapupPage.PostIts(shown, _layout))
         {
-            fills.AddRange(InstantActionWrapupPage.PostItPaper(postIt));
-            notes.Add(InstantActionWrapupPage.PostItNote(postIt));
+            layers.Fills.AddRange(InstantActionWrapupPage.PostItPaper(postIt));
+            layers.Notes.Add(InstantActionWrapupPage.PostItNote(postIt));
         }
 
         _pending.Clear();
         foreach (var print in InstantActionWrapupPage.Prints(shown, _layout))
         {
-            fills.AddRange(InstantActionWrapupPage.PrintPaper(print));
+            layers.Fills.AddRange(InstantActionWrapupPage.PrintPaper(print));
             if (InstantActionWrapupPage.PrintPicture(print) is { } picture)
             {
-                pictures.Add(picture);
+                layers.Pictures.Add(picture);
             }
             else if (!print.Shot.Landed)
             {
@@ -235,26 +225,26 @@ public sealed class OriginalWrapupScreen : IOriginalScreenModule
             }
         }
 
-        strokes.AddRange(InstantActionWrapupPage.TickStrokes(shown.Won, _layout));
+        layers.Strokes.AddRange(InstantActionWrapupPage.TickStrokes(shown.Won, _layout));
 
         for (int i = 0; i < rows.Count; i++)
         {
             var row = rows[i];
             if (row.Art is { } plaque)
             {
-                plaques.Add(new BoardPlaque(
+                layers.Plaques.Add(new BoardPlaque(
                     plaque, row.X, row.Y, i, ComposedBoard.PlaqueFrame(plaque.Frames, i == focus, i == _host.PressedRow),
                     string.Empty, BoardInk.LabelNormal));
             }
             else if (i == focus && row.Key.StartsWith(PrintKeyPrefix, StringComparison.Ordinal))
             {
-                fills.Add(_host.FocusMark(row));
+                layers.Fills.Add(_host.FocusMark(row));
             }
         }
 
         if (_host.SeatPanel(onPaper: true) is { } strip)
         {
-            overlays.Add(strip);
+            layers.Overlays.Add(strip);
         }
     }
 

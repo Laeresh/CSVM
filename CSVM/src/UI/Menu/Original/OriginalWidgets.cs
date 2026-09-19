@@ -4,12 +4,13 @@ using System.Globalization;
 
 namespace CSVM.UI.Menu.Original;
 
-/// <summary>The layout-widget readings more than one Original screen module needs: the slot number a
-/// numbered widget key carries, where a section's background pane lands on the board, a strip's
-/// one-frame size, and the rows of a screen drawn by the shared board component, which the campaign
-/// module and the shell's own per-seat aircraft screen both build off an <see cref="ICampaignPage"/>.
-/// Held here because a module is a sealed class of its own, so a rule two of them follow can live in
-/// neither. The open-dropdown rule is the other such reading, in <c>OriginalDropList.cs</c>.</summary>
+/// <summary>The layout-widget readings more than one Original screen module needs. They cover the
+/// slot number a numbered widget key carries and where a section's background pane lands on the
+/// board. They also cover a strip's one-frame size and the rows of a screen drawn by the shared
+/// board component. The campaign module and the shell's own per-seat aircraft screen build those
+/// rows off an <see cref="ICampaignPage"/>. Held here because a module is a sealed class of its
+/// own, so a rule two of them follow can live in neither. The open-dropdown rule is the other such
+/// reading, in <c>OriginalDropList.cs</c>.</summary>
 internal static class OriginalWidgets
 {
     // A page row that is neither a button nor a field: a roster name, a mission row, a scrap.
@@ -21,8 +22,8 @@ internal static class OriginalWidgets
     // One entry of an open drop-down list, keyed by its index into the list.
     internal const string EntryKeyPrefix = "ENTRY:";
 
-    // A plaque whose art the measurer cannot see: the briefing's brief_button1 is mission art
-    // under extracted/rimage, 196x32 in the shipped file; every other plaque is a rof strip.
+    // A plaque whose art the measurer cannot see. The briefing's brief_button1 is mission art
+    // under extracted/rimage, 196x32 in the shipped file. Every other plaque is a rof strip.
     private const float BriefPlaqueWidth = 196f;
     private const float BriefPlaqueHeight = 32f;
 
@@ -49,12 +50,12 @@ internal static class OriginalWidgets
         return int.TryParse(key.AsSpan(prefix.Length), NumberStyles.Integer, CultureInfo.InvariantCulture, out int i) ? i : null;
     }
 
-    // Where a section's pane lands on the board, which for art smaller than the board is centred
-    // rather than left at the corner it is authored at. PLANENAME.SCRIPT initializes
-    // pn_p_background with relative = 1 and then sets the screen's own location to
-    // ((getresx() - its width) / 2, (getresy() - its height) / 2); the messagebox and the loadout
-    // section do the same, the 410x300 pane landing on the 195,150 the shots measure. A pane that
-    // fills the board centres onto its own corner, and one authored away from the corner keeps it.
+    // Where a section's pane lands on the board. Art smaller than the board is centred rather than
+    // left at its authored corner. PLANENAME.SCRIPT initializes pn_p_background with relative = 1.
+    // It then sets the screen's own location to ((getresx() - its width) / 2, (getresy() - its
+    // height) / 2). The messagebox and the loadout section do the same, the 410x300 pane landing
+    // on the 195,150 the shots measure. A pane that fills the board centres onto its own corner,
+    // and one authored away from the corner keeps it.
     internal static (float X, float Y) PaneOrigin(
         MenuLayoutScreen screen, string key, Func<string, (int Width, int Height)?> measure)
     {
@@ -97,8 +98,8 @@ internal static class OriginalWidgets
         return (size.Width, (float)Math.Floor(size.Height / (float)Math.Max(1, art.Frames)));
     }
 
-    // A plaque's one-frame size: the strip measured where the file is a rof bitmap, the shipped
-    // size for the briefing's rimage plaque, the roster's CONTINUE strip as the fallback otherwise.
+    // A plaque's one-frame size. A rof bitmap is measured as a strip, and the briefing's rimage
+    // plaque takes its shipped size. The roster's CONTINUE strip is the fallback.
     internal static (float Width, float Height) PlaqueSizeOf(BoardArt art, Func<string, (int Width, int Height)?> measure)
     {
         if (art.Library == BoardArtLibrary.Rimage)
@@ -112,8 +113,8 @@ internal static class OriginalWidgets
     // Whether a row is one entry of an open list, which takes the highlight rather than the focus.
     internal static bool HoverOnly(OriginalRow row) => row.Key.StartsWith(EntryKeyPrefix, StringComparison.Ordinal);
 
-    // One entry of an open list taking the highlight: the list's own cursor moves onto it, where
-    // the focus stays on the field the list hangs from.
+    // One entry of an open list taking the highlight. The list's own cursor moves onto it. The
+    // focus stays on the field the list hangs from.
     internal static void Highlight(CampaignCombo? combo, string key)
     {
         if (combo is { } open && Entry(key) is { } entry)
@@ -129,11 +130,11 @@ internal static class OriginalWidgets
             ? entry
             : null;
 
-    // The rows of a screen drawn by the shared board component: one row per page row at the
-    // rectangle the component draws it at (a button's slot and strip, a field's box, a list row's
-    // slot), a row with no rectangle keeping its index unseen and unhit and a row <paramref
-    // name="enabled"/> refuses disabled, then <paramref name="openCombo"/>'s entries where a field
-    // of the page stands open.
+    // The rows of a screen drawn by the shared board component. One row stands per page row, at
+    // the rectangle the component draws it at. That is a button's slot and strip, a field's box,
+    // or a list row's slot. A row with no rectangle keeps its index unseen and unhit, and a row
+    // <paramref name="enabled"/> refuses is disabled. Then come <paramref name="openCombo"/>'s
+    // entries, where a field of the page stands open.
     internal static void PageRows(
         ICampaignPage page, CampaignCombo? openCombo, Func<int, bool> enabled, CampaignLayout layout,
         Func<string, (int Width, int Height)?> measure, List<OriginalRow> rows)
@@ -193,8 +194,8 @@ internal static class OriginalWidgets
         }
     }
 
-    // A row key for a page row: the authored button it presses (with its crew slot), else the
-    // kind of row it is with its index.
+    // A row key for a page row. It is the authored button it presses, with its crew slot.
+    // Otherwise it is the kind of row with its index.
     private static string RowKey(ICampaignPage page, int row)
     {
         var reference = page.Button(row);
@@ -208,11 +209,12 @@ internal static class OriginalWidgets
         return (page.Combo(row) != null ? FieldKeyPrefix : RowKeyPrefix) + row.ToString(CultureInfo.InvariantCulture);
     }
 
-    // Where a list or text row sits: the roster's box and its list rows at the layout's own item
-    // height, a mission row inside the table of contents' window, and on the book a scrap at its
-    // authored region (or its picture's bounds where the row authors none), else whatever art the
-    // row draws itself with, at that strip's frame. The book's answer is per row and not per scrap
-    // because a row the page offers and the pointer cannot reach is a control the player has lost.
+    // Where a list or text row sits. The roster's box and its list rows take the layout's own item
+    // height, and a mission row sits inside the table of contents' window. On the book a scrap
+    // takes its authored region, or its picture's bounds where the row authors none. Any other
+    // book row takes whatever art it draws itself with, at that strip's frame. The book's answer
+    // is per row and not per scrap. A row the page offers and the pointer cannot reach is a
+    // control the player has lost.
     private static (float X, float Y, float Width, float Height)? ListRowBox(
         ICampaignPage page, int row, int listIndex, CampaignLayout layout, Func<string, (int Width, int Height)?> measure)
     {

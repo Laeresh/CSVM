@@ -119,20 +119,9 @@ public sealed partial class AiWeaponAudio : Node3D
             return;
         }
         float dist = Mathf.Sqrt(AudioListeners.NearestDistanceSq(this, Listeners));
-        bool culled = dist > _gunLoopCull;
+        bool culled = GunLoopSound.Apply(_gunLoop, dist, _gunLoopCull, _gunLoopRangeMin,
+            _gunLoopRangeMax, _gunLoopVol);
         SetCulled(culled, dist);
-        if (culled)
-        {
-            _gunLoop.Stop();
-            return;
-        }
-        // Every frame, not only on the frame the loop starts: the aeroplane and the listener are
-        // both flying, so a level written once is the level of wherever they happened to be then.
-        _gunLoop.VolumeDb = SoundFalloff.SessionGainDb(dist, _gunLoopRangeMin, _gunLoopRangeMax, _gunLoopVol);
-        if (!_gunLoop.Playing)
-        {
-            _gunLoop.Play();
-        }
     }
 
     /// <summary>The trigger came off, or the aircraft respawned.</summary>
@@ -231,9 +220,7 @@ public sealed partial class AiWeaponAudio : Node3D
         _gunLoopVol = resolved.Volume;
         _gunLoopRangeMin = resolved.RangeMin;
         _gunLoopRangeMax = resolved.RangeMax;
-        // The cull is the cue's OWN WeaponSoundCue.CullDistance, not EngineAudioCurves.CullDistance:
-        // a gun loop is authored audible to 150-550 m, far inside the engine routine's 2000, so that
-        // number could never bite first and reading it here would be a borrowed constant.
+        // The caliber's own cue distance, which is the one GunLoopSound tests each frame against.
         _gunLoopCull = resolved.CullDistance;
         _culled = null;   // re-armed with the slot, so the first frame of this caliber logs its verdict
         Log.Info("sound", $"ai weapons {Aircraft()}: loop={SlotState(sndName, cue)} audible={resolved.RangeMax:0} m cull={_gunLoopCull:0} m range=x{SoundFalloff.RangeScale:0.###}");

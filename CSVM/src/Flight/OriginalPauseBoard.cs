@@ -44,7 +44,7 @@ public sealed partial class OriginalPauseBoard : Control
     /// <summary>Leave the session, chosen from QUIT.</summary>
     public Action? Exit { get; set; }
 
-    /// <summary>Hand the pausing player's pane to a free camera over the frozen world, chosen from
+    /// <summary>Hand the pausing player's pane to a free camera over the halted world, chosen from
     /// PHOTO MODE, the one strip the original does not author. The session suspends this sheet for
     /// the duration and brings it back on Escape; the halt is never dropped, so the world stays the
     /// still frame it already is.</summary>

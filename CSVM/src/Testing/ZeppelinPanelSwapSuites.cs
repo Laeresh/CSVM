@@ -9,10 +9,10 @@ using Godot;
 namespace CSVM.Testing;
 
 /// <summary>The pirate zeppelin's gasbag burn, read as geometry rather than as a pixel. A burning
-/// section fades its hull-skin panels out and its burnt-skin panels in, and the gasbag envelope and
+/// section fades its hull-skin panels out and its burnt-skin panels in. The gasbag envelope and
 /// the truss are switched on to stand behind the opening. Each of those meshes carries its own
-/// authored sidedness, so this reads the built surfaces back and pins the cull mode every one of
-/// them takes against the flag its polygons ship.</summary>
+/// authored sidedness. This reads the built surfaces back and pins the cull mode every one takes
+/// against the flag its polygons ship.</summary>
 internal static class ZeppelinPanelSwapSuites
 {
     private const string Chapter = "C2B";
@@ -22,8 +22,9 @@ internal static class ZeppelinPanelSwapSuites
     private const string BurnAnim = "pzepleft_gasbag1";
     private const float Tick = 1f / 30f;
 
-    // The left side of gasbag1: the hull-skin panels the burn fades out, the burnt-skin panels it
-    // fades in, what the swap uncovers, and the right-side pair the authored crossing reaches.
+    // The left side of gasbag1: the hull-skin panels the burn fades out, and the burnt-skin panels
+    // it fades in. The list also holds what the swap uncovers and the right-side pair the authored
+    // crossing reaches.
     private static readonly string[] Watched =
     {
         "panelleft1", "panelleft2", "panelleft3", "panelleftb1", "panelleftb2",
@@ -80,7 +81,7 @@ internal static class ZeppelinPanelSwapSuites
         ctx.Same(Watched.Length, nodes.Count,
             $"every panel, burnt panel and envelope of the {Section} left side is built: {nodes.Count} of {Watched.Length}");
 
-        // The flag reading, taken from the shipped model rather than from a name: a polygon with
+        // The flag reading, taken from the shipped model rather than from a name. A polygon with
         // show_backface set asks for both faces, and the builder answers with cull_disabled.
         report.AppendLine("=== authored sidedness against the built surface");
         foreach (string name in Watched)
@@ -114,8 +115,9 @@ internal static class ZeppelinPanelSwapSuites
         int started = runtime.Play(BurnAnim, section).Count;
         ctx.Check(started > 0, $"{BurnAnim} is a definition this world carries and it starts (instances={started})");
 
-        // burn_leftside walks the five panels at 1, 9, 17, 22 and 30 s and calls the finish at 36 s;
-        // each fade runs 3 s. 26 s is mid-burn with the top panel gone, 45 s is past the finish.
+        // burn_leftside walks the five panels at 1, 9, 17, 22 and 30 s and calls the finish at 36 s.
+        // Each fade runs 3 s. The 26 s mark is mid-burn with the top panel gone, and 45 s is past
+        // the finish.
         float clock = 0f;
         foreach (float mark in new[] { 2f, 5f, 12f, 20f, 26f, 34f, 40f, 45f })
         {
@@ -135,8 +137,8 @@ internal static class ZeppelinPanelSwapSuites
             }
         }
 
-        // Past the finish: it switches the whole panels group off and fades the two top burnt panels
-        // in, so every panel position the section carries is covered by burnt skin.
+        // Past the finish: it switches the whole panels group off and fades the two top burnt
+        // panels in. Every panel position the section carries is then covered by burnt skin.
         foreach (string name in new[] { "panelleft1", "panelleft2", "panelleft3", "panelright3" })
         {
             ctx.Check(!nodes[name].IsVisibleInTree(), $"{name} is gone once the finish has switched the panels off");
@@ -154,8 +156,8 @@ internal static class ZeppelinPanelSwapSuites
         ctx.Note($"{Chapter}/{Mission}: the {Section} burn swaps five hull-skin panels for five burnt ones, each mesh on the cull mode its own polygons ask for");
     }
 
-    // Mid-burn, at 26 s: the three side panels have faded out, and the envelope and the truss the
-    // burn switched on at its first frame are what stand behind the opening they left.
+    // Mid-burn, at 26 s: the three side panels have faded out. The envelope and the truss the
+    // burn switched on at its first frame stand behind the opening they left.
     private static void MidBurn(TestContext ctx, Dictionary<string, Node3D> nodes)
     {
         foreach (string name in new[] { "panelleft1", "panelleft2", "panelleft3" })
@@ -196,7 +198,7 @@ internal static class ZeppelinPanelSwapSuites
         return null;
     }
 
-    // The shipped node index a name resolves to inside a subtree, so a panel name that repeats on
+    // The shipped node index a name resolves to inside a subtree. A panel name that repeats on
     // all six sections is read off this section's own copy rather than another section's.
     private static int SourceIndex(TestWorld world, string name, int from)
     {
@@ -222,7 +224,7 @@ internal static class ZeppelinPanelSwapSuites
         return -1;
     }
 
-    // What the node's own geometry asks for, aggregated over its subtree: a hatch panel keeps its
+    // What the node's own geometry asks for, aggregated over its subtree. A hatch panel keeps its
     // two skin variants in child nodes, so both belong to the one answer.
     private static Sidedness AuthoredSidedness(TestWorld world, int section, string name)
     {
@@ -257,7 +259,7 @@ internal static class ZeppelinPanelSwapSuites
     }
 
     // The same question asked of the built surfaces: the bias shader carries its cull mode in its
-    // own render_mode line, so the built answer is read there rather than from a builder field.
+    // own render_mode line. The built answer is read there rather than from a builder field.
     private static Sidedness BuiltSidedness(Node3D node)
     {
         var answer = default(Sidedness);
@@ -320,8 +322,8 @@ internal static class ZeppelinPanelSwapSuites
         value.Both && value.Single ? "both and one" : value.Both ? "both faces"
             : value.Single ? "one face" : "no surface";
 
-    /// <summary>Which sidednesses a mesh asks for or builds: a model whose polygons disagree, and
-    /// the surfaces it builds, carry both.</summary>
+    // Which sidednesses a mesh asks for or builds: a model whose polygons disagree, and the
+    // surfaces it builds, carry both.
     private readonly record struct Sidedness(bool Both, bool Single)
     {
         public Sidedness With(bool both) => new(Both || both, Single || !both);

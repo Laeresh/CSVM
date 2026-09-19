@@ -525,7 +525,7 @@ public sealed partial class ColliderOverlay : Node
         }
         Log.Info("world", $"collider overlay built: {_summary}");
         // Said every build, not just in the docs: the two ways this picture is not the source data.
-        Log.Info("world", $"collider overlay: colours are the surface id a touch RESOLVES to (an id whose def this install does not ship draws as 0/default), and the id is stamped per collider BODY, not per polygon. It shows what the engine will select, not the material data.");
+        Log.Info("world", $"collider overlay: colours are the surface id a touch RESOLVES to (an id whose def this install does not ship draws as 0/default), and the id is stamped per collider BODY, not per polygon. It shows what the runtime will select, not the material data.");
     }
 
     // Releases this pass's drawings before the next show rebuilds from the live tree.
