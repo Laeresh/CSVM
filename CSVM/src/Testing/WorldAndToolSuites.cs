@@ -1287,10 +1287,10 @@ internal static class WorldAndToolSuites
 
     // ⚠ A card's pose reads the eye's POSITION and never its basis. A billboard assembled from
     // INV_VIEW_MATRIX's columns carries the camera's roll into every stamp, which is the one thing
-    // the original's shortest-arc tracker cannot do (docs/org/cloudCards.md). Asserted on the
+    // the original's per-card tracker cannot do (docs/org/cloudCards.md). Asserted on the
     // emitted shader text, because a vertex-stage rotation leaves no trace in the built scene.
     [Suite("clutter-card-pose",
-        "C5's poleflare glow stamps pose through the facade arc and never through the camera's own "
+        "C5's poleflare glow stamps pose through the facade look-at and never through the camera's own "
         + "basis, while the lightpole cards beside them keep the cylindrical pose")]
     internal static void ClutterCardPose(TestContext ctx)
     {
@@ -1335,13 +1335,13 @@ internal static class WorldAndToolSuites
         }
 
         ctx.Check(glow!.Contains("csky_facade_spherical(origin, CAMERA_POSITION_WORLD)", System.StringComparison.Ordinal),
-            $"the glow card poses through the facade arc");
+            $"the glow card poses through the facade look-at");
         ctx.Check(glow.Contains("res://shaders/csky_facade.gdshaderinc", System.StringComparison.Ordinal),
             $"the glow card's shader includes the facade block it calls");
         // The post is the control, the same emitter one flag apart. Without it a glow reading
         // right while the post lost its own pose would pass unseen.
         ctx.Check(!pole!.Contains("csky_facade_spherical", System.StringComparison.Ordinal),
-            $"the lightpole card takes no spherical arc");
+            $"the lightpole card takes no spherical pose");
         ctx.Check(pole.Contains("CAMERA_POSITION_WORLD.xz - origin.xz", System.StringComparison.Ordinal),
             $"the lightpole card still spins about its own vertical");
         ctx.Note($"{chapter}/{template}: {examined} card kinds examined, glow and post read apart");

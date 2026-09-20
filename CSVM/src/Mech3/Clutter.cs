@@ -812,8 +812,8 @@ public sealed class ClutterBuilder
 
     // The basis a card's vertices are turned by, the rendering half of its decoration model's own
     // FacadeMode (docs/org/vertexLighting.md, "Facades: the same gate, a different N").
-    // A SphericalY glow takes the original's shortest-arc facade, which reads the eye's position
-    // and never its basis, so a roll leaves it alone. A CylindricalY card spins about its planted
+    // A SphericalY glow takes the world-up facade look-at, which reads the eye's position and
+    // never its basis, so a roll leaves it alone. A CylindricalY card spins about its planted
     // point's vertical alone, so a tree or a lamp post stays upright.
     private static string FaceBasisLines(bool spherical) => spherical
         ? "    mat3 face = csky_facade_spherical(origin, CAMERA_POSITION_WORLD);"

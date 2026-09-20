@@ -283,19 +283,20 @@ underside and the walls too and place several times the field.
 `FogVolumeClutter` and its generated card shader carry the pose, the colour path and the alpha path
 above.
 
-- **The pose is the shortest arc, taken from the card's authored facing.** `csky_facade_spherical`
+- **The pose is a world-up look-at standing in for the tracker.** `csky_facade_spherical`
   in [`../../CSVM/shaders/csky_facade.gdshaderinc`](../../CSVM/shaders/csky_facade.gdshaderinc)
-  builds the rotation that carries local `+Z` onto the direction from the card to the eye with no
-  twist about it, in closed form, and every `SphericalY` population takes it: the `fvol` deck
-  cards, the `cloudparent` facades, the stamped clutter glows, and the glow sprites that share
-  their dispatch. The eye's basis
-  is not read, so the camera's roll cannot reach a card, which is the property the decode above
-  turns on. Two differences from the original remain, both structural: a shader holds no state, so
-  the arc is taken from the authored facing every frame instead of accumulating from the previous
-  one (the same pose the original shows on its first frame, differing afterwards only by the twist
-  a looping camera path would have transported), and the singularity therefore sits at a fixed
-  `f = -Z` rather than following the tracker. For a deck card, whose authored normal points up,
-  that direction lies inside the set the view-angle term has already culled.
+  points the card's `+Z` at the eye and takes its `+Y` as the world's up projected off that line,
+  and every `SphericalY` population takes it: the `fvol` deck cards, the `cloudparent` facades,
+  the stamped clutter glows, and the glow sprites that share their dispatch. The eye's basis is
+  not read, so the camera's roll cannot reach a card, which is the property the decode above turns
+  on, and the up hint is constant, so translating past a card cannot roll it either. A shader
+  holds no state, so the tracker itself is not reproduced; each of its steps is twist-free and
+  keeps the roll a card started with, so away from the pole this look-at is the pose it settles
+  into. ⚠ A closed-form shortest arc from a fixed axis is not that pose: its twist depends on
+  where the eye stands, and sliding sideways past a card that lies behind the axis rolls it
+  through most of a half turn. The one direction this look-at is degenerate in is the eye straight
+  above or below a card, where the up hint falls back to the world's `+Z`; a round puff seen face
+  on hides the roll it takes there.
 - **The colour is the authored 240, unscaled, and the only thing that ever multiplies it is the
   original's own per-vertex directional term.** A chapter authoring its card `lighting: true` (C1C,
   C2B and C5) takes `AMBIENT + DIFFUSE · max(N·L, 0)` per corner on the card's three authored

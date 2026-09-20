@@ -210,8 +210,8 @@ runs.
 `cloudsprite1`/`cloudsprite2` are ordinary [clutter template roots](clutter.md), parentless
 `Object3d` nodes resolved by name (`ClutterBuilder.FindTemplateRoot`, shared with the trees) with
 one child carrying the card. The card is a single 4-vertex, 1-polygon tri-strip quad,
-`model_type: Facade` + `facade_mode: SphericalY` (turned to face the eye in any direction, not the
-trees' upright `CylindricalY`), skinned `cloud1.tif` / `cloud2.tif`, vertex colours 240/240/240, centred on its
+`model_type: Facade` + `facade_mode: SphericalY` (turned to face the eye in any direction, tilting
+as well as yawing, not the trees' upright `CylindricalY`), skinned `cloud1.tif` / `cloud2.tif`, vertex colours 240/240/240, centred on its
 own quad centre to within 3 mm.
 
 ⚠ **We render those cards at the authored 240, and no colour term is applied to them at all.**
