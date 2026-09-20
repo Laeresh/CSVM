@@ -105,7 +105,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave E, The flip
 
-41. ☐ A clean-machine run of the downloaded zip, above and below the floor
+41. ☑ A clean-machine run of the downloaded zip, above and below the floor
 42. ☐ Release notes, the first tag, the flip, and an announcement draft
 43. ☑ `README.md`: the play path, the status, and the developer split
 
@@ -857,7 +857,7 @@ when the tag has not been published yet.
 
 # Wave E, The flip
 
-## E41 ☐ A clean-machine run of the downloaded zip, above and below the floor
+## E41 ☑ A clean-machine run of the downloaded zip, above and below the floor
 
 **Goal.** The exact artifact a stranger will download is proven on machines that have never seen
 this project, following only the public README.
@@ -890,6 +890,64 @@ defect, or an E43 one where the step was on the front page.
 **⚠ Traps.** ⚠ Never force-kill the sandbox processes; close the window. Do not read the flight-mode
 exit hang as a package failure. A hand-copied zip does not test the mark-of-the-web path, which is
 the specific thing this run exists to prove.
+
+**Verified.** Two Windows Sandbox runs of the same zip, `sandbox/PublicRelease.ps1` under
+`RunSandbox.ps1 -Networking -MapReadOnly <retail install>`, one with the vGPU and one with
+`-NoVGpu`. The zip was `PublishRelease.ps1 -TagSuffix rehearsal -DryRun`'s export of the clean
+commit the tree stood at, 198 files, SHA-256 `1db91e88…a481`, not a release asset: the tag-and-upload
+run was refused by the session's permission policy, so the release-page download is left to E42's own
+re-run against the published asset, and the mark of the web was written onto the zip on the host as
+the `Zone.Identifier` stream a browser writes (`ZoneId=3`, referrer and host URL). What the mark then
+did is observed, not assumed: it survived the mapped folder and the copy into Downloads, Explorer's
+own unzip (the shell copy engine, 5 seconds for the 198 files) propagated it to every file inside,
+`CSVM.exe`, `Extract.cmd` and `Extract.ps1` each carrying `ZoneId=3` with the zip as referrer, and
+double-clicking them through Explorer raised the prompts a stranger meets. `CSVM.exe` raises
+SmartScreen's blue "Windows protected your PC" sheet with its "More info" link, which is what the
+README describes. `Extract.cmd` raises a different prompt the README did not describe, the attachment
+manager's "Open File - Security Warning" with Run and Cancel, and the README now names it. Neither
+prompt was clicked through; each launch was then repeated as a plain process, which is what "Run
+anyway" leads to.
+
+The README's four steps held on the machine that meets the floor. `CSVM.exe` before extraction shows
+the "No game data found" screen naming `Extract.cmd`, and its log carries the same sentence.
+`Extract.cmd` with the install at a path its probe checks found it, took one Enter as its prompt says,
+and finished in 29 seconds with exit 0, 1668 files and 684 MB in `extracted\`, the two figures D32
+carried unmeasured. The menu and a C1 flight ran on Vulkan at 1450 and 650 to 720 fps uncapped, no
+dialog, the flight with zero stderr lines. Every log's first line is `csvm version=0.1.0`, the logs
+sit in `logs\` beside the exe named for the mode and start time, and
+`%APPDATA%\Godot\app_userdata\CSVM` existed after the first menu run. The version in the menu's
+bottom-right corner was not read off a screenshot, since the eight-second shot lands in the intro
+film. The folder picker was not exercised, being a dialog; the probed-install path and the
+dropped-folder argument are the two paths a script can drive.
+
+Below the floor the README was wrong, and E41 corrected it. C22 had observed a menu without game
+data and a flight, never the menu with data. With data present the boot card shows, the intro film
+starts, its first 4 MB vertex buffer fails with `DXGI_ERROR_DEVICE_REMOVED` on the `Microsoft Basic
+Render Driver`, and the process dies of the same `0xC0000005` sixteen seconds in, before any menu;
+the flight dies the same way, so a player below the floor sees the window vanish a few seconds after
+start, not after picking a mission. The no-game-data screen alone survives there. The README's
+requirement bullet and its troubleshooting section now say so, the `[perf] gpu=` identification
+still holds, and `docs/tooling.md`'s floor paragraph was corrected with it. The extraction itself
+took 28 seconds on that machine, since it never touches the GPU.
+
+Two things a stranger sees were settled in the item's wake. The extraction console printed
+4535 `INTERVAL VAL FAIL` lines and one `DELTA VAL FAIL` from `unzbd`'s anim validation inside a run
+that succeeds, so a reader who scans for the word the README tells them to look for found it 4536
+times on a good run; `unzbd` has no quiet flag (its `env_logger` defaults to `warn` and the lines
+are `log::error!`), so `ExtractAssets.ps1` now counts them, and the 171 `anim def duplicate anim
+ref` lines of the same kind, beside the transform-precision notes instead of printing them, one
+grey `(N anim-validation notes)` line per archive and a total in the summary, verified on a
+scratch copy of `C1\cam_anim.zbd` (451 notes, nothing else printed). The
+Godot boot splash is the first thing on screen after the SmartScreen sheet and stays for the first
+release. One rig lesson remains for the record: SmartScreen's verdict needs a network, so the rig
+gained `-Networking`; the first attempt with
+`Start-Process` hung inside the prompt and a hidden helper never showed it, which is why the driver
+hands the file to Explorer, and `docs/tooling.md` records both with the CIM and log-sharing
+lessons. The export step also showed that Godot's import writes `.uid` files for scripts that lack
+one, which dirties the tree after the build and fails the publish script's post-export check: the
+`.uid` files have to be committed before E42's publish. Content gate clean
+(`CheckCommitContent.ps1` exit 0); nothing under `CSVM/` was touched, so the complete `RunTests.ps1`
+is not this change's gate.
 
 ## E42 ☐ Release notes, the first tag, the flip, and an announcement draft
 

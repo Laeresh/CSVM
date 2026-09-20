@@ -371,9 +371,13 @@ It stages `.scratch\sandbox\<timestamp>-<vgpu|novgpu>\` with an `input\` folder 
 driver script, mapped read-only) and a writable `output\`, writes the `.wsb`, starts Windows Sandbox
 on it and waits for the driver's `done.txt`. `-NoVGpu` is the below-the-floor machine, `-MemoryMB`
 its memory, `-MapReadOnly` adds host folders the zip does not carry (a retail install, an extraction
-tree), and `-Driver` chooses what runs inside, so a later item can supply its own procedure without
-rebuilding the harness. Everything the run produced stays on the host in `output\`: screenshots,
-both streams, the build's own `logs\`, a line-by-line `steps.log` and `summary.json`.
+tree), `-Networking` gives the guest a network (off by default; the SmartScreen verdict on an
+unknown download is fetched, so a run that records that prompt needs it), and `-Driver` chooses what
+runs inside, so a later item can supply its own procedure without rebuilding the harness. The drivers
+share `sandbox/SandboxCommon.ps1`, copied in beside the driver and dot-sourced by name: the step log,
+the window census, screenshots, the machine facts and the watched launch of `CSVM.exe`. Everything
+the run produced stays on the host in `output\`: screenshots, both streams, the build's own `logs\`,
+a line-by-line `steps.log` and `summary.json`.
 
 **`sandbox/RendererFloor.ps1`** is the driver that answers "what does this machine do with this
 build". It unzips to `C:\CSVM`, launches `CSVM.exe` the way a recipient double-clicks it, records
@@ -386,6 +390,17 @@ gl_compatibility` and with `--rendering-driver opengl3`, so a fallback that does
 documented troubleshooting line rather than a guess. With an extraction tree mapped it also flies a
 chapter with `--no-vsync`, because whether a machine renders a menu says nothing about whether it
 can fly.
+
+**`sandbox/PublicRelease.ps1`** is the driver that follows `packaging/README.md` literally on a zip
+carrying the mark of the web, with a retail install mapped in (`-MapReadOnly`). The zip is copied
+into Downloads as a browser leaves it, unzipped through the shell's own copy engine so the mark
+propagates to the files inside, and then each double-click the README names is done twice: once
+through Explorer, which is where the security prompt appears and is recorded, and once as a plain
+process, which is what "Run anyway" leads to. `CSVM.exe` is started before the extraction for the
+no-game-data screen, `Extract.cmd` is run with its prompt answered by Enter after the mapped install
+is junctioned to a path its probe checks, and the menu and a C1 flight run on the data the machine
+extracted itself. The summary records the mark on the zip and on the extracted files, the extraction's
+time, file count and size, the save folder, and each launch's windows and dialogs.
 
 What the rig had to learn, none of it visible in a failed run:
 
@@ -408,7 +423,15 @@ What the rig had to learn, none of it visible in a failed run:
 - **The logon command can fire before the mapped folders mount,** so it polls for them, and its
   console is invisible, so it redirects. That redirect is still buffered when the session ends, which
   is why the driver appends `steps.log` line by line and reads its own `summary.json` back off the
-  share before saying it finished.
+  share before saying it finished. The append opens the file with every share flag, because a host
+  that tails the log while the guest writes it otherwise makes every later append fail silently.
+- ⚠ **A file carrying the mark of the web is not double-clicked with `Start-Process`.** ShellExecute
+  does not return until the security prompt is answered, so the driver hangs there, and a prompt
+  raised from a hidden helper process never reaches the screen at all. The driver hands the file to
+  `explorer.exe`, which returns at once and shows the prompt where a person would see it.
+- **CIM is access-denied to the sandbox account too**, and `Get-NetAdapter` throws a terminating
+  error through `-ErrorAction SilentlyContinue`, which empties every machine fact gathered in the
+  same expression. Network presence is read from `NetworkInterface.GetIsNetworkAvailable()`.
 
 **The renderer floor, as observed.** The build does not refuse to start without Vulkan. On the
 below-floor machine Godot reports `Required Vulkan instance extension VK_KHR_surface not found`,
@@ -419,8 +442,11 @@ and the no-game-data screen render normally. A flight does not: loading a chapte
 device, `buffer_create` fails with `0x8007000e` (out of memory) tens of thousands of times, and the
 process dies of an access violation (`0xC0000005`) about fourteen seconds in, leaving no window and
 no message. Guest memory is not the constraint, since 8 GB and 16 GB fail identically. So the floor
-is a GPU with a working Vulkan or Direct3D 12 driver, and what a machine below it shows a player is
-menus that work followed by a mission that vanishes.
+is a GPU with a working Vulkan or Direct3D 12 driver. What a machine below it shows a player is the
+boot card and then nothing: with game data present the intro film's first 4 MB vertex buffer fails
+with `DXGI_ERROR_DEVICE_REMOVED` (`0x887a0005`) and the process dies of the same access violation a
+few seconds in, before any menu. Only the no-game-data screen survives on that machine, so a menu
+observed without data says nothing about the floor.
 
 ## `tools/` (git-ignored)
 
