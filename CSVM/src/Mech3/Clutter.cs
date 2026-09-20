@@ -252,6 +252,48 @@ public sealed class ClutterBuilder
         return null;
     }
 
+    /// <summary>Every mesh-bearing node under <paramref name="deco"/> other than
+    /// <paramref name="drawn"/>, each with its transform into <paramref name="drawn"/>'s own frame.
+    /// A decoration model is a node chain whose meshes sit on several nodes. The original draws
+    /// the whole chain, so these are the rest of the building.
+    /// ⚠ LOD alternates are excluded here exactly as <see cref="SceneBuilder"/> excludes them
+    /// (nearest level only), or a block would draw its far silhouette inside itself.</summary>
+    public static List<(int MeshIndex, Transform3D Local)> ExtraMeshes(
+        GameZ gamez, GameZNode deco, GameZNode drawn)
+    {
+        var found = new List<(GameZNode Node, Transform3D Xf)>();
+        // The decoration node's own local placed the stamp already, so the frame here is the one
+        // below it. That is the frame the drawn mesh's own MeshLift was measured in.
+        if (drawn.Index == deco.Index)
+            Walk(deco, Transform3D.Identity);
+        else
+            foreach (var c in deco.Children)
+                if (c >= 0 && c < gamez.Nodes.Count)
+                    Walk(gamez.Nodes[c], Transform3D.Identity);
+        var parts = new List<(int, Transform3D)>();
+        int at = found.FindIndex(f => f.Node.Index == drawn.Index);
+        if (at < 0)
+            return parts;
+        var toLocal = found[at].Xf.AffineInverse();
+        foreach (var (node, xf) in found)
+            if (node.Index != drawn.Index)
+                parts.Add((node.MeshIndex, toLocal * xf));
+        return parts;
+
+        void Walk(GameZNode node, Transform3D xf)
+        {
+            if (WorldBuilder.SkipWorldNode(node) || (node.Kind == "Lod" && node.LodRangeMin != 0f))
+                return;
+            var here = node.Local is { } local ? xf * local : xf;
+            if (node.MeshIndex >= 0 && node.MeshIndex < gamez.Meshes.Count
+                && gamez.Meshes[node.MeshIndex].Polygons.Count > 0)
+                found.Add((node, here));
+            foreach (var c in node.Children)
+                if (c >= 0 && c < gamez.Nodes.Count)
+                    Walk(gamez.Nodes[c], here);
+        }
+    }
+
     /// <summary>The template's ground quad as the original's decoration projection uses it: the
     /// polygon's plane, and the affine map from a local position on it to the polygon's own
     /// interpolated texture UV.
@@ -389,6 +431,29 @@ public sealed class ClutterBuilder
             {
                 SolidCount += kind.Instances.Count;
                 solidKinds.Add(kind);
+                // The rest of the decoration's own chain, one MultiMesh each over the same stamps.
+                // Exported too, so MapEdgeExtender's copies past the map edge are whole buildings.
+                foreach (var (meshIndex, local) in kind.ExtraParts)
+                {
+                    var placements = Composed(kind.Instances, local);
+                    if (BuildSolidPart(kind, meshIndex, placements) is not { } partMmi)
+                        continue;
+                    root.AddChild(partMmi);
+                    exported.Add(new KindExport
+                    {
+                        Texture = kind.Label,
+                        Mesh = (ArrayMesh)partMmi.Multimesh!.Mesh,
+                        Material = partMmi.MaterialOverride,
+                        Solid = true,
+                        NodeBias = NodeBiasOf(kind),
+                        Width = kind.Width,
+                        Height = kind.Height,
+                        CullMargin = CullMarginOf(kind),
+                        Placements = placements,
+                        Fades = kind.Fades,
+                    });
+                    exportedMesh.Add(meshIndex);
+                }
             }
             else
             {
@@ -676,6 +741,17 @@ public sealed class ClutterBuilder
         return mm;
     }
 
+    // A kind's stamps in one of its further meshes' frames. That frame is the drawn mesh's own
+    // for every decoration this install ships. The composition is here so a data change cannot
+    // silently drop a part's offset.
+    private static List<Transform3D> Composed(List<Transform3D> instances, Transform3D local)
+    {
+        var composed = new List<Transform3D>(instances.Count);
+        foreach (var xf in instances)
+            composed.Add(xf * local);
+        return composed;
+    }
+
     // A billboard card, turned toward the camera by FaceBasisLines because the source decorations
     // are one-sided quads that would vanish edge-on. Fullbright, SceneBuilder's cylindrical fog, and
     // the archive's own blend-or-scissor verdict. `lit` and `fogged` are the decoration model's own
@@ -792,7 +868,7 @@ public sealed class ClutterBuilder
 
             if (!kinds.TryGetValue(decoMesh.MeshIndex, out var kind))
             {
-                if (MakeKind(decoMesh, deco.Name) is not { } made)
+                if (MakeKind(decoMesh, deco.Name, deco) is not { } made)
                 {
                     (skipped ??= new List<string>()).Add(deco.Name);
                     continue;
@@ -818,7 +894,7 @@ public sealed class ClutterBuilder
     // rendered identically, a `firtree2` stamped because `firtree1` rolled it must be the same
     // kind of thing as a `firtree2` the template placed itself. Null when the mesh is neither a
     // sprite card nor a solid decoration (no texture, or no SceneBuilder for the solid path).
-    private Kind? MakeKind(GameZNode meshNode, string model)
+    private Kind? MakeKind(GameZNode meshNode, string model, GameZNode deco)
     {
         if (SpriteInfo(meshNode.MeshIndex) is { } s)
         {
@@ -838,7 +914,7 @@ public sealed class ClutterBuilder
         }
         if (IsSolidDecoration(meshNode.MeshIndex))
         {
-            return new Kind
+            var solid = new Kind
             {
                 MeshIndex = meshNode.MeshIndex,
                 NodeIndex = meshNode.Index,
@@ -846,6 +922,8 @@ public sealed class ClutterBuilder
                 Label = model,
                 Solid = true,
             };
+            solid.ExtraParts.AddRange(ExtraMeshes(_gamez, deco, meshNode));
+            return solid;
         }
         return null;
     }
@@ -924,7 +1002,7 @@ public sealed class ClutterBuilder
                 continue;
             if (FirstWithMesh(_gamez, node) is not { } meshNode)
                 continue;
-            if (MakeKind(meshNode, model) is not { } kind)
+            if (MakeKind(meshNode, model, node) is not { } kind)
                 continue;
             if (_props?.Find(model) is { } block)
                 AdoptBlock(kind, block);
@@ -1140,28 +1218,51 @@ public sealed class ClutterBuilder
         return mmi;
     }
 
+    // One further mesh of a decoration's chain, drawn over the kind's own stamps already moved
+    // into that mesh's frame. Same materials, same fades and the same draw-order bias as the
+    // mesh it belongs with, because it is one building, not a second decoration.
+    private MultiMeshInstance3D? BuildSolidPart(Kind kind, int meshIndex, List<Transform3D> placements)
+    {
+        var mesh = _scene?.SharedMesh(meshIndex, clutterFade: true);
+        if (mesh == null)
+            return null;
+        var mm = new MultiMesh
+        {
+            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+            UseCustomData = true,
+            Mesh = mesh,
+            InstanceCount = placements.Count,
+        };
+        for (int i = 0; i < placements.Count; i++)
+        {
+            mm.SetInstanceTransform(i, placements[i]);
+            mm.SetInstanceCustomData(i, kind.Fades[i]);
+        }
+        ClutterCull.Index(mm, placements);
+        var mmi = new MultiMeshInstance3D
+        {
+            Multimesh = mm,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            Name = Sanitize(kind.Label + "_" + meshIndex),
+        };
+        mmi.SetInstanceShaderParameter("node_bias", NodeBiasOf(kind));
+        return mmi;
+    }
+
     private void BuildSolidCollision(Node3D root, List<Kind> kinds)
     {
-        // One shape per distinct decoration mesh, keyed by MeshIndex. That over-counts C5's mesh
-        // duplicates, but at about 40 triangles a shape it is not worth a geometry hash.
+        // One shape per distinct decoration mesh, keyed by MeshIndex, a decoration's further
+        // meshes included. That over-counts C5's mesh duplicates, but at about 40 triangles a
+        // shape it is not worth a geometry hash.
         var shapes = _solidShapes = new Dictionary<int, ConcavePolygonShape3D>();
         var tris = new List<Vector3>();
         foreach (var kind in kinds)
         {
-            if (shapes.ContainsKey(kind.MeshIndex))
-                continue;
-            tris.Clear();
-            int oneSided = AppendTriangles(_gamez.Meshes[kind.MeshIndex], tris);
-            if (tris.Count == 0)
-                continue;
-            // ⚠ Two-sided where SceneBuilder's world colliders are one-sided, and not for want of
-            // the flag: this triangulation does not alternate a strip's winding, so the triangles
-            // have no agreed front. Whether the original holds these at all is undecoded.
-            var shape = new ConcavePolygonShape3D { Data = tris.ToArray(), BackfaceCollision = true };
-            shapes[kind.MeshIndex] = shape;
-            SolidCollisionTriangles += tris.Count / 3;
-            SolidCollisionOneSidedTriangles += oneSided;
+            Shape(kind.MeshIndex);
+            foreach (var (meshIndex, _) in kind.ExtraParts)
+                Shape(meshIndex);
         }
+
         SolidCollisionShapes = shapes.Count;
         if (shapes.Count == 0)
             return;
@@ -1177,10 +1278,34 @@ public sealed class ClutterBuilder
         var regions = new Dictionary<(int, int), StaticBody3D>();
         foreach (var kind in kinds)
         {
-            if (!shapes.TryGetValue(kind.MeshIndex, out var shape))
-                continue;
+            Attach(kind.MeshIndex, kind.Instances);
+            foreach (var (meshIndex, local) in kind.ExtraParts)
+                Attach(meshIndex, Composed(kind.Instances, local));
+        }
+
+        void Shape(int meshIndex)
+        {
+            if (shapes.ContainsKey(meshIndex))
+                return;
+            tris.Clear();
+            int oneSided = AppendTriangles(_gamez.Meshes[meshIndex], tris);
+            if (tris.Count == 0)
+                return;
+            // ⚠ Two-sided where SceneBuilder's world colliders are one-sided, and not for want of
+            // the flag. This triangulation does not alternate a strip's winding, so the triangles
+            // have no agreed front. Whether the original holds these at all is undecoded.
+            var shape = new ConcavePolygonShape3D { Data = tris.ToArray(), BackfaceCollision = true };
+            shapes[meshIndex] = shape;
+            SolidCollisionTriangles += tris.Count / 3;
+            SolidCollisionOneSidedTriangles += oneSided;
+        }
+
+        void Attach(int meshIndex, List<Transform3D> placements)
+        {
+            if (!shapes.TryGetValue(meshIndex, out var shape))
+                return;
             var shapeRid = shape.GetRid();
-            foreach (var xf in kind.Instances)
+            foreach (var xf in placements)
             {
                 var key = (Mathf.FloorToInt(xf.Origin.X / CollisionRegion),
                            Mathf.FloorToInt(xf.Origin.Z / CollisionRegion));
@@ -1480,6 +1605,13 @@ public sealed class ClutterBuilder
         // Parallel to Instances: each stamp's (near², far², 1/(far² − near²), 0) as the MultiMesh
         // custom data the fade shader reads; zero for a stamp that never fades.
         public readonly List<Color> Fades = new();
+
+        // The decoration's FURTHER mesh-bearing nodes besides MeshIndex, each with its transform
+        // into MeshIndex's own frame. A 3D decoration is a node chain and the original draws all
+        // of it. C5's cb15a hangs two street walls and a roof cap off `o2` and `g8`, and loses
+        // them when only the `Default` mesh is drawn. Empty for a card and for a single-mesh
+        // decoration (docs/formats/clutter.md).
+        public readonly List<(int MeshIndex, Transform3D Local)> ExtraParts = new();
 
         public int MeshIndex;
         public int NodeIndex;                    // a representative decoration node (draw order)

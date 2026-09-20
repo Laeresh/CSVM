@@ -533,17 +533,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `--campaign=C1C:1`, hold under the band with a zeppelin above it, then climb through.
   *Cross-refs:* `docs/formats/weather/atmosphere.md` (the band), BL-999's record (the whiteout
   over the cockpit), `BL-380` (fog per rig).
-- `BL-1029` `[Bug]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: feel]` `[C5]` **A C5 building
-  shows a side wall from one side and none from the other.** *Evidence:*
-  `--pos="-9908.636,58.366,-3458.637" --direction="-0.99932,0.03675,-0.00233"`
-  (`Screenshots/crimsonskies_2026-09-19_23-49-33-491.png` and `-37-461.png`, local, the same
-  building from two sides): the face is there from one side and gone from the other, a culled or
-  reverse-wound face rather than a dropped mesh. *Fix shape:* `--freecam` at the pose, name the
-  mesh, check the face's winding and its material's cull mode against the archive's flags; if the
-  original draws it two-sided, that material takes `cull_disabled`. *⚠ Traps:* measure this one
-  building first; do not switch every building material to `cull_disabled`. *Playtest after fix:*
-  the same pose, both sides.
-
 ## Effects & animation runtime
 
 - `BL-674` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: data]` `[CM10]` **CM10's attack-balloon wave flies from 990 m down to water level and back up
