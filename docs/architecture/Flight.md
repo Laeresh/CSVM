@@ -285,12 +285,12 @@ Decode: [../org/weaponImpact.md](../org/weaponImpact.md), [../formats/weapons.md
 ## src/Flight/CraterGate.cs
 Whether a round's ground strike asks for a crater, as a pure function with no scene behind it.
 Two rules meet in `For`: the original's own, the struck node's `CAN_MODIFY` flag over a `CRATER`
-weapon, which no shipped node satisfies, and the Enhanced Graphics page's Rocket Craters row, under
-which any rocket warhead's ground burst carves. The answer is a `CraterAsk`, not a bool, because
-only the faithful rule suppresses the weapon's `ANIMATION` and `SURFACE_ANIMATION` slots: the
-option adds a bowl under a burst that still plays. `Enabled` is the run's answer to the row, set
-from the saved option (never under `--det`) or from `--craters`, and read by `ProjectilePool.Impact`.
-Decode: [../org/craters.md](../org/craters.md).
+weapon, which no shipped node satisfies, and the remake's own carve option, under which any rocket
+warhead's ground burst carves. The answer is a `CraterAsk`, not a bool, because only the faithful
+rule suppresses the weapon's `ANIMATION` and `SURFACE_ANIMATION` slots: the option adds a bowl under
+a burst that still plays. `Enabled` is the run's answer, armed at boot from the saved
+`rocketCraters` key (never under `--det`) or from `--craters`, its only two doors since no menu row
+offers it, and read by `ProjectilePool.Impact`. Decode: [../org/craters.md](../org/craters.md).
 
 ## src/Flight/Projectile.cs
 `ProjectilePool`, the shared-world weapon-fire subsystem: a fixed pool of rounds integrated off the

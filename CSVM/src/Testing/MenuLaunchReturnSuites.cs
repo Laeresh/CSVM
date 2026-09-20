@@ -86,7 +86,7 @@ internal static class MenuLaunchReturnSuites
     [Suite("menu-backdrop",
         "the persistent environment's background over an Options restart and a launch, on the "
         + "launcher's own WorldEnvironment: a run that shows no menu leaves it on the sky, the "
-        + "menu's first show blacks it, Built-in's Options screen offers fifteen steppers, two doors "
+        + "menu's first show blacks it, Built-in's Options screen offers fourteen steppers, two doors "
         + "and no presentation row, the frame between the apply's exit and the restart carries no "
         + "presentation and stays black, the restart stands a fresh Built-in up over the same "
         + "black, and a launch puts the sky back with the material the rig built still on it")]
@@ -163,8 +163,8 @@ internal static class MenuLaunchReturnSuites
             run.Press(Down);
         }
 
-        ctx.Check(rows.Count == 17 && !rows.Exists(r => r.Contains("presentation", StringComparison.OrdinalIgnoreCase)),
-            $"the Options screen holds fifteen steppers and two doors and no presentation row ({string.Join(" | ", rows)})");
+        ctx.Check(rows.Count == 16 && !rows.Exists(r => r.Contains("presentation", StringComparison.OrdinalIgnoreCase)),
+            $"the Options screen holds fourteen steppers and two doors and no presentation row ({string.Join(" | ", rows)})");
         WalkTo(run, menu, "Apply and restart the menu");
         run.Press(Accept);
         var applied = run.Expect<OptionsApplyExit>();

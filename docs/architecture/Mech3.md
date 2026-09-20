@@ -83,7 +83,7 @@ under the body the round struck, hands the carve to `TerrainCarve` and the decor
 ages one out, so what bounds a mission's count is the refusal alone. `TryCarve` is the sink shape
 `ProjectilePool` holds, true only when the carve landed. The pool asks it only for a collider
 stamped `SceneBuilder.CanModifyMeta`, which no shipped node carries, so a played round never reaches
-it and only a direct caller (the `crater-carve` suite, an enhanced option) carves.
+it and only a direct caller (the `crater-carve` suite, the hand-armed carve option) carves.
 
 ## src/Mech3/TerrainCarve.cs
 The mesh and collider surgery one carve performs on one world node. The ring is subtracted from

@@ -388,21 +388,15 @@ public class OriginalOptionsTests
         Assert.Null(host.Module.VSyncChoice);
         Assert.Equal(GraphicsMode.Default, host.Module.GraphicsChoice);
 
-        // Four steps, not five: the size row is dead under the borderless default, which owns the
+        // Three steps, not four: the size row is dead under the borderless default, which owns the
         // size. A dead row is out of the walk.
         Down(host);
         Down(host);
         Down(host);
-        // The carve row above the graphics one opens off, the shipped default, and flips.
-        Assert.Equal(OriginalOptionsScreen.RocketCratersKey, host.FocusedKey);
-        Assert.Null(host.Module.RocketCratersChoice);
-        Accept(host);
-        Assert.True(host.Module.RocketCratersChoice);
-        Down(host);
         Assert.Equal(OriginalOptionsScreen.GraphicsKey, host.FocusedKey);
         Accept(host);
         Assert.Equal(GraphicsMode.EnhancedWord, host.Module.GraphicsChoice);
-        Assert.Equal(4 + 2, Compose(host).Plaques.Single(p => p.Art.Name == "PP_B_Check8.png" && p.Y == 465f).Frame);
+        Assert.Equal(4 + 2, Compose(host).Plaques.Single(p => p.Art.Name == "PP_B_Check8.png").Frame);
 
         // A sideways step takes the next word with wrap, as a Game Options row does.
         StepX(host, 1);
@@ -414,7 +408,6 @@ public class OriginalOptionsTests
         Assert.Equal(OriginalOptionsScreen.VideoAcceptKey, host.FocusedKey);
         var exit = Assert.IsType<OptionsApplyExit>(Accept(host));
         Assert.Equal(GraphicsMode.EnhancedWord, exit.Graphics);
-        Assert.True(exit.RocketCraters);
         Assert.Null(exit.MonitorIndex);
         Assert.Null(exit.Resolution);
         Assert.Null(exit.DisplayMode);
@@ -452,7 +445,6 @@ public class OriginalOptionsTests
         StepX(host, -1);
         Assert.Equal(DisplayWords.Windowed, host.Module.DisplayModeChoice);
 
-        Down(host);
         Down(host);
         Down(host);
         Down(host);
@@ -587,9 +579,6 @@ public class OriginalOptionsTests
         Assert.Equal("60", host.Module.VSyncChoice);
         Down(host);
         Accept(host);
-        Assert.True(host.Module.RocketCratersChoice);
-        Down(host);
-        Accept(host);
         Assert.Equal(GraphicsMode.EnhancedWord, host.Module.GraphicsChoice);
         Down(host);
         Down(host);
@@ -599,10 +588,8 @@ public class OriginalOptionsTests
         Assert.Equal(GraphicsMode.Default, host.Module.GraphicsChoice);
         Assert.Null(host.Module.DisplayModeChoice);
         Assert.Null(host.Module.VSyncChoice);
-        Assert.Null(host.Module.RocketCratersChoice);
 
         host.Module.OpenVideo();
-        Down(host);
         Down(host);
         Down(host);
         Down(host);
@@ -787,7 +774,8 @@ public class OriginalOptionsTests
         Assert.False(resolution.Enabled);
         Assert.Equal((260f, 335f, 70f, 17f), Rect(Row(host, OriginalOptionsScreen.DisplayModeKey)));
         Assert.Equal((260f, 380f, 70f, 17f), Rect(Row(host, OriginalOptionsScreen.VSyncKey)));
-        Assert.Equal((260f, 420f, 16f, 16f), Rect(Row(host, OriginalOptionsScreen.RocketCratersKey)));
+        // The Graphics checkbox keeps the authored Shadows corner. The Clutter Detail line above it
+        // stays blank, no row moving up onto a line the artwork does not draw it on.
         Assert.Equal((260f, 465f, 16f, 16f), Rect(Row(host, OriginalOptionsScreen.GraphicsKey)));
         Assert.Equal((500f, 470f, 240f, 50f), Rect(Row(host, OriginalOptionsScreen.VideoAcceptKey)));
         Assert.Equal((500f, 520f, 240f, 50f), Rect(Row(host, OriginalOptionsScreen.VideoCancelKey)));
@@ -812,22 +800,17 @@ public class OriginalOptionsTests
         Assert.Contains(board.Lines, l => l.Text == "V-Sync" && l.X == 130f && l.Y == 380f && l.Width == 130f);
         Assert.Contains(board.Lines, l => l.Text.StartsWith("Select the frame pacing.", StringComparison.Ordinal)
             && l.X == 340f && l.Y == 380f && l.Width == 310f);
-        // The carve row stands on the authored Clutter Detail line, the checkbox line above Shadows,
-        // and its description wraps at the plaque column for the same reason the Shadows one does.
-        Assert.Contains(board.Lines, l => l.Text == "Rocket Craters" && l.X == 130f && l.Y == 425f && l.Width == 130f);
-        Assert.Contains(board.Lines, l => l.Text.StartsWith("Let a rocket's ground burst", StringComparison.Ordinal)
-            && l.X == 340f && l.Y == 425f && l.Width == 160f);
         Assert.Contains(board.Lines, l => l.Text == "Enhanced Graphics" && l.X == 130f && l.Y == 470f && l.Width == 130f);
         Assert.Contains(board.Lines, l => l.Text.StartsWith("Select the lit world.", StringComparison.Ordinal)
             && l.X == 340f && l.Y == 470f && l.Width == 160f);
-        Assert.Equal(13, board.Lines.Count(l => l.Row < 0));
-        // Both checkboxes draw unchecked and unfocused, the page opening on the monitor row above
-        // them: the second of their eight frames.
-        Assert.Equal(new[] { 1, 1 }, board.Plaques.Where(p => p.Art.Name == "PP_B_Check8.png").Select(p => p.Frame));
+        Assert.Equal(11, board.Lines.Count(l => l.Row < 0));
+        // The checkbox draws unchecked and unfocused, the page opening on the monitor row above it:
+        // the second of its eight frames.
+        Assert.Equal(1, board.Plaques.Single(p => p.Art.Name == "PP_B_Check8.png").Frame);
 
         // The box marks the focused dropdown and no other, and it follows the cursor past the dead
-        // size row onto the display mode's. Four rows down it stands on the second checkbox, a
-        // plaque strip that takes no box at all, so the page draws none.
+        // size row onto the display mode's. Three rows down it stands on the checkbox, a plaque
+        // strip that takes no box at all, so the page draws none.
         Assert.Equal(
             new[] { (260f, 245f, 70f, 15f) },
             board.Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));
@@ -836,9 +819,6 @@ public class OriginalOptionsTests
             new[] { (260f, 335f, 70f, 17f) },
             Compose(host).Fills.Where(f => f.Border).Select(f => (f.X, f.Y, f.Width, f.Height)));
         Down(host);
-        Down(host);
-        Assert.Equal(OriginalOptionsScreen.RocketCratersKey, host.FocusedKey);
-        Assert.Empty(Compose(host).Fills.Where(f => f.Border));
         Down(host);
         Assert.Equal(OriginalOptionsScreen.GraphicsKey, host.FocusedKey);
         Assert.Empty(Compose(host).Fills.Where(f => f.Border));
@@ -1223,11 +1203,11 @@ public class OriginalOptionsTests
             new[]
             {
                 OriginalOptionsScreen.MonitorKey, OriginalOptionsScreen.ResolutionKey, OriginalOptionsScreen.DisplayModeKey,
-                OriginalOptionsScreen.VSyncKey, OriginalOptionsScreen.RocketCratersKey, OriginalOptionsScreen.GraphicsKey,
+                OriginalOptionsScreen.VSyncKey, OriginalOptionsScreen.GraphicsKey,
                 OriginalOptionsScreen.VideoAcceptKey, OriginalOptionsScreen.VideoCancelKey,
             },
             rows.Select(r => r.Key));
-        RowsAreClearOfEachOther(host, rows, "VIDEO", 12);
+        RowsAreClearOfEachOther(host, rows, "VIDEO", 10);
     }
 
     // The CONTROLS page's rows, the same rule over its own plate. The sensitivity slider is pinned

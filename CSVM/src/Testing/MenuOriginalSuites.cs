@@ -72,18 +72,18 @@ internal static class MenuOriginalSuites
         + "from mid-setup discards the pick and shows Built-in's Mode screen, a switch back starts "
         + "Original fresh, Built-in's Options route steps the difficulty, the opening view, the "
         + "automatic head turn, the targeting setting on and back off, the rumble toggle off, the "
-        + "graphics mode, the rocket carve on from the off it opens at and "
+        + "graphics mode and "
         + "its four display rows over the machine's own screens and sizes, the two vocabularies and "
         + "a wrap onto the last frame cap, its four volume rows stepped by the AUDIO page's own "
         + "step and clamped at both ends, "
         + "opens and leaves the rebinding screen behind its Controls door and emits the apply exit "
-        + "carrying all fifteen with no presentation row among them, "
+        + "carrying all fourteen with no presentation row among them, "
         + "Original's VIDEO door opens the decoded page on its Display Mode dropdown "
         + "which fits its authored window and draws no bar, over the V-Sync one whose five words "
         + "window into four with the arrows and the thumb inside the box's right edge and the fifth "
         + "kept for the walk but unseen and unhit, that list wheeling and dragging like any other "
-        + "and picking a frame cap, and the Rocket Craters and Enhanced Graphics checkboxes "
-        + "that flip, whose CANCEL CHANGES drops them all with no exit and whose ACCEPT CHANGES "
+        + "and picking a frame cap, and the Enhanced Graphics checkbox "
+        + "that flips, whose CANCEL CHANGES drops them all with no exit and whose ACCEPT CHANGES "
         + "leaves as one more apply exit carrying them, Original's AUDIO door opens the decoded page "
         + "on its Master slider over four thumbs, a sideways step moves a level and clamps at "
         + "silence, the open page states its mix to the host every frame and names the level a "
@@ -543,8 +543,8 @@ internal static class MenuOriginalSuites
         Press(host, seat, Up);
         ctx.Check(menu.ShownRowText == LaunchMenu.OptionsRow, $"Up from Free Flight wraps onto Options ({menu.ShownRowText})");
         Press(host, seat, Accept);
-        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 17 && menu.ShownRowText == "Difficulty: Normal",
-            $"Accept opens the Options screen with its seventeen rows, the difficulty stepper first ({menu.ShownScreen}, {menu.ShownRowCount}, {menu.ShownRowText})");
+        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 16 && menu.ShownRowText == "Difficulty: Normal",
+            $"Accept opens the Options screen with its sixteen rows, the difficulty stepper first ({menu.ShownScreen}, {menu.ShownRowCount}, {menu.ShownRowText})");
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == "Difficulty: Hard", $"Right steps the difficulty to Hard ({menu.ShownRowText})");
         Press(host, seat, Down);
@@ -580,17 +580,11 @@ internal static class MenuOriginalSuites
         ctx.Check(menu.ShownRowText != beforeGraphics && menu.ShownRowText.StartsWith("Graphics: ", System.StringComparison.Ordinal),
             $"the sixth row is the graphics mode, straight under the rumble with no presentation row between, and Right steps it ({beforeGraphics} -> {menu.ShownRowText})");
         string graphics = menu.ShownRowText.EndsWith("Enhanced", System.StringComparison.Ordinal) ? "enhanced" : "original";
-        Press(host, seat, Down);
-        ctx.Check(menu.ShownRowText == "Rocket craters: Off",
-            $"the seventh row is the rocket carve, straight under the graphics mode and unsaved showing Off, which is what keeps a shipped default digging nothing ({menu.ShownRowText})");
-        Press(host, seat, Right);
-        ctx.Check(menu.ShownRowText == "Rocket craters: On",
-            $"Right turns the carve on ({menu.ShownRowText})");
         var display = BuiltInDisplayRows(ctx, host, seat, menu);
         BuiltInAudioRows(ctx, host, seat, menu);
         Press(host, seat, Down);
-        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow && menu.ShownHeading == "OPTIONS  (16/17)",
-            $"the sixteenth row is the Controls door, the heading counting the window's position ({menu.ShownRowText}, {menu.ShownHeading})");
+        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow && menu.ShownHeading == "OPTIONS  (15/16)",
+            $"the fifteenth row is the Controls door, the heading counting the window's position ({menu.ShownRowText}, {menu.ShownHeading})");
         Press(host, seat, Accept);
         ctx.Check(menu.ShownScreen == "Controls" && menu.ShownRowCount > 2,
             $"which opens the rebinding screen over a seat's own keymap ({menu.ShownScreen}, {menu.ShownRowCount} rows)");
@@ -606,8 +600,8 @@ internal static class MenuOriginalSuites
             ctx.Check(applied.Graphics == graphics && applied.Difficulty == "hard"
                 && applied.NearestAfterKill == false && applied.Rumble == false
                 && applied.DefaultView == CSVM.Flight.PilotView.Name(CSVM.Flight.PilotViewMode.Cockpit)
-                && applied.AutoHeadTurn == true && applied.RocketCraters == true,
-                $"carrying every stepped choice, the targeting setting stepped back off, the rumble turned off, the opening view, the head turn and the carve among them ({applied.Graphics}, {applied.Difficulty}, {applied.NearestAfterKill}, {applied.Rumble}, {applied.DefaultView ?? "none"}, {applied.AutoHeadTurn}, {applied.RocketCraters})");
+                && applied.AutoHeadTurn == true,
+                $"carrying every stepped choice, the targeting setting stepped back off, the rumble turned off, the opening view and the head turn among them ({applied.Graphics}, {applied.Difficulty}, {applied.NearestAfterKill}, {applied.Rumble}, {applied.DefaultView ?? "none"}, {applied.AutoHeadTurn})");
             ctx.Check(applied.MonitorIndex == display.Monitor && applied.Resolution == display.Resolution
                 && applied.DisplayMode == display.DisplayMode && applied.VSync == display.VSync,
                 $"and all four display settings the rows stepped ({applied.MonitorIndex}, {applied.Resolution}, {applied.DisplayMode}, {applied.VSync})");
@@ -690,8 +684,8 @@ internal static class MenuOriginalSuites
     private static void BuiltInAudioRows(TestContext ctx, MenuHost host, ScriptedSeat seat, LaunchMenu menu)
     {
         Press(host, seat, Down);
-        ctx.Check(menu.ShownRowText == $"Master volume: {AudioMix.DefaultMaster}" && menu.ShownHeading == "OPTIONS  (12/17)",
-            $"the twelfth row is the Master level, unsaved showing the shipped full level ({menu.ShownRowText}, {menu.ShownHeading})");
+        ctx.Check(menu.ShownRowText == $"Master volume: {AudioMix.DefaultMaster}" && menu.ShownHeading == "OPTIONS  (11/16)",
+            $"the eleventh row is the Master level, unsaved showing the shipped full level ({menu.ShownRowText}, {menu.ShownHeading})");
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == $"Master volume: {AudioMix.MaxLevel}",
             $"Right at full clamps rather than wrapping to silence ({menu.ShownRowText})");
@@ -950,11 +944,10 @@ internal static class MenuOriginalSuites
         int titles = 0;
         foreach (var line in board.Lines)
         {
-            titles += line.Text is "VIDEO" or "Monitor" or "Resolution" or "Display Mode" or "V-Sync"
-                or "Rocket Craters" or "Enhanced Graphics" ? 1 : 0;
+            titles += line.Text is "VIDEO" or "Monitor" or "Resolution" or "Display Mode" or "V-Sync" or "Enhanced Graphics" ? 1 : 0;
         }
 
-        ctx.Check(titles == 7, $"drawing the section's own tab title over the six row titles ({titles} of 7)");
+        ctx.Check(titles == 6, $"drawing the section's own tab title over the five row titles ({titles} of 6)");
         bool box = false;
         foreach (var plaque in board.Plaques)
         {
@@ -1007,12 +1000,6 @@ internal static class MenuOriginalSuites
         Press(host, seat, Accept);
         ctx.Check(shell.Options.VSyncChoice == "120" && shell.FocusedKey == OriginalOptionsScreen.VSyncKey,
             $"and picking two below the off default closes it on the 120 fps cap ({shell.Options.VSyncChoice ?? "unset"}, {shell.FocusedKey})");
-        WalkTo(host, seat, shell, OriginalOptionsScreen.RocketCratersKey);
-        ctx.Check(shell.Options.RocketCratersChoice != true,
-            $"the carve row above the graphics one opens off, which is what leaves a shipped default digging nothing ({shell.Options.RocketCratersChoice?.ToString() ?? "unset"})");
-        Press(host, seat, Accept);
-        ctx.Check(shell.Options.RocketCratersChoice == true,
-            $"and Accept on its checkbox arms the carve ({shell.Options.RocketCratersChoice?.ToString() ?? "unset"})");
         WalkTo(host, seat, shell, OriginalOptionsScreen.GraphicsKey);
         Press(host, seat, Accept);
         ctx.Check(shell.Options.GraphicsChoice == GraphicsMode.EnhancedWord,
@@ -1021,8 +1008,8 @@ internal static class MenuOriginalSuites
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.Options && shell.Options.GraphicsChoice == GraphicsMode.Default
             && shell.Options.VSyncChoice == null && shell.Options.DisplayModeChoice == null && shell.Options.ResolutionChoice == null
-            && shell.Options.MonitorChoice == null && shell.Options.RocketCratersChoice != true && exits.Count == before,
-            $"CANCEL CHANGES lands back on Preferences with all six edits dropped and no exit ({shell.Screen}, {shell.Options.GraphicsChoice}, {shell.Options.VSyncChoice ?? "unset"}, {shell.Options.DisplayModeChoice ?? "unset"}, {shell.Options.ResolutionChoice ?? "unset"}, {shell.Options.MonitorChoice ?? "unset"}, {shell.Options.RocketCratersChoice?.ToString() ?? "unset"})");
+            && shell.Options.MonitorChoice == null && exits.Count == before,
+            $"CANCEL CHANGES lands back on Preferences with all five edits dropped and no exit ({shell.Screen}, {shell.Options.GraphicsChoice}, {shell.Options.VSyncChoice ?? "unset"}, {shell.Options.DisplayModeChoice ?? "unset"}, {shell.Options.ResolutionChoice ?? "unset"}, {shell.Options.MonitorChoice ?? "unset"})");
 
         WalkTo(host, seat, shell, OriginalOptionsScreen.VideoDoorKey);
         Press(host, seat, Accept);
@@ -1030,8 +1017,6 @@ internal static class MenuOriginalSuites
         Press(host, seat, Right);
         WalkTo(host, seat, shell, OriginalOptionsScreen.VSyncKey);
         Press(host, seat, Right);
-        WalkTo(host, seat, shell, OriginalOptionsScreen.RocketCratersKey);
-        Press(host, seat, Accept);
         WalkTo(host, seat, shell, OriginalOptionsScreen.GraphicsKey);
         Press(host, seat, Accept);
         WalkTo(host, seat, shell, OriginalOptionsScreen.VideoAcceptKey);
@@ -1039,9 +1024,9 @@ internal static class MenuOriginalSuites
         ctx.Check(exits.Count == before + 1 && exits[^1] is OptionsApplyExit
         {
             Graphics: GraphicsMode.EnhancedWord, VSync: "60",
-            DisplayMode: DisplayWords.Fullscreen, RocketCraters: true,
+            DisplayMode: DisplayWords.Fullscreen,
         },
-            $"and ACCEPT CHANGES leaves through the host as one OptionsApplyExit carrying all three words and the carve ({exits.Count - before}, {exits[^1].GetType().Name})");
+            $"and ACCEPT CHANGES leaves through the host as one OptionsApplyExit carrying all three words ({exits.Count - before}, {exits[^1].GetType().Name})");
         ctx.Check(!host.Shown, $"with the presentation hidden for the launcher to act (shown={host.Shown})");
     }
 

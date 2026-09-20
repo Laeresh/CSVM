@@ -96,10 +96,6 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     /// <summary>The VIDEO page's enhanced-graphics checkbox.</summary>
     public const string GraphicsKey = "GRAPHICS";
 
-    /// <summary>The VIDEO page's rocket-crater checkbox, over the row the Clutter Detail tier
-    /// stood on.</summary>
-    public const string RocketCratersKey = "ROCKETCRATERS";
-
     /// <summary>The Options hub's fourth door, onto the CONTROLS page.</summary>
     public const string ControlsDoorKey = "PF_B_CONTROLS";
 
@@ -424,11 +420,6 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
             OriginalRowKind.Dropdown, _ => DisplaySettingRows.VSyncLabels,
             s => DisplaySettingRows.WordIndex(CSVM.Utils.DisplayWords.VSyncChoices, s._vsync, CSVM.Utils.VSyncSetting.Default),
             (s, i) => s._vsync = CSVM.Utils.DisplayWords.VSyncChoices[i]),
-        new(RocketCratersKey, "Rocket Craters", "VP_T_ClutterTitle", "VP_B_CLUTTER", "VP_T_ClutterDESC",
-            _ => "Let a rocket's ground burst dig a crater and flatten what stood in it. The original digs none.",
-            OriginalRowKind.Radio, _ => NearestAfterKillWords,
-            s => s._rocketCraters == true ? 1 : 0,
-            (s, i) => s._rocketCraters = i == 1),
         new(GraphicsKey, "Enhanced Graphics", "VP_T_ShadowsTitle", "VP_B_SHADOWS", "VP_T_ShadowsDESC",
             s => s.GraphicsDescription(), OriginalRowKind.Radio, _ => GraphicsWords,
             s => s._graphics == CSVM.Utils.GraphicsMode.EnhancedWord ? 1 : 0,
@@ -512,9 +503,6 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     private int _keysTab;
     private int _keysTop;
     private string _graphics = CSVM.Utils.GraphicsMode.Default;
-    // The rocket carve as saved, held nullable for the reason the targeting setting is, and read as
-    // off while never set: the original carves nothing in play, so nobody gets a bowl unasked.
-    private bool? _rocketCraters;
     private int _difficulty = CSVM.Flight.Difficulty.Normal;
     // The targeting setting as saved, null while never set, which the consumer reads as off. It is
     // held nullable rather than as the checkbox's own 0/1. A page that never showed it then hands
@@ -615,9 +603,6 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
 
     /// <summary>The graphics mode word the VIDEO page would apply.</summary>
     public string GraphicsChoice => _graphics;
-
-    /// <summary>Whether the VIDEO page would apply the rocket carve, null while never set.</summary>
-    public bool? RocketCratersChoice => _rocketCraters;
 
     /// <summary>The screen index (<see cref="CSVM.Utils.MonitorSetting.Word"/>'s spelling) the
     /// VIDEO page would apply, or null while nothing has been saved and no row has been
@@ -969,7 +954,6 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
     {
         var saved = _options?.Invoke();
         _graphics = saved?.GraphicsMode ?? CSVM.Utils.GraphicsMode.Default;
-        _rocketCraters = saved?.RocketCraters;
         _difficulty = CSVM.Flight.Difficulty.Parse(saved?.Difficulty) ?? CSVM.Flight.Difficulty.Normal;
         _nearestAfterKill = saved?.NearestAfterKill;
         _rumble = saved?.Rumble;
@@ -993,7 +977,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         new(_graphics, CSVM.Flight.Difficulty.Word(_difficulty),
             _monitorIndex, _resolution, _displayMode, _vsync,
             _audioMaster, _audioMusic, _audioEffects, _audioVoice, _nearestAfterKill, _rumble,
-            _defaultView, _autoHeadTurn, _rocketCraters);
+            _defaultView, _autoHeadTurn);
 
     // Back from a page: the saved settings are read again, so an edit the player declined is gone.
     private void BackToPreferences()

@@ -906,18 +906,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   four modules duplicate them; a page module that reaches back into the form's fields for its
   layout is the form in another file. *Cross-refs:* `BL-1014`, `BL-1015`,
   `docs/menu-presentations.md`, `docs/architecture/UI.md`.
-- `BL-1032` `[Cleanup]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **The Rocket
-  Craters row leaves the VIDEO page and the launcher; `options.json`'s `rocketCraters` and
-  `--craters` stay as the door.** *Evidence:* the user's call after BL-1009: the carve is not offered
-  in the menu, and stays testable by hand. Sites: `OriginalOptionsScreen.VideoOptions`'s
-  `RocketCratersKey` row (on `VP_B_CLUTTER`), `LaunchMenu`'s stepper (case 6, "Rocket craters:"),
-  and the walks in `MenuOriginalSuites` and `DisplaySettingsSuites`. `OptionsStore.RocketCraters` and
-  `CraterGate.Enabled`'s two sources stay. *Fix shape:* remove the two rows and their suite walks,
-  keep the store field, the flag and the crater suites; `docs/org/craters.md` names the json key as
-  the only door. *⚠ Traps:* not the carve path itself (`CraterGate`, `Projectile.Impact`) and not
-  the Faithful stamped-node path. Whether the 20 m, 3 m dish reads under the burst's smoke and
-  whether crashing planes should carve stay unjudged; the door is how to try it, and no playtest
-  row tracks it. *Cross-refs:* BL-1009's record (`git log --grep=BL-1009`).
 
 ## Splitscreen
 

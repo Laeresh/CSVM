@@ -450,10 +450,11 @@ public sealed record SessionSpec
     /// only). Default off: the assist is the original's shipped behaviour.</summary>
     public bool NoAssist { get; private set; }
 
-    /// <summary><c>--craters</c>: arm the Enhanced Graphics page's Rocket Craters row for this run,
-    /// so every rocket warhead's ground burst carves. Off by default and saved nowhere; it is the
-    /// one source of the carve that survives <c>--det</c>, which reads no saved option, so a probe
-    /// can photograph a bowl without any pinned golden ever seeing one.</summary>
+    /// <summary><c>--craters</c>: arm the rocket carve for this run, so every rocket warhead's
+    /// ground burst digs a bowl. Off by default and saved nowhere. No screen offers the carve, so
+    /// this flag and the options file's own <c>rocketCraters</c> key are its two doors. This one
+    /// survives <c>--det</c>, which reads no saved option, so a probe can photograph a bowl
+    /// without any pinned golden ever seeing one.</summary>
     public bool Craters { get; private set; }
 
     /// <summary><c>--generators[=plane]</c>: run the mission's egen enemy generators;

@@ -790,7 +790,7 @@ The one typed way out of the menu, handed to `IMenuHost.Exit` and consumed by `L
 `CampaignMissionExit` (profile, `cm_sequence` position, per-seat choices), `QuitExit` and
 `OptionsApplyExit` (the graphics-mode and difficulty words, the four display settings, the four volume levels and the gameplay switches, null where never set).
 An applied choice rides the exit rather than being saved by the screen that took it, so the options file keeps one writer, and a screen
-hands back the settings it does not show; none of the thirteen is defaulted, so a page cannot hand back a null it never read. A custom
+hands back the settings it does not show; none of the fourteen is defaulted, so a page cannot hand back a null it never read, and a field no screen offers any more is dropped rather than left riding as a null the consumer would save. A custom
 plane rides the exit as a resolved `CustomPlaneDef`, never a store name. Presentations never construct
 sessions. The return side is `MenuReturnDestination`; the exit table and the scans holding the seam: [../menu-presentations.md](../menu-presentations.md).
 

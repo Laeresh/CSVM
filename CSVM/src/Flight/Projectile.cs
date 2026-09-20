@@ -57,7 +57,7 @@ public sealed partial class ProjectilePool : Node3D
     /// <summary>Where a ground strike that passed <see cref="CraterGate"/> goes: given the impact
     /// point and the struck collider, carve the bowl and flatten the decorations in it, returning
     /// whether the carve landed. The faithful rule asks only for a collider whose node carries
-    /// <see cref="SceneBuilder.CanModifyMeta"/>, which no shipped node does; the Rocket Craters
+    /// <see cref="SceneBuilder.CanModifyMeta"/>, which no shipped node does; the remake's own
     /// option asks for any rocket. Wired to <c>CraterField.TryCarve</c> in a collidable flight.</summary>
     public System.Func<Vector3, Node?, bool>? CraterSink;
 
