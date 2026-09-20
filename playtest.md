@@ -860,6 +860,19 @@ is a judgement on our own remake.
   *Blocks:* `BL-934` (lines unheard at the controls); a silent sortie whose log carries the
   `ai voice:` lines is that item's next cause.
 
+- `PT-176` `[Own]` **The whole-screen pattern under Enhanced Graphics is gone, and the sun's
+  shadow edge still reads soft.** The sun's penumbra filter was the pass laying it: it alone
+  resolved through a screen-space sample rotation, over 81 % of a C1 waterfall frame, and the
+  filter now runs at its top rung, which removed 86 % of the measured excess without touching the
+  penumbra's width (`analysis/screen-dither/FINDINGS.md`). The instrument cannot say whether the
+  remaining seventh is visible to an eye, and only an eye judges an edge. Fly any chapter under
+  Enhanced, still and moving, over open water and over ground, at the window size you normally
+  play at. *Look for:* (a) no fine weave over terrain, water or building faces, in particular while
+  the camera turns, which is when a screen-space pattern crawls; (b) a shadow edge still soft
+  rather than a hard line, on the aircraft's own shadow and on a building's; (c) no new cost you
+  can feel, the top rung being the more expensive one. *Blocks:* nothing; it confirms the fix the
+  original report asked for.
+
 ## Everything else
 
 Everything blocked on an unlanded fix is tracked in [`backlog.md`](backlog.md) with its own

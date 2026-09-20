@@ -47,6 +47,29 @@ public enum MenuMode
     Versus,
 }
 
+/// <summary>The enhanced presentation's screen-space passes, as doors a run can close one at a
+/// time. Each can lay a pattern of its own over the frame. Bisecting a full-screen artefact means
+/// rendering one pose per closed door until the pattern goes. Reaches
+/// <c>--graphics=enhanced</c> alone, the faithful path running none of them.</summary>
+[Flags]
+public enum EnhancedPasses
+{
+    None = 0,
+
+    /// <summary><c>--no-ssao</c>: the ambient-occlusion pass.</summary>
+    Ssao = 1,
+
+    /// <summary><c>--no-ssr</c>: screen-space reflection on the water.</summary>
+    Ssr = 2,
+
+    /// <summary><c>--no-glow</c>: the glow pass; the AgX tonemap stays.</summary>
+    Glow = 4,
+
+    /// <summary><c>--no-soft-shadows</c>: the sun's penumbra, angular distance and blur both 0,
+    /// leaving a hard shadow edge rather than no shadow.</summary>
+    SoftShadows = 8,
+}
+
 /// <summary>One <c>--ai=</c> entry: the airframe, plus the optional tokens that follow it.
 /// <c>Count</c> is the entry's <c>n=</c>, so one entry stands for a whole squadron rather than a
 /// plane. <c>Team</c> is its <c>team=</c>, and it is the only way two CLI planes can be put on the
@@ -297,6 +320,11 @@ public sealed record SessionSpec
     /// ambient cloud field (<c>Effects.FogVolumeClutter</c>), which is a different population that
     /// happens to share the word.</summary>
     public bool NoClutter { get; private set; }
+
+    /// <summary><b>Resolved.</b> The enhanced passes this run leaves out, one bit per
+    /// <c>--no-</c> door. Empty in the faithful presentation, which builds none of them anyway.
+    /// See <c>docs/cli.md</c>.</summary>
+    public EnhancedPasses SkippedPasses { get; private set; }
 
     /// <summary><c>--debug-clutterflag</c>: recolour the built world by each polygon's decoded
     /// <c>no_clutter</c> flag (raw polygon bit <c>0x800</c>, <see cref="Mech3.GameZPolygon.NoClutter"/>)
@@ -1289,6 +1317,10 @@ public sealed record SessionSpec
             else if (arg == "--no-clutter") { s.NoClutter = true; }
             else if (arg == "--no-zone-cull") { s.NoZoneCull = true; }
             else if (arg == "--no-flare") { s.NoFlare = true; }
+            else if (arg == "--no-ssao") { s.SkippedPasses |= EnhancedPasses.Ssao; }
+            else if (arg == "--no-ssr") { s.SkippedPasses |= EnhancedPasses.Ssr; }
+            else if (arg == "--no-glow") { s.SkippedPasses |= EnhancedPasses.Glow; }
+            else if (arg == "--no-soft-shadows") { s.SkippedPasses |= EnhancedPasses.SoftShadows; }
             else if (arg.StartsWith("--mips=")) { s.SetMips(arg["--mips=".Length..]); }
             else if (arg.StartsWith("--graphics="))
             {

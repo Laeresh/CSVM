@@ -326,4 +326,22 @@ public class SessionSpecParserTests
         Assert.Equal("original", s.PresentationOverride);
         Assert.True(s.ForceBuiltInPresentation);
     }
+
+    /// <summary>The enhanced-pass bisect doors: none closed by default, each flag closes its own
+    /// bit, and several on one line accumulate rather than replacing each other.</summary>
+    [Fact]
+    public void EnhancedPassDoorsAccumulate()
+    {
+        Assert.Equal(EnhancedPasses.None, SessionSpec.Parse(new[] { "--fly" }).SkippedPasses);
+        Assert.Equal(EnhancedPasses.Ssao, SessionSpec.Parse(new[] { "--no-ssao" }).SkippedPasses);
+        Assert.Equal(EnhancedPasses.Ssr, SessionSpec.Parse(new[] { "--no-ssr" }).SkippedPasses);
+        Assert.Equal(EnhancedPasses.Glow, SessionSpec.Parse(new[] { "--no-glow" }).SkippedPasses);
+        Assert.Equal(
+            EnhancedPasses.SoftShadows, SessionSpec.Parse(new[] { "--no-soft-shadows" }).SkippedPasses);
+
+        var all = SessionSpec.Parse(new[] { "--no-ssao", "--no-ssr", "--no-glow", "--no-soft-shadows" });
+        Assert.Equal(
+            EnhancedPasses.Ssao | EnhancedPasses.Ssr | EnhancedPasses.Glow | EnhancedPasses.SoftShadows,
+            all.SkippedPasses);
+    }
 }

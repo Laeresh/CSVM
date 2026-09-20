@@ -486,23 +486,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   replaced; `git log --grep=BL-305`. Do not reopen either ID; IDs are never reused, per this
   file's own rule).
 
-- `BL-803` `[Bug]` `[S]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` **Enhanced Graphics lays a
-  dithering pattern over the whole screen.** *Evidence:* reported at the controls under Enhanced
-  Graphics as a "dithering effect over the screen"; which chapter, view and window size are not
-  recorded, and the faithful presentation is not reported to show it. Nothing in the Enhanced
-  environment asks for a dither on purpose: `Launcher.cs` builds the `WorldEnvironment` with SSAO,
-  screen-space reflection, glow and an AgX tonemap (`CSVM/src/Session/Launcher.cs:1120-1132`), the
-  sun's shadow with a blur of 1.0 whose own comment records that raising it "dithered the lit
-  water" (`Launcher.cs:91-94`), and the clutter fade dithers only its own fragments
-  (`SceneBuilder.cs:1557`). *Fix shape:* reproduce it, then bisect the effect by disabling SSAO,
-  SSR, glow and the shadow blur one at a time (a `--no-*` style door if none exists) until the
-  pattern goes, and fix that one pass: Godot's SSAO and soft-shadow passes both resolve with a
-  screen-space noise that a low resolution scale or a half-resolution buffer leaves visible.
-  *⚠ Traps:* Godot's own debanding is not enabled here, so the pattern is not that; a screenshot
-  captured through `--shots` is a previous frame's render and carries the burst camera's dither
-  (`CaptureDirector.cs:96`), so judge this at the controls or on an undithered capture.
-  *Playtest after fix:* any chapter under Enhanced Graphics, still and moving, over water and over
-  ground. *Cross-refs:* `docs/architecture/Utils.md` (`GraphicsMode`).
 - `BL-1027` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` `[C1]` **A far tree card
   still paints over a ridge polygon and the trees ahead of it in C1, after BL-997's depth prepass.**
   *Evidence:* at the controls on c24653b6 at `--pos="-1595.425,182.281,-4843.352"

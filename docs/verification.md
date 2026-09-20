@@ -177,6 +177,16 @@ member, and it does not go here.
   against the print's 0. A matrix fitted to the measured ratio would have been a second tint on top
   of the one piece of art that already makes it.
 
+- **SHOT-42**, **Measure a full-screen dither as the mean 2x2 alternation `|a-b-c+d|` over
+  luminance, and bisect it by differencing the pass doors rather than by reading the frames.** A
+  pass that resolves through a screen-space sample pattern is the only one whose own contribution
+  alternates pixel to pixel, so the difference between the full frame and the frame with that pass
+  off carries the alternation and every other pass's difference is a smooth field. At C1's
+  waterfall under `--graphics=enhanced` at 1920x1080 the soft-shadow difference scored 2.17 over
+  81% of the frame while SSAO, SSR and glow scored 0.10, 0.07 and 0.00. Reading the frames
+  themselves cannot separate the pattern from the texture it lies on: over the same pose the C2
+  city frame's own detail buries it entirely.
+
 ## GOLD, golden images
 
 - **GOLD-1**, **Update moved hashes with the visual change, and explain each moved shot in the

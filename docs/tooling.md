@@ -468,6 +468,9 @@ terminal (SHELL-10): **never invoke the Godot binary directly for a scripted run
 `.\RunProbe.ps1 <user args>`.** It forwards every argument verbatim (no build step, so build
 first), runs on its own hidden desktop (`csvm-probe`, falling back to a visible but still
 redirected run if the OS refuses one), parks the streams beside the run's `--log-file` or in
-`.scratch/logs/probe-<stamp>.out/.err`, and exits with Godot's code. Its one switch is
-**`-TimeoutSec`** (default **300**, `0` = wait forever), which kills the run and exits **124**, so
-a probe that never quits cannot hang a session.
+`.scratch/logs/probe-<stamp>.out/.err`, and exits with Godot's code. **`-TimeoutSec`** (default
+**300**, `0` = wait forever) kills the run and exits **124**, so a probe that never quits cannot
+hang a session. **`-Resolution WxH`** is forwarded as Godot's own `--resolution` ahead of the `--`,
+which is the only way a scripted capture lands at a size a player runs: the project ships
+1280x720, and a saved size cannot raise it because `--screenshot` implies `--det`, which drops
+every saved option (DET-8). A resolution-sensitive artefact is invisible at the default size.

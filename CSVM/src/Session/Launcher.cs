@@ -96,6 +96,13 @@ public partial class Launcher : Node3D
     // Kept here rather than trading a hard line for banding.
     private const float EnhancedShadowBlur = 1.0f;
 
+    // ⚠ Do not lower this while EnhancedShadowAngularDistance stays above the sun's real 0.5°.
+    // Godot resolves a penumbra by sampling the shadow map through a disc rotated per screen
+    // pixel. Too few samples for the disc's width leave that rotation as a woven pattern over
+    // every lit surface. This width needs the top rung.
+    private const RenderingServer.ShadowQuality EnhancedShadowFilterQuality =
+        RenderingServer.ShadowQuality.SoftUltra;
+
     // TUNE, judged at the controls on C2/C5. Godot's own default (1.0 m) reads a building's own
     // trim but misses the wider contact shading a street canyon wants at this world's scale
     // (buildings tens of metres tall, streets a similar width); this radius picks up a block's
@@ -1578,21 +1585,25 @@ public partial class Launcher : Node3D
             AmbientLightColor = Colors.White,
             AmbientLightEnergy = WeatherRig.DefaultEnergies.Ambient,
         };
-        // Enhanced mode alone: SSAO darkens ambient light where geometry occludes it, and the
-        // faithful path's world is fullbright, so it would find nothing to occlude. The cockpit
-        // pass duplicates this Environment (CockpitOverlay.NewOverlay) and inherits the settings.
+        // Enhanced mode alone: the faithful path's world is fullbright, so none of these passes has
+        // anything to work on. The cockpit pass duplicates this Environment
+        // (CockpitOverlay.NewOverlay) and inherits the settings.
         if (GraphicsMode.Enhanced)
         {
             UseMissionSky(_env);
-            _env.SsaoEnabled = true;
-            _env.SsaoRadius = EnhancedSsaoRadius;
-            _env.SsaoIntensity = EnhancedSsaoIntensity;
-            _env.SsaoPower = EnhancedSsaoPower;
-            _env.SsaoDetail = EnhancedSsaoDetail;
-            _env.SsaoHorizon = EnhancedSsaoHorizon;
-            _env.SsaoSharpness = EnhancedSsaoSharpness;
-            EnableWaterReflections(_env);
-            EnableGlowAndTonemap(_env);
+            if (!Skipped(EnhancedPasses.Ssao))
+            {
+                EnableAmbientOcclusion(_env);
+            }
+            if (!Skipped(EnhancedPasses.Ssr))
+            {
+                EnableWaterReflections(_env);
+            }
+            if (!Skipped(EnhancedPasses.Glow))
+            {
+                EnableGlow(_env);
+            }
+            UseFilmicTonemap(_env);
         }
         AddChild(new WorldEnvironment { Environment = _env });
     }
@@ -1623,8 +1634,28 @@ public partial class Launcher : Node3D
         sun.DirectionalShadowBlendSplits = true;
         sun.ShadowBias = EnhancedShadowBias;
         sun.ShadowNormalBias = EnhancedShadowNormalBias;
-        sun.LightAngularDistance = EnhancedShadowAngularDistance;
-        sun.ShadowBlur = EnhancedShadowBlur;
+        // Both zero leaves a hard shadow edge rather than no shadow. That isolates the penumbra
+        // filter, which is the part resolving with a screen-space sample pattern.
+        bool hard = Skipped(EnhancedPasses.SoftShadows);
+        sun.LightAngularDistance = hard ? 0f : EnhancedShadowAngularDistance;
+        sun.ShadowBlur = hard ? 0f : EnhancedShadowBlur;
+        // A renderer-wide setting rather than a light property. It is set here beside the width it
+        // carries, not in project.godot, where the faithful path would inherit it.
+        RenderingServer.DirectionalSoftShadowFilterSetQuality(
+            hard ? RenderingServer.ShadowQuality.Hard : EnhancedShadowFilterQuality);
+    }
+
+    // Ambient occlusion, which darkens the ambient term where geometry occludes it. The faithful
+    // path's world is fullbright, so this pass would find nothing there to occlude.
+    private void EnableAmbientOcclusion(Godot.Environment env)
+    {
+        env.SsaoEnabled = true;
+        env.SsaoRadius = EnhancedSsaoRadius;
+        env.SsaoIntensity = EnhancedSsaoIntensity;
+        env.SsaoPower = EnhancedSsaoPower;
+        env.SsaoDetail = EnhancedSsaoDetail;
+        env.SsaoHorizon = EnhancedSsaoHorizon;
+        env.SsaoSharpness = EnhancedSsaoSharpness;
     }
 
     // Screen-space reflection, for the one glossy population in the world: the water surfaces
@@ -1640,11 +1671,9 @@ public partial class Launcher : Node3D
         env.SsrDepthTolerance = EnhancedSsrDepthTolerance;
     }
 
-    // Enhanced mode alone: with a lit world, sun, shadows and real light energy feeding the HDR
-    // colour buffer, values can exceed 1.0 and clip instead of rolling off, and C21's glow-arm
-    // sprites are the only surfaces meant to bloom. The cockpit pass duplicates this Environment
-    // at build time (CockpitOverlay.NewOverlay), so its own tonemap matches the world pass exactly.
-    private void EnableGlowAndTonemap(Godot.Environment env)
+    // Enhanced mode alone. A lit world's real light energy feeds the HDR colour buffer, and
+    // C21's glow-arm sprites are the only surfaces meant to bloom out of it.
+    private void EnableGlow(Godot.Environment env)
     {
         env.GlowEnabled = true;
         env.GlowHdrThreshold = EnhancedGlowHdrThreshold;
@@ -1654,11 +1683,23 @@ public partial class Launcher : Node3D
         env.GlowBlendMode = EnhancedGlowBlendMode;
         env.GlowHdrScale = EnhancedGlowHdrScale;
         env.GlowHdrLuminanceCap = EnhancedGlowHdrLuminanceCap;
+    }
+
+    // Enhanced mode alone: without it the HDR values a lit world produces clip instead of rolling
+    // off. It is not a pass a bisect door closes, since every enhanced frame's exposure depends on
+    // it. The cockpit pass duplicates this Environment at build time (CockpitOverlay.NewOverlay),
+    // so its own tonemap matches the world pass exactly.
+    private void UseFilmicTonemap(Godot.Environment env)
+    {
         env.TonemapMode = EnhancedTonemapMode;
         env.TonemapExposure = EnhancedTonemapExposure;
         env.TonemapAgxWhite = EnhancedTonemapAgxWhite;
         env.TonemapAgxContrast = EnhancedTonemapAgxContrast;
     }
+
+    // Whether this run asked for that enhanced pass to be left out. Closing one door at a time
+    // bisects a full-screen artefact to the pass that draws it; docs/cli.md holds them.
+    private bool Skipped(EnhancedPasses pass) => (_spec.SkippedPasses & pass) != 0;
 
     // The dead end for a launch with no extraction under the data root: the screen goes up and
     // nothing else is built, so the window carries the answer instead of the log. Esc leaves

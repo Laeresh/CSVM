@@ -171,7 +171,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☐ TAA on every 3D viewport under Enhanced
 2. ☐ Render Scale, a VIDEO page row applied to every 3D viewport, ignored under `--det`
-3. ☐ BL-803 closes on the flight after A1, or the bisect doors land and find the pass
+3. ☑ BL-803 closes on the flight after A1, or the bisect doors land and find the pass
 4. ☐ Alpha-to-coverage on the cutout surfaces under Enhanced
 5. ☐ FSR 2.2 tried once as the alternative temporal pass, kept or parked on the user's verdict
 
@@ -284,26 +284,15 @@ titles and round-trip the store); at the controls, 200% on C5 visibly sharpens t
 scale them the same way or the panes disagree in sharpness. The row is a display setting and is
 NOT under the Enhanced switch (decision 3).
 
-## A3 ☐ BL-803 closes on the flight after A1, or the bisect doors land and find the pass
+## A3 ☑ BL-803 closes on the flight after A1, or the bisect doors land and find the pass
 
-**Goal.** The whole-screen dithering reported under Enhanced is gone, and its closing record names
-what it was.
-
-**Evidence (confidence: lead-only).** `backlog.md` `BL-803`: reported at the controls, no chapter,
-view or window size recorded; nothing in the enhanced Environment asks for a dither; the shadow
-blur's own comment records that raising it "dithered the lit water"; Godot's SSAO and soft-shadow
-passes resolve with screen-space noise. `<TODO: re-verify still-open against git log --grep=BL-803, git log -S and the code>`
-
-**Approach.** After A1 lands the user flies Enhanced, still and moving, over water and ground. If
-the pattern is gone, close `BL-803` on that verdict with A1 as the fix. If it persists, add
-`--no-ssao`, `--no-ssr`, `--no-shadow-blur` inspection doors beside `--no-fog` in `SessionSpec`,
-bisect at the controls, and fix the one pass (a half-resolution buffer or a resolution scale is the
-usual cause).
-
-**Model recommendation.** high if the bisect runs: it is judgement over four interacting passes.
-
-**Verify.** The user's flight; if bisected, the door that clears it named in the closing commit,
-and the doors documented in `docs/cli.md` (600-character bullet cap).
+Taken by the bisect route rather than the flight, so it does not wait on A1. The doors
+`--no-ssao`, `--no-ssr`, `--no-glow` and `--no-soft-shadows` landed in `SessionSpec` and named the
+sun's penumbra filter: it alone resolves through a screen-space pattern, over 81 % of the C1
+waterfall frame. Raising the directional soft-shadow filter to its top rung removed 86 % of the
+excess and held the judged penumbra width. `analysis/screen-dither/FINDINGS.md` holds the
+instrument and the numbers; A1's TAA is no longer what this item waits on. What is still owed is
+the look at the controls, which no instrument replaces.
 
 **⚠ Traps.** Do not bisect on `--shots` frames. Debanding is off and is not the cause. Do not
 widen the fix to the faithful path, which is not reported to show it.
