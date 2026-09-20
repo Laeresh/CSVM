@@ -226,6 +226,30 @@ draws its authored 800x600 space one-to-one.
   - (d) flying level inside the band, no popping as a sprite's own band swings across the cull.
   *Blocks:* nothing tracks the outcome; a fail mints a new `BL` naming which of (a)-(d) failed.
 
+### CM06 (C1C/M01) · the cloud band's far side, a zeppelin above it
+
+```powershell
+./RunGame.ps1 --campaign=<profile>:5
+```
+
+- `PT-175` `[Own]` **The overcast hides what is on the other side of it, and gives it back on the
+  climb.** Each drawn aircraft and zeppelin now earns its own zone from its altitude against the
+  band's midpoint, so an object wholly on the far side is not drawn for a camera on this side, which
+  is what the original's per-object zone assignment plus its camera zone gate come to. The engine
+  suite settles the arithmetic against the mission's own band and zeppelin records; what it cannot
+  settle is how the appearing and disappearing reads at the controls.
+  *Look for:*
+  - (a) holding under the band, the zeppelins and any aircraft above it are gone rather than drawn
+    through the overcast, and the sea, the terrain and your own airframe are untouched;
+  - (b) climbing through, they come back as you enter the band rather than a long way above or
+    below it, and the moment lands inside the white where the eye cannot pick out a snap;
+  - (c) levelling out above the band, what is underneath it has gone the same way, and the objects
+    up there with you stay drawn;
+  - (d) flying level inside the band, nothing flickers: an object straddling the midpoint draws at
+    both states by design, so a blink there is a bug;
+  - (e) `--no-fog` gives everything back at every altitude.
+  *Blocks:* nothing tracks the outcome; a fail mints a new `BL` naming which of (a)-(e) failed.
+
 ### C1 · Bloodhawk vs AI, the kill sequence, sound on
 
 ```powershell

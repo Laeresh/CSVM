@@ -146,6 +146,14 @@ public sealed partial class ZeppelinRuntime : Node
             _ => (int?)null,
         });
 
+    /// <summary>Appends every placed zeppelin's host node, the drawn hull the cloud band's
+    /// per-object zone gate (<see cref="ObjectZoneGate"/>) reads an altitude span off.</summary>
+    public void CollectHosts(List<Node3D> into)
+    {
+        foreach (var live in _live)
+            into.Add(live.Host);
+    }
+
     /// <summary>Completes the record-team fan onto the guns standing on each airship, which is the
     /// rest of what <c>FUN_004bee80</c> writes. Call once the emplacements exist; a record authoring
     /// no team leaves its guns on their own <c>TURRET</c> default, since substituting one there is

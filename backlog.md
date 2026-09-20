@@ -518,21 +518,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   wrong, then the same prepass or a sort key for that pair. *⚠ Traps:* BL-997's `clutter-card-depth`
   suite measures card over card only, so it passes on this frame; do not re-tune the fade.
   *Playtest after fix:* the same pose. *Cross-refs:* BL-997's record (`git log --grep=BL-997`).
-- `BL-1028` `[Bug]` `[M]` `[Next: decode]` `[Impact: high]` `[Evidence: feel]` **Aircraft and
-  zeppelins beyond the cloud band stay visible from the other side of it.** *Evidence:* CM06
-  (`C1C/M01`) flown under the band, in both presentations: planes and zeppelins above the band are
-  drawn as if no band stood between. The user recalls the original hiding them until the climb into
-  the band. The port's whiteout is one pane-filling overlay per rig, its opacity driven by the
-  camera's own altitude alone (`WeatherRig.Tick`, `WeatherState.WhiteoutAmount`), so an object's
-  altitude relative to the band changes nothing about how it draws. *Fix shape:* decode what the
-  original does with an object on the far side of the `CLOUD_COVER` band (a per-object cull against
-  the band's altitudes, a fog term keyed on the object's height, or the band's own fog range), then
-  port it to the drawn aircraft, zeppelins and their effects; the overlay stays as it is. *⚠ Traps:*
-  the deck field (BL-325) is a separate mechanism and CM06 ships none, so this is the band alone;
-  `--no-fog` disables the overlay and must disable this too. *Playtest after fix:*
-  `--campaign=C1C:1`, hold under the band with a zeppelin above it, then climb through.
-  *Cross-refs:* `docs/formats/weather/atmosphere.md` (the band), BL-999's record (the whiteout
-  over the cockpit), `BL-380` (fog per rig).
 ## Effects & animation runtime
 
 - `BL-674` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: data]` `[CM10]` **CM10's attack-balloon wave flies from 990 m down to water level and back up

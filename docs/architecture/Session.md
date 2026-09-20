@@ -507,7 +507,7 @@ steps a phase at a time (`CrashRigQueue.cs`), where the pre-warm itself repeats 
 land on one frame, and `BuildFlightCrashRuntime` is the one-call form. The names it binds are `EffectCatalogue.cs`; the slot mechanism is `Mech3/TemplateStage.cs`.
 
 ## src/Session/WeatherRig.cs
-Applies the flown mission's weather, driving each rig's skydome, whiteout, deck regime and zone gate every frame; the whiteout is one pane-filling overlay per rig, carrying the cloud band and the fog-volume curtain on `HudLayers.Whiteout`, under that pane's own cockpit pass, so the window whites out and the interior stays clear.
+Applies the flown mission's weather, driving each rig's skydome, whiteout, deck regime and zone gate every frame, plus the one session-wide `ObjectZoneGate.cs` pass; the whiteout is one pane-filling overlay per rig, carrying the cloud band and the fog-volume curtain on `HudLayers.Whiteout`, under that pane's own cockpit pass, so the window whites out and the interior stays clear.
 `ApplyZone` writes the zone's authored fog and its `SUNLIGHT` pair through one arm per
 graphics mode, mirrored onto every registered extra (sun, env) pair so a cockpit overlay crosses
 zones too; both arms put the ambient half through `WriteColorAmbient`, colour-sourced and never a sky
@@ -515,6 +515,16 @@ contribution, so a night zone's scene fill is darker than a day zone's. `ApplyFo
 animation runtime's `FOG_STATE` sink, writing only the fields the event carries under the same
 last-writer order. Enhanced mode also caps a night zone, paints the sky the zone's own fog colour and
 pushes the fog range out, which the sun's shadow distance follows. `SunlightRgb` publishes the applied pair scaled by its authored colours, for the reader that needs the light rather than an energy. Both arms also set `csky_sun_dir` and `csky_sun_light`, the same bearing and pair uncollapsed, for the lit cloud cards, which shade per vertex off normals that turn with the camera, and `csky_sun_ambient_rgb`/`csky_sun_diffuse_rgb` (`SunVertexLight`, the bicolored rule) for the in-flight aircraft's per-vertex term ([../org/vertexLighting.md](../org/vertexLighting.md)), plus `csky_sun_fill_rgb` (`PhotographFill`), the Danger Zone photograph's raised ambient half. Decode: [../org/weather.md](../org/weather.md), authored side [../formats/weather.md](../formats/weather.md).
+
+## src/Session/ObjectZoneGate.cs
+The per-object half of the zone gate, ticked by `WeatherRig` over the session's aircraft and
+zeppelins. Each frame an object's merged world extent is judged against the cloud band's midpoint
+(`Flight/Weather.cs`'s `ObjectZone`) and its meshes move onto that zone's `Mech3/ZoneGate.cs` layer,
+so a camera on the far side of the band does not draw it at all, which is the original's per-object
+zone assignment plus its camera zone gate. The extent is measured once per root because an airframe
+is rigid, and the walk takes whatever hangs under it, so an effect parented to an aircraft rides
+along; a mesh already wearing a layer of its own (the own-airframe hide, a per-pane copy) is left
+alone. `--no-fog` and `--no-zone-cull` open the gate. Decode: [../formats/weather/atmosphere.md](../formats/weather/atmosphere.md).
 
 ## src/Session/LensFlareRig.cs
 The sun's lens flare: four screen-space sprites strung along the sun-to-screen-centre vector, plus a

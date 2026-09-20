@@ -100,6 +100,8 @@ public partial class GameSession : Node3D
     private readonly List<FlightController> _aircraftScan = new();
     // scratch: the rigs' controllers alone, rebuilt on every HumanAircraft() call
     private readonly List<FlightController> _humanScan = new();
+    // scratch: the aircraft plus the placed zeppelins, rebuilt on every GatedObjects() call
+    private readonly List<Node3D> _gatedScan = new();
     // scratch: rig camera positions for the edge extender
     private readonly List<Vector3> _focusPoints = new();
     // Pickable subtrees that live beside the world content rather than under it, the anim lab's
@@ -1121,6 +1123,17 @@ public partial class GameSession : Node3D
         return _humanScan;
     }
 
+    // Every drawn thing the cloud band's per-object zone gate judges by its own altitude, meaning
+    // the session's aircraft and its placed zeppelins. Same reused-list shape as AllAircraft, read
+    // fresh each frame because both rosters change all flight long.
+    private IReadOnlyList<Node3D> GatedObjects()
+    {
+        _gatedScan.Clear();
+        _gatedScan.AddRange(AllAircraft());
+        _zeppelins?.CollectHosts(_gatedScan);
+        return _gatedScan;
+    }
+
     // Loads the session's core archives (gamez, textures, sounds, sound defs/groups) and routes the
     // texture/sound archives to whichever owner outlives this build scope.
     private void LoadArchives(BuildState state)
@@ -1609,6 +1622,9 @@ public partial class GameSession : Node3D
             // second consumer rather than re-loaded. Tick resolves each camera's weather state from
             // it, and its in-volume whiteout where fog_zone is armed.
             _weatherRig.SetFogVolumes(fogVolumes, fogVolumeSpec);
+            // The flown objects the band's per-object gate moves between layers (ObjectZoneGate).
+            // A plane or a zeppelin on the far side of the overcast stops drawing.
+            _weatherRig.SetGatedObjects(GatedObjects);
             // The horizon's zone children go in with the mission's weather: the zone the fog and
             // the dome share is picked from both (three chapters ship an empty zone2).
             _weatherRig.Build(state.MissionZrdrPath, _rigs, builder.HorizonZones(),

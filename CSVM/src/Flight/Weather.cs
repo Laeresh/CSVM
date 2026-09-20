@@ -287,6 +287,39 @@ public sealed class WeatherState
         return state;
     }
 
+    /// <summary>The zone a drawn object earns from its own world-space vertical span, the binary's
+    /// per-object half of the zone gate (<c>FUN_00489f60</c>). It is 1 wholly below the band's
+    /// midpoint, 2 wholly above it, -1 when it straddles the midpoint or the mission authors no
+    /// band. A -1 object is ungated, drawn at every camera state. The threshold is the MIDPOINT,
+    /// not the opaque core's edge the camera's own state flips at.
+    /// Decode: docs/formats/weather/atmosphere.md.</summary>
+    public int ObjectZone(float minY, float maxY)
+    {
+        if (!HasCloudBand)
+            return -1;
+        float centre = CloudBandCentre;
+        if (maxY < centre)
+            return 1;
+        return centre < minY ? 2 : -1;
+    }
+
+    /// <summary>The same verdict for an object whose world extent is <paramref name="span"/>, with
+    /// the binary's own first arm ahead of the band. An object standing in an armed <c>fvol</c>
+    /// volume is zone 3 whatever its altitude, which keeps it drawn for a camera in that volume.
+    /// Precedence and inputs match <see cref="CameraWeatherState"/>.</summary>
+    public int ObjectZone(Aabb span, bool fogZoneArmed, IReadOnlyList<FogVolumeBox> volumes)
+    {
+        if (fogZoneArmed)
+        {
+            var centre = span.GetCenter();
+            foreach (var volume in volumes)
+                if (volume.Contains(centre))
+                    return 3;
+        }
+
+        return ObjectZone(span.Position.Y, span.Position.Y + span.Size.Y);
+    }
+
     private static float WorldLightFactor(ZrdrDict zone)
     {
         float diffuse = zone.List("SUNLIGHT_DIFFUSE") is { Count: >= 1 } sd && sd[0] is float dv ? dv : 1f;

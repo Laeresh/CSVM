@@ -506,6 +506,7 @@ clusters they delegate to.
 - `src/Session/EffectCatalogue.cs`, the name tables saying which authored anims are playable effects, and the anchor roots both effect binds stage from.
 - `src/Session/SurfaceDefTable.cs`, one of the original's per-surface anim-def vectors and the cascade that indexes it with a struck material's surface id.
 - `src/Session/WeatherRig.cs`, loads the mission's weather and drives the per-rig skydome, whiteout, deck and zone gate each frame.
+- `src/Session/ObjectZoneGate.cs`, gives each flown object the zone its own altitude earns against the cloud band, so the band hides what is on its far side.
 - `src/Session/WorldEffectsFactory.cs`, builds the impact/destruction effect stages and the per-plane crash runtime.
 - `src/Session/LensFlareRig.cs`, the sun's lens flare: screen-space sprites along the sun-to-centre line plus the wash, one instance per pane.
 - `src/Session/FlightRoster.cs`, the session's aircraft set: builds the human field in player order and introduces AI aircraft later through one assembly seam.

@@ -118,6 +118,11 @@ public sealed class WeatherRig
     // cockpit overlay's own clones, registered once each is built, so a zone crossing mid-flight
     // reaches the interior pass too rather than leaving it lit for the mission's first zone.
     private readonly List<(DirectionalLight3D Sun, Godot.Environment? Env)> _extraLighting = new();
+    // The gate's other half: the authored world wears its zone_id from the build, a flown object
+    // earns one per frame from its own altitude. Owned here because this class already holds the
+    // mission's band and is the session's one owner of render visibility.
+    private readonly ObjectZoneGate _objectGate = new();
+    private readonly List<Node3D> _noObjects = new();
 
     private WeatherState? _weather;
     private string _activeZone;
@@ -161,6 +166,10 @@ public sealed class WeatherRig
     private bool _zoneWritten;
     private AnimRuntime.FogStateChange? _pendingFogState;
 
+    // The session's drawn aircraft and zeppelins, read fresh each frame. A wave spawns and an
+    // airframe is shot down long after this rig is built, so a held list goes stale.
+    private Func<IReadOnlyList<Node3D>>? _gatedObjects;
+
     public WeatherRig(SessionSpec spec, Node3D worldRoot, DirectionalLight3D sun,
         EffectAmbience? ambience = null, ViewerSet? viewers = null, Godot.Environment? env = null)
     {
@@ -188,6 +197,10 @@ public sealed class WeatherRig
     /// linear, range and altitude in metres). A mirror, because the renderer refuses to read a
     /// global back outside the editor; it is what a suite asserts a fog change by.</summary>
     public FogWritten FogGlobals { get; private set; }
+
+    /// <summary>The per-object half of the zone gate, for the suite that asserts an object above
+    /// the band stops drawing for a camera below it.</summary>
+    public ObjectZoneGate ObjectGate => _objectGate;
 
     /// <summary>The applied zone's <c>SUNLIGHT_DIFFUSE</c>/<c>SUNLIGHT_AMBIENT</c>, each scaled
     /// by its own authored colour. The authored pair rather than the energies derived from it,
@@ -390,6 +403,12 @@ public sealed class WeatherRig
     /// Never called leaves the deck at −1, i.e. drawn at every state.</summary>
     public void SetDeckZoneId(int zoneId) => _deckZoneId = zoneId;
 
+    /// <summary>The drawn objects the per-object zone gate moves between layers each frame: the
+    /// session's aircraft and zeppelins, with whatever effect meshes hang under them. A delegate
+    /// rather than a list because the roster changes all flight long. Never called leaves the gate
+    /// idle, which is what a suite building a bare rig gets.</summary>
+    public void SetGatedObjects(Func<IReadOnlyList<Node3D>> objects) => _gatedObjects = objects;
+
     /// <summary>The deck tiles' own authored altitude (<c>WorldBuilder.CloudDeckAltitude</c>),
     /// read off the built data. Set from the same place as <see cref="SetDeckCenter"/>, for the
     /// same reason: the deck is world geometry built with the chapter, not mission weather.
@@ -421,6 +440,12 @@ public sealed class WeatherRig
         // puffer distance fade is a per-pane draw rule, so a trail near player 2 must draw in
         // player 2's pane regardless of what player 1 points at.
         _ambience.SetViewers(_viewers);
+
+        // Each drawn object's own zone, resolved once for the whole session rather than per rig.
+        // The verdict is the object's altitude against the band, which no camera takes part in.
+        // Opened by --no-fog, since a band that hides nothing must not keep hiding aeroplanes.
+        _objectGate.Tick(_gatedObjects?.Invoke() ?? _noObjects, _weather, _fogWhiteout.Armed,
+            _fogVolumes, _spec.NoZoneCull || _spec.NoFog);
 
         foreach (var rig in rigs)
         {
