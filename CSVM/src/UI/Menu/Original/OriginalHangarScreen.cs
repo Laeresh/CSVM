@@ -87,6 +87,16 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
     /// <summary>The inventory's Done button, back to the hub.</summary>
     public const string InventoryDoneKey = "HA_B_DONE";
 
+    /// <summary>The row the inventory's plane line is drawn on, replacing the 108 <c>HA_T_PLANE</c>
+    /// authors. Its dashed box covers rows 101 to 124 of <c>PS_BackGround.jpg</c>. A line's
+    /// baseline falls one font size under its row, so the authored 108 dropped the 14-pixel line's
+    /// baseline onto the box's bottom rule. Row 104 centres its cap band on the box instead.</summary>
+    public const float InventoryPlaneRow = 104f;
+
+    /// <summary>The first row of the dashed box's bottom rule in <c>PS_BackGround.jpg</c>, what the
+    /// plane line's baseline has to stand clear of.</summary>
+    public const float InventoryPlaneBoxBottom = 122f;
+
     /// <summary>The airframe tab's dropdown.</summary>
     public const string AirframeDropKey = "AF_D_AIRFRAME";
 
@@ -535,11 +545,14 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
         return plane.Name == airframe ? airframe : plane.Name + "   " + airframe;
     }
 
-    private static void InventoryLine(MenuLayoutScreen screen, List<BoardLine> lines, string key, string text, float size)
+    // An overridden Y is a row whose line is measured off the artwork rather than taken from the
+    // layout.
+    private static void InventoryLine(
+        MenuLayoutScreen screen, List<BoardLine> lines, string key, string text, float size, float? y = null)
     {
         if (screen.Widget(key) is { } widget)
         {
-            lines.Add(new BoardLine(text, widget.Int("X"), widget.Int("Y"), widget.Int("Width"), size, BoardInk.Row));
+            lines.Add(new BoardLine(text, widget.Int("X"), y ?? widget.Int("Y"), widget.Int("Width"), size, BoardInk.Row));
         }
     }
 
@@ -2047,7 +2060,7 @@ public sealed class OriginalHangarScreen : IOriginalScreenModule
             // ⚠ The plane line belongs at HA_T_PLANE. HANGAR.SCRIPT binds both its text objects
             // there and none to HA_T_PILOTPLANE, which the shipped build authors and never draws.
             // The wide row starts the line inside the box and wraps it onto the pull-down.
-            InventoryLine(screen, lines, "HA_T_PLANE", PlaneLine(hangar, plane), HubLabelFont);
+            InventoryLine(screen, lines, "HA_T_PLANE", PlaneLine(hangar, plane), HubLabelFont, InventoryPlaneRow);
             InventoryLine(screen, lines, "HA_T_AGILITYP", "AGILITY: " + Rating(bill.AgilityStars), HubTextFont);
             InventoryLine(screen, lines, "HA_T_ARMORP", "ARMOR: " + Rating(bill.ArmourStars), HubTextFont);
             // ⚠ Draw no Value row without a wallet. A sale is what 1258 prices, and a plane built on

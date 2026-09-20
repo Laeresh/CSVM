@@ -906,15 +906,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   four modules duplicate them; a page module that reaches back into the form's fields for its
   layout is the form in another file. *Cross-refs:* `BL-1014`, `BL-1015`,
   `docs/menu-presentations.md`, `docs/architecture/UI.md`.
-- `BL-1031` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **INVENTORY: the plane
-  line sits low in its dashed box.** *Evidence:* at the controls on e20bb109: "better but move it up
-  so that it's centred on the box" (`.scratch\orch-9\BL-765\inventory-title-before-after.png`,
-  local). The line starts at the box's left edge now, its baseline sits on the box's bottom.
-  `OriginalHangarScreen` writes it through `InventoryLine` at `HA_T_PLANE` (138,108). *Fix shape:*
-  centre the line vertically on the dashed box (measure the box's rows in the art);
-  `menu-original-hangar` holds the check. *⚠ Traps:* no original still of the INVENTORY screen
-  exists, so the box, not a capture, is the reference. *Cross-refs:* BL-765's record
-  (`git log --grep=BL-765`).
 - `BL-1032` `[Cleanup]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **The Rocket
   Craters row leaves the VIDEO page and the launcher; `options.json`'s `rocketCraters` and
   `--craters` stay as the door.** *Evidence:* the user's call after BL-1009: the carve is not offered

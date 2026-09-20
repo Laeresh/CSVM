@@ -102,7 +102,8 @@ internal static class MenuHangarSuites
         + "(reading Export on this door, centred on its paper plaque) save the scratch plane into the "
         + "user's store and the shared roster and return to the "
         + "Instant Action screen with it in the Pilot Plane list, SELL PLANES opens the inventory, which "
-        + "wallet-free builds no Export row and deletes instead of selling, leaving the picked plane's "
+        + "wallet-free builds no Export row and deletes instead of selling, standing the picked plane's "
+        + "line centred in its dashed box and leaving its "
         + "Value row unwritten and asking the unpriced delete "
         + "question in the query box, CANCEL and Back return to the Instant Action screen with "
         + "no residue, the cabin's PLANE CONSTRUCTION draws the cash note on every tab and the totals "
@@ -1036,9 +1037,13 @@ internal static class MenuHangarSuites
         var picked = shell.Compose();
         ctx.Check(InventoryFigure(layout, picked, "HA_T_AGILITYP") != null && InventoryFigure(layout, picked, "HA_T_VALUEP") == null,
             $"whose figures stand without the Value row, this door pricing nothing ({InventoryFigure(layout, picked, "HA_T_VALUEP")?.Text})");
-        ctx.Check(InventoryFigure(layout, picked, "HA_T_PLANE") is { } named && named.Text.StartsWith(scratch, StringComparison.Ordinal)
+        var named = InventoryFigure(layout, picked, "HA_T_PLANE", OriginalHangarScreen.InventoryPlaneRow);
+        ctx.Check(named != null && named.Text.StartsWith(scratch, StringComparison.Ordinal)
             && InventoryFigure(layout, picked, "HA_T_PILOTPLANE") == null,
-            $"and the plane line on the row HANGAR.SCRIPT binds, the wide one unused ({InventoryFigure(layout, picked, "HA_T_PLANE")?.Text})");
+            $"and the plane line on the row HANGAR.SCRIPT binds, the wide one unused ({named?.Text})");
+        ctx.Check(named != null && named.Y + named.Size < OriginalHangarScreen.InventoryPlaneBoxBottom
+            && InventoryFigure(layout, picked, "HA_T_PLANE") == null,
+            $"centred in its dashed box, off the authored row whose baseline lands on the box's bottom rule ({named?.Y}, {named?.Size})");
         var sellButton = Row(shell, OriginalHangarScreen.InventorySellKey)!;
         Click(host, seat, Pointer(fit, sellButton.X + 5f, sellButton.Y + 5f, pressed: true, clicked: true));
         ctx.Check(shell.Dialog != null && shell.FocusedKey == OriginalShell.DialogYesKey && store.Load(scratch) != null,
@@ -1237,10 +1242,12 @@ internal static class MenuHangarSuites
 
     // The same reading on the inventory page, where a row's absence is the claim being made and
     // matching English text would only find the row that was not drawn.
-    private static BoardLine? InventoryFigure(MenuLayout layout, ComposedBoard board, string key)
-        => Figure(layout, OriginalHangarScreen.InventorySection, board, key);
+    private static BoardLine? InventoryFigure(MenuLayout layout, ComposedBoard board, string key, float? row = null)
+        => Figure(layout, OriginalHangarScreen.InventorySection, board, key, row);
 
-    private static BoardLine? Figure(MenuLayout layout, string section, ComposedBoard board, string key)
+    // A row given its own line is looked for there. The authored Y stands only for rows the
+    // composer leaves where the layout puts them.
+    private static BoardLine? Figure(MenuLayout layout, string section, ComposedBoard board, string key, float? row = null)
     {
         if (layout.Screen(section)?.Widget(key) is not { } widget)
         {
@@ -1248,7 +1255,7 @@ internal static class MenuHangarSuites
         }
 
         float x = widget.Int("X");
-        float y = widget.Int("Y");
+        float y = row ?? widget.Int("Y");
         return board.Lines.FirstOrDefault(l => l.X == x && l.Y == y);
     }
 
