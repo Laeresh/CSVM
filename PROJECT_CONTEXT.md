@@ -232,9 +232,9 @@ Full validated format documentation lives in **`docs/formats/`**, one page per f
 
 ## Agent skills
 
-- Issue tracker: this repo's own markdown, `backlog.md`, a live `docs/PLAN-*.md`, `playtest.md`. Public GitHub Issues are a separate surface, worked in the issue and never mirrored into these files; the form and the policies are in `.github/`. See [`docs/agents/issue-tracker.md`](docs/agents/issue-tracker.md).
-- Triage labels: the five canonical roles, unrenamed. See [`docs/agents/triage-labels.md`](docs/agents/triage-labels.md).
-- Domain docs: single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT.md`/`docs/adr/`. See [`docs/agents/domain.md`](docs/agents/domain.md).
+- Issue tracker: GitHub Issues on `Laeresh/CSVM` via `gh`, with `backlog`/`playtest`/`capture` labels in place of new `BL-`/`PT-`/`CAP-` ids. `backlog.md` and `playtest.md` hold only the entries filed before the switch, until each closes; `docs/PLAN-*.md` is still the live plan. See [`docs/agents/issue-tracker.md`](docs/agents/issue-tracker.md).
+- Triage labels: the five canonical roles, unrenamed, created on the repo. See [`docs/agents/triage-labels.md`](docs/agents/triage-labels.md).
+- Domain docs: single-context; glossary in `CONTEXT.md`, structural decisions in `docs/adr/`, the rest in `docs/` and git history. See [`docs/agents/domain.md`](docs/agents/domain.md).
 
 ## Current status / next step
 
