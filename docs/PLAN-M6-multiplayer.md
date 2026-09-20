@@ -199,8 +199,9 @@ what carries them, and a test can run two sessions against each other in one pro
 latency, jitter and loss.
 
 **Evidence (confidence: lead-only).** Nothing under `CSVM/` touches the network today;
-`docs/PLAN-public-release.md` greps `System.Net`, `ENetMultiplayerPeer` and `MultiplayerApi` to
-prove it, and that grep becomes a claim to retire when this lands. The interface shape (a peer id
+`PLAN-public-release` D33 grepped `System.Net`, `ENetMultiplayerPeer` and `MultiplayerApi` to
+prove it, and `.github/SECURITY.md` states it, so that statement becomes a claim to retire when
+this lands. The interface shape (a peer id
 list, send unreliable, send reliable, a receive callback) is this plan's design, not a decode.
 
 **Approach.** One interface in a new `CSVM/src/Net/` namespace with three members: the peer roster,
