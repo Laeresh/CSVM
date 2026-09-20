@@ -102,10 +102,11 @@ alone. `Modal` and `Message` are the dialog and the refusal band every screen sh
 Owns a campaign sortie's humans as part of the shared `CampaignFeature` (`Feature.Field`, in
 `CSVM.UI.Menu` so either presentation walks the same field): joined count, the flight check showing,
 and each guest's pick. Player 0 keeps the seated profile's aircraft; later players fly
-session-scoped stock records or copies, so a guest's edits cannot persist.
-`Advance`/`Retreat`/`Rewind` walk one reused flight-check page through the field, and the seated
-player's first FLY MISSION latches `Locked` across that walk. `Taken` and `Choose` are the
-no-duplicate rule, stock picks compared by airframe and profile picks by plane name.
+session-scoped stock records or copies, so a guest's edits reach no profile store. A rebuild (a
+mission launch, a hangar visit, a re-seat) carries each guest's pick and its fit over, so the run's
+later missions open on what they chose. `Advance`/`Retreat`/`Rewind` walk one reused flight-check
+page through the field, and the seated player's first FLY MISSION latches `Locked`. `Taken` and
+`Choose` are the no-duplicate rule, stock picks compared by airframe and profile picks by name.
 
 ## src/UI/Campaign*Page.cs
 The ten campaign screens, one file each, every one an `ICampaignPage` over `CampaignFlow`: the

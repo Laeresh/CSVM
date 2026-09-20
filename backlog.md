@@ -1009,16 +1009,6 @@ usual.
   two-seat case. *⚠ Traps:* the `cg_hookup_player` CALLBACK fires once per landing and must stay
   once. *Playtest after fix:* two pads, C1 M01 to the landing, P2 lands first. *Cross-refs:*
   `BL-434` (splitscreen behaviour unprofiled).
-- `BL-1035` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **Local co-op: player
-  2's campaign ammo pick is not kept for the next mission.** *Evidence:* P2 picked ammo on the
-  campaign's loadout page; the next mission offered stock again while P1's pick held.
-  `CampaignFeature.CommitLoadout` writes the picks into the record and saves the profile only for
-  `Field.Current == 0`; a guest's record is session-scoped and belongs to no profile, by its own
-  summary. *Fix shape:* keep the guest's record, picks included, across missions within the session,
-  and save it into P2's own profile when they are seated with one; `MenuPlayerSetupSuites` covers
-  seat 1's own loadout for one launch only, extend it across a mission boundary. *⚠ Traps:* never
-  write a guest's pick into seat 0's plane. *Playtest after fix:* two pads, pick ammo for P2, fly a
-  mission, open the next mission's loadout page. *Cross-refs:* `BL-434`.
 
 ## Missions, modes & campaign
 

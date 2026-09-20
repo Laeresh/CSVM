@@ -434,7 +434,8 @@ public sealed class CampaignFeature : IMenuFeature
     /// <summary>ACCEPT LOADOUT: writes the picks into the record and, for the seated player's own
     /// aircraft, saves the profile, the original's <c>uiData</c> 2034 commit path. A guest's record
     /// is session-scoped and belongs to no profile, so their ACCEPT writes the record and saves
-    /// nothing.</summary>
+    /// nothing. The field (<see cref="CampaignFlightField"/>) keeps that record across the
+    /// sortie's missions.</summary>
     public void CommitLoadout(OwnedPlane plane, int[] ammo, int[] ordnance)
     {
         ArgumentNullException.ThrowIfNull(plane);
