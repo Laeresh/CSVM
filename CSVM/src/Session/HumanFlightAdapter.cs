@@ -177,6 +177,7 @@ internal sealed class HumanFlightAdapter
             // one scripted sequence per player ('|'-separated); the last covers the rest
             HoldSegments = _policy.HoldSets == null ? null
                 : _policy.HoldSets[Math.Min(pi, _policy.HoldSets.Length - 1)],
+            LeverSteps = _policy.LeverSteps,
             PlaneModel = planeModel,
             Props = PropAnimator.Build(planeModel),
             WingLights = WingLightBlinker.Build(planeBuilder.WingFlares, _policy.AnimLod),

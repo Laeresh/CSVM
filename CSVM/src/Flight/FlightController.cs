@@ -603,6 +603,13 @@ public partial class FlightController : Node3D
     /// auto-respawns after a short pause.</summary>
     private (FlightInput Input, float Duration)[]? _holdSegments;
 
+    /// <summary>The <c>--lever=</c> schedule (from <see cref="FlightControllerBuild.LeverSteps"/>):
+    /// commanded-lever presses at their own sim-seconds, the scripted twin of the digit row. It lets
+    /// a headless capture slam the throttle. Null on every ordinary run.</summary>
+    private IReadOnlyList<(float At, float Lever)>? _leverSteps;
+    private float _leverElapsed;                 // sim-s the keyboard arm has read, for the schedule
+    private int _leverNext;                      // the next scheduled press not yet made
+
     // A stick the caller supplied outright (FlightControllerBuild.InputSource), ahead of every
     // other arm.
     private IFlightInputSource? _suppliedInputSource;
@@ -2627,6 +2634,17 @@ public partial class FlightController : Node3D
         return FirePressed();
     }
 
+    // The --lever= schedule on a rig a suite assembled itself rather than through the roster. That
+    // is the only way to reach the flag's own path, since a headless run holds no digit down. The times
+    // run from this call, not from the rig's first step, so a suite need not count what it has
+    // already stepped.
+    internal void ScheduleLeverForTest(IReadOnlyList<(float At, float Lever)> steps)
+    {
+        _leverSteps = steps;
+        _leverElapsed = 0f;
+        _leverNext = 0;
+    }
+
     // This tick's reading for one action, written over the three readers after a real poll, so the
     // next SimStep in the same rendered frame reuses it rather than polling over it. The suites'
     // stand-in for hardware nothing headless can hold down.
@@ -4274,6 +4292,8 @@ public partial class FlightController : Node3D
             + (_keyActions.Axis(InputAction.ThrottleUp, InputAction.ThrottleDown) + padThrottle)
                 * ThrottleRate * dt,
             0f, 1f);
+        if (ScheduledThrottle(dt) is { } scheduled)
+            _throttleSetting = scheduled;
         if (RequestedThrottle() is { } requested)
             _throttleSetting = requested;
 
@@ -4411,6 +4431,21 @@ public partial class FlightController : Node3D
         }
 
         return requested;
+    }
+
+    // Which lever the --lever= schedule presses on this step, or null while none is due. A step is
+    // one press: the commanded lever jumps there and stays. The live one then slews to it at its own
+    // rate, so the gap the exhaust smoke charges from is a real one. A live digit beats it, since
+    // the caller who added the schedule is not the one at the keyboard.
+    private float? ScheduledThrottle(float dt)
+    {
+        if (_leverSteps == null)
+            return null;
+        _leverElapsed += dt;
+        float? pressed = null;
+        while (_leverNext < _leverSteps.Count && _leverSteps[_leverNext].At <= _leverElapsed)
+            pressed = _leverSteps[_leverNext++].Lever;
+        return pressed;
     }
 
     // Both levers on one value, for the writers that place an aircraft rather than fly it. The

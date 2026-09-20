@@ -20,6 +20,11 @@ internal sealed class FlightControllerBuild
     /// unattended, so a crash auto-respawns after a short pause.</summary>
     public (FlightInput Input, float Duration)[]? HoldSegments;
 
+    /// <summary>A scheduled sequence of commanded-lever presses (sim-second, lever 0 to 1), the
+    /// scripted twin of the digit row. A capture that has to slam the throttle uses it. Null on every
+    /// ordinary run. It drives the keyboard arm, so a <see cref="HoldSegments"/> run ignores it.</summary>
+    public IReadOnlyList<(float At, float Lever)>? LeverSteps;
+
     /// <summary>A stick of the caller's own, taking precedence over every other arm. It exists for
     /// a scripted profile that has to close a loop on the aircraft's own state, which a timed
     /// segment list cannot: the plant has no auto-level, so "push for N seconds" flies a different
@@ -144,6 +149,7 @@ public partial class FlightController
         IsHumanPiloted = build.IsHumanPiloted;
         Pilot = build.Pilot;
         _holdSegments = build.HoldSegments;
+        _leverSteps = build.LeverSteps;
         _suppliedInputSource = build.InputSource;
         PlaneModel = build.PlaneModel;
         Props = build.Props;

@@ -61,7 +61,7 @@ exactly how `PROJECT_CONTEXT.md`'s day-to-day table drifted from this page. One 
 `--map-edge-block` · `--map-edge-mode`
 
 **Scripted input, fly a fixed stick input, no hands**
-`--hold` · `--yaw` · `--pitch` · `--look`
+`--hold` · `--lever` · `--yaw` · `--pitch` · `--look`
 
 **Data paths, override where the extraction is read from**
 `--data-root` · `--gamez` · `--textures` · `--zrdr` · `--interp` · `--sounds` · `--zip-assets` · `--messages`
@@ -315,6 +315,7 @@ lines**.
 - `--debug-join=N` (menu only: seat N device-less players through the shared player setup so the aircraft screens can be screenshot without N controllers; they can never act (and the last one starts selected, so both states show), making the shot deterministic. Built-in draws them as split panes and on the join strip; under `--presentation=original` the same flag seats them on the Free Flight and Dogfight screens' seat strip and aircraft column)
 - `--debug-pointer=x,y[,down][,right]` (`--presentation=original` only: stand seat 0's pointer at that authored 800x600 point for the run, a button held per word after the pair, `down` the primary and `right` the secondary the credits screen's hidden line answers, so those states are shot with nobody at the controls. Authored not window pixels, so the shot lands on the same widget whatever the window; the press arrives as an edge once and never releases, leaving the held frame standing rather than firing. **Quote it in PowerShell** (SHELL-18); fewer than two numbers stands no pointer)
 - `--hold=p,r,y,thr[@dur][;…]` (scripted flight input for automated runs: `;`-separated segments with `@seconds` durations sequence the inputs, so `1,0,0,0@1.1;0,0,0,0` pulls for 1.1 s then releases, and a single segment is a constant hold. `|` separates **per-player** sequences under `--players`, the last covering any remaining players. Such runs are unattended, so a crash auto-respawns after a pause and a completed stunt race auto-rematches on the same timer)
+- `--lever=<eighths>[@seconds][;…]` (**press the throttle digit row on a schedule**, the scripted twin of tapping `0`-`8`, for a capture that has to slam the lever with nobody at the keyboard. Each `;`-separated step is one press of that eighth at that sim-second, so `0@0;8@10` idles from the spawn and slams to full at ten seconds; the commanded lever jumps and stays, the live one slews to it at its own 0.5/s, and that gap is what the exhaust smoke charges from. It drives the **keyboard** arm, so a `--hold=` run ignores it, as do AI aircraft. Steps sort by time; an eighth outside 0-8 clamps)
 - `--yaw=`
 - `--pitch=`
 - `--pos=x,y,z` (place the **subject of whatever mode is running** at a world position: the plane's spawn in `--fly`/`--stunt`, where it beats `--spawn=N`, the camera eye in `--freecam`/`--anim-lab`, the orbit eye in `--viewer`. **Quote it in PowerShell** (`"--pos=-6500,300,-1500"`) or the comma splits the argument into an array and the run dies (SHELL-18). In flight `FlightModel.Reset` applies start speed and trim, and a respawn returns to the placed pose. Under `--campaign=` a placement made during a mission intro cutscene waits for the cutscene's `WorldHeld` handoff)

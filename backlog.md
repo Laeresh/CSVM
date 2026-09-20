@@ -530,8 +530,9 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   capture may delete the feature rather than tune it.
 
 - `BL-285` `[Bug]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: decoded]` **The decoded
-  exhaust smoke is ported and reads far thinner than the original's at the controls.** *Verdict
-  at the controls:* against CAP-21, "its a lot denser in the original"; the AI aircraft's trails
+  exhaust smoke is ported and measures about half the original's density at a matched slam.**
+  *Verdict at the controls:* against CAP-21, "its a lot denser in the original"; the AI aircraft's
+  trails
   (`git log --grep=BL-969`) draw and read right. *Evidence:* the original's exhaust
   smoke is its one code-built puffer, a near-black 0.4 m trail per `exhaust%d` marker whose opacity
   charges from the commanded lever running ahead of the live one and decays at 1.5/s
@@ -541,17 +542,30 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   constant is now decoded and none is left to tune. The decode reproduces both ends CAP-21 bounds,
   a 1/8 step peaking at opacity 0.013 and an idle-to-full slam at 0.356, out 3.9 sim-s later (the
   footage's plume is gone about 2.8 wall-s after the slam, 3.9 sim-s at the capture's 1.39 ratio).
-  A render over grey fog shows two dark streams where the nitro trails were; beside a CAP-21 frame
-  0.8 wall-s after the slam, ours reads narrower and paler near the tail. The footage plane had
-  been idling for several seconds and flies slower than the render's, which alone thickens the
-  plume near the tail, so no instrument here settles it. *Fix shape:* first a render at the
-  footage's own speed (idle for several seconds, then the slam), read against the CAP-21 frame
-  0.8 wall-s after the slam; a mismatch that survives the matched speed is a puffer-renderer
-  question (the card's sprite size, `Puffer.BirthAlpha`, the texture's alpha), never a constant
-  of this emitter, since every one of those is decoded. ⚠ Traps: slam with a digit key, not the
+  *Measured at matched speed:* `--lever=` (`docs/cli.md`) presses the throttle digit row on a
+  schedule, so a headless capture can fly the footage's own input history: idle from the spawn, one
+  `8` press at 10 sim-s, the chase camera 0.8 s after it, a Bloodhawk as CAP-21 flies, 1280x720.
+  The control is the same sim frame rendered again with the trail suppressed, so the difference
+  between the two frames is the plume and nothing else, and the footage is read the same way
+  against a background estimated per row from the band's own margins. Over the hundred rows a
+  hundred pixels below the wing line, the original darkens its background by 41% and 39% in its two
+  plumes, peaking at 62% and 72%, over median widths of 77 px and 60 px; the port darkens by 20%
+  in both, peaking at 36% and 41%, over 49 px each. The port therefore stands at about half the
+  original's opacity and about 0.7 of its width at the same moment of the same manoeuvre in the
+  same airframe, which confirms the verdict at the controls and rules the matched speed out as the
+  cause. *The question:* which term in the draw carries the missing factor, since the emitter has
+  none left. Three candidates, all in the renderer: the quad-rim fade in
+  `MultiMeshEmitterRenderer`'s shader, which ramps alpha over the outer 12% of each card edge and
+  is authored against additive rectangles over dark ground yet also applies to the mixed blend this
+  plume draws in; `Puffer.SizeScaleDefault`, the decoded radius-to-diameter 2; and the
+  `smoke101..103` alpha channel, mean 0.263 and peak 0.639, which caps one card at 0.23 opacity
+  under the slam's 0.355 birth alpha. None of the three is settled by the decode as it stands, so
+  the next step is the original's own draw path for a near-black mixed sprite, never a constant of
+  this emitter. ⚠ Traps: slam with a digit key, not the
   throttle-up key. A held key moves the commanded lever at the slew's own rate, so the gap stays
   one step's slew and the original shows nothing for it either. A scripted `--hold` feeds the
-  smoke no gap, so no capture flag reaches the plume. *Playtest after fix:* from idle at a steady
+  smoke no gap, since it bypasses the lever; `--lever=` is the capture flag that reaches the
+  plume. *Playtest after fix:* from idle at a steady
   cruise, slam to full with the `8` digit key and watch from the chase camera as CAP-21 does around
   12.5 s: near-black smoke from each exhaust, strongest about a second after the slam and gone
   about four seconds after it, as wide and as dark near the tail as the footage's at the same

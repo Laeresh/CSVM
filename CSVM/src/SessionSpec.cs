@@ -518,6 +518,11 @@ public sealed record SessionSpec
     /// whose generators run uncredited anyway.</summary>
     public bool WakeGenerators { get; private set; }
     public (FlightInput, float)[][]? HoldSets { get; private set; }
+
+    /// <summary>The <c>--lever=</c> schedule: commanded-lever steps in eighths, each at its own
+    /// sim-second, played on every human-flown seat as the digit row's keys play them. Null when
+    /// the flag is absent, which is every ordinary run.</summary>
+    public IReadOnlyList<(float At, float Lever)>? LeverSteps { get; private set; }
     /// <summary>The <c>--damage=</c> preset pairs (part, fraction 0–1); null when <c>--damage</c>
     /// carried no value.</summary>
     public IReadOnlyList<(string Part, float Fraction)>? DamagePreset { get; private set; }
@@ -1428,6 +1433,7 @@ public sealed record SessionSpec
             else if (arg == "--debug-collision") { s.DebugCollision = true; }
             else if (arg.StartsWith("--players=")) { s.Players = int.Parse(arg["--players=".Length..]); s.PlayersExplicit = true; }
             else if (arg.StartsWith("--hold=")) { s.HoldSets = ParseHold(arg["--hold=".Length..]); }
+            else if (arg.StartsWith("--lever=")) { s.LeverSteps = ParseLever(arg["--lever=".Length..]); }
             else if (arg.StartsWith("--frames=")) { s.ScreenshotFrames = int.Parse(arg["--frames=".Length..]); }
             else if (arg.StartsWith("--shots=")) { s.ScreenshotShots = Math.Max(1, int.Parse(arg["--shots=".Length..])); }
             else if (arg.StartsWith("--jitter=")) { s.JitterDeg = Flt(arg["--jitter=".Length..]); }
@@ -1679,6 +1685,22 @@ public sealed record SessionSpec
             players.Add(segments.ToArray());
         }
         return players.ToArray();
+    }
+
+    /// <summary>Parse the lever schedule: ';'-separated "eighths@seconds" steps, ascending in time,
+    /// where eighths is 0 to 8 as the digit row reads it. A step is one press of that digit at that
+    /// sim-second, so the commanded lever jumps and stays. The live lever then slews to it at its
+    /// own rate, and that gap is what the exhaust smoke charges from.</summary>
+    public static (float At, float Lever)[] ParseLever(string s)
+    {
+        var steps = new List<(float, float)>();
+        foreach (var step in s.Split(';', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var at = step.Split('@');
+            steps.Add((at.Length > 1 ? Flt(at[1]) : 0f, Math.Clamp(Flt(at[0]), 0f, 8f) / 8f));
+        }
+        steps.Sort((a, b) => a.Item1.CompareTo(b.Item1));
+        return steps.ToArray();
     }
 
     /// <summary>Parse <c>--paint-color=</c>: up to three '/'-separated byte triples (body / dark

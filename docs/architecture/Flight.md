@@ -1114,13 +1114,13 @@ original's own component block, a velocity kick into a two-branch integrator who
 
 ## src/Flight/FlightControllerBuild.cs
 The internal construction handoff from `FlightRoster` to `FlightController`: one resolved
-controller's pre-tree state from either flight adapter, which `Bind` consumes exactly once, before
-tree attachment. The roster keeps the data resolution and the lifecycle ordering while the
-controller keeps its runtime interface. `HoldSegments`, the scripted hold profile a caller may want,
-rides this DTO the same way `Pilot` does, so `FlightController` exposes a public field for neither;
-`Bind` copies it before resolving and storing the `IFlightInputSource`, alongside the `IWorldQuery`
-seam. The same partial holds `ApplyProfile`, the one method a seat takes a player's keymap and
-mouse scheme and sensitivity through, at build and on a Controls page accepted in flight alike.
+controller's pre-tree state from either flight adapter, which `Bind` consumes exactly once. The
+roster keeps the data resolution and the lifecycle ordering while the controller keeps its runtime
+interface. `HoldSegments` (the scripted hold profile) and `LeverSteps` (the commanded-lever presses
+`--lever=` schedules) ride this DTO the same way `Pilot` does, so `FlightController` exposes a
+public field for none; `Bind` copies them before resolving and storing the `IFlightInputSource`,
+alongside the `IWorldQuery` seam. The same partial holds `ApplyProfile`, the one method a seat takes
+a keymap, mouse scheme and sensitivity through, at build and on a Controls page accepted in flight.
 
 ## src/Flight/IFlightInputSource.cs
 The seam a sim step reads this frame's pilot intent through: `Read(dt)` returns one `FlightInput`.
@@ -1154,7 +1154,7 @@ one `IWorldQuery` bound in `Bind`, and contact detection fills one `ContactRepor
 sweep, the AI probe rays or the anti-tunnelling centre ray. An AI aircraft is this SAME node with
 `Pilot` driving the input source, no camera and no HUD canvas, so flight, collision, weapons and
 damage are the player's path exactly. `Held`, `ControlHold` (`FlightControlHold`: the discrete commands are swallowed and no crash cam brings a hull back, with the stick either the pilot's or neutral over the lever they left), `Inert`, `Spectating`, `CameraOwned` and
-`AllowLiveRespawn` are the flags a session or a lab pins it with, and `RespawnPlacement` is the hook a session answers with where a respawn should put the aeroplane (`VersusSpawnRotation` in the dogfight), unset everywhere else so a respawn keeps the pose `Setup` fixed. `SelectRankedTarget` builds the pilot's four-pool candidate list, each entry carrying its own class bias, and hands it, with the machine's ATTACK radius as the reach, to `AiTargetRanking.SelectBest` under the session's targeting order; `HoldsStandingTarget` is the sweep's gate, re-scoring the standing target alone until the hold expires or the rank fails. A human seat also plays `Bindings/PadRumble.cs` at the sites that already carry a cue (gun fire, an ordnance launch, a round taken, a contact, the crash, the nitro, a turret shot and a dive past the rated maximum), on the pads `PadDevices` names and never another pane's. The once-per-death shutdown ends every flight system in one place, so the gun and engine loops, the `snd_propstop` cue and the propeller's own `stopprops` wind-down to the still disc leave together, and a respawn takes that wind-down off the slot before replaying the spawn choreography. `TickIncomingFire` runs the shield and the canopy cue off one tick, and `OpenCanopyHole` puts an opened hole through the rig as its authored def, with `EnsureViewCameraProxy` supplying the rig-local `camera1` that def's exterior branch poses against. Read `AircraftLifecycle.cs` next.
+`AllowLiveRespawn` are the flags a session or a lab pins it with, and `RespawnPlacement` is the hook a session answers with where a respawn should put the aeroplane (`VersusSpawnRotation` in the dogfight), unset everywhere else so a respawn keeps the pose `Setup` fixed. `SelectRankedTarget` builds the pilot's four-pool candidate list, each entry carrying its own class bias, and hands it, with the machine's ATTACK radius as the reach, to `AiTargetRanking.SelectBest` under the session's targeting order; `HoldsStandingTarget` is the sweep's gate, re-scoring the standing target alone until the hold expires or the rank fails. A human seat also plays `Bindings/PadRumble.cs` at the sites that already carry a cue (gun fire, an ordnance launch, a round taken, a contact, the crash, the nitro, a turret shot and a dive past the rated maximum), on the pads `PadDevices` names and never another pane's. The once-per-death shutdown ends every flight system in one place, so the gun and engine loops, the `snd_propstop` cue and the propeller's own `stopprops` wind-down to the still disc leave together, and a respawn takes that wind-down off the slot before replaying the spawn choreography. `TickIncomingFire` runs the shield and the canopy cue off one tick, and `OpenCanopyHole` puts an opened hole through the rig as its authored def, with `EnsureViewCameraProxy` supplying the rig-local `camera1` that def's exterior branch poses against. The keyboard arm also plays `LeverSteps`, the `--lever=` schedule of commanded-lever presses at their own sim-seconds, which is how a headless capture slams the throttle as the digit row does and leaves the exhaust smoke a real lever gap to charge from; a live digit beats it. Read `AircraftLifecycle.cs` next.
 
 ## src/Flight/PlaneDamage.cs
 The decoded vehicle damage ledger: per-part pools from `destroyable_parts` plus a whole-vehicle
