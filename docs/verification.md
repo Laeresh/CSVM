@@ -814,6 +814,11 @@ member, and it does not go here.
   comparison striding four reports every frame as wholly changed.** A tree card's occlusion pane
   read a card that drew 0 pixels and a ground quad that filled 6912 of 9216, both artifacts of this,
   before any of the three was accounted for.
+- **INSTR-92**, **A positional voice that is not culled is not therefore heard: the decoded law's
+  band between the audible radius and the 1.1x cull runs from -30 dB to -100 dB, so a cue logged as
+  reaching a distance can be 70 dB down there. Read the level the line prints, never the cull
+  distance beside it.** An AI aeroplane's `snd_30cal` at 398 m of its 413 m cull measured -72 dB,
+  and a turret cue whose scaled radius is 1000 m stands at -30 dB there.
 
 ## SRC, sources and documents
 

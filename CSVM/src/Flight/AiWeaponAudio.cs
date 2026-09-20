@@ -223,12 +223,13 @@ public sealed partial class AiWeaponAudio : Node3D
         // The caliber's own cue distance, which is the one GunLoopSound tests each frame against.
         _gunLoopCull = resolved.CullDistance;
         _culled = null;   // re-armed with the slot, so the first frame of this caliber logs its verdict
-        Log.Info("sound", $"ai weapons {Aircraft()}: loop={SlotState(sndName, cue)} audible={resolved.RangeMax:0} m cull={_gunLoopCull:0} m range=x{SoundFalloff.RangeScale:0.###}");
+        Log.Info("sound", $"ai weapons {Aircraft()}: loop={SlotState(sndName, cue)} audible={resolved.RangeMax * SoundFalloff.RangeScale:0} m cull={_gunLoopCull:0} m range=x{SoundFalloff.RangeScale:0.###}");
     }
 
-    // The first frame and every transition after it, always logged: audio cannot be
-    // screenshot-verified (INSTR-45), and this line is what separates "silent because it is past the
-    // cull" from "silent because its definition never resolved".
+    // The first frame and every transition after it, always logged. Audio cannot be
+    // screenshot-verified (INSTR-45), and this line separates "silent past the cull" from "silent
+    // because its definition never resolved". ⚠ The word is `sounding`, not `audible`: the level
+    // between the audible radius and the cull runs to -100 dB (INSTR-92).
     private void SetCulled(bool culled, float dist)
     {
         if (culled == _culled)
@@ -236,7 +237,7 @@ public sealed partial class AiWeaponAudio : Node3D
             return;
         }
         _culled = culled;
-        Log.Debug("sound", $"ai weapons {Aircraft()} {(culled ? "culled" : "audible")} at {dist:0} m, {SoundFalloff.SessionGainDb(dist, _gunLoopRangeMin, _gunLoopRangeMax, _gunLoopVol):0.0} dB (cull {_gunLoopCull:0} m, range x{SoundFalloff.RangeScale:0.###})");
+        Log.Debug("sound", $"ai weapons {Aircraft()} {(culled ? "culled" : "sounding")} at {dist:0} m, {SoundFalloff.SessionGainDb(dist, _gunLoopRangeMin, _gunLoopRangeMax, _gunLoopVol):0.0} dB (cull {_gunLoopCull:0} m, range x{SoundFalloff.RangeScale:0.###})");
     }
 
     // Which aircraft every line here is about: the controller this component hangs under, whose name

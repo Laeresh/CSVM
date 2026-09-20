@@ -107,7 +107,7 @@ public sealed partial class GunVoice : Node3D
         }
         var voice = new GunVoice(cue, home.Listeners, label, leaseSeconds);
         home.Node.AddChild(voice);
-        Log.Info("sound", $"gun voice {label}: loop={cue.Name} audible={cue.RangeMax:0} m cull={voice._cull:0} m range=x{SoundFalloff.RangeScale:0.###} lease={leaseSeconds:0.00} s");
+        Log.Info("sound", $"gun voice {label}: loop={cue.Name} audible={cue.RangeMax * SoundFalloff.RangeScale:0} m cull={voice._cull:0} m range=x{SoundFalloff.RangeScale:0.###} lease={leaseSeconds:0.00} s");
         return voice;
     }
 
@@ -175,9 +175,10 @@ public sealed partial class GunVoice : Node3D
         SetCulled(culled, dist);
     }
 
-    // The first shot and every transition after it, always logged: audio cannot be
-    // screenshot-verified (INSTR-45), and this line is what separates "silent because it is past
-    // the cull" from "silent because its definition never resolved".
+    // The first shot and every transition after it, always logged. Audio cannot be
+    // screenshot-verified (INSTR-45), and this line separates "silent past the cull" from "silent
+    // because its definition never resolved". ⚠ The word is `sounding`, not `audible`: the level
+    // between the audible radius and the cull runs to -100 dB (INSTR-92).
     private void SetCulled(bool culled, float dist)
     {
         if (culled == _culled)
@@ -185,7 +186,7 @@ public sealed partial class GunVoice : Node3D
             return;
         }
         _culled = culled;
-        Log.Debug("sound", $"gun voice {_label} {(culled ? "culled" : "audible")} at {dist:0} m, {SoundFalloff.SessionGainDb(dist, _rangeMin, _rangeMax, _volume):0.0} dB (cull {_cull:0} m, range x{SoundFalloff.RangeScale:0.###})");
+        Log.Debug("sound", $"gun voice {_label} {(culled ? "culled" : "sounding")} at {dist:0} m, {SoundFalloff.SessionGainDb(dist, _rangeMin, _rangeMax, _volume):0.0} dB (cull {_cull:0} m, range x{SoundFalloff.RangeScale:0.###})");
     }
 }
 

@@ -579,46 +579,48 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   speed; a single 1/8 step at most a faint wisp, idle to 5/8 a plume about half as dark.
   *Cross-refs:* `git log --grep=BL-285` (the port), `git log --grep=BL-969` (the AI trails).
 
-- `BL-933` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: decoded]`
-  **The gun voices run the decoded level law and are still heard only beside the player, even at
-  the range factor that brings the world emitters in: a shooting enemy aeroplane or turret should
-  be clearly audible at about 1 km and is heard only close by.**
-  *Verdict at the controls:* the listen after the law landed failed, and harder than the world
-  emitters on the same law, "I can't hear shooting enemies or
-  turrets, only within ~10 meters"; and at the shipped range factor of 2.5, which brings the
-  siren and the train in, "enemy shots are still only hearable if I'm really close. They should be
-  clearly audible if i'm in range ~1km". At 2.5 a turret's `snd_turretgun` `RANGE [30, 400]` is
-  audible to 1,000 m by the law, so the gun sites carry a second cause of their own. *What moves
-  first:* the `--log=sound:debug` lines (distance, gain and cull per voice) on the sortie below
-  decide between the level, the lease and the cue's `VOLUME`. *Evidence:* reported at
-  the controls three times before the law landed, after `BL-793` landed a positional loop per mount ("cant hear guns
-  of turrets. And planes only when very near. Too much falloff perhaps?"), after `BL-820` gave the
-  hulls a voice ("Cant hear them. They fire but there is no sound") and against `BL-846` ("i can
-  only hear them if they are shooting right beside me"). The cause found then was the mapping onto
-  Godot's own model: every gun voice built its player with `UnitSize = RANGE`'s full-volume distance and
-  `MaxDistance` = its audible one on Godot's inverse-distance model, which multiplies a second
-  linear fade onto the level, reaches silence exactly at the audible radius where the decoded law
-  still plays to 1.1x, and brings a low-pass of up to 24 dB above 5 kHz that guts a gun's crack.
-  Against `SoundFalloff.cs` at `VOLUME` 1, `snd_turretgun` `RANGE [30, 400]` read -13.0 / -22.5 /
-  -32.0 / silent dB at 100 / 200 / 300 / 400 m where the law gives -6.0 / -18.8 / -25.5 / -30.0;
-  `snd_60cal` `RANGE [35, 450]` read -11.3 / -20.2 / -28.2 / -40.2 against -3.3 / -16.7 / -23.5 /
-  -28.1. Both sites now carry a player with no attenuation model and no `MaxDistance`, levelled
-  from the law per frame, the way `WorldSounds` already was.
-  The audible radii are the data's: a turret's `snd_chaingun` is silent past 220 m and a 30-cal
-  past 165 m, and the aeroplane loops author `RANGE [20, 150]` to `[40, 550]` by caliber, not the
-  `[80, 800]` of the dry cue `snd_emptyclip`.
+- `BL-933` `[Tuning]` `[S]` `[Next: decide]` `[Impact: high]` `[Evidence: decoded]`
+  **A shooting enemy aeroplane or turret is heard only close by, because a gun cue's authored reach
+  is a fraction of the distance a gun shoots from: the decision is how much remake-only reach the
+  weapon cues get, on top of the 2.5 the world emitters were judged at.**
+  *Verdict at the controls:* "cant hear guns of turrets. And planes only when very near", "Cant
+  hear them. They fire but there is no sound", and at the shipped range factor "enemy shots are
+  still only hearable if I'm really close. They should be clearly audible if i'm in range ~1km".
+  *The gun sites carry no second cause:* the suite `gun-voice-reach` reads a C4 belly ring firing
+  and an AI aeroplane's caliber loop at the shipped x2.5 and finds both granted a voice, unculled
+  and at the decoded law's own level, on the `Effects` bus the world emitters that do reach use,
+  with no engine attenuation model and no `MaxDistance`; every gun cue authors no `VOLUME` key, so
+  its gain is 1; the turret lease is renewed per round and the hull lease per tick, and both hold.
+  The turret ring reads -12.3 / -20.8 / -30.0 dB at 200 / 300 / 500 m and is culled past 550 m; the
+  AI mount's `snd_30cal` reads -18.8 / -26.2 dB at 200 / 300 m and is culled past 413 m. A live
+  Instant Action wave logs an enemy firing at 398 m of its 413 m cull at -72.1 dB, which is the
+  law's tail rather than a defect.
+  *What the data says:* every one of the 42 turret entries in `ai.zrd` authors `SOUNDS.CANNON`
+  `snd_chaingun` `RANGE [30, 200]`, so no emplacement anywhere carries `snd_turretgun`; that cue
+  belongs to the two weapon records the patrol boats and turret trucks fire, which do reach 1,000 m
+  and are culled at 1,100 m, and whose attack radius is 400 m in any case. Against that, a turret's
+  `DETECTION_RANGE` runs 350 to 1,000 m (17 entries past 600 m) and every caliber's ballistic
+  `RANGE` is 1,000 m, so a gun opens fire from two to seven times its own cue's scaled reach.
+  *The decision:* the missing reach is the cue's radii and not a level, and the shipped 2.5 was
+  measured on the world emitters, whose radii (the siren's `[200, 1200]`) are three to eight times
+  the guns'. For a turret's chaingun to stand 10 dB down at 1 km the factor would have to be about
+  14, and about 5 merely to reach 1 km at the law's -30 dB edge; an aircraft 30-cal wants about 19
+  and 7. So either the weapon cues take a factor of their own, or the build keeps the authored
+  reach and gunfire stays a close-quarters sound.
+  *The sortie that answers it:* CM21 (`--campaign=<profile>:20`) across the docks and CM17 (`:16`)
+  for the pirate zeppelin's rings, with `--volume=1.0 --no-det --log=sound:debug`, flown at
+  `--sound-range-scale=2.5`, then `=5`, then `=10`, saying which reads like the original at 300 m,
+  at 600 m and at 1 km. ⚠ That flag scales the world emitters too, so at 10 the siren and the train
+  stand at four times the reach they were judged at; ignore them and listen to the guns.
   *⚠ Traps:* `WeaponSoundCue.CullMargin` (1.1) is `SoundFalloff.CullFactor`, decoded from the
   compare, and is not the knob; `BL-846`'s closing note says the same. Do not retune a level by
-  ear: every constant here is the decode's or the authored `RANGE`, and the reach that is missing
-  is beyond what the shipped range factor already buys.
-  *Playtest after fix:* CM17 (`--campaign=<profile>:16`) for the pirate zeppelin's gun rings at a
-  couple of hundred metres, CM21 (`:20`) for the patrol boats and turret trucks across the docks,
-  an Instant Action wave for an enemy aeroplane's guns from further off than beside you, all with
-  `--volume=1.0 --no-det --log=sound:debug`; and nothing too loud at a cue's own audible radius.
+  ear: every constant here is the decode's or the authored `RANGE`. A cue that is not culled is not
+  therefore heard (`INSTR-92`), which is what made the earlier reading of this entry expect
+  `snd_turretgun` to be audible at 1 km.
   *Cross-refs:* `docs/formats/sounds.md` ("The gain
   between the two radii", "No listener-side term scales the reach" for the shipped factor),
-  `INSTR-87`, `git log --grep=BL-269` (the shipped factor), `git log --grep=BL-933`, `git log --grep=BL-793`,
-  `git log --grep=BL-820`, `git log --grep=BL-846`.
+  `INSTR-87`, `INSTR-92`, `git log --grep=BL-269` (the shipped factor), `git log --grep=BL-933`,
+  `git log --grep=BL-793`, `git log --grep=BL-820`, `git log --grep=BL-846`.
 
 - `BL-934` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` **The dynamic enemy and
   ally voice lines dispatch in the suite and are now heard at the controls, but far more rarely

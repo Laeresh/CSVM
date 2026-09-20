@@ -794,6 +794,13 @@ public sealed class TestContext
     /// decoded against. The session's factor comes back on dispose.</summary>
     public static IDisposable AtAuthoredSoundRadii() => new SoundRangeScope(1f);
 
+    /// <summary>The counterpart of <see cref="AtAuthoredSoundRadii"/>: reads every positional sound
+    /// level and cull at the factor the build ships, whatever the caller's session carries. What a
+    /// suite asking how far a cue reaches AT THE CONTROLS needs. That question is about the shipped
+    /// reach, not about the decoded radii.</summary>
+    public static IDisposable AtShippedSoundRadii() =>
+        new SoundRangeScope(Mech3.SoundFalloff.ShippedRangeScale);
+
     /// <summary>Records a check. A false verdict fails the suite but does not stop it, the rest of
     /// the checks still run, so one report names every broken thing rather than the first.</summary>
     public void Check(bool ok, FormattableString what)
