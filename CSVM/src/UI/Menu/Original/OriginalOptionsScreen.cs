@@ -1371,6 +1371,7 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
             dropHeight,
             box != null ? box.Int("X") - titleX : GameOptionCheckDx,
             checkDy,
+            checkHeight,
             description?.Int("X", (int)GameOptionDescX) ?? GameOptionDescX,
             descDy,
             description?.Int("Width", (int)GameOptionDescWidth) ?? GameOptionDescWidth,
@@ -1635,9 +1636,8 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
         for (int i = 0; i < GameOptions.Length; i++)
         {
             var option = GameOptions[i];
-            layers.Lines.Add(new BoardLine(option.Title, page.TitleX, page.RowY(i), page.TitleWidthFor(option.Kind),
-                GameOptionTitleFont, BoardInk.Row, -1, false,
-                option.Kind == OriginalRowKind.Radio ? BoardJustify.Center : BoardJustify.Left));
+            layers.Lines.Add(new BoardLine(option.Title, page.TitleX, page.TitleYFor(i, option.Kind),
+                page.TitleWidthFor(option.Kind), GameOptionTitleFont, BoardInk.Row));
             layers.Lines.Add(new BoardLine(option.Description(this), page.DescX, page.DescY(i), page.DescWidth,
                 GameOptionDescFont, BoardInk.Row));
         }
@@ -2887,12 +2887,12 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
 
     // The Game Options page's row shape in authored pixels, every number off the section's own
     // widgets. It is the title column, the first row's line and every row's own line. The
-    // dropdown box, the checkbox's offset from its row, the description column and the two
-    // controls' strips follow.
+    // dropdown box, the checkbox's offset from its row and its own height, the description column
+    // and the two controls' strips follow.
     private sealed record GameOptionsPage(
         float TitleX, float TitleWidth, float CheckTitleWidth, float FirstY, IReadOnlyList<float> Lines,
         float DropX, float DropDy, float DropWidth, float ItemHeight,
-        float CheckDx, float CheckDy, float DescX, float DescDy, float DescWidth,
+        float CheckDx, float CheckDy, float CheckHeight, float DescX, float DescDy, float DescWidth,
         BoardArt? Arrow, BoardArt? Box, int ExtraRows)
     {
         // How far the plate's growth took the two plaques and everything else standing on its
@@ -2913,6 +2913,17 @@ public sealed class OriginalOptionsScreen : IOriginalScreenModule
                 ? first
                 : MathF.Floor(first + ((last - first) * Math.Clamp(row, 0, Lines.Count - 1) / (Lines.Count - 1)));
         }
+
+        // Where a row's own words stand. A dropdown row's title keeps the row's line, its box
+        // opening under it. A checkbox row's title stands on its box's centre line instead, the box
+        // being taller than the face and standing beside the words. That is what the VIDEO section
+        // authors for the same pair, its clutter title seven pixels under a 29-pixel box against a
+        // 14-pixel face. A line is drawn from the top of its own em box, so half the difference
+        // between the two centres it.
+        public float TitleYFor(int row, OriginalRowKind kind) =>
+            kind == OriginalRowKind.Radio
+                ? RowY(row) + CheckDy + MathF.Floor((CheckHeight - GameOptionTitleFont) / 2f)
+                : RowY(row);
 
         // A checkbox row takes the head-turn row's own narrower title box, which leaves the box
         // beside it clear of the words. A dropdown row takes the wide one.

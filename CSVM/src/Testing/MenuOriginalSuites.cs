@@ -56,7 +56,8 @@ internal static class MenuOriginalSuites
         + "GAME OPTIONS door open the decoded page whose Difficulty dropdown stands first and whose "
         + "five rows take every choice, none of them the menu presentation, on a plate grown a band "
         + "to hold them where each row stands wholly inside one band and one band carries the pair "
-        + "the canvas leaves no band for, and whose CANCEL CHANGES "
+        + "the canvas leaves no band for and each checkbox row's title stands on its own box's "
+        + "centre line at the dropdown rows' column, and whose CANCEL CHANGES "
         + "drops them, a wheel step over the "
         + "aircraft column and over Instant Action's contents window moves each one row and clamps "
         + "at the head, a drag down each thumb's track lands the window on its last row without "
@@ -863,6 +864,33 @@ internal static class MenuOriginalSuites
             $"every option row standing wholly inside one band, one band carrying the pair the canvas leaves no band for ({banded}, {shared} shared)");
         ctx.Check(lowest > 0f && lowest <= accept,
             $"and no option row reaching past that line, which would take one press for two rows ({lowest} of {accept})");
+
+        // A checkbox row's words beside its own box rather than over the band's top edge. They
+        // stand on the box's centre line, in the dropdown rows' own column and left-aligned there.
+        float column = -1f;
+        foreach (var line in board.Lines)
+        {
+            column = line.Text == "Difficulty" ? line.X : column;
+        }
+
+        int aligned = 0;
+        foreach (var row in shell.Rows)
+        {
+            if (row.Kind != OriginalRowKind.Radio)
+            {
+                continue;
+            }
+
+            foreach (var line in board.Lines)
+            {
+                aligned += line.Text is "Auto Head Turn" or "Next Target" or "Rumble"
+                    && line.X == column && line.Justify == BoardJustify.Left
+                    && Math.Abs(line.Y + (line.Size / 2f) - row.Y - (row.Height / 2f)) <= 1f ? 1 : 0;
+            }
+        }
+
+        ctx.Check(column > 0f && aligned == 3,
+            $"each checkbox row's title on its own box's centre line at the dropdown rows' column ({aligned} of 3 at {column})");
     }
 
     private static float RowY(OriginalShell shell, string key)

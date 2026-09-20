@@ -906,18 +906,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   four modules duplicate them; a page module that reaches back into the form's fields for its
   layout is the form in another file. *Cross-refs:* `BL-1014`, `BL-1015`,
   `docs/menu-presentations.md`, `docs/architecture/UI.md`.
-- `BL-1030` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Game Options: Auto
-  Head Turn stands above its band, and the three checkbox labels are centred instead of
-  left-aligned.** *Evidence:* at the controls on 74d613e5 against
-  `.scratch\orch-9\BL-1006\side-by-side.png` (local): Default View is right; Auto Head Turn should
-  move down so its label stands inside the background square on the checkbox's own line; the Auto
-  Head Turn, Next Target and Rumble labels should be left-aligned like Difficulty and Default View.
-  `OriginalOptionsScreen.BandedGameOptionLines` lays the pair out (the upper at the band's top, the
-  lower a 29 px checkbox below, `GameOptionPlateBandHeight` 62). *Fix shape:* the label's y to its
-  checkbox's centre line, the label's x to the left inset the dropdown rows use; `menu-original-tracer`
-  asserts the banding, extend it with the alignment. *⚠ Traps:* the checkboxes touch the panel rims by
-  about 2 px, the art's limit, so the boxes stay and the labels move. *Cross-refs:* BL-1006's record
-  (`git log --grep=BL-1006`).
 - `BL-1031` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **INVENTORY: the plane
   line sits low in its dashed box.** *Evidence:* at the controls on e20bb109: "better but move it up
   so that it's centred on the box" (`.scratch\orch-9\BL-765\inventory-title-before-after.png`,

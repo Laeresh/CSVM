@@ -737,18 +737,21 @@ public class OriginalOptionsTests
         // evenly down their own window, so this one stands above its row rather than under it.
         Assert.Contains(board.Lines, l => l.Text == "Default View" && l.X == 130f && l.Y == 340f && l.Width == 170f);
         Assert.Contains(board.Lines, l => l.Text == "Select your default view." && l.X == 340f && l.Y == 335f && l.Width == 310f);
-        // A checkbox row takes the narrower title box the authored head-turn row carries. The pair
-        // opens at its band's own top, the first row's 26-pixel inset above the authored line, and
-        // steps by one 16-pixel checkbox, which is what fits two into a band painted for one.
-        Assert.Contains(board.Lines, l => l.Text == "Auto Head Turn" && l.X == 130f && l.Y == 374f && l.Width == 112f);
+        // A checkbox row takes the narrower title box the head-turn row carries, in the dropdown
+        // rows' own column and left-aligned there. The pair opens at its band's top and steps by
+        // one 16-pixel checkbox. Each title stands on its box's centre line, a pixel under the row.
+        Assert.Contains(board.Lines, l => l.Text == "Auto Head Turn" && l.X == 130f && l.Y == 375f
+            && l.Width == 112f && l.Justify == BoardJustify.Left);
         // No row offers the menu presentation: the command line alone chooses it.
         Assert.DoesNotContain(board.Lines, l => l.Text is "Menu" or "Select the menu presentation.");
-        Assert.Contains(board.Lines, l => l.Text == "Next Target" && l.X == 130f && l.Y == 390f && l.Width == 112f);
+        Assert.Contains(board.Lines, l => l.Text == "Next Target" && l.X == 130f && l.Y == 391f
+            && l.Width == 112f && l.Justify == BoardJustify.Left);
         Assert.Contains(board.Lines,
             l => l.Text == "Take the nearest target after a kill instead of the first of the list."
                 && l.X == 340f && l.Y == 425f && l.Width == 310f);
         // The bottom band keeps one row, so Rumble's own description clears the moved plaques.
-        Assert.Contains(board.Lines, l => l.Text == "Rumble" && l.X == 130f && l.Y == 460f && l.Width == 112f);
+        Assert.Contains(board.Lines, l => l.Text == "Rumble" && l.X == 130f && l.Y == 461f
+            && l.Width == 112f && l.Justify == BoardJustify.Left);
         Assert.Contains(board.Lines,
             l => l.Text.StartsWith("Rumble the gamepad", StringComparison.Ordinal) && l.Y == 470f);
         // Five titles, five descriptions and the page's own tab title.
