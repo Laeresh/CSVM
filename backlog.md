@@ -1095,16 +1095,6 @@ usual.
   not a split. The per-frame tick order across the runtimes is the one thing the session must
   keep in one place; do not scatter it into the extracted modules. *Cross-refs:* `BL-1014`,
   `BL-1016`, `docs/architecture/Session.md`.
-- `BL-1033` `[Bug]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: data]` **A danger zone
-  photograph is the whole pane squeezed into 640x480, so a wide window's print is squished.**
-  *Evidence:* `Snap_1_18.PNG` from a 5120x1440 flight (`Screenshots/`, local) is a 640x480 file
-  holding the full 32:9 frame, everything narrowed. `CampaignSnapshot.Develop` calls
-  `frame.Resize(640, 480)` on the pane readback with no crop. The fill and the sepia pass. *Fix
-  shape:* crop a centred 4:3 window at the pane's full height before the resize, what a 640x480
-  original would frame, the flanks dropped; a unit on a 32:9 and a 4:3 source, and
-  `campaign-danger-zone-snapshot` asserts the aspect. *⚠ Traps:* not a letterbox, the print fills
-  the mount's window. *Playtest after fix:* a C1 mission 1 danger zone at 32:9, then the scrapbook
-  zoom and the exported file. *Cross-refs:* BL-1008's record (`git log --grep=BL-1008`).
 
 ## Tooling, platform & docs
 

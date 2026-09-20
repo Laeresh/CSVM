@@ -22,7 +22,7 @@ public static class CampaignSnapshot
     /// <summary>The size a photograph is written at, which every file the retail game wrote is,
     /// whatever resolution it displayed at. The page then forces the print into its 164x123 region
     /// and the zoom draws it at this size, where the torn mount's window is cut for it. A pane of
-    /// any other shape is squashed into it.</summary>
+    /// another shape is framed by <see cref="Window"/> first, never squashed into it.</summary>
     public const int Width = 640;
 
     /// <summary>The written height, the partner of <see cref="Width"/>.</summary>
@@ -42,6 +42,27 @@ public static class CampaignSnapshot
     // worker, so every read and write holds Gate.
     private static readonly object Gate = new();
     private static readonly Dictionary<string, bool?> InFlight = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The part of a pane the photograph frames: the centred 4:3 window at the pane's
+    /// full height, the flanks of a wider one dropped. A pane narrower than 4:3 keeps its full
+    /// width and loses the top and bottom instead. The print fills the mount's window either way,
+    /// so neither answer is a letterbox. A pane with no area answers an empty window.</summary>
+    public static Rect2I Window(int width, int height)
+    {
+        if (width <= 0 || height <= 0)
+        {
+            return default;
+        }
+
+        if ((long)width * Height >= (long)height * Width)
+        {
+            int framed = Math.Max(1, (int)((long)height * Width / Height));
+            return new Rect2I((width - framed) / 2, 0, framed, height);
+        }
+
+        int tall = Math.Max(1, (int)((long)width * Height / Width));
+        return new Rect2I(0, (height - tall) / 2, width, tall);
+    }
 
     /// <summary>The name a scrapbook capture row resolves against the profile directory:
     /// <c>Snap_&lt;mission&gt;_&lt;objective&gt;.PNG</c>, the mission being the 1-based campaign
@@ -116,9 +137,15 @@ public static class CampaignSnapshot
         }
         else
         {
-            frame.Resize(Width, Height, Image.Interpolation.Bilinear);
+            // ⚠ Frame the pane before the resize; a pane wider than 4:3 is otherwise squeezed
+            // whole into the file, which narrows everything in it.
+            var window = Window(frame.GetWidth(), frame.GetHeight());
+            var print = window.Size.X == frame.GetWidth() && window.Size.Y == frame.GetHeight()
+                ? frame
+                : frame.GetRegion(window);
+            print.Resize(Width, Height, Image.Interpolation.Bilinear);
             Directory.CreateDirectory(directory);
-            var err = frame.SavePng(staged);
+            var err = print.SavePng(staged);
             written = err == Error.Ok;
             if (written)
             {

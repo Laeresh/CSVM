@@ -774,7 +774,9 @@ The remake takes the same pose in `DangerZonePhotograph`, a viewport of its own 
 pane's world, so the pane is never moved. A pilot in a first-person view has the hidden airframe
 groups shown for that one frame on a visual layer no pane draws, and the fill light below lights
 the pilot's own aircraft for that frame. A run that draws no frames (headless) photographs the pane
-instead.
+instead. The original's back buffer was 4:3 at every resolution it ran at, so its file is that
+buffer scaled; a pane here can be any shape, and the remake writes the centred 4:3 window of it at
+the pane's full height, which is what a 640×480 screen framed.
 
 Authoring gaps stay as they are: CM18 numbers a zone 19 with no row for it, CM19 numbers one 31
 with no row, CM23 ships rows 27 and 28 for zones it disables, and every `_31` row is dead because

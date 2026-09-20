@@ -172,14 +172,14 @@ each in either order, the rule `Flight/StuntMission.cs` reads off `ia.json`'s zo
 Gate decode: [../formats/missions.md](../formats/missions.md).
 
 ## src/Session/CampaignSnapshot.cs
-The campaign Danger Zone photograph through `Flight/DangerZonePhotograph.cs`, scaled to the 640x480
-every retail photograph is, written into the flying profile's directory under the
-`Snap_<mission>_<objective>` name a capture row resolves against. `Stage` requests one zone's still on the crossing frame, and a worker
-writes it under a `.PN_` pending name when the frame lands. `Commit` sweeps ids 10 to 31 at mission
-end, keeping them under their scrapbook names on a win and deleting them on a loss (the original's
-two-step); a still landing after the sweep takes the verdict left for it. `Flight/StuntCapture.cs`
-is the other camera: an Instant Action run has no mission slot or objective to be named by. Rows and
-gate: [../formats/campaign-screens.md](../formats/campaign-screens.md).
+The campaign Danger Zone photograph through `Flight/DangerZonePhotograph.cs`, written into the flying profile's
+directory under the `Snap_<mission>_<objective>` name a capture row resolves against. `Window` frames the pane's
+centred 4:3 part, a wider pane's flanks dropped, and the file is the 640x480 every retail photograph is. `Stage`
+requests one zone's still on the crossing frame, and a worker writes it under a `.PN_` pending name when the
+frame lands. `Commit` sweeps ids 10 to 31 at mission end, keeping them under their scrapbook names on a win and
+deleting them on a loss (the original's two-step); a still landing after the sweep takes the verdict left for it.
+`Flight/StuntCapture.cs` is the other camera: an Instant Action run has no mission slot or objective to be named
+by. Rows and gate: [../formats/campaign-screens.md](../formats/campaign-screens.md).
 
 ## src/Session/ObjectiveGraph.cs
 The objectives runtime over a parsed script, pure state over `Step` calls in the shape of
