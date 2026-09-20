@@ -117,7 +117,7 @@ public class CampaignScrapbookZoomPageTests
     }
 
     /// <summary>A player capture's detail view: the print at the mount's own inset offset and at
-    /// the size every retail photograph is, with the torn mount drawn over it, since
+    /// the size every one of the original's photographs is, with the torn mount drawn over it, since
     /// <c>SBZ_GRIME</c>'s Z of 200 stands above <c>SBZ_IMAGE</c>'s 0. The mount's translucent
     /// middle is the tint the scrapbook shows and the exported file does not.</summary>
     [Fact]

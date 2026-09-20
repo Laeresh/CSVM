@@ -33,7 +33,7 @@ public sealed class ObjectZoneGate
 
     /// <summary>Assigns every object in <paramref name="objects"/> its zone layer for this frame,
     /// off its own extent, the mission's band and the chapter's fog volumes. When
-    /// <paramref name="open"/> is set each one is restored to the layer it was built with, which is
+    /// <paramref name="open"/> is set each one is restored to the shared world layer, which is
     /// what <c>--no-fog</c> and <c>--no-zone-cull</c> pass.</summary>
     public void Tick(IReadOnlyList<Node3D> objects, WeatherState? weather, bool fogZoneArmed,
         IReadOnlyList<FogVolumeBox> volumes, bool open)
@@ -53,7 +53,7 @@ public sealed class ObjectZoneGate
             if (layer != 0)
                 GatedObjects++;
             foreach (var mesh in entry.Meshes)
-                mesh.Instance.Layers = layer != 0 ? layer : mesh.BuiltLayers;
+                mesh.Layers = layer != 0 ? layer : DefaultLayer;
         }
         Sweep(objects);
     }
@@ -86,30 +86,28 @@ public sealed class ObjectZoneGate
         return entry;
     }
 
-    private readonly record struct GatedMesh(VisualInstance3D Instance, uint BuiltLayers);
-
     private sealed class Entry
     {
-        private Entry(List<GatedMesh> meshes, Aabb extent)
+        private Entry(List<VisualInstance3D> meshes, Aabb extent)
         {
             Meshes = meshes;
             Extent = extent;
         }
 
-        public List<GatedMesh> Meshes { get; }
+        public List<VisualInstance3D> Meshes { get; }
 
         public Aabb Extent { get; }
 
         public static Entry Measure(Node3D root)
         {
-            var meshes = new List<GatedMesh>();
+            var meshes = new List<VisualInstance3D>();
             Collect(root, meshes);
             var toRoot = root.GlobalTransform.AffineInverse();
             var extent = new Aabb();
             bool any = false;
             foreach (var mesh in meshes)
             {
-                var local = (toRoot * mesh.Instance.GlobalTransform) * mesh.Instance.GetAabb();
+                var local = (toRoot * mesh.GlobalTransform) * mesh.GetAabb();
                 extent = any ? extent.Merge(local) : local;
                 any = true;
             }
@@ -123,15 +121,15 @@ public sealed class ObjectZoneGate
             if (Meshes.Count == 0)
                 return false;
             foreach (var mesh in Meshes)
-                if (!GodotObject.IsInstanceValid(mesh.Instance))
+                if (!GodotObject.IsInstanceValid(mesh))
                     return false;
             return true;
         }
 
-        private static void Collect(Node node, List<GatedMesh> into)
+        private static void Collect(Node node, List<VisualInstance3D> into)
         {
             if (node is VisualInstance3D instance && instance.Layers == DefaultLayer)
-                into.Add(new GatedMesh(instance, instance.Layers));
+                into.Add(instance);
             foreach (var child in node.GetChildren())
                 Collect(child, into);
         }

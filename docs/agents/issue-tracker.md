@@ -99,13 +99,13 @@ has somewhere to go, and the policy a reporter reads is in `.github/`.
 A public report is worked in its own issue and is not copied into a `backlog` issue; the
 thread is its whole record, which is the promise `CONTRIBUTING.md` makes. Internal issues
 may reference a public one by number when a fix covers both. The internal issues are
-public too now, so their bodies are written for a reader who did not run the session: no
+public too, so their bodies are written for a reader who did not run the session: no
 session-only shorthand, no user-only recall stated as fact without saying so.
 
 ## PRs as a request surface
 
-**PRs as a request surface: no.** _(Set to `yes` if this repo treats external PRs as feature
-requests; `/triage` reads this flag.)_
+**PRs as a request surface: no.** `/triage` reads this flag. A pull request is a contribution,
+not a feature request; a request goes to an issue.
 
 Small self-contained pull requests are accepted for `packaging/`, the extraction scripts,
 documentation and typo fixes; anything under `CSVM/src` needs an issue first, because a

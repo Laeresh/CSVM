@@ -287,7 +287,7 @@ public sealed class WeatherState
         return state;
     }
 
-    /// <summary>The zone a drawn object earns from its own world-space vertical span, the binary's
+    /// <summary>The zone a drawn object earns from its own world-space vertical span, the original's
     /// per-object half of the zone gate (<c>FUN_00489f60</c>). It is 1 wholly below the band's
     /// midpoint, 2 wholly above it, -1 when it straddles the midpoint or the mission authors no
     /// band. A -1 object is ungated, drawn at every camera state. The threshold is the MIDPOINT,
@@ -304,7 +304,7 @@ public sealed class WeatherState
     }
 
     /// <summary>The same verdict for an object whose world extent is <paramref name="span"/>, with
-    /// the binary's own first arm ahead of the band. An object standing in an armed <c>fvol</c>
+    /// the original's own first arm ahead of the band. An object standing in an armed <c>fvol</c>
     /// volume is zone 3 whatever its altitude, which keeps it drawn for a camera in that volume.
     /// Precedence and inputs match <see cref="CameraWeatherState"/>.</summary>
     public int ObjectZone(Aabb span, bool fogZoneArmed, IReadOnlyList<FogVolumeBox> volumes)

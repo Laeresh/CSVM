@@ -321,7 +321,7 @@ public sealed record SessionSpec
     /// happens to share the word.</summary>
     public bool NoClutter { get; private set; }
 
-    /// <summary><b>Resolved.</b> The enhanced passes this run leaves out, one bit per
+    /// <summary>Resolved. The enhanced passes this run leaves out, one bit per
     /// <c>--no-</c> door. Empty in the faithful presentation, which builds none of them anyway.
     /// See <c>docs/cli.md</c>.</summary>
     public EnhancedPasses SkippedPasses { get; private set; }

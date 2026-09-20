@@ -529,17 +529,22 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   family (`TextureArchive.SoftAlphaTrees`) and is not the knob. The seeded captures at the first pose
   do not reproduce it, so a zero from that instrument is not a pass. *Playtest after fix:* both poses
   in `--fly`, the band behind the cards reads through their soft edge like the rest of the ground.
-  *Cross-refs:* `git log --grep=BL-997`, `git log --grep=BL-1027`, `INSTR-91`.
+  *On closing:* decide whether `--hide-alpha` and the `SceneBuilder.AlphaOf` registry stay as
+  diagnostics (then `docs/cli.md` keeps the flag bullet and the world log keeps its census line) or
+  leave with the fix; a door with no owner after its item closes is what this item's isolation
+  door becomes otherwise. *Cross-refs:* `git log --grep=BL-997`, `git log --grep=BL-1027`,
+  `INSTR-91`.
 
 - `BL-1037` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Under Enhanced
-  Graphics, faint diagonal bands cross the water and the aircraft's self-shadow carries noise, and
-  the sun's penumbra filter drops to SoftHigh.** *Verdict at the controls:* after `BL-803`'s fix
+  Graphics, faint diagonal bands cross the water and the aircraft's self-shadow carries noise; the
+  item also takes the sun's penumbra filter down to SoftHigh.** *Verdict at the controls:* after `BL-803`'s fix
   (the filter at SoftUltra), "it fixes some artifacts but the stripes still remain", the stripes
   being fine low-contrast diagonal bands over the water at `--pos="-6037.015,395.381,-6040.959"
   --direction="0.58931,-0.04872,0.80644"` (`Screenshots/crimsonskies_2026-09-20_07-12-26-864.png`),
   and "some shadows on the plane have visual noise". The cost call `BL-803`'s closing commit left
-  open is taken: the filter takes the SoftHigh rung (4.63 ms against SoftUltra's 5.78 ms of GPU time
-  at the C1 waterfall), and this item owns whatever that gives back along with the two symptoms.
+  open is taken: this item moves the filter to the SoftHigh rung (4.63 ms against SoftUltra's
+  5.78 ms of GPU time at the C1 waterfall); the build still runs SoftUltra until it does, and the
+  item owns whatever the drop gives back along with the two symptoms.
   *Evidence:* `git log --grep=BL-803` and `analysis/screen-dither/FINDINGS.md`: the 2x2 alternation
   instrument found the soft-shadow pass at 2.168 over 81 percent of a C1 waterfall frame, SSAO, SSR
   and glow under 0.11, SoftUltra removing 86 percent of the excess and SoftHigh 72. Open water was
@@ -549,7 +554,12 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   `--no-ssao`, `--no-ssr`, `--no-glow`) and against the Faithful presentation at the same pose,
   since a band both presentations draw is the water's own texture; for the airframe, the shadow
   bias and normal bias against its own casting at a pose with the sun low across the fuselage.
-  *⚠ Traps:* do not raise the rung back to chase the water; the cost call is the user's. A pattern
+  *⚠ Traps:* `EnhancedShadowFilterQuality` carries a prohibition: do not lower it while
+  `EnhancedShadowAngularDistance` stays above the sun's real 0.5 degrees, because Godot resolves the
+  penumbra through a disc rotated per screen pixel and too few samples for the disc's width leave
+  that rotation as a woven pattern over every lit surface. The drop to SoftHigh therefore brings
+  the angular distance down to 0.5 degrees in the same change, or the weave `BL-803` removed
+  returns. Do not raise the rung back to chase the water; the cost call is the user's. A pattern
   the Faithful presentation also draws is not this item. *Playtest after fix:* the pose above under
   Enhanced, still and turning, the water flat; then a chase view with the sun across the airframe,
   its shadow on itself clean. *Cross-refs:* `git log --grep=BL-803`, `SHOT-42`, `docs/cli.md` (the
@@ -854,7 +864,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
 
 ## HUD & UI
 
-- `BL-181` `[Tuning]` `[Blocked: a shared type scale]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Marker HUD + scoreboard layout is a provisional pass, not a
+- `BL-181` `[Tuning]` `[M]` `[Next: code]` `[Impact: low]` `[Evidence: feel]` **Marker HUD + scoreboard layout is a provisional pass, not a
   fidelity sign-off.** Playtested 2026-07-30
   (`./RunGame.ps1 --stunt --chapter=C4 --plane=player_fury`): the stunt run HUD and scoreboard placement,
   fonts and distance units "work for now." The verdict is explicitly contingent: it says these read
@@ -864,12 +874,17 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   pixels with a per-background ink palette (`BoardPalette`), so they carry no type scale, no distance
   units and no shared font choice for an in-flight overlay to match. What this waits on is a UI
   surface that defines those three things for chrome the original did not paint, which is what the
-  menu-hub milestone was standing in for. Blocked on that surface, not on data.
-  *Fix shape:* re-review `StuntRunHud.cs`/`TargetHud.cs`/`StuntScoreboard.cs` placement once such a type scale exists,
-  against it rather than in isolation. *Decision:* author that type scale (one font choice, a size
-  scale and a distance-unit convention for chrome the original never painted) as the first step of
-  this item, then re-review against it; the join board's crew manifest stands on the same scale.
-  *Cross-refs:* `BL-449`, whose landing prompted this wording.
+  menu-hub milestone was standing in for. That surface now exists in first draft: the Original
+  join board (`OriginalJoinBoard.cs`) hand-sets seven font sizes (heading 26, articles 22, subtitle
+  and tag 14, device 17, rule 15, status 13) with a comment saying the shared scale takes them over.
+  *Fix shape:* lift the join board's sizes into the type scale (one font choice, a size scale and
+  a distance-unit convention for chrome the original never painted), pose the board on it, then
+  re-review `StuntRunHud.cs`/`TargetHud.cs`/`StuntScoreboard.cs` placement against it rather than in
+  isolation. Built-in's Start-to-join strip behind `--force-builtin` is the second join path
+  `BL-951` said must fold into the board's own gesture; it folds in here. *⚠ Traps:* the board
+  landed before the scale, so its sizes are a draft to lift, not a reference to match; do not add a
+  third set of sizes for the HUD. *Cross-refs:* `BL-449`, whose landing prompted this wording,
+  `git log --grep=BL-951`.
 
 - `BL-1016` `[Cleanup]` `[L]` `[Next: decide]` `[Impact: none]` `[Evidence: trace]` **`OriginalOptionsScreen.cs`
   is 2535 lines and 326 members after absorbing four screens; each page becomes its own module
@@ -1041,7 +1056,7 @@ usual.
   position; `Pads.LogPads` records the roster so the next one reads off the log rather than being
   inferred. Dropping the var also closes that divergence.
 
-- `BL-1036` `[Tooling]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **`ground-contact`
+- `BL-1036` `[Tooling]` `[S]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **`ground-contact`
   run before `instant-action-end` in the same `--run-tests` process makes the second one fail: its
   aircraft stops moving, so which suites a shard happens to hold decides whether the battery is
   green.** *Evidence:* `.\RunTests.ps1 -Filter 'suite:ground-contact,suite:instant-action-end'
@@ -1055,11 +1070,14 @@ usual.
   the state the next suite assumes, rather than reordering shards around it. *⚠ Traps:* the
   symptom is not load or timing; it reproduces on an idle machine with those two suites alone. Do
   not tune a weight to separate them, that hides the leak and the next added suite re-pairs them.
+  *Priority:* ahead of the other tooling items. `BL-951` landed over this failure, and while the
+  pair stays red every battery result is ambiguous, since a 1-failed run has to be re-read by hand
+  to tell this pairing from a real regression. *Cross-refs:* `git log --grep=BL-951`.
 
 ## Misc
 
 - `BL-284` `[Bug]` `[Blocked: CAP-34]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Wing-light flare: soft round glow vs the original's sharp star burst; the view-dependence
-  half is `BL-1039`'s.** Follow-up from `BL-119` (landed 2026-08-05): with the authored one-sided quad restored
+  half is `BL-1039`'s.** Follow-up from `BL-119`: with the authored one-sided quad restored
   and the blink at the measured ~1 frame, the flare reads as a compact soft amber glow, much closer
   than the old billboard blob, but the PT-03 reference still shows sharp radiating star points that
   our plain radial `oil_liteflare` sprite does not produce. Whether the original draws the flare

@@ -56,7 +56,7 @@ public sealed class OriginalJoinBoard : IOriginalScreenModule
     private const float BackX = 500f;
     private const float ContinueX = 620f;
 
-    // The board's own sizes, the prototype's: BL-181's type scale overrides them once it exists.
+    // The board's own sizes, the prototype's, until a shared menu type scale exists to take them over.
     private const float HeadingFont = 26f;
     private const float ArticlesFont = 22f;
     private const float SubtitleFont = 14f;

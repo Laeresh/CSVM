@@ -1,6 +1,6 @@
 # Milestone 6, Multiplayer
 
-**ACTIVE PLAN** (written 2026-09-19). It sits in `docs/`, which by this repo's convention makes it
+**ACTIVE PLAN**. It sits in `docs/`, which by this repo's convention makes it
 a live plan; PROJECT_CONTEXT.md's "Current status" names it. When every item lands, the closing
 commit deletes this file, records the completion in its message, and clears the "Current status"
 pointer; any live prose linking this file by path is unlinked in the same commit.
@@ -44,7 +44,7 @@ extraction, so the only bytes sent are pilot states, fire and hit events, AI spa
 destructible deaths, mission director transitions, the match clock and the seat roster. A design
 that finds itself replicating a mesh, a node or an animation has left this plan.
 
-## Decisions (2026-09-19)
+## Decisions
 
 | # | Question | Decision |
 |---|---|---|
@@ -127,7 +127,7 @@ splitscreen seat index is already the player id through `VersusMatch.PlayerCount
 ## Ground rules
 
 - **Original-game data drives everything.** Read the reader/compiled JSON before writing a handler;
-  never guess a value. Inventing content is the trap this project falls into most often.
+  never guess a value. Inventing content is the mistake this project makes most often.
 - **Evidence is a lead to verify, not a finding to implement.** Confirm every claim against the
   data/code before building on it; **a correct disproof that lands no code is a success here**, not a
   failure. Mark each item's Evidence with its confidence (traced-to-code / direction-sound-magnitude-

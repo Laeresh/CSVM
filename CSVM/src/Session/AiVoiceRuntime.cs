@@ -81,7 +81,7 @@ public sealed partial class AiVoiceRuntime : Node
         float constitutionChance)
     {
         WatchModes(ai);
-        WatchKills(ai);
+        IndexAndWatchKills(ai);
         WatchFriendlyFire(ai);
         if (accentId is not { } accent)
         {
@@ -124,7 +124,7 @@ public sealed partial class AiVoiceRuntime : Node
     public void RegisterPlayer(FlightController rig)
     {
         _humans.Add(rig.PlayerIndex);
-        WatchKills(rig);
+        IndexAndWatchKills(rig);
         _lastPlayerFraction[rig] = 1f;
         if (rig.Stunt is { } stunt)
         {
@@ -253,9 +253,10 @@ public sealed partial class AiVoiceRuntime : Node
     }
 
     // ⚠ Subscribed for every aircraft handed over, human rigs included. The gloat's speaker is the
-    // KILLER, so the site needs the victim's team and the shooter id the death report carries, and
-    // a killer with no voice of its own simply stays silent. Idempotent per aircraft.
-    private void WatchKills(FlightController plane)
+    // KILLER, so the site needs the victim's team and the shooter id the death report carries. A
+    // killer with no voice of its own simply stays silent. The same handover puts the aircraft
+    // into the index the team lookups and the bearing call-outs read. Idempotent per aircraft.
+    private void IndexAndWatchKills(FlightController plane)
     {
         _byIndex[plane.PlayerIndex] = plane;
         if (!_watchedKills.Add(plane.PlayerIndex))
@@ -264,6 +265,11 @@ public sealed partial class AiVoiceRuntime : Node
         }
         plane.Downed += (_, killer) => OnDowned(plane, killer);
     }
+
+    // A shooter id may belong to an aircraft never handed over, a turret or a rig that left. The
+    // roster's own team table is the fallback for those.
+    private int TeamOf(int pilot) =>
+        _byIndex.TryGetValue(pilot, out var node) ? node.Team : AimAssist.TeamOfPilot(pilot);
 
     // The gloat, decoded polarity (combat-voice.md, "The gloat triggers and trigger 28"). The
     // friendly predicate over shooter and victim comes first, so a friendly kill picks no gloat at
@@ -275,10 +281,7 @@ public sealed partial class AiVoiceRuntime : Node
         {
             return;
         }
-        int shooterTeam = _byIndex.TryGetValue(shooter, out var node)
-            ? node.Team
-            : AimAssist.TeamOfPilot(shooter);
-        if (!AimAssist.Hostile(shooterTeam, victim.Team))
+        if (!AimAssist.Hostile(TeamOf(shooter), victim.Team))
         {
             return;
         }
@@ -318,10 +321,7 @@ public sealed partial class AiVoiceRuntime : Node
         {
             return;
         }
-        int shooterTeam = _byIndex.TryGetValue(id, out var node)
-            ? node.Team
-            : AimAssist.TeamOfPilot(id);
-        if (AimAssist.Hostile(shooterTeam, victim.Team))
+        if (AimAssist.Hostile(TeamOf(id), victim.Team))
         {
             return;
         }

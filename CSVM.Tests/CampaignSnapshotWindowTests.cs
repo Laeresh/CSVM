@@ -7,7 +7,7 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The Danger Zone photograph's framing (<see cref="CampaignSnapshot.Window"/>): the written file
-/// is the 640x480 every retail one is. A pane of another shape is cropped to a centred 4:3 window
+/// is the 640x480 every one of the original's is. A pane of another shape is cropped to a centred 4:3 window
 /// before the scale, never squeezed into it. A wide pane keeps its full height and loses its
 /// flanks; a narrow one keeps its full width. Neither answer letterboxes, because the print fills
 /// the torn mount's window.
