@@ -106,7 +106,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave E, The flip
 
 41. ☑ A clean-machine run of the downloaded zip, above and below the floor
-42. ☐ Release notes, the first tag, the flip, and an announcement draft
+42. ◐ Release notes, the first tag, the flip, and an announcement draft
 43. ☑ `README.md`: the play path, the status, and the developer split
 
 ## Dependency and parallelism notes
@@ -949,7 +949,7 @@ one, which dirties the tree after the build and fails the publish script's post-
 (`CheckCommitContent.ps1` exit 0); nothing under `CSVM/` was touched, so the complete `RunTests.ps1`
 is not this change's gate.
 
-## E42 ☐ Release notes, the first tag, the flip, and an announcement draft
+## E42 ◐ Release notes, the first tag, the flip, and an announcement draft
 
 **Goal.** The repository is public, `v0.1.0` exists with notes a stranger can judge the build by, and
 an announcement draft is waiting for the author.
@@ -981,7 +981,31 @@ public for an hour can have been cloned and cached, so everything in this plan l
 flip, not after it. A release tag is equally permanent, see D34. Nothing is announced until the
 logged-out read has happened.
 
-## E43 ☑ `README.md`: the play path, the status, and the developer split
+**Prepared; the flip and the publish are the author's sitting.** The notes are
+`docs/release-notes-v0.1.0.md`, written for `PublishRelease.ps1 -NotesFile`: what the build is,
+what it needs with C22's floor and E41's below-floor symptom, the three setup steps, the Known
+Issues, where a report goes and the AI-assistance disclosure. The SHA-256, the size and both
+commits are the script's own generated sections below the file, so the file states none of them,
+and its text carries no 64-hex string, which is the refusal the script would otherwise raise. The
+Known Issues came from the appendix re-verified against `backlog.md` and `git log`, not copied:
+of the appendix's fourteen entries, nine had landed since A1 wrote them (the CM13 flight check,
+the CM15 livery, the cinemas, the ring that shot through its own hull, and all five splitscreen
+seat and Free Flight entries), and the Gemini burn-out entry left `backlog.md` at `4f9f2c13`
+without a closing record while `CAP-47` still stands in `playtest.md`, so it comes off on the
+landed burn-through of `BL-738` and the `gemini-gasbag-bays` suite rather than on that removal.
+Six open items that post-date A1 went in (`BL-1027`, `BL-1037`, `BL-1038`, `BL-934`, `BL-1039`,
+`BL-1040`), each as the sentence its verdict at the controls recorded, and every entry names its
+mission by the campaign's own title rather than a `CM` number, since a player has never seen one.
+No entry carries an id, which is Decision 7. The appendix below is the refreshed list with the
+author's evidence kept. The announcement draft is `.scratch/announcement-v0.1.0.md`, a forum
+length and a short form, both to the notes' facts, and it is repeated in this item's landing
+commit so a swept `.scratch` does not lose it. The history scan was re-run: every extension ever
+added on any ref is source, documentation, fixtures, analysis text or the font, with no archive,
+image, model or game file among them. `gh` sees the repository as private with Issues on,
+Discussions off and private vulnerability reporting not yet offered, which is the state the
+sitting starts from. What remains is the sitting itself and this item's Verify step, and that
+record goes in the plan's closing commit: the flip, the publish, the logged-out read, and one
+E41 pass against the published asset. `README.md`: the play path, the status, and the developer split
 
 **Goal.** The first text a stranger reads describes the build that exists, and someone who only wants
 to play has a way in with no developer instruction between them and the download.
@@ -1093,14 +1117,12 @@ Two rules this list is written to. Nothing here meets Decision 3's bar, because 
 that does except `BL-694`, which A2 fixes and which therefore never reaches the notes. And nothing
 here is an internal decode: the sentence says what happens on screen, not which function is wrong.
 
-Before E42 uses it: `BL-694` is fixed by then, so re-read the CM14 entries against the landed fix.
-Anything A2 or a later wave closes comes off this list.
+This is the list as E42 re-verified it against `backlog.md` and `git log`; the entries A1 wrote
+that landed in between are gone, and the items filed after A1 that a player meets are in. The
+notes name every mission by its campaign title, since a player has never seen a `CM` number.
 
 ## Campaign missions
 
-- **The Gemini's gasbags burn without ever finishing, so fire alone never brings the zeppelin
-  down.** Shoot the gasbags directly instead of waiting for the fire, since three of the five kill
-  it. (`BL-639`; no landing commit, and it is blocked on unfilmed reference footage, `CAP-47`.)
 - **In CM10 the attack balloons dive from their entrance altitude down to the sea and climb back
   out, and the objective marker follows them down.** Wait for the climb, which runs at the
   authored rate and needs no input. (`BL-674`; no landing commit, the motion is the entrance
@@ -1109,23 +1131,18 @@ Anything A2 or a later wave closes comes off this list.
   captured.** Close on the last Balmoral and finish the wing-walk promptly rather than circling.
   (Kept by decision: the original's own turrets do the same, since nothing in its turret path
   reads an objective, capture or pickup flag; `git log --grep=BL-717`.)
-- **In CM13 the flight check offers the change-plane button to the wingman and never grants the
-  mission's own aeroplane.** Fly the aeroplane the profile already owns, which completes the
-  mission. (`BL-689`; no landing commit, `CampaignFlightCheckPage` still hands one slot-less
-  answer to both crew slots.)
-- **In CM15 the Balmoral staged in the cutscene wears the stock skins instead of the livery the
-  flyable aeroplane wears.** No workaround, and nothing about the mission changes. (`BL-690`; no
-  landing commit, and `AircraftStage` still builds its subtree with no painter of any kind.)
-- **The cutscene movies do not play at all.** No workaround; the campaign reaches the cabin and
-  every mission without them. (`BL-446`; no landing commit, and the tree contains no
-  `VideoStreamPlayer` and no transcode step.)
+- **In CM01 the palm trees of an island the mission deactivates stand on open water.** No
+  workaround, and nothing about the mission changes. (`BL-1038`; no landing commit, and the
+  clutter walk still reads no node's ACTIVE bit.)
 
 ## Enemies and combat
 
-- **A zeppelin's turrets can shoot the player through the hull they are mounted on.** Break away
-  from the hull rather than flying along it, since the fire stops once the ring loses its bearing.
-  (`BL-714`; a probe confirmed a parked hull blocks its own rings correctly, so the item stayed
-  open for the moving-hull case it was reported on.)
+- **Enemy and wingman radio chatter during a fight is much rarer than the original's.** No
+  workaround. (`BL-934`; the trigger items `BL-986` to `BL-995` landed, and this is the re-listen
+  they are owed, `PT-161`.)
+- **A FLARE loaded on a rack shows its blue star burst before it is fired.** Cosmetic.
+  (`BL-1040`; no landing commit, `Projectile.BuildFlyoutBody` still skips the definition's
+  `RESET_STATE`.)
 
 ## What the world looks and sounds like
 
@@ -1134,20 +1151,31 @@ Anything A2 or a later wave closes comes off this list.
   than wrapping it, and water takes no shadow. Set Enhanced Graphics in Game Options and restart
   for real shadow maps instead, which are not the shadow the original drew. (Kept by decision, no
   item tracks it; `git log --grep=BL-331`.)
-- **In the New York chapter the lit building faces read darker than the original.** No
-  workaround; it is a matter of how the shipped textures are sampled and nothing is missing from
-  the world. (`BL-322`; its premise has been narrowed by decodes and it has no landing commit.)
+- **With Enhanced Graphics on, faint diagonal bands cross open water and an aircraft's shadow on
+  itself carries noise.** Switch Enhanced Graphics off. (`BL-1037`; no landing commit; the
+  penumbra filter's rung is the item's own cost call.)
+- **In the Northwest chapter a bright band along a ground polygon's edge paints over the soft
+  edges of the tree cards in front of it.** No workaround. (`BL-1027`; no landing commit, the
+  world's blended surfaces still draw with `depth_draw_never`.)
+- **In the New York chapter some lit building faces read darker than the original and some plain
+  surfaces brighter.** No workaround; nothing is missing from the world. (`BL-322`; the matched
+  `CAP-58` pairs read both directions by surface, and it has no landing commit.)
+- **The wing position lights are drawn as a fixed quad, so they do not turn to face the camera and
+  thin out or vanish from some angles.** No workaround. (`BL-1039`; no landing commit,
+  `PlaneBuilder.FlareMaterial` is still a plain material with no facade pose.)
 
 ## Menus, and playing with more than one person
 
-- **A second pilot can pick an aeroplane but never a weapon loadout, Back on that screen removes
-  them from the game instead of returning, and the first pad drives their screen as well as their
-  own.** Press Start to rejoin after an accidental Back, and let the first player make the loadout
-  choice, which every seat then flies with. (`BL-746`, `BL-747` and `BL-748`; none has a landing
-  commit, and the cited `OriginalSeatPlane` arms are unchanged.)
-- **A two-pilot Free Flight ends its plane-selection walk back on the Free Flight screen instead of
-  launching.** Press FLY again on the first player's screen, which launches. (`BL-749`; no landing
-  commit, and `FinishSeatWalk` still launches only on the Instant Action return.)
 - **A splitscreen stunt race starts its clock the moment the world appears, so whoever finishes
   loading first flies first.** Start the run together by agreement rather than trusting the clock.
-  (`BL-314`; no landing commit, and there is no countdown of any kind in the tree.)
+  (`BL-314`; no landing commit, and there is no countdown of any kind in the tree. Kept here as
+  evidence and left out of the notes by the author's call.)
+
+## Came off the list since A1
+
+The CM13 flight check (`BL-689`), the CM15 staged livery (`BL-690`), the cinemas (`BL-446`), the
+ring firing through its own hull (`BL-714`), the second pilot's loadout, Back and pad (`BL-746`,
+`BL-747`, `BL-748`) and the two-pilot Free Flight launch (`BL-749`) all have landing commits. The
+Gemini burn-out (`BL-639`) has none of its own: a cannon kill burns a gasbag through to its finish
+since `BL-738`, and three gasbag deaths kill the ship in the `gemini-gasbag-bays` suite, and the
+entry left `backlog.md` at `4f9f2c13` while `CAP-47` still stands in `playtest.md`.
