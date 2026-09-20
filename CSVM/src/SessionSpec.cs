@@ -332,6 +332,13 @@ public sealed record SessionSpec
     /// toggle. See <c>docs/cli.md</c>.</summary>
     public bool DebugClutterFlag { get; private set; }
 
+    /// <summary><c>--hide-alpha=blend-surfaces,scissor-surfaces,blend-cards,scissor-cards</c>: build
+    /// the world without the named transparency classes. A frame where two of them paint in the
+    /// wrong order then names the pair by elimination. A build-time drop, like
+    /// <see cref="DebugClutterFlag"/>, so there is no runtime toggle. Empty in every ordinary run.
+    /// See <c>docs/cli.md</c>.</summary>
+    public Mech3.SceneBuilder.TransparencyClass HiddenAlpha { get; private set; }
+
     /// <summary><c>--clutter-templates=a,b,c</c>: build these clutter templates instead of the
     /// chapter's own <c>AddClutterTemplates</c> list, so one district at a time can be A/B'd
     /// against the original. Names are matched case-insensitively against the gamez's template
@@ -1035,6 +1042,27 @@ public sealed record SessionSpec
             else if (arg == "--debug-classoverlay") { s.ShowClassOverlay = true; }
             else if (arg == "--debug-tilegrid") { s.ShowTileGrid = true; }
             else if (arg == "--debug-clutterflag") { s.DebugClutterFlag = true; }
+            else if (arg.StartsWith("--hide-alpha="))
+            {
+                foreach (var want in arg["--hide-alpha=".Length..]
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    var one = want.ToLowerInvariant() switch
+                    {
+                        "blend-surfaces" => Mech3.SceneBuilder.TransparencyClass.BlendSurface,
+                        "scissor-surfaces" => Mech3.SceneBuilder.TransparencyClass.ScissorSurface,
+                        "blend-cards" => Mech3.SceneBuilder.TransparencyClass.BlendCard,
+                        "scissor-cards" => Mech3.SceneBuilder.TransparencyClass.ScissorCard,
+                        _ => Mech3.SceneBuilder.TransparencyClass.None,
+                    };
+                    if (one == Mech3.SceneBuilder.TransparencyClass.None)
+                    {
+                        notes.Add(new Note("world", $"--hide-alpha='{want}' is not a class it takes "
+                            + "(blend-surfaces, scissor-surfaces, blend-cards, scissor-cards), ignoring it"));
+                    }
+                    s.HiddenAlpha |= one;
+                }
+            }
             else if (arg.StartsWith("--clutter-templates="))
             {
                 var names = arg["--clutter-templates=".Length..]

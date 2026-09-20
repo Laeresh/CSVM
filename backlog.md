@@ -486,7 +486,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   replaced; `git log --grep=BL-305`. Do not reopen either ID; IDs are never reused, per this
   file's own rule).
 
-- `BL-1027` `[Bug]` `[M]` `[Next: data]` `[Impact: high]` `[Evidence: feel]` `[C1]` **A far tree card
+- `BL-1027` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` `[C1]` **A far tree card
   still paints over a ridge polygon and the trees ahead of it in C1, after BL-997's depth prepass.**
   *Evidence:* at the controls on c24653b6 at `--pos="-1595.425,182.281,-4843.352"
   --direction="-0.21242,0.01919,-0.97699"` (`Screenshots/crimsonskies_2026-09-19_23-41-17-262.png`,
@@ -496,11 +496,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   card (`depth_prepass_alpha` on the blended MultiMesh variant, `Clutter.cs` `ShaderCode`); the
   blend-or-scissor verdict is per texture family (`TextureArchive.SoftAlphaTrees`), and
   `SceneBuilder`'s world-surface blended variants still carry `depth_draw_never`, noted at BL-997's
-  landing. *Fix shape:* a `--freecam` capture at the pose with each variant isolated (scissor cards
-  off, then blended cards off, then the terrain's blended surfaces off) to name the pair that paints
-  wrong, then the same prepass or a sort key for that pair. *⚠ Traps:* BL-997's `clutter-card-depth`
-  suite measures card over card only, so it passes on this frame; do not re-tune the fade.
-  *Playtest after fix:* the same pose. *Cross-refs:* BL-997's record (`git log --grep=BL-997`).
+  the same pose, both sides.
 ## Effects & animation runtime
 
 - `BL-674` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: data]` `[CM10]` **CM10's attack-balloon wave flies from 990 m down to water level and back up

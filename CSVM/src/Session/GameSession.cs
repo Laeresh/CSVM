@@ -1337,6 +1337,7 @@ public partial class GameSession : Node3D
                 DebugDzPaths = _spec.DebugDzPaths,
                 NoClutter = _spec.NoClutter,
                 DebugClutterFlag = _spec.DebugClutterFlag,
+                HiddenAlpha = _spec.HiddenAlpha,
                 ClutterTemplates = _spec.ClutterTemplates,
                 // ⚠ Do not set these by hand; they come from LoadArchives's ArchiveIntent. The
                 // textures belong to the session so the runtime keeps a live PufferFactory; the

@@ -129,6 +129,14 @@ public sealed class ClutterBuilder
     /// <summary>Total decoration sprites (billboard cards) placed by the last Build.</summary>
     public int InstanceCount { get; private set; }
 
+    /// <summary>Card kinds the last Build drew blended, and card kinds it cut to a hard silhouette,
+    /// the census an isolation capture is read against. Counts KINDS, since a kind is one MultiMesh
+    /// and one draw, which is the unit a draw-order question is asked in.</summary>
+    public int BlendCardKinds { get; private set; }
+
+    /// <inheritdoc cref="BlendCardKinds"/>
+    public int ScissorCardKinds { get; private set; }
+
     /// <summary>Total 3D decorations (city-block buildings, parked cars) placed by the last
     /// Build. Zero on every chapter whose templates carry only sprites.</summary>
     public int SolidCount { get; private set; }
@@ -401,6 +409,7 @@ public sealed class ClutterBuilder
         var exportedMesh = new List<int>();   // parallel: each export's decoration MeshIndex
         var solidKinds = new List<Kind>();
         InstanceCount = SolidCount = SolidCollisionTriangles = 0;
+        BlendCardKinds = ScissorCardKinds = 0;
         SolidCollisionShapes = SolidCollisionInstances = SolidCollisionOneSidedTriangles = 0;
         _solidShapes = null;
         // _allKinds, not templates.Values, a substitution-only kind has instances to export and
@@ -1154,14 +1163,22 @@ public sealed class ClutterBuilder
         return shader;
     }
 
-    // All instances of one kind as a single MultiMesh draw call.
-    private MultiMeshInstance3D BuildKindInstance(Kind kind)
+    // All instances of one kind as a single MultiMesh draw call. Null when an isolation run
+    // (--hide-alpha) asked for this kind's transparency class to be left out.
+    private MultiMeshInstance3D? BuildKindInstance(Kind kind)
     {
         var tex = _textures.Find(kind.Label);
         // ⚠ Read the verdict straight off the Find above and nowhere else; it is what sets the
         // archive's Last* fields. A card whose alpha the archive calls soft blends, exactly as the
         // same texture does on a world surface, so foliage and glow are not cut here alone.
         bool blend = tex != null && _textures.LastHadAlpha && _textures.LastAlphaIsSoft;
+        var alpha = blend ? SceneBuilder.TransparencyClass.BlendCard : SceneBuilder.TransparencyClass.ScissorCard;
+        if (blend)
+            BlendCardKinds++;
+        else
+            ScissorCardKinds++;
+        if (_scene != null && _scene.HiddenAlpha.HasFlag(alpha))
+            return null;
         // Clamp when the card's UVs never leave the unit square, the same data-driven rule as
         // SceneBuilder's world surfaces; wrapping bleeds the texture's opposite edge in at the
         // UV border (the hairline-seam / tracer-tail artifact).

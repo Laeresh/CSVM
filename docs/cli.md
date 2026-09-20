@@ -46,7 +46,7 @@ exactly how `PROJECT_CONTEXT.md`'s day-to-day table drifted from this page. One 
 `--loadout` · `--rocket` · `--gun-select` · `--target` · `--fire` · `--fire-rockets` · `--incoming` · `--ai` · `--ai-attack` · `--ai-damage` · `--canopy-holes` · `--ai-targeting` · `--difficulty` · `--no-assist` · `--no-crash-loss` · `--generators` · `--zeppelins` · `--zep` · `--wake-turrets` · `--wake-generators` · `--craters` · `--infinite-ammo` · `--ammo` · `--weapon-lab` · `--weapon-mount` · `--weapon-fire` · `--weapon-cycle` · `--weapon-click` · `--weapon-target` · `--weapon-surface` · `--weapon-standoff` · `--weapon-camera` · `--weapon-test` · `--damage` · `--damage-hd` · `--destroy` · `--crash`
 
 **Debug labs, the scripted twin of each interactive lab key**
-`--debug-livery` · `--debug-mesh` · `--debug-select` · `--debug-nodelab` · `--debug-damage` · `--debug-names` · `--debug-fps` · `--debug-join` · `--debug-waves` · `--debug-wingmen` · `--debug-preset` · `--debug-pointer` · `--debug-scoreboard` · `--debug-wash` · `--debug-anim-ui` · `--debug-collision` · `--debug-dzpaths` · `--debug-ainets` · `--debug-targets` · `--debug-markers` · `--debug-spectate` · `--debug-pause` · `--debug-load` · `--debug-objective` · `--collision` · `--debug-colliders` · `--debug-classoverlay` · `--debug-tilegrid` · `--debug-clutterflag` · `--markers`
+`--debug-livery` · `--debug-mesh` · `--debug-select` · `--debug-nodelab` · `--debug-damage` · `--debug-names` · `--debug-fps` · `--debug-join` · `--debug-waves` · `--debug-wingmen` · `--debug-preset` · `--debug-pointer` · `--debug-scoreboard` · `--debug-wash` · `--debug-anim-ui` · `--debug-collision` · `--debug-dzpaths` · `--debug-ainets` · `--debug-targets` · `--debug-markers` · `--debug-spectate` · `--debug-pause` · `--debug-load` · `--debug-objective` · `--collision` · `--debug-colliders` · `--debug-classoverlay` · `--debug-tilegrid` · `--debug-clutterflag` · `--hide-alpha` · `--markers`
 
 **Dumps and the test harness, report text plus a verdict, then quit**
 `--dump-markers` · `--dump-weapons` · `--dump-loadout` · `--dump-flight` · `--dump-config` · `--dump-mips` · `--dump-ai` · `--dump-tilegrid` · `--run-tests` · `--damage-test` · `--effects-test` · `--hud-font-test`
@@ -115,6 +115,13 @@ lines**.
   flag. A polygon carrying the flag is RED, one without it GREEN, and all clutter BLUE. A decoration's own polygons are unflagged, so
   without it a whole city block reads as clutter-eligible ground. The flag is polygon bit `0x800`, `GameZPolygon.NoClutter` (`docs/formats/gamez.md`). There is no runtime toggle: the recolour is written into the vertex colours at build time. One log line
   per build carries the census, which counts polygons per built model, not per placement)
+- `--hide-alpha=<class>[,<class>…]` (**isolation aid** for a draw-order question: build the world
+  without the named transparency classes, so a frame where two of them paint in the wrong order
+  names the pair by elimination. Classes: `blend-surfaces`, `scissor-surfaces`, `blend-cards`,
+  `scissor-cards`, named apart because a surface and a card take different shaders and different
+  depth modes at the same verdict. Build-time, no runtime toggle: the surface is never committed
+  and the kind's MultiMesh is never made. One log line per build carries the census and what was
+  hidden)
 - `--dump-tilegrid[=path]` (build the chapter world, write the **map-edge tile census** and quit;
   the written twin of `--debug-tilegrid`, and the only place a refused tile appears. JSON to
   `./.scratch/tilegrid_<chapter>.json` unless a path is given. One row per tile candidate: verdict

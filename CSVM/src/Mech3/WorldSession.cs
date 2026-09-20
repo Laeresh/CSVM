@@ -119,7 +119,7 @@ public sealed class WorldSession
         mark = StartupProfile.Mark();
         var builder = new WorldBuilder(gamez, textures, collision: o.Collision,
             scrollOverrides: missionSetup?.ScrollByModel(gamez),
-            debugClutterFlag: o.DebugClutterFlag);
+            debugClutterFlag: o.DebugClutterFlag, hiddenAlpha: o.HiddenAlpha);
         // A mission-structure node authors an owner per mission of the chapter, so the build has
         // to know which mission it is standing in before it stamps any team.
         builder.MissionSlot = GameZ.MissionSlotOf(o.Mission);
@@ -190,6 +190,11 @@ public sealed class WorldSession
         StartupProfile.Record("clutter", mark);
         LoadProgress.Report(LoadStep.Clutter);
         s.Clutter = clutterBuilder;
+        // The transparency census a draw-order question is read against. It says which classes this
+        // chapter carries, and which of them an isolation run left out.
+        string hidden = o.HiddenAlpha == SceneBuilder.TransparencyClass.None
+            ? string.Empty : $"; hidden {o.HiddenAlpha}";
+        Log.Info("world", $"alpha classes: surfaces blend={builder.BlendSurfaceCount} scissor={builder.ScissorSurfaceCount}; cards blend={clutterBuilder?.BlendCardKinds ?? 0} scissor={clutterBuilder?.ScissorCardKinds ?? 0}{hidden}");
 
         // --debug-clutterflag: force clutter blue and print the census. Blue is the one colour
         // the world shader cannot express itself, a decoration's own polygons are unflagged,
@@ -716,6 +721,11 @@ public sealed class WorldSession
         /// clutter is built blue, so "which ground is flagged" and "where the decorations are" can
         /// never be confused. See <see cref="SceneBuilder.DebugClutterFlag"/>.</summary>
         public bool DebugClutterFlag { get; init; }
+
+        /// <summary><c>--hide-alpha=</c>: leave the named transparency classes out of the build. A
+        /// frame where two of them paint in the wrong order then names the pair by elimination.
+        /// See <see cref="SceneBuilder.HiddenAlpha"/>.</summary>
+        public SceneBuilder.TransparencyClass HiddenAlpha { get; init; }
 
         /// <summary><c>--clutter-templates=</c>: build these clutter templates instead of the
         /// chapter's own registered list, so one district at a time can be A/B'd against the
