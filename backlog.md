@@ -989,17 +989,6 @@ usual.
   cross-pane body-hide visually at the controls with 2+ cockpit-view pilots in the same session.
   *Cross-refs:* `PLAN-cockpit-view` B11 ("Splitscreen posture"), `BL-389` (splitscreen weapon
   mix, same playtest family).
-- `BL-1034` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Local co-op: player
-  2's landing plays the docking with no visible hook.** *Evidence:* at the controls, P2 lands, the
-  docking animation completes, no hook shows on their aircraft; the user's read is that the hook
-  plays on P1's. `player_extend_hook` is one `test_player` sequence of eleven `IF NODE_ACTIVE[n]`
-  arms over the player airframe nodes (`docs/formats/cutscenes.md`): with two player nodes active
-  the sequence resolves an arm for one airframe, seat 0's. *Fix shape:* play the extend on the
-  landing pilot's own node (the runtime's lookup for that pilot's airframe rather than the
-  sequence's first active arm); `LandingApproachSuites` holds the one-play check, extend it with a
-  two-seat case. *⚠ Traps:* the `cg_hookup_player` CALLBACK fires once per landing and must stay
-  once. *Playtest after fix:* two pads, C1 M01 to the landing, P2 lands first. *Cross-refs:*
-  `BL-434` (splitscreen behaviour unprofiled).
 
 ## Missions, modes & campaign
 

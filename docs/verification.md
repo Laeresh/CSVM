@@ -493,6 +493,16 @@ member, and it does not go here.
   (`models.json` plus `nodes.json`), so the question is answered by a census in minutes and cannot
   be answered by a frame. A look that survives that census comes from some other mechanism, and
   implementing the named one moves nothing in the chapter that was complained about.
+- **WORLD-49**, **A node table that keeps the first claimant of a name needs the OUTGOING subtree
+  taken out of it, not only the freed ones: two live subtrees under the same names leave every
+  definition resolving the one that was indexed first.** The animation runtime stages one flown
+  airframe for the zeppelin hookup to pose, and retired rows on a free alone, which covers the
+  airframe swap (its outgoing aeroplane is freed) and covers nothing when both aeroplanes are
+  alive. With two humans flying, the hookup's `IF NODE_ACTIVE` arms went on resolving the seat
+  staged when the rigs were bound, so that pilot's docking hook swung while the human who flew
+  the approach docked with none. `campaign-coop-hookup-seat` reads the table's own answer for the
+  airframe name beside the two hooks, which tells an arm resolving the wrong aeroplane apart from
+  an effect attached to the wrong rig.
 
 ## SHELL, Windows, PowerShell, and processes
 

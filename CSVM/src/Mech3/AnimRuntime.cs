@@ -1252,6 +1252,26 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         _resolver.ClearFindCache();
     }
 
+    /// <summary>Takes a subtree <see cref="IndexRebasedStage"/> put in the node table back out,
+    /// for an owner staging another over the same names while this one lives. Two live aircraft
+    /// under one airframe name leave the compiled symbol table's claim on whichever was indexed
+    /// first. A subtree whose nodes have been FREED is <see cref="RetireFreedNodes"/>'s instead.
+    /// Returns the rows dropped.</summary>
+    public int UnstageRebased(Node3D subtree)
+    {
+        ArgumentNullException.ThrowIfNull(subtree);
+        var nodes = new List<Node3D>();
+        void Walk(Node3D n)
+        {
+            nodes.Add(n);
+            for (int i = 0, count = n.GetChildCount(); i < count; i++)
+                if (n.GetChild(i) is Node3D c)
+                    Walk(c);
+        }
+        Walk(subtree);
+        return _resolver.DropNodes(nodes);
+    }
+
     /// <summary>How many rows of the resolver's node table name a node that has since been freed.
     /// Zero right after <see cref="IndexRebasedStage"/>, which retires them. A suite reads it to
     /// assert that, because the fault a stale row causes needs a hash collision and so shows on

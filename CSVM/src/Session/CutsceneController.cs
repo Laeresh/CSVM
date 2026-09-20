@@ -489,6 +489,10 @@ public sealed partial class CutsceneController : Node
             _episodeOwner = slotWins ? _ownerRig : null;
             _owner = null;
             _ownerRig = null;
+            // The owner's own aeroplane into the node table as the episode takes the session, not
+            // at a swap alone. A hookup resolves `player_<airframe>` by name, and the seat staged
+            // at the bind is otherwise the one whose hook swings.
+            StageFlownAirframe();
             SeedRaisers();
             ScopeFastForward();
             HeldForEnding = false;

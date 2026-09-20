@@ -549,8 +549,7 @@ Name to node resolution as one public module, generic over the node type (`NameR
 the index, the wildcard `Matcher`, the memoized `FindAll`, the scoped tier chain
 (`Resolve`/`ResolveScoped`), the symbol authority (`SymbolClaims`/`NarrowToSymbolRoot`), `Anchors`
 (NAME match, symbol narrowing, root lift) and the bind census. Node identity is
-constructor-supplied, never the node type's inherited `Equals`, and `DropFreed` retires the rows
-naming a freed node. `AdmissibleStaging` filters every tier, the owner's verdict on one pooled
+constructor-supplied, never the node type's inherited `Equals`; `DropFreed` retires the rows naming a freed node and `DropNodes` those naming a live subtree a second staging replaces, since a name resolves to whichever claimant was indexed first. `AdmissibleStaging` filters every tier, the owner's verdict on one pooled
 copy, and `RefusesGlobalTier` withholds the last tier from a plain name written by a definition
 the world holds several instances of. Decode: [../org/sequences.md](../org/sequences.md).
 
@@ -688,7 +687,7 @@ the bodiless `player` marker the flown aircraft is posed onto, `chuteman`'s para
 `balmoral`, and the `FigureNodes`/`PropNodes` groups. Each node's shipped active state and the
 holder it hangs under are on its own member, which decide whether it draws in a mission that never
 names it. All carry a rebased gamez index (`PointerBaseOf`) a compiled cross-archive symbol table
-binds; `StageFlown` adds the flown airframe and parks its hook. A skinned subtree gets its own
+binds; `StageFlown` puts the one flown airframe in the node table and parks its hook, taking the airframe it replaces back out so a second human's aeroplane cannot answer for the first's name. A skinned subtree gets its own
 builder, so `Paint` gives it its stand-in's livery. Decode: docs/formats/anim-definitions/cutscenes.md.
 
 ## src/Mech3/SessionArchives.cs

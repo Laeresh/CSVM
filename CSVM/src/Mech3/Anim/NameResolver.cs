@@ -244,6 +244,78 @@ public sealed class NameResolver<TNode>
         return dropped;
     }
 
+    /// <summary>Drops every row naming one of <paramref name="nodes"/>, with the ancestry entries,
+    /// index claims and cached answers keyed on one. This is the inverse of the <see cref="Add"/>
+    /// walk one staging pass made. An owner calls it when it stages a second subtree over the same
+    /// names while the first is still live. ⚠ Every node handed here is hashed, so a freed one
+    /// belongs to <see cref="DropFreed"/> instead. Returns the rows dropped.</summary>
+    public int DropNodes(IReadOnlyCollection<TNode> nodes)
+    {
+        ArgumentNullException.ThrowIfNull(nodes);
+        var drop = new HashSet<TNode>(_identity);
+        foreach (var node in nodes)
+        {
+            drop.Add(node);
+        }
+
+        int dropped = 0;
+        var kept = new List<IndexRow>(_index.Count);
+        foreach (var row in _index)
+        {
+            if (drop.Contains(row.Node))
+            {
+                dropped++;
+            }
+            else
+            {
+                kept.Add(row);
+            }
+        }
+
+        if (dropped == 0)
+        {
+            return 0;
+        }
+
+        _index.Clear();
+        _index.AddRange(kept);
+        var ancestry = new List<KeyValuePair<TNode, TNode?>>(_parentOf.Count);
+        foreach (var entry in _parentOf)
+        {
+            if (!drop.Contains(entry.Key))
+            {
+                ancestry.Add(entry);
+            }
+        }
+
+        _parentOf.Clear();
+        foreach (var entry in ancestry)
+        {
+            // A dropped parent leaves its kept child rooted here, the way DropFreed's rebuild does.
+            // IsWithin walks the chain, and a step of it no longer indexed answers nothing.
+            var parent = entry.Value;
+            _parentOf[entry.Key] = parent is not null && !drop.Contains(parent) ? parent : null;
+        }
+
+        var claims = new List<int>();
+        foreach (var claim in _byIndex)
+        {
+            if (drop.Contains(claim.Value))
+            {
+                claims.Add(claim.Key);
+            }
+        }
+
+        foreach (int gamezIndex in claims)
+        {
+            _byIndex.Remove(gamezIndex);
+        }
+
+        _soleCopyCache.Clear();
+        _findCache.Clear();
+        return dropped;
+    }
+
     /// <summary>How many indexed rows name a node the liveness test rejects, the stale entries a
     /// stage would leave behind. Walks the whole index, so read it at a seam rather than per
     /// frame; zero after <see cref="DropFreed"/>.</summary>
