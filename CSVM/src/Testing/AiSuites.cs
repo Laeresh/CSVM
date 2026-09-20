@@ -3408,7 +3408,7 @@ internal static class AiSuites
                 Utils.Log.Configure("sound:debug");
                 using var sink = Utils.Log.PushConsoleSink(line =>
                 {
-                    if (line.Contains("ai weapons ") && (line.Contains(" culled ") || line.Contains(" audible ")))
+                    if (line.Contains("ai weapons ") && (line.Contains(" culled ") || line.Contains(" sounding ")))
                         culls.Add(line);
                 });
 
@@ -3437,8 +3437,8 @@ internal static class AiSuites
                     && here[0].Position.DistanceTo(ears[0]) > 20f
                     && there[0].Position.DistanceTo(ears[0]) > 20f,
                     $"…and neither sits on the listener, which is what a voice pinned to the ear would do");
-                ctx.Check(culls.Count(l => l.Contains(" audible ")) == 2,
-                    $"both voices logged the transition into earshot (got {culls.Count(l => l.Contains(" audible "))})");
+                ctx.Check(culls.Count(l => l.Contains(" sounding ")) == 2,
+                    $"both voices logged the transition into earshot (got {culls.Count(l => l.Contains(" sounding "))})");
 
                 // The cull, driven from the listener rather than by moving the aeroplane. The two
                 // ears below straddle the 1.1x, which is what separates this cull from one taken at
