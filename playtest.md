@@ -112,7 +112,7 @@ draws its authored 800x600 space one-to-one.
 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
-| `CAP-34` | Wing-light flare shape + view-dependence | Any player plane except the Bloodhawk (the one airframe with no wing-light anim or flare nodes) with wing lights on, one continuous orbit from front through side to tail. Close enough to read whether the flare shows sharp radiating star points (vs a soft round glow) and whether it stays visible across the orbit or only from a narrow chase-view cone | `BL-284` |
+| `CAP-34` | Wing-light flare shape | Any player plane except the Bloodhawk (the one airframe with no wing-light anim or flare nodes) with wing lights on, one continuous orbit from front through side to tail. Close enough to read whether the flare shows sharp radiating star points (vs a soft round glow). The view-dependence half this capture once carried is answered by data: the flare mesh is a `Facade`/`SphericalY` model, `BL-1039` | `BL-284` |
 | `CAP-59` | **Does a C1B night cloud have a moon side?** | In the original, fly C1B by night and film **one** cloud from **two headings at the same range**, first with the moon behind the camera, then with the moon behind the cloud, holding the same puff large enough in frame to read its near and far sides, with the moon itself in frame on the second pass so the bearing is readable. *Look for:* whether the side turned toward the moon reads brighter than the side turned away **at a fixed range**, which is the one thing that separates a moon side from distance through the night fog. ⚠ `playtest/CAP-11/`'s stills cannot answer it: both put their cloud on the moon's bearing at very different ranges, so their 218-against-70 split reads as fog depth. C1B's clouds are the 70 placed `cloudparent` facades, authored `lighting: false` with an empty normal array, so a moon side there would be a remake departure rather than a decoded term | `BL-325` |
 
 ### Damage & collision
@@ -225,30 +225,6 @@ draws its authored 800x600 space one-to-one.
   - (c) at the 1,700 m rung the cloud tops sit at the original's brightness rather than above it;
   - (d) flying level inside the band, no popping as a sprite's own band swings across the cull.
   *Blocks:* nothing tracks the outcome; a fail mints a new `BL` naming which of (a)-(d) failed.
-
-### CM06 (C1C/M01) · the cloud band's far side, a zeppelin above it
-
-```powershell
-./RunGame.ps1 --campaign=<profile>:5
-```
-
-- `PT-175` `[Own]` **The overcast hides what is on the other side of it, and gives it back on the
-  climb.** Each drawn aircraft and zeppelin now earns its own zone from its altitude against the
-  band's midpoint, so an object wholly on the far side is not drawn for a camera on this side, which
-  is what the original's per-object zone assignment plus its camera zone gate come to. The engine
-  suite settles the arithmetic against the mission's own band and zeppelin records; what it cannot
-  settle is how the appearing and disappearing reads at the controls.
-  *Look for:*
-  - (a) holding under the band, the zeppelins and any aircraft above it are gone rather than drawn
-    through the overcast, and the sea, the terrain and your own airframe are untouched;
-  - (b) climbing through, they come back as you enter the band rather than a long way above or
-    below it, and the moment lands inside the white where the eye cannot pick out a snap;
-  - (c) levelling out above the band, what is underneath it has gone the same way, and the objects
-    up there with you stay drawn;
-  - (d) flying level inside the band, nothing flickers: an object straddling the midpoint draws at
-    both states by design, so a blink there is a bug;
-  - (e) `--no-fog` gives everything back at every altitude.
-  *Blocks:* nothing tracks the outcome; a fail mints a new `BL` naming which of (a)-(e) failed.
 
 ### C1 · Bloodhawk vs AI, the kill sequence, sound on
 
@@ -859,19 +835,6 @@ is a judgement on our own remake.
   session's log under `.scratch/logs/`, an `ai voice: <name>: trigger #` line for each call heard.
   *Blocks:* `BL-934` (lines unheard at the controls); a silent sortie whose log carries the
   `ai voice:` lines is that item's next cause.
-
-- `PT-176` `[Own]` **The whole-screen pattern under Enhanced Graphics is gone, and the sun's
-  shadow edge still reads soft.** The sun's penumbra filter was the pass laying it: it alone
-  resolved through a screen-space sample rotation, over 81 % of a C1 waterfall frame, and the
-  filter now runs at its top rung, which removed 86 % of the measured excess without touching the
-  penumbra's width (`analysis/screen-dither/FINDINGS.md`). The instrument cannot say whether the
-  remaining seventh is visible to an eye, and only an eye judges an edge. Fly any chapter under
-  Enhanced, still and moving, over open water and over ground, at the window size you normally
-  play at. *Look for:* (a) no fine weave over terrain, water or building faces, in particular while
-  the camera turns, which is when a screen-space pattern crawls; (b) a shadow edge still soft
-  rather than a hard line, on the aircraft's own shadow and on a building's; (c) no new cost you
-  can feel, the top rung being the more expensive one. *Blocks:* nothing; it confirms the fix the
-  original report asked for.
 
 ## Everything else
 

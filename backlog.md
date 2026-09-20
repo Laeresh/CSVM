@@ -224,6 +224,27 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   clear and the hull does not (CM13's dbase arch on dzpath2) in both games; if the original passes,
   sweep the player's probes too. *Cross-refs:* `PlaneStats.CollisionProbes`, `docs/formats/vehicle.md`.
 
+- `BL-1040` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **A mounted FLARE
+  (`wep_15`) shows its blue star burst on the rack before it is fired.** *Verdict at the controls:*
+  "FLARE shows the explosion sprite (blue star) while unfired". *Evidence:* the round's `FLYOUT`
+  `MODEL` is `reararc`, whose subtree carries `rapolys` (the body) and `sflsh` (the flash sprite),
+  both `active: true` in the chapter record (`extracted/C1/gamez/nodes.json`). What turns `sflsh`
+  off is the deploy definition `deploy_reararc`'s `RESET_STATE`
+  (`extracted/C1/cam_anim/reararc-deploy_reararc.json`: `rapolys` true, `sflsh` false); its
+  sequences then activate `sflsh`, scale it 1 to 2 over 0.3 s, fade it in over 0.05 s and out over
+  2.25 s, deactivate it, and call `rear_flash_effect` at 4.0 s. `Projectile.BuildFlyoutBody`
+  instances the prototype root through `SceneBuilder.BuildSubtree` at each node's own ACTIVE bit and
+  never applies the definition's reset state, and `PylonOrdnance` hangs that copy on the pylon, so
+  the sprite draws on the rack, and on the round from release unless the flight runs the
+  definition. *Fix shape:* a flyout body applies its `MODEL_ANIMATION` definition's `RESET_STATE` at
+  instancing (`AnimRuntime` poses pooled library copies that way, `RunResetStateEvents`), so `sflsh`
+  starts hidden; whether the in-flight round runs `deploy_reararc` at all is the second thing to
+  read. *⚠ Traps:* do not hide `sflsh` by name; the reset state is the authored rule, and the other
+  `FLYOUT` models' definitions are read for the same shape before the flare is assumed alone.
+  *Playtest after fix:* a plane loaded with FLARE, on the ground and in flight, the rack shows the
+  body only; fire one, the star appears when the round goes off. *Cross-refs:*
+  `docs/org/ordnanceTypes.md` (`wep_15`), `PylonOrdnance.cs`, `git log --grep=BL-1040`.
+
 ## Flight model & collision physics
 
 - `BL-562` `[Perf]` `[M]` `[Next: data]` `[Impact: low]` `[Evidence: data]` `[CM11]` **CM11 (C2/M02) still spends a single physics tick of about 36 ms on the sortie's
@@ -486,17 +507,97 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   replaced; `git log --grep=BL-305`. Do not reopen either ID; IDs are never reused, per this
   file's own rule).
 
-- `BL-1027` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` `[C1]` **A far tree card
-  still paints over a ridge polygon and the trees ahead of it in C1, after BL-997's depth prepass.**
-  *Evidence:* at the controls on c24653b6 at `--pos="-1595.425,182.281,-4843.352"
-  --direction="-0.21242,0.01919,-0.97699"` (`Screenshots/crimsonskies_2026-09-19_23-41-17-262.png`,
-  local): "still the same". The user's read of the frame: of two ground polygons behind one tree
-  card, one shows darkened through the card and the other full bright, as if one variant blends and
-  the other scissors against different polygons behind the same sprite. BL-997 fixed card against
-  card (`depth_prepass_alpha` on the blended MultiMesh variant, `Clutter.cs` `ShaderCode`); the
-  blend-or-scissor verdict is per texture family (`TextureArchive.SoftAlphaTrees`), and
-  `SceneBuilder`'s world-surface blended variants still carry `depth_draw_never`, noted at BL-997's
-  the same pose, both sides.
+- `BL-1027` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` `[C1]` **A bright band
+  along a ground polygon's edge paints over the tree cards standing in front of it in C1, after
+  BL-997's depth prepass.** *Verdict at the controls:* the ground seen through a tree card's soft
+  alpha reads darker, and a band along the edge of a larger ground polygon reads full bright through
+  the same card, so the band is that ground drawn on top of the card; the near card is not the thing
+  painted over, which answers the question BL-1027's amendment left open. Second pose, freecam at
+  x -2089 y 156 z -3919 in C1 (`Screenshots/crimsonskies_2026-09-20_07-42-54-631.png`, the red box);
+  the first at `--pos="-1595.425,182.281,-4843.352" --direction="-0.21242,0.01919,-0.97699"`
+  (`Screenshots/crimsonskies_2026-09-19_23-41-17-262.png`). *Evidence:* BL-997 fixed card against
+  card (`depth_prepass_alpha` on the blended MultiMesh variant, `Clutter.cs` `ShaderCode`);
+  `SceneBuilder`'s world-surface blended variants still carry `depth_draw_never`; C1 carries 573
+  blended and 543 scissored world surfaces and 7 blended card kinds
+  (`--hide-alpha=blend-surfaces,scissor-surfaces,blend-cards,scissor-cards`, the isolation door,
+  `git log --grep=BL-1027`). The seeded captures along the first heading put card pixels lost to a
+  world surface at 0, and `clutter-card-depth`'s card-over-terrain case reads lost=0, so neither
+  reproduces either frame. *Fix shape:* reproduce at the second pose first, where the cards are near;
+  name the band's surface class with the isolation door (a blended world surface drawn after the
+  card, sorted on its centroid, is the shape the verdict points at); then the draw order between the
+  world's blended surfaces and the cards. *⚠ Traps:* the blend-or-scissor verdict is per texture
+  family (`TextureArchive.SoftAlphaTrees`) and is not the knob. The seeded captures at the first pose
+  do not reproduce it, so a zero from that instrument is not a pass. *Playtest after fix:* both poses
+  in `--fly`, the band behind the cards reads through their soft edge like the rest of the ground.
+  *Cross-refs:* `git log --grep=BL-997`, `git log --grep=BL-1027`, `INSTR-91`.
+
+- `BL-1037` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: feel]` **Under Enhanced
+  Graphics, faint diagonal bands cross the water and the aircraft's self-shadow carries noise, and
+  the sun's penumbra filter drops to SoftHigh.** *Verdict at the controls:* after `BL-803`'s fix
+  (the filter at SoftUltra), "it fixes some artifacts but the stripes still remain", the stripes
+  being fine low-contrast diagonal bands over the water at `--pos="-6037.015,395.381,-6040.959"
+  --direction="0.58931,-0.04872,0.80644"` (`Screenshots/crimsonskies_2026-09-20_07-12-26-864.png`),
+  and "some shadows on the plane have visual noise". The cost call `BL-803`'s closing commit left
+  open is taken: the filter takes the SoftHigh rung (4.63 ms against SoftUltra's 5.78 ms of GPU time
+  at the C1 waterfall), and this item owns whatever that gives back along with the two symptoms.
+  *Evidence:* `git log --grep=BL-803` and `analysis/screen-dither/FINDINGS.md`: the 2x2 alternation
+  instrument found the soft-shadow pass at 2.168 over 81 percent of a C1 waterfall frame, SSAO, SSR
+  and glow under 0.11, SoftUltra removing 86 percent of the excess and SoftHigh 72. Open water was
+  not one of the instrument's poses, and noise inside an airframe's own shadow is acne at the
+  receiver, which the filter's rung does not decide. *Fix shape:* `EnhancedShadowFilterQuality` to
+  SoftHigh; bisect the water bands at the pose with the four doors (`--no-soft-shadows`,
+  `--no-ssao`, `--no-ssr`, `--no-glow`) and against the Faithful presentation at the same pose,
+  since a band both presentations draw is the water's own texture; for the airframe, the shadow
+  bias and normal bias against its own casting at a pose with the sun low across the fuselage.
+  *⚠ Traps:* do not raise the rung back to chase the water; the cost call is the user's. A pattern
+  the Faithful presentation also draws is not this item. *Playtest after fix:* the pose above under
+  Enhanced, still and turning, the water flat; then a chase view with the sun across the airframe,
+  its shadow on itself clean. *Cross-refs:* `git log --grep=BL-803`, `SHOT-42`, `docs/cli.md` (the
+  four doors), `docs/PLAN-enhanced-graphics-2.md`.
+
+- `BL-1038` `[Bug]` `[M]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` `[CM01]` **The trees
+  of an island the mission deactivates stand on open water in CM01.** *Verdict at the controls:*
+  "Trees from a deactivated island still are active", a curved file of palms on the sea at
+  `--pos="-1430.753,149.389,-1818.664" --direction="-0.64273,-0.01762,-0.76589"`
+  (`Screenshots/crimsonskies_2026-09-20_07-25-14-063.png`). *Evidence:* `Clutter.cs`
+  `PlaceOnWorld` walks the world's children and partition nodes and stamps every polygon carrying a
+  template's ground texture, and every placement of one kind is baked into one MultiMesh; the walk
+  reads no node's ACTIVE bit and nothing maps a stamp back to the node it was stamped under, so
+  `AnimRuntime.SetSubtreeActive`, which writes `Visible` on the subtree, cannot reach the island's
+  stamps. Whether the island's terrain is hidden by its own record's ACTIVE bit (`WorldBuilder`
+  `applyActive`) or by the mission's area verb (`SetSubtreeActiveByIndex`) is the first thing to
+  read off CM01's script. *Fix shape:* carry the stamping node's gamez index on each placement; a
+  subtree activation hides and shows the instances under it the way a dead decoration's are taken
+  out, and a placement under a node born inactive starts hidden. *⚠ Traps:* not a placement rule
+  change: the stamps are right, their visibility is not. Do not filter the walk by the ACTIVE bit
+  alone; a script can activate a subtree later and its trees must come with it. The rolling window
+  past the map edge copies from `ExportedKinds` and must follow its source stamp. *Playtest after
+  fix:* CM01 at the pose above, no trees on the water, and the island's trees present wherever its
+  terrain is. *Cross-refs:* `docs/formats/clutter.md`, `docs/architecture/Mech3.md` (`Clutter`),
+  `git log --grep=BL-1029` (the further-mesh walk on the same builder).
+
+- `BL-1039` `[Bug]` `[S]` `[Next: code]` `[Impact: low]` `[Evidence: data]` **The wing-light flare
+  is a `Facade`/`SphericalY` model in the plane data and is drawn as a fixed one-sided quad, so the
+  position lights do not turn to the camera.** *Verdict at the controls:* "Position lights on planes
+  dont turn towards camera". *Evidence:* `extracted/planes/nodes.json`'s `wing_flare1` and
+  `wing_flare2` reference model 1261, and `extracted/planes/models.json` model 1261 is
+  `model_type: Facade`, `facade_mode: SphericalY`, `lighting: false`, the classification the placed
+  `cloudparent` facades, C1's `docklight_flare` and the templates clutter's glow stamps carry, all of
+  which pose through `csky_facade.gdshaderinc`'s `csky_facade_spherical`
+  (`git log --grep=BL-998`, `git log --grep=BL-1013`). `PlaneBuilder.FlareMaterial` is a
+  `StandardMaterial3D` with no billboard, and its comment records why: Godot's billboard mode
+  flattened the star burst into a blob (`BL-119`). That mode is the camera basis, which rolls with
+  the eye; the original's SphericalY is a look-at from the eye's position that keeps the card's own
+  up, decoded at BL-998 (`FUN_00539390`). *Fix shape:* the flare quad takes a ShaderMaterial
+  including `csky_facade.gdshaderinc` and posing through
+  `csky_facade_spherical(origin, CAMERA_POSITION_WORLD)` like the clutter's glow stamps; the
+  additive tint, the blink and the `OmniLight3D` untouched. *⚠ Traps:* not `BillboardMode`; that is
+  the rejected fix, for the reason BL-998 found. The star-burst shape stays `BL-284`'s. *Playtest
+  after fix:* any player plane but the Bloodhawk, wing lights on, an orbit from nose through side to
+  tail in the chase view: the flare visible and facing you all the way round, and not rolling in a
+  bank. *Cross-refs:* `BL-284` (the shape half; its view-dependence half is answered here),
+  `CAP-34`, `docs/formats/gamez.md` (the model classification).
+
 ## Effects & animation runtime
 
 - `BL-674` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: data]` `[CM10]` **CM10's attack-balloon wave flies from 990 m down to water level and back up
@@ -529,11 +630,11 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   entry that drives it "plausibly an authoring leftover", present on 1 of 11 aircraft, so the
   capture may delete the feature rather than tune it.
 
-- `BL-285` `[Bug]` `[S]` `[Next: data]` `[Impact: low]` `[Evidence: decoded]` **The decoded
+- `BL-285` `[Bug]` `[S]` `[Next: decode]` `[Impact: low]` `[Evidence: decoded]` **The decoded
   exhaust smoke is ported and measures about half the original's density at a matched slam.**
   *Verdict at the controls:* against CAP-21, "its a lot denser in the original"; the AI aircraft's
-  trails
-  (`git log --grep=BL-969`) draw and read right. *Evidence:* the original's exhaust
+  trails (`git log --grep=BL-969`) draw and read right. The matched-speed compare below stands as
+  the measurement; no further look is owed, the next step is the decode of the draw path. *Evidence:* the original's exhaust
   smoke is its one code-built puffer, a near-black 0.4 m trail per `exhaust%d` marker whose opacity
   charges from the commanded lever running ahead of the live one and decays at 1.5/s
   (`FUN_004afa20`, `FUN_004afbc0`, fed from `FUN_0048e580`; decode in `docs/formats/effects.md`,
@@ -571,49 +672,6 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   about four seconds after it, as wide and as dark near the tail as the footage's at the same
   speed; a single 1/8 step at most a faint wisp, idle to 5/8 a plume about half as dark.
   *Cross-refs:* `git log --grep=BL-285` (the port), `git log --grep=BL-969` (the AI trails).
-
-- `BL-933` `[Tuning]` `[S]` `[Next: decide]` `[Impact: high]` `[Evidence: decoded]`
-  **A shooting enemy aeroplane or turret is heard only close by, because a gun cue's authored reach
-  is a fraction of the distance a gun shoots from: the decision is how much remake-only reach the
-  weapon cues get, on top of the 2.5 the world emitters were judged at.**
-  *Verdict at the controls:* "cant hear guns of turrets. And planes only when very near", "Cant
-  hear them. They fire but there is no sound", and at the shipped range factor "enemy shots are
-  still only hearable if I'm really close. They should be clearly audible if i'm in range ~1km".
-  *The gun sites carry no second cause:* the suite `gun-voice-reach` reads a C4 belly ring firing
-  and an AI aeroplane's caliber loop at the shipped x2.5 and finds both granted a voice, unculled
-  and at the decoded law's own level, on the `Effects` bus the world emitters that do reach use,
-  with no engine attenuation model and no `MaxDistance`; every gun cue authors no `VOLUME` key, so
-  its gain is 1; the turret lease is renewed per round and the hull lease per tick, and both hold.
-  The turret ring reads -12.3 / -20.8 / -30.0 dB at 200 / 300 / 500 m and is culled past 550 m; the
-  AI mount's `snd_30cal` reads -18.8 / -26.2 dB at 200 / 300 m and is culled past 413 m. A live
-  Instant Action wave logs an enemy firing at 398 m of its 413 m cull at -72.1 dB, which is the
-  law's tail rather than a defect.
-  *What the data says:* every one of the 42 turret entries in `ai.zrd` authors `SOUNDS.CANNON`
-  `snd_chaingun` `RANGE [30, 200]`, so no emplacement anywhere carries `snd_turretgun`; that cue
-  belongs to the two weapon records the patrol boats and turret trucks fire, which do reach 1,000 m
-  and are culled at 1,100 m, and whose attack radius is 400 m in any case. Against that, a turret's
-  `DETECTION_RANGE` runs 350 to 1,000 m (17 entries past 600 m) and every caliber's ballistic
-  `RANGE` is 1,000 m, so a gun opens fire from two to seven times its own cue's scaled reach.
-  *The decision:* the missing reach is the cue's radii and not a level, and the shipped 2.5 was
-  measured on the world emitters, whose radii (the siren's `[200, 1200]`) are three to eight times
-  the guns'. For a turret's chaingun to stand 10 dB down at 1 km the factor would have to be about
-  14, and about 5 merely to reach 1 km at the law's -30 dB edge; an aircraft 30-cal wants about 19
-  and 7. So either the weapon cues take a factor of their own, or the build keeps the authored
-  reach and gunfire stays a close-quarters sound.
-  *The sortie that answers it:* CM21 (`--campaign=<profile>:20`) across the docks and CM17 (`:16`)
-  for the pirate zeppelin's rings, with `--volume=1.0 --no-det --log=sound:debug`, flown at
-  `--sound-range-scale=2.5`, then `=5`, then `=10`, saying which reads like the original at 300 m,
-  at 600 m and at 1 km. ⚠ That flag scales the world emitters too, so at 10 the siren and the train
-  stand at four times the reach they were judged at; ignore them and listen to the guns.
-  *⚠ Traps:* `WeaponSoundCue.CullMargin` (1.1) is `SoundFalloff.CullFactor`, decoded from the
-  compare, and is not the knob; `BL-846`'s closing note says the same. Do not retune a level by
-  ear: every constant here is the decode's or the authored `RANGE`. A cue that is not culled is not
-  therefore heard (`INSTR-92`), which is what made the earlier reading of this entry expect
-  `snd_turretgun` to be audible at 1 km.
-  *Cross-refs:* `docs/formats/sounds.md` ("The gain
-  between the two radii", "No listener-side term scales the reach" for the shipped factor),
-  `INSTR-87`, `INSTR-92`, `git log --grep=BL-269` (the shipped factor), `git log --grep=BL-933`,
-  `git log --grep=BL-793`, `git log --grep=BL-820`, `git log --grep=BL-846`.
 
 - `BL-934` `[Bug]` `[M]` `[Next: look]` `[Impact: high]` `[Evidence: feel]` **The dynamic enemy and
   ally voice lines dispatch in the suite and are now heard at the controls, but far more rarely
@@ -1000,13 +1058,13 @@ usual.
 
 ## Misc
 
-- `BL-284` `[Bug]` `[Blocked: CAP-34]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Wing-light flare: soft round glow vs the original's sharp star burst; view-dependence
-  unproven.** Follow-up from `BL-119` (landed 2026-08-05): with the authored one-sided quad restored
+- `BL-284` `[Bug]` `[Blocked: CAP-34]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: footage]` **Wing-light flare: soft round glow vs the original's sharp star burst; the view-dependence
+  half is `BL-1039`'s.** Follow-up from `BL-119` (landed 2026-08-05): with the authored one-sided quad restored
   and the blink at the measured ~1 frame, the flare reads as a compact soft amber glow, much closer
   than the old billboard blob, but the PT-03 reference still shows sharp radiating star points that
   our plain radial `oil_liteflare` sprite does not produce. Whether the original draws the flare
-  from every angle (a one-sided quad is roughly chase-view-only) is also unmeasured, one orbit
-  clip of a lit plane in the original settles both, any player plane works: `vehicle.zrd.json`
+  from every angle is answered by data, the flare mesh is a `Facade`/`SphericalY` model
+  (`BL-1039` poses it so), and the orbit clip settles the star shape alone; any player plane works: `vehicle.zrd.json`
   wires `wing_lights_blink` (or `brigand`'s own `wing_lights_brigand`) into every player craft's
   `start_anims` except the Bloodhawk, which has neither the anim nor flare nodes. (Earlier notes
   here said only piratefighter/brigand carried it, that read `wing_light.zrd.json`'s two
