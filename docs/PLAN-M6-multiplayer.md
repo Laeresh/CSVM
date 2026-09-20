@@ -13,9 +13,9 @@ match clock, scores, spawns, the AI, the zeppelins, the turrets, the destructibl
 mission director), and every discrete event crosses the wire as a typed message in the shape the
 executable already uses. Two modes ship: the Dogfight deathmatch that splitscreen already plays, and
 campaign co-op in the shape the local splitscreen campaign already has, the host's campaign with
-guests flying as the human field. The plan draws one item from `backlog.md`, `BL-951` (the local
-multiplayer door and join board), which was not re-verified still-open in the session that wrote
-this plan.
+guests flying as the human field. The plan builds on the local join board already on the main menu
+(`CSVM/src/UI/Menu/Original/OriginalJoinBoard.cs`), which signs the pads at one machine onto their
+seats; the network door and a remote guest's entry on the same manifest are this plan's own work.
 
 Out of scope, deliberately: the flag and zeppelin match modes (decoded on the scoring side only,
 they follow Dogfight once the carrier works), a dedicated headless host (a listen server is the
@@ -163,7 +163,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 12. ☐ Fire, hit, damage and death events in the decoded order, scored by the host
 13. ☐ Host-owned spawn and respawn from `net.zrd` and the rotation, applied by guests
 14. ☐ Match state: clock, limits, end and scoreboard replicated
-15. ☐ The ENet transport, host and join by direct IP with UPnP, and the multiplayer door's join board (`BL-951`)
+15. ☐ The ENet transport, host and join by direct IP with UPnP, and the multiplayer door on the join board
 
 ### Wave C, campaign co-op
 
@@ -440,21 +440,20 @@ asserting the hold on both peers>
 
 **⚠ Traps.** <TODO: none known yet>
 
-## B15 ☐ The ENet transport, host and join by direct IP with UPnP, and the multiplayer door's join board (`BL-951`)
+## B15 ☐ The ENet transport, host and join by direct IP with UPnP, and the multiplayer door on the join board
 
 **Goal.** One player hosts from the menu, another joins by address, and both land in a Dogfight
 that plays as it does on the harness.
 
 **Evidence (confidence: lead-only).** Godot's `ENetMultiplayerPeer` carries reliable, unreliable and
 unreliable-ordered channels over UDP and its `UPNP` class maps a port on the host's router; both
-untested here. `BL-951` (`backlog.md`, the local multiplayer door and join board) describes the
-board this item widens with network seats; it was not re-verified still-open in the scoping
-session. <TODO: re-verify `BL-951` still-open against `git log --grep=BL-951` and
-`UI/Menu/Original/OriginalSeats.cs`>
+untested here. The local join board (`CSVM/src/UI/Menu/Original/OriginalJoinBoard.cs`) is the board
+this item widens with network seats: its crew manifest already holds four entries signed on by the
+pads at one machine, and a remote guest is another entry on it.
 
 **Approach.** `EnetTransport` implements A1's interface and is the only file under `CSVM/` naming a
-Godot networking type. The menu door opens the join board from `BL-951` with a host and a join
-action; a joined guest appears as a seat on every peer's board. UPnP is attempted and reported, never
+Godot networking type. The menu door opens the local join board with a host and a join action
+beside its manifest; a joined guest appears as an entry on every peer's board. UPnP is attempted and reported, never
 required.
 
 **Model recommendation.** <TODO: not settled in the scoping session>

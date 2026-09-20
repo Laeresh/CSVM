@@ -296,7 +296,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/Menu/CampaignCheats.cs`, what the original's four menu cheats leave switched on: the mission pull-down and its pick, the gallery reveal, the unlock-everything flag.
 - `src/UI/Menu/CampaignAidProfiles.cs`, the scratch profile store the campaign screenshot aids seat a player over, unable to reach the real one.
 - `src/UI/Menu/MenuIdleSource.cs`, a seat's input source with no device behind it, idle every frame; the screenshot aid's extra players.
-- `src/UI/MenuSeatDevices.cs`, the pad side of the shared player setup: seat 0's claimed pad, the join gesture, hotplug, the flight binding.
+- `src/UI/MenuSeatDevices.cs`, the pad side of the shared player setup: seat 0's claimed pad, the join and sign-on gestures, hotplug, the flight binding.
 - `src/UI/MenuControlsSeats.cs`, the rebinding screen's seat bookkeeping for any presentation: which seats it offers, their pad identities and staged keymaps.
 - `src/UI/Menu/FreeFlightFeature.cs`, Free Flight as a shared feature: the chapter roster, the pick, the launch gate and the typed exit.
 - `src/UI/Menu/InstantActionFeature.cs`, Instant Action as a shared feature: the decoded option sets, the typed setup state, the built def.
@@ -310,6 +310,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/Menu/Original/SliderControl.cs`, the shell's continuous control: a slider row's hold-and-move under the pointer, and the clamped sideways step.
 - `src/UI/Menu/Original/OriginalOptionsScreen.cs`, the five pages behind the Options hub's doors as one standalone module: the Game Options and VIDEO tables, AUDIO's slider rows, the seat chooser and the seven category tabs of rebinding.
 - `src/UI/Menu/Original/OriginalCredits.cs`, the shell's credits screen (a `partial`): the painted background pane, ABOUT drawn disabled, the DONE plaque.
+- `src/UI/Menu/Original/OriginalJoinBoard.cs`, the join board as one standalone module: the crew manifest, the articles of the crew, and the one place a pad signs onto a seat.
 - `src/UI/Menu/Original/OriginalSeats.cs`, the shell's two sortie screens (a `partial`): the chapters, the windowed aircraft column, FLY.
 - `src/UI/Menu/Original/OriginalSeatPlane.cs`, the shell's per-seat aircraft screen (a `partial`): one joined seat picking on the plane-selection board's shape.
 - `src/UI/Menu/Original/OriginalInstantActionScreen.cs`, the Instant Action screen and its Weapon Loadout as one standalone module: the contents list, dropdowns, enemy pages, the Build door, and the decoded ammo chrome over one aeroplane's fit.

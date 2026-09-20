@@ -594,7 +594,9 @@ public sealed partial class ComposedBoardView : Control
 
     private void DrawFill(BoardFit fit, BoardFill fill)
     {
-        var colour = new Color(fill.R / 255f, fill.G / 255f, fill.B / 255f, fill.Opacity);
+        var colour = fill.Ink is { } ink
+            ? InkOf(ink) with { A = fill.Opacity }
+            : new Color(fill.R / 255f, fill.G / 255f, fill.B / 255f, fill.Opacity);
         var box = new Rect2(
             fit.X(fill.X), fit.Y(fill.Y), fit.Length(fill.Width), fit.Length(fill.Height));
         if (!fill.Border)
@@ -753,6 +755,12 @@ public sealed partial class ComposedBoardView : Control
         int points = Mathf.Max(1, Mathf.RoundToInt(fit.Length(line.Size)));
         var at = new Vector2(fit.X(line.X), fit.Y(line.Y) + points);
         DrawCaret(fit, font, line, points);
+        if (line.Glyph is { } control)
+        {
+            DrawGlyphLine(font, line, control, points, at);
+            return;
+        }
+
         if (line.Text.Length == 0)
         {
             return;
@@ -780,6 +788,18 @@ public sealed partial class ComposedBoardView : Control
         };
         DrawMultilineString(font, at, line.Text, justify, fit.Length(line.Width),
             points, -1, InkOf(line));
+    }
+
+    // A line with a pad control in it, drawn through the composition the flight prompts use: words,
+    // picture, words. The measurement is why the line comes through here rather than being spaced
+    // by its composer.
+    private void DrawGlyphLine(Font font, BoardLine line, GlyphKey glyph, int points, Vector2 baseline)
+    {
+        int slot = line.Text.IndexOf(BoardLine.GlyphSlot, StringComparison.Ordinal);
+        var prompt = slot < 0
+            ? ControlLine.Plain(line.Text)
+            : ControlLine.Around(line.Text[..slot], line.Text[(slot + BoardLine.GlyphSlot.Length)..], glyph);
+        prompt.Draw(this, font, points, new Vector2(baseline.X, baseline.Y - font.GetAscent(points)), InkOf(line));
     }
 
     // The edit box's cursor after the text it follows, on the lit half of the blink. The text is

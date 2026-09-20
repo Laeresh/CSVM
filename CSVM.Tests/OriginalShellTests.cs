@@ -27,19 +27,19 @@ public class OriginalShellTests
     private static readonly MenuCommands Right = new() { MoveX = 1 };
 
     [Fact]
-    public void TheTopLevelIsTheSixDecodedRowsPlusTheFreeFlightDoorAndOpensFocusedOnTheDoor()
+    public void TheTopLevelIsTheSixDecodedRowsPlusTheThreeRemakeDoorsAndOpensFocusedOnFreeFlight()
     {
         var shell = Shell(out _);
 
         Assert.Equal(OriginalScreen.TopLevel, shell.Screen);
         Assert.Equal(
-            new[] { OriginalShell.FreeFlightKey, OriginalShell.DogfightKey, "MM_B_CAMPAIGN", "MM_B_INSTANTACTION", "MM_B_MULTIPLAYER", "MM_B_PREFERENCES", "MM_B_CREDITS", "MM_B_QUIT" },
+            new[] { OriginalShell.FreeFlightKey, OriginalShell.DogfightKey, OriginalShell.JoinBoardKey, "MM_B_CAMPAIGN", "MM_B_INSTANTACTION", "MM_B_MULTIPLAYER", "MM_B_PREFERENCES", "MM_B_CREDITS", "MM_B_QUIT" },
             shell.Rows.Select(r => r.Key));
         Assert.Equal(OriginalShell.FreeFlightKey, shell.FocusedKey);
         // The decoded rows with no remake destination yet are disabled; Instant Action,
         // Preferences (the Options door), Credits and Quit react. The hangar is reached through
-        // Instant Action's Build Custom Plane, so no door of its own stands here.
-        Assert.Equal(new[] { true, true, false, true, false, true, true, true }, shell.Rows.Select(r => r.Enabled));
+        // Instant Action's Build Custom Plane, and MULTIPLAYER is the original's network play.
+        Assert.Equal(new[] { true, true, true, false, true, false, true, true, true }, shell.Rows.Select(r => r.Enabled));
         // A decoded button's rectangle is its authored corner and its measured strip's frame.
         var quit = shell.Rows.Single(r => r.Key == "MM_B_QUIT");
         Assert.Equal((280f, 530f, 240f, 50f), (quit.X, quit.Y, quit.Width, quit.Height));
@@ -62,7 +62,7 @@ public class OriginalShellTests
         step = shell.Step(Pointer(290f, 290f));
         Assert.Equal("MM_B_QUIT", shell.FocusedKey);
         Assert.Empty(step.Cues);
-        Assert.Equal(2, shell.Hover);
+        Assert.Equal(3, shell.Hover);
     }
 
     [Fact]
@@ -134,6 +134,8 @@ public class OriginalShellTests
 
         shell.Step(Down);
         Assert.Equal(OriginalShell.DogfightKey, shell.FocusedKey);
+        shell.Step(Down);
+        Assert.Equal(OriginalShell.JoinBoardKey, shell.FocusedKey);
         shell.Step(Down);
         Assert.Equal("MM_B_INSTANTACTION", shell.FocusedKey);
         shell.Step(Down);
@@ -216,6 +218,7 @@ public class OriginalShellTests
         step = shell.Step(Back);
         Assert.IsType<QuitExit>(step.Exit);
 
+        shell.Step(Down);
         shell.Step(Down);
         shell.Step(Down);
         shell.Step(Down);
@@ -419,7 +422,7 @@ public class OriginalShellTests
         var board = shell.Compose();
         Assert.Empty(board.Backdrop);
         Assert.Equal(new[] { "PM_Logo.png", "PM_Frame.png" }, board.Pictures.Select(p => p.Art.Name));
-        Assert.Equal(8, board.Plaques.Count);
+        Assert.Equal(9, board.Plaques.Count);
     }
 
     [Fact]
@@ -442,11 +445,14 @@ public class OriginalShellTests
         var shell = new OriginalShell(layout, new FreeFlightFeature(), new PlayerSetupFeature(), _ => null);
 
         var rows = shell.Rows;
-        Assert.Equal(new[] { OriginalShell.FreeFlightKey, OriginalShell.DogfightKey }, rows.Select(r => r.Key));
+        Assert.Equal(
+            new[] { OriginalShell.FreeFlightKey, OriginalShell.DogfightKey, OriginalShell.JoinBoardKey },
+            rows.Select(r => r.Key));
         var board = shell.Compose();
         Assert.Empty(board.Plaques);
         Assert.Contains(board.Lines, l => l.Text == "FREE FLIGHT");
         Assert.Contains(board.Lines, l => l.Text == "DOGFIGHT");
+        Assert.Contains(board.Lines, l => l.Text == "JOIN BOARD");
         Assert.Contains(board.Fills, f => f.Border);
         Assert.Equal(new MenuLayoutColor(0xFF, 0xFF, 0xFF, 0xFF), shell.Inks.LabelNormal);
     }

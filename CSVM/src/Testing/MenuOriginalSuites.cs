@@ -26,6 +26,10 @@ internal static class MenuOriginalSuites
     // roster whatever is plugged into the machine running the suite.
     private const int AbsentPad = 99;
 
+    // The two pads the join board walk signs on, absent for the same reason.
+    private const int FirstPad = 96;
+    private const int SecondPad = 97;
+
     // The scrapbook's Current Mission tab, the one plaque a campaign board puts in the top band.
     // Its art starts at authored x 558 and is 114 wide, so a chip row in the corner clears this.
     private const float BookTabRight = 672f;
@@ -61,12 +65,12 @@ internal static class MenuOriginalSuites
         + "drops them, a wheel step over the "
         + "aircraft column and over Instant Action's contents window moves each one row and clamps "
         + "at the head, a drag down each thumb's track lands the window on its last row without "
-        + "activating what the click stood over, and the contents arrows still step it, seat 0 steering with a "
-        + "pad claims it so it can never join as another seat, a pad a guest already joined on is "
+        + "activating what the click stood over, and the contents arrows still step it, steering the "
+        + "menu with a pad claims nothing, a pad a guest already joined on is "
         + "not claimable and a rebind of seat 0's set drops the stale last-active reading with it, "
         + "a seat whose pad drops off the roster holds it through the grace and leaves once the "
-        + "device stays gone past it, joining is open on the Instant Action "
-        + "screen and a second seat joined there stays seated, the campaign flight check carries the "
+        + "device stays gone past it, the Instant Action screen reads the roster without opening "
+        + "joining and a seat signed on at the board stays seated, the campaign flight check carries the "
         + "seat strip with two seats and none with one, drawn as Built-in's own chip row in the "
         + "top-right corner clear of the book tab, a switch to Built-in "
         + "from mid-setup discards the pick and shows Built-in's Mode screen, a switch back starts "
@@ -154,6 +158,137 @@ internal static class MenuOriginalSuites
         ctx.Check(host.Active == null && !host.Shown, $"Deactivate leaves the host holding no presentation");
     }
 
+    [Suite("menu-join-board",
+        "The join board over the install's decoded layout: the top level's third door opens it and "
+        + "it is the one screen joining is open on, its manifest starting as four open seats, the "
+        + "first pad to sign on taking the captain's chair beside the keyboard and the second a seat "
+        + "of its own with the manifest drawing both, B on the second pad giving that seat up and "
+        + "leaving the captain's entry where it was, the captain's Start casting off to the top "
+        + "level with the manifest standing, BACK dropping every sign-on, and Free Flight, Dogfight "
+        + "and Instant Action reading the roster without opening joining, their footer and hint no "
+        + "longer inviting a pad's START")]
+    internal static void MenuJoinBoard(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        var seat = new ScriptedSeat();
+        var registry = new PresentationRegistry();
+        var player1 = new MenuInput { Keyboard = true };
+        registry.Register(PresentationId.Original, () => new OriginalPresentation(
+            ctx.Host, ctx.DataRoot, layout, string.Empty, player1));
+        var host = new MenuHost(registry, new RecordingAudio(), _ => { });
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
+        host.AddSeat(seat);
+        try
+        {
+            host.Select(forceBuiltIn: false, cliOverride: "original");
+            host.Show(MenuReturnDestination.TopLevel);
+            var original = host.Active as OriginalPresentation;
+            ctx.Check(original?.Shell != null && original.Devices != null,
+                $"Original stands at the top level with its shell and its pad roster ({host.Active?.Id})");
+            if (original?.Shell is not { } shell || original.Devices is not { } devices)
+            {
+                return;
+            }
+
+            SignOnAtTheBoard(ctx, host, seat, shell, devices);
+            JoiningIsTheBoardsAlone(ctx, host, seat, shell);
+        }
+        finally
+        {
+            host.Deactivate();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+        }
+    }
+
+    // The board itself. The gestures are raw device reads and a scripted run has no pad to press,
+    // so the walk calls what the board's own scan calls. The two pad indices are ones no real
+    // device holds, so a machine with pads plugged in walks this path too.
+    private static void SignOnAtTheBoard(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, MenuSeatDevices devices)
+    {
+        var setup = host.Features.Get<PlayerSetupFeature>();
+        WalkTo(host, seat, shell, OriginalShell.JoinBoardKey);
+        Press(host, seat, Accept);
+        ctx.Check(shell.Screen == OriginalScreen.JoinBoard && shell.JoiningOpen,
+            $"the top level's JOIN BOARD door opens the one screen joining is open on ({shell.Screen}, open={shell.JoiningOpen})");
+        ctx.Check(BoardLines(shell, "open seat") == 4 && BoardLines(shell, "signed on") == 0,
+            $"whose manifest starts as four open seats ({BoardLines(shell, "open seat")} open)");
+
+        ctx.Check(devices.SignOn(FirstPad) && devices.P1Pad == FirstPad,
+            $"A on the first pad takes the captain's chair, seat 1 beside the keyboard ({devices.P1Pad})");
+        ctx.Check(devices.SignOn(SecondPad) && setup.Seats.Count == 2,
+            $"and A on the second signs it onto a seat of its own ({setup.Seats.Count} seats)");
+        ctx.Check(devices.SignedOn(0) && devices.SignedOn(1) && !devices.SignedOn(2),
+            $"so two entries hold a pad and the rest stay open");
+        ctx.Check(BoardLines(shell, "signed on") == 2 && BoardLines(shell, "open seat") == 2,
+            $"which is what the manifest draws ({BoardLines(shell, "signed on")} signed on)");
+
+        ctx.Check(devices.SignOff(SecondPad) && setup.Seats.Count == 1 && devices.P1Pad == FirstPad,
+            $"B on the second pad gives its seat up, the entry above it staying put ({devices.P1Pad}, {setup.Seats.Count} seats)");
+        ctx.Check(shell.JoinBoard.CastOff() && shell.Screen == OriginalScreen.TopLevel && devices.P1Pad == FirstPad,
+            $"and the captain's Start casts off with the manifest standing ({shell.Screen}, {devices.P1Pad})");
+
+        // The other way off, which keeps nobody.
+        WalkTo(host, seat, shell, OriginalShell.JoinBoardKey);
+        Press(host, seat, Accept);
+        Press(host, seat, Back);
+        ctx.Check(shell.Screen == OriginalScreen.TopLevel && devices.P1Pad < 0 && setup.Seats.Count == 1,
+            $"BACK leaves the board and drops the sign-ons ({shell.Screen}, {devices.P1Pad}, {setup.Seats.Count} seats)");
+    }
+
+    // The screens seats used to be decided on: each reads the roster the board wrote, and none of
+    // them opens the gesture that writes it.
+    private static void JoiningIsTheBoardsAlone(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell)
+    {
+        var doors = new (string Key, OriginalScreen Screen)[]
+        {
+            (OriginalShell.FreeFlightKey, OriginalScreen.FreeFlight),
+            (OriginalShell.DogfightKey, OriginalScreen.Dogfight),
+            ("MM_B_INSTANTACTION", OriginalScreen.InstantAction),
+        };
+        foreach (var door in doors)
+        {
+            WalkTo(host, seat, shell, door.Key);
+            Press(host, seat, Accept);
+            ctx.Check(shell.Screen == door.Screen && !shell.JoiningOpen,
+                $"{door.Screen} reads the roster without opening joining ({shell.Screen}, open={shell.JoiningOpen})");
+            if (door.Screen == OriginalScreen.FreeFlight)
+            {
+                ctx.Check(BoardLines(shell, "START") == 0 && BoardLines(shell, "to join") == 0,
+                    $"and neither its footer nor its hint invites a pad's START ({BoardLines(shell, "START")} lines)");
+            }
+
+            host.Show(MenuReturnDestination.TopLevel);
+        }
+
+        ctx.Check(shell.Screen == OriginalScreen.TopLevel, $"the walk lands back on the top level ({shell.Screen})");
+    }
+
+    // How many composed lines carry a piece of text. The manifest states a seat in words rather
+    // than in a row, so its entries are counted here.
+    private static int BoardLines(OriginalShell shell, string text)
+    {
+        int count = 0;
+        foreach (var line in shell.Compose().Lines)
+        {
+            if (line.Text.Contains(text, StringComparison.Ordinal))
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
     private static OriginalShell? ColdStart(TestContext ctx, MenuHost host)
     {
         string? reason = host.Select(forceBuiltIn: false, cliOverride: "original");
@@ -167,7 +302,7 @@ internal static class MenuOriginalSuites
             $"a cold start opens on the top level ({shell?.Screen})");
         ctx.Check(shell?.FocusedKey == OriginalShell.FreeFlightKey,
             $"with the Free Flight door focused ({shell?.FocusedKey})");
-        ctx.Check(shell?.Rows.Count == 8, $"the top level is the six decoded rows plus the two doors ({shell?.Rows.Count})");
+        ctx.Check(shell?.Rows.Count == 9, $"the top level is the six decoded rows plus the three doors ({shell?.Rows.Count})");
         ctx.Check(Godot.Input.MouseMode == Godot.Input.MouseModeEnum.Hidden,
             $"the OS pointer is hidden while Original draws its own ({Godot.Input.MouseMode})");
         return shell;
@@ -369,8 +504,8 @@ internal static class MenuOriginalSuites
 
         player1.LastActivePad = 2;
         host.Tick(Dt);
-        ctx.Check(devices.P1Pad == 2 && devices.IsClaimed(2),
-            $"seat 0 steering with pad 2 claims it, so the join scan skips that pad ({devices.P1Pad}, claimed={devices.IsClaimed(2)})");
+        ctx.Check(devices.P1Pad < 0 && !devices.IsClaimed(2),
+            $"steering the menu with a pad claims nothing, a seat being taken on the join board alone ({devices.P1Pad}, claimed={devices.IsClaimed(2)})");
         player1.LastActivePad = -1;
         host.Tick(Dt);
         GuestPadClaim(ctx, host, setup, devices, player1);
@@ -378,10 +513,11 @@ internal static class MenuOriginalSuites
 
         WalkTo(host, seat, shell, "MM_B_INSTANTACTION");
         Press(host, seat, Accept);
-        ctx.Check(shell.Screen == OriginalScreen.InstantAction && shell.JoiningOpen,
-            $"the Instant Action screen opens joining ({shell.Screen}, open={shell.JoiningOpen})");
+        ctx.Check(shell.Screen == OriginalScreen.InstantAction && !shell.JoiningOpen,
+            $"the Instant Action screen reads the roster without opening joining ({shell.Screen}, open={shell.JoiningOpen})");
         var s2 = new ScriptedSeat();
-        ctx.Check(setup.Join(s2) != null && host.Seats.Count == 2, $"a second seat joins there ({host.Seats.Count})");
+        ctx.Check(setup.Join(s2) != null && host.Seats.Count == 2,
+            $"a seat signed on at the board is one the screen shows ({host.Seats.Count})");
         Press(host, seat, Down);
         ctx.Check(host.Seats.Count == 2 && shell.Screen == OriginalScreen.InstantAction,
             $"and stays seated while seat 0 keeps steering the screen ({host.Seats.Count}, {shell.Screen})");
@@ -390,8 +526,8 @@ internal static class MenuOriginalSuites
         shell.Campaign.OpenCampaignOver(CampaignAidProfiles.Store(seeded: true), CampaignAidProfiles.Planes());
         ctx.Check(shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot), $"the scratch campaign seats its pilot");
         shell.Campaign.ShowMissionScreen(OriginalScreen.CampaignFlightCheck);
-        ctx.Check(shell.Screen == OriginalScreen.CampaignFlightCheck && shell.JoiningOpen,
-            $"the flight check opens joining too ({shell.Screen}, open={shell.JoiningOpen})");
+        ctx.Check(shell.Screen == OriginalScreen.CampaignFlightCheck && !shell.JoiningOpen,
+            $"and the flight check the same ({shell.Screen}, open={shell.JoiningOpen})");
         ctx.Check(StripSeats(shell) == 2, $"its board carries the seat strip naming both seats ({StripSeats(shell)} lines)");
         ctx.Check(StripIsChipRow(shell, out string chips),
             $"drawn as Built-in's chip row, tags in their own seat inks in the top-right corner clear of the book tab ({chips})");

@@ -841,54 +841,8 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   *Fix shape:* re-review `StuntRunHud.cs`/`TargetHud.cs`/`StuntScoreboard.cs` placement once such a type scale exists,
   against it rather than in isolation. *Decision:* author that type scale (one font choice, a size
   scale and a distance-unit convention for chrome the original never painted) as the first step of
-  this item, then re-review against it; the `BL-951` join board stands on the same scale.
+  this item, then re-review against it; the join board's crew manifest stands on the same scale.
   *Cross-refs:* `BL-449`, whose landing prompted this wording.
-
-
-- `BL-951` `[Feature]` `[L]` `[Next: code]` `[Impact: high]` `[Evidence: trace]` **A local
-  multiplayer door on the main menu, opening a join board where every controller claims its seat
-  once and holds it for the whole session, instead of seats being decided implicitly on whichever
-  flight screen happens to open joining.** *Evidence:* joining today is scattered across screens
-  and has no board of its own: `OriginalSeats.JoiningOpen` opens it on Free Flight, Dogfight,
-  Instant Action, the campaign flight check and the controls page, nowhere else, so a player who
-  presses Start anywhere but those five joins nobody and gets no word back. Seat 0 meanwhile
-  borrows every unclaimed pad until it claims one by steering a screen with it
-  (`MenuSeatDevices.ClaimP1Pad`), which means who ends up on which plane is settled by who moved a
-  stick first rather than by anyone saying so, and the binding is only read out at launch
-  (`Launcher.BindMenuPads`). Two bugs came straight out of that implicitness: the claim taking a
-  pad another player had joined on (`git log --grep=BL-949`) and a device blip reshuffling the
-  seats (`git log --grep=BL-950`). *Fix shape:* a door on the top level opening the board, and
-  the board is the only place a pad joins: `OriginalSeats.JoiningOpen` and the Start-to-join
-  gesture go from Free Flight, Dogfight, Instant Action, the campaign flight check and the
-  controls page, so those screens only read the roster. The board is the open scrapbook
-  (`SB_BackGround.jpg`, the `Album` palette), settled on the prototype branch below. Left page,
-  CREW MANIFEST, "four seats, no stowaways": four entries, one per seat, each a chip in the
-  seat's colour with its player tag, then the device name over "signed on", or "open seat" over
-  the A glyph and "to sign on". Every entry is a pad seat; the keyboard is never listed, it holds
-  seat 1 implicitly and the first pad to sign on shares that seat with it. Right page, ARTICLES
-  OF THE CREW, three lines with the pad glyphs inline: "First [A] takes the captain's chair.",
-  "[A] and your name goes in the log.", "[B] and you walk the plank.", then "Captain, press
-  [Start] to cast off.", with BACK and CONTINUE plaques at the page's lower right. A joins (not
-  Start), B on a seated pad gives its seat up and the entries above it stay put, Start on the
-  captain's pad continues, CONTINUE is the same for keyboard and mouse, BACK leaves the board and
-  drops the sign-ons. The roster is what every later screen and the session itself read, so the
-  flight screens stop being where seats are decided. *⚠ Traps:* the prototype draws a glyph on a
-  board line through a prototype-only face tag resolved inside `ComposedBoardView`, and sets the
-  gap after a glyph by hand because a module cannot measure text; the real board needs a glyph
-  route the composed board owns, or the line breaks on another font. Seat 0 keeps the keyboard
-  whatever the board says, so a slot is a pad's claim, not a player's existence. Device loss and
-  reassignment is the part that bites (the linked thread lands on it too, over batteries and
-  devices claimed twice); `MenuSeatDevices`'s guid reconciliation and its grace already carry it
-  for the current flow and should not be reimplemented on the board. *Decision:* build it as the
-  prototype shows; its sizes (26 heading, 17 device, 15 rules, 13 status) are the starting point
-  and the type scale `BL-181` authors overrides them once it exists. *Cross-refs:* branch
-  `proto-bl951-join-board` (the throwaway prototype, `--presentation=original
-  --menu=join-board:c:2` opens the chosen variant with two pads seated; variants a and b are the
-  clipboards it lost to), `SeatStrip.cs` (the chip row that already names seated players),
-  `MenuSeatDevices.cs`, `PlayerSetupFeature.cs`, `docs/controls.md` (the Start row that this
-  retires),
-  https://discussions.unity.com/t/local-multiplayer-player-join-config-screen-using-ui-toolkit/1701038
-  (the pattern as other local co-op games ship it, asked for by name).
 
 - `BL-1016` `[Cleanup]` `[L]` `[Next: decide]` `[Impact: none]` `[Evidence: trace]` **`OriginalOptionsScreen.cs`
   is 2535 lines and 326 members after absorbing four screens; each page becomes its own module
@@ -1059,6 +1013,21 @@ usual.
   holds a roster position without producing input came to take the seat `AssignPads` fills by
   position; `Pads.LogPads` records the roster so the next one reads off the log rather than being
   inferred. Dropping the var also closes that divergence.
+
+- `BL-1036` `[Tooling]` `[S]` `[Next: code]` `[Impact: none]` `[Evidence: trace]` **`ground-contact`
+  run before `instant-action-end` in the same `--run-tests` process makes the second one fail: its
+  aircraft stops moving, so which suites a shard happens to hold decides whether the battery is
+  green.** *Evidence:* `.\RunTests.ps1 -Filter 'suite:ground-contact,suite:instant-action-end'
+  -SkipUnits -SkipGoldens` fails every run on the hold checks, reporting `frames=180 slowest
+  step=0.00 m last=0.00 m boards=1` where the suite wants every frame of the 3 s hold to move.
+  `instant-action-end` passes alone, and passes after each of the other shard-5 predecessors tried,
+  so the pair is the whole condition. Shards are packed from `analysis/engine-suite-weights.json`,
+  which is why adding any suite anywhere can introduce or remove the pairing and the failure looks
+  like a flake. *Fix shape:* find what `ground-contact` leaves in the shared physics space (it
+  builds a collision world and sweeps it) and give the suite a teardown that returns the process to
+  the state the next suite assumes, rather than reordering shards around it. *⚠ Traps:* the
+  symptom is not load or timing; it reproduces on an idle machine with those two suites alone. Do
+  not tune a weight to separate them, that hides the leak and the next added suite re-pairs them.
 
 ## Misc
 

@@ -52,6 +52,10 @@ public enum OriginalScreen
     /// painted into, ABOUT drawn disabled and the DONE plaque.</summary>
     Credits,
 
+    /// <summary>The remake-only join board, the one screen a pad signs onto a seat from
+    /// (<see cref="OriginalJoinBoard"/>).</summary>
+    JoinBoard,
+
     /// <summary>The decoded <c>[@InstantAction@]</c> setup screen: the Table of Contents, the
     /// dropdowns, the paged enemy rows, the radio pair and its buttons.</summary>
     InstantAction,
@@ -211,6 +215,9 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     /// <summary>The Free Flight door's key on the top level.</summary>
     public const string FreeFlightKey = "FREEFLIGHT";
 
+    /// <summary>The join board's door on the top level.</summary>
+    public const string JoinBoardKey = "JOINBOARD";
+
     /// <summary>The Free Flight screen's leave button.</summary>
     public const string BackKey = "BACK";
 
@@ -239,6 +246,9 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     // column is full, so the door stands in the clear left margin at the row pitch's height.
     private const float DoorX = 42f;
     private const float DoorY = 293f;
+
+    // The join board's door, a third plaque under the two sortie doors.
+    private const float JoinBoardDoorY = DoorY + 72f;
 
     // The remake-only screens' list geometry. It is two columns under the logo, one authored text
     // height (STDTEXTH, 16) plus air per row, and the two plaques on the bottom margin.
@@ -367,7 +377,10 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         Func<CSVM.Utils.ScreenList>? screens = null,
         // The shared rebinding feature the CONTROLS door stands over; null draws that door
         // disabled and leaves the two pages behind it unreachable.
-        ControlsFeature? controls = null)
+        ControlsFeature? controls = null,
+        // The pad roster the join board signs pads onto; null draws four open entries and answers
+        // no gesture, which is what an engine-free test sees.
+        IJoinRoster? joinRoster = null)
     {
         _layout = layout ?? throw new ArgumentNullException(nameof(layout));
         _free = free ?? throw new ArgumentNullException(nameof(free));
@@ -386,9 +399,10 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             campaign, _setup, planes, _campaignLayout, this, profiles, _stock, _flightDevices, dataRoot);
         Hangar = hangar != null ? new OriginalHangarScreen(hangar, planes, layout, measure, this) : null;
         Wrapup = new OriginalWrapupScreen(_campaignLayout, measure, this, InstantAction.OpenInstantAction);
+        JoinBoard = new OriginalJoinBoard(layout, this, joinRoster);
         _modules = Hangar != null
-            ? new IOriginalScreenModule[] { InstantAction, Options, Campaign, Hangar, Wrapup }
-            : new IOriginalScreenModule[] { InstantAction, Options, Campaign, Wrapup };
+            ? new IOriginalScreenModule[] { InstantAction, Options, Campaign, Hangar, Wrapup, JoinBoard }
+            : new IOriginalScreenModule[] { InstantAction, Options, Campaign, Wrapup, JoinBoard };
         var plaqueRow = layout.Screen("FlightCheck")?.Widget("FC_B_CHANGEPLANE");
         _plaque = plaqueRow is { Art.Count: > 0 } ? new BoardArt(BoardArtLibrary.Ui, plaqueRow.Art[0], plaqueRow.Frames) : null;
         Inks = ReadInks(layout, plaqueRow);
@@ -507,6 +521,10 @@ public sealed partial class OriginalShell : IOriginalScreenHost
     /// <summary>The module behind the Instant Action wrap-up page, holding the final numbers one
     /// ended mission handed over. It stands empty until a session hands one in.</summary>
     public OriginalWrapupScreen Wrapup { get; }
+
+    /// <summary>The module behind the join board, the one screen a pad signs onto a seat from.
+    /// </summary>
+    public OriginalJoinBoard JoinBoard { get; }
 
     /// <summary>Which campaign board the screen showing wears, or null when it wears none; what
     /// the presentation picks the board's palette by. The campaign's own screens answer for
@@ -1344,6 +1362,9 @@ public sealed partial class OriginalShell : IOriginalScreenHost
                     case DogfightKey:
                         Open(OriginalScreen.Dogfight);
                         break;
+                    case JoinBoardKey:
+                        JoinBoard.Open();
+                        break;
                     case CampaignKey:
                         Campaign.OpenCampaign();
                         break;
@@ -1444,6 +1465,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
             case OriginalScreen.TopLevel:
                 rows.Add(TextButton(FreeFlightKey, "FREE FLIGHT", DoorX, DoorY, true, 0));
                 rows.Add(TextButton(DogfightKey, "DOGFIGHT", DoorX, DogfightDoorY, true, 0));
+                rows.Add(TextButton(JoinBoardKey, "JOIN BOARD", DoorX, JoinBoardDoorY, true, 0));
                 var main = _layout.Screen(OriginalAvailability.MainMenuSection);
                 foreach (string key in TopLevelButtons)
                 {

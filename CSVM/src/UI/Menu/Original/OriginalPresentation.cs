@@ -11,14 +11,15 @@ namespace CSVM.UI.Menu.Original;
 
 /// <summary>
 /// The Original presentation: <see cref="OriginalShell"/> drawn through a <see cref="ComposedBoardView"/>
-/// on the board layer, registered under <see cref="PresentationId.Original"/>. <see cref="Activate"/>
-/// builds the layer on the first call, refreshes the shared roster from the saved-plane store and
-/// stands the shell on the destination's screen on every call; <see cref="Tick"/> keeps the pad
-/// roster in step, claims seat 0's pad while joining is closed, scans the join gesture on the
-/// screens the shell opens it on (<see cref="OriginalShell.JoiningOpen"/>), polls every seat, maps a
-/// pointer from window pixels into the authored space through <see cref="BoardFit"/>, steps the
-/// shell per seat, requests its cues and hands its exit to the host. The OS pointer is hidden
-/// while the presentation is on screen, since the shell draws the original's own.
+/// on the board layer, registered under <see cref="PresentationId.Original"/>, with
+/// <see cref="Activate"/> building the layer on the first call. It refreshes the shared roster from
+/// the saved-plane store and stands the shell on the destination's screen on every call.
+/// Each <see cref="Tick"/> keeps the pad roster in step and reads the join board's sign-on gestures
+/// on the one screen that opens them (<see cref="OriginalShell.JoiningOpen"/>). It then polls every
+/// seat and maps a pointer from window pixels into the authored space through
+/// <see cref="BoardFit"/>. It steps the shell per seat, requests its cues and hands its exit to the
+/// host. The OS pointer is hidden while the presentation is on screen, since the shell draws the
+/// original's own.
 /// </summary>
 public sealed class OriginalPresentation : IMenuPresentation
 {
@@ -109,6 +110,10 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// <summary>The wrap-up aid's argument that shows the seventeen-zone run with a stand-in
     /// photograph per zone, the last one still on its way.</summary>
     public const string InstantActionWrapupLongPhotosAid = "long-photos";
+
+    /// <summary>The aid value that opens the join board, <c>join-board</c> alone for an empty
+    /// manifest or <c>join-board:N</c> with that many entries posed as signed on.</summary>
+    public const string JoinBoardAid = "join-board";
 
     /// <summary>The aid value that opens the hangar's name screen on a fresh build.</summary>
     public const string PlaneNameAid = "plane-name";
@@ -337,7 +342,8 @@ public sealed class OriginalPresentation : IMenuPresentation
                 options: () => OptionsStore.UserOptions().Load(),
                 screenSizes: ResolutionSetting.ScreenSizes,
                 screens: MonitorSetting.Screens,
-                controls: host.Features.TryGet<ControlsFeature>(out var controls) ? controls : null);
+                controls: host.Features.TryGet<ControlsFeature>(out var controls) ? controls : null,
+                joinRoster: _devices);
             _controlsSeats = host.Features.TryGet<ControlsFeature>(out var rebinds) ? new MenuControlsSeats(rebinds) : null;
             _palette = PaletteFor(_shell.Inks);
             _preferencesPalette = PaletteFor(_shell.PreferencesInks, _shell.Inks);
@@ -492,7 +498,7 @@ public sealed class OriginalPresentation : IMenuPresentation
                     // The screen opens on one life, so neither the unlimited reading nor a count
                     // above one is a state a plain shot of it can show.
                     _shell.InstantAction.OpenInstantAction();
-                    _shell.InstantAction.PoseLives(AidLives(lives));
+                    _shell.InstantAction.PoseLives(AidCount(lives));
                     break;
                 case InstantActionWrapupAid:
                     _shell.Wrapup.ShowWrapup(InstantActionWrapupPage.Sample(won: true));
@@ -508,6 +514,12 @@ public sealed class OriginalPresentation : IMenuPresentation
                     break;
                 case InstantActionWrapupAid + ":" + InstantActionWrapupLongPhotosAid:
                     _shell.Wrapup.ShowWrapup(WithSamplePhotos(InstantActionWrapupPage.LongSample(), pending: 1));
+                    break;
+                case JoinBoardAid:
+                    _shell.JoinBoard.Open();
+                    break;
+                case string board when board.StartsWith(JoinBoardAid + ":", StringComparison.Ordinal):
+                    _shell.JoinBoard.Pose(AidCount(board));
                     break;
                 case PlaneNameAid:
                     _shell.OpenHangar();
@@ -587,12 +599,8 @@ public sealed class OriginalPresentation : IMenuPresentation
         }
 
         _devices!.Sync(0f);
-        _devices.PrimeJoins();
+        _devices.PrimeBoard();
         _joiningOpen = _shell.JoiningOpen;
-        if (!_joiningOpen)
-        {
-            _devices.ClaimP1Pad();
-        }
 
         _layer.Visible = true;
         _shown = true;
@@ -611,19 +619,23 @@ public sealed class OriginalPresentation : IMenuPresentation
         bool joining = _shell.JoiningOpen;
         if (joining && !_joiningOpen)
         {
-            _devices.PrimeJoins();
+            _devices.PrimeBoard();
         }
 
         _joiningOpen = joining;
+        // The board's gestures are read raw off the pads, a pad with no seat having no commands to
+        // read. Nowhere else does a button reach the roster: seat 0 no longer claims a pad by
+        // steering with it.
+        bool signing = false;
         if (joining)
         {
-            changed |= _devices.ScanJoins();
-        }
-        else
-        {
-            // While joining is closed the pad steering seat 0 becomes seat 0's for good, so once a
-            // screen opens joining every other pad is unambiguously a joiner.
-            changed |= _devices.ClaimP1Pad();
+            var scan = _devices.ScanBoard();
+            changed |= scan.Moved;
+            signing = scan.Pressed;
+            if (scan.Cast)
+            {
+                changed |= _shell.JoinBoard.CastOff();
+            }
         }
 
         // Before the poll, so a pad that joined this frame already has its player row and a seat
@@ -643,6 +655,15 @@ public sealed class OriginalPresentation : IMenuPresentation
         for (int i = 0; i < _host.Seats.Count; i++)
         {
             var commands = _host.Seats[i].Poll(dt);
+
+            // ⚠ A board gesture is not also a press on its plaques. Seat 0 reads every pad nobody
+            // holds, so the same A would arrive here as Accept and arm CONTINUE under it. The
+            // keyboard and the mouse still drive the plaques on any frame no gesture landed in.
+            if (i == 0 && signing)
+            {
+                commands = commands with { Accept = false, Back = false, Join = false };
+            }
+
             if (commands.Pointer is { } pointer)
             {
                 commands = commands with
@@ -773,9 +794,10 @@ public sealed class OriginalPresentation : IMenuPresentation
 
     private static Color ToColor(MenuLayoutColor c) => new(c.R / 255f, c.G / 255f, c.B / 255f, 1f);
 
-    // The lives aid's count: the digits after a further colon, else 0, the unlimited reading. The
-    // feature clamps a count past its cap, so an out-of-range aid poses the cap rather than failing.
-    private static int AidLives(string aid)
+    // An aid's trailing count: the digits after its last colon, else 0 (the lives aid's unlimited
+    // reading, the board's empty manifest). Each aid clamps its own, so an out-of-range argument
+    // poses the nearest state rather than failing.
+    private static int AidCount(string aid)
     {
         int colon = aid.LastIndexOf(':');
         return colon > 0 && int.TryParse(
@@ -1036,12 +1058,13 @@ public sealed class OriginalPresentation : IMenuPresentation
     {
         if (_shell != null && _view != null)
         {
-            // Paper pages write in authored black, the loadout in the ammo form's palette, the hub
-            // in its own inks, the three options pages in the Preferences page's, a campaign screen
-            // in its shared board component's palette, and the rest in the file-wide inks.
+            // Each family writes in its own palette. Paper pages take authored black, the loadout
+            // the ammo form's and the join board the scrapbook's. The options pages take the
+            // Preferences page's, the hub its own inks, a campaign screen its board component's.
             var palette = _shell.Screen is OriginalScreen.InstantAction or OriginalScreen.InstantActionWrapup
                     or OriginalScreen.HangarInventory ? _paperPalette
                 : _shell.Screen == OriginalScreen.InstantActionLoadout ? BoardPalette.Paper
+                : _shell.Screen == OriginalScreen.JoinBoard ? OriginalJoinBoard.Palette
                 : _shell.Screen is OriginalScreen.Options or OriginalScreen.GameOptions or OriginalScreen.Audio
                     or OriginalScreen.Video or OriginalScreen.ControlsPrefs or OriginalScreen.Keys ? _preferencesPalette
                 : _shell.IsHangarScreen ? _hangarPalette

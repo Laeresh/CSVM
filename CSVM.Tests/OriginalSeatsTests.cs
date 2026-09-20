@@ -195,7 +195,7 @@ public class OriginalSeatsTests
         // The map picked, the hint stops naming it.
         var map = shell.Rows.Single(r => r.Key == "C1");
         Click(shell, map.X + 4f, map.Y + 4f);
-        Assert.Contains(shell.Compose().Lines, l => l.Text == "FLY when ready, or press START on a free pad to join");
+        Assert.Contains(shell.Compose().Lines, l => l.Text == "FLY when ready");
 
         // A Dogfight short of its second seat names that seat even with no map picked, the press
         // being further off than one press.
@@ -254,7 +254,7 @@ public class OriginalSeatsTests
         Assert.Equal(3, Assert.IsType<LaunchExit>(last.Exit).Seats.Count);
         Assert.Equal(OriginalScreen.FreeFlight, shell.Screen);
         Assert.True(Fly(shell).Enabled);
-        Assert.Contains(shell.Compose().Lines, l => l.Text == "FLY when ready, or press START on a free pad to join");
+        Assert.Contains(shell.Compose().Lines, l => l.Text == "FLY when ready");
     }
 
     [Fact]

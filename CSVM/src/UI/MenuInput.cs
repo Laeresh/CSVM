@@ -208,6 +208,17 @@ public sealed class MenuInput
     public static bool JoinPressed(int pad) =>
         !CSVM.Pads.InputBlocked && Input.IsJoyButtonPressed(pad, JoyButton.Start);
 
+    /// <summary>Whether a pad is pressing A, the join board's sign-on gesture. Raw and static for
+    /// the reason <see cref="JoinPressed"/> is: the pad has no player until it signs on, so no
+    /// seat's bindings can answer for it.</summary>
+    public static bool SignOnPressed(int pad) =>
+        !CSVM.Pads.InputBlocked && Input.IsJoyButtonPressed(pad, JoyButton.A);
+
+    /// <summary>Whether a pad is pressing B, the board's sign-off gesture. Raw for the same reason:
+    /// the answer must name the pad that moved, not the seat that holds it.</summary>
+    public static bool SignOffPressed(int pad) =>
+        !CSVM.Pads.InputBlocked && Input.IsJoyButtonPressed(pad, JoyButton.B);
+
     /// <summary>One frame of one cursor axis: a fresh press or a direction flip fires immediately
     /// and arms the initial delay, a held direction repeats on the timer, and letting go releases
     /// it. Public so the d-pad shape unit-tests (the repo takes public members over

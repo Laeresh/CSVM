@@ -48,8 +48,15 @@ public sealed record ControlLine
     /// <summary>The whole line in words, the reading that does not depend on a glyph set.</summary>
     public string Text { get; }
 
-    /// <summary>Whether there is anything at all to draw.</summary>
-    public bool IsEmpty => Text.Length == 0;
+    /// <summary>Whether there is anything at all to draw. A line whose only content is its glyph
+    /// still draws, which is what a board line with the picture alone in it is.</summary>
+    public bool IsEmpty => Text.Length == 0 && Glyph == null;
+
+    /// <summary>The glyph itself between two runs of words, a board line's own prompt. It is for a
+    /// caller naming a control directly rather than filling a message template. The fallback is
+    /// empty, so a set drawing no picture leaves the two runs butted together.</summary>
+    public static ControlLine Around(string prefix, string suffix, GlyphKey glyph) =>
+        new(prefix ?? string.Empty, string.Empty, suffix ?? string.Empty, glyph);
 
     /// <summary>A line with no control in it, which is what a fallback wording with nothing bound
     /// to name reads as.</summary>

@@ -149,14 +149,17 @@ The seats themselves are the `PlayerSetupFeature`'s. Once that feature is regist
 `MenuHost.Seats` is its live source list, `MenuHost.AddSeat` joins through it, and a join made
 anywhere shows up in every presentation's `Seats` read. The pad side (`MenuSeatDevices`,
 `CSVM/src/UI/MenuSeatDevices.cs`) is presentation-side and shared by both: seat 0's claimed pad,
-hotplug reconciliation, the Start-to-join scan (each presentation decides on which screens it is
-open), and `FlightPads`, the binding a launch carries per seat. Both presentations call
-`ClaimP1Pad` every frame while joining is closed (Built-in off its Plane screen, Original wherever
-`OriginalShell.JoiningOpen` is false), so the pad seat 0 steers with is seat 0's for good and can
-never join as a further seat. Original opens joining on the four screens that launch a flight
-(Free Flight, Dogfight, Instant Action and the campaign flight check) and, once a second seat has
-joined, draws a seat strip over every campaign board and over the Instant Action screen as an
-overlay; a solo campaign shows the authored board alone. That strip is Built-in's own chip row, the
+hotplug reconciliation, the gesture scans (each presentation decides on which screens they are
+open), and `FlightPads`, the binding a launch carries per seat. Built-in keeps the Start-to-join
+scan (`PrimeJoins`/`ScanJoins`) on the screens that launch a flight and calls `ClaimP1Pad` every
+frame off its Plane screen, so the pad seat 0 steers with is seat 0's for good and can never join
+as a further seat. Original signs pads on at one screen only, the join board (`OriginalJoinBoard`,
+behind the top level's JOIN BOARD door), through `PrimeBoard` and `ScanBoard`: A signs a pad onto
+the next open seat, B on a seated pad gives that seat back, and the captain's Start casts off.
+`OriginalShell.JoiningOpen` is true on the board alone, so the screens that launch a flight (Free
+Flight, Dogfight, Instant Action and the campaign flight check) only read the roster the board
+wrote. Once a second seat has signed on, Original draws a seat strip over every campaign board and
+over the Instant Action screen as an overlay; a solo campaign shows the authored board alone. That strip is Built-in's own chip row, the
 player tags alone in the top-right corner each in its seat's identity colour over a dark ground
 (`CSVM/src/UI/SeatStrip.cs` holds the shape the two share, and the Instant Action screen asks for
 the more opaque ground its light paper needs). The sortie screens keep their own strip lower down,
@@ -537,7 +540,8 @@ standing open, the one leaf list whose sizes can outrun the window its row autho
 `controls`, `keys` and `keys:<category>` with the KEYS AND BUTTONS page standing on the tab of that
 name (spaces and case ignored), `keys:other` being the one category that outruns its list window and
 `keys:targeting` the eleven targeting actions, `credits` and
-`credits:about` with the About box standing over it, the
+`credits:about` with the About box standing over it, `join-board` on the crew manifest with nobody
+signed on and `join-board:<pads>` with that many entries posed as signed on, the
 `plane-*` hangar poses with `plane-construction:open` standing the airframe list open on a row the
 hub's figures preview, `plane-construction:overweight` on a build past its capacity,
 `plane-construction:defaults` with the airframe swap's three-button question standing over an

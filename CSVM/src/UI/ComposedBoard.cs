@@ -253,13 +253,16 @@ public sealed record BoardPicture(
 public sealed record BoardStroke(
     float X1, float Y1, float X2, float Y2, byte R, byte G, byte B, float Opacity = 1f);
 
-/// <summary>A rectangle in an authored ARGB colour, which is a list widget's own
-/// <c>ldrawrect</c>/<c>ldrawframe</c> pair: the table of contents draws a row's picked and focused
-/// states with nothing else. <paramref name="Border"/> draws the one-pixel outline instead of the
-/// fill, and <paramref name="Opacity"/> is the colour's own alpha byte.</summary>
+/// <summary>A rectangle in an authored ARGB colour, a list widget's own
+/// <c>ldrawrect</c>/<c>ldrawframe</c> pair. The table of contents draws a row's picked and focused
+/// states with nothing else. The <paramref name="Border"/> flag draws the one-pixel outline instead
+/// of the fill, and the <paramref name="Opacity"/> is the colour's own alpha byte. An
+/// <paramref name="Ink"/> takes the palette's colour instead of the three bytes, which is what a
+/// seat chip wants. The identity colours then stay in the renderer rather than being turned into
+/// bytes by every composer that paints one.</summary>
 public sealed record BoardFill(
     float X, float Y, float Width, float Height, byte R, byte G, byte B, float Opacity = 1f,
-    bool Border = false);
+    bool Border = false, BoardInk? Ink = null);
 
 /// <summary>One button plaque: its art strip, its authored top-left, the page row it presses, the
 /// strip frame to draw and the label to write over it. <see cref="Label"/> is empty where the art
@@ -288,10 +291,20 @@ public sealed record BoardLine(
     bool Italic = false, BoardJustify Justify = BoardJustify.Left, BoardCaret? Caret = null,
     bool Bold = false, float Leading = 0f, LanguiFace? Face = null, BoardTint? Colour = null)
 {
+    /// <summary>Where <see cref="Glyph"/> is drawn inside <see cref="Text"/>. A control character,
+    /// so no authored string carries one.</summary>
+    public const string GlyphSlot = "\u0001";
+
     /// <summary>The authored box height a wrapped block is asked to fit inside, 0 for a line
     /// drawn at its own size whatever it comes to. A block taller than this is stepped down a
     /// point at a time by the renderer, which is the only half that can measure it.</summary>
     public float Height { get; init; }
+
+    /// <summary>The pad control drawn where <see cref="GlyphSlot"/> stands in the text, or null for
+    /// a line of words alone. ⚠ The gap after the glyph is the renderer's, since only it can measure
+    /// the picture. A composer that spaces the words itself breaks the line on another face. A line
+    /// carrying one is drawn unwrapped and unjustified for the same reason.</summary>
+    public GlyphKey? Glyph { get; init; }
 }
 
 /// <summary>

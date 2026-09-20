@@ -201,7 +201,7 @@ sit over the background and stay under the page's pictures, where a selection ba
 is a widget's entries plus its wrap box (cut at a word where the box has no room for the rest, shrunk
 to a face the whole list fits in, or no box at all where the widget's own list stops nowhere), its
 marks, and `BoardCaret` an edit box's cursor on the line it follows, all placed by a caller that can measure text. A `BoardLine` carrying a `Height` names the box its block is fitted to, the renderer stepping its face down until the block fits, since only the renderer can measure. `PlaqueFrame` and `PlaqueInk` are a plaque's states, and a plaque whose art leaves
-part of its frame empty carries its label's own baseline. `BoardArt` names a file and its frame count and the renderer resolves it; one of its libraries is a movie, so a background film reaches the backdrop with no engine type here, and one is an image already in memory (`Held`), a stunt photograph's thumbnail. `BoardCrop` takes a region of the source instead of the whole frame, which is a chart sheet's own window.
+part of its frame empty carries its label's own baseline. `BoardArt` names a file and its frame count and the renderer resolves it; one of its libraries is a movie, so a background film reaches the backdrop with no engine type here, and one is an image already in memory (`Held`), a stunt photograph's thumbnail. `BoardCrop` takes a region of the source instead of the whole frame, which is a chart sheet's own window. A `BoardLine` carrying a `Glyph` names the pad button drawn where `GlyphSlot` stands in its text, the renderer owning the gap after the picture since only it can measure one, and a `BoardFill` carrying an `Ink` takes the palette's colour instead of three bytes, which is what a seat chip paints with.
 
 ## src/UI/CampaignBoards.cs
 The fixed chrome of all eight campaign screens, plus the composer that turns a page and a cursor
@@ -239,7 +239,7 @@ extraction roots, and caches a miss so an absent extraction is probed once per n
 to a `MovieSurface`, whose one texture the cache holds and the surface rewrites in place, so the
 picture animates with nothing invalidated; a held image gets one texture per image, dropped once a shown board stops drawing it; `AdvanceMovies` runs their clocks off the caller's own step and
 `AdvanceCaret` blinks a text cursor off it, each saying whether to repaint. A line naming a `LanguiFace` draws in that installed Windows face, cached per tag, and keeps the board's own where the machine lacks it; a pitched block honours authored line breaks and indents and justifies as a whole, its lines left-aligned under the widest. Supplies the font metric a flowed
-`BoardNote` and a caret cannot take, `Fitted` shrinking a note's face until its list fits its box rather than losing a row and stepping a `BoardLine` carrying a box height down a point at a time until its wrapped block fits, `Block` being that measurement on its own, the two-line hint band a pad needs, and `ArtSize` for a caller that must clip against a bitmap's own authored width. `PresentMoving` is the one repaint a caller holding the frame loop can still make: its pictures go on a canvas item of the view's own, fitted by the same maths and re-fitted on a resize, rather than through a queued redraw callback the blocked loop would never reach, so a load screen's build can move the bar it draws.
+`BoardNote` and a caret cannot take, `Fitted` shrinking a note's face until its list fits its box rather than losing a row and stepping a `BoardLine` carrying a box height down a point at a time until its wrapped block fits, `Block` being that measurement on its own, the two-line hint band a pad needs, and `ArtSize` for a caller that must clip against a bitmap's own authored width. `PresentMoving` is the one repaint a caller holding the frame loop can still make: its pictures go on a canvas item of the view's own, fitted by the same maths and re-fitted on a resize, rather than through a queued redraw callback the blocked loop would never reach, so a load screen's build can move the bar it draws. A line carrying a glyph is drawn through `ControlLine`, the composition the flight prompts already use, so the picture and the gap around it are measured in one place and a board composer never spaces them itself.
 
 ## src/UI/CinemaScreen.cs
 One cinema on screen: a `CinemaPlayback`, the `ImageTexture` its pictures upload into, and the
@@ -375,6 +375,8 @@ because they decide when a control fires rather than what it looks like. `Contro
 swappable set (which controls it draws, how wide one is at a line's height, how to draw one) and
 `ControlGlyphs.Set` the one holder every composing site reads, so replacing the whole look is one
 assignment. The shipped `PromptFontGlyphs` draws pad controls as characters of PromptFont (SIL OFL 1.1, `CSVM/data/promptfont.ttf.bin`): its controller-neutral glyphs for the face buttons (the four-button cluster with the pressed one filled), the d-pad, the stick directions and clicks and the three menu buttons, and its Xbox-lettered shoulders and triggers, the font having no neutral ones. A button with no glyph, or every control when the font file is missing, draws as a lettered plaque; it declines keys, mouse buttons and hats, which is how a keyboard seat keeps `BindingLabels`' words. The file carries an extension Godot does not import and is read as bytes, so an export's `--import` leaves the tree clean and `export_presets.cfg`'s include filter packs it. The original ships no such art, so the set and its size on the line are judgements at the controls, not a decode.
+`PadA`, `PadB` and `PadStart` are the three buttons named outright rather than through a binding, which is what the
+join board's gestures need: a pad with no seat has no keymap for `For` to look a prompt up in.
 
 ## src/UI/ControlLine.cs
 One prompt line with one control in it, and the row of them a board's footer is. `Compose` fills the
@@ -384,7 +386,7 @@ is ever built by concatenation; `Text` is the whole line in words, which is what
 reads. `For` picks the binding through `ActiveDevice.PromptBinding`, so one seat names one device.
 `Draw` writes a glyph-less line as a single string, the way a plain label always drew it, and only a
 line carrying a glyph is drawn in parts. `ControlHintBar` lays several lines out in a row and
-centres them in its own box; its items are composed one at a time so the device gate holds per item.
+centres them in its own box; its items are composed one at a time so the device gate holds per item. `Around` builds the same line from a prefix, a suffix and a control named outright, for a caller writing its own words rather than filling a message template, and a line whose only content is its glyph still counts as something to draw.
 
 ## src/UI/BoardMenuView.cs
 Draws a `BoardMenu`'s rows as `CursorRow`s inside the board style all five boards share, so the
@@ -429,7 +431,7 @@ context (`src/Bindings/`) from three readings of one seat: keyboard live, keyboa
 typeable keys, and the pad alone. Its pad rows sit on the seat-local `SeatPads` identity, since a
 seat reads a set of pads and no binding may hold a connection index. `Typed` and `Erase` serve a
 text field, `PadMove`/`PadMoveX` are the axes such a screen reads instead, since W, A, S and D
-are letters there. `TypeableKeys` is deliberately wider than any box's accept rule, and Shift gives each key its US-layout shifted character. `Device` and `DeviceMoved` come from an `ActiveDevice` over a fourth reading, the keyboard half alone, so a board hint names the side the seat last used and knows the tick it changed; `Hint` composes one such line. Wrapped by `Menu/BuiltIn/BuiltInSeat.cs`, bound by `MenuSeatDevices`; it also serves the in-flight boards.
+are letters there. `TypeableKeys` is deliberately wider than any box's accept rule, and Shift gives each key its US-layout shifted character. `Device` and `DeviceMoved` come from an `ActiveDevice` over a fourth reading, the keyboard half alone, so a board hint names the side the seat last used and knows the tick it changed; `Hint` composes one such line. Wrapped by `Menu/BuiltIn/BuiltInSeat.cs`, bound by `MenuSeatDevices`; it also serves the in-flight boards. Beside all of that stand three static raw pad reads, `JoinPressed`, `SignOnPressed` and `SignOffPressed` for Start, A and B: a pad no seat owns has no keymap, so nothing bound can answer for the join gesture or the join board's two.
 
 ## src/UI/HudLayers.cs
 The canvas-layer ordering for everything drawn over the 3D view, in one place, so "does the collider
@@ -924,7 +926,7 @@ missions with every objective bit set, plus the scratch build store the export a
 The Original presentation's screen graph (`CSVM.UI.Menu.Original`), engine-free over `MenuLayout` and the shared Free Flight, player-setup,
 Instant Action, hangar and campaign features, with the art measurer and the flight-devices answer injected. It owns the top level composed
 from `[MainMenu]`'s own rows, the two remake-only sortie screens, the Options hub over the decoded Preferences chrome, and the messagebox
-idiom every refusal and confirm goes through, whose box, `RaiseDialog` and answer keys are its own `OriginalShellDialog.cs` partial; the sortie and credits screens are its own partials, below, while the campaign, hangar, Instant Action and option families stand outside them as `OriginalCampaignScreen.cs`, `OriginalHangarScreen.cs`, `OriginalInstantActionScreen.cs` and `OriginalOptionsScreen.cs`. Each is held as one `IOriginalScreenModule` in a list and reaches back through `IOriginalScreenHost` (`OriginalScreenHost.cs`); `ModuleFor` answers which module owns the screen showing, so `BuildRows`, `Lists`, the sideways step, the dropdown close, `Activate`, `Back` and `Compose` name a module through that one lookup rather than a field and a screen-range check per family, and `Campaign`, `Hangar`, `InstantAction` and `Options` are the typed accessors the presentation and the suites read module-specific state through, the seat walk and the shell's own hangar and seat-strip members reaching campaign state through the first of them. `Step` applies one seat's frame, `Compose` is
+idiom every refusal and confirm goes through, whose box, `RaiseDialog` and answer keys are its own `OriginalShellDialog.cs` partial; the sortie and credits screens are its own partials, below, while the campaign, hangar, Instant Action, join-board and option families stand outside them as `OriginalCampaignScreen.cs`, `OriginalHangarScreen.cs`, `OriginalInstantActionScreen.cs`, `OriginalJoinBoard.cs` (behind the top level's remake-only JOIN BOARD door) and `OriginalOptionsScreen.cs`. Each is held as one `IOriginalScreenModule` in a list and reaches back through `IOriginalScreenHost` (`OriginalScreenHost.cs`); `ModuleFor` answers which module owns the screen showing, so `BuildRows`, `Lists`, the sideways step, the dropdown close, `Activate`, `Back` and `Compose` name a module through that one lookup rather than a field and a screen-range check per family, and `Campaign`, `Hangar`, `InstantAction`, `JoinBoard` and `Options` are the typed accessors the presentation and the suites read module-specific state through, the seat walk and the shell's own hangar and seat-strip members reaching campaign state through the first of them. `Step` applies one seat's frame, `Compose` is
 the screen as a `ComposedBoard` whose backdrop takes a section's `movie` row at its bottom, and every page's row kinds live here,
 `OriginalSlider` among them. A pointer press arms a row and only the release still on it activates (`ArmedKey`), on an edit box taking the
 caret alone where Accept in one reaches the screen's own commit; the pointer's bitmap answers an enter or leave (`PointerLive`); and a film
@@ -1010,13 +1012,23 @@ no arm here. ABOUT raises the messagebox in its `ma_` set, centred on its own ba
 langui 1301 over the product id; the script's hidden line shows while the pointer's secondary button
 is held in its region. The screen: [../org/menu-inventory.md](../org/menu-inventory.md).
 
+## src/UI/Menu/Original/OriginalJoinBoard.cs
+The join board, one standalone module behind the top level's remake-only JOIN BOARD door and the only screen a pad signs onto a
+seat from. It draws as the open scrapbook (`SB_BackGround.jpg`, the `Album` palette): the CREW MANIFEST down the left page, one
+entry per seat carrying that seat's identity chip and player tag and either the device name over "signed on" or the open seat
+over the press that takes it, and the ARTICLES OF THE CREW down the right, three rules and the captain's cast-off line whose pad
+buttons are drawn inline through `BoardLine.Glyph`. The gestures are `MenuSeatDevices`'s (`PrimeBoard`/`ScanBoard`), read raw off
+the devices because a pad with no seat has no commands to read; CONTINUE keeps the manifest and BACK drops every sign-on. The
+keyboard is never listed, since it holds seat 1 whatever the manifest says and the first pad to sign on shares that seat, and
+`Pose` fills the entries for a screenshot with nobody at the controls: [../menu-presentations.md](../menu-presentations.md).
+
 ## src/UI/Menu/Original/OriginalSeats.cs
 The shell's two sortie screens, Free Flight and Dogfight, over the shared player setup, plus the
 seat rules every screen shares. Rows: the chapter column and BACK, then the aircraft column over
 the setup's roster (an eleven-row sliding window) and FLY. Seat 0 alone drives these screens; each
 joined seat then picks on its own screen (`OriginalSeatPlane.cs`). FLY is enabled once the mode's
 gate is met and leaves as the mode's own typed exit, which the walk's last confirm reaches for it.
-`JoiningOpen` is the per-screen joining rule the presentation reads, and `CampaignSeatPanel` the
+`JoiningOpen` is the per-screen joining rule the presentation reads, true on the join board alone, so these screens read the roster that board wrote and take no join gesture of their own. `CampaignSeatPanel` is the
 seat strip the campaign boards and the Instant Action screen take as an overlay once a second seat
 has joined, Built-in's chip row on `SeatStrip`'s shared shape. Remake-only by design: [../org/menu-inventory.md](../org/menu-inventory.md).
 
@@ -1071,8 +1083,8 @@ their strings: [../org/menu-inventory.md](../org/menu-inventory.md).
 The Original presentation node, registered under `PresentationId.Original`: a `CanvasLayer` on the board layer holding one
 `ComposedBoardView`, so every screen scales as the campaign boards do. `Activate` builds the shell and the device
 bookkeeping once, refreshes the roster from the saved-plane store on every call, stands the shell on the top level, maps the
-return destination onto it and applies the `--menu=` aid on the first show. `Tick` keeps the pads in step (seat 0's claim
-while joining is closed, the join scan while the shell opens it), polls every seat, maps a window-pixel pointer into the
+return destination onto it and applies the `--menu=` aid on the first show. `Tick` keeps the pads in step (the board's sign-on scan
+while the shell stands on the join board, and that frame's presses dropped from seat 0's commands, since seat 0 borrows every unheld pad and would otherwise read the same A as Accept), polls every seat, maps a window-pixel pointer into the
 authored space, steps the shell, requests its cues, states the AUDIO page's mix while that page is open and ends the
 preview on every door out and on `Hide`, drives the briefing's reveal, and runs the board's movies on the step the host was given,
 `DebugPointer` standing in for seat 0's pointer when the screenshot aid asks. A `ShotViewer` over the view follows the wrap-up page's `Viewing` photograph. The shell's art sizes come from `OriginalArtSizes`; `PaletteFor` is the inks, and `CabinPalette` writes the cabin's pull-down in the paper forms' list inks.
@@ -1186,8 +1198,8 @@ The pad side of the shared player setup, for any presentation, over seat 0's `Me
 feature. `P1Pad` is the pad seat 0 claimed by steering a screen with it. `Sync` reconciles the
 seats with the connected pads: a seat whose pad vanished is unjoined, a vanished claimed pad frees
 seat 0, and seat 0's poller is bound to its claimed pad or to every unclaimed one. `PrimeJoins`
-and `ScanJoins` are the join gesture, Start on an unclaimed pad while a seat is free, the caller
-deciding on which screens joining is open. `PadOf` reads a joined seat's pad back off its
+and `ScanJoins` are Built-in's join gesture, Start on an unclaimed pad while a seat is free, the caller deciding on which screens joining is open; `PrimeBoard`, `ScanBoard` and the `BoardScan` it answers with are Original's join board, A signing a pad on, B signing it off and Start on the captain's pad casting off, over `SignOn`, `SignOff`, `IsCaptain` and the `IJoinRoster` the board draws its manifest from. A first sign-on takes `P1Pad` rather than a seat of its own, since the keyboard holds seat 1 whatever the manifest says, and `DropSignOns` is BACK giving every one of them back.
+`PadOf` reads a joined seat's pad back off its
 `BuiltInSeat`, and `FlightPads` is the binding a launch carries, the answer both presentations
 hand the feature's `Choices`. Read `src/UI/Menu/PlayerSetupFeature.cs` for the seats themselves.
 
