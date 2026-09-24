@@ -1,4 +1,5 @@
 using System;
+using CSVM.Utils;
 
 namespace CSVM.Flight;
 
@@ -60,9 +61,9 @@ public static class Difficulty
     /// itself. Null for anything else, so a caller can reject rather than silently pick a tier.</summary>
     public static int? Parse(string? name) => name?.Trim().ToLowerInvariant() switch
     {
-        "normal" or "novice" or "0" => Normal,
-        "hard" or "veteran" or "1" => Hard,
-        "hardest" or "ace" or "2" => Hardest,
+        DifficultyWords.Normal or "novice" or "0" => Normal,
+        DifficultyWords.Hard or "veteran" or "1" => Hard,
+        DifficultyWords.Hardest or "ace" or "2" => Hardest,
         _ => null,
     };
 
@@ -74,10 +75,15 @@ public static class Difficulty
         _ => "Hardest",
     };
 
-    /// <summary>The tier's word as the options file and the <c>--difficulty=</c> flag spell it,
-    /// the campaign selector's label in lower case, so a saved value reads back through
-    /// <see cref="Parse"/> and a player can copy it from the file onto a command line.</summary>
-    public static string Word(int difficulty) => Label(difficulty).ToLowerInvariant();
+    /// <summary>The tier's word as the options file and the <c>--difficulty=</c> flag spell it
+    /// (<see cref="DifficultyWords"/>). A saved value reads back through <see cref="Parse"/>, and
+    /// a player can copy it from the file onto a command line.</summary>
+    public static string Word(int difficulty) => Clamp(difficulty) switch
+    {
+        Normal => DifficultyWords.Normal,
+        Hard => DifficultyWords.Hard,
+        _ => DifficultyWords.Hardest,
+    };
 
     /// <summary>Any integer brought onto the three tiers, the way the engine's own setter is fed
     /// (<c>0 -> 0, 2 -> 2, anything else -> 1</c>).</summary>

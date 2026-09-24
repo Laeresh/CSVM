@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Utils;
 
 namespace CSVM.Flight;
 
@@ -104,9 +105,9 @@ public static class PilotView
     /// breadcrumb a scripted capture reads back matches the argument that asked for it.</summary>
     public static string Name(PilotViewMode mode) => mode switch
     {
-        PilotViewMode.Cockpit => "cockpit",
-        PilotViewMode.Nose => "nose",
-        _ => "chase",
+        PilotViewMode.Cockpit => ViewWords.Cockpit,
+        PilotViewMode.Nose => ViewWords.Nose,
+        _ => ViewWords.Chase,
     };
 
     // One name matched case-insensitively, so --view=Cockpit reads like --view=BACK already does.

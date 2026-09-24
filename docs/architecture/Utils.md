@@ -1,6 +1,6 @@
 # Utils
 
-The things every subsystem depends on: the clock, the log, the seed. Changing one of these changes determinism repo-wide; read `docs/verification.md` first.
+The things every subsystem depends on: the clock, the log, the seed. Changing one of these changes determinism repo-wide; read `docs/verification.md` first. `Utils` is a leaf: no file here names a `Flight`, `Session` or `Effects` type.
 
 One `## src/...` entry per module, body at most 8 lines, 12 for the highest-traffic modules.
 
@@ -211,7 +211,8 @@ and the typed getters (`GetFloat` / `GetInt` / `GetBool` / `GetString`) return t
 a present key, else the caller's in-code `const` default, read through at the point of use. Keys
 are `moduleCamelCase.fieldCamelCase`, grouped one nesting level in the JSON and flattened to
 dot-keys. Nothing writes the file and `config.json` is git-ignored, so the consts stay canonical;
-querying a key is also what registers it for `--dump-config`.
+querying a key is also what registers it for `--dump-config`. `Config` names none of the modules
+that read it: the startup read of every key is `Session/TuningWarmup.cs`.
 
 ## src/Utils/EffectsLevel.cs
 The original's graphics EffectsLevel option as a config key (`graphics.effectsLevel`: `high`,
@@ -283,7 +284,7 @@ Process-wide, version-tolerant JSON persistence for `OptionsDef`: the graphics m
 display settings (monitor index, resolution, display mode, V-Sync), the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in and the automatic head turn. One file, `user://options.json`,
 independent of `Session/CampaignProfileStore.cs`. A missing or malformed file reads as empty, an unknown version invalidates it, an
 unknown value drops only that field, and a field the file does not carry reads as never set, which is why adding a field does not bump
-`Version`. Four reads hold that one contract: a word set (`DisplayWords` holds the two display vocabularies), a shape predicate for the
+`Version`. Four reads hold that one contract: a word set (`DisplayWords`, `DifficultyWords` and `ViewWords` hold the vocabularies, whose resolved tier and view mode belong to `Flight`), a shape predicate for the
 monitor index and the canonical `1920x1080` resolution, `AudioMix`'s 0..100 range for a level, which is `int?` so a saved mute stays
 distinct from never set, and a JSON-kind check for the switch, `bool?` for the same reason. `Save` writes a sibling temp file and renames it. Under `--run-tests`, `UserOptions()` uses an emptied scratch
 directory (`DirectoryOverride`), so no suite touches the player's file; `Launcher.ApplyOptions` is the only writer.

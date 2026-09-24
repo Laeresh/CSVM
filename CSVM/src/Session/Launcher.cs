@@ -750,7 +750,7 @@ public partial class Launcher : Node3D
 
         // Exercises the wired modules once so Config's tuning registry is complete, then flags
         // any config.json key no tunable matched, data-free, so a typo is caught before flight.
-        Config.WarmTuningRegistry();
+        TuningWarmup.Run();
         Config.ReportOrphans();
         // --dump-config: write a fully-populated tuning template (every registered key + its default,
         // nested by block) to the scratch folder and quit, the copy-and-edit source for config.json.

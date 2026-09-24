@@ -40,6 +40,14 @@ and the sink every menu exit takes ([../menu-presentations.md](../menu-presentat
 extraction it shows `UI/NoGameDataScreen.cs`. `LaunchSession`, `ReturnToMenu`, `RestartSession` and
 `BeginLaunch`/`RunOwedLaunch` are every path a session starts or ends on (the load screen stays up past the build while the session's owed build steps run one a frame through `GameSession.StepOwedLoad`, which is what makes it a yield of several frames; a CLI launch has no screen and drains them inside `LaunchSession`), a flight left early comes back to the screen it was launched from (settled by the launch through `MenuReturnDestination.ForLaunch`, not by the exit press), and what the persistent `WorldEnvironment` draws behind all of it is `Utils/WorldBackdrop.cs`'s: black while the menu owns the screen and at the quits that still draw, the sky again at every launch.
 
+## src/Session/TuningWarmup.cs
+The startup pass that fills `Config`'s key registry before `Config.ReportOrphans` and
+`--dump-config` run. `Run` builds a throwaway `FlightModel` and steps it once, reads the
+`HudMetrics` scales, and registers the keys whose reads happen only on a path the launch never
+drives (rocket and tracer tunables, the loadout caps, the `Puffer` scales, the `StartGrid`
+spacing, the graphics keys). It sits in `Session` so that `Utils.Config` names none of the modules
+it serves. A module newly wired to `Config` adds its line here. `Launcher._Ready` is the one caller.
+
 ## src/Session/LiveryResolver.cs
 Resolves which livery each player flies: the shipped paint catalog and the per-pattern
 region-mask library (both lazy and cached), `PatternsForPlane`, and the per-player `SchemeFor`
