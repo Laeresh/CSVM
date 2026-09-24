@@ -182,7 +182,7 @@ public sealed class SceneBuilder
     /// is everywhere, so only the term marks a shader that reads opacity.</summary>
     internal const string OpacityTerm = " * csky_opacity";
 
-    /// <summary>The debug overlays' per-instance tint (<see cref="UI.ClassOverlay"/>), the LAST
+    /// <summary>The debug overlays' per-instance tint (<c>UI.ClassOverlay</c>), the LAST
     /// write fragment() makes to ALBEDO, so a tinted object reads as its class colour at any
     /// distance. <c>mix(x, t, 0.0)</c> is exactly <c>x</c>, so the line changes no pixel while the
     /// overlay is off. ⚠ Do not move this into a <c>MaterialOverride</c>/<c>MaterialOverlay</c>.

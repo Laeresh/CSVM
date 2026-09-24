@@ -8,7 +8,7 @@ Traps do not live here; the rule is in `docs/architecture.md`.
 
 ## src/Effects/Puffer.cs
 The engine's billboard-particle emitter, read from `PUFFER_STATE` blocks by `PufferState.Load` or
-`FromAnimEvent`: `Puffer.Create` bakes the frame atlas and each frame's blend (the texture's additive
+`FromAnimEvent` (`Mech3/PufferState.cs`): `Puffer.Create` bakes the frame atlas and each frame's blend (the texture's additive
 bit) into an `IEmitterRenderer` (`EmitterRenderer.cs`); this class owns only the CPU integration.
 The authored state picks burst, distance-trail or sustained mode; callers drive it through
 `Emit`/`Stop`, `Burst` and the hard-kill `Clear`, and `CreateWith` reaches all three with no atlas,
@@ -22,8 +22,15 @@ stream, authored in `weather.zrd`'s `WIND` block (schema:
 [../formats/weather.md](../formats/weather.md); decode: [../org/weather.md](../org/weather.md)).
 `EffectAmbience` is the seam holding the per-frame state a `Puffer` reads, the wind and every
 pane's camera pose. `GameSession` owns the one instance and `WeatherRig.Tick` writes it per frame;
-the world build takes that same instance by option, so its emitters fade and cull like the player's
-own. `Still` is the camera-less null object an unwired puffer reads. Read `Puffer.cs` next.
+the world build's emitter factory closes over that same instance, so its emitters fade and cull
+like the player's own. `Still` is the camera-less null object an unwired puffer reads. Read `Puffer.cs` next.
+
+## src/Effects/PufferEmitterFactory.cs
+The one real implementation of the animation layer's `IEmitterFactory` seam (`Mech3/Anim/IEmitter.cs`):
+`Create` turns a `PufferState` into a sustained `Puffer` wrapped as an `IEmitter`, parented under
+the world root and reading the session's `EffectAmbience`. The seam is owned below, so the
+animation runtime drives emitters without naming this layer; `GameSession` and the test harness
+hand the factory in through `WorldSession.Options`. A texture-less state is a stub and builds nothing.
 
 ## src/Effects/EmitterRenderer.cs
 `Puffer`'s lower seam. `IEmitterRenderer` takes live particles (`Attach` sizes the pool, `Grow`

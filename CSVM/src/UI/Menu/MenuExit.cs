@@ -62,15 +62,17 @@ public sealed record OptionsApplyExit(
 public sealed record VersusRules(int KillTarget, int TimeLimitMinutes);
 
 /// <summary>A non-campaign launch: the chapter, one <see cref="MenuSeatChoice"/> per joined seat
-/// in seat order, the picked <see cref="MenuMode"/>, for Instant Action only the wizard's built
-/// <see cref="InstantActionDef"/>, and for Dogfight only the match rules (both null otherwise; a
-/// null <paramref name="Match"/> leaves the command line's own kill target and time limit).</summary>
+/// in seat order, and the picked <see cref="MenuMode"/>. Instant Action alone adds the wizard's
+/// built <see cref="InstantActionDef"/> and the wingmen's edited fit (null for the stock fit).
+/// Dogfight alone adds the match rules; a null <paramref name="Match"/> leaves the command
+/// line's own kill target and time limit.</summary>
 public sealed record LaunchExit(
     string Chapter,
     IReadOnlyList<MenuSeatChoice> Seats,
     MenuMode Mode,
     InstantActionDef? InstantAction = null,
-    VersusRules? Match = null) : MenuExit;
+    VersusRules? Match = null,
+    LoadoutChoice? WingmanLoadout = null) : MenuExit;
 
 /// <summary>A campaign mission launch: the seated profile's name, the <c>cm_sequence</c> story
 /// position, and one <see cref="MenuSeatChoice"/> per joined human in seat order. Seat 0 is the

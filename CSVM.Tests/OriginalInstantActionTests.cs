@@ -565,12 +565,12 @@ public class OriginalInstantActionTests
         Assert.Equal(OriginalScreen.InstantAction, host.Screen);
         Assert.Equal("ap", ia.WingmanFit.GunAmmoFor(1));
 
-        // The def carries the wingman fit only where wingmen fly: a squadron with one.
+        // The launch carries the wingman fit only where wingmen fly: a squadron with one.
         ia.SelectMissionType(1);
         ia.SetWingmen(1);
         var exit = Click(host, OriginalInstantActionScreen.FlyMissionKey);
         var launch = Assert.IsType<LaunchExit>(exit);
-        Assert.Same(ia.WingmanFit, launch.InstantAction!.WingmanLoadout);
+        Assert.Same(ia.WingmanFit, launch.WingmanLoadout);
         Assert.Null(Assert.Single(launch.Seats).Fit);
     }
 

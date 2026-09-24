@@ -300,6 +300,10 @@ public sealed record SessionSpec
     /// instead. Only ever carried onto the record here, never loaded or built, the same
     /// purity contract <see cref="IaPath"/> (a path, not a load) already keeps.</summary>
     public InstantActionDef? IaDef { get; private set; }
+    /// <summary>Set only by <see cref="FromMenu"/>: the wingmen's fit from the wizard's loadout
+    /// screen, null for the stock fit and on every CLI launch. Kept beside <see cref="IaDef"/>
+    /// rather than on it because a fit is a flight type the Mech3 def must not name.</summary>
+    public LoadoutChoice? IaWingmanLoadout { get; private set; }
     /// <summary>The <c>--stage=</c> value as given, unvalidated, only "empty" names a stage.
     /// Whether it survived is <see cref="EmptyStage"/>.</summary>
     public string? Stage { get; private set; }
@@ -1494,7 +1498,8 @@ public sealed record SessionSpec
     /// match rules, null where none offers them (<see cref="VsKillsExplicit"/>).</summary>
     public static SessionSpec FromMenu(SessionSpec cli, string chapter, IReadOnlyList<string> planeNodes,
         MenuMode mode, InstantActionDef? iaDef = null, IReadOnlyList<LoadoutChoice?>? loadouts = null,
-        IReadOnlyList<CustomPlaneDef?>? customPlanes = null, int? vsKills = null, int? vsTimeMinutes = null)
+        IReadOnlyList<CustomPlaneDef?>? customPlanes = null, int? vsKills = null, int? vsTimeMinutes = null,
+        LoadoutChoice? iaWingmanLoadout = null)
     {
         var names = planeNodes.ToArray();
         return cli with
@@ -1521,6 +1526,7 @@ public sealed record SessionSpec
                 _ => "zeppelin_run",
             },
             IaDef = iaDef,
+            IaWingmanLoadout = iaDef != null ? iaWingmanLoadout : null,
         };
     }
 
@@ -1546,6 +1552,7 @@ public sealed record SessionSpec
             Stunt = false,
             Versus = false,
             IaDef = null,
+            IaWingmanLoadout = null,
             Mode = SessionMode.Fly,
             WorldMode = true,
             ChapterGiven = true,

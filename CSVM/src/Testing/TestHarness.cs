@@ -751,11 +751,11 @@ public sealed class TestContext
     public IEmitterFactory? EmitterFactory { get; set; }
 
     /// <summary>The ambience the next world this builds hands its real emitter factory, what a game
-    /// session gives from its own instance (<see cref="WorldSession.Options.Ambience"/>). Null (the
-    /// default) leaves the option null, so a suite that never touches this gets still air and no
-    /// camera, the state every other emitter suite reads. Mutable for the reason
-    /// <see cref="EmitterFactory"/> is, and used with <see cref="WithPrivateWorld"/> for the same
-    /// one: a cached world would hand this suite's ambience to every later suite on the chapter.</summary>
+    /// session gives from its own instance (<see cref="WorldSession.Options.ArchiveEmitterFactory"/>).
+    /// Null (the default) builds that factory over still air. A suite that never sets it gets no
+    /// wind and no camera, the state every other emitter suite reads. It is mutable for the reason
+    /// <see cref="EmitterFactory"/> is, and needs <see cref="WithPrivateWorld"/> for the same one.
+    /// A cached world would hand this suite's ambience to every later suite on the chapter.</summary>
     public EffectAmbience? Ambience { get; set; }
 
     /// <summary>Extra sound-group names to prewarm for the next world this builds, a mission's own
@@ -1034,6 +1034,7 @@ public sealed class TestContext
                 SoundsPath, ZrdrPath, Mute, _decode);
             using var textures = archives.Textures;
             using var sounds = archives.Sounds;
+            var ambience = Ambience;
 
             var session = WorldSession.Build(
                 new WorldSession.Options
@@ -1044,14 +1045,15 @@ public sealed class TestContext
                     ZrdrPath = ZrdrPath,
                     InterpPath = InterpPath,
                     MissionZrdrPath = SessionPaths.MissionZrdr(DataRoot, chapter, mission),
+                    ChapterZrdrPath = SessionPaths.ChapterZrdr(DataRoot, chapter),
                     EffectsParent = stage,
                     PlayerPosition = () => Camera.GlobalPosition,
                     Collision = collision,
                     RuntimeSeed = Rng.IntSeedFor(Rng.Anim),
                     EmitterFactory = EmitterFactory,
-                    Ambience = Ambience,
+                    ArchiveEmitterFactory = (tex, parent) => new PufferEmitterFactory(tex, parent, ambience),
                     ExtraPrewarmNames = ExtraPrewarmSoundNames,
-                    CutsceneRoots = CutsceneRoots,
+                    Cutscenes = CutsceneRoots ? CSVM.Session.GameSession.CutsceneWorldNames : null,
                     LandingTriggers = CutsceneRoots,
                     PlanesGamezPath = PlanesGamezPath,
                     Decode = _decode,

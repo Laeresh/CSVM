@@ -2007,7 +2007,7 @@ public partial class Launcher : Node3D
         var (planes, pads, fits, customs) = Unpack(launch.Seats);
         LaunchedFrom(launch);
         _spec = SessionSpec.FromMenu(_cli, launch.Chapter, planes, launch.Mode, launch.InstantAction, fits, customs,
-            launch.Match?.KillTarget, launch.Match?.TimeLimitMinutes);
+            launch.Match?.KillTarget, launch.Match?.TimeLimitMinutes, launch.WingmanLoadout);
         // Step the master so flying again is a new mission rather than a replay: without this every
         // relaunch re-derives the same spawn, opposition and liveries. ⚠ A pinned run must hold
         // still, which is what keeps the goldens and the perf harnesses reproducible.

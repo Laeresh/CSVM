@@ -602,7 +602,7 @@ show the current rung. Objects are picked by box, map-scale meshes (terrain) by 
 `--debug-select` replays a click for a scripted run. A Ctrl-held pick is reported as `CtrlPicked`,
 and a tool may append a line to the breadcrumb through `HudLine`, which is how the export set
 attaches without this service knowing what an export is. `ExtraRoots` walks props parked beside the
-world content; `SubtreeWorldAabb`, `NewBoxInstance` and `DrawBox` are shared with the other tools.
+world content; `SubtreeWorldAabb` (over `Mech3/SubtreeBounds.cs`), `NewBoxInstance` and `DrawBox` are shared with the other tools.
 
 ## src/UI/TargetingOverlay.cs
 The targeting overlay (key F15, `--debug-targets`): a per-frame line from every turret gunner and AI
@@ -798,7 +798,7 @@ narration.
 
 ## src/UI/Menu/MenuExit.cs
 The one typed way out of the menu, handed to `IMenuHost.Exit` and consumed by `Launcher`:
-`LaunchExit` (chapter, per-seat `MenuSeatChoice`, `MenuMode`, optional `InstantActionDef`, and for Dogfight a `VersusRules` of kill target and minutes that an explicit `--vs-kills=`/`--vs-time=` beats),
+`LaunchExit` (chapter, per-seat `MenuSeatChoice`, `MenuMode`, optional `InstantActionDef` with the wingmen's edited fit beside it, and for Dogfight a `VersusRules` of kill target and minutes that an explicit `--vs-kills=`/`--vs-time=` beats),
 `CampaignMissionExit` (profile, `cm_sequence` position, per-seat choices), `QuitExit` and
 `OptionsApplyExit` (the graphics-mode and difficulty words, the four display settings, the four volume levels and the gameplay switches, null where never set).
 An applied choice rides the exit rather than being saved by the screen that took it, so the options file keeps one writer, and a screen
@@ -1230,7 +1230,7 @@ the bans a chapter and stunt flying impose, the eleven airframes, the militias w
 aircraft and wave accent, the skills and the preset table. The setup is typed state with semantic
 operations: select and confirm an environment (which re-fits the mission type and loads the
 chapter's own base def), the mission type, the lives, the four waves, the wingmen, both plane
-picks and a preset. `Refusal`/`CanLaunch`, `BuildDef` and `BuildExit` are the gate and the launch.
+picks and a preset. `Refusal`/`CanLaunch`, `BuildDef`, `LaunchWingmanFit` and `BuildExit` are the gate and the launch.
 `Discard` resets every field. Decode: [../formats/instant-action.md](../formats/instant-action.md).
 
 ## src/UI/MovieSurface.cs

@@ -108,8 +108,8 @@ re-liveries the built plane in place, `BuildDestroyed` builds the wreck subtree 
 plane-root to destroyed transform chain baked in, and `WingFlares`, `DamagePanels` and
 `CockpitDamagePanels` expose the nodes the build collected. A caller building a second aeroplane of one airframe and livery passes the
 `painter` the first composed, so those skins are composed once (PERF-22). `spinningProps` selects the flight propeller set
-(`PropParts.cs`); `Build` also reads `CockpitCameraOffset` off the `cockpit_camera` marker for `CameraController`. `cockpitInterior`
-mounts `cockpit1` hidden at that offset under `InteriorScale` and the fixed head-pitch tilt, then `ParkInteriorStates` walks it, darkening exactly what `reset_bulletholes` does (the `bulNx` hole quads, never the meshless `bulletN` groups over them) plus the two warning lamps. Camera decode: [../org/cameraViews.md](../org/cameraViews.md).
+(`PropParts.cs`); `Build` also reads `CockpitCameraOffset` off the `cockpit_camera` marker, which the flight camera mounts at with the decoded `HeadPitchOffsetRad` tilt this file also owns. `cockpitInterior`
+mounts `cockpit1` hidden at that offset under `InteriorScale` and that same tilt, then `ParkInteriorStates` walks it, darkening exactly what `reset_bulletholes` does (the `bulNx` hole quads, never the meshless `bulletN` groups over them) plus the two warning lamps. Camera decode: [../org/cameraViews.md](../org/cameraViews.md).
 
 ## src/Mech3/PaintScheme.cs
 One aircraft livery: the pattern name, three colours and three decal indices of the `paint_*`
@@ -278,7 +278,7 @@ the launchscreen's Instant Action wizard. The first two funnel through one priva
 key/[values] shape `ZrdrDict` already wraps, so a hand-authored mission parses through exactly the
 path a real chapter's does; the wizard overlays only the fields a pilot can configure onto the
 chosen environment's own `Load` result. `spawn_points` and `dzones` stay in `Flight/SpawnPoints`
-and `Flight/StuntMission`. Every optional key's default: [../formats/instant-action.md](../formats/instant-action.md).
+and `Flight/StuntMission`, and the wingmen's fit rides beside the def (`SessionSpec.IaWingmanLoadout`) since it is a flight type. Every optional key's default: [../formats/instant-action.md](../formats/instant-action.md).
 
 ## src/Mech3/AiSkills.cs
 The AI pilot-skill constants from `player.json`: the `ai_skill_parameters` block as
@@ -316,7 +316,7 @@ The `vehicle.json` def table as an index, next to `Flight/PlaneStats.cs`'s full 
 `AirframeFor` finds the player airframe node an AI def's model is built from (the `p`-prefixed twin
 of the nearest ancestor, else of the chain's `nodename`), `BaseDefForPlayerNode` is its inverse and
 `DerivesFrom` is the variant test `PlaneStats.LoadForAi` enforces. `StartAnimsOf`, `InjureAnimsOf`,
-`WeaponsOf` and `AttackOf` return the nearest authored value up that chain, the last two arming a hull with its def's own gun and giving it the radius its scorer admits candidates inside, `DefaultAttackRadiusM` the decoded 400 m both surface defs fall to for want of an authored `attack` ([../org/aiPilot.md](../org/aiPilot.md)).
+`WeaponsOf` and `AttackOf` return the nearest authored value up that chain, the last two arming a hull with its def's own gun (an `AiWeaponSlot`, defined here) and giving it the radius its scorer admits candidates inside, `DefaultAttackRadiusM` the decoded 400 m both surface defs fall to for want of an authored `attack` ([../org/aiPilot.md](../org/aiPilot.md)).
 Pure over `FromRoot`, pinned in `CampaignRosterPlanTests`.
 
 ## src/Mech3/FogVolumes.cs
@@ -673,12 +673,23 @@ Decode: docs/formats/campaign-sequence.md.
 ## src/Mech3/WorldSession.cs
 Builds one chapter world and binds its `AnimProgram`, the world+anim half of a session build:
 `Build` returns Root, Runtime, Program, Builder, Clutter, CloudDeck and Lights, and stops before
-the per-view steps the caller drives. `Options` is the whole seam: the shared `DecodeCache`, the
-emitter factory a suite substitutes, the session ambience its emitters read, the clutter debug
-switches, the sound-group prewarm names, the callback and trigger hosts, and the cutscene gate
-building `camera1`, the letterbox bars, the composition frames and the `AircraftStage`. It stands
-up the staged props a definition reparents onto placed content, and `ResolveLibraryRoot` is the
-lazy pool behind a call naming a library root, keyed on anchor and event. Read `WorldBuilder.cs`.
+the per-view steps the caller drives. `Options` is the whole seam, and everything above Mech3 comes
+in through it: the chapter zrdr path, the shared `DecodeCache`, the emitter factory a suite
+substitutes and the archive factory that builds the real one, the clutter debug switches, the
+sound-group prewarm names, the callback and trigger hosts, and `CutsceneNames` (the session's
+camera, bars and intro names), whose presence gates `camera1`, the letterbox bars, the composition
+frames and the `AircraftStage`. It stands up the staged props a definition reparents onto placed content, and `ResolveLibraryRoot` is the lazy pool behind a call naming a library root, keyed on anchor and event. Read `WorldBuilder.cs`.
+
+## src/Mech3/PufferState.cs
+One decoded `PUFFER_STATE` block: emission mode and cadence, velocity, size, lifetime, the texture
+flipbook and the fade bands, read by `Load` from an effects reader or by `FromAnimEvent` from a
+compiled anim event. Data only, so the animation layer can carry it across the `IEmitterFactory`
+seam without naming the renderer; `Effects/Puffer.cs` integrates it. Keys: [../formats/effects.md](../formats/effects.md).
+
+## src/Mech3/SubtreeBounds.cs
+A built subtree's world-space extent, the union of its own mesh boxes (`WorldAabb`), skipping any
+node marked `OverlayMeta` so a tool's drawing parked on an object never grows its box. Shared by
+`AnimRuntime`'s effect siting and the inspect tools behind `UI/SelectionService.cs`.
 
 ## src/Mech3/AircraftStage.cs
 The aircraft-archive subtrees a story-mission intro, a hangar or chuteman drop, or a wing-walk

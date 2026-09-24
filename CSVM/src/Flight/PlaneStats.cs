@@ -51,23 +51,6 @@ public sealed class DestroyablePart
     public List<(float Frac, string Anim)> InjureAnims = new();
 }
 
-/// <summary>One entry of an AI vehicle def's <c>weapons</c> block: the authored 5-tuple
-/// <c>[weapon_id, rounds_carried, refire_interval_s, min_range_m, max_range_m]</c>, decoded from the
-/// builder <c>FUN_004b59b0</c> (docs/org/aiPilot/aiWeapons.md). Guns and ordnance share the block;
-/// nothing separates them but the weapon def's own <c>CANNON</c> flag.
-/// ⚠ Five base defs (<c>firebrand</c>, <c>bloodhawk</c>, <c>brigand</c>, <c>fury</c>,
-/// <c>autogyro</c>) author <see cref="RefireSeconds"/> and <see cref="MinRangeM"/> transposed against
-/// all 25 militia variants, so they run a 200-second ordnance refire. That is shipped data: the
-/// original's reader takes element 3 as the interval in every case, and so does this.</summary>
-public sealed class AiWeaponSlot
-{
-    public string WeaponId = "";
-    public int Rounds;
-    public float RefireSeconds;
-    public float MinRangeM;
-    public float MaxRangeM;
-}
-
 /// <summary>One entry of a vehicle def's <c>turrets</c> block: which <c>ai.zrd</c> gunner row
 /// (<see cref="Title"/>, a <c>MSG_TUR_*</c> key) drives which turret-rig subtree
 /// (<see cref="Node"/>, e.g. <c>kestrel_turret1</c>). The block is keyed by VIEWPOINT,

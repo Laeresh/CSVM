@@ -100,7 +100,7 @@ public struct FlightHudState
     public Vector3 InheritedVelocity;
 
     /// <summary>The aircraft's own orientation (<c>FlightModel.Attitude</c>), never the camera's:
-    /// the artificial horizon reads this, not <c>CameraController.HeadPitchOffsetRad</c> or any
+    /// the artificial horizon reads this, not <c>PlaneBuilder.HeadPitchOffsetRad</c> or any
     /// look-around the pilot has applied.</summary>
     public Basis Attitude;
 

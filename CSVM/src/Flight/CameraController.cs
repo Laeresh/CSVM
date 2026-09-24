@@ -63,13 +63,6 @@ public sealed class CameraController
     /// every respawn, the scripted twin of pressing the flyby key.</summary>
     public const int PinnedFlybyView = 11;
 
-    /// <summary>The fixed head-pitch offset <c>FUN_0042d980</c> applies about the same axis as
-    /// elevation, in both first-person views: −4.70° = −0.08203 rad (bit pattern
-    /// <c>0xbda7ff58</c>). Not head-look (C21), a constant tilt baked into the view build.
-    /// It tilts the WORLD view alone, so <see cref="Mech3.PlaneBuilder"/> mounts the cockpit
-    /// interior carrying the same tilt to keep the gunsight on the guns.</summary>
-    public const float HeadPitchOffsetRad = -0.08203f;
-
     // The chase offset's DIRECTION: behind and above the nose, at atan2(4.5, 16) ≈ 15.7° of
     // elevation. Hand-picked and still a TUNE, camparam ships a distance per plane, not an angle,
     // so only the radius below comes from the data.
@@ -340,15 +333,15 @@ public sealed class CameraController
     // property, which reads worse than the one local suppression here.
 #pragma warning disable SA1204
     /// <summary>The pure first-person placement law: <c>camera_world = plane_pos + plane_rotation
-    /// × offset</c>, aimed by the head's own angles, azimuth about the plane's up axis, then
-    /// elevation about the axis that yaw just produced, so a sideways look still pitches through
-    /// the head's own horizon. The fixed −4.70° head-pitch offset rides the same axis as elevation,
-    /// as it does in the original. Static and engine-free so the math is unit-testable without a
-    /// live <see cref="Camera3D"/>, <see cref="FirstPersonView"/> is the thin write onto one.</summary>
+    /// × offset</c>, aimed by the head's own angles. Azimuth turns about the plane's up axis first.
+    /// Elevation then turns about the axis that yaw produced, so a sideways look pitches through
+    /// the head's own horizon. The fixed tilt, <see cref="Mech3.PlaneBuilder.HeadPitchOffsetRad"/>,
+    /// rides the elevation axis as in the original. Static and engine-free so the math is unit-testable;
+    /// <see cref="FirstPersonView"/> is the thin write onto a live <see cref="Camera3D"/>.</summary>
     public static (Vector3 Position, Basis Basis) FirstPersonPose(Vector3 planePos, Basis attitude,
         Vector3 cockpitCameraOffset, float elevation = 0f, float azimuth = 0f) =>
         (planePos + (attitude * cockpitCameraOffset),
-         attitude * new Basis(Vector3.Up, azimuth) * new Basis(Vector3.Right, elevation + HeadPitchOffsetRad));
+         attitude * new Basis(Vector3.Up, azimuth) * new Basis(Vector3.Right, elevation + Mech3.PlaneBuilder.HeadPitchOffsetRad));
 #pragma warning restore SA1204
 
     /// <summary>First-person placement (Cockpit mode 6 / Nose mode 7): rigidly mounted at the

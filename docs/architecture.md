@@ -91,6 +91,8 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/ScriptedPath.cs`, resolves an authored waypoint path (`pp1` → the gamez `pp1_aipath` subtree) into ordered world-space waypoints.
 - `src/Mech3/WorldPartitionGrid.cs`, which gamez nodes a world-space XZ rectangle covers, off the World node's own cell table; the area verb's selector.
 - `src/Mech3/WorldSession.cs`, builds a chapter world and binds its `AnimProgram`, from load through the sound prewarm; `Options` is the whole caller seam.
+- `src/Mech3/PufferState.cs`, one decoded `PUFFER_STATE` block, the authored emitter state an effects renderer reads.
+- `src/Mech3/SubtreeBounds.cs`, a built subtree's world-space extent from its own meshes, skipping a tool's overlay drawings.
 - `src/Mech3/AircraftStage.cs`, stages the aircraft-archive subtrees a cutscene animates into a chapter world's node table, at that chapter's pointer base.
 - `src/Mech3/SessionArchives.cs`, opens the five archives a chapter build needs and the matching `WorldSession.Options` lifetime flags, per `ArchiveIntent`.
 - `src/Mech3/DecodeCache.cs`, the opt-in store of decoded, read-only world inputs keyed by their source paths, so one chapter built many times is decoded once.
@@ -265,6 +267,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 ### `src/Effects/`, particle systems
 
 - `src/Effects/Puffer.cs`, data-driven `PUFFER_STATE` billboard-particle emitter: burst, distance-trail, or sustained at-node modes.
+- `src/Effects/PufferEmitterFactory.cs`, the animation runtime's `IEmitterFactory` seam implemented over `Puffer`, one per built world.
 - `src/Effects/EmitterRenderer.cs`, the `IEmitterRenderer` seam under `Puffer` and the `MultiMesh` billboard-shader renderer behind it.
 - `src/Effects/FogVolumeClutter.cs`, the authored ambient cloud field: `fogvol.zrd` clutter scattered through its `fvol*` volumes, one MultiMesh per kind.
 - `src/Effects/Precipitation.cs`, weather.json rain/snow: one camera-following MultiMesh of flakes or streaks, self-animating on the GPU.

@@ -20,7 +20,7 @@ public sealed partial class CutsceneController : Node
 {
     /// <summary>The gamez node a cutscene definition poses, and the pose every rig camera mirrors
     /// while one plays. Bodiless in the gamez, so the world build stands a marker in for it.</summary>
-    public const string CameraNode = "camera1";
+    public const string CameraNode = CanopyHoleCue.ViewCameraNode;
 
     /// <summary>The gamez node carrying the two black bars, activated by the shared
     /// <c>letterbox</c> definition and pinned to <see cref="CameraNode"/> every tick.</summary>

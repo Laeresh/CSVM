@@ -26,6 +26,11 @@ namespace CSVM.Session;
 /// </summary>
 public partial class GameSession : Node3D
 {
+    /// <summary>The cutscene host's node and definition names, in the world build's shape. A
+    /// session and the test harness both pass this, so they stand up the same cutscene roots.</summary>
+    internal static readonly WorldSession.CutsceneNames CutsceneWorldNames = new(
+        CutsceneController.CameraNode, CutsceneController.BarsNode, CutsceneController.IntroAnims);
+
     private const float HorizonScale = 2.5f;
 
     // The fraction of the camera's far plane the scaled skydome may reach; past it the dome clips
@@ -1296,11 +1301,13 @@ public partial class GameSession : Node3D
                 ZrdrPath = state.ZrdrPath,
                 InterpPath = state.InterpPath,
                 MissionZrdrPath = state.MissionZrdrPath,
+                ChapterZrdrPath = SessionPaths.ChapterZrdr(state.DataRoot, _spec.Chapter),
                 EffectsParent = _worldRoot!,
                 // The one instance the weather rig publishes to and the player's own effects read.
                 // Without it the world's emitters hold the camera-less still-air null object, which
                 // runs neither the authored distance fade nor either of its culls.
-                Ambience = _ambience,
+                ArchiveEmitterFactory = (textures, parent) =>
+                    new Effects.PufferEmitterFactory(textures, parent, _ambience),
                 // The PLAYER_RANGE fallback for a runtime with no PlayerPositions wired: player 1's
                 // camera, resolved per call because none of those cameras exist yet here.
                 PlayerPosition = () => (_rigs.Count > 0 ? _rigs[0].Camera : _camera) is { } cam
@@ -1360,7 +1367,7 @@ public partial class GameSession : Node3D
                 NodeSubtree = state.NodeSubtree,
                 // The cutscene seam, wired before the bootstrap because an intro definition raises
                 // its codes the instant startanims starts it, long before a rig exists.
-                CutsceneRoots = _cutscene != null,
+                Cutscenes = _cutscene != null ? CutsceneWorldNames : null,
                 LandingTriggers = _landings != null,
                 PlanesGamezPath = state.PlanesGamezPath,
                 CallbackHost = _cutscene != null ? _cutscene.Host : null,

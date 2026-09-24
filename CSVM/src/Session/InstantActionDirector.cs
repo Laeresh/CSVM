@@ -265,7 +265,7 @@ public sealed class InstantActionDirector
                     // stock-table branch it lands in also catches enemies on player airframes.
                     var wingman = inputs.Spawn(new AiSpawn(wingmanNode, pos, pos + wmFwd, pilot,
                         wingmanScheme, AimAssist.PlayerTeam, Inert: false, ShippedSkins: false,
-                        Fit: ia.Def.WingmanLoadout, AttackRating: 5, PilotName: slot.TitleKey,
+                        Fit: _spec.IaWingmanLoadout, AttackRating: 5, PilotName: slot.TitleKey,
                         Difficulty: null)); // on the player's team, so the scale never reaches it
                     wingmen[i] = wingman;
                     if (wingman == null)

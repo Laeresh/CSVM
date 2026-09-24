@@ -209,7 +209,7 @@ public sealed class ClutterBuilder
 
     /// <summary>Finds a template root by name. Null when the gamez ships none, which is normal:
     /// C2B registers three templates it does not carry. Static and shared with
-    /// <see cref="CSVM.Effects.FogVolumeClutter"/>, so the two lookups cannot diverge.
+    /// <c>CSVM.Effects.FogVolumeClutter</c>, so the two lookups cannot diverge.
     /// ⚠ Match only parentless nodes. The world carries unrelated leaf nodes under the same
     /// names, and a root hangs off nothing because the boot script loads it by name.</summary>
     public static GameZNode? FindTemplateRoot(GameZ gamez, string name)

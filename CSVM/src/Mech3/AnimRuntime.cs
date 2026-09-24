@@ -1865,7 +1865,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// real transform keeps its origin exactly, and a meshless node has no bounds.</summary>
     internal static Vector3 VisualOriginOf(Node3D node)
     {
-        var box = UI.SelectionService.SubtreeWorldAabb(node);
+        var box = SubtreeBounds.WorldAabb(node);
         if (box.Size.LengthSquared() <= 1e-9f)
             return node.GlobalPosition;
         return box.Grow(1f).HasPoint(node.GlobalPosition) ? node.GlobalPosition : box.GetCenter();

@@ -27,11 +27,11 @@ public sealed partial class SelectionService : Node
     /// Buildings, vehicles and animated props are all well under it. TUNE.</summary>
     public const float MaxPickDiag = 350f;
 
-    /// <summary>Node metadata marking a subtree as another tool's DRAWING rather than world content:
-    /// collider wireframes, normal lines, highlight boxes. Anything carrying it is skipped by the
-    /// pick and by the box measurement, so a debug overlay can be parented onto the object it
-    /// annotates without becoming selectable, or growing the next box measured over it.</summary>
-    public const string OverlayMeta = "csvm_overlay";
+    /// <summary>Node metadata marking a subtree as another tool's DRAWING rather than world content
+    /// (<see cref="SubtreeBounds.OverlayMeta"/>). The pick and the box measurement both skip anything
+    /// carrying it. A debug overlay parented onto the object it annotates is therefore never selectable
+    /// and never grows the next box measured over it.</summary>
+    public const string OverlayMeta = SubtreeBounds.OverlayMeta;
 
     // Smallest edge the highlight box is drawn at, so a meshless pivot rung is still visible. The
     // MEASURED box is what CurrentBox and the log report, only the drawing is grown.
@@ -40,10 +40,6 @@ public sealed partial class SelectionService : Node
     // How many rungs the breadcrumb prints before it elides the middle. The LOG is never elided,
     // a truncated list that drops the rung under test is worse than a long one.
     private const int MaxCrumbs = 9;
-
-    // The same key as a StringName, built once: the string const converts to a fresh finalizable
-    // StringName on every HasMeta call, which the per-node box walk cannot afford.
-    private static readonly StringName OverlayMetaName = OverlayMeta;
 
     // The breadcrumb's text conventions follow NodeLabels: the same amber as a floating node name,
     // because this is the same question ("what is that thing called").
@@ -117,43 +113,10 @@ public sealed partial class SelectionService : Node
 
     // ---- geometry -----------------------------------------------------------------------------
 
-    /// <summary>World-frame union of a subtree's own mesh AABBs. Measured from the subtree itself
-    /// rather than from a shared merge helper, and empty meshes are skipped, so nothing another
-    /// system parked elsewhere in the scene can enter the box. Meshless subtree ⇒ a zero-size box
-    /// at the node's own position. Public because every inspect tool wants this measurement and
-    /// none of them may take the merge-over-the-live-tree shortcut.</summary>
-    public static Aabb SubtreeWorldAabb(Node3D root)
-    {
-        Aabb merged = default;
-        bool any = false;
-        // Indexed children and a prebuilt StringName, never GetChildren() or the string const:
-        // each of those allocates a finalizable Godot wrapper per node visited, and a walk over a
-        // large world subtree every few frames is what fed the gen1 collection pauses.
-        void Walk(Node n)
-        {
-            if (n is Node3D overlay && overlay.HasMeta(OverlayMetaName))
-            {
-                return; // a tool's drawing parked on this object is not part of its extent
-            }
-            if (n is MeshInstance3D { Mesh: { } mesh } mi)
-            {
-                var local = mesh.GetAabb();
-                if (local.Size.LengthSquared() > 1e-9f)
-                {
-                    var box = mi.GlobalTransform * local;
-                    merged = any ? merged.Merge(box) : box;
-                    any = true;
-                }
-            }
-            int count = n.GetChildCount();
-            for (int i = 0; i < count; i++)
-            {
-                Walk(n.GetChild(i));
-            }
-        }
-        Walk(root);
-        return any ? merged : new Aabb(root.GlobalPosition, Vector3.Zero);
-    }
+    /// <summary>World-frame union of a subtree's own mesh AABBs (<see cref="SubtreeBounds.WorldAabb"/>).
+    /// Public because every inspect tool wants this measurement and none of them may take the
+    /// merge-over-the-live-tree shortcut.</summary>
+    public static Aabb SubtreeWorldAabb(Node3D root) => SubtreeBounds.WorldAabb(root);
 
     /// <summary>Parses <c>--debug-select[=x,y[,up]]</c>. An empty value means the middle of the
     /// viewport with no ladder walk; a malformed one is reported and ignored rather than throwing
