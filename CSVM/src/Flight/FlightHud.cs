@@ -46,7 +46,7 @@ public struct FlightHudState
     public bool Stalled;
 
     /// <summary>Whether the approach table's <c>auto</c> row currently passes for this aircraft
-    /// (<see cref="CSVM.Session.LandingApproachRuntime.AutoLandOffered"/>), so the auto-land button
+    /// (<c>LandingApproachRuntime.AutoLandOffered</c>), so the auto-land button
     /// does something right now.</summary>
     public bool AutoLandOffered;
 

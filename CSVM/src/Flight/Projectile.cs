@@ -508,7 +508,7 @@ public sealed partial class ProjectilePool : Node3D
     /// whole of the engine's <c>VehicleList</c> rather than its aircraft half. Null in every build
     /// with no hulls (the weapon lab, the suite labs, a bare stage), where the vehicle list is the
     /// aircraft roster and nothing else.</summary>
-    public Session.SurfaceVehicleRuntime? SurfaceVehicles { get; set; }
+    public ISurfaceVehicles? SurfaceVehicles { get; set; }
 
     /// <summary>The session's destructibles, CSVM's stand-in for the engine's mission-structure
     /// pool, so a scan that wants that pool asks here rather than carrying its own reference.

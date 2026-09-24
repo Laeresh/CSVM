@@ -292,8 +292,8 @@ public partial class GameSession : Node3D
     // over it while PREFERENCES is open. The leaf is the Launcher's to build (only it holds the
     // decoded layout and the options writer); null leaves both boards without that door.
     private Control? _pauseBoard;
-    private Flight.PausePreferences? _pauseOptions;
-    private Func<Flight.PausePreferences?>? _pauseOptionsFactory;
+    private UI.PausePreferences? _pauseOptions;
+    private Func<UI.PausePreferences?>? _pauseOptionsFactory;
     // Photo mode's three pieces, all null unless it is engaged: the hint/exit reader, the camera
     // holding the pane, and whose pane it is.
     private UI.PhotoModeHud? _photoHud;

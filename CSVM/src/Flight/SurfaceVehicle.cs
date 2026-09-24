@@ -1,11 +1,10 @@
 using System;
 using System.Collections.Generic;
-using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Utils;
 using Godot;
 
-namespace CSVM.Session;
+namespace CSVM.Flight;
 
 /// <summary>
 /// One spawned surface vehicle: a chapter hull on the water, driven along its patrol net by the
@@ -14,7 +13,7 @@ namespace CSVM.Session;
 /// no flight model: the hull is a world subtree, its damage the destructible pool the chapter's
 /// own <c>patrolboat</c> definitions register on it, and its wake and damage stages the
 /// vehicle def's <c>start_anims</c> and <c>injure_anims</c> played on that subtree. Built and
-/// stepped by <see cref="SurfaceVehicleRuntime"/>.
+/// stepped by <c>SurfaceVehicleRuntime</c>.
 /// </summary>
 public sealed class SurfaceVehicle
 {
@@ -28,12 +27,17 @@ public sealed class SurfaceVehicle
     private bool _wakePlayed;
     private int? _team;
 
-    internal SurfaceVehicle(string name, RosterSpawnPlan plan, Node3D body, AnimRuntime runtime,
-        DestructibleRegistry.Instance? pool, IReadOnlyList<string> startAnims,
+    /// <param name="def">The vehicle def the roster block resolved to.</param>
+    /// <param name="team">The block's <c>team</c> slot, or null.</param>
+    /// <param name="group">The block's AI group.</param>
+    /// <param name="inert">The block's <c>deactivated</c> flag: built hidden and held.</param>
+    internal SurfaceVehicle(string name, string def, int? team, int group, bool inert, Node3D body,
+        AnimRuntime runtime, DestructibleRegistry.Instance? pool, IReadOnlyList<string> startAnims,
         IReadOnlyList<(float Fraction, string Anim)> injureAnims, float waterY, float heading)
     {
         Name = name;
-        Plan = plan;
+        Def = def;
+        Group = group;
         Body = body;
         _runtime = runtime;
         _pool = pool;
@@ -41,12 +45,12 @@ public sealed class SurfaceVehicle
         _injureLadder = new List<(float, string)>(injureAnims);
         _waterY = waterY;
         Heading = heading;
-        Inert = plan.Inert;
-        Team = plan.Team;
+        Inert = inert;
+        Team = team;
         if (pool != null)
         {
             pool.Owner = name;
-            pool.Team = plan.Team;
+            pool.Team = team;
             pool.Dormant = Inert;
         }
         body.Visible = !Inert;
@@ -67,15 +71,16 @@ public sealed class SurfaceVehicle
     /// name line at all and is what the original does (only C1B/M03's four boats author one of the
     /// install's 23 <c>mode ship</c> blocks). ⚠ Never the vehicle def's own <c>MSG_VEH_*</c> title:
     /// no author in the original reads it (docs/org/targeting.md). Set once by
-    /// <see cref="SurfaceVehicleRuntime"/> at spawn, where the table and the block meet.</summary>
+    /// <c>SurfaceVehicleRuntime</c> at spawn, where the table and the block meet.</summary>
     public string MarkerName { get; internal set; } = "";
 
-    public RosterSpawnPlan Plan { get; }
+    /// <summary>The vehicle def the hull was built from (<c>patrolboat</c>, <c>t_truck</c>).</summary>
+    public string Def { get; }
 
     /// <summary>The built hull, a copy of the chapter's library-root model.</summary>
     public Node3D Body { get; }
 
-    public int Group => Plan.Group;
+    public int Group { get; }
 
     /// <summary>The side, from the block's <c>team</c> slot; <c>SET_AI_TEAM</c> rewrites it and
     /// the pool follows, so the hull is that side's target.</summary>
@@ -122,7 +127,7 @@ public sealed class SurfaceVehicle
 
     /// <summary>This hull's gun, or null when the build wired no weapon catalogue, the def arms
     /// nothing, or the model carries no mount (<see cref="SurfaceGunner.Build"/>). Set once by
-    /// <see cref="SurfaceVehicleRuntime"/> at spawn.</summary>
+    /// <c>SurfaceVehicleRuntime</c> at spawn.</summary>
     internal SurfaceGunner? Gunner { get; set; }
 
     /// <summary>The <c>WAKEUP_ENEMIES</c> half: the hull appears where it was placed, its pool

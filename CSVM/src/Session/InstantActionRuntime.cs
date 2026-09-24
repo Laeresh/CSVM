@@ -357,18 +357,6 @@ public sealed class InstantActionRuntime
         return anyFlying;
     }
 
-    /// <summary>The wrap-up's "Time to Complete Mission" row (docs/formats/instant-action.md
-    /// "What the four numbers count"): <c>minutes = ms / 60000</c>, <c>seconds = (ms / 1000) % 60</c>,
-    /// both truncating, the decoded <c>IDS_IAWU_TIME</c> format <c>%02d:%02d</c>. Takes
-    /// <see cref="Elapsed"/>'s own unit, seconds, and converts to milliseconds itself.</summary>
-    public static string FormatElapsed(float elapsedSeconds)
-    {
-        int ms = (int)(elapsedSeconds * 1000f);
-        int minutes = ms / 60000;
-        int seconds = ms / 1000 % 60;
-        return $"{minutes:00}:{seconds:00}";
-    }
-
     /// <summary>The wrap-up's "Shot %" row: <c>100 × hits / fired</c>, truncating, the decoded
     /// <c>ftol(100.0 × snapshot+0x22 / snapshot+0x20)</c>. ⚠ Zero rounds fired is a divergence,
     /// deliberately taken: the original's unguarded x87 divide yields a large negative number

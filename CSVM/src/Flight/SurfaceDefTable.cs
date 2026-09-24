@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using CSVM.Mech3;
 
-namespace CSVM.Session;
+namespace CSVM.Flight;
 
 /// <summary>
 /// One of the original's per-surface anim-def vectors, <c>"player_crash_" + name</c> or

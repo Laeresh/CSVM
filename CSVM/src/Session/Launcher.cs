@@ -1939,13 +1939,13 @@ public partial class Launcher : Node3D
     // through the one writer. PersistOptions is the apply. ⚠ No ShowMenu: the flight returns to
     // the sheet over its own world, not tearing down what the pause stands on. Null where no
     // layout reads.
-    private Flight.PausePreferences? BuildPauseOptions()
+    private UI.PausePreferences? BuildPauseOptions()
     {
         OriginalAvailable(PresentationId.Original);
         var controls = _menuHost != null && _menuHost.Features.TryGet<ControlsFeature>(out var feature)
             ? feature
             : null;
-        return Flight.PausePreferences.Build(_dataRoot, _originalLayout, controls, PersistOptions, _menuAudio);
+        return UI.PausePreferences.Build(_dataRoot, _originalLayout, controls, PersistOptions, _menuAudio);
     }
 
     // --debug-join=N synthesizes N extra device-less players so the splitscreen aircraft select
@@ -2427,7 +2427,7 @@ public sealed class LauncherContext
     /// or answers null where the install carries no decoded menu layout for it to compose from. A
     /// factory rather than the node, since the session parents it and only the Launcher holds the
     /// layout, the shared rebinding feature, the menu's audio and the options file's writer.</summary>
-    public System.Func<Flight.PausePreferences?>? PauseOptions { get; init; }
+    public System.Func<UI.PausePreferences?>? PauseOptions { get; init; }
 
     /// <summary>A campaign mission ended, won or lost: the Launcher frees this session a frame later
     /// and shows the menu at the debrief of the named profile's flown mission, carrying the result

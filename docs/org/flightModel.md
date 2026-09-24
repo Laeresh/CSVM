@@ -2920,7 +2920,7 @@ take.
 The roster spawner calls `ScriptedPathVehicles.Place`, so C1/M04 really does put four aeroplanes on
 `pp1`–`pp4` and its `START_TAXI` chain really does release them.
 A surface vehicle (`mode ship`, the patrol boats) is driven by the same law for its whole life
-(`Session/SurfaceVehicle.cs`): the follower steers it over an unbounded route, a generator's
+(`Flight/SurfaceVehicle.cs`): the follower steers it over an unbounded route, a generator's
 take-off run and then a walk of its net's edges, so it never reaches the final leg's acceleration
 and climb-out, and its height is pinned to the water rather than taken from the route. The 40 mph
 taxi speed is the only speed it has; the def's own `rates` are not consumed.

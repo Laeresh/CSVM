@@ -113,6 +113,7 @@ The plane as a flying, shooting, damageable thing, plus its HUD and stunt mode. 
 from the extracted zrdr; owns the arcade physics and everything drawn over the pilot's view.
 
 - `src/Flight/PlaneStats.cs`, typed per-plane stats from vehicle/engines/player.json: dynamics, engine sound, destroyable parts.
+- `src/Flight/PlaneRoster.cs`, pure lookups over a `SessionSpec`'s plane roster: which plane a player flies, and its display name.
 - `src/Flight/ShakeDefs.cs`, typed reader over shakes.json: the six shake-oscillator sources (law + per-source magnitude term).
 - `src/Flight/WeaponDefs.cs`, typed reader over `weapons.json` `BALLISTICS`: 48 `WeaponDef`s; inspect with `--dump-weapons`.
 - `src/Flight/Loadout.cs`, `stock_loadouts.json` reader + `Bind` to a built plane: gun groups + hardpoints, markers→muzzle nodes; `--dump-loadout`.
@@ -126,6 +127,9 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/TargetHud.cs`, the per-pane targeting HUD: the selected target's bracket and label, the spyglass disc and its gates, the nearest-hostile fallback, the F16 / `--debug-markers` every-aircraft overlay.
 - `src/Flight/TurretDefs.cs`, typed reader over `ai.zrd`'s `TURRET` section: 42 `TurretDef`s, carried/standalone split, arcs, duty cycle, weapon block.
 - `src/Flight/TurretController.cs`, one turret gunner, carried or emplaced: acquire, intercept, arc clamp, bounded slew, duty cycle, fire into the shared pool.
+- `src/Flight/SurfaceVehicle.cs`, one built hull: the scripted-path follower over its patrol net, the wake and injure anims, and the pool a hit reaches.
+- `src/Flight/SurfaceGunner.cs`, a hull's own gun: the non-jet acquisition, the 20 s target hold, the mount, and the fire decision on the def's authored tuple.
+- `src/Flight/ISurfaceVehicles.cs`, the flight side's read of a mission's built surface hulls: the aim and target-scan candidates, and the list a proximity fuse measures.
 - `src/Flight/AiPilot.cs`, the non-player `FlightModel` driver: standing orders, patrol, gunner, escort and mode machine into one `FlightInput` per sim step.
 - `src/Flight/AiControlLaw.cs`, the original's own AI steering law: an aim point, its velocity and one of four decoded tables into stick and throttle lever.
 - `src/Flight/AiEscort.cs`, the formation-escort law a netless `mode wingman` flies: leader and target snapshots into one station point and its velocity.
@@ -167,6 +171,8 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/CanopyHoleCue.cs`, the decoded canopy-glass cadence: which interval of gun hits opens one of the five `bullethole_anims` holes, and so sounds `window_hit_sg`.
 - `src/Flight/SpawnPoints.cs`, flight spawn from the mission's own zrdr: ia.json `spawn_points`, or objectives.json PLAYER_INIT as fallback.
 - `src/Flight/MissionTargets.cs`, mission `targets.json`: target key to its objective display keys, plus the marker flags a mission starts with.
+- `src/Flight/ObjectiveTarget.cs`, one target-directive argument: a bare node name or an authored parent/child path, keyed by the joined path.
+- `src/Flight/ObjectiveSite.cs`, one live objective site as targeting sees it: the flagged node, its two marker label lines, and where it is this frame.
 - `src/Flight/StuntMission.cs`, Stunt Flying state: ia.json `dzones` → a danger-zone run with completion, clock and splits, one per pilot.
 - `src/Flight/HudMetrics.cs`, the one rule for HUD sizing: window height / 1440, damped by `sqrt(paneH/windowH)` for splitscreen.
 - `src/Flight/HudFont.cs`, the game's own 5px HUD bitmap font, auto-segmented from `rimage/5pointhud*.png`; `--hud-font-test` proves it.
@@ -202,7 +208,6 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/HaltReason.cs`, why the clock is stopped; the clock advances only when no reason is set.
 - `src/Flight/PauseBoard.cs`, the shared pause board and its Resume · Photo · Preferences · Restart · Exit menu, one whole-window CanvasLayer.
 - `src/Flight/OriginalPauseBoard.cs`, the Original presentation's pause screen: the mission's own `escape.zrd` sheet over the held world, on the same seam.
-- `src/Flight/PausePreferences.cs`, the Preferences leaf over a paused mission: the Original Options screen hosted on the pause, its exit returning to the sheet with the settings applied.
 - `src/Flight/PhysicsConstants.cs`, `NomGravity`, the single `nom_gravity` value the flight model and its tests share.
 - `src/Flight/Weather.cs`, weather.json reader → `WeatherState`: per-zone fog, sunlight, cloud whiteout, wind, precipitation.
 - `src/Flight/FlightAudio.cs`, own-plane loops (engine, overspeed whine, rattle) + crash/prop one-shots, per-player `MixGain`.
@@ -245,6 +250,8 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/AircraftLifecycle.cs`, the states one aircraft moves between and the spawn timers; every transition reports what the node must then perform.
 - `src/Flight/PlaneDamage.cs`, the decoded damage ledger: per-part pools plus the whole-vehicle pair, the armour-first take-hit flow, and the kill rule.
 - `src/Flight/DamageVisuals.cs`, flips the torn-skin `pdpN` panels (paired by mesh position) at the data's injure thresholds, plus fire trails.
+- `src/Flight/EffectCatalogue.cs`, the name tables saying which authored anims are playable effects, and the anchor roots both effect binds stage from.
+- `src/Flight/SurfaceDefTable.cs`, one of the original's per-surface anim-def vectors and the cascade that indexes it with a struck material's surface id.
 - `src/Flight/DamageLab.cs`, the `--damage` and F19 slider panel: one slider per part, driving a parked plane's visuals or the flown plane's real ledger.
 - `src/Flight/CompassTape.cs`, the top-centre heading tape from the game's own HUD textures, drawn as a cylindrical drum seen edge-on.
 - `src/Flight/GaugeCluster.cs`, the cockpit dials as HUD (altimeter/speedo/damage + gun/missile), geometry from the plane's `gauges` subtree.
@@ -394,6 +401,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/LoadBoard.cs`, the node that hangs the load screen over a build, tracking the window until the world appears.
 - `src/UI/LoadScreens.cs`, what the load screen is made of: the campaign chart sheet, and the Instant Action blackboard carrying its dialog's own four texts.
 - `src/UI/PauseScreens.cs`, what the Original presentation's pause screen is made of: the mission's chart at its crop, the parchment, the memento and the strips, the authored four and the remake's photo strip.
+- `src/UI/PausePreferences.cs`, the Preferences leaf over a paused mission: the Original Options screen hosted on the pause, its exit returning to the sheet with the settings applied.
 - `src/UI/MissionMap.cs`, the one chart drawer every screen showing a mission's map shares: the sheet at its crop, the reveal's pins, and an icon placed by world position.
 - `src/UI/ObjectivesHud.cs`, the campaign mission's objectives readout, drawn on the pause screen alone, one instance per rig.
 - `src/UI/MissionEndFade.cs`, the mission-end black-out, painting `CampaignDirector.LeavingFade` onto a full-screen rect every frame, one instance per rig.
@@ -509,9 +517,6 @@ clusters they delegate to.
 - `src/Session/SpawnPicker.cs`, each player's flight spawn: the shared spawn-list index and the per-player point; also the plain `IFlightStarts`.
 - `src/Session/IFlightStarts.cs`, the spawn-placement seam: one call answering for the whole field, and the `FlightStart` pair every rig is placed from.
 - `src/Session/StartGrid.cs`, the abreast starting grid: every pilot fanned about one anchor spawn, the whole field lifted as one to clear terrain.
-- `src/Session/PlaneRoster.cs`, pure lookups over a `SessionSpec`'s plane roster: which plane a player flies, and its display name.
-- `src/Session/EffectCatalogue.cs`, the name tables saying which authored anims are playable effects, and the anchor roots both effect binds stage from.
-- `src/Session/SurfaceDefTable.cs`, one of the original's per-surface anim-def vectors and the cascade that indexes it with a struck material's surface id.
 - `src/Session/WeatherRig.cs`, loads the mission's weather and drives the per-rig skydome, whiteout, deck and zone gate each frame.
 - `src/Session/ObjectZoneGate.cs`, gives each flown object the zone its own altitude earns against the cloud band, so the band hides what is on its far side.
 - `src/Session/WorldEffectsFactory.cs`, builds the impact/destruction effect stages and the per-plane crash runtime.
@@ -528,8 +533,6 @@ clusters they delegate to.
 - `src/Session/SpectateHandoff.cs`, the shared pane handoff for a downed pilot whose teammates fly on: the wreck pinned, a spectator camera in the freed pane.
 - `src/Session/ScriptedPathVehicles.cs`, one mission's scripted-path vehicles: the snap onto waypoint 0, the freeze, `START_TAXI`'s release, the handoff back.
 - `src/Session/SurfaceVehicleRuntime.cs`, builds and steps a mission's `mode ship` hulls: a library-root copy placed on the water, indexed on the runtime.
-- `src/Session/SurfaceVehicle.cs`, one built hull: the scripted-path follower over its patrol net, the wake and injure anims, and the pool a hit reaches.
-- `src/Session/SurfaceGunner.cs`, a hull's own gun: the non-jet acquisition, the 20 s target hold, the mount, and the fire decision on the def's authored tuple.
 - `src/Session/CampaignRoster.cs`, the engine-free plan of a campaign mission's `aiv` roster: each block's airframe, and its net or its netless escort.
 - `src/Session/GeneratorCycle.cs`, the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel, the credit.
 - `src/Session/NetTrailerTargets.cs`, resolves a patrol net's trailer name (`player`, a zeppelin) to a live position, so an anchored net rides its target.

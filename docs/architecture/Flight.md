@@ -114,6 +114,33 @@ pass while `AiTargetRanking.AircraftFirst` holds and an aircraft is in reach, so
 activation, the attack window, the barrel-on-solution cone, a cached line of sight and the
 `FIRE_RATE` redraw, each round renewing its `GunVoice` off `SOUNDS.CANNON`. An acquired human player is reported once per episode to `ProjectilePool`, the combat voice's `WA-Turret` site. Aliveness, teams, and what a gun's own mount is to its sight line and to its rounds sit at their members: [../org/targeting.md](../org/targeting.md), [../formats/turrets.md](../formats/turrets.md), [../formats/combat-voice.md](../formats/combat-voice.md).
 
+## src/Flight/SurfaceVehicle.cs
+One built hull: no pilot, no flight model, no `FlightController`. Its movement is the scripted-path
+follower's law (`PathFollower.cs`, [../org/flightModel.md](../org/flightModel.md)) over an
+unbounded route, the generator's take-off run then a lazy walk of the patrol net's edges, height
+pinned to the water. `Patrol` is the roster and `SET_AI_NET` assignment, `Launch` the generator's,
+`Wake` the `WAKEUP_ENEMIES` arm a block's `deactivated` waits on. Damage is the pool the chapter's
+definition registered on the root: a rung of the injure ladder plays as the pool falls through its
+fraction, the death leaving the parts to the death sequence. Its gun is `SurfaceGunner.cs`, stepped
+from here for a woken, undestroyed hull; `Session/SurfaceVehicleRuntime.cs` is how one is built.
+
+## src/Flight/SurfaceGunner.cs
+One hull's gun ([../org/aiPilot.md](../org/aiPilot.md) "What a `mode ship` vehicle runs"): the
+acquisition, mount and fire decision a patrol boat runs, built from the def's own `weapons` tuple
+and the model's `turret` > `gun` > `firepoint` chain, or not built when any input is missing. It
+sweeps the pool's three candidate lists under the team gate, ranks with the non-`jet` scorer and the
+defs' class biases, holds a target for a hardcoded 20 s, aims through `SurfaceGunMount` and
+fires on the authored window, interval and magazine, dropping non-aircraft candidates so a boat does
+not shoot a boat, which is why the aircraft-first preference is not spent here. No pursue gate and no
+quick draw, neither reaching a hull. `AttackRadius` is the hull's own ATTACK volume, the one both decoded scorers admit on, never its activation ([../org/aiPilot.md](../org/aiPilot.md)). Its `GunVoice` is renewed per tick from the hull origin ([../org/weaponFire.md](../org/weaponFire.md)). Suites: `surface-vehicle-guns`, `surface-gun-voices`.
+
+## src/Flight/ISurfaceVehicles.cs
+What a plane and its projectile pool read of a mission's surface hulls: `Vessels`, the list the
+proximity fuse measures against, and `CollectVehicles`, which puts every hull on the aim assist's
+and the target scan's vehicle list. `FlightController.SurfaceVehicles` and
+`ProjectilePool.SurfaceVehicles` hold it. The session builds and steps the hulls, so its
+`Session/SurfaceVehicleRuntime.cs` is the one implementation and `Flight` never names it.
+
 ## src/Flight/WeaponCursor.cs
 `FireControl`'s internal ammo-slot index math, an `internal` class nothing else may call: `NextArmed`
 is the firing cursor, the selected slot while it has rounds and otherwise the next armed slot
@@ -531,6 +558,14 @@ paths read. It also carries the `crash` block's restitution ceiling, the engine 
 curves, `destroyable_parts` as `DestroyablePart` records with the def-level injure anims, and the
 `collision` probe list, and `AiTargetBias`/`AiStructBias`, the def's two acquisition rank terms, and `AiAttackDwell`/`AiNotPursuitDwell`, the pursuit timers, all read off the chain the vehicle spawns as. `Load` resolves down the player chain, `LoadForAi` takes only the damage model off the AI chain, and the `With*` family layers roster, difficulty and hangar overrides on.
 
+## src/Flight/PlaneRoster.cs
+Static, spec-free lookups over a `SessionSpec`'s plane roster: `PlaneFor(spec, index)`,
+`PlaneDisplayName(stats)`, `Humanize(s)`. A plane's display name is the def's AUTHORED `title`
+(`PlaneStats.AiTitle`, "Medusa Kestrel") where something has resolved it through the string table,
+and the def-name derivation ("Bloodhawk") otherwise, which is what a player load and a bare rig get.
+No session state: every call takes the `SessionSpec` explicitly rather than caching one, since
+these are pure over their arguments.
+
 ## src/Flight/SpawnPoints.cs
 Reads the flight spawn from a mission's OWN zrdr, a different archive than the shared `--zrdr`, in
 three schemas: `LoadIa` for the instant-action `spawn_points` per scenario, which only some folders
@@ -549,6 +584,20 @@ a nested `[parent, child]` entry keys `parent/child`, the same spelling `Objecti
 the script's directives, so the two tables meet on one string. `Load(mission, chapter)` walks the
 original's reader search path, and `ByNode` exposes the whole table for a consumer that wants the
 starting flags rather than one key's labels. Schema: [../formats/missions.md](../formats/missions.md).
+
+## src/Flight/ObjectiveTarget.cs
+One argument of a target directive (`ADD_`/`REMOVE_OBJECTIVE_TARGET`, `ADD_`/`REMOVE_OTHER_TARGET`,
+`SET_HELP_LABEL`): a bare node name, or an authored `[parent, child]` path that is ONE target.
+`Key` joins the path with `/` and is the identity every objective store and every site is keyed
+by; `Node` is the last segment, what `targets.zrd` is looked up by. The script that reads it is
+`Session/ObjectiveScript.cs`. Format: [../formats/objectives.md](../formats/objectives.md).
+
+## src/Flight/ObjectiveSite.cs
+One live objective site as the targeting path sees it: the flagged `ObjectiveTarget`, its resolved
+name, the two label lines its marker prints, its position this frame, and which of the record's two
+flags it stands on. ONE instance per site for as long as the mission flags it, because a selection
+is held by source identity. `TargetPool` labels it; `Session/ObjectiveSites.cs` builds and refreshes
+the set. Decode: [../org/targeting.md](../org/targeting.md).
 
 ## src/Flight/MarkerDraw.cs
 The world marker's drawing primitives, shared by `TargetHud` and `StuntRunHud`: the shadowed
@@ -812,23 +861,13 @@ player's reader alone. What it draws is `PauseScreens`' composition through `Com
 the screen tests off engine and this node owns the cursor, the pointer and the five actions. An Instant Action sortie's sheet is the blackboard, which it writes in `BoardPalette.EscapeBlackboard` rather than the campaign sheet's ink. That
 seat's pointer shares the cursor: a hover moves it, a press holds the strip, the release on it fires, and the OS pointer gives way to the dialog's own. Its readout is a delegate, since the objectives follow the running mission. Preferences stands `PausePreferences` over the held world and `Reprime`s on its close, and photo mode does the same over the frozen world. It draws no control hints, since the original's sheet carries none. Decode: [../org/pause-screen.md](../org/pause-screen.md).
 
-## src/Flight/PausePreferences.cs
-The Preferences leaf over a paused mission: an `OriginalShell` of its own on the Options screen,
-over the held world and drawn through `ComposedBoardView`, its display rows the `DisplaySettingRows`
-both Options screens draw. Either pause board's PREFERENCES opens it, the pausing player's reader
-drives it, and every door out closes it onto the sheet with an `OptionsApplyExit` already applied;
-the halt is never touched. Its other features are throwaways and its `ControlsFeature` the menu's
-own, whose `Accepted` it hands to the flying seats `Open` was given (`ApplyProfile`), so a rebind
-or mouse scheme takes hold before the resume, as do the head turn and targeting switch it carries.
-`Build` answers null with no decoded layout. Decode: [../org/pause-screen.md](../org/pause-screen.md).
-
 ## src/Flight/IaWrapupBoard.cs
 Instant Action's wrap-up board on `ResultsBoard`'s shell, whole-window since the mission ends for
 every human at once: four label and value rows for time to complete, enemies shot down, danger
 zones completed and shot percentage. It takes no live match object at all, only the caller's own
 snapshot handed in once by `InstantActionRuntime`, so `InstantActionDirector` owns every source
-and this class draws what it is given. On a stunt mission it also grows a `StuntSplits` section
-and player 1's `StuntShotStrip` (the one live source, handed over at the wrap-up rather than the
+and this class draws what it is given. Its static `FormatElapsed` is the decoded time row, which
+the Original presentation's wrap-up page prints too. On a stunt mission it also grows a `StuntSplits` section and player 1's `StuntShotStrip` (the one live source, handed over at the wrap-up rather than the
 ending so a marker latched after the run completed is on it), and no per-pane scoreboard is built. Its Restart reaches the Launcher's session restart
 and rebuilds the world, because a mission's waves, ace and zeppelin cannot be put back in place.
 
@@ -1174,6 +1213,26 @@ again. `RigAnimFor` is a curated membership test over the effect catalogue, whic
 cockpit gauge def from ever playing on an airframe, and the panel-pairing traps sit on
 `PairHealthySkins`. The cockpit-interior twins ride the same panel table as their exterior
 partners, so no separate cockpit rule exists. Decode: [../org/vehicleDamage.md](../org/vehicleDamage.md).
+
+## src/Flight/EffectCatalogue.cs
+The record of which authored anims are playable effects and what their defs need staged: the name
+tables every effect producer must stay inside, static and engine-free. It owns the impact and death
+effect names, the crash rig's own def tables and the two surface-indexed def vectors, the
+damage-stage and prop-choreography menus, the canopy-hole family a human rig alone binds, the
+destroy-def lookup, the collider overlay's surface colour key, and the anchor-root derivation that IS
+`WorldEffectsFactory`'s stage source. An unstageable anchor fails the build rather than leaving a def
+anchored on nothing. Every name producer carries a producer-range tripwire in `CSVM.Tests` asserting
+its whole range resolves inside these tables. Read `Session/WorldEffectsFactory.cs` next.
+
+## src/Flight/SurfaceDefTable.cs
+One of the original's per-surface anim-def vectors (`"player_crash_" + name`, `"ai_crash_" +
+name` or `"touchdown_" + name` over every `SurfaceRegistry` slot) plus the cascade that indexes
+it with a struck material's numeric surface id (`SceneBuilder.SurfaceIdMeta`). Built once per
+bind from a caller-supplied "does this def exist" test, so `PlayableDefs` is what a runtime binds
+and `DefForSurfaceId` is what an impact asks. Engine-free and pure; the fallback cascade and its
+empty-slot arm carry their prohibition at the type itself. The AI family runs the same cascade
+over the same fields with the vehicle's own name as its last resort. Full decode, including the
+touchdown family and the weapon `IMPACT` table: `analysis/surface-classification/FINDINGS.md`.
 
 ## src/Flight/DamageLab.cs
 The damage lab that F19 toggles: one armour slider for the parts the data gives an armour pool, one

@@ -174,7 +174,7 @@ public static class AimAssist
 
     /// <summary>The team a selectable zeppelin sub-part takes when its record authors none, so it
     /// lands on the player's Enemy cycle rather than the Ally one
-    /// (<see cref="Session.ZeppelinRuntime.CollectTargetParts"/>, the only reader left).
+    /// (<c>ZeppelinRuntime.CollectTargetParts</c>, the only reader left).
     /// ⚠ A remake-only rule, and the SELECTION cycle's alone. Hostility does not use it: an
     /// unauthored world object is neutral there, which is the original's own fall-through
     /// (docs/org/targeting.md "World objects are in the same space, and are normally neutral").</summary>

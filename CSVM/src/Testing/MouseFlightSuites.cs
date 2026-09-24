@@ -2,6 +2,7 @@ using System;
 using CSVM.Bindings;
 using CSVM.Flight;
 using CSVM.Session;
+using CSVM.UI;
 using Godot;
 
 namespace CSVM.Testing;

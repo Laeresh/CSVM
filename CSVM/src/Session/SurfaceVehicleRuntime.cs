@@ -15,7 +15,7 @@ namespace CSVM.Session;
 /// destructible pool is the one a weapon hit or a ram reaches through <c>AnimRuntime.DamageAt</c>.
 /// Stepped only by <see cref="SessionSimulation"/>, after the generators that may launch a hull.
 /// </summary>
-public sealed partial class SurfaceVehicleRuntime : Node
+public sealed partial class SurfaceVehicleRuntime : Node, ISurfaceVehicles
 {
     // How far above and below the authored spot the water probe looks. A hull is authored at
     // y = 0 on every shipped block and the water sits within a metre of it.
@@ -109,8 +109,8 @@ public sealed partial class SurfaceVehicleRuntime : Node
                 pool = candidate;
             }
         }
-        var vessel = new SurfaceVehicle(name, plan, body, _runtime, pool,
-            _defs.StartAnimsOf(plan.Def), _defs.InjureAnimsOf(plan.Def), waterY, heading)
+        var vessel = new SurfaceVehicle(name, plan.Def, plan.Team, plan.Group, plan.Inert, body,
+            _runtime, pool, _defs.StartAnimsOf(plan.Def), _defs.InjureAnimsOf(plan.Def), waterY, heading)
         {
             MarkerName = MarkerNameOf(plan),
         };

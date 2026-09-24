@@ -1,14 +1,14 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Bindings;
-using CSVM.UI;
+using CSVM.Flight;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
 using CSVM.UI.Menu.Original;
 using CSVM.Utils;
 using Godot;
 
-namespace CSVM.Flight;
+namespace CSVM.UI;
 
 /// <summary>
 /// The Preferences leaf over a paused mission: the Original presentation's Options screen with the

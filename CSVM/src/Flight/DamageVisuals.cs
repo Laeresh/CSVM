@@ -149,10 +149,10 @@ public sealed class DamageVisuals
             return "player_damage_trail";
         // The catalogue's spelling is returned, not the ladder's: the rig binds and stops by that
         // name, and the data's case is not guaranteed to match it.
-        foreach (var anim in Session.EffectCatalogue.DamageStageAnims)
+        foreach (var anim in EffectCatalogue.DamageStageAnims)
             if (Same(anim, injureAnim))
                 return anim;
-        foreach (var anim in Session.EffectCatalogue.PlaneDamageEffectAnims)
+        foreach (var anim in EffectCatalogue.PlaneDamageEffectAnims)
             if (Same(anim, injureAnim))
                 return anim;
         return null;

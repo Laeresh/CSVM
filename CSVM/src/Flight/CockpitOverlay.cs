@@ -50,7 +50,7 @@ public sealed partial class CockpitOverlay : CanvasLayer
     /// overlay world, at zero translation.</summary>
     public Node3D Interior => _interior;
 
-    /// <summary>This pass's own cloned sun, so <see cref="Session.WeatherRig.RegisterExtraLighting"/>
+    /// <summary>This pass's own cloned sun, so <c>WeatherRig.RegisterExtraLighting</c>
     /// can keep its LEVEL in step with future zone changes; its bearing is <see cref="Sync"/>'s,
     /// re-taken from the world sun every frame. Null when the caller passed no sun (a suite rig
     /// with no lighting).</summary>

@@ -1,4 +1,3 @@
-using CSVM.Session;
 using CSVM.UI;
 using Godot;
 
@@ -44,8 +43,8 @@ public sealed partial class IaWrapupBoard : ResultsBoard
     protected override bool StillEnded => true;
 
     /// <summary>Builds the (hidden) board. Add it to a <c>CanvasLayer</c> above the splitscreen
-    /// panes; the caller calls <see cref="Present"/> once, from
-    /// <see cref="InstantActionRuntime.MissionEnded"/>.</summary>
+    /// panes; the caller calls <see cref="Present"/> once, from the mission runtime's
+    /// <c>MissionEnded</c>.</summary>
     public static IaWrapupBoard Build(string context, bool exitsToMenu, PauseState state,
         System.Func<int, MenuInput> inputFor)
     {
@@ -54,9 +53,22 @@ public sealed partial class IaWrapupBoard : ResultsBoard
         return board;
     }
 
+    /// <summary>The wrap-up's "Time to Complete Mission" row, in the decoded <c>IDS_IAWU_TIME</c>
+    /// format <c>%02d:%02d</c> (docs/formats/instant-action.md "What the four numbers count").
+    /// Minutes are <c>ms / 60000</c> and seconds <c>(ms / 1000) % 60</c>, both truncating. Takes
+    /// the mission clock's own unit, seconds, and converts to milliseconds itself. Shared with the
+    /// Original presentation's wrap-up page.</summary>
+    public static string FormatElapsed(float elapsedSeconds)
+    {
+        int ms = (int)(elapsedSeconds * 1000f);
+        int minutes = ms / 60000;
+        int seconds = ms / 1000 % 60;
+        return $"{minutes:00}:{seconds:00}";
+    }
+
     /// <summary>Shows the board with the mission's four final counters
     /// (docs/formats/instant-action.md "What the four numbers count"). Called exactly once, from
-    /// <see cref="InstantActionRuntime.MissionEnded"/>, every value here is that instant's
+    /// the mission runtime's <c>MissionEnded</c>, every value here is that instant's
     /// snapshot, the same discipline <see cref="VersusBoard"/> takes from
     /// <see cref="VersusMatch.Standings"/>. <paramref name="shots"/>, player 1's camera, is the
     /// exception: its strip under the splits fills in as late frames land.</summary>
@@ -97,7 +109,7 @@ public sealed partial class IaWrapupBoard : ResultsBoard
         int labelW = (int)(280f * s), valueW = (int)(90f * s);
         int font = (int)(RowFont * s);
         AddCell(grid, TimeTitle, font, RowColor, HorizontalAlignment.Left, labelW);
-        AddCell(grid, InstantActionRuntime.FormatElapsed(elapsedSeconds), font, RowColor,
+        AddCell(grid, FormatElapsed(elapsedSeconds), font, RowColor,
             HorizontalAlignment.Right, valueW);
         AddCell(grid, DestroyedTitle, font, RowColor, HorizontalAlignment.Left, labelW);
         AddCell(grid, enemiesShotDown.ToString(), font, RowColor, HorizontalAlignment.Right, valueW);

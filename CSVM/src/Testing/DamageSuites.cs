@@ -600,7 +600,7 @@ internal static class DamageSuites
                 {
                     string n = def.AnimName ?? def.Name ?? "";
                     starts[n] = starts.TryGetValue(n, out var c) ? c + 1 : 1;
-                    if (Session.EffectCatalogue.AiDamageStageAnims.Contains(n, System.StringComparer.OrdinalIgnoreCase))
+                    if (Flight.EffectCatalogue.AiDamageStageAnims.Contains(n, System.StringComparer.OrdinalIgnoreCase))
                         anchors.Add(anchor);
                 };
                 rig.OnInstanceFinished += (def, _) =>

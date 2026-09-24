@@ -34,7 +34,7 @@ than a participant registry. Read `GameSession.cs` for who owns each phase.
 Main.tscn's root and the process bootstrap: CLI parse into `_cli`/`_spec`, data-root precedence, the
 editor check that gives an export its `logs\` and audible volume default, the developer gain on bus 0 with the saved mix under it, at startup and on an Options apply (`Utils/MasterVolume.cs` resolves the first, `Utils/AudioMix.cs` writes the second), the `--dump-*`/`--run-tests` early quits,
 and what outlives a session (camera, sun, audio, music, the perf and hitch instruments, and the one `ChapterCinema` and `ClosingCinema` the campaign's doors play through). It owns the
-menu as one `MenuHost` built on the first show, the presentation resolution, the only options write (an apply from the in-flight `Flight/PausePreferences.cs` leaf takes that same route, without the presentation reselect a menu-side apply ends on),
+menu as one `MenuHost` built on the first show, the presentation resolution, the only options write (an apply from the in-flight `UI/PausePreferences.cs` leaf takes that same route, without the presentation reselect a menu-side apply ends on),
 the frame pacing and the window's screen, mode and size at startup and on an Options apply (`Utils/VSyncSetting.cs`, `Utils/MonitorSetting.cs`, `Utils/DisplayModeSetting.cs`, `Utils/ResolutionSetting.cs`), the enhanced presentation's sun shadow and screen-space passes with the `SessionSpec.EnhancedPasses` doors that leave one out,
 and the sink every menu exit takes ([../menu-presentations.md](../menu-presentations.md)); with no
 extraction it shows `UI/NoGameDataScreen.cs`. `LaunchSession`, `ReturnToMenu`, `RestartSession` and
@@ -86,24 +86,6 @@ and `startGrid.slotSpacing`/`startGrid.groundClearance` are registered TUNE valu
 `GameSession` selects this grid for multiplayer campaign sessions and eligible splitscreen stunt
 races; solo, Dogfight and deterministic scripted race starts keep their own placement paths.
 
-## src/Session/PlaneRoster.cs
-Static, spec-free lookups over a `SessionSpec`'s plane roster: `PlaneFor(spec, index)`,
-`PlaneDisplayName(stats)`, `Humanize(s)`. A plane's display name is the def's AUTHORED `title`
-(`PlaneStats.AiTitle`, "Medusa Kestrel") where something has resolved it through the string table,
-and the def-name derivation ("Bloodhawk") otherwise, which is what a player load and a bare rig get.
-No session state: every call takes the `SessionSpec` explicitly rather than caching one, since
-these are pure over their arguments.
-
-## src/Session/SurfaceDefTable.cs
-One of the original's per-surface anim-def vectors (`"player_crash_" + name`, `"ai_crash_" +
-name` or `"touchdown_" + name` over every `SurfaceRegistry` slot) plus the cascade that indexes
-it with a struck material's numeric surface id (`SceneBuilder.SurfaceIdMeta`). Built once per
-bind from a caller-supplied "does this def exist" test, so `PlayableDefs` is what a runtime binds
-and `DefForSurfaceId` is what an impact asks. Engine-free and pure; the fallback cascade and its
-empty-slot arm carry their prohibition at the type itself. The AI family runs the same cascade
-over the same fields with the vehicle's own name as its last resort. Full decode, including the
-touchdown family and the weapon `IMPACT` table: `analysis/surface-classification/FINDINGS.md`.
-
 ## src/Session/InstantActionDirector.cs
 The engine side of one Instant Action mission, behind `GameSession`'s one nullable `_iaDirector`
 field: a plain sealed class that builds no node of its own, so every actor it makes parents under
@@ -127,7 +109,7 @@ rating, the wingmen's fan placement, each wave's per-member draws, the objective
 and the mission's end with the decoded `WrapupHoldS` that `Advance` spends before the `WrapupDue`
 cue for the board. The static, engine-free helpers `InstantActionDirector` calls are here
 (`ChooseAceSpawn`, `RepresentativeRating`, `WingmanSlotFor`/`FlownWingmen`, `RandomPilotStats`/
-`ResolveWaveAccentId`, `VoiceAccentIds` (voice prewarm), the zeppelin lookups, `FormatElapsed`/`ShotPercent`).
+`ResolveWaveAccentId`, `VoiceAccentIds` (voice prewarm), the zeppelin lookups, `ShotPercent`).
 The end half holds no engine type and calls no `GD.*`, like `VersusMatch`, and the director owns
 every log line about it. Format and decode: [../formats/instant-action.md](../formats/instant-action.md).
 
@@ -147,8 +129,8 @@ Instant Action and multiplayer stub amounts to. Two parser rules are the origina
 keep the shipped data honest: blocks are read `OBJECTIVE1`, `OBJECTIVE2` and stop at the first
 missing number, and every directive is found by exact name over the block's flat alternating
 list, so a truncated or misspelled key lands in no field and stays dead. The four target
-directives and `SET_HELP_LABEL` read `ObjectiveTarget`s, where a nested list is ONE path keyed
-`parent/child`. Format and decode: [../formats/objectives.md](../formats/objectives.md).
+directives and `SET_HELP_LABEL` read `Flight/ObjectiveTarget.cs` values, where a nested list is ONE
+path keyed `parent/child`. Format and decode: [../formats/objectives.md](../formats/objectives.md).
 
 ## src/Session/ObjectiveSites.cs
 The flown mission's flagged target sites, offered to each player's `TargetPool` carrying the flag
@@ -156,7 +138,7 @@ their own record authors: `CollectFlagged` runs once per `TargetFlag`, over `tar
 `objective` half (the Enemy cycle) and then its `other_target` half (the Non-Aircraft cycle), the
 curated list admitting a mission's chosen structures and no other destructible. A campaign director's script edits both with
 `ADD_`/`REMOVE_`; the director-free constructor is what Instant Action and the multiplayer modes
-take, their table unedited. World SITES only, keyed by `ObjectiveTarget.Key`, re-read every frame so
+take, their table unedited. World SITES only, one `Flight/ObjectiveSite.cs` per `ObjectiveTarget.Key`, re-read every frame so
 a site tracks a moving node and reads `Live` off its `DestructibleRegistry` state; a roster block
 that flags itself rides its own aeroplane. Bound by `GameSession`; [../org/targeting.md](../org/targeting.md).
 
@@ -312,29 +294,9 @@ with no player airframe: each is a copy of the chapter's library-root model unde
 at its authored spot, its height read off the water, indexed on the world runtime so the chapter's
 definitions anchor on it and register its destructible pool. `GameSession` builds one lazily for
 the roster phase and the generator block; `SessionSimulation` steps it after the generators that
-may launch another hull. `CollectVehicles` offers every hull to the aim assist's vehicle list
+may launch another hull. A plane reads it as `Flight/ISurfaceVehicles.cs`. `CollectVehicles` offers every hull to the aim assist's vehicle list
 ([../org/aim-assist.md](../org/aim-assist.md)); `Projectiles`/`Weapons`/`Voices` arm and voice its gun on the attack radius `AttackRadiusOf` resolves in the engine's own write order, the block's and net's slot over the def's `attack` over the decoded 400 m default and never a zero reach ([../org/aiPilot.md](../org/aiPilot.md)); `Strings` names it, slot 20 into `MarkerName`.
-Read `SurfaceVehicle.cs` next.
-
-## src/Session/SurfaceVehicle.cs
-One built hull: no pilot, no flight model, no `FlightController`. Its movement is the scripted-path
-follower's law (`Flight/PathFollower.cs`, [../org/flightModel.md](../org/flightModel.md)) over an
-unbounded route, the generator's take-off run then a lazy walk of the patrol net's edges, height
-pinned to the water. `Patrol` is the roster and `SET_AI_NET` assignment, `Launch` the generator's,
-`Wake` the `WAKEUP_ENEMIES` arm a block's `deactivated` waits on. Damage is the pool the chapter's
-definition registered on the root: a rung of the injure ladder plays as the pool falls through its
-fraction, the death leaving the parts to the death sequence. Its gun is `SurfaceGunner.cs`, stepped
-from here for a woken, undestroyed hull; `SurfaceVehicleRuntime.cs` is how one is built.
-
-## src/Session/SurfaceGunner.cs
-One hull's gun ([../org/aiPilot.md](../org/aiPilot.md) "What a `mode ship` vehicle runs"): the
-acquisition, mount and fire decision a patrol boat runs, built from the def's own `weapons` tuple
-and the model's `turret` > `gun` > `firepoint` chain, or not built when any input is missing. It
-sweeps the pool's three candidate lists under the team gate, ranks with the non-`jet` scorer and the
-defs' class biases, holds a target for a hardcoded 20 s, aims through `Flight/SurfaceGunMount` and
-fires on the authored window, interval and magazine, dropping non-aircraft candidates so a boat does
-not shoot a boat, which is why the aircraft-first preference is not spent here. No pursue gate and no
-quick draw, neither reaching a hull. `AttackRadius` is the hull's own ATTACK volume, the one both decoded scorers admit on, never its activation ([../org/aiPilot.md](../org/aiPilot.md)). Its `GunVoice` is renewed per tick from the hull origin ([../org/weaponFire.md](../org/weaponFire.md)). Suites: `surface-vehicle-guns`, `surface-gun-voices`.
+Read `Flight/SurfaceVehicle.cs` next.
 
 ## src/Session/CutsceneController.cs
 The host a story mission's intro or landings definition raises its `CALLBACK` codes to, and the
@@ -494,16 +456,6 @@ human-session contracts. Player order decides the shared paint and spawn draws. 
 captured scheme and its own build are laid over that assembly, the one path a bought plane takes.
 An Instant Action racer takes no `Race`, so it flies on through the ending's hold. `BuildDamageVisuals` is also the common first phase for AI damage. Read `FlightRoster.cs` next.
 
-## src/Session/EffectCatalogue.cs
-The record of which authored anims are playable effects and what their defs need staged: the name
-tables every effect producer must stay inside, static and engine-free. It owns the impact and death
-effect names, the crash rig's own def tables and the two surface-indexed def vectors, the
-damage-stage and prop-choreography menus, the canopy-hole family a human rig alone binds, the
-destroy-def lookup, the collider overlay's surface colour key, and the anchor-root derivation that IS
-`WorldEffectsFactory`'s stage source. An unstageable anchor fails the build rather than leaving a def
-anchored on nothing. Every name producer carries a producer-range tripwire in `CSVM.Tests` asserting
-its whole range resolves inside these tables. Read `WorldEffectsFactory.cs` next.
-
 ## src/Session/WorldEffectsFactory.cs
 Builds the two effect stages a session needs and the runtimes bound to them: the world-effects
 runtime for impacts and destruction, and the per-plane crash runtime, which despite its name binds
@@ -512,7 +464,7 @@ the prop choreography, and on a human rig the canopy holes, whose `PLAYER_1ST_PE
 and handed to their runtime sealed, and both pre-warm their emitters after the bind so a first burst
 finds its puffers already made; `EnsureWorldEffects` hands the effects runtime the world's `WorldLights` as a contributor, so a burst's authored `LIGHT_STATE` renders on both presentations. `BeginFlightCrashRuntime` opens the crash build as a handle a caller
 steps a phase at a time (`CrashRigQueue.cs`), where the pre-warm itself repeats a slice at a time so a rig's two hundred emitters never
-land on one frame, and `BuildFlightCrashRuntime` is the one-call form. The names it binds are `EffectCatalogue.cs`; the slot mechanism is `Mech3/TemplateStage.cs`.
+land on one frame, and `BuildFlightCrashRuntime` is the one-call form. The names it binds are `Flight/EffectCatalogue.cs`; the slot mechanism is `Mech3/TemplateStage.cs`.
 
 ## src/Session/WeatherRig.cs
 Applies the flown mission's weather, driving each rig's skydome, whiteout, deck regime and zone gate every frame, plus the one session-wide `ObjectZoneGate.cs` pass; the whiteout is one pane-filling overlay per rig, carrying the cloud band and the fog-volume curtain on `HudLayers.Whiteout`, under that pane's own cockpit pass, so the window whites out and the interior stays clear.

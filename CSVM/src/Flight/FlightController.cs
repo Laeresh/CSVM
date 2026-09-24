@@ -4,7 +4,6 @@ using System.Globalization;
 using CSVM.Bindings;
 using CSVM.Effects;
 using CSVM.Mech3;
-using CSVM.Session;
 using CSVM.Utils;
 using Godot;
 
@@ -218,7 +217,7 @@ public partial class FlightController : Node3D
     /// the state machine.</summary>
     public bool AutoNitro;
 
-    /// <summary>Whether <see cref="LandingApproachRuntime"/>'s auto row currently passes for this
+    /// <summary>Whether <c>LandingApproachRuntime</c>'s auto row currently passes for this
     /// aircraft, fed once a frame by the session that owns the trigger. Drives the HUD prompt.</summary>
     public bool AutoLandOffered;
 
@@ -383,7 +382,7 @@ public partial class FlightController : Node3D
     /// list the aircraft roster feeds (`VehicleList`, docs/org/aim-assist.md "The four lists": the
     /// decoded list holds "aircraft and AI ground/sea vehicles"), never the structure or turret one.
     /// Null in every build with no world or no hull spawned, which costs the scan nothing.</summary>
-    public SurfaceVehicleRuntime? SurfaceVehicles;
+    public ISurfaceVehicles? SurfaceVehicles;
 
     /// <summary>Draw the collision probe, the swept ray plus the airframe boxes the
     /// crash test sweeps each physics frame, in green (red on the impact frame).</summary>
@@ -432,7 +431,7 @@ public partial class FlightController : Node3D
     /// <summary>The Auto Head Turn option as the options file has it, the original's GAME OPTIONS
     /// checkbox. True turns the head with the aircraft in the cockpit, false leaves it ahead. It is
     /// seeded at build and read every frame. A page accepted over the pause rewrites it
-    /// (<see cref="PausePreferences"/>). ⚠ Null, the default, is "never set". It leaves the
+    /// (<c>UI.PausePreferences</c>). ⚠ Null, the default, is "never set". It leaves the
     /// <c>headLook.autohead</c> config key deciding, which ships OFF (<see cref="Utils.Config"/>),
     /// so a build with no options file answers to that key alone.</summary>
     public bool? AutoHeadTurn;
@@ -1326,8 +1325,8 @@ public partial class FlightController : Node3D
     {
         if (_viewCameraProxy != null || !IsHumanPiloted)
             return _viewCameraProxy;
-        var proxy = new Node3D { Name = CutsceneController.CameraNode };
-        proxy.SetMeta(AnimRuntime.NameMeta, CutsceneController.CameraNode);
+        var proxy = new Node3D { Name = CanopyHoleCue.ViewCameraNode };
+        proxy.SetMeta(AnimRuntime.NameMeta, CanopyHoleCue.ViewCameraNode);
         AddChild(proxy);
         _viewCameraProxy = proxy;
         return proxy;

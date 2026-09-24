@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Flight;
 using CSVM.Mech3;
 
 namespace CSVM.Session;
@@ -38,46 +39,6 @@ public readonly record struct AnimStateEntry(string Name, int State);
 /// <summary>One <c>WARP_VEHICLE</c> waypoint: a position plus heading, or (when
 /// <see cref="PointName"/> is set) the named point the vehicle is warped to instead.</summary>
 public readonly record struct WarpPoint(float X, float Y, float Z, float Heading, string? PointName);
-
-/// <summary>One argument of a target directive (<c>ADD_/REMOVE_OBJECTIVE_TARGET</c>,
-/// <c>ADD_/REMOVE_OTHER_TARGET</c>, <c>SET_HELP_LABEL</c>): a bare name, matched anywhere in the
-/// world, or an authored <c>[parent, child, ...]</c> path whose every later name is found under
-/// the node before it. <see cref="Key"/> is the identity string every store and every site is
-/// keyed by, the segments joined with <c>/</c>, so a bare name's key is the name itself.
-/// ⚠ A path is ONE target. C1/M04's <c>[[piratezep, rock_zeppelin]]</c> names the hull's own
-/// <c>rock_zeppelin</c>; read as two names it lights the hull's root and a ground node of the
-/// same name as well.</summary>
-public readonly struct ObjectiveTarget
-{
-    /// <summary>Builds a target over a non-empty path.</summary>
-    public ObjectiveTarget(IReadOnlyList<string> path)
-    {
-        Path = path;
-        Key = string.Join("/", path);
-    }
-
-    /// <summary>The authored names, outermost first; one entry for a bare name.</summary>
-    public IReadOnlyList<string> Path { get; }
-
-    /// <summary>The identity string: the path joined with <c>/</c>.</summary>
-    public string Key { get; }
-
-    /// <summary>The name of the node the target lands on, the last segment. What
-    /// <c>targets.zrd</c> is looked up by.</summary>
-    public string Node => Path[^1];
-
-    /// <summary>Whether the target is a path rather than a bare name.</summary>
-    public bool Scoped => Path.Count > 1;
-
-    /// <summary>The target a key denotes, inverse of <see cref="Key"/>.</summary>
-    public static ObjectiveTarget Parse(string key) => new(key.Split('/'));
-
-    /// <summary>Whether this target's key is the given one, case-insensitively.</summary>
-    public bool Is(string key) => string.Equals(Key, key, StringComparison.OrdinalIgnoreCase);
-
-    /// <inheritdoc/>
-    public override string ToString() => Key;
-}
 
 /// <summary>A parsed <c>TRAVELERS</c> proximity condition. <see cref="Who"/> is a node name or, when
 /// <see cref="Group"/> is set, an AI group; the reference is a node name or a literal point.

@@ -18,6 +18,11 @@ public sealed class CanopyHoleCue
     /// <c>bullet_hit_sound</c>.</summary>
     public const string WindowHitSound = "window_hit_sg";
 
+    /// <summary>The gamez node the hole defs pose AT_NODE, the view camera the cutscene definitions
+    /// pose as well. A human rig stands its own copy up under this name
+    /// (<see cref="FlightController.EnsureViewCameraProxy"/>).</summary>
+    public const string ViewCameraNode = "camera1";
+
     /// <summary>Holes a player def's <c>bullethole_anims</c> names, <c>bullet1</c>..<c>bullet5</c>,
     /// the same five on every player def.</summary>
     public const int HoleCount = 5;

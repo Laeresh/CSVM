@@ -1,10 +1,9 @@
 using System.Collections.Generic;
-using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Utils;
 using Godot;
 
-namespace CSVM.Session;
+namespace CSVM.Flight;
 
 /// <summary>
 /// The gun a <c>mode ship</c> hull carries: the acquisition, the mount and the fire decision a
@@ -102,7 +101,7 @@ internal sealed class SurfaceGunner
     public object? Target => _target;
 
     /// <summary>The radius the ranking admits a candidate inside, the hull's attack volume as
-    /// <see cref="SurfaceVehicleRuntime"/> resolved it at spawn. Exposed so the suite reads the
+    /// <c>SurfaceVehicleRuntime</c> resolved it at spawn. Exposed so the suite reads the
     /// reach rather than inferring it from which shots landed.</summary>
     public float AttackRadius => _attackRadius;
 

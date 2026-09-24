@@ -158,7 +158,7 @@ public static class InstantActionWrapupPage
         };
         string[] values =
         {
-            InstantActionRuntime.FormatElapsed(snapshot.Elapsed),
+            IaWrapupBoard.FormatElapsed(snapshot.Elapsed),
             snapshot.EnemiesShotDown.ToString(CultureInfo.InvariantCulture),
             snapshot.ZonesCompleted.ToString(CultureInfo.InvariantCulture),
             snapshot.ShotPercent.ToString(CultureInfo.InvariantCulture) + "%",

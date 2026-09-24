@@ -417,9 +417,9 @@ public class SessionSpecMenuTests
         var spec = SessionSpec.FromMenu(Cli(), "C1", new[] { "player_bhawk", "player_fury" },
             MenuMode.Stunt, WizardDef("stunt_flying"));
 
-        Assert.Null(Session.PlaneRoster.InstantActionOverride(spec, "player_bhawk"));
-        Assert.Equal("player_bhawk", Session.PlaneRoster.PlaneFor(spec, 0));
-        Assert.Equal("player_fury", Session.PlaneRoster.PlaneFor(spec, 1));
+        Assert.Null(Flight.PlaneRoster.InstantActionOverride(spec, "player_bhawk"));
+        Assert.Equal("player_bhawk", Flight.PlaneRoster.PlaneFor(spec, 0));
+        Assert.Equal("player_fury", Flight.PlaneRoster.PlaneFor(spec, 1));
     }
 
     /// <summary>A def read off a file has no per-player pick behind it, so its one player_plane
@@ -429,7 +429,7 @@ public class SessionSpecMenuTests
     {
         var spec = Cli("--ia=mission.json", "--plane=player_bhawk,player_fury");
 
-        Assert.Equal("player_kestrel", Session.PlaneRoster.InstantActionOverride(spec, "player_kestrel"));
+        Assert.Equal("player_kestrel", Flight.PlaneRoster.InstantActionOverride(spec, "player_kestrel"));
     }
 
     /// <summary>The screenshot aid's pointer, which stands in for seat 0's on the Original

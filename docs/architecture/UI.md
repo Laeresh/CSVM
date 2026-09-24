@@ -37,7 +37,7 @@ instance: `Build(stock, customs)` lists the stock rows in their given order, the
 `CustomPlaneDef` in the store's name-sorted order, each carrying its store name and its airframe's
 stock node, skipping a campaign plane nobody has exported. `AirframeNode` and `AirframeOf` are the
 airframe-id to `player_*` node table and its inverse, `IndexOf` the after-build auto-select's
-case-blind lookup. Deliberately not `Session.PlaneRoster`, which answers "which plane does player N
+case-blind lookup. Deliberately not `Flight.PlaneRoster`, which answers "which plane does player N
 fly" off a `SessionSpec`: this is the menu-side list, that one the session-side read. Tests:
 `CSVM.Tests/PlanePickerRosterTests.cs`.
 
@@ -345,6 +345,16 @@ pause: its memento is the seated profile's own picture, `Rows` marks a note line
 `Icon` turns one world pose into the chart icon a session and a suite place alike, through the
 shared `MissionMap`, which draws nothing for a pose off the window. `RowAt` is the pointer's hit
 test over the five 132x28 plates, and a pointer draws the dialog's own cursor; an unreadable extraction leaves the pause to the Built-in board. Decode: [../org/pause-screen.md](../org/pause-screen.md).
+
+## src/UI/PausePreferences.cs
+The Preferences leaf over a paused mission: an `OriginalShell` of its own on the Options screen,
+over the held world and drawn through `ComposedBoardView`, its display rows the `DisplaySettingRows`
+both Options screens draw. Either pause board's PREFERENCES opens it, the pausing player's reader
+drives it, and every door out closes it onto the sheet with an `OptionsApplyExit` already applied;
+the halt is never touched. Its other features are throwaways and its `ControlsFeature` the menu's
+own, whose `Accepted` it hands to the flying seats `Open` was given (`ApplyProfile`), so a rebind
+or mouse scheme takes hold before the resume, as do the head turn and targeting switch it carries.
+`Build` answers null with no decoded layout. Decode: [../org/pause-screen.md](../org/pause-screen.md).
 
 ## src/UI/MissionMap.cs
 The one chart drawer every screen showing a mission's map shares, engine-free: the sheet as a

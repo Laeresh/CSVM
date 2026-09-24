@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using CSVM.Mech3;
 
-namespace CSVM.Session;
+namespace CSVM.Flight;
 
 /// <summary>Where one definition's anchor lives, as the bind that stages it can see it. The rule is
 /// uniform across the world-effects and the crash bind; only the lookup differs, which is why
@@ -25,7 +25,7 @@ public enum AnchorPlacement
 }
 
 /// <summary>The record of which authored anims are playable effects, and what their defs need
-/// staged. Owns the name tables every effect producer must stay inside, <see cref="WorldEffectsFactory"/>
+/// staged. Owns the name tables every effect producer must stay inside, <c>WorldEffectsFactory</c>
 /// consumes these names to build and stage the runtime; the naming lives here, never there.
 /// ⚠ Names cross every play seam (<c>GrazeEffectSink</c>, <c>ExternalEffect</c>,
 /// <c>ProjectilePool.EffectSink</c>) as bare strings, never a typed entry, a typed entry would

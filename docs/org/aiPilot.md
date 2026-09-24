@@ -620,14 +620,14 @@ runs inside the hold through `AiTargetRanking.KeepsStandingTarget`, so an enemy 
 into reach takes an ally off a camp building at once rather than at the hold's end. A hull is neither
 class and keeps its ranked place. `--ai-targeting=decoded` puts the single running minimum back and
 the bare decoded hold with it, and the order is then the two biases' alone.
-`Session/SurfaceGunner` never takes the preference, since it
+`Flight/SurfaceGunner` never takes the preference, since it
 drops non-aircraft candidates anyway.
 
 The admission volume comes out as the attack one in every picker. `AiTargetRanking.Score` refuses a
 candidate past the `attackRange` it is handed, and `FlightController.SelectRankedTarget`, its
 re-score `HoldsStandingTarget` and the withdrawal's reach test all hand it
 `AiModeMachine.AttackRange`, so a member whose activation volume a `DEDG` widened keeps its own
-attack radius for what it may pick up. `Session/SurfaceGunner` is handed the radius
+attack radius for what it may pick up. `Flight/SurfaceGunner` is handed the radius
 `SurfaceVehicleRuntime` resolves for the hull at spawn, the block's and net's attack slot over the
 def's own `attack` over the 400 m def record default, which is the engine's own order (see "Where a
 hull's attack triple comes from"). `AiModeMachine.ActivationRange` is left where the spawn seeds it

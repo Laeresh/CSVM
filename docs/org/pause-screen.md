@@ -401,7 +401,7 @@ strip while the keyboard's selection rests on another. Only a seat holding a mou
 which is seat 0, so a pad player's pause is the pad's alone and the OS cursor is left as it was.
 
 **Preferences opens the Original options over the held world.** The original opens its own
-preferences dialog over the paused mission, and this port stands `Flight/PausePreferences.cs`
+preferences dialog over the paused mission, and this port stands `UI/PausePreferences.cs`
 there: the Original presentation's Options screen with the Game Options, AUDIO, VIDEO and
 rebinding pages behind its doors, hosted over the pause rather than over the menu. The halt is
 untouched while it stands, so the world stays held beneath it, and every door out (a page's

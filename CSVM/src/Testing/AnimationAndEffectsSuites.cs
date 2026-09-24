@@ -28,7 +28,7 @@ internal static class AnimationAndEffectsSuites
     {
         ctx.WithWorld(ctx.Chapter, collision: false, world =>
         {
-            var names = Session.EffectCatalogue.WorldEffectAnimNames(world.Session.Program);
+            var names = Flight.EffectCatalogue.WorldEffectAnimNames(world.Session.Program);
             // The staged set is DERIVED, so this census stages what the
             // real world-effects build stages, from the same call, a root the closure gains and
             // this chapter's gamez cannot supply throws here, naming the def and the anchor.
@@ -123,7 +123,7 @@ internal static class AnimationAndEffectsSuites
                     }
                     ctx.Host.AddChild(rigScope);
                     var resolve = Session.WorldEffectsFactory.StageRootResolver(world.Gamez, rigScope);
-                    var rigRoots = Session.EffectCatalogue.CrashStageRoots(world.Session.Program, resolve);
+                    var rigRoots = Flight.EffectCatalogue.CrashStageRoots(world.Session.Program, resolve);
                     var built = new Node3D { Name = "crash_template_replica" };
                     ctx.Host.AddChild(built);
                     int n = Session.WorldEffectsFactory.BuildEffectStage(world.Gamez,
@@ -2182,7 +2182,7 @@ internal static class AnimationAndEffectsSuites
     internal static void WithBurst(TestContext ctx, TestWorld world, string animName,
         System.Text.StringBuilder report, System.Action<IReadOnlyList<BurstFire>> body)
     {
-        var roots = Session.EffectCatalogue.StageRootsFor(world.Session.Program, new[] { animName },
+        var roots = Flight.EffectCatalogue.StageRootsFor(world.Session.Program, new[] { animName },
             Session.WorldEffectsFactory.StageRootResolver(world.Gamez));
         ctx.Check(roots.Count > 0,
             $"{animName}: its call closure's anchor roots derived ({roots.Count}: {string.Join(", ", roots)})");

@@ -267,7 +267,7 @@ public sealed class ObjectiveGraph
     public IReadOnlyList<ObjectiveRow> Rows => _rows;
 
     /// <summary>The targets currently flagged as objective targets (`ADD_OBJECTIVE_TARGET`), by
-    /// <see cref="ObjectiveTarget.Key"/>: a bare name, or <c>parent/child</c> for an authored
+    /// <see cref="Flight.ObjectiveTarget.Key"/>: a bare name, or <c>parent/child</c> for an authored
     /// path.</summary>
     public IReadOnlyCollection<string> ObjectiveTargets => _objectiveTargets;
 

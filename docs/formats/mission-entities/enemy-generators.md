@@ -356,7 +356,7 @@ two points, and launches on the decoded pose: point 0 plus 0.2 m, nose on point 
 the throttle open. An aircraft then flies the take-off **run** under the scripted-path follower
 and is handed to the flight model at the final leg's 300 m point, climbing; a hull runs the same
 points and joins its
-net where they end (`Session/SurfaceVehicle.cs`).
+net where they end (`Flight/SurfaceVehicle.cs`).
 
 **The door hold is kept, its length is not.** The remake's cycle carries a two-state door and no
 animation clock, so a spawn released past its threshold with the hangar shut opens the door and

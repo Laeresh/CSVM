@@ -61,7 +61,7 @@ public readonly struct PursuitQuarry
             Velocity = velocity,
             Nose = aircraft != null ? forward : Vector3.Zero,
             IsAircraft = aircraft != null,
-            IsVehicle = aircraft != null || target is Session.SurfaceVehicle,
+            IsVehicle = aircraft != null || target is SurfaceVehicle,
             IsPrimaryTarget = gunner?.IsPrimaryTarget(target) ?? false,
             IsHumanPiloted = aircraft?.IsHumanPiloted ?? false,
             Mode = aircraft?.Pilot?.Machine?.Mode,

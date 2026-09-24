@@ -1,7 +1,6 @@
 using System;
-using CSVM.Flight;
 
-namespace CSVM.Session;
+namespace CSVM.Flight;
 
 /// <summary>Pure lookups over a <see cref="SessionSpec"/>'s plane roster: which plane a player
 /// flies and a readable display name for it. No session state, so these take the spec explicitly
@@ -18,7 +17,7 @@ public static class PlaneRoster
     /// each player the pick <see cref="PlaneFor"/> returns. A def read off a file (<c>--ia=</c>,
     /// <c>ia.zrd.json</c>) names one <c>player_plane</c> and no human behind it picked anything,
     /// so it stands for all of them. The launchscreen wizard's def carries PLAYER 1's pick in that
-    /// same field (<see cref="UI.LaunchMenu"/>'s FireLaunch), so honouring it would fly P2..P4 in
+    /// same field (<c>LaunchMenu.FireLaunch</c>), so honouring it would fly P2..P4 in
     /// player 1's aircraft instead of their own.</summary>
     public static string? InstantActionOverride(SessionSpec spec, string? iaPlayerNode) =>
         spec.IaDef != null ? null : iaPlayerNode;
