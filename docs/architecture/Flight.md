@@ -34,7 +34,7 @@ position in a def's arrays, and `ApplyTo` lays them over a base handed in rather
 custom plane's saved fit takes the same path and a pick for a slot the base lacks is dropped. Guns
 are slots 1 to 4; ordnance is either a physical pylon, which the loadout screens read off the fit,
 or a saved record's wing cell naming a pylon only against a fit (`Loadout.PylonForCell`). `None` is
-an explicit empty mount taking no pick, a null entry no choice at all. Fills: `Session/CampaignLoadout.cs`.
+an explicit empty mount taking no pick, a null entry no choice at all. Fills: `Session/Campaign/CampaignLoadout.cs`.
 
 ## src/Flight/WeaponBench.cs
 The world-less "do all 48 weapons mount and fire without throwing" pass check behind `--weapon-test`
@@ -122,7 +122,7 @@ pinned to the water. `Patrol` is the roster and `SET_AI_NET` assignment, `Launch
 `Wake` the `WAKEUP_ENEMIES` arm a block's `deactivated` waits on. Damage is the pool the chapter's
 definition registered on the root: a rung of the injure ladder plays as the pool falls through its
 fraction, the death leaving the parts to the death sequence. Its gun is `SurfaceGunner.cs`, stepped
-from here for a woken, undestroyed hull; `Session/SurfaceVehicleRuntime.cs` is how one is built.
+from here for a woken, undestroyed hull; `Session/World/SurfaceVehicleRuntime.cs` is how one is built.
 
 ## src/Flight/SurfaceGunner.cs
 One hull's gun ([../org/aiPilot.md](../org/aiPilot.md) "What a `mode ship` vehicle runs"): the
@@ -139,7 +139,7 @@ What a plane and its projectile pool read of a mission's surface hulls: `Vessels
 proximity fuse measures against, and `CollectVehicles`, which puts every hull on the aim assist's
 and the target scan's vehicle list. `FlightController.SurfaceVehicles` and
 `ProjectilePool.SurfaceVehicles` hold it. The session builds and steps the hulls, so its
-`Session/SurfaceVehicleRuntime.cs` is the one implementation and `Flight` never names it.
+`Session/World/SurfaceVehicleRuntime.cs` is the one implementation and `Flight` never names it.
 
 ## src/Flight/WeaponCursor.cs
 `FireControl`'s internal ammo-slot index math, an `internal` class nothing else may call: `NextArmed`
@@ -408,7 +408,7 @@ per-cannon stowed, deploy, ready and fire machine, whose `Step` emits the deploy
 lists on durations taken from the authored anim defs, with its own re-fire timer; `TryAim`, which
 consumes `AimAssist.TryIntercept`; `PickGasbag` and `FirstLiveTarget`, the decoded candidate walk in
 authored order with no team or hostility read; and `CannonsEngaged`, the decoded byte the mission
-script writes, while clear of which nothing deploys. `Session/ZeppelinRuntime.Cannons.cs` wires it.
+script writes, while clear of which nothing deploys. `Session/World/ZeppelinRuntime.Cannons.cs` wires it.
 Chain: [../formats/mission-entities.md](../formats/mission-entities.md).
 
 ## src/Flight/ZeppelinDamage.cs
@@ -590,13 +590,13 @@ One argument of a target directive (`ADD_`/`REMOVE_OBJECTIVE_TARGET`, `ADD_`/`RE
 `SET_HELP_LABEL`): a bare node name, or an authored `[parent, child]` path that is ONE target.
 `Key` joins the path with `/` and is the identity every objective store and every site is keyed
 by; `Node` is the last segment, what `targets.zrd` is looked up by. The script that reads it is
-`Session/ObjectiveScript.cs`. Format: [../formats/objectives.md](../formats/objectives.md).
+`Session/Objectives/ObjectiveScript.cs`. Format: [../formats/objectives.md](../formats/objectives.md).
 
 ## src/Flight/ObjectiveSite.cs
 One live objective site as the targeting path sees it: the flagged `ObjectiveTarget`, its resolved
 name, the two label lines its marker prints, its position this frame, and which of the record's two
 flags it stands on. ONE instance per site for as long as the mission flags it, because a selection
-is held by source identity. `TargetPool` labels it; `Session/ObjectiveSites.cs` builds and refreshes
+is held by source identity. `TargetPool` labels it; `Session/Objectives/ObjectiveSites.cs` builds and refreshes
 the set. Decode: [../org/targeting.md](../org/targeting.md).
 
 ## src/Flight/MarkerDraw.cs
@@ -871,7 +871,7 @@ pads through `Pads.For(_padDevices)`, every key and pad read resolving through
 orbit lock (released by any translation input, re-locked by the target key through `OrbitLock.Next`
 over `GameSession.LockCandidateAircraft`'s roster) and a public `Camera` accessor; while locked the
 orbit answers the right stick and the triggers as well as the mouse. It is also the pane a pilot
-out of the mission watches from (`Session/SpectateHandoff.cs`), with `padDevices`/`useKeyboard`
+out of the mission watches from (`Session/Roster/SpectateHandoff.cs`), with `padDevices`/`useKeyboard`
 filtering each watcher to its own seat so two watchers move independently. Read `OrbitLock.cs` next.
 
 ## src/Flight/OrbitLock.cs
@@ -923,7 +923,7 @@ one frozen position, so this scales relative motion into a virtual cursor confin
 band to `CentreBand` on this path only, ahead of the decoded 0.1. `Allowed` is the guard: a real
 display with somebody at the controls, so the test desktop and `--det` keep their mouse mode.
 `Restorable` is what a board with its own pointer puts back, never a capture. `FlightController` owns the mode write and release, and
-`Session/FlightRosterInputs.cs` resolves the guard once per session. Read `MouseFlight.cs` next.
+`Session/Roster/FlightRosterInputs.cs` resolves the guard once per session. Read `MouseFlight.cs` next.
 
 ## src/Flight/NitroSystem.cs
 The original's nitro boost lifecycle, engine-free: a 30-unit tank burned at 4/s while boosting and
@@ -938,7 +938,7 @@ injector, and `EngagedThisTick`/`ReleasedThisTick`/`LoopRefreshedThisTick` are t
 ## src/Flight/PathFollower.cs
 The engine's SECOND movement law and the exclusive alternative to `FlightModel`: the dispatcher
 picks between the two before any flight law runs, so nothing here is a steering input. Pure state
-and maths, driven by `Session/ScriptedPathVehicles.cs`. `Following` (the path owns this vehicle) and
+and maths, driven by `Session/World/ScriptedPathVehicles.cs`. `Following` (the path owns this vehicle) and
 `Frozen` (placed and waiting) are held apart, because folding them together cannot express the state
 most authored path vehicles spend a mission in. Every constant is decoded: the final leg steers at,
 and ends at, the point 300 m along it from the waypoint behind, raised with speed, so a shorter
@@ -1137,7 +1137,7 @@ damage-stage and prop-choreography menus, the canopy-hole family a human rig alo
 destroy-def lookup, the collider overlay's surface colour key, and the anchor-root derivation that IS
 `WorldEffectsFactory`'s stage source. An unstageable anchor fails the build rather than leaving a def
 anchored on nothing. Every name producer carries a producer-range tripwire in `CSVM.Tests` asserting
-its whole range resolves inside these tables. Read `Session/WorldEffectsFactory.cs` next.
+its whole range resolves inside these tables. Read `Session/World/WorldEffectsFactory.cs` next.
 
 ## src/Flight/SurfaceDefTable.cs
 One of the original's per-surface anim-def vectors (`"player_crash_" + name`, `"ai_crash_" +

@@ -4,7 +4,7 @@ namespace CSVM.UI;
 
 /// <summary>
 /// The static inspection view's orbit-camera controller: LMB-drag orbit, mouse-wheel zoom, and
-/// AABB-based framing of a subject. Shared by <see cref="CSVM.Session.GameSession"/> and the
+/// AABB-based framing of a subject. Shared by <see cref="CSVM.Session.Launch.GameSession"/> and the
 /// <c>--anim-lab</c> mode. Owns the orbit state and steers a <see cref="Camera3D"/> it does not
 /// own; the host keeps ownership of the placement flags and F11/F12. <see cref="Frame"/>'s own doc
 /// covers how the camera FOV sizes the orbit distance.

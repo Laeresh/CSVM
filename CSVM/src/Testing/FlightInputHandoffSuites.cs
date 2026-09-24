@@ -2,7 +2,8 @@ using System;
 using CSVM.Bindings;
 using CSVM.Flight;
 using CSVM.Mech3;
-using CSVM.Session;
+using CSVM.Session.Roster;
+using CSVM.Session.World;
 using Godot;
 
 namespace CSVM.Testing;

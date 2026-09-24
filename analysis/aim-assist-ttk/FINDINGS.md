@@ -82,7 +82,7 @@ Aircraft also receive the decoded independent +/-5% per-spawn variation. Actual 
 
 The original roster spawn multiplies enemy armour and health by `0.875`, `1.0`, or `1.25`. In Instant Action, the Novice/Veteran/Ace wave skill is specifically this pool multiplier; it is not the pilot rating.
 
-CSVM exposes and stores `InstantActionWave.EnemySkill`, but the spawn record carries no difficulty or health-scale field. [`InstantActionDirector.cs`](../../CSVM/src/Session/InstantActionDirector.cs) chooses pilot statistics, while [`AiFlightAssembler.cs`](../../CSVM/src/Session/AiFlightAssembler.cs) applies the faithful +/-5% aircraft jitter to the unscaled airframe pools. The selected wave skill therefore does not change enemy durability.
+CSVM exposes and stores `InstantActionWave.EnemySkill`, but the spawn record carries no difficulty or health-scale field. [`InstantActionDirector.cs`](../../CSVM/src/Session/InstantAction/InstantActionDirector.cs) chooses pilot statistics, while [`AiFlightAssembler.cs`](../../CSVM/src/Session/Roster/AiFlightAssembler.cs) applies the faithful +/-5% aircraft jitter to the unscaled airframe pools. The selected wave skill therefore does not change enemy durability.
 
 This explains a longer CSVM kill time when the comparison is against original Novice. Against original Veteran, this omission does not change the base pool; against original Ace, CSVM is easier.
 
@@ -90,7 +90,7 @@ This explains a longer CSVM kill time when the comparison is against original No
 
 The original applies roster slot 7 `init_health` when greater than zero and slot 66 `armor` when greater than or equal to zero, then applies difficulty. The format and executable path are documented in [`docs/formats/ai-rosters.md`](../../docs/formats/ai-rosters.md) and [`docs/org/vehicleDamage.md`](../../docs/org/vehicleDamage.md).
 
-CSVM's [`RosterSpawnPlan`](../../CSVM/src/Session/CampaignRoster.cs) has neither value. `CampaignRosterPlan.Build` does not read them, `SpawnFor` cannot forward them, and the assembler seeds the airframe defaults instead.
+CSVM's [`RosterSpawnPlan`](../../CSVM/src/Session/Campaign/CampaignRoster.cs) has neither value. `CampaignRosterPlan.Build` does not read them, `SpawnFor` cannot forward them, and the assembler seeds the airframe defaults instead.
 
 A census of all 414 extracted roster blocks found, among 251 enabled non-player-team blocks:
 

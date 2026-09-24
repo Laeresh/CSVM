@@ -2908,7 +2908,7 @@ Action places no vehicle on a path (`ia.zrd.json`'s `dzpath1`–`dzpath5` are da
 golden can see it.
 
 **What CSVM ports of this.** `Flight/PathFollower.cs` is the law with every constant above,
-`Mech3/ScriptedPath.cs` the route, and `Session/ScriptedPathVehicles.cs` the lifecycle, released by
+`Mech3/ScriptedPath.cs` the route, and `Session/World/ScriptedPathVehicles.cs` the lifecycle, released by
 `CampaignDirector`'s `START_TAXI`. Pinned by the `scripted-path` suite over C1's real `pp1`.
 The altitude between waypoints and the finish test are both the decode's: the motion is pitched at
 the steering target's height over the horizontal distance to it, and the leg-advance test is

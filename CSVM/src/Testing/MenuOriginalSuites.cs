@@ -119,7 +119,7 @@ internal static class MenuOriginalSuites
         registry.Register(PresentationId.Original, () => new OriginalPresentation(
             ctx.Host, ctx.DataRoot, layout, string.Empty, player1)
         {
-            CampaignProfiles = new CSVM.Session.CampaignProfileStore(profiles),
+            CampaignProfiles = new CSVM.Session.Campaign.CampaignProfileStore(profiles),
         });
         var host = new MenuHost(registry, audio, exits.Add);
         MenuSuiteHost.AddFeatures(host, ctx.DataRoot);

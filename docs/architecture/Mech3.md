@@ -217,11 +217,11 @@ arm the row. `Resolve` drops a row whose animation the mission does not carry, w
 original's own load-time rejection and why an Instant Action mission arms none of them. Each
 resolved row holds its volume in the approach node's own frame, its attitude cone and its speed
 band, and the geodesic attitude test beside them; the geometry is engine-free and
-`Session/LandingApproachRuntime.cs` flies a player against it. Decode: [../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md).
+`Session/Campaign/LandingApproachRuntime.cs` flies a player against it. Decode: [../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md).
 
 ## src/Mech3/Pickups.cs
 A mission's compact `pickups.zrd` sensor table as `PickupSpec` (node name, radius in metres): the
-spheres `Session/LadderSwitchRuntime.cs` tests the player against every frame. An absent or
+spheres `Session/Campaign/LadderSwitchRuntime.cs` tests the player against every frame. An absent or
 unreadable file resolves to an empty list rather than throwing. Nothing here starts the pickup
 timing; the train's own `train_on_track` definition calls `pickup_timing` at mission load. Decode:
 [../org/ladderSwitch.md](../org/ladderSwitch.md).
@@ -296,7 +296,7 @@ both authors of an AI's range volumes are read into, a roster block's twelve slo
 (`FromRosterSlots`, three named per volume plus a flag no block authors) and a net record's nine
 floats at elements 2–10 (`FromNetRecord`). `Overlaid` is the engine's per-field non-zero test, so
 `net.Overlaid(block)` is the decoded order ([../org/aiPilot.md](../org/aiPilot.md), "Net assignment"); the
-`min_ai_active_dist` floor is `Session/CampaignRoster.cs`'s `ApplyVolumes`. The altitude bands are
+`min_ai_active_dist` floor is `Session/Campaign/CampaignRoster.cs`'s `ApplyVolumes`. The altitude bands are
 read and carried but have no consumer: `Flight/AiModeMachine.cs` gates on radii alone.
 
 ## src/Mech3/RosterMarkers.cs
@@ -559,7 +559,7 @@ that offers no skip: the target, the ramp, the scoped definition set and `RateFo
 owned by nobody but `CutsceneController`, which scopes it per episode and hands it to
 `AnimRuntime.FastForward`; the runtime multiplies each definition's dt by it and spends a raised
 rate as repeated passes of the instance walk. A remake-only rule, so both constants are design
-choices rather than decoded figures. Read `Session/CutsceneController.cs` next; the reasoning is
+choices rather than decoded figures. Read `Session/World/CutsceneController.cs` next; the reasoning is
 docs/formats/anim-definitions/cutscenes.md, "Handoff and skip".
 
 ## src/Mech3/Anim/TemplateStage.cs
@@ -647,7 +647,7 @@ id pool, to clip defs. `PlayableFor(voId, family)` returns the one name to hand
 `MissionRadio.Speak`: the shipped `snd_<FAMILY>-A_id<N>_random` variant group where one is
 authored, else the bare def. `SessionPrewarmNames` is the flight session's mission-roster prewarm
 set, reached through `WorldSession.Options.VoiceClipNames` with CLI and Instant Action accents joined in. Dispatch
-sits above this seam, in `Flight/AiVoiceDispatcher.cs` (the rules) and `Session/AiVoiceRuntime.cs`
+sits above this seam, in `Flight/AiVoiceDispatcher.cs` (the rules) and `Session/Roster/AiVoiceRuntime.cs`
 (the wiring), never in it. Decode: docs/formats/combat-voice.md.
 
 ## src/Mech3/MissionCutscenes.cs
@@ -666,7 +666,7 @@ one's storage address (world folder, mission folder, `Persist.NNN`/`Mission.NNN`
 whether it flies with a wingman. `PreviousInSameChapter` is the engine's own backwards walk to the
 last earlier mission of the same world folder, which is what cross-mission persistence is scoped
 by. There is no branch, no predicate and no alternate; the only selection rule is "the next `seq`",
-which is why `Session/CampaignProgression.cs` models a single integer position. The three
+which is why `Session/Campaign/CampaignProgression.cs` models a single integer position. The three
 numberings one mission carries, and the folder-number-is-not-the-act rule, are on their own members; `ChapterNumber` inverts `ChapterFolder`, which is the environment digit an Instant Action pause dialog is keyed by.
 Decode: docs/formats/campaign-sequence.md.
 

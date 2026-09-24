@@ -6,7 +6,7 @@ namespace CSVM.UI;
 /// <summary>
 /// The build's version as <c>CSVM v&lt;version&gt;</c> in the bottom-right corner of the menu, so a
 /// screenshot a stranger sends already carries the build it was taken on, and the number is not
-/// taken for the original game's own. Built once by <see cref="CSVM.Session.Launcher"/>
+/// taken for the original game's own. Built once by <see cref="CSVM.Session.Launch.Launcher"/>
 /// and shown whenever the menu is up, which is what puts it on EVERY presentation: the stamp is a
 /// fact about the binary, not part of any one presentation's screen graph, and Original draws the
 /// decoded artwork with no place to put one. Hidden in flight, so no golden screenshot sees it.

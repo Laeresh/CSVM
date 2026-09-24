@@ -1037,7 +1037,7 @@ does. The `wingman-engage` suite measures it on a flown leg: the wingman holds o
 target throughout, opens fire, and its escort state never leaves the formation.
 
 **The spawner.** A campaign session spawns the mission's `aiv` roster through
-`Session/CampaignRoster.cs` (the plan) and `CampaignDirector.BuildRoster` (the placement). The fork
+`Session/Campaign/CampaignRoster.cs` (the plan) and `CampaignDirector.BuildRoster` (the placement). The fork
 above is applied per block from the def's `mode` (`Mech3/VehicleDefs.cs`, resolved through
 `kind_of`) and the block's `netids`: a netless `mode wingman` block gets `AiPilot.Escort` on the rig
 its `primary_target` names (the literal `player` is the first human), resolved in a second pass once

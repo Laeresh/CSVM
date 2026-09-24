@@ -1,7 +1,7 @@
 using System;
 using CSVM.Bindings;
 using CSVM.Flight;
-using CSVM.Session;
+using CSVM.Session.Roster;
 using CSVM.UI;
 using Godot;
 

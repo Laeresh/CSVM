@@ -148,7 +148,7 @@ public sealed class WorldBuilder
     /// <summary>The gamez <c>zone_id</c> the deck tiles author, or −1 when this world has no deck
     /// or its tiles disagree. The deck is the one world subtree <see cref="ZoneGate"/> does not
     /// stamp with a zone layer, being a per-rig camera-anchored copy, so
-    /// <c>Session.WeatherRig.Tick</c> tests this per rig instead.</summary>
+    /// <c>Session.World.WeatherRig.Tick</c> tests this per rig instead.</summary>
     public int CloudDeckZoneId { get; private set; } = -1;
 
     /// <summary>The deck tiles' own AUTHORED altitude, read off the coverage-winning bucket

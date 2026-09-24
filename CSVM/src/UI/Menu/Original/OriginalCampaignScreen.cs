@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Mech3;
-using CSVM.Session;
+using CSVM.Session.Campaign;
 
 namespace CSVM.UI.Menu.Original;
 

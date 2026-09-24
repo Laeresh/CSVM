@@ -74,5 +74,5 @@ public sealed record CabinReturn(string Profile) : MenuReturnDestination;
 /// the story position just flown, and whether that mission was won. The result travels with the
 /// destination because nothing on the far side can recover it: a lost replay of a mission the
 /// profile has already completed leaves the profile exactly as it found it, and the closing film is
-/// gated on the result (<c>Session/ClosingCinema.cs</c>).</summary>
+/// gated on the result (<c>Session/Campaign/ClosingCinema.cs</c>).</summary>
 public sealed record DebriefReturn(string Profile, int MissionSeq, bool MissionWon) : MenuReturnDestination;

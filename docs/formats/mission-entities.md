@@ -307,7 +307,7 @@ binary rather than inferred:
   position, so a record naming a surface hull is engaged here as it is there.
 
 What the remake's implementation (M4 F19, `Flight/ZeppelinBroadside.cs` +
-`Session/ZeppelinRuntime.Cannons.cs`) added to the picture:
+`Session/World/ZeppelinRuntime.Cannons.cs`) added to the picture:
 
 - **The deploy anims author their own timing.** Every `deployAnim`/`retractAnim` names a
   compiled per-mission `mis_anim` def (`lbroad11-deploy_pzep_lbroad11`) whose longest

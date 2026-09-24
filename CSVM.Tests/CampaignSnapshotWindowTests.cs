@@ -1,5 +1,5 @@
 using System;
-using CSVM.Session;
+using CSVM.Session.Campaign;
 using Godot;
 using Xunit;
 

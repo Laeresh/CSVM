@@ -18,7 +18,7 @@ internal static class HudLayers
     /// stands in front of.</summary>
     public const int FlareSprites = -3;
 
-    /// <summary>The cloud-band and fog-volume whiteout (<c>Session/WeatherRig.cs</c>), the air
+    /// <summary>The cloud-band and fog-volume whiteout (<c>Session/World/WeatherRig.cs</c>), the air
     /// between the eye and the world.
     /// ⚠ Keep it under <see cref="CockpitPass"/>: the original's whiteout is a fog term on the
     /// world draw, which the interior never takes, so the canopy, panel and gauges stay clear

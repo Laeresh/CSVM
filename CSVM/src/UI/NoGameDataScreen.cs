@@ -8,7 +8,7 @@ namespace CSVM.UI;
 /// What the window shows instead of the menu when the data root holds no extraction: that the
 /// game data is missing, and the step that produces it. A recipient who starts the exe before
 /// extracting is answered on screen, not in a log file they have no reason to open.
-/// ⚠ Do not grow this into a second provenance check; <see cref="CSVM.Session.ExtractionStamp"/>
+/// ⚠ Do not grow this into a second provenance check; <see cref="CSVM.Session.Launch.ExtractionStamp"/>
 /// owns whether an extraction is stale and stays a warning. This screen answers one question,
 /// whether there is an extraction here at all, and it is the launcher that decides when to ask.
 /// </summary>

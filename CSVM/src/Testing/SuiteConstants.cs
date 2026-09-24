@@ -6,7 +6,7 @@ using CSVM.Effects;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Mech3.Anim;
-using CSVM.Session;
+using CSVM.Session.Roster;
 using CSVM.UI;
 using CSVM.Utils;
 using Godot;

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using CSVM.Mech3;
-using CSVM.Session;
+using CSVM.Session.Campaign;
 
 namespace CSVM.UI;
 

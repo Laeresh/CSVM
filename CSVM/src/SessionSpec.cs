@@ -281,7 +281,7 @@ public sealed record SessionSpec
     /// type free of file I/O.</summary>
     public string? IaPath { get; private set; }
     /// <summary><c>--campaign=&lt;profile&gt;:&lt;seq&gt;</c>: a campaign session, a selected
-    /// <see cref="Session.CampaignProfileStore"/> profile plus a <c>cm_sequence.zrd</c> mission
+    /// <see cref="Session.Campaign.CampaignProfileStore"/> profile plus a <c>cm_sequence.zrd</c> mission
     /// index, carried here as plain values. Null when the flag was absent; loading the profile and
     /// building the mission are the runtime's job, the contract <see cref="IaPath"/> keeps. No new
     /// <see cref="SessionMode"/>: a content arg with no other mode vote resolves to
@@ -1534,7 +1534,7 @@ public sealed record SessionSpec
     /// mission: the profile and story position <c>--campaign=</c> would name, and
     /// <paramref name="planeNodes"/>, one entry per joined human in player order (entry 0 the
     /// SEATED pilot's aircraft, entries 1 and up guests'). The chapter and mission are settled by
-    /// <see cref="Session.CampaignDirector.ResolveSpec"/> in the constructor, out of
+    /// <see cref="Session.Campaign.CampaignDirector.ResolveSpec"/> in the constructor, out of
     /// <c>cm_sequence.zrd</c>, as for a command line. ⚠ Derived from the pristine <paramref name="cli"/>.</summary>
     public static SessionSpec FromCampaign(SessionSpec cli, string profile, int seq,
         IReadOnlyList<string> planeNodes, int players,
@@ -1806,13 +1806,13 @@ public sealed record SessionSpec
 
     /// <summary>A copy pointed at the chapter and mission a <c>--campaign=</c> story position
     /// resolves to. Resolving it needs <c>cm_sequence.zrd</c> off disk, which this type never
-    /// touches, so <see cref="Session.CampaignDirector.ResolveSpec"/> reads the sequence and calls
+    /// touches, so <see cref="Session.Campaign.CampaignDirector.ResolveSpec"/> reads the sequence and calls
     /// this; the rest of the build then sees an ordinary chapter/mission session.</summary>
     public SessionSpec WithCampaignMission(string chapter, string mission) =>
         this with { Chapter = chapter, Mission = mission, ChapterGiven = true };
 
     /// <summary>A copy with <see cref="Zeppelins"/>/<see cref="Generators"/> turned on for a
-    /// campaign mission that ships the data; <see cref="Session.GameSession"/> calls this once
+    /// campaign mission that ships the data; <see cref="Session.Launch.GameSession"/> calls this once
     /// <see cref="WithCampaignMission"/> has settled the chapter/mission <see cref="FromCampaign"/>
     /// could not yet know. ORs rather than overwrites, so an explicit CLI flag survives.</summary>
     public SessionSpec WithCampaignZeppelins(bool hasZeppelins, bool hasGenerators) =>
@@ -1822,7 +1822,7 @@ public sealed record SessionSpec
     /// hangar build and stored fit that go with it. The counterpart of <see cref="FromCampaign"/>'s
     /// seat for a command-line <c>--campaign=</c>, whose spec never passed a launchscreen: reading
     /// the profile needs the store off disk, which this type never touches, so
-    /// <see cref="Session.CampaignDirector.ResolveSeatedPlane"/> reads it and calls this. Guests
+    /// <see cref="Session.Campaign.CampaignDirector.ResolveSeatedPlane"/> reads it and calls this. Guests
     /// keep falling back to entry 0 the way <see cref="FromCampaign"/> leaves them.</summary>
     public SessionSpec WithSeatedAircraft(string planeNode, CustomPlaneDef? custom, LoadoutChoice? fit) =>
         this with

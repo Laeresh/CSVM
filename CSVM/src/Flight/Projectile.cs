@@ -461,7 +461,7 @@ public sealed partial class ProjectilePool : Node3D
     /// and has line of sight to it, once per acquisition episode
     /// (<see cref="TurretController"/>). The pool is the seam every gunner already holds and the
     /// one list both turret families reach, so a session-wide listener subscribes once here
-    /// instead of per gunner as each is built; <c>Session.AiVoiceRuntime</c> broadcasts
+    /// instead of per gunner as each is built; <c>Session.Roster.AiVoiceRuntime</c> broadcasts
     /// <c>WA-Turret</c> on it.</summary>
     public event Action<TurretController, FlightController>? TurretAcquiredPlayer;
 

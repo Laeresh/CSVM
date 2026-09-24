@@ -306,7 +306,7 @@ different speakers on the same frame, the pursuer and one of the player's wingme
 
 The rules above are represented in `CSVM/src/Flight/AiVoiceDispatcher.cs` (the gate, cooldowns,
 halving, election, DI tiers, bearing index, engine-free, seeded) and wired by
-`CSVM/src/Session/AiVoiceRuntime.cs`. Where the original's dispatch site is
+`CSVM/src/Session/Roster/AiVoiceRuntime.cs`. Where the original's dispatch site is
 decoded, the remake uses it; where only the trigger's meaning is decoded, the chosen stand-in
 site is recorded here. The runtime watches the mode machine of every AI the session hands it,
 whether or not that aircraft resolved a voice of its own: rows 1-12 below are broadcast, so they

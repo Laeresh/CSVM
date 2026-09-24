@@ -130,13 +130,13 @@ public sealed class CustomPlaneDef
     /// <summary>Wing decal, 0-49 or <see cref="KeepDecal"/> (record +0x64).</summary>
     public int WingDecal { get; set; } = KeepDecal;
 
-    /// <summary>Per-gun-slot ammunition pick, in <c>Session.OwnedPlane.Ammo</c>'s own encoding, or
+    /// <summary>Per-gun-slot ammunition pick, in <c>Session.Campaign.OwnedPlane.Ammo</c>'s own encoding, or
     /// <see cref="NoAmmoPick"/> for a slot the campaign never fitted. Optional in the stored file:
     /// the campaign's EXPORT is what writes it, so a plane built in the hangar carries none and
     /// flies its base fit.</summary>
     public int[] Ammo { get; } = NothingPicked();
 
-    /// <summary>Per-pylon ordnance pick, eight cells, in <c>Session.OwnedPlane.Ordnance</c>'s own
+    /// <summary>Per-pylon ordnance pick, eight cells, in <c>Session.Campaign.OwnedPlane.Ordnance</c>'s own
     /// one-based encoding with <see cref="NoOrdnancePick"/> for a cell the campaign never fitted.
     /// Optional in the stored file, exactly as <see cref="Ammo"/> is.</summary>
     public int[] Ordnance { get; } = new int[LoadoutChoice.MaxPylon];
@@ -248,7 +248,7 @@ public sealed class CustomPlaneDef
     /// runs it on both load and save, so an out-of-range value from a hand-edited file (or a
     /// screen bug) can never leave the model claiming an airframe or calibre that does not
     /// exist. <see cref="Ammo"/> and <see cref="Ordnance"/> are the exception: their vocabulary is
-    /// <c>Session.CampaignLoadout</c>'s, the one decoder of both, which reads anything outside it
+    /// <c>Session.Campaign.CampaignLoadout</c>'s, the one decoder of both, which reads anything outside it
     /// as the stock fit, so they are round-tripped as stored rather than pinned here.</summary>
     public CustomPlaneDef Clamp()
     {

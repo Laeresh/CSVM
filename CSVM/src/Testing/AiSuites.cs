@@ -3,7 +3,10 @@ using System.IO;
 using System.Linq;
 using CSVM.Flight;
 using CSVM.Mech3;
-using CSVM.Session;
+using CSVM.Session.Campaign;
+using CSVM.Session.InstantAction;
+using CSVM.Session.Roster;
+using CSVM.Session.World;
 using CSVM.Tooling;
 using CSVM.Utils;
 using Godot;
@@ -631,7 +634,7 @@ internal static class AiSuites
             FlightController? target = null;
             FlightController? friend = null;
             FlightController? zepBait = null;   // its own rig: the zeppelin rings shoot it to bits
-            Session.TurretEmplacementRuntime? emplacements = null;   // a Node now: freed below
+            Session.World.TurretEmplacementRuntime? emplacements = null;   // a Node now: freed below
             var savedClock = Utils.GameClock.Current;
             try
             {
@@ -644,7 +647,7 @@ internal static class AiSuites
                 // ⚠ Keep the clock stepping (INSTR-49): without it the gunner's 1-2 s line-of-sight
                 // cache never expires and the woken gun rides the one cast it took at wake.
                 Utils.GameClock.Current = new Utils.GameClock { Mode = Utils.GameClock.RunMode.FixedStep };
-                var runtime = emplacements = new Session.TurretEmplacementRuntime(turretDefs, weapons,
+                var runtime = emplacements = new Session.World.TurretEmplacementRuntime(turretDefs, weapons,
                     (pattern, scope) => world.Runtime.FindNodes(pattern, scope), live,
                     world.Runtime.WorldRoot);
 
@@ -950,10 +953,10 @@ internal static class AiSuites
             using var c4Textures = new TextureArchive(texturesPath);
             var live = new ProjectilePool(c4Textures, null, null);
             ctx.Host.AddChild(live);
-            Session.TurretEmplacementRuntime? c4Emplacements = null;
+            Session.World.TurretEmplacementRuntime? c4Emplacements = null;
             try
             {
-                var runtime = c4Emplacements = new Session.TurretEmplacementRuntime(turretDefs, weapons,
+                var runtime = c4Emplacements = new Session.World.TurretEmplacementRuntime(turretDefs, weapons,
                     (pattern, scope) => world.Runtime.FindNodes(pattern, scope), live,
                     world.Runtime.WorldRoot);
                 var census = new List<string>();
@@ -1002,12 +1005,12 @@ internal static class AiSuites
             {
                 var textures = new TextureArchive(texturesPath);
                 ProjectilePool? live = null;
-                Session.TurretEmplacementRuntime? emplacements = null;
+                Session.World.TurretEmplacementRuntime? emplacements = null;
                 try
                 {
                     live = new ProjectilePool(textures, null, null) { DamageSink = world.Runtime.DamageAt };
                     ctx.Host.AddChild(live);
-                    emplacements = new Session.TurretEmplacementRuntime(turretDefs, weapons,
+                    emplacements = new Session.World.TurretEmplacementRuntime(turretDefs, weapons,
                         (pattern, scope) => world.Runtime.FindNodes(pattern, scope), live,
                         world.Runtime.WorldRoot);
                     ctx.Host.AddChild(emplacements);
@@ -1097,7 +1100,7 @@ internal static class AiSuites
             var textures = new TextureArchive(texturesPath);
             ProjectilePool? pool = null;
             FlightController? target = null;
-            Session.TurretEmplacementRuntime? emplacements = null;
+            Session.World.TurretEmplacementRuntime? emplacements = null;
             var savedClock = Utils.GameClock.Current;
             try
             {
@@ -1112,7 +1115,7 @@ internal static class AiSuites
                     return world.Runtime.DamageAt(node, dmg);
                 };
                 ctx.Host.AddChild(live);
-                var runtime = emplacements = new Session.TurretEmplacementRuntime(turretDefs, weapons,
+                var runtime = emplacements = new Session.World.TurretEmplacementRuntime(turretDefs, weapons,
                     (pattern, scope) => world.Runtime.FindNodes(pattern, scope), live,
                     world.Runtime.WorldRoot);
                 var guns = runtime.Emplacements.Where(t => t.Label.StartsWith("MSG_TUR_AAA@aagun")).ToList();
@@ -1259,7 +1262,7 @@ internal static class AiSuites
         ctx.RequireData(missionZrdr, $"C1/M02 zrdr");
 
         // The mission's own wake directive, read from the shipped script rather than assumed.
-        var script = Session.ObjectiveScript.Load(missionZrdr);
+        var script = Session.Objectives.ObjectiveScript.Load(missionZrdr);
         var patterns = new List<string>();
         foreach (var def in script.Objectives)
             patterns.AddRange(def.WakeupTurrets);
@@ -1283,7 +1286,7 @@ internal static class AiSuites
             var textures = new TextureArchive(texturesPath);
             ProjectilePool? pool = null;
             FlightController? target = null;
-            Session.TurretEmplacementRuntime? emplacements = null;
+            Session.World.TurretEmplacementRuntime? emplacements = null;
             try
             {
                 var hits = new List<(string Victim, float Damage)>();
@@ -1297,7 +1300,7 @@ internal static class AiSuites
                     return world.Runtime.DamageAt(node, dmg);
                 };
                 ctx.Host.AddChild(live);
-                var runtime = emplacements = new Session.TurretEmplacementRuntime(turretDefs, weapons,
+                var runtime = emplacements = new Session.World.TurretEmplacementRuntime(turretDefs, weapons,
                     (pattern, scope) => world.Runtime.FindNodes(pattern, scope), live,
                     world.Runtime.WorldRoot);
                 var guns = runtime.Emplacements.Where(t => t.Label.StartsWith("MSG_TUR_AAA@aagun")).ToList();
@@ -1311,14 +1314,14 @@ internal static class AiSuites
 
                 // A chapter 1 log holding all five wrecked, written by CM07 itself: the walk cuts
                 // it off, so the mission opens on the fort the .gw built.
-                var log = new Session.CampaignPersistLog();
-                var wrecked = new List<Session.PersistedObject>();
+                var log = new Session.Campaign.CampaignPersistLog();
+                var wrecked = new List<Session.Campaign.PersistedObject>();
                 foreach (var g in guns)
                 {
                     if (world.Runtime.Destructibles.Resolve(g.Site!) is { } inst
                         && inst.Anchor.HasMeta(AnimRuntime.IndexMeta))
                     {
-                        wrecked.Add(new Session.PersistedObject((int)inst.Anchor.GetMeta(AnimRuntime.IndexMeta),
+                        wrecked.Add(new Session.Campaign.PersistedObject((int)inst.Anchor.GetMeta(AnimRuntime.IndexMeta),
                             inst.Def.Name, inst.Anchor.Name, true, 0f));
                     }
                 }
@@ -2576,8 +2579,8 @@ internal static class AiSuites
         using var archive = new SoundArchive(ctx.SoundsPath);
         WorldSounds? sounds = null;
         MissionRadio? radio = null;
-        Session.AiVoiceRuntime? runtime = null;
-        Session.AiVoiceRuntime? attack = null;
+        Session.Roster.AiVoiceRuntime? runtime = null;
+        Session.Roster.AiVoiceRuntime? attack = null;
         FlightController? ai = null;
         ProjectilePool? turretPool = null;
         var gloatRigs = new List<FlightController>();
@@ -2595,7 +2598,7 @@ internal static class AiSuites
 
             radio = new MissionRadio(defs, groups, sounds.StreamFor);
             ctx.Host.AddChild(radio);
-            runtime = new Session.AiVoiceRuntime(voice, sounds, radio, new System.Random(5));
+            runtime = new Session.Roster.AiVoiceRuntime(voice, sounds, radio, new System.Random(5));
             ctx.Host.AddChild(runtime);
 
             var aiModel = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
@@ -3012,7 +3015,7 @@ internal static class AiSuites
             // edge, so a commit inside the 2 s mute window costs nothing. The second runtime
             // carries its own clock, the only way to put a transition inside that window here.
             PumpRadio(radio);
-            attack = new Session.AiVoiceRuntime(voice, sounds, radio, new System.Random(9));
+            attack = new Session.Roster.AiVoiceRuntime(voice, sounds, radio, new System.Random(9));
             ctx.Host.AddChild(attack);
             var calls = new List<(string Tag, int Trigger, string Clip)>();
             attack.LinePlayed += (tag, trigger, clip) => calls.Add((tag, trigger, clip));

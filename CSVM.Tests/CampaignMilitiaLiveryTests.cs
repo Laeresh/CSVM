@@ -5,7 +5,8 @@ using System.Linq;
 using CSVM;
 using CSVM.Flight;
 using CSVM.Mech3;
-using CSVM.Session;
+using CSVM.Session.Campaign;
+using CSVM.Session.Roster;
 using Xunit;
 
 namespace CSVM.Tests;

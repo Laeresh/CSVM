@@ -26,7 +26,7 @@ public sealed partial class IaWrapupBoard : ResultsBoard
     // The shipped row titles, langui ids 1134-1137 (docs/formats/instant-action.md "The wrap-up
     // screen"), literal text, not read off ui_strings.json at runtime: that table is a build-time
     // extraction artifact of the .rof archive, not one of the five archives a session build opens
-    // (Session/SessionArchives.cs), and six lines are stable enough not to earn a reader of their
+    // (Mech3/SessionArchives.cs), and six lines are stable enough not to earn a reader of their
     // own here.
     private const string TimeTitle = "Time to Complete Mission";
     private const string DestroyedTitle = "Enemies Shot Down";

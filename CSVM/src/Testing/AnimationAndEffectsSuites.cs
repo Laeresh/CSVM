@@ -4,7 +4,7 @@ using System.Text;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Mech3.Anim;
-using CSVM.Session;
+using CSVM.Session.Roster;
 using CSVM.Tooling;
 using CSVM.UI;
 using Godot;
@@ -32,12 +32,12 @@ internal static class AnimationAndEffectsSuites
             // The staged set is DERIVED, so this census stages what the
             // real world-effects build stages, from the same call, a root the closure gains and
             // this chapter's gamez cannot supply throws here, naming the def and the anchor.
-            var roots = Session.WorldEffectsFactory.EffectStageRootNames(world.Session.Program, world.Gamez);
+            var roots = Session.World.WorldEffectsFactory.EffectStageRootNames(world.Session.Program, world.Gamez);
             var stage = new Node3D { Name = "EffectCensusStage" };
             var pool = new Node3D { Name = "pool0" };
             pool.SetMeta(AnimRuntime.PoolSlotMeta, 0);
             stage.AddChild(pool);
-            int built = Session.WorldEffectsFactory.BuildEffectStage(world.Gamez,
+            int built = Session.World.WorldEffectsFactory.BuildEffectStage(world.Gamez,
                 world.Session.Builder.Scene, pool, roots);
             ctx.Check(built == roots.Count, $"staged {built}/{roots.Count} template root(s)");
             foreach (var child in pool.GetChildren())
@@ -122,11 +122,11 @@ internal static class AnimationAndEffectsSuites
                         rigScope.AddChild(wreck);
                     }
                     ctx.Host.AddChild(rigScope);
-                    var resolve = Session.WorldEffectsFactory.StageRootResolver(world.Gamez, rigScope);
+                    var resolve = Session.World.WorldEffectsFactory.StageRootResolver(world.Gamez, rigScope);
                     var rigRoots = Flight.EffectCatalogue.CrashStageRoots(world.Session.Program, resolve);
                     var built = new Node3D { Name = "crash_template_replica" };
                     ctx.Host.AddChild(built);
-                    int n = Session.WorldEffectsFactory.BuildEffectStage(world.Gamez,
+                    int n = Session.World.WorldEffectsFactory.BuildEffectStage(world.Gamez,
                         world.Session.Builder.Scene, built, rigRoots);
                     built.Free();
                     ctx.Check(n == rigRoots.Count,
@@ -2183,14 +2183,14 @@ internal static class AnimationAndEffectsSuites
         System.Text.StringBuilder report, System.Action<IReadOnlyList<BurstFire>> body)
     {
         var roots = Flight.EffectCatalogue.StageRootsFor(world.Session.Program, new[] { animName },
-            Session.WorldEffectsFactory.StageRootResolver(world.Gamez));
+            Session.World.WorldEffectsFactory.StageRootResolver(world.Gamez));
         ctx.Check(roots.Count > 0,
             $"{animName}: its call closure's anchor roots derived ({roots.Count}: {string.Join(", ", roots)})");
         var stage = new Node3D { Name = $"BurstStage_{animName}" };
         var pool = new Node3D { Name = "pool0" };
         pool.SetMeta(AnimRuntime.PoolSlotMeta, 0);
         stage.AddChild(pool);
-        int built = Session.WorldEffectsFactory.BuildEffectStage(world.Gamez,
+        int built = Session.World.WorldEffectsFactory.BuildEffectStage(world.Gamez,
             world.Session.Builder.Scene, pool, roots);
         ctx.Same(roots.Count, built, $"{animName}: template roots staged from the chapter gamez");
         foreach (var child in pool.GetChildren())

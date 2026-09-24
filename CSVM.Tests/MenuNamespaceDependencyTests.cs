@@ -35,7 +35,9 @@ public class MenuNamespaceDependencyTests
         var violations = AssemblyDependencyScan.Violations(
             Assembly("CSVM.dll"),
             ns => ns == "CSVM.UI" || ns.StartsWith("CSVM.UI.Menu", StringComparison.Ordinal),
-            name => name is "CSVM.Session.GameSession" or "CSVM.Session.Launcher" or "CSVM.Session.LauncherContext");
+            name => name is "CSVM.Session.Launch.GameSession"
+                or "CSVM.Session.Launch.Launcher"
+                or "CSVM.Session.Launch.LauncherContext");
 
         Assert.True(violations.Count == 0, string.Join(Environment.NewLine, violations));
     }

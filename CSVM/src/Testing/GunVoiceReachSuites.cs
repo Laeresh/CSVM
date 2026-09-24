@@ -3,7 +3,8 @@ using System.Collections.Generic;
 using System.Linq;
 using CSVM.Flight;
 using CSVM.Mech3;
-using CSVM.Session;
+using CSVM.Session.InstantAction;
+using CSVM.Session.World;
 using CSVM.Utils;
 using Godot;
 

@@ -167,7 +167,7 @@ public sealed class ProbeRunner
     /// it: the graph then completes it off its own conditions on the next step, rather than a
     /// mark being faked into the display. Drives <c>--debug-objective=</c> and the objectives
     /// suite alike. Returns whether the mission arms an objective of that number.</summary>
-    public static bool ForceObjective(Mech3.AnimRuntime? runtime, Session.CampaignDirector director, int number)
+    public static bool ForceObjective(Mech3.AnimRuntime? runtime, Session.Campaign.CampaignDirector director, int number)
     {
         if (runtime == null || director.Graph is not { } graph)
         {
@@ -192,7 +192,7 @@ public sealed class ProbeRunner
     /// <summary>Destroys (or, where nothing is destructible, deactivates) every node one
     /// objective's <c>INACTIVE</c> paths name, the same resolve-then-kill shape
     /// <c>CampaignMissionEnd</c>'s driver uses.</summary>
-    public static void DriveInactive(Mech3.AnimRuntime runtime, Session.ObjectiveDef def)
+    public static void DriveInactive(Mech3.AnimRuntime runtime, Session.Objectives.ObjectiveDef def)
     {
         foreach (var path in def.Inactive)
         {

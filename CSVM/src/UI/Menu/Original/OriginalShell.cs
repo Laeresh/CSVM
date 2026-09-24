@@ -362,7 +362,7 @@ public sealed partial class OriginalShell : IOriginalScreenHost
         HangarFeature? hangar = null,
         CSVM.Flight.CustomPlaneStore? planes = null,
         CampaignFeature? campaign = null,
-        Func<CSVM.Session.CampaignProfileStore>? profiles = null,
+        Func<CSVM.Session.Campaign.CampaignProfileStore>? profiles = null,
         Func<CSVM.Flight.StockLoadouts?>? stock = null,
         string? dataRoot = null,
         // Reads the saved options the Options screen shows back; null opens it on the defaults,

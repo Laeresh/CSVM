@@ -32,7 +32,7 @@ public enum TurretGate
 /// barrel, writes the pose onto the <c>PARTS</c> nodes, and fires through the shared
 /// <see cref="ProjectilePool"/>, hit resolution is geometric, with <c>INACCURACY</c> as a scatter
 /// cone, never a probability roll. A plain class, not a Node: a carried gunner is ticked by its
-/// host's <c>SimStep</c>, an emplacement by <c>Session.TurretEmplacementRuntime</c>.</summary>
+/// host's <c>SimStep</c>, an emplacement by <c>Session.World.TurretEmplacementRuntime</c>.</summary>
 public sealed class TurretController
 {
     /// <summary>The barrel's catch-up rate toward the clamped aim direction, per second, the

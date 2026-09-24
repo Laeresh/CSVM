@@ -479,7 +479,7 @@ look for) · *Cross-refs:* (related `BL-nnn`/`CAP-nn`/docs, with why).
   (`--freecam --chapter=C1 --pos=-2000,1000,-1792 --direction=0,0,-1` sits in the bottom ramp),
   and compare the shimmer's pace against any original in-cloud footage (`CAP-12`'s C4 take has
   in-cloud frames) once such footage is reviewed for timing rather than just colour.
-  *Cross-refs:* `docs/architecture.md`'s `Session/WeatherRig.cs` entry (D32 bullet).
+  *Cross-refs:* `docs/architecture.md`'s `Session/World/WeatherRig.cs` entry (D32 bullet).
 
 - `BL-341` `[Research]` `[M]` `[Next: look]` `[Impact: low]` `[Evidence: data]` `[C5]` **Reopened `BL-250`: with the real `no_clutter` gate landed, 7.6% of C5's ground
   (13.8 million m², the flagged overlay area with no base layer beneath it) renders bare, and
@@ -924,7 +924,7 @@ usual.
 - `BL-380` `[Bug]` `[Blocked: per-instance fog shader uniforms]` `[L]` `[Next: code]` `[Impact: low]` `[Evidence: trace]` **Fog-zone selection stays
   player-1-only in splitscreen: `csky_fog_color`/`_range`/`_alt`/`csky_world_light` are one GLOBAL
   shader uniform set, written from rig 0's camera weather state alone
-  (`Session/WeatherRig.cs:459-466`), so a pane on the other side of a fog-zone boundary from P1
+  (`Session/World/WeatherRig.cs:459-466`), so a pane on the other side of a fog-zone boundary from P1
   renders P1's fog, not its own.** Split out of the `BL-338` residual sweep 2026-08-15 (plan B14):
   the whiteout overlay and the deck regime are already per-rig (the same `WeatherRig.Tick` loop),
   only the fog GLOBALS lag behind, because `ApplyFogGlobals` writes session-wide shader uniforms,

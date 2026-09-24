@@ -1,6 +1,6 @@
 using System.IO;
 using CSVM.Flight;
-using CSVM.Session;
+using CSVM.Session.Roster;
 using CSVM.Utils;
 
 namespace CSVM.Testing;

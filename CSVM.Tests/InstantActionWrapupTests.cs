@@ -1,5 +1,5 @@
 using CSVM.Flight;
-using CSVM.Session;
+using CSVM.Session.InstantAction;
 using CSVM.UI;
 using Xunit;
 

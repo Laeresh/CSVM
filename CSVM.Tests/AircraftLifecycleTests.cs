@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using CSVM.Flight;
 using CSVM.Mech3;
-using CSVM.Session;
 using Xunit;
 
 namespace CSVM.Tests;

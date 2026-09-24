@@ -4,7 +4,8 @@ using System.IO;
 using System.Text;
 using CSVM.Flight;
 using CSVM.Mech3;
-using CSVM.Session;
+using CSVM.Session.Campaign;
+using CSVM.Session.Objectives;
 using CSVM.UI;
 using Godot;
 

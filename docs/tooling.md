@@ -49,7 +49,7 @@ which is what makes the viewer read loose files; `-Source`/`-Dest` override the 
 
 Every failure-free run stamps `<Dest>/VERSION.json` with the `unzbd --version` line verbatim, the
 exe's SHA-256, the fork HEAD, the date, and a hand-bumped schema integer the engine
-compares at boot (`src/Session/ExtractionStamp.cs` warns, never blocks), bumped by any reader
+compares at boot (`src/Session/Launch/ExtractionStamp.cs` warns, never blocks), bumped by any reader
 change that invalidates old extractions.
 
 **`messages.json`** comes from a step after the walk, since `strings.dll` sits at the install root

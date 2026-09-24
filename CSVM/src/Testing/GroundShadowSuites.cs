@@ -4,7 +4,8 @@ using System.Diagnostics;
 using System.Text;
 using CSVM.Flight;
 using CSVM.Mech3;
-using CSVM.Session;
+using CSVM.Session.Roster;
+using CSVM.Session.World;
 using CSVM.Utils;
 using Godot;
 

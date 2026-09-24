@@ -111,7 +111,7 @@ page through the field, and the seated player's first FLY MISSION latches `Locke
 ## src/UI/Campaign*Page.cs
 The ten campaign screens, one file each, every one an `ICampaignPage` over `CampaignFlow`: the
 player roster with its name field and confirmed delete, the cabin hub, the memento chooser its wall
-opens over `Session/CampaignMementos.cs`, the previous-missions contents list, the briefing with its
+opens over `Session/Campaign/CampaignMementos.cs`, the previous-missions contents list, the briefing with its
 revealed map and parchment note, the flight check, ammo selection, plane selection with its ratings
 and export, the scrapbook and one scrap's zoom view, whose torn mount over a photograph is the
 book's sepia. Each names its own `LAYOUT.CSV` script and reads geometry through `CampaignLayout`, so
@@ -248,7 +248,7 @@ rather than score or world sound. The picture fills the same 800x600 rectangle `
 board into, so a cinema and the screen it hands off to own one area of the window. `Open` answers
 null for a file that will not read, `Ended` is how a flow learns it stopped, and `CinemaSkip` is
 which presses end it early, the per-cinema differences there being the original's own. It mounts
-itself on `HudLayers.Cinema` and frees itself; `Session/Launcher.cs`'s `PlayCinema` is the seam.
+itself on `HudLayers.Cinema` and frees itself; `Session/Launch/Launcher.cs`'s `PlayCinema` is the seam.
 The three authored sets live here as constants and `CinemaSkips` answers them.
 
 ## src/UI/CinemaSkips.cs
@@ -263,7 +263,7 @@ cinema's set is, and why they differ, is [../formats/cinemas.md](../formats/cine
 
 ## src/UI/CinemaHandoff.cs
 What every cinema flow shares. `CinemaPlay` is the shape of the call that puts a film on screen, which
-`Session/Launcher.cs` satisfies by handing over `PlayCinema` itself. `Once` wraps the continuation a film hands off to: a
+`Session/Launch/Launcher.cs` satisfies by handing over `PlayCinema` itself. `Once` wraps the continuation a film hands off to: a
 skip can land on the frame the film plays out and both paths end it, so the next screen opens once however many times the
 cinema reports it stopped; the boot block, whose continuations start the next film, chains unwrapped. `CinemaFilm` is for
 the screen a film stands in front of rather than a flow that chains them: `Play` spans one film, `Up` says the film owns
@@ -279,7 +279,7 @@ for a film, one that puts up a still and one that takes the card down as the fir
 name, position and duration is the reader's ([../formats/cinemas.md](../formats/cinemas.md)), which
 is also where the card's one showing, the unseen fade and the films running back to back are
 settled; `Held` is the one member that says how much of an authored hold reaches the screen.
-`BootCard` supplies the stills, `Session/Launcher.cs`'s `PlayCinema` the films.
+`BootCard` supplies the stills, `Session/Launch/Launcher.cs`'s `PlayCinema` the films.
 
 ## src/UI/BootCard.cs
 The boot sequence's engine half, and the only file that knows a boot still is drawn at all: the
@@ -617,7 +617,7 @@ its own, and the Escape or pad-B read that raises `Exit` for `GameSession.ExitPh
 It decides nothing about the mode itself. The hint fades rather than persisting, since the mode
 exists to compose a frame, and the fade runs on wall time because photo mode holds the clock. Pad
 reads go through the seat's own device filter, so in splitscreen another player's pad cannot close a
-mode that is not theirs. The mode itself is `Session/GameSession.cs`'s.
+mode that is not theirs. The mode itself is `Session/Launch/GameSession.cs`'s.
 
 ## src/UI/PerfHud.cs
 The frame-cost readout (key F14, `--debug-fps` presets it): fps, the current frame's cost and the
@@ -646,7 +646,7 @@ as the way out. `Missing` is the whole test, an absent or empty `extracted` dire
 engine-free so the launcher's branch and its unit read one rule; `Instruction` is the single
 sentence the screen and the launcher's own log line share, worded for a release payload
 (`Extract.cmd`) or a repo checkout (the two extractor scripts). Provenance is not asked about
-here: `Session/ExtractionStamp.cs` owns whether an extraction is stale and stays a warning.
+here: `Session/Launch/ExtractionStamp.cs` owns whether an extraction is stale and stays a warning.
 
 ## src/UI/MeshLab.cs
 The geometry and shading lab (key M): normal lines, the smoothing-seam wireframe, collider boxes,
@@ -871,7 +871,7 @@ The shared menu audio contract: a presentation requests a `MenuCue` by semantic 
 stops narration at moments it owns, and states through `PreviewMix`/`EndMixPreview` the mix a page
 that sets one stands at and which `MenuMixLevel` a frame moved; the service owns resolution,
 playback, volume, the buses and the handoff into a launching session. The host implementation is
-`MenuAudioService` (`src/Session/MenuAudioService.cs`); Built-in's one call site is the briefing
+`MenuAudioService` (`src/Session/Launch/MenuAudioService.cs`); Built-in's one call site is the briefing
 narration.
 
 ## src/UI/Menu/MenuExit.cs
@@ -1227,7 +1227,7 @@ The four cue names the Original presentation asks the shared audio service for: 
 a button press, and an edit box's keystroke and reject sounds, which are the four the original's
 globals script binds. The names are semantic and the cue table owns which wav each resolves to, so
 the presentation names no file. The contract is `IMenuAudio.cs` and the table is
-`src/Session/MenuCueTable.cs`.
+`src/Session/Launch/MenuCueTable.cs`.
 
 ## src/UI/Menu/Original/PointerSeat.cs
 Seat 0 with a pointer: wraps the seat that polls the keyboard and the unclaimed pads and adds the

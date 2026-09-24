@@ -3,7 +3,7 @@
 Part of the [format documentation](README.md) (see also [zrdr.md](zrdr.md),
 [world-structure.md](world-structure.md)). Covers the mission's `weather.json` reader: distance fog, the cloud-cover
 whiteout band, wind, and the shared **colour-triple encoding rule**. Consumed by
-`CSVM/src/Flight/Weather.cs` (`WeatherState`) + `Session.WeatherRig.Build`.
+`CSVM/src/Flight/Weather.cs` (`WeatherState`) + `Session.World.WeatherRig.Build`.
 
 This reference covers fog colour, precipitation
 (item 5) and the `SUNLIGHT_*` world-lighting decode (item 6, the night/overcast brightness

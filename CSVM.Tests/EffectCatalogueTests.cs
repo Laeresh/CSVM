@@ -4,7 +4,6 @@ using System.Linq;
 using System.Threading.Tasks;
 using CSVM.Flight;
 using CSVM.Mech3;
-using CSVM.Session;
 using Xunit;
 
 namespace CSVM.Tests;

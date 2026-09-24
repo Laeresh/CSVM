@@ -4,7 +4,7 @@ using System.IO;
 using System.Linq;
 using CSVM.Flight;
 using CSVM.Mech3;
-using CSVM.Session;
+using CSVM.Session.Campaign;
 using CSVM.UI;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.Original;

@@ -3,7 +3,7 @@ using System.IO;
 using System.Linq;
 using CSVM.Flight;
 using CSVM.Mech3;
-using CSVM.Session;
+using CSVM.Session.Roster;
 using CSVM.Tooling;
 using Godot;
 
@@ -84,7 +84,7 @@ internal static class DamageSuites
                 var pool = new Node3D { Name = $"pool{slot}" };
                 pool.SetMeta(AnimRuntime.PoolSlotMeta, slot);
                 stage.AddChild(pool);
-                int built = Session.WorldEffectsFactory.BuildEffectStage(world.Gamez,
+                int built = Session.World.WorldEffectsFactory.BuildEffectStage(world.Gamez,
                     world.Session.Builder.Scene, pool, new[] { "planeflakes" });
                 ctx.Check(built == 1, $"slot {slot} staged its planeflakes copy");
                 foreach (var child in pool.GetChildren())
@@ -97,7 +97,7 @@ internal static class DamageSuites
             }
 
             var runtime = new AnimRuntime(
-                Session.WorldEffectsFactory.NewCrashTemplateStage())
+                Session.World.WorldEffectsFactory.NewCrashTemplateStage())
             {
                 AutoStart = false,
                 ManualAdvance = true,
@@ -170,7 +170,7 @@ internal static class DamageSuites
                 var pool = new Node3D { Name = $"pool{slot}" };
                 pool.SetMeta(AnimRuntime.PoolSlotMeta, slot);
                 stage.AddChild(pool);
-                Session.WorldEffectsFactory.BuildEffectStage(world.Gamez,
+                Session.World.WorldEffectsFactory.BuildEffectStage(world.Gamez,
                     world.Session.Builder.Scene, pool, new[] { "planeflakes" });
                 foreach (var child in pool.GetChildren())
                 {
@@ -181,7 +181,7 @@ internal static class DamageSuites
                 }
             }
 
-            var runtime = new AnimRuntime(Session.WorldEffectsFactory.NewCrashTemplateStage())
+            var runtime = new AnimRuntime(Session.World.WorldEffectsFactory.NewCrashTemplateStage())
             {
                 AutoStart = false,
                 ManualAdvance = true,
@@ -560,7 +560,7 @@ internal static class DamageSuites
                 ctx.Host.AddChild(live);
                 var spec = SessionSpec.Parse(System.Array.Empty<string>());
                 var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
-                var factory = new Session.WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero);
+                var factory = new Session.World.WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero);
                 var inputs = new AircraftAssemblyResources
                 {
                     PlanesGamez = planesGamez,

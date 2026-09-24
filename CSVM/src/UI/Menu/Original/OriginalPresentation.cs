@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using CSVM.Flight;
-using CSVM.Session;
+using CSVM.Session.Campaign;
 using CSVM.Utils;
 using Godot;
 

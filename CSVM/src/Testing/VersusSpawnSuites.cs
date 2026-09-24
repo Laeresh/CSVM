@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using CSVM.Flight;
 using CSVM.Mech3;
-using CSVM.Session;
+using CSVM.Session.Roster;
 using CSVM.Utils;
 using Godot;
 

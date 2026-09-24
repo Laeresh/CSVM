@@ -47,7 +47,7 @@ extracted menu artwork to be usable, and every other presentation is additive be
 
 `PresentationRegistry` (`CSVM/src/UI/Menu/PresentationRegistry.cs`) holds one factory per
 `PresentationId`, a non-empty ordinal token, the word `--presentation=` names. `Launcher.BuildMenuHost`
-(`CSVM/src/Session/Launcher.cs`) fills the registry once per process:
+(`CSVM/src/Session/Launch/Launcher.cs`) fills the registry once per process:
 
 ```
 registry.Register(PresentationId.BuiltIn,  () => new BuiltInPresentation(...));
@@ -360,7 +360,7 @@ around rectangles the layout authors at differing widths.
 `BeginNarration(wavName)` starts spoken narration, replacing any playing and ducking the music,
 `EndNarration()` stops it, idempotent, and `PreviewMix(levels, moved)`/`EndMixPreview()` carry the
 mix a page that sets one stands at. The presentation chooses which cue to ask for and when; the
-service (`MenuAudioService`, `CSVM/src/Session/MenuAudioService.cs`) owns lookup, decoding,
+service (`MenuAudioService`, `CSVM/src/Session/Launch/MenuAudioService.cs`) owns lookup, decoding,
 playback, volume, the buses and the handoff into a launching session. A cue name the table lacks, a
 missing file or a failed decode is logged once and cached as silence; a presentation never learns
 whether a sound exists.
@@ -406,7 +406,7 @@ the script: `ZB = 0` stands on every `@ctl@SK` object the shipped scripts build,
 `GLOBALS.SCRIPT`'s menu music, which plays on while the menu is up, so the field settles nothing.
 Film of the original is the only thing that would.
 
-The cue table (`MenuCueTable`, `CSVM/src/Session/MenuCueTable.cs`) resolves the four names the
+The cue table (`MenuCueTable`, `CSVM/src/Session/Launch/MenuCueTable.cs`) resolves the four names the
 original's globals script binds: `menu.rollover`, `menu.click`, `menu.text`, `menu.text-error`, each
 to a wav under the extracted rof tree's `ASSETS/SOUNDS`. Original asks for all four
 (`OriginalCues`); Built-in asks for none and uses the service for briefing narration alone. A new

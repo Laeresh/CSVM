@@ -118,7 +118,7 @@ with a picked entry is `docs/org/multiplayer-spawn.md`.
 sim step reads pilot intent, resolved once at `FlightController.cs:1006` from three arms (scripted,
 AI, keyboard). `FlightController` keeps `_simPrev`, `_simCurr` and `_renderPose`
 (`FlightController.cs:1260`), the slot an interpolated remote pose lands in.
-`CSVM/src/Session/SessionSimulation.cs:8` names every simulation phase as a method on
+`CSVM/src/Session/World/SessionSimulation.cs:8` names every simulation phase as a method on
 `ISessionSimulationRuntime`, which makes the host-or-guest ownership rule mechanical. The
 splitscreen seat index is already the player id through `VersusMatch.PlayerCount`
 (`GameSession.cs:2613`, `GameSession.cs:2673`) and `SpawnPicker.cs:92`'s `playerCount`. The seeded

@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using CSVM.Session;
+using CSVM.Session.Campaign;
+using CSVM.Session.Launch;
 using CSVM.UI;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;

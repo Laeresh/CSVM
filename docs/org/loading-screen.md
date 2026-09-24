@@ -283,7 +283,7 @@ flushes, and the build owns that loop until it returns, so a forced frame would 
 canvas commands every time. `--debug-load[=dir]` stands this screen over a CLI launch and
 photographs each presented frame, which is how the bar is read back with nobody at the menu.
 The build stays one
-synchronous block: `Session/Launcher.cs`, `Session/GameSession.cs` and `Mech3/WorldSession.cs`
+synchronous block: `Session/Launch/Launcher.cs`, `Session/Launch/GameSession.cs` and `Mech3/WorldSession.cs`
 report each phase boundary they cross, taking the fraction the table authors for it and never one
 derived from how long the phase took. The fill is the repaint's own pixel clip,
 `floor(fillWidth * fraction)` of `prog_red` over `prog_blk` on the blackboard and `prog_redload`

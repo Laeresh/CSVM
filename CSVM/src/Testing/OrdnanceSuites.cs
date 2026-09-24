@@ -5,7 +5,8 @@ using CSVM.Effects;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Mech3.Anim;
-using CSVM.Session;
+using CSVM.Session.InstantAction;
+using CSVM.Session.Roster;
 using CSVM.UI;
 using CSVM.Utils;
 using Godot;
@@ -2610,7 +2611,7 @@ internal static class OrdnanceSuites
     internal static Node3D StageBurstRoots(TestContext ctx, TestWorld world, string animName, int slots)
     {
         var roots = Flight.EffectCatalogue.StageRootsFor(world.Session.Program, new[] { animName },
-            Session.WorldEffectsFactory.StageRootResolver(world.Gamez));
+            Session.World.WorldEffectsFactory.StageRootResolver(world.Gamez));
         ctx.Check(roots.Count > 0,
             $"{animName}: its call closure's anchor roots derived ({roots.Count}: {string.Join(", ", roots)})");
         var stage = new Node3D { Name = $"BurstStage_{animName}" };
@@ -2619,7 +2620,7 @@ internal static class OrdnanceSuites
             var pool = new Node3D { Name = $"pool{slot}" };
             pool.SetMeta(AnimRuntime.PoolSlotMeta, slot);
             stage.AddChild(pool);
-            int built = Session.WorldEffectsFactory.BuildEffectStage(world.Gamez,
+            int built = Session.World.WorldEffectsFactory.BuildEffectStage(world.Gamez,
                 world.Session.Builder.Scene, pool, roots);
             ctx.Same(roots.Count, built, $"{animName}: template roots staged from the chapter gamez (slot {slot})");
             foreach (var child in pool.GetChildren())

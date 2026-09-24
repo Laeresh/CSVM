@@ -10,7 +10,7 @@ namespace CSVM.UI;
 /// The always-available frame-cost readout (key F14): fps, the current frame's wall cost, and
 /// the worst frame in the last few seconds, cycling Off, Compact, Full. The Full tier adds the
 /// per-frame cost split, GC counts by generation, breadcrumbs, and a rolling frame-time graph.
-/// Built once by <see cref="CSVM.Session.Launcher"/>, never per <c>GameSession</c> or
+/// Built once by <see cref="CSVM.Session.Launch.Launcher"/>, never per <c>GameSession</c> or
 /// splitscreen pane, since fps/frame cost/GC are process-wide facts. Off by default so the 11
 /// golden screenshots stay byte-identical; <c>--debug-fps[=compact|full]</c> is the scripted
 /// twin. Fed the same raw <c>Stopwatch</c>-based cost <see cref="Utils.HitchMonitor"/> ticks on,

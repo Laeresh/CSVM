@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using CSVM.Session;
+using CSVM.Session.Campaign;
 using CSVM.UI;
 using Xunit;
 

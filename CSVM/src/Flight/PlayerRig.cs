@@ -51,7 +51,7 @@ public sealed class PlayerRig
     public Node3D? Horizon;
 
     /// <summary>The zone domes under <see cref="Horizon"/>, one per horizon zone the world built.
-    /// <c>Session.WeatherRig.Tick</c> shows exactly the one matching this rig's own camera
+    /// <c>Session.World.WeatherRig.Tick</c> shows exactly the one matching this rig's own camera
     /// weather state; decode: docs/org/weather.md.
     /// ⚠ A single entry stays visible at every state: a chapter whose data supports no swap must
     /// not render a frame with no sky in it.</summary>
@@ -73,13 +73,13 @@ public sealed class PlayerRig
     /// lens flare's sprites and wash, and the cloud whiteout. A <c>CanvasLayer</c> draws over all
     /// 3D content whatever its depth, so these would otherwise paint the sun and the cloud over a
     /// cutscene's letterbox card, which sits 7.5 m in front of the eye and occludes both in world
-    /// terms. <c>Session.CutsceneController</c> lowers them while a definition presents (BL-452);
+    /// terms. <c>Session.World.CutsceneController</c> lowers them while a definition presents (BL-452);
     /// nothing else touches them, so an ordinary flight is unchanged.</summary>
     public List<CanvasLayer> WorldOverlays = new();
 
     /// <summary>This player's own camera weather state (1/2/3, <c>WeatherState.CameraWeatherState</c>),
     /// published once per frame by
-    /// <c>Session.WeatherRig.Tick</c>. Per rig, not per session, a splitscreen pane's camera can
+    /// <c>Session.World.WeatherRig.Tick</c>. Per rig, not per session, a splitscreen pane's camera can
     /// sit in a different state than another pane's at the same instant, same as
     /// <see cref="Deck"/>'s regime. Consumed by nothing yet; defaults to 1 (the binary's own
     /// default) until the first <c>Tick</c> resolves it.</summary>

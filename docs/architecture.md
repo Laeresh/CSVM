@@ -326,7 +326,7 @@ The launchscreen and splitscreen rig, the in-flight pause and results boards, pl
 - `src/UI/Menu/Original/OriginalRosters.cs`, the Original sortie screens' chapter labels and the eleven stock airframes with their nodes.
 - `src/UI/Menu/Original/OriginalCues.cs`, the four cue names Original asks for: a rollover, a press, and an edit box's two sounds.
 - `src/UI/Menu/Original/PointerSeat.cs`, seat 0 with the mouse as its `MenuPointer`, the click a press edge and the wheel's steps; device reads injected.
-- `src/Session/MenuCueTable.cs`, the menu cue table: cue name to wav under the rof tree's `ASSETS/SOUNDS`, the four the globals script binds.
+- `src/Session/Launch/MenuCueTable.cs`, the menu cue table: cue name to wav under the rof tree's `ASSETS/SOUNDS`, the four the globals script binds.
 - `src/UI/BoardMenu.cs`, a board's cursor and item list, engine-free, so the selection rules test off engine.
 - `src/UI/BoardMenuItem.cs`, the rows a board menu can offer: Resume, Photo, Restart, Exit.
 - `src/UI/BoardMenuView.cs`, draws a board menu's rows in the launchscreen's cursor idiom, inside the board style.
@@ -508,60 +508,80 @@ The `--dump-*` probes, the capture loop, the golden-image hash and the glTF expo
 
 ### `src/Session/`, the launch/session layer
 
-The `Launcher` scene root, the per-launch `GameSession` node, and the low-coupling session-build
-clusters they delegate to.
+The `Launcher` scene root, the per-launch `GameSession` node, and the session-build clusters they
+delegate to, in six sub-namespaces, one folder each. `Launch` sits on top and nothing else in
+`Session` names it; `Objectives` sits at the bottom and names one other (`Campaign`, once).
 
-- `src/Session/Launcher.cs`, Main.tscn's root: the once-per-process bootstrap, what outlives a session, the menu host, and every path a session starts or ends.
-- `src/Session/GameSession.cs`, the per-launch session node: ordered build phases over one `SessionSpec`, owning the clock, world root, panes and runtimes.
-- `src/Session/SessionSimulation.cs`, the plain-C# owner of one haltable, ordered session-simulation step; `GameSession` maps its named phases to their owners.
-- `src/Session/ExtractionStamp.cs`, reads the extraction provenance stamp at boot and warns once when it is stale or unreadable; `Behind` is the blocking read, `Schema` the promise a test pins.
-- `src/Session/MenuAudioService.cs`, the menus' audio host: the music channel, the briefing narration player, the cue player behind `MenuCueTable`, and the AUDIO page's live mix preview.
-- `src/Session/LiveryResolver.cs`, each player's livery from a `SessionSpec`: the paint catalog, the pattern-mask library and the per-player scheme pick.
-- `src/Session/SpawnPicker.cs`, each player's flight spawn: the shared spawn-list index and the per-player point; also the plain `IFlightStarts`.
-- `src/Session/IFlightStarts.cs`, the spawn-placement seam: one call answering for the whole field, and the `FlightStart` pair every rig is placed from.
-- `src/Session/StartGrid.cs`, the abreast starting grid: every pilot fanned about one anchor spawn, the whole field lifted as one to clear terrain.
-- `src/Session/WeatherRig.cs`, loads the mission's weather and drives the per-rig skydome, whiteout, deck and zone gate each frame.
-- `src/Session/ObjectZoneGate.cs`, gives each flown object the zone its own altitude earns against the cloud band, so the band hides what is on its far side.
-- `src/Session/WorldEffectsFactory.cs`, builds the impact/destruction effect stages and the per-plane crash runtime.
-- `src/Session/LensFlareRig.cs`, the sun's lens flare: screen-space sprites along the sun-to-centre line plus the wash, one instance per pane.
-- `src/Session/FlightRoster.cs`, the session's aircraft set: builds the human field in player order and introduces AI aircraft later through one assembly seam.
-- `src/Session/FlightRosterInputs.cs`, the roster's grouped dependency contracts: aircraft resources, world bindings, human-session bindings and the policy.
-- `src/Session/HumanFlightAdapter.cs`, the roster's private human path: painted plane, controller, loadout, instruments, damage visuals, spawn, crash rig.
-- `src/Session/AiFlightAssembler.cs`, the roster's private AI path: pilot preparation, model, controller, loadout, damage and crash runtime, and placement.
-- `src/Session/AiAirframePool.cs`, the wave aeroplanes built in the loading screen and held out of the tree, so a launch binds one instead of building it.
-- `src/Session/CrashRigQueue.cs`, the queue of crash rigs for aeroplanes already flying, advanced one build step a frame so a launch costs less on its frame.
-- `src/Session/InstantActionDirector.cs`, the engine side of one Instant Action mission: the actor phases, the sequencer tick and the end-condition wiring.
-- `src/Session/InstantActionRuntime.cs`, one Instant Action mission's actor set and its end, engine-free: the ace, wingmen, wave draws and objective zeppelin.
-- `src/Session/InstantActionWaves.cs`, the decoded wave sequencer, engine-free: the wave counter, the spawn draw against live humans, the fan geometry.
-- `src/Session/SpectateHandoff.cs`, the shared pane handoff for a downed pilot whose teammates fly on: the wreck pinned, a spectator camera in the freed pane.
-- `src/Session/ScriptedPathVehicles.cs`, one mission's scripted-path vehicles: the snap onto waypoint 0, the freeze, `START_TAXI`'s release, the handoff back.
-- `src/Session/SurfaceVehicleRuntime.cs`, builds and steps a mission's `mode ship` hulls: a library-root copy placed on the water, indexed on the runtime.
-- `src/Session/CampaignRoster.cs`, the engine-free plan of a campaign mission's `aiv` roster: each block's airframe, and its net or its netless escort.
-- `src/Session/GeneratorCycle.cs`, the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel, the credit.
-- `src/Session/NetTrailerTargets.cs`, resolves a patrol net's trailer name (`player`, a zeppelin) to a live position, so an anchored net rides its target.
-- `src/Session/AiGeneratorRuntime.cs`, runs a mission's egen generators (`--generators`): the load drops, the cycle stepping, each launch's spawn or release.
-- `src/Session/AiVoiceRuntime.cs`, wires the combat-voice dispatcher into a session: the speakers, the damage sources, and the flat radio queue every line plays on.
-- `src/Session/ZeppelinRuntime.cs`, runs a mission's zeppelins (`--zeppelins`): the placement, the net flight, the per-part damage and kill, the script's arms.
-- `src/Session/ZeppelinRuntime.Cannons.cs`, the broadside half of that partial: the cannon wiring, the target and arc gate, the anims and the rounds fired.
-- `src/Session/TurretEmplacementRuntime.cs`, the world AA emplacements: placed against the built world, in the shared aim pool, stepped after the airships.
-- `src/Session/CampaignProfileStore.cs`, JSON persistence for one named campaign profile: funds, owned planes, mission records, awards and the destruction log.
-- `src/Session/CampaignProgression.cs`, the rules that write a profile: an attempt's best-of merge, the monotonic position, the rewards and the skip offer.
-- `src/Session/ChapterCinema.cs`, which film plays before a campaign chapter, when it plays, and the single handoff to the passenger cabin that follows it.
-- `src/Session/ClosingCinema.cs`, whether the campaign's closing film plays before the scrapbook a flown mission opens, and the single handoff to that book.
-- `src/Session/CampaignPersistLog.cs`, the cross-mission state log: what a mission left destroyed, carried silently into later missions of the same chapter.
-- `src/Session/CampaignLoadout.cs`, the bridge between a profile's stored ammunition and ordnance picks and the `LoadoutChoice` a launch hands the session.
-- `src/Session/ObjectiveScript.cs`, one mission's parsed `objectives.zrd`: the contiguous `OBJECTIVEn` blocks, in the typed shape the graph runs.
-- `src/Session/ObjectiveGraph.cs`, the objectives runtime, engine-free: the four-state machine, the rotating completion scan, the conditions, the four endings.
-- `src/Session/CampaignHumanField.cs`, the human field's rules, engine-free: what a condition naming one aeroplane asks once two to four humans fly.
-- `src/Session/ObjectiveSites.cs`, the flown campaign mission's flagged target sites as targeting candidates, rebuilt from their live source every frame.
-- `src/Session/CampaignDirector.cs`, the engine side of a campaign mission: the graph armed against the built world, the roster spawned and launched off its hooks, the attempt recorded.
-- `src/Session/CampaignDangerZones.cs`, a campaign mission's own danger zones: the `dzpathN` gates its script arms, tracked per human by the stunt gate rule, each carrying its mission's objective number.
-- `src/Session/CampaignSnapshot.cs`, the Danger Zone photograph a campaign mission writes into the flying profile's directory under the scrapbook row's own `Snap_<mission>_<objective>` name.
-- `src/Session/AirframeSwap.cs`, the three `CALLBACK` codes that hand the player a different airframe in mid mission, and the def and node each names.
-- `src/Session/CutsceneController.cs`, the host a cutscene definition raises its `CALLBACK` codes to, and the session state those codes describe.
-- `src/Session/LandingApproachRuntime.cs`, the mid-mission cutscene trigger: `landings.zrd` rows tested against each flying human, and the auto-land offer.
-- `src/Session/LadderSwitch.cs`, the rope-ladder switch as an engine-free rule and state machine, plus the co-op holder rule deciding which human owns it.
-- `src/Session/LadderSwitchRuntime.cs`, that switch flown against the built world: the per-human attitude and sensor read, and the definitions it starts.
+**`Session.Launch`**, the process and the per-launch session.
+
+- `src/Session/Launch/Launcher.cs`, Main.tscn's root: the once-per-process bootstrap, what outlives a session, the menu host, and every path a session starts or ends.
+- `src/Session/Launch/GameSession.cs`, the per-launch session node: ordered build phases over one `SessionSpec`, owning the clock, world root, panes and runtimes.
+- `src/Session/Launch/TuningWarmup.cs`, the startup pass that registers every `Config` key before the orphan report and `--dump-config` read the registry.
+- `src/Session/Launch/ExtractionStamp.cs`, reads the extraction provenance stamp at boot and warns once when it is stale or unreadable; `Behind` is the blocking read, `Schema` the promise a test pins.
+- `src/Session/Launch/MenuAudioService.cs`, the menus' audio host: the music channel, the briefing narration player, the cue player behind `MenuCueTable`, and the AUDIO page's live mix preview.
+
+**`Session.InstantAction`**, one Instant Action mission.
+
+- `src/Session/InstantAction/InstantActionDirector.cs`, the engine side of one Instant Action mission: the actor phases, the sequencer tick and the end-condition wiring.
+- `src/Session/InstantAction/InstantActionRuntime.cs`, one Instant Action mission's actor set and its end, engine-free: the ace, wingmen, wave draws and objective zeppelin.
+- `src/Session/InstantAction/InstantActionWaves.cs`, the decoded wave sequencer, engine-free: the wave counter, the spawn draw against live humans, the fan geometry.
+
+**`Session.Campaign`**, the campaign director, the profile and what a mission leaves in it.
+
+- `src/Session/Campaign/CampaignDirector.cs`, the engine side of a campaign mission: the graph armed against the built world, the roster spawned and launched off its hooks, the attempt recorded.
+- `src/Session/Campaign/CampaignRoster.cs`, the engine-free plan of a campaign mission's `aiv` roster: each block's airframe, and its net or its netless escort.
+- `src/Session/Campaign/CampaignHumanField.cs`, the human field's rules, engine-free: what a condition naming one aeroplane asks once two to four humans fly.
+- `src/Session/Campaign/CampaignDangerZones.cs`, a campaign mission's own danger zones: the `dzpathN` gates its script arms, tracked per human by the stunt gate rule, each carrying its mission's objective number.
+- `src/Session/Campaign/CampaignSnapshot.cs`, the Danger Zone photograph a campaign mission writes into the flying profile's directory under the scrapbook row's own `Snap_<mission>_<objective>` name.
+- `src/Session/Campaign/CampaignProfileStore.cs`, JSON persistence for one named campaign profile: funds, owned planes, mission records, awards and the destruction log.
+- `src/Session/Campaign/CampaignProgression.cs`, the rules that write a profile: an attempt's best-of merge, the monotonic position, the rewards and the skip offer.
+- `src/Session/Campaign/CampaignMementos.cs`, the cabin-wall pictures a profile may hang: the award table, which rows a profile holds, and the one bitmap name every screen draws.
+- `src/Session/Campaign/CampaignPersistLog.cs`, the cross-mission state log: what a mission left destroyed, carried silently into later missions of the same chapter.
+- `src/Session/Campaign/CampaignLoadout.cs`, the bridge between a profile's stored ammunition and ordnance picks and the `LoadoutChoice` a launch hands the session.
+- `src/Session/Campaign/ChapterCinema.cs`, which film plays before a campaign chapter, when it plays, and the single handoff to the passenger cabin that follows it.
+- `src/Session/Campaign/ClosingCinema.cs`, whether the campaign's closing film plays before the scrapbook a flown mission opens, and the single handoff to that book.
+- `src/Session/Campaign/LandingApproachRuntime.cs`, the mid-mission cutscene trigger: `landings.zrd` rows tested against each flying human, and the auto-land offer.
+- `src/Session/Campaign/LadderSwitch.cs`, the rope-ladder switch as an engine-free rule and state machine, plus the co-op holder rule deciding which human owns it.
+- `src/Session/Campaign/LadderSwitchRuntime.cs`, that switch flown against the built world: the per-human attitude and sensor read, and the definitions it starts.
+
+**`Session.Roster`**, who is flying and how each got an aeroplane.
+
+- `src/Session/Roster/FlightRoster.cs`, the session's aircraft set: builds the human field in player order and introduces AI aircraft later through one assembly seam.
+- `src/Session/Roster/FlightRosterInputs.cs`, the roster's grouped dependency contracts: aircraft resources, world bindings, human-session bindings and the policy.
+- `src/Session/Roster/HumanFlightAdapter.cs`, the roster's private human path: painted plane, controller, loadout, instruments, damage visuals, spawn, crash rig.
+- `src/Session/Roster/AiFlightAssembler.cs`, the roster's private AI path: pilot preparation, model, controller, loadout, damage and crash runtime, and placement.
+- `src/Session/Roster/AiAirframePool.cs`, the wave aeroplanes built in the loading screen and held out of the tree, so a launch binds one instead of building it.
+- `src/Session/Roster/CrashRigQueue.cs`, the queue of crash rigs for aeroplanes already flying, advanced one build step a frame so a launch costs less on its frame.
+- `src/Session/Roster/LiveryResolver.cs`, each player's livery from a `SessionSpec`: the paint catalog, the pattern-mask library and the per-player scheme pick.
+- `src/Session/Roster/SpawnPicker.cs`, each player's flight spawn: the shared spawn-list index and the per-player point; also the plain `IFlightStarts`.
+- `src/Session/Roster/IFlightStarts.cs`, the spawn-placement seam: one call answering for the whole field, and the `FlightStart` pair every rig is placed from.
+- `src/Session/Roster/StartGrid.cs`, the abreast starting grid: every pilot fanned about one anchor spawn, the whole field lifted as one to clear terrain.
+- `src/Session/Roster/SpectateHandoff.cs`, the shared pane handoff for a downed pilot whose teammates fly on: the wreck pinned, a spectator camera in the freed pane.
+- `src/Session/Roster/AirframeSwap.cs`, the three `CALLBACK` codes that hand the player a different airframe in mid mission, and the def and node each names.
+- `src/Session/Roster/GeneratorCycle.cs`, the decoded egen launch timing law for one generator, pure and engine-free: composed periods, hold-not-cancel, the credit.
+- `src/Session/Roster/AiGeneratorRuntime.cs`, runs a mission's egen generators (`--generators`): the load drops, the cycle stepping, each launch's spawn or release.
+- `src/Session/Roster/AiVoiceRuntime.cs`, wires the combat-voice dispatcher into a session: the speakers, the damage sources, and the flat radio queue every line plays on.
+
+**`Session.World`**, the simulation step and the non-aeroplane things in the world.
+
+- `src/Session/World/SessionSimulation.cs`, the plain-C# owner of one haltable, ordered session-simulation step; `GameSession` maps its named phases to their owners.
+- `src/Session/World/WeatherRig.cs`, loads the mission's weather and drives the per-rig skydome, whiteout, deck and zone gate each frame.
+- `src/Session/World/LensFlareRig.cs`, the sun's lens flare: screen-space sprites along the sun-to-centre line plus the wash, one instance per pane.
+- `src/Session/World/WorldEffectsFactory.cs`, builds the impact/destruction effect stages and the per-plane crash runtime.
+- `src/Session/World/CutsceneController.cs`, the host a cutscene definition raises its `CALLBACK` codes to, and the session state those codes describe.
+- `src/Session/World/ScriptedPathVehicles.cs`, one mission's scripted-path vehicles: the snap onto waypoint 0, the freeze, `START_TAXI`'s release, the handoff back.
+- `src/Session/World/SurfaceVehicleRuntime.cs`, builds and steps a mission's `mode ship` hulls: a library-root copy placed on the water, indexed on the runtime.
+- `src/Session/World/ZeppelinRuntime.cs`, runs a mission's zeppelins (`--zeppelins`): the placement, the net flight, the per-part damage and kill, the script's arms.
+- `src/Session/World/ZeppelinRuntime.Cannons.cs`, the broadside half of that partial: the cannon wiring, the target and arc gate, the anims and the rounds fired.
+- `src/Session/World/TurretEmplacementRuntime.cs`, the world AA emplacements: placed against the built world, in the shared aim pool, stepped after the airships.
+
+**`Session.Objectives`**, the mission script, the rules it runs and the targets it names.
+
+- `src/Session/Objectives/ObjectiveScript.cs`, one mission's parsed `objectives.zrd`: the contiguous `OBJECTIVEn` blocks, in the typed shape the graph runs.
+- `src/Session/Objectives/ObjectiveGraph.cs`, the objectives runtime, engine-free: the four-state machine, the rotating completion scan, the conditions, the four endings.
+- `src/Session/Objectives/ObjectiveSites.cs`, the flown campaign mission's flagged target sites as targeting candidates, rebuilt from their live source every frame.
+- `src/Session/Objectives/ObjectZoneGate.cs`, gives each flown object the zone its own altitude earns against the cloud band, so the band hides what is on its far side.
+- `src/Session/Objectives/NetTrailerTargets.cs`, resolves a patrol net's trailer name (`player`, a zeppelin) to a live position, so an anchored net rides its target.
 
 ### `src/Bindings/`, the input binding model
 

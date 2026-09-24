@@ -4,7 +4,8 @@ using System.Globalization;
 using CSVM.Bindings;
 using CSVM.Flight;
 using CSVM.Mech3;
-using CSVM.Session;
+using CSVM.Session.Campaign;
+using CSVM.Session.InstantAction;
 using CSVM.UI.Menu;
 using CSVM.UI.Menu.BuiltIn;
 using CSVM.Utils;
@@ -815,11 +816,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     }
 
     /// <summary>Opens the campaign on the named profile's scrapbook, at the mission a finished
-    /// mission just flew, cabin on its far side after <see cref="Session.Launcher"/>'s deferred
+    /// mission just flew, cabin on its far side after <see cref="Session.Launch.Launcher"/>'s deferred
     /// hop. The profile is re-read from the store, the same discipline as
     /// <see cref="OpenCampaignCabin"/>, so the shown record is what the mission just wrote. A win on
     /// the campaign's last mission watches the closing film first
-    /// (<see cref="CampaignFlow.OpenScrapbookAfterMission(Session.CampaignProfileDef, int, bool)"/>).</summary>
+    /// (<see cref="CampaignFlow.OpenScrapbookAfterMission(Session.Campaign.CampaignProfileDef, int, bool)"/>).</summary>
     public void OpenCampaignScrapbook(string profileName, int seq, bool missionWon)
     {
         OpenCampaign();

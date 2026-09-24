@@ -3,7 +3,8 @@ using System.IO;
 using System.Linq;
 using CSVM.Flight;
 using CSVM.Mech3;
-using CSVM.Session;
+using CSVM.Session.Campaign;
+using CSVM.Session.Roster;
 using CSVM.Tooling;
 using Godot;
 
@@ -54,7 +55,7 @@ internal static class DestroyChoreographySuites
                 var pool = new Node3D { Name = $"pool{slot}" };
                 pool.SetMeta(AnimRuntime.PoolSlotMeta, slot);
                 stage.AddChild(pool);
-                Session.WorldEffectsFactory.BuildEffectStage(world.Gamez,
+                Session.World.WorldEffectsFactory.BuildEffectStage(world.Gamez,
                     world.Session.Builder.Scene, pool, new[] { "planeflakes" });
                 foreach (var child in pool.GetChildren())
                 {
@@ -67,7 +68,7 @@ internal static class DestroyChoreographySuites
 
             ctx.Check(copies.Count == 4, $"four planeflakes copies staged ({copies.Count})");
             var runtime = new AnimRuntime(
-                Session.WorldEffectsFactory.NewCrashTemplateStage())
+                Session.World.WorldEffectsFactory.NewCrashTemplateStage())
             {
                 AutoStart = false,
                 ManualAdvance = true,
@@ -792,7 +793,7 @@ internal static class DestroyChoreographySuites
                 ctx.Host.AddChild(live);
                 var spec = SessionSpec.Parse(System.Array.Empty<string>());
                 var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
-                var factory = new Session.WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero);
+                var factory = new Session.World.WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero);
                 var inputs = new AircraftAssemblyResources
                 {
                     PlanesGamez = planesGamez,
@@ -898,7 +899,7 @@ internal static class DestroyChoreographySuites
                 {
                     var controller = new Node3D { Name = "controller_replica" };
                     var runtime = AnimRuntime.ForCrashRig(
-                        Session.WorldEffectsFactory.NewCrashTemplateStage(),
+                        Session.World.WorldEffectsFactory.NewCrashTemplateStage(),
                         1, new CountingEmitterFactory(), false);
                     runtime.ManualAdvance = true;
                     try
@@ -910,9 +911,9 @@ internal static class DestroyChoreographySuites
                         crashRoot.SetMeta(AnimRuntime.NameMeta, "player");
                         crashRoot.Transform = planeModel.Transform;
                         controller.AddChild(crashRoot);
-                        var rootNames = Session.WorldEffectsFactory.CrashStageRootNames(
+                        var rootNames = Session.World.WorldEffectsFactory.CrashStageRootNames(
                             world.Session.Program, world.Gamez, controller);
-                        Session.WorldEffectsFactory.StageCrashTemplates(world.Gamez,
+                        Session.World.WorldEffectsFactory.StageCrashTemplates(world.Gamez,
                             world.Session.Builder.Scene, crashRoot, rootNames,
                             Utils.EffectPools.Load());
                         var copies = new List<(string Root, int Slot, Node3D Copy)>();
@@ -1072,7 +1073,7 @@ internal static class DestroyChoreographySuites
                 var controller = new Node3D { Name = "controller_replica" };
                 var emitters = new CountingEmitterFactory();
                 var runtime = AnimRuntime.ForCrashRig(
-                    Session.WorldEffectsFactory.NewCrashTemplateStage(), 1, emitters, false);
+                    Session.World.WorldEffectsFactory.NewCrashTemplateStage(), 1, emitters, false);
                 runtime.ManualAdvance = true;
                 try
                 {
@@ -1132,7 +1133,7 @@ internal static class DestroyChoreographySuites
             FlightController? player = null;
             try
             {
-                var factory = new Session.WorldEffectsFactory(
+                var factory = new Session.World.WorldEffectsFactory(
                     SessionSpec.Parse(System.Array.Empty<string>()), ctx.Host, () => Vector3.Zero);
                 var spawn = new Vector3(0f, 500f, 0f);
                 var stats = PlaneStats.Load(ctx.ZrdrPath, model);
@@ -1252,7 +1253,7 @@ internal static class DestroyChoreographySuites
             var built = new List<FlightController>();
             try
             {
-                var factory = new Session.WorldEffectsFactory(
+                var factory = new Session.World.WorldEffectsFactory(
                     SessionSpec.Parse(System.Array.Empty<string>()), ctx.Host, () => Vector3.Zero);
                 var stats = PlaneStats.Load(ctx.ZrdrPath, model);
                 FlightController? Build(bool human, Vector3 spawn, int index)
@@ -1520,7 +1521,7 @@ internal static class DestroyChoreographySuites
             FlightController? ai = null;
             try
             {
-                var factory = new Session.WorldEffectsFactory(
+                var factory = new Session.World.WorldEffectsFactory(
                     SessionSpec.Parse(System.Array.Empty<string>()), ctx.Host, () => Vector3.Zero);
                 var spawn = new Vector3(0f, 500f, 0f);
                 var stats = PlaneStats.Load(ctx.ZrdrPath, model);
@@ -1683,7 +1684,7 @@ internal static class DestroyChoreographySuites
             var controller = new Node3D { Name = "controller_replica" };
             var fake = new CountingEmitterFactory();
             var runtime = AnimRuntime.ForCrashRig(
-                Session.WorldEffectsFactory.NewCrashTemplateStage(), 1, fake, false);
+                Session.World.WorldEffectsFactory.NewCrashTemplateStage(), 1, fake, false);
             runtime.ManualAdvance = true;
             try
             {
@@ -1696,9 +1697,9 @@ internal static class DestroyChoreographySuites
                 controller.AddChild(crashRoot);
                 var program = world.Session.Program;
                 var crashDefs = Flight.EffectCatalogue.CrashDefTable(program);
-                var rootNames = Session.WorldEffectsFactory.CrashStageRootNames(
+                var rootNames = Session.World.WorldEffectsFactory.CrashStageRootNames(
                     program, world.Gamez, controller, crashDefs);
-                Session.WorldEffectsFactory.StageCrashTemplates(world.Gamez,
+                Session.World.WorldEffectsFactory.StageCrashTemplates(world.Gamez,
                     world.Session.Builder.Scene, crashRoot, rootNames, Utils.EffectPools.Load());
                 var wreck = builder.BuildDestroyed(model);
                 if (wreck != null)
@@ -1840,7 +1841,7 @@ internal static class DestroyChoreographySuites
                 ctx.Host.AddChild(live);
                 var spec = SessionSpec.Parse(System.Array.Empty<string>());
                 var liveries = new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof"));
-                var factory = new Session.WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero);
+                var factory = new Session.World.WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero);
                 var inputs = new AircraftAssemblyResources
                 {
                     PlanesGamez = planesGamez,
@@ -1946,7 +1947,7 @@ internal static class DestroyChoreographySuites
             var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
             var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
             var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
-            var factory = new Session.WorldEffectsFactory(
+            var factory = new Session.World.WorldEffectsFactory(
                 SessionSpec.Parse(System.Array.Empty<string>()), ctx.Host, () => Vector3.Zero);
             FlightController? ai = null;
             FlightController? human = null;
@@ -2647,7 +2648,7 @@ internal static class DestroyChoreographySuites
     private static void PlayerDestroyArm(TestContext ctx, TestWorld world, GameZ planesGamez,
         TextureArchive textures, string planeName, bool autogyro)
     {
-        var factory = new Session.WorldEffectsFactory(
+        var factory = new Session.World.WorldEffectsFactory(
             SessionSpec.Parse(System.Array.Empty<string>()), ctx.Host, () => Vector3.Zero);
         FlightController? player = null;
         try

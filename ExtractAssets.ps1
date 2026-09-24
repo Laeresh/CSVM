@@ -28,7 +28,7 @@
 
     A failure-free run stamps <Dest>\VERSION.json with what produced the tree (unzbd
     version line, exe SHA-256, fork commit when the checkout is present, date, schema
-    integer). The engine compares the schema at boot (src\Session\ExtractionStamp.cs)
+    integer). The engine compares the schema at boot (src\Session\Launch\ExtractionStamp.cs)
     and warns when it no longer matches.
     RULE: the schema integer is a hand-maintained promise -- bump $StampSchema here,
     in ExtractRof.ps1, and ExtractionStamp.Schema in the SAME commit as any reader
@@ -270,7 +270,7 @@ if ($unknowns.Count -gt 0) {
 
 # ---- version stamp --------------------------------------------------------
 # A failure-free run (including the all-up-to-date one) stamps the tree with what
-# produced it, so the engine (src\Session\ExtractionStamp.cs) can tell a boot-time
+# produced it, so the engine (src\Session\Launch\ExtractionStamp.cs) can tell a boot-time
 # "it looks wrong" report which extractor vintage it is looking at. Read-merge-write:
 # ExtractRof.ps1 owns the "rof" field of the same file and must survive this write.
 # $StampSchema bumps together with ExtractRof.ps1's and ExtractionStamp.Schema, in the

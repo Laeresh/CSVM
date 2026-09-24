@@ -2,7 +2,8 @@ using System.Collections.Generic;
 using System.Linq;
 using CSVM.Flight;
 using CSVM.Mech3;
-using CSVM.Session;
+using CSVM.Session.InstantAction;
+using CSVM.Session.Roster;
 using CSVM.Utils;
 using Godot;
 
@@ -767,13 +768,13 @@ internal static class TargetingSuites
             {
                 var textures = new TextureArchive(texturesPath);
                 ProjectilePool? live = null;
-                Session.TurretEmplacementRuntime? emplacements = null;
+                Session.World.TurretEmplacementRuntime? emplacements = null;
                 var shown = new List<Node3D>();
                 try
                 {
                     live = new ProjectilePool(textures, null, null);
                     ctx.Host.AddChild(live);
-                    emplacements = new Session.TurretEmplacementRuntime(turretDefs, weapons,
+                    emplacements = new Session.World.TurretEmplacementRuntime(turretDefs, weapons,
                         (pattern, scope) => world.Runtime.FindNodes(pattern, scope), live,
                         world.Runtime.WorldRoot);
                     // The runtime registers its own emplacements with the pool; a second

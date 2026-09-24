@@ -1,6 +1,6 @@
 using System.IO;
 using CSVM.Mech3;
-using CSVM.Session;
+using CSVM.Session.Campaign;
 using CSVM.UI;
 using Xunit;
 

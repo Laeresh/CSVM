@@ -76,7 +76,7 @@ internal static class LoadProgressSuites
                 ctx.ZrdrPath, ctx.MessagesPath,
                 SessionPaths.MissionZrdr(ctx.DataRoot, mission.ChapterFolder, mission.MissionFolder),
                 EscapeDialog.CampaignKey(mission.Campaign, mission.Mission),
-                Session.CampaignMementos.BitmapFor(null));
+                Session.Campaign.CampaignMementos.BitmapFor(null));
         }
 
         return null;

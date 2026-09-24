@@ -359,7 +359,7 @@ its Instant Action twin and the load screen's `Loading.zrd`, and `UI/MissionMap.
 drawer this screen shares with the campaign briefing and the load screen, which is where the world
 window and the pin placement live.
 
-**An Instant Action sortie pauses on its own blackboard.** `Session/GameSession.cs` keys the sheet on
+**An Instant Action sortie pauses on its own blackboard.** `Session/Launch/GameSession.cs` keys the sheet on
 the sortie's chapter, through `Mech3/CampaignSequence.cs`'s `ChapterNumber`, and its mission type's
 own letter, reads it out of `ia_escape.zrd`, and hands `UI/Menu/Original/OriginalPauseBoard.cs` a board written
 in `UI/BoardPalette.cs`'s `EscapeBlackboard`, the load screen's chalk with the near-black label inks

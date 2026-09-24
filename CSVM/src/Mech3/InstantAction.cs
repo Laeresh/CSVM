@@ -15,7 +15,7 @@ namespace CSVM.Mech3;
 /// <see cref="EnemyGeneratorDef.Capacity"/> gives its own unresolved key. <c>EnemyAccentId</c>
 /// IS read by the wave parser and IS this wave's voice, subject to
 /// the decoded re-roll: an authored 12 (the wingman accent range's own base) becomes
-/// <c>12 + rand() % 5</c> at spawn, not at parse time, <c>Session.InstantActionRuntime.ResolveWaveAccentId</c>.</summary>
+/// <c>12 + rand() % 5</c> at spawn, not at parse time, <c>Session.InstantAction.InstantActionRuntime.ResolveWaveAccentId</c>.</summary>
 public readonly record struct InstantActionWave(
     int NumEnemies, string EnemyName, string EnemyPlane, string EnemySkill, int EnemyAccentId);
 

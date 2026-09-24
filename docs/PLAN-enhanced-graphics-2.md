@@ -8,7 +8,7 @@ pointer; any live prose linking this file by path is unlinked in the same commit
 The opt-in Enhanced mode (`GraphicsMode.Enhanced`, `--graphics=enhanced`) today lights the world
 from the authored sun and ambient, mirrors the committed world lights onto real omni lights, casts
 4-split soft shadow maps, runs SSAO, blurs a screen-space reflection on water, blooms only the
-glow-arm sprites and tonemaps with AgX (`CSVM/src/Session/Launcher.cs` `SetupLighting`). Clouds are
+glow-arm sprites and tonemaps with AgX (`CSVM/src/Session/Launch/Launcher.cs` `SetupLighting`). Clouds are
 still the original's flat, unshaded sprite cards and explosions are still unlit puffer billboards.
 This plan adds four things to that stack, all behind the same switch: a temporal anti-aliasing pass
 plus a render-scale display setting (Wave A), lit explosions (Wave B), lit cloud cards and volumetric

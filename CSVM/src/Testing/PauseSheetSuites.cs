@@ -81,7 +81,7 @@ internal static class PauseSheetSuites
 
     // The profile a campaign pause is taken over here: a seated one that chose a picture. The
     // flown session's own director hands that picture to the readout.
-    private static readonly Session.CampaignProfileDef Seated = SeatProfile();
+    private static readonly Session.Campaign.CampaignProfileDef Seated = SeatProfile();
 
     // The four mission types, in the order the exe's jump table letters them.
     private static readonly string[] MissionTypes =
@@ -1021,7 +1021,7 @@ internal static class PauseSheetSuites
 
         ctx.Check(rowOne > 0, $"the sheet's own script reveals the priority 1 row ({rowOne} time(s))");
 
-        var graph = new Session.ObjectiveGraph(Session.ObjectiveScript.Parse(reader), new NoWorld());
+        var graph = new Session.Objectives.ObjectiveGraph(Session.Objectives.ObjectiveScript.Parse(reader), new NoWorld());
         for (float t = 0f; t < 3f; t += 0.1f)
         {
             graph.Step(0.1f);
@@ -1323,12 +1323,12 @@ internal static class PauseSheetSuites
         }
 
         return new PauseReadout(
-            rows, Session.CampaignMementos.BitmapFor(Seated), System.Array.Empty<PauseWorldIcon>());
+            rows, Session.Campaign.CampaignMementos.BitmapFor(Seated), System.Array.Empty<PauseWorldIcon>());
     }
 
-    private static Session.CampaignProfileDef SeatProfile()
+    private static Session.Campaign.CampaignProfileDef SeatProfile()
     {
-        var def = Session.CampaignProfileDef.NewProfile("Pause Sheet");
+        var def = Session.Campaign.CampaignProfileDef.NewProfile("Pause Sheet");
         def.Memento = ChosenMemento;
         return def;
     }
@@ -1340,10 +1340,10 @@ internal static class PauseSheetSuites
         TestContext ctx, List<(CampaignMission Mission, PauseSheet Sheet)> sheets, int at,
         StringBuilder report)
     {
-        string chosen = Session.CampaignMementos.BitmapFor(Seated);
-        string seeded = Session.CampaignMementos.BitmapFor(null);
+        string chosen = Session.Campaign.CampaignMementos.BitmapFor(Seated);
+        string seeded = Session.Campaign.CampaignMementos.BitmapFor(null);
         ctx.Check(
-            chosen == Session.CampaignMementos.Bitmap(ChosenMemento) && chosen != seeded,
+            chosen == Session.Campaign.CampaignMementos.Bitmap(ChosenMemento) && chosen != seeded,
             $"the seated profile hangs {chosen} where a session with no profile hangs {seeded}");
         if (at < 0)
         {
@@ -1353,8 +1353,8 @@ internal static class PauseSheetSuites
         var entry = sheets[at];
         string missionZrdr = SessionPaths.MissionZrdr(
             ctx.DataRoot, entry.Mission.ChapterFolder, entry.Mission.MissionFolder);
-        var director = Session.CampaignDirector.Create(
-            Session.ObjectiveScript.Load(missionZrdr), entry.Mission, Seated, null);
+        var director = Session.Campaign.CampaignDirector.Create(
+            Session.Objectives.ObjectiveScript.Load(missionZrdr), entry.Mission, Seated, null);
         ctx.Check(
             director.Memento == chosen,
             $"the flown mission's own director hands that picture to the readout ({director.Memento})");
@@ -1434,7 +1434,7 @@ internal static class PauseSheetSuites
     // The objectives runtime's world seam with no world behind it: the families a session cannot
     // answer report null, exactly as the live adapter does, and every world-touching action is a
     // no-op. Enough to run a mission's own script for its timing and its chaining.
-    private sealed class NoWorld : Session.IObjectiveWorld
+    private sealed class NoWorld : Session.Objectives.IObjectiveWorld
     {
         public bool? NodeInactive(IReadOnlyList<string> path) => null;
 
@@ -1446,7 +1446,7 @@ internal static class PauseSheetSuites
         {
         }
 
-        public bool? TravelersMet(Session.TravelersSpec spec) => null;
+        public bool? TravelersMet(Session.Objectives.TravelersSpec spec) => null;
 
         public void WakeupEnemies(IReadOnlyList<string> names)
         {
@@ -1476,7 +1476,7 @@ internal static class PauseSheetSuites
         {
         }
 
-        public void WarpVehicle(string vehicle, IReadOnlyList<Session.WarpPoint> points)
+        public void WarpVehicle(string vehicle, IReadOnlyList<Session.Objectives.WarpPoint> points)
         {
         }
 

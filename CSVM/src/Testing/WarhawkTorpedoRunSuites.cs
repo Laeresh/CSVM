@@ -3,7 +3,7 @@ using System.Linq;
 using System.Text;
 using CSVM.Flight;
 using CSVM.Mech3;
-using CSVM.Session;
+using CSVM.Session.Roster;
 using Godot;
 
 namespace CSVM.Testing;
