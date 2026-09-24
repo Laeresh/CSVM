@@ -219,7 +219,7 @@ internal static class WorldAndToolSuites
     // marker. Able to fail: without the Skip arm the interior build finds no cockpit1; without the
     // mount it sits at the plane origin at authored (~20x) scale.
     [Suite("cockpit-interior",
-        "the player plane's cockpit1 interior builds hidden at the cockpit_camera marker, an AI-style build gains nothing, and the per-mode hiding follows the pilot's view (B11)")]
+        "the player plane's cockpit1 interior builds hidden at the cockpit_camera marker, an AI-style build gains nothing, and the per-mode hiding follows the pilot's view (B11), while the Danger Zone photograph's frame shows the hidden airframe on a layer no pane draws and puts it back after")]
     internal static void CockpitInterior(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -259,14 +259,32 @@ internal static class WorldAndToolSuites
                 ctx.Check(node != null, $"the interior carries {panel}");
                 ctx.Check(node is not { Visible: true }, $"{panel} is built hidden (torn state off)");
             }
-            // ⚠ The five windshield bullet-hole groups and the two warning lamps ship active:true,
-            // so an unparked build renders white splats across the sky on a pristine plane.
-            foreach (var state in new[]
-                     { "bullet1", "bullet2", "bullet3", "bullet4", "bullet5", "lowalt_on", "stallwarning_on" })
+            // ⚠ The windshield bullet-hole quads and the two warning lamps ship active:true. An
+            // unparked build renders white splats across the sky on a pristine plane. The parking
+            // follows reset_bulletholes: the bulNx quads dark, the bulletN groups over them drawn.
+            foreach (var lamp in new[] { "lowalt_on", "stallwarning_on" })
             {
-                var node = FindNamed(interior, state);
-                ctx.Check(node != null, $"the interior carries {state}");
-                ctx.Check(node is not { Visible: true }, $"{state} is parked hidden on a pristine plane");
+                var node = FindNamed(interior, lamp);
+                ctx.Check(node != null, $"the interior carries {lamp}");
+                ctx.Check(node is not { Visible: true }, $"{lamp} is parked hidden on a pristine plane");
+            }
+            foreach (var group in new[] { "bullet1", "bullet2", "bullet3", "bullet4", "bullet5" })
+            {
+                var node = FindNamed(interior, group);
+                ctx.Check(node is { Visible: true }, $"the interior carries {group}, drawn");
+                if (node == null)
+                    continue;
+                int quads = 0, lit = 0;
+                foreach (var child in node.GetChildren())
+                {
+                    if (child is not Node3D quad)
+                        continue;
+                    quads++;
+                    if (quad.Visible)
+                        lit++;
+                }
+                ctx.Check(quads >= 3 && lit == 0,
+                    $"{group}'s {quads} hole quads are parked hidden on a pristine plane, lit={lit}");
             }
             // …and the panel geometry beside them is NOT parked: the states are a named set, not a
             // blanket hide, so a wrong predicate that hid the dashboard would fail here.
@@ -300,6 +318,7 @@ internal static class WorldAndToolSuites
             ctx.Check(!interior.Visible && body is { Visible: false }
                 && markers is { Visible: false } && dontmove is { Visible: false },
                 $"Nose: interior out, body out, markers/dontmove out");
+            PhotographFrame(ctx, cockpit, interior, body, markers, dontmove);
             cockpit.Apply(PilotViewMode.Cockpit, firstPerson: false);
             ctx.Check(!interior.Visible && body is { Visible: true }
                 && markers is { Visible: true } && dontmove is { Visible: true },
@@ -312,6 +331,92 @@ internal static class WorldAndToolSuites
         {
             exterior?.Free();
             withInterior?.Free();
+            textures.Dispose();
+        }
+    }
+
+    // The photograph's fill light, proved in the three things the pixels follow from, since a
+    // suite cannot read pixels back. The faithful aircraft shader swaps its ambient half for the
+    // fill only at an armed eye. The photograph's frame arms that eye on its own pilot's instances
+    // alone, and the pane stands out of reach of it. The end of the frame disarms every one. The
+    // fill's level is C1's zone through the decoded law. Able to fail: an unarmed airframe, a
+    // stranger's plane armed, a pane within reach, or an instance left armed after the frame.
+    [Suite("danger-zone-photograph-fill",
+        "the Danger Zone photograph's frame raises its own pilot's aircraft to the decoded fill ambient for its eye alone: the pane on the same frame is out of reach, another plane is never armed, and the next frame is disarmed")]
+    internal static void DangerZonePhotographFill(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var weather = WeatherState.Load(SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1"));
+        ctx.Check(weather != null, $"C1 IA1's weather loads");
+        if (weather != null)
+        {
+            var zone = weather.Zone("zone1");
+            (Vector3 ambient, _) = WeatherRig.SunVertexLight(zone);
+            Vector3 fill = WeatherRig.PhotographFill(zone);
+            float expected = Mathf.Clamp(Mathf.Floor((((zone.SunAmbient * 1.5f) + 0.1f) * 255f) + 0.5f), 0f, 255f) / 255f;
+            ctx.Check(Mathf.Abs(WeatherRig.PhotographFillAmbient(zone.SunAmbient) - expected) < 1e-5f,
+                $"the fill scalar is the stored byte A={zone.SunAmbient:0.###} fill={expected:0.####}");
+            ctx.Check(fill.X > ambient.X && fill.Y > ambient.Y && fill.Z > ambient.Z,
+                $"the fill lights brighter than the zone's ambient half ambient={ambient} fill={fill}");
+        }
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var textures = new TextureArchive(texturesPath);
+        var controller = new Node3D { Name = "photo_fill_pilot" };
+        var stranger = new Node3D { Name = "photo_fill_stranger", Position = new Vector3(40f, 0f, 0f) };
+        var paneView = new SubViewport { Size = new Vector2I(64, 48), RenderTargetUpdateMode = SubViewport.UpdateMode.Disabled };
+        DangerZonePhotograph? photo = null;
+        try
+        {
+            controller.AddChild(new PlaneBuilder(planesGamez, textures, spinningProps: true).Build(ctx.PlaneName));
+            stranger.AddChild(new PlaneBuilder(planesGamez, textures, spinningProps: true).Build(ctx.PlaneName));
+            ctx.Host.AddChild(controller);
+            ctx.Host.AddChild(stranger);
+            // The chase pane, where a pilot's view stands: behind and above the tail.
+            var pane = new Camera3D { Position = new Vector3(0f, 3f, 18f) };
+            paneView.AddChild(pane);
+            ctx.Host.AddChild(paneView);
+
+            var shaders = ShadersUnder(controller);
+            int gated = shaders.Count(s => s.Code.Contains("csky_sun_fill_rgb : csky_sun_ambient_rgb", System.StringComparison.Ordinal)
+                && s.Code.Contains("distance(CAMERA_POSITION_WORLD, csky_photo_eye.xyz)", System.StringComparison.Ordinal));
+            ctx.Check(gated > 0, $"the aircraft's faithful shaders swap the ambient half at an armed eye gated={gated} of {shaders.Count}");
+
+            photo = DangerZonePhotograph.Build(pane, null, () => controller.GlobalTransform, 18.5f, () => 0.5f,
+                airframe: controller);
+            controller.AddChild(photo);
+            ctx.Check(photo.Request(_ => { }), $"the photograph takes the request");
+            photo._Process(0);
+
+            var instances = Meshes(controller).OfType<GeometryInstance3D>().ToList();
+            Vector3 eye = photo.Eye.Origin;
+            var armed = new Vector4(eye.X, eye.Y, eye.Z, 1f);
+            int hit = instances.Count(i => i.GetInstanceShaderParameter(SceneBuilder.PhotoEyeParam).AsVector4() == armed);
+            ctx.Check(instances.Count > 0 && hit == instances.Count && photo.Filled.Count == instances.Count,
+                $"the frame arms every instance of its own pilot's aircraft at its eye armed={hit} of {instances.Count}");
+            int strays = Meshes(stranger).OfType<GeometryInstance3D>()
+                .Count(i => i.GetInstanceShaderParameter(SceneBuilder.PhotoEyeParam).AsVector4().W > 0.5f);
+            ctx.Check(strays == 0, $"another plane's instances are never armed strays={strays}");
+            float paneReach = pane.GlobalPosition.DistanceTo(eye);
+            ctx.Check(paneReach > SceneBuilder.PhotoEyeReach * 10f,
+                $"the pane drawing the same frame stands out of the fill's reach pane={paneReach:0.#}m reach={SceneBuilder.PhotoEyeReach}m");
+
+            // The frame's end: leaving the tree before the draw lands takes the same disarm the
+            // post-draw callback does.
+            controller.RemoveChild(photo);
+            int left = instances.Count(i => i.GetInstanceShaderParameter(SceneBuilder.PhotoEyeParam).AsVector4() != Vector4.Zero);
+            ctx.Check(left == 0 && photo.Filled.Count == 0,
+                $"the next frame draws every instance disarmed left={left}");
+        }
+        finally
+        {
+            photo?.Free();
+            controller.QueueFree();
+            stranger.QueueFree();
+            paneView.QueueFree();
             textures.Dispose();
         }
     }
@@ -371,7 +476,7 @@ internal static class WorldAndToolSuites
                     - CameraController.HorizontalToVerticalFovDeg(80f)) < 0.001f,
                 $"the pass's FOV law is the camera's own per-mode law");
             // The other half of that table: every pose outside the interior takes the one decoded
-            // base, whatever FOV the camera arrived carrying, so no caller writes its own number
+            // base, whatever FOV the camera arrived carrying. No caller writes its own number
             // beside the camera and expects the controller to hand it back.
             var probeCam = new Camera3D { Fov = 12f };
             host.AddChild(probeCam);
@@ -413,7 +518,7 @@ internal static class WorldAndToolSuites
         }
     }
 
-    // The authored panel driven off live readings (PLAN-cockpit-panel): the needles take an absolute angle and
+    // The authored panel driven off live readings: the needles take an absolute angle and
     // the two lamps follow the cluster's own blink state. Able to fail: a needle left at its modeled
     // rest rotation, a lamp still parked while its condition holds, or a drive that moves the panel
     // geometry around the needle instead of the needle itself.
@@ -466,7 +571,7 @@ internal static class WorldAndToolSuites
             ctx.Check(Mathf.Abs(Mathf.AngleDifference(speed.Transform.Basis.GetEuler().Z, wantSpeed)) < 0.01f,
                 $"a second frame writes the same absolute angle rather than turning again");
 
-            // The horizon (PLAN-cockpit-panel B12): N = Rz(-roll) . Rx(pitch), no gain/offset/clamp. A zero
+            // The horizon: N = Rz(-roll) . Rx(pitch), no gain/offset/clamp. A zero
             // attitude first, since that has to equal the authored rest basis exactly.
             ctx.Check(horizon != null && horizonRest != null, $"the interior carries pfhorizon");
             if (horizon != null && horizonRest != null)
@@ -532,7 +637,7 @@ internal static class WorldAndToolSuites
         }
     }
 
-    // The belt lights take the loadout's colour tier (PLAN-cockpit-panel). A pristine plane reads all-green,
+    // The belt lights take the loadout's colour tier. A pristine plane reads all-green,
     // which proves nothing, so this drives a spent belt and reads the material back. Able to fail:
     // a drive that recolours nothing, or one that writes the shared built material and so repaints
     // every indicator at once instead of the one position. Binds through CockpitGauges.Bind(builder),
@@ -779,8 +884,8 @@ internal static class WorldAndToolSuites
 
     // ---- needs a chapter world ------------------------------------------------------------------
 
-    // The four every-chapter censuses in one pass, because the world build is nearly the whole
-    // cost of each and four suites building the same eight chapters paid it four times over.
+    // The four every-chapter censuses in one pass. The world build is nearly the whole cost of
+    // each, and four suites building the same eight chapters pay it four times over.
     [Suite("chapter-census",
         "every chapter's built world, once each with collision: nothing a chapter hides is left "
         + "solid (no enabled collider under an invisible node), the ground answers a ray from "
@@ -1089,10 +1194,10 @@ internal static class WorldAndToolSuites
         ctx.Note($"{chapter} bare firtree1={bareFir1} firtree2={bareFir2}; dressed firtree1={dressedFir1} firtree2={dressedFir2}; scales {lo:0.000}-{hi:0.000}");
     }
 
-    // A decoration model is a node chain, and the mesh node under its `.flt` top may translate: C5's
-    // w_lightglow sits 4.75 m up, the lamp head's height. Asserted as an A/B against the same build
-    // with that chain transform cleared, which is the state the stamp had while it dropped it, so
-    // the control both fails able and shows the move is confined to the glow.
+    // A decoration model is a node chain, and the mesh node under its `.flt` top may translate.
+    // C5's w_lightglow sits 4.75 m up, the lamp head's height. Asserted as an A/B against the same
+    // build with that chain transform cleared. The control both fails able and shows the move is
+    // confined to the glow.
     [Suite("clutter-mesh-lift",
         "C5's lamp glow stamps 4.75 m up its own decoration chain, and clearing that chain moves the glow alone")]
     internal static void ClutterMeshLift(TestContext ctx)
@@ -1206,6 +1311,68 @@ internal static class WorldAndToolSuites
         ctx.Note($"{chapter}/{template}: {moved} glow stamps lifted 4.75 m, {unmoved} stamps unchanged, poles={poles?.Count ?? 0}");
     }
 
+    // ⚠ A card's pose reads the eye's POSITION and never its basis. A billboard assembled from
+    // INV_VIEW_MATRIX's columns carries the camera's roll into every stamp, which is the one thing
+    // the original's per-card tracker cannot do (docs/org/cloudCards.md). Asserted on the
+    // emitted shader text, because a vertex-stage rotation leaves no trace in the built scene.
+    [Suite("clutter-card-pose",
+        "C5's poleflare glow stamps pose through the facade look-at and never through the camera's own "
+        + "basis, while the lightpole cards beside them keep the cylindrical pose")]
+    internal static void ClutterCardPose(TestContext ctx)
+    {
+        const string chapter = "C5";
+        const string template = "cblock7";   // the district carrying lightpole and its poleflare glow
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, chapter);
+        string gamezPath = SessionPaths.ChapterGamez(ctx.DataRoot, chapter);
+        ctx.RequireData(texturesPath, $"{chapter} textures");
+        ctx.RequireData(gamezPath, $"{chapter} gamez");
+
+        var gamez = GameZ.Load(gamezPath);
+        using var textures = new TextureArchive(texturesPath);
+        var props = ClutterTemplateSpec.Load(SessionPaths.ChapterZrdr(ctx.DataRoot, chapter));
+        var clutter = new ClutterBuilder(gamez, textures, null, props);
+        var built = clutter.Build(new[] { template });
+
+        var code = new Dictionary<string, string>(System.StringComparer.Ordinal);
+        int examined = 0;
+        foreach (var kind in clutter.ExportedKinds ?? System.Array.Empty<ClutterBuilder.KindExport>())
+        {
+            if (kind.Solid || kind.Material is not ShaderMaterial { Shader: { } shader })
+            {
+                continue;
+            }
+            code[kind.Texture] = shader.Code;
+            ctx.Check(!shader.Code.Contains("INV_VIEW_MATRIX[0]", System.StringComparison.Ordinal)
+                      && !shader.Code.Contains("INV_VIEW_MATRIX[1]", System.StringComparison.Ordinal)
+                      && !shader.Code.Contains("INV_VIEW_MATRIX[2]", System.StringComparison.Ordinal),
+                $"{kind.Texture} builds no basis from the camera's columns");
+            examined++;
+        }
+        built?.Free();
+
+        ctx.Check(examined > 0, $"{template} exports card kinds count={examined}");
+        bool hasGlow = code.TryGetValue("poleflare.tif", out var glow);
+        bool hasPole = code.TryGetValue("lightpole.tif", out var pole);
+        ctx.Check(hasGlow, $"{template} stamps the poleflare glow card");
+        ctx.Check(hasPole, $"{template} stamps the lightpole card");
+        if (!hasGlow || !hasPole)
+        {
+            return;
+        }
+
+        ctx.Check(glow!.Contains("csky_facade_spherical(origin, CAMERA_POSITION_WORLD)", System.StringComparison.Ordinal),
+            $"the glow card poses through the facade look-at");
+        ctx.Check(glow.Contains("res://shaders/csky_facade.gdshaderinc", System.StringComparison.Ordinal),
+            $"the glow card's shader includes the facade block it calls");
+        // The post is the control, the same emitter one flag apart. Without it a glow reading
+        // right while the post lost its own pose would pass unseen.
+        ctx.Check(!pole!.Contains("csky_facade_spherical", System.StringComparison.Ordinal),
+            $"the lightpole card takes no spherical pose");
+        ctx.Check(pole.Contains("CAMERA_POSITION_WORLD.xz - origin.xz", System.StringComparison.Ordinal),
+            $"the lightpole card still spins about its own vertical");
+        ctx.Note($"{chapter}/{template}: {examined} card kinds examined, glow and post read apart");
+    }
+
     // The DirectionalLight3D is pointed by the flown zone's authored SUNLIGHT_ORIENTATION and keeps
     // following it when the camera's weather state moves to another zone. The CSVM.Tests units pin the
     // parse and the euler-to-direction mapping; neither can see the light wired to the wrong seam, or
@@ -1276,7 +1443,7 @@ internal static class WorldAndToolSuites
     // ⚠ C1B against C1C is the install's OWN night/day pair. Do not fold this onto one mission:
     // two zones of one mission differ by cloud layer, which is not the difference under test.
     [Suite("sun-energy",
-        "the world's light takes its energy from the flown zone's authored SUNLIGHT, so C1B's night mission lights an aircraft dimmer than C1C's daylight, the ambient fill is colour-sourced from the zone's own SUNLIGHT_COLOR_AMBIENT rather than the sky, and a zone change carries the new energy (BL-332)")]
+        "the world's light takes its energy from the flown zone's authored SUNLIGHT, so C1B's night mission gets a dimmer scene sun than C1C's daylight, the ambient fill is colour-sourced from the zone's own SUNLIGHT_COLOR_AMBIENT rather than the sky, and a zone change carries the new energy (BL-332)")]
     internal static void SunEnergy(TestContext ctx)
     {
         string nightZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1B", "IA1");
@@ -1295,8 +1462,8 @@ internal static class WorldAndToolSuites
             $"C1B's night zone lights the aircraft under half as hard as C1C's day zone");
         ctx.Check(nightAmbient < dayAmbient * 0.5f,
             $"and its ambient fill is under half of C1C's too");
-        // The energy counts only where the renderer reads it, which is a colour-sourced ambient:
-        // on the sky source Godot takes the fill off the procedural cubemap and both the colour
+        // The energy counts only where the renderer reads it, which is a colour-sourced ambient.
+        // On the sky source Godot takes the fill off the procedural cubemap. Both the colour
         // and the energy written here are ignored (docs/verification.md WORLD-32).
         ctx.Check(night.Source == Godot.Environment.AmbientSource.Color,
             $"the zone apply leaves the Environment's ambient colour-sourced (got {night.Source})");
@@ -1426,6 +1593,122 @@ internal static class WorldAndToolSuites
             pass?.QueueFree();
             camera.QueueFree();
             sun.QueueFree();
+        }
+    }
+
+    // The whiteout is the air OUTSIDE the canopy: the original applies it as a fog term on the
+    // world draw, which the interior never takes, so the window whites out and the panel does not.
+    // Both are canvas layers here, so the order between them is what decides it, and the drawn
+    // frame is out of a suite's reach (see SessionStartCoverSuites). Able to fail: a whiteout back
+    // on a layer above the pass (where it painted the panel), a flare canvas left above the
+    // whiteout, one overlay shared by two panes, and a --no-fog run still painting the band.
+    [Suite("weather-cockpit-whiteout",
+        "the cloud-band whiteout draws under each pane's own cockpit pass, so a full-opacity band whites the window out and leaves the canopy, panel and gauges clear, in cockpit view and in chase view alike, while --no-fog clears it")]
+    internal static void WeatherCockpitWhiteout(TestContext ctx)
+    {
+        string zrdr = SessionPaths.MissionZrdr(ctx.DataRoot, "C1", "IA1");
+        ctx.RequireData(zrdr, $"C1/IA1 mission zrdr");
+
+        // The order the picture is composed in, asserted on the constants themselves: the flare
+        // and the whiteout are the sky, the pass is the cockpit in front of it, and the HUD is the
+        // chrome over both.
+        ctx.Check(HudLayers.FlareSprites < HudLayers.Whiteout,
+            $"the flare sprites draw under the whiteout, so a cloud swallows them flare={HudLayers.FlareSprites} whiteout={HudLayers.Whiteout}");
+        ctx.Check(HudLayers.Whiteout < HudLayers.CockpitPass,
+            $"the whiteout draws under the cockpit pass whiteout={HudLayers.Whiteout} pass={HudLayers.CockpitPass}");
+        ctx.Check(HudLayers.CockpitPass < HudLayers.Hud && HudLayers.CockpitPass < HudLayers.SunWash,
+            $"and the pass stays under the HUD and the sun wash pass={HudLayers.CockpitPass} hud={HudLayers.Hud} wash={HudLayers.SunWash}");
+
+        var pane0 = new Node { Name = "whiteout-pane-0" };
+        var pane1 = new Node { Name = "whiteout-pane-1" };
+        var camera0 = new Camera3D { Name = "whiteout-camera-0" };
+        var camera1 = new Camera3D { Name = "whiteout-camera-1" };
+        var sun = new DirectionalLight3D { Name = "whiteout-sun" };
+        ctx.Host.AddChild(pane0);
+        ctx.Host.AddChild(pane1);
+        ctx.Host.AddChild(camera0);
+        ctx.Host.AddChild(camera1);
+        ctx.Host.AddChild(sun);
+        CockpitOverlay? pass = null;
+        try
+        {
+            var spec = SessionSpec.Parse(new[] { "--chapter=C1", "--mission=IA1" });
+            var rigs = new List<PlayerRig>
+            {
+                new PlayerRig { Index = 0, Camera = camera0, HudParent = pane0 },
+                new PlayerRig { Index = 1, Camera = camera1, HudParent = pane1 },
+            };
+            var weather = new WeatherRig(spec, ctx.Host, sun);
+            weather.Build(zrdr, rigs, System.Array.Empty<HorizonZone>(), _ => { });
+
+            foreach (var rig in rigs)
+            {
+                var canvas = rig.Whiteout?.GetParent() as CanvasLayer;
+                ctx.Check(canvas != null && canvas.Layer == HudLayers.Whiteout,
+                    $"player {rig.Index}'s whiteout sits on the whiteout layer layer={canvas?.Layer}");
+                ctx.Check(canvas != null && canvas.GetParent() == rig.HudParent,
+                    $"and hangs under that player's own pane, so a splitscreen pane whites out alone");
+                ctx.Check(rig.Whiteout != null && rig.Whiteout.AnchorRight == 1f
+                    && rig.Whiteout.AnchorBottom == 1f,
+                    $"and fills its pane rather than a corner of it");
+            }
+
+            // C1/IA1's band is 970-1124 m with a 1032-1062 m opaque core, so the centre is a
+            // total whiteout and the flicker's own guard leaves it there untouched.
+            camera0.Position = new Vector3(0f, 1047f, 0f);
+            camera1.Position = Vector3.Zero;
+            weather.Tick(rigs);
+            float inside = rigs[0].Whiteout?.Color.A ?? -1f;
+            float outside = rigs[1].Whiteout?.Color.A ?? -1f;
+            ctx.Note($"band centre alpha {inside:0.000}, below the band {outside:0.000}");
+            ctx.Check(Mathf.IsEqualApprox(inside, 1f),
+                $"a camera in the band's core paints a total whiteout alpha={inside:0.000}");
+            ctx.Check(Mathf.IsEqualApprox(outside, 0f),
+                $"and the other pane, below the band, paints nothing alpha={outside:0.000}");
+
+            // The pass over that same pane, with the whiteout at full: cockpit view draws the
+            // interior over it, chase view takes the pass off and leaves the pane white.
+            var panel = new Node3D { Name = "whiteout-panel" };
+            pane0.AddChild(panel);
+            pass = CockpitOverlay.Build(pane0, panel, null, null);
+            if (pass == null)
+            {
+                ctx.Check(false, $"the cockpit pass builds over the pane");
+                return;
+            }
+            var cam = new CameraController(camera0, new CamParams(), _ => false, -1,
+                PilotViewMode.Cockpit);
+            pass.Sync(Basis.Identity, cam, 0f);
+            int whiteoutLayer = (rigs[0].Whiteout?.GetParent() as CanvasLayer)?.Layer ?? 0;
+            ctx.Check(pass.Visible && pass.Layer > whiteoutLayer,
+                $"in cockpit view the interior draws over the full whiteout pass={pass.Layer} whiteout={whiteoutLayer}");
+            ctx.Check(pass.GetParent() == pane0,
+                $"and it is this pane's own pass, not a shared one");
+            pass.Deactivate();
+            weather.Tick(rigs);
+            ctx.Check(!pass.Visible && Mathf.IsEqualApprox(rigs[0].Whiteout?.Color.A ?? -1f, 1f),
+                $"in chase view the pass is down and the whiteout covers the whole pane");
+
+            // --no-fog covers the whiteout as it covers the fog, at the same altitude.
+            var clearSpec = SessionSpec.Parse(
+                new[] { "--chapter=C1", "--mission=IA1", "--no-fog" });
+            var clearRigs = new List<PlayerRig>
+                { new PlayerRig { Index = 0, Camera = camera0, HudParent = pane1 } };
+            var clearWeather = new WeatherRig(clearSpec, ctx.Host, sun);
+            clearWeather.Build(zrdr, clearRigs, System.Array.Empty<HorizonZone>(), _ => { });
+            clearWeather.Tick(clearRigs);
+            float cleared = clearRigs[0].Whiteout?.Color.A ?? -1f;
+            ctx.Check(Mathf.IsEqualApprox(cleared, 0f),
+                $"--no-fog clears the band whiteout at the same altitude alpha={cleared:0.000}");
+        }
+        finally
+        {
+            pass?.QueueFree();
+            camera0.QueueFree();
+            camera1.QueueFree();
+            sun.QueueFree();
+            pane0.QueueFree();
+            pane1.QueueFree();
         }
     }
 
@@ -1721,7 +2004,8 @@ internal static class WorldAndToolSuites
         + "against the NEAREST of every pane's camera, not player 1's alone (B13, BL-366): a "
         + "light 2000 m from a lone P1 stays committed once a second viewer sits 100 m from it, "
         + "the able-to-fail control against P1 alone drops the same light, and the one-viewer "
-        + "case reads exactly what it read before; given a parent node the same commit mirrors "
+        + "case reads exactly what it read before; the packed factor is the authored colour times "
+        + "ambient + diffuse and the shader term takes no dot product; given a parent node the same commit mirrors "
         + "one OmniLight3D per committed light in enhanced mode and none at all in original mode")]
     internal static void WorldLightsNearestViewer(TestContext ctx)
     {
@@ -1773,6 +2057,29 @@ internal static class WorldAndToolSuites
         lights.Commit(new[] { p1 });
         ctx.Check(lights.CommittedPositions.Count == 1 && lights.CommittedPositions.Contains(nearP1),
             $"one viewer (single player) uses the single-viewer distance rule");
+
+        // The packed factor is the authored colour times ambient + diffuse, unconverted. The MP2
+        // flag lights' 0.3 + 1.0 scale it by 1.3, and a light authoring neither (scalar 1) packs
+        // its colour.
+        var heLight = new Color(1f, 0.86f, 0.29f);
+        lights.Begin();
+        lights.Add(nearP1, heLight, 1f, 10f);
+        lights.Add(new Vector3(0f, 0f, -6f), heLight, 1f, 10f, 0.3f + 1.0f);
+        lights.Commit(new[] { p1 });
+        ctx.Check(lights.CommittedFactors.Count == 2
+                  && lights.CommittedFactors[0].IsEqualApprox(heLight)
+                  && lights.CommittedFactors[1].IsEqualApprox(heLight * 1.3f),
+            $"the factor is colour x (ambient + diffuse), unlinearised: {string.Join(", ", lights.CommittedFactors)}");
+        ctx.Check(!lights.CommittedFactors[0].IsEqualApprox(heLight.SrgbToLinear()),
+            $"ABLE-TO-FAIL CONTROL: the packed factor is not the linearised colour the enhanced omni takes");
+
+        // The term has no N.L: the include never takes a dot product. A surface facing away from
+        // the light gains exactly what a surface facing it does.
+        string include = Godot.FileAccess.GetFileAsString("res://shaders/csky_lights.gdshaderinc");
+        ctx.Check(include.Contains("csky_point_light", System.StringComparison.Ordinal)
+                  && !include.Contains("dot(", System.StringComparison.Ordinal)
+                  && !include.Contains("smoothstep", System.StringComparison.Ordinal),
+            $"csky_lights.gdshaderinc defines csky_point_light with no dot product and no smoothstep");
 
         // Same instance, same commit shape, gated on the launch's own graphics mode: enhanced
         // mirrors the committed set onto one OmniLight3D per light, original spawns none at all.
@@ -1844,7 +2151,7 @@ internal static class WorldAndToolSuites
             long perNode = PerNodeWalkCost(effectRoot);
 
             // The same cycle before anything unrelated is faded, which is the comparison the
-            // process-wide fast path used to turn on: reported, not asserted, since a suite that
+            // process-wide fast path turns on: reported, not asserted, since a suite that
             // ran earlier in this process may already have left a faded root of its own behind.
             WorldCollision.TakeWalkSteps();
             Fade(effectRoot, faded);
@@ -2079,10 +2386,10 @@ internal static class WorldAndToolSuites
         return (meshes, merged);
     }
 
-    // One mission's ZONE1 lighting, off a rig of its own so the two missions cannot share state:
-    // the two energies, the ambient as the renderer will read it (source and colour), and the
-    // authored colour it should be, read straight off the file for comparison. The Environment is
-    // a bare one, so every field returned is a value the zone apply itself wrote.
+    // One mission's ZONE1 lighting, off a rig of its own so the two missions cannot share state.
+    // The two energies come back, with the ambient as the renderer will read it (source and
+    // colour). The authored colour it should be is read straight off the file for comparison. The
+    // Environment is a bare one, so every field returned is a value the zone apply itself wrote.
     // ⚠ --sky-zone=zone1 on purpose. The default request is zone2, the ABOVE-cloud zone, and
     // comparing two missions' cloud tops is not the night-against-day question.
     private static (float Sun, float Ambient, Godot.Environment.AmbientSource Source, Color Color, Color Authored) ZoneEnergies(
@@ -2183,9 +2490,9 @@ internal static class WorldAndToolSuites
     }
 
 
-    // Every distinct Shader a subtree draws through, over all four seats a built world uses: a
-    // GeometryInstance3D's override and overlay, a MeshInstance3D's per-surface materials, and a
-    // MultiMeshInstance3D's shared mesh surfaces.
+    // Every distinct Shader a subtree draws through, over all four seats a built world uses. That
+    // covers a GeometryInstance3D's override and overlay, a MeshInstance3D's per-surface
+    // materials, and a MultiMeshInstance3D's shared mesh surfaces.
     private static void CollectShaders(Node node, HashSet<Shader> found)
     {
         if (node is GeometryInstance3D geo)
@@ -2229,10 +2536,10 @@ internal static class WorldAndToolSuites
         }
     }
 
-    // Which generator emitted a shader, by a token only that generator writes: the world mesh alone
-    // carries a depth bias, the templates clutter alone dithers its far fade, of the two remaining
-    // spinning arms only the cylindrical facade builds a spin basis, and the ambient cloud field
-    // alone declares far_fade. Anything else is the camera-facing billboard.
+    // Which generator emitted a shader, by a token only that generator writes. The world mesh
+    // alone carries a depth bias, and the templates clutter alone dithers its far fade. Of the two
+    // remaining spinning arms only the cylindrical facade builds a spin basis. The ambient cloud
+    // field alone declares far_fade. Anything else is the camera-facing billboard.
     private static string ArmOf(string code) =>
         code.Contains("uniform float depth_bias", System.StringComparison.Ordinal) ? "world"
         : code.Contains("csky_clutter_dither_keep", System.StringComparison.Ordinal) ? "clutter"
@@ -2244,4 +2551,39 @@ internal static class WorldAndToolSuites
         byArm.Count == 0 ? "none"
         : string.Join(" ", byArm.OrderBy(p => p.Key, System.StringComparer.Ordinal)
             .Select(p => $"{p.Key}={p.Value}"));
+
+    // The Danger Zone camera's frame over a Nose view, which hides the most. Every hidden airframe
+    // group shows for the photograph on a layer no pane draws, and the interior stays out. The end
+    // of the frame puts every group's visibility and every mesh's layers back exactly.
+    private static void PhotographFrame(TestContext ctx, CockpitVisibility cockpit, Node3D interior,
+        Node3D? body, Node3D? markers, Node3D? dontmove)
+    {
+        var groups = new[] { body, markers, dontmove }.OfType<Node3D>().ToList();
+        var before = groups.SelectMany(Meshes).Distinct().ToDictionary(m => m, m => m.Layers);
+        uint layer = SplitScreen.PhotographLayer;
+
+        cockpit.ShowForPhotograph(layer);
+        var drawn = groups.SelectMany(Meshes).ToList();
+        ctx.Check(groups.Count == 3 && groups.All(g => g.Visible) && !interior.Visible,
+            $"the photograph frame shows body, markers and dontmove and leaves the interior out");
+        ctx.Check(drawn.Count > 0 && drawn.All(m => m.Layers == layer),
+            $"…every one of their {drawn.Count} meshes on the photograph layer alone");
+
+        cockpit.EndPhotograph();
+        ctx.Check(groups.All(g => !g.Visible),
+            $"the end of the frame hides the three groups again");
+        ctx.Check(before.All(kv => kv.Key.Layers == kv.Value),
+            $"…and gives every mesh back its own layers");
+    }
+
+    private static IEnumerable<VisualInstance3D> Meshes(Node root)
+    {
+        if (root is VisualInstance3D instance)
+            yield return instance;
+        foreach (var child in root.GetChildren())
+        {
+            foreach (var nested in Meshes(child))
+                yield return nested;
+        }
+    }
 }

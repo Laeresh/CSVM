@@ -262,7 +262,7 @@ public class OriginalManifestTests : IDisposable
         registry.Register(PresentationId.Original, () => new FakeWizardPresentation());
         var host = new MenuHost(registry, new RecordingAudio(), _ => { });
         host.Availability = id => id == PresentationId.Original ? unavailable : null;
-        host.Select(forceBuiltIn: false, cliOverride: null, savedRequest: PresentationId.Original.Value);
+        host.Select(forceBuiltIn: false, cliOverride: PresentationId.Original.Value);
         return host;
     }
 

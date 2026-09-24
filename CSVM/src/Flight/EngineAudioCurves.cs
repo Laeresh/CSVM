@@ -1,6 +1,24 @@
+using System.Collections.Generic;
+using CSVM.Mech3;
 using Godot;
 
 namespace CSVM.Flight;
+
+/// <summary>Where the engine slot stands against the airframe's damage. The original has no
+/// sputter or restart cue of its own: the damage edge stops the slot, the slot stays silent while
+/// the shared re-arm timer runs, and then the damaged loop starts at full level and holds.
+/// Decode: docs/formats/vehicle.md, "The damaged engine's phases".</summary>
+public enum EngineSlotPhase
+{
+    /// <summary>The plain or cockpit loop, per the view.</summary>
+    Healthy,
+
+    /// <summary>Damaged, and the slot is silent until the re-arm timer fires.</summary>
+    Out,
+
+    /// <summary>The <c>damaged_engine_sound</c> loop, at whatever pitch its definition accepts.</summary>
+    Damaged,
+}
 
 /// <summary>Everything the engine slot's curves read this frame. The original's per-frame routine
 /// takes the throttle lever plus two things off the airframe's own state, so this carries all three
@@ -43,9 +61,12 @@ public static class EngineAudioCurves
     private const float DamagedRearmMin = 3f;
     private const float DamagedRearmSpread = 2f;
 
-    // The mixer clamps the played frequency rather than letting a multiplier reach zero; Godot has
-    // no such floor, and a PitchScale of 0 stalls the stream instead of bottoming out.
-    private const float MinPitch = 0.01f;
+    // The frequency handed to the voice is clamped to 4000..55200 Hz, and every install WAV is
+    // 22050 Hz, so as a PitchScale the mixer's own bounds are these. Godot clamps nothing, and a
+    // PitchScale of 0 stalls the stream instead of bottoming out.
+    // Decode: docs/formats/sounds.md, "A definition is pitched only when it carries FREQUENCY".
+    private const float MinPitch = 4000f / 22050f;
+    private const float MaxPitch = 55200f / 22050f;
 
     // The two added terms and the clamp they sit under, all read out of the image rather than tuned
     // (docs/formats/vehicle.md carries each address). Volume and pitch differ only in the turn-rate
@@ -64,11 +85,11 @@ public static class EngineAudioCurves
     private const float BoostVolumeParam = 1.17f;
     private const float BoostPitchParam = 1.25f;
 
-    // The gain the rattle loop plays at once its gate opens, hardcoded by the original's own
-    // keep-alive call rather than read from the rattle block. ⚠ Not a mix constant to tune: it is
-    // the same 1.0 the engine slot's flat volume curve gives that slot, so the two sit level.
+    // The gain the rattle loop plays at once its gate opens. The original's keep-alive call
+    // hardcodes 1.0, level with the engine slot's flat volume curve; this port plays it 1.3x that,
+    // a chosen departure judged at the controls, where the decoded level read audible but low.
     // Decode: docs/org/shakes.md, "The rattle SOUND is a gate at full level".
-    private const float RattleGain = 1f;
+    private const float RattleGain = 1.3f;
 
     /// <summary>Whether the engine slot takes <c>damaged_engine_sound</c>: the original tests its
     /// whole disabled-systems mask for nonzero, and the two bits this engine models are the
@@ -78,30 +99,66 @@ public static class EngineAudioCurves
     public static bool EngineDamaged(float worstHealthFraction, bool engineDead = false) =>
         engineDead || worstHealthFraction < DamagedEngineHealthFraction;
 
+    /// <summary>Whether the definition on a slot accepts a frequency write at all. The original
+    /// gives a definition's buffer the frequency control only when its entry carries
+    /// <c>FREQUENCY</c>, so on one without it every pitch these curves compute is refused and the
+    /// loop runs at its own sample rate. In the shipped install that silences the pitch on
+    /// <c>snd_damagedengine</c> and on every <c>*_cp</c> cockpit loop.
+    /// Decode: docs/formats/sounds.md, "A definition is pitched only when it carries FREQUENCY".</summary>
+    public static bool SlotIsPitched(IReadOnlyDictionary<string, SoundDef>? defs, string? name) =>
+        name != null && defs != null && defs.TryGetValue(name, out var def) && def.Frequency;
+
     /// <summary>The damaged swap's pitch multiplier, drawn once per swap and then held:
     /// <paramref name="u"/> is the original's <c>rand() / 32767</c> and the entry's own two floats
     /// bound it linearly. A CLEAR flag byte leaves the multiplier at 1 rather than drawing, which
-    /// is why the flag is not a range of zero width.</summary>
+    /// is why the flag is not a range of zero width. ⚠ Nobody hears this on the shipped entry:
+    /// <c>snd_damagedengine</c> takes no frequency write (<see cref="SlotIsPitched"/>).</summary>
     public static float DamagedPitchMul(PlaneStats stats, float u) =>
         stats.DamagedEnginePitchRandom
             ? stats.DamagedEnginePitchLo + ((stats.DamagedEnginePitchHi - stats.DamagedEnginePitchLo) * u)
             : 1f;
 
     /// <summary>Ticks the shared re-arm timer one frame and says whether the damaged loop may
-    /// start now. The accumulator resets to zero once it crosses a threshold redrawn every frame
-    /// from <paramref name="u"/>, the frame's own draw in [0, 1). Only reached while the engine
-    /// handle is silent and the airframe is damaged.
+    /// start now. The accumulator as it stood BEFORE this frame is tested against a threshold
+    /// redrawn every frame from <paramref name="u"/>, the frame's own draw in [0, 1): past it, it
+    /// resets to zero and fires; otherwise it takes this frame's <paramref name="dt"/>.
     /// Decode: docs/formats/vehicle.md, "What makes an airframe damaged".</summary>
     public static bool AdvanceDamagedRearm(DamagedEngineTimer timer, float dt, float u)
     {
-        timer.Elapsed += dt;
-        if (timer.Elapsed < DamagedRearmMin + (DamagedRearmSpread * u))
+        if (timer.Elapsed <= DamagedRearmMin + (DamagedRearmSpread * u))
         {
+            timer.Elapsed += dt;
             return false;
         }
         timer.Elapsed = 0f;
         return true;
     }
+
+    /// <summary>One frame of the engine slot's damage phases (<see cref="EngineSlotPhase"/>).
+    /// Healthy is taken the moment <paramref name="damaged"/> clears; a damaged slot whose loop
+    /// is still sounding holds; anything else (the edge, the silence, a stopped loop) ticks the
+    /// shared re-arm timer and starts the damaged loop when it fires. The caller stops the slot on
+    /// the way into <see cref="EngineSlotPhase.Out"/> and starts it on the way out of it.
+    /// Decode: docs/formats/vehicle.md, "The damaged engine's phases".</summary>
+    public static EngineSlotPhase StepEnginePhase(EngineSlotPhase phase, bool damaged,
+        bool loopSounding, DamagedEngineTimer timer, float dt, float u)
+    {
+        if (!damaged)
+        {
+            return EngineSlotPhase.Healthy;
+        }
+        if (phase == EngineSlotPhase.Damaged && loopSounding)
+        {
+            return EngineSlotPhase.Damaged;
+        }
+        return AdvanceDamagedRearm(timer, dt, u) ? EngineSlotPhase.Damaged : EngineSlotPhase.Out;
+    }
+
+    /// <summary>Whether a step from <paramref name="from"/> to <paramref name="next"/> starts the
+    /// damaged loop this frame, which includes a damaged loop that had stopped (an AI past the
+    /// cull) being started again once the timer fires.</summary>
+    public static bool StartsDamagedLoop(EngineSlotPhase from, EngineSlotPhase next, bool loopSounding) =>
+        next == EngineSlotPhase.Damaged && !(from == EngineSlotPhase.Damaged && loopSounding);
 
     /// <summary>The engine slot's definition and its pitch multiplier: damaged swaps onto
     /// <c>damaged_engine_sound</c> at a drawn multiplier; else <paramref name="cockpitView"/>
@@ -135,12 +192,14 @@ public static class EngineAudioCurves
         model.Attitude.Z.Y,
         boosting);
 
-    /// <summary>Slot 0, the engine loop. Each curve's normalised parameter is the throttle lever
-    /// plus a turn-rate term and a climb-attitude term, clamped to [0, 1.5] BEFORE the curve maps it
-    /// to an output (docs/formats/vehicle.md, "The engine slot's pitch and gain are not throttle
-    /// alone"); the pitch then carries the damaged-swap multiplier. The returned volume is the curve
-    /// alone, the caller still applies the definition's own VOLUME, its ramp and any mix gain.</summary>
-    internal static (float Pitch, float Volume) Engine(PlaneStats stats, in EngineDrive drive, float pitchMul)
+    /// <summary>Slot 0, the engine loop. Each curve's parameter is the throttle lever plus a
+    /// turn-rate and a climb-attitude term, clamped to [0, 1.5] BEFORE the curve maps it
+    /// (docs/formats/vehicle.md, "The engine slot's pitch and gain are not throttle alone"); the
+    /// pitch then carries the swap multiplier and the mixer's clamp, or is 1 when
+    /// <paramref name="pitchable"/> (<see cref="SlotIsPitched"/>) is clear. The volume is the curve
+    /// alone: the caller still applies the definition's own VOLUME, its ramp and any mix gain.</summary>
+    internal static (float Pitch, float Volume) Engine(
+        PlaneStats stats, in EngineDrive drive, float pitchMul, bool pitchable)
     {
         float tVol = drive.Boosting ? BoostVolumeParam
             : Mathf.Clamp(stats.EngineVolume.Frac(drive.Throttle) + (TurnRateIntoVolume * drive.TurnRate)
@@ -148,7 +207,9 @@ public static class EngineAudioCurves
         float tPitch = drive.Boosting ? BoostPitchParam
             : Mathf.Clamp(stats.EnginePitch.Frac(drive.Throttle) + (TurnRateIntoPitch * drive.TurnRate)
                 - (ClimbAttitudeIntoParam * drive.ClimbAttitude), 0f, ParamMax);
-        return (Mathf.Max(MinPitch, stats.EnginePitch.Remap(tPitch) * pitchMul),
+        return (pitchable
+                    ? Mathf.Clamp(stats.EnginePitch.Remap(tPitch) * pitchMul, MinPitch, MaxPitch)
+                    : 1f,
                 stats.EngineVolume.Remap(tVol));
     }
 
@@ -165,4 +226,8 @@ public static class EngineAudioCurves
     /// reaches the mix at the engine slot's own level once it opens.</summary>
     internal static float Rattle(PlaneStats stats, float speedFrac) =>
         speedFrac < stats.RattleSpeedGate ? 0f : RattleGain;
+
+    /// <summary>The level the rattle plays at past its gate, for the suites that pin the gate's
+    /// flat top and its relation to the engine slot.</summary>
+    internal static float RattleLevel() => RattleGain;
 }

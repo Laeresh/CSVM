@@ -20,6 +20,17 @@ public readonly record struct GlyphKey(ControlKind Kind, int Index, int Sign)
 /// </summary>
 public static class ControlGlyphs
 {
+    /// <summary>The A button as a glyph key. A gesture read raw off a device has no binding to name
+    /// it (<see cref="MenuInput.SignOnPressed"/>), so a line prompting one names the button itself.
+    /// Every prompt that does stand on a binding goes through <see cref="For"/> instead.</summary>
+    public static readonly GlyphKey PadA = new(ControlKind.Button, (int)JoyButton.A, 0);
+
+    /// <summary>The B button, the sign-off half of the pair above.</summary>
+    public static readonly GlyphKey PadB = new(ControlKind.Button, (int)JoyButton.B, 0);
+
+    /// <summary>The Start button, likewise read raw.</summary>
+    public static readonly GlyphKey PadStart = new(ControlKind.Button, (int)JoyButton.Start, 0);
+
     private static ControlGlyphSet _set = new PromptFontGlyphs();
 
     /// <summary>The set every control line draws through. Assigning a different one changes every

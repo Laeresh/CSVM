@@ -7,7 +7,7 @@ namespace CSVM.UI.Menu.Original;
 /// Original's availability answer, made before entry: the extraction tree is not older than the
 /// manifest reads, the decoded layout file loads with a top level in it, and every file
 /// <see cref="OriginalAssetManifest"/> classes required is on disk and reads. A failure is one
-/// reason for the host to select Built-in for this run and leave the saved request alone; what is
+/// reason for the host to select Built-in for this run and leave the request alone; what is
 /// optional and absent comes back beside it, for the presentation to draw without.
 /// </summary>
 public static class OriginalAvailability

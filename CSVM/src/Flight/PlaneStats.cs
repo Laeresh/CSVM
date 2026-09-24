@@ -168,6 +168,12 @@ public sealed class PlaneStats
     public float AiAttackRange = 2000f;
     public float AiReturnRange = 1200f;
 
+    // The pursuit dwell pair, vehicle.json 'attack_dwell' / 'not_pursuit_dwell' (def +0x5c/+0x60),
+    // seconds: basic_airplane authors 60 / 5 and every aeroplane inherits them. The fallbacks are
+    // the def record's compiled defaults (FUN_00478a00, 0x00478a93 and 0x00478a9a).
+    public float AiAttackDwell = 60f;
+    public float AiNotPursuitDwell = 3f;
+
     // The AI control law's per-axis output stage (docs/org/aiControlLaw.md): roll, pitch and yaw
     // commands are multiplied by these scales, then clamped to these limits. Fallbacks are the
     // def initialiser's own compiled defaults, which is what every airframe in this install flies on.
@@ -293,8 +299,8 @@ public sealed class PlaneStats
     // pi/180 on the way in. The shipped 1.0 is a 1-degree cone.
     public float StickyBulletInaccuracy = Mathf.Pi / 180f;
 
-    // C22's autohead velocity-follow (docs/formats/vehicle/player-globals.md): the idle-frame
-    // lean into the plane's own velocity that HeadLook.IdleAim drives in Cockpit only. All three
+    // The autohead lead (docs/formats/vehicle/player-globals.md): the idle-frame head aim along
+    // the plane's own turn that HeadLook.IdleAim drives in Cockpit only. All three
     // fallbacks are the executable's own compiled defaults, not this install's authored values,
     // ⚠ turn_max's asymmetry is the trap: the AUTHORED path converts degrees to radians and then
     // DOUBLES the result (the loader's own arithmetic), where the compiled DEFAULT is already the
@@ -635,6 +641,8 @@ public sealed class PlaneStats
             FlightCeiling = Prop("flight_ceiling", 2500f),
             AiAttackRange = Prop("attack", 2000f),
             AiReturnRange = Prop("return_range", 1200f),
+            AiAttackDwell = Prop("attack_dwell", 60f),
+            AiNotPursuitDwell = Prop("not_pursuit_dwell", 3f),
             // Fallbacks are the def initialiser's compiled defaults, not guesses, see the fields.
             AiInputScaleRoll = Prop("ai_input_scale_roll", 3.5f),
             AiInputScalePitch = Prop("ai_input_scale_pitch", 3.5f),
@@ -664,7 +672,7 @@ public sealed class PlaneStats
         stats.VehicleArmor = PropOpt("armor");
         stats.VehicleHealth = PropOpt("health");
 
-        // Off the damage chain, because the def the vehicle SPAWNS as is what the engine copies
+        // Off the damage chain, because the def the vehicle SPAWNS as is what the original copies
         // these off: an AI variant's own chain for an AI aeroplane, and the player chain, where
         // player_airplane authors the -300, for a flown one.
         stats.AiTargetBias = PropOpt("target_bias") ?? 0f;
@@ -877,7 +885,7 @@ public sealed class PlaneStats
             stats.StickyBulletInaccuracy = Mathf.DegToRad(
                 player.Float("sticky_bullet_inaccuracy", Mathf.RadToDeg(stats.StickyBulletInaccuracy)));
 
-            // autohead_* (C22, docs/formats/vehicle/player-globals.md): turn_max's authored
+            // autohead_* (docs/formats/vehicle/player-globals.md): turn_max's authored
             // degrees are converted THEN DOUBLED, unlike its already-doubled compiled default.
             stats.AutoheadTurnTime = player.Float("autohead_turn_time", stats.AutoheadTurnTime);
             stats.AutoheadTurnMax = player.TryFloat("autohead_turn_max", out var turnMaxDeg)

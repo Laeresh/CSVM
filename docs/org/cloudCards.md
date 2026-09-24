@@ -36,7 +36,12 @@ statistical ramp and never a rim.
 | `FUN_0044c310` | Point-in-polygon test in the polygon's own plane, over its edges against its normal |
 | `FUN_004db010` | Files the finished instance in the world's clutter grid cell |
 | `FUN_0044c1c0` | The per-instance view-angle term: `max(0, dot(polygon normal, unit(eye - sprite)))` |
-| `FUN_004d5de0` | The per-instance clutter draw: evaluates the fade, sets the global opacity around the draw, restores it after |
+| `FUN_004d5de0` | The per-instance clutter draw: evaluates the fade, sets the global opacity around the draw, restores it after, and lends the template node this instance's own facade quaternion |
+| `FUN_00553700` | The model-type switch at the head of the draw: `1` is a facade, and the mode word at model `+0x04` picks which pose routine runs |
+| `FUN_00539390` | The `SphericalY` pose: the shortest-arc tracker, and the per-instance quaternion it accumulates |
+| `FUN_0053fd40` | The shortest-arc quaternion between two unit vectors, and the antiparallel fallback |
+| `FUN_00539040` | That fallback's arbitrary perpendicular |
+| `FUN_005408e0` | The `CylindricalY` pose: a turn about the model's own Y by the camera heading less the model's |
 | `FUN_004d6010` | The clutter quadtree walk, which culls a whole subtree on the **unscaled** band |
 | `FUN_0054e0e0` | Writes the global opacity `DAT_00a06f98` (default 1.0) |
 | `FUN_004d2120` | Writes the clutter distance factor `DAT_0062d170` |
@@ -47,6 +52,44 @@ statistical ramp and never a rim.
 | `FUN_00552020` | The per-model mask the draw keys on (lighting, distance fog, band fog) |
 | `FUN_005a0e00` | Device set-up: stage 0 colour op MODULATE of texture by diffuse |
 | `0x005a6160` | The transparent-queue drain, which sets the blend states a card is drawn under |
+
+## The pose: a shortest-arc tracker, and the camera's basis never enters it
+
+A cloud card is a `Facade` model in `SphericalY` mode (`model_type` 1, the mode word at model
+`+0x04` = 1; the census is in [`../formats/gamez.md`](../formats/gamez.md)). The draw reaches
+`FUN_00553700`, which switches on those two words and hands a `SphericalY` model to `FUN_00539390`
+before the geometry is submitted.
+
+`FUN_00539390` does **not** build a basis out of the camera's. It keeps a **quaternion per card**,
+a lazily allocated 16 bytes hanging off the node at `+0xc8`, seeded from the identity at
+`DAT_006379a0` = `(1, 0, 0, 0)`. Each frame it rotates the reference facing `DAT_006379d0` =
+`(0, 0, 1)` by the stored quaternion (`FUN_0053fb40`) to recover where the card is pointing now,
+takes the direction from the card to the eye (read out of the modelview translation and brought
+back out of view space by the 3x3 inverse `FUN_0053dfc0`, which is where the camera's own basis
+cancels), builds the **shortest arc** between those two directions (`FUN_0053fd40`, the half-vector
+construction), composes it onto the stored quaternion (`FUN_0053f920`), normalizes
+(`FUN_0053f850`), stores it back, and turns it into the model's basis (`FUN_0053fa40`). Since the
+arc is the minimal rotation from the card's own previous facing, nothing about the eye except its
+**position** reaches the card, and rolling the aircraft leaves every card exactly where it was.
+
+The per-card quaternion is per **instance**, not per template: the clutter draw `FUN_004d5de0`
+swaps the instance's own slot at `+0x44` into the shared template node's `+0xc8` before the draw
+and writes it back after, so ten thousand scattered cards each track their own facing through one
+model.
+
+⚠ **There is no up vector, so the pose has no zenith or nadir degeneracy.** A card looked at from
+straight above is an ordinary shortest arc like any other, which is the opposite of what a
+`lookAt(world up)` billboard does. The single degenerate input is the exact 180 degree reversal, an
+eye directly behind the card's current facing: `FUN_0053fd40` finds `1 + dot` at zero, sets `w = 0`
+and takes an arbitrary perpendicular from `FUN_00539040` (which returns `(1, 0, 0)` unless the
+vector's own x is nonzero), giving a half turn about it. Reaching it requires the eye to cross the
+card's facing exactly, and the frame after it the tracker is continuous again.
+
+For contrast, a `CylindricalY` facade (`FUN_005408e0`, the tree and lamppost cards) is not a
+tracker at all: it is a single yaw about the model's own Y by the camera heading
+`*(float *)(DAT_009fddc4 + 0x3c)` less the model's own heading (`atan2` via `FUN_0053def0`),
+applied by `FUN_0053ac80`. Its up is the model's Y by construction, and it likewise never sees the
+camera's roll.
 
 ## The colour: the authored 240 and nothing else
 
@@ -203,16 +246,27 @@ field is scattered **over the volume mesh's faces**, not through its interior. P
   polygon's vertices projected onto the two;
 - the steps are `distance * sqrt(3) / 2` along `U` and `distance` along `V`, each extent divided
   into a whole number of steps, and **every other row is offset by half a step**, which is a
-  staggered lattice rather than a square one;
-- each cell's point is tested by `FUN_0044c310` against the polygon's own outline and skipped when
-  it falls outside;
-- the point is then displaced **along `unit(p - ref)`** by a random draw over `perp_dist_range`,
+  staggered lattice rather than a square one. In full (`0x0044c9b3`..`0x0044ca3e`): an extent
+  wider than its nominal step takes `step = extent / ftol(extent / nominal + 0.5)`, a narrower one
+  is its own single step; rows start half a row step in from the minimum and run while they stay
+  at or below the maximum, columns start at the minimum (plus half a column step on odd rows);
+- the kind is drawn by weight twice, once over the blocks and once over a block's nodes, and then
+  the fade band;
+- the point is displaced **along `unit(p - ref)`** by a random draw over `perp_dist_range`,
   where `ref` is a per-volume reference point the caller passes from the volume record's `+0x64`
   (untraced beyond that; for a slab's top face the direction it gives is up near the middle and
-  increasingly outward towards the rim), and then perturbed on all three axes independently by up
-  to half of one random draw over `perturb_dist_range`;
+  increasingly outward towards the rim);
+- it is then perturbed by **one** draw `m` over `perturb_dist_range` (`0x0044cde0`..`0x0044cdf9`,
+  the block's `+0x24`/`+0x28`) and one draw per axis, `p += (rand() · 3.051851e-05 − 0.5) · m`
+  (`0x0044cdfc`..`0x0044ce50`, the constants at `0x00603598` and `0x006032e0` = 0.5), so each axis
+  moves uniformly over `[−m/2, m/2]`. On C1 and C1C (`distance` 130, `perturb_dist_range`
+  `[10, 20]`) that is at most ±10 m per axis against a 130 m column step, so the original's own
+  lattice is regular to within 8 % of a step;
 - the scale is one uniform random draw over `scale_range`, applied to all three axes;
-- the kind is drawn by weight twice, once over the blocks and once over a block's nodes.
+- only then is the final, displaced and perturbed point tested by `FUN_0044c310` against the
+  polygon's own outline (`0x0044ce5e`..`0x0044ce87`, the argument is the perturbed point), and the
+  placement skipped when it falls outside. Every draw above is taken for every lattice cell,
+  accepted or not.
 
 Every `rand()` above runs inside the fixed-seed window `FUN_0044e010` opens, so the whole field is
 the same every launch.
@@ -226,11 +280,31 @@ underside and the walls too and place several times the field.
 
 ## Where CSVM stands
 
-`FogVolumeClutter` and its generated card shader carry the colour path and the alpha path above.
+`FogVolumeClutter` and its generated card shader carry the pose, the colour path and the alpha path
+above.
 
-- **The colour is the authored 240, unscaled.** There is no colour term left in the cloud path:
-  the card's own vertex colour reaches the shader as the data authors it, and a brightness gap on
-  this population is read as coverage rather than corrected as a colour.
+- **The pose is a world-up look-at standing in for the tracker.** `csky_facade_spherical`
+  in [`../../CSVM/shaders/csky_facade.gdshaderinc`](../../CSVM/shaders/csky_facade.gdshaderinc)
+  points the card's `+Z` at the eye and takes its `+Y` as the world's up projected off that line,
+  and every `SphericalY` population takes it: the `fvol` deck cards, the `cloudparent` facades,
+  the stamped clutter glows, and the glow sprites that share their dispatch. The eye's basis is
+  not read, so the camera's roll cannot reach a card, which is the property the decode above turns
+  on, and the up hint is constant, so translating past a card cannot roll it either. A shader
+  holds no state, so the tracker itself is not reproduced; each of its steps is twist-free and
+  keeps the roll a card started with, so away from the pole this look-at is the pose it settles
+  into. ⚠ A closed-form shortest arc from a fixed axis is not that pose: its twist depends on
+  where the eye stands, and sliding sideways past a card that lies behind the axis rolls it
+  through most of a half turn. The one direction this look-at is degenerate in is the eye straight
+  above or below a card, where the up hint falls back to the world's `+Z`; a round puff seen face
+  on hides the roll it takes there.
+- **The colour is the authored 240, unscaled, and the only thing that ever multiplies it is the
+  original's own per-vertex directional term.** A chapter authoring its card `lighting: true` (C1C,
+  C2B and C5) takes `AMBIENT + DIFFUSE · max(N·L, 0)` per corner on the card's three authored
+  normals, turned by the same facade basis the quad takes, clamped after the multiply the way the
+  original clamps it ([`vertexLighting.md`](vertexLighting.md)); a chapter authoring it false (C1,
+  C4) reaches the shader as the data authors it. There is no other colour term and no brightness
+  constant: a brightness gap on this population is read as coverage rather than corrected as a
+  colour.
 - **The fade band is drawn per sprite.** The scatter draws one `t` per placement and hands it to
   the shader as instance custom data; the shader interpolates both authored `far_fade_range` pairs
   with it and ramps linearly in squared distance, not as a smoothstep.
@@ -245,6 +319,24 @@ underside and the walls too and place several times the field.
   the templates clutter already takes from the graphics `EffectsLevel`, so `HIGH` leaves the
   authored metres literal and the two clutter populations cannot drift apart.
 - **The card takes no fog in either build**, which is the one place the two agree by construction.
+
+⚠ **The port lays the lattice with two known differences, neither of which bears on rows.** It
+steps the nominal `distance · sqrt(3)/2` by `distance` from the face's minimum corner rather than
+the whole-number fit above with its half-step row start, and it tests the undisplaced lattice point
+against the outline before drawing, where the original tests the perturbed point after every draw.
+The perturbation itself is the original's to the constant: one magnitude, then `[−m/2, m/2]` per
+axis. Fixing either difference moves the placed field and every cloud golden, and is a separate
+change.
+
+**The shipped field is the decoded lattice plus a remake-only 30 m offset** (`--cloud-jitter=<m>`,
+default 30, `FogVolumeClutter.ShippedJitter`). Because the original's own ±10 m on a 130 m lattice
+leaves its rows standing, a regular lattice seen along the deck reads as rows in either build. At
+30 m the rows stop reading along the C1 and C1C decks at the controls, which is what sets the
+value. The offset is uniform on X/Z, up to `m` metres per axis, applied to each lattice card after
+every decoded draw off its own `cloudjitter` stream, so every value of the knob lays the same seeded
+field; the map-edge ring, whose cards are already uniform in their cells, is left alone.
+`--cloud-jitter=0` renders the decoded lattice itself, which is the control a cloud render is
+differenced against.
 
 ⚠ **Two quantities are still inferred.** The per-volume reference point the perpendicular offset
 runs away from is taken as the volume's own bounds centre, which gives the direction the decode

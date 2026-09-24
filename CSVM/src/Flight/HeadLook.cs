@@ -5,9 +5,9 @@ namespace CSVM.Flight;
 
 /// <summary>Which of the head's behaviours is live, the original's own look-state byte
 /// (docs/org/cameraViews.md, head-look controller). Snap returns the head to straight ahead the
-/// moment its direction is released and is where autohead runs; free-look pans the head and leaves
-/// it wherever it was pointed; padlock aims it at the selected target and reads no look control at
-/// all. Exactly one is live per frame, and all three are written by the same writers
+/// moment its direction is released, and is where autohead runs. Free-look pans the head and
+/// leaves it wherever it was pointed. Padlock aims it at the selected target and reads no look
+/// control at all. Exactly one is live per frame, and all three are written by the same writers
 /// <see cref="HeadLook.Step"/> runs, not by paths of their own.</summary>
 public enum LookMode
 {
@@ -22,34 +22,31 @@ public enum LookMode
     Padlock,
 }
 
-/// <summary>One frame of look input, in the head's own conventions: a snap direction as a
-/// composed (x, y) with +x right and +y forward, a free-look direction with +right and +up, the
-/// center key, the pad's absolute aim with the same +right/+up signs, whether the free-look
-/// control is held, and the two mode keys. The snap and free-look directions are read for
-/// DIRECTION only, so a half-deflected input pans exactly as fast as a full one, which is what the
-/// original's hat-switch input does. That rule does NOT bind <paramref name="PadRight"/>/<paramref
-/// name="PadUp"/>: those carry a MAGNITUDE, because the pad aims absolutely (docs/controls.md).
-/// <paramref name="Looking"/> claims the free-look arm on its own, so a held control over a still
-/// mouse holds the pose rather than reading as idle. <paramref name="TogglePadlock"/> is Track
-/// Target. Defaulted, so a caller forcing one of the other paths cannot leave a stale deflection on
-/// the frame.</summary>
+/// <summary>One frame of look input, in the head's own conventions (docs/controls.md); the
+/// optional members default off, so a forced path leaves no stale deflection. A snap direction is
+/// a composed (x, y), +x right and +y forward; a free-look direction and the pad's absolute aim
+/// are +right and +up. Both relative directions are read for DIRECTION only, so a half-deflected
+/// input pans as fast as a full one, as the original's hat switch does. The
+/// <paramref name="PadRight"/> and <paramref name="PadUp"/> pair is exempt: it carries a
+/// MAGNITUDE, because the pad aims absolutely. A held <paramref name="Looking"/> claims the pan,
+/// so a still mouse holds the pose rather than reading as idle. The
+/// <paramref name="TogglePadlock"/> flag is Track Target; <paramref name="ForceSnap"/> writes
+/// snap, so the cockpit's look-back reaches dead astern and returns in either mode.</summary>
 public readonly record struct HeadLookInput(
     float SnapX, float SnapY, float FreeRight, float FreeUp, bool Center,
     float PadRight = 0f, float PadUp = 0f, bool Looking = false,
-    bool SelectSnapMode = false, bool SelectFreeLookMode = false, bool TogglePadlock = false);
+    bool SelectSnapMode = false, bool SelectFreeLookMode = false, bool TogglePadlock = false,
+    bool ForceSnap = false);
 
-/// <summary>
-/// The pilot's head, in the two first-person views and on the chase camera alike: where it is
-/// being told to look (the TARGET angles, set through whichever <see cref="LookMode"/> is live)
-/// and where it is actually looking (the SHOWN angles, chasing the targets exponentially at the
-/// decoded rates). Elevation is 0 at level and +π/2 straight up, clamped to
-/// <see cref="ElevationFloor"/>..π/2, the floor the placing view sets; azimuth is 0 straight
-/// ahead, positive to the left, and CLAMPED to ±π, the head stops at dead astern and never pans
-/// past it, the original's own stop confirmed at its controls. Both bounds bind the
-/// relative paths (snap, free-look, center); the absolute pad aim carries its own envelope, see
-/// <see cref="PadAimTargets"/>. Engine-free apart from <see cref="Mathf"/>: the shown angles become
-/// a basis in <see cref="CameraController.FirstPersonPose"/> and a chase offset in <see cref="CameraController.ChaseSwing"/>.
-/// </summary>
+/// <summary>The pilot's head, in the two first-person views and on the chase camera alike,
+/// engine-free apart from <see cref="Mathf"/>. It holds the TARGET angles it is told to look at,
+/// set through whichever <see cref="LookMode"/> is live. The SHOWN angles are where it actually
+/// looks, chasing exponentially at the decoded rates, and <see cref="CameraController"/> poses the
+/// view from them. Elevation is 0 at level and +π/2 straight up, clamped to
+/// <see cref="ElevationFloor"/>..π/2, the floor the placing view sets. Azimuth is 0 straight ahead
+/// and positive to the left, CLAMPED to ±π, the original's own stop at dead astern. Both bounds
+/// bind the relative paths (snap, free-look, center); the absolute pad aim carries its own
+/// envelope, see <see cref="PadAimTargets"/>.</summary>
 public sealed class HeadLook
 {
     /// <summary>Free-look pan rate, rad/s, in whichever direction the input points
@@ -88,6 +85,18 @@ public sealed class HeadLook
     /// parallel to the view. Widening it here gimbals chase.</summary>
     public const float PadLookYawMaxDeg = 150f, PadLookPitchMaxDeg = 60f;
 
+    /// <summary>How fast the filtered look stick catches its raw position, 1/s, a time constant of
+    /// 40 ms. Short enough to stay under the hand, long enough to bury the noise a stick reports
+    /// around any held position, which an absolute aim otherwise shows frame for frame. TUNE: the
+    /// original binds no axis to look at all, so there is nothing to decode.</summary>
+    public const float PadAimSmoothRate = 25f;
+
+    /// <summary>How far the look stick must leave centre before it aims anything, as a fraction of
+    /// full deflection, measured radially so no direction is favoured. Crossing it moves the aim by
+    /// 3° round and 1.2° up and down, under the wobble it gates out. TUNE, for the same reason
+    /// <see cref="PadAimSmoothRate"/> is.</summary>
+    public const float PadAimCentreBand = 0.02f;
+
     // How near a direction must be to dead ahead, and to a 45° diagonal, for the snap to lift the
     // head: 0.1° and 0.09° respectively. Windows rather than equalities because the original's
     // input is a POV angle in hundredths of a degree; a digital key cluster hits them exactly.
@@ -97,9 +106,12 @@ public sealed class HeadLook
     // How near centre counts as at rest, 0.1°: the window Settled reads.
     private const float SettledWindowRad = 0.001745f;
 
+    // The look stick's own filter, stepped on every frame this head is stepped so its state never
+    // lags the mode that is about to read it.
+    private readonly StickLookFilter _padFilter = new();
+
     // The three mode keys as they stood last frame. The mode is written on the PRESS EDGE, as the
-    // original's command handlers fire, so a key held down does not pin the mode against the
-    // device inference that runs after it.
+    // original's command handlers fire. A key held down writes it once, not every frame.
     private bool _snapKeyDown;
 
     private bool _smoothKeyDown;
@@ -111,12 +123,12 @@ public sealed class HeadLook
     public HeadLook(float elevationFloor = FirstPersonElevationFloor) =>
         ElevationFloor = elevationFloor;
 
-    /// <summary>Consulted on a <see cref="LookMode.Snap"/> frame with no look input at all, and on a
-    /// <see cref="LookMode.Padlock"/> frame with nothing selected: the original's autohead gate is
-    /// those two arms and no other. Its answer becomes the targets directly, elevation past
-    /// <see cref="ElevationFloor"/> on purpose, since autohead's own floor is below level, so the
-    /// value is taken as given and only the azimuth is clamped. Null (the default) returns the idle
-    /// head to straight ahead. ⚠ Never consulted in <see cref="LookMode.FreeLook"/>.</summary>
+    /// <summary>Consulted on a <see cref="LookMode.Snap"/> frame with no look input, and on a
+    /// <see cref="LookMode.Padlock"/> frame with nothing selected. The original's autohead gate is
+    /// those two arms and no other. Its answer becomes the targets directly, with only the azimuth
+    /// clamped: elevation passes <see cref="ElevationFloor"/> on purpose, since autohead's own
+    /// floor is below level. Null (the default) returns the idle head to straight ahead.
+    /// ⚠ Never consulted in <see cref="LookMode.FreeLook"/>.</summary>
     public Func<(float Elevation, float Azimuth)?>? IdleAim { get; set; }
 
     /// <summary>Where the selected target sits in the PLANE's own frame, or null for nothing
@@ -126,8 +138,9 @@ public sealed class HeadLook
     public Func<Vector3?>? TargetOffset { get; set; }
 
     /// <summary>Which behaviour this frame runs, and the only thing that decides it: exactly one
-    /// mode is live per frame. Written by the two mode keys and then by whichever device moved, so
-    /// the key states a default and a device still takes it back.</summary>
+    /// mode is live per frame. Written only by the three mode keys, padlock's own exit and
+    /// <see cref="HeadLookInput.ForceSnap"/>, never by a device moving. The numpad and the mouse
+    /// both obey whichever mode the keys chose.</summary>
     public LookMode Mode { get; private set; }
 
     /// <summary>The lowest elevation this head may be told to look at:
@@ -192,44 +205,45 @@ public sealed class HeadLook
         (Mathf.Clamp(up, -1f, 1f) * Mathf.DegToRad(PadLookPitchMaxDeg),
          Mathf.Clamp(-right, -1f, 1f) * Mathf.DegToRad(PadLookYawMaxDeg));
 
-    /// <summary>The padlock bearing: a target offset in the PLANE's own frame becomes the head's two
-    /// angles, elevation off the horizontal plane and azimuth about the up axis. The law has no rate
-    /// limit and no smoothing of its own, the shown angles do all of it, and no bound but the
-    /// placing view's floor (docs/org/cameraViews.md, padlock). Pure; <paramref name="localOffset"/>
-    /// is +right, +up, +aft.</summary>
+    /// <summary>The padlock bearing: a target offset in the PLANE's own frame becomes the head's
+    /// two angles. Elevation is off the horizontal plane, azimuth about the up axis. The law has
+    /// no rate limit and no smoothing of its own, since the shown angles do all of it. Its one
+    /// bound is the placing view's floor (docs/org/cameraViews.md, padlock). Pure;
+    /// <paramref name="localOffset"/> is +right, +up, +aft.</summary>
     public static (float Elevation, float Azimuth) PadlockTargets(Vector3 localOffset) =>
         (Mathf.Atan2(localOffset.Y,
              Mathf.Sqrt((localOffset.X * localOffset.X) + (localOffset.Z * localOffset.Z))),
          Mathf.Atan2(-localOffset.X, -localOffset.Z));
 
-    /// <summary>An angle folded onto the near side of <paramref name="shown"/>, so a chase toward it
-    /// crosses the ±π seam by the short arc instead of unwinding through the front. The original
+    /// <summary>An angle folded onto the near side of <paramref name="shown"/>. A chase toward it
+    /// then crosses the ±π seam by the short arc, not by unwinding through the front. The original
     /// applies this before every chase; only <see cref="LookMode.Padlock"/> reaches the seam here.
     /// </summary>
     public static float Nearest(float target, float shown) => shown + Wrap(target - shown);
 
-    /// <summary>The idle-frame lean into the plane's own velocity, local-frame X/Y only
-    /// (forward speed dropped, why, and the (elevation, azimuth) derivation, are
-    /// docs/formats/vehicle/player-globals.md's autohead row). Scaled by <paramref
-    /// name="turnTime"/>, capped in magnitude at <paramref name="turnMax"/>, floored at <paramref
-    /// name="minPitch"/>, below <see cref="ElevationFloor"/> on purpose, <see cref="Step"/>'s idle
-    /// branch bypasses it. Null when the lean is negligible.</summary>
-    public static (float Elevation, float Azimuth)? AutoheadTarget(
-        Vector3 localVelocity, float turnTime, float turnMax, float minPitch)
+    /// <summary>The autohead aim: where the nose will point <paramref name="turnTime"/> seconds on
+    /// at the present <see cref="FlightModel.BodyRates"/>. The lead is a half-angle, so a capped
+    /// lead turns by twice its magnitude, as the plant's own step does. The head therefore leads
+    /// into a turn and centres as the rates die (docs/org/cameraViews.md, "Autohead"). Elevation
+    /// floors at <paramref name="minPitch"/>, below <see cref="ElevationFloor"/> on purpose.
+    /// ⚠ Not the linear velocity: that lags the nose and aims the head outside a turn.</summary>
+    public static (float Elevation, float Azimuth) AutoheadTarget(
+        Vector3 bodyRates, float turnTime, float turnMax, float minPitch)
     {
-        Vector2 lean = new Vector2(localVelocity.X, localVelocity.Y) * turnTime;
-        float mag = lean.Length();
-        if (mag <= 1e-4f)
+        Vector3 lead = bodyRates * turnTime;
+        float half = lead.Length();
+        if (half <= 1e-9f)
         {
-            return null;
+            return (0f, 0f);
         }
-        if (mag > turnMax)
+        if (half > turnMax)
         {
-            lean *= turnMax / mag;
+            lead *= turnMax / half;
+            half = turnMax;
         }
-        float elevation = Mathf.Max(lean.Y, minPitch);
-        float azimuth = ClampAzimuth(-lean.X);
-        return (elevation, azimuth);
+        Vector3 nose = new Basis(lead / half, 2f * half) * Vector3.Forward;
+        var (elevation, azimuth) = PadlockTargets(nose);
+        return (Mathf.Max(elevation, minPitch), azimuth);
     }
 
     /// <summary>The decoded smoothing law: <c>shown = target + (shown − target)·e^(−rate·dt)</c>.
@@ -248,23 +262,26 @@ public sealed class HeadLook
 
     /// <summary>One frame: settle <see cref="Mode"/>, pick this frame's target through that mode
     /// alone, then chase it. Padlock owns the whole frame and reads no look control, the centre key
-    /// included. Otherwise the centre key beats everything, snap then runs the direction table, the
-    /// pad's absolute aim, or the idle frame <see cref="IdleAim"/> owns, and free-look runs the pad,
-    /// the pan, or nothing at all, holding where the head was pointed. A centred pad claims no
-    /// frame, so a plugged-in stick blocks neither the mouse nor autohead.</summary>
+    /// included. Otherwise the centre key beats everything. Snap runs the direction table, the pad,
+    /// the mouse pan, or the idle frame <see cref="IdleAim"/> owns. Free-look integrates the numpad
+    /// direction, else the pad, else the mouse pan, else holds. A centred pad claims no frame.
+    /// </summary>
     public void Step(float dt, in HeadLookInput input)
     {
-        var snap = SnapTargets(input.SnapX, input.SnapY);
+        bool direction = input.SnapX != 0f || input.SnapY != 0f;
         bool panning = input.Looking || input.FreeRight != 0f || input.FreeUp != 0f;
-        SelectMode(input, snap != null, panning);
+        // Ahead of the modes, so the filter advances on every frame and a mode that takes the pad
+        // over from another path reads this frame's deflection rather than the last one it saw.
+        _padFilter.Step(dt, input.PadRight, input.PadUp);
+        SelectMode(input);
         bool padlocked = Mode == LookMode.Padlock;
 
         if (padlocked)
         {
             PadlockFrame();
-            // The exit scan runs AFTER the bearing, as the original's does, so the frame a look
-            // direction arrives on still aims at the target and the snap state owns the next one.
-            if (snap != null || panning)
+            // The exit scan runs AFTER the bearing, as the original's does. The frame a look
+            // direction arrives on still aims at the target, and snap owns the next one.
+            if (direction || panning)
             {
                 Mode = LookMode.Snap;
             }
@@ -275,11 +292,17 @@ public sealed class HeadLook
         }
         else if (Mode == LookMode.Snap)
         {
-            SnapFrame(snap, input);
+            SnapFrame(SnapTargets(input.SnapX, input.SnapY), panning, input, dt);
         }
-        else if (input.PadRight != 0f || input.PadUp != 0f)
+        else if (direction)
         {
-            PadAim(input);
+            // Free-look reads the numpad through the integrator, not the table. A held key pans at
+            // the decoded rate; a released one leaves the head where it was pointed.
+            FreeLook(input.SnapX, input.SnapY, dt);
+        }
+        else if (_padFilter.Active)
+        {
+            PadAim();
         }
         else if (panning)
         {
@@ -289,17 +312,17 @@ public sealed class HeadLook
         }
 
         Elevation = Approach(Elevation, TargetElevation, ElevationSmoothRate, dt);
-        // A plain chase, no wrap: the relative paths' targets are clamped to ±π, so the head swings
-        // back through the front to reach the other side, which is what a hard-stopped head does.
-        // A padlocked head is the one that reaches the seam, and it crosses by the short arc.
+        // A plain chase, no wrap: the relative paths' targets are clamped to ±π. The head swings
+        // back through the front to reach the other side, as a hard-stopped head does. A padlocked
+        // head is the one that reaches the seam, and it crosses by the short arc.
         Azimuth = padlocked
             ? Wrap(Approach(Azimuth, Nearest(TargetAzimuth, Azimuth), AzimuthSmoothRate, dt))
             : Approach(Azimuth, TargetAzimuth, AzimuthSmoothRate, dt);
     }
 
-    /// <summary>Put the head straight ahead at once, targets and shown angles together, and back in
-    /// <see cref="LookMode.Snap"/>, which is what a fresh spawn wants and what the original's own
-    /// camera init writes. As against the center key's smoothed return, which leaves the mode
+    /// <summary>Put the head straight ahead at once, targets and shown angles together, and back
+    /// in <see cref="LookMode.Snap"/>. That is what a fresh spawn wants, and what the original's
+    /// own camera init writes. As against the center key's smoothed return, which leaves the mode
     /// alone.</summary>
     public void Reset()
     {
@@ -309,11 +332,10 @@ public sealed class HeadLook
         Mode = LookMode.Snap;
     }
 
-    // This frame's mode, in writer order: the two keys on their press edge first, then whichever
-    // device moved, so a key states a default and a device still takes it back. Of the two
-    // inferences the snap direction is written last, which is what decides a frame carrying a
-    // direction and a pan at once.
-    private void SelectMode(in HeadLookInput input, bool snapping, bool panning)
+    // This frame's mode, in writer order: the keys on their press edge, then the forced snap. ⚠ No
+    // device writes the mode. A numpad direction writing Snap would make the free-look pan
+    // impossible, and a mouse pan writing FreeLook would stop the head springing back in snap.
+    private void SelectMode(in HeadLookInput input)
     {
         if (input.SelectSnapMode && !_snapKeyDown)
         {
@@ -338,28 +360,17 @@ public sealed class HeadLook
         _snapKeyDown = input.SelectSnapMode;
         _padlockKeyDown = input.TogglePadlock;
         _smoothKeyDown = input.SelectFreeLookMode;
-        if (Mode == LookMode.Padlock)
-        {
-            // ⚠ Do not let the device inference below take the mode off padlock. That state is left
-            // by its own exit scan, which runs in Step after the frame's bearing, not before it.
-            return;
-        }
-
-        if (panning)
-        {
-            Mode = LookMode.FreeLook;
-        }
-
-        if (snapping)
+        // Padlock is left by its own exit scan, which runs in Step after the frame's bearing.
+        if (input.ForceSnap && Mode != LookMode.Padlock)
         {
             Mode = LookMode.Snap;
         }
     }
 
     // The padlock frame: the selected target's bearing becomes the targets outright, with only the
-    // placing view's floor applied, so a target below a cockpit head holds at level. With nothing
-    // selected the original zeroes both angles and hands the frame to the idle rule, the same
-    // autohead arm a released snap direction reaches.
+    // placing view's floor applied. A target below a cockpit head therefore holds at level. With
+    // nothing selected the original zeroes both angles and hands the frame to the idle rule, the
+    // same autohead arm a released snap direction reaches.
     private void PadlockFrame()
     {
         if (TargetOffset?.Invoke() is { } offset)
@@ -379,18 +390,23 @@ public sealed class HeadLook
         }
     }
 
-    // The snap mode's frame: the direction table, else the pad's standing aim, else the idle rule.
-    // A released direction returns the head to straight ahead, which is this mode's whole
-    // difference from free-look, and the frame autohead is allowed to own.
-    private void SnapFrame((float Elevation, float Azimuth)? snap, in HeadLookInput input)
+    // The snap mode's frame: the direction table, else the pad's standing aim, else the mouse pan
+    // while its control is held, else the idle rule. A released input returns the head to straight
+    // ahead, which is this mode's whole difference from free-look, and the frame autohead may own.
+    private void SnapFrame(
+        (float Elevation, float Azimuth)? snap, bool panning, in HeadLookInput input, float dt)
     {
         if (snap != null)
         {
             SetTargets(snap.Value.Elevation, snap.Value.Azimuth);
         }
-        else if (input.PadRight != 0f || input.PadUp != 0f)
+        else if (_padFilter.Active)
         {
-            PadAim(input);
+            PadAim();
+        }
+        else if (panning)
+        {
+            FreeLook(input.FreeRight, input.FreeUp, dt);
         }
         else if (IdleAim?.Invoke() is { } idle)
         {
@@ -404,11 +420,11 @@ public sealed class HeadLook
     }
 
     // The pad's absolute aim, this port's own path: a standing instruction, so it sits below the
-    // discrete commands and above the pan. Assigned rather than SetTargets'd, since it owns its
-    // own bounds.
-    private void PadAim(in HeadLookInput input)
+    // discrete commands and above the pan. Read off the filter rather than the raw pair, and
+    // assigned rather than SetTargets'd, since it owns its own bounds.
+    private void PadAim()
     {
-        var (elevation, azimuth) = PadAimTargets(input.PadRight, input.PadUp);
+        var (elevation, azimuth) = PadAimTargets(_padFilter.X, _padFilter.Y);
         TargetElevation = elevation;
         TargetAzimuth = azimuth;
     }
@@ -431,5 +447,43 @@ public sealed class HeadLook
     {
         TargetElevation = Mathf.Clamp(elevation, ElevationFloor, MaxElevation);
         TargetAzimuth = ClampAzimuth(azimuth);
+    }
+}
+
+/// <summary>What sits between the raw look stick and every view it aims: a radial centre band, then
+/// a first-order lag at <see cref="HeadLook.PadAimSmoothRate"/> on each component. The pair is the
+/// stick's own and carries no direction of its own, because the head reads it as right and up while
+/// the chase swing reads it as right and down.
+/// ⚠ Ask <see cref="Active"/> whether the stick is being used, never the filtered pair. The lag
+/// never lands on its input exactly, so a held stick's pair is never its raw one, while inside the
+/// band the state is zeroed and both read exactly 0, which is what lets a reader's own return to
+/// centre start on the frame the stick was let go.</summary>
+public sealed class StickLookFilter
+{
+    /// <summary>The filtered deflection along the stick's first axis.</summary>
+    public float X { get; private set; }
+
+    /// <summary>The filtered deflection along the stick's second axis.</summary>
+    public float Y { get; private set; }
+
+    /// <summary>Whether the raw stick sat outside the centre band on the last <see cref="Step"/>,
+    /// which is the whole test of whether it is claiming a view this frame.</summary>
+    public bool Active { get; private set; }
+
+    /// <summary>Advance one frame over the raw pair. Inside the band the state is zeroed, so
+    /// nothing of a held deflection survives letting go.</summary>
+    public void Step(float dt, float x, float y)
+    {
+        if (Mathf.Sqrt((x * x) + (y * y)) <= HeadLook.PadAimCentreBand)
+        {
+            X = 0f;
+            Y = 0f;
+            Active = false;
+            return;
+        }
+
+        X = HeadLook.Approach(X, x, HeadLook.PadAimSmoothRate, dt);
+        Y = HeadLook.Approach(Y, y, HeadLook.PadAimSmoothRate, dt);
+        Active = true;
     }
 }

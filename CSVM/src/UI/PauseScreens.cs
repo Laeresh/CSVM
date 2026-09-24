@@ -170,10 +170,6 @@ public static class PauseScreens
     /// one is too rather than shouting beside them.</summary>
     public const string PhotoLabel = "Photo Mode";
 
-    // How far off the strips the control hint stands, in authored pixels. TUNE: the sheet authors
-    // no such line, so there is nothing to read the gap off.
-    private const float HintGap = 8f;
-
     // The widget names the shared BUTTONS block authors, and the name the remake's own strip
     // carries, which no shipped file holds.
     private const string ResumeKey = "RESUME_MISSION_BTN";
@@ -211,36 +207,6 @@ public static class PauseScreens
         return new EscapeButton(
             PhotoKey, at, resume.Normal, resume.Rollover, resume.Activate, string.Empty,
             resume.LabelOffset);
-    }
-
-    /// <summary>Where a control hint stands on a sheet, in authored pixels: across the strips' own
-    /// span so it reads as theirs rather than as part of whatever the dialog draws elsewhere, clear
-    /// under the lowest strip where <paramref name="height"/> of it fits inside the dialog, and clear
-    /// above the topmost strip otherwise. Every figure comes off the sheet, so a dialog that puts its
-    /// strips anywhere still leaves the hint off them.</summary>
-    public static (float Left, float Top, float Width) HintBox(PauseSheet sheet, float height)
-    {
-        ArgumentNullException.ThrowIfNull(sheet);
-        float top = BoardFit.AuthoredHeight;
-        float bottom = 0f;
-        float left = BoardFit.AuthoredWidth;
-        float right = 0f;
-        foreach (var strip in sheet.Strips)
-        {
-            if (strip is not { } button)
-            {
-                continue;
-            }
-
-            top = Math.Min(top, button.At.Y);
-            bottom = Math.Max(bottom, button.At.Y + StripHeight);
-            left = Math.Min(left, button.At.X);
-            right = Math.Max(right, button.At.X + StripWidth);
-        }
-
-        float under = bottom + HintGap;
-        float y = under + height <= BoardFit.AuthoredHeight ? under : Math.Max(0f, top - HintGap - height);
-        return (left, y, Math.Max(0f, right - left));
     }
 
     /// <summary>The strip an authored point lands on, or -1 for a point on none of them. This is

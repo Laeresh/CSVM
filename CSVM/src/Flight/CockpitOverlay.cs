@@ -15,6 +15,9 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed partial class CockpitOverlay : CanvasLayer
 {
+    /// <summary>The panel material parameter carrying the world position of the pass's origin.</summary>
+    public const string LightOriginParam = "light_origin";
+
     private readonly SubViewport _view;
     private readonly Camera3D _camera;
     private readonly Node3D _interior;
@@ -22,6 +25,10 @@ public sealed partial class CockpitOverlay : CanvasLayer
     private readonly DirectionalLight3D? _sun;
     private readonly Basis _mount;
     private readonly List<OmniLight3D> _flashes = new();
+
+    // The panel's own shader materials, whose point-light term needs the world position of this
+    // pass's origin (SceneBuilder's `light_origin`).
+    private readonly List<ShaderMaterial> _materials = new();
 
     private CockpitOverlay(SubViewport view, Camera3D camera, Node3D interior,
         DirectionalLight3D? light, DirectionalLight3D? sun)
@@ -32,6 +39,7 @@ public sealed partial class CockpitOverlay : CanvasLayer
         _light = light;
         _sun = sun;
         _mount = interior.Transform.Basis;
+        CollectMaterials(interior, _materials);
     }
 
     /// <summary>The camera looking at the interior from that world's origin. The overlay's own,
@@ -105,6 +113,9 @@ public sealed partial class CockpitOverlay : CanvasLayer
             camera.Head.Elevation, camera.Head.Azimuth);
         _camera.Transform = new Transform3D(basis, Vector3.Zero);
         _camera.Fov = CameraController.FirstPersonFovDeg(camera.ViewMode);
+        // The world's point lights sit at world positions; the panel sits at the eye's offset.
+        foreach (var material in _materials)
+            material.SetShaderParameter(LightOriginParam, camera.EyePosition);
         if (_light != null && _sun != null && GodotObject.IsInstanceValid(_sun))
         {
             _light.Basis = _sun.GlobalBasis;
@@ -182,6 +193,26 @@ public sealed partial class CockpitOverlay : CanvasLayer
         };
     }
 
+    // Every distinct shader material the subtree draws with, override or mesh surface.
+    private static void CollectMaterials(Node node, List<ShaderMaterial> into)
+    {
+        if (node is MeshInstance3D mi && mi.Mesh is { } mesh)
+        {
+            if (mi.MaterialOverride is ShaderMaterial over && !into.Contains(over))
+                into.Add(over);
+            for (int s = 0; s < mesh.GetSurfaceCount(); s++)
+            {
+                if ((mi.GetSurfaceOverrideMaterial(s) ?? mesh.SurfaceGetMaterial(s)) is ShaderMaterial m
+                    && !into.Contains(m))
+                {
+                    into.Add(m);
+                }
+            }
+        }
+        foreach (var child in node.GetChildren())
+            CollectMaterials(child, into);
+    }
+
     // Whether the pass draws this frame, as the two writes that decide it: the layer's own
     // visibility and the viewport's update mode, which together also stop it re-rendering.
     private bool Shown(bool shown)
@@ -218,8 +249,9 @@ public sealed partial class CockpitOverlay : CanvasLayer
         _view.AddChild(interior);
     }
 
-    // The muzzle flashes are OmniLight3Ds in the main world, which this world cannot see, so each
-    // lit one gets a twin here at the same eye-relative place; twins past the lit count go dark.
+    // The omni muzzle flashes live in the main world, which this world cannot see, so each lit one
+    // gets a twin here at the same eye-relative place; twins past the lit count go dark. Only the
+    // enhanced interior is shaded and takes them; the original-mode interior takes the point term.
     private void MirrorFlashes(
         IEnumerable<(Vector3 Position, float Range, Color Color, float Energy)>? flashes, Vector3 eye)
     {

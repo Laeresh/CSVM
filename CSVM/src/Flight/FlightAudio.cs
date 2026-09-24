@@ -7,8 +7,8 @@ namespace CSVM.Flight;
 
 /// <summary>
 /// Own-plane sound, all from the player's own game data: the plane's engine loop (per-plane WAV via
-/// vehicle.json 'engine_sound', throttle-driven pitch and volume, swapped for 'damaged_engine_sound'
-/// while the airframe is hurt and for 'cockpit_engine_sound' while the pilot's SELECTED view is
+/// vehicle.json 'engine_sound', throttle-driven pitch and volume, cut on the damage edge and then
+/// swapped for 'damaged_engine_sound' once the re-arm timer fires (<see cref="EngineSlotPhase"/>), and for 'cockpit_engine_sound' while the pilot's SELECTED view is
 /// Cockpit or Nose, <see cref="EngineAudioCurves.EngineDefFor"/> is the one precedence rule both
 /// swaps share), the overspeed whine ('prop_sound', which no shipped def names), the
 /// airframe rattle (player.json 'rattle', a gate at full level past fd_speed), plus the one-shots
@@ -40,9 +40,10 @@ public partial class FlightAudio : Node
     // decode at the moment the airframe is hit or the view changes is a hitch nobody needs.
     private AudioStreamWav? _engineStream, _damagedStream, _cockpitStream;
     private float _damagedVol = 1f, _cockpitVol = 1f;
-    private bool _engineDamaged;              // which of the three the slot currently holds
+    private EngineSlotPhase _enginePhase;     // Healthy holds the plain or cockpit stream
     private bool _engineCockpitView;
     private float _enginePitchMul = 1f;       // the damaged swap's one-off pitch draw
+    private bool _enginePitchable;            // whether the def on the slot takes a frequency write
     private AudioStreamPlayer? _crash;
     private AudioStreamPlayer? _groundExp, _waterExp;
     private float _groundExpVol = 1f, _waterExpVol = 1f;
@@ -74,6 +75,20 @@ public partial class FlightAudio : Node
     private AudioStreamPlayer? _warningShot, _bulletHit, _windowHit;
     private System.Random? _cueRng;
 
+    /// <summary>Which damage phase the engine slot is in (<see cref="EngineSlotPhase"/>), for the
+    /// suite that walks the slot through the damage edge, the silence and the damaged loop.</summary>
+    internal EngineSlotPhase EnginePhase => _enginePhase;
+
+    /// <summary>Whether the engine slot is sounding, read off the live player.</summary>
+    internal bool EngineSounding => _engine is { Playing: true };
+
+    /// <summary>The engine slot's start ramp, 0 to 1; a respawn restarts it and a damaged start does not.</summary>
+    internal float EngineRampLevel => _engineRamp;
+
+    /// <summary>Whether the slot currently holds the <c>damaged_engine_sound</c> stream.</summary>
+    internal bool EngineHoldsDamagedStream => _engine != null && _damagedStream != null
+        && ReferenceEquals(_engine.Stream, _damagedStream);
+
     public void Setup(SoundArchive archive, Dictionary<string, SoundDef> defs, PlaneStats stats,
         WeaponDefs? weapons, IReadOnlyDictionary<string, SoundGroup>? groups = null)
     {
@@ -95,6 +110,9 @@ public partial class FlightAudio : Node
         }
         _engine = MakeLoop(archive, defs, stats.EngineSound, out _engineVol);
         _engineStream = _engine?.Stream as AudioStreamWav;
+        // The slot starts on the plain definition, and only a swap goes through the two paths that
+        // re-read this, so the opening state has to be set here rather than left at its default.
+        _enginePitchable = EngineAudioCurves.SlotIsPitched(defs, stats.EngineSound);
         // Not built as a player of its own: this stream replaces the engine's on the one slot, so a
         // second player would be the blend the decode refuted.
         if (stats.DamagedEngineSound is { } damagedName)
@@ -217,14 +235,17 @@ public partial class FlightAudio : Node
     {
         if (_engineRamp < 1f)
             _engineRamp = Mathf.Min(1f, _engineRamp + dt / EngineStartRamp);
-        UpdateEngineSlot(EngineAudioCurves.EngineDamaged(healthFrac, engineDead), cockpitView);
-        if (_engine != null)
+        UpdateEngineSlot(dt, EngineAudioCurves.EngineDamaged(healthFrac, engineDead), cockpitView);
+        // Out is the damaged engine's silence, not a stopped loop to restart.
+        if (_engine != null && _enginePhase != EngineSlotPhase.Out)
         {
-            if (!_engine.Playing)
+            if (_enginePhase == EngineSlotPhase.Healthy && !_engine.Playing)
                 StartEngine(); // respawn after a crash: propstart + fresh volume ramp-in
-            var (pitch, volume) = EngineAudioCurves.Engine(_stats, drive, _enginePitchMul);
+            var (pitch, volume) = EngineAudioCurves.Engine(
+                _stats, drive, _enginePitchMul, _enginePitchable);
             _engine.PitchScale = pitch;
-            float baseVol = _engineDamaged ? _damagedVol : _engineCockpitView ? _cockpitVol : _engineVol;
+            float baseVol = _enginePhase == EngineSlotPhase.Damaged ? _damagedVol
+                : _engineCockpitView ? _cockpitVol : _engineVol;
             _engine.VolumeDb = Mathf.LinearToDb(Mathf.Max(SilenceThreshold,
                 volume * baseVol * _engineRamp * MixGain));
         }
@@ -260,7 +281,7 @@ public partial class FlightAudio : Node
     /// plane-explosion one-shots.</summary>
     public void OnCrash()
     {
-        _engine?.Stop();
+        ResetEngineSlot();
         _whine?.Stop();
         _rattle?.Stop();
         if (_crash == null)
@@ -345,7 +366,7 @@ public partial class FlightAudio : Node
     /// needs to prevent that.</summary>
     public void OnEngineStop()
     {
-        _engine?.Stop();
+        ResetEngineSlot();
         _whine?.Stop();
         _rattle?.Stop();
         // D32: fires right after OnCrash's boom, the same crash instant, MixGain for
@@ -429,37 +450,92 @@ public partial class FlightAudio : Node
         return name;
     }
 
-    /// <summary>Points the engine slot at <c>damaged_engine_sound</c>, <c>cockpit_engine_sound</c>
-    /// or back at <c>engine_sound</c> (<see cref="EngineAudioCurves.EngineDefFor"/> carries the
-    /// precedence), drawing the damaged swap's pitch multiplier as it goes. The damaged input is
-    /// the decoded disabled-systems test (<see cref="EngineAudioCurves.EngineDamaged"/>); either
-    /// input changing re-evaluates the pair.</summary>
-    private void UpdateEngineSlot(bool damaged, bool cockpitView)
+    // Steps the slot's damage phase with EngineAudioCurves.StepEnginePhase, the rule AiEngineAudio
+    // runs too, and acts on a change. The edge silences the slot, the fired re-arm timer starts
+    // damaged_engine_sound at a drawn multiplier, and a cleared mask restores the healthy loop at
+    // once. While healthy, the view picks the stream.
+    private void UpdateEngineSlot(float dt, bool damaged, bool cockpitView)
     {
+        if (_engine == null)
+        {
+            return;
+        }
         damaged &= _damagedStream != null;
-        cockpitView &= _cockpitStream != null;
-        if (_engine == null || (damaged == _engineDamaged && cockpitView == _engineCockpitView))
+        var rng = Rng.Stream(Rng.FlightAudio);
+        // Drawn only while damaged, so a healthy flight leaves the stream the crash pick reads alone.
+        float u = damaged ? rng.Randf() : 0f;
+        var from = _enginePhase;
+        bool sounding = _engine.Playing;
+        _enginePhase = EngineAudioCurves.StepEnginePhase(from, damaged, sounding,
+            _stats.DamagedTimer, dt, u);
+        if (EngineAudioCurves.StartsDamagedLoop(from, _enginePhase, sounding))
         {
-            return;
-        }
-        _engineDamaged = damaged;
-        _engineCockpitView = cockpitView;
-        var (name, pitchMul) = EngineAudioCurves.EngineDefFor(
-            _stats, damaged, Rng.Stream(Rng.FlightAudio), cockpitView);
-        _enginePitchMul = pitchMul;
-        var stream = damaged ? _damagedStream : cockpitView ? _cockpitStream : _engineStream;
-        if (stream == null)
-        {
-            return;
-        }
-        bool wasPlaying = _engine.Playing;
-        _engine.Stop();
-        _engine.Stream = stream;
-        if (wasPlaying)
+            var (name, pitchMul) = EngineAudioCurves.EngineDefFor(_stats, true, rng);
+            _enginePitchMul = pitchMul;
+            _enginePitchable = EngineAudioCurves.SlotIsPitched(_defs, name);
+            _engine.Stop();
+            _engine.Stream = _damagedStream;
+            _engineRamp = 1f; // the original starts it at full level, with no start cue
             _engine.Play();
-        // The headless observable for a swap nobody can screenshot: which def the slot took and
-        // what the draw gave it. A hard cut, same as the damaged swap, no crossfade is decoded.
-        Log.Info("sound", $"engine sound: slot 0 -> {name} pitchMul={_enginePitchMul:0.000}");
+            Log.Info("sound", $"engine sound: slot 0 -> {name} pitchMul={_enginePitchMul:0.000} pitched={_enginePitchable}");
+        }
+        else if (_enginePhase == from)
+        {
+            if (from == EngineSlotPhase.Healthy)
+                UpdateCockpitSwap(cockpitView);
+        }
+        else if (_enginePhase == EngineSlotPhase.Out)
+        {
+            _engine.Stop();
+            Log.Info("sound", $"engine sound: slot 0 out, waiting on the damaged re-arm timer");
+        }
+        else
+        {
+            // Out has nothing to wait for; a stopped damaged loop is the crash the hook restarts.
+            RestoreHealthyStream(cockpitView, play: from == EngineSlotPhase.Out || sounding);
+        }
+    }
+
+    // The healthy arm's view swap: cockpit_engine_sound while the pilot's SELECTED view is the full
+    // Cockpit, engine_sound otherwise. A hard cut, no crossfade is decoded.
+    private void UpdateCockpitSwap(bool cockpitView)
+    {
+        if ((cockpitView && _cockpitStream != null) != _engineCockpitView)
+        {
+            RestoreHealthyStream(cockpitView, play: _engine!.Playing);
+        }
+    }
+
+    private void RestoreHealthyStream(bool cockpitView, bool play)
+    {
+        _engineCockpitView = cockpitView && _cockpitStream != null;
+        var (name, pitchMul) = EngineAudioCurves.EngineDefFor(
+            _stats, false, Rng.Stream(Rng.FlightAudio), _engineCockpitView);
+        _enginePitchMul = pitchMul;
+        _enginePitchable = EngineAudioCurves.SlotIsPitched(_defs, name);
+        _engine!.Stop();
+        _engine.Stream = _engineCockpitView ? _cockpitStream : _engineStream;
+        if (play)
+            _engine.Play();
+        // The headless observable for a swap nobody can screenshot: which def the slot took, and
+        // whether that def accepts the throttle curve's pitch at all.
+        Log.Info("sound", $"engine sound: slot 0 -> {name} pitchMul={_enginePitchMul:0.000} pitched={_enginePitchable}");
+    }
+
+    // A dead aircraft's slot goes back to healthy and silent, so the respawn's own start cue is
+    // what brings it back rather than a leftover damaged phase.
+    private void ResetEngineSlot()
+    {
+        if (_engine == null)
+        {
+            return;
+        }
+        _engine.Stop();
+        _enginePhase = EngineSlotPhase.Healthy;
+        _enginePitchMul = 1f;
+        _enginePitchable = EngineAudioCurves.SlotIsPitched(
+            _defs, _engineCockpitView ? _stats.CockpitEngineSound : _stats.EngineSound);
+        _engine.Stream = _engineCockpitView ? _cockpitStream : _engineStream;
     }
 
     private AudioStreamPlayer? MakeLoop(SoundArchive archive,

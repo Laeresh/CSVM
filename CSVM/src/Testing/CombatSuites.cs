@@ -641,7 +641,7 @@ internal static class CombatSuites
 
     // B5's launch scatter (AimAssist.Scatter): every round lands inside the
     // cone, the polar angle is UNIFORM IN THE ANGLE rather than over the cone's solid angle (the
-    // reflex port, and what `ProjectilePool.ApplySpread`'s `sqrt(rand)` does, which would
+    // reflex port, and what `sqrt(rand)` cap sampling does, which would
     // pile shots at the rim), and the roll about the aim axis covers the full circle. The
     // able-to-fail control is the solid-angle sampling itself, computed alongside from the same
     // draws: it fails the flatness test this one passes.
@@ -901,11 +901,11 @@ internal static class CombatSuites
     }
 
     // The muzzle flash's own anchoring, in the two halves that decide it. The placement half is
-    // measured here: the quad's pinned corner against the muzzle node's live pose, over the frames
-    // the flash is drawn while the aeroplane flies on. The ORDER half cannot be measured by a
-    // hand-stepped harness, which poses the carrier itself before it draws, so the pool's draw
-    // priority is asserted instead: at the default priority it drew before the flight rigs wrote
-    // this frame's interpolated pose and every effect sat a frame astern of the gun.
+    // measured here: the quad's pinned corner against the muzzle node's live pose. It is measured
+    // over the frames the flash is drawn while the aeroplane flies on. The ORDER half cannot be
+    // measured by a hand-stepped harness, which poses the carrier before it draws. The pool's draw
+    // priority is asserted instead. At the default priority the pool draws before the flight rigs
+    // write this frame's interpolated pose, leaving every effect a frame astern of the gun.
     [Suite("muzzle-flash-rides-muzzle",
         "the flash quads and the shot light sit on the firing muzzle on every drawn frame of their life while the aeroplane flies on, and the pool draws after the flight rigs rather than before them")]
     internal static void MuzzleFlashRidesMuzzle(TestContext ctx)
@@ -931,8 +931,8 @@ internal static class CombatSuites
             ctx.Check(live.ProcessPriority > 0,
                 $"the pool draws after the default-priority flight rigs priority={live.ProcessPriority}");
 
-            // The C1 spawn's pose: heading well off -Z and 9 km from the world origin, so a basis
-            // dropped anywhere in the chain shows up as metres rather than as rounding.
+            // The C1 spawn's pose: heading well off -Z and 9 km from the world origin. A basis
+            // dropped anywhere in the chain then shows up as metres rather than as rounding.
             var attitude = new Basis(Vector3.Up, Mathf.DegToRad(132f));
             var start = new Vector3(-7065f, 326f, -5519f);
             carrier = new Node3D();
@@ -986,8 +986,8 @@ internal static class CombatSuites
         }
     }
 
-    // The Cockpit view's rule, which is per shooter and not per session: the pilot in the canopy
-    // draws no flash on their own guns, an aeroplane ahead of them still does, and the shot light
+    // The Cockpit view's rule is per shooter, not per session. The pilot in the canopy
+    // draws no flash on their own guns, and an aeroplane ahead of them still does. The shot light
     // that lights the interior fires either way.
     [Suite("muzzle-flash-cockpit-hidden",
         "a pilot flying the Cockpit view draws no muzzle flash quads from their own guns while the shot light still fires, and another shooter's flash is untouched")]
@@ -1007,7 +1007,7 @@ internal static class CombatSuites
             {
                 return;
             }
-            // Player 1 sits in the cockpit, player 2 does not; Nose is deliberately not covered,
+            // Player 1 sits in the cockpit, player 2 does not. Nose is deliberately not covered,
             // so a nose-view pilot reads false here exactly as an external one does.
             var live = new ProjectilePool(textures, null, null) { CockpitViewOfPilot = id => id == 0 };
             pool = live;
@@ -1028,6 +1028,67 @@ internal static class CombatSuites
         finally
         {
             pool?.Free();
+            textures.Dispose();
+        }
+    }
+
+    [Suite("muzzle-light-first-person-point-term",
+        "in original mode a first-person shot's bigmuzzle_lt/muzzle_lt pair reaches the bound WorldLights set with its authored near/far and colour and lights no omni, while an unbound pool keeps the omni pair")]
+    internal static void MuzzleLightFirstPersonPointTerm(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var gun = WeaponDefs.Load(ctx.ZrdrPath, null).All.FirstOrDefault(w => w.IsGun);
+        var textures = new TextureArchive(texturesPath);
+        var pools = new List<ProjectilePool>();
+        try
+        {
+            ctx.Check(gun != null, $"a gun weapon loaded from the catalogue");
+            if (gun == null)
+                return;
+            var muzzle = new Transform3D(Basis.Identity, new Vector3(-7065f, 326f, -5519f));
+            ProjectilePool Fire(WorldLights? lights)
+            {
+                var p = new ProjectilePool(textures, null, null) { FirstPersonView = () => true };
+                pools.Add(p);
+                ctx.Host.AddChild(p);
+                if (lights != null)
+                    p.BindPointLights(lights);
+                p.Spawn(gun, muzzle, Vector3.Zero, shooterId: 0);
+                p._Process(1f / 60f);
+                return p;
+            }
+
+            var set = new WorldLights();
+            var bound = Fire(set);
+            ctx.Same(0, bound.ActiveMuzzleLights().Count(), $"the bound pool lights no omni");
+            var pending = bound.PendingPointFlashes().OrderByDescending(f => f.Far).ToList();
+            ctx.Same(2, pending.Count, $"the shot holds the first-person pair for the point term");
+            if (pending.Count == 2)
+            {
+                ctx.Check(pending[0].Near == 13.5f && pending[0].Far == 21.25f
+                          && pending[0].Color == new Color(0.88f, 0.78f, 0.36f),
+                    $"bigmuzzle_lt keeps its authored 13.5/21.25 and colour: {pending[0]}");
+                ctx.Check(pending[1].Near == 12.9f && pending[1].Far == 18.25f
+                          && pending[1].Color == new Color(0.93f, 0.78f, 0.36f),
+                    $"muzzle_lt keeps its authored 12.9/18.25 and colour: {pending[1]}");
+            }
+            set.Begin();
+            set.Commit(new[] { muzzle.Origin });
+            ctx.Same(2, set.CommittedPositions.Count, $"the commit carries the pair");
+            ctx.Check(pending.All(f => set.CommittedPositions.Contains(f.Position)),
+                $"…at the positions the shot queued");
+
+            var unbound = Fire(null);
+            ctx.Same(2, unbound.ActiveMuzzleLights().Count(),
+                $"ABLE-TO-FAIL CONTROL: with no point set bound the pair falls back to two omnis");
+            ctx.Same(0, unbound.PendingPointFlashes().Count(), $"…and queues nothing");
+        }
+        finally
+        {
+            foreach (var p in pools)
+                p.Free();
             textures.Dispose();
         }
     }
@@ -1490,9 +1551,9 @@ internal static class CombatSuites
                 ctx.Same(0, hits.Count,
                     $"a contact rings nothing either, a scrape is not being shot at");
 
-                // Who the shield covers is the SESSION's rule, not the airframe's, so it is measured
+                // Who the shield covers is the SESSION's rule, not the airframe's. It is measured
                 // on TWO human panes in both modes: a co-op pair both absorb, a Dogfight pair
-                // neither do. One round per pane, the mode gate being all that is under test.
+                // neither do. One round goes to each pane, the mode gate being all that is tested.
                 var wingPos = targetPos + new Vector3(60f, 0f, 0f);
                 wing = BuildParkedRig(ctx, planesGamez, textures, stats, 1,
                     wingPos, wingPos + Vector3.Forward, live, stock, weapons, null);
@@ -1503,8 +1564,8 @@ internal static class CombatSuites
                 float Pool(FlightController r) => r.Damage!.Parts.Values.Sum(p => p.Hp + p.Armor);
                 foreach (bool dogfight in new[] { false, true })
                 {
-                    // The session's own notion of the mode, the one GameSession hands every rig:
-                    // a live match outside --vs does not exist, and a Dogfight rig always has one.
+                    // The session's own notion of the mode is the one GameSession hands every rig.
+                    // A live match outside --vs does not exist, and a Dogfight rig always has one.
                     var match = dogfight ? new VersusMatch(2, killTarget: 0, timeLimit: 0f) : null;
                     string mode = dogfight ? "dogfight" : "co-op";
                     foreach (var pane in new[] { target, wing })
@@ -1545,6 +1606,132 @@ internal static class CombatSuites
             pool?.Free();
             textures.Dispose();
         }
+    }
+
+    // What an opened hole DRAWS comes from the real derivation, not a hand-played def, once per
+    // branch of the def's PLAYER_1ST_PERSON test. The parts are the crash-rig name set, the staged
+    // template closure and the runtime's ON_CALL path. The sound half is incoming-fire-cues'
+    // above. ⚠ A crash runtime resolves a name in its bind scope alone, so the rig needs its own
+    // `camera1`. The world's copy is outside it, so without the rig's own the overlay poses at the
+    // origin. FlightController's EnsureViewCameraProxy builds it in production.
+    [Suite("canopy-hole-draws",
+        "an opened canopy hole draws: the human crash-rig name set carries bullet1..bullet5, its "
+        + "stage closure pulls the two_/three_/four_bulletholes overlay roots out of the chapter "
+        + "gamez, and playing one def leaves a live instance anchored on the aircraft that lights "
+        + "the bulNx glass quads inside the cockpit1 interior in BOTH views (sequence two, which "
+        + "the branch does not gate), while sequence one's PLAYER_1ST_PERSON test calls the "
+        + "exterior overlay only outside first person, where it poses at the rig's own camera1")]
+    internal static void CanopyHoleDraws(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+            var textures = new TextureArchive(SessionPaths.ChapterTextures(ctx.DataRoot, world.Chapter));
+            try
+            {
+                // An AI rig must NOT take these names. Its airframe carries no cockpit1 interior, so
+                // a bound hole def would light nothing and stage three roots for nobody.
+                var humanNames = EffectCatalogue.CrashRigAnimNames(
+                    EffectCatalogue.CrashDefTable(world.Session.Program), null, humanPiloted: true);
+                var aiNames = EffectCatalogue.CrashRigAnimNames(
+                    EffectCatalogue.CrashDefTable(world.Session.Program), null, humanPiloted: false);
+                ctx.Check(EffectCatalogue.CanopyHoleAnims.All(humanNames.Contains)
+                          && !EffectCatalogue.CanopyHoleAnims.Any(aiNames.Contains),
+                    $"the human crash rig binds all {EffectCatalogue.CanopyHoleAnims.Length} canopy hole defs and an AI rig binds none");
+
+                foreach (var view in new[] { PilotViewMode.Cockpit, PilotViewMode.Chase })
+                {
+                    string name = PilotView.Name(view);
+                    bool firstPerson = PilotView.IsFirstPerson(view);
+                    var controller = new Node3D { Name = "controller_replica" };
+                    var runtime = AnimRuntime.ForCrashRig(
+                        WorldEffectsFactory.NewCrashTemplateStage(), 1, new CountingEmitterFactory(), false);
+                    runtime.ManualAdvance = true;
+                    runtime.FirstPersonView = () => firstPerson;
+                    try
+                    {
+                        var builder = new PlaneBuilder(planesGamez, textures, cockpitInterior: true);
+                        var planeModel = builder.Build(ctx.PlaneName);
+                        controller.AddChild(planeModel);
+                        var eye = new Node3D { Name = CutsceneController.CameraNode };
+                        eye.SetMeta(AnimRuntime.NameMeta, CutsceneController.CameraNode);
+                        controller.AddChild(eye);
+                        var crashRoot = new Node3D { Name = "player" };
+                        crashRoot.SetMeta(AnimRuntime.NameMeta, "player");
+                        crashRoot.Transform = planeModel.Transform;
+                        controller.AddChild(crashRoot);
+                        ctx.Host.AddChild(controller);
+                        ctx.Host.AddChild(runtime);
+
+                        var rootNames = WorldEffectsFactory.CrashStageRootNames(world.Session.Program,
+                            world.Gamez, controller, humanPiloted: true);
+                        var overlays = new[] { "two_bulletholes", "three_bulletholes", "four_bulletholes" };
+                        ctx.Check(overlays.All(o => rootNames.Contains(o, System.StringComparer.OrdinalIgnoreCase)),
+                            $"{name}: the stage closure asks for all three overlay roots [{string.Join(", ", overlays.Where(o => rootNames.Contains(o, System.StringComparer.OrdinalIgnoreCase)))}]");
+                        var staged = WorldEffectsFactory.StageCrashTemplates(world.Gamez,
+                            world.Session.Builder.Scene, crashRoot, rootNames, EffectPools.Load());
+                        ctx.Check(staged.Slot0 == rootNames.Count,
+                            $"{name}: every root the closure asked for built from this chapter's gamez ({staged.Slot0}/{rootNames.Count})");
+
+                        var started = new List<(string Anim, Node3D? Anchor)>();
+                        runtime.OnInstanceStarted += (def, anchor) =>
+                            started.Add((def.AnimName ?? def.Name ?? "", anchor));
+                        runtime.Bind(controller, world.Session.Program.Subset(humanNames));
+                        // The glass is pristine before the call, which is the build's own parking
+                        // (PlaneBuilder.IsInteriorDrivenState) and not something the rig did.
+                        var quads = runtime.FindNodes("bul1a").Concat(runtime.FindNodes("bul1b"))
+                            .Concat(runtime.FindNodes("bul1c")).ToList();
+                        ctx.Check(quads.Count == 3 && quads.All(q => !q.Visible),
+                            $"{name}: bullet1's {quads.Count} glass quads start parked dark");
+                        var group = runtime.FindNodes("bullet1").FirstOrDefault();
+                        ctx.Check(group is { Visible: true },
+                            $"{name}: …under a bullet1 group the build leaves drawn, or the quads could never show");
+
+                        started.Clear();
+                        var played = runtime.Play("bullet1", planeModel, applyReset: false);
+                        // Past the def's whole 1.62 s timeline (bul1a at 0, bul1b at 0.71, bul1c at 1.62).
+                        for (int i = 0; i < 120; i++)
+                        {
+                            runtime.Advance(1f / 60f);
+                        }
+
+                        int offPlane = played.Count(p => p.Anchor == null
+                                                         || (p.Anchor != controller && !controller.IsAncestorOf(p.Anchor)));
+                        ctx.Check(played.Count == 1 && offPlane == 0,
+                            $"{name}: the call left {played.Count} live bullet1 instance(s), {offPlane} of them off this aircraft");
+                        ctx.Check(quads.All(q => q.Visible),
+                            $"{name}: sequence two lit all three glass quads, which the branch does not gate ({quads.Count(q => q.Visible)}/3)");
+
+                        // Sequence one's branch CALLS the exterior overlay outside first person and
+                        // nowhere else. The empty arm is why the cockpit sees only the glass.
+                        bool calledOverlay = started.Any(s => s.Anim.StartsWith("two_bulletholes",
+                            System.StringComparison.OrdinalIgnoreCase));
+                        ctx.Check(calledOverlay == !firstPerson,
+                            $"{name}: PLAYER_1ST_PERSON={firstPerson} and the exterior overlay {(calledOverlay ? "was" : "was not")} called");
+                        var copy = runtime.FindNodes("two_bulletholes").FirstOrDefault();
+                        ctx.Check(copy != null && copy.Visible == !firstPerson,
+                            $"{name}: …and its staged copy is {(copy is { Visible: true } ? "lit" : "dark")}");
+                        if (!firstPerson && copy != null)
+                        {
+                            ctx.Check(copy.GlobalPosition.DistanceTo(eye.GlobalPosition) < 1f,
+                                $"{name}: the overlay poses AT_NODE camera1, {copy.GlobalPosition.DistanceTo(eye.GlobalPosition):0.00} m off the eye");
+                        }
+
+                        ctx.Note($"{name}: {played.Count} hole instance(s), {quads.Count(q => q.Visible)}/3 quads lit, overlay called={calledOverlay}");
+                    }
+                    finally
+                    {
+                        runtime.Free();
+                        controller.Free();
+                    }
+                }
+            }
+            finally
+            {
+                textures.Dispose();
+            }
+        });
     }
 
     // The decoded graze restitution on real contacts: a shallow dive onto a floor and a shallow scrape
@@ -2062,8 +2249,11 @@ internal static class CombatSuites
         ctx.Check(Mathf.IsEqualApprox(stats.EngineVolume.MinY, stats.EngineVolume.MaxY),
             $"…and its volume curve is FLAT at {stats.EngineVolume.MinY:0.##}, which is what makes the 0.26 term inert");
 
-        float Pitch(EngineDrive d) => EngineAudioCurves.Engine(stats, d, 1f).Pitch;
-        float Volume(EngineDrive d) => EngineAudioCurves.Engine(stats, d, 1f).Volume;
+        // pitchable: the plain engine_sound definitions all carry FREQUENCY, which is what lets the
+        // curve below reach the voice at all; the damaged and cockpit loops that do not are pinned
+        // in the unit tier (EngineAudioModelTests).
+        float Pitch(EngineDrive d) => EngineAudioCurves.Engine(stats, d, 1f, true).Pitch;
+        float Volume(EngineDrive d) => EngineAudioCurves.Engine(stats, d, 1f, true).Volume;
         var level = new EngineDrive(1f, 0f, 0f);
         float baseline = Pitch(level);
         ctx.Check(Mathf.IsEqualApprox(baseline, 1f),
@@ -2127,6 +2317,88 @@ internal static class CombatSuites
         CheckRattleGate(ctx, stats);
     }
 
+    // The own-ship engine slot walked through the damage phases on a real FlightAudio. Decode:
+    // docs/formats/vehicle.md, "The damaged engine's phases". The phase lengths come from the
+    // re-arm timer's constants, never from a listen, so a failure here is the port drifting.
+    [Suite("engine-damage-phases",
+        "the own-ship engine slot across heavy damage: the damage edge cuts the healthy loop on " +
+        "that frame, the slot stays silent below the re-arm timer's 3 s floor, the damaged loop " +
+        "starts by the 5 s ceiling at full level with no start ramp and then holds while it " +
+        "sounds, and a heal restores the healthy loop on the same frame with no wait")]
+    internal static void EngineDamagePhases(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
+        var soundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath);
+        var stats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+        ctx.Check(stats.DamagedEngineSound != null,
+            $"{ctx.PlaneName} binds damaged_engine_sound={stats.DamagedEngineSound}");
+        if (stats.DamagedEngineSound == null)
+            return;
+
+        using var archive = new SoundArchive(ctx.SoundsPath);
+        var audio = new FlightAudio();
+        audio.Setup(archive, soundDefs, stats, weapons, soundGroups);
+        ctx.Host.AddChild(audio);
+        try
+        {
+            const float dt = 1f / 60f;
+            var drive = new EngineDrive(1f, 0f, 0f);
+            for (int i = 0; i < 180; i++)
+                audio.Update(dt, drive, 1f, 1f);
+            ctx.Check(audio.EnginePhase == EngineSlotPhase.Healthy && audio.EngineSounding
+                      && !audio.EngineHoldsDamagedStream,
+                $"healthy flight sounds the healthy loop (phase={audio.EnginePhase}, sounding={audio.EngineSounding})");
+
+            audio.Update(dt, drive, 1f, 0.1f);
+            ctx.Check(audio.EnginePhase == EngineSlotPhase.Out && !audio.EngineSounding,
+                $"the damage edge puts the engine out on that frame (phase={audio.EnginePhase}, sounding={audio.EngineSounding})");
+
+            // Frame 1 was the edge; 3 s of frames at the 3.0 s floor never fire whatever the draw.
+            int frame = 1;
+            bool silent = true;
+            for (; frame < 180; frame++)
+            {
+                audio.Update(dt, drive, 1f, 0.1f);
+                silent &= audio.EnginePhase == EngineSlotPhase.Out && !audio.EngineSounding;
+            }
+            ctx.Check(silent, $"the slot stays silent for the timer's 3 s floor ({frame} frames)");
+
+            int startFrame = -1;
+            for (; frame < 320 && startFrame < 0; frame++)
+            {
+                audio.Update(dt, drive, 1f, 0.1f);
+                if (audio.EnginePhase == EngineSlotPhase.Damaged)
+                    startFrame = frame;
+            }
+            ctx.Check(startFrame >= 180 && startFrame <= 302,
+                $"the damaged loop starts {startFrame * dt:0.00} s after the edge, inside the drawn 3 to 5 s threshold");
+            ctx.Check(audio.EngineSounding && audio.EngineHoldsDamagedStream,
+                $"…on the damaged_engine_sound stream, sounding");
+            ctx.Check(Mathf.IsEqualApprox(audio.EngineRampLevel, 1f),
+                $"…at full level with no start ramp (ramp={audio.EngineRampLevel:0.00})");
+
+            bool held = true;
+            for (int i = 0; i < 600; i++)
+            {
+                audio.Update(dt, drive, 1f, 0.1f);
+                held &= audio.EnginePhase == EngineSlotPhase.Damaged && audio.EngineHoldsDamagedStream;
+            }
+            ctx.Check(held, $"a sounding damaged loop holds for 10 s, the stutter runs without a second restart");
+
+            audio.Update(dt, drive, 1f, 1f);
+            ctx.Check(audio.EnginePhase == EngineSlotPhase.Healthy && audio.EngineSounding
+                      && !audio.EngineHoldsDamagedStream,
+                $"a heal restores the healthy loop on the same frame (phase={audio.EnginePhase})");
+        }
+        finally
+        {
+            audio.QueueFree();
+        }
+    }
+
     // The air-to-air hit chain on two real flight rigs driven by manual sim steps: body strike,
     // struck-shape to part mapping, armor-first damage, the decoded whole-vehicle kill rule, a
     // crashed plane's immunity, Downed attribution into a real VersusMatch, the VS respawn loop, and
@@ -2138,7 +2410,8 @@ internal static class CombatSuites
         "weapon's own values, downs it when whole-vehicle health exhausts (a lone dead critical " +
         "part no longer kills: the decoded rule, D14) with the kill attributed through the " +
         "Downed event (never hits the shooter's own geometry), a rocket fuses on a passing " +
-        "plane, blasting with falloff and attributing the kill, a burst beside the plane that " +
+        "plane, blasting with falloff and attributing the kill, flies on past planes on its own " +
+        "side while another Dogfight pilot's rocket still fuses, a burst beside the plane that " +
         "fired the round costs it nothing while a plane the same distance out takes the " +
         "falloff share, concentrated fire on ONE " +
         "bearing kills through the decoded redirect + whole-pool overflow (the 2026-08-14 " +
@@ -2506,6 +2779,41 @@ internal static class CombatSuites
                 $"an unowned rocket fuses like any other moved={beforeNear - Combined(target):0.##}");
             ctx.Check(Pristine(shooter), $"zero blast outside the radius (the shooter's plane, 500 m out)");
 
+            // --- the fuse skips the round's whole side. Every rig keeps its per-pilot default team,
+            // the Dogfight shape. The pass flies on only once the target and bystander join the
+            // shooter's side, and a pilot-2 round still fuses on pilot 1.
+            ctx.Check(shooter.Team == AimAssist.TeamOfPilot(0) && target.Team == AimAssist.TeamOfPilot(1)
+                      && bystander.Team == AimAssist.TeamOfPilot(2)
+                      && shooter.Team != target.Team && target.Team != bystander.Team,
+                $"precondition: the three rigs are on three sides, as Dogfight pilots are (teams {shooter.Team}, {target.Team}, {bystander.Team})");
+            int targetTeam = target.Team, bystanderTeam = bystander.Team;
+            target.Respawn();
+            bystander.Respawn();
+            target.Team = shooter.Team;
+            bystander.Team = shooter.Team;
+            live.Spawn(rocket, crossMuzzle, Vector3.Zero, shooter.PlayerIndex);
+            var wingPass = new List<(Vector3 Pos, Vector3 Velocity)>();
+            bool passedWing = false;
+            for (int i = 0; i < 60 && !passedWing; i++)
+            {
+                live.SimStep(1f / 60f);
+                wingPass.Clear();
+                live.CollectLiveRounds(wingPass);
+                passedWing = wingPass.Count == 1 && wingPass[0].Pos.X > passPoint.X + fuseRange;
+            }
+            live.Clear();
+            target.Team = targetTeam;
+            bystander.Team = bystanderTeam;
+            ctx.Check(passedWing && Pristine(target) && Pristine(bystander),
+                $"a round passing two planes on its own side inside the fuse flies on past them (past={passedWing}), and neither takes a blast");
+
+            target.Respawn();
+            bystander.Respawn();
+            float beforeVersus = Combined(target);
+            FireRocket(crossMuzzle, bystander.PlayerIndex);
+            ctx.Check(Combined(target) < beforeVersus,
+                $"a pilot-{bystander.PlayerIndex} rocket (team {bystander.Team}) still fuses on pilot {target.PlayerIndex} (team {target.Team}) moved={beforeVersus - Combined(target):0.##}");
+
             // The attributed blast kill: fused passes across the critical nose until it zeroes, with the Downed
             // report carrying the shooter through the same seam the gun kill used. Counters entering this
             // phase: kills(P1)=1, deaths(P2)=4.
@@ -2543,9 +2851,9 @@ internal static class CombatSuites
             ctx.Check(Combined(target) < tBefore,
                 $"…and the same round flew on to fuse on the opponent moved={tBefore - Combined(target):0.##}");
 
-            // --- the self-blast exemption, the guns invariant carried onto the blast pass: a
-            // burst the shooter cannot dodge, on a plate abeam and below it, costs it nothing
-            // while a second plane the same distance out takes the falloff share.
+            // --- the self-blast exemption carries the guns invariant onto the blast pass. A burst
+            // the shooter cannot dodge, on a plate abeam and below it, costs it nothing. A second
+            // plane the same distance out takes the falloff share.
             float abeam = fuseRange + 15f;
             var burstSite = shooterPos + new Vector3(-abeam, -6f, 0f);
             selfBlastPlate = Plate("self-blast-plate", new Vector3(4f, 0.2f, 4f), burstSite);
@@ -2768,9 +3076,9 @@ internal static class CombatSuites
         }
     }
 
-    // The rattle loop that sits beside the engine slot, on the same speed fraction the whine's
-    // curves read. ⚠ A ramp here is the regression: the block's volume_range is parsed into a global
-    // no instruction reads, so a 0→1 lift over 1.0→1.2x fd_speed leaves the loop inaudible through
+    // The rattle loop sits beside the engine slot, on the same speed fraction the whine's curves
+    // read. ⚠ A ramp here is the regression. The block's volume_range is parsed into a global no
+    // instruction reads. A 0→1 lift over 1.0→1.2x fd_speed then leaves the loop inaudible through
     // the speeds anyone actually flies. Decode: docs/org/shakes.md.
     private static void CheckRattleGate(TestContext ctx, PlaneStats stats)
     {
@@ -2783,16 +3091,16 @@ internal static class CombatSuites
         float at = EngineAudioCurves.Rattle(stats, 1f);
         float over = EngineAudioCurves.Rattle(stats, 1.2f);
         ctx.Check(below == 0f, $"a hair under the gate the rattle is silent: {below:0.0000}");
-        ctx.Check(Mathf.IsEqualApprox(at, 1f),
-            $"…and reaches FULL level the moment speed meets it: {at:0.0000}");
+        ctx.Check(Mathf.IsEqualApprox(at, EngineAudioCurves.RattleLevel()),
+            $"…and reaches its full level the moment speed meets it: {at:0.0000}");
         ctx.Check(Mathf.IsEqualApprox(over, at),
             $"…with no ramp above it, {over:0.0000} a fifth of the way past against {at:0.0000}");
 
-        // Level with the engine slot, which is the relation the decode fixes: both loops take the
-        // same 1.0 into the mix, so nothing about the rattle is quieter than the engine beside it.
-        float engine = EngineAudioCurves.Engine(stats, new EngineDrive(1f, 0f, 0f), 1f).Volume;
-        ctx.Check(Mathf.IsEqualApprox(at, engine),
-            $"…and sits level with the engine slot's own gain, {at:0.0000} against {engine:0.0000}");
+        // The original hands both loops the same 1.0. The port plays the rattle 1.3x the engine
+        // slot's gain, a chosen departure, so nothing about the rattle is quieter than the engine.
+        float engine = EngineAudioCurves.Engine(stats, new EngineDrive(1f, 0f, 0f), 1f, true).Volume;
+        ctx.Check(Mathf.IsEqualApprox(at, engine * 1.3f),
+            $"…and sits 1.3x the engine slot's own gain, {at:0.0000} against {engine:0.0000}");
     }
 
     // A parked, stock-armed rig with its own airframe, collider and damage ledger. ⚠ The loadout

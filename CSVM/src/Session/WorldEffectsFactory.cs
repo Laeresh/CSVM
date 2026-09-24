@@ -186,9 +186,9 @@ public sealed class WorldEffectsFactory
     /// per-plane).</summary>
     public static IReadOnlyList<string> CrashStageRootNames(AnimProgram program, GameZ gamez,
         Node3D rigScope, SurfaceDefTable? crashDefs = null, string? destroyAnim = null,
-        GameZ? planesGamez = null) =>
+        GameZ? planesGamez = null, bool humanPiloted = false) =>
         EffectCatalogue.CrashStageRoots(program, StageRootResolver(gamez, rigScope, planesGamez),
-            crashDefs ?? EffectCatalogue.CrashDefTable(program), destroyAnim);
+            crashDefs ?? EffectCatalogue.CrashDefTable(program), destroyAnim, humanPiloted);
 
     /// <summary>Stages the crash rig's pooled effect-template copies under
     /// <paramref name="crashRoot"/>, one <c>poolN</c> container per depth level, every copy hidden.
@@ -287,6 +287,9 @@ public sealed class WorldEffectsFactory
             }
         }
         var effects = _worldEffects;
+        // A burst's authored LIGHT_STATE (he_light and its kin) submits into the world's own set,
+        // so it rides the world's fade, budget and omni mirror on both presentations.
+        effects.ContributeLightsTo(worldRuntime.Lights);
         if (worldRuntime.ExternalEffect == null)
         {
             worldRuntime.ExternalEffect = (name, pt, node, follow) =>
@@ -303,7 +306,7 @@ public sealed class WorldEffectsFactory
                 // there is one place a burst light or a shimmer is decided rather than two that
                 // can disagree. Both read the same liveness, the fireball's own ANIM_STATE.
                 Func<bool> stillBurning = () => effects.AnimStateOf(name) == AnimStateRunning;
-                RegisterBurstLight(worldRuntime.Lights, name, pt, stillBurning);
+                RegisterBurstLight(worldRuntime.Lights, name, pt, stillBurning, effects.AuthorsLight(name));
                 RegisterHeatShimmer(name, pt, stillBurning);
             };
             // The one callee a burst may re-base, and only when the pool hands a basis in, which is
@@ -343,16 +346,16 @@ public sealed class WorldEffectsFactory
         new CrashRigBuild(this, controller, planeBuilder, planeName, gamez, worldScene, textures,
             crashProgram, verbose, worldSounds, planesGamez);
 
-    /// <summary>The effect sink's burst-light rule, the one place it is decided: under Enhanced
+    /// <summary>The effect sink's burst-light rule, the one place it is decided. Under Enhanced
     /// Graphics a played fireball effect (<see cref="EffectCatalogue.IsBurstLight"/>) registers a
-    /// short-lived light with the world's own <see cref="WorldLights"/>, so it rides the same
-    /// per-frame commit and the same omni pool. <paramref name="stillBurning"/> is the fireball's
-    /// liveness. The faithful presentation registers nothing at all, and neither does a view with
-    /// no lights (a lab, the static viewer).</summary>
+    /// short-lived light with the world's <see cref="WorldLights"/>, gone when
+    /// <paramref name="stillBurning"/> goes false. The faithful presentation and a view with no
+    /// lights register nothing. ⚠ Nor does a def that authors its own light
+    /// (<paramref name="authorsOwnLight"/>), whose light is already in the set.</summary>
     internal static void RegisterBurstLight(WorldLights? lights, string animName, Vector3 at,
-        Func<bool> stillBurning)
+        Func<bool> stillBurning, bool authorsOwnLight)
     {
-        if (lights == null || !GraphicsMode.Enhanced || !EffectCatalogue.IsBurstLight(animName))
+        if (lights == null || authorsOwnLight || !GraphicsMode.Enhanced || !EffectCatalogue.IsBurstLight(animName))
             return;
         lights.AddBurst(at, EffectCatalogue.BurstLightColor, stillBurning);
     }
@@ -383,7 +386,8 @@ public sealed class WorldEffectsFactory
             var destroy = EffectCatalogue.DestroyAnimFor(human, planeName);
             if (destroy != null && program.ByAnimName(destroy).Count == 0)
                 destroy = null;
-            foreach (var r in CrashStageRootNames(program, gamez, controller, defs, destroy, altGamez))
+            foreach (var r in CrashStageRootNames(program, gamez, controller, defs, destroy, altGamez,
+                         humanPiloted: human))
                 if (!both.Contains(r))
                     both.Add(r);
         }
@@ -502,10 +506,10 @@ public sealed class WorldEffectsFactory
             }
     }
 
-    // Built once per session (see the field): cullBackfaces matches PlaneBuilder's own builder,
-    // since these subtrees are authored as aircraft geometry.
+    // Built once per session (see the field): cullBackfaces and the sun term match PlaneBuilder's
+    // own builder, since these subtrees are authored as aircraft geometry and fly in the same world.
     private SceneBuilder PlanesScene(GameZ planesGamez, TextureArchive textures) =>
-        _planesScene ??= new SceneBuilder(planesGamez, textures, cullBackfaces: true);
+        _planesScene ??= new SceneBuilder(planesGamez, textures, cullBackfaces: true, sunVertexLit: true);
 
     // The world-scoped generalization of the per-player crash runtime: stages effect templates
     // under a dedicated subtree, keeps a live `IEmitterFactory`, and binds
@@ -758,8 +762,12 @@ public sealed class WorldEffectsFactory
             // session gamez IS the plane source, so the alt arm never fires there.
             var altGamez = _planesGamez != null && !ReferenceEquals(_planesGamez, _gamez) ? _planesGamez : null;
             var altScene = altGamez != null ? _factory.PlanesScene(altGamez, _textures) : null;
+            // ⚠ Before the derivation, not after: the canopy-hole overlay poses AT_NODE `camera1`,
+            // a name a rig runtime can only resolve inside its own bind scope, and the bind indexes
+            // this subtree once. A proxy added later would leave the overlay at the world origin.
+            _controller.EnsureViewCameraProxy();
             _rootNames = CrashStageRootNames(_crashProgram, _gamez, _controller, _crashDefs,
-                _destroyAnim, altGamez);
+                _destroyAnim, altGamez, _controller.IsHumanPiloted);
             // ⚠ Both kinds' roots, resolved HERE and not at the check below: once the templates are
             // staged, a staged root answers InScope instead of Stage and drops out of the derivation.
             _bothKindsRoots = BothRigKindsStageRoots(_crashProgram, _gamez, _controller, _planeName,
@@ -827,6 +835,10 @@ public sealed class WorldEffectsFactory
             crashRuntime.AnchorWarnAnimNames =
                 new HashSet<string>(EffectCatalogue.DamageStageAnims, StringComparer.OrdinalIgnoreCase);
             crashRuntime.AnchorWarnLabel = _planeName;
+            // This rig's own pilot answers PLAYER_1ST_PERSON, never a session-wide view: with
+            // splitscreen each pane's canopy takes its own branch. Unwired the condition reads
+            // false, which would run every canopy hole's exterior arm inside the cockpit.
+            crashRuntime.FirstPersonView = () => _controller.FirstPersonView;
             // Wreck pieces with `do_intersections: true` stay in the world; handing the mask over arms
             // their collider sweep. Only Fly-mode goldens exercise it, and none captures a completed
             // landing, analysis/object-motion-goldens/FINDINGS.md.
@@ -841,7 +853,8 @@ public sealed class WorldEffectsFactory
             // full ~800-def world program, its ~150 generic-named defs would mis-anchor onto this
             // plane's parts and run their reset states on it.
             crashRuntime.Bind(_controller,
-                _crashProgram.Subset(EffectCatalogue.CrashRigAnimNames(_crashDefs!, _destroyAnim)));
+                _crashProgram.Subset(EffectCatalogue.CrashRigAnimNames(_crashDefs!, _destroyAnim,
+                    _controller.IsHumanPiloted)));
             _controller.AddChild(crashRuntime);
             _controller.DestroyDef = _destroyAnim;
             // Which of the two families owns the landing, asked of the data rather than of who is
@@ -861,9 +874,9 @@ public sealed class WorldEffectsFactory
             WireDamageStages(_controller, crashRuntime, _crashProgram);
         }
 
-        /// <summary>Builds the next slice of the rig's emitters and answers whether the last def is
-        /// behind it. Every emitter the rig's defs name is built off the frame that plays it, so a
-        /// crash or a damage stage finds its puffers and materials already made.</summary>
+        // Builds the next slice of the rig's emitters and answers whether the last def is behind it.
+        // Every emitter the rig's defs name is built off the frame that plays it. A crash or a
+        // damage stage then finds its puffers and materials already made.
         private bool PrewarmSome()
         {
             var crashRuntime = _crashRuntime!;

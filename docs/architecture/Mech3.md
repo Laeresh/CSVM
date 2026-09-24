@@ -27,18 +27,18 @@ manifest, the one reader that sees the `Simple` textures. That manifest also sup
 bias for `Launcher`. [../org/textures.md](../org/textures.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../formats/gamez.md](../formats/gamez.md).
 
 ## src/Mech3/SceneBuilder.cs
-Shared GameZ-subtree to MeshInstance3D builder: triangulation, material and mesh caches, nearest-LOD only, a skip
-predicate. It replicates the original's draw order as depth bias (priority, subface, overlay pass, within-mesh surface
-rank, then `NodeBiasOf`'s cross-node tie-break off the world's `ConflictRank` map), applies CLAMP per surface off
-`UvsWithinUnitSquare` rather than blanket, and colours a surface `vertex colour x material` except where the two
-restate each other. `BuildSubtree`'s `zoneGate` flag moves each instance onto its `zone_id` visual layer
-(`ZoneGate.cs`), off for the camera-anchored deck and dome. `CollidersForMesh` splits a mesh into one trimesh per
-surface class and by sidedness, both halves on one body registering with `WorldCollision`;
-`MissionStructureTeamMeta` is the channel `DestructibleRegistry` reads a pool's team through. A textured surface
-takes `csky_world_light` on its `lighting` flag alone, and every mip-mapped arm fetches through `SampleAlbedo`, the
-one `csky_sample_albedo` carrying the chapter's LOD bias, reused by `Clutter` and `MeshLab`. Under Enhanced Graphics
-the cutout arm also takes `CoverageMode` and the `CoverageLines` built-ins that feed it, so a scissored edge resolves
-through the project's MSAA samples. Arms and selection: [Root.md](Root.md), [../formats/gotchas.md](../formats/gotchas.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../org/textures.md](../org/textures.md).
+Shared GameZ-subtree to MeshInstance3D builder: triangulation, material and mesh caches,
+nearest-LOD only, a skip predicate. It replicates the original's draw order as depth bias (priority,
+subface, overlay pass, within-mesh surface rank, then `NodeBiasOf`'s cross-node tie-break off the
+world's `ConflictRank` map), applies CLAMP per surface off `UvsWithinUnitSquare` rather than blanket,
+and colours a surface `vertex colour x material` except where the two restate each other.
+`BuildSubtree`'s `zoneGate` flag moves each instance onto its `zone_id` visual layer
+(`ZoneGate.cs`), off for the camera-anchored deck and dome. `CollidersForMesh` splits a mesh into one
+trimesh per surface class and soil and by sidedness, both halves on one body registering with
+`WorldCollision`; `MissionStructureTeamMeta` is the channel `DestructibleRegistry` reads a pool's
+team through. A textured surface takes `csky_world_light` on its `lighting` flag alone, and every
+mip-mapped arm fetches through `SampleAlbedo`, the one `csky_sample_albedo` carrying the chapter's
+LOD bias, reused by `Clutter` and `MeshLab`. `AlphaOf` reads back the transparency verdict a built material's shader was generated for, the registry `HiddenAlpha` (`--hide-alpha`) drops a class by, dropping the surface rather than the instance so the classes isolate from each other. A `sunVertexLit` builder (the in-flight aircraft) draws original mode's shaded arm unshaded, with the original's per-vertex sun term, whose ambient half is the Danger Zone photograph's fill at an armed `PhotoEyeParam` eye. Under Enhanced Graphics the cutout arm also takes `CoverageMode` and the `CoverageLines` built-ins that feed it, so a scissored edge resolves through the project's MSAA samples. Arms and selection: [Root.md](Root.md), [../formats/gotchas.md](../formats/gotchas.md), [../org/vertexLighting.md](../org/vertexLighting.md), [../org/textures.md](../org/textures.md).
 
 ## src/Mech3/ZoneGate.cs
 The original's per-node visibility gate (`FUN_0056c430`). `FUN_004d62d0` arms the camera each frame
@@ -81,8 +81,9 @@ Every crater one mission has carved and the rule that decides whether it may car
 under the body the round struck, hands the carve to `TerrainCarve` and the decorations to
 `ClutterCull`, and returns which of the original's outcomes happened. A crater is permanent, nothing
 ages one out, so what bounds a mission's count is the refusal alone. `TryCarve` is the sink shape
-`ProjectilePool` holds, true only when the carve landed, which is what suppresses the weapon's
-impact animation.
+`ProjectilePool` holds, true only when the carve landed. The pool asks it only for a collider
+stamped `SceneBuilder.CanModifyMeta`, which no shipped node carries, so a played round never reaches
+it and only a direct caller (the `crater-carve` suite, the hand-armed carve option) carves.
 
 ## src/Mech3/TerrainCarve.cs
 The mesh and collider surgery one carve performs on one world node. The ring is subtracted from
@@ -108,7 +109,7 @@ plane-root to destroyed transform chain baked in, and `WingFlares`, `DamagePanel
 `CockpitDamagePanels` expose the nodes the build collected. A caller building a second aeroplane of one airframe and livery passes the
 `painter` the first composed, so those skins are composed once (PERF-22). `spinningProps` selects the flight propeller set
 (`PropParts.cs`); `Build` also reads `CockpitCameraOffset` off the `cockpit_camera` marker for `CameraController`. `cockpitInterior`
-mounts `cockpit1` hidden at that offset under `InteriorScale` and the fixed head-pitch tilt, then `ParkInteriorStates` walks it. Camera decode: [../org/cameraViews.md](../org/cameraViews.md).
+mounts `cockpit1` hidden at that offset under `InteriorScale` and the fixed head-pitch tilt, then `ParkInteriorStates` walks it, darkening exactly what `reset_bulletholes` does (the `bulNx` hole quads, never the meshless `bulletN` groups over them) plus the two warning lamps. Camera decode: [../org/cameraViews.md](../org/cameraViews.md).
 
 ## src/Mech3/PaintScheme.cs
 One aircraft livery: the pattern name, three colours and three decal indices of the `paint_*`
@@ -124,8 +125,10 @@ session share a decode. `.BM` layout: [../formats/rof.md](../formats/rof.md).
 
 ## src/Mech3/PlanePainter.cs
 Applies a `PaintScheme` to one aircraft: composites its skins from the pattern's region masks and
-swaps the three decal placeholders. The composite formula, the shading-plane choice and the
-bottom-up `.BM` rows are decode, and belong to [../formats/paint.md](../formats/paint.md),
+swaps the three decal placeholders. `SkinNameFor` decides which `.BM` a model texture is painted
+from, the original pairing the two by table rather than by name. The composite formula, the
+shading-plane choice and the bottom-up `.BM` rows are decode, and belong to
+[../formats/paint.md](../formats/paint.md),
 [../formats/rof.md](../formats/rof.md) and [../org/paint.md](../org/paint.md). Read those before changing a composite step.
 
 ## src/Mech3/MilitiaPaint.cs
@@ -186,10 +189,10 @@ measurements: [../formats/world-structure.md](../formats/world-structure.md). Re
 Stamps the boot-script clutter templates across placed polygons carrying the template's ground texture,
 one stamp per integer UV repeat of the polygon's UV lattice: sprites become one fullbright billboard
 MultiMesh per kind, turned toward the camera as that kind's own `FacadeMode` says, solids go through
-`SceneBuilder.SharedMesh`, `ClassifyBillboard` the split. A card blends or scissors on the archive's own alpha verdict, one shader variant each, and the scissored one takes `SceneBuilder.CoverageMode` under Enhanced Graphics. Every stamp carries its far fade as MultiMesh custom
+`SceneBuilder.SharedMesh`, `ClassifyBillboard` the split. A card blends or scissors on the archive's own alpha verdict, one shader variant each. The scissored variant takes `SceneBuilder.CoverageMode` under Enhanced Graphics, and the blended variant writes its body's depth through a prepass: a kind is one MultiMesh, a single draw in buffer order that sorts nothing, so a card writing no depth at all is painted over by every later card and kind whatever their distances. `BlendCardKinds`/`ScissorCardKinds` count the kinds each way, the census an `--hide-alpha` isolation is read against, and a hidden class builds no MultiMesh for its kinds. Every stamp carries its far fade as MultiMesh custom
 data under `EffectsLevel`, and samples through `SceneBuilder.SampleAlbedo` for the chapter's mip bias. `TemplateNames` reads `AddClutterTemplates` unfiltered, the per-polygon `no_clutter` gate deciding
 which patch a district dresses; `OverrideTemplateNames` is `--clutter-templates=`'s replacement.
-A decoration is a node chain, and `FirstWithMesh` hands back the translation down to the node carrying the mesh, so a stamp lands where the chain puts the drawn card: C5's lamp glow rides 4.75 m up its post.
+A decoration is a node chain, and `FirstWithMesh` hands back the translation down to the node carrying the mesh, so a stamp lands where the chain puts the drawn card: C5's lamp glow rides 4.75 m up its post. A solid decoration's chain carries SEVERAL meshes, which `ExtraMeshes` collects (nearest LOD only, each in the drawn mesh's frame) so `Kind.ExtraParts` draws and collides the whole building: 12 of C5's city blocks hold two street walls and a roof cap on further nodes, and drawing the first mesh alone leaves them open on two sides.
 Placement runtime: [../org/clutter.md](../org/clutter.md); authored side: [../formats/clutter.md](../formats/clutter.md), [../formats/templates.md](../formats/templates.md).
 
 ## src/Mech3/ClutterTemplates.cs
@@ -338,7 +341,8 @@ The original's UI string table by id, read from `extracted/rof/ui_strings.json`.
 rows are kept, since ids repeat across the file's two merged tables and every menu range this
 remake reads sits in that one. `FormatMessage` positional placeholders (`%1!d!`) convert to
 composite format rather than going to printf, and a leading `[FONTID]` tag is stripped as a
-renderer directive rather than text. `Parse` takes the JSON itself, so the table and its formatting
+renderer directive rather than text; `Face` answers the tag a row carries, from its `font` field or
+that stripped prefix, for a screen that draws the row in its own face. `Parse` takes the JSON itself, so the table and its formatting
 test off engine; `Empty` is the fallback that lets a menu draw on a missing extraction. Ids and
 rows: [../formats/strings.md](../formats/strings.md).
 
@@ -417,32 +421,32 @@ unchanged. Two entries exist install-wide (`fire1.flt` 12@10, `fire2.flt` 6@5).
 
 ## src/Mech3/WorldSounds.cs
 `SOUND_NODE` ambient looping 3D emitters: one pooled `AudioStreamPlayer3D` per live emitter,
-following its host's pose each frame. `PlayOneShot(name, worldPos, rng, bus)` is the one-shot
-`SOUND` half, fire-and-forget destruction and impact audio resolving a `SOUND_GROUPS` name to a
-member first; the overload taking a `Node3D` rides that source's pose per Tick. `bus` is read per
-play, because combat voice (`Session/AiVoiceRuntime.cs`) is the one caller not on Effects.
-`HasStream` answers availability after the prewarm, `OneShotsStarted` that a cue fired. Who hears
+following its host's pose each frame. `PlayOneShot(name, worldPos, rng)` is the one-shot
+`SOUND` half, fire-and-forget destruction and impact audio on Effects, resolving a `SOUND_GROUPS`
+name to a member first. Radio lines, combat voice included, never come here: they are flat and
+belong to `MissionRadio.cs`. `HasStream` answers availability after the prewarm, `OneShotsStarted` that a cue fired. Who hears
 an emitter is `UI/SplitScreen.cs`'s per-pane model, fed by `SetListeners`: `Tick` measures to the
 nearest and levels every player from `SoundFalloff.cs`, never Godot's. Next: `SoundFalloff.cs`.
 
 ## src/Mech3/SoundFalloff.cs
-The original's positional gain law, engine-free and pure: what a listener distance, a definition's
-`RANGE` pair and its `VOLUME` come to in decibels. `AttenuationDb` is the distance term alone,
-`VolumeDb` the linear-gain conversion (ten decibels per doubling, not `20 log10`), `GainDb` the sum
-with the silence floor. It exists as its own module because no Godot attenuation model expresses
-the shape: the ramp is measured from the full-volume radius rather than from the emitter, and the
-band past the audible radius is a tail rather than a cut. The decode, its addresses and the table
-are [../formats/sounds.md](../formats/sounds.md). Read `WorldSounds.cs` for the only caller.
+The original's positional gain law, engine-free: what a listener distance, a definition's `RANGE`
+pair and its `VOLUME` come to in decibels. `AttenuationDb` is the distance term alone, `VolumeDb`
+the linear-gain conversion (ten decibels per doubling, not `20 log10`), `GainDb` the sum with the
+silence floor. No Godot attenuation model expresses the shape, since the ramp is measured from the
+full-volume radius. `SessionGainDb` is what the play paths call: the law at `RangeScale`, the one
+piece of state here, shipping at the remake-only `ShippedRangeScale` (`--sound-range-scale=`). The
+decode and its addresses are [../formats/sounds.md](../formats/sounds.md). Callers: `WorldSounds`,
+`Flight/GunVoice.cs`, `Flight/AiWeaponAudio.cs`.
 
 ## src/Mech3/WorldLights.cs
-Packs the animated world's `LIGHT_STATE` point lights into the 2xN RGBAF texture the fullbright
-world shader reads as spill (`csky_light_data`, its loop bounded by `csky_light_count`). The uniform
-is session-global, so a lit light is lit for every pane, but `Commit`'s distance fade and its
-`MaxActive`-slot significance rank both answer to the NEAREST of every viewer position handed in
-rather than one camera, which is why a light beside player four stays lit with player one far away
-(`AnimRuntime.LightViewerPositions`, from `GameSession`'s `ViewerSet`). Given a parent `Node3D` and
-enhanced mode, `Commit` mirrors the committed set onto pooled `OmniLight3D` nodes, and `AddBurst`
-adds an explosion flash aged on `Begin`'s dt that dies with its fireball. [Root.md](Root.md).
+Packs the `LIGHT_STATE` point lights, each as colour times ambient + diffuse, into the 2xN texture (`csky_light_data`,
+`csky_light_count`) the original-mode world and aircraft shaders read as the per-vertex point term
+([../org/vertexLighting.md](../org/vertexLighting.md)). `Commit`'s distance fade and `MaxActive` significance rank answer
+to the NEAREST viewer handed in (`AnimRuntime.LightViewerPositions`, from `GameSession`'s `ViewerSet`). The world runtime
+owns the frame (`Begin`/`Add`/`Commit`); the world-effects runtime contributes through `AddSource`, so a burst ranks
+against the beacons in one set. With a parent `Node3D` in enhanced mode, `Commit` mirrors the committed set onto pooled
+`OmniLight3D` nodes ([Root.md](Root.md)). Enhanced alone, `AddBurst` adds an explosion flash, aged on `Begin`'s dt and
+dying with its fireball, for a burst whose def authors no light of its own.
 
 ## src/Mech3/MissionSetup.cs
 Parses + applies the per-mission `.gw` interp script that decides which world entities a mission
@@ -492,11 +496,11 @@ motion decode, both contact tiers and the readings they supersede: [../org/objec
 
 ## src/Mech3/Anim/MotionSet.cs
 `AnimRuntime`'s live motions as a module: `Add` (owner stamp, `(Target, Channel)` eviction,
-`LaunchCount`), the per-frame `Tick` sweep, `DiscardFor`/`Reset`, and the predicates the rest of the
-runtime asks: `Airborne` (the retirement hold `AnimRuntime.Retirable` consults), `OwesBounce` (its
-armed-branch subset, which a suite reads), `HasSpinOn` (the `Loop{-1}` spin re-assert guard) and
-`LiveFromToMotion` (the still-live transform tween
-`PoseChannel` carries into a replacement channel). It never constructs a motion; `PoseChannel`
+`LaunchCount`), the per-frame `Tick` sweep, `DiscardFor`/`Reset`, `HaltLaunchedBy` (a stop ending
+the ballistic bodies its sequence launched), and the predicates the runtime asks: `Airborne` (the
+retirement hold `AnimRuntime.Retirable` consults), `OwesBounce` (its armed-branch subset, which a
+suite reads), `HasSpinOn` (the `Loop{-1}` spin re-assert guard) and `LiveFromToMotion` (the
+still-live transform tween `PoseChannel` carries into a replacement channel). It never constructs a motion; `PoseChannel`
 builds them and hands them over. `Node3D`-typed but never dereferenced, every operation here being
 identity comparison, which is why the freed-target rule sits on `Tick`. Read `Anim/PoseChannel.cs`.
 
@@ -521,14 +525,14 @@ rather than a constructor snapshot. Ambient emitter plumbing is `WorldSounds.cs`
 grammar is docs/formats/sounds.md.
 
 ## src/Mech3/Anim/LightChannel.cs
-One runtime's `LIGHT_STATE`/`LIGHT_ANIMATION` events as a module: `HandleLightState` (the partial
-update that declares a light on first use and never defaults an absent field),
-`HandleLightAnimation` (the signed-delta tween over `run_time`), `Tick` (the per-frame advance and
-submission to `WorldLights`), `Reset` and `DiscardFor`. Both handlers report through their return
-value whether they applied, and the router adds that to its counters. `Lights` and
-`LightViewerPositions` stay public fields on `AnimRuntime` for callers to configure, read here
-through closures that fold in the single-camera fallback. `AnimLight` is this channel's own value
-type, constructed nowhere else. Read `WorldLights.cs` next.
+One runtime's `LIGHT_STATE`/`LIGHT_ANIMATION` events: `HandleLightState` (a partial update that
+never defaults an absent field), `HandleLightAnimation` (the signed-delta tween over `run_time`),
+`Tick` (the advance, then the owner's whole `WorldLights` frame or, under
+`AnimRuntime.ContributeLightsTo`, only a registered submission), `Reset` and `DiscardFor`, which
+`PlayEffectAt` also runs on a reused pooled copy so each call starts dark like the original's
+per-call clone. Both handlers report whether they applied through their return value. `Lights` and
+`LightViewerPositions` stay fields on `AnimRuntime`, read through closures that fold in the
+single-camera fallback. `AnimLight` is constructed nowhere else. Read `WorldLights.cs` next.
 
 ## src/Mech3/Anim/PoseChannel.cs
 One runtime's object-pose/visual events as a module: the nine `OBJECT_*` handler bodies, the pose
@@ -545,10 +549,9 @@ Name to node resolution as one public module, generic over the node type (`NameR
 the index, the wildcard `Matcher`, the memoized `FindAll`, the scoped tier chain
 (`Resolve`/`ResolveScoped`), the symbol authority (`SymbolClaims`/`NarrowToSymbolRoot`), `Anchors`
 (NAME match, symbol narrowing, root lift) and the bind census. Node identity is
-constructor-supplied, never the node type's inherited `Equals`, and `DropFreed` retires the rows
-naming a freed node. Every tier is filtered by `AdmissibleStaging`, the owner's verdict on one
-pooled copy; that filter and its limits are on the members. Decode:
-[../org/sequences.md](../org/sequences.md), "The definition owns a private copy of its subtree".
+constructor-supplied, never the node type's inherited `Equals`; `DropFreed` retires the rows naming a freed node and `DropNodes` those naming a live subtree a second staging replaces, since a name resolves to whichever claimant was indexed first. `AdmissibleStaging` filters every tier, the owner's verdict on one pooled
+copy, and `RefusesGlobalTier` withholds the last tier from a plain name written by a definition
+the world holds several instances of. Decode: [../org/sequences.md](../org/sequences.md).
 
 ## src/Mech3/Anim/CutsceneFastForward.cs
 The rate one cutscene episode's own definitions run at while the player holds a key through a scene
@@ -623,14 +626,14 @@ times the duck and nothing else: the player's music level is the Music bus's gai
 are docs/org/music.md.
 
 ## src/Mech3/MissionRadio.cs
-The mission radio queue: the third playback channel, beside `MusicPlayer`'s streaming track and
-`WorldSounds`' pooled 3D emitters, and the one a mission's objective callouts speak on. `Cue(name)`
-takes a queued radio definition or a VO dialogue chain and returns how many lines it will speak, 0
-for a name this channel does not own, so a caller can fall through to the channel that does. One
-call speaks at a time: a chain runs its lines back to back as one call, a later cue queues behind
-rather than cutting in, `Cancel` is `STOP_QUEUED_SOUNDS`, and a call waiting past its definition's
-`QUEUE` tolerance is dropped unheard. Streams come from `WorldSounds.StreamFor`. The cue delay is
-docs/formats/objectives.md; the definition classes and the tolerance are docs/formats/sounds.md.
+The mission radio queue, the flat Voice channel beside `MusicPlayer` and `WorldSounds`' 3D emitters.
+`Cue(name)` queues an objective callout (a radio definition or a VO dialogue chain) and returns its
+line count, 0 for a name this channel does not own. `Speak(name, rng, speakerId)` queues a combat
+voice line on the same queue without the cue delay; `IsSpeaking(speakerId)` answers the voice gate
+whether that pilot's own line still holds the channel. One call speaks at a time: a chain runs back
+to back, a later call queues behind rather than cutting in, `Cancel` is `STOP_QUEUED_SOUNDS`, and a
+call waiting past its `QUEUE` tolerance is dropped. Streams come from `WorldSounds.StreamFor`. Cue
+delay: docs/formats/objectives.md; the queue, classes and tolerance: docs/formats/sounds.md.
 
 ## src/Mech3/SoundDefs.cs
 sounds.json SETS parser: `snd_*` name to `SoundDef` (wav name, flags, range, volume); the entry
@@ -641,9 +644,9 @@ grammar and flag/key meanings are in docs/formats/sounds.md. `LoadGroups` parses
 ## src/Mech3/CombatVoice.cs
 The combat-voice resolver: roster `accentID` (slot 65) to a `voice.zrd` ACCENT row, to a pilot VO
 id pool, to clip defs. `PlayableFor(voId, family)` returns the one name to hand
-`WorldSounds.PlayOneShot`: the shipped `snd_<FAMILY>-A_id<N>_random` variant group where one is
+`MissionRadio.Speak`: the shipped `snd_<FAMILY>-A_id<N>_random` variant group where one is
 authored, else the bare def. `SessionPrewarmNames` is the flight session's mission-roster prewarm
-set, reached through `WorldSession.Options.VoiceClipNames` with CLI accents joined in. Dispatch
+set, reached through `WorldSession.Options.VoiceClipNames` with CLI and Instant Action accents joined in. Dispatch
 sits above this seam, in `Flight/AiVoiceDispatcher.cs` (the rules) and `Session/AiVoiceRuntime.cs`
 (the wiring), never in it. Decode: docs/formats/combat-voice.md.
 
@@ -684,7 +687,7 @@ the bodiless `player` marker the flown aircraft is posed onto, `chuteman`'s para
 `balmoral`, and the `FigureNodes`/`PropNodes` groups. Each node's shipped active state and the
 holder it hangs under are on its own member, which decide whether it draws in a mission that never
 names it. All carry a rebased gamez index (`PointerBaseOf`) a compiled cross-archive symbol table
-binds; `StageFlown` adds the flown airframe and parks its hook. A skinned subtree gets its own
+binds; `StageFlown` puts the one flown airframe in the node table and parks its hook, taking the airframe it replaces back out so a second human's aeroplane cannot answer for the first's name. A skinned subtree gets its own
 builder, so `Paint` gives it its stand-in's livery. Decode: docs/formats/anim-definitions/cutscenes.md.
 
 ## src/Mech3/SessionArchives.cs

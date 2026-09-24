@@ -22,13 +22,20 @@ namespace CSVM.Testing;
 internal static class MenuOriginalSuites
 {
     private const float Dt = 1f / 60f;
+    // A connection index past anything the platform hands out. A seat placed on it is off the
+    // roster whatever is plugged into the machine running the suite.
+    private const int AbsentPad = 99;
 
-    // The scrapbook's Current Mission tab, the one plaque a campaign board puts in the top band:
-    // its art starts at authored x 558 and is 114 wide, so a chip row in the corner clears this.
+    // The two pads the join board walk signs on, absent for the same reason.
+    private const int FirstPad = 96;
+    private const int SecondPad = 97;
+
+    // The scrapbook's Current Mission tab, the one plaque a campaign board puts in the top band.
+    // Its art starts at authored x 558 and is 114 wide, so a chip row in the corner clears this.
     private const float BookTabRight = 672f;
 
-    // The corner the [@GameOptions@] section authors its plate at, the art's own height, the pitch
-    // between its row panels and the line its two plaques stand on. Held here rather than read off
+    // The [@GameOptions@] section's authored plate: its corner, the art's own height, the pitch
+    // between row panels, and the line its two plaques stand on. Held here rather than read off
     // the layout so the check has something of its own to compare the composed page against.
     private const float AuthoredPlateY = 215f;
     private const float AuthoredPlateHeight = 289f;
@@ -51,23 +58,31 @@ internal static class MenuOriginalSuites
         + "click on the door opens Free Flight, keyboard frames pick a chapter and an airframe and "
         + "FLY leaves as one LaunchExit, the return re-enters the top level, PREFERENCES and its "
         + "GAME OPTIONS door open the decoded page whose Difficulty dropdown stands first and whose "
-        + "six rows take every choice on a plate grown a band to hold them and whose CANCEL CHANGES "
+        + "five rows take every choice, none of them the menu presentation, on a plate grown a band "
+        + "to hold them where each row stands wholly inside one band and one band carries the pair "
+        + "the canvas leaves no band for and each checkbox row's title stands on its own box's "
+        + "centre line at the dropdown rows' column, and whose CANCEL CHANGES "
         + "drops them, a wheel step over the "
         + "aircraft column and over Instant Action's contents window moves each one row and clamps "
         + "at the head, a drag down each thumb's track lands the window on its last row without "
-        + "activating what the click stood over, and the contents arrows still step it, seat 0 steering with a "
-        + "pad claims it so it can never join as another seat, joining is open on the Instant Action "
-        + "screen and a second seat joined there stays seated, the campaign flight check carries the "
+        + "activating what the click stood over, and the contents arrows still step it, steering the "
+        + "menu with a pad claims nothing, a pad a guest already joined on is "
+        + "not claimable and a rebind of seat 0's set drops the stale last-active reading with it, "
+        + "a seat whose pad drops off the roster holds it through the grace and leaves once the "
+        + "device stays gone past it, the Instant Action screen reads the roster without opening "
+        + "joining and a seat signed on at the board stays seated, the campaign flight check carries the "
         + "seat strip with two seats and none with one, drawn as Built-in's own chip row in the "
         + "top-right corner clear of the book tab, a switch to Built-in "
         + "from mid-setup discards the pick and shows Built-in's Mode screen, a switch back starts "
         + "Original fresh, Built-in's Options route steps the difficulty, the opening view, the "
         + "automatic head turn, the targeting setting on and back off, the rumble toggle off, the "
-        + "two other choices and "
+        + "graphics mode and "
         + "its five display rows over the machine's own screens and sizes, the three vocabularies "
-        + "and a wrap onto the last frame cap and onto the last render scale, "
+        + "and a wrap onto the last frame cap and onto the last render scale, its four volume rows "
+        + "stepped by the AUDIO page's own step and clamped at both ends, "
         + "opens and leaves the rebinding screen behind its Controls door and emits the apply exit "
-        + "carrying all twelve, Original's VIDEO door opens the decoded page on its Display Mode dropdown "
+        + "carrying all fifteen with no presentation row among them, "
+        + "Original's VIDEO door opens the decoded page on its Display Mode dropdown "
         + "which fits its authored window and draws no bar, over the V-Sync one whose five words "
         + "window into four with the arrows and the thumb inside the box's right edge and the fifth "
         + "kept for the walk but unseen and unhit, that list wheeling and dragging like any other "
@@ -143,9 +158,140 @@ internal static class MenuOriginalSuites
         ctx.Check(host.Active == null && !host.Shown, $"Deactivate leaves the host holding no presentation");
     }
 
+    [Suite("menu-join-board",
+        "The join board over the install's decoded layout: the top level's third door opens it and "
+        + "it is the one screen joining is open on, its manifest starting as four open seats, the "
+        + "first pad to sign on taking the captain's chair beside the keyboard and the second a seat "
+        + "of its own with the manifest drawing both, B on the second pad giving that seat up and "
+        + "leaving the captain's entry where it was, the captain's Start casting off to the top "
+        + "level with the manifest standing, BACK dropping every sign-on, and Free Flight, Dogfight "
+        + "and Instant Action reading the roster without opening joining, their footer and hint no "
+        + "longer inviting a pad's START")]
+    internal static void MenuJoinBoard(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(MenuLayout.PathUnder(ctx.DataRoot), $"decoded menu layout");
+        var layout = OriginalAvailability.Load(ctx.DataRoot, out var why);
+        ctx.Check(layout != null, $"the install's layout passes the availability check ({why ?? "ok"})");
+        if (layout == null)
+        {
+            return;
+        }
+
+        var seat = new ScriptedSeat();
+        var registry = new PresentationRegistry();
+        var player1 = new MenuInput { Keyboard = true };
+        registry.Register(PresentationId.Original, () => new OriginalPresentation(
+            ctx.Host, ctx.DataRoot, layout, string.Empty, player1));
+        var host = new MenuHost(registry, new RecordingAudio(), _ => { });
+        MenuSuiteHost.AddFeatures(host, ctx.DataRoot);
+        host.AddSeat(seat);
+        try
+        {
+            host.Select(forceBuiltIn: false, cliOverride: "original");
+            host.Show(MenuReturnDestination.TopLevel);
+            var original = host.Active as OriginalPresentation;
+            ctx.Check(original?.Shell != null && original.Devices != null,
+                $"Original stands at the top level with its shell and its pad roster ({host.Active?.Id})");
+            if (original?.Shell is not { } shell || original.Devices is not { } devices)
+            {
+                return;
+            }
+
+            SignOnAtTheBoard(ctx, host, seat, shell, devices);
+            JoiningIsTheBoardsAlone(ctx, host, seat, shell);
+        }
+        finally
+        {
+            host.Deactivate();
+            Godot.Input.MouseMode = Godot.Input.MouseModeEnum.Visible;
+        }
+    }
+
+    // The board itself. The gestures are raw device reads and a scripted run has no pad to press,
+    // so the walk calls what the board's own scan calls. The two pad indices are ones no real
+    // device holds, so a machine with pads plugged in walks this path too.
+    private static void SignOnAtTheBoard(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, MenuSeatDevices devices)
+    {
+        var setup = host.Features.Get<PlayerSetupFeature>();
+        WalkTo(host, seat, shell, OriginalShell.JoinBoardKey);
+        Press(host, seat, Accept);
+        ctx.Check(shell.Screen == OriginalScreen.JoinBoard && shell.JoiningOpen,
+            $"the top level's JOIN BOARD door opens the one screen joining is open on ({shell.Screen}, open={shell.JoiningOpen})");
+        ctx.Check(BoardLines(shell, "open seat") == 4 && BoardLines(shell, "signed on") == 0,
+            $"whose manifest starts as four open seats ({BoardLines(shell, "open seat")} open)");
+
+        ctx.Check(devices.SignOn(FirstPad) && devices.P1Pad == FirstPad,
+            $"A on the first pad takes the captain's chair, seat 1 beside the keyboard ({devices.P1Pad})");
+        ctx.Check(devices.SignOn(SecondPad) && setup.Seats.Count == 2,
+            $"and A on the second signs it onto a seat of its own ({setup.Seats.Count} seats)");
+        ctx.Check(devices.SignedOn(0) && devices.SignedOn(1) && !devices.SignedOn(2),
+            $"so two entries hold a pad and the rest stay open");
+        ctx.Check(BoardLines(shell, "signed on") == 2 && BoardLines(shell, "open seat") == 2,
+            $"which is what the manifest draws ({BoardLines(shell, "signed on")} signed on)");
+
+        ctx.Check(devices.SignOff(SecondPad) && setup.Seats.Count == 1 && devices.P1Pad == FirstPad,
+            $"B on the second pad gives its seat up, the entry above it staying put ({devices.P1Pad}, {setup.Seats.Count} seats)");
+        ctx.Check(shell.JoinBoard.CastOff() && shell.Screen == OriginalScreen.TopLevel && devices.P1Pad == FirstPad,
+            $"and the captain's Start casts off with the manifest standing ({shell.Screen}, {devices.P1Pad})");
+
+        // The other way off, which keeps nobody.
+        WalkTo(host, seat, shell, OriginalShell.JoinBoardKey);
+        Press(host, seat, Accept);
+        Press(host, seat, Back);
+        ctx.Check(shell.Screen == OriginalScreen.TopLevel && devices.P1Pad < 0 && setup.Seats.Count == 1,
+            $"BACK leaves the board and drops the sign-ons ({shell.Screen}, {devices.P1Pad}, {setup.Seats.Count} seats)");
+    }
+
+    // The screens seats used to be decided on: each reads the roster the board wrote, and none of
+    // them opens the gesture that writes it.
+    private static void JoiningIsTheBoardsAlone(
+        TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell)
+    {
+        var doors = new (string Key, OriginalScreen Screen)[]
+        {
+            (OriginalShell.FreeFlightKey, OriginalScreen.FreeFlight),
+            (OriginalShell.DogfightKey, OriginalScreen.Dogfight),
+            ("MM_B_INSTANTACTION", OriginalScreen.InstantAction),
+        };
+        foreach (var door in doors)
+        {
+            WalkTo(host, seat, shell, door.Key);
+            Press(host, seat, Accept);
+            ctx.Check(shell.Screen == door.Screen && !shell.JoiningOpen,
+                $"{door.Screen} reads the roster without opening joining ({shell.Screen}, open={shell.JoiningOpen})");
+            if (door.Screen == OriginalScreen.FreeFlight)
+            {
+                ctx.Check(BoardLines(shell, "START") == 0 && BoardLines(shell, "to join") == 0,
+                    $"and neither its footer nor its hint invites a pad's START ({BoardLines(shell, "START")} lines)");
+            }
+
+            host.Show(MenuReturnDestination.TopLevel);
+        }
+
+        ctx.Check(shell.Screen == OriginalScreen.TopLevel, $"the walk lands back on the top level ({shell.Screen})");
+    }
+
+    // How many composed lines carry a piece of text. The manifest states a seat in words rather
+    // than in a row, so its entries are counted here.
+    private static int BoardLines(OriginalShell shell, string text)
+    {
+        int count = 0;
+        foreach (var line in shell.Compose().Lines)
+        {
+            if (line.Text.Contains(text, StringComparison.Ordinal))
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
     private static OriginalShell? ColdStart(TestContext ctx, MenuHost host)
     {
-        string? reason = host.Select(forceBuiltIn: false, cliOverride: "original", savedRequest: null);
+        string? reason = host.Select(forceBuiltIn: false, cliOverride: "original");
         ctx.Check(host.Selected == PresentationId.Original && reason == null,
             $"--presentation=original selects Original over the install's layout ({host.Selected}, {reason ?? "no reason"})");
         host.Show(MenuReturnDestination.TopLevel);
@@ -156,7 +302,7 @@ internal static class MenuOriginalSuites
             $"a cold start opens on the top level ({shell?.Screen})");
         ctx.Check(shell?.FocusedKey == OriginalShell.FreeFlightKey,
             $"with the Free Flight door focused ({shell?.FocusedKey})");
-        ctx.Check(shell?.Rows.Count == 8, $"the top level is the six decoded rows plus the two doors ({shell?.Rows.Count})");
+        ctx.Check(shell?.Rows.Count == 9, $"the top level is the six decoded rows plus the three doors ({shell?.Rows.Count})");
         ctx.Check(Godot.Input.MouseMode == Godot.Input.MouseModeEnum.Hidden,
             $"the OS pointer is hidden while Original draws its own ({Godot.Input.MouseMode})");
         return shell;
@@ -358,16 +504,20 @@ internal static class MenuOriginalSuites
 
         player1.LastActivePad = 2;
         host.Tick(Dt);
-        ctx.Check(devices.P1Pad == 2 && devices.IsClaimed(2),
-            $"seat 0 steering with pad 2 claims it, so the join scan skips that pad ({devices.P1Pad}, claimed={devices.IsClaimed(2)})");
+        ctx.Check(devices.P1Pad < 0 && !devices.IsClaimed(2),
+            $"steering the menu with a pad claims nothing, a seat being taken on the join board alone ({devices.P1Pad}, claimed={devices.IsClaimed(2)})");
         player1.LastActivePad = -1;
+        host.Tick(Dt);
+        GuestPadClaim(ctx, host, setup, devices, player1);
+        PadBlipGrace(ctx, host, setup, devices, player1);
 
         WalkTo(host, seat, shell, "MM_B_INSTANTACTION");
         Press(host, seat, Accept);
-        ctx.Check(shell.Screen == OriginalScreen.InstantAction && shell.JoiningOpen,
-            $"the Instant Action screen opens joining ({shell.Screen}, open={shell.JoiningOpen})");
+        ctx.Check(shell.Screen == OriginalScreen.InstantAction && !shell.JoiningOpen,
+            $"the Instant Action screen reads the roster without opening joining ({shell.Screen}, open={shell.JoiningOpen})");
         var s2 = new ScriptedSeat();
-        ctx.Check(setup.Join(s2) != null && host.Seats.Count == 2, $"a second seat joins there ({host.Seats.Count})");
+        ctx.Check(setup.Join(s2) != null && host.Seats.Count == 2,
+            $"a seat signed on at the board is one the screen shows ({host.Seats.Count})");
         Press(host, seat, Down);
         ctx.Check(host.Seats.Count == 2 && shell.Screen == OriginalScreen.InstantAction,
             $"and stays seated while seat 0 keeps steering the screen ({host.Seats.Count}, {shell.Screen})");
@@ -376,8 +526,8 @@ internal static class MenuOriginalSuites
         shell.Campaign.OpenCampaignOver(CampaignAidProfiles.Store(seeded: true), CampaignAidProfiles.Planes());
         ctx.Check(shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot), $"the scratch campaign seats its pilot");
         shell.Campaign.ShowMissionScreen(OriginalScreen.CampaignFlightCheck);
-        ctx.Check(shell.Screen == OriginalScreen.CampaignFlightCheck && shell.JoiningOpen,
-            $"the flight check opens joining too ({shell.Screen}, open={shell.JoiningOpen})");
+        ctx.Check(shell.Screen == OriginalScreen.CampaignFlightCheck && !shell.JoiningOpen,
+            $"and the flight check the same ({shell.Screen}, open={shell.JoiningOpen})");
         ctx.Check(StripSeats(shell) == 2, $"its board carries the seat strip naming both seats ({StripSeats(shell)} lines)");
         ctx.Check(StripIsChipRow(shell, out string chips),
             $"drawn as Built-in's chip row, tags in their own seat inks in the top-right corner clear of the book tab ({chips})");
@@ -387,6 +537,61 @@ internal static class MenuOriginalSuites
         host.Show(MenuReturnDestination.TopLevel);
         ctx.Check(shell.Screen == OriginalScreen.TopLevel && !host.Features.Get<CampaignFeature>().IsOpen,
             $"a top-level show closes the scratch campaign again ({shell.Screen})");
+    }
+
+    // Seat 0 borrows every unclaimed pad, so a guest steering the menu before they press Start
+    // leaves their own pad in its last-active reading. Both halves of what keeps a later claim off
+    // that pad. The claim skips a pad another seat holds, and a rebind of seat 0's set drops the
+    // reading it was taken from.
+    private static void GuestPadClaim(
+        TestContext ctx, MenuHost host, PlayerSetupFeature setup, MenuSeatDevices devices, MenuInput player1)
+    {
+        var guest = new MenuInput { Pads = new[] { 2 } };
+        var seat = setup.Join(new BuiltInSeat(guest));
+        player1.LastActivePad = 2;
+        ctx.Check(seat != null && !devices.ClaimP1Pad() && devices.P1Pad < 0,
+            $"a guest's joined pad is not claimable by seat 0, so neither seat flies the other's ({devices.P1Pad})");
+
+        player1.Pads = new[] { 2 };
+        devices.Sync(0f);
+        ctx.Check(player1.LastActivePad < 0,
+            $"and rebinding seat 0's pads drops the stale reading with them ({player1.LastActivePad})");
+        ctx.Check(!devices.ClaimP1Pad() && devices.P1Pad < 0,
+            $"leaving the claim nothing to take from a set seat 0 no longer reads ({devices.P1Pad})");
+        if (seat != null)
+        {
+            setup.Unjoin(seat);
+        }
+
+        host.Tick(Dt);
+    }
+
+    // Steam Input re-enumerates its virtual pads mid-menu, and a seat that leaves on every blip is
+    // the join flow coming apart. The roster is live here because --no-pads has none to come back
+    // to. The pad index is one no real device can hold, so the grace is what decides.
+    private static void PadBlipGrace(
+        TestContext ctx, MenuHost host, PlayerSetupFeature setup, MenuSeatDevices devices, MenuInput player1)
+    {
+        bool disabled = Pads.Disabled;
+        var bound = player1.Pads;
+        Pads.Disabled = false;
+        int before = setup.Seats.Count;
+        var seat = setup.Join(new BuiltInSeat(new MenuInput { Pads = new[] { AbsentPad } }));
+        devices.Sync(MenuSeatDevices.DeviceGrace / 2f);
+        ctx.Check(seat != null && setup.Seats.Count == before + 1,
+            $"a seat whose pad drops off the roster holds it through the grace ({setup.Seats.Count} seats)");
+        devices.Sync(MenuSeatDevices.DeviceGrace);
+        ctx.Check(setup.Seats.Count == before,
+            $"and leaves once the device stays gone past it ({setup.Seats.Count} seats)");
+
+        Pads.Disabled = disabled;
+        player1.Pads = bound;
+        if (seat != null && setup.Seats.Count > before)
+        {
+            setup.Unjoin(seat);
+        }
+
+        host.Tick(Dt);
     }
 
     // How many seat lines the composed board's overlays carry: the strip's lines are the only
@@ -406,7 +611,7 @@ internal static class MenuOriginalSuites
     }
 
     // Whether the strip is the chip row Built-in draws: the player tags alone, each in its own
-    // seat's ink, on one line of the corner and beginning right of the book tab.
+    // seat's ink. The row sits on one line of the corner and begins right of the book tab.
     private static bool StripIsChipRow(OriginalShell shell, out string report)
     {
         var chips = new List<BoardLine>();
@@ -435,8 +640,8 @@ internal static class MenuOriginalSuites
         return ok;
     }
 
-    // The switch, as the launcher performs it after an Options exit: from mid-setup on the Free
-    // Flight screen, Deactivate discards the feature's pick and Built-in opens on its Mode screen.
+    // The host's switch between presentations: Deactivate, Select and Show. From mid-setup on the
+    // Free Flight screen, Deactivate discards the feature's pick and Built-in opens on its Mode screen.
     private static void SwitchToBuiltIn(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell)
     {
         Press(host, seat, Accept);
@@ -447,21 +652,22 @@ internal static class MenuOriginalSuites
         host.Deactivate();
         ctx.Check(host.Active == null && host.Features.Get<FreeFlightFeature>().Chapter == null,
             $"Deactivate frees Original and discards the unfinished pick");
-        string? reason = host.Select(forceBuiltIn: false, cliOverride: null, savedRequest: "built-in");
+        string? reason = host.Select(forceBuiltIn: false, cliOverride: "built-in");
         host.Show(MenuReturnDestination.TopLevel);
         var menu = (host.Active as BuiltInPresentation)?.Menu;
         ctx.Check(host.Selected == PresentationId.BuiltIn && reason == null && menu is { Visible: true },
-            $"the saved request re-selects Built-in and Show stands the launchscreen up ({host.Selected})");
+            $"a Built-in request re-selects it and Show stands the launchscreen up ({host.Selected})");
         ctx.Check(menu?.ShownScreen == "Mode" && menu.ShownRowText == "Free Flight",
             $"at its own top level, the Mode screen ({menu?.ShownScreen}, {menu?.ShownRowText})");
         ctx.Check(menu?.ShownRowCount == 6, $"whose sixth row is the Options door ({menu?.ShownRowCount})");
     }
 
-    // Built-in's Options route: the last Mode row opens Options, Right steps the difficulty to
-    // Hard, the two rows under it step the opening view and the automatic head turn, the two under
-    // those the targeting setting and the rumble, then the presentation and the graphics mode, the
-    // five display rows step over the machine's own screens and sizes, and the apply row's Accept
-    // leaves as the one exit the launcher persists every choice from.
+    // Built-in's Options route: the last Mode row opens Options, and Right steps the difficulty to
+    // Hard. The two rows under it step the opening view and the automatic head turn, the two under
+    // those the targeting setting and the rumble. The graphics mode row comes next; the command
+    // line alone chooses a presentation, so no row does. The five display rows step over the
+    // machine's own screens and sizes. The four volume rows step the levels the AUDIO page writes.
+    // The apply row's Accept is the one exit the launcher persists every choice from.
     private static void BuiltInOptionsRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, List<MenuExit> exits)
     {
         var menu = (host.Active as BuiltInPresentation)?.Menu;
@@ -473,8 +679,8 @@ internal static class MenuOriginalSuites
         Press(host, seat, Up);
         ctx.Check(menu.ShownRowText == LaunchMenu.OptionsRow, $"Up from Free Flight wraps onto Options ({menu.ShownRowText})");
         Press(host, seat, Accept);
-        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 14 && menu.ShownRowText == "Difficulty: Normal",
-            $"Accept opens the Options screen with its fourteen rows, the difficulty stepper first ({menu.ShownScreen}, {menu.ShownRowCount}, {menu.ShownRowText})");
+        ctx.Check(menu.ShownScreen == "Options" && menu.ShownRowCount == 17 && menu.ShownRowText == "Difficulty: Normal",
+            $"Accept opens the Options screen with its seventeen rows, the difficulty stepper first ({menu.ShownScreen}, {menu.ShownRowCount}, {menu.ShownRowText})");
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == "Difficulty: Hard", $"Right steps the difficulty to Hard ({menu.ShownRowText})");
         Press(host, seat, Down);
@@ -505,20 +711,16 @@ internal static class MenuOriginalSuites
         ctx.Check(menu.ShownRowText == "Controller rumble: Off",
             $"Right turns the rumble off ({menu.ShownRowText})");
         Press(host, seat, Down);
-        string before = menu.ShownRowText;
-        Press(host, seat, Right);
-        ctx.Check(menu.ShownRowText != before && menu.ShownRowText.StartsWith("Menu presentation: ", System.StringComparison.Ordinal),
-            $"Right steps the presentation row ({before} -> {menu.ShownRowText})");
-        string chosen = menu.ShownRowText.EndsWith("Original", System.StringComparison.Ordinal) ? "original" : "built-in";
-        Press(host, seat, Down);
         string beforeGraphics = menu.ShownRowText;
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText != beforeGraphics && menu.ShownRowText.StartsWith("Graphics: ", System.StringComparison.Ordinal),
-            $"Right steps the graphics row under it ({beforeGraphics} -> {menu.ShownRowText})");
+            $"the sixth row is the graphics mode, straight under the rumble with no presentation row between, and Right steps it ({beforeGraphics} -> {menu.ShownRowText})");
         string graphics = menu.ShownRowText.EndsWith("Enhanced", System.StringComparison.Ordinal) ? "enhanced" : "original";
         var display = BuiltInDisplayRows(ctx, host, seat, menu);
+        BuiltInAudioRows(ctx, host, seat, menu);
         Press(host, seat, Down);
-        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow, $"the thirteenth row is the Controls door ({menu.ShownRowText})");
+        ctx.Check(menu.ShownRowText == LaunchMenu.ControlsRow && menu.ShownHeading == "OPTIONS  (16/17)",
+            $"the sixteenth row is the Controls door, the heading counting the window's position ({menu.ShownRowText}, {menu.ShownHeading})");
         Press(host, seat, Accept);
         ctx.Check(menu.ShownScreen == "Controls" && menu.ShownRowCount > 2,
             $"which opens the rebinding screen over a seat's own keymap ({menu.ShownScreen}, {menu.ShownRowCount} rows)");
@@ -531,15 +733,18 @@ internal static class MenuOriginalSuites
             $"Apply leaves through the host as an OptionsApplyExit ({exits.Count}, {exits[^1].GetType().Name})");
         if (exits.Count == 2 && exits[1] is OptionsApplyExit applied)
         {
-            ctx.Check(applied.Presentation.Value == chosen && applied.Graphics == graphics && applied.Difficulty == "hard"
+            ctx.Check(applied.Graphics == graphics && applied.Difficulty == "hard"
                 && applied.NearestAfterKill == false && applied.Rumble == false
                 && applied.DefaultView == CSVM.Flight.PilotView.Name(CSVM.Flight.PilotViewMode.Cockpit)
                 && applied.AutoHeadTurn == true,
-                $"carrying every stepped choice, the targeting setting stepped back off, the rumble turned off, the opening view and the head turn among them ({applied.Presentation}, {applied.Graphics}, {applied.Difficulty}, {applied.NearestAfterKill}, {applied.Rumble}, {applied.DefaultView ?? "none"}, {applied.AutoHeadTurn})");
+                $"carrying every stepped choice, the targeting setting stepped back off, the rumble turned off, the opening view and the head turn among them ({applied.Graphics}, {applied.Difficulty}, {applied.NearestAfterKill}, {applied.Rumble}, {applied.DefaultView ?? "none"}, {applied.AutoHeadTurn})");
             ctx.Check(applied.MonitorIndex == display.Monitor && applied.Resolution == display.Resolution
                 && applied.DisplayMode == display.DisplayMode && applied.VSync == display.VSync
                 && applied.RenderScale == display.RenderScale,
                 $"and all five display settings the rows stepped ({applied.MonitorIndex}, {applied.Resolution}, {applied.DisplayMode}, {applied.VSync}, {applied.RenderScale})");
+            ctx.Check(applied.AudioMaster == null && applied.AudioMusic == AudioMix.DefaultMusic - SliderControl.KeyStep
+                && applied.AudioEffects == null && applied.AudioVoice == AudioMix.MinLevel,
+                $"and the levels the volume rows moved, the two left alone still never set ({Level(applied.AudioMaster)}, {Level(applied.AudioMusic)}, {Level(applied.AudioEffects)}, {Level(applied.AudioVoice)})");
             var plan = MonitorSetting.Resolve(applied.MonitorIndex, MonitorSetting.Screens());
             ctx.Check(plan.Source == "options.json" && ResolutionSetting.Resolve(applied.Resolution,
                     ResolutionSetting.ScreenSizes(), applied.DisplayMode).Source == "options.json",
@@ -561,7 +766,7 @@ internal static class MenuOriginalSuites
         int standing = MonitorSetting.Resolve(null, screens).Screen;
         Press(host, seat, Down);
         ctx.Check(menu.ShownRowText == $"Monitor: {screens.Labels[standing]}",
-            $"the sixth row is the monitor, an unsaved index showing the screen the window stands on ({menu.ShownRowText})");
+            $"the seventh row is the monitor, an unsaved index showing the screen the window stands on ({menu.ShownRowText})");
         Press(host, seat, Right);
         int stepped = DisplaySettingRows.Step(standing, 1, screens.Labels.Count);
         ctx.Check(menu.ShownRowText == $"Monitor: {screens.Labels[stepped]}",
@@ -571,7 +776,7 @@ internal static class MenuOriginalSuites
         Press(host, seat, Down);
         string opened = menu.ShownRowText;
         ctx.Check(opened == $"Resolution: {sizes.Fallback}",
-            $"the seventh row is the resolution, showing the screen's own size ({opened})");
+            $"the eighth row is the resolution, showing the screen's own size ({opened})");
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == opened,
             $"which the shipped borderless mode pins, so Right steps it nowhere ({menu.ShownRowText})");
@@ -580,12 +785,12 @@ internal static class MenuOriginalSuites
 
         Press(host, seat, Down);
         ctx.Check(menu.ShownRowText == "Display mode: Borderless",
-            $"the eighth row is the display mode, unsaved showing the shipped borderless default ({menu.ShownRowText})");
+            $"the ninth row is the display mode, unsaved showing the shipped borderless default ({menu.ShownRowText})");
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == "Display mode: Fullscreen",
             $"Right steps it one word along the vocabulary ({menu.ShownRowText})");
 
-        // Back up to the size row, which exclusive fullscreen leaves to the player: the pin above
+        // Back up to the size row, which exclusive fullscreen leaves to the player. The pin above
         // is the mode's and not the row's, and this mode flies at the size the row names.
         Press(host, seat, Up);
         Press(host, seat, Right);
@@ -595,7 +800,7 @@ internal static class MenuOriginalSuites
         Press(host, seat, Down);
 
         Press(host, seat, Down);
-        ctx.Check(menu.ShownRowText == "V-Sync: Off", $"the ninth row is V-Sync, unsaved showing the shipped Off ({menu.ShownRowText})");
+        ctx.Check(menu.ShownRowText == "V-Sync: Off", $"the tenth row is V-Sync, unsaved showing the shipped Off ({menu.ShownRowText})");
         Press(host, seat, Right);
         ctx.Check(menu.ShownRowText == "V-Sync: 60 FPS",
             $"Right steps it onto the first cap ({menu.ShownRowText})");
@@ -609,13 +814,47 @@ internal static class MenuOriginalSuites
 
         Press(host, seat, Down);
         ctx.Check(menu.ShownRowText == "Render scale: 100%",
-            $"the tenth row is the render scale, unsaved showing native ({menu.ShownRowText})");
+            $"the eleventh row is the render scale, unsaved showing native ({menu.ShownRowText})");
         Press(host, seat, Left);
         ctx.Check(menu.ShownRowText == "Render scale: 200%",
             $"one Left wraps onto the last scale the list offers ({menu.ShownRowText})");
 
         return (MonitorSetting.Word(stepped), size, DisplayWords.Fullscreen, "144", "200");
     }
+
+    // The four volume rows, walked from the render scale row on a mix nothing has saved. Each shows the
+    // shipped level, steps by the AUDIO page's own keyboard step, and clamps at both ends. A step
+    // that moves nothing writes nothing, so Master stepped up off full stays never set.
+    private static void BuiltInAudioRows(TestContext ctx, MenuHost host, ScriptedSeat seat, LaunchMenu menu)
+    {
+        Press(host, seat, Down);
+        ctx.Check(menu.ShownRowText == $"Master volume: {AudioMix.DefaultMaster}" && menu.ShownHeading == "OPTIONS  (12/17)",
+            $"the twelfth row is the Master level, unsaved showing the shipped full level ({menu.ShownRowText}, {menu.ShownHeading})");
+        Press(host, seat, Right);
+        ctx.Check(menu.ShownRowText == $"Master volume: {AudioMix.MaxLevel}",
+            $"Right at full clamps rather than wrapping to silence ({menu.ShownRowText})");
+        Press(host, seat, Down);
+        ctx.Check(menu.ShownRowText == $"Music volume: {AudioMix.DefaultMusic}",
+            $"the Music level follows, unsaved showing its authored default ({menu.ShownRowText})");
+        Press(host, seat, Left);
+        ctx.Check(menu.ShownRowText == $"Music volume: {AudioMix.DefaultMusic - SliderControl.KeyStep}",
+            $"Left steps it down by the AUDIO page's own step ({menu.ShownRowText})");
+        Press(host, seat, Down);
+        ctx.Check(menu.ShownRowText == $"Effects volume: {AudioMix.DefaultEffects}",
+            $"the Effects level follows ({menu.ShownRowText})");
+        Press(host, seat, Down);
+        ctx.Check(menu.ShownRowText == $"Voice volume: {AudioMix.DefaultVoice}",
+            $"and the Voice level last, the order the AUDIO page draws them in ({menu.ShownRowText})");
+        for (int i = 0; i <= (AudioMix.DefaultVoice / SliderControl.KeyStep); i++)
+        {
+            Press(host, seat, Left);
+        }
+
+        ctx.Check(menu.ShownRowText == $"Voice volume: {AudioMix.MinLevel}",
+            $"a step past silence clamps there rather than wrapping to full ({menu.ShownRowText})");
+    }
+
+    private static string Level(int? level) => level?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unset";
 
     private static bool Offers(IReadOnlyList<string> sizes, string word)
     {
@@ -630,10 +869,10 @@ internal static class MenuOriginalSuites
         return false;
     }
 
-    // Original's own Options route over the install's decoded sections: PREFERENCES opens the
-    // Preferences page, its GAME OPTIONS door the decoded page, whose rows take every choice and
-    // whose CANCEL CHANGES drops them; the walk leaves the top level as it found it. The first
-    // three rows are the original's own, in its order, the three after them this port's.
+    // Original's own Options route over the install's decoded sections. PREFERENCES opens the
+    // Preferences page, and its GAME OPTIONS door the decoded page. That page's rows take every
+    // choice, and its CANCEL CHANGES drops them. The walk leaves the top level as it found it.
+    // The first three rows are the original's own, in its order, the two after them this port's.
     private static void OriginalOptionsRoute(TestContext ctx, MenuHost host, ScriptedSeat seat, OriginalShell shell, List<MenuExit> exits)
     {
         WalkTo(host, seat, shell, "MM_B_PREFERENCES");
@@ -645,13 +884,16 @@ internal static class MenuOriginalSuites
             $"GAME OPTIONS opens the decoded page on its Difficulty dropdown, the first row ({shell.Screen}, {shell.FocusedKey})");
         var board = shell.Compose();
         int titles = 0;
+        int menuTitles = 0;
         foreach (var line in board.Lines)
         {
             titles += line.Text is "GAME OPTIONS" or "Difficulty" or "Default View" or "Auto Head Turn"
-                or "Menu" or "Next Target" or "Rumble" ? 1 : 0;
+                or "Next Target" or "Rumble" ? 1 : 0;
+            menuTitles += line.Text is "Menu" ? 1 : 0;
         }
 
-        ctx.Check(titles == 7, $"drawing the section's own tab title over the six row titles ({titles} of 7)");
+        ctx.Check(titles == 6 && menuTitles == 0,
+            $"drawing the section's own tab title over the five row titles and no Menu row ({titles} of 6, {menuTitles} Menu)");
         OriginalGameOptionsPlate(ctx, shell, board);
         Press(host, seat, Accept);
         ctx.Check(shell.Options.OpenGameOption == OriginalOptionsScreen.DifficultyKey && shell.Rows.Count == 3
@@ -666,7 +908,7 @@ internal static class MenuOriginalSuites
         ctx.Check(shell.Options.OpenGameOption == OriginalOptionsScreen.DefaultViewKey && shell.Rows.Count == 3,
             $"Accept on the Default View row under it opens the dropdown over the original's three views ({shell.Options.OpenGameOption}, {shell.Rows.Count})");
         // The list opens on the item the row stands at, which with nothing saved is the last of the
-        // three, so one step down wraps onto the first.
+        // three. One step down wraps onto the first.
         Press(host, seat, Down);
         Press(host, seat, Accept);
         ctx.Check(shell.Options.DefaultViewChoice == CSVM.Flight.PilotView.Name(CSVM.Flight.PilotViewMode.Cockpit),
@@ -675,24 +917,18 @@ internal static class MenuOriginalSuites
         Press(host, seat, Accept);
         ctx.Check(shell.Options.AutoHeadTurnChoice == true && shell.FocusedKey == OriginalOptionsScreen.AutoHeadTurnKey,
             $"Accept on the Auto Head Turn checkbox under it turns the head turn on ({shell.Options.AutoHeadTurnChoice})");
-        WalkTo(host, seat, shell, OriginalOptionsScreen.PresentationKey);
-        Press(host, seat, Accept);
-        ctx.Check(shell.Options.OpenGameOption == OriginalOptionsScreen.PresentationKey && shell.Rows.Count == 2,
-            $"Accept on the Menu row under it opens the dropdown over the two shipped presentations ({shell.Options.OpenGameOption}, {shell.Rows.Count})");
         Press(host, seat, Down);
-        Press(host, seat, Accept);
-        ctx.Check(shell.Options.PresentationChoice == PresentationId.BuiltIn.Value,
-            $"and picking the second closes it on the other token ({shell.Options.PresentationChoice})");
-        WalkTo(host, seat, shell, OriginalOptionsScreen.NearestAfterKillKey);
+        ctx.Check(shell.FocusedKey == OriginalOptionsScreen.NearestAfterKillKey,
+            $"the row straight under the head turn is Next Target, no presentation row standing between ({shell.FocusedKey})");
         Press(host, seat, Accept);
         ctx.Check(shell.Options.NearestAfterKillChoice == true,
-            $"Accept on the Next Target checkbox under them turns the targeting setting on ({shell.Options.NearestAfterKillChoice})");
+            $"Accept on the Next Target checkbox turns the targeting setting on ({shell.Options.NearestAfterKillChoice})");
         WalkTo(host, seat, shell, OriginalOptionsScreen.GameOptionsCancelKey);
         Press(host, seat, Accept);
-        ctx.Check(shell.Screen == OriginalScreen.Options && shell.Options.PresentationChoice == PresentationId.Original.Value
+        ctx.Check(shell.Screen == OriginalScreen.Options
             && shell.Options.DifficultyChoice == CSVM.Flight.Difficulty.Normal && shell.Options.NearestAfterKillChoice == null
             && shell.Options.DefaultViewChoice == null && shell.Options.AutoHeadTurnChoice == null,
-            $"CANCEL CHANGES lands back on Preferences with every edit dropped ({shell.Screen}, {shell.Options.PresentationChoice}, {shell.Options.DifficultyChoice}, {shell.Options.NearestAfterKillChoice}, {shell.Options.DefaultViewChoice ?? "none"}, {shell.Options.AutoHeadTurnChoice})");
+            $"CANCEL CHANGES lands back on Preferences with every edit dropped ({shell.Screen}, {shell.Options.DifficultyChoice}, {shell.Options.NearestAfterKillChoice}, {shell.Options.DefaultViewChoice ?? "none"}, {shell.Options.AutoHeadTurnChoice})");
         WalkTo(host, seat, shell, OriginalShell.OptionsBackKey);
         Press(host, seat, Accept);
         ctx.Check(shell.Screen == OriginalScreen.TopLevel && exits.Count == 1,
@@ -700,10 +936,11 @@ internal static class MenuOriginalSuites
         WalkTo(host, seat, shell, OriginalShell.FreeFlightKey);
     }
 
-    // The grown plate and what stands on it: the page carries more rows than the section's three, so
-    // the plate is drawn as a head, the repeated row band and a tail instead of one picture, it
-    // reaches a whole band further down than the art it is cut from, the two plaques stand that same
-    // band below their authored line, and no row's own reach crosses the moved plaque line.
+    // The grown plate and what stands on it. The page carries more rows than the section's three.
+    // The plate is drawn as a head, the repeated row band and a tail rather than one picture. It
+    // reaches a whole band further down than the art it is cut from. The two plaques stand that
+    // same band below their authored line. Every row stands wholly inside one band, a single band
+    // carries two of them, and no row's own reach crosses the moved plaque line.
     private static void OriginalGameOptionsPlate(TestContext ctx, OriginalShell shell, ComposedBoard board)
     {
         var plate = new List<BoardPicture>();
@@ -735,15 +972,63 @@ internal static class MenuOriginalSuites
         ctx.Check(Math.Abs(accept - (AuthoredPlaqueY + AuthoredGameOptionPitch)) < 0.5f && Math.Abs(cancel - accept) < 0.5f,
             $"with ACCEPT CHANGES and CANCEL CHANGES that same band below their authored line ({accept}, {cancel})");
 
+        // The first band opens one band above the head crop's bottom edge, so every band after it is
+        // a whole pitch down from there; a row wholly inside one of them stands on drawn panel.
+        float first = plate.Count > 0 ? plate[0].Y + (plate[0].Crop?.Height ?? 0f) - AuthoredGameOptionPitch : 0f;
+        var held = new int[Math.Max(1, plate.Count)];
+        bool banded = plate.Count > 0;
         float lowest = 0f;
         foreach (var row in shell.Rows)
         {
-            lowest = row.Key is OriginalOptionsScreen.GameOptionsAcceptKey or OriginalOptionsScreen.GameOptionsCancelKey
-                ? lowest : Math.Max(lowest, row.Y + row.Height);
+            if (row.Key is OriginalOptionsScreen.GameOptionsAcceptKey or OriginalOptionsScreen.GameOptionsCancelKey)
+            {
+                continue;
+            }
+
+            lowest = Math.Max(lowest, row.Y + row.Height);
+            int band = (int)Math.Floor((row.Y - first) / AuthoredGameOptionPitch);
+            banded &= band >= 0 && band < held.Length
+                && row.Y + row.Height <= first + ((band + 1) * AuthoredGameOptionPitch);
+            held[Math.Clamp(band, 0, held.Length - 1)]++;
         }
 
+        int shared = 0;
+        foreach (int count in held)
+        {
+            shared += count > 1 ? 1 : 0;
+        }
+
+        ctx.Check(banded && shared == 1,
+            $"every option row standing wholly inside one band, one band carrying the pair the canvas leaves no band for ({banded}, {shared} shared)");
         ctx.Check(lowest > 0f && lowest <= accept,
             $"and no option row reaching past that line, which would take one press for two rows ({lowest} of {accept})");
+
+        // A checkbox row's words beside its own box rather than over the band's top edge. They
+        // stand on the box's centre line, in the dropdown rows' own column and left-aligned there.
+        float column = -1f;
+        foreach (var line in board.Lines)
+        {
+            column = line.Text == "Difficulty" ? line.X : column;
+        }
+
+        int aligned = 0;
+        foreach (var row in shell.Rows)
+        {
+            if (row.Kind != OriginalRowKind.Radio)
+            {
+                continue;
+            }
+
+            foreach (var line in board.Lines)
+            {
+                aligned += line.Text is "Auto Head Turn" or "Next Target" or "Rumble"
+                    && line.X == column && line.Justify == BoardJustify.Left
+                    && Math.Abs(line.Y + (line.Size / 2f) - row.Y - (row.Height / 2f)) <= 1f ? 1 : 0;
+            }
+        }
+
+        ctx.Check(column > 0f && aligned == 3,
+            $"each checkbox row's title on its own box's centre line at the dropdown rows' column ({aligned} of 3 at {column})");
     }
 
     private static float RowY(OriginalShell shell, string key)
@@ -771,11 +1056,11 @@ internal static class MenuOriginalSuites
     private static OriginalShell? SwitchBackToOriginal(TestContext ctx, MenuHost host)
     {
         host.Deactivate();
-        string? reason = host.Select(forceBuiltIn: false, cliOverride: null, savedRequest: "original");
+        string? reason = host.Select(forceBuiltIn: false, cliOverride: "original");
         host.Show(MenuReturnDestination.TopLevel);
         var shell = (host.Active as OriginalPresentation)?.Shell;
         ctx.Check(host.Selected == PresentationId.Original && reason == null && shell != null,
-            $"the saved request re-selects Original and Show creates a fresh instance ({host.Selected})");
+            $"an Original request re-selects it and Show creates a fresh instance ({host.Selected})");
         ctx.Check(shell is { Screen: OriginalScreen.TopLevel, PickedChapter: null, FocusedKey: OriginalShell.FreeFlightKey },
             $"standing on its top level with nothing picked and the door focused ({shell?.Screen}, {shell?.PickedChapter ?? "none"}, {shell?.FocusedKey})");
         return shell;
@@ -823,7 +1108,7 @@ internal static class MenuOriginalSuites
         ctx.Check(shell.Options.MonitorChoice != null
             && OptionsStore.TryParseMonitorIndex(shell.Options.MonitorChoice, out int picked) && picked < shell.Options.MonitorWords.Count,
             $"and a sideways step on it takes a screen this machine has ({shell.Options.MonitorChoice ?? "unset"} of {shell.Options.MonitorWords.Count})");
-        // The size row under the borderless default, which owns the size: it draws dead and the
+        // The size row under the borderless default, which owns the size. It draws dead and the
         // walk cannot land on it, so the row the walk ends on is what the check names.
         WalkTo(host, seat, shell, OriginalOptionsScreen.ResolutionKey);
         ctx.Check(shell.Options.ResolutionPinned && Row(shell, OriginalOptionsScreen.ResolutionKey) is { Enabled: false }
@@ -842,7 +1127,7 @@ internal static class MenuOriginalSuites
         ctx.Check(shell.Options.DisplayModeChoice == DisplayWords.Fullscreen,
             $"a sideways step on the focused row takes the display mode after the borderless default ({shell.Options.DisplayModeChoice ?? "unset"})");
         // The row's own words are this machine's screen sizes, so what it steps to is read back off
-        // the shell rather than named: the claim is that the step lands on a size the screen offers
+        // the shell rather than named. The claim is that the step lands on a size the screen offers,
         // and not on the screen's own size the row opened at.
         WalkTo(host, seat, shell, OriginalOptionsScreen.ResolutionKey);
         Press(host, seat, Right);
@@ -1017,15 +1302,15 @@ internal static class MenuOriginalSuites
     // is not there falls back to Built-in with the availability reason and the request kept.
     private static void Recovery(TestContext ctx, MenuHost host, PresentationRegistry registry, RecordingAudio audio)
     {
-        string? reason = host.Select(forceBuiltIn: true, cliOverride: "original", savedRequest: "original");
+        string? reason = host.Select(forceBuiltIn: true, cliOverride: "original");
         ctx.Check(host.Selected == PresentationId.BuiltIn && reason != null && host.Requested == PresentationId.Original,
             $"--force-builtin resolves Built-in over the Original override and keeps the request ({reason})");
 
         var missing = new MenuHost(registry, audio, _ => { });
         missing.Availability = id => id == PresentationId.Original ? OriginalAvailability.Load(EmptyDataRoot(ctx), out var why) == null ? why : null : null;
-        reason = missing.Select(forceBuiltIn: false, cliOverride: null, savedRequest: "original");
+        reason = missing.Select(forceBuiltIn: false, cliOverride: null);
         ctx.Check(missing.Selected == PresentationId.BuiltIn && missing.Requested == PresentationId.Original,
-            $"a data root with no decoded layout selects Built-in and keeps the saved request ({missing.Selected}, {missing.Requested})");
+            $"a flagless run over a data root with no decoded layout selects Built-in and keeps the Original request ({missing.Selected}, {missing.Requested})");
         ctx.Check(reason != null && reason.Contains("menu_layout.json", System.StringComparison.Ordinal),
             $"with the reason naming the missing file ({reason})");
     }

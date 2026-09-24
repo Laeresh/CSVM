@@ -7,8 +7,8 @@ using Godot;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// The mission radio queue: the non-positional voice channel a mission's objective callouts play
-/// on, beside <see cref="MusicPlayer"/>'s streaming channel and <see cref="WorldSounds"/>'s pooled
+/// The mission radio queue: the non-positional voice channel a mission's objective callouts and
+/// every combat voice line play on, beside <see cref="MusicPlayer"/>'s streaming channel and <see cref="WorldSounds"/>'s pooled
 /// 3D emitters. A cue names a radio definition or a VO dialogue chain; a chain plays its lines in
 /// order as one call, and a call that arrives while another is speaking queues behind it rather
 /// than cutting in. The start delay and the per-line wait tolerance are the original's, decoded in
@@ -27,6 +27,10 @@ public sealed partial class MissionRadio : Node
     /// <summary>Added to an authored QUEUE value to get the real tolerance. The library reads the
     /// key and then adds this.</summary>
     public const float ToleranceBias = 0.3f;
+
+    /// <summary>The speaker id of a call no pilot owns (every objective callout), which
+    /// <see cref="IsSpeaking"/> answers false for.</summary>
+    public const int NoSpeaker = -1;
 
     private readonly IReadOnlyDictionary<string, SoundDef> _defs;
     private readonly IReadOnlyDictionary<string, SoundGroup> _groups;
@@ -71,20 +75,50 @@ public sealed partial class MissionRadio : Node
             return 0;
         }
 
-        // The tolerance is the first line's: the data authors one QUEUE value per mission, so
-        // every line of a chain carries the same number anyway.
-        float tolerance = _defs.TryGetValue(lines[0], out var first) && first.QueueSeconds is { } q
-            ? q + ToleranceBias
-            : DefaultToleranceSeconds;
-        _queue.Add(new RadioCall
-        {
-            Cue = name,
-            Lines = lines,
-            Tolerance = tolerance,
-            Delay = CueDelaySeconds,
-        });
-        Log.Debug("sound", $"radio queue cue={name} lines={lines.Count} wait<={tolerance:0.#}s pending={_queue.Count}");
+        Enqueue(name, lines, CueDelaySeconds, NoSpeaker);
         return lines.Count;
+    }
+
+    /// <summary>Queues one combat voice line on this same channel with no start delay, and returns
+    /// the definition it will speak, or null when the name is no radio line or its WAV never
+    /// decoded. The original hands a combat bark to the one queue the objective cues use, without
+    /// their delay (docs/formats/sounds.md). <paramref name="speakerId"/> is the pilot the line
+    /// belongs to, what <see cref="IsSpeaking"/> answers from.</summary>
+    public string? Speak(string name, Random rng, int speakerId = NoSpeaker)
+    {
+        if (Resolve(name, rng) is not { Count: > 0 } lines || _stream(lines[0]) == null)
+        {
+            return null;
+        }
+
+        Enqueue(name, lines, 0f, speakerId);
+        return lines[0];
+    }
+
+    /// <summary>Whether this pilot's own line holds the channel: queued, or on air with its length
+    /// not yet elapsed. The combat-voice gate's "must not already be talking" reads this, so a
+    /// speaker cannot queue a second line over its own first and have the tolerance drop it.</summary>
+    public bool IsSpeaking(int speakerId)
+    {
+        if (speakerId == NoSpeaker)
+        {
+            return false;
+        }
+
+        if (_lineLeft > 0f && _onAir != null && _onAir.Speaker == speakerId)
+        {
+            return true;
+        }
+
+        foreach (var call in _queue)
+        {
+            if (call.Speaker == speakerId)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>Drops queued calls the named sounds belong to, if they have not started speaking:
@@ -154,6 +188,24 @@ public sealed partial class MissionRadio : Node
     }
 
     public override void _Ready() => AddChild(_player);
+
+    private void Enqueue(string name, List<string> lines, float delay, int speakerId)
+    {
+        // The tolerance is the first line's: the data authors one QUEUE value per mission, so
+        // every line of a chain carries the same number anyway.
+        float tolerance = _defs.TryGetValue(lines[0], out var first) && first.QueueSeconds is { } q
+            ? q + ToleranceBias
+            : DefaultToleranceSeconds;
+        _queue.Add(new RadioCall
+        {
+            Cue = name,
+            Lines = lines,
+            Tolerance = tolerance,
+            Delay = delay,
+            Speaker = speakerId,
+        });
+        Log.Debug("sound", $"radio queue cue={name} lines={lines.Count} wait<={tolerance:0.#}s pending={_queue.Count}");
+    }
 
     // Which lines a cue speaks: a chain group in order, a weighted group's pick, or a bare radio
     // definition. Null for anything this channel does not own.
@@ -234,7 +286,8 @@ public sealed partial class MissionRadio : Node
         }
     }
 
-    // One queued call: the cue that raised it and the lines it speaks, in order.
+    // One queued call: the cue that raised it, the lines it speaks in order, and the pilot it
+    // belongs to (NoSpeaker for an objective callout, which no voice gate asks about).
     private sealed class RadioCall
     {
         public string Cue = "";
@@ -244,6 +297,7 @@ public sealed partial class MissionRadio : Node
         public float Delay;
         public float Waited;
         public float Tolerance;
+        public int Speaker = NoSpeaker;
 
         public bool Names(string name) =>
             string.Equals(Cue, name, StringComparison.OrdinalIgnoreCase)

@@ -98,13 +98,12 @@ public partial class Launcher : Node3D
     // that dither rather than removing it (headless measure of the 2 px component, 1.6x base).
     private const float EnhancedShadowBlur = 1.0f;
 
-    // TUNE, measured headless. The filter the sun's soft shadow is sampled with. At the project
-    // default (SoftLow) a 25° sun's own self-occlusion resolves into a fine screen-space lattice
-    // over grazing lit terrain and water, at about half the amplitude of the shadow map's acne;
-    // SoftHigh halves that amplitude again for 0.8 ms of GPU at 720p, and SoftUltra buys nothing
-    // measurable beyond it. This is renderer-global state, set only on the enhanced path here.
-    private const RenderingServer.ShadowQuality EnhancedSoftShadowFilter =
-        RenderingServer.ShadowQuality.SoftHigh;
+    // ⚠ Do not lower this while EnhancedShadowAngularDistance stays above the sun's real 0.5°.
+    // Godot resolves a penumbra by sampling the shadow map through a disc rotated per screen
+    // pixel. Too few samples for the disc's width leave that rotation as a woven pattern over
+    // every lit surface. This width needs the top rung.
+    private const RenderingServer.ShadowQuality EnhancedShadowFilterQuality =
+        RenderingServer.ShadowQuality.SoftUltra;
 
     // TUNE, judged at the controls on C2/C5. Godot's own default (1.0 m) reads a building's own
     // trim but misses the wider contact shading a street canyon wants at this world's scale
@@ -259,8 +258,8 @@ public partial class Launcher : Node3D
     // the mission ends inside the session's own physics step, which is no place to free it.
     private (string Profile, CampaignMissionResult Result)? _pendingDebrief;
 
-    // The numbers an ended Instant Action mission froze, acted on at the top of the next frame for
-    // the same reason the debrief is: the ending arrives inside the session's own step.
+    // The final numbers of an ended Instant Action mission, acted on at the top of the next frame.
+    // The reason is the debrief's: the ending arrives inside the session's own step.
     private IaWrapupSnapshot? _pendingWrapup;
 
     // The load screen and the deferred build behind it (BeginLaunch → _Process). A build is one
@@ -269,13 +268,13 @@ public partial class Launcher : Node3D
     // ⚠ Null/-1 means no launch is owed; a CLI launch does not come through here at all.
     private CanvasLayer? _loadLayer;
     private int _launchFramesWaited = -1;
-    // The load screen's second half: once the session is built, the work it ordered for the load
-    // is carried out one step a frame with the screen still up, which is what makes the screen a
-    // real yield of several frames. -1 means nothing is owed.
+    // This is the load screen's second half. Once the session is built, the work it ordered for the
+    // load is carried out one step a frame with the screen still up. That is what makes the screen
+    // a real yield of several frames. -1 means nothing is owed.
     private int _loadStepsRun = -1;
-    // The cover that bridges the load screen and the session's first real frame: raised with the
-    // screen (or, on a CLI launch, with the build), held opaque until the session says that frame
-    // is ready, then faded up from dark. Null under --det and once it has finished.
+    // The cover that bridges the load screen and the session's first real frame. It is raised with
+    // the screen, or with the build on a CLI launch. It stays opaque until the session says that
+    // frame is ready, then fades up from dark. Null under --det and once it has finished.
     private UI.SessionStartFade? _startFade;
 
     private double _perfClock;
@@ -362,12 +361,11 @@ public partial class Launcher : Node3D
     private LaunchMenu? BuiltInMenu => (_menuHost?.Active as BuiltInPresentation)?.Menu;
 
     // The presentation a session's boards take. A menu launch has already settled it on the host,
-    // availability and saved option included. A CLI launch builds no host and reads no saved menu
-    // option, since it never went through the menu, so only the flags speak for it there.
+    // availability included. A CLI launch builds no host, so only the flags speak for it there.
     private PresentationId SessionPresentation =>
         _menuHost is { } host ? host.Selected
         : _spec.ForceBuiltInPresentation ? PresentationId.BuiltIn
-        : new PresentationId(Utils.PresentationResolution.Requested(_spec.PresentationOverride, null));
+        : new PresentationId(Utils.PresentationResolution.Requested(_spec.PresentationOverride));
 
     public override void _Ready()
     {
@@ -464,8 +462,8 @@ public partial class Launcher : Node3D
         {
             Pads.Disabled = true;
         }
-        // Read by both AI pickers, for the same reason the two statics above are statics: it
-        // settles once per launch and no pilot or gunner chooses it for itself.
+        // Read by both AI pickers, for the same reason the two statics above are statics. It
+        // settles once per launch, and no pilot or gunner chooses it for itself.
         Flight.AiTargetRanking.AircraftFirst = _spec.AircraftFirstTargeting;
         _captureDirector = new Testing.CaptureDirector(_spec);
         _gltfExporter = new Testing.GltfExporter(_spec);
@@ -615,10 +613,21 @@ public partial class Launcher : Node3D
         // rule the saved graphics word below follows; SavedLevels owns that drop.
         var savedMix = AudioMix.SavedLevels(_spec.Det);
         AudioMix.Apply(savedMix.Master, savedMix.Music, savedMix.Effects, savedMix.Voice);
+        // Logged on every launch, not only when a flag moved it. The shipped factor is a departure
+        // from the decoded radii, so a run's record has to say what reach it played at.
+        Mech3.SoundFalloff.SetRangeScale(_spec.SoundRangeScale);
+        string rangeVia = Mech3.SoundFalloff.RangeScale == Mech3.SoundFalloff.ShippedRangeScale
+            ? "shipped" : "--sound-range-scale";
+        Log.Info("sound", $"sound range scale=x{Mech3.SoundFalloff.RangeScale:0.###} via={rangeVia}, every positional RANGE pair and its cull multiplied");
         // The haptics toggle, read under the same rule and defaulting ON where nothing is saved.
-        // ⚠ A deterministic run never rumbles: a golden sweep or a scripted probe must not reach the
-        // hardware on the desk, and no screen is drawn from this.
+        // ⚠ A deterministic run never rumbles. A golden sweep or a scripted probe must not reach
+        // the hardware on the desk, and no screen is drawn from this.
         PadRumble.Enabled = !_spec.Det && OptionsStore.UserOptions().Load().Rumble != false;
+        // The rocket carve, defaulting OFF: the original carves nothing in play. ⚠ No screen offers
+        // it. The saved key and --craters are its only doors, read here and nowhere else. A --det
+        // run drops the key, keeping every golden clear of a bowl; the flag survives it, for a probe.
+        CraterGate.Enabled = _spec.Craters
+            || (!_spec.Det && OptionsStore.UserOptions().Load().RocketCraters == true);
         // Before the first PreferUnzipped call and process-wide, so every later resolution (the
         // chapter paths in StartSession, the menu pages' own lookups) takes the same asset shape.
         SessionPaths.ForceZipped = _spec.ZipAssets;
@@ -649,11 +658,23 @@ public partial class Launcher : Node3D
         // overrides it from WeatherState.WorldLight below.
         RenderingServer.GlobalShaderParameterAdd("csky_world_light",
             RenderingServer.GlobalShaderParameterType.Float, 1.0f);
-        // The world direction toward the sun, read by the enhanced billboard arms that grade a
-        // hand-billboarded sprite by it (csky_sun.gdshaderinc, which has the decode). Registered in
-        // both modes, because the global must exist before a shader declaring it compiles.
+        // The same SUNLIGHT uncollapsed, for the cloud cards and the enhanced billboard grades
+        // (docs/org/vertexLighting.md). The defaults, ambient 1 and diffuse 0, draw a card as
+        // authored in a view without mission weather.
         RenderingServer.GlobalShaderParameterAdd("csky_sun_dir",
-            RenderingServer.GlobalShaderParameterType.Vec3, Vector3.Up);
+            RenderingServer.GlobalShaderParameterType.Vec3, new Vector3(0f, 1f, 0f));
+        RenderingServer.GlobalShaderParameterAdd("csky_sun_light",
+            RenderingServer.GlobalShaderParameterType.Vec2, new Vector2(1f, 0f));
+        // The same pair with its colours (WeatherRig.SunVertexLight), which the faithful aircraft
+        // reads. SetupLighting replaces these registration defaults with the day pair.
+        RenderingServer.GlobalShaderParameterAdd("csky_sun_ambient_rgb",
+            RenderingServer.GlobalShaderParameterType.Vec3, Vector3.One);
+        RenderingServer.GlobalShaderParameterAdd("csky_sun_diffuse_rgb",
+            RenderingServer.GlobalShaderParameterType.Vec3, Vector3.Zero);
+        // The Danger Zone photograph's ambient half for its own pilot (WeatherRig.PhotographFill);
+        // ambient 1 fills to 1, so the default agrees with the ambient default above.
+        RenderingServer.GlobalShaderParameterAdd("csky_sun_fill_rgb",
+            RenderingServer.GlobalShaderParameterType.Vec3, Vector3.One);
         // The world sampler's mip LOD bias. 0 is the original's own device default, so a chapter
         // authoring no MipBias renders exactly as it did (docs/org/textures.md).
         RenderingServer.GlobalShaderParameterAdd("csky_mip_bias",
@@ -784,8 +805,8 @@ public partial class Launcher : Node3D
                 Log.Info("core", $"gamepad: device {p} \"{Input.GetJoyName(p)}\" guid={Input.GetJoyGuid(p)} info={Input.GetJoyInfo(p)}");
 
         SetupLighting();
-        // The same two framings GameSession re-applies per launch: the decoded world base for
-        // every camera that draws the world, the viewer's own 50 for a model on a stage.
+        // GameSession re-applies these same two framings per launch. The decoded world base serves
+        // every camera that draws the world, and the viewer's own 50 a model on a stage.
         _camera = new Camera3D
         {
             Fov = _spec.Fly || _spec.Freecam || _spec.AnimLab ? CameraController.ExternalFovDeg : 50f,
@@ -855,6 +876,14 @@ public partial class Launcher : Node3D
             }
 
             ShowMenu(MenuReturnDestination.TopLevel);
+            return;
+        }
+
+        // --debug-load stands the real screen over a CLI launch, deferred build and all. That is
+        // the only way to watch the bar with nobody at the menu.
+        if (_spec.DebugLoad != null)
+        {
+            BeginLaunch();
             return;
         }
 
@@ -1076,8 +1105,8 @@ public partial class Launcher : Node3D
     }
 
     // Where a flight left early lands, taken from the launch that starts it. Every menu launch path
-    // writes it here and ExitSession reads it back, so the rule stands in one place.
-    // ⚠ Keep it internal rather than private: nothing instantiates a Launcher headlessly, so the
+    // writes it here, ExitSession reads it back, and the rule stands in one place.
+    // ⚠ Keep it internal rather than private. Nothing instantiates a Launcher headlessly, so the
     // launch-return suite pins this round trip on the live node or not at all.
     internal void LaunchedFrom(MenuExit exit) => ExitDestination = MenuReturnDestination.ForLaunch(exit);
 
@@ -1155,9 +1184,9 @@ public partial class Launcher : Node3D
     // published clock, the world lights, the camera restore) cannot land on top of the new one.
     private void RunOwedLaunch()
     {
-        // The load screen's second half: the session exists, and what it ordered for the load is
-        // carried out a step a frame behind the same screen. A step is one wave aeroplane, so the
-        // launch frame that needs it later binds a finished one instead of building it.
+        // This is the load screen's second half. The session exists, and what it ordered for the
+        // load is carried out a step a frame behind the same screen. A step is one wave aeroplane,
+        // so the launch frame that needs it later binds a finished one instead of building it.
         if (_loadStepsRun >= 0)
         {
             if (_session is { } loading && loading.StepOwedLoad())
@@ -1179,7 +1208,7 @@ public partial class Launcher : Node3D
         _launchFramesWaited = -1;
         bool built = LaunchSession();
         // The screen stays up while the build's own owed steps run, and comes down on the frame
-        // they finish: a load screen left up past that would draw over the first frame of the
+        // they finish. A load screen left up past that would draw over the first frame of the
         // world, and over a --screenshot capture.
         if (built && _session is { } loaded && loaded.StepOwedLoad())
         {
@@ -1219,9 +1248,10 @@ public partial class Launcher : Node3D
         _launchFramesWaited = 0;
     }
 
-    // The cover, up before the load screen that hides it, so the frame the screen comes down on is
-    // already covered and no frame between the two shows the world. Replacing a cover still up (a
-    // relaunch straight out of a session) starts the hold again, which is what a fresh build wants.
+    // The cover goes up before the load screen that hides it. The frame the screen comes down on is
+    // then already covered, and no frame between the two shows the world. Replacing a cover still
+    // up (a relaunch straight out of a session) starts the hold again, which is what a fresh build
+    // wants.
     private void RaiseStartCover()
     {
         DropStartCover();
@@ -1257,8 +1287,10 @@ public partial class Launcher : Node3D
             ? CampaignLoadSheet(missionSeq ?? _spec.CampaignMissionSeq ?? 0)
             : null;
         _loadLayer = new CanvasLayer { Name = "load_board", Layer = UI.HudLayers.Board };
-        _loadLayer.AddChild(UI.LoadBoard.Build(
-            _dataRoot, _zrdrPath, _messagesPath, campaign, subject, missionType, sheet));
+        var board = UI.LoadBoard.Build(
+            _dataRoot, _zrdrPath, _messagesPath, campaign, subject, missionType, sheet);
+        board.CaptureDir = _spec.DebugLoad ?? string.Empty;
+        _loadLayer.AddChild(board);
         AddChild(_loadLayer);
     }
 
@@ -1389,7 +1421,7 @@ public partial class Launcher : Node3D
             && Flight.SpawnPoints.LoadPlayerInit(missionZrdr) is { } init)
         {
             // Through the readout's own conversion off a nose vector, never off the spawn's heading
-            // degrees: those are the mission data's yaw, which runs opposite the compass.
+            // degrees. Those are the mission data's yaw, which runs opposite the compass.
             var nose = new Basis(Vector3.Up, Mathf.DegToRad(init.Spawn.HeadingDeg)) * Vector3.Forward;
             if (UI.PauseReadout.Icon(
                 sheet.Shared.OwnShip, init.Spawn.Position.X, init.Spawn.Position.Z,
@@ -1409,8 +1441,8 @@ public partial class Launcher : Node3D
         return new UI.PauseReadout(rows, SeatedMemento(), icons);
     }
 
-    // The picture the seated profile hangs, read back off the store the cabin's chooser writes, so
-    // this screen, a real pause and the cabin wall all draw the one name. A launch or a door with
+    // The picture the seated profile hangs, read back off the store the cabin's chooser writes.
+    // This screen, a real pause and the cabin wall all draw the one name. A launch or a door with
     // no profile behind it draws the seeded keepsake (docs/org/pause-screen.md).
     private string SeatedMemento() =>
         CampaignMementos.BitmapFor(
@@ -1493,9 +1525,9 @@ public partial class Launcher : Node3D
         });
         AddChild(_session);
         bool built = _session.StartSession();
-        // A CLI launch has no load screen to yield behind, so what the build ordered for the load
-        // runs here, inside the same block the rest of the build ran in. The menu path steps it one
-        // a frame with the screen still up instead (RunOwedLaunch).
+        // A CLI launch has no load screen to yield behind. What the build ordered for the load runs
+        // here, inside the same block as the rest of the build. The menu path steps it one a frame
+        // with the screen still up instead (RunOwedLaunch).
         if (built && _loadLayer == null)
         {
             int steps = 0;
@@ -1518,8 +1550,8 @@ public partial class Launcher : Node3D
         // C8: the build's own scopes (loads, material creation) belong to no frame, and the frame
         // that closes over the build would otherwise report them all at once.
         PerfSample.Reset();
-        // Same boundary for every bracket: a build that spans the tail leaves a half-open tick,
-        // pass, AI walk or phase whose next close would charge the whole build to one step.
+        // Every bracket takes the same boundary. A build that spans the tail leaves a half-open
+        // tick, pass, AI walk or phase. Its next close would charge the whole build to one step.
         PhysicsTickCost.Reset();
         ProcessPassCost.Reset();
         AiStepCost.Reset();
@@ -1549,36 +1581,46 @@ public partial class Launcher : Node3D
         if (GraphicsMode.Enhanced)
             EnableSunShadows(_sun);
         AddChild(_sun);
-        // After the AddChild, so the bearing published is the one the light wears in the tree. A
-        // session with no weather.json never reaches ApplyZone, and this is the only write it gets.
+        // The modal day pair under this bearing, after the AddChild so the bearing is the one the
+        // light wears in the tree. A session with no weather.json never reaches ApplyZone, and
+        // this write shades its planes like a day zone.
+        (Vector3 dayDiffuse, Vector3 dayAmbient) = WeatherRig.DefaultSunlightRgb;
         WeatherRig.WriteSunDirection(_sun);
+        RenderingServer.GlobalShaderParameterSet("csky_sun_ambient_rgb", dayAmbient);
+        RenderingServer.GlobalShaderParameterSet("csky_sun_diffuse_rgb", dayDiffuse);
+        RenderingServer.GlobalShaderParameterSet("csky_sun_fill_rgb",
+            Vector3.One * WeatherRig.PhotographFillAmbient(WeatherState.DefaultAmbient));
 
         _env = new Godot.Environment
         {
             BackgroundMode = Godot.Environment.BGMode.Sky,
             Sky = new Sky { SkyMaterial = new ProceduralSkyMaterial() },
-            // ⚠ Colour-sourced in BOTH modes, never AmbientSource.Sky: a sky ambient fills a night
+            // ⚠ Colour-sourced in BOTH modes, never AmbientSource.Sky. A sky ambient fills a night
             // chapter's aircraft off the same daylight gradient a day one gets, and ignores the
             // pair written here. Per-zone values: WeatherRig.ApplyZone (docs/architecture.md).
             AmbientLightSource = Godot.Environment.AmbientSource.Color,
             AmbientLightColor = Colors.White,
             AmbientLightEnergy = WeatherRig.DefaultEnergies.Ambient,
         };
-        // Enhanced mode alone: SSAO darkens ambient light where geometry occludes it, and the
-        // faithful path's world is fullbright, so it would find nothing to occlude. The cockpit
-        // pass duplicates this Environment (CockpitOverlay.NewOverlay) and inherits the settings.
+        // Enhanced mode alone: the faithful path's world is fullbright, so none of these passes has
+        // anything to work on. The cockpit pass duplicates this Environment
+        // (CockpitOverlay.NewOverlay) and inherits the settings.
         if (GraphicsMode.Enhanced)
         {
             UseMissionSky(_env);
-            _env.SsaoEnabled = true;
-            _env.SsaoRadius = EnhancedSsaoRadius;
-            _env.SsaoIntensity = EnhancedSsaoIntensity;
-            _env.SsaoPower = EnhancedSsaoPower;
-            _env.SsaoDetail = EnhancedSsaoDetail;
-            _env.SsaoHorizon = EnhancedSsaoHorizon;
-            _env.SsaoSharpness = EnhancedSsaoSharpness;
-            EnableWaterReflections(_env);
-            EnableGlowAndTonemap(_env);
+            if (!Skipped(EnhancedPasses.Ssao))
+            {
+                EnableAmbientOcclusion(_env);
+            }
+            if (!Skipped(EnhancedPasses.Ssr))
+            {
+                EnableWaterReflections(_env);
+            }
+            if (!Skipped(EnhancedPasses.Glow))
+            {
+                EnableGlow(_env);
+            }
+            UseFilmicTonemap(_env);
         }
         AddChild(new WorldEnvironment { Environment = _env });
     }
@@ -1609,9 +1651,28 @@ public partial class Launcher : Node3D
         sun.DirectionalShadowBlendSplits = true;
         sun.ShadowBias = EnhancedShadowBias;
         sun.ShadowNormalBias = EnhancedShadowNormalBias;
-        sun.LightAngularDistance = EnhancedShadowAngularDistance;
-        sun.ShadowBlur = EnhancedShadowBlur;
-        RenderingServer.DirectionalSoftShadowFilterSetQuality(EnhancedSoftShadowFilter);
+        // Both zero leaves a hard shadow edge rather than no shadow. That isolates the penumbra
+        // filter, which is the part resolving with a screen-space sample pattern.
+        bool hard = Skipped(EnhancedPasses.SoftShadows);
+        sun.LightAngularDistance = hard ? 0f : EnhancedShadowAngularDistance;
+        sun.ShadowBlur = hard ? 0f : EnhancedShadowBlur;
+        // A renderer-wide setting rather than a light property. It is set here beside the width it
+        // carries, not in project.godot, where the faithful path would inherit it.
+        RenderingServer.DirectionalSoftShadowFilterSetQuality(
+            hard ? RenderingServer.ShadowQuality.Hard : EnhancedShadowFilterQuality);
+    }
+
+    // Ambient occlusion, which darkens the ambient term where geometry occludes it. The faithful
+    // path's world is fullbright, so this pass would find nothing there to occlude.
+    private void EnableAmbientOcclusion(Godot.Environment env)
+    {
+        env.SsaoEnabled = true;
+        env.SsaoRadius = EnhancedSsaoRadius;
+        env.SsaoIntensity = EnhancedSsaoIntensity;
+        env.SsaoPower = EnhancedSsaoPower;
+        env.SsaoDetail = EnhancedSsaoDetail;
+        env.SsaoHorizon = EnhancedSsaoHorizon;
+        env.SsaoSharpness = EnhancedSsaoSharpness;
     }
 
     // Screen-space reflection, for the one glossy population in the world: the water surfaces
@@ -1627,13 +1688,10 @@ public partial class Launcher : Node3D
         env.SsrDepthTolerance = EnhancedSsrDepthTolerance;
     }
 
-    // Enhanced mode alone: with a lit world, sun, shadows and real light energy feeding the HDR
-    // colour buffer, values can exceed 1.0 and clip instead of rolling off, and C21's glow-arm
-    // sprites are the only surfaces meant to bloom. The cockpit pass duplicates this Environment
-    // at build time (CockpitOverlay.NewOverlay), so its own tonemap matches the world pass exactly.
-    // Under Enhanced the puffer fire flipbook joins them: MultiMeshEmitterRenderer lifts the
-    // fire_f01-fire_f06 columns alone over this threshold, and no other particle sprite crosses it.
-    private void EnableGlowAndTonemap(Godot.Environment env)
+    // Enhanced mode alone. A lit world's real light energy feeds the HDR colour buffer, and only
+    // C21's glow-arm sprites and the puffer fire flipbook bloom out of it.
+    // MultiMeshEmitterRenderer lifts the fire_f01-fire_f06 columns alone over this threshold.
+    private void EnableGlow(Godot.Environment env)
     {
         env.GlowEnabled = true;
         env.GlowHdrThreshold = EnhancedGlowHdrThreshold;
@@ -1643,11 +1701,23 @@ public partial class Launcher : Node3D
         env.GlowBlendMode = EnhancedGlowBlendMode;
         env.GlowHdrScale = EnhancedGlowHdrScale;
         env.GlowHdrLuminanceCap = EnhancedGlowHdrLuminanceCap;
+    }
+
+    // Enhanced mode alone: without it the HDR values a lit world produces clip instead of rolling
+    // off. It is not a pass a bisect door closes, since every enhanced frame's exposure depends on
+    // it. The cockpit pass duplicates this Environment at build time (CockpitOverlay.NewOverlay),
+    // so its own tonemap matches the world pass exactly.
+    private void UseFilmicTonemap(Godot.Environment env)
+    {
         env.TonemapMode = EnhancedTonemapMode;
         env.TonemapExposure = EnhancedTonemapExposure;
         env.TonemapAgxWhite = EnhancedTonemapAgxWhite;
         env.TonemapAgxContrast = EnhancedTonemapAgxContrast;
     }
+
+    // Whether this run asked for that enhanced pass to be left out. Closing one door at a time
+    // bisects a full-screen artefact to the pass that draws it; docs/cli.md holds them.
+    private bool Skipped(EnhancedPasses pass) => (_spec.SkippedPasses & pass) != 0;
 
     // The dead end for a launch with no extraction under the data root: the screen goes up and
     // nothing else is built, so the window carries the answer instead of the log. Esc leaves
@@ -1725,7 +1795,7 @@ public partial class Launcher : Node3D
     // player-setup features, the first seat (keyboard plus every unclaimed pad behind the
     // launchscreen's own poller, the mouse as its pointer), the audio service over the process's music, archive and
     // the rof tree's menu sounds, and OnMenuExit as the sink. The active presentation is settled
-    // through PresentationResolution: the force flag, --presentation=, then the saved request;
+    // through PresentationResolution: the force flag, --presentation=, then Original;
     // availability is registration plus, for Original, OriginalAvailable below.
     private MenuHost BuildMenuHost()
     {
@@ -1774,8 +1844,7 @@ public partial class Launcher : Node3D
         host.Features.Add(new ControlsFeature((player, profile) =>
             CSVM.Bindings.BindingStore.UserBindings().Save(player, profile)));
         host.AddSeat(seat);
-        string? saved = OptionsStore.UserOptions().Load().MenuPresentation;
-        string? reason = host.Select(_spec.ForceBuiltInPresentation, _spec.PresentationOverride, saved);
+        string? reason = host.Select(_spec.ForceBuiltInPresentation, _spec.PresentationOverride);
         string why = reason == null ? "" : $" reason={reason}";
         Log.Info("ui", $"menu presentation active={host.Selected} requested={host.Requested}{why}");
         return host;
@@ -1823,9 +1892,8 @@ public partial class Launcher : Node3D
     }
 
     // The Options route's apply from the menu: persist and apply every choice, then end the active
-    // presentation (discarding every feature's transient state), re-select with the saved request in
-    // place of any session override, and show the selected presentation at its top level. The force
-    // flag still wins, since it is the recovery path.
+    // presentation (discarding every feature's transient state) and show the same one again at its
+    // top level. No re-select: the presentation is the command line's alone, settled once.
     private void ApplyOptions(OptionsApplyExit applied)
     {
         if (_menuHost == null)
@@ -1834,25 +1902,20 @@ public partial class Launcher : Node3D
         }
 
         PersistOptions(applied);
-        var requested = applied.Presentation;
         _menuHost.Deactivate();
-        string? reason = _menuHost.Select(_spec.ForceBuiltInPresentation, null, requested.Value);
-        string why = reason == null ? "" : $" reason={reason}";
-        Log.Info("ui", $"menu presentation switch requested={requested} active={_menuHost.Selected}{why}");
         ShowMenu(MenuReturnDestination.TopLevel);
     }
 
-    // The options file's one writer, shared by the menu's apply above and by the pause leaf's:
-    // every choice the screen took saved, then the display settings and the mix applied now.
-    // ⚠ The graphics word, the render scale, the opening view and the automatic head turn are saved
-    // and nothing more: each is read once, at launch or as a flight is built, so the choice takes
-    // hold on the next start rather than on this one. Do not rebuild the world here.
+    // The options file's one writer, shared by the menu's apply above and by the pause leaf's.
+    // It saves every choice the screen took. The display settings and the mix are applied now.
+    // ⚠ The graphics word, the render scale, the opening view and the difficulty are saved and no
+    // more. Each is read once, at launch or when a flight is built, so do not rebuild anything
+    // here. The head turn and targeting switch are saved for the next sortie and put on the seats
+    // flying now by the pause leaf itself (PausePreferences.FeedGameOptions).
     private void PersistOptions(OptionsApplyExit applied)
     {
-        var requested = applied.Presentation;
         var store = OptionsStore.UserOptions();
         var options = store.Load();
-        options.MenuPresentation = requested.Value;
         options.GraphicsMode = applied.Graphics;
         options.Difficulty = applied.Difficulty;
         options.NearestAfterKill = applied.NearestAfterKill;
@@ -1881,18 +1944,20 @@ public partial class Launcher : Node3D
         // The mix takes effect now too, through the same call the startup path makes. Apply is
         // idempotent, so an accept from a page that shows no slider rewrites the same three gains.
         AudioMix.Apply(applied.AudioMaster, applied.AudioMusic, applied.AudioEffects, applied.AudioVoice);
-        // The haptics toggle takes effect now for the same reason, so a pilot turning it off over the
+        // The haptics toggle takes effect now for the same reason. A pilot turning it off over the
         // pause sheet flies the rest of the sortie with a quiet pad.
         PadRumble.Enabled = !_spec.Det && applied.Rumble != false;
-        Log.Info("ui", $"options applied: presentation={requested.Value} {Utils.GraphicsMode.Key}={applied.Graphics} difficulty={applied.Difficulty}");
+        // ⚠ The carve is NOT re-armed here. No screen offers it, so the saved key is untouched by an
+        // apply and the gate keeps what boot gave it (see the arming above).
+        Log.Info("ui", $"options applied: {Utils.GraphicsMode.Key}={applied.Graphics} difficulty={applied.Difficulty}");
     }
 
-    // The in-flight Preferences leaf both pause boards open: the decoded layout the Original
-    // presentation composes from, the host's own rebinding feature so a rebind over the pause edits
-    // the keymap the menu edits and saves through the one writer, the menu's audio service for its
-    // cues, and PersistOptions as the apply. ⚠ No presentation switch and no ShowMenu: the flight
-    // returns to the sheet over its own world, so a saved presentation word reaches the shell at the
-    // next start rather than tearing down what the pause stands on. Null where no layout reads.
+    // The in-flight Preferences leaf both pause boards open. It takes the decoded layout the
+    // Original presentation composes from, and the menu's audio service for its cues. The host's
+    // own rebinding feature means a rebind over the pause edits the keymap the menu edits, saved
+    // through the one writer. PersistOptions is the apply. ⚠ No ShowMenu: the flight returns to
+    // the sheet over its own world, not tearing down what the pause stands on. Null where no
+    // layout reads.
     private Flight.PausePreferences? BuildPauseOptions()
     {
         OriginalAvailable(PresentationId.Original);
@@ -2123,8 +2188,8 @@ public partial class Launcher : Node3D
             _session = null;
         }
 
-        // The menu is not a session start, so a cover left over from one (a mission exited inside
-        // its own fade) has nothing left to uncover.
+        // The menu is not a session start. A cover left over from one (a mission exited inside its
+        // own fade) has nothing left to uncover.
         DropStartCover();
         // Same reason as the build in LaunchSession: a teardown legitimately stalls the loop.
         _hitchSidecar.Flush();
@@ -2309,7 +2374,7 @@ public partial class Launcher : Node3D
         double aiPlanes = aiSteps > 0 ? (double)aiPlaneSum / aiSteps : 0;
         double physHz = _perfClock > 0 ? physTicks / _perfClock : 0;
         double physTick = physTicks > 0 ? physTickMs / physTicks : 0;
-        // The split of the two whole-pass terms above by what ran: the sim step per TICK beside
+        // These split the two whole-pass terms above by what ran. The sim step goes per TICK beside
         // phys_tick_ms, the named _Process consumers per FRAME beside proc_ms (src/Utils/PhaseCost.cs).
         string simRow = SimPhaseCost.TakeRow(physTicks);
         string simAllocRow = SimPhaseCost.AllocRow();
@@ -2323,9 +2388,9 @@ public partial class Launcher : Node3D
         double maxMs = _perfFrameMsSorted[PerfWindowFrames - 1];
         double p95Ms = _perfFrameMsSorted[Perf95Index];
         Log.Info("perf", $"window sim_frame={simFrame} frames={_perfFrames} wall_ms={wallMs:0.00} fps={fps:0.0} frame_ms={frameMs:0.00} script_ms={scriptMs:0.00} proc_ms={procMs:0.000} proc_max_ms={procMaxMs:0.000} proc_passes={procPasses} ai_ms={aiMs:0.000} ai_planes={aiPlanes:0.0} render_cpu_ms={renderCpuMs:0.00} gpu_ms={gpuMs:0.00} physics_ms={physicsMs:0.00} phys_tick_ms={physTick:0.000} phys_tick_max_ms={physTickMaxMs:0.000} phys_hz={physHz:0.0} draws={draws:0.0} prims={prims:0.0} nodes={nodes:0.0} mem_mb={memMb:0.00} max_ms={maxMs:0.00} p95_ms={p95Ms:0.00} sim_ms={simRow} proc_sites_ms={procSites}");
-        // Its own line, not another term on the window above: the BYTE figure answers a different
-        // question from the millisecond one (which phase feeds the collector, rather than which
-        // phase the pause landed in, PERF-34), and the two are read side by side.
+        // Its own line, not another term on the window above. The BYTE figure answers a different
+        // question from the millisecond one: which phase feeds the collector, rather than which
+        // phase the pause landed in (PERF-34). The two are read side by side.
         Log.Info("perf", $"alloc sim_frame={simFrame} sim_alloc_b={simAllocRow}");
         _perfClock = 0; _perfFrames = 0; _perfProcess = _perfGpu = _perfCpuRender = _perfPhysics = 0;
         _perfDraws = _perfPrims = _perfNodes = _perfMem = 0;
@@ -2390,7 +2455,7 @@ public sealed class LauncherContext
     public System.Action<string, CampaignMissionResult>? CampaignMissionEnded { get; init; }
 
     /// <summary>Frees the session and shows the menu at the Instant Action wrap-up, carrying the
-    /// numbers frozen at the ending. Null when this process was not launched into the menu, and
+    /// final numbers the ending left. Null when this process was not launched into the menu, and
     /// unused by a presentation whose own board takes the ending inside the flight.</summary>
     public System.Action<IaWrapupSnapshot>? InstantActionWrapup { get; init; }
 

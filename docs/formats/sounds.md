@@ -20,7 +20,9 @@ volume and pitch curves, and the WAV container. The readers are `SoundDefs.cs`, 
 ```
 
 - **Bare flags:** `LOOPED` (plays as a forward loop), `3D` (positional), `FREQUENCY`
-  (the engine may pitch-shift this sound), `SFX`, `PURGEABLE`, `OPTIONAL`.
+  (the buffer gets the frequency control, without which every pitch write on it is refused, see
+  [below](#a-definition-is-pitched-only-when-it-carries-frequency)), `SFX`, `PURGEABLE`,
+  `OPTIONAL`.
 - **Valued keys:** `RANGE [fullVolumeDist, audibleDist]` (meters), `VOLUME [gain]`,
   `QUEUE [waitSeconds]`, `QPRIORITY [n]`.
 
@@ -50,6 +52,18 @@ on three definitions in `c3m05` and nowhere else; ⚠ which direction is more ur
 nothing reads it. ⚠ The tolerance is a wait rule, not a deadline on the cue's own 1 s start delay:
 charging the delay against it drops every 0.5 s bark before it can speak. The cue delay and the
 `STOP_QUEUED_SOUNDS` cancellation are [objectives.md](objectives.md).
+
+⚠ **There is one queue, and combat voice speaks on it.** A combat line's play call
+(`FUN_004afc90`, reached from the talker gate `FUN_004afd00`) is `FUN_00593590(def, 1.0)`, which
+hands a non-streamed definition to `FUN_00593b80(def, gain, pos = 0, vel = 0)`. There, the
+definition's queued bit (flag word `+0x0c`, bit `0x200`, the `QUEUE` key) routes it to
+`FUN_00593a70`, which builds a queue item stamped `now + wait` and inserts it into the single
+global list `DAT_00639eac`. The pump `FUN_00593110` holds one item on air at a time
+(`DAT_00639eb4`), starts the next only after the current voice stops plus 0.3 s, and skips an item
+whose stamp has passed. The position pointer is null on this path, so a combat line is flat, never
+placed at the speaker. The remake's `MissionRadio` is that queue: objective cues enter it through
+`Cue` with their 1 s delay, and combat lines through `Speak` with none. ⚠ The 0.3 s gap between
+items is not modelled; `MissionRadio` starts a waiting call on the step after the last line ends.
 
 Beside the effect/UI sets (`COMMON`, the per-mission `c<x>m<nn>` sets, the `brief_*` and `DIALOG`
 sets), 35 sets named `id<N>` carry the combat-voice clips: `snd_id<N>_<TYPE>` →
@@ -93,7 +107,40 @@ counted from the shelf, so the level holds far longer in absolute distance: a `R
 siren is unattenuated to 325 m, 10 dB down at 450 m, 20 at 700 m and 30 at its audible radius,
 where the curve is continuous into the tail and reaches the floor at 1320 m. No engine attenuation
 model expresses that shape, so `CSVM/src/Mech3/SoundFalloff.cs` computes it and drives the player's
-level itself.
+level itself, on every positional path alike: the world's ambient emitters and one-shots, an
+aircraft's gun loop and dry cue, and a mount's gun voice all carry a player with no attenuation
+model and no `MaxDistance`, since either would multiply a second curve onto the decoded one.
+
+⚠ **No listener-side term scales the reach: the distance the curve reads is the raw world distance
+from the camera to the emitter, and the radii are the authored ones.** Each place such a term could
+sit in the retail build has been read and holds none:
+
+- **DirectSound's 3D listener.** The software path `FUN_00597c20` touches only the voice buffer
+  (`SetVolume` `+0x3c`, `SetPan` `+0x40`, `GetFrequency`/`SetFrequency` `+0x20`/`+0x44`); no
+  listener object, distance factor or rolloff factor is set. The hardware arm that owns a listener
+  interface (`DAT_00639cbc`, reached through `FUN_00597b40` and `FUN_00597a00`'s second branch) is
+  gated on `DAT_00639cb4`, which is 0 in the image and whose one writer (`0x005923a0`) stores 0.
+- **The definition load.** `FUN_00592c90` copies `RANGE`'s two floats into `+0x1c`/`+0x20`
+  unscaled (defaults `50`/`400` when the key is absent); its post-load hook `DAT_00639ec8` is null
+  on the one load path (`FUN_00592340` passes 0).
+- **Where the listener stands.** `FUN_00597a00` copies a 12-float world matrix to `DAT_00639e34`,
+  the position landing at `DAT_00639e58`; its caller `FUN_004d31d0` hands it the camera node's own
+  world matrix (`+0x44`), at most once per frame. An emitter's position is its `SOUND` node's world origin
+  (`FUN_004e0e60`), refreshed by the walk over the world's sound-node list (`FUN_004db750`). Both are in world
+  units, as the port's are.
+- **Gain multipliers.** The level takes `VOLUME x SoundVolume x` a per-category option level
+  (`DAT_00639e8c`, default 1.0 at `DAT_00639e88`; the callback at `0x004803c0` returns the `VOICE`,
+  `MUSIC` or `SFX` option level), and `FUN_00593620` clamps any product at or above 1 to 0 dB, so
+  none of them can lift a distant voice.
+
+The distance itself is the bit-hack square root at `0x00597dac`, which reads long rather than short
+between powers of four, so it cannot add reach either. CSVM nevertheless ships a factor of **2.5**
+on both radii and on the cull that follows them (`SoundFalloff.ShippedRangeScale`, overridden by
+`--sound-range-scale=`, `docs/cli.md`): at the authored radii the world emitters, the C1 police
+siren and the track train among them, are heard from far closer in than the original's are at the
+controls, and 2.5 is the reach that matched. Nothing above stands behind that factor, so it is a
+remake-only departure; `--sound-range-scale=1` reads the radii as authored, which is what the
+suites pinning this law read at.
 
 ⚠ **`VOLUME` converts on the same ten-decibels-per-doubling scale, not the usual `20 log10`.**
 `FUN_00593620` returns 0 at or above 1, `-10000` at or below `2^-10`, and `1000 log2(gain)`
@@ -126,6 +173,72 @@ Each plane def names its own engine loop via `engine_sound` / `cockpit_engine_so
 `damaged_engine_sound` is an array of swap candidates for that same slot (`snd_damagedengine`
 install-wide), not a second loop blended over it; the entry's two floats are a pitch-multiplier
 range drawn once per swap. See vehicle.md.
+
+### The whole level path, retail against the remake
+
+The two builds run the same curve under different mixers. Read end to end, from the definition's
+`VOLUME` to what one speaker is driven with, they stand within about four decibels of each other,
+and the only divergence that favours the retail build is three of those.
+
+| Stage | Retail | CSVM |
+|---|---|---|
+| definition level | `1000 log2(VOLUME x SoundVolume x category)` hundredths of a decibel, `FUN_00593620` called from `FUN_00597c20` and from the play entry `FUN_00593b80` | `SoundFalloff.VolumeDb`, the same ten-decibels-per-doubling conversion |
+| distance | the bands above, added in hundredths at `0x00597e98` (the ramp) and `0x00597e47` (the tail) | `SoundFalloff.AttenuationDb`, the same bands |
+| category level | `SfxVolume` 0.5, `MusicVolume` 0.65, `VoiceVolume` 0.75 as shipped (`FUN_0043fb50`, `0x3f000000` / `0x3f266666` / `0x3f400000`), chosen by the classifier at `0x004802e0`, whose tokens `NOROGUE`, `WINGMAN`, `VOICE`, `MUSIC`, `SFX` and `OPTIONAL` set bits 1, 2, 4, 8, 0x10 and 0x40 of def`+0x10`, read by the level callback at `0x004803c0` (installed at `0x004a811d`) | the `Effects`, `Music` and `Voice` buses at `20 log10(level/100 x master/100)`, `Utils/AudioMix.cs`, the same shipped level of 50 out of 100 |
+| output gain | `SoundVolume`, default 1.0 (`FUN_00591af0`) | bus 0, the developer `--volume=` |
+| per-voice ceiling | the play call's own gain through the same product, voice`+0x24`; a `SOUND` node plays at gain 1.0 (`FUN_004e0d60` passes `0x3f800000`), so it never bites | none |
+| write | `IDirectSoundBuffer::SetVolume`, vtable `+0x3c`, floored at `-10000` | `AudioStreamPlayer3D.VolumeDb`, the level at the listener while the attenuation model is `Disabled` and `MaxDistance` is 0 |
+| stereo | `SetPan`, vtable `+0x40`, `1600 x (offset . listener right axis) / dist` (`0x00597df8`, scale at `0x00609428`): the FAR channel loses up to 16 dB and the near one loses nothing, so a voice dead ahead drives both channels at the level above | the engine's own stereo law, cosine of half the azimuth at `panning_strength` 1, which is constant power: both channels 3.01 dB down dead ahead and astern, the near channel at the full level abeam and the far one silent |
+
+⚠ **No term in that chain is worth the reach the shipped 2.5 factor buys, so it stands as a
+remake-only departure rather than a ported constant.** The police siren
+(`RANGE [200, 1200]`, no `VOLUME` key) with both mixers at their maximum, in decibels at the near
+channel:
+
+| distance | retail | CSVM at 1, dead ahead | CSVM at 1, abeam | CSVM at the shipped 2.5 |
+|---|---|---|---|---|
+| 250 m, inside the shelf | 0.00 | -3.01 | 0.00 | 0.00 |
+| 700 m, mid band | -20.00 | -23.01 | -20.00 | 0.00 |
+| 1200 m, the audible radius | -30.00 | -33.01 | -30.00 | -11.63 |
+
+At the shipped levels instead (retail `SfxVolume` 0.5, CSVM `Effects` 50 under `Master` 100) the
+retail column reads -10.00, -30.00 and -40.00 against -9.03, -29.03 and -39.03 dead ahead, because
+the two option curves differ: the retail slider converts on the `VOLUME` scale above and the bus on
+Godot's `20 log10`, so the same slider position stands 3.98 dB louder here. The train
+(`RANGE [600, 1200]`) reads the same offsets at 650, 900 and 1200 m, the law and both mixers being
+shared. So the measured spread over the whole chain is 3.01 dB against the remake and 3.98 dB for
+it, where scaling the radii by 2.5 is worth up to 20 dB inside the band and moves the cull from
+1320 m to 3300 m. ⚠ The one number not measured here is the decoded PCM amplitude against what
+DirectSound gets from the same archive: both builds read `soundsh`, whose `PLAYBACK_FORMAT HIGH` is
+the 22050/16/1 the reader produces, and `WavFile` applies no gain of its own, but the samples have
+not been compared.
+
+### A definition is pitched only when it carries FREQUENCY
+
+⚠ **The flag is a capability on the buffer, not a hint, and a definition without it plays at its
+WAV's own rate whatever pitch the caller computes.** `FUN_0059b950` builds the definition's master
+buffer, and the `DSBUFFERDESC` it fills gets `DSBCAPS_CTRLFREQUENCY` (`0x20`) only when the flag
+byte at def+0xc has bit 5 set (`TEST AL,0x20` at `0x0059b9c6`, `OR` at `0x0059b9ca`, the create at
+`0x0059ba0b`); the bit is what the `FREQUENCY` token sets in the parser `FUN_00592c90`. Every
+voice is a `DuplicateSoundBuffer` copy of that master (`FUN_00593490` at `0x00593520`, master
+handle at def+0x54), and a duplicate inherits the master's caps, so the capability is decided once
+per definition and no voice can opt back in.
+
+The write itself is `FUN_00597740`: it forms `(int)(def[+0x2c] * pitch)`, where def+0x2c is a float
+holding the WAV header's own `nSamplesPerSec` (stored at `0x0059bbd1`), clamps the result to
+**55200 Hz** (`0xd7a0`, at `0x005977f5`) and **4000 Hz** (`0xfa0`, at `0x00597803`), and calls
+`IDirectSoundBuffer::SetFrequency` (vtable +0x44) at `0x00597813`. On a buffer created without the
+control that call returns `DSERR_CONTROLUNAVAIL`, which the error decoder `FUN_005992c0` names and
+`zsnd_parm.cpp:315` logs; the loop keeps playing, unpitched. Since every shipped WAV is 22050 Hz,
+those two bounds are a playback-rate multiplier of 0.181 to 2.503.
+
+⚠ **The shipped engine loops split on this flag, and the damaged one is on the wrong side of it.**
+All eleven `engine_sound` definitions carry `FREQUENCY`, so the throttle curve reaches them.
+`snd_damagedengine` (`engine_damaged.wav`, `LOOPED 3D SFX RANGE [130, 420]`) does not, and neither
+does any `*_cp` cockpit loop, so the drawn damaged-engine multiplier and the throttle curve are
+both refused and those loops run at 22050 Hz flat. A port that applies the multiplier anyway runs
+the damaged engine roughly half an octave under the original. The multiplier's own decode is
+[vehicle.md](vehicle.md#what-makes-an-airframe-damaged).
 
 ## Sound groups
 

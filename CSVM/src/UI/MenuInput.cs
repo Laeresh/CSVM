@@ -59,8 +59,9 @@ public sealed class MenuInput
     public int PadMoveX;
 
     /// <summary>The characters typed this frame, "" for none, keyboard only, edge-detected per
-    /// key. Letters arrive upper case while Shift is held. Polled like everything else here rather
-    /// than read off an input event, so one screen's text and its navigation share a clock.</summary>
+    /// key. Shift gives a letter's upper case and any other key's US-layout shifted symbol. Polled
+    /// like everything else here rather than read off an input event, so one screen's text and its
+    /// navigation share a clock.</summary>
     public string Typed = string.Empty;
 
     /// <summary>Backspace pressed this frame (edge), the deletion half of <see cref="Typed"/>.</summary>
@@ -207,6 +208,17 @@ public sealed class MenuInput
     public static bool JoinPressed(int pad) =>
         !CSVM.Pads.InputBlocked && Input.IsJoyButtonPressed(pad, JoyButton.Start);
 
+    /// <summary>Whether a pad is pressing A, the join board's sign-on gesture. Raw and static for
+    /// the reason <see cref="JoinPressed"/> is: the pad has no player until it signs on, so no
+    /// seat's bindings can answer for it.</summary>
+    public static bool SignOnPressed(int pad) =>
+        !CSVM.Pads.InputBlocked && Input.IsJoyButtonPressed(pad, JoyButton.A);
+
+    /// <summary>Whether a pad is pressing B, the board's sign-off gesture. Raw for the same reason:
+    /// the answer must name the pad that moved, not the seat that holds it.</summary>
+    public static bool SignOffPressed(int pad) =>
+        !CSVM.Pads.InputBlocked && Input.IsJoyButtonPressed(pad, JoyButton.B);
+
     /// <summary>One frame of one cursor axis: a fresh press or a direction flip fires immediately
     /// and arms the initial delay, a held direction repeats on the timer, and letting go releases
     /// it. Public so the d-pad shape unit-tests (the repo takes public members over
@@ -245,7 +257,8 @@ public sealed class MenuInput
     }
 
     /// <summary>The characters the typeable keys produce this frame: each key whose state rose
-    /// since <paramref name="prev"/>, in table order, Shift deciding a letter's case.
+    /// since <paramref name="prev"/>, in table order, Shift deciding a letter's case and the
+    /// symbol any other key prints.
     /// <paramref name="prev"/> is the caller's edge state, updated in place and sized from
     /// <see cref="TypeableKeys"/> so it cannot fall out of step with the table. Public so text
     /// entry unit-tests; it reads no device itself.</summary>
@@ -382,16 +395,46 @@ public sealed class MenuInput
         Accept = Back = PadBack = Start = Loadout = Presets = DeviceMoved = false;
     }
 
-    // The Key enum's letter, digit and punctuation values ARE their ASCII codes, so the character
-    // is the key. Shift cases a letter and leaves punctuation at its unshifted symbol, which is
-    // enough: no name box accepts either form, so both reach the same refusal.
+    // The Key enum's letter, digit and punctuation values ARE their ASCII codes, so the unshifted
+    // character is the key. Shift cases a letter and takes every other key to the US-layout symbol
+    // printed above it, the one layout the Key names describe; a box's accept rule, not this table,
+    // decides which of those it takes (the unlocking pilot name ends in Shift+1).
     private static char CharFor(Key key, bool shift)
     {
         if (key == Key.Space)
             return ' ';
         char c = (char)(int)key;
-        return key is >= Key.A and <= Key.Z && !shift ? char.ToLowerInvariant(c) : c;
+        if (key is >= Key.A and <= Key.Z)
+            return shift ? c : char.ToLowerInvariant(c);
+        return shift ? ShiftedUs(c) : c;
     }
+
+    // The US-layout shifted row: the digits and the punctuation keys BuildTextKeys polls.
+    private static char ShiftedUs(char c) => c switch
+    {
+        '1' => '!',
+        '2' => '@',
+        '3' => '#',
+        '4' => '$',
+        '5' => '%',
+        '6' => '^',
+        '7' => '&',
+        '8' => '*',
+        '9' => '(',
+        '0' => ')',
+        '\'' => '"',
+        ',' => '<',
+        '-' => '_',
+        '.' => '>',
+        '/' => '?',
+        ';' => ':',
+        '=' => '+',
+        '[' => '{',
+        '\\' => '|',
+        ']' => '}',
+        '`' => '~',
+        _ => c,
+    };
 
     // The letters, the digit row, the space bar and then the punctuation, in that order. The
     // punctuation is every printable non-alphanumeric key a US layout reports unshifted; it is
@@ -439,7 +482,7 @@ public sealed class MenuInput
     }
 
     // Every typeable key pressed this frame, plus Backspace. Shift decides case, which is what lets
-    // a profile name read as the original's own mixed-case roster does.
+    // a profile name read as the original's own mixed-case roster does, and the shifted symbols.
     private void PollText()
     {
         Typed = TypedFrom(KeyDown, KeyDown(Key.Shift), _textPrev);

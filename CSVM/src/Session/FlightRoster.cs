@@ -31,7 +31,10 @@ public readonly record struct AiSpawn(string PlaneName, Vector3 Position, Vector
     int? Difficulty = null, float? InitHealth = null, float? Armor = null,
     // Slot 67: exempts this pilot's skill ratings from the difficulty offset (Flight.Difficulty).
     bool Ace = false,
-    bool ObjectiveMarker = false, string? ObjectiveTypeLabel = null, string? ObjectiveCategory = null);
+    bool ObjectiveMarker = false, string? ObjectiveTypeLabel = null, string? ObjectiveCategory = null,
+    // The block's own def when AiDef is null: the livery is read off it, and a def authoring no
+    // paint_pattern flies the shipped skins on any team (docs/org/paint.md).
+    string? LiveryDef = null);
 
 /// <summary>The session's aircraft set: builds the human field in deterministic player order and
 /// introduces AI aircraft later for missions, waves, and generators. The roster is the assembly
@@ -249,8 +252,10 @@ public sealed class FlightRoster
             if (spawn.Pilot.Machine is { } modes)
             {
                 string tag = controller.Name;
+                // The sim clock on every line: a chase's length and a revert's re-promotion are
+                // read straight off the trace, which a bare transition list cannot show.
                 modeChanged = (from, to, why) => Log.Info("flight",
-                    $"ai mode: {tag}: {AiModeMachine.NameOf(from)} -> {AiModeMachine.NameOf(to)} ({why})");
+                    $"ai mode: {tag}: {AiModeMachine.NameOf(from)} -> {AiModeMachine.NameOf(to)} ({why}) t={GameClock.Current?.Time ?? 0.0:0.00}");
                 rollLogged = line => Log.Info("flight", $"ai roll: {tag}: {line}");
                 modes.ModeChanged += modeChanged;
                 modes.RollLogged += rollLogged;

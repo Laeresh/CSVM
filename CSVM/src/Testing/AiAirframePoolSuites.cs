@@ -9,7 +9,7 @@ using Godot;
 
 namespace CSVM.Testing;
 
-/// <summary>The pool the loading screen fills, on both sides of the seam it exists for: the
+/// <summary>The pool the load screen fills, on both sides of the seam it exists for: the
 /// counting rules on their own (order, cap, build, claim, refill, discard), and over a built world
 /// the one claim that matters, that an aeroplane taken from the pool is the aeroplane an in-place
 /// build would have produced. The second is what lets the goldens keep flying AI aircraft: if the
@@ -99,7 +99,7 @@ internal static class AiAirframePoolSuites
 
     [Suite("ai-airframe-pool-claim",
         "that a claimed aeroplane is the aeroplane an in-place build would have made: over C4/M03's "
-        + "built world one wave aeroplane is ordered and built as the loading screen does, then two "
+        + "built world one wave aeroplane is ordered and built as the load screen does, then two "
         + "launch off the same roster block, the first claiming it and the second building in place "
         + "because the slot is empty. Their model trees, node for node, and their collision hulls "
         + "are compared, the hull resources are held to be the one shared set, and the pool is "
@@ -143,19 +143,8 @@ internal static class AiAirframePoolSuites
             var built = new FlightRoster(FlightRosterPolicy.From(spec),
                 new LiveryResolver(spec, Path.Combine(ctx.DataRoot, "extracted", "rof")),
                 new WorldEffectsFactory(spec, ctx.Host, () => Vector3.Zero), ctx.Host,
-                new AircraftAssemblyResources
-                {
-                    PlanesGamez = planesGamez,
-                    StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
-                    AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
-                    PaintRng = new RandomNumberGenerator(),
-                    ZrdrPath = ctx.ZrdrPath,
-                    StockLoadouts = StockLoadouts.Load(),
-                    WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
-                    WeaponMessages = Messages.Load(ctx.MessagesPath),
-                    Textures = textures,
-                    Shakes = ShakeDefs.Load(ctx.ZrdrPath),
-                },
+                SuiteConstants.AircraftResources(ctx, planesGamez, textures,
+                    Messages.Load(ctx.MessagesPath)),
                 new FlightWorldBindings
                 {
                     Projectiles = live,

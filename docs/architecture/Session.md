@@ -35,7 +35,7 @@ Main.tscn's root and the process bootstrap: CLI parse into `_cli`/`_spec`, data-
 editor check that gives an export its `logs\` and audible volume default, the developer gain on bus 0 with the saved mix under it, at startup and on an Options apply (`Utils/MasterVolume.cs` resolves the first, `Utils/AudioMix.cs` writes the second), the `--dump-*`/`--run-tests` early quits,
 and what outlives a session (camera, sun, audio, music, the perf and hitch instruments, and the one `ChapterCinema` and `ClosingCinema` the campaign's doors play through). It owns the
 menu as one `MenuHost` built on the first show, the presentation resolution, the only options write (an apply from the in-flight `Flight/PausePreferences.cs` leaf takes that same route, without the presentation reselect a menu-side apply ends on),
-the frame pacing and the window's screen, mode and size at startup and on an Options apply (`Utils/VSyncSetting.cs`, `Utils/MonitorSetting.cs`, `Utils/DisplayModeSetting.cs`, `Utils/ResolutionSetting.cs`),
+the frame pacing and the window's screen, mode and size at startup and on an Options apply (`Utils/VSyncSetting.cs`, `Utils/MonitorSetting.cs`, `Utils/DisplayModeSetting.cs`, `Utils/ResolutionSetting.cs`), the enhanced presentation's sun shadow and screen-space passes with the `SessionSpec.EnhancedPasses` doors that leave one out,
 and the sink every menu exit takes ([../menu-presentations.md](../menu-presentations.md)); with no
 extraction it shows `UI/NoGameDataScreen.cs`. `LaunchSession`, `ReturnToMenu`, `RestartSession` and
 `BeginLaunch`/`RunOwedLaunch` are every path a session starts or ends on (the load screen stays up past the build while the session's owed build steps run one a frame through `GameSession.StepOwedLoad`, which is what makes it a yield of several frames; a CLI launch has no screen and drains them inside `LaunchSession`), a flight left early comes back to the screen it was launched from (settled by the launch through `MenuReturnDestination.ForLaunch`, not by the exit press), and what the persistent `WorldEnvironment` draws behind all of it is `Utils/WorldBackdrop.cs`'s: black while the menu owns the screen and at the quits that still draw, the sky again at every launch.
@@ -101,8 +101,7 @@ The engine side of one Instant Action mission, behind `GameSession`'s one nullab
 field: a plain sealed class that builds no node of its own, so every actor it makes parents under
 the handed world root. `TryCreate` takes the wizard's def or `--ia=<path>`; `BuildActors` is the
 contiguous actor phase (the chapter's first patrol net, the ace, the wingman fan and its escort
-chain, every configured wave built inert at the world origin); `Step` ticks the sequencer and
-activates what it returns; `WireEndConditions` routes each mode's own win signal, the lives
+chain, every configured wave built inert at the world origin, each actor named on its `AiSpawn.PilotName`: the ace's `ace_name`, a wave's `enemy_name`, a wingman slot's fixed pilot); `Step` ticks the sequencer and activates what it returns; `WireEndConditions` routes each mode's own win signal, the lives
 ledger and the whole-window wrap-up board, snapshotting the four counters at the ending and holding the pilots' seats (not the world, not the cameras) until the hold runs out and the board is due: a win keeps the stick and loses the commands, a loss loses both, and a hull lost inside the hold spends no life and takes no pane. The decoded rules stay engine-free in
 `InstantActionRuntime.cs` and `InstantActionWaves.cs`; this class owns every `ia:` log line.
 
@@ -115,14 +114,14 @@ the downed pilot's own device filter. A false result means that pane already has
 Candidate and tracking lists are optional for callers without a roster or rerun path.
 
 ## src/Session/InstantActionRuntime.cs
-Owns one Instant Action mission's actor set: the loaded `InstantActionDef`, the ace's spawn draw
-and rating, the wingmen's fan placement, each wave's per-member draws, the objective-zeppelin
-selection, and the mission's end with the decoded `WrapupHoldS` that `Advance` spends between that ending and the `WrapupDue` cue for the board. The static, engine-free helpers `InstantActionDirector` calls
-are here (`ChooseAceSpawn`, `RepresentativeRating`, `WingmanSlotFor`/`FlownWingmen`,
-`RandomPilotStats`/`ResolveWaveAccentId`, the zeppelin lookups, `FormatElapsed`/`ShotPercent`).
-The end half holds no engine type and calls no `GD.*`, the same construction rule `VersusMatch`
-follows, and the director owns every log line about it. Format and decode:
-[../formats/instant-action.md](../formats/instant-action.md).
+Owns one Instant Action mission's actor set: the loaded `InstantActionDef`, the ace's spawn draw and
+rating, the wingmen's fan placement, each wave's per-member draws, the objective-zeppelin selection,
+and the mission's end with the decoded `WrapupHoldS` that `Advance` spends before the `WrapupDue`
+cue for the board. The static, engine-free helpers `InstantActionDirector` calls are here
+(`ChooseAceSpawn`, `RepresentativeRating`, `WingmanSlotFor`/`FlownWingmen`, `RandomPilotStats`/
+`ResolveWaveAccentId`, `VoiceAccentIds` (voice prewarm), the zeppelin lookups, `FormatElapsed`/`ShotPercent`).
+The end half holds no engine type and calls no `GD.*`, like `VersusMatch`, and the director owns
+every log line about it. Format and decode: [../formats/instant-action.md](../formats/instant-action.md).
 
 ## src/Session/InstantActionWaves.cs
 The decoded wave sequencer's own selection, trigger and geometry logic (`FUN_0045b9d0`): pure
@@ -173,13 +172,14 @@ each in either order, the rule `Flight/StuntMission.cs` reads off `ia.json`'s zo
 Gate decode: [../formats/missions.md](../formats/missions.md).
 
 ## src/Session/CampaignSnapshot.cs
-The campaign Danger Zone photograph: the pilot's pane, scaled to the 164x123 region the scrapbook
-forces, written into the flying profile's own directory under the `Snap_<mission>_<objective>` name
-a capture row resolves against. `Stage` writes one zone's still under a `.PN_` pending name during
-the flight and `Commit` sweeps ids 10 to 31 at mission end, keeping them under their scrapbook names
-on a win and deleting them on a loss, which is the original's own two-step. `Flight/StuntCapture.cs`
-is the other camera and shares nothing but the idea: an Instant Action run has no mission slot or
-objective to be named by. Rows and gate: [../formats/campaign-screens.md](../formats/campaign-screens.md).
+The campaign Danger Zone photograph through `Flight/DangerZonePhotograph.cs`, written into the flying profile's
+directory under the `Snap_<mission>_<objective>` name a capture row resolves against. `Window` frames the pane's
+centred 4:3 part, a wider pane's flanks dropped, and the file is the 640x480 every retail photograph is. `Stage`
+requests one zone's still on the crossing frame, and a worker writes it under a `.PN_` pending name when the
+frame lands. `Commit` sweeps ids 10 to 31 at mission end, keeping them under their scrapbook names on a win and
+deleting them on a loss (the original's two-step); a still landing after the sweep takes the verdict left for it.
+`Flight/StuntCapture.cs` is the other camera: an Instant Action run has no mission slot or objective to be named
+by. Rows and gate: [../formats/campaign-screens.md](../formats/campaign-screens.md).
 
 ## src/Session/ObjectiveGraph.cs
 The objectives runtime over a parsed script, pure state over `Step` calls in the shape of
@@ -198,7 +198,7 @@ class building no node of its own. `ResolveSpec` runs in `GameSession`'s constru
 the `aiv` blocks through `CampaignRoster.cs`; `Attach` arms the graph once every runtime a
 directive can touch is up; `BindCallbackHost` takes the `CALLBACK` slot ahead of the generator
 runtime's, where 801 to 803 reactivate the lowest-numbered still-deactivated Black Hat of their
-family, CM19's only launch path, and 968 takes C4/M03's escorting wingman out of the world as that mission's docking film says her name; `Step` runs the graph, the escort repair, the music and the danger-zone tracker, whose completed zones both photograph into the profile through `CampaignSnapshot` and make `DangerZoneMask`, the id 18 to 30 half of the completed-objective mask. The
+family, CM19's only launch path, and 968 takes C4/M03's escorting wingman out of the world as that mission's docking film says her name; `Step` runs the graph, the escort repair, the music and the danger-zone tracker, whose completed zones photograph into the profile through `CampaignSnapshot`, raise the flight's praise line through `WorldInputs.DangerZoneSpoken` and make `DangerZoneMask`, the id 18 to 30 half of the completed-objective mask. The
 nested `World` is the `IObjectiveWorld`, a directive with no seam here a named no-op, and `WidenGroupEngagement` is where an awake `DEDG` reaches its group's live members; `Memento` is the picture the flying profile hangs, which the pause sheet's own slot takes; mission end records the attempt, folds the persist log into the profile and holds before the cabin behind `LeavingFade`, the ramp `UI.MissionEndFade` paints. Debrief: [../org/debrief.md](../org/debrief.md).
 
 ## src/Session/CampaignProgression.cs
@@ -335,7 +335,7 @@ the aircraft, the humans out of flight with the episode owner posed on the stage
 and the runtime's range gates reading where they last flew rather than where the film puts them,
 the AI parked (at the start of a mission of any type, and again before any intro plays whether or not its own data authors 913, lifted by code 914 from whichever definition the mission bootstraps), the mid-mission airframe swap, the re-placement, the clearing of every round still in flight, and one restore at the definition's end or at a skip, refused once the mission has ended under the episode so the leaving fade keeps the film's shot. It also owns the held-input fast-forward (`Mech3/Anim/CutsceneFastForward.cs`), scoped to the episode's call closure and offered only where no skip is armed. A `Node`
 only so it can tick last in the frame, after the animation advance that poses `camera1`. Which
-definition and which human an episode belongs to is the slot `Own` claims, not the raiser of the first code. Decode: [../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md).
+definition and which human an episode belongs to is the slot `Own` claims, not the raiser of the first code, and that human's own airframe is staged into the animation runtime's node table as the episode takes the session, so a hookup resolves the landing pilot's aeroplane rather than the seat that was staged at the bind. Decode: [../formats/anim-definitions/cutscenes.md](../formats/anim-definitions/cutscenes.md).
 
 ## src/Session/LandingApproachRuntime.cs
 The mid-mission cutscene trigger: a story mission's resolved `LandingApproaches` are tested each
@@ -396,8 +396,8 @@ grace. Every drop, launch and door prints an `egen:` line. Decode:
 Runs a mission's zeppelins behind `--zeppelins`: a `ZeppelinDef` whose world node and net resolve has
 its hull switched on, is placed at its authored pose and flown by `ZeppelinMotion` over
 `AiNetFollower`; an animation-driven hull is neither placed nor stepped. `WireDamage` builds the
-per-part pools, `PollDamage` owns the kill, the Instant Action engine count and the generator
-disable; `CollectTargetParts` alone makes a structure selectable, and only under `TargetPool`'s
+per-part pools, `PollDamage` owns the kill (a healthy entry is dead when its pool is destroyed or
+its own node is switched off), the Instant Action engine count and the generator disable; `CollectTargetParts` alone makes a structure selectable, and only under `TargetPool`'s
 torpedo gate. A def whose net does not resolve is held out, zones unwired; `--zep=` grafts one on a
 synthetic net. Script arms: `SetStopPoint`, `Hold`, `Wake`, `SetNet` (nearest-node seat from where
 the hull stands) and `SetTeam` (one side over every pool and gun). Decode: [../formats/mission-entities.md](../formats/mission-entities.md).
@@ -422,14 +422,14 @@ Format and decode, including the wake ordering and the awake-by-data census:
 [../formats/turrets.md](../formats/turrets.md).
 
 ## src/Session/AiVoiceRuntime.cs
-Wires the combat-voice dispatcher into a running flight session, built with the rigs wherever the
-world has a `WorldSounds` and ticked on the sim clock: each AI spawn is registered as a speaker on
-its own `FlightController.Team`, each human rig as a damage source, and the wired sites are
-subscribed (the hit-path damage tiers, the death cries, the patrol-to-pursue call-out, the
-sixth-sense stun and the completed reaction). `RegisterAi` also mirrors `InPlay` into the speaker's
-liveness, the only place the engine-free dispatcher and a controller meet. Clips play through
-`WorldSounds.PlayOneShot` alone, passing Voice where that path's other callers take its Effects
-default, and every roll prints an `ai voice:` line. [../formats/combat-voice.md](../formats/combat-voice.md).
+Wires the combat-voice dispatcher into a running flight session, built with the rigs wherever the world has a `WorldSounds`
+and ticked on the sim clock: an accented AI spawn is registered as a speaker on its own `FlightController.Team`, each human
+rig as a damage source whose rounds draw the ally distress out of a teammate they strike, and the mode machine and death report of EVERY aircraft handed over are watched, accented or not,
+because the bearing call-out, the taunt, the killer's gloat and the flight's enemy-down call on a player kill are spoken by an aircraft other than the one the event reached.
+An evade episode's end speaks the successful-shake taunt, and only once the machine's own evade flag has cleared.
+`Step` raises the rest of the pursue path for every AI whose gunner holds a human, at the slot cooldown's own interval rather than on a mode edge, so a commit inside the mute window is not lost: the taunt the pursuer's own nose against that human picks, its `WA-Attack`, and the flight's bearing call-out.
+`RegisterAi` also mirrors `InPlay` into the speaker's liveness, the only place the engine-free dispatcher and a controller meet.
+Lines play flat through `MissionRadio.Speak` (the queue the objective callouts share) with the speaker id that answers the "already talking" hook; every roll and first "no clip" refusal prints an `ai voice:` line. `WatchTurrets` adds the one non-aircraft source, a gunner's acquisition of a human player off the shared `ProjectilePool`, broadcast on that player's team, and `DangerZoneCompleted` the other, the flight's praise for a player's run through the gates, which the campaign's own completion report raises. [../formats/combat-voice.md](../formats/combat-voice.md).
 
 ## src/Session/FlightRoster.cs
 The session-owned aircraft aggregate. `BuildPlayers` commits the whole human field in ascending player order and `SpawnAi` commits one
@@ -474,47 +474,57 @@ from `AiAirframePool.cs` where one is ready and built in place otherwise, over o
 `PlanePainter` per airframe and livery (PERF-22). That runtime is OPENED rather than built wherever the caller supplied a queue, so the
 launch frame carries no rig and the prop choreography plays from the queue's completion hook. It chains the durability override ahead of
 the enemy scale and the spawn jitter, the engine's own order ([../org/vehicleDamage.md](../org/vehicleDamage.md)), resolves the readout's
-title, stamps the block's objective marker, and owns the AI skills cache. Read `FlightRoster.cs` next.
+title, stamps the block's objective marker, and owns the AI skills cache. The danger-zone look's daredevil chance is drawn from that cache here and zeroed for anything but a `jet`, the original's own class gate on the arm that rolls it. Read `FlightRoster.cs` next.
 
 ## src/Session/HumanFlightAdapter.cs
 `FlightRoster`'s private human-aircraft path: one `Assemble` builds the painted model,
 `FlightController`, loadout and ordnance, carried turrets, HUD and instruments, damage visuals,
-audio, stunt and match bindings, target selection, the authored start placement, the crash runtime,
-and last the `UI.SplitScreen.OwnAirframeLayer` stamp that keeps the whole model out of this pilot's
+audio, stunt and match bindings, target selection, the authored start placement, the Danger Zone
+eye, the crash runtime, and last the `UI.SplitScreen.OwnAirframeLayer` stamp that keeps the whole model out of this pilot's
 own spyglass disc. It reads only the roster's copied policy plus the grouped aircraft, world and
 human-session contracts. Player order decides the shared paint and spawn draws. An airframe swap's
 captured scheme and its own build are laid over that assembly, the one path a bought plane takes.
-`BuildDamageVisuals` is also the common first phase for AI damage. Read `FlightRoster.cs` next.
+An Instant Action racer takes no `Race`, so it flies on through the ending's hold. `BuildDamageVisuals` is also the common first phase for AI damage. Read `FlightRoster.cs` next.
 
 ## src/Session/EffectCatalogue.cs
 The record of which authored anims are playable effects and what their defs need staged: the name
 tables every effect producer must stay inside, static and engine-free. It owns the impact and death
 effect names, the crash rig's own def tables and the two surface-indexed def vectors, the
-damage-stage and prop-choreography menus, the destroy-def lookup, the collider overlay's surface
-colour key, and the anchor-root derivation that IS `WorldEffectsFactory`'s stage source. An
-unstageable anchor fails the build rather than leaving a def anchored on nothing. Every name
-producer carries a producer-range tripwire in `CSVM.Tests` asserting its whole range resolves inside
-these tables. Read `WorldEffectsFactory.cs` next.
+damage-stage and prop-choreography menus, the canopy-hole family a human rig alone binds, the
+destroy-def lookup, the collider overlay's surface colour key, and the anchor-root derivation that IS
+`WorldEffectsFactory`'s stage source. An unstageable anchor fails the build rather than leaving a def
+anchored on nothing. Every name producer carries a producer-range tripwire in `CSVM.Tests` asserting
+its whole range resolves inside these tables. Read `WorldEffectsFactory.cs` next.
 
 ## src/Session/WorldEffectsFactory.cs
 Builds the two effect stages a session needs and the runtimes bound to them: the world-effects
 runtime for impacts and destruction, and the per-plane crash runtime, which despite its name binds
-every def that plays ON one aircraft (the crash-def vector, the destroy def, the panel damage shims
-and the prop choreography). Both stages are built in pool slots sized from `data/effect_pools.json`
+every def that plays ON one aircraft (the crash-def vector, the destroy def, the panel damage shims,
+the prop choreography, and on a human rig the canopy holes, whose `PLAYER_1ST_PERSON` branch this rig's own pilot answers). Both stages are built in pool slots sized from `data/effect_pools.json`
 and handed to their runtime sealed, and both pre-warm their emitters after the bind so a first burst
-finds its puffers already made. `BeginFlightCrashRuntime` opens the crash build as a handle a caller
+finds its puffers already made; `EnsureWorldEffects` hands the effects runtime the world's `WorldLights` as a contributor, so a burst's authored `LIGHT_STATE` renders on both presentations. `BeginFlightCrashRuntime` opens the crash build as a handle a caller
 steps a phase at a time (`CrashRigQueue.cs`), where the pre-warm itself repeats a slice at a time so a rig's two hundred emitters never
 land on one frame, and `BuildFlightCrashRuntime` is the one-call form. The names it binds are `EffectCatalogue.cs`; the slot mechanism is `Mech3/TemplateStage.cs`.
 
 ## src/Session/WeatherRig.cs
-Applies the flown mission's weather, driving each rig's skydome, whiteout, deck regime and zone gate
-every frame. `ApplyZone` writes the zone's authored fog and its `SUNLIGHT` pair through one arm per
+Applies the flown mission's weather, driving each rig's skydome, whiteout, deck regime and zone gate every frame, plus the one session-wide `ObjectZoneGate.cs` pass; the whiteout is one pane-filling overlay per rig, carrying the cloud band and the fog-volume curtain on `HudLayers.Whiteout`, under that pane's own cockpit pass, so the window whites out and the interior stays clear.
+`ApplyZone` writes the zone's authored fog and its `SUNLIGHT` pair through one arm per
 graphics mode, mirrored onto every registered extra (sun, env) pair so a cockpit overlay crosses
 zones too; both arms put the ambient half through `WriteColorAmbient`, colour-sourced and never a sky
-contribution, so a night zone's aircraft fill is darker than a day zone's. `ApplyFogState` is the
+contribution, so a night zone's scene fill is darker than a day zone's. `ApplyFogState` is the
 animation runtime's `FOG_STATE` sink, writing only the fields the event carries under the same
 last-writer order. Enhanced mode also caps a night zone, paints the sky the zone's own fog colour and
-pushes the fog range out, which the sun's shadow distance follows. `SunlightRgb` publishes the applied pair scaled by its authored colours, for the reader that needs the light rather than an energy. Decode: [../org/weather.md](../org/weather.md), authored side [../formats/weather.md](../formats/weather.md).
+pushes the fog range out, which the sun's shadow distance follows. `SunlightRgb` publishes the applied pair scaled by its authored colours, for the reader that needs the light rather than an energy. Both arms also set `csky_sun_dir` and `csky_sun_light`, the same bearing and pair uncollapsed, for the lit cloud cards, which shade per vertex off normals that turn with the camera, and `csky_sun_ambient_rgb`/`csky_sun_diffuse_rgb` (`SunVertexLight`, the bicolored rule) for the in-flight aircraft's per-vertex term ([../org/vertexLighting.md](../org/vertexLighting.md)), plus `csky_sun_fill_rgb` (`PhotographFill`), the Danger Zone photograph's raised ambient half. Decode: [../org/weather.md](../org/weather.md), authored side [../formats/weather.md](../formats/weather.md).
+
+## src/Session/ObjectZoneGate.cs
+The per-object half of the zone gate, ticked by `WeatherRig` over the session's aircraft and
+zeppelins. Each frame an object's merged world extent is judged against the cloud band's midpoint
+(`Flight/Weather.cs`'s `ObjectZone`) and its meshes move onto that zone's `Mech3/ZoneGate.cs` layer,
+so a camera on the far side of the band does not draw it at all, which is the original's per-object
+zone assignment plus its camera zone gate. The extent is measured once per root because an airframe
+is rigid, and the walk takes whatever hangs under it, so an effect parented to an aircraft rides
+along; a mesh already wearing a layer of its own (the own-airframe hide, a per-pane copy) is left
+alone. `--no-fog` and `--no-zone-cull` open the gate. Decode: [../formats/weather/atmosphere.md](../formats/weather/atmosphere.md).
 
 ## src/Session/LensFlareRig.cs
 The sun's lens flare: four screen-space sprites strung along the sun-to-screen-centre vector, plus a

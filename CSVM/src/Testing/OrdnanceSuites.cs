@@ -1392,7 +1392,8 @@ internal static class OrdnanceSuites
     [Suite("disabling-hits",
         "the hit-side dispatch of the no-damage types on a live pool (D15-D17): a wep_08 into a " +
         "human's tail washes that pane red at weight 1 for 5 s after a 1 s delay and no other " +
-        "pane, a wep_09 from behind does nothing while one from ahead washes white, two humans " +
+        "pane, a wep_09 from behind does nothing while one from ahead washes white, a human's " +
+        "own wep_08 bursting 20 m away washes their pane too, two humans " +
         "hit in one second each carry their own wash and an AI 20 m from one burst is stunned; " +
         "an AI is stunned for DisablingIntensity's seconds by a burst on the ground inside " +
         "IMPACT_PROXIMITY, raised to 5 s by a direct hit and overwritten back down by the next " +
@@ -1545,6 +1546,21 @@ internal static class OrdnanceSuites
             Advance(7f);
             ctx.Check(Clear(0) && Clear(1) && Pristine(human0), $"and it clears; the ledger is still untouched");
 
+            // 2b. The shooter is not exempt from their own burst. P2's sonic into the AI 20 m off
+            // their wing stuns the AI and washes pane 2. The original's self-hit guard sits below
+            // the no-damage arms and spares the damage pair alone.
+            before = washes.Count;
+            live.Spawn(sonic, new Transform3D(Basis.LookingAt(Vector3.Forward, Vector3.Up), Tail(aiNear)), Vector3.Zero,
+                shooterId: 1);
+            Advance(0.5f);
+            ctx.Check(!RoundsAlive() && washes.Count == before + 1 && washes[^1].Player == 1
+                      && washes[^1].Colour == new Color(1f, 0f, 0f),
+                $"P2's own wep_08 bursting on the AI 20 m away washes pane 2 red (washes={washes.Count - before} players={string.Join(",", washes.Skip(before).Select(w => w.Player + 1))})");
+            ctx.Check(aiNear.Pilot!.IsStunned && Pristine(human1) && Pristine(aiNear),
+                $"the struck AI is stunned and neither ledger moved (stunned={aiNear.Pilot.IsStunned})");
+            Advance(7f);
+            ctx.Check(Clear(1), $"the self-wash clears at its duration ({flash.CurrentFor(1)})");
+
             // 3. Two viewers hit inside one second: each pane its own wash, and the AI 20 m from the
             // second burst is inside the sonic's plateau and stunned for the full 5 s.
             before = washes.Count;
@@ -1655,7 +1671,8 @@ internal static class OrdnanceSuites
         "hands he_ground_effect a basis whose Y is the slope normal, the same round into flat " +
         "ground hands identity, and a wep_12's scatter_effect on the slope stays identity; the " +
         "faithful presentation hands the upper ring no basis at all, and Enhanced Graphics hands " +
-        "it one facing back along the round's own flight direction, the ground effect unchanged")]
+        "it one whose drawn disc faces back along the round's own flight direction, the ground " +
+        "effect unchanged")]
     internal static void ImpactOrientation(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
@@ -1714,7 +1731,7 @@ internal static class OrdnanceSuites
                 Mathf.RadToDeg(Mathf.Acos(Mathf.Clamp(a.Normalized().Dot(b.Normalized()), -1f, 1f)));
 
             static string Describe((string Name, Vector3 At, Basis Orient, Basis? Ring)? play) =>
-                play is { } p ? $"fx={p.Name} Y={p.Orient.Y} ring={(p.Ring is { } r ? r.Y.ToString() : "-")}" : "no play";
+                play is { } p ? $"fx={p.Name} Y={p.Orient.Y} ringNormal={(p.Ring is { } r ? (r * ProjectilePool.UpperRingDiscNormal).ToString() : "-")}" : "no play";
 
             var onSlope = Drop(he, origin + new Vector3(0f, 20f, 0f));
             ctx.Check(onSlope is { Name: "he_ground_effect" } s1 && DegreesBetween(s1.Orient.Y, slopeNormal) < 0.5f
@@ -1741,27 +1758,30 @@ internal static class OrdnanceSuites
                       && ProjectilePool.UpperRingOrient(Vector3.Zero) is null,
                 $"UpperRingOrient answers null in the faithful presentation");
 
-            // Enhanced Graphics from the setting itself, restored before this suite returns: the
-            // faithful path is what every pinned golden renders and nothing may leave it flipped.
+            // Enhanced Graphics comes from the setting itself, restored before this suite returns.
+            // The faithful path is what every pinned golden renders, and nothing may leave it
+            // flipped.
             GraphicsMode.Resolve(GraphicsMode.EnhancedWord);
             try
             {
                 ctx.Check(GraphicsMode.Enhanced, $"the graphics setting resolves to enhanced");
+                var discNormal = ProjectilePool.UpperRingDiscNormal;
                 ctx.Check(ProjectilePool.UpperRingOrient(down30) is { } pure
-                          && DegreesBetween(pure.Y, -down30) < 0.5f
+                          && DegreesBetween(pure * discNormal, -down30) < 0.5f
                           && Mathf.IsEqualApprox(pure.Determinant(), 1f),
-                    $"UpperRingOrient turns world up onto the reverse of the flight direction ({ProjectilePool.UpperRingOrient(down30)?.Y.ToString() ?? "-"} against {-down30})");
+                    $"UpperRingOrient turns the ring's disc normal onto the reverse of the flight direction ({(ProjectilePool.UpperRingOrient(down30) * discNormal)?.ToString() ?? "-"} against {-down30})");
                 ctx.Check(ProjectilePool.UpperRingOrient(Vector3.Zero) is null,
                     $"a round with no usable velocity still gets no basis");
 
-                // Fired down the slope's own -X lean at 45°, so the ring basis, the slope normal and
-                // world up are three different directions and no two of them can be confused.
+                // The round is fired down the slope's own -X lean at 45°. The ring basis, the slope
+                // normal and world up are then three different directions, and no two can be
+                // confused.
                 var slanted = new Vector3(-1f, -1f, 0f).Normalized();
                 var enhancedOnSlope = Drop(he, origin + new Vector3(20f, 20f, 0f), slanted);
                 ctx.Check(enhancedOnSlope is { Name: "he_ground_effect", Ring: not null } e1
-                          && DegreesBetween(e1.Ring!.Value.Y, -slanted) < 15f
-                          && DegreesBetween(e1.Ring!.Value.Y, Vector3.Up) > 20f
-                          && DegreesBetween(e1.Ring!.Value.Y, slopeNormal) > 20f,
+                          && DegreesBetween(e1.Ring!.Value * discNormal, -slanted) < 15f
+                          && DegreesBetween(e1.Ring!.Value * discNormal, Vector3.Up) > 20f
+                          && DegreesBetween(e1.Ring!.Value * discNormal, slopeNormal) > 20f,
                     $"Enhanced hands the upper ring a basis facing back along the round's flight direction ({Describe(enhancedOnSlope)} launched along {slanted})");
                 ctx.Check(enhancedOnSlope is { Ring: not null } e2
                           && Mathf.IsEqualApprox(e2.Ring!.Value.Determinant(), 1f)
@@ -1791,13 +1811,14 @@ internal static class OrdnanceSuites
     // composed the way WorldEffectsFactory composes it, and a real WorldLights behind it, so what
     // is measured is the committed set and the omni pool rather than a flag. The fireball's
     // liveness is a local the suite owns, which is the only way to step past the fireball's end.
-    [Suite("burst-light",
+    [Suite("burst-light-envelope",
         "Enhanced Graphics only: a wep_06 rocket burst registers exactly one short-lived " +
         "WorldLights burst light at the hit, which commits as an ordinary light, mirrors onto one " +
         "shadowless OmniLight3D from the same pool, decays as it burns and is gone the frame its " +
-        "fireball stops burning; the faithful presentation registers none at all, and a gun hit " +
-        "registers none in either presentation")]
-    internal static void BurstLight(TestContext ctx)
+        "fireball stops burning, for a def that authors no light of its own; the faithful " +
+        "presentation registers none at all, a def that authors its light registers none, and a " +
+        "gun hit registers none in either presentation")]
+    internal static void BurstLightEnvelope(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
@@ -1829,10 +1850,12 @@ internal static class OrdnanceSuites
             var plays = new List<string>();
             var live = new ProjectilePool(textures, null, null)
             {
+                // The sink answers "no authored light", which is the fireball defs' case: this
+                // suite measures the envelope, and `burst-light` owns the authored-light gate.
                 EffectSink = (name, at, orient, ringOrient, ttl) =>
                 {
                     plays.Add(name);
-                    WorldEffectsFactory.RegisterBurstLight(lights, name, at, () => burning);
+                    WorldEffectsFactory.RegisterBurstLight(lights, name, at, () => burning, authorsOwnLight: false);
                 },
             };
             pool = live;
@@ -1864,11 +1887,16 @@ internal static class OrdnanceSuites
             try
             {
                 lights = new WorldLights(omniParent);
-                WorldEffectsFactory.RegisterBurstLight(lights, "3040slug_gunhit", origin, () => burning);
+                WorldEffectsFactory.RegisterBurstLight(lights, "3040slug_gunhit", origin, () => burning, authorsOwnLight: false);
                 lights.Begin(Dt);
                 lights.Commit(viewers);
                 ctx.Same(0, lights.CommittedPositions.Count,
                     $"a gun hit carries no fireball and registers nothing even under Enhanced");
+                WorldEffectsFactory.RegisterBurstLight(lights, "he_ground_effect", origin, () => burning, authorsOwnLight: true);
+                lights.Begin(Dt);
+                lights.Commit(viewers);
+                ctx.Same(0, lights.CommittedPositions.Count,
+                    $"a fireball whose def authors its own light registers no second one");
 
                 ctx.Check(Drop(), $"the same rocket plays the same effect under Enhanced");
                 lights.Begin(Dt);
@@ -2039,6 +2067,119 @@ internal static class OrdnanceSuites
             ctx.Host.RemoveChild(worldRoot);
             worldRoot.Free();
             textures.Dispose();
+        }
+    }
+
+    // The authored detonation light is played the production way. A world-effects runtime only
+    // contributes into a WorldLights another runtime owns, whose one Begin/Commit ranks the burst
+    // with its own light. The ranges are the def's signed deltas accumulated
+    // (extracted/C1/cam_anim/he_ring-he_ground_effect.json). (4,20), +(50,160), +(10,25), +(30,80),
+    // +(10,35) holds (104,320) until the @Event+0.2 pair adds (30,80) and (10,20), then INACTIVE.
+    [Suite("burst-light",
+        "he_ground_effect's authored he_light and he_light1 reach the world's WorldLights through " +
+        "the effects runtime on both presentations: the def's colour, the (104,320) m plateau its " +
+        "LIGHT_ANIMATION deltas accumulate to, a peak no wider than the authored 420 m, both " +
+        "committed beside the owner's own light and gone after their INACTIVE events, the effect " +
+        "sink's enhanced envelope staying out because the def authors its light; under " +
+        "Enhanced the same set mirrors onto omnis, on the faithful path onto none")]
+    internal static void BurstLight(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            EffectStageSuiteHelper.WithEffectStage(ctx, world, "he_ground_effect",
+                new[] { "he_ring", "he_ring1", "he_trails" }, (stage, runtime, point) =>
+            {
+                // The fireball defs are the ones the enhanced envelope still lights.
+                if (runtime.Handles("large_fireball"))
+                    ctx.Check(!runtime.AuthorsLight("large_fireball"), $"large_fireball authors no light of its own");
+                // One pool slot, so the second play reuses the first one's copy and its light keys.
+                BurstLightOn(ctx, runtime, point, enhanced: false);
+                BurstLightOn(ctx, runtime, point, enhanced: true);
+            });
+        });
+    }
+
+    internal static void BurstLightOn(TestContext ctx, AnimRuntime runtime, Vector3 point, bool enhanced)
+    {
+        const float Dt = 1f / 60f;
+        string mode = enhanced ? "Enhanced" : "faithful";
+        var omniParent = new Node3D { Name = "burst_light_omnis" };
+        ctx.Host.AddChild(omniParent);
+        if (enhanced)
+            GraphicsMode.Resolve(GraphicsMode.EnhancedWord);
+        var lights = new WorldLights(omniParent);
+        var viewers = new[] { point };
+        var ownerLight = point + new Vector3(30f, 0f, 0f);
+        try
+        {
+            runtime.ContributeLightsTo(lights);
+            ctx.Check(runtime.PlayEffectAt("he_ground_effect", point), $"{mode}: he_ground_effect plays");
+            // The effect sink's own burst-light call, asked the way production asks it. The def
+            // authors its light, so the envelope stays out and the counts below hold in both modes.
+            // A doubled light would commit a fourth and outlive the INACTIVE.
+            bool authors = runtime.AuthorsLight("he_ground_effect");
+            ctx.Check(authors, $"{mode}: the runtime reads he_ground_effect as authoring its own light");
+            WorldEffectsFactory.RegisterBurstLight(lights, "he_ground_effect", point, () => true, authors);
+            float clock = 0f, firstLit = -1f, lastLit = -1f, peakMax = 0f, peakOmni = 0f;
+            int maxCommitted = 0;
+            var color = Colors.Black;
+            (float Min, float Max) plateau = (0f, 0f);
+            float burstOffset = float.MaxValue;
+            for (int i = 0; i < 90; i++)
+            {
+                runtime.Advance(Dt);
+                clock += Dt;
+                // The owner's frame: its own light, then the commit that asks the contributor in.
+                lights.Begin();
+                lights.Add(ownerLight, Colors.White, 2f, 10f);
+                lights.Commit(viewers);
+                maxCommitted = Mathf.Max(maxCommitted, lights.CommittedPositions.Count);
+                var he = runtime.LightSnapshot().FirstOrDefault(l => l.Name == "he_light");
+                if (he.Name != null && he.Active)
+                {
+                    if (firstLit < 0f)
+                    {
+                        color = he.Color;
+                        firstLit = clock;
+                    }
+                    lastLit = clock;
+                    peakMax = Mathf.Max(peakMax, he.RangeMax);
+                    if (Mathf.Abs(clock - 0.25f) < Dt / 2f)
+                    {
+                        plateau = (he.RangeMin, he.RangeMax);
+                        foreach (var p in lights.CommittedPositions)
+                            burstOffset = Mathf.Min(burstOffset, p.DistanceTo(point));
+                    }
+                }
+                foreach (var child in omniParent.GetChildren())
+                {
+                    if (child is OmniLight3D { Visible: true } omni)
+                        peakOmni = Mathf.Max(peakOmni, omni.OmniRange);
+                }
+            }
+            ctx.Note($"{mode}: he_light lit {firstLit:0.###} s to {lastLit:0.###} s, plateau ({plateau.Min:0.#},{plateau.Max:0.#}) m, peak max {peakMax:0.#} m, at most {maxCommitted} committed, omni reach {peakOmni:0.#} m");
+            ctx.Check(firstLit > 0f && firstLit <= 2f * Dt, $"{mode}: he_light lights on the burst's first frame ({firstLit:0.###} s)");
+            ctx.Check(color.IsEqualApprox(new Color(1f, 0.86f, 0.29f)), $"{mode}: with the def's own colour ({color})");
+            ctx.Check(Mathf.Abs(plateau.Min - 104f) < 0.5f && Mathf.Abs(plateau.Max - 320f) < 0.5f,
+                $"{mode}: the four opening deltas accumulate to the authored (104,320) m plateau ({plateau.Min:0.##},{plateau.Max:0.##})");
+            ctx.Check(peakMax >= 320f && peakMax <= 420.01f,
+                $"{mode}: the peak stays within the authored 420 m, never clamped below the plateau ({peakMax:0.##} m)");
+            ctx.Check(burstOffset < 1f, $"{mode}: a committed light sits on the burst ({burstOffset:0.###} m off)");
+            ctx.Same(3, maxCommitted, $"{mode}: the owner's light, he_light and he_light1 commit together");
+            ctx.Check(lastLit > 0.3f && lastLit < 0.6f, $"{mode}: he_light goes out on its INACTIVE event ({lastLit:0.###} s)");
+            ctx.Same(1, lights.CommittedPositions.Count, $"{mode}: once both bursts are out only the owner's light is left");
+            if (enhanced)
+                ctx.Check(peakOmni >= 320f, $"{mode}: the burst mirrors onto an omni of its authored reach ({peakOmni:0.#} m)");
+            else
+                ctx.Same(0, omniParent.GetChildCount(), $"{mode}: and spawns no omni");
+        }
+        finally
+        {
+            runtime.ContributeLightsTo(null);
+            lights.Dispose();
+            if (enhanced)
+                GraphicsMode.Resolve(GraphicsMode.Default);
+            omniParent.Free();
         }
     }
 
@@ -2221,22 +2362,25 @@ internal static class OrdnanceSuites
         });
     }
 
-    // What a gun round finds on a movie-studio building. The original indexes the IMPACT table with
-    // the struck material's own soil byte and with nothing else (FUN_005ac7a0 at 0x005ac7a9,
-    // docs/org/weaponImpact.md), and the film lot's blocks carry soil `default`, so the round plays
-    // the authored gunhit there. `buildings`(11) is reached only by C1's hangar materials, where the
-    // guns bind the install-missing bld_damage.flt and the ricochet stands in for it; wep_02 is the
-    // exception whose large_fireball the runtime carries, and which therefore renders alone.
+    // What a gun round finds on a building. The original indexes the IMPACT table with the struck
+    // material's own soil byte and with nothing else (FUN_005ac7a0 at 0x005ac7a9,
+    // docs/org/weaponImpact.md). The film lot's blocks and C1's zeppelin hangar carry soil
+    // `default`, so the round plays the authored gunhit there. `buildings`(11) is reached only by
+    // C1's small airport buildings (`aphagar0N`), where the guns bind bld_damage.flt. That name no
+    // install file defines, so the original's slot is null and the round draws nothing.
     [Suite("impact-building-surface",
-        "a gun round on a C2 film-lot building reads default(0) off the struck material and hands " +
-        "the authored 3040slug_gunhit to the effects runtime, the chapter carrying no buildings(11) " +
-        "collider at all; on the hangar surface wep_00's install-missing bld_damage.flt still takes " +
-        "the ricochet stand-in while wep_02's runtime-carried large_fireball renders alone (BL-289)")]
+        "a gun round on a C2 film-lot building and on C1's zeppelin hangar reads default(0) off the " +
+        "struck material and hands the authored 3040slug_gunhit to the effects runtime; on a C1 " +
+        "airport building carrying buildings(11) wep_00's undefined bld_damage.flt draws and sounds " +
+        "nothing, while wep_02's runtime-carried large_fireball still renders; on the same sheds " +
+        "the aphagar03 faces read default off their own material and play the gunhit")]
     internal static void ImpactBuildingSurface(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, FilmLotChapter);
         ctx.RequireData(texturesPath, $"{FilmLotChapter} textures");
+        string airportTextures = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(airportTextures, $"C1 textures");
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
         if (!weapons.TryGet("wep_00", out var gun) || !weapons.TryGet("wep_02", out var fifty))
         {
@@ -2254,18 +2398,21 @@ internal static class OrdnanceSuites
 
         var unbound = ImpactOutcome.Resolve(gun, SurfaceRegistry.Buildings, modelResolved: false,
             hasEffectsRuntime: true, effectBound: false);
-        ctx.Check(unbound.StandIn == ImpactStandIn.Ricochet,
-            $"a gun on buildings whose bound name renders nowhere keeps the ricochet stand-in standin={unbound.StandIn}");
+        ctx.Check(unbound is { StandIn: ImpactStandIn.None, Sound: null },
+            $"a gun on buildings whose bound name renders nowhere draws no stand-in and plays no sound, as the original's null slot and empty SOUND list do standin={unbound.StandIn} snd={unbound.Sound ?? "-"}");
         var rendered = ImpactOutcome.Resolve(fifty, SurfaceRegistry.Buildings, modelResolved: false,
             hasEffectsRuntime: true, effectBound: true);
-        ctx.Check(rendered is { EffectName: "large_fireball", StandIn: not ImpactStandIn.Ricochet },
-            $"and a name the runtime renders takes the burst away, playing the authored def alone fx={rendered.EffectName ?? "-"} standin={rendered.StandIn}");
+        ctx.Check(rendered.EffectName == "large_fireball",
+            $"and wep_02's bound large_fireball still plays on the same surface fx={rendered.EffectName ?? "-"}");
 
         // The lab reads the built chapter through the one physics space, where a cached collidable
         // world's colliders would also stand and answer the ray.
         ctx.EvictCollidableWorlds();
         ctx.WithPrivateWorld(FilmLotChapter, collision: true,
             world => Strafe(ctx, world, gun, texturesPath));
+        ctx.EvictCollidableWorlds();
+        ctx.WithPrivateWorld("C1", collision: true,
+            world => StrafeAirport(ctx, world, gun, airportTextures));
     }
 
     // A5's launch axis and D18's launch hook over a live fire path: the rig fires its own pylons
@@ -2519,8 +2666,8 @@ internal static class OrdnanceSuites
                 var slot0 = stage.GetNode<Node3D>("pool0");
                 var readings = new List<List<RingReading>>();
                 // A burst crosses the fade threshold once per ring, and a console line costs about
-                // 1.9 ms on the frame path (PERF-35), so the report must stay off the console tier.
-                // Vacuous when a filter has turned `anim` up.
+                // 1.9 ms on the frame path (PERF-35). The report must therefore stay off the
+                // console tier. Vacuous when a filter has turned `anim` up.
                 bool animTurnedUp = Utils.Log.ConsoleShows("anim", Utils.Log.Level.Debug);
                 var consoleFades = new List<string>();
                 using (Utils.Log.PushConsoleSink(line =>
@@ -2894,10 +3041,8 @@ internal static class OrdnanceSuites
         return rows;
     }
 
-    // One staged root's own `sonic_emit1`, or null: the burst stages three copies of the emitter
-    // rig and the whole question is which of them a definition drives.
     // The far end of the seam the pool's basis travels: the effects runtime placing the named
-    // callee with it. Worth its own world because a name the catalogue and the data disagree on
+    // callee with it. This needs its own world. A name the catalogue and the data disagree on
     // would leave the ring on its authored axis and report nothing at all.
     private static void UpperRingPlacement(TestContext ctx)
     {
@@ -2927,18 +3072,30 @@ internal static class OrdnanceSuites
                 var ground = slot0.GetNodeOrNull<Node3D>("he_ring");
                 ctx.Check(upper != null && ground != null,
                     $"the burst's two ring roots are staged (upper={upper != null}, ground={ground != null})");
-                ctx.Check(upper != null && Degrees(upper.GlobalBasis.Y, Vector3.Up) < 0.5f,
-                    $"handed no basis, the upper ring keeps the fixed axis (Y={upper?.GlobalBasis.Y})");
+                var faithfulNormal = DiscNormalOf(upper);
+                ctx.Check(upper != null && Degrees(upper.GlobalBasis.Y, Vector3.Up) < 0.5f
+                          && faithfulNormal is { } fn && Degrees(fn, upper.GlobalBasis * ProjectilePool.UpperRingDiscNormal) < 0.5f,
+                    $"handed no basis, the upper ring keeps the fixed axis, its drawn disc facing the authored axis (Y={upper?.GlobalBasis.Y} disc={faithfulNormal})");
 
-                // The same burst with a basis in: the one the pool would build for a round coming
-                // down at 45°, which is nothing like the axis the faithful play just left it on.
+                // The same burst gets the basis the pool builds under Enhanced for a rocket diving
+                // at 45° across both horizontal axes. The drawn mesh is measured, not the basis.
                 // ⚠ A second burst at the SAME point is refused as already live, so move it.
-                var handed = ProjectilePool.SurfaceUpBasis(new Vector3(1f, 1f, 0f).Normalized());
-                ctx.Check(runtime.PlayEffectAt(anim, site + new Vector3(80f, 0f, 0f), callOrient: handed),
+                var flight = new Vector3(1f, -1.41421f, -1f).Normalized();
+                GraphicsMode.Resolve(GraphicsMode.EnhancedWord);
+                Basis? handed;
+                try
+                {
+                    handed = ProjectilePool.UpperRingOrient(flight);
+                }
+                finally
+                {
+                    GraphicsMode.Resolve(GraphicsMode.Default);
+                }
+                ctx.Check(handed != null && runtime.PlayEffectAt(anim, site + new Vector3(80f, 0f, 0f), callOrient: handed),
                     $"the enhanced burst played");
-                ctx.Check(upper != null && Degrees(upper.GlobalBasis.Y, handed.Y) < 0.5f
-                          && Degrees(upper.GlobalBasis.Y, Vector3.Up) > 40f,
-                    $"handed one, it takes it (Y={upper?.GlobalBasis.Y} against {handed.Y})");
+                var enhancedNormal = DiscNormalOf(upper);
+                ctx.Check(enhancedNormal is { } en && Mathf.Min(Degrees(en, -flight), Degrees(-en, -flight)) < 0.5f,
+                    $"handed one, the drawn disc faces back along the flight (disc={enhancedNormal} against {-flight})");
                 ctx.Check(ground != null && Degrees(ground.GlobalBasis.Y, Vector3.Up) < 0.5f,
                     $"the ground ring under it is left on its own axis (Y={ground?.GlobalBasis.Y})");
             }
@@ -2950,6 +3107,21 @@ internal static class OrdnanceSuites
         });
     }
 
+    // The world-space normal of the first ring mesh drawn under `root`: its mesh box's thinnest
+    // local axis carried through the instance's global basis. A disc's normal is its thin axis
+    // whatever node basis or mesh transform put it there, which is what the basis alone cannot show.
+    private static Vector3? DiscNormalOf(Node3D? root)
+    {
+        if (root == null || Descendants(root).OfType<MeshInstance3D>().FirstOrDefault(m => m.Mesh != null) is not { } mesh)
+            return null;
+        var size = mesh.Mesh.GetAabb().Size;
+        var local = size.X <= size.Y && size.X <= size.Z ? Vector3.Right
+            : size.Y <= size.Z ? Vector3.Up : Vector3.Back;
+        return (mesh.GlobalBasis.Inverse().Transposed() * local).Normalized();
+    }
+
+    // One staged root's own `sonic_emit1`, or null. The burst stages three copies of the emitter
+    // rig, and the whole question is which of them a definition drives.
     private static Node3D? EmitIn(Node3D slot, string rootName)
     {
         if (slot.GetNodeOrNull<Node3D>(rootName) is not { } root)
@@ -3055,7 +3227,7 @@ internal static class OrdnanceSuites
                 live.SimStep(1f / 60f);
             }
             ctx.Check(plays.Count > 0 && plays[0] == "3040slug_gunhit",
-                $"a 30 cal round into that building hands the decoded gunhit to the effects runtime, no ricochet in sight (played={(plays.Count > 0 ? plays[0] : "nothing")})");
+                $"a 30 cal round into that building hands the decoded gunhit to the effects runtime (played={(plays.Count > 0 ? plays[0] : "nothing")})");
             ctx.Note($"{FilmLotChapter}: {classed.Count} buildings-classed colliders, none carrying soil 11, a gun round on one playing {(plays.Count > 0 ? plays[0] : "nothing")}");
         }
         finally
@@ -3063,6 +3235,195 @@ internal static class OrdnanceSuites
             live?.Free();
             textures.Dispose();
         }
+    }
+
+    // C1's two building kinds, each struck from above by one 30 cal round. One is the zeppelin
+    // hangar (`hangar_left`/`hangar_right`/`mainhangar_roof`, soil default), the other an airport
+    // building whose collider carries buildings(11).
+    private static void StrafeAirport(TestContext ctx, TestWorld world, WeaponDef gun, string texturesPath)
+    {
+        var bodies = world.Session.Root.FindChildren("*", "StaticBody3D", recursive: true, owned: false)
+            .OfType<StaticBody3D>().ToList();
+        string[] zeppelinHangar = { "hangar_left", "hangar_right", "mainhangar_roof" };
+        var hangar = bodies.Where(b => b.GetParent() is { } p && zeppelinHangar.Contains(p.Name.ToString())).ToList();
+        var eleven = bodies.Where(b => ProjectilePool.SurfaceIdOf(b) == SurfaceRegistry.Buildings).ToList();
+        ctx.Check(hangar.Count > 0, $"C1 builds the zeppelin hangar's colliders count={hangar.Count}");
+        ctx.Check(hangar.All(b => ProjectilePool.SurfaceIdOf(b) == SurfaceRegistry.Default),
+            $"and every one of them reads default(0): the hangar_NN textures carry soil Default");
+        ctx.Check(eleven.Count > 0, $"and {eleven.Count} colliders carry buildings(11), the aphagar0N airport buildings");
+
+        var bound = EffectCatalogue.WorldEffectAnimNames(world.Session.Program);
+        var sub = world.Session.Program.Subset(bound);
+        var onHangar = FireDownOnto(ctx, world, hangar, gun, texturesPath, sub);
+        ctx.Check(onHangar is { Plays: ["3040slug_gunhit", ..] },
+            $"a round into the zeppelin hangar hands 3040slug_gunhit to the effects runtime, the debris the original throws there (played={onHangar?.Plays.FirstOrDefault() ?? "nothing"})");
+        // The strike takes a face of the body itself, not a ray down its mesh's middle. The sheds'
+        // roofs are aphagar03, a separate default(0) body.
+        var onEleven = eleven.Select(b => FaceOf(ctx, b)).FirstOrDefault(f => f != null) is { } ef
+            ? FireAlong(ctx, world, ef.Point, ef.Dir, 40f, gun, texturesPath, sub)
+            : null;
+        ctx.Check(onEleven != null, $"a round lands on a buildings(11) collider");
+        if (onEleven is { } e)
+        {
+            ctx.Check(e.Plays.Count == 0 && e.Sprites == 0,
+                $"and it hands nothing to the effects runtime and draws no sprite of its own (played={e.Plays.Count} sprites={e.Sprites})");
+            ctx.Note($"C1: one of {eleven.Count} buildings(11) colliders struck at {e.Point}, the zeppelin hangar at {onHangar?.Point.ToString() ?? "-"}");
+        }
+        StrafeShedWalls(ctx, world, bodies, gun, texturesPath, sub);
+    }
+
+    // The sheds' meshes mix `aphagar03` (soil default) with the soil-11 `aphagar0N` materials in
+    // one surface class. The original reads the soil off the struck polygon's own material. The
+    // aphagar03 faces play the default gunhit, and the soil-11 faces of the same shed play nothing.
+    private static void StrafeShedWalls(TestContext ctx, TestWorld world, List<StaticBody3D> bodies,
+        WeaponDef gun, string texturesPath, AnimProgram sub)
+    {
+        var gamez = world.Gamez;
+        var a03 = Enumerable.Range(0, gamez.Materials.Count)
+            .Where(i => gamez.Materials[i].TextureName?.StartsWith("aphagar03", System.StringComparison.OrdinalIgnoreCase) == true)
+            .ToHashSet();
+        ctx.Check(a03.Count > 0 && a03.All(i => gamez.Materials[i].SoilId == SurfaceRegistry.Default),
+            $"C1's aphagar03 materials carry soil default(0) count={a03.Count}");
+        // Meshes where aphagar03 and a soil-11 material share one surface class: the mixed bucket.
+        bool Mixed(GameZMesh mesh) =>
+            mesh.Polygons.Any(p => a03.Contains(p.MaterialIndex))
+            && mesh.Polygons.Any(p => p.MaterialIndex >= 0 && p.MaterialIndex < gamez.Materials.Count
+                && gamez.Materials[p.MaterialIndex].SoilId == SurfaceRegistry.Buildings
+                && SceneBuilder.ClassifySurface(gamez.Materials[p.MaterialIndex].TextureName) == SceneBuilder.ClassifySurface("aphagar03"));
+        var sheds = gamez.Nodes
+            .Where(n => n.MeshIndex >= 0 && n.MeshIndex < gamez.Meshes.Count && Mixed(gamez.Meshes[n.MeshIndex]))
+            .ToList();
+        var shedIndices = sheds.Select(n => n.Index).ToHashSet();
+        var shedNames = sheds.Select(n => n.Name).Distinct().OrderBy(s => s).ToList();
+        ctx.Check(sheds.Count > 0, $"{sheds.Count} C1 nodes carry aphagar03 and soil-11 polygons in one class ({string.Join(" ", shedNames)})");
+        // Node names repeat across the chapter, so the built node is matched on its gamez index.
+        var onSheds = bodies.Where(b => b.GetParent() is { } p && p.HasMeta(AnimRuntime.IndexMeta)
+            && shedIndices.Contains(p.GetMeta(AnimRuntime.IndexMeta).AsInt32())).ToList();
+        var walls = onSheds.Where(b => ProjectilePool.SurfaceIdOf(b) == SurfaceRegistry.Default).ToList();
+        var eleven = onSheds.Where(b => ProjectilePool.SurfaceIdOf(b) == SurfaceRegistry.Buildings).ToList();
+        var unsplit = onSheds.GroupBy(b => b.GetParent())
+            .Where(g => !g.Any(b => walls.Contains(b)) || !g.Any(b => eleven.Contains(b)))
+            .Select(g => g.Key.Name.ToString())
+            .ToList();
+        ctx.Check(onSheds.Count > 0 && unsplit.Count == 0,
+            $"and every such node builds a default(0) collider beside its buildings(11) one, the soil split (default={walls.Count} eleven={eleven.Count} unsplit={string.Join(" ", unsplit)})");
+
+        var wall = walls.Select(b => (Body: b, Face: FaceOf(ctx, b))).FirstOrDefault(x => x.Face != null);
+        ctx.Check(wall.Face != null, $"a ray reaches a face of an aphagar03 collider");
+        if (wall.Face is not { } wf)
+        {
+            return;
+        }
+        var onWall = FireAlong(ctx, world, wf.Point, wf.Dir, 40f, gun, texturesPath, sub);
+        ctx.Check(onWall is { Plays: ["3040slug_gunhit", ..] },
+            $"a round into {wall.Body.GetParent().Name}'s aphagar03 face reads default and hands 3040slug_gunhit to the effects runtime (played={onWall?.Plays.FirstOrDefault() ?? "nothing"})");
+        ctx.Note($"C1: {onSheds.Count} shed colliders on {string.Join(" ", shedNames)}; aphagar03 struck at {wf.Point} on {wall.Body.GetParent().Name}/{wall.Body.Name}");
+    }
+
+    // Drops one round straight down onto the first candidate a ray from above lands on. Steps the
+    // pool until the round strikes (DamageSink reports it), then reads what the hit produced that
+    // step.
+    private static (List<string> Plays, int Sprites, Vector3 Point)? FireDownOnto(TestContext ctx, TestWorld world,
+        List<StaticBody3D> candidates, WeaponDef gun, string texturesPath, AnimProgram sub)
+    {
+        var space = ctx.Host.GetWorld3D().DirectSpaceState;
+        Vector3? found = null;
+        foreach (var body in candidates)
+        {
+            if (body.GetParent() is not Node3D owner
+                || owner.GetNodeOrNull<MeshInstance3D>("mesh") is not { } mesh)
+            {
+                continue;
+            }
+            var centre = mesh.GlobalTransform * mesh.GetAabb().GetCenter();
+            var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                centre with { Y = centre.Y + 400f }, centre with { Y = centre.Y - 400f },
+                CollisionLayers.World));
+            if (hit.Count > 0 && hit["collider"].Obj is StaticBody3D landed && ReferenceEquals(landed, body))
+            {
+                found = hit["position"].AsVector3();
+                break;
+            }
+        }
+        return found is { } point ? FireAlong(ctx, world, point, Vector3.Down, 60f, gun, texturesPath, sub) : null;
+    }
+
+    // Fires one round along `dir` from `standoff` short of `point`. Steps the pool until the round
+    // strikes (DamageSink reports it) and returns what the hit produced that step.
+    private static (List<string> Plays, int Sprites, Vector3 Point)? FireAlong(TestContext ctx, TestWorld world,
+        Vector3 point, Vector3 dir, float standoff, WeaponDef gun, string texturesPath, AnimProgram sub)
+    {
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? live = null;
+        try
+        {
+            var plays = new List<string>();
+            bool struck = false;
+            live = new ProjectilePool(textures, null, null,
+                flyoutGamez: world.Gamez, flyoutScene: world.Session.Builder.Scene,
+                flyoutAnims: world.Session.Program)
+            {
+                EffectSink = (name, at, orient, ringOrient, ttl) => plays.Add(name),
+                EffectHandles = name => sub.ByAnimName(name).Count > 0,
+                DamageSink = (_, _) =>
+                {
+                    struck = true;
+                    return false;
+                },
+            };
+            ctx.Host.AddChild(live);
+            var up = Mathf.Abs(dir.Y) > 0.9f ? Vector3.Forward : Vector3.Up;
+            live.Spawn(gun, new Transform3D(Basis.LookingAt(dir, up), point - (dir * standoff)), Vector3.Zero);
+            for (int i = 0; i < 180 && !struck; i++)
+            {
+                live.SimStep(1f / 60f);
+            }
+            return struck ? (plays, live.ImpactSpriteCount, point) : null;
+        }
+        finally
+        {
+            live?.Free();
+            textures.Dispose();
+        }
+    }
+
+    // A point on one of `body`'s own triangles, reached by a ray from `Standoff` along the face
+    // normal (either side) before any other collider. The direction that ray runs comes back with
+    // the point.
+    private static (Vector3 Point, Vector3 Dir)? FaceOf(TestContext ctx, StaticBody3D body)
+    {
+        const float Standoff = 40f;
+        var space = ctx.Host.GetWorld3D().DirectSpaceState;
+        foreach (var cs in body.GetChildren().OfType<CollisionShape3D>())
+        {
+            if (cs.Shape is not ConcavePolygonShape3D shape)
+            {
+                continue;
+            }
+            var xf = cs.GlobalTransform;
+            var faces = shape.GetFaces();
+            for (int i = 0; i + 2 < faces.Length; i += 3)
+            {
+                Vector3 a = xf * faces[i], b = xf * faces[i + 1], c = xf * faces[i + 2];
+                var n = (b - a).Cross(c - a);
+                if (n.Length() < 2f)
+                {
+                    continue;
+                }
+                n = n.Normalized();
+                var centre = (a + b + c) / 3f;
+                foreach (var side in new[] { n, -n })
+                {
+                    var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(
+                        centre + (side * Standoff), centre - (side * 2f), CollisionLayers.World));
+                    if (hit.Count > 0 && hit["collider"].Obj is StaticBody3D landed && ReferenceEquals(landed, body))
+                    {
+                        return (hit["position"].AsVector3(), -side);
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     private readonly record struct RingReading(string Root, string Mesh, bool Visible, Vector3 Scale, float Opacity);

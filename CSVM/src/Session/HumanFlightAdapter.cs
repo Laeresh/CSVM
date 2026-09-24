@@ -178,6 +178,7 @@ internal sealed class HumanFlightAdapter
             // one scripted sequence per player ('|'-separated); the last covers the rest
             HoldSegments = _policy.HoldSets == null ? null
                 : _policy.HoldSets[Math.Min(pi, _policy.HoldSets.Length - 1)],
+            LeverSteps = _policy.LeverSteps,
             PlaneModel = planeModel,
             Props = PropAnimator.Build(planeModel),
             WingLights = WingLightBlinker.Build(planeBuilder.WingFlares, _policy.AnimLod),
@@ -325,7 +326,7 @@ internal sealed class HumanFlightAdapter
 
         // The original's heading tape, rebuilt from the chapter's own HUD
         // textures (compassticks2/compasstxt ship in every chapter's archive).
-        pilotHud.Compass = CompassTape.Build(_aircraft.Textures, _policy.CompassSqueeze);
+        pilotHud.Compass = CompassTape.Build(_aircraft.Textures);
         if (verbose && pilotHud.Compass != null)
             Log.Info("flight", $"compass: heading tape from compassticks2/compasstxt");
 
@@ -400,12 +401,14 @@ internal sealed class HumanFlightAdapter
             // rather than through FlightRoster's roster-wide channel: each pane races its own copy
             // of the run, and a shared feed would put one pilot's cleared zones on another's HUD.
             controller.TargetObjectives = into => run.CollectTargets(into);
-            // This pane's Danger Zone camera. The photographed pixels are this seat's own pane, so
-            // in splitscreen the shot is the SubViewport that crossed the marker, never the window.
+            // This pane's Danger Zone camera, photographing through the pilot's posed eye. A run
+            // with no window to draw it in reads this seat's own pane instead, so in splitscreen
+            // that shot is the SubViewport that crossed the marker, never the window.
             var pane = rig.Viewport;
             var capture = new StuntCapture(run, _policy.Chapter,
-                () => (pane ?? (controller.IsInsideTree() ? controller.GetViewport() : null))
-                    ?.GetTexture()?.GetImage());
+                landed => controller.Photograph is { } eye && DangerZonePhotograph.Drawable
+                    ? eye.Request(landed)
+                    : PaneReadback.Request(pane ?? (controller.IsInsideTree() ? controller.GetViewport() : null), landed));
             capture.Sting = () => controller.Audio?.OnDangerZoneCamera();
             controller.StuntShots = capture;
 
@@ -419,9 +422,15 @@ internal sealed class HumanFlightAdapter
                 // below covers the whole window when the last pilot is in. The run
                 // HUD shows this player's placing meanwhile.
                 race.Add(pi, controller.Stunt, planeDisplay);
-                controller.Race = race;
                 runHud.Race = race;
                 runHud.PlayerIndex = pi;
+                // ⚠ Instant Action keeps the placings and nothing else: its ending is the
+                // director's hold and wrap-up, which the pilot flies through, so the seat takes
+                // none of the race board's rules (the finish hold, R as a rematch).
+                if (!_human.InstantActionActive)
+                {
+                    controller.Race = race;
+                }
             }
             else if (_human.InstantActionActive)
             {
@@ -499,9 +508,16 @@ internal sealed class HumanFlightAdapter
         // The plant's force path is chosen once, here, off who is flying, a person, so the
         // player path. FlightModel.UsesAiForcePath carries why this is a construction argument
         // rather than the original's own pointer-compare-against-the-player test.
+        var camParams = _aircraft.CamParamsFor(planeName);
         controller.Setup(new FlightModel(stats, aiForcePath: !controller.IsHumanPiloted),
-            rig.Camera, _aircraft.CamParamsFor(planeName), start.Pos, start.LookAt,
+            rig.Camera, camParams, start.Pos, start.LookAt,
             start.ThrottleFrac, start.SpeedMps, cockpitCameraOffset: planeBuilder.CockpitCameraOffset);
+        // The Danger Zone eye, framed off the airframe's own chase distance and aimed at the pose
+        // the controller draws, which is the controller node's own transform.
+        var scatter = Rng.Stream(Rng.Photograph);
+        controller.Photograph = DangerZonePhotograph.Build(rig.Camera, controller.Cockpit,
+            () => controller.GlobalTransform, camParams.Dist, scatter.Randf, airframe: controller);
+        controller.AddChild(controller.Photograph);
         // --weapon-lab: a flight session whose aircraft is pinned at the spawn pose. Set after
         // Setup, so the pin, captured at the first held sim step, takes the pose Setup just wrote.
         if (_policy.WeaponLab)
@@ -510,11 +526,9 @@ internal sealed class HumanFlightAdapter
             if (verbose)
                 Log.Info("flight", $"weapon lab: P{pi + 1} held at the spawn pose (world sim running)");
         }
-        // The throttle-slam exhaust smoke: needs the plane's own exhaust marker
-        // nodes plus the live throttle Setup just wrote, so it builds after Setup rather than
-        // alongside Props/WingLights above.
-        controller.ThrottleSmoke = ThrottleSlamSmoke.Build(planeModel, _aircraft.ZrdrPath, _aircraft.Textures,
-            controller, controller.Throttle, _world.Ambience);
+        // The exhaust smoke hangs off the plane's own exhaust marker nodes, one trail per marker.
+        controller.ExhaustSmoke = ExhaustSmoke.Build(planeModel, _aircraft.Textures, controller,
+            _world.Ambience);
 
         // The ambient speed cue is chapter data, not an aircraft-model effect: one private copy
         // per player so splitscreen panes do not see another pilot's ahead-of-plane wisps.

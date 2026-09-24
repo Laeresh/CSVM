@@ -11,14 +11,15 @@ namespace CSVM.UI.Menu.Original;
 
 /// <summary>
 /// The Original presentation: <see cref="OriginalShell"/> drawn through a <see cref="ComposedBoardView"/>
-/// on the board layer, registered under <see cref="PresentationId.Original"/>. <see cref="Activate"/>
-/// builds the layer on the first call, refreshes the shared roster from the saved-plane store and
-/// stands the shell on the destination's screen on every call; <see cref="Tick"/> keeps the pad
-/// roster in step, claims seat 0's pad while joining is closed, scans the join gesture on the
-/// screens the shell opens it on (<see cref="OriginalShell.JoiningOpen"/>), polls every seat, maps a
-/// pointer from window pixels into the authored space through <see cref="BoardFit"/>, steps the
-/// shell per seat, requests its cues and hands its exit to the host. The OS pointer is hidden
-/// while the presentation is on screen, since the shell draws the original's own.
+/// on the board layer, registered under <see cref="PresentationId.Original"/>, with
+/// <see cref="Activate"/> building the layer on the first call. It refreshes the shared roster from
+/// the saved-plane store and stands the shell on the destination's screen on every call.
+/// Each <see cref="Tick"/> keeps the pad roster in step and reads the join board's sign-on gestures
+/// on the one screen that opens them (<see cref="OriginalShell.JoiningOpen"/>). It then polls every
+/// seat and maps a pointer from window pixels into the authored space through
+/// <see cref="BoardFit"/>. It steps the shell per seat, requests its cues and hands its exit to the
+/// host. The OS pointer is hidden while the presentation is on screen, since the shell draws the
+/// original's own.
 /// </summary>
 public sealed class OriginalPresentation : IMenuPresentation
 {
@@ -98,6 +99,22 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// one, the two headlines being the page's only difference between them.</summary>
     public const string InstantActionWrapupFailedAid = "failed";
 
+    /// <summary>The wrap-up aid's argument that shows a seventeen-zone stunt run, the longest the
+    /// install ships, whose splits take more than one post-it.</summary>
+    public const string InstantActionWrapupLongAid = "long";
+
+    /// <summary>The wrap-up aid's argument that shows the sample run with a stand-in photograph
+    /// per zone, every one landed.</summary>
+    public const string InstantActionWrapupPhotosAid = "photos";
+
+    /// <summary>The wrap-up aid's argument that shows the seventeen-zone run with a stand-in
+    /// photograph per zone, the last one still on its way.</summary>
+    public const string InstantActionWrapupLongPhotosAid = "long-photos";
+
+    /// <summary>The aid value that opens the join board, <c>join-board</c> alone for an empty
+    /// manifest or <c>join-board:N</c> with that many entries posed as signed on.</summary>
+    public const string JoinBoardAid = "join-board";
+
     /// <summary>The aid value that opens the hangar's name screen on a fresh build.</summary>
     public const string PlaneNameAid = "plane-name";
 
@@ -148,6 +165,17 @@ public sealed class OriginalPresentation : IMenuPresentation
         CampaignDeleteAid,
     };
 
+    /// <summary>The cabin's palette: the shared cabin board's, with the mission pull-down's words
+    /// in the paper forms' list inks. <c>PASSENGERCABIN.SCRIPT</c> gives <c>pc_d_missions</c> the
+    /// <c>@shareditems@BUA</c> list, the one the plane selection and ammo screens take, which prints
+    /// black on its <c>0xffc8d4e6</c> paper whatever screen it stands on
+    /// (<c>docs/formats/campaign-screens.md</c>, "The mission cheat").</summary>
+    public static readonly BoardPalette CabinPalette = BoardPalette.Panel with
+    {
+        Row = BoardPalette.Paper.Row,
+        Focus = BoardPalette.Paper.Focus,
+    };
+
     // The aids' scratch build carries this name, so the shots read the same on every machine; it
     // is never committed by an aid.
     private const string AidPlaneName = "Sample Plane";
@@ -179,6 +207,7 @@ public sealed class OriginalPresentation : IMenuPresentation
     private int _debugJoin;
     private CanvasLayer? _layer;
     private ComposedBoardView? _view;
+    private ShotViewer? _shotViewer;
     private OriginalShell? _shell;
     private MenuSeatDevices? _devices;
     private IMenuHost? _host;
@@ -232,6 +261,10 @@ public sealed class OriginalPresentation : IMenuPresentation
     /// can write a real player's progress. Read on every open, so it may be set before the first
     /// show or between shows.</summary>
     public CampaignProfileStore? CampaignProfiles { get; set; }
+
+    /// <summary>The viewer showing the wrap-up page's open photograph, for a suite reading it back;
+    /// null while the presentation has no layer.</summary>
+    internal ShotViewer? PhotoViewer => _shotViewer;
 
     /// <summary>The board palette the shell's inks resolve to: list text in the file-wide
     /// disabled grey with the active white for the focused row, plaque labels in the paper
@@ -309,7 +342,8 @@ public sealed class OriginalPresentation : IMenuPresentation
                 options: () => OptionsStore.UserOptions().Load(),
                 screenSizes: ResolutionSetting.ScreenSizes,
                 screens: MonitorSetting.Screens,
-                controls: host.Features.TryGet<ControlsFeature>(out var controls) ? controls : null);
+                controls: host.Features.TryGet<ControlsFeature>(out var controls) ? controls : null,
+                joinRoster: _devices);
             _controlsSeats = host.Features.TryGet<ControlsFeature>(out var rebinds) ? new MenuControlsSeats(rebinds) : null;
             _palette = PaletteFor(_shell.Inks);
             _preferencesPalette = PaletteFor(_shell.PreferencesInks, _shell.Inks);
@@ -325,6 +359,9 @@ public sealed class OriginalPresentation : IMenuPresentation
             _layer = new CanvasLayer { Name = "original_menu", Layer = HudLayers.Board };
             _view = ComposedBoardView.Build(_dataRoot);
             _layer.AddChild(_view);
+            // The shell polls its own pointer, so the viewer over the page takes no click.
+            _shotViewer = ShotViewer.Build(clickCloses: false);
+            _layer.AddChild(_shotViewer);
             _parent.AddChild(_layer);
         }
 
@@ -360,7 +397,7 @@ public sealed class OriginalPresentation : IMenuPresentation
         }
         else if (destination is InstantActionWrapupReturn wrapup)
         {
-            // The numbers were frozen at the ending and travel with the destination; the session
+            // The numbers are final at the ending and travel with the destination. The session
             // that counted them is already gone by the time this page draws.
             _shell.Wrapup.ShowWrapup(wrapup.Snapshot);
         }
@@ -461,13 +498,28 @@ public sealed class OriginalPresentation : IMenuPresentation
                     // The screen opens on one life, so neither the unlimited reading nor a count
                     // above one is a state a plain shot of it can show.
                     _shell.InstantAction.OpenInstantAction();
-                    _shell.InstantAction.PoseLives(AidLives(lives));
+                    _shell.InstantAction.PoseLives(AidCount(lives));
                     break;
                 case InstantActionWrapupAid:
                     _shell.Wrapup.ShowWrapup(InstantActionWrapupPage.Sample(won: true));
                     break;
                 case InstantActionWrapupAid + ":" + InstantActionWrapupFailedAid:
                     _shell.Wrapup.ShowWrapup(InstantActionWrapupPage.Sample(won: false));
+                    break;
+                case InstantActionWrapupAid + ":" + InstantActionWrapupLongAid:
+                    _shell.Wrapup.ShowWrapup(InstantActionWrapupPage.LongSample());
+                    break;
+                case InstantActionWrapupAid + ":" + InstantActionWrapupPhotosAid:
+                    _shell.Wrapup.ShowWrapup(WithSamplePhotos(InstantActionWrapupPage.Sample(won: true), pending: 0));
+                    break;
+                case InstantActionWrapupAid + ":" + InstantActionWrapupLongPhotosAid:
+                    _shell.Wrapup.ShowWrapup(WithSamplePhotos(InstantActionWrapupPage.LongSample(), pending: 1));
+                    break;
+                case JoinBoardAid:
+                    _shell.JoinBoard.Open();
+                    break;
+                case string board when board.StartsWith(JoinBoardAid + ":", StringComparison.Ordinal):
+                    _shell.JoinBoard.Pose(AidCount(board));
                     break;
                 case PlaneNameAid:
                     _shell.OpenHangar();
@@ -546,13 +598,9 @@ public sealed class OriginalPresentation : IMenuPresentation
             seat.Prime();
         }
 
-        _devices!.Sync();
-        _devices.PrimeJoins();
+        _devices!.Sync(0f);
+        _devices.PrimeBoard();
         _joiningOpen = _shell.JoiningOpen;
-        if (!_joiningOpen)
-        {
-            _devices.ClaimP1Pad();
-        }
 
         _layer.Visible = true;
         _shown = true;
@@ -567,23 +615,27 @@ public sealed class OriginalPresentation : IMenuPresentation
             return;
         }
 
-        bool changed = _devices.Sync();
+        bool changed = _devices.Sync(dt);
         bool joining = _shell.JoiningOpen;
         if (joining && !_joiningOpen)
         {
-            _devices.PrimeJoins();
+            _devices.PrimeBoard();
         }
 
         _joiningOpen = joining;
+        // The board's gestures are read raw off the pads, a pad with no seat having no commands to
+        // read. Nowhere else does a button reach the roster: seat 0 no longer claims a pad by
+        // steering with it.
+        bool signing = false;
         if (joining)
         {
-            changed |= _devices.ScanJoins();
-        }
-        else
-        {
-            // While joining is closed the pad steering seat 0 becomes seat 0's for good, so once a
-            // screen opens joining every other pad is unambiguously a joiner.
-            changed |= _devices.ClaimP1Pad();
+            var scan = _devices.ScanBoard();
+            changed |= scan.Moved;
+            signing = scan.Pressed;
+            if (scan.Cast)
+            {
+                changed |= _shell.JoinBoard.CastOff();
+            }
         }
 
         // Before the poll, so a pad that joined this frame already has its player row and a seat
@@ -603,6 +655,15 @@ public sealed class OriginalPresentation : IMenuPresentation
         for (int i = 0; i < _host.Seats.Count; i++)
         {
             var commands = _host.Seats[i].Poll(dt);
+
+            // ⚠ A board gesture is not also a press on its plaques. Seat 0 reads every pad nobody
+            // holds, so the same A would arrive here as Accept and arm CONTINUE under it. The
+            // keyboard and the mouse still drive the plaques on any frame no gesture landed in.
+            if (i == 0 && signing)
+            {
+                commands = commands with { Accept = false, Back = false, Join = false };
+            }
+
             if (commands.Pointer is { } pointer)
             {
                 commands = commands with
@@ -677,6 +738,10 @@ public sealed class OriginalPresentation : IMenuPresentation
         // An edit box's caret blinks on the same step, and repaints for the same reason: the
         // screen has not changed, only the pixels the box draws.
         picture |= _view.AdvanceCaret(dt);
+        // A photograph landing after the wrap-up page woke fills its print, which is a new picture
+        // on the board rather than new pixels in one already drawn, so the page is composed again.
+        changed |= _shell.Screen == OriginalScreen.InstantActionWrapup && _shell.Wrapup.TakeLanded();
+        SyncShotViewer();
         if (changed)
         {
             Redraw();
@@ -694,6 +759,8 @@ public sealed class OriginalPresentation : IMenuPresentation
         {
             _layer.Visible = false;
         }
+
+        _shotViewer?.Close();
 
         // Off screen nothing types, so a seat left capturing on the name screen is released, and
         // nothing narrates: a launch from the briefing's flight check ends the voice with it.
@@ -722,13 +789,15 @@ public sealed class OriginalPresentation : IMenuPresentation
         _layer.QueueFree();
         _layer = null;
         _view = null;
+        _shotViewer = null;
     }
 
     private static Color ToColor(MenuLayoutColor c) => new(c.R / 255f, c.G / 255f, c.B / 255f, 1f);
 
-    // The lives aid's count: the digits after a further colon, else 0, the unlimited reading. The
-    // feature clamps a count past its cap, so an out-of-range aid poses the cap rather than failing.
-    private static int AidLives(string aid)
+    // An aid's trailing count: the digits after its last colon, else 0 (the lives aid's unlimited
+    // reading, the board's empty manifest). Each aid clamps its own, so an out-of-range argument
+    // poses the nearest state rather than failing.
+    private static int AidCount(string aid)
     {
         int colon = aid.LastIndexOf(':');
         return colon > 0 && int.TryParse(
@@ -750,6 +819,45 @@ public sealed class OriginalPresentation : IMenuPresentation
         }
 
         return 0;
+    }
+
+    // One stand-in photograph per zone the sample completed, the last pending ones never landing.
+    // Each is a sky over a tilted horizon in its own hue, so the prints tell apart in a shot.
+    private static IaWrapupSnapshot WithSamplePhotos(IaWrapupSnapshot sample, int pending)
+    {
+        var shots = new List<StuntShot>();
+        for (int i = 0; i < sample.ZonesCompleted; i++)
+        {
+            var shot = new StuntShot { DzName = $"dz{i + 1}", At = i, Path = $"sample_dz{i + 1}.png" };
+            if (i < sample.ZonesCompleted - pending)
+            {
+                shot.Thumb = SamplePhoto(i);
+                shot.Landed = true;
+            }
+
+            shots.Add(shot);
+        }
+
+        return sample with { Shots = shots };
+    }
+
+    private static Image SamplePhoto(int index)
+    {
+        const int width = StuntCapture.ThumbWidth, height = StuntCapture.ThumbWidth * 9 / 16;
+        var image = Image.CreateEmpty(width, height, false, Image.Format.Rgb8);
+        var sky = Color.FromHsv(0.55f + (index * 0.037f % 0.2f), 0.45f, 0.9f);
+        var ground = Color.FromHsv(0.25f + (index * 0.053f % 0.12f), 0.5f, 0.45f);
+        float tilt = ((index % 5) - 2) * 0.12f;
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                float horizon = (height * 0.6f) + ((x - (width / 2f)) * tilt);
+                image.SetPixel(x, y, y < horizon ? sky.Darkened(y / (float)height * 0.3f) : ground);
+            }
+        }
+
+        return image;
     }
 
     // The Game Options aid's posed state, the keyboard walk that reaches it rather than a state the
@@ -846,7 +954,15 @@ public sealed class OriginalPresentation : IMenuPresentation
                 _shell.Campaign.ShowDeleteConfirm(CampaignAidProfiles.Pilot);
                 break;
             case "campaign-cabin":
+                // A leading typed word stands the mission pull-down up as typing it on the wall
+                // would, and the script after it walks the cabin with the field there.
                 _shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
+                if (argument.StartsWith(CampaignCheats.MissionWord, StringComparison.Ordinal))
+                {
+                    _shell.Campaign.Cheats?.ShowMissionList();
+                    argument = argument[CampaignCheats.MissionWord.Length..];
+                }
+
                 break;
             case "campaign-previous":
                 _shell.Campaign.ShowCabin(CampaignAidProfiles.Pilot);
@@ -942,18 +1058,45 @@ public sealed class OriginalPresentation : IMenuPresentation
     {
         if (_shell != null && _view != null)
         {
-            // Paper pages write in authored black, the loadout in the ammo form's palette, the hub
-            // in its own inks, the three options pages in the Preferences page's, a campaign screen
-            // in its shared board component's palette, and the rest in the file-wide inks.
+            // Each family writes in its own palette. Paper pages take authored black, the loadout
+            // the ammo form's and the join board the scrapbook's. The options pages take the
+            // Preferences page's, the hub its own inks, a campaign screen its board component's.
             var palette = _shell.Screen is OriginalScreen.InstantAction or OriginalScreen.InstantActionWrapup
                     or OriginalScreen.HangarInventory ? _paperPalette
                 : _shell.Screen == OriginalScreen.InstantActionLoadout ? BoardPalette.Paper
+                : _shell.Screen == OriginalScreen.JoinBoard ? OriginalJoinBoard.Palette
                 : _shell.Screen is OriginalScreen.Options or OriginalScreen.GameOptions or OriginalScreen.Audio
                     or OriginalScreen.Video or OriginalScreen.ControlsPrefs or OriginalScreen.Keys ? _preferencesPalette
                 : _shell.IsHangarScreen ? _hangarPalette
+                : _shell.CampaignPage == CampaignScreen.Cabin ? CabinPalette
                 : _shell.CampaignPage is { } campaign ? BoardPalette.For(campaign)
                 : _palette;
             _view.Show(_shell.Compose(), palette, string.Empty, string.Empty);
+        }
+    }
+
+    // The viewer follows the wrap-up page's open photograph, which the page's own rows open and
+    // close, so any other screen shows none.
+    private void SyncShotViewer()
+    {
+        if (_shotViewer == null || _shell == null)
+        {
+            return;
+        }
+
+        var shot = _shell.Screen == OriginalScreen.InstantActionWrapup ? _shell.Wrapup.Viewing : null;
+        if (shot == _shotViewer.Shot)
+        {
+            return;
+        }
+
+        if (shot == null)
+        {
+            _shotViewer.Close();
+        }
+        else
+        {
+            _shotViewer.Open(shot);
         }
     }
 }

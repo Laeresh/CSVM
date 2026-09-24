@@ -48,22 +48,30 @@ public static class DisplayWords
         new[] { RenderScaleNative, "125", "150", "175", "200" };
 }
 
-/// <summary>The process-wide options: the requested menu presentation, the requested graphics
-/// mode, the difficulty setting, the nearest-after-a-kill targeting setting, the opening view, the
-/// automatic head turn, the five display settings (the monitor, the window size, the display mode,
-/// the V-Sync choice and the render scale) and the four volume levels. A missing field means "never
-/// set"; the caller, not this def, decides what that falls back to.
+/// <summary>Every process-wide option the game saves, one property each, and each said in its own
+/// summary below. A missing field means "never set"; the caller, not this def, decides what that
+/// falls back to.
 /// ⚠ A display field added here is read through a <c>SavedWord(bool det)</c> reader and nowhere
-/// else, and that reader returns null under <c>--det</c>: a golden shot is a deterministic run
-/// against the player's own options directory, so a saved size or mode that escaped the drop would
-/// move every golden in the repo. The <c>display-det-guard</c> suite compares this def against the
-/// readers by reflection and fails on a field that has none. The four levels take the same drop
-/// through <see cref="AudioMix.SavedLevels"/>, which is their one reader.</summary>
+/// else, and that reader returns null under <c>--det</c>. Otherwise a saved size or mode would
+/// move every golden, a golden shot being a deterministic run against the player's own options
+/// directory. The <c>display-det-guard</c> suite compares this def against the readers by
+/// reflection and fails on a field that has none. The four volume levels take the same drop through
+/// <see cref="AudioMix.SavedLevels"/>, which is their one reader.</summary>
 public sealed class OptionsDef
 {
+    /// <summary>A menu presentation word an older build saved. Loaded and saved back so such a
+    /// file round-trips, and read by nothing: the command line alone picks the presentation, and
+    /// no screen writes this field.</summary>
     public string? MenuPresentation { get; set; }
 
     public string? GraphicsMode { get; set; }
+
+    /// <summary>Whether a rocket warhead's ground burst carves the terrain
+    /// (<see cref="Flight.CraterGate"/>). ⚠ No screen offers this. The carve is remake-only chrome
+    /// the menu does not advertise. This key, hand-set in the file, is one of its two doors and
+    /// <c>--craters</c> the other. Nullable because null is "never set", which reads as OFF, the
+    /// original carving nothing in play.</summary>
+    public bool? RocketCraters { get; set; }
 
     /// <summary>The difficulty word (<see cref="Flight.Difficulty.Word"/>): the campaign
     /// selector's tier the launch reads when no flag names one.</summary>
@@ -250,6 +258,7 @@ public sealed class OptionsStore
             w.WriteNumber("version", Version);
             Write(w, "menuPresentation", def.MenuPresentation);
             Write(w, "graphicsMode", def.GraphicsMode);
+            WriteFlag(w, "rocketCraters", def.RocketCraters);
             Write(w, "difficulty", def.Difficulty);
             WriteFlag(w, "nearestAfterKill", def.NearestAfterKill);
             WriteFlag(w, "rumble", def.Rumble);
@@ -295,6 +304,7 @@ public sealed class OptionsStore
             {
                 MenuPresentation = Read(root, "menuPresentation", ValidPresentations),
                 GraphicsMode = Read(root, "graphicsMode", ValidGraphicsModes),
+                RocketCraters = ReadFlag(root, "rocketCraters"),
                 Difficulty = Read(root, "difficulty", ValidDifficulties),
                 NearestAfterKill = ReadFlag(root, "nearestAfterKill"),
                 Rumble = ReadFlag(root, "rumble"),

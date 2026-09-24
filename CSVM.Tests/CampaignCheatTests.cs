@@ -153,8 +153,8 @@ public class CampaignCheatTests : IDisposable
         Assert.Equal(expected, cheats.MissionPick);
     }
 
-    /// <summary>Closing the campaign drops the pull-down and its pick and keeps the two engine
-    /// globals, which the original clears only by leaving the game.</summary>
+    /// <summary>Closing the campaign drops the pull-down and its pick and keeps the original's two
+    /// globals, which it clears only when the process exits.</summary>
     [Fact]
     public void ClosingTheCampaignDropsThePullDownAndKeepsTheGlobals()
     {
@@ -172,7 +172,7 @@ public class CampaignCheatTests : IDisposable
         Assert.True(cheats.AllowAll);
     }
 
-    /// <summary>The pilot name is compared the way the engine's own <c>lstrcmpiA</c> compares it,
+    /// <summary>The pilot name is compared the way the original's own <c>lstrcmpiA</c> compares it,
     /// and a name that merely contains it is not it.</summary>
     [Theory]
     [InlineData("crashcheat!", true)]

@@ -5,23 +5,32 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The head-look laws: the snap direction table, the 2 rad/s
-/// free-look integration, the elevation clamp and azimuth wrap, the padlock's target bearing and
-/// its exit scan, and the exponential smoothing at the decoded rates (elevation 3.0/s, azimuth
-/// 5.0/s). <see cref="HeadLook"/> is engine-free, so none of this needs a live camera.
+/// The head-look laws: the snap direction table, the 2 rad/s free-look integration, the elevation
+/// clamp and azimuth wrap. The padlock's target bearing and its exit scan are here too, with the
+/// exponential smoothing at the decoded rates (elevation 3.0/s, azimuth 5.0/s).
+/// Everything in <see cref="HeadLook"/> is engine-free, so none of this needs a live camera.
 /// </summary>
 public class HeadLookTests
 {
     private const float Tol = 1e-4f;
 
-    // C22: HeadLook.AutoheadTarget's shipped constants (extracted/zrdr/player.zrd.json via
-    // PlaneStatsFlightGlobalsTests' own loader assertion), reused by the pure-vector-law tests
-    // near the bottom of this file.
+    // A live frame at 60 Hz, and long enough of them for the look stick's lag to arrive inside Tol
+    // (its time constant is 40 ms, so one second leaves nothing of it).
+    private const float StepDt = 1f / 60f;
+
+    private const int HoldFrames = 60;
+
+    // HeadLook.AutoheadTarget's shipped constants (extracted/zrdr/player.zrd.json via
+    // PlaneStatsFlightGlobalsTests' own loader assertion), reused by the lead-law tests near the
+    // bottom of this file.
     private const float ShippedTurnTime = 0.75f;
     private const float ShippedTurnMax = 0.0998f;
     private const float ShippedMinPitch = -0.0524f;
 
     private static HeadLookInput Idle => default;
+
+    private static string ZrdrPath =>
+        SessionPaths.PreferUnzipped(System.IO.Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
 
     // The original's two mode keys, K and J, as the frame they are pressed on.
     private static HeadLookInput SnapKey =>
@@ -84,7 +93,7 @@ public class HeadLookTests
     public void ThePadLooksBelowLevelWhereTheOtherPathsCannot()
     {
         var head = new HeadLook();          // first person: ElevationFloor 0, level
-        head.Step(0.1f, Pad(0f, -1f));
+        HoldStick(head, 0f, -1f);           // held, so the stick's own lag has arrived
         Assert.Equal(Mathf.DegToRad(-HeadLook.PadLookPitchMaxDeg), head.TargetElevation, Tol);
 
         head = new HeadLook();
@@ -118,6 +127,82 @@ public class HeadLookTests
         head.Step(0.1f, Idle);
         Assert.Equal(0f, head.TargetAzimuth, Tol);
         Assert.Equal(0f, head.TargetElevation, Tol);
+    }
+
+    // The filter's whole law: one time constant of a held deflection leaves the filtered pair at
+    // 1 - 1/e of it, whatever step size the frames arrive in, and a few more put it on the stick.
+    [Fact]
+    public void TheStickFilterReachesOneTimeConstantOfAHeldDeflection()
+    {
+        var filter = new StickLookFilter();
+        float tau = 1f / HeadLook.PadAimSmoothRate;
+        const int steps = 20;
+        for (int i = 0; i < steps; i++)
+        {
+            filter.Step(tau / steps, 1f, 0f);
+        }
+
+        Assert.True(filter.Active);
+        Assert.Equal(1f - Mathf.Exp(-1f), filter.X, Tol);
+        Assert.Equal(0f, filter.Y, Tol);
+
+        for (int i = 0; i < 5 * steps; i++)
+        {
+            filter.Step(tau / steps, 1f, 0f);
+        }
+
+        Assert.Equal(1f, filter.X, 1e-2f);
+    }
+
+    // The centre band, the noise gate: a stick inside it is a stick at rest, so the filter reads
+    // zero on both axes and the head's own idle rule owns the frame.
+    [Theory]
+    [InlineData(HeadLook.PadAimCentreBand * 0.5f, 0f)]
+    [InlineData(0f, -HeadLook.PadAimCentreBand * 0.5f)]
+    [InlineData(HeadLook.PadAimCentreBand * 0.7f, HeadLook.PadAimCentreBand * 0.7f)]
+    public void AStickInsideTheCentreBandReadsAsNoStickAtAll(float x, float y)
+    {
+        var filter = new StickLookFilter();
+        filter.Step(0.1f, x, y);
+        Assert.False(filter.Active);
+        Assert.Equal(0f, filter.X, Tol);
+        Assert.Equal(0f, filter.Y, Tol);
+
+        var head = new HeadLook();
+        head.Step(0.1f, Pad(x, y));
+        Assert.Equal(0f, head.TargetAzimuth, Tol);
+        Assert.Equal(0f, head.TargetElevation, Tol);
+    }
+
+    // The filter is on the stick and nowhere else: the mouse pan still integrates at the decoded
+    // 2 rad/s and the numpad still lands on the table's own angle, with a below-band stick over both.
+    [Fact]
+    public void TheFilterLeavesTheNumpadAndTheMousePathsAlone()
+    {
+        const float idle = HeadLook.PadAimCentreBand * 0.5f;
+        var head = new HeadLook();
+        head.Step(0.5f, new HeadLookInput(0f, 0f, 0f, 1f, false, idle, 0f));
+        Assert.Equal(1f, head.TargetElevation, Tol);
+
+        head = new HeadLook();
+        head.Step(0.1f, new HeadLookInput(-1f, 0f, 0f, 0f, false, idle, 0f));   // Kp4
+        Assert.Equal(Mathf.Pi / 2f, head.TargetAzimuth, Tol);
+    }
+
+    // Release is not slowed by the filter: on the frame the stick centres the targets are back at
+    // straight ahead and the shown angle is already decaying at the decoded azimuth rate alone.
+    [Fact]
+    public void ReleasingTheStickIsAsFastAsItWasBeforeTheFilter()
+    {
+        var head = new HeadLook();
+        HoldStick(head, -1f, 0f);
+        float shown = head.Azimuth;
+        Assert.True(shown > 1f);
+
+        head.Step(StepDt, Idle);
+        Assert.Equal(0f, head.TargetAzimuth, Tol);
+        Assert.Equal(
+            HeadLook.Approach(shown, 0f, HeadLook.AzimuthSmoothRate, StepDt), head.Azimuth, Tol);
     }
 
     // The pad reaches the same angles the chase camera swings through, which is the whole
@@ -277,13 +362,14 @@ public class HeadLookTests
         Assert.InRange(head.Azimuth, -Mathf.Pi, Mathf.Pi);
     }
 
-    // The two modes differ exactly here, which is the whole reason the original carries the state
-    // byte: a released pan holds the head where it was pointed in free-look, and the snap key puts
-    // the head back on the mode whose released direction returns it to straight ahead.
+    // The two modes differ exactly here, which is why the original carries the state byte. In
+    // free-look a released pan holds the head where it was pointed. The snap key puts the head
+    // back on the mode whose released direction returns it to straight ahead.
     [Fact]
     public void AReleasedPanHoldsTheHeadInFreeLookAndTheSnapKeyBringsItBack()
     {
         var head = new HeadLook();
+        head.Step(0.1f, SmoothKey);
         for (int i = 0; i < 10; i++)
         {
             head.Step(0.1f, Free(-1f, 1f));
@@ -302,9 +388,9 @@ public class HeadLookTests
         Assert.Equal(0f, head.TargetAzimuth, Tol);
     }
 
-    // The mode keys, the original's Access Snap Look Mode and Access Smooth Look Mode: each states
-    // which behaviour is live, and the smooth one centres the head on the way in, targets and shown
-    // angles together, as its own handler does.
+    // The mode keys are the original's Access Snap Look Mode and Access Smooth Look Mode. Each
+    // states which behaviour is live. The smooth one centres the head on the way in, targets and
+    // shown angles together, as its own handler does.
     [Fact]
     public void TheModeKeysStateTheModeAndTheSmoothOneCentresTheHead()
     {
@@ -323,49 +409,141 @@ public class HeadLookTests
         Assert.Equal(LookMode.Snap, head.Mode);
     }
 
-    // The device inference stays live over the key, in both directions: the key states a default
-    // and the next device to move takes the mode back off it.
+    // No device writes the mode: the keys choose it and both devices obey it. A mouse pan after K
+    // leaves the head in snap, and a numpad direction after J leaves it in free-look.
     [Fact]
-    public void AMouseMoveAfterTheSnapKeyAndASnapAfterTheSmoothKeyBothSwitchTheMode()
+    public void NeitherDeviceTakesTheModeOffTheKeys()
     {
         var head = new HeadLook();
         head.Step(0.1f, SnapKey);
         head.Step(0.5f, Free(0f, 1f));
-        Assert.Equal(LookMode.FreeLook, head.Mode);
+        Assert.Equal(LookMode.Snap, head.Mode);
         Assert.Equal(HeadLook.FreeLookRate * 0.5f, head.TargetElevation, Tol);
 
         head = new HeadLook();
         head.Step(0.1f, SmoothKey);
         head.Step(0.1f, Snap(-1f, 0f));
-        Assert.Equal(LookMode.Snap, head.Mode);
-        Assert.Equal(Mathf.Pi / 2f, head.TargetAzimuth, Tol);
+        Assert.Equal(LookMode.FreeLook, head.Mode);
+        Assert.Equal(HeadLook.FreeLookRate * 0.1f, head.TargetAzimuth, Tol);
     }
 
-    // One mode owns the frame, so a numpad direction and a mouse pan arriving together do not both
-    // move the head: the snap direction decides, and the pan is not integrated on top of it.
+    // J: a held numpad direction pans at the decoded 2 rad/s along its own direction. The released
+    // key leaves the head where it was pointed, the original's state 1 read of the slots.
     [Fact]
-    public void OneModeOwnsTheFrameWhenBothDevicesMoveAtOnce()
+    public void InSmoothModeAHeldNumpadKeyPansAtTwoRadiansPerSecondAndTheHeadStaysOnRelease()
+    {
+        var head = new HeadLook();
+        head.Step(0.1f, SmoothKey);
+        for (int i = 0; i < 5; i++)
+        {
+            head.Step(0.1f, Snap(-1f, 0f));                  // Kp4 Look Left for half a second
+        }
+        Assert.Equal(LookMode.FreeLook, head.Mode);
+        Assert.Equal(1f, head.TargetAzimuth, Tol);
+        Assert.Equal(0f, head.TargetElevation, Tol);
+
+        for (int i = 0; i < 30; i++)
+        {
+            head.Step(0.1f, Idle);
+        }
+        Assert.Equal(1f, head.TargetAzimuth, Tol);
+        Assert.Equal(1f, head.Azimuth, 1e-3f);
+
+        head.Step(0.25f, Snap(1f, 1f));                      // Kp9: up and right, normalised
+        float leg = HeadLook.FreeLookRate * 0.25f / Mathf.Sqrt(2f);
+        Assert.Equal(1f - leg, head.TargetAzimuth, Tol);
+        Assert.Equal(leg, head.TargetElevation, Tol);
+
+        // ABLE-TO-FAIL CONTROL: Kp8 in snap mode goes straight up through the table, so the
+        // integrated values above are the mode's doing and not the direction's.
+        var snap = new HeadLook();
+        snap.Step(0.25f, Snap(0f, 1f));
+        Assert.Equal(HeadLook.MaxElevation, snap.TargetElevation, Tol);
+    }
+
+    // K: the same key snaps through the table and the released key returns the head.
+    [Fact]
+    public void InSnapModeANumpadKeySnapsAndTheHeadReturnsOnRelease()
+    {
+        var head = new HeadLook();
+        head.Step(0.1f, SmoothKey);
+        head.Step(0.1f, SnapKey);
+        head.Step(0.1f, Snap(-1f, 0f));
+        Assert.Equal(LookMode.Snap, head.Mode);
+        Assert.Equal(Mathf.Pi / 2f, head.TargetAzimuth, Tol);
+        head.Step(0.1f, Idle);
+        Assert.Equal(0f, head.TargetAzimuth, Tol);
+    }
+
+    // The mouse follows the same two rules. In K it pans while its control is held, and the head
+    // springs back when the control is released. In J it parks where it pointed.
+    [Fact]
+    public void TheMouseSpringsBackInSnapModeAndParksInSmoothMode()
+    {
+        var snap = new HeadLook();
+        for (int i = 0; i < 5; i++)
+        {
+            snap.Step(0.1f, Looking(-1f, 0f));
+        }
+        Assert.Equal(1f, snap.TargetAzimuth, Tol);
+        snap.Step(0.1f, Looking());                          // a still mouse under the held control
+        Assert.Equal(1f, snap.TargetAzimuth, Tol);
+        snap.Step(0.1f, Idle);                               // the control released
+        Assert.Equal(LookMode.Snap, snap.Mode);
+        Assert.Equal(0f, snap.TargetAzimuth, Tol);
+
+        var smooth = new HeadLook();
+        smooth.Step(0.1f, SmoothKey);
+        for (int i = 0; i < 5; i++)
+        {
+            smooth.Step(0.1f, Looking(-1f, 0f));
+        }
+        smooth.Step(0.1f, Idle);
+        Assert.Equal(LookMode.FreeLook, smooth.Mode);
+        Assert.Equal(1f, smooth.TargetAzimuth, Tol);
+    }
+
+    // Look-back forces the snap state, so it reaches dead astern and returns in either mode.
+    [Fact]
+    public void AForcedSnapReachesDeadAsternEvenInSmoothMode()
+    {
+        var head = new HeadLook();
+        head.Step(0.1f, SmoothKey);
+        head.Step(0.1f, new HeadLookInput(0f, -1f, 0f, 0f, false, ForceSnap: true));
+        Assert.Equal(LookMode.Snap, head.Mode);
+        Assert.Equal(Mathf.Pi, Mathf.Abs(head.TargetAzimuth), Tol);  // dead astern is either stop
+        head.Step(0.1f, Idle);
+        Assert.Equal(0f, head.TargetAzimuth, Tol);
+    }
+
+    // One source owns the frame, so a numpad direction and a mouse pan arriving together do not
+    // both move the head. The numpad decides in either mode, and the pan is not added on top.
+    [Fact]
+    public void OneSourceOwnsTheFrameWhenBothDevicesMoveAtOnce()
     {
         var both = new HeadLook();
         var snapOnly = new HeadLook();
         var input = new HeadLookInput(-1f, 0f, 1f, 1f, false);
         both.Step(0.5f, input);
         snapOnly.Step(0.5f, Snap(-1f, 0f));
-
-        Assert.Equal(LookMode.Snap, both.Mode);
         Assert.Equal(snapOnly.TargetElevation, both.TargetElevation, Tol);
         Assert.Equal(snapOnly.TargetAzimuth, both.TargetAzimuth, Tol);
 
-        // ABLE-TO-FAIL CONTROL: the same pan without the direction is the free-look frame it was
-        // held out of, so the assertion above is about the mode and not about an inert input.
+        var smoothBoth = new HeadLook();
+        smoothBoth.Step(0.1f, SmoothKey);
+        smoothBoth.Step(0.5f, input);
+        Assert.Equal(1f, smoothBoth.TargetAzimuth, Tol);
+        Assert.Equal(0f, smoothBoth.TargetElevation, Tol);
+
+        // ABLE-TO-FAIL CONTROL: the same pan without the direction moves the head, so the
+        // assertions above are about precedence and not about an inert input.
         var panOnly = new HeadLook();
         panOnly.Step(0.5f, Free(1f, 1f));
-        Assert.Equal(LookMode.FreeLook, panOnly.Mode);
         Assert.NotEqual(0f, panOnly.TargetElevation);
     }
 
-    // Autohead is gated on the snap state in the original, so the idle hook is not consulted at all
-    // while free-look owns the head: that mode's idle frame holds the pose instead.
+    // Autohead is gated on the snap state in the original, so the idle hook is not consulted while
+    // free-look owns the head. That mode's idle frame holds the pose instead.
     [Fact]
     public void TheIdleHookIsSilentInFreeLookMode()
     {
@@ -381,8 +559,8 @@ public class HeadLookTests
         Assert.Equal(2, calls);
     }
 
-    // The held control is its own claim on the free-look arm: a mouse that has stopped moving is
-    // not a released button, so the head stays where the mouse put it and the shown angles settle
+    // The held control is its own claim on the free-look arm. A mouse that has stopped moving is
+    // not a released button. The head stays where the mouse put it, and the shown angles settle
     // onto that pose rather than chasing the centre.
     [Fact]
     public void AHeldControlOverAStillMouseHoldsTheLook()
@@ -404,13 +582,13 @@ public class HeadLookTests
         Assert.Equal(elevation, head.Elevation, 1e-3f);
     }
 
-    // Releasing the control leaves the head where the mouse put it, the free-look mode it entered
-    // when the mouse first moved, and the centre key is what brings it back there: the original's
-    // state 1 zeroes the angles on that key alone and on nothing else.
+    // In free-look, releasing the control leaves the head where the mouse put it. The centre key
+    // brings it back: the original's state 1 zeroes the angles on that key alone.
     [Fact]
     public void ReleasingTheHeldControlHoldsTheLookAndTheCentreKeyBringsItBack()
     {
         var head = new HeadLook();
+        head.Step(0.1f, SmoothKey);
         for (int i = 0; i < 10; i++)
         {
             head.Step(0.1f, Looking(-1f, 1f));
@@ -428,8 +606,8 @@ public class HeadLookTests
         Assert.Equal(LookMode.FreeLook, head.Mode);
     }
 
-    // The head still takes the delta while the control is held: the flag decides who owns the
-    // frame, not how far the pan goes, so a held pan reads exactly as the motion-only path did.
+    // The head still takes the delta while the control is held. The flag decides who owns the
+    // frame, not how far the pan goes, so a held pan reads as the motion-only path does.
     [Fact]
     public void AHeldControlStillPansAtTheDecodedRate()
     {
@@ -441,8 +619,8 @@ public class HeadLookTests
         Assert.Equal(motionOnly.TargetElevation, held.TargetElevation, Tol);
     }
 
-    // The arms above free-look keep their place: the centre key and the pad's absolute aim both
-    // claim the frame off a held control, so neither is stranded while the button is down.
+    // The arms above free-look keep their place. The centre key and the pad's absolute aim both
+    // claim the frame off a held control. Neither is stranded while the button is down.
     [Fact]
     public void TheCentreKeyAndThePadStillBeatAHeldControl()
     {
@@ -452,7 +630,11 @@ public class HeadLookTests
         Assert.Equal(0f, centred.TargetAzimuth, Tol);
 
         var aimed = new HeadLook();
-        aimed.Step(0.1f, new HeadLookInput(0f, 0f, 0f, 0f, false, 1f, 0f, true));
+        for (int i = 0; i < HoldFrames; i++)    // held, so the stick's own lag has arrived
+        {
+            aimed.Step(StepDt, new HeadLookInput(0f, 0f, 0f, 0f, false, 1f, 0f, true));
+        }
+
         Assert.Equal(-Mathf.DegToRad(HeadLook.PadLookYawMaxDeg), aimed.TargetAzimuth, Tol);
     }
 
@@ -518,72 +700,126 @@ public class HeadLookTests
         Assert.True(basis.X.IsEqualApprox(expected.X));
     }
 
-    // C22: HeadLook.AutoheadTarget, the idle-frame lean law fed to IdleAim, exercised as a pure
-    // vector law directly, no PlaneStats in the loop.
+    // HeadLook.AutoheadTarget, the lead law fed to IdleAim, exercised as a pure law on body rates,
+    // no PlaneStats in the loop. Rates are the plant's half-angle ones: +X nose up, +Y nose left.
 
     [Fact]
-    public void AutoheadIsNullWhenTheLocalVelocityIsNegligible()
+    public void AutoheadCentresTheHeadWhenThePlaneIsNotTurning()
     {
-        Assert.Null(HeadLook.AutoheadTarget(Vector3.Zero, ShippedTurnTime, ShippedTurnMax, ShippedMinPitch));
-        Assert.Null(HeadLook.AutoheadTarget(new Vector3(0f, 0f, -1e-5f), ShippedTurnTime, ShippedTurnMax, ShippedMinPitch));
+        var still = Lead(0f, 0f, 0f);
+        Assert.Equal(0f, still.Elevation, Tol);
+        Assert.Equal(0f, still.Azimuth, Tol);
     }
 
     [Fact]
-    public void AutoheadIgnoresPureForwardSpeedEntirely()
+    public void AutoheadIgnoresAPureRollBecauseTheNoseDoesNotMove()
     {
-        // Straight and level at full cruise speed, nose along the plane's own −Z: the forward
-        // component is dropped before scaling (the class doc's port decision), so this reads
-        // exactly as negligible, the same null a parked aircraft returns.
-        Assert.Null(HeadLook.AutoheadTarget(new Vector3(0f, 0f, -100f), ShippedTurnTime, ShippedTurnMax, ShippedMinPitch));
+        var rolling = Lead(0f, 0f, 1.5f);
+        Assert.Equal(0f, rolling.Elevation, Tol);
+        Assert.Equal(0f, rolling.Azimuth, Tol);
     }
 
     [Fact]
-    public void AutoheadPinsTheDecodedMinusThreeDegreeFloorOnAHardDive()
+    public void AutoheadAimsWhereTheNoseWillBeAfterTurnTimeBelowTheCap()
     {
-        // A steep dive at speed: the raw lean angle is well past −3°, so the floor, not the
-        // magnitude cap's direction, decides the shown elevation. This is the trap's own pin:
-        // the −3° floor sits below C21's [0, π/2] input floor and must survive here.
-        var t = HeadLook.AutoheadTarget(new Vector3(0f, -50f, -100f), ShippedTurnTime, ShippedTurnMax, ShippedMinPitch);
-        Assert.NotNull(t);
-        Assert.Equal(ShippedMinPitch, t!.Value.Elevation, Tol);
+        // 0.04 half-angle rad/s of yaw: the lead's half-angle is 0.03, under the 0.0998 cap. The
+        // head turns by the full 2 × 0.03, the angle the plant's own step turns the nose by.
+        var t = Lead(0f, 0.04f, 0f);
+        Assert.Equal(2f * 0.04f * ShippedTurnTime, t.Azimuth, Tol);
+        Assert.Equal(0f, t.Elevation, Tol);
     }
 
     [Fact]
-    public void AutoheadCapsTheLeanVectorsMagnitudeAtTurnMax()
+    public void AutoheadCapsTheLeadAtTwiceTurnMax()
     {
-        // A climb well past the cap once scaled by turnTime (5 m/s × 0.75 = 3.75, against a
-        // 0.0998 rad cap): the resulting elevation must sit exactly at the cap, not the
-        // uncapped 3.75.
-        var t = HeadLook.AutoheadTarget(new Vector3(0f, 5f, -200f), ShippedTurnTime, ShippedTurnMax, ShippedMinPitch);
-        Assert.NotNull(t);
-        Assert.Equal(ShippedTurnMax, t!.Value.Elevation, Tol);
-        Assert.Equal(0f, t.Value.Azimuth, Tol);
+        // A hard pull well past the cap: the half-angle stops at turn_max. The head rises by
+        // twice it (the quaternion's doubling), not by the uncapped 2 × 1.5.
+        var t = Lead(2f, 0f, 0f);
+        Assert.Equal(2f * ShippedTurnMax, t.Elevation, Tol);
+        Assert.Equal(0f, t.Azimuth, Tol);
     }
 
     [Fact]
-    public void AutoheadLeavesASmallLeanUncappedBelowTurnMax()
+    public void AutoheadFloorsAPushOverAtTheDecodedMinusThreeDegrees()
     {
-        // Well under the cap once scaled: the components pass straight through as the direct
-        // (elevation, azimuth) angles, not through an arctangent, the cap having any effect at
-        // all on the visible angle depends on this.
-        var t = HeadLook.AutoheadTarget(new Vector3(0.01f, 0.01f, -100f), ShippedTurnTime, ShippedTurnMax, ShippedMinPitch);
-        Assert.NotNull(t);
-        Assert.Equal(0.01f * ShippedTurnTime, t!.Value.Elevation, Tol);
-        Assert.Equal(-0.01f * ShippedTurnTime, t.Value.Azimuth, Tol);
+        // Nose falling hard: the lead points well below −3°, and the floor, below the input
+        // paths' own level floor, decides the elevation.
+        Assert.Equal(ShippedMinPitch, Lead(-2f, 0f, 0f).Elevation, Tol);
     }
 
-    [Fact]
-    public void AutoheadLooksRightWhenTheVelocityDriftsRightOfTheNose()
+    [Theory]
+    [InlineData(-0.2f, -1f)]   // nose yawing right: the head looks right (azimuth is +left)
+    [InlineData(0.2f, 1f)]     // and left
+    public void AutoheadLooksTheWayTheNoseIsTurning(float yawRate, float sign)
     {
-        // Forward with a rightward drift (local +X): the codebase's convention is positive azimuth
-        // = LEFT, so a rightward drift must read NEGATIVE, matching SnapTargets' own mirroring.
-        var t = HeadLook.AutoheadTarget(new Vector3(50f, 0f, -100f), ShippedTurnTime, ShippedTurnMax, ShippedMinPitch);
-        Assert.NotNull(t);
-        Assert.True(t!.Value.Azimuth < 0f);
+        var t = Lead(0.1f, yawRate, 0f);
+        Assert.True(Mathf.Sign(t.Azimuth) == sign, $"azimuth {t.Azimuth} for yaw rate {yawRate}");
+        Assert.True(t.Elevation > 0f, $"elevation {t.Elevation} under a pull");
     }
 
-    // Track Target (the original's state 2): the head holds the selected target's own bearing every
-    // frame, with no rate of its own, and the shown angles do all the smoothing there is.
+    /// <summary>The shipped Black Hawk flown by the real plant in a sustained 60° banked pull each
+    /// way. The head leads into the turn, on the side the nose is heading. It settles back to
+    /// centre once the wings are rolled level and the stick released. The lead's direction is also
+    /// checked against where the nose really is <c>turn_time</c> later.</summary>
+    [ExtractedDataTheory]
+    [InlineData(1f)]    // right bank
+    [InlineData(-1f)]   // left bank
+    public void AutoheadLeadsIntoASustainedBankedTurnAndCentresAsTheWingsLevel(float right)
+    {
+        const float dt = 1f / 60f;
+        var stats = PlaneStats.Load(ZrdrPath, "player_bhawk");
+        var model = new FlightModel(stats);
+        var banked = Basis.Identity.Rotated(Vector3.Back, -right * Mathf.DegToRad(60f));
+        model.Reset(new Vector3(0f, 1500f, 0f), banked, stats.FdSpeed, 1f);
+        var pull = new FlightInput { Pitch = 0.6f, Throttle = 1f };
+        for (int i = 0; i < 180; i++)
+        {
+            model.Step(pull, dt);
+        }
+
+        var (elevation, azimuth) = HeadLook.AutoheadTarget(model.BodyRates, stats.AutoheadTurnTime,
+            stats.AutoheadTurnMax, stats.AutoheadTurnMinPitch);
+        Assert.True(Mathf.Sign(azimuth) == -right,
+            $"bank {right}: the head must look into the turn, azimuth {azimuth} (+left), rates {model.BodyRates}");
+        Assert.True(elevation > 0f, $"bank {right}: the pull lifts the head, elevation {elevation}");
+
+        // Where the nose really goes in turn_time, in the frame the head is measured in.
+        var frame = model.Attitude;
+        for (float t = 0f; t < stats.AutoheadTurnTime; t += dt)
+        {
+            model.Step(pull, dt);
+        }
+
+        var (noseElevation, noseAzimuth) = HeadLook.PadlockTargets(frame.Inverse() * -model.Attitude.Z);
+        Assert.True(Mathf.Sign(noseAzimuth) == -right && noseElevation > 0f,
+            $"bank {right}: the nose itself went ({noseElevation}, {noseAzimuth}), the side the head led to");
+        Assert.True(Mathf.Abs(azimuth) <= Mathf.Abs(noseAzimuth) + 1e-3f,
+            $"bank {right}: the capped lead ({azimuth}) does not overshoot the nose's own turn ({noseAzimuth})");
+
+        // Roll the wings level against the bank, then release the stick.
+        for (int i = 0; i < 600 && Mathf.Abs(model.Attitude.X.Y) > 0.02f; i++)
+        {
+            model.Step(new FlightInput { Roll = model.Attitude.X.Y < 0f ? 1f : -1f, Throttle = 1f }, dt);
+        }
+
+        Assert.True(Mathf.Abs(model.Attitude.X.Y) <= 0.02f, $"bank {right}: the wings never came level");
+        for (int i = 0; i < 180; i++)
+        {
+            model.Step(new FlightInput { Throttle = 1f }, dt);
+        }
+
+        // The plant keeps a small residual pitch and yaw rate after the roll-out. "Centre" is
+        // therefore a small fraction of the turn's own lead, not zero.
+        var level = HeadLook.AutoheadTarget(model.BodyRates, stats.AutoheadTurnTime,
+            stats.AutoheadTurnMax, stats.AutoheadTurnMinPitch);
+        float turning = new Vector2(elevation, azimuth).Length();
+        float settled = new Vector2(level.Elevation, level.Azimuth).Length();
+        Assert.True(settled < 0.25f * turning,
+            $"bank {right}: wings level, the head must be back near centre, lead {settled} against the turn's {turning}, rates {model.BodyRates}");
+    }
+
+    // Track Target (the original's state 2): the head holds the selected target's own bearing
+    // every frame, with no rate of its own. The shown angles do all the smoothing there is.
 
     [Theory]
     [InlineData(0f, 0f, -100f, 0f, 0f)]                          // dead ahead
@@ -636,8 +872,8 @@ public class HeadLookTests
         Assert.Equal(Mathf.Pi / 2f, head.Azimuth, 1e-3f);
     }
 
-    // The only bound the padlock law carries is the placing view's own floor, so a target below a
-    // cockpit head holds at level while the chase camera's head follows it down.
+    // The only bound the padlock law carries is the placing view's own floor. A target below a
+    // cockpit head holds at level, while the chase camera's head follows it down.
     [Fact]
     public void TheViewsFloorIsTheOnlyClampAPadlockedHeadTakes()
     {
@@ -650,9 +886,9 @@ public class HeadLookTests
         Assert.Equal(-Mathf.Pi / 4f, chase.TargetElevation, Tol);
     }
 
-    // A target crossing dead astern flips the bearing's sign, and the head crosses the ±π seam by
-    // the short arc rather than unwinding through the nose: the wrap the original applies before
-    // every chase, which only this state reaches.
+    // A target crossing dead astern flips the bearing's sign. The head crosses the ±π seam by the
+    // short arc rather than unwinding through the nose. That is the wrap the original applies
+    // before every chase, which only this state reaches.
     [Fact]
     public void ATargetPassingBehindIsFollowedAcrossTheTailNotThroughTheFront()
     {
@@ -689,7 +925,7 @@ public class HeadLookTests
         bare.Step(0.1f, PadlockKey);
         bare.Step(0.5f, Free(-1f, 1f));
         // The exit writes SNAP whichever slot caused it, so a pan out of padlock lands there and
-        // the free-look state is one further input away.
+        // only J reaches the free-look state.
         Assert.Equal(LookMode.Snap, bare.Mode);
 
         bare = new HeadLook();
@@ -707,7 +943,7 @@ public class HeadLookTests
         Assert.Equal(-0.0524f, leaning.TargetElevation, Tol);
     }
 
-    // The exit scan is the eight direction slots and nothing else: the centre key and the pad's
+    // The exit scan is the eight direction slots and nothing else. The centre key and the pad's
     // absolute aim are polled and discarded while padlocked, as the original's own arm does.
     [Fact]
     public void ASnapDirectionLeavesPadlockWhileTheCentreKeyAndThePadDoNot()
@@ -745,8 +981,22 @@ public class HeadLookTests
 
     private static HeadLookInput Pad(float right, float up) => new(0f, 0f, 0f, 0f, false, right, up);
 
-    // The free-look control held, carrying whatever the mouse moved this frame: zero is the still
-    // mouse a held button cannot otherwise be told apart from a released one.
+    // A stick held long enough for its filter to arrive, at a live frame rate, so what is read
+    // afterwards is the stick's position and not the lag on the way to it.
+    private static void HoldStick(HeadLook head, float right, float up)
+    {
+        for (int i = 0; i < HoldFrames; i++)
+        {
+            head.Step(StepDt, Pad(right, up));
+        }
+    }
+
+    // The free-look control held, carrying whatever the mouse moved this frame. Zero stands for a
+    // still mouse, which the held flag tells apart from a released button.
     private static HeadLookInput Looking(float right = 0f, float up = 0f) =>
         new(0f, 0f, right, up, false, 0f, 0f, true);
+
+    // The autohead lead for half-angle body rates, at the shipped constants.
+    private static (float Elevation, float Azimuth) Lead(float x, float y, float z) =>
+        HeadLook.AutoheadTarget(new Vector3(x, y, z), ShippedTurnTime, ShippedTurnMax, ShippedMinPitch);
 }

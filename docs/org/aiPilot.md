@@ -28,8 +28,27 @@ by one authored key and one authored field:
 - a **formation escort**, which requires a `primary_target` and never looks at a net.
 
 An aircraft with no patrol net does not fly a degenerate straight line and does not loiter. It
-either flies a formation station on its leader, or it is a `jet` with no net, which is a state the
-shipped data never produces.
+either flies a formation station on its leader, or it is a `jet` with no net, which the engine
+builds dead.
+
+⚠ **The shipped data does produce one netless `jet`, and the original builds it dead.** C1/M04's
+`blakepeace_2_2` (team 2, group 4, enabled, `deactivated 0`) authors slot 0 as an empty list, every
+volume as `0.0` and its spawn at the world origin. The spawn reader `FUN_0047c210` takes the id when
+the list count is 1, draws `rand() % count` when it is higher, and otherwise writes `-1` to `+0x2e4`
+(`0x0047c76d`); nothing on that path skips the block. What decides its fate is the vehicle build
+`FUN_00476250`: it sets the dead byte `+0x91d` to 1 and the current edge `+0x2ec` to `-1` before net
+assignment (`0x0047636b`), and clears the dead byte again (`0x004763df`) on exactly two paths, a
+block whose `mode` is still `wingman` after the demotion test below, or a `netids >= 0` whose
+assignment `FUN_00475fc0` left a real edge in `+0x2ec`. A `jet` with `netids == -1` takes neither,
+so it is built dead: the world tick skips it (`+0x91d == 0 || +0x91f != 0`), targeting skips it,
+`DEDG` does not count it, and `WAKEUP_ENEMIES` cannot revive it because the hidden bit `+0x945`
+stays clear. The net follower `FUN_0041d1f0` would look `-1` up in the chapter net table
+(`0x0041d20a`–`0x0041d228`), find no match and index record `-1`, 100 bytes before the table's first
+record, with no guard, but it is never reached for this vehicle. Read live under the debugger on
+C1/M04: the vehicle sits in `VehicleList` at (0, 0, 0) with `+0x91d = 1`, `+0x945 = 0`,
+`+0x944 = 0`, `+0x2ec = -1` and its spawn speed still in `+0x934`, and the 100 bytes before the net
+table hold a null node-array pointer, so the read would have faulted had it run. CSVM does not spawn
+the block (`CampaignRoster.cs`, the plan's `Skipped` list).
 
 ## `mode`, the dynamics class
 
@@ -120,13 +139,18 @@ silent, and the emplacement file settles nothing about a hull's own weapon.
 `0x00479dbc`), and `FUN_00475820` copies them to vehicle `+0x304` and `+0x308`. Both feed the one
 timestamp `+0x300`, which paces a pursuit at both ends:
 
-- `FUN_0041f040` refuses to promote while `DAT_0071c470 <= +0x300`, unless the offered target
-  differs from the one at `+0x2fc`, the target the last promotion took;
-- on promoting it sets `+0x300` to now plus `+0x304`, except that a `jet` or `wingman` promoting
-  onto a target that is not a `TargetVehicle` gets a hardcoded 20 s instead;
+- `FUN_0041f040` refuses to promote, returning 0, while `DAT_0071c470 <= +0x300`
+  (`0x0041f069`–`0x0041f07a`), unless the standing target at `+0x948` is the vehicle's assigned
+  `primary_target` at `+0x2fc` (the two objects' `+0x4` compared at `0x0041f048`–`0x0041f05e`) or the
+  debug flag `DAT_0064f66e` is set;
+- on promoting it sets `+0x300` to now plus `+0x304` (`0x0041f106`), except that a `jet` or
+  `wingman` promoting onto a target that is not a `TargetVehicle` gets a hardcoded 20.0 s instead
+  (`0x006035e4`, `0x0041f0ea`);
 - losing a pursued target sets `+0x300` to now plus `+0x308` (step 3 above);
 - the pursue behaviour's tail reverts the task the moment `+0x300` passes (`0x0041e674`), so the
-  same stamp that made the aeroplane wait before the chase is also what ends it.
+  same stamp that made the aeroplane wait before the chase is also what ends it, and the revert
+  re-arms it to now plus `+0x308`, or plus a hardcoded 15.0 s (`0x00603560`) on the same
+  `jet`/`wingman` non-`TargetVehicle` condition.
 
 `basic_airplane` authors `attack_dwell 60` and `not_pursuit_dwell 5` and every aeroplane def
 inherits them, so an unassigned chase runs a minute and the next one may start five seconds later.
@@ -360,7 +384,10 @@ own position at `+0x204`–`+0x20c`, and any one of five terms reverts the task:
 | above | `0x0041e6c7`–`0x0041e6d5` | `dy` is over `+0x33c`, which holds +r |
 
 The revert at `0x0041e6d7` writes the default task `+0x2f4` into `+0x2f0` and re-arms `+0x300` to now
-plus `+0x308`, or plus a hardcoded 20.0 for a `jet`/`wingman` whose target is not a `TargetVehicle`.
+plus `+0x308` (`0x0041e72b`), or plus a hardcoded 15.0 (`0x00603560`, `0x0041e713`) for a
+`jet`/`wingman` whose target is not a `TargetVehicle`. It leaves `+0x948` standing, so the next
+frame's selection may hand the same target straight back, and the promotion's dwell refusal is what
+keeps the aeroplane on its net until the re-armed stamp passes.
 **None of the five reads the activation volume.** The parse fills all three fields from one token
 (`0x00479de9`–`0x00479e09`, as `r²`, `+r`, `−r`), and only a second and third token part the band from
 the radius (`0x00479e14`, `0x00479e22`); `basic_airplane` authors `return_range 1200` alone and every
@@ -373,9 +400,10 @@ patrol branch (task `0` or `2`), never while the task is already pursue, and the
 is a separate field, so a stun, a climb-out or an evasive program leaves task and anchor standing.
 A pursuit is leashed to where the chase began, not to the spawn and not to the last maneuver.
 
-⚠ **The whole revert is skipped for an assigned `primary_target`.** The tail sits inside a guard
-(`0x0041e5fd` onward) that runs only when `+0x2fc` is null or the standing target at `+0x948` has a
-different owner, the same predicate the promotion's dwell gate uses. A vehicle chasing the target its
+⚠ **The whole revert is skipped for an assigned `primary_target`.** The guard at
+`0x0041e5a6`–`0x0041e5bc` jumps straight to the return at `0x0041e73d` when `+0x2fc` is set and the
+standing target at `+0x948` has the same `+0x4` object, the same predicate the promotion's dwell gate
+uses; the anchor offset (`0x0041e5c2`) and the five terms run only otherwise. A vehicle chasing the target its
 roster block assigned it neither waits to promote nor ever reverts.
 
 ⚠ **The dwell pair caps every other chase at 60 seconds.** `basic_airplane` authors `attack_dwell 60`
@@ -385,11 +413,66 @@ the pursuit for a minute, reverts, and cannot promote again for five seconds. Th
 end it sooner. Subtracting `(1 − +0x8f4) × +0x304` at `0x0041e65c` shortens the deadline while the
 quarry is the player and the player is chasing back.
 
-CSVM ports the anchor and the cylinder. `AiModeMachine.PursuitAnchor` is taken on the promotion into
-pursue and dropped when the task reverts, `ReturnRange` is tested as the cylinder above, and the
-disengage reads no activation term. Unported, named rather than guessed: the dwell pair, which would
-need the promotion's own `+0x300` refusal beside it to mean anything; the `primary_target` exemption;
-and the per-frame revert during an evasive program, which CSVM defers to the moment the program ends.
+### The promotion has no range, team or net gate of its own
+
+`FUN_0041c270` calls `FUN_0041f040` on every frame the task is patrol (`0` or `2`), the selected
+target at `+0x948` is live and `+0x67c` is not `ship`, `plane` or `heli` (`0x0041c37c`). The promotion
+reads no distance, no team, no net flag and no volume: its one refusal is the dwell above, and its
+only other input is what `FUN_0041fe10` selected. Every admission term (team, `rating_biases`, the
+attack cylinder, the gasbag gate, the 20 s hold) therefore lives in the selection, and a target that
+is selected is chased the frame the dwell allows it. The enemy and the friendly side run the same
+path; nothing in either function reads the team beyond the scorer's own hostility test.
+
+### Where the activation and attack ranges are read
+
+The range a pursuit starts inside belongs to the selection, and the promotion trusts it. The three
+functions on the path, in the order `FUN_0041c270` runs them each frame:
+
+| Step | Function | What it reads |
+|---|---|---|
+| select | `FUN_0041fe10` | the assigned `primary_target` (`+0x2fc`) first, re-scored through the scorer every frame and kept while the score is under `1e20` (a `wingman` skips this arm); then the standing target re-scored while the hold `+0x94c` stands; then the sweep `FUN_0041f9c0` |
+| score | `FUN_00421ad0` (`0x00421b47`), `FUN_00421950` (`0x004219ac`) | the attack cylinder `+0x328`/`+0x32c`/`+0x330`, outside which the rank is `1e21` and never picked |
+| promote | `FUN_0041f040` | the dwell stamp and the primary match (`0x0041f048`–`0x0041f07a`), no position at all |
+
+`min_ai_active_dist` is the global `DAT_0071c3ec`, written once by the level loader `FUN_004735b0`
+(`0x00474139`/`0x00474141`) and read only by the two activation clamps (`FUN_00476250` at
+`0x004763f4`, `FUN_0047c210` at `0x0047c922`). The activation triple it floors is read only by the
+world tick's awake test (`0x00489a28`, the table above). Neither reaches `FUN_0041c270`,
+`FUN_0041f040` or `FUN_0041d9f0`. So the attack radius gates a pursuit exactly once, as the
+scorers' admission, and the primary arm is held to it because it runs through the same scorer.
+
+CSVM applies that admission in `AiTargetRanking.Score` (a sphere of `AttackRange`, where the
+original tests a cylinder), in `SelectBest` and `KeepsStandingTarget`, and in the primary pick of
+`FlightController.SelectRankedTarget`. `FlightController.HoldsStandingTarget` keeps an assigned
+primary only while it is inside `AttackRange`, the port of the primary arm's per-frame re-score.
+`AiModeMachine` tests no range of its own.
+
+### What CSVM ports of the dwell and the leash
+
+`AiModeMachine` keeps the one stamp against its own clock (the sum of its `Update` steps) and reads
+`attack_dwell`/`not_pursuit_dwell` through `PlaneStats` from the def chain, whose compiled defaults
+are 60.0 and 3.0 (`FUN_00478a00`, `0x00478a93`/`0x00478a9a`) under `basic_airplane`'s authored 60
+and 5. A promotion (and any other path that opens a new pursue task, an ordered one included) arms
+the stamp to now + `attack_dwell`, or 20 s when `PursuitQuarry.IsVehicle` is false (a turret or a
+structure; aircraft and hulls are the `TargetVehicle` class). `Patrol` refuses the promotion while
+the stamp stands unless the quarry is the gunner's `PrimaryTargetName`. `Pursue`, `LayOff` and
+`Evade` with a pursue task revert when the stamp passes or the pursuer leaves the return cylinder,
+both skipped for the primary, and re-arm the stamp to now + `not_pursuit_dwell` (15 s for a
+non-vehicle). A lost target re-arms `not_pursuit_dwell`. The 20/15 s condition is the pursuer's
+`jet`/`wingman` mode in the original, which every shipped aeroplane def is, so the port tests the
+quarry's class alone. Where it still diverges:
+
+- The per-frame revert during an evasive program is deferred to the moment the program ends.
+- The `player_attack_time_factor` term is not ported. `+0x8f4` is def `+0x294` (parsed at
+  `0x0047b625`, token at `0x00628348`), constructor default 1.0 (`0x004b0313`), authored 0.8 on
+  `basic_airplane`, and a roster block's `+0xd8` overrides it (`0x0047d431`/`0x0047d445`). When the
+  quarry is the player and the player's own standing target is this vehicle, the deadline shrinks
+  by `(1 − 0.8) × 60` = 12 s (`0x0041e65c`/`0x0041e662`).
+- The other `+0x300` writers are not ported: the roster spawn's 0 to 10 s first wait (`FUN_00476250`,
+  `0x004764b9`, called from `FUN_0047c210` at `0x0047c77b`, `rand()/32767 × 10.0`), the world tick's
+  wake re-arm to `U(0,1) × +0x308` (`FUN_004897c0`, `0x00489b4f`), and the freeze-all/unfreeze-all
+  pair `FUN_0041f250`/`FUN_0041f2e0` (now + 3e10 with `+0x354` set, then now + `U(0,2)` s). The
+  constructor zeroes the stamp (`0x004b086a`), which the port matches.
 
 ### `rating_biases` returns rank units directly
 
@@ -719,9 +802,10 @@ the net-id table for the vehicle's `netids` value at `+0x2e4` and, **on no match
 indexing 100 bytes before the first element of the net array and dereferencing the node and edge
 pointers it finds there. There is no guard and no fallback path.
 
-This is latent rather than reachable: the shipped data never gives a `jet` a missing net (below),
-so the index −1 read is never executed by the retail game. It is recorded here because it is the
-positive proof that "netless patrol" is not a behaviour the engine has.
+This is latent rather than reachable: a `jet` with no net is built dead by `FUN_00476250` (the
+headline), so the follower never runs for it and the index −1 read is never executed by the retail
+game. It is recorded here because it is the positive proof that "netless patrol" is not a behaviour
+the engine has.
 
 Net assignment is `FUN_00475fc0`. On `netids == -1` it returns immediately, leaving the task
 untouched. On a valid net it:
@@ -1244,6 +1328,15 @@ Per zone: `+0x44` is a difficulty, the node's flag word `+0x28 >> 23`; `+0x48` i
 cleared by `dzones.zrd`'s `disable` list (`FUN_00445da0`) and by the script's zone on/off op;
 `+0x49` is cleared by `nosnapshot`; `+0x4c` is the objective slot from `objective_numbers`.
 
+The difficulty read is the whole word shifted right as an unsigned quantity, with no mask and no
+sign extension: `MOV ECX,[EBX+0x28]` then `SHR ECX,0x17` then `MOV [EDX+0x44],ECX` at
+`0x00445f7d`–`0x00445f8e`, so bits 23 to 31 and nothing else. The pick then refuses a zone on the
+signed test `natural_touch < difficulty` (`0x004210e0`'s unforced arm), which admits an exact
+match. **Every one of the install's 80 `dzpath` nodes authors no flag word at all**, six in C1,
+seven in C1B, thirteen in C2, five in C3, fifteen in C4 and thirty-four in C5, with none in C1C or
+C2B, so every shipped zone is difficulty 0 and the term admits every pilot. The field is read
+anyway: the authored bits are the only thing allowed to set it.
+
 ### Two entries, and which one the shipped data uses
 
 **The node tag** (`FUN_0041d1f0`, right after the walk step `FUN_0041d8f0`): the node just
@@ -1256,17 +1349,34 @@ forced arm. Neither arm rolls anything, tests a range or reads a difficulty:
   vertex is closer). A refused entry sets a 5 s retry stamp (`+0x8a0`) and nothing else.
 - the forced arm of `FUN_004210e0` takes the nearest end of ANY active zone, at any range.
 
-**The proximity roll** (`FUN_004210e0`'s unforced arm) is a different thing and a narrow one: it
-runs from the PURSUE arm alone (`FUN_0041d9f0`, its first statement), and only while the vehicle
-is a `jet` in state 0 with byte `+0xba` set, which the damage handler sets on a FAILED steady-hand
-test (`FUN_004b9bc0`, "Absorbed %f damage, steady hand test failed") and pursue clears when the
-player is no longer behind it. Every 5 s (`+0x8a0`) it rolls `rand()/32767 <
-daredevil_chance` (`+0x954`, default 0.2), "Dare devil test passed. Looking for danger zones.",
-then over every active zone with a FREE lane and a difficulty at or under the pilot's
-`natural_touch` (`+0x958`, default 4; "Choosing danger zone. Natural touch test failed") it takes
-the end inside **500 m** whose into-ribbon tangent best lines up with the direction from the
-aeroplane to it. So the roll is an evasion: a hit pilot being chased dives into a nearby zone.
-The only other caller is the debug console's `force_dz` (`FUN_0043d640`), on the player's target.
+**The proximity roll** (`FUN_004210e0`'s unforced arm) is a different thing and a narrow one. Its
+gate is the head of the combat driver `FUN_0041d9f0`, five tests before anything else that driver
+does, each falling through to `0x0041da43`: the global suspend flag `DAT_0064f66e` is clear
+(`0x0041d9f9`), the vehicle class `+0x67c` is 0, a `jet` (`0x0041da07`), the state `+0x358` is 0
+(`0x0041da11`), the hit byte `+0xba` is set (`0x0041da1b`), and the mission clock `DAT_0071c470`
+has reached the retry stamp `+0x8a0` (`0x0041da25`, `FCOMP` then `TEST AH,1`, so the call is taken
+on clock at or past stamp). Then `FUN_004210e0(0, 0)` at `0x0041da3e`. The hit byte is the damage
+handler's, set on a FAILED steady-hand test (`FUN_004b9bc0`, "Absorbed %f damage, steady hand test
+failed") and cleared by pursue when the player is no longer behind it, so the roll is an evasion:
+a hit pilot being chased dives into a nearby zone.
+
+The unforced arm rolls `rand() × 3.051851e-05 < daredevil_chance` (`+0x954`, written from the def
+at `0x0047ce4e`, constructor default 0.2 at `0x004b03c2`), logging "Dare devil test passed.
+Looking for danger zones." or "Dare devil test failed. Not looking for danger zones.". On a pass
+it walks every zone whose active byte `+0x48` is set, whose difficulty `+0x44` is at or under the
+pilot's `natural_touch` (`+0x958`, written at `0x0047ce92`, default 4 at `0x004b03cc`; "Choosing
+danger zone. Natural touch test failed") and which has a free lane (`FUN_00446510`), reads both
+ends through `FUN_00446790`/`FUN_00446850`, and takes the end within **500 m** (the squared test
+`local_4c <= 250000.0`) whose into-ribbon tangent best lines up with the direction from the
+aeroplane to it. Every path that does not enter stamps `+0x8a0 = DAT_0071c470 + 5.0` at
+`LAB_00421443`. The only other caller is the debug console's `force_dz` (`FUN_0043d640`), on the
+player's target.
+
+The suspend flag is not a danger-zone term and reads 0 for the whole of a played mission: the
+mission load clears it (`0x00464693`) as does the new-game path (`0x004654fa`), the debug
+console's `suspend` command writes it (`0x0043db4d`), and the state core raises it only once a
+deadline of 1,000,000,000 ticks stamped at load has passed (`0x004a0252`, the constant at
+`DAT_00622bb4`).
 
 Both entries end the same way: the run record is written to `+0x9bc`, the state to **2**, and the
 standing target `+0x948` is released. `FUN_004897c0` then re-arms state 2 from a non-null
@@ -1352,11 +1462,21 @@ edge pick (`FUN_00431e40`) excluding the edge the walk was on when the run began
 crash checks are both gated on state < 4 / < 2 in `FUN_004897c0`, so nothing interrupts a rail
 run but a stun write, after which `+0x9bc` re-arms the approach at the cursor's current point.
 
+⚠ **The `PR-DngrZn` line belongs to the gate count, not to the AI's run.** The zone module's own
+completion routine `FUN_00446990` broadcasts combat-voice trigger 15 through `FUN_004b86a0(0xf)`
+at `0x004469ff`, inside the branch that needs more than one gate crossed (`0x004469dc`) and right
+after the loop that clears each gate's crossed byte `+0x10` (`FUN_00446930` sets it). The same
+branch flags matching `DANGER_ZONES_COMPLETED` objective names, increments the completion count
+`_DAT_0071d328` and arms the snapshot `DAT_0064fb78`. `FUN_0048e580` reaches that routine for the
+local player's vehicle alone (`CMP EDI,[0x0071c298]` at `0x0048ea1f`), so the line is the flight
+praising the player's run through the gates, and an AI's own rail run never speaks it.
+
 ### What CSVM ports of this
 
 `Flight/DangerZoneRibbon.cs` is the spline, the run cursor and the rail integrator with every
 constant above; `Flight/DangerZoneRibbons.cs` reads every `dzpathN` of the chapter gamez by the
-route-versus-gate material rule and applies `dzones.zrd`'s `disable` list. `AiNetFollower`
+route-versus-gate material rule, takes each zone's difficulty off its node's flag word and applies
+`dzones.zrd`'s `disable` list. `AiNetFollower`
 reports the node it just reached (`ArrivedNode`), `AiPilot` takes the node-tag entry into
 `AiModeMachine.ApproachingDangerZone`, locks at 105 m into `NavigatingDangerZone` and publishes
 `RailPose`, which `FlightController.SimStep` applies in place of the model step; the exit
@@ -1364,6 +1484,16 @@ re-seats the follower through `AiNetFollower.Reseat`, which is handed the leg th
 the entry and refuses it, the exclusion above. Measured on C2/M03 with the world's colliders up
 (the `campaign-racers` suite, 208 s of sim): all six racers fly `dzpath1, 2, 3, 10, 6, 7, 9` in
 the net's tag order, each once, through approach, lock and exit.
+
+The proximity roll is ported beside the tag entry. `AiModeMachine.RollDaredevil` is the roll and
+the 5 s stamp, with the original's own log strings; `DangerZoneRibbons.ProximityPick` is the zone
+walk, the difficulty and free-lane admission and the 500 m best-facing end; `AiPilot` calls them
+from the combat modes with `Evading` up, which is the remake's `+0xba`, and both entries then run
+through one `StartDangerZoneRun`. The class gate lives where the chance is assembled
+(`AiFlightAssembler`, a non-`jet` gets a chance of 0), so a wingman escort keeps its station under
+fire. The trigger 15 line rides the player's own completion report:
+`CampaignDirector.NotifyDangerZoneCompleted` raises `WorldInputs.DangerZoneSpoken`, which
+`GameSession` turns into `AiVoiceRuntime.DangerZoneCompleted` for the flown aeroplane.
 
 ⚠ **The exclusion is what carries a racer out of a zone.** Without it the seat pick after a run
 is free to take the leg back toward the tagged node, and `dzpath3`'s exit sets the aeroplane
@@ -1391,10 +1521,10 @@ install's one tagged node on a generator's net. The `generator-launch-danger-zon
 off the Dante over the mission's built world, seats him on `M4MilesRun` the way OBJECTIVE60 does and
 reads the entry off his pilot.
 
-Not ported: the proximity roll (it needs the `+0xba` hit flag the mode machine does not carry;
-`DangerZoneRibbon.ProximityRangeM` and `HasFreeLane` are its admission terms, kept for it), the
-target release at the lock (CSVM's gunner target is the host's), the altitude-floor bypass on the
-approach solve, the lane table past the zero lane (no shipped node has one), and the vertical nose a
+Not ported: the suspend flag the roll's gate reads first (nothing in CSVM suspends a mission that
+way), the target release at the lock (CSVM's gunner target is the host's), the altitude-floor
+bypass on the approach solve, the lane table past the zero lane (no shipped node has one), and the
+vertical nose a
 bay launch seats its net with (CSVM seats a launched follower on its first update, from the
 aeroplane's live nose, so a drop's first leg is the best-aligned one rather than the first-listed).
 
@@ -1568,6 +1698,7 @@ law is a campaign behaviour and the wrong fix for a wingman that leaves the figh
 | `FUN_0041d1f0` | the patrol-net follower |
 | `FUN_0041d9f0` | pursue, including the 400 m merge rule at `0x0041e130` |
 | `FUN_0041e760` | the formation escort law |
+| `FUN_0041f040` | the promotion to pursue: the `+0x300` dwell refusal, the anchor, the dwell re-arm |
 | `FUN_0041b560` | the shared steering law: point in, stick and throttle out |
 | `FUN_004311c0` | builds the chapter net table from `neindex`, in file order (`FUN_00431300` frees it) |
 | `FUN_004314e0` | builds one `CCENet` from its record: nodes, edges, volumes, and the trailer's name→object resolve |

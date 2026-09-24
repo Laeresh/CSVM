@@ -26,6 +26,13 @@ public sealed partial class TargetHud : Control
     /// boundary.</summary>
     public const float BracketHysteresis = 50f;
 
+    /// <summary>This HUD's frame-callback priority, above every flight rig's default 0.
+    /// ⚠ Keep it above them. An aeroplane writes its interpolated drawn pose inside its own
+    /// callback, and the spyglass aims at the target's node: a HUD that ran first aimed at the new
+    /// simulation pose on a frame with a physics step and at last frame's drawn pose on one
+    /// without, and the picture stepped with the target in a turn.</summary>
+    public const int AfterFlightRigs = 1;
+
     /// <summary>Which pane this draws in (0-based), the identity <see cref="OwnTeam"/> falls
     /// back to with no aircraft bound.</summary>
     public int PlayerIndex;
@@ -185,6 +192,7 @@ public sealed partial class TargetHud : Control
             HostilePool = pool,
             MouseFilter = MouseFilterEnum.Ignore,
             FocusMode = FocusModeEnum.None,
+            ProcessPriority = AfterFlightRigs,
         };
         // The picture hangs on the HUD control itself, so it lives inside this pane's viewport and
         // renders this pane's world; it is idle until a target is off screen and inside the gate.

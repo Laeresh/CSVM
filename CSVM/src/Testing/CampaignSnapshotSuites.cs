@@ -23,18 +23,41 @@ internal static class CampaignSnapshotSuites
     private const string Pilot = "Zachary";
     private const string Zone = "dzpath1";
     private const string MountName = "DZ_generic_corners";
+    private const string ZoomMountName = "DZ_ZOOMgrimeframe";
+
+    // The page region a capture is forced into, and the zoom's inset offset off its mount.
+    private const float PageRegionWidth = 164f;
+    private const float PageRegionHeight = 123f;
+    private const float ZoomInsetDx = 10f;
+    private const float ZoomInsetDy = 8f;
+
+    // The photographed pane, a 32:9 one like the reported flight's.
+    private const int PaneWidth = 1280;
+    private const int PaneHeight = 360;
 
     // Well outside every stunt marker's radius, so the control run's latch is a crossing.
     private static readonly Vector3 Elsewhere = new(0f, 60000f, 0f);
 
+    // The centred 4:3 window a 640x480 file frames of that pane. Written out rather than taken
+    // from the writer's own rule, so the check stands on its own.
+    private static readonly Rect2I PaneWindow = new(400, 0, 480, 360);
+
+    // The window's colour and the flanks', far enough apart that an 8-bit round trip cannot
+    // confuse them.
+    private static readonly Color Print = new(0.3f, 0.5f, 0.2f);
+    private static readonly Color Flank = new(0.9f, 0.1f, 0.8f);
+
     [Suite("campaign-danger-zone-snapshot",
         "the campaign Danger Zone photograph over C3/M01's own dzpath1 gates: the mission's "
         + "dzones.zrd binds the zone to the objective number SCRAPBOOK.CSV's Snap_1_18 row names, "
-        + "a crossing of the authored gates stages the pilot's pane under that name in a scratch "
+        + "a crossing of the authored gates stages the pilot's photograph under that name in a scratch "
         + "profile directory, winning the mission keeps it at the row's own name and sets the "
-        + "zone's mask bit, the written file is the forced 164x123 region, the scrapbook resolves "
-        + "and draws it under its photo-corner mount, a spread composed without the file on disk "
-        + "skips the row, and a stunt Instant Action run writes its own shots and no Snap_ file")]
+        + "zone's mask bit, the written file is the 640x480 every retail photograph is and frames "
+        + "the wide pane's centred 4:3 window rather than squeezing the whole pane into it, the "
+        + "scrapbook forces the print into its 164x123 page region and draws it under its "
+        + "photo-corner mount with the zoom's torn mount over it, a spread composed without the file on disk "
+        + "skips the row, a stunt Instant Action run writes its own shots and no Snap_ file, and a "
+        + "frame landing after the mission-end sweep takes that sweep's keep or drop")]
     internal static void CampaignDangerZoneSnapshot(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -60,6 +83,7 @@ internal static class CampaignSnapshotSuites
             ctx.WithWorld(Chapter, collision: false, Mission, world =>
                 Fly(ctx, world, script, mission, profile, store, missionZrdr, report));
             StuntRunWritesNoSnap(ctx, root, store.DirFor(Pilot), report);
+            LandsAfterCommit(ctx, Path.Combine(root, "Late"), mission.Ordinal);
         }
         finally
         {
@@ -95,9 +119,8 @@ internal static class CampaignSnapshotSuites
             return;
         }
 
-        string forced = $"{CampaignSnapshot.Width}x{CampaignSnapshot.Height}";
         ctx.Check(row.Scrap.Region == null,
-            $"row {mission.Ordinal}_{row.Spread}_{row.Scrap.Item} forces no region of its own, so the engine's {forced} applies");
+            $"row {mission.Ordinal}_{row.Spread}_{row.Scrap.Item} forces no region of its own, so the engine's page region applies");
         report.AppendLine($"{Chapter}/{Mission} ordinal {mission.Ordinal}: '{Zone}' -> objective {objective} "
             + $"-> row {mission.Ordinal}_{row.Spread}_{row.Scrap.Item} '{row.Scrap.ImageName}'");
 
@@ -110,10 +133,11 @@ internal static class CampaignSnapshotSuites
         {
             Runtime = world.Runtime,
             Gamez = world.Gamez,
-            PlayerPane = () =>
+            PlayerPane = landed =>
             {
                 panes++;
-                return Pane();
+                landed(Pane());
+                return true;
             },
         });
 
@@ -131,8 +155,11 @@ internal static class CampaignSnapshotSuites
             $"exactly one Snap_ file stands in the profile directory");
         if (Image.LoadFromFile(kept) is { } written)
         {
-            ctx.Same(CampaignSnapshot.Width, written.GetWidth(), $"the file is the forced region's width");
+            ctx.Same(CampaignSnapshot.Width, written.GetWidth(), $"the file is the written width every retail photograph is");
             ctx.Same(CampaignSnapshot.Height, written.GetHeight(), $"…and its height");
+            string? off = OffThePrint(written);
+            ctx.Check(off == null,
+                $"…and holds the {PaneWidth}x{PaneHeight} pane's centred 4:3 window alone, neither the whole pane squeezed into it nor a letterbox{off}");
         }
 
         Draws(ctx, store, profile, mission, row, kept, report);
@@ -207,7 +234,47 @@ internal static class CampaignSnapshotSuites
         int mount = IndexOfMount(all, row.Scrap);
         ctx.Check(capture >= 0 && mount > capture,
             $"the photo-corner mount draws over the photograph (capture at {capture}, mount at {mount})");
+        if (capture >= 0)
+        {
+            ctx.Check(all[capture].Width == PageRegionWidth && all[capture].Height == PageRegionHeight,
+                $"the print is forced into the page's own region, which is what the smudge strip is cut for");
+        }
+
+        ZoomDraws(ctx, flow, mission, row, kept, report);
         report.AppendLine($"spread {row.Spread}: {drawn.Count} pictures gated, {all.Count} with every row revealed");
+    }
+
+    // The detail view of the same row: the print at the torn mount's own inset offset and at the
+    // written size, with the mount over it, which is where the scrapbook's tint comes from.
+    private static void ZoomDraws(TestContext ctx, CampaignFlow flow, CampaignMission mission,
+        (int Spread, ScrapbookScrap Scrap) row, string kept, StringBuilder report)
+    {
+        flow.SetScrapbookZoom(mission.Ordinal, row.Spread, row.Scrap.Item);
+        flow.GoTo(CampaignScreen.ScrapbookZoom);
+        var zoom = flow.Page.Pictures;
+        int print = IndexOfLoose(zoom, kept);
+        int mount = -1;
+        for (int i = 0; i < zoom.Count; i++)
+        {
+            if (zoom[i].Art.Name.Contains(ZoomMountName, StringComparison.OrdinalIgnoreCase))
+            {
+                mount = i;
+            }
+        }
+
+        ctx.Check(print >= 0 && mount > print,
+            $"the zoom's torn mount draws over the print (print at {print}, mount at {mount})");
+        if (print >= 0)
+        {
+            ctx.Check(zoom[print].Width == CampaignSnapshot.Width && zoom[print].Height == CampaignSnapshot.Height,
+                $"…at the written size, which is what the mount's window is cut for");
+            ctx.Check(mount >= 0 && zoom[print].X == zoom[mount].X + ZoomInsetDx
+                && zoom[print].Y == zoom[mount].Y + ZoomInsetDy,
+                $"…and at the mount's own position plus the script's ten and eight");
+        }
+
+        flow.GoTo(CampaignScreen.Scrapbook);
+        report.AppendLine($"zoom: print at {print}, mount at {mount} of {zoom.Count} pictures");
     }
 
     // The control: a stunt run's camera writes under screenshots/stunts/ and touches no Snap_ name,
@@ -231,7 +298,11 @@ internal static class CampaignSnapshotSuites
         try
         {
             StuntCapture.DirectoryOverride = Path.Combine(root, "Stunts");
-            var capture = new StuntCapture(run, "C4", Pane);
+            var capture = new StuntCapture(run, "C4", landed =>
+            {
+                landed(Pane());
+                return true;
+            });
             foreach (var zone in run.Zones)
             {
                 run.Tick(1f);
@@ -249,6 +320,30 @@ internal static class CampaignSnapshotSuites
         finally
         {
             StuntCapture.DirectoryOverride = previous;
+        }
+    }
+
+    // The readback lands frames after the crossing, so a zone that ends the mission is committed
+    // before its file exists: the verdict waits for the landing instead of missing the file.
+    private static void LandsAfterCommit(TestContext ctx, string dir, int mission)
+    {
+        foreach (bool won in new[] { true, false })
+        {
+            int objective = won ? 18 : 19;
+            Action<Image?>? held = null;
+            string? staged = CampaignSnapshot.Stage(dir, mission, objective, landed =>
+            {
+                held = landed;
+                return true;
+            });
+            string kept = Path.Combine(dir, CampaignSnapshot.FileName(mission, objective));
+            ctx.Check(staged != null && !File.Exists(staged),
+                $"a {(won ? "won" : "lost")} mission's crossing stages nothing on disk until its frame lands");
+            ctx.Same(1, CampaignSnapshot.Commit(dir, mission, won),
+                $"…and the mission-end sweep still counts the photograph on its way");
+            held?.Invoke(Pane());
+            ctx.Check(!File.Exists(staged ?? "") && File.Exists(kept) == won,
+                $"the late frame of a {(won ? "won" : "lost")} mission takes the sweep's verdict: kept={File.Exists(kept)}");
         }
     }
 
@@ -317,12 +412,34 @@ internal static class CampaignSnapshotSuites
         return null;
     }
 
-    // The pane both halves photograph: a solid frame, so the verdict rests on which file is
-    // written rather than on what a headless host happened to render.
+    // The pane both halves photograph: a 32:9 frame whose centred 4:3 window is one flat colour
+    // and whose flanks are another. The verdict then rests on which file is written and on what
+    // the writer framed, not on what a headless host happened to render.
     private static Image Pane()
     {
-        var img = Image.CreateEmpty(320, 240, false, Image.Format.Rgba8);
-        img.Fill(new Color(0.3f, 0.5f, 0.2f));
+        var img = Image.CreateEmpty(PaneWidth, PaneHeight, false, Image.Format.Rgba8);
+        img.Fill(Flank);
+        img.FillRect(PaneWindow, Print);
         return img;
+    }
+
+    // Every pixel of the written print is the pane's centred window. A wide pane squeezed whole
+    // into the file carries the flank colour at the sides, and a letterbox its bars.
+    private static string? OffThePrint(Image written)
+    {
+        for (int y = 1; y < written.GetHeight(); y += 37)
+        {
+            for (int x = 1; x < written.GetWidth(); x += 37)
+            {
+                var pixel = written.GetPixel(x, y);
+                if (Mathf.Abs(pixel.R - Print.R) > 0.02f || Mathf.Abs(pixel.G - Print.G) > 0.02f
+                    || Mathf.Abs(pixel.B - Print.B) > 0.02f)
+                {
+                    return $", {x},{y} is {pixel}";
+                }
+            }
+        }
+
+        return null;
     }
 }

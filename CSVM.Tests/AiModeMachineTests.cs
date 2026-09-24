@@ -9,13 +9,12 @@ namespace CSVM.Tests;
 
 /// <summary>
 /// The decoded mode machine's transition table, engine-free: the nine modes under fixed rolls
-/// (a pool-covering bite, a zero exponent) and seeded rngs. Pins activation into pursue, the
-/// return-cylinder exit measured from the pursuit anchor and the anchor's own life, the
-/// steady-hand power law and the sixth-sense roll in the engine's own
-/// vocabulary, the evasive
-/// maneuver playing to Done and returning, the avoid-crash override on an injected probe, the
-/// signature-maneuver weighting, the D15 lay-off entry/exit (a chasing human fallen behind,
-/// gated by the AssistEnabled switch), and seed determinism.
+/// (a pool-covering bite, a zero exponent) and seeded rngs. Pins the promotion and its dwell, the
+/// return-cylinder exit measured from the pursuit anchor, and the anchor's own life. The
+/// steady-hand power law and the sixth-sense roll are pinned in the original's own vocabulary. So
+/// are the evasive maneuver playing to Done and returning, the avoid-crash override on an injected
+/// probe, and the signature-maneuver weighting. The D15 lay-off entry and exit (a chasing human
+/// fallen behind, gated by the AssistEnabled switch) and seed determinism are pinned too.
 /// </summary>
 public class AiModeMachineTests
 {
@@ -43,20 +42,129 @@ public class AiModeMachineTests
         Assert.Equal("navigating danger zone", AiModeMachine.NameOf(AiMode.NavigatingDangerZone));
     }
 
+    /// <summary>The promotion reads no range. The attack radius is the selection's admission
+    /// test, so whatever quarry the machine is handed is chased the tick the dwell allows.</summary>
     [Fact]
-    public void PatrolActivatesIntoPursueInsideTheRadius()
+    public void PatrolPromotesAnyHandedQuarryWithNoRangeOfItsOwn()
     {
         var m = Machine();
+        m.ActivationRange = 1000f;
+        m.AttackRange = 1000f;
         var transitions = new List<(AiMode From, AiMode To)>();
         m.ModeChanged += (from, to, _) => transitions.Add((from, to));
 
-        // Outside min_ai_active_dist / attack (both 2000 shipped): stays on patrol.
-        Assert.Equal(AiMode.Patrol, m.Update(Home, Level, Home + new Vector3(2500f, 0f, 0f), null, 0.1f));
+        Assert.Equal(AiMode.Patrol, m.Update(Home, Level, null, null, 0.1f));
         Assert.Empty(transitions);
 
-        // Inside: pursue, announced as one patrol -> pursue transition.
-        Assert.Equal(AiMode.Pursue, m.Update(Home, Level, Home + new Vector3(1900f, 0f, 0f), null, 0.1f));
+        Assert.Equal(AiMode.Pursue, m.Update(Home, Level, Home + new Vector3(2500f, 0f, 0f), null, 0.1f));
         Assert.Equal((AiMode.Patrol, AiMode.Pursue), Assert.Single(transitions));
+    }
+
+    /// <summary>A promotion arms the chase's deadline to attack_dwell, and the pursuit reverts
+    /// the tick it passes. The revert re-arms not_pursuit_dwell, which refuses the next promotion
+    /// until it has passed too.</summary>
+    [Fact]
+    public void TheChaseRevertsAtTheAttackDwellAndThePromotionWaitsOutTheRearm()
+    {
+        var m = Machine();
+        m.AttackDwellS = 60f;
+        m.NotPursuitDwellS = 5f;
+        var target = Home + new Vector3(500f, 0f, 0f);
+        PursueFrom(m, target);
+        Assert.Equal(60f, m.DwellRemainingS, 3);
+
+        Assert.Equal(AiMode.Pursue, Step(m, target, 59.8f));
+        Assert.Equal(AiMode.Patrol, m.Update(Home, Level, target, null, 0.3f));
+        Assert.Equal(5f, m.DwellRemainingS, 3);
+
+        // Refused while the stamp stands, with the quarry still handed over every tick.
+        Assert.Equal(AiMode.Patrol, Step(m, target, 4.8f));
+        Assert.Equal(AiMode.Pursue, m.Update(Home, Level, target, null, 0.3f));
+    }
+
+    /// <summary>The return cylinder's revert re-arms the wait: the original's re-promotion on the
+    /// very next tick, with a fresh anchor, is exactly what this refuses.</summary>
+    [Fact]
+    public void TheCylinderRevertRearmsTheWaitAndATurretTakesTheFifteenSecondHold()
+    {
+        var m = Machine();
+        var target = Home + new Vector3(500f, 0f, 0f);
+        PursueFrom(m, target);
+        var strayed = Home + new Vector3(1300f, 0f, 0f);
+        Assert.Equal(AiMode.Patrol, m.Update(strayed, Level, target, null, 0.1f));
+        Assert.Equal(m.NotPursuitDwellS, m.DwellRemainingS, 3);
+        Assert.Equal(AiMode.Patrol, m.Update(strayed, Level, target, null, 0.1f));
+
+        // A structure quarry: 20 s to promote on, 15 s of wait after the cylinder.
+        var t = Machine();
+        Assert.Equal(AiMode.Pursue, t.Update(Home, Level, target, null, 0.1f, quarryIsVehicle: false));
+        Assert.Equal(AiModeMachine.NonVehicleAttackDwellS, t.DwellRemainingS, 3);
+        Assert.Equal(AiMode.Patrol, t.Update(strayed, Level, target, null, 0.1f, quarryIsVehicle: false));
+        Assert.Equal(AiModeMachine.NonVehicleNotPursuitDwellS, t.DwellRemainingS, 3);
+    }
+
+    /// <summary>A lost target re-arms not_pursuit_dwell, with no 15 s variant.</summary>
+    [Fact]
+    public void ALostTargetRearmsTheNotPursuitDwell()
+    {
+        var m = Machine();
+        m.NotPursuitDwellS = 5f;
+        var target = Home + new Vector3(500f, 0f, 0f);
+        Assert.Equal(AiMode.Pursue, m.Update(Home, Level, target, null, 0.1f, quarryIsVehicle: false));
+        Assert.Equal(AiMode.Patrol, m.Update(Home, Level, null, null, 0.1f));
+        Assert.Equal(5f, m.DwellRemainingS, 3);
+        Assert.Equal(AiMode.Patrol, m.Update(Home, Level, target, null, 1f));
+    }
+
+    /// <summary>The assigned primary_target lifts both ends: it is promoted onto inside the wait,
+    /// and neither the deadline nor the cylinder ends that chase.</summary>
+    [Fact]
+    public void TheAssignedTargetIsExemptFromTheDwellAndTheLeash()
+    {
+        var m = Machine();
+        var target = Home + new Vector3(500f, 0f, 0f);
+        PursueFrom(m, target);
+        Assert.Equal(AiMode.Patrol, m.Update(Home, Level, null, null, 0.1f));
+        Assert.True(m.DwellRemainingS > 0f);
+
+        Assert.Equal(AiMode.Pursue, m.Update(Home, Level, target, null, 0.1f, quarryIsPrimary: true));
+        var strayed = Home + new Vector3(5000f, 0f, 0f);
+        Assert.Equal(AiMode.Pursue,
+            m.Update(strayed, Level, target, null, 120f, quarryIsPrimary: true));
+
+        // Once the quarry is no longer the assigned one, the passed deadline ends it.
+        Assert.Equal(AiMode.Patrol, m.Update(strayed, Level, target, null, 0.1f));
+    }
+
+    /// <summary>An ordered engagement arms its own deadline, so a stamp left from the machine's
+    /// start does not revert it on the next tick.</summary>
+    [Fact]
+    public void AnOrderedPursuitArmsItsOwnDeadline()
+    {
+        var m = Machine();
+        var target = Home + new Vector3(500f, 0f, 0f);
+        m.Update(Home, Level, null, null, 100f);
+        m.Enter(AiMode.Pursue);
+        Assert.Equal(AiMode.Pursue, m.Update(Home, Level, target, null, 0.1f));
+    }
+
+    /// <summary>The dwell ends a pursue task only. An evade ordered off the net that loses its
+    /// target leaves the wait alone. One that settles into pursue takes a fresh deadline rather
+    /// than reverting on a stamp left from the machine's start.</summary>
+    [Fact]
+    public void AnEvadeOffTheNetIsNoChaseForTheDwellToEnd()
+    {
+        var m = Machine();
+        var target = Home + new Vector3(500f, 0f, 0f);
+        m.Update(Home, Level, null, null, 100f);
+        m.Enter(AiMode.Evade);
+        Assert.Equal(AiMode.Patrol, m.Update(Home, Level, null, null, 0.1f));
+        Assert.Equal(0f, m.DwellRemainingS);
+
+        m.Enter(AiMode.Evade);
+        Assert.Equal(AiMode.Pursue, m.Update(Home, Level, target, null, 0.1f));
+        Assert.Equal(m.AttackDwellS, m.DwellRemainingS, 3);
+        Assert.Equal(AiMode.Pursue, m.Update(Home, Level, target, null, 0.1f));
     }
 
     [Fact]
@@ -67,8 +175,8 @@ public class AiModeMachineTests
         PursueFrom(m, Home + new Vector3(1500f, 0f, 0f));
         Assert.Equal(AiMode.Patrol, m.Update(Home, Level, null, null, 0.1f));
 
-        // The decoded leash reverts on its own: outside the cylinder from the anchor, with the
-        // target 300 m off and deep inside the activation radius the condition no longer reads.
+        // The decoded leash reverts on its own: outside the cylinder from the anchor. The target
+        // is 300 m off, deep inside the activation radius the condition no longer reads.
         var m2 = Machine();
         PursueFrom(m2, Home + new Vector3(1500f, 0f, 0f));
         var strayed = Home + new Vector3(1300f, 0f, 0f); // > 1200 from the anchor
@@ -82,8 +190,8 @@ public class AiModeMachineTests
         Assert.Equal(AiMode.Pursue, m3.Update(Home + new Vector3(900f, 0f, 0f), Level, farTarget, null, 0.1f));
     }
 
-    /// <summary>The leash is the decoded CYLINDER, not a sphere: the corner between the horizontal
-    /// radius and the vertical band is inside it, and the band alone recalls a pursuer that has
+    /// <summary>The leash is the decoded CYLINDER, not a sphere. The corner between the horizontal
+    /// radius and the vertical band is inside it. The band alone recalls a pursuer that has
     /// climbed away without straying at all.</summary>
     [Fact]
     public void TheReturnLeashIsACylinderAboutTheAnchor()
@@ -104,8 +212,8 @@ public class AiModeMachineTests
     }
 
     /// <summary>The anchor is taken once, where the promotion happened, and nothing while the task
-    /// stands moves it: a pilot leashed to where it caught its quarry rather than to where it
-    /// spawned, and a finished evasive program handing back to that same point.</summary>
+    /// stands moves it. A pilot is leashed to where it caught its quarry, not to where it spawned.
+    /// A finished evasive program hands back to that same point.</summary>
     [Fact]
     public void ThePursuitAnchorIsWhereTheChaseBeganAndSurvivesAReaction()
     {
@@ -165,8 +273,8 @@ public class AiModeMachineTests
         Assert.Contains("steady hand test passed. Not evading.", logged2);
     }
 
-    /// <summary>The roll is the decoded power law over the bite, not a flat chance: the same round
-    /// evades far more often out of a worn-down pool than a fresh one, and the exponent a higher
+    /// <summary>The roll is the decoded power law over the bite, not a flat chance. The same round
+    /// evades far more often out of a worn-down pool than a fresh one. The exponent a higher
     /// rating resolves to evades MORE rather than less.</summary>
     [Fact]
     public void TheSteadyHandRollRisesWithTheBiteAndWithTheRating()
@@ -176,8 +284,8 @@ public class AiModeMachineTests
         Assert.Equal(3.7058f, AiModeMachine.ExponentFor(0.2666667f), 3);
         Assert.Equal(7.0813f, AiModeMachine.ExponentFor(0.08f), 3);
 
-        // A wep_130 round (1.5 armour, 1.5 health) on a hostile Fury at Normal: 108 of pool at
-        // full health, a tenth of that worn down to.
+        // A wep_130 round (1.5 armour, 1.5 health) on a hostile Fury at Normal meets 108 of pool
+        // at full health. Worn down, it meets a tenth of that.
         float e0 = AiModeMachine.ExponentFor(0.5f), e9 = AiModeMachine.ExponentFor(0.08f);
         double fresh0 = 1d - AiModeMachine.PassChance(1.5f, 108f, e0);
         double fresh9 = 1d - AiModeMachine.PassChance(1.5f, 108f, e9);
@@ -196,8 +304,8 @@ public class AiModeMachineTests
         Assert.Equal(0d, AiModeMachine.PassChance(30f, 30f, e0));
     }
 
-    /// <summary>One impact takes several rolls when the pair outlives the pools it meets: the
-    /// wrapper's leftover loop, each pass against a pool the last one shrank.</summary>
+    /// <summary>One impact takes several rolls when the pair outlives the pools it meets. The
+    /// wrapper's leftover loop runs each pass against a pool the last one shrank.</summary>
     [Fact]
     public void LeftoverDamageTakesAFurtherRollAgainstAShrunkPool()
     {
@@ -208,7 +316,7 @@ public class AiModeMachineTests
         m.SteadyHandExponent = 0f; // every roll passes, so the loop is what the count shows
 
         // Armour 10 against 20 of armour damage: half the health damage is shielded, the rest
-        // spends, and both leftovers re-enter against what is left of the pair.
+        // spends. Both leftovers re-enter against what is left of the pair.
         m.NotifyDamage(20f, 40f, 10f, 100f);
         Assert.True(rolls.Count >= 2, $"the leftover re-entered rolls={rolls.Count}");
         Assert.False(m.Evading);
@@ -223,8 +331,8 @@ public class AiModeMachineTests
         Assert.Single(single);
     }
 
-    /// <summary>The picker's injector cull: <c>nitro_evade</c> is difficulty 0, so only the
-    /// injector keeps a pilot that cannot boost from flying six wings-level seconds as its
+    /// <summary>The picker's injector cull: <c>nitro_evade</c> is difficulty 0. Only the injector
+    /// keeps a pilot that cannot boost from flying six wings-level seconds as its
     /// evade.</summary>
     [Fact]
     public void ANitroFlaggedManeuverIsDrawnOnlyWithTheInjector()
@@ -285,7 +393,8 @@ public class AiModeMachineTests
         Assert.Equal(AiMode.Evade, m.Mode);
 
         // A second hit rolls nothing at all while the flag stands, and says so rather than falling
-        // silent, so a trace can tell a pilot that is never hit from one hit while already evading.
+        // silent. A trace can then tell a pilot that is never hit from one hit while already
+        // evading.
         string? logged = null;
         m.RollLogged += line => logged = line;
         m.NotifyDamage(0f, 8f, 0f, 8f);
@@ -305,7 +414,7 @@ public class AiModeMachineTests
         Assert.Equal(AiMode.Patrol, m2.Mode);
     }
 
-    /// <summary>The flag is the damage routine's to write: an ordered entry into the evade state
+    /// <summary>The flag is the damage routine's to write. An ordered entry into the evade state
     /// leaves it clear, so the hit that follows still takes its own steady-hand roll.</summary>
     [Fact]
     public void AnOrderedEvadeCarriesNoFlag()
@@ -541,9 +650,9 @@ public class AiModeMachineTests
     }
 
     /// <summary>The stun cannot strand a pilot: an external mode override during it releases the
-    /// controls. The damage handler gates on the evade flag alone, so a hit taken while stunned
-    /// still rolls and a failure overwrites the stun; the sixth-sense roll is the one a stunned
-    /// pilot does not take, because its trigger needs pursue or lay off.</summary>
+    /// controls. The damage handler gates on the evade flag alone. A hit taken while stunned still
+    /// rolls, and a failure overwrites the stun. The sixth-sense roll is the one a stunned pilot
+    /// does not take, because its trigger needs pursue or lay off.</summary>
     [Fact]
     public void AStunnedPilotStillRollsOnAHitAndIsReleasedByAnOverride()
     {
@@ -597,7 +706,7 @@ public class AiModeMachineTests
     [Fact]
     public void AltitudeVetoCullsAProgramPredictedToEndBelowTheFloor()
     {
-        // The shipped split_s ends one prediction step lower than it started, so the veto turns on
+        // The shipped split_s ends one prediction step lower than it started. The veto turns on
         // the altitude it is flown at and on nothing else.
         foreach (float altitude in new[] { 60f, 600f })
         {
@@ -842,6 +951,43 @@ public class AiModeMachineTests
             m.Update(Home, Level, Astern600, null, 1f / 60f, Chasing, targetIsHuman: true));
     }
 
+    /// <summary>The daredevil roll behind the proximity pick. A certainty passes and says so in
+    /// the engine's own vocabulary. A zero chance never rolls at all, the class gate a non-jet
+    /// spawn is given. A failed roll holds the next look five seconds.</summary>
+    [Fact]
+    public void TheDaredevilRollHoldsFiveSecondsAfterAFailedLook()
+    {
+        var m = Machine();
+        var rolls = new List<string>();
+        m.RollLogged += rolls.Add;
+
+        m.DaredevilChance = 0f;
+        Assert.False(m.RollDaredevil());
+        Assert.Empty(rolls);
+
+        m.DaredevilChance = 1f;
+        Assert.True(m.RollDaredevil());
+        Assert.Equal("Dare devil test passed. Looking for danger zones.", Assert.Single(rolls));
+
+        // A look that started no run stamps the hold, and nothing rolls again inside it.
+        m.StampDangerZoneRetry();
+        m.Update(Home, Level, null, null, AiModeMachine.DangerZoneRetryS - 0.5f);
+        Assert.False(m.RollDaredevil());
+        Assert.Single(rolls);
+        m.Update(Home, Level, null, null, 1f);
+        Assert.True(m.RollDaredevil());
+
+        // …and a failed roll arms the same hold, so the refusal costs one roll per interval.
+        m.DaredevilChance = 0.0001f;
+        m.Update(Home, Level, null, null, AiModeMachine.DangerZoneRetryS);
+        Assert.False(m.RollDaredevil());
+        Assert.Equal("Dare devil test failed. Not looking for danger zones.", rolls[^1]);
+        int failed = rolls.Count;
+        m.DaredevilChance = 1f;
+        Assert.False(m.RollDaredevil());
+        Assert.Equal(failed, rolls.Count);
+    }
+
     [Fact]
     public void FixedSeedsTransitionIdentically()
     {
@@ -935,6 +1081,15 @@ public class AiModeMachineTests
         Difficulty = 99,
         Steps = Array.Empty<ManeuverStep>(),
     };
+
+    // Holds position and quarry for the given seconds in 0.1 s ticks, returning the mode reached.
+    private static AiMode Step(AiModeMachine m, Vector3 target, float seconds)
+    {
+        var mode = m.Mode;
+        for (float t = 0f; t < seconds - 1e-4f; t += 0.1f)
+            mode = m.Update(Home, Level, target, null, 0.1f);
+        return mode;
+    }
 
     private static AiMode PursueFrom(AiModeMachine m, Vector3 target)
     {

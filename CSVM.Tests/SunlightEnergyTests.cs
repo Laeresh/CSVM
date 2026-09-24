@@ -172,6 +172,79 @@ public class SunlightEnergyTests
         Assert.Equal(1.6f, daySun, 2);
     }
 
+    // The bicolored bit decides which colour the ambient half wears. Clear, the original reads only
+    // the diffuse colour for both halves, so an authored ambient colour must not reach the plane.
+    [Fact]
+    public void AnUnbicoloredZoneLightsBothHalvesWithTheDiffuseColour()
+    {
+        var zone = Zone(1.2f, 0.25f) with
+        {
+            SunColorDiffuse = new Color(1f, 0.8f, 0.7f),
+            SunColorAmbient = new Color(0.7f, 0.9f, 1f),
+        };
+        (Vector3 ambient, Vector3 diffuse) = WeatherRig.SunVertexLight(zone);
+        Assert.Equal(0.25f, ambient.X, 3);
+        Assert.Equal(0.2f, ambient.Y, 3);
+        Assert.Equal(0.175f, ambient.Z, 3);
+        Assert.Equal(1.2f, diffuse.X, 3);
+        Assert.Equal(0.96f, diffuse.Y, 3);
+    }
+
+    [Fact]
+    public void ABicoloredZoneLightsTheAmbientHalfWithItsOwnColour()
+    {
+        var zone = Zone(1.5f, 0.5f) with
+        {
+            SunColorDiffuse = new Color(1f, 0.8f, 0.7f),
+            SunColorAmbient = new Color(0.7f, 0.9f, 1f),
+            SunBicolored = true,
+        };
+        (Vector3 ambient, Vector3 diffuse) = WeatherRig.SunVertexLight(zone);
+        Assert.Equal(0.35f, ambient.X, 3);
+        Assert.Equal(0.45f, ambient.Y, 3);
+        Assert.Equal(0.5f, ambient.Z, 3);
+        Assert.Equal(1.05f, diffuse.Z, 3);
+    }
+
+    // The bit off the shipped data: C5's night zone authors it set, C1's day zones clear.
+    [ExtractedDataFact]
+    public void TheBicoloredBitParsesOffTheInstallsZones()
+    {
+        var c5 = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C5", "IA1"));
+        var c1 = WeatherState.Load(SessionPaths.MissionZrdr(TestData.DataRoot!, "C1", "IA1"));
+        Assert.NotNull(c5);
+        Assert.NotNull(c1);
+        Assert.True(c5!.Zone("zone1").SunBicolored);
+        Assert.False(c1!.Zone("zone1").SunBicolored);
+    }
+
+    // The photograph's fill: the byte FUN_004a0220 stores, ftol((A * 1.5 + 0.1) * 255 + 0.5)
+    // clamped to 255, read back through the 1/255 the draw multiplies it by.
+    [Theory]
+    [InlineData(0.25f, 121)]
+    [InlineData(0.5f, 217)]
+    [InlineData(0f, 26)]
+    [InlineData(0.6f, 255)]
+    [InlineData(1.5f, 255)]
+    public void ThePhotographFillIsTheStoredByte(float ambient, int stored)
+        => Assert.Equal(stored * 0.003921569f, WeatherRig.PhotographFillAmbient(ambient), 6);
+
+    // The fill replaces the ambient scalar alone, so it keeps the colour the ambient half is
+    // lit with, bicoloured or not.
+    [Fact]
+    public void ThePhotographFillKeepsTheAmbientHalfsColour()
+    {
+        var zone = Zone(1.5f, 0.25f) with
+        {
+            SunColorDiffuse = new Color(1f, 0.8f, 0.7f),
+            SunColorAmbient = new Color(0.7f, 0.9f, 1f),
+        };
+        float fill = 121 * 0.003921569f;
+        Assert.Equal(new Vector3(1f, 0.8f, 0.7f) * fill, WeatherRig.PhotographFill(zone));
+        Assert.Equal(new Vector3(0.7f, 0.9f, 1f) * fill,
+            WeatherRig.PhotographFill(zone with { SunBicolored = true }));
+    }
+
     // The default fog is the install's modal DAY colour, so a case that says nothing about the
     // sky gets the day arm of the night rule.
     private static WeatherState.ZoneWeather Zone(float diffuse, float ambient, Color? fog = null)

@@ -146,6 +146,14 @@ public sealed partial class ZeppelinRuntime : Node
             _ => (int?)null,
         });
 
+    /// <summary>Appends every placed zeppelin's host node, the drawn hull the cloud band's
+    /// per-object zone gate (<see cref="ObjectZoneGate"/>) reads an altitude span off.</summary>
+    public void CollectHosts(List<Node3D> into)
+    {
+        foreach (var live in _live)
+            into.Add(live.Host);
+    }
+
     /// <summary>Completes the record-team fan onto the guns standing on each airship, which is the
     /// rest of what <c>FUN_004bee80</c> writes. Call once the emplacements exist; a record authoring
     /// no team leaves its guns on their own <c>TURRET</c> default, since substituting one there is
@@ -563,16 +571,13 @@ public sealed partial class ZeppelinRuntime : Node
 
     // The team the healthy entry's flagged state child carries, or null where the zone group
     // is missing, has no such child, or the child authors no owner for this mission.
-    private static int? StateChildTeam(AnimRuntime runtime, Node3D host, ZeppelinHealthyZone zone)
-    {
-        var group = ZoneNode(runtime, host, zone.Node);
-        if (group == null)
-        {
-            return null;
-        }
-        var child = ZoneNode(runtime, group, zone.Kind);
-        return child == null ? null : DestructibleRegistry.MissionStructureTeamOf(child);
-    }
+    private static int? StateChildTeam(AnimRuntime runtime, Node3D host, ZeppelinHealthyZone zone) =>
+        StateChild(runtime, host, zone) is { } child ? DestructibleRegistry.MissionStructureTeamOf(child) : null;
+
+    // The node a healthy entry names, walked from the hull the way the record loader walks it
+    // (gasbag1, then panels inside it); null where either step does not resolve.
+    private static Node3D? StateChild(AnimRuntime runtime, Node3D host, ZeppelinHealthyZone zone) =>
+        ZoneNode(runtime, host, zone.Node) is { } group ? ZoneNode(runtime, group, zone.Kind) : null;
 
     private static void AddPart(List<AimCandidate> into, DestructibleRegistry.Instance? inst,
         int team, Vector3 velocity)
@@ -676,6 +681,7 @@ public sealed partial class ZeppelinRuntime : Node
             {
                 continue;
             }
+            zep.StateNodes[zone.Node] = StateChild(runtime, zep.Host, zone);
             ZeppelinGasbag? bag = recordHp.TryGetValue(zone.Node, out var b) ? b : null;
             var inst = ZonePool(runtime, zep.Host, zone.Node, bag?.Hp, bag?.DestroyAnim);
             zep.GasbagZones[zone.Node] = inst;
@@ -791,9 +797,11 @@ public sealed partial class ZeppelinRuntime : Node
         // Per-zone kill lines, once each.
         foreach (var (node, inst) in zep.GasbagZones)
         {
-            if (inst is { Status: DestructibleRegistry.State.Destroyed } && zep.DeadZones.Add(node))
+            if (!zep.ZoneAlive(node) && zep.DeadZones.Add(node))
             {
-                Log.Info("flight", $"zep: '{zep.Def.Node}' gasbag '{node}' destroyed, survivors {damage.Survivors(zep.ZoneAlive)}/{damage.Required} required");
+                string how = inst is { Status: DestructibleRegistry.State.Destroyed }
+                    ? "destroyed" : "switched off by a script";
+                Log.Info("flight", $"zep: '{zep.Def.Node}' gasbag '{node}' {how}, survivors {damage.Survivors(zep.ZoneAlive)}/{damage.Required} required");
             }
         }
 
@@ -860,7 +868,8 @@ public sealed partial class ZeppelinRuntime : Node
             Motion = motion;
             Host = host;
             ZoneAlive = node => ZoneIsAlive(
-                GasbagZones.TryGetValue(node, out var inst) ? inst : null);
+                    GasbagZones.TryGetValue(node, out var inst) ? inst : null)
+                && StateActive(StateNodes.TryGetValue(node, out var state) ? state : null);
             Dormant = def.Deactivated;
             Team = teamOverride ?? AuthoredTeam(def);
         }
@@ -938,8 +947,19 @@ public sealed partial class ZeppelinRuntime : Node
         /// <summary>No-solution skip lines printed (rate-limited like the gate log).</summary>
         public int SkipLogged { get; set; }
 
-        /// <summary>The aggregator's zone-aliveness view: a zone with no pool never dies.</summary>
+        /// <summary>The node each distinct healthy entry names (gasbag1/panels), null where it
+        /// does not resolve.</summary>
+        public Dictionary<string, Node3D?> StateNodes { get; } =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>The aggregator's zone-aliveness view: a destroyed pool, or the entry's own node
+        /// switched off, which is the one flag the original's survivor walk reads.
+        /// ⚠ Never the pool alone: a script that burns a gasbag switches the node off with no
+        /// damage at all, and the hull then flies its net through its own crash.</summary>
         public Func<string, bool> ZoneAlive { get; }
+
+        private static bool StateActive(Node3D? node) =>
+            node == null || !GodotObject.IsInstanceValid(node) || node.Visible;
     }
 
     private sealed class CannonZone

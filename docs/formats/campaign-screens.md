@@ -33,6 +33,8 @@ choreography in [objectives.md](objectives.md).
 - [Plane selection: `PLANESELECTION.SCRIPT`](#plane-selection-planeselectionscript)
 - [Ammo selection: `ORDINANCELAYOUT.SCRIPT`](#ammo-selection-ordinancelayoutscript)
 - [The scrapbook: `SCRAPBOOK.SCRIPT`, `SCRAPBOOKZOOM.SCRIPT`, `SCRAPBOOK_TOC.SCRIPT`](#the-scrapbook-scrapbookscript-scrapbookzoomscript-scrapbook_tocscript)
+  - [The zoom view's sepia](#the-zoom-views-sepia)
+  - [Fitting a block to its box](#fitting-a-block-to-its-box)
   - [Export to Desktop](#export-to-desktop)
   - [Entry, exit and the table of contents](#entry-exit-and-the-table-of-contents)
 - [Callback reference](#callback-reference)
@@ -225,7 +227,14 @@ when the campaign is finished.
 script keyboard focus, and typing `idaho` activates the otherwise-deactivated dropdown
 `pc_d_missions` (24 rows, filled from `uiData` 2038 with langui `3450 + row`, the long mission
 names). With the dropdown used, Next Mission passes `QG + 1` to 2104 instead of -2. The dropdown is
-pre-selected to the campaign position, with 24 clamped to row 23. The remake builds it, and builds
+pre-selected to the campaign position, with 24 clamped to row 23. Its `WM` is
+`@shareditems@BUA`, the list the plane selection and ammo screens' dropdowns also take, so it
+draws exactly as theirs do over the cabin painting: `SHAREDITEMS.SCRIPT`'s `BUA` fills the closed
+field `0xffc8d4e6` with a one-pixel frame in black (white while the pointer is over the list) and
+prints the pick in `0xff000000`, and its list `CUA` fills the window the same paper with a white
+frame, the picked row `0xffa7b9d7` and the row under the pointer `0xffe0e0e0`, every entry in
+black. `XTA`/`YTA` (the option pages' dark `0xff221c17` field) and `ZTA`/`AUA` (the hangar tabs'
+`0xffdacaa7` paper) are the file's other two list families. The remake builds it, and builds
 the same matcher on the table of contents (`ispy`) and the construction hub (`gimme`): the click
 arms the screen's own buffer, each typed character extends it, a character that leaves the word's
 prefix empties it so a partial retype starts over, and the comparison is case-sensitive.
@@ -301,7 +310,10 @@ wingman ids share one handler apiece, so only the slot differs). Row -1 returns 
   set, so a group holds one or two barrels. The row text is the calibre name plus the group's
   ammunition short name (langui `3360 + ammo`).
 - A rocket row `r` addresses **pylon cell `r`** of the record and is empty when the cell holds 11.
-  Cells 0 to 3 are one wing and 4 to 7 the other.
+  Cells 0 to 3 are one wing and 4 to 7 the other. CSVM departs here on purpose: its loadout
+  screens key the boxes by physical pylon number in fill order (`LaunchMenu.AmmoPylons`), so the
+  rows agree with the weapon gauge's belt lights, at the cost that a fill order crossing wings can
+  draw a starboard pylon in the port box.
 
 **The calibre name is `IDS_GUNSHORTNAME` (langui `3320 + slot`), not the long name the hangar and
 the ammo screen use.** `Campaign Flight Check.png` settles it: the row reads `1)  .50-cal. Slug`,
@@ -520,17 +532,31 @@ Hoplite shot shows three greyed `No Gun` captions with no field under any of the
 a deactivation is the caption beside it, never the field. The rows that remain do not close up into
 the gap either, because every `OL_D_ROCKETS<N>` carries its own `LAYOUT.CSV` rect (y 320, 348, 376
 and 404, cells 0 to 3 anchored in `<V3>` and 4 to 7 in `<V4>`), so a hidden row leaves its slot
-empty and every other row stays where the layout put it. Both readings are this screen's own; a
-deactivated widget elsewhere is evidence about that screen, not about this one.
+empty and every other row stays where the layout put it. `CAP-50.mkv` t=80.0 shows the gun half
+again on a stock Warhawk (two `No Gun` captions, no field); that film's two aircraft both carry four
+pylons a wing, so the rocket half rests on the Hoplite shot and the script. The Instant Action
+page's blank boxes are a different act, a `10000` disable rather than a `deactivate`
+([instant-action.md](instant-action.md#screen-controls)), and say nothing about this screen.
 
 **⚠ A rocket dropdown's row index is not the ordnance id.** The rocket list is a table of twelve
-8-byte records at `0x00619efc`; an entry is offered only when its first field is at most the
-current mission number, so the list grows as the campaign progresses, and the row index is a
+8-byte records at `0x00619efc`; an entry is offered only when its first field is at most
+`0x0064b678 + 1`, so the list grows as the campaign progresses, and the row index is a
 position in the filtered list. `FUN_0040ff50` maps a row to the table index and
 `FUN_0040ffa0` maps back; the ammunition list has no such filter and its row index is the
-ammunition index directly. Three executable flags (`0x00647b5c`, `0x00647b68`, `0x00647b6c`, which
-this decode did not identify) bypass the filter and offer all twelve; the Instant Action and
-multiplayer paths are the likely users.
+ammunition index directly. Three executable flags (`0x00647b5c`, `0x00647b68`, `0x00647b6c`)
+bypass the filter and offer all twelve. The first is `fAllowAll`, the unlock-everything mode the
+hidden pilot name sets, which switches off the airframe availability thresholds in the same way
+([`org/hangar.md`](../org/hangar.md)); the other two this decode did not identify, and the Instant
+Action and multiplayer paths are their likely users.
+
+**⚠ The filter reads the profile's progress, not the mission being flown.** `0x0064b678` is the
+save's `UIData +0x338`, the completed-mission count
+([saved-games.md](saved-games.md#where-the-ammunition-and-ordnance-picks-live) for the record the
+picks live in), and the mission wrap-up `FUN_00405ce0` only ever raises it to the flown mission's
+index. Replaying an earlier mission therefore leaves it where the furthest mission put it, and the
+pylon lists keep every row the pilot has already earned. The airframe list on the plane
+construction screen is filtered against the same global by `FUN_00410120`, so one counter governs
+both screens and neither one consults the sortie.
 
 | Row | Ordnance | Available from mission |
 |---|---|---|
@@ -656,6 +682,15 @@ script prefixes with `assets\graphics\`; the zoom background is
 the name under its own (second-letter) extension. All 294 page images, all 43 `.JPG` zoom insets
 and all 26 `SB_BG_*.jpg` backgrounds are present in the shipped install.
 
+⚠ **A second letter `0` names no inset at all, not a `.PNG` one.** `FUN_004061d0` switches on that
+letter and its `'0'` case stores an empty extension to `DAT_0064b32c`; the zoom's setup at
+`0x0040a99c` leaves the inset name empty when that extension is, and `SCRAPBOOKZOOM.SCRIPT` then
+creates no `sbz_image` and deactivates `sbz_b_export`. So every `P0` scrap that opens is the family
+background and its words alone, with RETURN and no EXPORT TO DESKTOP, which the original's capture
+shows on the Aloha Daily, the letter, the diary and the Bristol spec sheet. The "newspaper header"
+such a zoom shows is the family background itself (`SB_BG_B.jpg` carries the Aloha Daily masthead),
+not the page image, which is a picture of the clipping and never drawn in the zoom.
+
 The `Zoom` letter also names the text layout: `SBZ_T_TITLE<letter>`, `SBZ_T_CAPTION<letter>` and
 `SBZ_T_TEXT<letter>` in `LAYOUT.CSV` give each family its own box, colour and justification, 26
 families in all. Two of those rows carry typos the engine will not parse as colours,
@@ -674,8 +709,9 @@ unreached slot showing langui 1219 `Not yet flown`.
 ### The danger-zone slot
 
 A scrap whose name begins `Snap_` is a player capture, not shipped art: it resolves against the
-profile directory instead of `assets\graphics\`, is skipped when the file is not on disk, is forced
-to a 164×123 region, and is drawn at 25% on the page but full size in the zoom. 167 of the 461 rows
+profile directory instead of `assets\graphics\`, is skipped when the file is not on disk, and is
+drawn into a fixed 164×123 rectangle on the page and at its written size in the zoom, that written
+size being the 640×480 every file the retail game wrote is. 167 of the 461 rows
 are these, named `Snap_<mission>_<objective>` and gated on that objective, with a
 `DZ_generic_corners` row at identical coordinates one step higher in draw order supplying the
 photo-corner mount.
@@ -683,17 +719,104 @@ photo-corner mount.
 **Which flight writes one.** The objective half of the name is the mission's own
 `dzones.zrd` `objective_numbers` entry for a danger zone (`docs/formats/missions.md`, "Zone
 overrides"), so the zone the pilot flies through and the row that draws its photograph are named by
-the same data. Completing that zone on the campaign path photographs the pilot's pane into the
-seated profile's directory under a `.PN_` pending name; the mission end keeps the pending files as
+the same data. Completing that zone on the campaign path photographs the pilot's aircraft (below)
+into the seated profile's directory under a `.PN_` pending name; the mission end keeps the pending files as
 `Snap_<mission>_<objective>.PNG` on a win and deletes them on a loss, the original's own sweep over
 ids 10 to 31. A zone in the mission's `nosnapshot` list scores its objective and writes nothing.
 `CampaignSnapshot` is the writer and `CampaignDangerZones` the binding; the stunt camera is a
 different thing entirely and keeps its own names under `screenshots/stunts/`, since an Instant
-Action run has no mission slot and no objective to be named by.
+Action run has no mission slot and no objective to be named by. Both take the same photograph.
+
+**The camera.** [Evidence: decoded] The photograph is not the pilot's view. The zone update
+`FUN_00446990`, on a zone completing whose record has the snapshot flag `+0x49` set and an
+objective `+0x4c` of 0 or more, stores the objective in `DAT_00623ccc` (`0x00446ac5`), plays the
+sting and raises `DAT_0064fb78` (`0x00446ae1`). The next main tick, `FUN_004a0220` from
+`0x004a0372`, takes the photograph when that flag is up, the game is not a network game
+(`FUN_00440ad0`), a player exists and the player is not in a cutscene (`+0x91d`). It saves the
+camera's mode, FOV, position and orientation, then for one frame:
+
+- sets the camera mode to chase (`+0x14c` = 0, `0x004a0400`), so the `cockpit1` interior is not
+  drawn and the airframe is not hidden;
+- places the eye at the aircraft position plus `2.5 × dist` along the nose's level heading (the
+  backward row `+0x198` with y zeroed, normalised by `FUN_00422690`, times `dist` and the double
+  -2.5 at `0x00608348`), where `dist` is the airframe's `camparam` chase distance, plus a uniform
+  `rand()` scatter of up to ±0.15 `dist` on world X and Z and ±0.25 `dist` on Y. A nose pointing
+  straight up or down has no level heading and leaves the eye on the scatter alone;
+- turns the eye to look at the aircraft with no roll (`FUN_0053de20`: a yaw and a pitch off the two
+  positions), set through `FUN_004d2710` and `FUN_004d2490`;
+- sets the FOV to 60° (`FUN_0042b570(0x3f860a92)`), turns the cockpit and HUD chrome off
+  (`FUN_00455800(0)`), and draws the player model and `cockpit1` opaque (`FUN_0049cc00`);
+- on the hardware renderer, raises the sun's ambient scalar to `SUNLIGHT_AMBIENT × 1.5 + 0.1`
+  while the player model draws (`FUN_004ccfd0`, `FUN_004cd060`; "The fill light" below);
+- renders without the screen tint (`FUN_0049fe70(0)`) and saves the back buffer through
+  `FUN_005a9800` as `<profile>\Snap_<mission>_<objective>.PN_`.
+
+It then restores every saved setting, clears the flag (`0x004a0979`) and renders the normal frame
+over the same back buffer before the flip, so the player never sees the pose. The result is a
+head-on portrait of the aircraft from ahead of it, at the external field of view, with no HUD.
+Because the eye stays level with the aircraft, a photograph taken in level flight shows the nose
+and both wings coming at the camera, a bank shows as a tilted wing line, and one taken in a steep
+dive shows the upper surface with the nose toward the bottom of the frame and the tail at the top.
+
+**When it can fire.** [Evidence: decoded] There is no separate camera test. The trigger is inside
+`FUN_00446990`'s completion branch (more than one gate passed, `0x004469dc`), behind the zone's
+completed byte `+0x40`: tested at `0x00446aaa` before the completed-zones counter, and set at
+`0x00446ae8` whether or not a photograph was taken. A zone therefore photographs at most once, on
+its first completion, and the last photograph a run can take is the one its last zone's
+completion takes; nothing photographs after the run completes. The zone list's builder
+`FUN_004459f0` seeds every record with `+0x48` and `+0x49` set and `+0x4c` at -1, so only a zone
+that `objective_numbers` gives a slot photographs at all. The remake's stunt camera latches on
+the `dzN` marker sphere rather than the gate pair, and ends where the original does: its last test
+is on the frame the run completes, and a marker first entered after that frame is not
+photographed.
+
+The remake takes the same pose in `DangerZonePhotograph`, a viewport of its own that shares the
+pane's world, so the pane is never moved. A pilot in a first-person view has the hidden airframe
+groups shown for that one frame on a visual layer no pane draws, and the fill light below lights
+the pilot's own aircraft for that frame. A run that draws no frames (headless) photographs the pane
+instead. The original's back buffer was 4:3 at every resolution it ran at, so its file is that
+buffer scaled; a pane here can be any shape, and the remake writes the centred 4:3 window of it at
+the pane's full height, which is what a 640×480 screen framed.
 
 Authoring gaps stay as they are: CM18 numbers a zone 19 with no row for it, CM19 numbers one 31
 with no row, CM23 ships rows 27 and 28 for zones it disables, and every `_31` row is dead because
 the debrief's mask loop stops at 30 (`docs/org/debrief.md`).
+
+#### The fill light
+
+[Evidence: decoded] The fill is not a new light. It is the per-node ambient override every
+`Object3d` node carries in the flag word `+0x2c`: bit 7 enables it (`FUN_004ccfd0` sets it,
+`FUN_004cd020` reads it) and bits 9 to 16 hold its level as a byte (`FUN_004cd060` writes it,
+`FUN_004cd0b0` reads it). The script commands `NodeSetOverrideAmbient` and
+`NodeSetOverrideAmbientValue` (the latter's value times 255) drive the same two setters, and
+`NodeSetOverrideDiffuse` is the matching diffuse override (`FUN_004cd0f0`), which the photograph
+does not use.
+
+`FUN_004a0220` sets it on the player's node (`player+0xc`) from `0x004a0593` to `0x004a0649`,
+only when the hardware renderer flag `DAT_009be708` is up and the sunlight node `DAT_0071c2b8` (the
+one the zone apply `FUN_00472ea0` writes) has its class data. It saves the node's flag and byte,
+reads the sun's ambient scalar `A` (class data `+0xa0`, the zone's `SUNLIGHT_AMBIENT`), enables
+the override and stores `ftol((A × 1.5 + 0.1) × 255 + 0.5)` clamped to 0..255 (the constants at
+`0x00603460`, `0x006034a8`, `0x0060414c`, `0x006032e0`; `ftol` is `0x005f6e60`). After the save it
+puts the old flag and byte back (`0x004a08e3` to `0x004a0909`).
+
+The consumer is the `Object3d` draw `FUN_004d39c0`. For a node with the override set, when the
+gathered directional light (`FUN_0056bc40`, the sun) exists, it saves that light's ambient scalar
+and `DAT_0071ea14`, sets `DAT_0071ea14` to 1, sets the ambient scalar to `byte × 0.003921569`
+through `FUN_004dbce0` (which recomputes the light's premultiplied ambient and combined colour
+triples from its own colours), draws the node's model and every child, and restores both. The
+whole aircraft subtree therefore draws with the sun's ambient half raised to the fill and its
+direction, colour and diffuse half unchanged. C1's day `A` of 0.25 draws at 121/255, C5's 0.5 at
+217/255, and any `A` from about 0.6 up saturates at 1. The software renderer takes no fill. What
+`DAT_0071ea14` gates is not decoded.
+
+The remake's faithful aircraft shader takes the fill as a second ambient triple,
+`csky_sun_fill_rgb` (`WeatherRig.PhotographFill`, the same colour rule as the ambient half), in
+place of `csky_sun_ambient_rgb` when its instance's `csky_photo_eye` is armed and the drawing
+camera stands within `SceneBuilder.PhotoEyeReach` of that eye. `DangerZonePhotograph` arms its own
+pilot's instances with its eye for the frame it draws and disarms them after that draw, so the
+pane drawing the same aircraft on the same frame, and every later frame, keeps the zone's ambient.
+Enhanced mode's lit aircraft takes no fill.
 
 ### The grime
 
@@ -702,6 +825,59 @@ seeds from `(mission << 8) | spread` and clears a ten-bit used-mask; called with
 returns an unused value 0 to 9 and marks it used, resetting once all ten are taken; called with -2
 it reseeds from the clock. The overlay is therefore stable for a given page and varies between
 pages, and `SB_P_GRIME` is drawn one z above the scrap it dirties.
+
+### The zoom view's sepia
+
+A photograph reads warm and faded in the book and plain in the file EXPORT TO DESKTOP writes, and
+no draw anywhere applies a colour matrix. The warmth is one piece of art drawn over the print.
+
+`SB_P_GRIME`, the page wash, is a neutral stain: a 5 px opaque white border around an interior of
+alpha 0.067 to 1.0 (median 0.149) whose colour is (11.7, 11.4, 11.2), so a grey 128 under it comes
+out at R/G 1.000 and B/G 1.000. It darkens without tinting. The original's own page confirms that
+nothing else colours the print: fitting that border's opaque white in a reference spread puts the
+drawn wash at gain R 0.9740, G 0.9799, B 0.9800 and the shipped scraps beside it at R 1.0126,
+G 1.0125, B 1.0125, neutral within a percent both times.
+
+The zoom's own mount is where the sepia comes from. `DZ_ZOOMgrimeframe.png` is a cream torn photo
+mount with a translucent 585×419 window at mount-local (37, 37): alpha 0.137 to 0.894 (median
+0.302) over the colour (188.8, 173.0, 131.0), which is R/G 1.092 and B/G 0.757. Over a grey 128 the
+window reads R 146.4, G 141.6, B 128.9, a ratio of R/G 1.034 and B/G 0.910. `LAYOUT.CSV` gives
+`SBZ_GRIME` a Z of 200 against `SBZ_IMAGE`'s 0, so the mount draws over the print rather than under
+it, and `SCRAPBOOKZOOM.SCRIPT` places the print at the mount's own position plus ten and eight
+instead of at the row's authored `ZoomX`/`ZoomY`. The window is cut for a 640×480 print at that
+offset, so a file of another shape lands inside the opaque mount instead of behind the window.
+EXPORT TO DESKTOP copies the file, which never meets the mount, and the exported PNG is therefore
+the plain print.
+
+### Fitting a block to its box
+
+Every `SBZ_T_TITLE<letter>`, `SBZ_T_CAPTION<letter>` and `SBZ_T_TEXT<letter>` row carries a `Height`
+beside its `Width`, and **the original ignores it**. It draws a block at the point size the langui
+row's `[FONTID]` names, one line per face height, from the box's top down, and words that do not
+fit run on past the box and off the screen. Mission 1's second spread is the plain case: the diary
+scrap `1_2_2` is `VIN14` in a 555×590 box at y 10, its shipped text wraps to about 597 px, and the
+original's own page cuts the last line at the bottom edge of the 600 px screen. The original
+neither shrinks, clips nor scrolls; it simply overruns.
+
+**CSVM departs here.** A block taller than its box is stepped down a whole point at a time, its
+pitch scaled with it, and drawn at the largest size that fits. Of the 165 blocks the shipped table
+carries, ten are over their box at the authored size and take the step: `0_1_9`, `1_1_2`, `1_2_2`,
+`4_1_2`, `7_1_5`, `9_1_3`, `16_1_3`, `20_1_1`, `23_2_2` and `24_2_1`. Nine are 14 pt bodies that
+land at 13 pt or, for `0_1_9`, at 12 pt. The tenth is `20_1_1`'s `CENT36` headline, which wraps to
+three lines in a 110 px band and lands at 30 pt, the deepest step any shipped scrap takes. The
+floor is 8 pt: a block that will not fit even there is drawn at 8 pt and overruns, so a fault shows
+rather than words being dropped silently. No shipped scrap reaches the floor.
+
+Twelve further blocks draw a raw `IDS_SB_...` symbol, because `RESRC1.H` or the string table does
+not carry it and an unresolved key degrades to itself. All twelve are single-line titles and all
+twelve fit their box, so no overrun in the shipped table is a placeholder standing in for shorter
+words.
+
+The rule lives in the renderer rather than the composition, because how many lines words wrap to is
+a font metric: `CampaignScrapbookZoomPage` puts the box's authored height on the `BoardLine` and
+`ComposedBoardView` does the stepping, the same division `BoardNote`'s `Shrink` already uses. The
+`scrapbook-fit` suite sweeps every row of the shipped table, names the blocks over their box in its
+artifact, and fails if one is still over it after the step.
 
 ### Export to Desktop
 

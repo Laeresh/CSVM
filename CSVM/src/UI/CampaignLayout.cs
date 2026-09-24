@@ -189,18 +189,20 @@ public sealed class CampaignLayout
             return null;
         }
 
-        return new ScrapbookZoomFamily(t.X, t.Y, t.W, c.X, c.Y, c.W, b.X, b.Y, b.W);
+        return new ScrapbookZoomFamily(
+            t.X, t.Y, t.W, t.H, c.X, c.Y, c.W, c.H, b.X, b.Y, b.W, b.H);
     }
 
-    private static bool TryBox(MenuLayoutWidget widget, out (float X, float Y, float W) box)
+    private static bool TryBox(MenuLayoutWidget widget, out (float X, float Y, float W, float H) box)
     {
         box = default;
-        if (!widget.TryInt("X", out int x) || !widget.TryInt("Y", out int y) || !widget.TryInt("Width", out int w))
+        if (!widget.TryInt("X", out int x) || !widget.TryInt("Y", out int y)
+            || !widget.TryInt("Width", out int w) || !widget.TryInt("Height", out int h))
         {
             return false;
         }
 
-        box = (x, y, w);
+        box = (x, y, w, h);
         return true;
     }
 }

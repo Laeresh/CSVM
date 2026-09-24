@@ -59,7 +59,7 @@
       "name": "target",
       "mesh_index": -1,
       "children": [],
-      "flags": { "active": true, "intersect_surface": false },
+      "flags": { "active": true, "intersect_surface": false, "can_modify": true },
       "transformation": {
         "translation": { "x": 0.0, "y": 0.0, "z": 0.0 },
         "rotation": { "x": 0.0, "y": 0.0, "z": 0.0 }

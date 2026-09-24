@@ -57,7 +57,7 @@ bare flag (`LOCAL_NODES_ONLY`).
 
 | Key | Value | Meaning |
 |---|---|---|
-| `NAME` | 1 string | The world/object node(s) this def anchors to. Wildcards make one anim instance per matching node: `*`/`**` = any run of characters (`ftank0*`, `s_build**`), `#` = run of digits (`air_gen#`). Node names may be given without their `.flt` model suffix (`ap_radiotwr` ↔ gamez node `ap_radiotwr.flt`). |
+| `NAME` | 1 string | The world/object node(s) this def anchors to. Wildcards make one anim instance per matching node: each `*` = at most one digit (`ftank0*` ↔ `ftank01`, `s_build**` ↔ `s_build12`, `lkshadow*` ↔ the compiled `lkshadow`; the original's odometer stamps one digit per star, [org/sequences.md](../org/sequences.md), so `crate**` never reaches `craterlake`), `#` = run of digits (`air_gen#`). Node names may be given without their `.flt` model suffix (`ap_radiotwr` ↔ gamez node `ap_radiotwr.flt`). |
 | `NAME1` | list of (wildcard, [path…]) pairs | Multi-target form (zeppelin nacelle/turret sets): maps anim-instance name patterns to node paths inside a parent object. Per-object anims, part 2 scope. |
 | `ANIMATION_NAME` | 1 string | The name `startanims.json` / `CALL_ANIMATION` refer to. May itself carry a wildcard in template defs (`ftank_boom*`). |
 | `ANIMATION_ROOT_NAME` | 1 string | The node inside each instance the anim attaches to (`s_bld_healthy`, bare `healthy`). Needed to locate instances whose roots have free names: `m_build**` instances in C1 are `apbuild01.flt`/`aphngr01.flt`/…, found via their `m_bld_healthy` child. |
@@ -795,9 +795,12 @@ third, the "stopper", turns out to author a teardown that never runs:
   (`flame_ball_01`/`flame_ball_02` → `stop_p1trail`, in all 8 chapters), and the effects those
   sequences would have switched off are instead left to their own authored lifetimes.
 
-Halting a runner never retracts what its events already launched, motions, puffers and lights
-run out their own authored lifetimes (the same independence that keeps a rocket ring's scale
-motion alive after its launching sequence ends).
+Halting a runner never retracts what its events already launched. Puffers, lights and the
+tweened motions run out their own authored lifetimes (the same independence that keeps a rocket
+ring's scale motion alive after its launching sequence ends). ⚠ A ballistic `OBJECT_MOTION` is the
+exception: it is integrated only while its sequence is still dispatched, so a stop freezes the
+body where it stands, which is how every zeppelin wreck halts over the sea
+([sequences.md](../org/sequences.md)).
 
 ⚠ **CSVM does not persist the disable.** It halts matching runners and reports whether the name
 resolved; it does not remember that a sequence was stopped, so a later `CALL_SEQUENCE` still
@@ -928,7 +931,8 @@ a light name is scoped to the definition instance (two refineries each own an `o
 | `translate` | `{AtNode:{name,pos}}` (761×) or null (707×), a gamez node plus a local offset, the same shape and frame as a puffer's `AT_NODE`. |
 | `range` | `{min,max}`, full brightness inside `min`, nothing past `max`. Present on exactly the 1147 "on" events. **Every startup light in this install has a `max` between 2 and 22 m.** |
 | `color` | `{r,g,b}`, present 765×. A DX7 sRGB value, so it needs linearising like `FOG_COLOR`. |
-| `directional`, `saturated`, `subdivide`, `lightmap`, `static_`, `bicolored`, `orientation`, `ambient*`, `diffuse` | Null or false almost everywhere; nothing in this install depends on them. |
+| `ambient`, `diffuse` | Null except on the 20 MP2 flag-light events (0.3 / 1.0). An absent one keeps the light's value, 1.0 / 0 on a fresh light; the point term scales the colour by their sum ([`../org/vertexLighting.md`](../org/vertexLighting.md)). |
+| `directional`, `saturated`, `subdivide`, `lightmap`, `static_`, `bicolored`, `orientation`, `ambient_color` | Null or false almost everywhere; nothing in this install depends on them. |
 
 **The semantic that matters is that a `LIGHT_STATE` is a PARTIAL update.** A fire or refinery
 flicker is a stream of `{name, range}` events 0.03–0.07 s apart that must leave position,
@@ -974,15 +978,18 @@ with seven ramps over 0.41 s.
 docklights, six reflights, the police light); every other chapter's light events sit in
 `ON_CALL` combat/destruction effects (`gunhit_lt`, `muzzle_lt`, `fuel_light`) that a bootstrap
 never reaches. C1 reports 35 lights at startup, growing to ~57 as delayed and looping
-sequences fire.
+sequences fire. The `ON_CALL` effect lights (`he_light`, `gunhit_lt`, `fuel_light`, `flak_light1`,
+`torp_light` and the rest the world-effects runtime binds) light in every chapter when a burst
+plays them: that runtime submits into the world's own `WorldLights`, on both presentations.
 
 **What a point light is FOR here.** The visible flare at a light's own position is *already*
 separate gamez geometry, C1's `docklight_flare` is a `Facade`/`SphericalY` mesh textured
 `dock_liteflare.tif`, and the refinery's `flame01` is a `Facade`/`CylindricalY` mesh textured
 `fire101.tif`. Both render without any animation. So `LIGHT_STATE` is not what draws the lamp;
-it is the **spill onto surrounding geometry**, which is what the original's DX7 point lights
-did to the same baked vertex lighting our world shader reads. Rendering notes in
-`docs/architecture.md` under `WorldLights.cs`.
+it is the **light falling on surrounding geometry**, the per-vertex point term the original adds
+to the same authored vertex colour our world shader reads (the law is in
+[`../org/vertexLighting.md`](../org/vertexLighting.md), "Point lights"). Rendering notes in
+`docs/architecture/Mech3.md` under `WorldLights.cs`.
 
 **Cost warning for anyone adding a handler here.** These events are not occasional. C1 fires
 ~2,700 `LIGHT_STATE`s per second at steady state, because each fire's flicker re-issues its

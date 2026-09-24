@@ -51,7 +51,7 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
         shader_type spatial;
         render_mode BLEND_MODE, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;
         #include "res://shaders/csky_srgb.gdshaderinc"
-        #include "res://shaders/csky_atmosphere.gdshaderinc"SUN_INCLUDE
+        #include "res://shaders/csky_atmosphere.gdshaderinc"
 
         uniform sampler2D atlas : source_color, filter_linear, repeat_disable;
         uniform float frame_count = 1.0;
@@ -328,10 +328,8 @@ public sealed class MultiMeshEmitterRenderer : IEmitterRenderer
                     ? "v_gain = INSTANCE_CUSTOM.z;" + (shaded ? "\n    v_shade = INSTANCE_CUSTOM.w;" : "")
                     : "")
                 .Replace("GAIN_MUL", enhanced ? " * v_gain" : "")
-                // Both holes are empty AND at end of line on every other variant, so the text
-                // those compile is byte for byte the one they compiled before this arm existed.
-                .Replace("SUN_INCLUDE", shaded
-                    ? "\n#include \"res://shaders/csky_sun.gdshaderinc\"" : "")
+                // The hole is empty AND at end of line on every other variant, so their text stays
+                // byte for byte. The sun direction it reads is csky_atmosphere's, in every variant.
                 .Replace("SHADE_BLOCK", shaded ? "\n" + SmokeShadeBody : "");
             ShaderVariants[(mix, soft, enhanced)] = shader = new Shader { Code = code };
         }

@@ -65,4 +65,52 @@ public class PadsTests
         Assert.Empty(a![0]);
         Assert.Empty(a[1]);
     }
+
+    /// <summary>⚠ One controller, one roster entry. An 8BitDo Ultimate 2 arrives three times
+    /// (one XInput view, two DirectInput ones), and the extra views answer no input while holding
+    /// roster slots, so a single Start joins two seats and a seat lands on a stick nobody holds.
+    /// That is the two-player splitscreen report this rule closes.</summary>
+    [Fact]
+    public void DuplicateViewsOfOneControllerCollapseToItsXInputView()
+    {
+        var kept = Pads.KeepXInputView(new[]
+        {
+            (0, false, "2dc8/310a"),
+            (1, true, "2dc8/310a"),
+            (2, false, "2dc8/310a"),
+        });
+        Assert.Equal(new[] { 1 }, kept);
+    }
+
+    [Fact]
+    public void TwoControllersOfTheSameModelBothKeepTheirOwnXInputView()
+    {
+        // Same vendor/product pair, which is what the user tests with: the rule groups by model,
+        // so it must drop a model's DirectInput views without merging its two real controllers.
+        var kept = Pads.KeepXInputView(new[]
+        {
+            (0, false, "2dc8/310a"),
+            (1, true, "2dc8/310a"),
+            (2, false, "2dc8/310a"),
+            (3, true, "2dc8/310a"),
+        });
+        Assert.Equal(new[] { 1, 3 }, kept);
+    }
+
+    /// <summary>A stick the platform reports through DirectInput only still plays: dropping every
+    /// non-XInput view would leave its owner with no device at all.</summary>
+    [Fact]
+    public void AControllerWithNoXInputViewKeepsEveryViewItHas()
+    {
+        var kept = Pads.KeepXInputView(new[]
+        {
+            (0, false, "044f/b10a"),
+            (1, true, "2dc8/310a"),
+            (2, false, "2dc8/310a"),
+        });
+        Assert.Equal(new[] { 0, 1 }, kept);
+    }
+
+    [Fact]
+    public void AnEmptyRosterStaysEmpty() => Assert.Empty(Pads.KeepXInputView(new (int, bool, string)[0]));
 }

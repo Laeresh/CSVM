@@ -145,7 +145,6 @@ public sealed class OriginalAssetManifest
         ["Preferences.PF_B_RETURNTOGAME"] = "the in-flight way back, which the menu's Preferences page never offers",
         ["Audio.AP_B_MUSIC"] = "the In-Game Music checkbox, whose mute a slider that reaches zero already offers",
         ["Audio.AP_D_SQuality"] = "the Sound Quality tier, which no mixer this port runs on has an equivalent of",
-        ["ControlsPrefs.CP_S_MOUSE"] = "the Mouse Sensitivity slot and thumb, that box holding a two-value chooser here",
         ["PassengerCabin.PC_B_SAVE"] = "SAVE GAME, deactivated in the original and never drawn",
         ["MessageBox.MP_P_BACKGROUND"] = "the multiplayer error box, which has no local counterpart",
         ["MessageBox.MP_B_LEFT"] = "the multiplayer error box, which has no local counterpart",

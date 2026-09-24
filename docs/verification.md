@@ -166,6 +166,27 @@ member, and it does not go here.
   effect-off pair is what separates the effect's own flipping from ordinary parallax: without it
   every texel the camera move uncovers is counted as flicker.
 
+- **SHOT-41**, **A complaint that one screen tints what another shows plainly is first a question
+  about the art drawn over it and the order it draws in, so measure the overlay's own alpha and read
+  the layout's Z before adding a colour transform.** The scrapbook's photographs read warm and the
+  file EXPORT TO DESKTOP writes reads plain, and no colour matrix exists anywhere: the page wash
+  `SB_P_GRIME` is neutral (a grey 128 under it comes out R/G 1.000, B/G 1.000) and the original's
+  own spread draws it at gain 0.974/0.980/0.980 with the shipped scraps at 1.0126/1.0125/1.0125,
+  while the zoom's mount `DZ_ZOOMgrimeframe` is a cream window of alpha 0.137 to 0.894 over
+  (188.8, 173.0, 131.0), which is R/G 1.092 and B/G 0.757, and `LAYOUT.CSV` gives it a Z of 200
+  against the print's 0. A matrix fitted to the measured ratio would have been a second tint on top
+  of the one piece of art that already makes it.
+
+- **SHOT-42**, **Measure a full-screen dither as the mean 2x2 alternation `|a-b-c+d|` over
+  luminance, and bisect it by differencing the pass doors rather than by reading the frames.** A
+  pass that resolves through a screen-space sample pattern is the only one whose own contribution
+  alternates pixel to pixel, so the difference between the full frame and the frame with that pass
+  off carries the alternation and every other pass's difference is a smooth field. At C1's
+  waterfall under `--graphics=enhanced` at 1920x1080 the soft-shadow difference scored 2.17 over
+  81% of the frame while SSAO, SSR and glow scored 0.10, 0.07 and 0.00. Reading the frames
+  themselves cannot separate the pattern from the texture it lies on: over the same pose the C2
+  city frame's own detail buries it entirely.
+
 ## GOLD, golden images
 
 - **GOLD-1**, **Update moved hashes with the visual change, and explain each moved shot in the
@@ -469,8 +490,29 @@ member, and it does not go here.
   254, on a sheet whose mean texel is (63, 61, 64); at C1's 0.802 that is 0.375 of the sheet, which
   is the whole of the "37 % of its own colour" a texture census had measured. A census over textures
   cannot name the sheet a surface uses, because several sit inside its chromaticity tolerance; the
-  mesh's own material names it outright, and `--dump-debris=<name>` prints both halves of the
-  product per mesh under a destructible.
+  mesh's own material names it outright, and the `debris-shading` suite's probe prints both halves
+  of the product per mesh under a destructible.
+
+- **WORLD-48**, **A population authored `lighting: false` cannot show a directional light, so read
+  the flag and the normal array on the actual nodes before attributing a directional look to the
+  sun.** The report that night cloud sprites are directionally moonlit named a population that the
+  original's light never reaches: every placed `cloudparent` card in C1, C1B, C1C and C4 (626,
+  1,620, 1,056 and 1,453 nodes) is `lighting: false` AND ships an empty normal array, so both the
+  gate and the geometry the term runs on are absent, and C1B carries no `fvol` volume to hold the
+  cards that do have them. The flag and the array are per node in the chapter's own `gamez`
+  (`models.json` plus `nodes.json`), so the question is answered by a census in minutes and cannot
+  be answered by a frame. A look that survives that census comes from some other mechanism, and
+  implementing the named one moves nothing in the chapter that was complained about.
+- **WORLD-49**, **A node table that keeps the first claimant of a name needs the OUTGOING subtree
+  taken out of it, not only the freed ones: two live subtrees under the same names leave every
+  definition resolving the one that was indexed first.** The animation runtime stages one flown
+  airframe for the zeppelin hookup to pose, and retired rows on a free alone, which covers the
+  airframe swap (its outgoing aeroplane is freed) and covers nothing when both aeroplanes are
+  alive. With two humans flying, the hookup's `IF NODE_ACTIVE` arms went on resolving the seat
+  staged when the rigs were bound, so that pilot's docking hook swung while the human who flew
+  the approach docked with none. `campaign-coop-hookup-seat` reads the table's own answer for the
+  airframe name beside the two hooks, which tells an arm resolving the wrong aeroplane apart from
+  an effect attached to the wrong rig.
 
 ## SHELL, Windows, PowerShell, and processes
 
@@ -499,6 +541,10 @@ member, and it does not go here.
 - **SHELL-20**, **Under `$ErrorActionPreference = 'Stop'`, redirecting a native command's stderr
   makes its failure terminating, so a probe whose failure is the answer must lift the preference and
   read the exit code instead.**
+- **SHELL-21**, **Two new `global uniform` declarations in `csky_atmosphere.gdshaderinc` made every
+  headless `RunProbe.ps1` run save its screenshot and then never exit; the same declarations inside
+  one generated shader did not.** The cause is not decoded. Bisect a probe that hangs at exit
+  against the include first, and declare a global a single shader family needs in that family.
 
 ## INSTR, building instruments
 
@@ -741,6 +787,48 @@ member, and it does not go here.
   drawn pose in its callback; a hand-stepped suite poses the anchor before it draws and can never
   see the lag, so assert the `ProcessPriority` as well as the placement.** `ProjectilePool` drew
   before the flight rigs, and every anchored flash and shot light sat a frame astern of the gun.
+  A reader that runs first does not lag evenly: on a frame with a physics step it reads the new
+  simulation pose, and on one without it reads last frame's drawn pose, so its error alternates
+  with the step cadence and reads as a stepping picture. `TargetHud` aimed the spyglass that way,
+  0.18 to 1.44 m off the drawn target in a realtime turn.
+- **INSTR-87**, **An `AudioStreamPlayer3D`'s `VolumeDb` is the level a listener gets only when its
+  attenuation model is `Disabled` and its `MaxDistance` is 0: any other model applies its own curve
+  and a low-pass of up to 24 dB above 5 kHz, and a `MaxDistance` multiplies a second linear fade
+  that reaches zero exactly at that distance. Drive the level yourself, or a suite asserting a cue
+  sounds is blind to how loud it is.** Mapping `snd_turretgun`'s `RANGE [30, 400]` onto the
+  inverse-distance model left a hull's gun 7 dB under the decoded law at 100 m and hard silent at
+  400 m, where the decoded law plays on to 440.
+- **INSTR-88**, **A frame forced from inside a synchronous block presents only the drawing commands
+  the server already holds, so a repaint there must issue its own; a queued redraw is deferred
+  through a queue none but the main loop flushes, and counting the calls or their log lines is not
+  evidence any frame differed, only reading the presented frames back is.** A load screen that
+  repainted a `Control` and called `RenderingServer.ForceDraw()` reported 12 draws over a real
+  launch and wrote 12 byte-identical captures, the first fraction over and over.
+- **INSTR-89**, **A setting's own apply line is not evidence that the setting stands: read the state
+  it writes after the screen that applied it has closed, since a screen previewing a setting live
+  owes the state it opened over back and can put it back on top of the accept.** The pause sheet's
+  AUDIO page logged `mix master=100 music=50 effects=0 voice=50` on an accept and the bus was at
+  -6.021 dB a moment later, the preview's restore having run after the apply, which is why the level
+  was heard only at the next start.
+- **INSTR-90**, **Moving a control from one action to another in a shipped default table puts it on
+  BOTH for any saved keymap that names only one of the two, because a load merges saved rows into a
+  default map action by action: let the saved row take the control off every action the file does
+  not name, and test the partial file, not only the whole one.** A file naming the free-look row
+  alone would have held the free look and the rockets on one mouse button.
+- **INSTR-91**, **A suite photographs 3D geometry in an off-screen `SubViewport` of its own, which a
+  canvas item cannot do, but three things about that pane are not what they look like: an ordinary
+  `MeshInstance3D` renders at the identity until `ForceUpdateTransform` is called on the subtree,
+  because a transform notification waits for a scene-tree flush no single-frame suite reaches; a
+  `MultiMesh`'s instance buffer reaches the GPU with the frame AFTER the write, so one forced draw
+  photographs the previous pose; and the pane reads back as `Rgb8`, three bytes to the pixel, so a
+  comparison striding four reports every frame as wholly changed.** A tree card's occlusion pane
+  read a card that drew 0 pixels and a ground quad that filled 6912 of 9216, both artifacts of this,
+  before any of the three was accounted for.
+- **INSTR-92**, **A positional voice that is not culled is not therefore heard: the decoded law's
+  band between the audible radius and the 1.1x cull runs from -30 dB to -100 dB, so a cue logged as
+  reaching a distance can be 70 dB down there. Read the level the line prints, never the cull
+  distance beside it.** An AI aeroplane's `snd_30cal` at 398 m of its 413 m cull measured -72 dB,
+  and a turret cue whose scaled radius is 1000 m stands at -30 dB there.
 
 ## SRC, sources and documents
 

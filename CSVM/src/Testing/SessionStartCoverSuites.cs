@@ -39,8 +39,8 @@ internal static class SessionStartCoverSuites
         ctx.WriteArtifact($"test-session-start-cover.txt", report.ToString());
     }
 
-    /// <summary>The whole point of the det gate: nothing is built, so nothing can paint over the
-    /// world a golden hashes or the frame <c>--frames=N</c> counts to.</summary>
+    // The det gate builds nothing, so nothing can paint over the world a golden hashes or the frame
+    // --frames=N counts to.
     private static void CheckDeterministicRunIsUncovered(TestContext ctx, StringBuilder report)
     {
         var none = SessionStartFade.Build(det: true, () => false);

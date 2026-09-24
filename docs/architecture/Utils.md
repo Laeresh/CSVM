@@ -75,9 +75,8 @@ caller that wants to aggregate the spans without emitting the line, which is how
 ## src/Utils/LoadProgress.cs
 The load screen's progress while a build holds the frame loop: the original's sixteen authored
 milestone fractions, one per `LoadStep`, a monotonic setter that no step can drag backwards, and a
-wall-clock pump throttled to one repaint every 0.1 s. Ambient over `Current` for the reason
-`StartupProfile` is, so `Launcher`, `GameSession` and `WorldSession` report a boundary they have
-crossed without being handed a sink, and a launch with no screen over it draws nothing at all.
+wall-clock pump throttled to one repaint every 0.1 s. The throttle holds off only a step that left the bar where it was, since our phases can cross ten milestones inside one window and a bar the build skips past shows its first fraction and then the mission; `Trace` and `Draws` are the read-back, every step against the build's own wall clock with the undrawn ones marked.
+Ambient over `Current` for the reason `StartupProfile` is, so `Launcher`, `GameSession` and `WorldSession` report a boundary they have crossed without being handed a sink, and a launch with no screen over it draws nothing at all.
 Engine-free: `FillPixels` and `FrameAt` are the bar's pixel clip and the propeller's frame, and
 `UI/LoadBoard.cs` is what turns them into a drawn frame. Decode:
 [../org/loading-screen.md](../org/loading-screen.md).
@@ -119,6 +118,16 @@ layers down cannot be handed an accumulator. `Launcher._Process` calls `EndFrame
 the frame's wall cost, so the scopes and the `frame_ms` they ran inside describe the same span. The
 site vocabulary, the seeded call sites and the attribution terms a record carries:
 [../org/hitch.md](../org/hitch.md).
+
+## src/Utils/PaneReadback.cs
+One frame of a viewport read back without stalling the frame that asks: the Danger Zone camera's
+own viewport (`Flight/DangerZonePhotograph.cs`), a pilot's pane where no frames draw, and the
+screenshot key's frame. A synchronous `GetImage` plus a PNG encode of a 5120x1440 pane costs the
+frame that runs them over a second. The request copies the viewport's render target through
+`RenderingDevice.TextureGetDataAsync`, whose callback arrives after the device's frame queue, and
+a worker builds the image (RGB8 for an opaque viewport, as `GetImage` answers) and runs the
+caller's continuation, which encodes there too and defers to the main thread for anything touching
+the scene. No rendering device, or a render target other than RGBA8, falls back to the synchronous read.
 
 ## src/Utils/WallCostBank.cs
 One `--perf` cost meter: the open/close bracket, the banked wall milliseconds, the worst single
@@ -300,7 +309,7 @@ the native window handle. Fully static, one call site in `Launcher._Ready` right
 block, where the same predicate drives both window hiding and the interactive run's focus request.
 
 ## src/Utils/OptionsStore.cs
-Process-wide, version-tolerant JSON persistence for `OptionsDef`: the menu presentation, graphics mode and difficulty words, the five
+Process-wide, version-tolerant JSON persistence for `OptionsDef`: the graphics mode and difficulty words, the five
 display settings (monitor index, resolution, display mode, V-Sync, render scale), the four volume levels, the nearest-after-a-kill targeting switch, the default view a flight opens in and the automatic head turn. One file, `user://options.json`,
 independent of `Session/CampaignProfileStore.cs`. A missing or malformed file reads as empty, an unknown version invalidates it, an
 unknown value drops only that field, and a field the file does not carry reads as never set, which is why adding a field does not bump
@@ -339,11 +348,11 @@ buses underneath it (`AudioMix`), so the two reach the output as a product and a
 un-silence a scripted run. The `audio-levels-launch` suite drives that whole ladder from a parsed command line.
 
 ## src/Utils/PresentationResolution.cs
-The requested-versus-active menu presentation resolver: force-Built-in → CLI override → saved
-request → the Original default, with the caller's availability check applied only after the request
+The requested-versus-active menu presentation resolver: force-Built-in → CLI override → the
+Original default, with the caller's availability check applied only after the request
 is picked, so a machine without the extracted menu data lands on Built-in with a reason. `Resolve`
-never rewrites what `Requested` would answer, so a fallback cannot alter `OptionsStore`'s saved
-value. Presentation names are plain strings; no presentation contract type lives here.
+never rewrites what `Requested` would answer. ⚠ No saved word takes part: a `menuPresentation` an
+older build wrote stays in the options file unread. Presentation names are plain strings; no presentation contract type lives here.
 
 ## src/Utils/WorldBackdrop.cs
 The background of the process's one `WorldEnvironment`, which is a `ProceduralSkyMaterial` as the

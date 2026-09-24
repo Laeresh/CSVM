@@ -112,26 +112,20 @@ draws its authored 800x600 space one-to-one.
 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
-| `CAP-34` | Wing-light flare shape + view-dependence | Any player plane except the Bloodhawk (the one airframe with no wing-light anim or flare nodes) with wing lights on, one continuous orbit from front through side to tail. Close enough to read whether the flare shows sharp radiating star points (vs a soft round glow) and whether it stays visible across the orbit or only from a narrow chase-view cone | `BL-284` |
+| `CAP-34` | Wing-light flare shape | Any player plane except the Bloodhawk (the one airframe with no wing-light anim or flare nodes) with wing lights on, one continuous orbit from front through side to tail. Close enough to read whether the flare shows sharp radiating star points (vs a soft round glow). The view-dependence half this capture once carried is answered by data: the flare mesh is a `Facade`/`SphericalY` model, `BL-1039` | `BL-284` |
+| `CAP-59` | **Does a C1B night cloud have a moon side?** | In the original, fly C1B by night and film **one** cloud from **two headings at the same range**, first with the moon behind the camera, then with the moon behind the cloud, holding the same puff large enough in frame to read its near and far sides, with the moon itself in frame on the second pass so the bearing is readable. *Look for:* whether the side turned toward the moon reads brighter than the side turned away **at a fixed range**, which is the one thing that separates a moon side from distance through the night fog. ⚠ `playtest/CAP-11/`'s stills cannot answer it: both put their cloud on the moon's bearing at very different ranges, so their 218-against-70 split reads as fog depth. C1B's clouds are the 70 placed `cloudparent` facades, authored `lighting: false` with an empty normal array, so a moon side there would be a remake departure rather than a decoded term | `BL-325` |
 
 ### Damage & collision
 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
-| `CAP-39` | Cockpit view while firing | In the original, hold the guns for a second or two IN the cockpit view (mode 6), ideally at dusk or against a dark cliff so a light flash reads. A sweep of all 130 existing clips found no cockpit-view firing footage: every gun clip is nose or chase view. *Look for:* how bright and how warm the flash reads inside the canopy, and where it lands, CSVM implements `muzzle_burst`'s authored first-person lights (`testfp`'s `PLAYER_1ST_PERSON` branch: `bigmuzzle_lt` + `muzzle_lt` at the authored offsets, ranges and colour), so the clip CALIBRATES their look rather than settling whether the interior lights at all. Energy is a declared TUNE (the data carries none, so both lights start at the third-person stand-in's 2.5), and the emphasis to match is the canopy struts above the head, which is where the original puts it at the controls; the windshield bullet-hole decals on taking window hits ride the same sortie if one happens | `BL-286` (the first-person light energy, judged much dimmer than the original's) |
 | `CAP-27` | Does the original spark on the airframe at all? | Take damage in the original, a light scrape is enough, with the aircraft in frame (external/chase fine), and look for a **spark burst on the airframe itself**, distinct from smoke at the contact point. ⚠ This capture can **delete** a feature rather than tune one: our per-impact spark burst is driven by a 0.99 `injure_anims` entry that exists on **1 of 11** aircraft (the Devastator), plausibly an authoring leftover (was `BL-090` item 2, closed, `git log --grep=BL-090`). If the original never sparks, our implementation goes. If it does, `BL-281`'s ricochet mix can be judged | `BL-281` |
 | `CAP-30` | Firing-wobble amplitude across calibers and airframes | Dead-astern external/chase clips, level flight, guns held 3 s+: **(a)** one plane with two well-separated calibers (30 vs 70), **(b)** one caliber on a light vs a heavy plane, **(c)**, added 2026-08-07, a **Bloodhawk 40-cal** clip framed and fire-rate-matched to `Gun Wobble and animation.mp4`, giving a *second independent amplitude measurement* of the same case the law was derived from. (c) is what lets this capture serve as `BL-266`(a)'s fallback instrument: (a)/(b) alone ask only whether caliber and plane weight enter the law, and **cannot** settle the uniform ~2–4× shortfall our render shows against the reference clip. ⚠ Dead-astern framing is load-bearing: it makes the on-screen roll angle the world roll angle with no projection model (`analysis/gun-wobble-shake/FINDINGS.md`, capture spec there). Confirms or refutes the pure-caliber magnitude law (7e-5 × caliber, measured on one 40-cal clip) and whether plane model/weight enter; a being-hit clip on the same sortie also pins the impact sources' stand-in quantities | `BL-266` |
 | `CAP-38` | Beeper and seeker hits ON an aircraft, **with audio** | In the original, fire the beeper (`wep_10`) and the seeker (`wep_11`) at an aircraft and film the hit itself, external/chase, close enough to read the burst on the airframe. Both weapons author `ANIMATION large_fireball` on their aircraft `IMPACT` row and ours plays exactly that on a struck plane; a fused burst reads the `default` row in the original and in ours (`docs/org/ordnanceTypes.md` "Which row a burst reads"), so the beeper's near miss draws nothing and the seeker's draws its white flare at the round. The ground-side look is already signed off, so this clip is only the on-plane half. *Look for:* whether a direct strike shows the large fireball on the plane, something smaller, or nothing beyond the paint; whether a near miss shows nothing (beeper) or the flare (seeker); and the per-type impact sound on the same take (`snd_missile_beeper` / `snd_missile_seeker`) | Nothing tracks the outcome; a mismatch with our on-plane burst mints a new `BL` |
 | `CAP-29` | Panel-damage semantics | Take controlled damage per part in the original, own aircraft in frame (external/chase), damage display visible if possible. **Reduced 2026-08-15 by the `BL-297` decode**, which answered all three questions out of `crimson.exe` (`docs/org/vehicleDamage.md`, "Damage staging"): (a) effects land at the node the def names, so a nose hit DOES spark wing sites; (b) nothing per-part fires at all while a part's armor absorbs; (c) each entry fires once per downward crossing, so a panel tears once until repaired. **What is still owed is the look:** watch one panel cross its tear threshold and judge whether the flung debris reads as a piece of that panel or as generic flakes, and what visibly changes on the airframe. The other three are now confirmation, worth capturing on the same take if the framing allows but not worth a dedicated sortie | `BL-297` |
 | `CAP-47` | A gasbag burning out, CM14 (C2B/M04) | In the original, fly Clash of Dreadnaughts and set the Gemini's gasbags alight, holding one bag in frame from ignition through to whatever ends it, close enough to read both the fire and the envelope under it. *Look for:* what a finished gasbag looks like (a collapsed or missing envelope, a scorched one that stays, or a fire that simply stops), and what the zeppelin does once **three of its five** have finished, which is the authored death gate (`all_gmzep_gasbags` carries `MINIMUM_TO_SATISFY 3` over the five `finish_gmzepgasbagN` animations). Qualitative only: no burn duration is read off this clip as a constant | `BL-639` |
-| `CAP-55` | The Gemini's own death and where its wreck rests, CM14 (C2B/M04) | In the original, fly Clash of Dreadnaughts and torpedo three of the Gemini's five gasbags down **without destroying any left broadside bay**, then hold the hull in frame from the first bag falling through to where the wreck settles and stops moving. *Look for:* (a) how many gasbags separate and fall, counted against the hull (ours sheds five, and the eye agrees with the data), and whether every one of them stays on the water, since ours drops the front and back bags through it (`BL-698`); (b) whether the gondola/underside disappears as it settles (`breakunder` switches `underneath` inactive); (c) the waterline against the three left broadside bays and their hatches once it is at rest, since ours puts at least one bay under the sea; (d) a gun burst fired into whichever bay sits nearest the water, held long enough to see whether it takes damage; (e) the pause-screen objectives readout before and after that burst. Qualitative only: no distance or rest height is read off this clip as a constant. | `BL-698` and `PT-119` (b) and (d): whether the original leaves a bay unreachable at all, where ours no longer needs one, since the hull's own death demolishes every bay |
+| `CAP-55` | The Gemini's own death and where its wreck rests, CM14 (C2B/M04) | In the original, fly Clash of Dreadnaughts and torpedo three of the Gemini's five gasbags down **without destroying any left broadside bay**, then hold the hull in frame from the first bag falling through to where the wreck settles and stops moving. *Look for:* (a) how many gasbags separate and fall, counted against the hull (ours sheds five, and the eye agrees with the data), and whether every one of them stays on the water, since ours drops the front and back bags through it (`BL-698`); (b) whether the gondola/underside disappears as it settles (`breakunder` switches `underneath` inactive); (c) where the hull itself stops, on the water or in the air, since ours halts it some 47 m over the sea when the sections break away, and the waterline against the three left broadside bays and their hatches if it does come down; (d) a gun burst fired into whichever bay sits nearest the water, held long enough to see whether it takes damage; (e) the pause-screen objectives readout before and after that burst. Qualitative only: no distance or rest height is read off this clip as a constant. | `BL-698` and `PT-119` (b) and (d): whether the original leaves a bay unreachable at all, where ours no longer needs one, since the hull's own death demolishes every bay |
 | `CAP-57` | The Barracuda taking flak rockets on the hull, CM04 (C3/M03) | In the original, fly the mission to the submarine and put three flak rockets into its hull from outside the hangar, external view, the hull and the hangar mouth both in frame; then, whether it survives or not, keep firing into the open hangar and count what it costs there. *Look for:* whether the hull takes damage at all (a hit effect, a damage readout, the mission's voice), and how many rockets into the hangar mouth end it, against the six the authored 200 HP pool and flak's 35 per hit predict. The data is settled and the remake follows it: the pool sits on the hangar doors, not the hull, and a round anywhere else on the boat costs it nothing. This take is the check on that at the controls. Qualitative on the hull, a count on the hangar; no hit-point figure is read off this clip | Nothing tracks the outcome; a hull that takes damage in the original, or a hangar count that is not six, mints a new `BL` |
-
-### World
-
-| ID | Capture | What must be in frame | Unblocks |
-|---|---|---|---|
-| `CAP-58` | A **C5 Instant Action spawn held still**, three or four times, so a building wall can be measured at a pose we can reproduce exactly | The C5 half of `CAP-11` compares different buildings: `playtest/CAP-11/t0.5-c5-spawn-night-city.png` looks north over midtown past a stepped Art Deco tower, and no pose in C5 `IA1`'s eight `dogfight_ace` or four extra `dogfight_squadron` entries renders that view, so the original's start point is not recoverable from the data and every ratio measured off that pair is between unlike surfaces. This take fixes that: **start a C5 Instant Action flight and hold the very first second without touching the stick**, then quit and repeat three or four times, so more than one of the eight spawns is caught. Our side then renders the same spawn coordinate and heading with `--pos`/`--direction`, and the two frames hold the same buildings. Each frame must contain **at least one plain building wall turned toward the camera, close enough to read its texture**, rather than a face made of lit windows. *Look for:* whether the walls in ours read darker than the original's at all, and whether a wall turned away from the camera's left reads differently from one turned toward it, which is the directional shading the remake has no term for. Note the compass and altimeter in frame so the pose can be checked | `BL-322`: whether C5's facades are darker in ours at all, which the decode says can happen only on the `bldg1`-`bldg4` tower skins and never on the `cblock` city blocks |
 
 ### AI flight, an AI aircraft flying itself, external view
 
@@ -178,8 +172,8 @@ draws its authored 800x600 space one-to-one.
   stale numbers, a missing stamp or scrap, a scrap that will not open, an arrow or the bookmark
   appearing where it should not (or not appearing where it should), or landing straight on the cabin
   means the debrief screen is broken.
-- `PT-120` `[Own]` **The pad sitting: three axis-capture constants and the rumble, both judged with a
-  real pad in hand (`BL-693`).** `ControlCapture.RestBand` 0.25, `MoveThreshold` 0.6 and
+- `PT-120` `[Own]` **The pad sitting: three axis-capture constants, the look stick's own filter and
+  the rumble, all judged with a real pad in hand (`BL-693`).** `ControlCapture.RestBand` 0.25, `MoveThreshold` 0.6 and
   `CapturedDeadzone` 0.5 decide whether a stick or a trigger a player pushes becomes a binding, and
   none of them has a decode behind it: the original cannot bind an axis to a command at all, so there
   is nothing to match. The rumble does have one, the original's own effect table
@@ -199,7 +193,12 @@ draws its authored 800x600 space one-to-one.
   - (e) the sustained pair, the overspeed rattle and a turret gunner firing, hold while their cause
     lasts and stop when it does, without stuttering at the refresh seam;
   - (f) the Game Options Rumble row turns all of it off and back on, and the choice survives a
-    restart.
+    restart;
+  - (g) the look stick is steady: in snap mode (`K`), with the right stick held a little off centre,
+    first in the chase view and then in Cockpit, the view sits still instead of shimmering, a small
+    push still takes it where you meant, and letting go returns it at the speed it always did.
+    `HeadLook.PadAimSmoothRate` 25/s (a 40 ms lag) and `PadAimCentreBand` 0.02 are the two to raise
+    if it still shimmers and to lower if the view feels like it is catching up with your thumb;
   *Blocks:* `BL-693`. ⚠ Capturing the right trigger takes it from both Camera Boost and Camera
   Dolly Out rather than stacking a third reading (`ActionMap.SameControl` ignores the deadzone on
   purpose): that is not a fault of these three numbers and must not be tuned against.
@@ -211,19 +210,6 @@ draws its authored 800x600 space one-to-one.
 ```powershell
 ./RunGame.ps1 --plane=player_bhawk --chapter=C1
 ```
-
-- `PT-121` `[A/B: HUD.png]` **The compass tape's rim falloff and its octant letters
-  (`BL-113`).** The bar-end caps, the tile's overscan and the comb's hem are settled off the
-  stills; the edge falloff `min(1, 1.35·cos(Δ)^2.1)` and the letters' upright default are the two
-  that need eyes, the second with `--compass-squeeze` as its A/B. North = −Z is confirmed against
-  the original and is not in question here. *Look for:*
-  - (a) the outer quarter of the bar going near black while the inner half stays flat, at the
-    same gauge size as `OriginalScreenshots/HUD.png`, rather than the whole bar dimming evenly;
-  - (b) the octant letters at the bar's edges: upright as shipped, or narrowed with the drum
-    under `--compass-squeeze`, whichever reads like the original's card;
-  - (c) the nearest tick under the pointer: picked and drawn the way the original's is, holding
-    steady through a slow turn instead of stepping or flickering between neighbours.
-  *Blocks:* `BL-113`.
 
 - `PT-147` `[A/B: playtest/CAP-12/]` **The cloud field's view-angle fade, flown through the deck
   and above it.** Each `fvol` sprite's draw distance is now scaled by the cosine of the viewing
@@ -239,39 +225,6 @@ draws its authored 800x600 space one-to-one.
   - (c) at the 1,700 m rung the cloud tops sit at the original's brightness rather than above it;
   - (d) flying level inside the band, no popping as a sprite's own band swings across the cull.
   *Blocks:* nothing tracks the outcome; a fail mints a new `BL` naming which of (a)-(d) failed.
-
-### C1 · Bloodhawk, the police car and the train, sound on
-
-```powershell
-./RunGame.ps1 --chapter=C1 --plane=player_bhawk --volume=1.0 --no-det --debug-anim --log=sound
-```
-
-⚠ `--volume=1.0` is not optional: the default master volume is 0, so a run without it is silent for
-reasons that have nothing to do with this check. `--debug-anim --log=sound` prints one line per
-emitter each second carrying its distance, its authored range and the gain the curve put it at, so
-a disagreement can be read off numbers instead of guessed.
-
-- `PT-150` `[Own]` **The positional falloff, re-judged on the two emitters that produced the
-  complaint (`BL-269`).** The curve is no longer an approximation: it is the original's own law,
-  computed per frame from the definition's `RANGE` pair. The police chase car (`RANGE [200, 1200]`)
-  is now unattenuated out to 325 m, 10 dB down at 450, 20 at 700 and 30 at 1200, then silent at
-  1320; the track train (`RANGE [600, 1200]`) is unattenuated to 675 m, 10 down at 750, 20 at 900
-  and 30 at 1200. The previous curve was 6 dB per doubling from the emitter times a linear fade to
-  nothing at the audible radius, so the train was already 6 dB down where it should have been at
-  full volume and silent where it should still have been audible. No instrument can say whether the
-  new level reads right at the controls.
-  *Look for:*
-  - (a) flying past the police car at chase height, the siren stays at a steady full level while it
-    is close rather than dropping the moment you pass, and it fades out over the approach to a
-    kilometre instead of cutting;
-  - (b) the train on its track, heard from well out and holding its level through the near pass,
-    the earlier "quiet too soon" being gone;
-  - (c) neither emitter is now too loud too far out, which is the failure the other way: at the
-    authored audible radius both should be faint, not merely quieter;
-  - (d) circling one of them at a fixed radius, the level holds steady rather than pumping, since
-    the level is recomputed every frame from the nearest pane.
-  *Blocks:* `BL-269`. A fail on (a) or (b) alone is a scale question, not a curve one; quote the
-  `sound` log's distance and gain for the foot you judged it at.
 
 ### C1 · Bloodhawk vs AI, the kill sequence, sound on
 
@@ -306,12 +259,13 @@ reasons that have nothing to do with any of these checks.
   back without combat, `--fly --damage=nose:0.30` then `--fly --damage=nose:0.20`.
   *Look for:*
   - (a) the first hits, and a scrape along a cliff, leave the engine note untouched;
-  - (b) once a zone is deep into the red the note drops and stays dropped, at one pitch rather than
-    drifting;
-  - (c) the drawn pitch is not always the same on a fresh flight, and can land anywhere from a
-    near-normal note to a barely-there rumble.
-  ⚠ The pitch is a uniform draw with nothing about the damage in it, so a run that lands a mild
-  multiplier is not evidence the gate is wrong. Judge (c) across several flights.
+  - (b) once a zone is deep into the red the loop changes to the rough one and holds, at one pitch
+    rather than drifting;
+  - (c) that rough loop sounds the same on every fresh flight, and reads as an engine running
+    rough rather than as a slowed-down recording.
+  ⚠ The original refuses the pitch write on this definition, so the loop runs at its own rate and
+  the drawn multiplier is computed but never heard. A damaged note that differs from flight to
+  flight is a fault rather than the draw.
   *Blocks:* nothing; a fail on (a) says the gate reads the wrong pool, a fail on (b) says something
   is re-evaluating the swap per frame.
 
@@ -353,51 +307,6 @@ reasons that have nothing to do with any of these checks.
   which read as a mix problem. The original has no whine at all, so what the ear was matching in
   that dive was the engine slot's own movement, and these terms are what produces it.
 
-- `PT-126` `[A/B: OriginalScreenshots/Videos/CAP-10.mp4 + Bloodhawk Dive Sound.mp4]` **The airframe
-  rattle past the plane's own top speed (`BL-252`).** Both the sound and its level are decoded and
-  landed, so this is a confirmation, not a tuning pass: the original plays `snd_planeshake` from
-  exactly `1.0× fd_speed`, the plane's own maximum level speed, at full level and with no ramp
-  above it, level with the engine slot's own gain. Ours now does the same. ⚠ Judge whether the
-  port READS right, not whether a number should move: `1.0` is read out of the executable, and
-  `docs/verification.md`'s rule that a recording may not contest a decode covers the ear too.
-  *Look for:*
-  - (a) hold straight and level at 100% throttle to settle at max speed, then dive: the rattle
-    should come in at the crossing, sharply rather than swelling, and hold steady however deep
-    the dive goes;
-  - (b) whether it reads like the original's at the same foot, in the same view;
-  - (c) the cockpit case separately, since the original's cockpit engine is damped where ours is
-    not, so the ratio cannot be read across from the outside view.
-  *Blocks:* `BL-252`. ⚠ Do not read the threshold off the airspeed dial: the gauge art, its red arc
-  and its `300` mark are the same for every plane and cannot express a per-plane limit. ⚠ There is
-  no whine to listen for: no shipped def names `prop_sound`, so that slot never sounds at all.
-
-- `PT-127` `[A/B: OriginalScreenshots/Videos/CAP-21 0 to 100 Full.mp4 + CAP-21 100 to 0 Full.mp4]`
-  **The throttle-slam smoke gate (`BL-285`).** One constant pending one sortie:
-  `ThrottleSlamSmoke.SlamThreshold` is 0.25, the smallest value consistent with footage whose 2/8 to
-  4/8 band is unobserved. *Look for:*
-  - (a) the gate walked by hand from idle: a single 1/8 step must not fire, idle to 5/8 must, and
-    where in between it starts is the judgement;
-  - (b) whether the plume reads as a slam response at all, rather than a puff on any throttle move.
-  *Blocks:* `BL-285`. ⚠ The plume fires only on a build where the gate runs on the sim step: driven
-  from the rendered frame it read the lever flat on every other frame and nothing ever fired, so a
-  sortie on an older build judges an effect that never reached the screen.
-
-- `PT-128` `[A/B: OriginalScreenshots/Dirt Splash.png + Videos/30 Slu building.mp4]` **The building
-  ricochet spark burst (`BL-289`).** The dirt-chip constants left this item with `BL-313`: dirt now
-  takes the single spark, and the water column width is settled. What remains is the building
-  ricochet, whose five constants are stand-ins because both authored assets are missing from the
-  install: `RicochetSparks` 8, `RicochetSparkSize` 0.55 m, `RicochetSparkLife` 0.55 s,
-  `RicochetSparkSpeed` 22 m/s, `RicochetSpreadDeg` 90°.
-  ⚠ **Strafe a C1 airport hangar, not a Hollywood studio block.** The surface that reaches these
-  constants is the `soil` byte `buildings`(11), which only C1's `aphagar0N` hangar materials carry;
-  the film lot is `default` and plays the authored `3040slug_gunhit` instead (`BL-289`). *Look for:*
-  - (a) strafe a hangar: the burst's count and spark size against the original's own impact spray;
-  - (b) how long a spark lives and how far it travels before it goes;
-  - (c) the spread, where 90° is a stand-in: whether the burst reads as coming off the surface or as
-    a sphere around the hit.
-  *Blocks:* `BL-289`. The splash height and timing curves are authored data rather than TUNE and are
-  not on trial here.
-
 - `PT-133` `[Own]` **The HUD's reading box is the right width at the controls on a 32:9 screen.**
   The dials, the SPD/ALT/THR block and the pause screen's objectives panel measure from a 16:9 box
   centred in the pane rather than from the pane's own edges, that box is the frame every one of
@@ -414,20 +323,18 @@ reasons that have nothing to do with any of these checks.
   - (c) nothing has moved at 16:9: the same sortie windowed looks exactly as it did.
   *Blocks:* nothing tracks the outcome; a fail mints a new `BL`. The per-element choice and the
   one-pixel tolerance are in the landing commit (`git log --grep=BL-778`).
-
-- `PT-148` `[Own]` **The spyglass disc holds steady and never shows the pilot's own aeroplane.** The
-  picture's eye now stands on the interpolated pose the aeroplane is drawn at rather than on the last
-  physics pose, and the disc's camera drops the visual layer that aeroplane is drawn on. Both are
-  pinned by instrument (`spyglass-marker-hud`), but the jitter was reported by feel, so only the
-  controls can say whether it is gone and whether a second source of shake is left under it.
-  *Look for:*
-  - (a) select the AI, turn until it leaves the screen so the disc comes up, then hold a hard turn:
-    the picture inside the disc moves smoothly with the target instead of stepping;
-  - (b) no wing, tail, prop, pylon or ordnance of the own aeroplane crosses the disc at any bearing,
-    the target dead astern included;
-  - (c) the disc still shows the world, the target and the zone's fog as it did.
-  *Blocks:* nothing tracks the outcome; a fail on (a) mints a new `BL` naming what still steps, a
-  fail on (b) one naming what is still drawn.
+- `PT-174` `[Own]` **The original's keyboard table is under the hand on a fresh profile.** The flight
+  defaults are the original's decoded 64-entry table (`docs/org/input.md`, `git log
+  --grep=BL-901`): digits are the throttle eighths, targeting sits on E, W and R with Shift and
+  Ctrl as modifiers, Q and T nearest and clear, F8 the cockpit views. The table is pinned by unit
+  test and seen only on the Controls tabs; no sortie has been flown on it. Start a new pilot in
+  Player Setup so no saved bindings apply. *Look for:*
+  - (a) `1`..`9` set the throttle eighths and `=` / `-` step it, with nothing else on the digits;
+  - (b) E, Shift+E and Ctrl+E cycle enemy targets next, previous and nearest, W and R the same for
+    allies and non-aircraft, Q the nearest of anything and T clear, and a bare E does nothing while
+    Shift is held;
+  - (c) Space and X fire, Shift+S opens the spyglass, and F8 cycles the cockpit views to chase.
+  *Blocks:* nothing tracks the outcome; a fail mints a new `BL` item.
 
 ### C1 · two pilots, Dogfight (splitscreen VS)
 
@@ -474,6 +381,16 @@ reasons that have nothing to do with any of these checks.
   landing commit (`git log --grep=BL-777`). A stacked pane's first-person views hold their vertical
   angle and widen horizontally like any other viewport, so a cropped cockpit in one is a new fault
   rather than a known one.
+
+- `PT-152` `[Own]` **A respawn puts a downed pilot away from whoever just killed them, without
+  becoming a place the killer can wait at.** The spawn rotation picks the point that is roomiest and
+  furthest from the killer, weighted by two constants that are judgement rather than a decode:
+  `RoomyShare` 0.6 and `KillerWeight` 2. Nobody has judged them at the controls. *Launch:* the
+  section's Dogfight launch above, two pilots. *Look for:* camp one spawn, kill the other pilot
+  there, and say whether the respawn reads as away from the camper; then repeat from the same camp
+  and say whether the sequence of spawns becomes predictable. *Blocks:* nothing; a retune is the two
+  constants, a fail mints its own `BL`. The playtest steps the item wrote are in its landing commit
+  (`git log --grep=BL-301`).
 
 ### C1 · two pilots, stunt race (splitscreen starting grid)
 
@@ -559,8 +476,8 @@ the constant: a decode is not contested with a measurement read off a running pi
     the near one when they are apart. Take that baseline **before** judging anything else in this
     section;
   - (c) **a real hit routes the same way**: with `--rocket=wep_08`, a pilot caught in the **other**
-    pilot's sonic burst washes their own pane alone. (A pilot's own burst never washes them: the
-    gather excludes the round's owner, `FUN_005aca30`.)
+    pilot's sonic burst washes their own pane alone. (A pilot caught in their own burst is washed
+    too, as in the original, whose self-hit guard exempts only the damage pair.)
 
   *Blocks:* nothing tracks the outcome; (a)/(b) passed at the controls and only (c) is still owed.
   a fail on routing mints a new
@@ -626,24 +543,68 @@ against `BL-389` rather than against the wash routing.
   *Blocks:* `BL-537`. ⚠ Raise only a root that logs a recycle, never the default; the three gun
   roots stay at 1, and a root sized 0 clamps to 1.
 
-### CM07 (C1/M02) · the fort's flak, external view
+### C1 · four pilots, Dogfight without the warning-shot shield
 
 ```powershell
-./RunGame.ps1 --campaign=<profile>:6
+./RunGame.ps1 --vs --players=4 --chapter=C1
 ```
 
-- `PT-142` `[Own]` **The five AA guns at the fort open fire once the mission wakes them, on a
-  plane anywhere above them.** A ground emplacement's sight line used to strike its own mount past
-  the 1.5 m skirt in every direction, so the guns tracked and never fired; every emplacement now
-  excludes its own site's rig from the cast, wherever that site hangs (`git log --grep=BL-830`,
-  `git log --grep=BL-861`). CM03 (C3/M02) is the same look on guns parked under a grouping node,
-  the three on the ridge and the two in the airbase. Fly the mission to
-  `OBJECTIVE1`'s `WAKEUP_TURRETS`, then circle the fort at a few hundred metres, steep overhead and
-  low across, and watch the guns from the external view. *Look for:* tracer and muzzle flash from
-  every gun that is pointing at you, at the authored one to two rounds a second in bursts of two to
-  four seconds; a gun that tracks you and stays silent for more than a bored pause of five seconds
-  reopens the item. *Blocks:* nothing.
+- `PT-153` `[Own]` **A four-pane Dogfight carries no warning-shot shield, and whether that reads
+  sharp or fragile is the judgement.** The shield that absorbs an AI's first warning shots is the
+  session's rule: solo flight keeps it, co-op shields every human pane, and a Dogfight shields
+  nobody, which is where the original's own networked-session gate lands (`git log --grep=BL-834`).
+  No A/B exists, since the original has no splitscreen; the original's rule prescribes it and
+  nothing is filed unless the feel says otherwise. Fly a four-pane match to a few kills. *Look for:*
+  (a) the first burst from another pilot lands as damage at once, with no free pass; (b) whether
+  the fight reads as sharper for it or as fragile, with a pilot dead before they could react;
+  (c) nothing else changed: guns, rockets and the kill order all as in a two-pane match.
+  *Blocks:* nothing tracks the outcome; a "fragile" verdict mints a new `BL` naming what the
+  Dogfight should shield.
 
+### C4 · two pilots, Instant Action stunt run
+
+```powershell
+./RunGame.ps1
+```
+
+- `PT-173` `[Own]` **A stunt run through every marker photographs each one, and any landed
+  photograph opens full size on both presentations.** One pilot is enough. Menu path: Instant
+  Action → C4 → Stunt Flying, then the same run with `--presentation=original`. The photographs
+  and the grid are proved by suite on a synthetic run where every marker is latched from a parked
+  aircraft (`git log --grep=BL-256`, `git log --grep=BL-970`); no human has flown the markers or
+  opened a photograph. *Look for:*
+  - (a) each marker crossed at speed takes one photograph with its sting, and the C4 run's 14
+    thumbnails wrap into a grid on the results board rather than one shrunken row;
+  - (b) on Built-in, up from Photo Mode enters the grid, arrows walk the landed cells, confirm
+    opens the photograph full size and Esc or pad B closes it with the cursor on the same cell;
+    mouse hover and click do the same;
+  - (c) on Original, the prints stand as rows after CONTINUE, a landed one opens in the
+    presentation's viewer and Back closes it with focus on that print;
+  - (d) a marker entered during the 3 s hold after the finish takes no photograph.
+  *Variations:* `--presentation=original` for (c). *Blocks:* nothing tracks the outcome; a fail
+  mints a new `BL` item.
+
+### C1 · Instant Action, Dogfighting an Ace, sound on
+
+```powershell
+./RunGame.ps1
+```
+
+- `PT-158` `[Own]` **The ace talks: its attack line, its damage calls and its death cry**
+  (it closed `BL-977`, `git log --grep=BL-977`). Menu path: Instant Action → C1 → Dogfighting an Ace.
+  Let the ace commit to you, then shoot it down over a few passes. A scripted run shows the ace's
+  own clips (VO id 29, accent 24) prewarmed and its forced death cry resolving to a streamed clip;
+  what no instrument shows is hearing it. Each line plays flat on the radio channel, so distance
+  does not matter.
+  *Look for:*
+  - (a) a line from the ace as it commits to you;
+  - (b) one or more distress calls as its health drops past 70, 50 and 30 %;
+  - (c) a death cry as it goes down;
+  - (d) in the session's log under `.scratch/logs/`, no `owns the clips but none was prewarmed`
+    warning for `ai1_player_peacemaker`.
+
+  *Blocks:* nothing tracks the outcome; a silent ace with that warning absent mints a new `BL`
+  naming the trigger that stayed silent.
 
 ### CM01 (C3/M01) · two to four pilots, join, flight check, death and skip
 
@@ -739,7 +700,6 @@ is a judgement on our own remake.
   *Blocks:* `BL-694`'s landing commit (`git log --grep=BL-694`). A sortie that reaches no end
   state mints a new `BL`; `CAP-55` is what the original owes against (b) and (d).
 
-
 ### The exported package · a recipient's first run, no arguments
 
 ```powershell
@@ -785,33 +745,23 @@ is a judgement on our own remake.
   *Blocks:* nothing tracks the outcome; a fail mints a new `BL`. The reasoning behind the fallback
   and the apply order is in the landing commits (`git log --grep=BL-768`).
 
-### Any flight, on a two-monitor rig · the captured mouse
+### The CONTROLS page · a pad plugged in
 
 ```powershell
-./RunGame.ps1 --chapter=C1
+./RunGame.ps1 --presentation=original --menu=controls
 ```
 
-- `PT-149` `[Own]` **The pointer is gone and confined while flying, and every board that draws one
-  gets it back.** The capture is guarded off on a headless host, in a `--det` run and in a scripted
-  one, so no suite and no golden can exercise it: the units settle the virtual cursor's arithmetic
-  and the engine suite settles that the harness's own mouse mode is left alone, and nothing here has
-  ever been seen on a real display. ⚠ Launch without `--screenshot`, `--det` or `--run-tests`, each
-  of which turns the capture off outright. Fly both mouse schemes, the Controls page's Mouse row
-  reading **Look** on one pass and **Fly** on the other. *Look for:*
-  - (a) the pointer disappears the moment the flight takes input and never reappears over the
-    cockpit, and moving the mouse hard towards the second screen neither shows a cursor there nor
-    takes the focus off the game;
-  - (b) under **Fly**, the stick still reads where the cursor is: sideways banks, down pulls the
-    nose up, the middle of the pane flies nothing, and pushing to an edge saturates and comes back
-    at once rather than after a run of travel in the other direction;
-  - (c) holding the free-look button still pans the head at the same rate it did with a visible
-    pointer, under both schemes, and letting go hands the stick back;
-  - (d) `Esc` shows the pointer again on the pause sheet and it clicks the strips, PREFERENCES and
-    PHOTO MODE keep it, and resuming takes it away again with no jump in the stick;
-  - (e) a mission's wrap-up board and a dogfight or race results board show it too, and leaving to
-    the menu leaves the pointer working there.
-  *Blocks:* nothing tracks the outcome; a fail mints a new `BL`. The guard and the virtual cursor
-  are in the landing commit (`git log --grep=BL-916`) and `docs/verification.md` INSTR-79.
+- `PT-172` `[Own]` **The pad glyphs on the controls page read as the original's.** The glyph set is
+  keyed per control the way `BindingControl` is and swaps behind one seam, as the item asked, but
+  it draws vector shapes in code (`PadVectorGlyphs`) rather than a texture set (`git log
+  --grep=BL-878`); nobody has judged the look. Open the Original presentation's controls page with
+  a pad connected and walk the pad column. *Look for:*
+  - (a) every pad control shows a glyph, none falls back to a text label;
+  - (b) the face buttons, bumpers, triggers, sticks and d-pad are told apart at a glance at the
+    page's own size, with the weight and colour of the surrounding plaque art;
+  - (c) a rebinding capture shows the new control's glyph as soon as it is pressed.
+  *Blocks:* a pass closes the question; a fail mints a `BL` for a texture set behind the same
+  seam (`ControlGlyphs.Set`), which is why the seam is kept.
 
 ### Any campaign mission · enemy skill under the difficulty offset
 
@@ -847,6 +797,44 @@ is a judgement on our own remake.
   turning onto two or three other headings, so a sign error cannot hide at one pose; (c) the
   zeppelin icon, where the mission draws one, lying along the hull's own course. *Blocks:* nothing;
   a fail mints a new `BL`.
+
+### CM07 (C1/M02) · the Danger Zone photograph in the scrapbook
+
+```powershell
+./RunGame.ps1 --campaign=<profile>:6
+```
+
+- `PT-154` `[Own]` **A campaign mission's Danger Zone photograph lands in the scrapbook.** The
+  campaign camera is built and suited: crossing a zone stages a photograph of the aircraft, taken
+  from ahead of it looking back as the original's is, into the profile under the scrapbook row's own
+  `Snap_<mission>_<objective>` name, and a win keeps it while a loss drops it
+  (`git log --grep=BL-256`, `CampaignSnapshot`, `DangerZonePhotograph`). It has never been seen at the controls,
+  and the request was "should work in missions too for the scrapbook photos". CM07 authors four
+  zones (objectives 18 to 21, `C1/M02/zrdr/dzones.zrd.json`). Fly through at least one zone, win
+  the mission, and open the scrapbook. *Look for:* (a) the sting on the crossing and one hitch-free
+  frame (a hitch there is a new `BL`); (b) the photograph on the mission's spread
+  with its photo-corner mount, and the zoom showing the full 164x123 still; (c) a lost attempt
+  leaving no photograph behind; (d) whether the framing reads like the original's photographs, a
+  head-on view of the aeroplane from outside it. *Blocks:* nothing tracks the outcome; a
+  missing photograph mints a new `BL`.
+
+### CM07 (C1/M02) · combat voice on the radio, sound on
+
+```powershell
+./RunGame.ps1 --campaign=<profile>:6 --log=sound:debug
+```
+
+- `PT-161` `[Own]` **A wingman's combat call plays flat, like the scripted radio, and is heard.**
+  Combat voice now speaks on the mission radio's queue instead of from the speaker's aircraft, as
+  the original does (`git log --grep=BL-978`); the `ai-voice` suite pins a flat Voice-bus player
+  at the def's authored level with the listener 5 km away, but only an ear hears a line. Stay in
+  the fight beside the enemy flight for a minute or two, taking and dealing hits. *Look for:*
+  (a) a wingman calling an enemy's clock bearing, centred and at one level wherever the wingman
+  is, including far off; (b) damage calls as you and the enemy take hits; (c) no combat line
+  cutting into a scripted line, a bark waiting up to 0.8 s and then dropped instead; (d) in the
+  session's log under `.scratch/logs/`, an `ai voice: <name>: trigger #` line for each call heard.
+  *Blocks:* `BL-934` (lines unheard at the controls); a silent sortie whose log carries the
+  `ai voice:` lines is that item's next cause.
 
 ## Everything else
 

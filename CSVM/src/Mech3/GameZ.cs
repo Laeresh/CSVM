@@ -400,6 +400,8 @@ public sealed class GameZ
                     node.IntersectSurface = isf.ValueKind == JsonValueKind.True;
                 if (fl.TryGetProperty("active", out var ac))
                     node.Active = ac.ValueKind == JsonValueKind.True;
+                if (fl.TryGetProperty("can_modify", out var cm))
+                    node.CanModify = cm.ValueKind == JsonValueKind.True;
             }
             // zone_id: -1 (absent too) means always draw. See ZoneGate and docs/formats/gamez.md.
             if (header.TryGetProperty("zone_id", out var zn) && zn.ValueKind == JsonValueKind.Number)
@@ -707,6 +709,10 @@ public sealed class GameZNode
     // never builds visible. Absent flags (legacy extraction) default to active, matching every
     // other flags.* field here.
     public bool Active = true;
+    /// <summary>The terrain-carve gate (<c>flags.can_modify</c>, node-flag bit 16): the original
+    /// carves a crater only into a node carrying it, and no shipped node does
+    /// (docs/org/craters.md). Absent flags default to false, the shipped value everywhere.</summary>
+    public bool CanModify;
     /// <summary>The original's per-node visibility zone (<c>zone_id</c>): <b>-1</b> = always drawn;
     /// otherwise the node draws only while that id is in the camera's armed zone set, which
     /// the engine arms as <c>{0, camera weather state}</c>, so <b>0</b> is also always,
@@ -749,6 +755,11 @@ public sealed class GameZNode
     /// <summary>Whether the structure is a gasbag, which a turret's candidate pass excludes while
     /// the player's own selection still admits it.</summary>
     public bool IsGasbagStructure => (MissionTargetWord & 0x00400000u) != 0;
+
+    /// <summary>The danger-zone difficulty a <c>dzpathN</c> node authors: the flag word shifted
+    /// right by 23, unsigned and unmasked, so bits 23 to 31. Zero on a node authoring no word.
+    /// Decode: docs/org/aiPilot.md, "Per zone".</summary>
+    public int DangerZoneDifficulty => (int)(MissionTargetWord >> 23);
 
     /// <summary>The team the engine gives this node as a mission structure in the numbered mission
     /// of its chapter: the two-bit ownership slot at bit <c>2 * mission - 2</c>, read as a team id

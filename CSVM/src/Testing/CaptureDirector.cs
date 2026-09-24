@@ -60,24 +60,27 @@ public sealed class CaptureDirector
     public static string ShotDir() =>
         Path.GetFullPath(Path.Combine(ProjectSettings.GlobalizePath("res://"), "..", "Screenshots"));
 
-    /// <summary>Save the current frame to a timestamped PNG under <see cref="ShotDir"/>. Bound to
-    /// F12 in the orbit viewer, in free flight and on the menu screens; the full viewport is
-    /// captured, HUD or board included. Returns the file written, null if the save failed.</summary>
-    public static string? SaveScreenshot(Viewport viewport)
+    /// <summary>Save <paramref name="viewport"/>'s current frame to a timestamped PNG under
+    /// <see cref="ShotDir"/>. Bound to F12 in the orbit viewer, in free flight and on the menu
+    /// screens; the full viewport is captured, HUD or board included.</summary>
+    public static string? SaveScreenshot(Viewport viewport) =>
+        SaveScreenshot(landed => PaneReadback.Request(viewport, landed));
+
+    /// <summary>Asks <paramref name="pane"/> for the frame and writes it when it lands, logging
+    /// "screenshot saved" then, so the key-press frame pays for neither the readback nor the encode.
+    /// Returns the path the file will be written to, or null when there was no frame to ask for.
+    /// ⚠ The file does not exist on return: a caller that reads it waits for it.</summary>
+    public static string? SaveScreenshot(PaneRequest pane)
     {
         var dir = ShotDir();
-        Directory.CreateDirectory(dir);
         var path = Path.Combine(dir, $"crimsonskies_{System.DateTime.Now:yyyy-MM-dd_HH-mm-ss-fff}.png");
-        var img = viewport.GetTexture().GetImage();
-        var err = img.SavePng(path);
-        if (err == Error.Ok)
+        if (!pane(frame => WriteShot(frame, dir, path)))
         {
-            Log.Info("core", $"screenshot saved: {path}");
-            return path;
+            Log.Error("core", $"screenshot failed: no frame to read for {path}");
+            return null;
         }
 
-        Log.Error("core", $"screenshot failed ({err}): {path}");
-        return null;
+        return path;
     }
 
     /// <summary>The capture block at the tail of `_Process`. Nothing built yet: only shoot once a
@@ -173,6 +176,27 @@ public sealed class CaptureDirector
             return;
         }
         Log.Info("core", $"placement: --pos=\"{Vec3Arg(pos)}\" --lookat=\"{Vec3Arg(orbit.OrbitCenter)}\"");
+    }
+
+    // Runs wherever the pane hands its frame over, a worker for a live readback.
+    private static void WriteShot(Image? frame, string dir, string path)
+    {
+        if (frame == null || frame.GetWidth() <= 0 || frame.GetHeight() <= 0)
+        {
+            Log.Error("core", $"screenshot failed: the frame never arrived for {path}");
+            return;
+        }
+
+        Directory.CreateDirectory(dir);
+        var err = frame.SavePng(path);
+        if (err == Error.Ok)
+        {
+            Log.Info("core", $"screenshot saved: {path}");
+        }
+        else
+        {
+            Log.Error("core", $"screenshot failed ({err}): {path}");
+        }
     }
 
     // Insert a zero-padded frame index before the extension:

@@ -9,8 +9,8 @@ namespace CSVM.UI;
 
 /// <summary>
 /// The book's results page (scrapbook spread 1): the outcome line, the four rows the original
-/// draws and the two tabs, computed from one mission's record
-/// (<c>docs/org/debrief.md#the-screen-is-the-scrapbook</c>). Row titles and the outcome text are
+/// draws, and the two tabs. It is computed from one mission's record,
+/// <c>docs/org/debrief.md#the-screen-is-the-scrapbook</c>. Row titles and the outcome text are
 /// literal strings rather than read off <c>ui_strings.json</c> at runtime, following
 /// <see cref="Flight.IaWrapupBoard"/>'s own precedent. Positions are <c>[@ScrapBook@]</c>'s
 /// <c>SB_T_*</c> and <c>SB_KILL*</c> rows, read through the <see cref="CampaignLayout"/> a caller
@@ -67,9 +67,9 @@ public static class CampaignScrapbookResults
         (707f, 176f), (568f, 218f), (709f, 69f), (504f, 207f), (445f, 177f), (444f, 66f),
     };
 
-    /// <summary>Best to Date (langui 1159), the merged half at <c>+0x54</c>, or Most Recent
-    /// (langui 1160), the attempt half at <c>+0x00</c> (<c>docs/formats/saved-games.md</c>, "The
-    /// mission-result array").</summary>
+    /// <summary>Best to Date (langui 1159) is the merged half at <c>+0x54</c>. Most Recent
+    /// (langui 1160) is the attempt half at <c>+0x00</c>. See <c>docs/formats/saved-games.md</c>,
+    /// "The mission-result array".</summary>
     public static string TabTitle(bool bestToDate) => bestToDate ? "Best to Date" : "Most Recent";
 
     /// <summary>Whether the outcome line reads Mission Completed: the selected half's mask
@@ -96,9 +96,9 @@ public static class CampaignScrapbookResults
         return total & 0xffff;
     }
 
-    /// <summary>The filled kill-stamp slots, densely from slot 0: the plain tally's airframes in
-    /// ascending index order, skipping zeros, then the ace tally's the same way, stopping at
-    /// eleven (<c>docs/org/debrief.md#the-stamps-and-the-total</c>). The same airframe can fill
+    /// <summary>The filled kill-stamp slots, densely from slot 0. The plain tally's airframes come
+    /// in ascending index order, skipping zeros, then the ace tally's the same way, stopping at
+    /// eleven. See <c>docs/org/debrief.md#the-stamps-and-the-total</c>. The same airframe can fill
     /// two slots, once plain and once starred.</summary>
     public static IReadOnlyList<KillStamp> Stamps(MissionResult result, bool bestToDate)
     {
@@ -168,9 +168,9 @@ public static class CampaignScrapbookResults
     }
 
     /// <summary>The outcome line, the heading and the four drawn rows (title then value), each at
-    /// its own <c>SB_T_*</c> row. Time is <c>mm:ss</c> off milliseconds truncated the way
-    /// <c>FUN_00419630</c> writes it; the hit ratio is hits over shots as a percentage, truncated
-    /// toward zero the way the screen's own <c>ftol</c> call does, not rounded.</summary>
+    /// its own <c>SB_T_*</c> row. Time is <c>mm:ss</c> off milliseconds, truncated the way
+    /// <c>FUN_00419630</c> writes it. The hit ratio is hits over shots as a percentage. It
+    /// truncates toward zero the way the screen's own <c>ftol</c> call does, never rounding.</summary>
     public static IReadOnlyList<BoardLine> Rows(MissionResult result, bool bestToDate, CampaignLayout? layout = null)
     {
         layout ??= CampaignLayout.Fallback;
@@ -209,30 +209,28 @@ public static class CampaignScrapbookResults
         lines.Add(new BoardLine(value, valueX, valueY, 0, RowFont, BoardInk.Row, Italic: true));
     }
 
-    /// <summary>One filled kill-stamp slot: <paramref name="Slot"/> is the <c>SB_KILL</c>/
-    /// <c>SB_KILLTEXT</c> ordinal (0-10, not reading order), <paramref name="Frame"/> the strip
-    /// frame (the airframe index, or that plus eleven for the starred/ace variant), and
-    /// <paramref name="Count"/> the number drawn over it.</summary>
+    /// <summary>One filled kill-stamp slot. The <paramref name="Slot"/> is the <c>SB_KILL</c> and
+    /// <c>SB_KILLTEXT</c> ordinal, 0-10 and not in reading order. The <paramref name="Frame"/> is
+    /// the strip frame: the airframe index, or that plus eleven for the starred/ace variant. The
+    /// <paramref name="Count"/> is the number drawn over it.</summary>
     public readonly record struct KillStamp(int Slot, int Frame, int Count);
 }
 
 /// <summary>
-/// The scrapbook's table of contents (<c>SCRAPBOOK_TOC.SCRIPT</c>, <c>Campaign CAP-41 Previous
-/// Mission 1.png</c>): the career row the book opens at, then one 80-pixel row per mission the
-/// profile has completed, each an aircraft silhouette beside the mission's short name, the area
-/// it was flown over and the plane that flew it, in a four-row window with the listbox's own
-/// scrollbar beside it, then VIEW SELECTED, REPLAY MISSION and RETURN TO CABIN. A confirm on a
-/// row picks it and a second confirm is REPLAY MISSION's own press, which the career row never
-/// offers, so there it views instead; the secondary press is VIEW SELECTED on the cursor's row.
+/// The scrapbook's table of contents, <c>SCRAPBOOK_TOC.SCRIPT</c>, opens at the career row, then
+/// carries one 80-pixel row per mission the profile has completed. Each row is an aircraft
+/// silhouette beside the mission's short name, the area it was flown over and the plane that flew
+/// it. Four rows show at once, with the listbox's scrollbar beside them, then VIEW SELECTED,
+/// REPLAY MISSION and RETURN TO CABIN. A confirm picks a row, and a second confirm is REPLAY
+/// MISSION's press, which the career row never offers, so there it views instead. The secondary press is VIEW SELECTED on the cursor's row.
 /// The forward page tab is this screen's own, the original leaving the contents with no arrow a
-/// pad can turn forward by. The list's box, row height and window are <c>SBTOC_L_TOCList</c>'s,
-/// the headers <c>SBTOC_T_CHARACTER</c>'s and <c>SBTOC_T_MISSIONS</c>'s.
+/// pad can turn forward by.
 /// </summary>
 public sealed class CampaignPreviousMissionsPage : CampaignPage
 {
-    // SBTOC_L_TOCList, the listbox row of LAYOUT.CSV's [@ScrapBook_TOC@], as the fallback: X, Y,
-    // wrap width, the height of ONE row (not of the widget) and how many of them are on screen at
-    // once.
+    // SBTOC_L_TOCList, the listbox row of LAYOUT.CSV's [@ScrapBook_TOC@], as the fallback. It
+    // carries X, Y, wrap width, the height of ONE row (not of the widget), and how many rows are
+    // on screen at once.
     private const string Section = CampaignLayout.ContentsSection;
     private const float FallbackListX = 420f;
     private const float FallbackListY = 140f;
@@ -240,8 +238,8 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     private const int FallbackRowHeight = 80;
     private const int FallbackVisibleRows = 4;
 
-    // The row sub-script's own columns: the icon pane sits two pixels in, and its text column
-    // starts a further 20 past the pane's width, at the three rows +10, +30 and +50 down the row.
+    // The row sub-script's own columns. The icon pane sits two pixels in, and its text column
+    // starts a further 20 past the pane's width. The three text rows sit +10, +30 and +50 down.
     private const float IconInset = 2f;
     private const float IconWidth = 80f;
     private const float TextGap = 20f;
@@ -273,8 +271,8 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     private const float PickedWash = 0x80 / 255f;
     private const float FocusWash = 0x40 / 255f;
 
-    // The scrollbar column, measured off Campaign CAP-41 Previous Mission 2.png: the strip stands
-    // in the list's own last 16 pixels with an 11-pixel arrow at each end of the window. Its
+    // The scrollbar column, measured off Campaign CAP-41 Previous Mission 2.png. The strip stands
+    // in the list's own last 16 pixels, with an 11-pixel arrow at each end of the window. Its
     // track is the list's KF colour, 0xff282418.
     private const float ScrollX = 730f;
     private const float ScrollWidth = 16f;
@@ -293,8 +291,8 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     // ordinal 0.
     private const int CareerIconFrame = CampaignProgression.AirframeCount;
 
-    // fc_planeicons.png as the row sub-script mounts it: 12 frames of 80x80, the eleven airframes
-    // in id order and then the card fan the not-yet-started career row takes.
+    // fc_planeicons.png as the row sub-script mounts it: 12 frames of 80x80. The eleven airframes
+    // come in id order, then the card fan the not-yet-started career row takes.
     private static readonly BoardArt PlaneIcons = new(BoardArtLibrary.Ui, "FC_PlaneIcons.png", 12);
 
     // The listbox's <SLIDER>, <UP> and <DOWN>: a 16x11 thumb and two four-frame 16x11 strips, the
@@ -313,13 +311,13 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     private readonly BoardArt _scrollUp;
     private readonly BoardArt _scrollDown;
 
-    // The list row a press marks as the one REPLAY MISSION and VIEW SELECTED act on. -1 until the
-    // player has picked one; the two buttons then fall back to the first finished mission, so a
-    // press before ever selecting still does something sensible.
+    // The list row a press marks as the one REPLAY MISSION and VIEW SELECTED act on. It is -1
+    // until the player has picked one. The two buttons then fall back to the first finished
+    // mission, so a press before ever selecting still does something sensible.
     private int _selected = -1;
 
-    // The first row of the four the window shows, kept across visits so paging away from the list
-    // and back does not jump it to the top.
+    // The first row of the four the window shows. It is kept across visits, so paging away from
+    // the list and back does not jump it to the top.
     private int _top;
 
     /// <summary>Binds the page to its flow and reads the list's row off the flow's layout.</summary>
@@ -343,8 +341,9 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     public override string Title => "PREVIOUS MISSIONS";
 
     /// <summary>The one screen with a secondary press, so it says what X does rather than leaving
-    /// the shortcut to be discovered. Kept short: the band is centred over the board and a longer
-    /// line runs its right end under the CURRENT MISSION bookmark this screen carries at the top.
+    /// the shortcut to be discovered. Kept short, because the band is centred over the board. A
+    /// longer line runs its right end under the CURRENT MISSION bookmark at the top of this
+    /// screen.
     /// </summary>
     public override string Footer =>
         "↑↓  Choose       Enter / A  Select       X  View       Esc / B  Back";
@@ -476,7 +475,8 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     private float TextX => _listX + IconWidth + TextGap;
 
     /// <summary>A list row's rectangle inside the window, for a presentation that hit-tests the
-    /// rows; null for a button row and for a list row scrolled out of the window.</summary>
+    /// rows. The result is null for a button row, and for a list row scrolled out of the
+    /// window.</summary>
     public (float X, float Y, float Width, float Height)? RowBox(int row)
     {
         int slots = Slots();
@@ -489,9 +489,9 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
         return (_listX, _listY + ((row - top) * _rowHeight), _listWidth, _rowHeight);
     }
 
-    /// <summary>Puts the window's first row at <paramref name="top"/>, clamped, pulling the cursor
-    /// to the window's nearer edge when it stands on a list row the move would hide; the
-    /// pointer's wheel and thumb, which move the window rather than the cursor.</summary>
+    /// <summary>Puts the window's first row at <paramref name="top"/>, clamped. The cursor is
+    /// pulled to the window's nearer edge when it stands on a list row the move would hide. This
+    /// serves the pointer's wheel and thumb, which move the window rather than the cursor.</summary>
     public void ScrollTo(int top)
     {
         int count = Slots();
@@ -548,8 +548,8 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
         };
     }
 
-    /// <summary>A mission row's first confirm picks it and its second replays it, which is the
-    /// original's own double-click on a row folded onto a pad's single button; the career row is
+    /// <summary>A mission row's first confirm picks it, and its second replays it. That is the
+    /// original's own double-click on a row, folded onto a pad's single button. The career row is
     /// never replayed, so its second confirm opens it instead. VIEW SELECTED and the bookmark both
     /// open the book (<c>uiData</c> 2405 mode 1) on the picked page and on the campaign's own
     /// current mission.</summary>
@@ -589,9 +589,9 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
         }
     }
 
-    /// <summary>VIEW SELECTED without walking down to the button: on a list row it picks that row
-    /// and opens the book there, and on any other row it opens the book on whatever is picked
-    /// already. Nothing to open (no profile seated) leaves the press unhandled.</summary>
+    /// <summary>VIEW SELECTED without walking down to the button. On a list row it picks that row
+    /// and opens the book there. On any other row it opens the book on whatever is picked already.
+    /// Nothing to open (no profile seated) leaves the press unhandled.</summary>
     public override bool Secondary(int row)
     {
         int slots = Slots();
@@ -604,10 +604,10 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     }
 
     // How many rows the list offers: the career page, then one per story position the profile has
-    // completed, which is uiData 2409's own count of the campaign position plus one. The typed
-    // gallery word puts every mission in the list instead, the 24 that callback answers whenever
-    // fViewAll is set. Read fresh every call rather than cached: a replay recorded through the
-    // briefing or flight-check screens must show up here the next time this page draws.
+    // completed. That count is uiData 2409's own count of the campaign position plus one. The
+    // typed gallery word puts every mission in the list instead, the 24 that callback answers
+    // whenever fViewAll is set. Read fresh every call rather than cached. A replay recorded
+    // through the briefing or flight-check screens must show up here the next time this draws.
     private int Slots()
     {
         if (Flow.Profile is not { } profile)
@@ -622,7 +622,7 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
 
     // The buttons under the list, in the order they take rows, the arrow among them where the book
     // itself carries it. REPLAY MISSION is offered only where uiData 2411 offers it, on a picked
-    // mission whose record holds a time; the other four are created active and stay so.
+    // mission whose record holds a time. The other four are created active and stay so.
     private List<BoardButton> Buttons()
     {
         var buttons = new List<BoardButton> { BoardButton.ViewMission };
@@ -646,8 +646,8 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
         return offset >= 0 && offset < buttons.Count ? buttons[offset] : BoardButton.None;
     }
 
-    // The mission the campaign is on, which the bookmark opens the book at: the next unflown one,
-    // or the last of the twenty-four once the campaign is finished.
+    // The mission the campaign is on, which the bookmark opens the book at. That is the next
+    // unflown one, or the last of the twenty-four once the campaign is finished.
     private int CurrentSeq()
     {
         if (Flow.Profile is not { } profile)
@@ -670,8 +670,8 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
         return true;
     }
 
-    // uiData 2405 mode 1 on a list row: the book opens on that slot's first spread, the career
-    // page taking seq -1 the way the original's ordinal 0 opens mission 0.
+    // uiData 2405 mode 1 on a list row: the book opens on that slot's first spread. The career
+    // page takes seq -1, the way the original's ordinal 0 opens mission 0.
     private bool View(int slot)
     {
         Flow.OpenScrapbook(slot - 1);
@@ -679,7 +679,7 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
     }
 
     // The list row the two buttons act on: the player's own pick, or the first finished mission
-    // when nothing has been picked yet, which is the career row while nothing has been flown.
+    // when nothing has been picked yet. That is the career row while nothing has been flown.
     private int? SelectedSlot(int slots)
     {
         if (slots <= 0)
@@ -690,8 +690,8 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
         return _selected >= 0 && _selected < slots ? _selected : Math.Min(1, slots - 1);
     }
 
-    // The mission that pick stands for, or null on the career row: uiData 2411 answers 0 for
-    // mission 0 before the record array is read, so REPLAY MISSION is never offered there.
+    // The mission that pick stands for, or null on the career row. On mission 0, uiData 2411
+    // answers 0 before the record array is read, so REPLAY MISSION is never offered there.
     private int? SelectedSeq(int slots) =>
         SelectedSlot(slots) is { } slot && slot > 0 ? slot - 1 : null;
 
@@ -710,8 +710,9 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
         return top;
     }
 
-    // The thumb's run down the track: as tall a fraction of it as the window is of the list, never
-    // shorter than an arrow, and stepped so the last row scrolled to lands it flush at the bottom.
+    // The thumb's run down the track. It is as tall a fraction of the track as the window is of
+    // the list, and never shorter than an arrow. It steps so the last row scrolled to lands it
+    // flush at the bottom.
     private (float Y, float Height) Thumb(int count, int top)
     {
         float track = WindowHeight - (2f * ScrollButton);
@@ -720,9 +721,9 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
         return (_listY + ScrollButton + ((track - height) * top / last), height);
     }
 
-    // The three lines uiData 2409 hands the row sub-script: for a mission slot the mission's short
-    // name, the area of the chapter it belongs to, and the plane whose best-of run stands in the
-    // record; for the career page three fixed strings and no record read at all.
+    // The three lines uiData 2409 hands the row sub-script. A mission slot takes the mission's
+    // short name, the area of the chapter it belongs to, and the plane its best-of run flew. The
+    // career page takes three fixed strings, and reads no record at all.
     private string[] RowLines(int slot)
     {
         if (slot == 0)
@@ -746,8 +747,8 @@ public sealed class CampaignPreviousMissionsPage : CampaignPage
         };
     }
 
-    // The icon strip's frame for a row: the card fan on the career page, else the airframe the
-    // slot's best-of run flew, clamped inside the eleven the strip carries before that fan.
+    // The icon strip's frame for a row: the card fan on the career page. Every other row takes the
+    // airframe its best-of run flew, clamped inside the eleven the strip carries before that fan.
     private int Airframe(int slot) => slot == 0
         ? CareerIconFrame
         : Math.Clamp(Run(slot - 1)?.Airframe ?? 0, 0, CampaignProgression.AirframeCount - 1);

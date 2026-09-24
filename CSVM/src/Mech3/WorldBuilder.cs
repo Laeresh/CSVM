@@ -68,12 +68,13 @@ public sealed class WorldBuilder
 
     /// <param name="collision">Attach static colliders to solid geometry, so the flight loop can
     /// raycast terrain and buildings. Off for static viewing.</param>
-    /// <param name="scrollOverrides">Per-model UV scroll rates from the mission's interp boot
-    /// script (<see cref="MissionSetup.ScrollByModel"/>). Null leaves every model on its own gamez
-    /// <c>texture_scroll</c> field.</param>
+    /// <param name="scrollOverrides">Per-model UV scroll rates from the mission's interp boot script
+    /// (<see cref="MissionSetup.ScrollByModel"/>); null leaves each model on its gamez field.</param>
     /// <param name="debugClutterFlag"><see cref="SceneBuilder.DebugClutterFlag"/>.</param>
+    /// <param name="hiddenAlpha"><see cref="SceneBuilder.HiddenAlpha"/>.</param>
     public WorldBuilder(GameZ gamez, TextureArchive textures, bool collision = false,
-        IReadOnlyDictionary<int, Vector2>? scrollOverrides = null, bool debugClutterFlag = false)
+        IReadOnlyDictionary<int, Vector2>? scrollOverrides = null, bool debugClutterFlag = false,
+        SceneBuilder.TransparencyClass hiddenAlpha = SceneBuilder.TransparencyClass.None)
     {
         _gamez = gamez;
         _textures = textures;
@@ -86,6 +87,7 @@ public sealed class WorldBuilder
             cullBackfaces: true, scrollOverrides: scrollOverrides);
         _scene.Cycler = Cycler;
         _scene.DebugClutterFlag = debugClutterFlag;
+        _scene.HiddenAlpha = hiddenAlpha;
     }
 
     /// <summary>Which mission of the chapter this world is being built for, 1-based, forwarded to
@@ -113,6 +115,11 @@ public sealed class WorldBuilder
     /// material, see <see cref="SceneBuilder.OverlayPassSurfaceCount"/>.</summary>
     public int OverlayPassSurfaceCount => _scene.OverlayPassSurfaceCount;
     public int OverlayPassDeclinedCount => _scene.OverlayPassDeclinedCount;
+
+    /// <summary>World surfaces committed per transparency class, see
+    /// <see cref="SceneBuilder.BlendSurfaceCount"/>.</summary>
+    public int BlendSurfaceCount => _scene.BlendSurfaceCount;
+    public int ScissorSurfaceCount => _scene.ScissorSurfaceCount;
 
     /// <summary>Polygons drawn as nothing for want of a texture the retail data lacks, see
     /// <see cref="SceneBuilder.UndrawnPolygonCount"/>.</summary>

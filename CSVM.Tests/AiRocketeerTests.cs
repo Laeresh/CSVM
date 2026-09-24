@@ -139,7 +139,7 @@ public class AiRocketeerTests
         var pylons = new List<RocketPylonView> { pylon };
 
         // The authored band and interval, so the case runs on the Warhawk's numbers and not on
-        // the militia defaults the fields still carry (BL-394 wires them per vehicle).
+        // the militia defaults the fields still carry (PlaneStats.LoadForAi wires them per vehicle).
         var atAircraft = Warhawk(fit, rollsPass: true);
         atAircraft.Solve(ownPos, Vector3.Zero, basis,
             TargetPos, Vector3.Zero, TargetForward, targetIsGasbag: false, pylons);
@@ -358,8 +358,8 @@ public class AiRocketeerTests
 
     // One AI vehicle def's first ordnance entry, straight out of vehicle.zrd.json. The engine reads
     // the 5-tuple as id, rounds, refire interval, then the engagement band; the field order is
-    // decoded in docs/org/aiPilot/aiWeapons.md. Nothing in the runtime parses this block yet
-    // (BL-394), so the test reads it here rather than pretending a reader exists.
+    // decoded in docs/org/aiPilot/aiWeapons.md. The runtime's own reader is Loadout.BindAi; the
+    // test reads the tuple here directly so the authored order is pinned independently of it.
     private static AuthoredFit AuthoredOrdnance(string defName, WeaponDefs weapons)
     {
         var root = Zrdr.LoadFile(ZrdrPath, "vehicle.json")[0] as List<object?>;

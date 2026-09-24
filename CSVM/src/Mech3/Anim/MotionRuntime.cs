@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using CSVM.Mech3;
 using Godot;
 
@@ -126,8 +127,19 @@ internal sealed class MotionRuntime : IAnimMotion
     // test needs it: a breakup piece rides a wreck still doing a hundred metres a second.
     private Transform3D _prevParent;
     private bool _hasPrevParent;
+    // The body's own colliders, its whole subtree, which the column never answers with: the
+    // original clears the flying node's intersect_surface bit around the query, and the cell walk
+    // skips a node without that bit together with everything under it (docs/org/objectMotion.md).
+    // ⚠ Both column rays pass it: a wreck section's structure hangs below its origin and rides with
+    // it, so an unguarded ray lands the section on itself and it falls through the sea.
+    private Godot.Collections.Array<Rid>? _ownColliders;
 
     public Node3D Target { get; private init; } = null!;
+
+    /// <summary>The <c>OBJECT_MOTION</c> event that launched this body, so a
+    /// <c>STOP_SEQUENCE</c> on the sequence holding it can end the flight where it stands
+    /// (<see cref="MotionSet.HaltLaunchedBy"/>). Null for a body no event launched.</summary>
+    public AnimEvent? LaunchedBy { get; set; }
 
     public (AnimDefinition Def, Node3D? Anchor) Owner { get; set; }
 
@@ -222,6 +234,9 @@ internal sealed class MotionRuntime : IAnimMotion
             else if (!gravityBlock.Bool("no_altitude"))
                 m._contactTier = MotionContactTier.Column;
         }
+
+        if (m._contactTier == MotionContactTier.Column)
+            m._ownColliders = OwnColliders(target);
 
         m._bounce = data.Obj("bounce_sequence");
         m._surfaceIsWater = rt.SurfaceIsWater;
@@ -444,6 +459,24 @@ internal sealed class MotionRuntime : IAnimMotion
         return float.IsFinite(t) ? t : 0f;
     }
 
+    // Collected once at launch; a section's colliders are built with the world and never added to.
+    private static Godot.Collections.Array<Rid>? OwnColliders(Node3D target)
+    {
+        Godot.Collections.Array<Rid>? rids = null;
+        var pending = new Stack<Node>();
+        pending.Push(target);
+        while (pending.Count > 0)
+        {
+            var node = pending.Pop();
+            if (node is CollisionObject3D body)
+                (rids ??= new Godot.Collections.Array<Rid>()).Add(body.GetRid());
+            foreach (var child in node.GetChildren())
+                pending.Push(child);
+        }
+
+        return rids;
+    }
+
     // The default contact tier: reads the body's own column and ends the flight once the next step
     // would put it under whatever is there (docs/org/objectMotion.md, "Contact is the default").
     // ⚠ Departs from the decode on purpose: a pair of rays instead of a cell-record pick, and
@@ -477,10 +510,11 @@ internal sealed class MotionRuntime : IAnimMotion
         // back onto it. ⚠ The second cast comes DOWN from above, never up from below: a one-sided
         // collider answers nothing from behind, and every water polygon in the install is one.
         using var down = PhysicsRayQueryParameters3D.Create(
-            from, from + Vector3.Down * ColumnDepth, _contactMask);
+            from, from + Vector3.Down * ColumnDepth, _contactMask, _ownColliders);
         using var downHit = space.IntersectRay(down); // disposed, per motion per tick (PERF-20)
         using var up = downHit.Count == 0
-            ? PhysicsRayQueryParameters3D.Create(from + Vector3.Up * ColumnDepth, from, _contactMask)
+            ? PhysicsRayQueryParameters3D.Create(
+                from + Vector3.Up * ColumnDepth, from, _contactMask, _ownColliders)
             : null;
         using var upHit = up != null ? space.IntersectRay(up) : null;
         var hit = downHit.Count > 0 ? downHit : upHit;

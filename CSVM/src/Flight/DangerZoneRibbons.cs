@@ -21,9 +21,10 @@ public sealed class DangerZoneRibbons
 
     public IReadOnlyCollection<DangerZoneRibbon> All => _byIndex.Values;
 
-    /// <summary>Reads every ribbon of the world. <paramref name="disabled"/> is the mission's
-    /// <c>dzones.zrd</c> <c>disable</c> list, which switches the named zones off for the AI
-    /// as it does for the player. Null when the world carries no ribbon at all.</summary>
+    /// <summary>Reads every ribbon of the world, each at the difficulty its own node authors.
+    /// The disabled set is the mission's dzones.zrd disable list. It switches the named zones
+    /// off for the AI as it does for the player. Null when the world carries no ribbon at
+    /// all.</summary>
     public static DangerZoneRibbons? Load(GameZ gamez, IReadOnlySet<string>? disabled = null)
     {
         var set = new DangerZoneRibbons();
@@ -52,7 +53,8 @@ public sealed class DangerZoneRibbons
             }
             if (offsets.Count > 0)
                 lanes.Add($"{node.Name} x{offsets.Count}");
-            var ribbon = DangerZoneRibbon.FromPolyline(node.Name, index, vertices, offsets);
+            var ribbon = DangerZoneRibbon.FromPolyline(
+                node.Name, index, vertices, offsets, node.DangerZoneDifficulty);
             if (disabled != null && disabled.Contains(node.Name))
                 ribbon.Active = false;
             set._byIndex[index] = ribbon;
@@ -94,6 +96,42 @@ public sealed class DangerZoneRibbons
                 {
                     bestDistance = distance;
                     best = (ribbon, end == 1);
+                }
+            }
+        }
+        return best;
+    }
+
+    /// <summary>The pick a hit pilot's passed daredevil roll makes (<c>FUN_004210e0</c>'s
+    /// unforced arm). Admitted: an active ribbon with a free lane whose difficulty
+    /// <paramref name="naturalTouch"/> covers. Taken: the end inside
+    /// <see cref="DangerZoneRibbon.ProximityRangeM"/> whose into-ribbon tangent best lines up
+    /// with the line from <paramref name="position"/> to it, so the run continues the dive.
+    /// Null when nothing qualifies, which arms the pilot's own retry hold.</summary>
+    public (DangerZoneRibbon Ribbon, bool FarEnd)? ProximityPick(Vector3 position, int naturalTouch)
+    {
+        (DangerZoneRibbon, bool)? best = null;
+        float bestDot = -1f;
+        const float Reach = DangerZoneRibbon.ProximityRangeM * DangerZoneRibbon.ProximityRangeM;
+        foreach (var ribbon in _byIndex.Values)
+        {
+            if (!ribbon.Active || ribbon.Difficulty > naturalTouch || !ribbon.HasFreeLane)
+                continue;
+            for (int end = 0; end < 2; end++)
+            {
+                bool far = end == 1;
+                var toEnd = ribbon.End(far) - position;
+                var tangent = ribbon.EndTangentInto(far);
+                if (toEnd.LengthSquared() > Reach || toEnd.LengthSquared() < 1e-4f
+                    || tangent.LengthSquared() < 1e-4f)
+                {
+                    continue;
+                }
+                float facing = toEnd.Normalized().Dot(tangent.Normalized());
+                if (facing >= bestDot)
+                {
+                    bestDot = facing;
+                    best = (ribbon, far);
                 }
             }
         }

@@ -12,9 +12,9 @@ namespace CSVM.Flight;
 /// ⚠ The broadcast election is one line per event: a failed roll passes to the NEXT candidate,
 /// wrapping, never N independent rolls.
 /// Invented, named as such: the <c>Bail</c>/<c>NoBail</c> pick below the death-cry family root is
-/// a constitution roll (unconfirmed), and the bearing quantisation constants
-/// (<see cref="LevelBandM"/>; the 12/3/6/9 quadrants split at ±45°), only the index formula is
-/// decoded.</summary>
+/// a constitution roll (unconfirmed). The bearing quantisation is decoded whole: the nearest of
+/// the four quadrants about the warned pilot's heading, and the band at
+/// <see cref="LevelBandSin"/>.</summary>
 public sealed class AiVoiceDispatcher
 {
     /// <summary>Decoded: the per-slot cooldown, stamped on BOTH roll outcomes.</summary>
@@ -26,9 +26,19 @@ public sealed class AiVoiceDispatcher
     /// <summary>Decoded: ids 1–12 halve the talker chance, hardcoded.</summary>
     public const float BearingChanceFactor = 0.5f;
 
-    /// <summary>Invented: the enemy is "level" within this many metres of the warned aircraft's
-    /// altitude; only the low/level/high band ORDER is decoded.</summary>
-    public const float LevelBandM = 100f;
+    /// <summary>Decoded: the low/level/high band splits at this vertical component of the UNIT
+    /// vector between the two aircraft, about 17.5 degrees off the horizontal. ⚠ An angle, not a
+    /// height, so the band does not widen with separation (docs/formats/combat-voice.md, "The
+    /// pursue path").</summary>
+    public const float LevelBandSin = 0.3f;
+
+    /// <summary>Decoded: a pursuer holding the player within this cosine of its own nose (about
+    /// 31.8 degrees) taunts the player's failed shake (docs/formats/combat-voice.md).</summary>
+    public const float TauntNoseCos = 0.85f;
+
+    /// <summary>Decoded: a pursuer holding the player within this cosine of dead astern (about
+    /// 45.6 degrees) taunts the player on its own tail.</summary>
+    public const float TauntTailCos = 0.7f;
 
     /// <summary>The trigger ids this dispatcher names at its call sites (the full 29-id table is
     /// <c>CombatVoice.TriggerFamilies</c>).</summary>
@@ -37,6 +47,10 @@ public sealed class AiVoiceDispatcher
     public const int WaHighDmg = 13;
 
     public const int WaAttack = 14;
+
+    public const int PrDngrZn = 15;
+
+    public const int PrEnemyDwn = 16;
 
     public const int DiLowDmg = 17;
 
@@ -48,9 +62,22 @@ public sealed class AiVoiceDispatcher
 
     public const int DeEnemy = 21;
 
+    public const int GlAllyDwn = 22;
+
+    public const int GlEnemyDwn = 23;
+
+    public const int GlPlyrDwn = 24;
+
     public const int TaFailTail = 25;
 
+    public const int TaFailShk = 26;
+
     public const int TaSucShk = 27;
+
+    public const int DsAlly = 28;
+
+    /// <summary>The gate's outcome when the resolver finds no playable clip for the speaker.</summary>
+    public const string NoClipOutcome = "no clip";
 
     private const int TriggerCount = 29;
 
@@ -68,8 +95,9 @@ public sealed class AiVoiceDispatcher
         _resolve = resolve;
     }
 
-    /// <summary>Optional: whether a speaker is mid-line (the gate's "must not already be
-    /// talking"). Null = never; the remake's one-shots carry no per-speaker playing state yet.</summary>
+    /// <summary>Whether a speaker is mid-line (the gate's "must not already be talking"). The
+    /// session answers it from the radio channel, which holds the queued and on-air line's own
+    /// speaker and length; null = never, for a dispatcher driven without a channel.</summary>
     public Func<int, bool>? IsTalking { get; set; }
 
     /// <summary>Registered speakers, in registration order, the broadcast election's list.</summary>
@@ -81,9 +109,9 @@ public sealed class AiVoiceDispatcher
         1 + (3 * ((bearingIndex % 4 + 4) % 4)) + Math.Clamp(altitudeBand, 0, 2);
 
     /// <summary>Quantises an enemy's position in the warned aircraft's frame into the bearing
-    /// trigger id: nearest of the four clock quadrants about world up (12 ahead, 3 right, 6
-    /// behind, 9 left, the ±45° split is the natural quantisation, not a decoded constant) and
-    /// the low/level/high band per <see cref="LevelBandM"/>.</summary>
+    /// trigger id, both halves decoded: the nearest of the four clock quadrants about world up
+    /// (12 ahead, 3 right, 6 behind, 9 left, so the split falls at ±45°) and the low/level/high
+    /// band per <see cref="LevelBandSin"/>.</summary>
     public static int BearingTriggerFor(Vector3 ownPos, Vector3 ownForward, Vector3 enemyPos)
     {
         var to = enemyPos - ownPos;
@@ -98,8 +126,28 @@ public sealed class AiVoiceDispatcher
             float deg = Mathf.RadToDeg(Mathf.Atan2(fwd.Cross(toH).Dot(Vector3.Down), fwd.Dot(toH)));
             bearing = (int)Mathf.Round(Mathf.Wrap(deg, 0f, 360f) / 90f) % 4;
         }
-        int band = to.Y < -LevelBandM ? 0 : to.Y > LevelBandM ? 2 : 1;
+        float len = to.Length();
+        float rise = len > 1e-6f ? to.Y / len : 0f;
+        int band = rise < -LevelBandSin ? 0 : rise > LevelBandSin ? 2 : 1;
         return BearingTriggerId(bearing, band);
+    }
+
+    /// <summary>The taunt the pursuer's own geometry against the player raises, decoded whole:
+    /// <see cref="TaFailShk"/> with the player inside the nose cone, <see cref="TaFailTail"/> with
+    /// the player inside the astern cone, null between them. ⚠ The original dots the line against
+    /// the vehicle's BACKWARD basis row, so a reading that takes that row for the nose swaps the
+    /// two (docs/formats/combat-voice.md, "The pursue path").</summary>
+    public static int? TauntTriggerFor(Vector3 ownPos, Vector3 ownForward, Vector3 playerPos)
+    {
+        var to = playerPos - ownPos;
+        if (to.LengthSquared() < 1e-6f || ownForward.LengthSquared() < 1e-6f)
+        {
+            return null;
+        }
+        float cos = to.Normalized().Dot(ownForward.Normalized());
+        return cos > TauntNoseCos ? TaFailShk
+            : cos < -TauntTailCos ? TaFailTail
+            : null;
     }
 
     /// <summary>Adds a speaker. <paramref name="team"/> uses the broadcast rule's vocabulary:
@@ -226,7 +274,7 @@ public sealed class AiVoiceDispatcher
         string? clip = _resolve(speaker.VoId, family);
         if (clip == null)
         {
-            return new Decision(speaker, triggerId, null, "no clip", false);
+            return new Decision(speaker, triggerId, null, NoClipOutcome, false);
         }
         if (triggerId >= 0 && triggerId < TriggerCount && now < speaker.NextAllowed[triggerId])
         {

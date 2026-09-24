@@ -62,15 +62,15 @@ reset (INSTR-64).
 | `,` · `.` | shoulders | rudder, the original's "Turn Left" and "Turn Right" |
 | `=` · `-` | triggers | throttle up / down |
 | `1`–`9` | | set the throttle to an absolute eighth, `1` for idle through `9` for full: the original's own Throttle page, which is why no other flight action may take a digit. The key names the **desired** lever and the live one traverses to it at the rate the two keys above move it, which is the original's desired/live split rather than a jump |
-| `Space` | B | fire guns |
-| `X` | A | fire rockets, one per pull |
+| `Space` · LMB | B | fire guns. The mouse button is this port's own row: the original binds no mouse button to anything, and a pilot flying with the mouse has the trigger under the hand already on it. The KEYS AND BUTTONS page captures no left click, a click there being how a pointer confirms the row it is rebinding, so a player who takes this binding off the guns reaches it again through that page's reset |
+| `X` · RMB | A | fire rockets, one per pull. The mouse button is this port's own row, for the same reason as the guns above |
 | `F3` | D-pad → | cycle the guns clockwise: step the gun-group selector forward (one group fires at a time). The pad side follows the cockpit dial: the **GUNS** gauge is in the right column, **ROCKETS** in the left (`docs/formats/hud.md`, "Weapon gauges") |
 | `F5` | D-pad ← | cycle the rockets clockwise: step the hardpoint selector one mount along the belt, skipping every pylon that is spent |
 | `F4` · `F6` | D-pad → / ← **held** | cycle the guns and the rockets counterclockwise, over the same order and skipping the same empties, so a press each way returns to the slot you started on. These four are the original's own keys, by the name its keybind page displays (`OriginalScreenshots/Keybinds Weapons.png`: `F3`/`F4` guns, `F5`/`F6` rockets; the names are inverted against the message keys behind them, `docs/org/input.md`). The pad has one button per class rather than two, as the original's joystick column does, so holding it past 250 ms steps that class the other way, one step per hold, and the tap resolves on release so a spent hold never also steps forward. A keyboard hold does nothing: each direction has its own key |
 | `N` | X | nitro boost (the original's "Use Nitro-Booster"): engages only with a nitrous engine fitted and the tank at 99 % or more, then burns the whole tank (9.5 s) with no way to stop it, and re-arms after a 28 s refill. The nitro dial appears at the bottom of the right column, below the speedometer, with the injector fitted (`docs/org/flightModel.md`, "Nitro") |
 | `F19` | | damage lab on the flown plane, `--damage=` |
 | `B` | | weapon lab panel, `--weapon-lab` sessions only; its steppers arm the plane's live loadout and Space/`X` then fire it (`--weapon-lab=` picks the weapon, `--weapon-mount=` the mount, `--weapon-cycle=` steps the list) |
-| click | | weapon lab: park the held plane on the surface under the cursor, at the panel's stand-off, nose on it, `--weapon-click=x,y`, or `--weapon-target=x,y,z` / `--weapon-surface=<registry name>` (any of the fourteen surface ids; `dirt` means id 13, not "untagged") to place without a mouse at all |
+| click | | weapon lab: park the held plane on the surface under the cursor, at the panel's stand-off, nose on it. The left button is also the gun trigger in flight, and the lab holds no commands, so a placing click pulls it too; `--weapon-click=x,y`, or `--weapon-target=x,y,z` / `--weapon-surface=<registry name>` (any of the fourteen surface ids; `dirt` means id 13, not "untagged") to place without a mouse at all |
 | shift-click | | weapon lab: aim at that point without moving the plane, `--weapon-click=x,y,aim` |
 | stand-off slider | | weapon lab: how far back every placement parks (15–1100 m, default 90), `--weapon-standoff=` |
 | `V` | | weapon lab: hand the view to a free camera and back, fly out and watch an impact from a metre away, then `V` returns the orbit where you left it. `--weapon-camera=free\|<frames>` |
@@ -83,18 +83,18 @@ reset (INSTR-64).
 | `Q` | | target whatever is nearest the crosshair, a hard 15° cone about the **nose**, 2 km max, friend or foe. The pad reaches it by holding d-pad up past 250 ms, which is the target-cycle binding above dispatched by hold length, so this action carries no pad default of its own |
 | `T` | | target nothing, clears the selection, and it **stays** cleared until one of the keys above |
 | `F8` | D-pad ↓ | cycle the views: Cockpit → Nose → Chase → Cockpit, the original's own three-stop walk confirmed at its controls, `--view=cockpit` / `--view=nose` / `--view=chase`. The original's binding for "Cycle Cockpit Views" (`OriginalScreenshots/Keybinds Views 1.png`, which also gives it a joystick button); the D-pad slot is this port's pick of the free buttons, and gives a pad-only seat its way in |
-| `F2` | Back/Select | select the chase view directly, without walking the cycle, `--view=chase` (the default). This port's own action, and `F2` is the one gap in the original's function-key run: `F1` is its View Help (a screen this port does not have), `F3` through `F6` its weapon selectors, `F7` the flyby below and `F8` the view cycle above. Back is this port's pick of the free pad buttons |
+| (none) | (none) | select the chase view directly, without walking the cycle, `--view=chase` (the default). This port's own action, and it ships on no control at all: the `F8` cycle above reaches the chase view already, so a default here would spend a key and a pad button on a second way in. It stays a flight action, so the controls page can give it either |
 | `F7` | | the flyby camera, `--view=flyby`. The view leaves the aeroplane and takes a spot ahead of it and off to one side, holds that spot while the aircraft runs past within a few metres, then re-sites itself a few seconds later. The original's own binding, labelled "Access Chase View" (`OriginalScreenshots/Keybinds Views 1.png`), which its own code settles as camera mode 9 rather than the following chase view. `F8` or `F6` leaves it; so does a respawn. Placement, radii and timing all come from `camparam.json` (`docs/formats/camparam.md`) |
 | `Shift+S` | Misc1 | arm or disarm the spyglass, on at level load. Armed, a selected target that is off screen and inside the fog-derived range gate is shown in a round inset picture at its edge marker, framed to a constant apparent size. The original's own chord ("Toggle Spyglass", `OriginalScreenshots/Keybinds Views 1.png`, which also gives it joystick button 5); Misc1 is the one pad control no other flight action holds |
-| `numpad 1–9` (not `5`) | | head-look snap, in **every** view: hold a direction and the head swings there, release and it returns straight ahead. **The original's own bindings** (`OriginalScreenshots/Keybinds Views 2.png`): `Kp8` Look Up, `Kp4`/`Kp6` Look Left/Right, `Kp2` Look Back, `Kp7`/`Kp9` Look Up/Left and Up/Right, `Kp1`/`Kp3` Look Up/Left/Rear and Up/Right/Rear. So dead ahead looks straight **up**, every diagonal 45° up, and the flanks and astern look level. In Cockpit or Nose the head aims; in the chase view the same head swings the camera around the aeroplane, so looking left puts the camera on the aircraft's starboard side and `Kp8` gives the belly plan view. One head, so a bearing taken in the cockpit is the bearing the chase view shows, and several keys down compose as one direction rather than the lowest digit winning |
+| `numpad 1–9` (not `5`) | | head-look, in **every** view, read through whichever look mode is live. In snap mode (`K`, the mode a level load starts in) hold a direction and the head swings to that key's fixed angle, release and it returns straight ahead. In smooth mode (`J`) a held direction pans the head at the decoded 2 rad/s the way the key points, diagonals included, and a released key leaves the head where it got to; `numpad 5` or `J` recentres it. A direction never changes the mode itself. **The original's own bindings** (`OriginalScreenshots/Keybinds Views 2.png`): `Kp8` Look Up, `Kp4`/`Kp6` Look Left/Right, `Kp2` Look Back, `Kp7`/`Kp9` Look Up/Left and Up/Right, `Kp1`/`Kp3` Look Up/Left/Rear and Up/Right/Rear. So in snap mode dead ahead looks straight **up**, every diagonal 45° up, and the flanks and astern look level. In Cockpit or Nose the head aims; in the chase view the same head swings the camera around the aeroplane, so looking left puts the camera on the aircraft's starboard side and `Kp8` gives the belly plan view. One head, so a bearing taken in the cockpit is the bearing the chase view shows, and several keys down compose as one direction rather than the lowest digit winning |
 | `numpad 5` | | recenter the head, in every view, the original's `Kp5` "Look Forward" (same screenshot), the middle of the cluster its eight directions surround |
-| RMB-held mouse | | free-look, in every view: the head pans at the decoded 2 rad/s in whichever direction the mouse moves, stopping hard at dead astern (±180°, the original's own stop) and at straight up. **The pose is held:** a mouse that has stopped moving holds the pose it reached, and so does letting the button go, because a pan puts the head in its smooth look mode and that mode leaves a frame with no look input alone (the original's own state 1). `K`, `numpad 5` or any numpad direction brings the head back. Elevation floors at level in Cockpit or Nose and a further quarter turn down, at straight down, in the chase view, each the floor the original's own placement passes the controller. Direction only, so a slow movement pans as fast as a quick one, the original's input is a hat switch. RMB-held matches the freecam's look posture; the mouse does nothing in flight otherwise. The pad does **not** ride this path: a stick has an absolute position to map and a mouse has none, so the stick aims absolutely (the right-stick row below) while the mouse keeps the original's relative law. The original's own `K`, `L` and `J` selectors name the mode as well (the three rows below): they and the device that moved write the same one mode, the last writer of a frame winning, so a mouse pan still switches to smooth over a `K` and a numpad direction still switches to snap over a `J`. Padlock is the exception, since it reads no look input at all and is left by its own exit rather than by the device that moved |
-| `K` | | snap look mode, the original's "Access Snap Look Mode" (`OriginalScreenshots/Keybinds Views 1.png`). A head in this mode sits straight ahead whenever nothing is pressed, or wherever the autohead points, which is where a numpad direction leaves it and where a level load starts it. Stated on the press edge, so holding the key does not pin the mode against a mouse pan. Keyboard only, as the original has it: it reaches no joystick button there |
+| MMB-held mouse | | free-look, in every view: the head pans at the decoded 2 rad/s in whichever direction the mouse moves, stopping hard at dead astern (±180°, the original's own stop) and at straight up. A mouse that has stopped moving under the held button holds the pose it reached. **Letting the button go follows the look mode**, the same two rules the numpad follows: in snap mode (`K`) the head springs back to straight ahead, and in smooth mode (`J`) it stays where the mouse left it, since that mode leaves a frame with no look input alone (the original's own state 1), until `numpad 5` or `J` recentres it. The original has no mouse look; this row is the port's addition, fitted to the original's two modes. Elevation floors at level in Cockpit or Nose and a further quarter turn down, at straight down, in the chase view, each the floor the original's own placement passes the controller. Direction only, so a slow movement pans as fast as a quick one, the original's input is a hat switch. The middle button leaves the two buttons beside it to the guns and the rockets; the freecam's own look posture stays on RMB, which it reads as an event rather than through the shipped table. The pad does **not** ride this path: a stick has an absolute position to map and a mouse has none, so the stick aims absolutely (the right-stick row below) while the mouse keeps the original's relative law. The mode is written only by the original's own `K`, `L` and `J` selectors (the three rows below) and by padlock's own exit; neither the mouse nor the numpad changes it |
+| `K` | | snap look mode, the original's "Access Snap Look Mode" (`OriginalScreenshots/Keybinds Views 1.png`). A head in this mode sits straight ahead whenever nothing is pressed, or wherever the autohead points, which is where a released numpad direction or a released mouse pan returns it and where a level load starts it. Stated on the press edge. Keyboard only, as the original has it: it reaches no joystick button there |
 | `L` | | Track Target, the original's `Views 1 → Track Target` (same screenshot) and its third look mode. Toggle it on and the head holds the selected target's own bearing every frame, in the cockpit as an aim and in the chase view as a swing of the camera onto the far side of the aeroplane, so target and aircraft stay in one frame. The bearing is taken whole: no rate limit of its own beyond the head's shared easing, no azimuth limit, so a target passing astern is followed across the tail by the short way round, and the only bound is the view's own elevation floor (level in Cockpit or Nose, a further quarter turn down in the chase view). With nothing selected the head idles as a released snap does, autohead included. **Any** look direction leaves the state, a numpad snap or a pan alike, and it leaves to snap rather than back to smooth; `numpad 5` and the pad's absolute stick do not, they are inert while it holds. A second `L` leaves it the same way. The same press-edge rule and the same keyboard-only default as `K`: the original gives it no joystick button either |
-| `J` | | smooth look mode, the original's "Access Smooth Look Mode" (same screenshot). It centres the head as the original's own handler does, then leaves it wherever an input puts it, which is where a mouse pan leaves it. The same press-edge rule and the same keyboard-only default as `K` |
+| `J` | | smooth look mode, the original's "Access Smooth Look Mode" (same screenshot). It centres the head as the original's own handler does, then leaves it wherever an input puts it: a held numpad direction or a mouse pan moves it at 2 rad/s and releasing either leaves it there. Autohead never runs in this mode. The same press-edge rule and the same keyboard-only default as `K` |
 | `numpad 0` | | hold the look-behind: in an external view the back camera (ahead of the nose looking back, at the authored `back_dist` range, `--view=back`); in Cockpit or Nose a head look-back, the head snapping to dead astern while held and returning on release, as the original does in both cockpit views |
 | `numpad +`/`−`, **outside first person** | | chase-camera zoom: hold `−` to back off, `+` to come back in. The view rests at its NEAR end, so the only travel available is outward, up to the decoded flat 10 m; the axis moves at the decoded 2/s and eases at 1.5/s, clamped `[0, 1]` (the original's External Camera Zoom In/Out, `OriginalScreenshots/Keybinds Views 2.png`, decode in `docs/org/cameraViews.md`). Shared by the chase camera, a snapped or panned chase view and the pad look-around, which read the same radius; the look-behind takes its own bounds and no zoom. Also bound in the weapon lab (above), where the same two keys drive the free orbit's dolly instead. Both readings poll the two keys directly rather than through a named action, so this pair is outside the shipped default table and is not rebindable |
-| | right stick | aim the view, absolutely, in every view: stick position is view position, over one shared envelope of ±150° round and ±60° up and down, returning to the settled pose as the stick centres. Outside first person it swings the camera around the plane; in Cockpit or Nose it aims the head, and it is the only input that aims the head below level there (the original's relative controls floor at level in first person, which would leave the bottom half of an absolute stick inert). Not in the original, a UX call for this port (`BL-372`); the scripted twin is `--look=x,y`. A pad reaches neither the straight-up of `numpad 8` nor the dead astern of the stick click: ±60° is the chase camera's gimbal margin, and widening it would gimbal that camera |
+| | right stick | aim the view, absolutely, in every view: stick position is view position, over one shared envelope of ±150° round and ±60° up and down, returning to the settled pose as the stick centres. Outside first person it swings the camera around the plane; in Cockpit or Nose it aims the head, and it is the only input that aims the head below level there (the original's relative controls floor at level in first person, which would leave the bottom half of an absolute stick inert). Not in the original, a UX call for this port (`BL-372`); the scripted twin is `--look=x,y`. A pad reaches neither the straight-up of `numpad 8` nor the dead astern of the stick click: ±60° is the chase camera's gimbal margin, and widening it would gimbal that camera. The raw stick passes a small centre band and a 40 ms lag before it aims anything, in both views, so the wobble a stick reports around a held position does not become the view's; letting go is not lagged, a stick back inside the band reads as released on the frame it gets there and each view starts its own return to centre then |
 | | click right stick | hold to look back, the pad twin of `numpad 0` (`BL-372`), with the same split: external back camera outside, in-cockpit head look-back in the first-person views |
 | `C` | | show the built colliders, coloured by the surface id they resolve to (see `--collision`), `--debug-colliders` |
 | `H` | | colour world objects by class (destructible/facade/clutter/scenery), `--debug-classoverlay`. Moved off `X`, which is the original's Fire Rockets, so a tint no longer toggles under every rocket shot. It stays a letter rather than joining the `F13` upward block because that block's numbers follow physical keys on the maintainer's own keypad |
@@ -104,12 +104,14 @@ reset (INSTR-64).
 ## Flying with the mouse
 
 A seat can fly with the mouse instead of leaving it to head-look. The choice is
-per seat and per player, and it lives on the launchscreen's CONTROLS page, in the
-box the original's Mouse Sensitivity slider stands in: the row reads **Look** for
-the scheme above and **Fly** for this one. It is staged like every other edit
-there, so ACCEPT CHANGES is what keeps it and CANCEL CHANGES puts it back, and it
+per seat and per player, and it lives on the launchscreen's CONTROLS page, on
+the Mouse panel's title line above the original's Mouse Sensitivity slider: the
+row reads **Look** for the scheme above and **Fly** for this one. Built-in's
+Controls screen carries the same two values as its Mouse sensitivity stepper and
+its scheme toggle. Both are staged like every other edit there, so ACCEPT CHANGES is what keeps it and CANCEL CHANGES puts it back, and it
 is saved in that player's own keymap file (`bindings_p<n>.json`) beside the rows
-the KEYS AND BUTTONS page writes. A pad-only splitscreen seat cannot take it,
+the KEYS AND BUTTONS page writes. Accepted over the pause, it takes hold on the
+seat already flying, with no restart. A pad-only splitscreen seat cannot take it,
 having no mouse of its own. The Controls page is where the other two schemes are
 chosen, so the third one is chosen there too, rather than in a preferences row
 that no seat owns.
@@ -138,27 +140,64 @@ device's wider band left every ordinary offset flying nothing. That narrower
 band is this port's rule, not a decoded one.
 
 **Free look is hold-to-look under both mouse schemes.** The free-look control
-(right mouse button by default, rebindable on the KEYS AND BUTTONS page's Views 1
+(middle mouse button by default, rebindable on the KEYS AND BUTTONS page's Views 1
 tab) routes the mouse to the head for exactly as long as it is held: while the
 scheme is on that takes the stick off the mouse for the same span, and the frame
 the control comes up the stick has the cursor back. Off the scheme the control is
 read the same way, which is what it always was, so the keyboard and pad schemes
 are untouched. A still mouse under a held control holds the look rather than
-recentring, the free-look row above.
+recentring; what a released control does follows the look mode, the free-look row
+above.
 
 **A flight session holds the mouse, under both schemes.** Player 1's seat takes
 the pointer while it flies and hides it, so the cursor cannot be left behind on a
 second monitor or clicked onto another window mid-sortie. Under capture the OS
 pointer stops moving, so the stick and head-look read relative motion instead:
-the travel is accumulated into a cursor confined to the pane, which reads the
-same deflection, the same dead bands and the same hold-to-look as the visible
-cursor did. Every board that draws its own pointer gets it back, since each of
+the travel is accumulated into a cursor confined to the pane, which reads through
+the same offset, the same gate and the same hold-to-look as the visible cursor
+did. Every board that draws its own pointer gets it back, since each of
 them halts the session: the pause sheet, the preferences page behind its
 PREFERENCES row, photo mode's free camera and the wrap-up boards. The resume
 takes it again, from where it stood. A pilot out of lives keeps the pointer, its
 pane being the spectator camera's. Nothing is taken on a headless host, in a
 `--det` run or in a scripted one, so the test desktop and the pinned shots read
 the mouse mode their launch set.
+
+**The captured stick is scaled in mouse counts, not pane pixels.** Relative
+motion arrives in the mouse's own counts, and adding those to the pane unscaled
+made full deflection half the pane's width in counts: 960 counts on a 1920-wide
+pane, 15 mm of hand travel on a 1600 dpi mouse, and shorter still on a narrower
+window. So each axis is scaled to put the pane's edge at
+`MouseCapture.FullDeflectionCounts` (2000) counts from the middle, on any pane
+size and on both axes alike:
+
+| mouse | full deflection | centre band |
+|---|---|---|
+| 800 dpi | 64 mm | 13 mm |
+| 1600 dpi | 32 mm | 6.4 mm |
+| 3200 dpi | 16 mm | 3.2 mm |
+
+The centre band is `MouseCapture.CentreBand`, 0.2 of that travel (400 counts),
+twice the original's 0.1, so a hand resting on the mouse holds the stick
+centred. Past the band the deflection rises in a straight line to full at the
+edge. Both numbers are this port's, chosen for the captured path only: the
+original read the desktop pointer over an 800x600 window, and the visible
+pointer (a seat that holds no capture) still flies the decoded 0.1 over pane
+pixels.
+
+**The sensitivity divides that travel.** Full deflection is
+`FullDeflectionCounts / s` counts, where `s` is the seat's sensitivity
+(`Bindings/SensitivityScale.cs`), so a higher setting needs less hand travel,
+and the centre band shrinks with it. `s` runs from 0.25 to 4 with 1 as the
+default, which keeps a keymap file written without it flying the table above.
+The table is worked for 1600 dpi; a factor of four either way puts the same
+32 mm of travel within reach of any mouse from 400 to 6400 dpi. The original's
+slider was authored 1 to 100 around 50, and it moved the desktop cursor, not a
+captured stick. This port's slider runs 0 to 100 with 50 as 1, and each 25
+levels doubles `s` (`s = 2^((level - 50) / 25)`), so the ends land exactly on
+0.25 and 4 and every step reads the same in either direction. A step is 5
+levels on both presentations, the slider's own key step, which multiplies `s`
+by about 1.15; Built-in prints the value as a multiplier, `1.00x`.
 
 ## Any mode
 
@@ -168,14 +207,15 @@ the mouse mode their launch set.
 | ↑↓ · `W`/`S` | d-pad ↑↓ · left stick | move the board menu's cursor. The stick counts as a press past half its travel |
 | ←→ · `A`/`D` | d-pad ←→ · left stick | step the value under the cursor, on the rows that carry one |
 | `Enter` · numpad `Enter` · `Space` | A | confirm the highlighted item |
-| `Esc` | B | close the pause menu, which Start also does from inside it. A results board's menu has no way back and reads none |
-| - | - | every board carries a footer naming the three rows above for the seat driving it, Select and Confirm plus Resume where the board can be dismissed: both pause boards (the Built-in panel and the Original sheet, where it stands with the strips) and every results board. It is composed off that seat's own bindings and the device it last used, so a pad seat reads its controls as glyphs where a keyboard seat reads key names, and it is rewritten the moment that seat reaches for the other device |
+| `Esc` | B | close the pause menu, which Start also does from inside it. A results board's menu has no way back and reads none; on its photographs it closes an open one, else returns the cursor to Photo Mode |
+| - | - | every results board carries a footer naming Select and Confirm for the seat driving it; neither pause board carries one, as the original's pause sheet has none. It is composed off that seat's own bindings and the device it last used, so a pad seat reads its controls as glyphs where a keyboard seat reads key names, and it is rewritten the moment that seat reaches for the other device |
 | `L` | Y | on a menu screen, open the loadout for whatever the screen is about (a wingman's fit, a locked player seat's) |
 | `P` | X | on a menu screen, open its contents list, which is the Instant Action presets today |
-| | Start | on a menu screen, claim a seat with a pad no seat owns yet. Which pad pressed it is a raw device read rather than an action, because a seat's bindings answer for every pad it holds at once and cannot say which one moved. The join gesture has no default of its own for the same reason |
+| | A · B · Start | the join board's three gestures, and the only place a pad joins: A signs the pad onto the next open seat, B on a seated pad gives that seat back, and the captain's Start (the first pad to sign on) casts off with the manifest as it stands. The board is behind the main menu's JOIN BOARD door; every other screen reads the roster it wrote and takes no join gesture of its own. Which pad pressed is a raw device read rather than an action, because a seat's bindings answer for every pad it holds at once and cannot say which one moved, so these three have no bindings of their own. The Built-in launchscreen behind `--force-builtin` keeps its own Start-to-join strip |
 | mouse · LMB | | on an Original menu screen, the pointer focuses whatever row it stands on and a click confirms it. Built-in's own pointer is the `mouse` row further down this table |
 | mouse wheel · thumb drag | | on an Original menu screen, a wheel step over a list moves that list's window by one row, and its scrollbar thumb can be dragged down the track, the window following in proportion. Every list takes both: the scrapbook's contents page, an open drop-down on a campaign board or in Plane Construction, Instant Action's dropdowns and its contents window, and the aircraft column on Free Flight and Dogfight. The wheel is a remake comfort on top of the decoded screens; the lists' own arrows are unchanged, and a list that fits its window ignores the wheel |
 | - | | a results board (mission wrap-up, dogfight, race, stunt run) halts the sim and carries its own Photo Mode · Restart · Exit menu, driven by player 1. The pause key does nothing while one is up. Photo Mode leads because the resting row must be the harmless one, and on a results board Restart throws away the run just finished |
+| ↑ from Photo Mode · mouse over a photograph | d-pad ↑ · left stick | on a stunt run's results board (the solo scoreboard and Instant Action's wrap-up board), moves the cursor onto the Danger Zone photographs, which stand above the menu as a grid: arrows walk the landed ones, a photograph whose frame is still on its way refuses the cursor, and ↓ out of the grid's last row returns to Photo Mode. Confirm or a click opens the photograph full size over the board; `Esc` (pad `B`), confirm or a click closes it with the cursor still on it. On Original's wrap-up page each landed print is a row that takes the same cursor, pointer and viewer |
 | - | | **while any board is up the camera holds still.** It keeps the pose it had when the board appeared, so moving the menu cursor no longer swings the view (`BL-429`); the free look is the Photo Mode row |
 | Photo Mode row | | hands that player's pane to the `--freecam` controls over the frozen world, hides the board and the whole pilot HUD, and starts locked onto your own aircraft so entering never jumps. The halt is never dropped, so it stays a still frame with the audio paused. `Esc` (pad `B`) brings the board back, leaving the camera where you flew it. Splitscreen: only the pausing player's pane, the other panes stay frozen |
 | - | | a pilot out of lives watches from the `--freecam` controls (WASD/QE move, RMB look, `F`/pad `X` to lock onto an aircraft) on its own pane. Splitscreen: each downed pilot's spectator reads only its own pad/keyboard (`BL-375`), two players watching at once move independently, not lockstep. Mouse look stays shared (one physical mouse) |

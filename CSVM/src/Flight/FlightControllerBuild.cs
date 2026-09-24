@@ -20,6 +20,11 @@ internal sealed class FlightControllerBuild
     /// unattended, so a crash auto-respawns after a short pause.</summary>
     public (FlightInput Input, float Duration)[]? HoldSegments;
 
+    /// <summary>A scheduled sequence of commanded-lever presses (sim-second, lever 0 to 1), the
+    /// scripted twin of the digit row. A capture that has to slam the throttle uses it. Null on every
+    /// ordinary run. It drives the keyboard arm, so a <see cref="HoldSegments"/> run ignores it.</summary>
+    public IReadOnlyList<(float At, float Lever)>? LeverSteps;
+
     /// <summary>A stick of the caller's own, taking precedence over every other arm. It exists for
     /// a scripted profile that has to close a loop on the aircraft's own state, which a timed
     /// segment list cannot: the plant has no auto-level, so "push for N seconds" flies a different
@@ -76,18 +81,51 @@ public partial class FlightController
     /// </summary>
     public Bindings.DeviceSide ActiveDeviceSide => _bindings.Device.Side;
 
+    /// <summary>Whether this seat flies with the mouse, the third scheme beside the keyboard and the
+    /// pad. It is the seat's own profile's flag (<see cref="Bindings.BindingProfile.MouseFlying"/>),
+    /// read through each frame rather than copied, and <see cref="ApplyProfile"/> is how a saved or
+    /// accepted Controls page reaches it. Holding the free-look control routes the mouse to the head
+    /// for as long as it is held, under this scheme and the other two alike. False, the default,
+    /// leaves the mouse to head-look and every other reader byte for byte.</summary>
+    public bool MouseFlying
+    {
+        get => _bindings.MouseFlying;
+        set => _bindings.MouseFlying = value;
+    }
+
+    /// <summary>How far this seat's captured mouse moves the stick, the multiplier on
+    /// <see cref="MouseCapture.FullDeflectionCounts"/>'s travel (higher is more sensitive). The seat's
+    /// own profile's value, read through each frame like <see cref="MouseFlying"/> and set the same
+    /// way, through <see cref="ApplyProfile"/>.</summary>
+    public float MouseSensitivity
+    {
+        get => _bindings.MouseSensitivity;
+        set => _bindings.MouseSensitivity = value;
+    }
+
     /// <summary>Puts this seat on the keymap its player saved, so it flies what the rebinding screen
     /// wrote. Anything the file does not carry, or this build cannot read, stays at that action's
     /// shipped default, and under the launch gate no file is read at all
     /// (<see cref="Bindings.LaunchBindings"/>). A human rig calls it from <see cref="Bind"/> once
     /// <see cref="PlayerIndex"/> is known; an AI rig never reads a player's file.</summary>
-    public void LoadSavedKeymap()
+    public void LoadSavedKeymap() =>
+        ApplyProfile(Bindings.LaunchBindings.Profile(PlayerIndex + 1, default, readsKeyboard: true));
+
+    /// <summary>Puts this seat on <paramref name="profile"/>'s flight rows, mouse scheme and mouse
+    /// sensitivity, the whole
+    /// of what a seat takes from its player's keymap, and recomposes the prompts that name them.
+    /// ⚠ The build's saved read and a Controls page accepted in flight both come through here, so
+    /// anything a seat takes from a profile goes in this one method: a value copied anywhere else is
+    /// one an accepted edit cannot reach until the seat is rebuilt.</summary>
+    public void ApplyProfile(Bindings.BindingProfile profile)
     {
-        // One load for both, since the scheme and the keymap are one saved record: two calls would
-        // read the file twice and could take the flag off a different read than the bindings.
-        var profile = Bindings.LaunchBindings.Profile(PlayerIndex + 1, default, readsKeyboard: true);
+        ArgumentNullException.ThrowIfNull(profile);
+        // One profile for both, since the scheme and the keymap are one saved record: taking them
+        // from two reads could put the flag and the bindings on different files.
         FlightKeymap.Fill(profile.Map(Bindings.InputContext.Flight));
         MouseFlying = profile.MouseFlying;
+        MouseSensitivity = profile.MouseSensitivity;
+        ComposeControlPrompts();
     }
 
     /// <summary>Puts this seat's control prompts on <paramref name="strings"/> and composes them
@@ -111,6 +149,7 @@ public partial class FlightController
         IsHumanPiloted = build.IsHumanPiloted;
         Pilot = build.Pilot;
         _holdSegments = build.HoldSegments;
+        _leverSteps = build.LeverSteps;
         _suppliedInputSource = build.InputSource;
         PlaneModel = build.PlaneModel;
         Props = build.Props;

@@ -11,18 +11,17 @@ namespace CSVM.UI.Menu.Original;
 public sealed record OriginalInstantActionInks(
     MenuLayoutColor Text, MenuLayoutColor LabelNormal, MenuLayoutColor LabelRollover, MenuLayoutColor LabelDepressed);
 
-/// <summary>
-/// The Original Instant Action screen and its Weapon Loadout, a standalone module over the shared
-/// <see cref="InstantActionFeature"/> and the decoded <c>[@InstantAction@]</c> and
-/// <c>[@OrdinanceLayout@]</c> sections: the contents window and its arrows, the dropdowns, the paged
-/// enemy rows, the radio pair and the five buttons, then one aeroplane's fit over the campaign's own
-/// ammo chrome. Decoded rules bound here: a contents row applies its preset, View Story writes its
-/// name, the ace duel blanks every enemy control, the wingman plane blanks at zero wingmen, stunt
-/// flying bars the clouds. The Pilot Plane list is the sortie screens' roster; Build opens the
-/// hangar wallet-free, Weapon Loadout the loadout screen for the seat the radio names, and the
-/// per-seat picker's own door lands there over that seat's fit. ACCEPT LOADOUT keeps the picks,
-/// CANCEL LOADOUT and Back restore. Readings: docs/org/menu-inventory.md, docs/formats/instant-action.md.
-/// </summary>
+/// <summary>The Original Instant Action screen and its Weapon Loadout, one standalone module over
+/// the shared <see cref="InstantActionFeature"/> and the decoded <c>[@InstantAction@]</c> and
+/// <c>[@OrdinanceLayout@]</c> sections. It draws the contents window and its arrows, the
+/// dropdowns, the paged enemy rows, the radio pair, the five buttons, and one aeroplane's fit.
+/// Decoded rules bound here: a contents row applies its preset, View Story writes its name, and
+/// the ace duel blanks every enemy control. The wingman plane blanks at zero wingmen, stunt
+/// flying bars the clouds, and the Pilot Plane list is the sortie screens' roster. Build opens
+/// the hangar wallet-free, Weapon Loadout the loadout screen for the seat the radio names, the
+/// per-seat picker's door that seat's own fit. The loadout half stands on the campaign's own ammo
+/// chrome: ACCEPT LOADOUT keeps the picks, CANCEL LOADOUT and Back restore
+/// (docs/org/menu-inventory.md, docs/formats/instant-action.md).</summary>
 public sealed class OriginalInstantActionScreen : IOriginalScreenModule
 {
     /// <summary>The layout section the screen is composed from.</summary>
@@ -119,19 +118,20 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     private const int RocketTitleLabel = 3380;
     private const int RocketBodyLabel = 3410;
 
-    // The four colours a list and a box mark with, measured off the film: no layout row authors a
-    // dropdown's paper, the band under its picked row, the lighter band under the row the pointer
-    // is on, or the cream a closed box's outline is redrawn in while the pointer stands on it.
+    // The four colours a list and a box mark with, measured off the film. No layout row authors a
+    // dropdown's paper, the band under its picked row, or the lighter band under the row the
+    // pointer is on. No row authors the cream a closed box's outline is redrawn in while the
+    // pointer stands on it.
     private const byte ListPaperR = 216, ListPaperG = 200, ListPaperB = 166;
     private const byte PickedRowR = 200, PickedRowG = 151, PickedRowB = 80;
     private const byte HoveredRowR = 220, HoveredRowG = 181, HoveredRowB = 124;
     private const byte LitBoxR = 246, LitBoxG = 237, LitBoxB = 214;
 
     // The lives box's own measurements, the section authoring it none. Its line is not written
-    // down: LivesLine reads the setup stack and takes the first clear one, which on the shipped
-    // layout is the skipped line between the Wingmen row (Y 235) and the Mission row (Y 280),
-    // beside the mission type dropdown. ⚠ Never write a Y here. A hardcoded line lands on an
-    // authored box the moment the layout spaces its rows differently, and the reader's does.
+    // down. LivesLine reads the setup stack and takes the first clear one. That is the line the
+    // shipped layout skips between the Wingmen row (Y 235) and the Mission row (Y 280), beside the
+    // mission type dropdown. ⚠ Never write a Y here. A hardcoded line lands on an authored box the
+    // moment the layout spaces its rows differently, and the reader's does.
     private const float LivesWidth = 90f;
     private const float LivesFallbackX = 525f;
     private const float LivesFallbackY = 260f;
@@ -171,16 +171,15 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     private string? _loadoutNode;
     private string _loadoutName = string.Empty;
     // The seat whose own fit the screen is editing, set only by the per-seat picker's door and null
-    // for the Instant Action strip's. It is what says the screen belongs to a walk in progress, so
-    // the walk survives the trip and the return lands back on the picker rather than on Instant
-    // Action.
+    // for the Instant Action strip's. It is what says the screen belongs to a walk in progress. The
+    // walk survives the trip, and the return lands back on the picker rather than on Instant Action.
     private PlayerSeat? _loadoutSeat;
 
     /// <summary>An Instant Action module over <paramref name="instantAction"/>, the seats
-    /// <paramref name="setup"/> holds and the build store its Pilot Plane list reads, composing
-    /// <paramref name="layout"/>'s own sections and calling back into <paramref name="host"/> for the
-    /// state and the seams every screen family shares. <paramref name="stock"/> answers the stock
-    /// weapon table the loadout screen's fields stand over.</summary>
+    /// <paramref name="setup"/> holds and the build store its Pilot Plane list reads. It composes
+    /// <paramref name="layout"/>'s own sections and calls back into <paramref name="host"/> for the
+    /// state and the seams every screen family shares. The table <paramref name="stock"/> answers
+    /// the stock weapons the loadout screen's fields stand over.</summary>
     public OriginalInstantActionScreen(
         InstantActionFeature instantAction, PlayerSetupFeature setup, CustomPlaneStore? planes, MenuLayout layout,
         Func<string, (int Width, int Height)?> measure, IOriginalScreenHost host,
@@ -246,8 +245,8 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     /// <summary>Whose loadout the Weapon Loadout button targets: 0 the pilot, 1 the wingmen.</summary>
     public int LoadoutTarget => _iaRadio;
 
-    /// <summary>The pilot's fit, seat 0's own so the sortie screens and this one edit one choice; a
-    /// shell with no seat joined keeps a spare so the screen still works.</summary>
+    /// <summary>The pilot's fit, seat 0's own so the sortie screens and this one edit one choice.
+    /// A shell with no seat joined keeps a spare so the screen still works.</summary>
     public LoadoutChoice PilotFit => Seat0?.Fit ?? (_iaSpareFit ??= new LoadoutChoice());
 
     /// <summary>The story title View Story last wrote, or "".</summary>
@@ -256,8 +255,8 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     /// <summary>The fit the loadout screen is editing, or null while it is not showing.</summary>
     public LoadoutChoice? LoadoutFit => _loadoutFit;
 
-    /// <summary>The seat the loadout screen is editing for, as its index, or -1 when it is not
-    /// showing or was opened from the Instant Action screen instead.</summary>
+    /// <summary>The seat the loadout screen is editing for, as its index. It is -1 when the screen
+    /// is not showing, or when the Instant Action screen opened it.</summary>
     public int LoadoutSeat => _loadoutSeat is { } seat ? SeatIndex(seat) : -1;
 
     /// <summary>The stock node whose fit the loadout screen is editing, or null while it is not showing.</summary>
@@ -287,13 +286,13 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     }
 
     /// <summary>Re-reads the saved builds into the Pilot Plane list through the sortie screens'
-    /// roster rule. Every entry to the screen calls it; a return from the hangar calls it too, so
-    /// a build saved there is offered without leaving the screen.</summary>
+    /// roster rule. Every entry to the screen calls it, and a return from the hangar calls it too.
+    /// A build saved there is therefore offered without leaving the screen.</summary>
     public void RefreshRoster() =>
         _iaPilotRoster = OriginalRosters.Roster(_planes?.List() ?? Array.Empty<CustomPlaneDef>());
 
-    /// <summary>Opens one of the screen's dropdowns as a press on it would, for a scripted pose;
-    /// false when the screen is not showing or the key names no dropdown.</summary>
+    /// <summary>Opens one of the screen's dropdowns as a press on it would, for a scripted pose.
+    /// It answers false when the screen is not showing or the key names no dropdown.</summary>
     public bool OpenDropdownOn(string key)
     {
         if (_host.Screen != OriginalScreen.InstantAction || DropdownFor(key) is not { } list)
@@ -321,9 +320,9 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         return true;
     }
 
-    /// <summary>Opens the Weapon Loadout for the seat the radio pair names: the wingmen's airframe
-    /// and shared fit, or the picked pilot row (a build edits its own purchased fit) and seat
-    /// 0's fit. The picks standing on entry are remembered for CANCEL.</summary>
+    /// <summary>Opens the Weapon Loadout for the seat the radio pair names. That is the wingmen's
+    /// airframe and shared fit, or the picked pilot row and seat 0's fit. A build edits its own
+    /// purchased fit. The picks standing on entry are remembered for CANCEL.</summary>
     public void OpenLoadout()
     {
         if (_iaRadio == 1)
@@ -339,9 +338,9 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         }
     }
 
-    /// <summary>The per-seat picker's WEAPON LOADOUT: the seat's own fit over the airframe it has
-    /// selected, named for the seat so the screen says whose loadout it is. Its own storage and no
-    /// other's, so one pilot's picks cannot reach another's aeroplane.</summary>
+    /// <summary>The per-seat picker's WEAPON LOADOUT, the seat's own fit over the airframe it has
+    /// selected. It is named for the seat, so the screen says whose loadout it is. Its own storage
+    /// and no other's, so one pilot's picks cannot reach another's aeroplane.</summary>
     public void OpenSeatLoadout(PlayerSeat seat)
     {
         var roster = _setup.Roster;
@@ -354,8 +353,8 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         BeginLoadout(row.Node, $"P{SeatIndex(seat) + 1}  {row.Name}", seat.Fit, seat, row.Custom);
     }
 
-    /// <summary>Forgets what the loadout screen was editing without deciding where to go next, which
-    /// is what a walk losing its picking seat mid-edit needs: the fit belongs to a seat that has
+    /// <summary>Forgets what the loadout screen was editing without deciding where to go next. A
+    /// walk losing its picking seat mid-edit needs that, the fit belonging to a seat that has
     /// left.</summary>
     public void DropLoadout()
     {
@@ -383,9 +382,9 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         }
     }
 
-    /// <summary>The showing screen's scrolling lists for the pointer: an open dropdown's list alone
-    /// while one stands (on the loadout screen too, whose section has no contents window), else the
-    /// contents window.</summary>
+    /// <summary>The showing screen's scrolling lists for the pointer. While a dropdown stands open
+    /// its list is the only one, on the loadout screen too, whose section has no contents window.
+    /// Otherwise it is the contents window.</summary>
     public void Lists(List<OriginalList> lists)
     {
         var screen = _layout.Screen(_host.Screen == OriginalScreen.InstantActionLoadout ? LoadoutSection : InstantActionSection);
@@ -488,28 +487,24 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         return false;
     }
 
-    /// <summary>The showing screen as drawn. Neither of these two pages writes a note or a stroke,
-    /// the prose layer being the hangar's description box alone and the pen the campaign scrapbook's,
-    /// so <paramref name="notes"/> and <paramref name="strokes"/> stand unused; both are here
-    /// because one signature serves every module's dispatch.</summary>
-    public void Compose(
-        IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> backdrop, List<BoardPicture> pictures,
-        List<BoardFill> fills, List<BoardStroke> strokes, List<BoardLine> lines, List<BoardPlaque> plaques,
-        List<BoardNote> notes, List<BoardPanel> overlays)
+    /// <summary>The showing screen as drawn. Neither page writes a note or a stroke, since the
+    /// prose layer is the hangar's description box alone and the pen is the campaign scrapbook's.
+    /// Those two layers of <paramref name="layers"/> stand untouched here.</summary>
+    public void Compose(IReadOnlyList<OriginalRow> rows, int focus, BoardLayers layers)
     {
         if (_host.Screen == OriginalScreen.InstantActionLoadout)
         {
-            ComposeLoadout(rows, focus, backdrop, pictures, fills, lines, plaques, overlays);
+            ComposeLoadout(rows, focus, layers);
         }
         else
         {
-            ComposeInstantAction(rows, focus, backdrop, pictures, fills, lines, plaques, overlays);
+            ComposeInstantAction(rows, focus, layers);
         }
     }
 
-    // The rest of this class stays in the original's own narrative order (a helper beside the entry
-    // point it serves, the loadout screen's own half after the setup screen's) rather than hoisted
-    // into blocks for the ordering rules' sake, the same trade OriginalHangarScreen.cs makes.
+    // The rest of this class stays in the original's own narrative order. A helper stands beside the
+    // entry point it serves, and the loadout screen's own half after the setup screen's. Nothing is
+    // hoisted into blocks for the ordering rules' sake, the same trade OriginalHangarScreen.cs makes.
 #pragma warning disable SA1201, SA1202, SA1204
 
     private PlayerSeat? Seat0 => _setup.Seats.Count > 0 ? _setup.Seats[0] : null;
@@ -559,7 +554,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     private static (float X, float Y, float Width, float Height) DropBox(MenuLayoutWidget widget) =>
         (widget.Int("X"), widget.Int("Y"), widget.Int("Width", (int)FallbackDropWidth), widget.Int("ItemHeight", (int)FallbackItemHeight));
 
-    // The setup column as the layout authors it: the pilot and wingman rows, the mission and
+    // The setup column as the layout authors it. It is the pilot and wingman rows, the mission and
     // environment rows, and the first wave's boxes, which are the last of the column. The lives
     // box's line is found in the gaps between these.
     private static IEnumerable<string> LivesStackKeys()
@@ -612,8 +607,8 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         return int.TryParse(key[(ContentsKey.Length + 1)..], NumberStyles.Integer, CultureInfo.InvariantCulture, out int i) ? i : -1;
     }
 
-    // The stock airframe a roster row flies as, matched on the node rather than the row's name:
-    // a build's row is named for the build, and a name-keyed lookup would land on the wrong def.
+    // The stock airframe a roster row flies as, matched on the node rather than the row's name.
+    // A build's row is named for the build, so a name-keyed lookup would land on the wrong def.
     private static InstantActionAirframe? AirframeOf(MenuAircraft row)
     {
         foreach (var airframe in InstantActionFeature.Airframes)
@@ -670,8 +665,8 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             return null;
         }
 
-        // The remake-only box has no widget to read a window off, so its list shows every item
-        // and hangs no scroll chrome, which is what the shared rule does with no widget.
+        // The remake-only box has no widget to read a window off. Its list therefore shows every
+        // item and hangs no scroll chrome, which is what the shared rule does with no widget.
         if (key == LivesKey)
         {
             return OriginalDropLists.Over(key, null, list.Items, LivesBox(screen));
@@ -682,9 +677,9 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             : null;
     }
 
-    // The screen's widgets in focus order: the left page (the contents window, its arrows, View
-    // Story, Build) as column 0, the right page (the dropdowns of the shown enemy page, the paging
-    // button, the radio pair, Weapon Loadout, Fly Mission, Exit) as column 1.
+    // The screen's widgets in focus order. Column 0 is the left page: the contents window, its
+    // arrows, View Story and Build. Column 1 is the right page: the dropdowns of the shown enemy
+    // page, the paging button, the radio pair, Weapon Loadout, Fly Mission and Exit.
     private void BuildInstantActionWidgets(MenuLayoutScreen screen, List<OriginalRow> rows)
     {
         var presets = InstantActionFeature.Presets;
@@ -695,9 +690,9 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             float x = list.Int("X");
             float y = list.Int("Y");
             float width = list.Int("Width", 277);
-            // The list's own arrows stand inside its right edge, in the gutter the page's art
-            // paints there, the up arrow at the top of the window and the down arrow at its foot;
-            // each is live only while there is more list that way, and the rows keep off the column.
+            // The list's own arrows stand inside its right edge, in the gutter the page's art paints
+            // there. The up arrow is at the top of the window and the down arrow at its foot. Each
+            // is live only while there is more list that way, and the rows keep off the column.
             var up = StripArt(list.Art, 1);
             var down = StripArt(list.Art, 2);
             var upSize = StripSize(up, FallbackArrowWidth, FallbackArrowHeight);
@@ -721,8 +716,8 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         AddStrip(screen, rows, BuildKey, OriginalRowKind.Button, _host.CanBuildPlane, 0);
 
         // A box a setting has nothing to say through keeps its place blank and inert rather than
-        // leaving the page: the wingman plane at zero wingmen, every enemy box under the ace duel
-        // and a wave's militia, skill and aircraft while it carries nobody.
+        // leaving the page. That covers the wingman plane at zero wingmen, every enemy box under
+        // the ace duel, a wave's militia, skill and aircraft while it carries nobody.
         if (_iaPage == 0)
         {
             AddDropdown(screen, rows, PlayerPlaneKey);
@@ -741,7 +736,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         }
 
         // Both paging buttons stand on both pages, the one with nowhere to go in its disabled
-        // frame; the ace duel still pages, its later waves blank like the first.
+        // frame. The ace duel still pages, its later waves blank like the first.
         AddStrip(screen, rows, PageUpKey, OriginalRowKind.Button, _iaPage > 0, 1);
         AddStrip(screen, rows, PageDownKey, OriginalRowKind.Button, _iaPage == 0, 1);
 
@@ -753,8 +748,8 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     }
 
     // The lives box, this port's own control in the screen's dropdown idiom. It is no enemy
-    // control, so the ace duel leaves it live where it blanks the wave boxes, and no preset carries
-    // a lives value, so a contents row leaves it alone.
+    // control, so the ace duel leaves it live where it blanks the wave boxes. No preset carries a
+    // lives value, so a contents row leaves it alone.
     private void AddLives(MenuLayoutScreen screen, List<OriginalRow> rows)
     {
         var list = LivesDropdown();
@@ -763,9 +758,9 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             OriginalRowKind.Dropdown, box.X, box.Y, box.Width, box.Height, true, 1, LivesArrow(screen)));
     }
 
-    // The lives box's rectangle: the mission dropdown's left edge and item height, so the
-    // remake-only row stands in the setup column at the height every other box there draws, and
-    // the first clear line that column leaves.
+    // The lives box's rectangle takes the mission dropdown's left edge and item height. The
+    // remake-only row therefore stands in the setup column at the height every other box there
+    // draws. Its line is the first clear one that column leaves.
     private (float X, float Y, float Width, float Height) LivesBox(MenuLayoutScreen screen)
     {
         var mission = screen.Widget(MissionKey) is { } widget ? DropBox(widget) : default;
@@ -774,10 +769,10 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     }
 
     // The line the lives box takes: the first gap in the setup stack tall enough to hold it,
-    // centred in that gap. The shipped layout skips a line between the wingman and mission rows
-    // and another above the enemy block, and this takes the first, which is the one beside the
-    // mission type dropdown. A layout that skips none puts the box under the stack instead, which
-    // is honest about the crowding rather than drawing the box over an authored one.
+    // centred in that gap. The shipped layout skips a line between the wingman and mission rows and
+    // another above the enemy block. This takes the first, the one beside the mission type
+    // dropdown. A layout that skips none puts the box under the stack instead. That is honest about
+    // the crowding rather than drawing the box over an authored one.
     private float LivesLine(MenuLayoutScreen screen, float height)
     {
         var stack = new List<(float Top, float Bottom)>();
@@ -804,8 +799,8 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     }
 
 
-    // The lives box's closed-box arrow, taken off a dropdown the section does author (art 4 is
-    // every D row's own), so the remake-only row wears the page's chrome rather than a named file.
+    // The lives box's closed-box arrow, taken off a dropdown the section does author. Art 4 is
+    // every D row's own, so the remake-only row wears the page's chrome rather than a named file.
     private BoardArt? LivesArrow(MenuLayoutScreen screen) =>
         screen.Widget(MissionKey) is { } mission ? StripArt(mission.Art, 4) : null;
 
@@ -823,7 +818,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     }
 
     // One wave's four boxes. The ace duel takes no wave configuration at all, so even the count
-    // goes blank; an empty wave still offers its count and blanks only what a militia would fill.
+    // goes blank. An empty wave still offers its count and blanks only what a militia would fill.
     private void AddWave(MenuLayoutScreen screen, List<OriginalRow> rows, int wave)
     {
         bool counted = !_instantAction.IsAceDuel;
@@ -836,8 +831,8 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         }
     }
 
-    // A dropdown that is not live still stands where the layout puts it, with no value written
-    // and its arrow in the disabled frame, which is how the page reads a setting as unavailable.
+    // A dropdown that is not live still stands where the layout puts it, with no value written and
+    // its arrow in the disabled frame. That is how the page reads a setting as unavailable.
     private void AddDropdown(MenuLayoutScreen screen, List<OriginalRow> rows, string key, int column = 1, bool live = true)
     {
         if (screen.Widget(key) is not { } widget || DropdownFor(key) is not { } list)
@@ -884,16 +879,17 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         return _iaContentsTop;
     }
 
-    // The pilot's list over the roster; the wingman's stays the stock table (the original offers
-    // the wingmen no builds), so the two dropdowns are built apart on purpose.
+    // The pilot's list stands over the roster. The wingman's stays the stock table, the original
+    // offering the wingmen no builds, so the two dropdowns are built apart on purpose.
     private DropdownList PilotDropdown() =>
         new(Names(_iaPilotRoster, PilotRowText), PilotRow, _ => true, SelectPilotRow);
 
     private DropdownList WingmanPlaneDropdown() =>
         new(Names(InstantActionFeature.Airframes, a => a.Name), _instantAction.WingmanPlaneIndex, _ => true, _instantAction.SelectWingmanPlane);
 
-    // A pick moves the feature onto the row's stock airframe either way, so the presets, the def's
-    // nominal name and the wingman screens keep the stock vocabulary; the build rides as the overlay.
+    // A pick moves the feature onto the row's stock airframe either way. The presets, the def's
+    // nominal name and the wingman screens keep the stock vocabulary, and the build rides as the
+    // overlay.
     private void SelectPilotRow(int row)
     {
         if (row < 0 || row >= _iaPilotRoster.Count)
@@ -917,7 +913,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         DropPilotFitIfMoved(before);
     }
 
-    // A changed airframe drops the pilot's fit, the wingman rule applied to the pilot: gun slots
+    // A changed airframe drops the pilot's fit, the wingman rule applied to the pilot. Gun slots
     // and pylons are per airframe, so a fit for one has nowhere to live on another.
     private void DropPilotFitIfMoved(string before)
     {
@@ -1024,7 +1020,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
                         break;
                     default:
                         // Selecting a contents row applies its preset over every other control,
-                        // the list's own select callback; the environment is re-confirmed so the
+                        // the list's own select callback. The environment is re-confirmed, so the
                         // launch's base def follows the preset's chapter.
                         string before = _instantAction.PlayerPlane.Node;
                         _instantAction.ApplyPreset(int.Parse(suffix, CultureInfo.InvariantCulture));
@@ -1122,8 +1118,8 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     }
 
     // The contents list's window, its thumb inside the list's right edge on the track between the
-    // two arrows, placed by how far the window has scrolled and as long as the share of the list
-    // that window shows; null while the presets fit the window.
+    // two arrows. The thumb is placed by how far the window has scrolled, and is as long as the
+    // share of the list that window shows. It is null while the presets fit the window.
     private ListWindow? ContentsWindow(MenuLayoutWidget list)
     {
         int window = Math.Max(1, list.Int("TotalDisplayed", 14));
@@ -1149,8 +1145,9 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             y + arrow.Height, trackHeight, count, window, top);
     }
 
-    // An open dropdown's list window under its box: the authored TotalDisplayed rows, the arrows
-    // inside its right edge and the thumb between them; null while the items fit the window.
+    // An open dropdown's list window under its box. It is the authored TotalDisplayed rows, the
+    // arrows inside its right edge and the thumb between them. It is null while the items fit the
+    // window.
     private ListWindow? OpenListWindow(MenuLayoutScreen screen) =>
         OpenInstantActionDrop(screen) is { } drop ? OriginalDropLists.Window(drop, _iaListTop, StripSize) : null;
 
@@ -1165,11 +1162,9 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         }
     }
 
-    // The screen as drawn: the background under everything, the text rows, the widgets in their
-    // states, and an open list as the overlay over the finished page.
-    private void ComposeInstantAction(
-        IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> backdrop, List<BoardPicture> pictures,
-        List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPanel> overlays)
+    // The screen as drawn. It is the background under everything, the text rows, the widgets in
+    // their states, and an open list as the overlay over the finished page.
+    private void ComposeInstantAction(IReadOnlyList<OriginalRow> rows, int focus, BoardLayers layers)
     {
         var screen = _layout.Screen(InstantActionSection);
         if (screen == null)
@@ -1179,10 +1174,11 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
 
         if (screen.Widget("IA_BackGround") is { Art.Count: > 0 } background)
         {
-            backdrop.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, background.Art[0], Math.Max(1, background.Frames)),
+            layers.Backdrop.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, background.Art[0], Math.Max(1, background.Frames)),
                 background.Int("X"), background.Int("Y")));
         }
 
+        var lines = layers.Lines;
         AddText(screen, lines, "IA_T_TABLETITLE", TitleFont);
         AddText(screen, lines, "IA_T_TABLEINSTR", InstructionFont);
         AddText(screen, lines, "IA_T_STORYINSTR", InstructionFont);
@@ -1194,7 +1190,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             AddText(screen, lines, "IA_T_PILOTPLANETITLE", LabelFont);
             AddText(screen, lines, "IA_T_WINGMANTITLE", LabelFont);
             // The lives box's own title, written here rather than through a layout row because the
-            // section authors none, in the column and the ink every authored title takes.
+            // section authors none. It stands in the column and the ink every authored title takes.
             lines.Add(new BoardLine(LivesLabelText, LivesTitleX(screen), LivesBox(screen).Y, 0f, LabelFont, BoardInk.Heading));
             AddText(screen, lines, "IA_T_MISSIONTITLE", LabelFont);
             AddText(screen, lines, "IA_T_ENVIRONMENTTITLE", LabelFont);
@@ -1209,7 +1205,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             AddText(screen, lines, "IA_T_GOBACK", InstructionFont);
         }
 
-        // With a list open the rows are its items; the page under it is drawn from the closed
+        // With a list open the rows are its items. The page under it is drawn from the closed
         // widgets with the open dropdown focused, and the items become the overlay.
         IReadOnlyList<OriginalRow> widgets = rows;
         int widgetFocus = focus;
@@ -1230,36 +1226,35 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             }
         }
 
-        // The pointer's own row is named rather than indexed, since with a list open the page under
-        // it is a rebuilt set of closed widgets whose indices are not the hit-tested rows'; the hit
-        // is re-checked, since an activation can swap the row set out from under an earlier index.
+        // The pointer's own row is named rather than indexed. With a list open the page under it is
+        // a rebuilt set of closed widgets, whose indices are not the hit-tested rows'. The hit is
+        // re-checked, since an activation can swap the row set out from under an earlier index.
         int hover = _host.HoveredRow;
         string? under = hover >= 0 && hover < rows.Count && _host.Pointer is { } at && rows[hover].Contains(at.X, at.Y)
             ? rows[hover].Key
             : null;
-        ComposeContentsThumb(screen, pictures);
+        ComposeContentsThumb(screen, layers.Pictures);
         for (int i = 0; i < widgets.Count; i++)
         {
-            ComposeRow(widgets[i], i == widgetFocus, i == widgetPressed, i, fills, lines, plaques, pictures,
-                lit: widgets[i].Key == under);
+            ComposeRow(widgets[i], i == widgetFocus, i == widgetPressed, i, layers, lit: widgets[i].Key == under);
         }
 
         if (_iaOpen != null)
         {
-            ComposeOpenList(screen, rows, focus, overlays, ItemFont);
+            ComposeOpenList(screen, rows, focus, layers.Overlays, ItemFont);
         }
 
-        // The seat strip in the same desk-margin band as the campaign boards': the page's own
-        // words start at IA_T_TABLETITLE (155, 94), so the top-left corner is clear.
+        // The seat strip stands in the same desk-margin band as the campaign boards'. The page's
+        // own words start at IA_T_TABLETITLE (155, 94), so the top-left corner is clear.
         if (_host.SeatPanel(onPaper: true) is { } strip)
         {
-            overlays.Add(strip);
+            layers.Overlays.Add(strip);
         }
     }
 
-    // An open list as the overlay over the finished page: the visible items on a paper panel with
-    // the focused one marked, then the arrows and the thumb once the list outruns its window. The
-    // loadout screen's lists come through here too, in their own item font.
+    // An open list as the overlay over the finished page. It draws the visible items on a paper
+    // panel with the focused one marked. The arrows and the thumb follow once the list outruns its
+    // window. The loadout screen's lists come through here too, in their own item font.
     private void ComposeOpenList(MenuLayoutScreen screen, IReadOnlyList<OriginalRow> rows, int focus, List<BoardPanel> overlays, float itemFont)
     {
         var panelFills = new List<BoardFill>();
@@ -1277,7 +1272,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             }
         }
 
-        // The paper runs the authored box's full width, the scroll column included: the rows gave
+        // The paper runs the authored box's full width, the scroll column included. The rows gave
         // that column up so their bands and their words keep off the chrome, not the panel.
         float panelWidth = _iaOpen != null && screen.Widget(_iaOpen) is { } opened ? DropBox(opened).Width : width;
         if (top < bottom)
@@ -1288,7 +1283,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
 
         // The list carries two bands at once, the picked value's and the row the cursor is on.
         // The picked one wins where they meet, so a row never wears two and an untouched list
-        // still says what is picked; the words stay the page's own ink under either.
+        // still says what is picked. The words stay the page's own ink under either.
         int picked = _iaOpen != null && DropdownFor(_iaOpen) is { } open ? open.Current : -1;
         int pressed = _host.PressedRow;
         for (int i = 0; i < rows.Count; i++)
@@ -1330,13 +1325,14 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
 
     // One row of either paper page as drawn. ⚠ Do not move the dropdown's printed box onto the
     // focus alone. These pages draw it on every frame in black, which reads as a printed form
-    // field and is the look they want; the Preferences family's painted plates are the pages that
-    // take a focus box instead (OriginalShell.ComposePlateRow).
+    // field and is the look they want. The Preferences family's painted plates take a focus box
+    // instead (OriginalShell.ComposePlateRow).
     private void ComposeRow(
-        OriginalRow row, bool focused, bool pressed, int index,
-        List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPicture> pictures,
+        OriginalRow row, bool focused, bool pressed, int index, BoardLayers layers,
         float itemFont = ItemFont, bool lit = false)
     {
+        var fills = layers.Fills;
+        var lines = layers.Lines;
         switch (row.Kind)
         {
             case OriginalRowKind.ListRow:
@@ -1356,9 +1352,9 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
                     focused ? BoardInk.RowFocused : BoardInk.Row, index));
                 break;
             case OriginalRowKind.Dropdown:
-                // Under the pointer the printed black box is redrawn in the page's own cream,
-                // which is the whole of the rollover: the fill inside it does not move. The wash
-                // stays for a row a keyboard or pad walked onto, so the two never land together.
+                // Under the pointer the printed black box is redrawn in the page's own cream. That
+                // is the whole of the rollover, the fill inside it not moving. The wash stays for
+                // a row a keyboard or pad walked onto, so the two never land together.
                 if (focused && !lit)
                 {
                     fills.Add(new BoardFill(row.X, row.Y, row.Width, row.Height, 0, 0, 0, 0.10f));
@@ -1374,7 +1370,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
                     var size = StripSize(row.Art, FallbackArrowWidth, FallbackArrowHeight);
                     arrowWidth = size.Width;
                     int frame = row.Enabled ? ComposedBoard.PlaqueFrame(row.Art.Frames, focused, pressed) : 0;
-                    pictures.Add(new BoardPicture(row.Art, row.X + row.Width - size.Width, row.Y + ((row.Height - size.Height) / 2f), frame));
+                    layers.Pictures.Add(new BoardPicture(row.Art, row.X + row.Width - size.Width, row.Y + ((row.Height - size.Height) / 2f), frame));
                 }
 
                 lines.Add(new BoardLine(row.Label, row.X + 4f, row.Y + 2f, Math.Max(1f, row.Width - arrowWidth - 6f), itemFont,
@@ -1384,23 +1380,23 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
                 // An eight-state strip: the four button states unmarked, then the same four marked.
                 bool checkedRadio = (row.Key == PlayerRadioKey) == (_iaRadio == 0);
                 int state = row.Enabled ? (pressed ? 3 : focused ? 2 : 1) : 0;
-                plaques.Add(new BoardPlaque(row.Art, row.X, row.Y, index, (checkedRadio ? 4 : 0) + state, string.Empty, BoardInk.LabelNormal));
+                layers.Plaques.Add(new BoardPlaque(row.Art, row.X, row.Y, index, (checkedRadio ? 4 : 0) + state, string.Empty, BoardInk.LabelNormal));
                 break;
             case OriginalRowKind.TextButton when row.Art != null:
                 int labelFrame = row.Enabled ? ComposedBoard.PlaqueFrame(row.Art.Frames, focused, pressed) : 0;
                 var ink = row.Enabled ? ComposedBoard.PlaqueInk(focused, pressed) : BoardInk.Detail;
-                plaques.Add(new BoardPlaque(row.Art, row.X, row.Y, index, labelFrame, row.Label, ink));
+                layers.Plaques.Add(new BoardPlaque(row.Art, row.X, row.Y, index, labelFrame, row.Label, ink));
                 break;
             case OriginalRowKind.Button when row.Art != null:
                 int stripFrame = row.Enabled ? ComposedBoard.PlaqueFrame(row.Art.Frames, focused, pressed) : 0;
-                plaques.Add(new BoardPlaque(row.Art, row.X, row.Y, index, stripFrame, string.Empty, BoardInk.LabelNormal));
+                layers.Plaques.Add(new BoardPlaque(row.Art, row.X, row.Y, index, stripFrame, string.Empty, BoardInk.LabelNormal));
                 break;
         }
     }
 
-    // The contents list's slider thumb, on the track between its two arrows, placed by how far the
-    // window has scrolled and stretched to the length the window gives it, which is what says how
-    // much of the list is in view.
+    // The contents list's slider thumb, on the track between its two arrows. It is placed by how
+    // far the window has scrolled and stretched to the length the window gives it. That length is
+    // what says how much of the list is in view.
     private void ComposeContentsThumb(MenuLayoutScreen screen, List<BoardPicture> pictures)
     {
         if (screen.Widget(ContentsKey) is { } list && StripArt(list.Art, 0, 1) is { } thumb && ContentsWindow(list) is { } window)
@@ -1441,17 +1437,17 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         return -1;
     }
 
-    // The fill-order entry a physical pylon occupies inside the def's fit, or -1 when the
-    // aeroplane hangs no hardpoint there and the screen therefore draws no field. An entry the
-    // fit leaves on the empty sentinel is no hardpoint either: it holds a fill-order index open
-    // for a pylon the build never bought.
+    // The fill-order entry a physical pylon occupies inside the def's fit. It is -1 when the
+    // aeroplane hangs no hardpoint there, and the screen then draws no field. An entry the fit
+    // leaves on the empty sentinel is no hardpoint either. It holds a fill-order index open for a
+    // pylon the build never bought.
     private static int PylonEntry(LoadoutDef? def, int pylon) =>
         Loadout.Hangs(def?.Hardpoints, pylon) ? Array.IndexOf(Loadout.PylonFillOrder, pylon) : -1;
 
     private static string StockPylon(LoadoutDef def, int entry) =>
         def.Hardpoints != null && entry < def.Hardpoints.Stock.Length ? def.Hardpoints.Stock[entry] : LoadoutChoice.None;
 
-    // The firable gun a slot mounts, or null: a turret slot is built inert, so a pick there would
+    // The firable gun a slot mounts, or null. A turret slot is built inert, so a pick there would
     // change nothing, and the original's screen shows no field for it.
     private static GunSpec? GunFor(LoadoutDef? def, int slot)
     {
@@ -1471,11 +1467,11 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         return null;
     }
 
-    // The screen over one aeroplane's fit, whichever door opened it: the def the rows stand on and
-    // the option lists, then the picks standing on entry, which CANCEL and Back restore.
-    // ⚠ A saved build stands on its OWN fit, not on its airframe's stock one: the original's
+    // The screen over one aeroplane's fit, whichever door opened it. It carries the def the rows
+    // stand on and the option lists. The picks standing on entry are what CANCEL and Back restore.
+    // ⚠ A saved build stands on its OWN fit, not on its airframe's stock one. The original's
     // screen deactivates the rocket field of a pylon the record's two hardpoint counts do not
-    // reach, and a field it deactivates is not drawn at all.
+    // reach. A field it deactivates is not drawn at all.
     private void BeginLoadout(string node, string name, LoadoutChoice fit, PlayerSeat? seat, CustomPlaneDef? build)
     {
         _loadoutNode = node;
@@ -1500,7 +1496,7 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         _host.Open(OriginalScreen.InstantActionLoadout);
     }
 
-    // Leaves the screen for whichever one opened it: the picks stay on ACCEPT and go back to what
+    // Leaves the screen for whichever one opened it. The picks stay on ACCEPT and go back to what
     // stood on entry otherwise, so the shared fit reads as a working copy. The focus lands on the
     // row that opened the screen, so a second visit is one press away.
     private void CloseLoadout(bool keep)
@@ -1554,8 +1550,8 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         AddStrip(screen, rows, LoadoutCancelKey, OriginalRowKind.Button, true, 0);
     }
 
-    // A field's list over the stock table's options: the standing pick is the fit's, else the
-    // def's own stock value; a pick writes the option's id into the fit.
+    // A field's list over the stock table's options. The standing pick is the fit's, else the
+    // def's own stock value. A pick writes the option's id into the fit.
     private DropdownList? LoadoutDropdownFor(string key)
     {
         if (_loadoutFit is not { } fit || _loadoutDef is not { } def)
@@ -1622,12 +1618,10 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         return null;
     }
 
-    // The screen as drawn: the section's background, the airframe's two diagram frames, its text
-    // rows with the gun captions filled in, the fields and buttons, the focused field's description
-    // in its pane, and an open list as the overlay.
-    private void ComposeLoadout(
-        IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> backdrop, List<BoardPicture> pictures,
-        List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPanel> overlays)
+    // The screen as drawn. It is the section's background, the airframe's two diagram frames, and
+    // its text rows with the gun captions filled in. The fields and buttons follow, then the
+    // focused field's description in its pane and an open list as the overlay.
+    private void ComposeLoadout(IReadOnlyList<OriginalRow> rows, int focus, BoardLayers layers)
     {
         var screen = _layout.Screen(LoadoutSection);
         if (screen == null)
@@ -1635,18 +1629,18 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
             return;
         }
 
-        AddPane(screen, backdrop, "OL_BACKGROUND");
+        AddPane(screen, layers.Backdrop, "OL_BACKGROUND");
         int airframe = _loadoutNode != null ? PlanePickerRoster.AirframeOf(_loadoutNode) ?? 0 : 0;
         foreach (string key in new[] { "OL_P_PLANETOPICON", "OL_P_PLANEFRTICON" })
         {
             if (screen.Widget(key) is { Art.Count: > 0 } diagram)
             {
-                pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, diagram.Art[0], Math.Max(1, diagram.Frames)),
+                layers.Pictures.Add(new BoardPicture(new BoardArt(BoardArtLibrary.Ui, diagram.Art[0], Math.Max(1, diagram.Frames)),
                     diagram.Int("X"), diagram.Int("Y"), airframe));
             }
         }
 
-        ComposeLoadoutText(screen, lines);
+        ComposeLoadoutText(screen, layers.Lines);
         IReadOnlyList<OriginalRow> widgets = rows;
         int widgetFocus = focus;
         int widgetPressed = _host.PressedRow;
@@ -1668,17 +1662,17 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
 
         for (int i = 0; i < widgets.Count; i++)
         {
-            ComposeRow(widgets[i], i == widgetFocus, i == widgetPressed, i, fills, lines, plaques, pictures, LoadoutItemFont);
+            ComposeRow(widgets[i], i == widgetFocus, i == widgetPressed, i, layers, LoadoutItemFont);
         }
 
         if (widgetFocus >= 0 && widgetFocus < widgets.Count)
         {
-            ComposeLoadoutDescription(screen, lines, widgets[widgetFocus].Key);
+            ComposeLoadoutDescription(screen, layers.Lines, widgets[widgetFocus].Key);
         }
 
         if (_iaOpen != null)
         {
-            ComposeOpenList(screen, rows, focus, overlays, LoadoutItemFont);
+            ComposeOpenList(screen, rows, focus, layers.Overlays, LoadoutItemFont);
         }
     }
 
@@ -1690,8 +1684,8 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
     private void AddPane(MenuLayoutScreen screen, List<BoardPicture> pictures, string key) =>
         OriginalWidgets.AddPane(screen, pictures, key, _measure);
 
-    // The section's text rows at their authored places: the title and the panel headings as
-    // authored, the plane-info row naming the fitted aircraft, and each gun caption as the slot's
+    // The section's text rows at their authored places. The title and the panel headings stand as
+    // authored, and the plane-info row names the fitted aircraft. Each gun caption is the slot's
     // calibre or the no-gun marker.
     private void ComposeLoadoutText(MenuLayoutScreen screen, List<BoardLine> lines)
     {
@@ -1736,8 +1730,8 @@ public sealed class OriginalInstantActionScreen : IOriginalScreenModule
         }
     }
 
-    // The focused field's description in the pane beside its panel, the string table's title and
-    // body for the standing option, wrapped to the pane's authored width.
+    // The focused field's description in the pane beside its panel. It is the string table's title
+    // and body for the standing option, wrapped to the pane's authored width.
     private void ComposeLoadoutDescription(MenuLayoutScreen screen, List<BoardLine> lines, string key)
     {
         if (_loadoutFit is not { } fit || _loadoutDef is not { } def)

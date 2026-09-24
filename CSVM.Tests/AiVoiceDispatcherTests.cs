@@ -161,6 +161,38 @@ public class AiVoiceDispatcherTests
     }
 
     [Fact]
+    public void ASpeakerAlreadyTalkingIsRefusedPerSpeakerAndArmsNoCooldown()
+    {
+        var talking = new HashSet<int> { 1 };
+        var d = new AiVoiceDispatcher(new ScriptedRandom(0.0), ResolveAll())
+        {
+            IsTalking = talking.Contains,
+        };
+        var busy = d.Register(1, 2, AimAssist.NeutralTeam, false, 1f, 1f);
+        d.Register(2, 3, AimAssist.NeutralTeam, false, 1f, 1f);
+
+        // The speaker mid-line is refused before the roll, and its slot stays unarmed, so the
+        // line it could not speak costs it nothing.
+        var over = d.Dispatch(1, AiVoiceDispatcher.WaAttack, now: 10f);
+        Assert.Null(over.Clip);
+        Assert.False(over.Rolled);
+        Assert.Equal("already talking", over.Outcome);
+        Assert.Equal(0f, busy.NextAllowedAt(AiVoiceDispatcher.WaAttack));
+
+        // The test is per speaker: nobody else on the channel is held by it.
+        Assert.NotNull(d.Dispatch(2, AiVoiceDispatcher.WaAttack, now: 10f).Clip);
+
+        // A broadcast passes a talking candidate over without arming it, and elects the other.
+        var elected = d.Broadcast(AiVoiceDispatcher.WaHighDmg, AimAssist.NeutralTeam, now: 10f);
+        Assert.Equal("snd_id3_WA-HighDmg-A", elected.Clip);
+        Assert.Equal(0f, busy.NextAllowedAt(AiVoiceDispatcher.WaHighDmg));
+
+        // Once the line is done the same speaker speaks again.
+        talking.Clear();
+        Assert.NotNull(d.Dispatch(1, AiVoiceDispatcher.WaAttack, now: 10f).Clip);
+    }
+
+    [Fact]
     public void TheNullSlotIsTestedBeforeAnythingRollsAndArmsNoCooldown()
     {
         var d = new AiVoiceDispatcher(new ScriptedRandom(0.0),

@@ -669,6 +669,14 @@ plain-`NAME` shared definition passes both gates and is then deduplicated agains
 so it cannot become a second instance. `landings-hookup-airframe` reads the loaded count for the fork
 and for the flown airframe's branch, and counts both over a driven docking.
 
+**Which aeroplane is the flown one is a question the original never asks and CSVM has to.** The
+original has one player vehicle and names it; CSVM has a field of humans, and the node table the
+arms resolve `player_<airframe>` through carries one airframe at a time, the episode owner's, put
+there as the episode takes the session and taking the previous one back out. Without that a
+co-op landing swings the hook on whichever seat was staged when the rigs were bound, which is
+seat 0's. `campaign-coop-hookup-seat` flies two humans in the same airframe and reads the table's
+own answer beside both hooks.
+
 **No `<x>_hook_startup` runs in a player docking.** Four airframes author one (`bal`, `gyro`, `brig`,
 `war`), every one of them `ON_CALL`, and the only definitions that call them are C4/M04's
 black-market hookup and its AI airframe states (`bhmhookup.zrd`, `bhm_warhawks.zrd`,

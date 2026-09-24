@@ -10,7 +10,7 @@ namespace CSVM.Mech3.Anim;
 /// the vertex lighting of nearby geometry; the visible flare at the light's own position is
 /// separate gamez Facade geometry that already renders (C1's <c>docklight_flare</c> →
 /// <c>dock_liteflare.tif</c>, <c>flame01</c> → <c>fire101.tif</c>). See
-/// <see cref="WorldLights"/> for how the spill reaches the fullbright shader.
+/// <see cref="WorldLights"/> for how the point term reaches the world and aircraft shaders.
 /// </summary>
 internal sealed class AnimLight
 {
@@ -23,6 +23,10 @@ internal sealed class AnimLight
     public Color Color = new(1f, 1f, 1f);
 
     public float RangeMin, RangeMax;
+
+    // The light's own scalars, at the defaults a fresh light node carries until an event authors
+    // them; the point term scales by their sum (docs/org/vertexLighting.md, "Point lights").
+    public float Ambient = 1f, Diffuse;
 
     public bool Active;
 

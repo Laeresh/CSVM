@@ -64,7 +64,9 @@ public sealed class PlayerRig
     // geometry every pane sees (see Effects/FogVolumeClutter), unlike the dome and the deck,
     // which follow a camera and therefore still need a copy each.
 
-    /// <summary>This player's full-pane cloud-band whiteout overlay, faded by camera altitude.</summary>
+    /// <summary>This player's full-pane cloud-band whiteout overlay, faded by camera altitude. It
+    /// draws under this pane's own cockpit pass (<c>UI.HudLayers.Whiteout</c>), so the window
+    /// whites out and the interior does not.</summary>
     public ColorRect? Whiteout;
 
     /// <summary>This rig's screen-space layers that depict the WORLD rather than the chrome: the

@@ -29,11 +29,11 @@ public sealed class WeatherRig
     private const float AmbientEnergyPerAuthored = 1.8f;
 
     // ⚠ TUNE, judged at the controls, and NOT enhanced mode's pair. There a real sun lights the
-    // whole world through a tonemap; here it lights the aircraft alone over a fullbright world
-    // with none. This is the level a zone authoring the install's modal day SUNLIGHT keeps, and
-    // FaithfulEnergies caps there, so authored data only darkens a plane. No night cap either:
-    // the faithful world light ignores FOG_COLOR, so capping C5 would sink its plane below its
-    // own terrain.
+    // whole world through a tonemap; here it lights only the Godot-shaded surfaces of a faithful
+    // flight over a fullbright world. The in-flight aircraft is not one of them: it draws the
+    // decoded per-vertex term (SunVertexLight). This is the level a zone authoring the install's
+    // modal day SUNLIGHT keeps, and FaithfulEnergies caps there. No night cap either: the
+    // faithful world light ignores FOG_COLOR.
     private const float FaithfulSunEnergy = 1.6f;
     private const float FaithfulAmbientEnergy = 0.9f;
 
@@ -118,6 +118,11 @@ public sealed class WeatherRig
     // cockpit overlay's own clones, registered once each is built, so a zone crossing mid-flight
     // reaches the interior pass too rather than leaving it lit for the mission's first zone.
     private readonly List<(DirectionalLight3D Sun, Godot.Environment? Env)> _extraLighting = new();
+    // The gate's other half: the authored world wears its zone_id from the build, a flown object
+    // earns one per frame from its own altitude. Owned here because this class already holds the
+    // mission's band and is the session's one owner of render visibility.
+    private readonly ObjectZoneGate _objectGate = new();
+    private readonly List<Node3D> _noObjects = new();
 
     private WeatherState? _weather;
     private string _activeZone;
@@ -165,6 +170,10 @@ public sealed class WeatherRig
     private bool _zoneWritten;
     private AnimRuntime.FogStateChange? _pendingFogState;
 
+    // The session's drawn aircraft and zeppelins, read fresh each frame. A wave spawns and an
+    // airframe is shot down long after this rig is built, so a held list goes stale.
+    private Func<IReadOnlyList<Node3D>>? _gatedObjects;
+
     public WeatherRig(SessionSpec spec, Node3D worldRoot, DirectionalLight3D sun,
         EffectAmbience? ambience = null, ViewerSet? viewers = null, Godot.Environment? env = null)
     {
@@ -177,11 +186,10 @@ public sealed class WeatherRig
         _viewers = viewers ?? new ViewerSet();
     }
 
-    /// <summary>The faithful path's aircraft light with no mission weather to read: the sun's
+    /// <summary>The faithful path's scene light with no mission weather to read: the sun's
     /// <c>LightEnergy</c> and the Environment's <c>AmbientLightEnergy</c> the launcher builds
     /// with. It is what <see cref="FaithfulEnergies"/> resolves for a zone authoring the install's
-    /// modal day SUNLIGHT, so a mission carrying no weather.json lights a plane like a day
-    /// one.</summary>
+    /// modal day SUNLIGHT, so a mission carrying no weather.json lights like a day one.</summary>
     public static (float Sun, float Ambient) DefaultEnergies => (FaithfulSunEnergy, FaithfulAmbientEnergy);
 
     /// <summary>The install's modal day <c>SUNLIGHT</c> pair scaled by white, the shape
@@ -194,18 +202,15 @@ public sealed class WeatherRig
     /// global back outside the editor; it is what a suite asserts a fog change by.</summary>
     public FogWritten FogGlobals { get; private set; }
 
+    /// <summary>The per-object half of the zone gate, for the suite that asserts an object above
+    /// the band stops drawing for a camera below it.</summary>
+    public ObjectZoneGate ObjectGate => _objectGate;
+
     /// <summary>The applied zone's <c>SUNLIGHT_DIFFUSE</c>/<c>SUNLIGHT_AMBIENT</c>, each scaled
     /// by its own authored colour. The authored pair rather than the energies derived from it,
     /// for the reader that needs the light itself: the ground shadow's darkness is the light the
     /// aircraft blocks (<c>Flight/GroundShadowLaw</c>).</summary>
     public (Vector3 Diffuse, Vector3 Ambient) SunlightRgb { get; private set; } = DefaultSunlightRgb;
-
-    /// <summary>The applied zone's <c>csky_world_light</c>, the scalar the fullbright world shader
-    /// multiplies by, linearised exactly as the write to the global was. Published because
-    /// <c>RenderingServer.GlobalShaderParameterGet</c> answers with an empty Variant outside the
-    /// editor, so a reader that needs the live value cannot ask the server for it. 1 until a zone
-    /// is applied, and in enhanced mode, where a real sun carries that energy instead.</summary>
-    public float WorldLightLinear { get; private set; } = 1f;
 
     /// <summary>The deck's regime for one camera: the tiles' own world-fixed altitude in every
     /// regime, wearing the dimmed underside below <paramref name="bandCentre"/> and the undimmed
@@ -242,12 +247,40 @@ public sealed class WeatherRig
     }
 
     /// <summary>The faithful path's Godot energies for one zone's authored SUNLIGHT. Each scalar
-    /// scales its own day-level energy and is capped there, so a dim zone darkens the aircraft
-    /// while a bright one keeps the level every mission renders at today. Pure, so the mapping is
-    /// pinnable without a live scene.</summary>
+    /// scales its own day-level energy and is capped there, so a dim zone darkens what the scene
+    /// lights shade while a bright one keeps the day level. The in-flight aircraft does not read
+    /// them; it draws <see cref="SunVertexLight"/>. Pure, so the mapping is pinnable without a
+    /// live scene.</summary>
     public static (float Sun, float Ambient) FaithfulEnergies(WeatherState.ZoneWeather fog)
         => (FaithfulSunEnergy * MathF.Min(fog.SunDiffuse / WeatherState.DefaultDiffuse, 1f),
             FaithfulAmbientEnergy * MathF.Min(fog.SunAmbient / WeatherState.DefaultAmbient, 1f));
+
+    /// <summary>The original's per-vertex sun term for one zone as its two colour triples, the
+    /// ambient half and the half that <c>max(N·L, 0)</c> scales: the drawn diffuse is the authored
+    /// vertex colour times <c>Ambient + Diffuse × max(N·L, 0)</c>, clamped at white. With
+    /// <c>SUNLIGHT_BICOLORED</c> clear both halves carry the diffuse colour and the authored
+    /// ambient colour is never read; set, each half carries its own (docs/org/vertexLighting.md).
+    /// Pure, so the rule is pinnable without a live scene.</summary>
+    public static (Vector3 Ambient, Vector3 Diffuse) SunVertexLight(WeatherState.ZoneWeather fog)
+        => (Scaled(fog.SunAmbient, fog.SunBicolored ? fog.SunColorAmbient : fog.SunColorDiffuse),
+            Scaled(fog.SunDiffuse, fog.SunColorDiffuse));
+
+    /// <summary>The ambient scalar the Danger Zone photograph lights its pilot's aircraft with, off
+    /// the zone's <c>SUNLIGHT_AMBIENT</c>: <c>ambient × 1.5 + 0.1</c> rounded to a byte, clamped to
+    /// 0..255 and read back as a 1/255 fraction, which caps it at 1 (docs/formats/campaign-screens.md,
+    /// "The fill light"). Double arithmetic, as the original's 53-bit x87 evaluates it. Pure.</summary>
+    public static float PhotographFillAmbient(float ambient)
+    {
+        double level = ((((double)ambient * 1.5) + 0.1f) * 255.0) + 0.5;
+        int stored = level >= 255.0 ? 255 : level <= 0.0 ? 0 : (int)level;
+        return stored * 0.003921569f;
+    }
+
+    /// <summary>The photograph's ambient half as a colour triple: <see cref="PhotographFillAmbient"/>
+    /// in place of the zone's ambient scalar, on the colour <see cref="SunVertexLight"/> gives that
+    /// half. The diffuse half is the zone's own. Pure.</summary>
+    public static Vector3 PhotographFill(WeatherState.ZoneWeather fog)
+        => Scaled(PhotographFillAmbient(fog.SunAmbient), fog.SunBicolored ? fog.SunColorAmbient : fog.SunColorDiffuse);
 
     /// <summary>Whether a zone's authored <c>FOG_COLOR</c> puts it under a night sky, which is
     /// what caps its enhanced energies. Pure and public so the rule can be pinned and so a log
@@ -391,6 +424,12 @@ public sealed class WeatherRig
     /// Never called leaves the deck at −1, i.e. drawn at every state.</summary>
     public void SetDeckZoneId(int zoneId) => _deckZoneId = zoneId;
 
+    /// <summary>The drawn objects the per-object zone gate moves between layers each frame: the
+    /// session's aircraft and zeppelins, with whatever effect meshes hang under them. A delegate
+    /// rather than a list because the roster changes all flight long. Never called leaves the gate
+    /// idle, which is what a suite building a bare rig gets.</summary>
+    public void SetGatedObjects(Func<IReadOnlyList<Node3D>> objects) => _gatedObjects = objects;
+
     /// <summary>The deck tiles' own authored altitude (<c>WorldBuilder.CloudDeckAltitude</c>),
     /// read off the built data. Set from the same place as <see cref="SetDeckCenter"/>, for the
     /// same reason: the deck is world geometry built with the chapter, not mission weather.
@@ -422,6 +461,12 @@ public sealed class WeatherRig
         // puffer distance fade is a per-pane draw rule, so a trail near player 2 must draw in
         // player 2's pane regardless of what player 1 points at.
         _ambience.SetViewers(_viewers);
+
+        // Each drawn object's own zone, resolved once for the whole session rather than per rig.
+        // The verdict is the object's altitude against the band, which no camera takes part in.
+        // Opened by --no-fog, since a band that hides nothing must not keep hiding aeroplanes.
+        _objectGate.Tick(_gatedObjects?.Invoke() ?? _noObjects, _weather, _fogWhiteout.Armed,
+            _fogVolumes, _spec.NoZoneCull || _spec.NoFog);
 
         foreach (var rig in rigs)
         {
@@ -553,13 +598,13 @@ public sealed class WeatherRig
 
     // The resolved energies said out loud beside the world light, so a zone log says which
     // lighting the flight got and which authored pair produced it. Both modes print, since the
-    // faithful arm now moves per zone too and a night mission's plane is judged off this line.
+    // faithful arm moves per zone too.
     private static string LightSuffix(WeatherState.ZoneWeather fog)
     {
         if (!GraphicsMode.Enhanced)
         {
             (float sun, float ambient) = FaithfulEnergies(fog);
-            return Log.Format($"; aircraft sun energy {sun:0.00} (diffuse {fog.SunDiffuse:0.##}), ")
+            return Log.Format($"; scene sun energy {sun:0.00} (diffuse {fog.SunDiffuse:0.##}), ")
                    + Log.Format($"ambient energy {ambient:0.00} (ambient {fog.SunAmbient:0.##})");
         }
 
@@ -820,17 +865,23 @@ public sealed class WeatherRig
         // docs/org/weather.md for the measured gamma-vs-linear difference.
         float worldLightLinear = new Color(fog.WorldLight, fog.WorldLight, fog.WorldLight).SrgbToLinear().R;
         RenderingServer.GlobalShaderParameterSet("csky_world_light", worldLightLinear);
-        WorldLightLinear = worldLightLinear;
         // The zone's authored SUNLIGHT_ORIENTATION, adopted unconditionally, no tune, no clamp.
         // It shades aircraft only; the world is fullbright and casts no shadow from it.
         // ⚠ One light for the whole session: in splitscreen both panes wear rig 0's zone.
         _sun.Rotation = fog.SunOrientation;
-        // Republished off the light just rotated, for the enhanced billboard arms that grade
-        // themselves by the sun and take no shading from it (csky_sun.gdshaderinc).
+        // The bearing and the uncollapsed pair, in both modes, for the lit cloud cards and the
+        // enhanced billboard grades (docs/org/vertexLighting.md). It points toward the light.
         WriteSunDirection(_sun);
         // The volumetric banks scatter in the zone's own fog colour, so the cards' backdrop and the
         // haze they stand in cannot drift apart across a zone change.
         _fogBanks?.ApplyZone(fog.FogColor);
+        RenderingServer.GlobalShaderParameterSet("csky_sun_light",
+            new Vector2(fog.SunAmbient, fog.SunDiffuse));
+        // The same term with its colours, for the faithful aircraft, which carries no collapse.
+        (Vector3 ambientRgb, Vector3 diffuseRgb) = SunVertexLight(fog);
+        RenderingServer.GlobalShaderParameterSet("csky_sun_ambient_rgb", ambientRgb);
+        RenderingServer.GlobalShaderParameterSet("csky_sun_diffuse_rgb", diffuseRgb);
+        RenderingServer.GlobalShaderParameterSet("csky_sun_fill_rgb", PhotographFill(fog));
         // The authored pair itself, published for the ground shadow, which derives its darkness
         // from the light rather than from either mode's energies.
         SunlightRgb = (Scaled(fog.SunDiffuse, fog.SunColorDiffuse),
@@ -848,7 +899,6 @@ public sealed class WeatherRig
     private void ApplyEnhancedLighting(WeatherState.ZoneWeather fog)
     {
         RenderingServer.GlobalShaderParameterSet("csky_world_light", 1f);
-        WorldLightLinear = 1f;
         // Shadows end where this zone's haze BEGINS, off the AUTHORED near, so a shadow fades out
         // before the ramp rather than mixing with it (docs/architecture.md). The session sun only:
         // a registered clone owns its own camera-relative distance (RegisterExtraLighting).
@@ -865,9 +915,9 @@ public sealed class WeatherRig
                 fog.SunColorAmbient, fog.FogColor);
     }
 
-    // The faithful path's half of the zone apply: the authored SUNLIGHT pair drives the sun the
-    // aircraft is shaded by and the ambient that fills its shaded side. The world takes
-    // csky_world_light instead, being fullbright, and does not read this ambient at all.
+    // The faithful path's half of the zone apply: the authored SUNLIGHT pair drives the scene sun
+    // and ambient, which reach only the Godot-shaded surfaces. The in-flight aircraft takes the
+    // csky_sun_* globals instead, and the fullbright world takes csky_world_light.
     private void ApplyFaithfulLighting(WeatherState.ZoneWeather fog)
     {
         (float sunEnergy, float ambientEnergy) = FaithfulEnergies(fog);
@@ -897,9 +947,10 @@ public sealed class WeatherRig
             // inside the cloud. The ambient cloud field is not here, see Effects/FogVolumeClutter.
             foreach (var rig in rigs)
             {
-                // A pane-filling overlay so the whiteout swallows everything (terrain, plane,
-                // clouds) uniformly, like the original. Layer 0 keeps it behind the HUD (layer 1).
-                var canvas = new CanvasLayer { Layer = UI.HudLayers.WorldOverlay, Name = "whiteout" };
+                // A pane-filling overlay so the whiteout swallows everything outside (terrain,
+                // plane, clouds) uniformly, like the original. Its layer keeps it behind the HUD
+                // and behind the cockpit pass, which is what leaves the interior clear.
+                var canvas = new CanvasLayer { Layer = UI.HudLayers.Whiteout, Name = "whiteout" };
                 rig.Whiteout = new ColorRect
                 {
                     Color = new Color(

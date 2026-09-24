@@ -24,11 +24,19 @@ public sealed class UiStrings
 
     private readonly Dictionary<int, string> _byId;
 
-    private UiStrings(Dictionary<int, string> byId) => _byId = byId;
+    // The [FONTID] each row names, lifted by the extractor into its own field or still leading the
+    // text; a row naming none is absent.
+    private readonly Dictionary<int, string> _faces;
+
+    private UiStrings(Dictionary<int, string> byId, Dictionary<int, string> faces)
+    {
+        _byId = byId;
+        _faces = faces;
+    }
 
     /// <summary>A table with no strings in it. Every lookup falls back, so a menu built on a
     /// missing extraction still draws.</summary>
-    public static UiStrings Empty { get; } = new(new Dictionary<int, string>());
+    public static UiStrings Empty { get; } = new(new Dictionary<int, string>(), new Dictionary<int, string>());
 
     /// <summary>Reads the table under <paramref name="dataRoot"/>, or null when the file is
     /// absent or unreadable. The caller decides what a missing table means; the menus fall back to
@@ -55,6 +63,7 @@ public sealed class UiStrings
     public static UiStrings Parse(string json)
     {
         var byId = new Dictionary<int, string>();
+        var faces = new Dictionary<int, string>();
         using var doc = JsonDocument.Parse(json);
         if (doc.RootElement.ValueKind != JsonValueKind.Array)
         {
@@ -77,11 +86,25 @@ public sealed class UiStrings
 
             if (!byId.ContainsKey(key))
             {
-                byId[key] = StripFontTag(text.GetString() ?? string.Empty);
+                string raw = text.GetString() ?? string.Empty;
+                string stripped = StripFontTag(raw);
+                byId[key] = stripped;
+                string face = row.TryGetProperty("font", out var font) && font.ValueKind == JsonValueKind.String
+                    ? font.GetString() ?? string.Empty
+                    : string.Empty;
+                if (face.Length == 0 && stripped.Length < raw.Length)
+                {
+                    face = raw[1..(raw.Length - stripped.Length - 1)];
+                }
+
+                if (face.Length > 0)
+                {
+                    faces[key] = face;
+                }
             }
         }
 
-        return new UiStrings(byId);
+        return new UiStrings(byId, faces);
     }
 
     /// <summary>One <c>FormatMessage</c> string as a .NET composite format: <c>%1!d!</c> becomes
@@ -127,6 +150,10 @@ public sealed class UiStrings
 
     /// <summary>Whether the table carries this id at all.</summary>
     public bool Has(int id) => _byId.ContainsKey(id);
+
+    /// <summary>The <c>[FONTID]</c> tag a string id names its face by (<c>IMP36</c>, <c>TNR14</c>),
+    /// or null when the row names none or the table lacks it.</summary>
+    public string? Face(int id) => _faces.TryGetValue(id, out var face) ? face : null;
 
     /// <summary>The raw text of a string id, or <paramref name="fallback"/> when the table has no
     /// such row. Placeholders are left as the original wrote them; use <see cref="Format"/> to

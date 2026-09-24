@@ -334,7 +334,7 @@ public static class AimAssist
     /// "The scatter cone"), the only scatter the original applies to a player's round: rotate the aim
     /// direction about a perpendicular by <paramref name="inaccuracy"/> × a uniform [0,1).
     /// ⚠ The polar angle is uniform in <c>[0, inaccuracy]</c>, not over the cone's solid angle. Do
-    /// not merge this with <c>ProjectilePool.ApplySpread</c>'s <c>sqrt(rand)</c> cap sampling.</summary>
+    /// not replace it with <c>sqrt(rand)</c> cap sampling, which piles rounds at the rim.</summary>
     public static Vector3 Scatter(Vector3 aimDir, float inaccuracy, RandomNumberGenerator rng)
     {
         if (inaccuracy <= 0f || aimDir.LengthSquared() < 1e-12f)
@@ -507,7 +507,7 @@ public sealed class AimCandidateSet
         }
     }
 
-    /// <summary>The engine's own <c>MStructList</c>, which is narrower than every destructible:
+    /// <summary>The original's own <c>MStructList</c>, which is narrower than every destructible:
     /// the original builds one object per scene node carrying the mission-structure flag and sets
     /// the acquisition byte <c>+0x8d</c> on those alone, so a pool no mission structure stands on
     /// is not in the AI's list at all (docs/org/aiPilot.md, "What reaches the struct list"). The

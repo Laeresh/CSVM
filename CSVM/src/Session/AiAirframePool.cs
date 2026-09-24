@@ -22,7 +22,7 @@ internal sealed class AiAirframePool
 
     public AiAirframePool(Func<string, PaintScheme?, Prepared> build) => _build = build;
 
-    /// <summary>Aeroplanes ordered and not built yet. The loading screen builds until this is
+    /// <summary>Aeroplanes ordered and not built yet. The load screen builds until this is
     /// zero, and a quiet frame in play takes one off it.</summary>
     public int Owed
     {

@@ -35,6 +35,12 @@ public sealed partial class ProjectilePool : Node3D
     /// <c>DETONATION_TIME</c> ends it long before.</summary>
     public const float DefaultRange = 500f;
 
+    /// <summary>The impact burst's upper ring's disc normal in its own node's frame. The
+    /// <c>he_ringer1</c> model's box is 8.48 m square in X and Y and 1 m deep in Z. Its disc
+    /// therefore stands in the XY plane and faces along Z, where the ground ring's lies in
+    /// XZ.</summary>
+    public static readonly Vector3 UpperRingDiscNormal = Vector3.Back;
+
     /// <summary>Where a hit's damage goes: given the struck collider and the weapon's
     /// <c>HEALTH_DAMAGE</c>, apply it to the destructible that collider belongs to. Wired to
     /// <c>AnimRuntime.DamageAt</c> in flight; null when there is no destructible system (the static
@@ -48,10 +54,11 @@ public sealed partial class ProjectilePool : Node3D
     /// hurt a gasbag); null gates nothing.</summary>
     public System.Func<Node?, WeaponDef, bool>? WorldDamageGate;
 
-    /// <summary>Where a <c>CRATER</c> weapon's ground strike goes: given the impact point and the
-    /// struck collider, carve the bowl and flatten the decorations in it, returning whether the
-    /// carve landed. Wired to <c>CraterField.TryCarve</c> in a collidable flight; null in a build
-    /// with no world colliders, where a ground-attack round leaves the terrain alone.</summary>
+    /// <summary>Where a ground strike that passed <see cref="CraterGate"/> goes: given the impact
+    /// point and the struck collider, carve the bowl and flatten the decorations in it, returning
+    /// whether the carve landed. The faithful rule asks only for a collider whose node carries
+    /// <see cref="SceneBuilder.CanModifyMeta"/>, which no shipped node does; the remake's own
+    /// option asks for any rocket. Wired to <c>CraterField.TryCarve</c> in a collidable flight.</summary>
     public System.Func<Vector3, Node?, bool>? CraterSink;
 
     /// <summary>Where an Enhanced ground burst's scorch mark goes: the hit point, the struck
@@ -62,11 +69,11 @@ public sealed partial class ProjectilePool : Node3D
     public System.Action<Vector3, Vector3, string?, bool>? ScorchSink;
 
     /// <summary>Plays a named IMPACT effect (its puffer half) at a hit point through the world-effects
-    /// runtime: the gun/rocket smoke and fireballs whose <c>ANIMATION</c> is an ON_CALL effect
-    /// def rather than a gamez model. Null in views with no anim runtime. After the point come the
-    /// template's own basis (<see cref="EffectOrient"/>), the basis the burst's upper ring takes
-    /// (<see cref="UpperRingOrient"/>, null leaving it on its authored axis), and the instance's
-    /// time bound in seconds (0 = the runtime's own, <see cref="GunEffectTtl"/> for guns).</summary>
+    /// runtime. These are the gun/rocket smoke and fireballs whose <c>ANIMATION</c> is an ON_CALL
+    /// effect def rather than a gamez model. Null in views with no anim runtime. After the point come the
+    /// template's own basis (<see cref="EffectOrient"/>) and the basis the burst's upper ring takes
+    /// (<see cref="UpperRingOrient"/>, null leaving its authored axis). Last is the time bound in
+    /// seconds, 0 for the runtime's own and <see cref="GunEffectTtl"/> for guns.</summary>
     public System.Action<string, Vector3, Basis, Basis?, float>? EffectSink;
 
     /// <summary>Whether the world-effects runtime binds a def of this name (<c>AnimRuntime.Handles</c>).
@@ -168,9 +175,9 @@ public sealed partial class ProjectilePool : Node3D
     private const int MaxProjectiles = 1024;
     private const int MaxFlashes = 128;
     // ⚠ Keep this above every flight rig's priority (they draw at the default 0). Each anchored
-    // effect is placed on the pose its anchor NODE holds when this pool's frame callback runs, and
-    // an aeroplane writes its interpolated drawn pose inside its own callback. Drawing first read
-    // the previous frame's pose, so at speed the flash and the shot light sat a frame astern of the
+    // effect is placed on the pose its anchor NODE holds when this pool's frame callback runs.
+    // An aeroplane writes its interpolated drawn pose inside its own callback. Drawing first would
+    // read the previous frame's pose, putting the flash and the shot light a frame astern of the
     // gun. A suite cannot see this: a hand-stepped harness poses the anchor before it draws.
     private const int DrawPriority = 100;
     // ⚠ No rocket streak constants here any more. `he_rocket`/`ap_rocket` and every other ordnance
@@ -213,22 +220,12 @@ public sealed partial class ProjectilePool : Node3D
     // shared anchor under AnimRuntime's already-live gate would swallow all but one per RUN_TIME.
     private const int MaxCasings = 128;
 
-    // The muzzle light flash (muzzle_burst's `testfp`): real dynamic lights per shot, range/colour
-    // from the def's variants. The data deactivates them on the next event tick, so a flash lives
-    // ~2 frames here; energy is ours to pick (TUNE) for both the first- and third-person variants.
+    // The muzzle light flash (muzzle_burst's `testfp`) as pooled OmniLight3Ds: the third-person
+    // variants, and the first-person pair in enhanced mode or with no point term bound. The data
+    // deactivates them on the next event tick, so a flash lives ~2 frames here.
     private const int MaxMuzzleLights = 8;
     private const float MuzzleLightLife = 0.03f;   // s
-    private const float MuzzleLightEnergy = 2.5f;  // TUNE: no def carries energy, so the big first-person pair starts at the third-person stand-in's brightness
-
-    // A gun hit on a buildings-classed surface: a ricochet spark burst. Both authored assets are
-    // confirmed missing from the install (`bld_damage.flt` and the `rcochet1` EFFECT are 2 of the
-    // 5 referenced-but-undefined names, weapon-effects.md), so this stand-in is judged by eye:
-    // fast bright sparks flying off the wall plus the flash. Count/size/speed/life are TUNE.
-    private const int RicochetSparks = 8;
-    private const float RicochetSparkSize = 0.55f;  // m
-    private const float RicochetSparkLife = 0.55f;  // s
-    private const float RicochetSparkSpeed = 22f;   // m/s launch speed
-    private const float RicochetSpreadDeg = 90f;    // cone half-angle around the surface normal
+    private const float MuzzleLightEnergy = 2.5f;  // TUNE: no def carries energy; Godot's omni needs one
 
     // The authored water-splash playback, verbatim from splash1.flt/bsplsh.flt (identical shapes).
     // See docs/formats/weapon-effects/ordnance.md "Water splash playback" for the source events.
@@ -250,8 +247,16 @@ public sealed partial class ProjectilePool : Node3D
     // sibling material with no cycle block, so EnsureSplashFlipbook registers it lazily instead.
     private static readonly string[] SplashFlipbookTextures = { "splash01", "splash02", "splash03" };
 
-    private static readonly Color RicochetTint = new(1f, 0.95f, 0.6f); // white-hot spark yellow
     private static readonly Color MuzzleSmokeTint = new(0.85f, 0.85f, 0.85f);
+
+    // muzzle_burst's 1stperson_lts pair, bigmuzzle_lt then muzzle_lt, verbatim: the AT_NODE offset
+    // on the effects root, the near/far range and the colour. Neither authors ambient or diffuse, so
+    // each adds its colour at weight 1 (docs/org/vertexLighting.md, "Point lights").
+    private static readonly (Vector3 At, float Near, float Far, Color Color)[] FirstPersonLights =
+    {
+        (new Vector3(11f, -1f, -5f), 13.5f, 21.25f, new Color(0.88f, 0.78f, 0.36f)),
+        (new Vector3(-11f, -1f, -5f), 12.9f, 18.25f, new Color(0.93f, 0.78f, 0.36f)),
+    };
 
     // Where a gun shot's three secondaries sit, in the firing muzzle node's own frame, -Z forward.
     // The casing, the muzzlepuffer smoke and the muzzle lights hang off the muzzleburst_effects
@@ -339,6 +344,10 @@ public sealed partial class ProjectilePool : Node3D
     // Pooled muzzle-light flashes: real OmniLight3Ds, reused round-robin.
     private readonly List<LightFlash> _lights = new();
 
+    // The first-person pair's lights waiting for, or inside, their one drawn frame of the point
+    // term (SubmitPointFlashes). Empty unless BindPointLights was called.
+    private readonly List<PointFlash> _pointFlashes = new();
+
     // The session's wind, read by the rocket-trail puffers this pool builds. Rocket trails
     // carry FRICTION and no WIND_FACTOR, so they take the engine default of 1, fully carried.
     private readonly Effects.EffectAmbience _ambience = Effects.EffectAmbience.Still;
@@ -395,8 +404,8 @@ public sealed partial class ProjectilePool : Node3D
     // each choking every aircraft inside its radius for its TIME. Stepped by SimStep after the rounds.
     private readonly List<TanglerCloud> _tanglerClouds = new();
     private readonly List<AudioStreamPlayer> _sfxPool = new();
-    // The stand-in fireball's sprite scatter, muzzle-flash roll, and debris/ricochet spread
-    // (ApplySpread, gun dispersion itself was removed). Held rather than resolved per draw.
+    // The stand-in fireball's sprite scatter and the muzzle-flash roll (gun dispersion itself
+    // was removed). Held rather than resolved per draw.
     private readonly RandomNumberGenerator _rng = Rng.Stream(Rng.Weapons);
     private readonly HashSet<string> _flyoutLogged = new();
     // One MultiMesh per muzzle-flash ammo texture (MuzzleAmmoTextures), built in _Ready.
@@ -413,6 +422,7 @@ public sealed partial class ProjectilePool : Node3D
     // after the first frame.
     private readonly List<ScreenSize.ViewerSample> _viewerScratch = new();
 
+    private WorldLights? _pointLights;         // the session's point set, null until BindPointLights
     private int _projHigh;                     // highest slot ever used (bounds the scan)
     private Node3D _flyoutModels = null!;   // container for the live rocket-body instances
     private Node3D _impactFxModels = null!;  // container for the short-lived impact-effect instances
@@ -454,6 +464,14 @@ public sealed partial class ProjectilePool : Node3D
         ProcessPriority = DrawPriority;
     }
 
+    /// <summary>One of this session's gunners, carried or emplaced, has acquired a human player
+    /// and has line of sight to it, once per acquisition episode
+    /// (<see cref="TurretController"/>). The pool is the seam every gunner already holds and the
+    /// one list both turret families reach, so a session-wide listener subscribes once here
+    /// instead of per gunner as each is built; <c>Session.AiVoiceRuntime</c> broadcasts
+    /// <c>WA-Turret</c> on it.</summary>
+    public event Action<TurretController, FlightController>? TurretAcquiredPlayer;
+
     /// <summary>Every camera that can see this pool's tracers, feeding the
     /// <see cref="TracerMinPixels"/> distance floor, a screen-space rule applied to one shared
     /// world-space mesh, so it takes the NEAREST bound viewer. Unbound (weapon bench, suite
@@ -483,10 +501,15 @@ public sealed partial class ProjectilePool : Node3D
     public Func<bool>? FirstPersonView { get; set; }
 
     /// <summary>Whether the pilot with this shooter id has the full Cockpit view (mode 6) on
-    /// screen, which draws no muzzle flash quads for that pilot's own guns. Per shooter, not per
-    /// session: an aeroplane ahead still flashes while the player sits in the canopy. Nose (mode 7)
-    /// is not covered, and a null closure (the weapon bench, the suite labs) draws every flash.</summary>
+    /// screen. That view draws no muzzle flash quads for that pilot's own guns. Per shooter, not
+    /// per session: an aeroplane ahead still flashes while the player sits in the canopy. Nose
+    /// (mode 7) is not covered, and a null closure (the weapon bench, the suite labs) draws every
+    /// flash.</summary>
     public Func<int, bool>? CockpitViewOfPilot { get; set; }
+
+    /// <summary>The impact sprites alive this step (spark, explosion stand-in), for a suite that
+    /// asserts a hit drew none of its own.</summary>
+    public int ImpactSpriteCount => _impact.Count;
 
     /// <summary>The session's surface hulls, so <see cref="CollectVehicleList"/> can offer the
     /// whole of the engine's <c>VehicleList</c> rather than its aircraft half. Null in every build
@@ -604,49 +627,64 @@ public sealed partial class ProjectilePool : Node3D
     /// (<c>FUN_0053fd40</c> from <c>(0,1,0)</c>) before spawning that slot. Identity on flat ground,
     /// so the rule shows only on a slope, and identity for a burst with no surface (a fuse, the range
     /// expiry). A normal straight down turns half a turn about X.</summary>
-    public static Basis SurfaceUpBasis(Vector3 normal)
+    public static Basis SurfaceUpBasis(Vector3 normal) => ShortestArc(Vector3.Up, normal);
+
+    /// <summary>Enhanced Graphics only: the basis the impact burst's upper ring is placed with.
+    /// The ring's own disc normal (<see cref="UpperRingDiscNormal"/>, not world up) is rotated onto
+    /// the reverse of the round's flight direction. The ring then faces back up the path the rocket
+    /// came down. Null in the faithful presentation and for a round with no usable velocity. It
+    /// leaves the ring on the fixed axis the original spawns it on (docs/org/ordnanceTypes.md,
+    /// "The upper ring in Enhanced Graphics").</summary>
+    public static Basis? UpperRingOrient(Vector3 velocity) =>
+        GraphicsMode.Enhanced && velocity.LengthSquared() > 1e-6f
+            ? ShortestArc(UpperRingDiscNormal, -velocity.Normalized()) : null;
+
+    /// <summary>The shortest rotation taking unit <paramref name="from"/> onto <paramref name="to"/>;
+    /// a zero <paramref name="to"/> is identity, and an opposite one is half a turn about an axis
+    /// perpendicular to <paramref name="from"/>.</summary>
+    public static Basis ShortestArc(Vector3 from, Vector3 to)
     {
-        if (normal.LengthSquared() < 1e-6f)
+        if (to.LengthSquared() < 1e-6f)
             return Basis.Identity;
-        var to = normal.Normalized();
-        float dot = Vector3.Up.Dot(to);
+        to = to.Normalized();
+        float dot = from.Dot(to);
         if (dot > 1f - 1e-6f)
             return Basis.Identity;
         if (dot < -1f + 1e-6f)
-            return new Basis(Vector3.Right, Mathf.Pi);
-        var axis = Vector3.Up.Cross(to).Normalized();
+            return new Basis(Mathf.Abs(from.X) < 0.9f ? Vector3.Right : Vector3.Up, Mathf.Pi);
+        var axis = from.Cross(to).Normalized();
         return new Basis(axis, Mathf.Acos(Mathf.Clamp(dot, -1f, 1f)));
     }
 
-    /// <summary>Enhanced Graphics only: the basis the impact burst's upper ring is placed with, world
-    /// up rotated onto the reverse of the round's flight direction, so the ring faces back up the
-    /// path the rocket came down. Null in the faithful presentation and for a round with no usable
-    /// velocity, which leaves the ring on the fixed axis the original spawns it on
-    /// (docs/org/ordnanceTypes.md, "The upper ring in Enhanced Graphics").</summary>
-    public static Basis? UpperRingOrient(Vector3 velocity) =>
-        GraphicsMode.Enhanced && velocity.LengthSquared() > 1e-6f
-            ? SurfaceUpBasis(-velocity.Normalized()) : null;
-
-    /// <summary>Whether a candidate lies inside an authored proximity-fuse forward cone.</summary>
-    public static bool FuseDotAllows(float? minimumDot, Vector3 velocity, Vector3 towardTarget)
+    /// <summary>The <c>DETONATION_DOT_PRODUCT</c> gate: unit(round - candidate) dotted with the
+    /// candidate's backward axis must reach the threshold. A positive threshold therefore admits a
+    /// round behind the candidate, whatever way the round flies. A zero offset stays zero and dots
+    /// to 0, as the original's normalise leaves it (docs/org/ordnanceTypes.md "The proximity
+    /// fuse").</summary>
+    public static bool FuseDotAllows(float? minimumDot, Vector3 candidateBackward, Vector3 roundFromCandidate)
     {
         if (minimumDot is null)
             return true;
-        if (velocity.LengthSquared() <= 1e-6f || towardTarget.LengthSquared() <= 1e-6f)
-            return true;
-        return velocity.Normalized().Dot(towardTarget.Normalized()) >= minimumDot.Value;
+        var dir = roundFromCandidate.LengthSquared() > 0f ? roundFromCandidate.Normalized() : Vector3.Zero;
+        return dir.Dot(candidateBackward) >= minimumDot.Value;
     }
+
+    /// <summary>A fuse candidate's <c>+0x198</c> row, m[2], which is minus the nose: Godot's +Z
+    /// basis column, unit length.</summary>
+    public static Vector3 BackwardAxis(Node3D body) => body.GlobalBasis.Z.Normalized();
     /// <summary>Distance from point <paramref name="p"/> to the segment <paramref name="a"/>→
     /// <paramref name="b"/>. The fuse's cheap reject wants a round's whole step, not its endpoints:
     /// a gun round covers ~8 m per 60 Hz frame.</summary>
-    public static float SegmentPointDistance(Vector3 a, Vector3 b, Vector3 p)
+    public static float SegmentPointDistance(Vector3 a, Vector3 b, Vector3 p) =>
+        (p - (a + (b - a) * SegmentClosestFraction(a, b, p))).Length();
+
+    /// <summary>The fraction along <paramref name="a"/>→<paramref name="b"/> of the segment point
+    /// nearest <paramref name="p"/>, clamped to the segment; 0 for a degenerate one.</summary>
+    public static float SegmentClosestFraction(Vector3 a, Vector3 b, Vector3 p)
     {
         var seg = b - a;
         float lenSq = seg.LengthSquared();
-        if (lenSq <= 1e-12f)
-            return (p - a).Length();
-        float t = Mathf.Clamp((p - a).Dot(seg) / lenSq, 0f, 1f);
-        return (p - (a + seg * t)).Length();
+        return lenSq <= 1e-12f ? 0f : Mathf.Clamp((p - a).Dot(seg) / lenSq, 0f, 1f);
     }
 
     /// <summary>The struck collider's numeric surface id, the index the weapon's <c>IMPACT</c>
@@ -887,8 +925,8 @@ public sealed partial class ProjectilePool : Node3D
     /// <summary>The muzzle flashes lit this frame, as world position, range, colour and energy.
     /// A second world drawing the cockpit interior (<see cref="CockpitOverlay"/>) has no view of
     /// these nodes and mirrors them from this list instead. The position is resolved off the firing
-    /// muzzle at the moment of the call, not read back off the pooled light: the caller is a pilot's
-    /// own frame callback, which runs before this pool places them.</summary>
+    /// muzzle at the moment of the call, never read back off the pooled light. The caller is a
+    /// pilot's own frame callback, which runs before this pool places them.</summary>
     public IEnumerable<(Vector3 Position, float Range, Color Color, float Energy)> ActiveMuzzleLights()
     {
         foreach (var l in _lights)
@@ -899,6 +937,24 @@ public sealed partial class ProjectilePool : Node3D
                 yield return (at, l.Light.OmniRange, l.Light.LightColor, l.Light.LightEnergy);
             }
         }
+    }
+
+    /// <summary>Routes the first-person muzzle pair into <paramref name="lights"/>, the session's
+    /// point-light set, in original mode. The world and the aircraft, the cockpit interior
+    /// included, then take it as the per-vertex point term rather than an
+    /// <see cref="OmniLight3D"/>.</summary>
+    public void BindPointLights(WorldLights lights)
+    {
+        _pointLights = lights;
+        lights.AddSource(SubmitPointFlashes);
+    }
+
+    /// <summary>The first-person muzzle lights the point term holds now: world position, near and
+    /// far range and colour. Diagnostics for the suite; the shaders read the packed set.</summary>
+    public IEnumerable<(Vector3 Position, float Near, float Far, Color Color)> PendingPointFlashes()
+    {
+        foreach (var f in _pointFlashes)
+            yield return (AnchorPoint(f.Anchor, f.Local, out var at) ? at : f.At, f.Near, f.Far, f.Color);
     }
 
     public override void _Ready()
@@ -1051,7 +1107,7 @@ public sealed partial class ProjectilePool : Node3D
         int ammoIdx = MuzzleAmmoIndex(weapon);
         var muzzleSprites = _muzzle[ammoIdx];
         // The original draws no muzzle flash on the pilot's own guns while the Cockpit view is on
-        // the screen, so the quads are skipped rather than drawn behind the canopy. The shot light
+        // the screen. The quads are skipped rather than drawn behind the canopy. The shot light
         // still fires: that is what lights the interior.
         bool ownCockpit = CockpitViewOfPilot?.Invoke(shooterId) == true;
         if (!ownCockpit && muzzleSprites.Count + MuzzleFlashCount <= MaxFlashes)
@@ -1212,9 +1268,9 @@ public sealed partial class ProjectilePool : Node3D
                     // Per-shot owner exclusion on the SHARED query object: set for this round's
                     // shooter, reset right after, a leaked Exclude shields the next round's target.
                     _ray.Exclude = ExcludeFor(p.Shooter, p.Owner);
-                    // Disposed, never dropped: a hit dictionary left to the finalizer is one more
-                    // finalizable object per round per tick, and that count sets the collection
-                    // pause (PERF-20). The same rule holds for every engine array or dictionary below.
+                    // Disposed, never dropped, as every engine collection below is. A hit dictionary
+                    // left to the finalizer is one more finalizable object per round per tick, and
+                    // that count sets the collection pause (docs/verification.md PERF-20).
                     using var hit = space.IntersectRay(_ray);
                     _ray.Exclude = NoExclude;
                     if (hit.Count > 0)
@@ -1246,7 +1302,7 @@ public sealed partial class ProjectilePool : Node3D
                 // Checked AFTER the ray, so a round that would strike its target keeps the direct
                 // hit. Damage arrives through the blast's aircraft pass, not this branch (shapeIdx
                 // -1 keeps it out of the direct-hit path and off the aircraft's IMPACT row).
-                if (ProximityFuseTriggered(p.Weapon, p.Shooter, prev, next, vel,
+                if (ProximityFuseTriggered(p.Weapon, p.Shooter, p.Team, prev, next,
                         out var fusePoint, out var fused, out var towardHull))
                 {
                     var fuseNormal = towardHull.LengthSquared() > 1e-8f
@@ -1326,10 +1382,17 @@ public sealed partial class ProjectilePool : Node3D
             l.Light.Visible = false;
             l.Anchor = null;
         }
+        _pointFlashes.Clear();
         foreach (var f in _impactFx)
             f.Model.QueueFree();
         _impactFx.Clear();
     }
+
+    /// <summary>Raises <see cref="TurretAcquiredPlayer"/>. Internal, and called from
+    /// <see cref="TurretController"/> alone: the gunner owns the episode rule (once per
+    /// acquisition, re-armed by losing the target), this only carries the report.</summary>
+    internal void ReportTurretAcquisition(TurretController turret, FlightController player) =>
+        TurretAcquiredPlayer?.Invoke(turret, player);
 
     internal void UnregisterAircraft(AircraftBody body) => _aircraft.Remove(body);
 
@@ -1481,9 +1544,10 @@ public sealed partial class ProjectilePool : Node3D
         return new Basis(x, y, z);
     }
 
-    // The template basis an IMPACT effect is placed with: the SURFACE_ANIMATION slot takes the
-    // struck normal's rotation, the ANIMATION slot the fixed world axis. ⚠ Keep this on the
-    // decoded rule in both presentations; the enhanced deviation is UpperRingOrient's alone.
+    // The template basis an IMPACT effect is placed with. The SURFACE_ANIMATION slot takes the
+    // struck normal's rotation, the ANIMATION slot the fixed world axis.
+    // ⚠ Keep the decoded rule in both presentations. The enhanced remake-only rule is
+    // UpperRingOrient's alone.
     private static Basis EffectOrient(in ImpactOutcome outcome, Vector3 normal) =>
         outcome.SurfaceOriented ? SurfaceUpBasis(normal) : Basis.Identity;
 
@@ -1667,7 +1731,7 @@ public sealed partial class ProjectilePool : Node3D
             }
             else
             {
-                // Smoke puffs and ricochet sparks carry velocity; every other sprite has it zeroed
+                // Smoke puffs carry velocity; every other sprite has it zeroed
                 // and is unaffected, the position/orientation set at spawn stands for its whole life.
                 if (s.Vel != Vector3.Zero)
                 {
@@ -1707,17 +1771,19 @@ public sealed partial class ProjectilePool : Node3D
         return new Basis(x, y, b.Z);
     }
 
-    // Where a flash's anchor puts it right now. False when it carries no anchor, or the node that
-    // fired it has been freed or unparented mid-flash, which leaves the light where it last stood
-    // for its remaining frames rather than snapping it to the world origin.
-    private static bool MuzzleFrame(LightFlash flash, out Vector3 world)
+    // Where a flash's anchor puts it right now. False when it carries no anchor, or when the node
+    // that fired it has been freed or unparented mid-flash. The light then stays where it last
+    // stood for its remaining frames, rather than snapping to the world origin.
+    private static bool MuzzleFrame(LightFlash flash, out Vector3 world) =>
+        AnchorPoint(flash.Anchor, flash.Local, out world);
+
+    private static bool AnchorPoint(Node3D? anchor, Vector3 local, out Vector3 world)
     {
         world = Vector3.Zero;
-        if (flash.Anchor is not { } anchor
-            || !GodotObject.IsInstanceValid(anchor) || !anchor.IsInsideTree())
+        if (anchor is null || !GodotObject.IsInstanceValid(anchor) || !anchor.IsInsideTree())
             return false;
         var xf = anchor.GlobalTransform;
-        world = xf.Origin + (xf.Basis.Orthonormalized() * flash.Local);
+        world = xf.Origin + (xf.Basis.Orthonormalized() * local);
         return true;
     }
 
@@ -1876,24 +1942,6 @@ public sealed partial class ProjectilePool : Node3D
         return mesh;
     }
 
-    private Vector3 ApplySpread(Vector3 forward, float coneDeg)
-    {
-        if (coneDeg <= 0f)
-            return forward;
-        // A random direction inside the cone: a random azimuth around `forward`, and a polar angle
-        // in [0, cone] biased for a roughly uniform disc so the pattern fills the cone, not its rim.
-        float half = Mathf.DegToRad(coneDeg) * 0.5f;
-        float polar = half * Mathf.Sqrt(_rng.Randf());
-        float azimuth = _rng.Randf() * Mathf.Tau;
-        // Build a basis with `forward` as -Z, then tilt.
-        var basis = Basis.LookingAt(forward, Mathf.Abs(forward.Dot(Vector3.Up)) > 0.99f ? Vector3.Right : Vector3.Up);
-        var tilted = basis * new Vector3(
-            Mathf.Sin(polar) * Mathf.Cos(azimuth),
-            Mathf.Sin(polar) * Mathf.Sin(azimuth),
-            -Mathf.Cos(polar));
-        return tilted.Normalized();
-    }
-
     // The in-flight rocket body: a BuildFlyoutBody instance parented under the
     // pool's own container (the caller poses it down the round's velocity each frame). Null falls back
     // to the exhaust streak.
@@ -2040,11 +2088,16 @@ public sealed partial class ProjectilePool : Node3D
         // feeds the resolve, so Apply performs a row already stripped of what the hook silenced.
         var suppression = RunImpactHook(weapon, point);
         // The terrain carve runs between the hook and the row's own bindings, under the hook's
-        // Effects bit, and only on a direct strike: a fused burst carries no hit record, so the
-        // original's carve sites are never reached from one (docs/org/craters.md).
-        bool cratered = weapon.Crater && shapeIdx >= 0 && collider is not AircraftBody
+        // Effects bit. ⚠ Do not answer the gate here: CraterGate holds both rules, and the
+        // faithful one refuses every played round as the original does (docs/org/craters.md).
+        var ask = shapeIdx >= 0 && collider is not AircraftBody
             && (suppression & ImpactSuppression.Effects) == 0
-            && (CraterSink?.Invoke(point, collider) ?? false);
+            ? CraterGate.For(weapon, SceneBuilder.CanModify(collider), CraterGate.Enabled)
+            : CraterAsk.None;
+        bool carved = ask != CraterAsk.None && (CraterSink?.Invoke(point, collider) ?? false);
+        // ⚠ Only the faithful carve suppresses the burst. The option is remake-only chrome and adds
+        // a bowl under a burst that still plays, where the original's AND drops both slots.
+        bool cratered = carved && ask == CraterAsk.Faithful;
         // The decision, taken once and read twice. `modelResolved` cannot be known before the
         // attempt, so the first resolve is only for the effect NAME to attempt; the second carries
         // the answer. Everything after this line obeys `outcome`, Impact itself decides nothing.
@@ -2055,16 +2108,15 @@ public sealed partial class ProjectilePool : Node3D
         bool effectBound = outcome.EffectName is { } bound && (EffectHandles?.Invoke(bound) ?? false);
         bool modelled = !effectBound && outcome.EffectName is { } fxName
             && SpawnImpactModel(fxName, point, EffectOrient(outcome, normal));
-        // The second resolve now also carries whether the runtime renders the row's own name, which
-        // is what takes the ricochet burst off a `buildings` hit that already plays something.
+        // The second resolve now also carries whether the runtime renders the row's own name. That
+        // is what separates `wep_02`'s bound `buildings` row from the guns' unbound one.
         if (modelled || effectBound)
             outcome = ImpactOutcome.Resolve(weapon, surface, modelled, hasEffectsRuntime, suppression, cratered, effectBound);
 
-        // The scorch follows the carve decision, not the effect sink: a mark is owed where a bowl
-        // was cut or a fireball burned, on ground a direct strike found, and never on water, where
-        // a projected decal reads wrong.
+        // The scorch follows the carve decision, not the effect sink. A mark is owed on struck
+        // ground where either carve rule cut a bowl or a fireball burned. Water takes none.
         if (shapeIdx >= 0 && collider is not AircraftBody && surface != SurfaceRegistry.Water)
-            ScorchSink?.Invoke(point, normal, outcome.EffectName, cratered);
+            ScorchSink?.Invoke(point, normal, outcome.EffectName, carved);
 
         // Verification breadcrumb: the first few impacts confirm hit detection and surface
         // classification without needing a lucky screenshot; then it goes quiet.
@@ -2098,9 +2150,6 @@ public sealed partial class ProjectilePool : Node3D
         {
             case ImpactStandIn.Explosion:
                 SpawnExplosion(point, orient);
-                break;
-            case ImpactStandIn.Ricochet:
-                SpawnRicochet(point, orient);
                 break;
             case ImpactStandIn.Spark when _impact.Count < MaxFlashes:
                 // The water case is its own read of the struck id, as it is in the original
@@ -2236,10 +2285,12 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    // The SONIC/FLASH hit against every aircraft the burst reaches: the same gather, cover test and
-    // 32 cap as the blast (the original hands each splash entry to FUN_004b9bc0, whose branch runs
-    // FUN_0042e840 on the entry's squared surface distance), then the victim's kind decides: a
-    // human's pane gets the wash, an AI pilot the stun, and neither takes a point of damage.
+    // The SONIC/FLASH hit against every aircraft the burst reaches. The gather, cover test and 32
+    // cap are the blast's. The original hands each splash entry to FUN_004b9bc0, whose branch runs
+    // FUN_0042e840 on the entry's squared surface distance. The victim's kind then decides: a
+    // human's pane gets the wash, an AI pilot the stun, and neither takes a point of damage. The
+    // shooter is a candidate here because the original's self-hit guard stands below the no-damage
+    // arms. A pilot is flashed and deafened by their own burst, and only the damage pair is exempt.
     private void ApplyDisabling(WeaponDef weapon, Vector3 point, Vector3 normal, int shooter)
     {
         float radiusSq = weapon.ImpactProximitySqM ?? 0f;
@@ -2247,7 +2298,7 @@ public sealed partial class ProjectilePool : Node3D
             return;
         var space = GetWorld3D()?.DirectSpaceState;
         _blastCandidates.Clear();
-        GatherAircraftCandidates(point, radiusSq, shooter);
+        GatherAircraftCandidates(point, radiusSq, shooter, includeShooter: true);
         _blastCandidates.Sort(ByDistance);
         int accepted = 0;
         for (int i = 0; i < _blastCandidates.Count && accepted < MaxBlastTargets; i++)
@@ -2327,14 +2378,14 @@ public sealed partial class ProjectilePool : Node3D
     }
 
 
-    // ⚠ Do not re-add a world fuse. It detonates every rocket short of its target and locks every
-    // hardpoint weapon out of its per-surface IMPACT entry. Armed against aircraft only.
-    // Detonates at CLOSEST APPROACH within the swept step, not first entry, or most rockets would
-    // detonate where the blast falls to zero and never hurt a plane. The shooter's own
-    // plane and a wreck/INERT airframe are never candidates. ⚠ This walk is the pool's own roster,
-    // not a physics query, so it needs FlightController.InPlay itself.
-    private bool ProximityFuseTriggered(WeaponDef weapon, int shooter, Vector3 from, Vector3 to,
-        Vector3 velocity, out Vector3 detonationPoint, out AircraftBody? fused, out Vector3 towardHull)
+    // ⚠ Do not re-add a world fuse: it detonates rockets short and locks hardpoint weapons out of
+    // their per-surface IMPACT entry. Candidates are VehicleList's aircraft and hulls, never world
+    // bodies or zeppelins. Both walks skip the round's whole side by plain id equality
+    // (docs/org/ordnanceTypes.md "The proximity fuse"). Detonation is at CLOSEST APPROACH within
+    // the swept step, not first entry. Otherwise most rockets burst where the blast is zero.
+    // ⚠ These walks are rosters, not a physics query, so each needs a liveness test.
+    private bool ProximityFuseTriggered(WeaponDef weapon, int shooter, int team, Vector3 from,
+        Vector3 to, out Vector3 detonationPoint, out AircraftBody? fused, out Vector3 towardHull)
     {
         detonationPoint = to;
         fused = null;
@@ -2344,7 +2395,7 @@ public sealed partial class ProjectilePool : Node3D
         float best = float.PositiveInfinity;
         foreach (var plane in _aircraft)
         {
-            if (plane.PlayerIndex == shooter || !plane.Rig.InPlay)
+            if (plane.PlayerIndex == shooter || plane.Rig.Team == team || !plane.Rig.InPlay)
                 continue;
             // Cheap reject: the segment cannot come within fuse range of any box while it stays
             // outside the plane's bounding sphere by more than that range.
@@ -2355,14 +2406,38 @@ public sealed partial class ProjectilePool : Node3D
             if (d > fuseRange || d >= best || t >= StillClosingFraction)
                 continue;
             var candidate = from + (to - from) * t;
-            if (!FuseDotAllows(weapon.DetonationDotProduct, velocity, hull - candidate))
+            if (!FuseDotAllows(weapon.DetonationDotProduct, BackwardAxis(plane),
+                    candidate - plane.GlobalPosition))
                 continue;
             best = d;
             detonationPoint = candidate;
             fused = plane;
             towardHull = hull - candidate;
         }
-        return fused != null;
+        if (SurfaceVehicles == null)
+            return fused != null;
+        // A hull is measured to its origin, the decoded point-to-point distance. It has no airframe
+        // hull set, and its colliders are world bodies the fuse must never query.
+        foreach (var vessel in SurfaceVehicles.Vessels)
+        {
+            if (!GodotObject.IsInstanceValid(vessel.Body) || vessel.Inert || vessel.IsDestroyed
+                || (vessel.Team ?? AimAssist.NeutralTeam) == team)
+                continue;
+            var origin = vessel.Position;
+            float t = SegmentClosestFraction(from, to, origin);
+            var candidate = from + (to - from) * t;
+            float d = candidate.DistanceTo(origin);
+            if (d > fuseRange || d >= best || t >= StillClosingFraction)
+                continue;
+            if (!FuseDotAllows(weapon.DetonationDotProduct, BackwardAxis(vessel.Body),
+                    candidate - origin))
+                continue;
+            best = d;
+            detonationPoint = candidate;
+            fused = null;
+            towardHull = origin - candidate;
+        }
+        return best < float.PositiveInfinity;
     }
 
     // The one exit every self-ended round takes, so the range expiry and both fuses share the
@@ -2543,7 +2618,7 @@ public sealed partial class ProjectilePool : Node3D
         _blastCandidates.Sort(ByDistance);
 
         // One share per world OBJECT, not per collider body: the original's hit buffer holds one
-        // entry per node and SceneBuilder splits a node into a body per surface class. The struck
+        // entry per node and SceneBuilder splits a node into a body per surface class and soil. The struck
         // node took the full figure already, so its siblings are spent with it.
         _blastGroups.Clear();
         if (struck != null)
@@ -2575,17 +2650,17 @@ public sealed partial class ProjectilePool : Node3D
         _blastCandidates.Clear();
     }
 
-    // Every registered flying plane inside the radius, never the shooter's own and never one out
-    // of play (same roster-walk caveat as the fuse), measured to the nearest point on its own
-    // collision boxes (0 inside, the engulf clamp) and struck at that box, so part mapping and
-    // kill attribution run the exact direct-hit path. ⚠ Keep the shooter's exemption here; the
-    // original guards the same case one level lower, on the vehicle hit path, and the departure
-    // is recorded in docs/org/ordnanceTypes.md.
-    private void GatherAircraftCandidates(Vector3 point, float radiusSq, int shooter)
+    // Every registered flying plane inside the radius, never one out of play, and never the
+    // shooter's own on the damage pass. The fuse's roster-walk caveat applies. Each is measured to
+    // the nearest point on its collision boxes (0 inside, the engulf clamp). The hit lands at that
+    // box, so part mapping and kill attribution run the direct-hit path. ⚠ Keep the damage pass's
+    // shooter exemption here. The original guards it one level lower, BELOW the no-damage arms,
+    // which is why the disabling pass asks for the shooter back (docs/org/ordnanceTypes.md).
+    private void GatherAircraftCandidates(Vector3 point, float radiusSq, int shooter, bool includeShooter = false)
     {
         foreach (var plane in _aircraft)
         {
-            if (plane.PlayerIndex == shooter || !plane.Rig.InPlay)
+            if ((plane.PlayerIndex == shooter && !includeShooter) || !plane.Rig.InPlay)
                 continue;
             int shapeIdx = plane.NearestShape(point, out float distance, out var nearPoint);
             if (shapeIdx < 0 || distance * distance >= radiusSq)
@@ -2677,30 +2752,6 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    // A gun round ricocheting off a buildings-classed surface: fast, bright sparks
-    // flying off the wall (additive, on the impact pool) plus the brief hit flash. A stand-in,
-    // the authored `bld_damage.flt`/`rcochet1` assets do not exist in the install; magnitudes
-    // are TUNE.
-    private void SpawnRicochet(Vector3 point, Basis orient)
-    {
-        if (_impact.Count < MaxFlashes)
-            _impact.Add(new Sprite { Pos = point, Life = ImpactLife, Size = ImpactSize, Tint = new Color(1f, 0.9f, 0.5f), Orient = orient });
-        for (int i = 0; i < RicochetSparks && _impact.Count < MaxFlashes; i++)
-        {
-            var dir = ApplySpread(orient.Z, RicochetSpreadDeg);
-            float speed = RicochetSparkSpeed * (0.5f + 0.5f * _rng.Randf());
-            _impact.Add(new Sprite
-            {
-                Pos = point,
-                Life = RicochetSparkLife * (0.7f + 0.6f * _rng.Randf()),
-                Size = RicochetSparkSize * (0.7f + 0.6f * _rng.Randf()),
-                Tint = RicochetTint,
-                Orient = orient,
-                Vel = dir * speed,
-            });
-        }
-    }
-
     // Ejects one shell casing: a pooled instance of the `gunshell` prototype, launched with its
     // def's own OBJECT_MOTION (MotionRuntime semantics). Each casing rides its own transient node,
     // so sustained fire ejects at gun rate. No-op without a world scene/anim program.
@@ -2729,8 +2780,8 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    // The authored muzzlepuffer smoke: a few short-lived puffs at the effects root ahead of the
-    // muzzle with the def's aft velocity, size, lifetime and deviation, the aircraft flies out of
+    // The authored muzzlepuffer smoke. A few short-lived puffs sit at the effects root ahead of the
+    // muzzle, with the def's aft velocity, size, lifetime and deviation. The aircraft flies out of
     // them, so they read as the smoke the shot leaves behind.
     private void SpawnMuzzleSmoke(Transform3D muzzle)
     {
@@ -2756,11 +2807,10 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    // The dynamic muzzle-light flash: pooled OmniLight3Ds set from the muzzle_burst def's testfp
-    // branch, shown for a couple of frames, the two big 1stperson_lts lights in a first-person
-    // view, otherwise one of the three small 3rdperson_lts variants. Both branches sit at
-    // MuzzleSecondaryOffset, the displaced effects root, rather than at the muzzle node.
-    // ⚠ A LIGHT_STATE RANGE is a falloff PAIR, not a band to roll in (WorldLights.Add): the outer
+    // The dynamic muzzle-light flash, the muzzle_burst def's testfp branch. A first-person view
+    // takes the two big 1stperson_lts lights, otherwise one of the three small 3rdperson_lts
+    // variants. Both branches sit at MuzzleSecondaryOffset, the displaced effects root.
+    // ⚠ A LIGHT_STATE RANGE is a falloff PAIR, not a band to roll in (WorldLights.Add). The outer
     // value is where the pool reaches zero, the OmniLight3D range. A rolled range pulsed per shot.
     private void FlashMuzzleLight(Transform3D muzzle, Node3D? anchor)
     {
@@ -2770,13 +2820,16 @@ public sealed partial class ProjectilePool : Node3D
             return;
         if (FirstPersonView?.Invoke() == true)
         {
-            // testfp's PLAYER_1ST_PERSON branch: bigmuzzle_lt and muzzle_lt at the def's own
-            // AT_NODE offsets, one either side of the gun line, big enough to light the cockpit
-            // interior from a shot, strongest on the canopy struts (docs/formats/weapon-effects.md).
-            EmitLight(muzzle, anchor, MuzzleSecondaryOffset + new Vector3(11f, -1f, -5f),
-                21.25f, new Color(0.88f, 0.78f, 0.36f));
-            EmitLight(muzzle, anchor, MuzzleSecondaryOffset + new Vector3(-11f, -1f, -5f),
-                18.25f, new Color(0.93f, 0.78f, 0.36f));
+            // In original mode the pair is the point term, which is what lights the unshaded
+            // cockpit interior; an omni reaches nothing there (docs/formats/weapon-effects.md).
+            bool pointTerm = _pointLights != null && !GraphicsMode.Enhanced;
+            foreach (var (at, near, far, tint) in FirstPersonLights)
+            {
+                if (pointTerm)
+                    QueuePointFlash(muzzle, anchor, MuzzleSecondaryOffset + at, near, far, tint);
+                else
+                    EmitLight(muzzle, anchor, MuzzleSecondaryOffset + at, far, tint);
+            }
             return;
         }
         // The def's 3rdperson_lts variants: RANDOM_WEIGHT 0.333 / 0.333 / else, each a range band
@@ -2845,6 +2898,42 @@ public sealed partial class ProjectilePool : Node3D
         slot.Frames = 0;
     }
 
+    // Holds one first-person light for the point term. Drops it when the set is already full,
+    // which is more than the shader can draw in one frame anyway.
+    private void QueuePointFlash(Transform3D muzzle, Node3D? anchor, Vector3 local, float near, float far, Color color)
+    {
+        if (_pointFlashes.Count >= WorldLights.MaxActive)
+            return;
+        _pointFlashes.Add(new PointFlash
+        {
+            Anchor = anchor,
+            Local = local,
+            At = muzzle.Origin + (muzzle.Basis.Orthonormalized() * local),
+            Near = near,
+            Far = far,
+            Color = color,
+        });
+    }
+
+    // The point set's per-commit call. Each light is submitted through the one rendered frame of
+    // its first commit, then dropped. The def's INACTIVE on the next event tick leaves it lit for
+    // one drawn frame. It rides its firing node the way the omni flashes do.
+    private void SubmitPointFlashes(WorldLights lights)
+    {
+        ulong frame = Engine.GetProcessFrames();
+        for (int i = _pointFlashes.Count - 1; i >= 0; i--)
+        {
+            var f = _pointFlashes[i];
+            if (f.Frame is { } lit && lit != frame)
+            {
+                _pointFlashes.RemoveAt(i);
+                continue;
+            }
+            f.Frame = frame;
+            lights.Add(AnchorPoint(f.Anchor, f.Local, out var at) ? at : f.At, f.Color, f.Near, f.Far);
+        }
+    }
+
     private void AgeCasings(float dt)
     {
         var spec = _casingSpec;
@@ -2884,9 +2973,9 @@ public sealed partial class ProjectilePool : Node3D
             {
                 l.InUse = false;
                 l.Light.Visible = false;
-                // Two breadcrumbs per session: the metres the expiring light rode with the muzzle.
-                // ⚠ Never difference the light against the muzzle here; this runs on the simulation
-                // step and the light was placed on the drawn pose (docs/verification.md).
+                // ⚠ Never difference the light against the muzzle here. This runs on the simulation
+                // step and the light was placed on the drawn pose (docs/verification.md). Two
+                // breadcrumbs per session give the metres the expiring light rode with the muzzle.
                 if (_muzzleLightLogs < 2 && l.Frames > 0 && (GameClock.Current?.Time ?? 0.0) >= 2.0
                     && MuzzleFrame(l, out var at))
                 {
@@ -3241,7 +3330,7 @@ public sealed partial class ProjectilePool : Node3D
         public Basis Orient;   // unit quad orientation: X width, Y height, Z the facing normal.
                                // Muzzle flashes roll in the firing plane's basis; impact sprites
                                // face the struck surface normal, a fixed world plane for neither.
-        public Vector3 Vel;    // m/s, world; zero for every sprite but ricochet sparks and smoke
+        public Vector3 Vel;    // m/s, world; zero for every sprite but smoke
         public bool NoGravity; // smoke puffs drift on their spawn velocity; sparks arc (false)
         public bool AnchorLeft; // Pos is the texture's left edge (UV x=0), not the quad centre,
                                 // the muzzle flash triad; the centre is derived in RenderSprites
@@ -3399,5 +3488,16 @@ public sealed partial class ProjectilePool : Node3D
         public Vector3 Local;   // the light's placement in the anchor's own frame
         public Vector3 LitAt;   // where the muzzle stood when it was lit, for the placement breadcrumb
         public int Frames;      // drawn frames this flash has lived, for the placement breadcrumb
+    }
+
+    // One first-person muzzle light held for the point term (SubmitPointFlashes).
+    private sealed class PointFlash
+    {
+        public Node3D? Anchor;  // the node that fired, resolved at each commit like LightFlash's
+        public Vector3 Local;   // the light's placement in the anchor's own frame
+        public Vector3 At;      // where it was lit, used when the anchor is gone
+        public float Near, Far; // the authored range pair, weight 1 inside Near and 0 past Far
+        public Color Color;
+        public ulong? Frame;    // the process frame of its first commit; null until then
     }
 }

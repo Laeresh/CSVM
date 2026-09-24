@@ -116,7 +116,7 @@ every cargo-zeppelin material, so on that airship the original does not even com
 is the file's `show_backface`; when it is clear both routines reject a hit whose plane faces away
 (`if (dot >= 0) return 0`). A single-sided polygon is solid from its front only. The remake reads
 the same flag on the collider rather than at the query, `SceneBuilder.CollidersForMesh` giving each
-surface class a two-sided shape and a one-sided one; the sidedness census is in
+(surface class, soil) body a two-sided shape and a one-sided one; the sidedness census is in
 [`../formats/gotchas.md`](../formats/gotchas.md).
 
 ## Only one rule lets a round pass through a surface, and it is the soil id

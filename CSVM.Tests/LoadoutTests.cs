@@ -161,8 +161,8 @@ public class LoadoutTests
     [Fact]
     public void TheHopliteHangsBothPylonsToPortAndTheFirebrandFourToTwo()
     {
-        // The two airframes whose stock count the fill-order halves used to split wrongly; the
-        // totals, and so the prices, are the authored counts either way.
+        // The two airframes whose stock count the fill-order halves are likeliest to split wrongly.
+        // The totals, and so the prices, are the authored counts either way.
         var loadouts = Load();
         var hoplite = loadouts.For("pautogyro")!.Hardpoints;
         var firebrand = loadouts.For("pfirebrand")!.Hardpoints;

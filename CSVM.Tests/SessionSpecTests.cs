@@ -1,5 +1,7 @@
 using System.Linq;
 using CSVM;
+using CSVM.Effects;
+using CSVM.Mech3;
 using CSVM.Utils;
 using Godot;
 using Xunit;
@@ -916,6 +918,50 @@ public class SessionSpecTests
 
         Assert.Empty(S("--volume=0").Warnings);
         Assert.Empty(S("--mute").Warnings);
+    }
+
+    [Fact]
+    public void TheSoundRangeScaleDefaultsToTheShippedFactor()
+    {
+        // The one assertion of the shipped departure's value: a session nobody passes the flag to
+        // plays every positional voice at 2.5 times its authored radii.
+        Assert.Equal(2.5f, SoundFalloff.ShippedRangeScale);
+        Assert.Equal(SoundFalloff.ShippedRangeScale, S("--fly").SoundRangeScale);
+        Assert.Equal(1f, S("--sound-range-scale=1").SoundRangeScale);
+        Assert.Equal(2f, S("--sound-range-scale=2").SoundRangeScale);
+        Assert.Equal(0.5f, S("--sound-range-scale=0.5").SoundRangeScale);
+        Assert.Empty(S("--sound-range-scale=4").Warnings);
+    }
+
+    [Fact]
+    public void AnUnusableSoundRangeScaleIsIgnoredLoudly()
+    {
+        foreach (string bad in new[] { "0", "-1", "far", "2,5" })
+        {
+            var s = S($"--sound-range-scale={bad}");
+            Assert.Equal(SoundFalloff.ShippedRangeScale, s.SoundRangeScale);
+            Assert.Contains(s.Warnings, w => w.Category == "core" && w.Message.Contains("not a positive number"));
+        }
+    }
+
+    [Fact]
+    public void TheCloudJitterDefaultsToTheShippedOffset()
+    {
+        Assert.Equal(FogVolumeClutter.ShippedJitter, S("--fly").CloudJitter);
+        Assert.Equal(40f, S("--cloud-jitter=40").CloudJitter);
+        Assert.Equal(0f, S("--cloud-jitter=0").CloudJitter);
+        Assert.Empty(S("--cloud-jitter=12.5").Warnings);
+    }
+
+    [Fact]
+    public void AnUnusableCloudJitterIsIgnoredLoudly()
+    {
+        foreach (string bad in new[] { "-1", "wide", "2,5", "NaN" })
+        {
+            var s = S($"--cloud-jitter={bad}");
+            Assert.Equal(FogVolumeClutter.ShippedJitter, s.CloudJitter);
+            Assert.Contains(s.Warnings, w => w.Category == "core" && w.Message.Contains("--cloud-jitter"));
+        }
     }
 
     // ---- Parse conventions ---------------------------------------------------------------------

@@ -345,6 +345,10 @@ camera is watching, which sits inside the inner radius, so distance attenuation 
 **Ported** as `EngineAudioCurves.Rattle` against `PlaneStats.RattleSpeedGate`, driven by
 `FlightAudio` on the pilot's own non-positional loop; the port keeps the per-player mix gain that
 every own-ship loop takes in splitscreen, and gates on each human pilot rather than on one camera.
+⚠ **One chosen departure:** the port plays the rattle at `1.3`, not the decoded `1.0`. At the
+controls the level-with-the-engine loop read right in shape and audible but low, and the
+original's output chain is not the remake's, so the gain is the user's ear rather than the decode.
+The gate, the flat top and the absence of a ramp are still the decoded law.
 
 ## `nitro`, one kick per engage, the raw authored `magnitude`
 

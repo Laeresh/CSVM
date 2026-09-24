@@ -39,7 +39,7 @@ public class OriginalCoverageTests : IDisposable
     private const string JoinStep = "*join";
 
     // The wrap-up page is opened by a flown mission's ending, not by any row, so the walk hands the
-    // shell a frozen run the way the presentation's return does.
+    // shell an ended run the way the presentation's return does.
     private const string WrapupStep = "*wrapup";
 
     private static readonly MenuCommands Accept = new() { Accept = true };
@@ -68,6 +68,9 @@ public class OriginalCoverageTests : IDisposable
     {
         new("free-flight", OriginalScreen.FreeFlight, new[] { OriginalShell.FreeFlightKey }, new[] { OriginalShell.BackKey }),
         new("dogfight", OriginalScreen.Dogfight, new[] { OriginalShell.DogfightKey }, new[] { OriginalShell.BackKey }),
+        new("join-board", OriginalScreen.JoinBoard, new[] { OriginalShell.JoinBoardKey }, new[] { OriginalJoinBoard.BackKey }),
+        new("join-board-continue", OriginalScreen.TopLevel,
+            new[] { OriginalShell.JoinBoardKey, OriginalJoinBoard.ContinueKey }, Array.Empty<string>()),
         // ⚠ The cursor families walk this screen as the picking seat, not as seat 0, which drives
         // nothing here; only the pointer stays seat 0's. ⚠ Leave the map unpicked: the way off by
         // row is the walk's completion, which is the launch itself once FLY's gate is met.
@@ -150,7 +153,7 @@ public class OriginalCoverageTests : IDisposable
             new[]
             {
                 "MM_B_PREFERENCES", OriginalOptionsScreen.GameOptionsDoorKey,
-                OriginalOptionsScreen.PresentationKey, OriginalOptionsScreen.PresentationKey + ":1", OriginalOptionsScreen.GameOptionsAcceptKey,
+                OriginalOptionsScreen.DifficultyKey, OriginalOptionsScreen.DifficultyKey + ":1", OriginalOptionsScreen.GameOptionsAcceptKey,
             },
             Array.Empty<string>(), Exit: typeof(OptionsApplyExit)),
         new("apply-audio", null,

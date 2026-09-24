@@ -316,9 +316,7 @@ public sealed partial class OriginalShell
 
     // The screen as the shared board component composes it over the seat's page, with the seat
     // strip naming who is picking.
-    private void ComposeSeatPlane(
-        int focus, List<BoardPicture> backdrop, List<BoardPicture> pictures, List<BoardFill> fills,
-        List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPanel> overlays)
+    private void ComposeSeatPlane(int focus, BoardLayers layers)
     {
         if (_seatPage is not { } page)
         {
@@ -327,15 +325,15 @@ public sealed partial class OriginalShell
 
         bool pressed = _pressed >= 0 && _pressed == focus;
         var board = CampaignBoards.For(page, focus, pressed, string.Empty, null, _campaignLayout);
-        backdrop.AddRange(board.Backdrop);
-        fills.AddRange(board.Fills);
-        pictures.AddRange(board.Pictures);
-        lines.AddRange(board.Lines);
-        plaques.AddRange(board.Plaques);
-        overlays.AddRange(board.Overlays);
+        layers.Backdrop.AddRange(board.Backdrop);
+        layers.Fills.AddRange(board.Fills);
+        layers.Pictures.AddRange(board.Pictures);
+        layers.Lines.AddRange(board.Lines);
+        layers.Plaques.AddRange(board.Plaques);
+        layers.Overlays.AddRange(board.Overlays);
         if (CampaignSeatPanel() is { } strip)
         {
-            overlays.Add(strip);
+            layers.Overlays.Add(strip);
         }
     }
 

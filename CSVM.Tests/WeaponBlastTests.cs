@@ -94,11 +94,33 @@ public class WeaponBlastTests
         Assert.True((down * Vector3.Up).IsEqualApprox(Vector3.Down));
     }
 
+    /// <summary>The decoded gate dots unit(round - candidate) with the candidate's backward axis, so
+    /// a positive threshold admits a round behind the candidate and refuses one ahead of it.</summary>
     [Fact]
-    public void TheAuthoredFuseDotGateAcceptsAheadAndRejectsBehind()
+    public void TheAuthoredFuseDotGateAdmitsARoundBehindTheCandidate()
     {
-        Assert.True(ProjectilePool.FuseDotAllows(0.3f, Vector3.Forward, Vector3.Forward));
-        Assert.False(ProjectilePool.FuseDotAllows(0.3f, Vector3.Forward, Vector3.Back));
+        // A candidate flying nose -Z has its backward axis on +Z.
+        var backward = Vector3.Back;
+        var candidate = new Vector3(100f, 50f, -20f);
+        var behind = candidate + new Vector3(2f, 1f, 12f);
+        var ahead = candidate + new Vector3(2f, 1f, -12f);
+        Assert.True(ProjectilePool.FuseDotAllows(0.3f, backward, behind - candidate));
+        Assert.False(ProjectilePool.FuseDotAllows(0.3f, backward, ahead - candidate));
+
+        // A negative threshold flips which side passes: abeam and behind admit, dead ahead does not.
+        var abeam = candidate + new Vector3(12f, 0f, 0f);
+        Assert.True(ProjectilePool.FuseDotAllows(-0.5f, backward, abeam - candidate));
+        Assert.False(ProjectilePool.FuseDotAllows(-0.5f, backward, ahead - candidate));
+    }
+
+    /// <summary>An unauthored threshold never gates, and a round exactly on the candidate's origin
+    /// dots to zero, which a positive threshold refuses and a zero one admits.</summary>
+    [Fact]
+    public void TheFuseDotGateReadsAZeroOffsetAsZero()
+    {
+        Assert.True(ProjectilePool.FuseDotAllows(null, Vector3.Back, Vector3.Forward));
+        Assert.False(ProjectilePool.FuseDotAllows(0.1f, Vector3.Back, Vector3.Zero));
+        Assert.True(ProjectilePool.FuseDotAllows(0f, Vector3.Back, Vector3.Zero));
     }
 
     /// <summary>The fuse's cheap reject measures the whole of a round's step: a round crossing 3 m

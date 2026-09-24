@@ -86,7 +86,12 @@ public sealed class MenuControlsSeats
             [InputContext.Menu] = input.Map,
             [InputContext.Camera] = LaunchBindings.Map(player, InputContext.Camera, PadOf(InputContext.Camera), input.Keyboard),
         };
-        // The flying scheme rides with the flight rows it competes with, off the same read.
-        return new BindingProfile(maps, input.Keyboard) { MouseFlying = saved.MouseFlying };
+        // The flying scheme and its sensitivity ride with the flight rows they compete with, off the
+        // same read.
+        return new BindingProfile(maps, input.Keyboard)
+        {
+            MouseFlying = saved.MouseFlying,
+            MouseSensitivity = saved.MouseSensitivity,
+        };
     }
 }

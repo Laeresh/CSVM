@@ -931,13 +931,23 @@ internal static class TargetingSuites
             f16.Toggle();
             ctx.Check(!pane1.MarkAll && !pane2.MarkAll,
                 $"and a second press switches them off again p1={pane1.MarkAll} p2={pane2.MarkAll}");
-            var noPanes = new UI.DebugMarkerToggle(() => new List<TargetHud>());
+            // A press with no pane to mark changes nothing and latches no state of its own. A pane
+            // can join the session after it, a splitscreen pane built late.
+            var latePanes = new List<TargetHud>();
+            var noPanes = new UI.DebugMarkerToggle(() => latePanes);
             noPanes.Toggle();
-            ctx.Check(true, $"CONTROL: a session with no flight pane takes the press without throwing");
+            ctx.Check(latePanes.Count == 0,
+                $"a session with no flight pane still has none after the press panes={latePanes.Count}");
+            var pane3 = new TargetHud { PlayerIndex = 0 };
+            latePanes.Add(pane3);
+            noPanes.Toggle();
+            ctx.Check(pane3.MarkAll,
+                $"and the pane that joins afterwards takes the next press on={pane3.MarkAll}");
             f16.Free();
             noPanes.Free();
             pane1.Free();
             pane2.Free();
+            pane3.Free();
         }
         finally
         {
@@ -1198,7 +1208,8 @@ internal static class TargetingSuites
         + "range is inside the fog-derived gate, and the gate is wider while a subject is already "
         + "held, so the picture engages nearer than it releases; a wider fog band opens it further "
         + "out, up to the 2000 m cap; its eye stands on the pose the aeroplane is drawn at rather "
-        + "than the sim pose the gates read, and its camera drops the one layer that aeroplane is "
+        + "than the sim pose the gates read, the hud runs after the flight rigs so its aim reads the "
+        + "target's drawn pose of the same frame, and its camera drops the one layer that aeroplane is "
         + "drawn on and no other; plus the three placement rules the disc brings, half the "
         + "window added to the anchor's inset with the tip and the on-screen test untouched, the "
         + "shaft starting on the rim, and the label 3 under the disc's bottom or 45 over its top")]
@@ -1271,6 +1282,9 @@ internal static class TargetingSuites
 
             hud = TargetHud.Build(0, ctx.Camera, live);
             ctx.Host.AddChild(hud);
+            // One frame cannot show the aim a step off the drawn target, so the order is asserted.
+            ctx.Check(hud.ProcessPriority > bogey.ProcessPriority,
+                $"the hud runs after the flight rigs (priority {hud.ProcessPriority} against a rig's {bogey.ProcessPriority}), so the picture aims at the pose the target is drawn at this frame");
             hud.Size = pane;
             hud.PlanePos = Vector3.Zero;
             // A 1 km fog band puts the release gate at 800 m and the engage gate at 700.

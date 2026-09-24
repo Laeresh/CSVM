@@ -432,16 +432,57 @@ re-derived.
 ## The proximity fuse
 
 `FUN_004b5fb0` runs the fuse as part of the world tick. For each round in flight (`DAT_0064f78c`) it
-walks **the aircraft list** (`DAT_0071dabc`), skips anything on the shooter's own side, and tests
-range against the round's weapon def `+0x44`. Nothing else is a candidate: the loop never touches
-world geometry, which decodes what was previously a recollection, that the original fuses on
-aircraft and never on terrain.
+walks **`VehicleList`** (the `std::list` at `0x0071dab8`, head node at `DAT_0071dabc`), skips anything
+on the shooter's own side, and tests range against the round's weapon def `+0x44`. Nothing else is
+a candidate: the loop never touches world geometry, which decodes what was previously a
+recollection, that the original fuses on aircraft and never on terrain.
+
+The side test compares the round wrapper's `+0x8` with the candidate's `+0x8`, the team. The
+wrapper's copy is the shooter's own: `FUN_004b6820` hands `FUN_00441830` the address of the firing
+vehicle's `+0x8` (`0x004b6e8c`, `0x004b7298`) and the wrapper's base constructor `FUN_00441b90`
+stores it. The range test is point to point: `FUN_00538880` returns the squared distance between the
+round's and the candidate's slot-0 positions, and the test passes below the squared distance at
+`+0x44`. The first candidate in list order that passes both tests (and the dot test below) fires
+the burst through `FUN_005ac3a0`, and the loop breaks.
+
+CSVM keeps two departures. It detonates at the closest approach within the round's swept step
+rather than at the first frame in range, since several rockets author a trigger distance equal to their
+blast radius and a burst at first entry would deal nothing. An aircraft is measured to its airframe hulls and a surface hull to its
+origin, the decoded point. Both branches skip the round's side as the original does, by plain id
+equality with no neutral clause, and the aircraft branch also skips the shooter's own plane, which
+only matters for a shooter whose team changed while its round was in flight.
+
+The side is the one team space every combat object shares ([`targeting.md`](targeting.md) "The team
+space"), so the skip follows each mode's team assignment. A campaign's humans and wingmen are team
+1 and its AI take their roster or `SET_AI_TEAM` id; Instant Action's humans and wingmen are team 1
+and its waves the enemy id; co-op splitscreen (`--coop`, and every co-op campaign) puts every human
+on team 1. Dogfight (`--vs`) and plain splitscreen flight give each pilot its own default
+(`AimAssist.TeamOfPilot`: pilot 0 is team 1, pilot N is `10 + N`), so two Dogfight pilots still
+fuse on each other. The per-pilot ladder is a remake rule, since the original's network sides are
+not decoded; the fuse reads whatever `+0x8` the mode wrote.
+
+`VehicleList` holds aircraft and the AI ground/sea vehicles ([`aim-assist.md`](aim-assist.md) "The
+four lists"), and **no zeppelin**. Its one inserter is `FUN_0047c210`, which allocates the 0xa20-byte
+vehicle object and links it in through `FUN_005b3330` at `0x0047c543`; every other reference to
+`0x0071dab8` is a name lookup (`FUN_004aff10`) or an iteration. A zeppelin is a different object:
+`FUN_004bd110` reads `zeppelins.zrd`, allocates each one as a 0xfc-byte record (`FUN_004bd460`,
+initialised by `FUN_004bd8d0`) and pushes it only onto the `ZeppelinList` vector at `0x0071df80`
+(net-registered at `0x004bd223`). The mission script agrees: `SET_AI_TEAM` (`FUN_00469e20`) tries
+`VehicleList` first and falls back to a separate `ZeppelinList` search (`FUN_004bd3e0`), naming the
+two in one message, "can't find vehicle or zeppelin". The fuse's dot test also reads the candidate
+at `+0x198`, past the end of a 0xfc-byte zeppelin record. **So the list sweep never fuses on a
+zeppelin**, its hull, gasbags or cannons; a round passing close by flies on. The per-round
+target-proximity path above is a separate question, since it reads the round's own held target
+rather than a list.
 
 When the weapon carries `DETONATION_DOT_PRODUCT` (`0x80000`), passing the range test is not enough.
 The routine normalises the vector between the two and dots it against **the candidate's** orientation
 axis (`+0x198`..`+0x1a0`), and requires that dot to reach the authored threshold at ext `+0x20`. Below
 it, the candidate is skipped and the round flies on. The cone is measured against the target's
-facing, not the round's. `FUN_004b9770`, the terminal-impact path, repeats the same test against the
+facing, not the round's. The vector is round minus candidate (the candidate's slot-0 position call
+returns at `0x004b637c`, the round wrapper's at `0x004b6386`, and the round's is the minuend), and `+0x198` is the vehicle's
+`m[2]`, the backward axis ([`flightModel.md`](flightModel.md)), so a positive threshold admits a
+round in a cone behind the candidate. `FUN_004b9770`, the terminal-impact path, repeats the same test against the
 victim's basis before it will resolve a hit.
 
 ## The beeper and the seeker, which are one weapon in two halves
@@ -670,13 +711,15 @@ and sound a row binds and how rows are filled. It does not cover what a detonati
   `+0x74`, not on the extension flags: `FUN_005ac690` under bit `0x10` (**`CRATER` present**, set by
   `FUN_005ad630` where it reads the key) and `FUN_005ac580` under bit `0x40000` (**`QUICKSAND`**,
   unauthored). Both gate on the struck node carrying `0x10000` and randomise a count and two scales
-  from weapon fields `+0x198`/`+0x1c0`, `+0x1a4`/`+0x1cc` and `+0x1a8`/`+0x1d0`. ⚠ A crater that was
-  actually carved suppresses **both** animation slots below unless the weapon authors
-  `ANIMATION_ALWAYS` (`+0x74` bit `0x800000`; nothing in this install does), so on the six
-  `CRATER` weapons the ground effect is the crater rather than the ring where the terrain takes one.
-  The randomisation never fires, because all six carriers author the block bare and every span is
-  zero; what the carve then builds, and why a carve is often refused outright, is
-  [`craters.md`](craters.md), which also says what CSVM builds and what stands in for the rest.
+  from weapon fields `+0x198`/`+0x1c0`, `+0x1a4`/`+0x1cc` and `+0x1a8`/`+0x1d0`. ⚠ **That `0x10000`
+  is `CAN_MODIFY`, and no node in the install carries it**, so neither carve ever runs in play and
+  `FUN_005ac690` always returns false ([`craters.md`](craters.md), "No shipped detonation reaches
+  the carve"). A crater that was actually carved would suppress **both** animation slots below
+  unless the weapon authors `ANIMATION_ALWAYS` (`+0x74` bit `0x800000`; nothing in this install
+  does), so that suppression is code with no reach and the six `CRATER` weapons always play their
+  rows. The randomisation never fires either, because all six carriers author the block bare and
+  every span is zero; what the carve would build, and what CSVM builds instead, is
+  [`craters.md`](craters.md).
 - **The row's own bindings** follow: the sound through `FUN_005ad100`; the `ANIMATION` (row `+0x4`)
   spawned through `FUN_004edc10` with a zero rotation, and only when `FUN_005abcf0` returned 0; and
   the `SURFACE_ANIMATION` (row `+0x1c`) spawned with an orientation built from the hit record:
@@ -696,17 +739,23 @@ twelve metres over the hit, while its ground ring (`call_he_ring`) is called at 
 ring definitions carry scale and opacity and no rotation of any kind
 ([`../formats/weapon-effects.md`](../formats/weapon-effects.md)), so the original draws the upper
 ring on the fixed world axis whatever the round's flight path, and `Crimson Skies 1.02 2026-07-31
-23-27-53.mp4` shows exactly that. A ring seen edge-on reads as a bright line rather than a ring,
-which is what the enhanced presentation changes and the faithful one keeps.
+23-27-53.mp4` shows exactly that. The two rings are not authored alike: the ground ring's model
+(`he_ringer`) is flat in its node's XZ plane, while the upper ring's (`he_ringer1`, model box
+±4.24 m in X and Y, ±0.5 m in Z) stands in its XY plane with its disc facing along Z. So the
+original's upper ring is a standing disc facing world Z, and a ring seen edge-on reads as a bright
+line rather than a ring, which is what the enhanced presentation changes and the faithful one keeps.
 
-Under Enhanced Graphics the remake places that one callee with world up rotated onto the reverse of
-the round's own flight direction, so the ring faces back up the path the rocket came down. Nothing
+Under Enhanced Graphics the remake places that one callee with the ring's own disc normal (node Z,
+`ProjectilePool.UpperRingDiscNormal`) rotated onto the reverse of the round's own flight direction,
+so the ring faces back up the path the rocket came down. Rotating world up instead turns the disc a
+quarter turn off the trail, since up lies in the disc's plane. Nothing
 else moves: the ground ring, the fireball, the trail columns and the `SURFACE_ANIMATION` rule above
 all keep their decoded placement, and the switch is the ordinary `graphics.mode` setting
 (`GraphicsMode.Enhanced`), so the faithful path is bit-identical with or without this rule. CSVM:
 `ProjectilePool.UpperRingOrient` decides and hands the basis through `EffectSink`;
 `AnimRuntime.OrientedCallAnimNames` (from `EffectCatalogue.ImpactUpperRingAnimNames`) is the one
-callee name it may re-base; the `impact-orientation` suite pins both presentations.
+callee name it may re-base; the `impact-orientation` suite pins both presentations, measuring the
+drawn mesh's disc normal against the reversed flight vector.
 
 ### The burst light in Enhanced Graphics
 
@@ -714,22 +763,24 @@ The HE burst authors a point light of its own. `he_ground_effect` runs `he_light
 `LIGHT_STATE he_light` ACTIVE at the `he_ring` node with `RANGE (4, 20)` and
 `COLOR (1.0, 0.86, 0.29)`, then walks six signed `LIGHT_ANIMATION` range deltas that grow the max
 from 20 m to 420 m over 0.41 s and switches the light INACTIVE again; the same definition's `FBFX`
-frame-buffer wash runs 1.2 s. ⚠ CSVM does not render that authored light: the effects runtime is
-built with no `WorldLights` of its own, so every `LIGHT_STATE` a played effect declares is a
-no-op there, and the faithful presentation shows the fireball sprite alone.
+frame-buffer wash runs 1.2 s. CSVM renders that authored light on both presentations: the effects
+runtime contributes its `LIGHT_STATE` lights into the world's `WorldLights` through `AddSource`,
+and the `burst-light` suite pins the ramp. `torpedo_ground_effect` authors `torp_light` the same way.
 
 ⚠ **Remake-only, and Enhanced Graphics only.** Under `GraphicsMode.Enhanced` a played fireball
-effect registers a short-lived light with the world's `WorldLights` instead
+effect whose definition authors no light of its own (`large_fireball`, `small_fireball`)
+registers a short-lived light with the world's `WorldLights`
 ([`../architecture/Mech3.md`](../architecture/Mech3.md)), so a detonation lights the terrain,
-buildings and aircraft around it. It borrows the authored colour above and takes the ignition end
-of the authored range; its peak, decay and flicker are a remake envelope with no counterpart in
-the data, and it ends with the fireball it came from rather than on a clock. CSVM:
-`EffectCatalogue.BurstLightAnimNames` names which effects throw one,
+buildings and aircraft around it. It borrows the authored `he_light` colour and takes the ignition
+end of the authored range; its peak, decay and flicker are a remake envelope with no counterpart in
+the data, and it ends with the fireball it came from rather than on a clock. A definition that
+authors a light (`AnimRuntime.AuthorsLight`) registers none, since its own light already stands at
+that point. CSVM: `EffectCatalogue.BurstLightAnimNames` names which effects throw one,
 `WorldEffectsFactory.RegisterBurstLight` decides, `WorldLights.AddBurst` holds the envelope, and
-the `burst-light` suite pins both presentations. The heat shimmer over the same burst
-(`Effects/HeatShimmer.cs`) is that same remake-only, Enhanced-only layer: it reads the same effect
-names and the same liveness, so a fireball that lights what stands around it is the one that
-refracts the air over it, and the faithful presentation carries neither.
+the `burst-light-envelope` suite pins both presentations. The heat shimmer over the same burst
+(`Effects/HeatShimmer.cs`) is that same remake-only, Enhanced-only layer: it reads the whole of the
+same effect names and the same liveness, so every fireball refracts the air over it, and the
+faithful presentation carries no shimmer.
 
 ### Which row a burst reads
 
@@ -743,7 +794,7 @@ that record differently:
 - **Every fused burst reads `default`(0).** Both fuse paths end in `FUN_005ac3a0`: the round's own
   fuse against its held target in `FUN_005afd50` (squared distance to the target at or under
   `+0x44`) and the vehicle-side sweep in `FUN_004b5fb0` (every live round whose `+0x44` exceeds
-  0.01, against every VehicleList entry but the shooter, under the optional dot gate of flag
+  0.01, against every VehicleList entry off the shooter's side, under the optional dot gate of flag
   `0x80000`). `FUN_005ac3a0` builds a synthetic hit record on its stack from the round's position and
   a material stub whose id field is zero, and the aircraft the round fused on is not on it; that
   aircraft takes its share through the splash gather like any other candidate. So a fuse burst
@@ -814,7 +865,7 @@ this path that takes a square root:
   from several collidable leaves takes several shares, one per leaf, all against the same HP pool.
   ⚠ This is NOT one entry per top-level object, and a reading that collapses a multi-part model to a
   single share contradicts the recursion. What the original has no counterpart for is CSVM's split of
-  one leaf into a body per surface class (`SceneBuilder.AttachCollision`), which is why the pool
+  one leaf into a body per surface class and soil (`SceneBuilder.AttachCollision`), which is why the pool
   collapses those siblings (`WorldCollision.OwnerOf`) and nothing coarser.
 - **At most 32 objects** are collected. The gather checks `count < 0x20` before testing each
   candidate and, once the buffer is full, logs "Database intersections array is full" for every
@@ -885,8 +936,9 @@ order is what decides which types can ever deal damage:
    figure as the duration, and the colour: white for `FLASH` and **red for `SONIC`**. An AI gets
    `FUN_004200d0`, which is a **stun**. Either way both damage figures are then zeroed. CSVM:
    `ProjectilePool.ApplyDisabling`, run from `Apply` on every burst of a `SONIC`/`FLASH` weapon over
-   the same aircraft gather the splash uses; a human's pane through `ProjectilePool.WashSink`
-   (`ScreenFlash.PlayBlend`), an AI through `FlightController.TryStunPilot`.
+   the same aircraft gather the splash uses, with the shooter kept as a candidate where the damage
+   pass drops them; a human's pane through `ProjectilePool.WashSink` (`ScreenFlash.PlayBlend`), an
+   AI through `FlightController.TryStunPilot`.
 3. **`BEEPER`** (`0x4000`). Tests the shooter against the victim (`FUN_004b8ce0`), then tags the
    victim by handing `FUN_004b88a0` the shared `TIME` at `+0x18`. Zeroes both damage figures and
    returns.
@@ -1190,8 +1242,9 @@ name `spinprops`, the two autogyro chains name `agyro_rotors`, and all 23 name `
 `prop3`/`prop3b` faded from 1 to 0 over 1.5 s and then deactivated. `snd_propstop` is
 `propstop.wav`, `PURGEABLE` (not looped), `3D`, range 200 to 420, so
 it plays positionally at the choked aircraft whoever is flying it. The blur discs cross-fade to a
-still blade over a second and a half while the engine loop is already carrying `snd_damagedengine` at
-its drawn pitch ([formats/vehicle.md](../formats/vehicle.md), "What makes an airframe damaged").
+still blade over a second and a half while slot 0 is silent: the same edge stops the engine loop, and
+`snd_damagedengine` starts only once the definition's re-arm timer fires, 3 to 5 s later
+([formats/vehicle.md](../formats/vehicle.md), "The damaged engine's phases").
 
 **The restart is silent and instant.** `spinprops` carries no `SOUND` event and no opacity ramp: it
 activates `propN`/`propNb`, deactivates `staticpropN` and `nitropropN`, and starts an endless

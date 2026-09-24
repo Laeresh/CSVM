@@ -40,9 +40,9 @@ public enum AiMode
     /// everything else waits.</summary>
     AvoidCrash,
 
-    /// <summary>Flying at a <c>dzpathN</c> ribbon's entry point on the emergency table: the
-    /// original's state 2, entered by <see cref="AiPilot"/> off a reached net node's danger-zone
-    /// tag, and left for <see cref="NavigatingDangerZone"/> inside 105 m of that point.</summary>
+    /// <summary>Flying at a <c>dzpathN</c> ribbon's entry point on the emergency table, the
+    /// original's state 2. Entered off a reached net node's danger-zone tag or a hit pilot's
+    /// proximity pick, and left inside 105 m for <see cref="NavigatingDangerZone"/>.</summary>
     ApproachingDangerZone,
 
     /// <summary>On rails along the ribbon: the pose is written off <see cref="DangerZoneRail"/>
@@ -53,16 +53,14 @@ public enum AiMode
 
 /// <summary>The nine-mode AI state machine, owned by an <see cref="AiPilot"/> and stepped
 /// once per sim tick from <see cref="AiPilot.Next"/>. The mode list and its vocabulary are
-/// decoded (docs/formats/ai-rosters.md "AI modes, engine-side"); which transitions are decoded
-/// and which are invented is recorded in docs/architecture.md's entry for this file, and each
-/// invented constant below says so at its own declaration.
+/// decoded (docs/formats/ai-rosters.md "AI modes, engine-side"), and each invented constant
+/// below says so at its own declaration.
 /// Config fields are plain and mutable BY DESIGN, mission scripts rewrite them at runtime
 /// (<c>SET_AI_ATTACK_RADIUS</c> and friends). All randomness is this machine's own seeded
 /// stream, so a fixed-seed run transitions identically. The obstacle probe is an injected
-/// delegate and target state arrives as a snapshot, so the transition table unit-tests without
-/// a scene tree (<c>AiModeMachineTests</c>).
-/// The danger-zone modes are entered by <see cref="AiPilot"/> alone, off a reached net node's
-/// tag (docs/org/aiPilot.md "The danger-zone run"). ⚠ Do not add a second entry here.</summary>
+/// delegate and target state a snapshot, so the table unit-tests without a scene tree.
+/// ⚠ The danger-zone modes are <see cref="AiPilot"/>'s to enter and none of them here: this
+/// machine only rolls and stamps (docs/org/aiPilot.md "The danger-zone run").</summary>
 public sealed class AiModeMachine
 {
     /// <summary>The evade flag's clear threshold, decoded: the flag is dropped once the cosine
@@ -79,9 +77,9 @@ public sealed class AiModeMachine
     /// <summary>Obstacle-probe cadence ceiling, seconds (see <see cref="ProbeIntervalMinS"/>).</summary>
     public const float ProbeIntervalMaxS = 1f;
 
-    /// <summary>The world-Y floor the climb-out arms below, and the one a candidate maneuver's
-    /// predicted end point is vetoed below, decoded: <c>DAT_0071c3f0</c>, written 20.0 at level
-    /// setup (<c>FUN_004735b0</c>, <c>0x0047415b</c>). ⚠ Flat world Y, not a terrain follow: it
+    /// <summary>The world-Y floor the climb-out arms below. A candidate maneuver whose predicted
+    /// end point falls below it is vetoed. Decoded: <c>DAT_0071c3f0</c>, written 20.0 at level
+    /// setup (<c>FUN_004735b0</c>, <c>0x0047415b</c>). ⚠ Flat world Y, not a terrain follow. It
     /// saves a plane over water and does nothing over a ridge, which is what the ray is for.</summary>
     public const float AltitudeFloorM = 20f;
 
@@ -97,6 +95,15 @@ public sealed class AiModeMachine
 
     /// <summary>Invented: minimum probe length, metres (a slow plane still looks ahead).</summary>
     public const float ProbeMinLookaheadM = 120f;
+
+    /// <summary>The hold a refused danger-zone look arms before the next one, seconds. Decoded:
+    /// the original stamps <c>+0x8a0</c> with the clock plus 5 on every arm that finds no run
+    /// (<c>FUN_004210e0</c>, <c>0x00421443</c>).</summary>
+    public const float DangerZoneRetryS = 5f;
+
+    /// <summary>The vehicle constructor's own <c>daredevil_chance</c> (<c>+0x954</c>, written
+    /// 0.2 at <c>0x004b03c2</c>), carried by a pilot whose spawn resolved no rating.</summary>
+    public const float DefaultDaredevilChance = 0.2f;
 
     /// <summary>The avoid-crash climb-out altitude gain, metres, decoded: the original's climb-out
     /// aim is the aeroplane's own position with Y + 1000 (<c>FUN_0041d1f0</c> case 3), which is the
@@ -121,8 +128,8 @@ public sealed class AiModeMachine
     public const float MinSelectionWeight = 0.1f;
 
     /// <summary>The base of the log that turns an authored <c>steady_hand_chance</c> into
-    /// <see cref="SteadyHandExponent"/>, decoded (<c>0x00608020</c>, read at <c>0x0047d00a</c>).
-    /// ⚠ The authored 0.5-to-0.08 pair is this log's argument, never a probability a roll is
+    /// <see cref="SteadyHandExponent"/>. Decoded (<c>0x00608020</c>, read at <c>0x0047d00a</c>).
+    /// ⚠ The authored 0.5-to-0.08 pair is this log's argument. It is never a probability a roll is
     /// compared against (docs/org/aiControlLaw.md, "The roll itself").</summary>
     public const float SteadyHandLogBase = 0.7f;
 
@@ -156,32 +163,50 @@ public sealed class AiModeMachine
     /// 2026-08-14: an enemy behind the player appearing to slow down).</summary>
     public const float LayOffSustainS = 1.5f;
 
+    /// <summary>The 20 s hold a promotion onto a turret or structure arms in place of
+    /// <see cref="AttackDwellS"/> (<c>0x006035e4</c>, read at <c>0x0041f0ea</c>). The original
+    /// takes it only for a <c>jet</c> or <c>wingman</c> pursuer, which every aeroplane def is.</summary>
+    public const float NonVehicleAttackDwellS = 20f;
+
+    /// <summary>The 15 s hold a pursuit revert off a turret or structure arms in place of
+    /// <see cref="NotPursuitDwellS"/> (<c>0x00603560</c>, read at <c>0x0041e713</c>).</summary>
+    public const float NonVehicleNotPursuitDwellS = 15f;
+
     /// <summary>Activation radius, metres, player.json's <c>min_ai_active_dist</c> (2000 shipped),
-    /// the fallback for every roster whose own volume slots are unauthored (all of them).
-    /// ⚠ Decoded, this volume gates whether the engine SIMULATES a vehicle at all, measured to the
-    /// player, and it reaches neither target admission nor the chase leash (docs/org/aiPilot.md
-    /// "Every reader of the attack and activation triples"). The pursue ENTRY floor below is
-    /// CSVM's own reading of it, and a <c>DEDG</c> widening raises that floor and nothing else.</summary>
+    /// the fallback for every roster whose own volume slots are unauthored. That is all of them.
+    /// ⚠ Decoded, this volume gates whether the original SIMULATES a vehicle at all, measured to
+    /// the player. It reaches neither target admission, the promotion nor the chase leash
+    /// (docs/org/aiPilot.md "Every reader of the attack and activation triples"). Nothing in this
+    /// machine reads it; it is carried for the spawn and <c>DEDG</c> writers that set it.</summary>
     public float ActivationRange = 2000f;
 
     /// <summary>Attack radius, metres, vehicle.json's <c>attack</c> (2000 shipped, on
-    /// <c>basic_airplane</c>, inherited install-wide). The decoded admission volume: both scorers
-    /// refuse a candidate outside it, so it is what <see cref="AiTargetRanking"/> is handed. Pursue
-    /// is entered when a target sits inside both this and <see cref="ActivationRange"/>.</summary>
+    /// <c>basic_airplane</c>, inherited install-wide). The decoded admission volume. Both scorers
+    /// refuse a candidate outside it, so it is what <see cref="AiTargetRanking"/> is handed.
+    /// ⚠ Do not test it again in <see cref="Update"/>. The original's promotion reads no range, and
+    /// a quarry the selection hands over is chased the tick the dwell allows it.</summary>
     public float AttackRange = 2000f;
 
-    /// <summary>Chase leash, metres, vehicle.json's <c>return_range</c> (1200 shipped), decoded as
-    /// a CYLINDER about the pursuit anchor: the squared horizontal radius at <c>+0x334</c> and the
-    /// vertical band <c>-r</c>/<c>+r</c> at <c>+0x338</c>/<c>+0x33c</c>, all three filled from the
-    /// one authored token. Leaving it reverts the task on its own, with no activation term
-    /// (<c>FUN_0041d9f0</c>, <c>0x0041e69c</c>–<c>0x0041e6d5</c>).</summary>
+    /// <summary>vehicle.json's <c>attack_dwell</c>, seconds (60 shipped): how long a promotion holds
+    /// the chase before the pursuit reverts on its own.</summary>
+    public float AttackDwellS = 60f;
+
+    /// <summary>vehicle.json's <c>not_pursuit_dwell</c>, seconds (5 shipped): how long a revert or a
+    /// lost target keeps the pilot on its net before it may promote again.</summary>
+    public float NotPursuitDwellS = 5f;
+
+    /// <summary>Chase leash, metres, vehicle.json's <c>return_range</c> (1200 shipped). Decoded as
+    /// a CYLINDER about the pursuit anchor. The squared horizontal radius sits at <c>+0x334</c>,
+    /// the vertical band <c>-r</c> to <c>+r</c> at <c>+0x338</c>/<c>+0x33c</c>. All three are
+    /// filled from the one authored token. Leaving it reverts the task on its own, with no
+    /// activation term (<c>FUN_0041d9f0</c>, <c>0x0041e69c</c>–<c>0x0041e6d5</c>).</summary>
     public float ReturnRange = 1200f;
 
-    /// <summary>The steady-hand exponent, the original's <c>+0x968</c>: a hit passes with
-    /// probability <c>(1 - bite/pool)</c> raised to this, so the same round evades far more often
-    /// out of a worn-down pool than a fresh one. Spawn writes <see cref="ExponentFor"/> of the
-    /// rating's <c>steady_hand_chance</c>, which RISES with the rating, so the better pilot evades
-    /// more (docs/org/aiControlLaw.md, "The roll itself").</summary>
+    /// <summary>The steady-hand exponent, the original's <c>+0x968</c>. A hit passes with
+    /// probability <c>(1 - bite/pool)</c> raised to this. The same round therefore evades far more
+    /// often out of a worn-down pool than a fresh one. Spawn writes <see cref="ExponentFor"/> of
+    /// the rating's <c>steady_hand_chance</c>, which RISES with the rating, so the better pilot
+    /// evades more (docs/org/aiControlLaw.md, "The roll itself").</summary>
     public float SteadyHandExponent = DefaultSteadyHandExponent;
 
     /// <summary>Probability that the sixth-sense test PASSES (the pilot follows the target's
@@ -206,8 +231,16 @@ public sealed class AiModeMachine
     public bool AssistEnabled = true;
 
     /// <summary>The pilot's 1–9 <c>natural_touch</c>, compared directly against maneuver
-    /// difficulty (no interpolation table, by design).</summary>
+    /// difficulty (no interpolation table, by design). The proximity pick compares it against a
+    /// ribbon's own difficulty the same way (<c>FUN_004210e0</c>, <c>+0x958</c> against
+    /// <c>+0x44</c>).</summary>
     public int NaturalTouch = 1;
+
+    /// <summary>The pilot's resolved <c>daredevil_chance</c> (<c>+0x954</c>, 0.35 → 0.99 over the
+    /// rating): the probability one look for a danger zone gets past the roll. A spawn whose def
+    /// is not a <c>jet</c> is given zero. That is the original's own <c>+0x67c</c> test on the
+    /// arm that rolls (<c>FUN_0041d9f0</c>, <c>0x0041da07</c>).</summary>
+    public float DaredevilChance = DefaultDaredevilChance;
 
     /// <summary>The maneuver library, or null for a maneuver-less pilot (a failed
     /// steady-hand test then evades plainly instead).</summary>
@@ -217,18 +250,18 @@ public sealed class AiModeMachine
     /// weighted up <see cref="SignatureWeight"/>× during selection; null/empty = none.</summary>
     public IReadOnlyCollection<string>? SignatureManeuvers;
 
-    /// <summary>Line-of-sight probe for the avoid-crash test and the maneuver veto's path sweep:
-    /// static world plus other aircraft, never the caster's own body (docs/org/aiPilot.md "What the
-    /// ray can hit"). Returns the struck body's name, or null for a clear line, so the transition
-    /// log can say whether the override fired on terrain or on another aircraft. The host wires
-    /// <c>FlightController.AvoidCrashBlocksLine</c>; a null delegate means no world data, so the
-    /// mode is never entered and no candidate is vetoed for an obstacle.</summary>
+    /// <summary>Line-of-sight probe for the avoid-crash test and the maneuver veto's path sweep.
+    /// It hits static world plus other aircraft, never the caster's own body (docs/org/aiPilot.md
+    /// "What the ray can hit"). Returns the struck body's name, or null for a clear line. The
+    /// transition log can then say whether the override fired on terrain or on another aircraft.
+    /// The host wires <c>FlightController.AvoidCrashBlocksLine</c>. A null delegate means no world
+    /// data, so the mode is never entered and no candidate is vetoed for an obstacle.</summary>
     public Func<Vector3, Vector3, string?>? ProbeBlocked;
 
     /// <summary>Whether a nitro-flagged library entry may be drawn at all: the injector installed
     /// and the engine alive (<c>FUN_004201a0</c>, <c>0x004202d5</c>-<c>0x004202ea</c>). The host
     /// wires <c>FlightController</c>'s pair. ⚠ A null delegate is a pilot with no injector, so
-    /// <c>nitro_evade</c> is culled: difficulty 0 makes it eligible for everyone, and without the
+    /// <c>nitro_evade</c> is culled. Difficulty 0 makes it eligible for everyone, and without the
     /// boost its single step is six seconds of wings-level flight.</summary>
     public Func<bool>? NitroUsable;
 
@@ -242,9 +275,18 @@ public sealed class AiModeMachine
     private AiMode? _lastTargetMode;
 
     // The pursuit anchor: the PURSUER's own position where the promotion began the chase
-    // (FUN_0041f040, 0x0041f0a6), never rewritten while the task stands, so a lay off, a stun or a
-    // finished maneuver hands back to the same point. Null means the task is not pursue.
+    // (FUN_0041f040, 0x0041f0a6). It is never rewritten while the task stands, so a lay off, a
+    // stun or a finished maneuver hands back to the same point. Null means the task is not pursue.
     private Vector3? _pursuitAnchor;
+
+    // The one dwell stamp (the original's +0x300) against this machine's own clock, the sum of
+    // every Update's dt. A promotion arms it to the chase's deadline. A revert or a lost target
+    // arms it to the end of the wait before the next chase, so one field paces both ends.
+    private double _clock;
+    private double _dwellUntil;
+    private double _dangerZoneRetryUntil;
+    private bool _quarryIsVehicle = true;
+    private bool _quarryIsPrimary;
 
     private Vector3 _lastPos;
     private Vector3 _lastVelocity;
@@ -266,9 +308,9 @@ public sealed class AiModeMachine
     /// (the session logs these in the engine's own mode vocabulary).</summary>
     public event Action<AiMode, AiMode, string>? ModeChanged;
 
-    /// <summary>Every steady-hand / sixth-sense roll's outcome, phrased in the engine's own
-    /// vocabulary (pass and fail alike, so a quiet run is distinguishable from a lucky one), plus
-    /// every hit that took no roll at all, so the line count is the hit count.</summary>
+    /// <summary>Every steady-hand and sixth-sense roll's outcome, phrased in the engine's own
+    /// vocabulary. Pass and fail alike, so a quiet run is distinguishable from a lucky one. Every
+    /// hit that took no roll at all is logged too, so the line count is the hit count.</summary>
     public event Action<string>? RollLogged;
 
     /// <summary>The current mode. Transitions go through the machine; <see cref="Enter"/> is the
@@ -296,6 +338,11 @@ public sealed class AiModeMachine
     /// the chase started rather than where the aircraft spawned.</summary>
     public Vector3? PursuitAnchor => _pursuitAnchor;
 
+    /// <summary>Seconds until the dwell stamp passes, zero once it has. While pursuing, this is
+    /// what is left of the chase. Otherwise it is what is left of the wait before a promotion is
+    /// allowed.</summary>
+    public float DwellRemainingS => (float)Math.Max(0.0, _dwellUntil - _clock);
+
     /// <summary>Avoid-crash's climb-out altitude order (entry altitude + <see cref="ClimbOutM"/>).</summary>
     public float ClimbOutAltitude { get; private set; }
 
@@ -313,15 +360,15 @@ public sealed class AiModeMachine
     public static float ExponentFor(float chance) => (float)(
         Math.Log(Math.Max(chance, MinSteadyHandChance)) / Math.Log(SteadyHandLogBase));
 
-    /// <summary>The decoded pass probability for one hit (<c>FUN_004b1160</c>): the complement of
-    /// the fraction this hit bites out of the victim's pre-hit pool, raised to
+    /// <summary>The decoded pass probability for one hit (<c>FUN_004b1160</c>). It is the
+    /// complement of the fraction this hit bites out of the victim's pre-hit pool, raised to
     /// <paramref name="exponent"/>. A bite covering the pool returns 0, which never passes.</summary>
     public static double PassChance(float bite, float pool, float exponent) =>
         pool <= 0f || bite >= pool ? 0d : Math.Pow(1d - (bite / (double)pool), exponent);
 
     /// <summary>The armour-then-health slice this hit takes of the pre-hit pair
-    /// (<c>FUN_004b1160</c>, <c>+0x2c8</c> and <c>+0x2d0</c>): the armour damage while the armour
-    /// pool covers it, else that pool plus the health damage, else the whole pair.</summary>
+    /// (<c>FUN_004b1160</c>, <c>+0x2c8</c> and <c>+0x2d0</c>). It is the armour damage while the
+    /// armour pool covers it, else that pool plus the health damage, else the whole pair.</summary>
     public static float BiteOf(float armorDamage, float healthDamage, float armorPool, float healthPool) =>
         armorDamage < armorPool ? armorDamage
         : healthDamage < healthPool ? armorPool + healthDamage
@@ -346,23 +393,30 @@ public sealed class AiModeMachine
     /// mode's own timers so a forced state behaves as if entered normally.</summary>
     public void Enter(AiMode mode, string reason = "ordered")
     {
-        // An ordered engagement anchors where it was ordered, as a promotion does: without this a
+        // An ordered engagement anchors where it was ordered, as a promotion does. Without this a
         // scripted rejoin would be leashed to a point the aircraft left long ago.
         if (mode is AiMode.Pursue or AiMode.LayOff)
+        {
             _pursuitAnchor = _lastPos;
+            ArmChaseDeadline(); // or the stale stamp would revert the ordered chase next tick
+        }
         Transition(mode, reason);
     }
 
-    /// <summary>One sim tick's transitions. <paramref name="targetMode"/> is the standing target's
-    /// own mode when it is an AI aircraft, for the sixth-sense trigger; a human target reports
-    /// null, since that roll is undecoded against a human.
-    /// <paramref name="targetVelocity"/>/<paramref name="targetIsHuman"/> feed the lay-off pursued
-    /// test, extended only to a human-piloted pursuer, <paramref name="targetNose"/> the evade
-    /// flag's alignment clear, and <paramref name="attitude"/> the frame the veto predicts in.</summary>
+    /// <summary>One sim tick's transitions. The <paramref name="targetMode"/> argument is an AI
+    /// target's own mode for the sixth-sense trigger, null for a human, the roll being undecoded
+    /// against one. The <paramref name="targetVelocity"/> and <paramref name="targetIsHuman"/>
+    /// arguments feed the lay-off pursued test, <paramref name="targetNose"/> the evade clear and
+    /// <paramref name="attitude"/> the veto's frame. A non-vehicle quarry takes the dwell's
+    /// 20/15 s holds; the primary lifts the dwell.</summary>
     public AiMode Update(Vector3 pos, Vector3 velocity, Vector3? targetPos, AiMode? targetMode,
         float dt, Vector3? targetVelocity = null, bool targetIsHuman = false, Vector3? nose = null,
-        Vector3? targetNose = null, Basis? attitude = null)
+        Vector3? targetNose = null, Basis? attitude = null, bool quarryIsVehicle = true,
+        bool quarryIsPrimary = false)
     {
+        _clock += dt;
+        _quarryIsVehicle = quarryIsVehicle;
+        _quarryIsPrimary = targetPos is not null && quarryIsPrimary;
         _lastPos = pos;
         _lastVelocity = velocity;
         _nose = nose;
@@ -400,27 +454,33 @@ public sealed class AiModeMachine
 
         switch (Mode)
         {
+            // The promotion (FUN_0041f040) reads no range, team or net. Whatever the selection
+            // handed over is chased once the dwell stamp has passed, at once for the assigned target.
             case AiMode.Patrol:
-                if (targetPos is { } t
-                    && pos.DistanceTo(t) <= Mathf.Min(ActivationRange, AttackRange))
+                if (targetPos is { } t && (_quarryIsPrimary || _clock > _dwellUntil))
                 {
                     Transition(AiMode.Pursue, FormattableString.Invariant($"target at {pos.DistanceTo(t):0} m"));
                 }
                 break;
 
             // Evade joins the engagement cases: the flag runs the same driver, so the target
-            // loss and the leash still apply while it stands.
+            // loss, the dwell and the leash still apply while it stands. The assigned target skips
+            // the dwell and the leash alike (FUN_0041d9f0, 0x0041e5a6).
             case AiMode.Pursue:
             case AiMode.LayOff:
             case AiMode.Evade:
                 if (targetPos is not { } tp)
                 {
-                    Transition(AiMode.Patrol, "target lost");
+                    RevertTask("target lost", NotPursuitDwellS);
                 }
-                else if (_pursuitAnchor is { } anchor && OutsideReturnCylinder(pos, anchor))
+                else if (!_quarryIsPrimary && _pursuitAnchor is not null && _clock > _dwellUntil)
                 {
-                    Transition(AiMode.Patrol, FormattableString.Invariant(
-                        $"{pos.DistanceTo(anchor):0} m from the pursuit anchor, beyond return range"));
+                    RevertTask("attack dwell ran out", RevertWaitS());
+                }
+                else if (!_quarryIsPrimary && _pursuitAnchor is { } anchor && OutsideReturnCylinder(pos, anchor))
+                {
+                    RevertTask(FormattableString.Invariant(
+                        $"{pos.DistanceTo(anchor):0} m from the pursuit anchor, beyond return range"), RevertWaitS());
                 }
                 else
                 {
@@ -448,12 +508,12 @@ public sealed class AiModeMachine
         return Mode;
     }
 
-    /// <summary>The hit path's entry (decoded: <c>FUN_004b9bc0</c>, <c>0x004b9f1e</c> onward), the
-    /// hit's two halves against the victim's PRE-hit pools: rolls the steady-hand test, and a
-    /// FAILED test sets the evade flag and picks a library maneuver whatever mode was running. A
-    /// pilot with nothing eligible does not break off at all; it keeps its engagement with the flag
-    /// set. Leftover damage re-enters as the wrapper loop's later passes do, so one impact can take
-    /// several rolls against a shrinking pool. No second roll while the flag already stands.</summary>
+    /// <summary>The hit path's entry (decoded: <c>FUN_004b9bc0</c>, <c>0x004b9f1e</c> onward). Both
+    /// halves of the hit are taken against the victim's PRE-hit pools, and the steady-hand test is
+    /// rolled here. A FAILED test sets the evade flag and picks a library maneuver whatever mode
+    /// was running. A pilot with nothing eligible does not break off; it keeps its engagement with
+    /// the flag set. Leftover damage re-enters as the wrapper loop's later passes do, so one impact
+    /// can take several rolls against a shrinking pool. No second roll while the flag stands.</summary>
     public void NotifyDamage(float armorDamage, float healthDamage, float armorPool, float healthPool)
     {
         if (Evading)
@@ -501,6 +561,29 @@ public sealed class AiModeMachine
             return;
         Stun(StunRecoveryIntervalS, FormattableString.Invariant($"for {StunRecoveryIntervalS:0.0} s"));
     }
+
+    /// <summary>The daredevil roll that opens the proximity pick (<c>FUN_004210e0</c>'s unforced
+    /// arm): true means the pilot may look for a zone this step. The 5 s stamp is read first, so
+    /// a refused look costs one roll per <see cref="DangerZoneRetryS"/>, not one per frame. A
+    /// failed roll arms the stamp again. ⚠ This rolls only, and <see cref="AiPilot"/> owns both
+    /// entries into the run.</summary>
+    public bool RollDaredevil()
+    {
+        if (DaredevilChance <= 0f || _clock < _dangerZoneRetryUntil)
+            return false;
+        bool passed = _rng.NextDouble() < DaredevilChance;
+        RollLogged?.Invoke("Dare devil test " + (passed
+            ? "passed. Looking for danger zones."
+            : "failed. Not looking for danger zones."));
+        if (!passed)
+            StampDangerZoneRetry();
+        return passed;
+    }
+
+    /// <summary>Arms the retry hold after a look that started no run. The original stamps it on
+    /// every arm of the pick that falls through. Those arms are a difficulty over the pilot's
+    /// natural touch, an occupied lane, and no end in range.</summary>
+    public void StampDangerZoneRetry() => _dangerZoneRetryUntil = _clock + DangerZoneRetryS;
 
     /// <summary>The stun handler (decoded: <c>FUN_004200d0</c>, shared by the failed sixth-sense
     /// test, a <c>SONIC</c>/<c>FLASH</c> hit and the smoke screen): controls neutral for
@@ -584,16 +667,35 @@ public sealed class AiModeMachine
     private void ReturnFromReaction(Vector3 pos, Vector3? targetPos)
     {
         bool engaged = targetPos is not null && _pursuitAnchor is { } anchor
-            && !OutsideReturnCylinder(pos, anchor);
+            && (_quarryIsPrimary || (_clock <= _dwellUntil && !OutsideReturnCylinder(pos, anchor)));
         var back = _returnMode is AiMode.Pursue or AiMode.LayOff && engaged
             ? _returnMode
             : _returnMode == AiMode.ApproachingDangerZone ? _returnMode
             : AiMode.Patrol;
+        // A reaction that hands a pursuit back to the net is the task revert, deferred to here.
+        if (back == AiMode.Patrol && _pursuitAnchor is not null)
+            _dwellUntil = _clock + (targetPos is null ? NotPursuitDwellS : RevertWaitS());
         Transition(back, "reaction complete");
     }
 
+    // The promotion's stamp (0x0041f0ea-0x0041f106): the chase's own deadline.
+    private void ArmChaseDeadline() =>
+        _dwellUntil = _clock + (_quarryIsVehicle ? AttackDwellS : NonVehicleAttackDwellS);
+
+    // The revert's re-arm (0x0041e6d7-0x0041e737): the wait before the next promotion.
+    private float RevertWaitS() => _quarryIsVehicle ? NotPursuitDwellS : NonVehicleNotPursuitDwellS;
+
+    // Only a pursue task re-arms (0x0041c299 tests task 1). An ordered evade off the net that
+    // loses its target leaves the promotion's wait where it stood.
+    private void RevertTask(string reason, float waitS)
+    {
+        if (_pursuitAnchor is not null)
+            _dwellUntil = _clock + waitS;
+        Transition(AiMode.Patrol, reason);
+    }
+
     // The task revert's geometry (FUN_0041d9f0, 0x0041e69c-0x0041e6d5): a cylinder about the
-    // anchor, ReturnRange wide and the same distance up and down. ⚠ Not a sphere; the corner
+    // anchor, ReturnRange wide and the same distance up and down. ⚠ Not a sphere. The corner
     // between radius and band is inside it, and a sphere would recall a climbing pursuer early.
     private bool OutsideReturnCylinder(Vector3 pos, Vector3 anchor)
     {
@@ -729,8 +831,9 @@ public sealed class AiModeMachine
     // One weighted seeded draw over the entries that pass the natural-touch, injector and altitude
     // culls; null when no library is set or nothing passes. The weight is the entry's own bias plus
     // one, penalised for the last two flown and multiplied up for a signature entry, floored last.
-    // The original's remaining term, a point for a program whose predicted end direction carries
-    // the aircraft toward its preferred altitude, wants a roster value this machine does not carry.
+    // The original's remaining term wants a roster value this machine does not carry. It is a point
+    // for a program whose predicted end direction carries the aircraft toward its preferred
+    // altitude.
     private Maneuver? PickManeuver()
     {
         if (Library is not { Count: > 0 } library)
@@ -770,9 +873,9 @@ public sealed class AiModeMachine
     }
 
     // The altitude veto, run before a program can be drawn: the candidate's PREDICTED end point
-    // decides, never the aeroplane's own altitude. Below AltitudeFloorM the program is dropped; at
-    // or above ProbeCeilingM it is kept with no obstacle test; between them the predicted path is
-    // swept segment by segment and any blocked segment drops it.
+    // decides, never the aeroplane's own altitude. Below AltitudeFloorM the program is dropped. At
+    // or above ProbeCeilingM it is kept with no obstacle test. Between them the predicted path is
+    // swept segment by segment, and any blocked segment drops it.
     // ⚠ Do not fold this into the reactive arm. That one fires on an aeroplane already below the
     // floor; this one keeps a doomed program from ever starting.
     private bool EndsSafely(Maneuver maneuver)
@@ -793,9 +896,9 @@ public sealed class AiModeMachine
         return true;
     }
 
-    // The frame a candidate program is predicted in: the aeroplane's own attitude when the caller
-    // supplies one, else the level frame of its nose, which is what a non-relative program composes
-    // onto in any case.
+    // The frame a candidate program is predicted in. It is the aeroplane's own attitude when the
+    // caller supplies one, else the level frame of its nose. A non-relative program composes onto
+    // that frame in any case.
     private Basis PredictionFrame() =>
         _attitude ?? (_nose is { } n && n.LengthSquared() > 1e-4f
             ? new Basis(Vector3.Up, Mathf.DegToRad(AiPilot.HeadingDegOf(n)))
@@ -808,11 +911,15 @@ public sealed class AiModeMachine
         var from = Mode;
         Mode = to;
         // The task's own life: patrol and the danger-zone run drop it (FUN_00421500 nulls the
-        // target), and a promotion into an engagement takes the anchor the leash is measured from.
+        // target). A promotion into an engagement takes the anchor the leash is measured from.
         if (to is AiMode.Patrol or AiMode.ApproachingDangerZone or AiMode.NavigatingDangerZone)
             _pursuitAnchor = null;
-        else if (to is AiMode.Pursue or AiMode.LayOff)
-            _pursuitAnchor ??= _lastPos;
+        else if ((to is AiMode.Pursue or AiMode.LayOff) && _pursuitAnchor is null)
+        {
+            // A new task, whichever path took it, is a promotion and takes the chase's deadline.
+            _pursuitAnchor = _lastPos;
+            ArmChaseDeadline();
+        }
         if (to != AiMode.EvasiveManeuver)
             Executor = null;
         if (from == AiMode.Stunned)

@@ -101,9 +101,7 @@ public interface IOriginalScreenHost
 
     /// <summary>Composes a row kind a module has no special drawing for, on the shell's own
     /// plate-page rule.</summary>
-    void ComposeGenericRow(
-        OriginalRow row, bool focused, bool pressed, int index,
-        List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques, List<BoardPicture> pictures);
+    void ComposeGenericRow(OriginalRow row, bool focused, bool pressed, int index, BoardLayers layers);
 
     /// <summary>A paper plaque carrying a label, at the shell's own sectionless column and the
     /// <paramref name="row"/>-th line of it. What a module's page falls back to where the layout
@@ -112,9 +110,7 @@ public interface IOriginalScreenHost
 
     /// <summary>Draws a page that has no section of its own: the heading over the plaque column and
     /// then every row on the shell's plain-page rule, the same pair the Options hub takes.</summary>
-    void ComposePlainPage(
-        string heading, IReadOnlyList<OriginalRow> rows, int focus,
-        List<BoardFill> fills, List<BoardLine> lines, List<BoardPlaque> plaques);
+    void ComposePlainPage(string heading, IReadOnlyList<OriginalRow> rows, int focus, BoardLayers layers);
 
     /// <summary>The outline that marks a focused row on a page composed over a painted plate, the
     /// same mark the shell's own slider and dropdown rows take.</summary>
@@ -151,11 +147,8 @@ public interface IOriginalScreenModule
     /// screen's own way back to the shell.</summary>
     bool Back();
 
-    /// <summary>The showing screen as drawn, into the board's own layers. <paramref name="rows"/>
+    /// <summary>The showing screen as drawn, into <paramref name="layers"/>. <paramref name="rows"/>
     /// and <paramref name="focus"/> are the screen's own even while a box stands over it, the box
     /// being the shell's to draw last and nothing under it focused.</summary>
-    void Compose(
-        IReadOnlyList<OriginalRow> rows, int focus, List<BoardPicture> backdrop, List<BoardPicture> pictures,
-        List<BoardFill> fills, List<BoardStroke> strokes, List<BoardLine> lines, List<BoardPlaque> plaques,
-        List<BoardNote> notes, List<BoardPanel> overlays);
+    void Compose(IReadOnlyList<OriginalRow> rows, int focus, BoardLayers layers);
 }

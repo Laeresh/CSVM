@@ -115,6 +115,8 @@ internal sealed class AiFlightAssembler
         {
             machine.AttackRange = stats.AiAttackRange;
             machine.ReturnRange = stats.AiReturnRange;
+            machine.AttackDwellS = stats.AiAttackDwell;
+            machine.NotPursuitDwellS = stats.AiNotPursuitDwell;
         }
 
         FlightController controller;
@@ -242,6 +244,10 @@ internal sealed class AiFlightAssembler
             controller.Setup(new FlightModel(stats, aiForcePath: true), null, new CamParams(),
                 spawn.Position, spawn.LookAt);
             controller.ArmSpawnTimers();
+            // The same exhaust smoke the flown aircraft carries, since the original builds it for
+            // every airframe with exhaust markers; the flight step feeds it this pilot's own gap.
+            controller.ExhaustSmoke = ExhaustSmoke.Build(planeModel, _aircraft.Textures, controller,
+                _world.Ambience);
             // The authored identity wins where the caller has one, because the ranking reads this
             // name against patterns written for it. The counter form is the fallback for the
             // spawners with no authored name (--ai, the Instant Action fan, the generators).
@@ -290,7 +296,7 @@ internal sealed class AiFlightAssembler
         return controller;
     }
 
-    // The spawn-independent half of an AI aeroplane, in the order the launch used to build it: the
+    // The spawn-independent half of an AI aeroplane, in the order a launch builds it: the
     // painted model, the prop and surface animators, the wing lamps and the collision hulls. The
     // pool runs this at load and a claim-less launch runs it in place, so both produce one tree.
     private AiAirframePool.Prepared BuildAirframe(string planeName, PaintScheme? scheme)
@@ -368,7 +374,7 @@ internal sealed class AiFlightAssembler
         scheme = MilitiaScheme(stats, spawn) ?? _liveries.SchemeFor(
             0, _aircraft.ZrdrPath, _aircraft.PaintRng,
             _liveries.PatternsForPlane(_aircraft.PlanesGamez, spawn.PlaneName),
-            useDefaultPattern: !spawn.ShippedSkins);
+            useDefaultPattern: !spawn.ShippedSkins && spawn.LiveryDef == null);
         return true;
     }
 
@@ -441,6 +447,14 @@ internal sealed class AiFlightAssembler
                 StunRecoveryIntervalS = _aiSkills.At("stun_recovery_interval",
                     SkillFor(defSkills.StunRecovery, rating, roster.StunRecovery)),
                 NaturalTouch = SkillFor(defSkills.NaturalTouch, rating, roster.NaturalTouch),
+                // The proximity pick's roll, on the original's own class gate: only a jet rolls
+                // (FUN_0041d9f0, 0x0041da07 reads +0x67c). A wingman escort therefore keeps its
+                // station under fire.
+                DaredevilChance = defStats.VehicleMode is null
+                    || defStats.VehicleMode.Equals(VehicleDefs.JetMode, StringComparison.OrdinalIgnoreCase)
+                    ? _aiSkills.At("daredevil_chance",
+                        SkillFor(defSkills.DareDevil, rating, roster.DareDevil))
+                    : 0f,
                 Library = _maneuvers,
                 AssistEnabled = !_policy.NoAssist,
             };
@@ -460,12 +474,12 @@ internal sealed class AiFlightAssembler
     // (docs/org/paint.md). Yields to --paint=, which is about this run, not about who the plane is.
     // ⚠ A NAMED militia def does not yield to ShippedSkins: that reading withholds only the player
     // militia's default pattern from another team, and gating the def's own livery on it left every
-    // campaign enemy and every generator launch in bare skins. A spawn naming no def keeps yielding,
-    // PlaneStats falling back to the base def and an Instant Action wave to the setup screen.
+    // campaign enemy and every generator launch in bare skins. A spawn naming no def keeps yielding.
+    // ⚠ A LiveryDef (bswingman on a Fury) outranks the base def standing in for the stats.
     private PaintScheme? MilitiaScheme(PlaneStats stats, AiSpawn spawn)
     {
-        if (_liveries.PaintRequested || stats.AiDefName is not { } def
-            || (spawn.ShippedSkins && spawn.AiDef == null))
+        if (_liveries.PaintRequested || (spawn.LiveryDef ?? stats.AiDefName) is not { } def
+            || (spawn.ShippedSkins && spawn.AiDef == null && spawn.LiveryDef == null))
             return null;
         var scheme = _liveries.DefScheme(_aircraft.ZrdrPath, def);
         if (_liveryDefsLogged.Add(def))

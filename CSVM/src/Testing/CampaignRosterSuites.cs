@@ -5,6 +5,7 @@ using System.Text;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Testing;
@@ -123,8 +124,9 @@ internal static class CampaignRosterSuites
 
     [Suite("campaign-roster",
         "the campaign roster spawner (D34, BL-362/BL-364) over C1/M04's shipped aiv roster in "
-        + "its built world: every enabled non-player block gets a rig, while disabled blocks "
-        + "remain generator templates; the decoded fork puts an escort "
+        + "its built world: every enabled non-player block gets a rig except the netless jet the "
+        + "original builds dead, while disabled blocks remain generator templates; the decoded "
+        + "fork puts an escort "
         + "on the netless wingman_1 (leader: the player rig) and on wingman_2/3 (leaders: the "
         + "devastator blocks) and a patrol net on every netted block with no block carrying "
         + "both, the deactivated blocks are inert, the four taxiPath vehicles are placed frozen, "
@@ -216,17 +218,31 @@ internal static class CampaignRosterSuites
                 report.AppendLine($"build summary suffix: '{what}'");
 
                 var roster = director.Roster;
+                var vehicleDefs = VehicleDefs.Load(ctx.ZrdrPath);
                 int expectedRoster = 0;
+                int builtDead = 0;
                 foreach (var (name, fields) in blocks)
                 {
-                    if (!name.Equals(CampaignRosterPlan.PlayerBlock,
-                            StringComparison.OrdinalIgnoreCase) && AiSkills.RosterEnabled(fields))
+                    if (name.Equals(CampaignRosterPlan.PlayerBlock, StringComparison.OrdinalIgnoreCase)
+                        || !AiSkills.RosterEnabled(fields))
                     {
-                        expectedRoster++;
+                        continue;
                     }
+                    // The original builds a netless block dead unless its def is a mode wingman.
+                    string blockMode = vehicleDefs.DefForBlock(name) is { } blockDef
+                        ? vehicleDefs.ModeOf(blockDef) ?? VehicleDefs.JetMode
+                        : VehicleDefs.JetMode;
+                    if (AiSkills.RosterNetIds(fields).Count == 0
+                        && !blockMode.Equals(VehicleDefs.WingmanMode, StringComparison.OrdinalIgnoreCase))
+                    {
+                        builtDead++;
+                        continue;
+                    }
+                    expectedRoster++;
                 }
+                ctx.Same(1, builtDead, $"one enabled block (blakepeace_2_2) is the netless jet the original builds dead");
                 ctx.Same(expectedRoster, roster.Count,
-                    $"every enabled non-player roster block has a rig");
+                    $"every other enabled non-player roster block has a rig");
                 CheckFork(ctx, roster, player, report);
                 CheckPaths(ctx, director, report);
                 CheckVolumes(ctx, roster, skills, report);
@@ -762,6 +778,7 @@ internal static class CampaignRosterSuites
         var textures = new TextureArchive(texturesPath);
         using var archive = new SoundArchive(ctx.SoundsPath);
         WorldSounds? sounds = null;
+        MissionRadio? radio = null;
         AiVoiceRuntime? runtime = null;
         FlightRoster? roster = null;
         ProjectilePool? pool = null;
@@ -780,7 +797,9 @@ internal static class CampaignRosterSuites
             sounds.Prewarm(voice.PrewarmNames(new[] { 32 }));
             sounds.Loader = null;
 
-            runtime = new AiVoiceRuntime(voice, sounds, new System.Random(5));
+            radio = new MissionRadio(soundDefs, soundGroups, sounds.StreamFor);
+            ctx.Host.AddChild(radio);
+            runtime = new AiVoiceRuntime(voice, sounds, radio, new System.Random(5));
             ctx.Host.AddChild(runtime);
 
             // The exact conversion GameSession.RegisterAiVoice applies in production: a null
@@ -844,6 +863,211 @@ internal static class CampaignRosterSuites
                 rig.Free();
             }
             pool?.Free();
+            radio?.Free();
+            if (sounds != null)
+            {
+                sounds.FlushOneShots();
+                sounds.Free();
+            }
+            textures.Dispose();
+        }
+    }
+
+    // The hand-built speaker in the ai-voice suite cannot see this, because the aircraft
+    // that speaks is not the one whose mode moved. The mission's own roster decides both, so the
+    // suite spawns C1/M02's through the director and drives the site a flown mission drives.
+    [Suite("ai-voice-mission",
+        "BL-934's gap between a hand-built speaker and a flown mission: C1/M02's shipped roster "
+        + "spawned through CampaignDirector on the session's own mission prewarm set, where the "
+        + "enemy blakepeace_2_1 authors accentID -1 and registers no speaker of its own, yet its "
+        + "patrol-to-pursue commit against the human rig still rolls the computed bearing "
+        + "call-out on one of the player's own voiced wingmen and reaches a playing stream on the "
+        + "mission radio's flat Voice-bus player, building no positional one-shot")]
+    internal static void AiVoiceMission(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
+        string missionZrdr = SessionPaths.MissionZrdr(ctx.DataRoot, BiasChapter, BiasMission);
+        ctx.RequireData(missionZrdr, $"{BiasChapter}/{BiasMission} zrdr");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, BiasChapter);
+        ctx.RequireData(texturesPath, $"{BiasChapter} textures");
+
+        CampaignMission? found = null;
+        foreach (var m in CampaignSequence.Load(ctx.ZrdrPath))
+        {
+            if (m.ChapterFolder.Equals(BiasChapter, StringComparison.OrdinalIgnoreCase)
+                && m.MissionFolder.Equals(BiasMission, StringComparison.OrdinalIgnoreCase))
+            {
+                found = m;
+            }
+        }
+        if (found is not { } mission)
+        {
+            throw new SuiteSkippedException($"{BiasChapter}/{BiasMission} is not in cm_sequence");
+        }
+
+        var blocks = AiSkills.LoadRoster(missionZrdr);
+        var skills = AiSkills.Load(ctx.ZrdrPath);
+        var script = ObjectiveScript.Load(missionZrdr);
+        var director = CampaignDirector.Create(script, mission, CampaignProfileDef.NewProfile("Zachary"), null);
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
+        var soundGroups = SoundDefs.LoadGroups(ctx.ZrdrPath);
+        var voice = new CombatVoice(soundDefs, soundGroups, CombatVoice.LoadAccents(ctx.ZrdrPath));
+
+        var textures = new TextureArchive(texturesPath);
+        using var archive = new SoundArchive(ctx.SoundsPath);
+        WorldSounds? sounds = null;
+        MissionRadio? radio = null;
+        AiVoiceRuntime? runtime = null;
+        FlightRoster? roster = null;
+        ProjectilePool? pool = null;
+        FlightController? player = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+            roster = Spawner(ctx, planesGamez, textures, live);
+
+            // The session's voice lifecycle: the MISSION's own accents prewarmed while the archive
+            // is open, the loader then retired as WorldSession.Build retires it, so a clip outside
+            // that set cannot play here either.
+            sounds = new WorldSounds(soundDefs, soundGroups)
+            {
+                Loader = (d, warn) => archive.Find(d.WavName, d.Looped, warn),
+            };
+            ctx.Host.AddChild(sounds);
+            sounds.Prewarm(CombatVoice.SessionPrewarmNames(ctx.ZrdrPath, missionZrdr, soundDefs, soundGroups));
+            sounds.Loader = null;
+
+            radio = new MissionRadio(soundDefs, soundGroups, sounds.StreamFor);
+            ctx.Host.AddChild(radio);
+            runtime = new AiVoiceRuntime(voice, sounds, radio, new System.Random(5));
+            ctx.Host.AddChild(runtime);
+
+            var playerPose = PlayerPose(blocks);
+            var playerStats = PlaneStats.Load(ctx.ZrdrPath, ctx.PlaneName);
+            player = Rig(ctx, planesGamez, textures, playerStats, live, ctx.PlaneName,
+                playerPose.Position, playerPose.Position + playerPose.Forward, human: true,
+                pilot: null, FlightRoster.ShooterIdBase, AimAssist.PlayerTeam);
+            var human = player;
+            runtime.RegisterPlayer(human);
+
+            // GameSession.RegisterAiVoice's own shape: every spawn is handed over, accent or none.
+            void RegisterVoice(FlightController? ai, int? accentId, int? talkerOverride, int? constitutionOverride)
+            {
+                if (ai == null)
+                {
+                    return;
+                }
+                runtime!.RegisterAi(ai, accentId, skills.At("talker_chance", talkerOverride ?? 5),
+                    skills.At("constitution_chance", constitutionOverride ?? 5));
+            }
+
+            director.BuildRoster(new CampaignDirector.RosterInputs
+            {
+                ChapterZrdrPath = SessionPaths.ChapterZrdr(ctx.DataRoot, BiasChapter),
+                MissionZrdrPath = missionZrdr,
+                ZrdrPath = ctx.ZrdrPath,
+                MinAiActiveDist = skills.MinAiActiveDist,
+                Player = () => human,
+                NetTrailers = new NetTrailerTargets(() => human.WorldPosition, _ => null),
+                Spawn = (plan, pos, look, pilot) =>
+                    roster!.SpawnAi(CampaignRosterPlan.SpawnFor(plan, pos, look, pilot)),
+                RegisterVoice = RegisterVoice,
+                Rng = new System.Random(1),
+            });
+
+            if (!director.Roster.TryGetValue(PlainBlock, out var enemy))
+            {
+                throw new SuiteSkippedException($"{BiasChapter}/{BiasMission} does not plan '{PlainBlock}'");
+            }
+            ctx.Check(runtime.Dispatcher.Find(enemy.PlayerIndex) == null,
+                $"the shipped enemy '{PlainBlock}' authors no accent, so it registers no speaker of its own");
+
+            // The player's own flight, the side that actually speaks about an enemy. Talker chance
+            // is pinned past 1 so the halved bearing roll (BearingChanceFactor) is still certain
+            // and a silent broadcast can only be a gate decision.
+            var allies = new List<FlightController>();
+            foreach (var entry in director.Roster)
+            {
+                if (entry.Value.Team == AimAssist.PlayerTeam
+                    && runtime.Dispatcher.Find(entry.Value.PlayerIndex) is { } ally)
+                {
+                    ally.TalkerChance = 2f;
+                    allies.Add(entry.Value);
+                }
+            }
+            ctx.Check(allies.Count > 0,
+                $"the mission voices the player's own flight: {allies.Count} registered speaker(s) on team {AimAssist.PlayerTeam}");
+            if (allies.Count == 0)
+            {
+                return;
+            }
+
+            var played = new List<(string Tag, int Trigger, string Clip)>();
+            runtime.LinePlayed += (tag, trigger, clip) => played.Add((tag, trigger, clip));
+            runtime.Step(3f); // past the decoded 2 s mute window
+
+            if (enemy.Pilot is not { Machine: { } machine } enemyPilot)
+            {
+                throw new SuiteSkippedException($"'{PlainBlock}' spawned without a mode machine");
+            }
+            // The assembler arms a gunner only for a spawn carrying an attack rating, and the
+            // target slot is all the dispatch site reads.
+            enemyPilot.Gunner ??= new AiGunner(new RandomNumberGenerator { Seed = 20260917 });
+            enemyPilot.Gunner.Target = human;
+
+            int expected = AiVoiceDispatcher.BearingTriggerFor(
+                human.WorldPosition, human.NoseDirection, enemy.WorldPosition);
+            int startedBefore = sounds.OneShotsStarted;
+            ctx.Check(machine.Mode == AiMode.Patrol,
+                $"baseline: the enemy is on patrol before it commits mode={AiModeMachine.NameOf(machine.Mode)}");
+            machine.Enter(AiMode.Pursue, $"suite: committed to the player");
+
+            ctx.Check(played.Count == 1 && played[0].Trigger == expected,
+                $"the enemy's patrol-to-pursue commit rolls exactly one line, the bearing call-out #{expected} computed in the player's own frame played=[{string.Join(", ", played)}]");
+            if (played.Count == 0)
+            {
+                return;
+            }
+            ctx.Check(played[0].Clip.Contains("WA-Enemy-"),
+                $"…resolved to a bearing clip of the speaking pilot's own accent clip={played[0].Clip}");
+            FlightController? speakerRig = null;
+            foreach (var rig in allies)
+            {
+                if (rig.Name.ToString() == played[0].Tag)
+                {
+                    speakerRig = rig;
+                }
+            }
+            ctx.Check(speakerRig != null,
+                $"…spoken by an aircraft on the player's own team, not by the accentless enemy whose mode moved speaker={played[0].Tag}");
+            radio.Tick(0.1f);
+            ctx.Check(radio.LinesStarted == 1 && radio.OnAir == played[0].Clip,
+                $"…starting exactly one radio line lines={radio.LinesStarted} on-air={radio.OnAir}");
+            ctx.Check(sounds.OneShotsStarted == startedBefore,
+                $"…and no positional one-shot started={sounds.OneShotsStarted - startedBefore}");
+            var radioPlayer = AiSuites.RadioPlayer(radio);
+            ctx.Check(radioPlayer is { Stream: not null, Playing: true },
+                $"…on a playing stream stream={radioPlayer?.Stream != null} playing={radioPlayer?.Playing}");
+            ctx.Check(radioPlayer != null && radioPlayer.Bus.ToString() == AudioBuses.Voice,
+                $"…on the Voice bus bus={radioPlayer?.Bus}");
+            ctx.Note($"{BiasChapter}/{BiasMission}: '{PlainBlock}' carries no accent and no speaker, and its commit to the player has '{played[0].Tag}' speak trigger #{expected}");
+        }
+        finally
+        {
+            var members = new List<FlightController>(roster?.AiAircraft ?? Array.Empty<FlightController>());
+            roster?.ClearMembership();
+            foreach (var rig in members)
+            {
+                rig.Free();
+            }
+            player?.Free();
+            pool?.Free();
+            radio?.Free();
             if (sounds != null)
             {
                 sounds.FlushOneShots();
@@ -1067,6 +1291,8 @@ internal static class CampaignRosterSuites
         {
             ctx.Check(parked.Inert && !parked.InPlay, $"blakebloodhawk_8 (deactivated 1) is inert and out of play");
         }
+        ctx.Check(!roster.ContainsKey("blakepeace_2_2"),
+            $"blakepeace_2_2 (an empty netids list on a jet) is not spawned: the original builds it dead");
         ctx.Check(escorts == 3, $"the three wingman blocks are the mission's three escorts: {escorts}");
         ctx.Check(inert == 9, $"the nine deactivated blocks are inert: {inert}");
     }

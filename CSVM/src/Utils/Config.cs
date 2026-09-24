@@ -221,8 +221,8 @@ public static class Config
             // the warmup never does, register them here so --dump-config still documents them.
             GetInt("weapons.gunAmmoCap", FlightController.GunAmmoCapDefault);
             GetInt("weapons.ordnanceCap", FlightController.OrdnanceCapDefault);
-            // C22's autohead toggle. Default OFF: the original's cockpit footage shows a
-            // pixel-frozen sight through manoeuvres, so its default plays no lean (the enable
+            // The autohead toggle. Default OFF: the original's cockpit footage shows a
+            // pixel-frozen sight through manoeuvres, so its default plays no lead (the enable
             // byte is an option; docs/formats/vehicle/player-globals.md).
             GetBool("headLook.autohead", false);
             // ⚠ Do not reinstate a `flightAudio` key. All three (whineMixGain,

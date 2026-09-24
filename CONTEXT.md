@@ -130,7 +130,7 @@ _Avoid_: death effects, destruction sequence, kill animation
 ## Boards and the sim clock
 
 **Menu presentation**:
-One player-selectable realization of the menus, owning their screen graph, artwork, layout,
+One selectable realization of the menus, owning their screen graph, artwork, layout,
 animation and interaction while sharing the state and operations that configure and launch play.
 _Avoid_: menu renderer, menu theme, menu skin
 
@@ -145,8 +145,8 @@ scaling its authored 4:3 canvas uniformly while preserving the extracted artwork
 _Avoid_: original renderer, classic skin, pixel-perfect menu
 
 **Options**:
-Process-wide player preferences persisted independently of profiles, including the selected menu
-presentation. A seated profile never owns or overrides them.
+Process-wide player preferences persisted independently of profiles. The menu presentation is not
+one of them: the command line alone selects it. A seated profile never owns or overrides them.
 _Avoid_: profile settings, campaign options, preferences (as a separate store)
 
 **Decoded menu layout**:

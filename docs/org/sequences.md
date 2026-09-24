@@ -210,8 +210,10 @@ Both wildcards act on the definition's own NAME at load, deciding **how many ani
 created**. Neither is a matcher, and no node name is ever compared as a pattern (see the `strcmp`
 rule above).
 
-- **`*` is a digit odometer.** `FUN_0059d610` scans the name right to left starting at `len-2`, so
-  the final character is excluded, and records up to **5** `*` positions, zeroing a counter for each.
+- **`*` is a digit odometer.** `FUN_0059d610` scans the name right to left from its last character
+  (`~uVar2 - 2` is `strlen - 1`, the same index `FUN_0051ff40` tests for a trailing `#`), so a
+  trailing `*` is a digit position like any other, and records up to **5** `*` positions, zeroing a
+  counter for each.
   `FUN_0059d6e0` steps the odometer (each digit runs 0 to 9, carrying, returning 0 when exhausted),
   and `FUN_0059d750` stamps the current counters into a copy of the name with `sprintf("%d", …)`,
   one character per `*`. `FUN_0051ff40` (with `FUN_0051fe60`) runs the whole instantiation once per
@@ -237,7 +239,21 @@ else returns nothing. No name comparison happens on the event path.
 ### Where CSVM stands against this
 
 `NameResolver`'s scope chain is the same shape as tiers 1, 2 and 5, and `LOCAL_NODES_ONLY` gates the
-last tier the same way. Four differences remain and none of them is deliberate:
+last tier the same way. A second gate stands beside it, and that one has no counterpart in the
+original because it is a consequence of resolving late: **a plain name written by a definition the
+world holds several instances of is refused the global tier** (`NameResolver.RefusesGlobalTier`;
+several instances means a NAME carrying a `*` or `#`, or an `ANIMATION_ROOT_NAME` root lift). The
+original binds each event's name once, at load, inside the instance's own copy of the subtree, and
+logs a name it cannot find as *"Animation error: Unable to find animation node."*; ours resolves at
+dispatch, so without that gate a generic name the instance lacks (`healthy`, `destroyed`, `door1`)
+falls to the whole index and the write lands on every same-named node in the world. Refused, it
+resolves to nothing and the write is a counted, logged no-op (`AnimRuntime.Targets`,
+`NameResolver.GlobalTierRefused`). Two names keep the tier: one written by a definition anchored by
+an exact NAME, which is one object, and one carrying a wildcard of its own, which stands in for the
+digit the odometer stamps into it and so still names the instance's own family
+(`locklear_gasbag.zrd.json`'s `lkshw*` writing `lkshb*` is the install's only such write).
+
+Four differences remain and none of them is deliberate:
 
 - `Resolve` and `AnimRuntime.Targets` consult the symbol table **first**, where the original consults
   its interned lists at tiers 3 and 4.
@@ -248,9 +264,11 @@ last tier the same way. Four differences remain and none of them is deliberate:
 - **`FindAll` compares `OrdinalIgnoreCase`**, where every tier of the original is case-sensitive; and
   it also matches a name against a `.flt`-stripped copy of each candidate, which the original has no
   counterpart for. Both widen a match the original would refuse.
-- **`Matcher` reads `*` and `#` as node-name patterns** (`*` any run, `#` a digit run), where in the
-  original they are instantiation controls on the definition's NAME and no node name is ever matched
-  as a pattern. This is the same multiplicity in the wrong place described above.
+- **`Matcher` reads `*` and `#` as node-name patterns** (`*` at most one digit, `#` a digit run), where in
+  the original they are instantiation controls on the definition's NAME and no node name is ever
+  matched as a pattern. This is the same multiplicity in the wrong place described above. The digit
+  reading of `*` is what keeps the shared `crate**` destructible off C3's `craterlake`; read as an
+  any-run pattern it instances there, on a node with no `healthy` model under it.
 
 The scope of the subtree tiers is **not** among them any more. Ours searches the call anchor's
 subtree, which for a crash rig is a root shared with staged template copies, where the original's is
@@ -586,8 +604,16 @@ the next one.
 not unique (`he_ground_effect` ships two unnamed sequences), and a name-keyed test collapses them
 into one and loses half the burst.
 
-⚠ Halting a runner does not touch what it already launched. Motions and puffers have authored
-lifetimes and outlive the sequence that started them.
+⚠ **A stop ends the ballistic `OBJECT_MOTION` bodies the stopped sequence launched, where they
+stand.** The handler (`004eb610`) writes the sequence's state byte to 2 (`004eb69a`), and the
+per-instance walk steps a slot only in state 0 or 1 (`004ecee8`-`004ecef1`, inside
+`FUN_004ecbb0`). The `OBJECT_MOTION` handler integrates its flight on every call and holds its
+event with a still-running return, so once its sequence is stopped nothing integrates the body
+again and it freezes in the pose the stop caught, with no bounce dispatched. Every zeppelin death
+is built on it: `main_altitude_check` stops `floatdown` half a second after the break, so the hull
+halts some 40 to 80 m over the sea while its gasbags fall the rest of the way. CSVM ends those
+bodies through `MotionSet.HaltLaunchedBy` and retracts nothing. Other motion kinds and puffers
+are left to their own lifetimes; the tweens were not decoded against the walk.
 
 ## CALL_ANIMATION hands the call site down as INPUT_NODE, and does not re-anchor the callee
 
@@ -620,7 +646,11 @@ caller's node": the target is resolved by the caller and delivered as an input, 
 the callee's anchor. CSVM instead makes the call site the callee's Start anchor
 (`AnimRuntime`'s `CallAnimation` arm, `callAnchor = siteNode ?? anchor`), which is an undeliberate
 difference; it was investigated as a candidate cause of C3/M02's balloon kill-chain symptoms and
-confirmed to drive none of them, since none reproduced on the current build.
+confirmed to drive none of them, since none reproduced on the current build. It does reach the
+`NODE_UNDERCOVER` probe: CM01's `cargozep1_crash` is called by a hydrogen tank's death and so runs
+anchored on the tank, and a self-exclusion read off that anchor lets the hull's 65 m probe find its
+own gasbags at cruise altitude. `AnimRuntime` therefore excludes the callee's own root above the
+probed node (`anim_root_name`), and falls back to the anchor only when no such ancestor exists.
 
 ### Where the callee's site pose lives, and what the decode leaves open
 

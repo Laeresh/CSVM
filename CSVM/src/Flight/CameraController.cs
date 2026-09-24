@@ -221,6 +221,11 @@ public sealed class CameraController
     /// relative to it (<see cref="CockpitOverlay"/>).</summary>
     public Vector3 EyePosition => _camera.GlobalPosition;
 
+    /// <summary>The whole eye frame, position and aim, for a caller that has to place geometry in
+    /// front of the view rather than merely measure from it. The canopy-hole overlay's
+    /// <c>AT_NODE camera1</c> reads it through <c>FlightController.EnsureViewCameraProxy</c>.</summary>
+    public Transform3D EyePose => _camera.GlobalTransform;
+
     /// <summary>The pilot's head: snap, free-look and the center key, smoothed to the angles
     /// <see cref="FirstPersonView"/> aims with and <see cref="Chase"/> swings by. ONE head for
     /// every view, as the original has (docs/org/cameraViews.md), so a bearing taken in the cockpit
@@ -320,12 +325,12 @@ public sealed class CameraController
         _camera.Basis = renderPose.Basis * Basis.LookingAt(-dir, Vector3.Up);
     }
 
-    /// <summary>Analog look-around: the right stick swings the view around the plane at the
-    /// dynamic radius every forward-facing external pose shares, through the same
-    /// <see cref="ChaseSwing"/> geometry the head swings it by. Pre-curved and dead-zoned, so both
-    /// axes at 0 reduce to the ordinary chase direction. Rigid and instant, and releasing it lets
-    /// <see cref="Chase"/> resume. ⚠ Its own path, not the head's: the stick aims ABSOLUTELY in
-    /// both views (docs/controls.md) and must keep doing so.</summary>
+    /// <summary>Analog look-around: the right stick swings the view around the plane at the dynamic
+    /// radius every forward-facing external pose shares, through the same <see cref="ChaseSwing"/>
+    /// geometry the head swings it by. Pre-curved, dead-zoned and <see cref="StickLookFilter"/>ed,
+    /// so both axes at 0 reduce to the ordinary chase direction and no stick noise reaches this
+    /// pose. Rigid and instant, and releasing it lets <see cref="Chase"/> resume. ⚠ Its own path,
+    /// not the head's: the stick aims ABSOLUTELY in both views (docs/controls.md).</summary>
     public void PadLook(in Transform3D renderPose, float stickX, float stickY)
     {
         float yaw = Mathf.DegToRad(stickX * HeadLook.PadLookYawMaxDeg);

@@ -66,6 +66,8 @@ else; `soil` never reaches the lighting code.
 | `FUN_0053cba0` | Transforms a model's normals by the current matrix's rotation, after the facade basis is installed; `FUN_00422690` renormalizes each one |
 | `FUN_00568790` | Per model, sorts the lights that reach it into the directional, the `0x04`-flagged and the remaining lists `FUN_005688a0` walks |
 | `FUN_0054e070` | The `SetVertexShading` GameGen setter (`DAT_00a05f08`), which boot sets to the hardware flag |
+| `FUN_004d33e0`, `FUN_004d35d0`, `FUN_004d37e0`, `FUN_004d39c0`, `FUN_004d3fa0` | The Object3d node draws, aircraft included: each calls the model draw through `DAT_00a07020` |
+| `FUN_00553f50` | The draw a node flagged `0x2000000` takes: a bounding-box debug outline, no lighting |
 | `FUN_005669b0` / `FUN_00566ae0` | The `DirectedLightFluctuate` enable, and the per-frame scroll of its lookup offsets |
 
 ## The light array (`FUN_00566be0`)
@@ -359,6 +361,99 @@ direction for. And `N` is the per-vertex normal only where the polygon carries o
 21,577 lit polygons and 43 % of C1's 16,580 do**, and the rest are shaded from the face normal, so
 a reproduction has to emit flat normals for the majority rather than smoothing them.
 
+## Aircraft: the same draw and the same law
+
+An aircraft is not drawn by a vehicle path. The Object3d draw variants `FUN_004d33e0`,
+`FUN_004d35d0`, `FUN_004d37e0`, `FUN_004d39c0` and `FUN_004d3fa0` each end in
+`(*DAT_00a07020)(node, mask)`, the model-draw pointer `FUN_0054dca0` sets to `FUN_00554550`, so a
+plane's nodes take the hardware draw above exactly as a building does. The only other draw a node
+can reach, `FUN_00553f50` behind node flag `0x2000000`, is a bounding-box debug outline. Nothing in
+the chain multiplies an aircraft-specific factor into the diffuse byte.
+
+Per vertex, then, the drawn diffuse is the authored colour times the accumulator, clamped at 255:
+`FUN_00568830` seeds 1.0, `FUN_005688a0` adds `(ambient + diffuse × max(N·L, 0)) × colour − 1`
+(with `SUNLIGHT_BICOLORED` clear both halves wear the diffuse colour, the flag test at
+`0x00568a7f`), and the textured branch multiplies the authored bytes at `0x00555289`, `0x00555295`
+and `0x005552a4` and clamps at `0x005552b2`-`0x00555349` against the 255.0 at `0x0060414c`. Stage 0
+MODULATE then multiplies the texel by that byte, in gamma space, and there is no specular term.
+
+The authored factor is identity on the airframe. Every vertex colour of every `lighting: true`
+exterior model of `player_bhawk` (wings, fuselage, flaps, engines, tail, head, body) is 255 in all
+three channels. The exceptions are small parts (props at 90 and up, `canopy2` at 120, `g442`, and
+`piece1`) and the cockpit dashboard and gauges, most of which are `lighting: false`: 5,359 of the
+aircraft's 5,776 vertex colours are 255. So an airframe texel is drawn at
+`texel × min(ambient + diffuse × max(N·L, 0), 1)`.
+
+The law accounts for the measured deficit. At `SUNLIGHT_ORIENTATION` pitch −25° a level wing top
+has `N·L = sin 25° = 0.42`. C1's zones author 1.2 / 0.25, giving `0.25 + 1.2 × 0.42 = 0.76`, the
+ratio of the original's red airframe to the remake's scene-lit one at the matched C1 pose. C5
+authors 1.5 / 0.5, which clamps to 1.0 on the same surface, so the original draws the top at the
+texel itself where the scene lights drew about 1.3 times it. The hue follows too: the product
+multiplies the texel's own channels and adds nothing, so a red texel stays red, where Godot's
+ambient, image light and specular added a neutral term that lifted green and blue to about three
+times the original's.
+
+## Point lights: how a `LIGHT_STATE` range is applied
+
+An animation's `LIGHT_STATE` is dispatched through slot 4 of the event table `FUN_004ee1a0` fills,
+the handler at `0x004e7b60` (no function boundary in the database). It indexes the definition's
+own light table at `def+0xec` (stride `0x2c`: the light node at `+0x24`, an attached flag at
+`+0x28`). `ACTIVE` on an unattached light attaches its node under the world root
+(`FUN_004db380`, `DAT_009fd160`); `INACTIVE` on an attached one detaches it (`FUN_004db420`).
+`PointSource` goes through `FUN_004dbff0`. The event's field word at `+0x30` routes each present
+field to its setter: bit `0x08`, the range, to `FUN_004dc3c0`; `0x10`, the colour, to
+`FUN_004dc970`; `0x02`, the `AT_NODE` translate, to `FUN_004dc540` through `FUN_004cf490`;
+`0x20`, the ambient at event `+0x90`, to `FUN_004dbce0` (`0x004e7d7e`); `0x40`, the diffuse at
+`+0x94`, to `FUN_004dbdb0` (`0x004e7d97`). A fresh light node carries ambient 1.0 and diffuse 0, so
+a `LIGHT_STATE` that authors neither scales its colour by exactly 1. Of the 1,468 compiled
+`LIGHT_STATE` events, 20 author either, all 0.3 / 1.0: the MP2 flag lights (`cs_flg_light1`/`2`,
+`flite1`/`2`).
+
+`FUN_004dc3c0` stores `near = min(r1, r2)` at `+0xe4` and `far = max(r1, r2)` at `+0xe8`, their
+squares at `+0xec`/`+0xf0` and `1 / (far − near)` at `+0xf4`. Equal ranges log
+`gwLightSetRanges r1==r2` and become `far = near + 10`. ⚠ **Nothing clamps the range**, here or in
+the draw, so a `LIGHT_STATE` range reaches the renderer at its authored width. The
+`LIGHT_ANIMATION` handler (`0x004e82b0`, slot 5) was not traced to its setter.
+
+At draw time `FUN_00566e00` tests the light against the model's bound sphere: the distance used is
+light-to-centre minus the radius, the light reaches the model when that is under `far`, and it is
+"fully inside" when distance plus radius is under `near`. `FUN_00568790` files a point light that
+authors no `0x04` flag into the list `FUN_005688a0` walks third (`DAT_00a06b28`), since its ambient
+defaults to 1.0. Per vertex that list adds
+
+    weight(d) × (ambient + diffuse) × colour,   weight = 1 inside near, (far − d) / (far − near) to far, 0 beyond
+
+into the accumulator: a linear fall-off with no `N·L`, and only on models whose `lighting` bit is
+set. The draw then multiplies the authored vertex colour by the accumulator and clamps the product,
+as for the sun.
+
+`FUN_00520910`, the clone every call of a definition makes, allocates a fresh light table and a
+new light node per entry (`FUN_004dba40`, defaults) with the attached flag clear, so every call owns
+its own light and starts it dark.
+
+CSVM evaluates the same term per vertex. `LightChannel` hands `WorldLights` the authored colour and
+`ambient + diffuse`, which packs their product unconverted; `csky_point_light` in
+`csky_lights.gdshaderinc` sums `weight(d) × factor` with no `N·L`. `SceneBuilder.GetBiasShader`
+includes it only on a `lighting: true` surface in the two original-mode arms that evaluate the
+vertex light:
+
+- **World (fullbright arm).** The vertex stage forms `clamp(COLOR × (csky_world_light + P))` and
+  passes the fragment the difference from the unlit `COLOR × csky_world_light`, both linearised, as
+  `v_point_gain`; the fragment adds `texel × v_point_gain` before the fog. With no light live the
+  gain is exactly zero, so an unlit frame's shader output is unchanged.
+- **Aircraft (vertex-sun arm).** `P` joins the sun term inside the clamp:
+  `clamp(COLOR × (ambient + diffuse × max(N·L, 0) + P))`. The world position is
+  `MODEL_MATRIX × VERTEX + light_origin`; `light_origin` is zero in the world and the eye position
+  in the cockpit overlay's own `World3D`, which `CockpitOverlay.Sync` sets each frame, so a light
+  submitted in world space reaches the interior at its true distance. The first-person muzzle pair
+  (`bigmuzzle_lt`/`muzzle_lt`, `docs/formats/weapon-effects.md`) is submitted this way by
+  `ProjectilePool`, which is how a shot lights the struts and the `lighting: true` dashboard; the
+  gauge faces are `lighting: false` and take nothing.
+
+⚠ The term is per vertex, as in the original, so a light smaller than a surface's vertex spacing
+lights that surface only where it reaches a vertex. Billboard and cylindrical facade materials take
+no point term, and in enhanced mode the omnis light the world instead.
+
 ## Specular: the device turns it off and no material exists to turn it back on
 
 ⚠ **Nothing in the original carries a specular term, on an aircraft or on anything else.** Four
@@ -390,12 +485,20 @@ its texture times a Lambert term, and nothing else.
 
 ### What CSVM does with that
 
-The remake shades aircraft through Godot's PBR material, which has no zero-gloss setting that also
-keeps the diffuse response, so the faithful reading is a floor rather than a value to copy. The
-shaded arm of `SceneBuilder.GetBiasShader` therefore carries `SPECULAR = 0.25` (`AircraftSpecular`)
-at roughness 0.85 and metallic 0.0, which is the remake's own choice: the value the user picked by
-eye off a sweep against `OriginalScreenshots/Fury from above.png`, low enough that sunlight reads as
-a sheen instead of gloss. The decode is the record behind it, not its source.
+In original mode the in-flight aircraft carries no specular term, like the original. `PlaneBuilder`
+and the shared planes builder pass `sunVertexLit`, and `SceneBuilder.GetBiasShader`'s shaded arm then
+draws `unshaded`: the vertex stage evaluates `clamp(COLOR × (ambient + diffuse × max(N·L, 0)), 0,
+1)` on the world normal against the zone's `csky_sun_dir`, `csky_sun_ambient_rgb` and
+`csky_sun_diffuse_rgb` (`WeatherRig.SunVertexLight`, which applies the bicolored rule), and the
+fragment multiplies the texel by it in gamma space. Neither the scene sun, the Environment ambient
+nor any sheen reaches it. An unlit model keeps its authored colour. The cockpit overlay pass keeps
+the world orientation, so the same world-space term serves the interior.
+
+Enhanced mode, and the hangar and menu stages, still shade aircraft through Godot's PBR material,
+which has no zero-gloss setting that also keeps the diffuse response. There the shaded arm carries
+`SPECULAR = 0.25` (`AircraftSpecular`) at roughness 0.85 and metallic 0.0, the remake's own choice:
+the value the user picked by eye off a sweep against `OriginalScreenshots/Fury from above.png`, low
+enough that sunlight reads as a sheen instead of gloss.
 
 ## Facades: the same gate, a different `N`
 
@@ -415,6 +518,8 @@ What the facade path changes is the **geometry the gate admits**, in three steps
    it replaces the model's basis with a camera-facing one chosen by the mode word at `+0x04`
    (`0` CylindricalY through `FUN_005408e0`, `1` SphericalY through `FUN_00539390`, which caches
    its quaternion on the node at `+0xc8`, `2` and `3` through `FUN_005398b0` / `FUN_00539c70`).
+   What those two routines compute, and why neither of them lets the camera's roll reach a card, is
+   decoded in [`cloudCards.md`](cloudCards.md).
    When the model carries flag bit `0x80` the rotation is wrapped in a translate to and from the
    centroid `FUN_00552180` averages out of the polygon vertices.
 2. `FUN_00554550` then skips, for a facade whose mode is `0` or `1`, the per-polygon block that
@@ -429,8 +534,8 @@ What the facade path changes is the **geometry the gate admits**, in three steps
 
 `FUN_005688a0` reads the face normal at the submit record's `+0x08` and the per-vertex array at
 `+0x0c`, preferring the array. A lit facade is therefore shaded per vertex from normals that
-**rotate with the camera**, which is a directional term that tracks where the player is looking, not
-a constant per-mission multiply.
+**turn with the card's pose**, which is a directional term that tracks where the player is standing,
+not a constant per-mission multiply.
 
 ### The ambient-only bit
 
@@ -498,15 +603,30 @@ sprite card. `TextureArchive` still reads the extractor's `alpha` field out of t
 `manifest.json` and publishes it as an alpha class, which is the right reader for anything that
 needs the texture's own bit rather than its pixels.
 
-⚠ **On a facade the gate is reproduced and the term behind it is not.** `csky_world_light` is the
+**The in-flight aircraft carries the term uncollapsed** in original mode, as "What CSVM does with
+that" describes: per vertex, on its own normals, with the product clamp.
+
+**The `LIGHT_STATE` point term is reproduced per vertex** on the world and the aircraft, gated by
+`lighting` and inside the product clamp, as "Point lights" above describes. Only the sun half of the
+world's vertex light is still the collapsed scalar.
+
+**On the `fvol` clutter cards the term behind the gate is reproduced.** `csky_world_light` is the
 collapse `AMBIENT + DIFFUSE × 0.46` calibrated on the predominantly up-facing world
 ([`weather.md`](weather.md)), and a camera-facing card is the one surface that averaging does not
-describe: the original shades it per vertex from normals that turn with the camera, between
+describe: the original shades it per vertex from normals that turn with the card's pose, between
 `AMBIENT` where a corner faces away from the sun and `AMBIENT + DIFFUSE` where one faces it. So
-honouring the flag with a flat multiply, which is what `SceneBuilder` does today, is right about
-*which* cards are lit (C1C, C2B and C5's `fvol` field, and nothing in C1, C4 or any placed
-`cloudparent` cluster) and wrong about the value on all of them. Acting on that is a look change on
-a visible population and is owed a verdict at the controls, not a luminance distance.
+`FogVolumeClutter` builds the card with its three authored normals and, on the chapters authoring
+`lighting: true`, evaluates `AMBIENT + DIFFUSE × max(N·L, 0)` per vertex on the normal turned by
+the same `csky_facade_spherical` basis the quad takes, clamping the product against the authored
+colour rather than the factor. `WeatherRig` publishes the zone's own `SUNLIGHT_AMBIENT`, `SUNLIGHT_DIFFUSE` and sun bearing
+uncollapsed for it; the collapsed scalar is not read on this population in either arm.
+
+⚠ **Every other camera-facing surface still takes the flat multiply.** `SceneBuilder`'s billboard
+path honours the gate and then dims a lit facade by `csky_world_light`, which is right about *which*
+surfaces are lit and wrong about the value on each. That is the remaining half of the miss, and it
+is not what a night cloud deck is made of: every placed `cloudparent` card in C1, C1B, C1C and C4 is
+`lighting: false`, so neither term reaches it and no directional look on that population can come
+from this mechanism.
 
 ⚠ **A city wall is the same miss as a card, but the sign of the miss depends on the authored
 vertex colour.** The collapse's 0.46 stands for the world's mean `N·L`, so any surface whose own

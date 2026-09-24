@@ -71,6 +71,31 @@ So an aircraft whose override record leaves a field unset wears its **def's** au
 That is the path an AI aircraft takes: its militia def's authored scheme is what it flies in unless
 something explicitly sets a field, or the default-scheme branch is taken.
 
+## Which pattern a spawn wears
+
+The same function picks the pattern before it builds the record, and the pick decides which of the
+two paths above runs, or whether any scheme is sent at all. Nothing in it reads the vehicle's team.
+
+1. The pattern starts as the spawned vehicle's own def's `+0x220` string (`0x0047d95d`; the def
+   pointer is the vehicle record's `+0x64`). A non-empty pattern string in the override record at
+   `+0x120` replaces it (`0x0047da7f`). For a roster block that record is slots 68 to 80
+   ([`formats/ai-rosters.md`](../formats/ai-rosters.md)), and every shipped campaign block leaves
+   the pattern empty, the decals at `-2` and the colours at `-1`.
+2. **An empty pattern sends no scheme at all** (`TEST EAX, EAX; JZ 0x0047dff9` at `0x0047db38`,
+   skipping the dispatch). The aircraft keeps its shipped key skins. This is the Black Swan's
+   Fury in CM16 to CM18: her block resolves `bswingman`, whose chain authors no paint key, and the
+   Fury's shipped `fur_*` skins are her own black body with white bars. The `bsfury` def that
+   authors `blckswan` is flown only as an enemy (C1C/M01).
+3. `player_fortune` is renamed `fortune` and sets the default-scheme flag
+   (`MOV byte ptr [EBP + 0xb], 0x1` at `0x0047dbef`), so the record is the global at `0x0071db08`
+   and not the def's (empty) slots. Every def that authors it (`wingman`, `devastator`) therefore
+   wears that one global scheme.
+4. A pattern with no texture set (`0x0047dc4c`) or an airframe index of 11 (`0x0047dc6c`) also
+   sends nothing. Any other airframe is checked against a per-airframe list of legal patterns
+   (the switch after `0x0047dc6c`, `blckswan` among the Fury's at `0x0047dd65`), and a mismatch
+   only prints `Warning: invalid combination of airframe and pattern` (`0x0047de1f`); the scheme
+   is still sent.
+
 ## Packing a colour
 
 Each colour's three components are packed into one dword (`0x0047df0c`–`0x0047df1b`, and the two
@@ -96,5 +121,11 @@ independent point that nothing between `vehicle.json` and the scheme record perm
   and an AI scheme from the def or the livery picker, so the per-field fallback above has no
   equivalent yet; it becomes relevant only when a mission or a saved plane can override one
   component of an otherwise authored scheme.
+- CSVM paints a campaign block off its AI def, the militia variant `PlaneStats` flies. Where the
+  block's own def is no variant of its airframe (`bswingman` on the Fury) the livery is read off
+  that own def instead (`RosterSpawnPlan.LiveryDef`), and one authoring nothing flies the shipped
+  skins on either team, as step 2 above does. A profile wingman flying a `w<plane>` twin, and every
+  enemy, still follow the routing in `AiFlightAssembler.MilitiaScheme` rather than this page's
+  team-blind rule.
 - CSVM keeps colours as an RGB triple rather than one packed dword, so the packing formula is a
   decode of the original's storage, not a shape to reproduce.

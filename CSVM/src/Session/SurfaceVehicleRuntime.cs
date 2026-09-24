@@ -157,7 +157,7 @@ public sealed partial class SurfaceVehicleRuntime : Node
         }
     }
 
-    // The radius the hull's own scorer admits a candidate inside, in the order the engine writes
+    // The radius the hull's own scorer admits a candidate inside, in the order the original writes
     // the attack triple at spawn: the def copy, then the net, then the block, each later writer
     // skipping a field the data leaves zero (docs/org/aiPilot.md "Where a hull's attack triple
     // comes from"). plan.Volumes is already the net overlaid by the block. A hull that resolves

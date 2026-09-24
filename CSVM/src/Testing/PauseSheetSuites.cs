@@ -25,8 +25,8 @@ internal static class PauseSheetSuites
     private const string NumberedMission = "M04";
 
     // The picture the profile this suite seats has chosen: a mission 0 award, so every profile
-    // holds it, and not the seeded pin-up, so a sheet that read no profile would draw a different
-    // name here rather than the right one by accident.
+    // holds it. It is not the seeded pin-up, so a sheet that read no profile would draw a
+    // different name here by accident.
     private const string ChosenMemento = "MS_P_Mom.jpg";
     // The mission whose objective block authors two IDENTITY entries, one keyed and one not. It is
     // the only block in the shipped data that does, and the note keeps the keyed entry alone.
@@ -45,8 +45,8 @@ internal static class PauseSheetSuites
     private const float AceHeadX = 365f;
 
     // How many objectives across the whole sequence are composed away rather than drawn. The
-    // executable's list walks its whole row vector and stops at no height, so every row reaches
-    // both screens, and a list too deep for the paper shrinks its face instead of losing a row.
+    // original's list walks its whole row vector and stops at no height, so every row reaches
+    // both screens. A list too deep for the paper shrinks its face instead of losing a row.
     private const int OverrunRows = 0;
 
     // Where the parchment's solid paper ends in authored pixels, off the art's own position. No
@@ -57,11 +57,11 @@ internal static class PauseSheetSuites
 
     // How many points over its own face the deepest list is put at to exercise the fit. Every
     // campaign list fits the paper at the size the screen writes it in, so nothing on the disc
-    // drives the shrink, and a rule no data reaches is a rule nothing checks.
+    // drives the shrink. A rule no data reaches is a rule nothing checks.
     private const float Swollen = 6f;
 
     // The alpha a pixel counts as paper at. The torn edge fades out over a few pixels rather than
-    // ending, so the solid rectangle is read at very nearly opaque rather than at any coverage.
+    // ending. The solid rectangle is read at very nearly opaque rather than at any coverage.
     private const float SolidAlpha = 250f / 255f;
 
     // How many lines each of the filmed mission's four objectives takes on the parchment, read off
@@ -69,8 +69,8 @@ internal static class PauseSheetSuites
     // can be held to rather than the glyphs.
     private static readonly int[] FilmedRowLines = { 1, 2, 2, 1 };
 
-    // And the numbered mission's two, both shorter than the filmed sheet's longest single line, so
-    // the original fits each on one line in the same box. No still films this one.
+    // And the numbered mission's two, both shorter than the filmed sheet's longest single line.
+    // The original fits each on one line in the same box. No still films this one.
     private static readonly int[] NumberedRowLines = { 1, 1 };
 
     // The world-folder digits Instant Action's own environment list offers. C1C (3) is the chapter
@@ -78,8 +78,8 @@ internal static class PauseSheetSuites
     // (docs/formats/instant-action.md).
     private static readonly int[] Environments = { 1, 2, 4, 5, 6, 7, 8 };
 
-    // The profile a campaign pause is taken over here: a seated one that chose a picture, which is
-    // what the flown session's own director hands the readout.
+    // The profile a campaign pause is taken over here: a seated one that chose a picture. The
+    // flown session's own director hands that picture to the readout.
     private static readonly Session.CampaignProfileDef Seated = SeatProfile();
 
     // The four mission types, in the order the exe's jump table letters them.
@@ -99,15 +99,15 @@ internal static class PauseSheetSuites
     };
 
     // Where the Instant Action sheet's strips stand, in the order a cursor walks them. The block
-    // authors three across and one below the third, so the remake's photo strip takes the free cell
-    // under RESTART rather than a channel between columns, which this block has none of.
+    // authors three across and one below the third. The remake's photo strip takes the free cell
+    // under RESTART, since this block has no channel between columns.
     private static readonly (float X, float Y)[] Strips =
     {
         (352f, 510f), (497f, 550f), (497f, 510f), (642f, 510f), (642f, 550f),
     };
 
-    // And where the campaign sheet's stand: two columns of two, whose own channel is where the
-    // photo strip goes, four pixels narrower than the plate it takes.
+    // And where the campaign sheet's stand: two columns of two. The photo strip goes in their own
+    // channel, four pixels narrower than the plate it takes.
     private static readonly (float X, float Y)[] CampaignStrips =
     {
         (107f, 528f), (237f, 528f), (127f, 559f), (367f, 528f), (347f, 559f),
@@ -249,8 +249,8 @@ internal static class PauseSheetSuites
     }
 
     // The parchment's solid paper in authored pixels, measured off the extraction rather than
-    // assumed: the largest fully opaque rectangle in the art, which is the paper inside the torn
-    // edges, at the point the sheet hangs the art. An empty rectangle where the bitmap is missing.
+    // assumed. The largest fully opaque rectangle in the art is the paper inside the torn edges,
+    // at the point the sheet hangs the art. An empty rectangle where the bitmap is missing.
     internal static Godot.Rect2 Paper(TestContext ctx, EscapeObjectivesList? list)
     {
         if (list == null)
@@ -273,7 +273,7 @@ internal static class PauseSheetSuites
 
     // The far corner of a flowed block in authored pixels: the widest line's own right edge and the
     // last line's bottom. A word too long to break pushes a line's box past the measure it wrapped
-    // to, so the drawn width is asked for rather than taken from the note.
+    // to. The drawn width is asked for rather than taken from the note.
     internal static Godot.Vector2 Corner(
         System.Func<string, float, Godot.Vector2> box, IReadOnlyList<BoardLine> placed)
     {
@@ -544,8 +544,8 @@ internal static class PauseSheetSuites
     }
 
     // The hit test over this dialog's own strips: the pointer moves the shared cursor onto each of
-    // the five in turn, and a press released on PREFERENCES fires that strip and leaves the sheet
-    // standing, which it and the photo strip are the only two rows to do.
+    // the five in turn. A press released on PREFERENCES fires that strip and leaves the sheet
+    // standing. It and the photo strip are the only two rows that do.
     private static void WalkStrips(
         TestContext ctx,
         Flight.OriginalPauseBoard board,
@@ -595,9 +595,9 @@ internal static class PauseSheetSuites
         report.AppendLine($"pointer: walked {walked} strips, fired PREFERENCES {fired} time(s)");
     }
 
-    // The remake's own strip on either sheet: pressed and released on its own plate it opens photo
-    // mode and leaves the halt and the sheet exactly as they were, the mode being a still frame over
-    // the frozen world rather than a resume, which is what returns a player to the sheet.
+    // The remake's own strip on either sheet: pressed and released on its own plate, it opens photo
+    // mode. The halt and the sheet stand exactly as they were. The mode is a still frame over the
+    // halted world rather than a resume, which is what returns a player to the sheet.
     private static void FirePhotoStrip(
         TestContext ctx,
         Flight.OriginalPauseBoard board,
@@ -771,8 +771,8 @@ internal static class PauseSheetSuites
         }
     }
 
-    // The five strips on the campaign sheet: the four the block authors at their own points and the
-    // photo strip in the channel between the two columns, each drawn in walk order. A plate that
+    // The five strips on the campaign sheet, drawn in walk order. The block authors four at their
+    // own points, and the photo strip stands in the channel between the two columns. A plate that
     // moved would land on its neighbour rather than beside it, which no other check would see.
     private static void CheckStripPlaces(
         TestContext ctx, PauseSheet sheet, ComposedBoard? shown, StringBuilder report)
@@ -802,9 +802,9 @@ internal static class PauseSheetSuites
         report.AppendLine($"strips: {string.Join(" ", places)}");
     }
 
-    // The pointer over the raised board: PREFERENCES, which leaves the board standing when it fires,
-    // and the photo strip, which is the other row that does, driven through the same frame the pad's
-    // own step runs in.
+    // The pointer over the raised board: PREFERENCES, which leaves the board standing when it
+    // fires, and the photo strip, the other row that does. Both are driven through the same frame
+    // the pad's own step runs in.
     private static void DrivePointer(
         TestContext ctx, Flight.OriginalPauseBoard board, PauseSheet sheet, Flight.PauseState pause,
         StringBuilder report)
@@ -1047,8 +1047,8 @@ internal static class PauseSheetSuites
     }
 
     // The parchment's rows in the face the original sets them in, and how many lines each takes in
-    // the measure the widget authors. Only the renderer's font knows how tall a wrapped entry drew,
-    // so the count is measured with the face the screen writes it in rather than composed.
+    // the measure the widget authors. Only the renderer's font knows how tall a wrapped entry drew.
+    // The count is measured with the face the screen writes it in rather than composed.
     private static void CheckRowWrap(
         TestContext ctx, List<(CampaignMission Mission, PauseSheet Sheet)> sheets, StringBuilder report)
     {
@@ -1162,10 +1162,10 @@ internal static class PauseSheetSuites
             + $"deepest {deepest}, widest {widest}");
     }
 
-    // The largest rectangle of paper pixels in a bitmap, by the histogram walk: each row carries
-    // how far the solid run above every column reaches, and the widest bar-chart rectangle standing
-    // on that row is a candidate. A profile of per-row runs cannot do this, since a few rows of the
-    // torn edge are almost all fringe and would shrink the answer to a sliver.
+    // The largest rectangle of paper pixels in a bitmap, by the histogram walk. Each row carries
+    // how far the solid run above every column reaches. The widest bar-chart rectangle standing on
+    // that row is a candidate. A profile of per-row runs cannot do this. A few rows of the torn
+    // edge are almost all fringe and would shrink the answer to a sliver.
     private static Godot.Rect2I Solid(Godot.Image art)
     {
         int wide = art.GetWidth(), high = art.GetHeight();
@@ -1215,8 +1215,8 @@ internal static class PauseSheetSuites
         report.AppendLine($"fit: the deepest list at {deep.Size + Swollen:0} pt comes back at {swollen.Size:0} pt");
     }
 
-    // One note's entries as line counts: a short word measured in the same box is one line's worth,
-    // so an entry's own measured height divided by it is how many lines it wrapped to.
+    // One note's entries as line counts. A short word measured in the same box is one line's worth.
+    // An entry's own measured height divided by it is how many lines it wrapped to.
     private static int[] RowLines(BoardFit fit, Godot.Font font, BoardNote note)
     {
         var height = ComposedBoardView.Measure(fit, font, note);
@@ -1235,7 +1235,7 @@ internal static class PauseSheetSuites
         && mission.MissionFolder.Equals(folder, System.StringComparison.OrdinalIgnoreCase);
 
     // The one mission whose objective block carries two IDENTITY entries. Only the keyed one is a
-    // note line, so the block owns a single row and a single mark; a reader that took every entry
+    // note line, so the block owns a single row and a single mark. A reader that took every entry
     // as a line would put an empty row on the parchment and mark two rows on one completion.
     private static void CheckDoubledIdentity(
         TestContext ctx, List<(CampaignMission Mission, PauseSheet Sheet)> sheets, StringBuilder report)

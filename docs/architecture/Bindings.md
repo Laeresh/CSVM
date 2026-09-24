@@ -166,8 +166,17 @@ applies to all of them at once. This is what a polling site is handed and what a
 edits. `Poll` resolves every context on the tick rather than only the mode in front of the player,
 because a pause board and the aeroplane behind it are both live on one tick. It also holds the
 seat's `ActiveDevice`, fed the tick's two halves by whoever polls them, so every prompt on the seat
-names one device, and the seat's flying scheme (`MouseFlying`), which two players at one machine
-choose separately. Where a seat's profile comes from is `LaunchBindings.cs`.
+names one device, and the seat's flying scheme (`MouseFlying`) and its `MouseSensitivity`, which
+two players at one machine choose separately. Where a seat's profile comes from is
+`LaunchBindings.cs`.
+
+## src/Bindings/SensitivityScale.cs
+The Fly scheme's mouse sensitivity as one set of numbers: a multiplier from 0.25 to 4 with 1 as the
+default, and the 0 to 100 slider scale both presentations step it on, even in ratio so that a
+`LevelStep` of 5 multiplies it by the same amount anywhere. `Clamp` reads a non-finite value as the
+default, which is what keeps a hand-edited keymap file from stopping the stick. `MouseCapture`
+divides its full-deflection travel by the value. The arithmetic and the range's reasoning:
+[../controls.md](../controls.md), "Flying with the mouse".
 
 ## src/Bindings/ActiveDevice.cs
 Which side of a seat's hardware produced its last real input, keyboard and mouse against the pads,
@@ -183,10 +192,10 @@ The keymap file: versioned JSON, one per player under `user://`, written atomica
 file and a rename. Named and versioned against the original, which writes 2400 unversioned raw bytes
 to the registry and points its live array at the loaded buffer, so a record-layout change there
 reinterprets an old save. `Encode` and `Decode` are the token grammar; version 2 is the key token's
-optional modifier prefix, and a version 1 file still loads whole because a bare key token means the
-same in both, which is why the reader checks no version. The file's shape, its tokens
-and what this build does with a row it cannot read: [../org/input.md](../org/input.md).
-`DirectoryOverride` is what keeps a suite off the keymap saved at this machine's controls.
+optional modifier prefix, and a version 1 file still loads whole, which is why the reader checks no
+version; a file without `mouseSensitivity` loads at the default. A control the file names is taken
+off any action still holding it by default. Its shape, tokens and unreadable rows:
+[../org/input.md](../org/input.md). `DirectoryOverride` keeps a suite off this machine's own keymap.
 
 ## src/Bindings/LaunchBindings.cs
 Where a seat's keymap comes from when the seat is built: the player's saved file, or the shipped
@@ -197,11 +206,11 @@ called. A seat is put on the loaded map through `ActionMap.Fill`. Coverage:
 `CSVM.Tests/LaunchBindingsTests.cs` and the `bindings-launch-load` engine suite.
 
 ## src/Bindings/PadRumble.cs
-The pad half of the flight cues: one seat's rumble, routed through `Pads.For` to the pads that seat's
-own bindings read, so a splitscreen pane never buzzes another pilot's controller. `RumbleEvent` is the
-original's own event list and a fixed table gives each row a weak magnitude, a strong one and a length.
-The static band functions (`GunFire`, `Launch`, `CannonHit`, `OrdnanceHit`, `Contact`) hold the
-original's own edges, so a call site passes the quantity it already has; `Overspeed` is the one
-sustained cue, restarted on a cadence while the dive lasts. `IRumbleSink` is the seam the unit tests
-replace and `JoyRumbleSink` is `Input.StartJoyVibration`; the static `Enabled` is the Game Options
-toggle, held off under `--det`. Every number, and why the bearing is dropped: [../org/input.md](../org/input.md).
+One seat's rumble, routed through `Pads.For` to the pads that seat's own bindings read, so a
+splitscreen pane never buzzes another pilot's controller, and sent only while the seat's own
+`ActiveDevice` (the reading its control prompts take) says the last input came off the pad.
+`RumbleEvent` is the original's event list; a fixed table gives each row a weak magnitude, a strong
+one and a length, and the static band functions (`GunFire`, `Launch`, `CannonHit`, `OrdnanceHit`,
+`Contact`) hold the original's edges. `Overspeed` is the one sustained cue, restarted on a cadence.
+`IRumbleSink` is the unit tests' seam over `Input.StartJoyVibration`; the static `Enabled` is the Game
+Options toggle, held off under `--det`. Every number and why the bearing is dropped: [../org/input.md](../org/input.md).

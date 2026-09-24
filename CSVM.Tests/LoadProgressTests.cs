@@ -136,30 +136,71 @@ public class LoadProgressTests
         Assert.Equal(0.90f, progress.Fraction);
     }
 
-    /// <summary>The pump is wall-clock throttled to one draw per 0.1 s, so the screen repaints at
-    /// most ten times a second however fast the steps arrive.</summary>
+    /// <summary>A build that crosses every boundary in no time at all still draws each fraction it
+    /// reaches: the throttle holds off a repeat, never a step the bar moved on, so a fast build
+    /// steps through the table instead of showing its first fraction and then the mission.</summary>
     [Fact]
-    public void ThePumpHoldsOffToOneDrawPerTenthOfASecond()
+    public void EveryStepThatMovesTheBarIsDrawnHoweverFastTheBuildIs()
+    {
+        double clock = 0d;
+        var progress = new LoadProgress(() => clock);
+        var drawn = new System.Collections.Generic.List<float>();
+        progress.Repaint = () => drawn.Add(progress.Fraction);
+
+        foreach (var step in Enum.GetValues<LoadStep>())
+        {
+            progress.Reach(step);
+        }
+
+        Assert.Equal(LoadProgress.Milestones.Distinct(), drawn);
+        Assert.Equal(drawn.Count, progress.Draws);
+        Assert.Equal(0.90f, progress.Fraction);
+    }
+
+    /// <summary>The pump is wall-clock throttled to one draw per 0.1 s, which is what holds the
+    /// propeller to its rate when a step leaves the bar where it was.</summary>
+    [Fact]
+    public void AStepThatMovesTheBarNowhereWaitsForTheThrottle()
     {
         double clock = 0d;
         int draws = 0;
         var progress = new LoadProgress(() => clock);
         progress.Repaint = () => draws++;
 
-        progress.Reach(LoadStep.RenderState);
+        progress.Reach(LoadStep.Paths);
         Assert.Equal(1, draws);
 
+        // The table's repeated 0.10, inside the throttle's own window.
         clock += 0.05d;
-        progress.Reach(LoadStep.ChapterPaths);
+        progress.Reach(LoadStep.Directors);
         Assert.Equal(1, draws);
 
         clock += 0.06d;
-        progress.Reach(LoadStep.Scaffold);
+        progress.Pump();
         Assert.Equal(2, draws);
+        Assert.Equal(LoadProgress.Milestones[(int)LoadStep.Paths], progress.Fraction);
+    }
 
-        // The fraction the coalesced step set is still the one drawn: the setter stores, the pump
-        // only decides when the picture goes out.
-        Assert.Equal(LoadProgress.Milestones[(int)LoadStep.Scaffold], progress.Fraction);
+    /// <summary>Every reported step is traced against the build's own wall clock, with the ones
+    /// that were not drawn marked, which is what the load screen writes its log line out of.
+    /// </summary>
+    [Fact]
+    public void TheTraceCarriesEveryStepAgainstWallTime()
+    {
+        double clock = 0d;
+        var progress = new LoadProgress(() => clock);
+
+        progress.Reach(LoadStep.Paths);
+        clock += 0.05d;
+        progress.Reach(LoadStep.Directors);
+
+        Assert.Equal(2, progress.Trace.Count);
+        Assert.Equal(LoadStep.Paths, progress.Trace[0].Step);
+        Assert.Equal(0d, progress.Trace[0].Seconds);
+        Assert.True(progress.Trace[0].Drawn);
+        Assert.Equal(0.05d, progress.Trace[1].Seconds);
+        Assert.Equal(0.10f, progress.Trace[1].Fraction);
+        Assert.False(progress.Trace[1].Drawn);
     }
 
     /// <summary>A build with no screen over it draws nothing: every CLI launch leaves the ambient

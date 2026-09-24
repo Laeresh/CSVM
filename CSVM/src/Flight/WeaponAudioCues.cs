@@ -18,15 +18,17 @@ public readonly record struct WeaponSoundCue(
     string Name, AudioStreamWav Stream, float Volume, float RangeMin, float RangeMax, bool Is3D)
 {
     /// <summary>The margin the sound manager leaves over <c>RANGE</c>'s audible distance before it
-    /// silences a positional voice. One number for every weapon voice: the aircraft gun loop and a
-    /// mount's gun reach the same 3D update, which silences past this multiple
+    /// silences a positional voice. The decoded law's own factor, not a second copy of it: the
+    /// aircraft gun loop and a mount's gun reach the same 3D update every world emitter does
     /// (docs/formats/sounds.md).</summary>
-    public const float CullMargin = 1.1f;
+    public const float CullMargin = SoundFalloff.CullFactor;
 
     /// <summary>Where this cue goes silent, <see cref="RangeMax"/> grown by
     /// <see cref="CullMargin"/>. The pair drives the attenuation curve, so the cull sits outside
-    /// that curve rather than on its end.</summary>
-    public float CullDistance => RangeMax * CullMargin;
+    /// that curve rather than on its end. Scaled with the curve by
+    /// <see cref="SoundFalloff.RangeScale"/>, so the diagnostic factor cannot cut a voice the
+    /// scaled curve still plays.</summary>
+    public float CullDistance => RangeMax * SoundFalloff.RangeScale * CullMargin;
 }
 
 /// <summary>

@@ -36,31 +36,36 @@ public class NameResolverTests
         Assert.DoesNotContain(lettered, found);
     }
 
-    // ---- '*' matches any run of characters, including the '**' template idiom ----
+    // ---- '*' matches at most one digit: the original's odometer stamps one digit per star, and
+    // its compiler instanced `lkshadow*` as plain `lkshadow` ----
 
     [Fact]
-    public void StarMatchesAnyRunOfCharacters()
+    public void StarMatchesAtMostOneDigit()
     {
+        var bare = Node("fly_trail");
         var t1 = Node("fly_trail1");
-        var t10 = Node("fly_trail10"); // two-char run: '*' must not quietly mean "one character"
+        var t10 = Node("fly_trail10"); // two digits need two stars
+        var lettered = Node("fly_trailx");
         var unrelated = Node("healthy");
         var resolver = Build(
-            (t1, "fly_trail1", null), (t10, "fly_trail10", null), (unrelated, "healthy", null));
+            (bare, "fly_trail", null), (t1, "fly_trail1", null), (t10, "fly_trail10", null),
+            (lettered, "fly_trailx", null), (unrelated, "healthy", null));
 
         var found = resolver.FindAll("fly_trail*", null);
 
-        Assert.Contains(t1, found);
-        Assert.Contains(t10, found);
-        Assert.DoesNotContain(unrelated, found);
+        Assert.Equal(new[] { bare, t1 }, found);
     }
 
     [Fact]
-    public void DoubleStarTemplateFormMatchesAnyRun()
+    public void DoubleStarTemplateFormMatchesTwoDigitsNotALetterRun()
     {
-        var node = Node("call_hetrails_up");
-        var resolver = Build((node, "call_hetrails_up", null));
+        // C3's shape: the shared `crate**` destructible must instance on the numbered crates and
+        // never on `craterlake`, whose death would switch every world `healthy` node off.
+        var crate01 = Node("crate01");
+        var lake = Node("craterlake");
+        var resolver = Build((crate01, "crate01", null), (lake, "craterlake", null));
 
-        Assert.Contains(node, resolver.FindAll("call_**", null));
+        Assert.Equal(new[] { crate01 }, resolver.FindAll("crate**", null));
     }
 
     // ---- plain names compare case-insensitively ----
@@ -119,7 +124,7 @@ public class NameResolverTests
         var root = Node("m_build01");
         var resolver = Build((root, "m_build01", null));
 
-        Assert.Equal(new[] { root }, resolver.FindAll("m_build*", root));
+        Assert.Equal(new[] { root }, resolver.FindAll("m_build**", root));
     }
 
     // ---- FindAll's memoized result is the same list instance on repeat, read-only-list semantics ----
@@ -257,6 +262,85 @@ public class NameResolverTests
         Assert.Equal(2, found.Count); // the anchor no longer narrows, both copies, index order
         Assert.Contains(mine, found);
         Assert.Contains(stray, found);
+    }
+
+    // ---- a definition the world holds several instances of writes inside its own instance only ----
+
+    [Fact]
+    public void AWildcardInstancedDefsMissedNameReachesNoOtherNode()
+    {
+        // C3's shape: the shared `crate**` destructible, whose death writes `healthy INACTIVE`.
+        // An instance carrying no healthy model must switch nothing off anywhere else.
+        var crate01 = Node("crate01");
+        var crateHealthy = Node("healthy");
+        var crate02 = Node("crate02"); // this copy carries no healthy model of its own
+        var hull = Node("piratezep");
+        var hullHealthy = Node("healthy");
+        var resolver = Build(
+            (crate01, "crate01", null),
+            (crateHealthy, "healthy", crate01),
+            (crate02, "crate02", null),
+            (hull, "piratezep", null),
+            (hullHealthy, "healthy", hull));
+        var def = Def("crate**", rootName: "healthy");
+        var path = new List<string> { "healthy" };
+
+        Assert.Equal(new[] { crateHealthy }, resolver.ResolveScoped(path, def, crate01));
+        Assert.Contains(hullHealthy, resolver.FindAll("healthy", null)); // the world node is there
+        Assert.Empty(resolver.ResolveScoped(path, def, crate02));        // and stays unreached
+        Assert.Equal(1, resolver.GlobalTierRefused);
+    }
+
+    [Fact]
+    public void AnExactlyNamedDefStillFallsThroughToTheGlobalTier()
+    {
+        // The contrast: one world object, one instance. A name it does not carry is still the
+        // world's to answer, exactly as the original's localOnly-clear chain answers it.
+        var anchor = Node("air_gen");
+        var stray = Node("door1");
+        var resolver = Build((anchor, "air_gen", null), (stray, "door1", null));
+
+        var found = resolver.ResolveScoped(new List<string> { "door1" }, Def("air_gen"), anchor);
+
+        Assert.Equal(new[] { stray }, found);
+        Assert.Equal(0, resolver.GlobalTierRefused);
+    }
+
+    [Fact]
+    public void AWildcardCarryingNameKeepsTheGlobalTier()
+    {
+        // The boundary: `lkshw*` writing `lkshb*` (the install's only such write). A wildcard in
+        // the name stands in for the digit the odometer stamps into it. It still names the
+        // definition's own family, so the whole index answers, as it does for the matcher today.
+        var shadow = Node("lkshw1");
+        var burnt = Node("lkshb1");
+        var plain = Node("lkshb");
+        var resolver = Build((shadow, "lkshw1", null), (burnt, "lkshb1", null), (plain, "lkshb", null));
+        var def = Def("lkshw*");
+
+        Assert.Equal(new[] { burnt, plain }, resolver.ResolveScoped(new List<string> { "lkshb*" }, def, shadow));
+        Assert.Empty(resolver.ResolveScoped(new List<string> { "lkshb" }, def, shadow));
+        Assert.Equal(1, resolver.GlobalTierRefused); // the plain name, and only it
+    }
+
+    [Fact]
+    public void ARootLiftedDefIsRefusedTheGlobalTierToo()
+    {
+        // The other multi-instance anchoring: an exact NAME that matches nothing, lifted onto every
+        // parent of its ANIMATION_ROOT_NAME. Two instances, so a generic name is theirs, not the
+        // world's; the refusal has to read the lift, which the definition alone does not record.
+        var b1 = Node("apbuild01.flt");
+        var b2 = Node("apbuild02.flt");
+        var stray = Node("door1");
+        var resolver = Build(
+            (b1, "apbuild01.flt", null), (Node("healthy"), "healthy", b1),
+            (b2, "apbuild02.flt", null), (Node("healthy"), "healthy", b2),
+            (stray, "door1", null));
+        var def = Def("m_build01", rootName: "healthy"); // no node carries the NAME
+
+        Assert.Equal(new[] { b1, b2 }, resolver.Anchors(def));
+        Assert.Empty(resolver.ResolveScoped(new List<string> { "door1" }, def, b1));
+        Assert.Equal(1, resolver.GlobalTierRefused);
     }
 
     // ---- symbol authority: an exact gamez-index binding beats ambiguous name matching ----
@@ -542,7 +626,7 @@ public class NameResolverTests
         Assert.Equal(0, resolver.FreedRows());
         var (staged, hook) = StageWarhawk(resolver);
 
-        Assert.Equal(new[] { staged }, resolver.FindAll("player_*", null));
+        Assert.Equal(new[] { staged }, resolver.FindAll("player_warhawk", null));
         Assert.Equal(new[] { hook }, resolver.FindAll("hook", staged));
         Assert.Equal(new[] { hook }, resolver.FindAll("hook", null));
     }

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 using CSVM.UI;
 using Godot;
 
@@ -19,8 +20,9 @@ internal static class MenuCaptureSuites
     [Suite("menu-screenshot-key",
         "the screenshot key on the menu screens: a real key event is pushed through the real "
         + "viewport with a LaunchMenu standing, once on the launchscreen and once on a "
-        + "campaign board, and each press must leave one more file in the folder the flight "
-        + "capture writes to")]
+        + "campaign board, and each press must ask for the frame once, write nothing on the press "
+        + "itself, and leave one more file in the folder the flight capture writes to once the "
+        + "frame lands on a worker")]
     internal static void MenuScreenshotKey(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
@@ -30,11 +32,11 @@ internal static class MenuCaptureSuites
         try
         {
             menu.ShowMenu();
-            Press(ctx, written, "the launchscreen");
+            Press(ctx, menu, written, "the launchscreen");
             menu.ShowMenu("campaign-briefing:0");
             ctx.Check(menu.ShownBoard != null,
                 $"the campaign board really was up for its press (ComposedBoardView, not the control layout)");
-            Press(ctx, written, "a campaign board");
+            Press(ctx, menu, written, "a campaign board");
         }
         finally
         {
@@ -50,26 +52,28 @@ internal static class MenuCaptureSuites
         }
     }
 
-    private static void Press(TestContext ctx, List<string> written, string where)
+    private static void Press(TestContext ctx, LaunchMenu menu, List<string> written, string where)
     {
         var before = new HashSet<string>(Shots());
         var viewport = ctx.Host.GetViewport();
+        var pane = new HeldPane(viewport);
+        menu.ScreenshotPane = pane.Request;
         viewport.PushInput(new InputEventKey { Keycode = Key.F12, PhysicalKeycode = Key.F12, Pressed = true });
         bool taken = viewport.IsInputHandled();
-        var fresh = new List<string>();
-        foreach (var path in Shots())
-        {
-            if (!before.Contains(path))
-            {
-                fresh.Add(path);
-                written.Add(path);
-            }
-        }
+        ctx.Check(pane.Grabs == 1, $"the press on {where} asked for the frame once ({pane.Grabs})");
+        ctx.Check(Fresh(before).Count == 0,
+            $"…and wrote nothing on the press itself, while the frame is still on its way");
 
+        // The frame lands on a worker, as a live readback's does, and the file is written there, so
+        // the check waits for that hand-over to finish before it looks.
+        bool landed = pane.Release(System.TimeSpan.FromSeconds(10));
+        ctx.Check(landed, $"…and the landed frame's write on {where} finished on its worker");
+        var fresh = Fresh(before);
+        written.AddRange(fresh);
         long size = fresh.Count == 1 ? new FileInfo(fresh[0]).Length : 0;
         ctx.Note($"{where}: handled={taken}, new files={fresh.Count}, bytes={size}");
         ctx.Check(fresh.Count == 1,
-            $"one press on {where} wrote exactly one file ({fresh.Count}), so the shot lands and nothing captures it twice");
+            $"one press on {where} wrote exactly one file once its frame landed ({fresh.Count}), so the shot lands and nothing captures it twice");
         ctx.Check(taken,
             $"and the menu took the key itself on {where} rather than leaving it to whatever is above it");
         ctx.Check(size > 0, $"and the file written from {where} has content ({size} bytes)");
@@ -80,9 +84,57 @@ internal static class MenuCaptureSuites
         }
     }
 
+    private static List<string> Fresh(HashSet<string> before)
+    {
+        var fresh = new List<string>();
+        foreach (var path in Shots())
+        {
+            if (!before.Contains(path))
+            {
+                fresh.Add(path);
+            }
+        }
+        return fresh;
+    }
+
     private static string[] Shots()
     {
         var dir = CaptureDirector.ShotDir();
         return Directory.Exists(dir) ? Directory.GetFiles(dir, "*.png") : System.Array.Empty<string>();
+    }
+
+    // The menu's frame source for one press. A suite runs inside one frame, so the live readback,
+    // which lands frames later, would never arrive; this holds the request instead and hands the
+    // viewport's frame over on a worker when released.
+    private sealed class HeldPane
+    {
+        private readonly Viewport _viewport;
+        private System.Action<Image?>? _held;
+
+        public HeldPane(Viewport viewport)
+        {
+            _viewport = viewport;
+        }
+
+        public int Grabs { get; private set; }
+
+        public bool Request(System.Action<Image?> landed)
+        {
+            Grabs++;
+            _held = landed;
+            return true;
+        }
+
+        public bool Release(System.TimeSpan timeout)
+        {
+            if (_held is not { } landed)
+            {
+                return false;
+            }
+
+            _held = null;
+            var frame = _viewport.GetTexture()?.GetImage();
+            return Task.Run(() => landed(frame)).Wait(timeout);
+        }
     }
 }

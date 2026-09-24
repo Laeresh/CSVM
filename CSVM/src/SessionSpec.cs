@@ -47,6 +47,29 @@ public enum MenuMode
     Versus,
 }
 
+/// <summary>The enhanced presentation's screen-space passes, as doors a run can close one at a
+/// time. Each can lay a pattern of its own over the frame. Bisecting a full-screen artefact means
+/// rendering one pose per closed door until the pattern goes. Reaches
+/// <c>--graphics=enhanced</c> alone, the faithful path running none of them.</summary>
+[Flags]
+public enum EnhancedPasses
+{
+    None = 0,
+
+    /// <summary><c>--no-ssao</c>: the ambient-occlusion pass.</summary>
+    Ssao = 1,
+
+    /// <summary><c>--no-ssr</c>: screen-space reflection on the water.</summary>
+    Ssr = 2,
+
+    /// <summary><c>--no-glow</c>: the glow pass; the AgX tonemap stays.</summary>
+    Glow = 4,
+
+    /// <summary><c>--no-soft-shadows</c>: the sun's penumbra, angular distance and blur both 0,
+    /// leaving a hard shadow edge rather than no shadow.</summary>
+    SoftShadows = 8,
+}
+
 /// <summary>One <c>--ai=</c> entry: the airframe, plus the optional tokens that follow it.
 /// <c>Count</c> is the entry's <c>n=</c>, so one entry stands for a whole squadron rather than a
 /// plane. <c>Team</c> is its <c>team=</c>, and it is the only way two CLI planes can be put on the
@@ -139,13 +162,13 @@ public sealed record SessionSpec
     /// <summary><c>--vs-kills=N</c>: the kill target that ends a match early. Default 5; 0
     /// disables the kill limit (the match then runs to the time limit alone).</summary>
     public int VsKills { get; private set; } = 5;
-    /// <summary><b>Resolved.</b> <c>--vs-kills=</c> was spelled out, so the flag beats a kill
+    /// <summary>Resolved. <c>--vs-kills=</c> was spelled out, so the flag beats a kill
     /// target a menu screen chose (<see cref="FromMenu"/>).</summary>
     public bool VsKillsExplicit { get; private set; }
     /// <summary><c>--vs-time=minutes</c>: the match time limit, in MINUTES. Default 5; 0 disables
     /// the time limit (the match then runs to the kill target alone).</summary>
     public int VsTimeMinutes { get; private set; } = 5;
-    /// <summary><b>Resolved.</b> <c>--vs-time=</c> was spelled out, so the flag beats a time limit
+    /// <summary>Resolved. <c>--vs-time=</c> was spelled out, so the flag beats a time limit
     /// a menu screen chose (<see cref="FromMenu"/>).</summary>
     public bool VsTimeExplicit { get; private set; }
     /// <summary><b>Resolved.</b> Open the aircraft's per-part HP sliders at launch, a modifier on
@@ -163,13 +186,13 @@ public sealed record SessionSpec
     /// runs on is the audio device's, so a fixed-step sim clock would say nothing about it.</summary>
     public string? MovieName { get; private set; }
 
-    /// <summary><c>--presentation=</c>: a session-only menu presentation override, never persisted.
-    /// <see cref="Utils.PresentationResolution"/> ranks it above the saved request and below
+    /// <summary><c>--presentation=</c>: the menu presentation for this run, never persisted.
+    /// <see cref="Utils.PresentationResolution"/> ranks it above the Original default and below
     /// <see cref="ForceBuiltInPresentation"/>. Null when the flag is absent.</summary>
     public string? PresentationOverride { get; private set; }
 
     /// <summary><c>--force-builtin</c>: the startup escape hatch that always resolves to the
-    /// Built-in presentation for this run, without touching the saved request.</summary>
+    /// Built-in presentation for this run, writing nothing.</summary>
     public bool ForceBuiltInPresentation { get; private set; }
 
     /// <summary>Which mode-coercing probe (if any) drives this session. The three set a mode at
@@ -209,7 +232,7 @@ public sealed record SessionSpec
     public string ModeName =>
         Mode == SessionMode.AnimLab ? "anim-lab"
         : DamageTest || EffectsTest || WeaponTest || RunTests ? "test"
-        : DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid || DumpDebris ? "dump"
+        : DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid ? "dump"
         : MovieName != null ? "movie"
         : Mode == SessionMode.Freecam ? "freecam"
         : Mode == SessionMode.Viewer ? "viewer"
@@ -224,7 +247,7 @@ public sealed record SessionSpec
     /// <c>--dump-flight</c> run turns the bundle on yet still asks for focus.</summary>
     public bool IsScripted =>
         NoFocus || ScreenshotPath != null || ExportGltfPath != null || RunTests
-        || DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid || DumpDebris
+        || DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips || DumpAi || DumpTileGrid
         || DamageTest || EffectsTest || WeaponTest;
 
     /// <summary><b>Resolved.</b> The chapter world is built instead of a single parked plane.</summary>
@@ -298,11 +321,23 @@ public sealed record SessionSpec
     /// happens to share the word.</summary>
     public bool NoClutter { get; private set; }
 
+    /// <summary>Resolved. The enhanced passes this run leaves out, one bit per
+    /// <c>--no-</c> door. Empty in the faithful presentation, which builds none of them anyway.
+    /// See <c>docs/cli.md</c>.</summary>
+    public EnhancedPasses SkippedPasses { get; private set; }
+
     /// <summary><c>--debug-clutterflag</c>: recolour the built world by each polygon's decoded
     /// <c>no_clutter</c> flag (raw polygon bit <c>0x800</c>, <see cref="Mech3.GameZPolygon.NoClutter"/>)
     ///, flagged red, clear green, clutter blue. A build-time recolour, so there is no runtime
     /// toggle. See <c>docs/cli.md</c>.</summary>
     public bool DebugClutterFlag { get; private set; }
+
+    /// <summary><c>--hide-alpha=blend-surfaces,scissor-surfaces,blend-cards,scissor-cards</c>: build
+    /// the world without the named transparency classes. A frame where two of them paint in the
+    /// wrong order then names the pair by elimination. A build-time drop, like
+    /// <see cref="DebugClutterFlag"/>, so there is no runtime toggle. Empty in every ordinary run.
+    /// See <c>docs/cli.md</c>.</summary>
+    public Mech3.SceneBuilder.TransparencyClass HiddenAlpha { get; private set; }
 
     /// <summary><c>--clutter-templates=a,b,c</c>: build these clutter templates instead of the
     /// chapter's own <c>AddClutterTemplates</c> list, so one district at a time can be A/B'd
@@ -405,6 +440,11 @@ public sealed record SessionSpec
     /// scripted shot. Null when the flag was absent. <c>--damage=</c> is the player's counterpart
     /// and writes per-part HP, which an AI airframe resolves none of.</summary>
     public float? AiHullDamage { get; private set; }
+    /// <summary><c>--canopy-holes[=&lt;1-5&gt;]</c>: open this many of the five canopy glass holes on
+    /// the flown aircraft as it spawns. It opens them through the same cue and
+    /// <c>cockpit_bulletholes</c> defs an incoming burst uses. A scripted shot then catches the
+    /// glass already struck. Null when the flag was absent.</summary>
+    public int? CanopyHoles { get; private set; }
     /// <summary><c>--ai-attack[=&lt;1-9&gt;]</c>: arm every AI plane this session spawns with the
     /// D14 forward-gun gunnery at the given skill rating (dead-eye/quick-draw interpolated from
     /// <c>ai_skill_parameters</c>; default 5), auto-targeting the nearest hostile aircraft.
@@ -412,8 +452,8 @@ public sealed record SessionSpec
     public int? AiAttackSkill { get; private set; }
 
     /// <summary><c>--ai-targeting=&lt;aircraft-first|decoded&gt;</c>: whether both AI pickers rank
-    /// live enemy aircraft ahead of every turret and structure candidate (the default), or run the
-    /// decoded picker's own order, which has no class priority
+    /// live enemy aircraft ahead of every turret and structure candidate, which is the default.
+    /// The other word runs the decoded picker's own order, which has no class priority
     /// (<see cref="Flight.AiTargetRanking.AircraftFirst"/>). The class biases are spent either
     /// way.</summary>
     public bool AircraftFirstTargeting { get; private set; } = true;
@@ -444,6 +484,14 @@ public sealed record SessionSpec
     /// machine gets <c>AssistEnabled</c> false, so the lay-off mode is never entered (pursue
     /// only). Default off: the assist is the original's shipped behaviour.</summary>
     public bool NoAssist { get; private set; }
+
+    /// <summary><c>--craters</c>: arm the rocket carve for this run, so every rocket warhead's
+    /// ground burst digs a bowl. Off by default and saved nowhere. No screen offers the carve, so
+    /// this flag and the options file's own <c>rocketCraters</c> key are its two doors. This one
+    /// survives <c>--det</c>, which reads no saved option, so a probe can photograph a bowl
+    /// without any pinned golden ever seeing one.</summary>
+    public bool Craters { get; private set; }
+
     /// <summary><c>--generators[=plane]</c>: run the mission's egen enemy generators;
     /// each surviving generator spawns AI aircraft on its decoded wave/period cycle through the
     /// same runtime spawn seam <c>--ai=</c> uses. The optional value picks the airframe of a
@@ -470,6 +518,11 @@ public sealed record SessionSpec
     /// whose generators run uncredited anyway.</summary>
     public bool WakeGenerators { get; private set; }
     public (FlightInput, float)[][]? HoldSets { get; private set; }
+
+    /// <summary>The <c>--lever=</c> schedule: commanded-lever steps in eighths, each at its own
+    /// sim-second, played on every human-flown seat as the digit row's keys play them. Null when
+    /// the flag is absent, which is every ordinary run.</summary>
+    public IReadOnlyList<(float At, float Lever)>? LeverSteps { get; private set; }
     /// <summary>The <c>--damage=</c> preset pairs (part, fraction 0–1); null when <c>--damage</c>
     /// carried no value.</summary>
     public IReadOnlyList<(string Part, float Fraction)>? DamagePreset { get; private set; }
@@ -497,7 +550,6 @@ public sealed record SessionSpec
         : DumpMips ? "--dump-mips"
         : DumpAi ? "--dump-ai"
         : DumpTileGrid ? "--dump-tilegrid"
-        : DumpDebris ? "--dump-debris"
         : DamageTest ? "--damage-test"
         : EffectsTest ? "--effects-test"
         : WeaponTest ? "--weapon-test"
@@ -571,12 +623,12 @@ public sealed record SessionSpec
     public Flight.PilotViewMode ViewMode { get; private set; }
     /// <summary>Whether <see cref="ViewMode"/> came from a <c>--view=</c> naming a mode rather than
     /// from the default. Held because Chase is both the default and a nameable mode, so the value
-    /// alone cannot say whether the command line asked for it, and
+    /// alone cannot say whether the command line asked for it. That matters because
     /// <see cref="WithSavedDefaultView"/> must not overrule a <c>--view=chase</c>.</summary>
     public bool ViewModeExplicit { get; private set; }
     /// <summary>Whether the pilot's head turns with the aircraft in the cockpit, as the options
-    /// file has it; null where never set, which leaves the <c>headLook.autohead</c> config key
-    /// deciding (<see cref="Flight.FlightController.AutoHeadTurn"/>). Dropped under
+    /// file has it. It is null where never set, which leaves the <c>headLook.autohead</c> config
+    /// key deciding (<see cref="Flight.FlightController.AutoHeadTurn"/>). Dropped under
     /// <c>--det</c> like every other saved option.</summary>
     public bool? AutoHeadTurn { get; private set; }
     /// <summary>The <c>--look=x,y</c> right-stick deflection held for the whole
@@ -631,15 +683,6 @@ public sealed record SessionSpec
     /// per-chapter name.</summary>
     public string DumpTileGridPath { get; private set; } = "";
 
-    /// <summary><c>--dump-debris=&lt;name&gt;</c>: build the chapter world, kill every destructible
-    /// the name matches, and report what shades each mesh under it, the model's <c>lighting</c>
-    /// flag, its sheets and their mean texel, the baked vertex colours, and the colour the
-    /// fullbright world shader lands on, marking which nodes flew. Needs a <c>--chapter</c>.</summary>
-    public bool DumpDebris { get; private set; }
-
-    /// <summary>Which destructible <c>--dump-debris=</c> kills, matched exactly as
-    /// <c>--destroy=</c> matches (def, animation or anchor <c>cs_name</c> substring).</summary>
-    public string DumpDebrisName { get; private set; } = "";
     public bool DamageTest { get; private set; }
     public string DamageTestFilter { get; private set; } = "";
     public float DamageHd { get; private set; }
@@ -694,17 +737,17 @@ public sealed record SessionSpec
     /// gameplay feature.</summary>
     public bool DebugMarkers { get; private set; }
 
-    /// <summary><c>--compass-squeeze</c>: draw the heading tape's octant letters with the ticks'
-    /// own horizontal drum squeeze instead of upright. The A/B for a reading the reference stills
-    /// cannot settle, so it survives <c>--det</c> where a config key would not.</summary>
-    public bool CompassSqueeze { get; private set; }
-
     /// <summary><c>--debug-spectate</c>: build the session exactly as it would be flown, then take
     /// every human OUT of it: the aircraft goes inert (undrawn, uncollidable, and absent from
     /// every AI's live candidate list, so nothing pursues you) and the pane switches to the
     /// <c>SpectatorCamera</c>. The way to watch what the AI does when no player is provoking
     /// it.</summary>
     public bool DebugSpectate { get; private set; }
+
+    /// <summary><c>--debug-load[=dir]</c>: stand the real load screen over a CLI launch, the way a
+    /// menu launch does. It writes one PNG per presented pump frame into that folder. The only way
+    /// to watch the bar fill with nobody at the menu; empty string = screen but no captures.</summary>
+    public string? DebugLoad { get; private set; }
     public int? DebugLivery { get; private set; }
     public string? DebugMesh { get; private set; }
     public string? DebugNames { get; private set; }
@@ -839,6 +882,20 @@ public sealed record SessionSpec
     /// At volume 0 every sound still loads, plays, counts and logs; it is simply inaudible.</para></summary>
     public float? Volume { get; private set; }
 
+    /// <summary><c>--sound-range-scale=</c>: the multiplier on every positional sound's <c>RANGE</c>
+    /// radii, read into <see cref="Mech3.SoundFalloff.RangeScale"/>. It is
+    /// <see cref="Mech3.SoundFalloff.ShippedRangeScale"/>, the remake-only departure that gives the
+    /// world emitters the original's reach, when absent; 1 is the data's own radii. A value that is
+    /// not a positive number is ignored with a warning.</summary>
+    public float SoundRangeScale { get; private set; } = Mech3.SoundFalloff.ShippedRangeScale;
+
+    /// <summary><c>--cloud-jitter=</c>: a remake-only extra X/Z offset, in metres, on every
+    /// lattice-scattered <c>fvol</c> cloud card (<see cref="Effects.FogVolumeClutter"/>). It is
+    /// <see cref="Effects.FogVolumeClutter.ShippedJitter"/>, the offset that breaks the decoded
+    /// lattice's rows, when absent; 0 is the decoded field untouched. A value that is not a
+    /// non-negative number is ignored with a warning.</summary>
+    public float CloudJitter { get; private set; } = Effects.FogVolumeClutter.ShippedJitter;
+
     public bool NoVsync { get; private set; }
     public bool Perf { get; private set; }
     public bool GcTypes { get; private set; }
@@ -959,9 +1016,10 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--debug-pause=")) { s.DebugPauseFrame = int.Parse(arg["--debug-pause=".Length..]); }
             else if (arg.StartsWith("--debug-objective=")) { s.DebugObjective = int.Parse(arg["--debug-objective=".Length..]); }
             else if (arg.StartsWith("--debug-wash=")) { s.DebugWash = int.Parse(arg["--debug-wash=".Length..]); }
-            else if (arg == "--compass-squeeze") { s.CompassSqueeze = true; }
             else if (arg == "--debug-markers") { s.DebugMarkers = true; }
             else if (arg == "--debug-spectate") { s.DebugSpectate = true; }
+            else if (arg == "--debug-load") { s.DebugLoad ??= ""; }
+            else if (arg.StartsWith("--debug-load=")) { s.DebugLoad = arg["--debug-load=".Length..]; }
             else if (arg == "--debug-livery") { s.DebugLivery ??= 0; }
             else if (arg.StartsWith("--debug-livery=")) { s.DebugLivery = int.Parse(arg["--debug-livery=".Length..]); }
             else if (arg == "--debug-mesh") { s.DebugMesh ??= ""; }
@@ -989,6 +1047,27 @@ public sealed record SessionSpec
             else if (arg == "--debug-classoverlay") { s.ShowClassOverlay = true; }
             else if (arg == "--debug-tilegrid") { s.ShowTileGrid = true; }
             else if (arg == "--debug-clutterflag") { s.DebugClutterFlag = true; }
+            else if (arg.StartsWith("--hide-alpha="))
+            {
+                foreach (var want in arg["--hide-alpha=".Length..]
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                {
+                    var one = want.ToLowerInvariant() switch
+                    {
+                        "blend-surfaces" => Mech3.SceneBuilder.TransparencyClass.BlendSurface,
+                        "scissor-surfaces" => Mech3.SceneBuilder.TransparencyClass.ScissorSurface,
+                        "blend-cards" => Mech3.SceneBuilder.TransparencyClass.BlendCard,
+                        "scissor-cards" => Mech3.SceneBuilder.TransparencyClass.ScissorCard,
+                        _ => Mech3.SceneBuilder.TransparencyClass.None,
+                    };
+                    if (one == Mech3.SceneBuilder.TransparencyClass.None)
+                    {
+                        notes.Add(new Note("world", $"--hide-alpha='{want}' is not a class it takes "
+                            + "(blend-surfaces, scissor-surfaces, blend-cards, scissor-cards), ignoring it"));
+                    }
+                    s.HiddenAlpha |= one;
+                }
+            }
             else if (arg.StartsWith("--clutter-templates="))
             {
                 var names = arg["--clutter-templates=".Length..]
@@ -1104,8 +1183,14 @@ public sealed record SessionSpec
                     s.AiPlanes = entries;
             }
             else if (arg.StartsWith("--ai-damage=")) { s.AiHullDamage = Math.Clamp(Flt(arg["--ai-damage=".Length..]), 0f, 1f); }
+            else if (arg == "--canopy-holes") { s.CanopyHoles = 1; }
+            else if (arg.StartsWith("--canopy-holes="))
+            {
+                s.CanopyHoles = Math.Clamp(int.Parse(arg["--canopy-holes=".Length..]),
+                    1, Flight.CanopyHoleCue.HoleCount);
+            }
             // An unknown word keeps the default rather than picking a policy, the same rule
-            // --difficulty= follows: a misspelling must not quietly change what the AI fights.
+            // --difficulty= follows. A misspelling must not quietly change what the AI fights.
             else if (arg.StartsWith("--ai-targeting="))
             {
                 string mode = arg["--ai-targeting=".Length..];
@@ -1131,6 +1216,7 @@ public sealed record SessionSpec
                 }
             }
             else if (arg == "--no-assist") { s.NoAssist = true; }
+            else if (arg == "--craters") { s.Craters = true; }
             else if (arg == "--generators") { s.Generators = true; }
             else if (arg.StartsWith("--generators=")) { s.Generators = true; s.GeneratorsPlane = arg["--generators=".Length..]; }
             else if (arg == "--zeppelins") { s.Zeppelins = true; }
@@ -1264,6 +1350,10 @@ public sealed record SessionSpec
             else if (arg == "--no-clutter") { s.NoClutter = true; }
             else if (arg == "--no-zone-cull") { s.NoZoneCull = true; }
             else if (arg == "--no-flare") { s.NoFlare = true; }
+            else if (arg == "--no-ssao") { s.SkippedPasses |= EnhancedPasses.Ssao; }
+            else if (arg == "--no-ssr") { s.SkippedPasses |= EnhancedPasses.Ssr; }
+            else if (arg == "--no-glow") { s.SkippedPasses |= EnhancedPasses.Glow; }
+            else if (arg == "--no-soft-shadows") { s.SkippedPasses |= EnhancedPasses.SoftShadows; }
             else if (arg.StartsWith("--mips=")) { s.SetMips(arg["--mips=".Length..]); }
             else if (arg.StartsWith("--graphics="))
             {
@@ -1281,7 +1371,6 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--dump-mips=")) { s.DumpMips = true; s.DumpMipsFilter = arg["--dump-mips=".Length..]; }
             else if (arg == "--dump-ai") { s.DumpAi = true; }
             else if (arg.StartsWith("--dump-ai=")) { s.DumpAi = true; s.DumpAiChapter = arg["--dump-ai=".Length..]; }
-            else if (arg.StartsWith("--dump-debris=")) { s.DumpDebris = true; s.DumpDebrisName = arg["--dump-debris=".Length..]; s.HasContentArg = true; }
             else if (arg == "--dump-tilegrid") { s.DumpTileGrid = true; s.HasContentArg = true; }
             else if (arg.StartsWith("--dump-tilegrid=")) { s.DumpTileGrid = true; s.DumpTileGridPath = arg["--dump-tilegrid=".Length..]; s.HasContentArg = true; }
             else if (arg.StartsWith("--tex-override=")) { texOverrides.Add(arg["--tex-override=".Length..]); }
@@ -1315,9 +1404,36 @@ public sealed record SessionSpec
                     s.Volume = volume;
                 }
             }
+            else if (arg.StartsWith("--sound-range-scale="))
+            {
+                string want = arg["--sound-range-scale=".Length..];
+                if (float.TryParse(want, NumberStyles.Float, CultureInfo.InvariantCulture, out float scale)
+                    && float.IsFinite(scale) && scale > 0f)
+                {
+                    s.SoundRangeScale = scale;
+                }
+                else
+                {
+                    notes.Add(new Note("core", $"--sound-range-scale={want} is not a positive number, leaving the shipped factor in place"));
+                }
+            }
+            else if (arg.StartsWith("--cloud-jitter="))
+            {
+                string want = arg["--cloud-jitter=".Length..];
+                if (float.TryParse(want, NumberStyles.Float, CultureInfo.InvariantCulture, out float metres)
+                    && float.IsFinite(metres) && metres >= 0f)
+                {
+                    s.CloudJitter = metres;
+                }
+                else
+                {
+                    notes.Add(new Note("core", $"--cloud-jitter={want} is not a non-negative number of metres, leaving the shipped offset in place"));
+                }
+            }
             else if (arg == "--debug-collision") { s.DebugCollision = true; }
             else if (arg.StartsWith("--players=")) { s.Players = int.Parse(arg["--players=".Length..]); s.PlayersExplicit = true; }
             else if (arg.StartsWith("--hold=")) { s.HoldSets = ParseHold(arg["--hold=".Length..]); }
+            else if (arg.StartsWith("--lever=")) { s.LeverSteps = ParseLever(arg["--lever=".Length..]); }
             else if (arg.StartsWith("--frames=")) { s.ScreenshotFrames = int.Parse(arg["--frames=".Length..]); }
             else if (arg.StartsWith("--shots=")) { s.ScreenshotShots = Math.Max(1, int.Parse(arg["--shots=".Length..])); }
             else if (arg.StartsWith("--jitter=")) { s.JitterDeg = Flt(arg["--jitter=".Length..]); }
@@ -1370,12 +1486,12 @@ public sealed record SessionSpec
         return s;
     }
 
-    /// <summary>The spec for a launchscreen launch, one plane per player, derived from
-    /// <paramref name="cli"/>, the pristine command line, never the last session's spec.
-    /// ⚠ Does not re-resolve: every menu-settable field must be written here, or the pristine base
-    /// re-opens the carry-over bug. <paramref name="mode"/> is Free/Stunt/Versus, not a bool, the
-    /// &gt;= 2-player Dogfight lock is <see cref="UI.LaunchMenu"/>'s job. <paramref name="iaDef"/>,
-    /// when given, decides <see cref="Scenario"/>/<see cref="Stunt"/> instead; the two vs arguments are a screen's match rules, null where none offers them (<see cref="VsKillsExplicit"/>).</summary>
+    /// <summary>The spec for a launchscreen launch, one plane per player, derived from the pristine
+    /// command line <paramref name="cli"/>, never the last session's spec. ⚠ Does not re-resolve:
+    /// every menu-settable field must be written here, or the pristine base drops it. The 2-player
+    /// Dogfight lock is <see cref="UI.LaunchMenu"/>'s job. An <paramref name="iaDef"/> decides
+    /// <see cref="Scenario"/> and <see cref="Stunt"/> instead. The two vs arguments are a screen's
+    /// match rules, null where none offers them (<see cref="VsKillsExplicit"/>).</summary>
     public static SessionSpec FromMenu(SessionSpec cli, string chapter, IReadOnlyList<string> planeNodes,
         MenuMode mode, InstantActionDef? iaDef = null, IReadOnlyList<LoadoutChoice?>? loadouts = null,
         IReadOnlyList<CustomPlaneDef?>? customPlanes = null, int? vsKills = null, int? vsTimeMinutes = null)
@@ -1451,20 +1567,20 @@ public sealed record SessionSpec
         return this with { Difficulty = saved };
     }
 
-    /// <summary>The saved targeting setting folded in, the difficulty's own rules less the flag:
-    /// nothing on the command line names it, a never-set field leaves the decoded head rule
-    /// standing, and a <c>--det</c> run reads no saved option, since a golden shot must not depend
-    /// on one machine's options file. Applied per launch, so an Options apply reaches the next
-    /// flight without a restart.</summary>
+    /// <summary>The saved targeting setting folded in, on the difficulty's own rules less the
+    /// flag. Nothing on the command line names it, and a never-set field leaves the decoded head
+    /// rule standing. A <c>--det</c> run reads no saved option, since a golden shot must not
+    /// depend on one machine's options file. Applied per launch, so an Options apply reaches the
+    /// next flight without a restart.</summary>
     public SessionSpec WithSavedNearestAfterKill(bool? saved) =>
         Det || saved is not { } on ? this : this with { NearestAfterKill = on };
 
-    /// <summary>The saved opening view folded in, the difficulty's own rules with <c>--view=</c> in
-    /// the flag's place: a command line naming a mode beats the saved word, a word
-    /// <see cref="CSVM.Flight.PilotView.Parse"/> refuses (or null) changes nothing, and a
+    /// <summary>The saved opening view folded in, on the difficulty's own rules with <c>--view=</c>
+    /// in the flag's place. A command line naming a mode beats the saved word. A word
+    /// <see cref="CSVM.Flight.PilotView.Parse"/> refuses, or null, changes nothing, and a
     /// <c>--det</c> run reads no saved option. Not folded outside <see cref="Fly"/>, since the two
     /// first-person views sit on a flown aircraft's camera and the other modes have cameras of
-    /// their own; it runs after <c>Validate</c>, so it keeps that rule rather than warning.</summary>
+    /// their own. It runs after <c>Validate</c>, so it keeps that rule rather than warning.</summary>
     public SessionSpec WithSavedDefaultView(string? savedWord)
     {
         if (ViewModeExplicit || Det || !Fly
@@ -1477,8 +1593,8 @@ public sealed record SessionSpec
     }
 
     /// <summary>The saved automatic head turn folded in, on
-    /// <see cref="WithSavedNearestAfterKill"/>'s rules: nothing on the command line names it, a
-    /// never-set field leaves the <c>headLook.autohead</c> config key deciding, and a <c>--det</c>
+    /// <see cref="WithSavedNearestAfterKill"/>'s rules. Nothing on the command line names it, and
+    /// a never-set field leaves the <c>headLook.autohead</c> config key deciding. A <c>--det</c>
     /// run reads no saved option.</summary>
     public SessionSpec WithSavedAutoHeadTurn(bool? saved) =>
         Det || saved is not { } on ? this : this with { AutoHeadTurn = on };
@@ -1569,6 +1685,22 @@ public sealed record SessionSpec
             players.Add(segments.ToArray());
         }
         return players.ToArray();
+    }
+
+    /// <summary>Parse the lever schedule: ';'-separated "eighths@seconds" steps, ascending in time,
+    /// where eighths is 0 to 8 as the digit row reads it. A step is one press of that digit at that
+    /// sim-second, so the commanded lever jumps and stays. The live lever then slews to it at its
+    /// own rate, and that gap is what the exhaust smoke charges from.</summary>
+    public static (float At, float Lever)[] ParseLever(string s)
+    {
+        var steps = new List<(float, float)>();
+        foreach (var step in s.Split(';', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var at = step.Split('@');
+            steps.Add((at.Length > 1 ? Flt(at[1]) : 0f, Math.Clamp(Flt(at[0]), 0f, 8f) / 8f));
+        }
+        steps.Sort((a, b) => a.Item1.CompareTo(b.Item1));
+        return steps.ToArray();
     }
 
     /// <summary>Parse <c>--paint-color=</c>: up to three '/'-separated byte triples (body / dark
@@ -1714,7 +1846,7 @@ public sealed record SessionSpec
         // --dump-tilegrid votes freecam for one reason: the map-edge extender is only built in the
         // freecam/fly/sky-zone arm, and the census is a report ABOUT that extender. A dump that
         // resolved to the viewer would build a world with no continuation and report nothing.
-        bool freecam = _freecamArg || DamageTest || EffectsTest || DumpTileGrid || DumpDebris;
+        bool freecam = _freecamArg || DamageTest || EffectsTest || DumpTileGrid;
         bool animLab = _animLabArg || PlayAnim != null || DebugAnimUi;
 
         // --vs and --stunt are both flight modifiers, but not composable, one match mode has to
@@ -1856,6 +1988,13 @@ public sealed record SessionSpec
         {
             Warn("ui", "--ai-damage needs --ai=<plane> to spend on; no AI aircraft were asked for");
             AiHullDamage = null;
+        }
+        // Same rule for the canopy: the cue and its defs belong to a flown aeroplane's own rig. A
+        // parked viewer plane has no crash rig to run them through.
+        if (CanopyHoles != null && !Fly && !Stunt)
+        {
+            Warn("ui", "--canopy-holes needs a flown aircraft (--fly/--stunt); ignoring it");
+            CanopyHoles = null;
         }
         // The two lab spec grammars live in their labs; the reject list keeps them from logging,
         // which is what lets this run with no engine under it.
@@ -2042,8 +2181,8 @@ public sealed record SessionSpec
     private void Print(string message) => _notes.Add(new Note("", message));
 
     /// <summary>A parse- or resolve-time complaint, held rather than logged so the spec stays
-    /// engine-free. <paramref name="Category"/> is the <c>Log</c> category to emit it under, at
-    /// warning level; empty means the note has no category and <c>Launcher</c> logs it under
-    /// <c>core</c> at info, which is where an argument complaint sits in launch order.</summary>
+    /// engine-free. The <paramref name="Category"/> is the <c>Log</c> category to emit it under,
+    /// at warning level. Empty means the note has no category, and <c>Launcher</c> logs it under
+    /// <c>core</c> at info, where an argument complaint sits in launch order.</summary>
     public readonly record struct Note(string Category, string Message);
 }

@@ -17,6 +17,13 @@ public sealed class PlanePainter
     // The three decal slots' texture suffixes, in paint-UI order: nose, tail, wing.
     private static readonly string[] DecalSuffixes = { "_noselogo", "_taillogo", "_winglogo" };
 
+    // The original pairs each `.BM` with the model texture it replaces in a static per-airframe
+    // table, so the two names need not match, and on one pair of the eleven tables they do not.
+    // ⚠ Do not rename either side to close the gap; both names are the original's own
+    // (docs/formats/paint.md).
+    private static readonly Dictionary<string, string> SkinAliases =
+        new(StringComparer.OrdinalIgnoreCase) { ["dev_fusalage"] = "dev_fusalage1" };
+
     private readonly TextureArchive _textures;
     private readonly PatternLibrary _library;
     private readonly PaintScheme _scheme;
@@ -80,6 +87,12 @@ public sealed class PlanePainter
         return found;
     }
 
+    /// <summary>The `.BM` a model texture is painted from, which is the model texture's own name
+    /// for every part but the Devastator's fuselage sides (<c>docs/formats/paint.md</c>). A part
+    /// no pattern ships a `.BM` for maps to itself and stays its shipped ZBD skin.</summary>
+    public static string SkinNameFor(string modelTextureName) =>
+        SkinAliases.TryGetValue(modelTextureName, out var skin) ? skin : modelTextureName;
+
     /// <summary>The texture to use in place of <paramref name="original"/>, or the original
     /// itself when this scheme does not touch it. Called for every material the plane's
     /// <see cref="SceneBuilder"/> resolves.</summary>
@@ -139,7 +152,7 @@ public sealed class PlanePainter
     {
         if (!baseName.StartsWith(_prefix + "_", StringComparison.OrdinalIgnoreCase))
             return null;
-        var bm = _library.Skin(_scheme.FolderName, baseName);
+        var bm = _library.Skin(_scheme.FolderName, SkinNameFor(baseName));
         if (bm == null)
             return null;
 

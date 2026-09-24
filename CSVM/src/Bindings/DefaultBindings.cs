@@ -37,6 +37,7 @@ public static class DefaultBindings
     /// keeps a migrating site from discovering a hole one call at a time.</summary>
     public static IReadOnlyList<InputAction> Unbound { get; } = new[]
     {
+        InputAction.SelectChaseView,
         InputAction.MenuJoin,
     };
 
@@ -112,8 +113,13 @@ public static class DefaultBindings
             b.Keys(InputAction.ThrottleSet0 + eighths, (Key)((int)Key.Key1 + eighths));
         }
 
-        b.Keys(InputAction.FireGuns, Key.Space).Buttons(InputAction.FireGuns, JoyButton.B);
-        b.Keys(InputAction.FireRockets, Key.X).Buttons(InputAction.FireRockets, JoyButton.A);
+        // The two weapons sit under the mouse hand as well, the left button firing the guns and the
+        // right the rockets, which is where a pilot flying with the mouse reaches for them. This
+        // port's own rows: the original binds no mouse button to anything.
+        b.Keys(InputAction.FireGuns, Key.Space).Buttons(InputAction.FireGuns, JoyButton.B)
+            .Mouse(InputAction.FireGuns, MouseButton.Left);
+        b.Keys(InputAction.FireRockets, Key.X).Buttons(InputAction.FireRockets, JoyButton.A)
+            .Mouse(InputAction.FireRockets, MouseButton.Right);
         b.Keys(InputAction.SelectGunGroup, Key.F3).Buttons(InputAction.SelectGunGroup, JoyButton.DpadRight);
         b.Keys(InputAction.SelectOrdnance, Key.F5).Buttons(InputAction.SelectOrdnance, JoyButton.DpadLeft);
 
@@ -147,10 +153,10 @@ public static class DefaultBindings
         b.Keys(InputAction.TargetClear, Key.T);
         b.Keys(InputAction.CycleCockpitViews, Key.F8).Buttons(InputAction.CycleCockpitViews, JoyButton.DpadDown);
 
-        // Selecting the chase view without walking the cycle is this port's own action; F2 is the
-        // one key in the original's function-key run it leaves free, F1 being its View Help and
-        // F3 to F8 its selectors and views.
-        b.Keys(InputAction.SelectChaseView, Key.F2).Buttons(InputAction.SelectChaseView, JoyButton.Back);
+        // Selecting the chase view without walking the cycle is this port's own action, and it
+        // ships unbound. The cycle on F8 reaches that view already, so a default here would spend a
+        // control on a second way in. It stays rebindable, which is what Leave keeps.
+        b.Leave(InputAction.SelectChaseView);
         // F7 is the original's own key for this camera ("Access Chase View", which its own decode
         // settles as the flyby rather than the following chase view); the pad has no spare button.
         b.Keys(InputAction.FlybyView, Key.F7);
@@ -170,9 +176,10 @@ public static class DefaultBindings
         b.Stick(InputAction.LookAimLeft, JoyAxis.RightX, -1, 0f);
         b.Stick(InputAction.LookAimRight, JoyAxis.RightX, 1, 0f);
 
-        // The first-person free look is the held right mouse button (docs/controls.md), the same
-        // control the freecam look posture reads (SpectatorCamera).
-        b.Mouse(InputAction.FreeLook, MouseButton.Right);
+        // The first-person free look is the held middle mouse button (docs/controls.md), the guns
+        // and the rockets taking the two beside it. The freecam's own look posture stays on the
+        // right button, read as an event rather than through this table (SpectatorCamera).
+        b.Mouse(InputAction.FreeLook, MouseButton.Middle);
 
         // The three look-mode selectors on the original's own keys, which its keybind page calls
         // Access Snap Look Mode, Track Target and Access Smooth Look Mode. Keyboard only, as the

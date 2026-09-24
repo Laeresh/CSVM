@@ -58,7 +58,7 @@ exception, a display setting like V-Sync, and it is ignored under `--det` so no 
 | 9 | Perf budget? | **The finished stack holds the D31 Enhanced frame time within 20%** on C4/C5/C3 at 4 panes, render scale 1.0. Render scale above 1.0 is the user's own spend. |
 | 10 | Wave order and pacing? | **A, B, C, E, D. A wave halts on the user's flight, and the next wave starts as soon as it has no dependency on the halted one.** B, C and E need A1 landed (they are judged through the same temporal filter) but not A's verdict; D needs everything. |
 | 11 | The feel of speed and of direction changes (Wave E)? | **Wind streaks past the camera and a chase camera that lags the nose and widens its FOV with speed, both under Enhanced.** Wingtip vapour is out (too much for a prop plane); radial motion blur is out (it competes with the temporal pass for sharpness). |
-| 12 | What happens to the authored speed-cue wisps under Enhanced? | **They stay; the streaks are added over them.** The wisps are data (`speed_cue.zrd`) and `BL-867` tunes them on the faithful path; whether Enhanced dims them under the streaks is a TUNE the user judges in E41's montage, not a decision made here. |
+| 12 | What happens to the authored speed-cue wisps under Enhanced? | **They stay; the streaks are added over them.** The wisps are data (`speed_cue.zrd`), judged right on the faithful path (`git log --grep=BL-867`); whether Enhanced dims them under the streaks is a TUNE the user judges in E41's montage, not a decision made here. |
 | 13 | Do the trees, rails and lattice that now blend rather than scissor change the plan? | **Yes: A4 covers only what stays scissored beside them**, which is 332 of the census's 388 cut names. Blended surfaces have no coverage edge to fix. |
 
 ## ⚠ Read this before implementing anything
@@ -128,8 +128,9 @@ worktree session here; use a local commit or a file copy.
 - **The speed cue as shipped.** `Flight/SpeedCue.cs` loads each chapter's `speed_cue.zrd`
   verbatim: three `cuepufferN` states picked by camera altitude, emitted 60 m ahead of the player
   and left in world space for the aircraft to pass (`docs/formats/effects.md` "Aircraft speed-cue
-  wisps"); off within 50 m of the ground. `BL-867` says they read too opaque and crowd a 16:9
-  frame, and is a faithful-path tuning item. The original authors no other speed cue: the
+  wisps"); off within 50 m of the ground. Their opacity was judged right at the controls
+  (`git log --grep=BL-867`); their lateral spread already widens with the pane's aspect over 4:3, and the opacity
+  is what the item still owes. The original authors no other speed cue: the
   `high_speed` shake runs only above rated max speed and the `rattle` sound is speed-keyed
   volume (`docs/org/shakes.md`).
 - **The chase camera's decoded law.** `docs/org/cameraViews.md` "The external camera's distance":
@@ -175,7 +176,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ TAA on every 3D viewport under Enhanced
 2. ☑ Render Scale, a VIDEO page row applied to every 3D viewport, ignored under `--det`
-3. ◐ BL-803: the shadow-map bands on grazing surfaces under Enhanced
+3. ☑ BL-803: the shadow-map bands on grazing surfaces under Enhanced
 4. ☑ Alpha-to-coverage on the cutout surfaces under Enhanced
 5. ◐ FSR 2.2 tried once as the alternative temporal pass, kept or parked on the user's verdict
 
@@ -218,7 +219,7 @@ and the effect sink, B14 adds its own material, B15 touches the crater/decal pat
 run in parallel worktrees with that file ownership. C21 owns `FogVolumeClutter.cs`; C22 is a new
 module and can run beside C21; C23 depends on C21's shader. E41 is a new `Effects` module and
 E42 owns `CameraController.cs`; they run in parallel with each other and with Wave C, after A1.
-E41 must not touch `SpeedCue.cs` or `Puffer.cs`, which `BL-867` owns. D31 and D32 depend on everything,
+E41 must not touch `SpeedCue.cs` or `Puffer.cs`, the faithful path's wisps. D31 and D32 depend on everything,
 and D32's baseline re-take (the D31 table was provisional) is taken at Wave A's start so the 20%
 has a current denominator.
 
@@ -343,22 +344,28 @@ titles and round-trip the store); at the controls, 200% on C5 visibly sharpens t
 scale them the same way or the panes disagree in sharpness. The row is a display setting and is
 NOT under the Enhanced switch (decision 3).
 
-## A3 ◐ BL-803: the shadow-map bands on grazing surfaces under Enhanced
+## A3 ☑ BL-803: the shadow-map bands on grazing surfaces under Enhanced
 
-**Landed.** The pattern is the sun's soft-shadow filter, not the bias pair, and not a cascade
-artefact: with `sun.ShadowEnabled = false` it vanishes from lit ground and water, and it never
-appears on sky. Godot filters a PCSS directional shadow at the project-wide
+**Landed.** `BL-803` closed on main with the directional soft-shadow filter at its top rung
+(`Launcher.EnhancedShadowFilterQuality`, SoftUltra), taken by the bisect route rather than the
+flight after A1. The doors `--no-ssao`, `--no-ssr`, `--no-glow` and `--no-soft-shadows` landed in
+`SessionSpec` and named the sun's penumbra filter: it alone resolves through a screen-space
+pattern, over 81 % of the C1 waterfall frame, and the top rung removed 86 % of the excess while
+holding the judged penumbra width. `analysis/screen-dither/FINDINGS.md` holds the instrument and
+the numbers. This branch's own SoftHigh constant gave way to main's in the merge; the residue the
+user still reports (water bands, airframe self-shadow noise) and the SoftHigh cost call are
+`BL-1037`'s.
+
+**Branch evidence (kept for reference).** This branch reached the same mechanism independently.
+The pattern is the sun's soft-shadow filter, not the bias pair, and not a cascade artefact: with
+`sun.ShadowEnabled = false` it vanishes from lit ground and water, and it never appears on sky.
+Godot filters a PCSS directional shadow at the project-wide
 `directional_shadow/soft_shadow_filter_quality`, which ships at Godot's default (Soft Low, measured
 bit-identical to the shipped build), and at a 25 degree sun that filter resolves the shadow map's
 own self-occlusion into a fine screen-space lattice over every grazing lit surface rather than
-dissolving it. `Session/Launcher.cs`'s `EnableSunShadows` now ends with
-`RenderingServer.DirectionalSoftShadowFilterSetQuality(EnhancedSoftShadowFilter)`, a new TUNE
-constant set to `RenderingServer.ShadowQuality.SoftHigh`. The call is renderer-global state, which
-is why it sits inside the enhanced-only `EnableSunShadows`; nothing on the faithful path reaches it.
-No other constant moved: `EnhancedShadowAngularDistance` stays at 2.0 so E48's soft edge survives,
-and the bias and blur comments now state what that pair does and does not control.
+dissolving it. The branch set the rung to SoftHigh inside the enhanced-only `EnableSunShadows`.
 
-**Verified.** Measured headless at the user's own C3 pose and the same pose on C1, plus a C1 town
+Measured headless at the user's own C3 pose and the same pose on C1, plus a C1 town
 pose as the cast-shadow control, as the band-limited RMS of the 1.6 to 4 px screen-space component
 (8-bit luminance, 2560x1421, TAA off to expose the source). C3 water: shadows off 0.19, shipped
 0.76, Soft High 0.42, Soft Ultra 0.39. C3 hillside: 0.30 / 1.07 / 0.58 / 0.56. C1 water at the same
@@ -371,9 +378,8 @@ at the 120 fps cap throughout; Soft Ultra was rejected because it buys nothing m
 High once TAA is on. The complete `RunTests.ps1` PASS: units 4568 passed 0 failed 2 skipped of
 4570, engine 348 passed 0 failed 0 skipped errors clean, goldens **19 shots hash-identical**;
 `CheckCommentCaps.ps1`, `CheckDocEntries.ps1` and `CheckEncoding.ps1` clean. Montages and the full
-lever table are under `.scratch/eg2/A3/`. Not verified here: the user's own eyes at the controls,
-which is what decides whether the residue that Soft High leaves still reads as banding, and whether
-the softer edge is worth the GPU cost on their rig. `BL-803` stays open until then.
+lever table are under `.scratch/eg2/A3/`. The branch's reading that Soft Ultra buys nothing over
+Soft High once TAA is on is the evidence `BL-1037` weighs against main's top rung.
 
 **Original approach (kept for reference).**
 
@@ -583,13 +589,14 @@ the live ones on the sim step `LightChannel.Tick` already has, submits them into
 the frame's `LIGHT_STATE` lights and drops each one the frame its fireball stops burning. They ride
 the existing distance fade, `MaxActive` rank and `OmniLight3D` pool with nothing new added to any of
 the three. The decision point is `WorldEffectsFactory.RegisterBurstLight` at the effect sink, which
-asks `EffectCatalogue.IsBurstLight` (the four fireball-throwing impact effects) and `GraphicsMode`,
+asks `EffectCatalogue.IsBurstLight` (the four fireball-throwing impact effects), whether the def
+authors its own light (see the decision below) and `GraphicsMode`,
 so the faithful path registers nothing and asks for nothing. Liveness is the effect's own
 `ANIM_STATE`, not a timer. The envelope is one TUNE block next to `OmniAttenuationTune`: a 3.0
 ignition gain, a 0.29 s e-fold that is spent by the 1.2 s the authored frame-buffer wash runs, a
 4 m to 180 m range and the authored `he_light` colour, flickering at 9 Hz against a 1.73x second
-sine with a per-burst phase stride so a salvo does not pulse in lockstep. The `burst-light` engine
-suite drives a live rocket into a plate and pins one light under Enhanced, none on the faithful
+sine with a per-burst phase stride so a salvo does not pulse in lockstep. The `burst-light-envelope`
+engine suite drives a live rocket into a plate and pins one light under Enhanced, none on the faithful
 path, none for a gun hit, a decayed energy 30 frames on, and the light gone with its fireball.
 
 **Verified.** On the item worktree: rebuild warning-free; the new `burst-light` engine suite and
@@ -631,6 +638,31 @@ hit beside a hangar: the hangar wall and the ground flash and settle. Faithful g
 **⚠ Traps.** The pool has no shadows and must stay that way (cost). A light that outlives its
 fireball reads as a bug; tie the life to the emitter's, not a timer. Do not touch the fireball's
 own sprite here; that is B12.
+⚠ **The authored burst light draws on both presentations.** The world-effects runtime submits
+`he_ground_effect`'s `he_light`/`he_light1` ramp (4 to 20 m at ignition, a 104 to 320 m plateau, 400 m
+at its last frame) into the world's `WorldLights` through `AddSource`, so the faithful path is not
+dark and the Enhanced path carries that ramp as an omni.
+
+**Decision on merging main.** One Enhanced HE burst carried three lights at one point: the
+authored `he_light` and `he_light1` plus this item's envelope. `torpedo_ground_effect` authors
+`torp_light` the same way; `large_fireball` and `small_fireball` author none. The smallest change
+that stops the doubling is a gate at the one decision point: `RegisterBurstLight` takes
+`authorsOwnLight`, which the effect sink answers from `AnimRuntime.AuthorsLight` (any `LightState`
+or `LightAnimation` event in the def), so the envelope now lights only the two fireball defs and
+the authored ramp is the HE and torpedo bursts' light on both presentations. The envelope's own
+constants are unchanged. The branch's suite is `burst-light-envelope` (the envelope, plus a def
+that authors its light registering none); main's `burst-light` calls the sink's rule with the
+runtime's own answer and still commits exactly the owner's light, `he_light` and `he_light1`, then
+the owner's alone. Measured on the hidden desktop at `--fly --chapter=C1 --pos=-6104,300,-4420
+--direction=0,-0.33,0.94 --fire-rockets --hold=0,0,0,0.3 --frames=90 --shots=12 --mute
+--graphics=enhanced` (two `he_ground_effect` impacts before frame 90): ungated against gated,
+about 9,400 to 10,000 pixels differ per frame, mean |d| 1.2 to 1.3 and at most 9 levels, 89 % of
+them brighter ungated, centred on the bursts, and mean luminance 0.004 to 0.005 higher ungated; a
+repeat of the gated run differs from it in zero pixels. C1's airfield holds the 16-light budget at
+16 of 47 live throughout, so any slot the envelope took came out of a beacon's (89 % is frame 0's
+share).
+Whether the HE burst should read brighter than its authored ramp under Enhanced is the user's
+call, which raising the authored light's omni energy would answer rather than a second light.
 
 ## B12 ☑ The additive fireball frames bloom
 
@@ -703,7 +735,7 @@ B12's fire lift is: `IsSmokeSprite` names `smoke101`…`smoke103` and `thickblks
 `INSTANCE_CUSTOM.w` into a `v_shade` varying, so the fire flipbook, the water splashes, the flares
 and the gun sparks are untouched and the ground smokeball keeps its soft-particle exemption. The
 shader-variant key carries the mode, so the faithful path compiles text with no gradient term at
-all: the `csky_sun.gdshaderinc` include and the varying are absent as well, not neutralised.
+all: the varying and the `csky_sun_dir` read are absent as well, not neutralised.
 `EnhancedSmokeGradient` is 0.2, a TUNE: on the C1 rocket plume one puff's sun-side to far-side
 luminance ratio moves 1.046 to 1.061 for a largest pixel delta of 7 of 255, which reads as puffs
 turned toward the light, while 0.45 (ratio 1.075, 12 levels) prints the same profile visibly on
@@ -712,9 +744,9 @@ quads, so a per-card amplitude that looks gentle alone accumulates through the s
 `EnhancedSmokeCeiling` 0.98 clamps inside the smoke branch alone, so a lifted `smoke101` (already
 1.000 linear at its peak) cannot cross the 1.0 glow threshold B12 reserved for the fire flipbook,
 and `magnesiumtip` and `poleflare` keep their unclamped 1.0. The sun-direction global the approach
-left open is `csky_sun_dir`, declared in `CSVM/shaders/csky_sun.gdshaderinc` and written by
-`WeatherRig.WriteSunDirection` off the sun light's basis; C21 added it and this item reuses it
-unchanged.
+left open is `csky_sun_dir`, declared once in `CSVM/shaders/csky_atmosphere.gdshaderinc` (main's
+declaration, which the merge kept in place of C21's own include) and written by
+`WeatherRig.WriteSunDirection` off the sun light's basis; this item reuses it unchanged.
 
 **The transmission rim was tried and dropped.** The puffer atlas is baked without mipmaps and
 sampled `filter_linear`, so C21's `textureLod(…, 3.0)` blur has no chain to read and a blur that
@@ -894,14 +926,15 @@ proved the path, not the eye.
 **Original approach (kept for reference).**
 
 **Goal.** A rocket or bomb hit on ground leaves a dark scorch under Enhanced; the faithful path
-keeps the crater carve and nothing else.
+leaves the ground untouched, as the original does.
 
-**Evidence (confidence: lead-only).** `docs/org/craters.md`: the original carves a crater from the
-weapon's `CRATER` block and destroys clutter; no scorch texture exists in the data. Godot's
-`Decal` node projects onto the lit world; on the faithful fullbright world it would not read.
+**Evidence (confidence: lead-only).** `docs/org/craters.md`: the original never carves a crater in
+play, since the carve gates on the struck node's `can_modify` flag and no shipped node carries it;
+no scorch texture exists in the data. Godot's `Decal` node projects onto the lit world; on the
+faithful fullbright world it would not read.
 
-**Approach.** Under Enhanced, at the crater build (`CraterField`/`TerrainCarve`) or the impact
-outcome for a weapon with no crater, place a `Decal` with a procedural radial scorch texture
+**Approach.** Under Enhanced, at the impact outcome (or at the crater build in
+`CraterField`/`TerrainCarve`, should an enhanced option re-enable the carve), place a `Decal` with a procedural radial scorch texture
 (TUNE size from the weapon's crater radius, TUNE fade), pooled and recycled with the same count
 cap the crater field keeps.
 
@@ -926,10 +959,17 @@ toward the sun in billboard UV space (brightening the thin sun-side edge, darken
 the card's own bulk), an underside darkening from the card's authored face normal on a half-lambert
 ramp, and the soft-particle depth fade copied from `EmitterRenderer.cs`. The graded albedo is
 clamped to 0.98 so it never crosses the enhanced glow threshold reserved for the glow-arm sprites.
-The sun direction arrives as one new global shader uniform, `csky_sun_dir`, declared in
-`CSVM/shaders/csky_sun.gdshaderinc`, registered in `Launcher` beside `csky_world_light` in both
-graphics modes, and written by `WeatherRig.WriteSunDirection` at lighting setup and on every zone
-apply. B13 reuses it unchanged.
+The sun direction arrives as the global shader uniform `csky_sun_dir`, declared once in
+`CSVM/shaders/csky_atmosphere.gdshaderinc`, registered in `Launcher` beside `csky_world_light` in
+both graphics modes, and written by `WeatherRig.WriteSunDirection` at lighting setup and on every
+zone apply. B13 reuses it unchanged.
+
+**Merged with main's lit cards.** Main made the field lit: a `lighting: true` card takes the
+original's per-vertex `AMBIENT + DIFFUSE x max(N.L, 0)` through `CardNormal`, and main declared
+`csky_sun_dir` itself, so C21's own `csky_sun.gdshaderinc` is deleted and one declaration stands.
+`ShaderCode(lit, fogged, enhanced)` emits main's faithful and lit text byte for byte when
+`enhanced` is false; under Enhanced the grade reads `graded` in place of `col.rgb`, over the colour
+the lit arm has already shaded, so the grade layers over either variant.
 
 Shadow-map darkening is **skipped**. The field is `unshaded` with `shadows_disabled`, so Godot's
 `light()` path is unreachable from it, and dropping `unshaded` would put a billboard that exists to
@@ -1183,8 +1223,8 @@ density and length pairs for the user. Faithful goldens zero movers; `--det` enh
 (D31's rocket-hit pose) either excludes the field or pins it, decided at D31.
 
 **⚠ Traps.** The rain field's header warns never to use Godot's `TIME`; drive from `csky_time`.
-Streaks through the cockpit glass read wrong at the near plane: keep the near fade. Do not close
-`BL-867` or edit the wisps' opacity from here. Split screen needs the field per pane, as the
+Streaks through the cockpit glass read wrong at the near plane: keep the near fade. Do not edit
+the wisps' opacity from here. Split screen needs the field per pane, as the
 speed cue's `decorate` hook does.
 
 ## E42 ☑ The chase camera lags the nose through a roll and widens its FOV with speed

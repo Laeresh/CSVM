@@ -23,6 +23,11 @@ public enum BoardArtLibrary
     /// extension: the picture playing now rather than a bitmap. The renderer plays it endlessly,
     /// which is what every <c>movie</c> row on a screen it composes authors.</summary>
     Movie,
+
+    /// <summary>A picture already in memory, <see cref="BoardArt.Pixels"/>, with
+    /// <see cref="BoardArt.Name"/> naming it for a reader: a stunt photograph's strip thumbnail,
+    /// which the wrap-up page draws without reading the full-size file back.</summary>
+    Held,
 }
 
 /// <summary>How a piece of board text is inked. The authored colours are per widget and mostly
@@ -226,8 +231,10 @@ public readonly record struct BoardCaret(byte R, byte G, byte B, float Width, fl
 public readonly record struct BoardCrop(float X, float Y, float Width, float Height);
 
 /// <summary>One bitmap a board draws, and how many stacked frames it holds. A button strip is four
-/// frames (disabled, normal, rollover, depressed, in that order); everything else is one.</summary>
-public sealed record BoardArt(BoardArtLibrary Library, string Name, int Frames = 1);
+/// frames (disabled, normal, rollover, depressed, in that order); everything else is one.
+/// <paramref name="Pixels"/> is the picture itself for <see cref="BoardArtLibrary.Held"/> art and
+/// null for every library read from a file.</summary>
+public sealed record BoardArt(BoardArtLibrary Library, string Name, int Frames = 1, Godot.Image? Pixels = null);
 
 /// <summary>A picture placed at its authored pixel position. <paramref name="Centered"/> is the
 /// briefing script's own <c>center</c> flag: the coordinate is the middle, not the top left.
@@ -246,13 +253,16 @@ public sealed record BoardPicture(
 public sealed record BoardStroke(
     float X1, float Y1, float X2, float Y2, byte R, byte G, byte B, float Opacity = 1f);
 
-/// <summary>A rectangle in an authored ARGB colour, which is a list widget's own
-/// <c>ldrawrect</c>/<c>ldrawframe</c> pair: the table of contents draws a row's picked and focused
-/// states with nothing else. <paramref name="Border"/> draws the one-pixel outline instead of the
-/// fill, and <paramref name="Opacity"/> is the colour's own alpha byte.</summary>
+/// <summary>A rectangle in an authored ARGB colour, a list widget's own
+/// <c>ldrawrect</c>/<c>ldrawframe</c> pair. The table of contents draws a row's picked and focused
+/// states with nothing else. The <paramref name="Border"/> flag draws the one-pixel outline instead
+/// of the fill, and the <paramref name="Opacity"/> is the colour's own alpha byte. An
+/// <paramref name="Ink"/> takes the palette's colour instead of the three bytes, which is what a
+/// seat chip wants. The identity colours then stay in the renderer rather than being turned into
+/// bytes by every composer that paints one.</summary>
 public sealed record BoardFill(
     float X, float Y, float Width, float Height, byte R, byte G, byte B, float Opacity = 1f,
-    bool Border = false);
+    bool Border = false, BoardInk? Ink = null);
 
 /// <summary>One button plaque: its art strip, its authored top-left, the page row it presses, the
 /// strip frame to draw and the label to write over it. <see cref="Label"/> is empty where the art
@@ -273,11 +283,29 @@ public sealed record BoardPlaque(
 /// <paramref name="Bold"/> is the weight of an authored face a screen draws beside a lighter one,
 /// which the extraction ships no second typeface for, so the renderer emboldens its own.
 /// <paramref name="Leading"/> is the pitch a wrapped block's lines take, 0 leaving it to the face's
-/// own metrics; a widget whose authored block must end where the artwork under it does sets it.</summary>
+/// own metrics; a widget whose authored block must end where the artwork under it does sets it.
+/// <paramref name="Face"/> is the typeface the langui row names, drawn in place of the board's own
+/// where the machine carries it. <paramref name="Colour"/> is an authored colour beating the ink.</summary>
 public sealed record BoardLine(
     string Text, float X, float Y, float Width, float Size, BoardInk Ink, int Row = -1,
     bool Italic = false, BoardJustify Justify = BoardJustify.Left, BoardCaret? Caret = null,
-    bool Bold = false, float Leading = 0f);
+    bool Bold = false, float Leading = 0f, LanguiFace? Face = null, BoardTint? Colour = null)
+{
+    /// <summary>Where <see cref="Glyph"/> is drawn inside <see cref="Text"/>. A control character,
+    /// so no authored string carries one.</summary>
+    public const string GlyphSlot = "\u0001";
+
+    /// <summary>The authored box height a wrapped block is asked to fit inside, 0 for a line
+    /// drawn at its own size whatever it comes to. A block taller than this is stepped down a
+    /// point at a time by the renderer, which is the only half that can measure it.</summary>
+    public float Height { get; init; }
+
+    /// <summary>The pad control drawn where <see cref="GlyphSlot"/> stands in the text, or null for
+    /// a line of words alone. ⚠ The gap after the glyph is the renderer's, since only it can measure
+    /// the picture. A composer that spaces the words itself breaks the line on another face. A line
+    /// carrying one is drawn unwrapped and unjustified for the same reason.</summary>
+    public GlyphKey? Glyph { get; init; }
+}
 
 /// <summary>
 /// A list widget's entries and the box they flow inside, in authored pixels (the briefing

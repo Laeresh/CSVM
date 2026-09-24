@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -71,14 +72,14 @@ internal static class SuiteConstants
     // mission list names registers nothing in either scope (AnimProgram), holding C2 and C5 down.
     internal static readonly (string Chapter, int Instances, int Anchors)[] Census =
     {
-        ("C1", 186, 117),
+        ("C1", 174, 105),
         ("C1B", 28, 28),
         ("C1C", 28, 28),
         ("C2", 176, 109),
         ("C2B", 28, 28),
-        ("C3", 210, 133),
+        ("C3", 209, 133),
         ("C4", 92, 67),
-        ("C5", 158, 94),
+        ("C5", 157, 93),
     };
 
     // Partition cells whose centre answers a downward ray, and how many of those also answer one
@@ -107,4 +108,25 @@ internal static class SuiteConstants
         "abld_shadow",                                // soft baked shadow overlay
     };
 
+    /// <summary>The aircraft resources a roster-building suite hands a flight roster, every field
+    /// read off the test context. Weapon messages and camera parameters are optional parameters,
+    /// since only some suites need them. Passing null leaves the field exactly as an omitted
+    /// initializer would, so no suite pays for a load it never reads.</summary>
+    internal static AircraftAssemblyResources AircraftResources(
+        TestContext ctx, GameZ planesGamez, TextureArchive textures,
+        Messages? weaponMessages = null, Func<string, CamParams>? camParamsFor = null) =>
+        new()
+        {
+            PlanesGamez = planesGamez,
+            StatsFor = plane => PlaneStats.Load(ctx.ZrdrPath, plane),
+            AiStatsFor = (plane, aiDef) => PlaneStats.LoadForAi(ctx.ZrdrPath, plane, aiDef),
+            CamParamsFor = camParamsFor!,
+            PaintRng = new RandomNumberGenerator(),
+            ZrdrPath = ctx.ZrdrPath,
+            StockLoadouts = StockLoadouts.Load(),
+            WeaponDefs = WeaponDefs.Load(ctx.ZrdrPath, null),
+            WeaponMessages = weaponMessages!,
+            Textures = textures,
+            Shakes = ShakeDefs.Load(ctx.ZrdrPath),
+        };
 }

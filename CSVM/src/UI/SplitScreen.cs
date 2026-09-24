@@ -21,6 +21,11 @@ public sealed partial class SplitScreen : CanvasLayer
     /// <summary>Panes the rig supports, the reserved visual-layer band is this wide.</summary>
     public const int MaxPlayers = 4;
 
+    /// <summary>The layer <see cref="Flight.CockpitVisibility.ShowForPhotograph"/> moves a pilot's
+    /// hidden airframe groups onto for the one frame the Danger Zone camera draws, the bit just below
+    /// the own-airframe band. No pane's cull mask carries it (<see cref="PaneCullMask"/>).</summary>
+    public const uint PhotographLayer = 1u << 8;
+
     // First visual layer of the reserved per-player band. Godot has 20 layers (bits 0–19); the
     // world builds everything on layer 1 (bit 0), so taking the top four leaves the whole middle
     // range free for future use.
@@ -127,7 +132,12 @@ public sealed partial class SplitScreen : CanvasLayer
 
     /// <summary>Cull mask for player <paramref name="index"/>'s camera: everything outside the
     /// reserved per-player band (the shared world, all aircraft) plus only this player's own bit.</summary>
-    public static uint PlayerCullMask(int index) => (AllLayers & ~PlayerBand) | PlayerVisualLayer(index);
+    public static uint PlayerCullMask(int index) =>
+        (AllLayers & ~PlayerBand & ~PhotographLayer) | PlayerVisualLayer(index);
+
+    /// <summary><paramref name="mask"/> less <see cref="PhotographLayer"/>, for a pane camera
+    /// whose mask is not built by <see cref="PlayerCullMask"/>.</summary>
+    public static uint PaneCullMask(uint mask) => mask & ~PhotographLayer;
 
     /// <summary>The visual layer player <paramref name="index"/>'s OWN airframe is drawn on, so one
     /// camera can leave that pilot's aeroplane out while every other camera, this pane's included,

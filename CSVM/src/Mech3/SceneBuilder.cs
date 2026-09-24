@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using CSVM.Utils;
 using Godot;
@@ -55,19 +56,29 @@ public sealed class SceneBuilder
     // logged, not silently collapsed.
     public const int ConflictRankCap = 7;
 
-    /// <summary>Meta key a collider carries when its dominant surface is water or buildings.
+    /// <summary>How near the drawing camera must stand to the eye <see cref="PhotoEyeParam"/>
+    /// carries, in metres, to draw the photograph's fill. It separates the photograph's camera
+    /// from every pane's, which never stands two and a half chase distances ahead of the nose.</summary>
+    public const float PhotoEyeReach = 0.5f;
+
+    /// <summary>Meta key a collider carries when its surface class is water or buildings.
     /// StringName, not <c>const string</c>, as every meta key here (see <c>AnimRuntime.NameMeta</c>).</summary>
     public static readonly StringName SurfaceMeta = "csky_surface";
 
     /// <summary>Meta key EVERY collider carries: an <c>int</c>, the original's numeric surface
-    /// type id (<see cref="GameZMaterial.SoilId"/>) for its dominant material, by polygon count
-    ///, the same body granularity <see cref="SurfaceMeta"/> already uses, not a per-triangle
-    /// value. A different name space from <see cref="SurfaceMeta"/>'s texture-derived class, so
-    /// it is never spelled as that string (see <see cref="CollidersForMesh"/>).</summary>
+    /// type id (<see cref="GameZMaterial.SoilId"/>). Every polygon in the body shares it, since
+    /// bodies are split by soil as well as class (<see cref="CollidersForMesh"/>). A different
+    /// name space from <see cref="SurfaceMeta"/>'s texture-derived class, so it is never spelled
+    /// as that string.</summary>
     public static readonly StringName SurfaceIdMeta = "csky_surface_id";
 
+    /// <summary>Meta key a collider carries when its node authors <see cref="GameZNode.CanModify"/>:
+    /// a <c>bool</c>, always true where present. The crater carve is refused on any collider without
+    /// it, and no shipped node sets it (docs/org/craters.md). Read by <see cref="CanModify"/>.</summary>
+    public static readonly StringName CanModifyMeta = "csky_can_modify";
+
     /// <summary>Meta key a mission-structure node carries when the mission being built is one it
-    /// authors an owner for: an <c>int</c>, that owner's team
+    /// authors an owner for. The value is an <c>int</c>, that owner's team
     /// (<see cref="GameZNode.MissionStructureTeam"/>). A flagged node authoring no owner for this
     /// mission carries none, since an unowned object is nobody's target either way. Read by
     /// <see cref="DestructibleRegistry.Register"/>.</summary>
@@ -79,6 +90,12 @@ public sealed class SceneBuilder
     public static readonly StringName MissionStructureGasbagMeta = "csky_mstruct_gasbag";
 
     public static readonly StringName OpacityParam = "csky_opacity";
+
+    /// <summary>Instance shader parameter the Danger Zone photograph arms on its own pilot's
+    /// aircraft for the one frame it draws. Its xyz is the photograph's eye, and w is 1 while
+    /// armed. A faithful aircraft surface then takes <c>csky_sun_fill_rgb</c> as its ambient half,
+    /// but only for a camera within <see cref="PhotoEyeReach"/> of that eye.</summary>
+    public static readonly StringName PhotoEyeParam = "csky_photo_eye";
 
     /// <summary>The albedo sampler every generated shader here declares, as a ready
     /// <see cref="StringName"/>. ⚠ Use this, never the bare string, wherever the write is on a
@@ -117,6 +134,12 @@ public sealed class SceneBuilder
     /// and every generated shader exactly as they are.</summary>
     public bool DebugClutterFlag;
 
+    /// <summary>Which transparency classes this builder leaves unbuilt (<c>--hide-alpha</c>,
+    /// <c>docs/cli.md</c>). Set by the caller before building, like <see cref="DebugClutterFlag"/>,
+    /// because a hidden class is dropped at the surface rather than switched off at runtime. Empty
+    /// in every ordinary run, so nothing but an isolation capture sees it.</summary>
+    public TransparencyClass HiddenAlpha;
+
     /// <summary>Where a material's own texture flipbook (the gamez `cycle` block) is delivered.
     /// Set by the caller before building; null leaves cycling materials static.</summary>
     public TextureCycler? Cycler;
@@ -148,6 +171,8 @@ public sealed class SceneBuilder
         "#include \"res://shaders/csky_time.gdshaderinc\"";
     internal const string MipBiasInclude =
         "#include \"res://shaders/csky_mip_bias.gdshaderinc\"";
+    internal const string FacadeInclude =
+        "#include \"res://shaders/csky_facade.gdshaderinc\"";
 
     /// <summary>The animation runtime's <c>OBJECT_OPACITY_STATE</c> translucency, a per-instance
     /// multiplier on ALPHA, because materials are cached and this changes at runtime. Declared in
@@ -195,6 +220,14 @@ public sealed class SceneBuilder
     /// else (<see cref="PlaneBuilder.InteriorScale"/> is why this exists). ⚠ Baked into cached
     /// meshes and materials: set it before building, never between builds.</summary>
     internal float DepthBiasScale = 1f;
+
+    /// <summary>Blend this builder's soft-alpha surfaces in GAMMA space, the way the original's
+    /// framebuffer mixed sRGB values, instead of the linear space Godot composites in: the same
+    /// correction <c>csky_srgb.gdshaderinc</c> makes for the DX7 vertex MODULATE, applied to the
+    /// other gamma-space operation. Without it a decal's faint surround lands near 31 % opacity
+    /// where the original put 8 %, which reads as a solid block (docs/formats/hud.md).
+    /// ⚠ Set before building, like <see cref="DepthBiasScale"/>: it keys the shader.</summary>
+    internal bool GammaBlendAlpha;
 
     /// <summary>The world's conflict ranks (<see cref="ConflictRank"/>), set by the caller before
     /// building. Null, every aircraft, every <c>--node=</c> subtree, any build with no conflict
@@ -290,12 +323,19 @@ void fragment() {
     // flicker, because it blurs a lost ray across its neighbours instead of dimming the water.
     private const float WaterRoughness = 0.25f;
     private const float WaterSpecular = 0.5f;
-    // What every aircraft surface reflects: skin, canopy, props and the cockpit interior all take
-    // the shaded arm, in both graphics modes. The original draws an aircraft with no specular term
-    // at all (docs/org/vertexLighting.md), so any highlight here is the remake's own, and this is
-    // the value picked by eye against the original's screenshots: sunlight reads as a sheen rather
-    // than as gloss. Judged at the controls, not by a luminance distance.
+    // What an aircraft surface reflects under the scene lights, which only enhanced mode's aircraft
+    // and a shaded builder without the per-vertex sun term draw under. The original has no
+    // specular term at all (docs/org/vertexLighting.md), so any highlight here is ours. A TUNE
+    // picked by eye against the original's screenshots, at the controls and not by a luminance
+    // distance. Sunlight reads as a sheen, not as gloss.
     private const float AircraftSpecular = 0.25f;
+    // The per-vertex sun term's colour triples (WeatherRig.SunVertexLight).
+    // ⚠ Declare them here, never in csky_atmosphere.gdshaderinc, which every world shader
+    // includes. Declared in that include, a headless probe never exits; the cause is not decoded
+    // (docs/verification.md SHELL-21).
+    private const string SunVertexLightDecl =
+        "global uniform vec3 csky_sun_ambient_rgb;\nglobal uniform vec3 csky_sun_diffuse_rgb;\n"
+        + "global uniform vec3 csky_sun_fill_rgb;";
     // ⚠ Format every scale invariantly; a comma decimal separator emits shader text that will not
     // compile. Godot discards EMISSION on an `unshaded` material and the glow pass reads the HDR
     // colour buffer, so these arms reach it by scaling the colour rather than by writing EMISSION.
@@ -324,6 +364,9 @@ void fragment() {
     private readonly GameZ _gamez;
     private readonly TextureArchive _textures;
     private readonly bool _fullbright;
+    // Original mode, shaded builders only: draw the original's per-vertex sun term instead of the
+    // scene lights, the in-flight aircraft's light (docs/org/vertexLighting.md).
+    private readonly bool _sunVertexLit;
     private readonly bool _generateCollision;
     private readonly bool _cullBackfaces;
     private readonly Func<string, bool>? _blendTexture;
@@ -346,7 +389,7 @@ void fragment() {
     private readonly Dictionary<(int Model, bool Force, bool ForceLit, bool ClutterFade), ArrayMesh?> _meshCache = new();
     private readonly Dictionary<int, Vector3> _meshPivotCache = new(); // billboard meshes only: local quad center
     private readonly Dictionary<int, ArrayMesh> _lightMeshCache = new();
-    private readonly Dictionary<int, List<(string? Surface, int SurfaceId, List<ConcavePolygonShape3D> Shapes)>> _colliderCache = new();
+    private readonly Dictionary<int, List<(string Name, string? Surface, int SurfaceId, List<ConcavePolygonShape3D> Shapes)>> _colliderCache = new();
     private readonly Dictionary<(float Far, float Slope, float Blink), ShaderMaterial> _lightMaterialCache = new();
     // Billboard glow material for a flare sprite quad: always alpha-blended (the soft ramp
     // must never scissor into a hard star cutout), no night dimming (it's a light source).
@@ -362,6 +405,10 @@ void fragment() {
     // and swaps each material's albedo in place, instead of rebuilding the whole aircraft
     // for every slider pixel). Only shader materials carrying an `albedo_tex` are listed.
     private readonly List<(ShaderMaterial Material, string TextureName)> _texturedMaterials = new();
+    // A built world material against the verdict its shader was generated for. The verdict is a
+    // shader variant rather than a parameter, so by the time a surface is committed it is reachable
+    // nowhere else. The material cache also hands one object back for every surface sharing it.
+    private readonly Dictionary<Material, TransparencyClass> _materialAlpha = new();
     private Shader? _lightShader;
 
     /// <param name="fullbright">Render unshaded, like the original's world pass: texture × baked
@@ -375,13 +422,14 @@ void fragment() {
         Func<string, bool>? billboardTexture = null, bool cullBackfaces = false,
         Func<string, bool>? glowTexture = null,
         Func<string, ImageTexture?, ImageTexture?>? textureSubstitute = null,
-        IReadOnlyDictionary<int, Vector2>? scrollOverrides = null)
+        IReadOnlyDictionary<int, Vector2>? scrollOverrides = null, bool sunVertexLit = false)
     {
         _textureSubstitute = textureSubstitute;
         _scrollOverrides = scrollOverrides;
         _gamez = gamez;
         _textures = textures;
         _fullbright = fullbright;
+        _sunVertexLit = sunVertexLit && !fullbright;
         _generateCollision = generateCollision;
         _blendTexture = blendTexture;
         _billboardTexture = billboardTexture;
@@ -393,6 +441,19 @@ void fragment() {
     /// (a light-source glow), or about one fixed axis (an upright tree card, a flame on a
     /// horizontal pipe). This is the gamez model's OWN classification, not a guess of ours.</summary>
     public enum BillboardKind { None, Spherical, CylindricalY, CylindricalX }
+
+    /// <summary>What a drawn thing does with its texture's alpha, split by what draws it. A world
+    /// surface and a clutter card at the same verdict still take different shaders and different
+    /// depth modes. An isolation capture therefore has to name the two separately.</summary>
+    [Flags]
+    public enum TransparencyClass
+    {
+        None = 0,
+        BlendSurface = 1,
+        ScissorSurface = 2,
+        BlendCard = 4,
+        ScissorCard = 8,
+    }
 
     // The rendering-side spelling of ClassifyBillboard's two cylindrical cases: the mesh
     // spins about one fixed world axis to face the camera on the other two, so a tree card or
@@ -432,6 +493,14 @@ void fragment() {
 
     public int OverlayPassDeclinedCount { get; private set; }
 
+    /// <summary>World surfaces committed per transparency class, the census an isolation capture
+    /// (<see cref="HiddenAlpha"/>) is read against. Counts SURFACES, not materials: one cached
+    /// material skins as many surfaces as the world has groups for it.</summary>
+    public int BlendSurfaceCount { get; private set; }
+
+    /// <inheritdoc cref="BlendSurfaceCount"/>
+    public int ScissorSurfaceCount { get; private set; }
+
     /// <summary>Polygons dropped because their material names a texture the retail data lacks and
     /// the original draws nothing for (<see cref="TextureArchive.IsAbsentAndUndrawn"/>). Expected
     /// 2 for a C3 world build (the skydome's two cloud cards) and 0 everywhere else, which is what
@@ -462,6 +531,10 @@ void fragment() {
     /// <summary>The textured materials built here, each with its source texture name, so a
     /// caller can re-resolve and swap them without a rebuild. See <see cref="Repaint"/>.</summary>
     public IReadOnlyList<(ShaderMaterial Material, string TextureName)> TexturedMaterials => _texturedMaterials;
+
+    /// <summary>Whether a struck collider's node accepts a crater, the original's
+    /// <c>CAN_MODIFY</c> gate read off <see cref="CanModifyMeta"/>.</summary>
+    public static bool CanModify(Node? collider) => collider != null && collider.HasMeta(CanModifyMeta);
 
     /// <summary>The one billboard rule, read straight from the gamez model: is this a flat card the
     /// engine turns toward the camera? Every caller goes through this. Null when the extraction
@@ -536,11 +609,18 @@ void fragment() {
                 mat.SetShaderParameter("albedo_tex", tex);
     }
 
+    /// <summary>The transparency verdict a world material was generated for. The verdict is a
+    /// shader variant rather than a parameter, so this registry is the only way back to it. A
+    /// material this builder did not make reads as <see cref="TransparencyClass.None"/>.</summary>
+    public TransparencyClass AlphaOf(Material? material) =>
+        material != null && _materialAlpha.TryGetValue(material, out var known)
+            ? known : TransparencyClass.None;
+
     /// <summary>The one biased albedo fetch every mip-mapped arm emits, defined in
     /// <c>csky_mip_bias.gdshaderinc</c> beside the global it reads.
-    /// ⚠ Never emit a bare <c>texture(albedo_tex, ...)</c> beside it. The original applies the
-    /// chapter's bias as one device render state, so an arm sampling unbiased draws that chapter
-    /// at a mip level the original never chose (docs/org/textures.md).</summary>
+    /// ⚠ Never emit a bare <c>texture(albedo_tex, ...)</c> anywhere. The original applies the
+    /// chapter's bias as one device render state. An arm sampling unbiased draws that chapter at a
+    /// mip level the original never chose (docs/org/textures.md).</summary>
     internal static string SampleAlbedo(string uv) => $"csky_sample_albedo(albedo_tex, {uv})";
 
     internal static bool UvsWithinUnitSquare(List<GameZPolygon> polys, int pass) =>
@@ -921,7 +1001,7 @@ void fragment() {
                 n3d.AddChild(mi);
                 MeshInstanceCount++;
                 if (collidable)
-                    AttachCollision(n3d, node.MeshIndex);
+                    AttachCollision(n3d, node.MeshIndex, node.CanModify);
             }
             // Point-sprite lights (night-sky stars, nav/tower beacons): rendered by the
             // original engine as small glowing dots. Never collidable, never shadowed.
@@ -955,22 +1035,22 @@ void fragment() {
         return n3d;
     }
 
-    // One static trimesh body PER SURFACE CLASS actually present in the mesh, not one body for
-    // the whole mesh, see CollidersForMesh. The parent node carries the world transform, so
-    // each collider lines up with the rendered surface it was carved from. Shapes are cached per
-    // mesh index and shared across instances (shapes are resources).
-    private void AttachCollision(Node3D parent, int meshIndex)
+    // One static trimesh body PER (SURFACE CLASS, SOIL) pair actually present in the mesh, not one
+    // body for the whole mesh, see CollidersForMesh. The parent node carries the world transform,
+    // so each collider lines up with the rendered surface it was carved from. Shapes are cached
+    // per mesh index and shared across instances (shapes are resources).
+    private void AttachCollision(Node3D parent, int meshIndex, bool canModify)
     {
         bool tracked = false;
-        foreach (var (surface, surfaceId, shapes) in CollidersForMesh(meshIndex))
+        foreach (var (name, surface, surfaceId, shapes) in CollidersForMesh(meshIndex))
         {
-            // ⚠ Keep the per-class names rather than "col" for all of them. Sibling bodies Godot
-            // cannot tell apart by the same requested name are renamed to an opaque
-            // "@StaticBody3D@N", breaking ColliderOverlay's "col" check once a mesh splits in two.
-            var body = new StaticBody3D { Name = surface != null ? $"col_{surface}" : "col" };
-            // ⚠ A class's one-sided and two-sided halves share ONE body. Two bodies would collide
+            // ⚠ Keep the distinct per-bucket names rather than "col" for all of them. Sibling
+            // bodies sharing a requested name are renamed to an opaque "@StaticBody3D@N",
+            // breaking ColliderOverlay's "col" check once a mesh splits in two.
+            var body = new StaticBody3D { Name = name };
+            // ⚠ A bucket's one-sided and two-sided halves share ONE body. Two bodies would collide
             // with the naming rule above, and every meta, count and OwnerOf answer below is per
-            // surface class, not per shape.
+            // bucket, not per shape.
             foreach (var shape in shapes)
                 body.AddChild(new CollisionShape3D { Shape = shape });
             // Stamp the struck-surface class (water / buildings), so a weapon impact can pick the
@@ -981,6 +1061,9 @@ void fragment() {
             // Every body carries the original's numeric surface id too, a different name space
             // from the class string above (see SurfaceIdMeta).
             body.SetMeta(SurfaceIdMeta, surfaceId);
+            // The node's own crater gate, stamped per body since a weapon reads the body it struck.
+            if (canModify)
+                body.SetMeta(CanModifyMeta, true);
             parent.AddChild(body);
             ColliderCount++;
             tracked = true;
@@ -993,13 +1076,13 @@ void fragment() {
         }
     }
 
-    // This mesh's colliding geometry split into one trimesh per surface class actually present,
-    // each polygon's own texture deciding which shape it joins. Each bucket also carries the
-    // original's numeric surface id for its dominant material by polygon count, which is a
-    // different name space from the class string and the same body granularity. Cached per mesh.
-    // ⚠ Do not collapse this to one area-weighted tag for the whole mesh. A coastal tile is mostly
-    // beach by area, so its real water polygons lose that vote and read as dry ground to a weapon.
-    private List<(string? Surface, int SurfaceId, List<ConcavePolygonShape3D> Shapes)> CollidersForMesh(int meshIndex)
+    // This mesh's colliding geometry split into one trimesh per (surface class, soil) pair actually
+    // present, each polygon's own material deciding which shape it joins. The soil split is what
+    // lets a body's SurfaceIdMeta be every struck polygon's own soil, as the original reads it per
+    // polygon (docs/org/weaponImpact.md). Within a class the soil with the most polygons keeps the
+    // class's plain name and comes first; any other soil is suffixed. Cached per mesh.
+    // ⚠ Do not merge buckets by area or count; a coastal tile's water or a shed's default wall then reads wrong.
+    private List<(string Name, string? Surface, int SurfaceId, List<ConcavePolygonShape3D> Shapes)> CollidersForMesh(int meshIndex)
     {
         if (_colliderCache.TryGetValue(meshIndex, out var cached))
             return cached;
@@ -1007,45 +1090,48 @@ void fragment() {
         _meshPivotCache.TryGetValue(meshIndex, out var offset); // Vector3.Zero when this mesh has none
         // "" stands in for the untagged/default bucket: Dictionary<TKey> needs a non-null key.
         const string defaultTag = "";
-        var buckets = new Dictionary<string, (List<Vector3> OneSided, List<Vector3> TwoSided)>();
-        var idCounts = new Dictionary<string, Dictionary<int, int>>();
+        var buckets = new Dictionary<(string Tag, int Soil), (List<Vector3> OneSided, List<Vector3> TwoSided, int Polys)>();
         foreach (var poly in mesh.Polygons)
         {
             bool hasMaterial = poly.MaterialIndex >= 0 && poly.MaterialIndex < _gamez.Materials.Count;
             var material = hasMaterial ? _gamez.Materials[poly.MaterialIndex] : null;
             string tag = ClassifySurface(material?.TextureName) ?? defaultTag;
-            if (!buckets.TryGetValue(tag, out var faces))
-            {
-                buckets[tag] = faces = (new List<Vector3>(), new List<Vector3>());
-                idCounts[tag] = new Dictionary<int, int>();
-            }
+            var key = (tag, material?.SoilId ?? 0);
+            if (!buckets.TryGetValue(key, out var faces))
+                faces = (new List<Vector3>(), new List<Vector3>(), 0);
+            buckets[key] = faces with { Polys = faces.Polys + 1 };
             // ⚠ The one-sided half is emitted REVERSED: the source's visible side is Godot's BACK
             // face, while a shape without BackfaceCollision is solid along Godot's own face normals
             // (docs/formats/gotchas.md). Unreversed it would be solid from behind alone.
             EmitCollisionFaces(mesh, poly, offset,
                 poly.ShowBackface ? faces.TwoSided : faces.OneSided, flip: !poly.ShowBackface);
             CountSidedness(tag, poly.ShowBackface);
-            int id = material?.SoilId ?? 0;
-            var counts = idCounts[tag];
-            counts[id] = counts.GetValueOrDefault(id) + 1;
         }
         CollisionBackToBackPairs += BackToBackPairs(mesh);
-        var result = new List<(string?, int, List<ConcavePolygonShape3D>)>();
-        foreach (var (tag, faces) in buckets)
+        var result = new List<(string, string?, int, List<ConcavePolygonShape3D>)>();
+        // Classes in first-seen order, as the bodies were ordered before the soil split.
+        foreach (var tag in buckets.Keys.Select(k => k.Tag).Distinct().ToList())
         {
-            // A polygon is solid from the side it is seen from and no other, the test the original
-            // runs (docs/org/weaponRay.md): the winding is not inconsistent, it is per polygon, and
-            // `chapter-census` is the tripwire for a down-wound tile a plane would fall through.
-            var shapes = new List<ConcavePolygonShape3D>();
-            AddShape(shapes, faces.OneSided, backface: false);
-            AddShape(shapes, faces.TwoSided, backface: true);
-            if (shapes.Count == 0)
-                continue;
-            int dominantId = idCounts[tag]
-                .OrderByDescending(kv => kv.Value)
-                .ThenBy(kv => kv.Key)
-                .First().Key;
-            result.Add((tag == defaultTag ? null : tag, dominantId, shapes));
+            var soils = buckets.Where(kv => kv.Key.Tag == tag)
+                .OrderByDescending(kv => kv.Value.Polys)
+                .ThenBy(kv => kv.Key.Soil)
+                .ToList();
+            string className = tag == defaultTag ? "col" : $"col_{tag}";
+            bool first = true;
+            foreach (var (key, faces) in soils)
+            {
+                // A polygon is solid from the side it is seen from and no other, the test the
+                // original runs (docs/org/weaponRay.md). The winding is per polygon, and
+                // `chapter-census` is the tripwire for a down-wound tile a plane falls through.
+                var shapes = new List<ConcavePolygonShape3D>();
+                AddShape(shapes, faces.OneSided, backface: false);
+                AddShape(shapes, faces.TwoSided, backface: true);
+                if (shapes.Count == 0)
+                    continue;
+                string name = first ? className : $"{className}_soil{key.Soil.ToString(CultureInfo.InvariantCulture)}";
+                first = false;
+                result.Add((name, tag == defaultTag ? null : tag, key.Soil, shapes));
+            }
         }
         _colliderCache[meshIndex] = result;
         return result;
@@ -1264,9 +1350,19 @@ void fragment() {
             // The glow/cylindrical paths take only the full clamp: their quads' UVs are
             // authored inside the unit square, so the partial case cannot arise there. They also
             // carry no clutter fade: no 3D decoration in the install is a glow or a facade.
-            st.SetMaterial(glowSprite ? GetGlowMaterial(materialIndex, fogged, clampUv)
+            var surfaceMaterial = glowSprite ? GetGlowMaterial(materialIndex, fogged, clampUv)
                 : cylAxis != CylAxis.None ? GetCylindricalMaterial(materialIndex, cylAxis, lit, fogged, clampUv)
-                : GetMaterial(materialIndex, priority, rank, noClutter, doubleSided, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade));
+                : GetMaterial(materialIndex, priority, rank, noClutter, doubleSided, scroll, clampUv, lit, fogged, pass, edgeClamp, clutterFade);
+            var alpha = _materialAlpha.TryGetValue(surfaceMaterial, out var known) ? known : TransparencyClass.None;
+            if (alpha == TransparencyClass.BlendSurface)
+                BlendSurfaceCount++;
+            else if (alpha == TransparencyClass.ScissorSurface)
+                ScissorSurfaceCount++;
+            // ⚠ Drop the surface, never hide the instance. The group is one of several on a shared
+            // mesh, and the classes are isolated from each other, not from the world.
+            if (alpha != TransparencyClass.None && HiddenAlpha.HasFlag(alpha))
+                continue;
+            st.SetMaterial(surfaceMaterial);
             st.Commit(arrayMesh);
         }
         return arrayMesh;
@@ -1489,6 +1585,13 @@ void fragment() {
         return mat;
     }
 
+    // Records the verdict a world material's shader was generated for. Every constructor that can
+    // make a blended or scissored surface calls it. The depth_draw_never variants live on the
+    // billboard shaders, so a census reaching only the bias path would call them opaque.
+    private void NoteAlpha(Material mat, bool blend, bool scissor) =>
+        _materialAlpha[mat] = blend ? TransparencyClass.BlendSurface
+            : scissor ? TransparencyClass.ScissorSurface : TransparencyClass.None;
+
     // A ShaderMaterial that mirrors NewStandard's look but pulls the geometry toward the
     // eye (or pushes it away, negative priority) by a fraction of its view distance.
     // The per-node draw-order term is added at instance level (see BuildSubtree).
@@ -1505,6 +1608,7 @@ void fragment() {
             Shader = GetBiasShader(shaded: !_fullbright, textured: tex != null, blend, scissor, doubleSided,
                 scrolls, clampUv && tex != null, lit, fogged, edgeClamp, clutterFade, water),
         };
+        NoteAlpha(mat, blend, scissor);
         float bias = Mathf.Clamp(priority * DepthBiasPerLevel, -0.05f, 0.05f) + rank * SurfaceRankBias;
         if (noClutter)
             bias += NoClutterLayerBias;
@@ -1532,8 +1636,8 @@ void fragment() {
     // rather than driving a uniform on purpose: a lit, fogged surface then emits byte-for-byte
     // the shader text it always did, so honouring the flags cannot perturb the overwhelming
     // majority of the world through float rounding in a mix().
-    // Key bits: 1/2/4/8/16/32/64 the flags above, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048
-    // clutterFade, 4096 DebugClutterFlag, 8192 enhanced, 16384 enhanced water; next free 32768.
+    // Key bits: 1-64 the flags above, 128 !lit, 256 !fogged, 512/1024 edgeClamp, 2048 clutterFade,
+    // 4096 DebugClutterFlag, 8192 enhanced, 16384 water, 32768 sun, 65536 gamma blend; free 131072.
     private Shader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
         bool scroll, bool clampUv, bool lit, bool fogged, UvClampAxes edgeClamp = UvClampAxes.None,
         bool clutterFade = false, bool water = false)
@@ -1546,10 +1650,17 @@ void fragment() {
         // ⚠ The water arm exists only inside the lit world arm, so original mode never sets its key
         // bit and its shader text cannot move.
         bool waterLit = worldLit && water;
+        // The original's own aircraft light: unshaded, the per-vertex sun term times the authored
+        // colour, clamped, then the texel (docs/org/vertexLighting.md). No Godot light reaches it.
+        bool sunLit = shaded && _sunVertexLit && !GraphicsMode.Enhanced;
+        // Only a blending surface has an alpha to correct; a scissor compares against a fixed 0.5
+        // and moving its alpha would move the cutout silhouette instead of the composite.
+        bool gammaBlend = blend && GammaBlendAlpha;
         int key = (shaded ? 1 : 0) | (textured ? 2 : 0) | (blend ? 4 : 0) | (scissor ? 8 : 0) | (doubleSided ? 16 : 0)
             | (scroll ? 32 : 0) | (clampUv ? 64 : 0) | (lit ? 0 : 128) | (fogged ? 0 : 256)
             | ((int)edgeClamp << 9) | (clutterFade ? 2048 : 0) | (DebugClutterFlag ? 4096 : 0)
-            | (GraphicsMode.Enhanced ? 8192 : 0) | (waterLit ? 16384 : 0);
+            | (GraphicsMode.Enhanced ? 8192 : 0) | (waterLit ? 16384 : 0) | (sunLit ? 32768 : 0)
+            | (gammaBlend ? 65536 : 0);
         if (BiasShaders.TryGetValue(key, out var cached))
             return cached;
 
@@ -1560,7 +1671,7 @@ void fragment() {
         sb.Append(doubleSided
             ? "render_mode skip_vertex_transform, cull_disabled"
             : "render_mode skip_vertex_transform, cull_front");
-        if (fullbright)
+        if (fullbright || sunLit)
             sb.Append(", unshaded");
         // The coverage arm samples albedo_tex for its edge derivative, so an untextured cutout
         // (which the archive cannot produce, a verdict needs a texture) keeps the plain scissor.
@@ -1581,8 +1692,11 @@ void fragment() {
             sb.AppendLine(ClutterFadeInclude);
             sb.AppendLine("varying flat float v_clutter_alpha;");
         }
-        if (fullbright)
-            sb.AppendLine(LightsInclude); // LIGHT_STATE spill, fullbright passes only
+        // The point-light term reaches only the two original-mode arms that evaluate the original's
+        // vertex light, and only on a model authored `lighting: true`.
+        bool pointLit = lit && (fullbright || sunLit);
+        if (pointLit)
+            sb.AppendLine(LightsInclude);
         if (textured)
         {
             // Anisotropic mipmap filtering: the world is viewed at grazing angles from the air,
@@ -1612,8 +1726,19 @@ void fragment() {
         // Both world arms: the original's DX7 pipeline multiplied texture × baked vertex colour in
         // GAMMA space, so linearising the vertex colour first reproduces that product
         // (docs/formats/gotchas.md). A linear multiply washes out every baked-dark corner.
-        if (!shaded)
+        if (!shaded || sunLit || gammaBlend)
             sb.AppendLine(SrgbInclude);
+        if (sunLit)
+        {
+            sb.AppendLine(SunVertexLightDecl);
+            sb.AppendLine("varying vec3 v_sun_lit;");
+            // Where this frame's origin sits in the world, for a model drawn in a frame of its own
+            // (the cockpit pass, CockpitOverlay). Zero for anything drawn in the world itself.
+            if (lit)
+                sb.AppendLine("uniform vec3 light_origin = vec3(0.0);");
+        }
+        if (fullbright && lit)
+            sb.AppendLine("varying vec3 v_point_gain;");
         // ⚠ Keep NORMAL pre-negated on every lit path. Every visible fragment is back-facing under
         // cull_front and Godot negates NORMAL there, so without this every upward-facing surface
         // shades as though lit from underneath (docs/formats/gotchas.md).
@@ -1624,9 +1749,30 @@ void fragment() {
             ? "    v_clutter_alpha = csky_clutter_fade_alpha(MODEL_MATRIX[3].xyz, CAMERA_POSITION_WORLD, INSTANCE_CUSTOM);\n"
               + "    VERTEX *= step(0.004, v_clutter_alpha);\n"
             : "";
+        // Per vertex in world space: the sun and the point lights, summed into one factor on the
+        // authored colour and clamped at white. The sun's ambient half is the photograph's fill at
+        // an armed eye (PhotoEyeParam); `lighting: false` takes the authored colour unchanged.
+        string sunVertex = !sunLit ? ""
+            : lit ? "    vec3 sun_ambient = csky_photo_eye.w > 0.5 && distance(CAMERA_POSITION_WORLD, csky_photo_eye.xyz) < "
+                    + PhotoEyeReach.ToString("0.0##", System.Globalization.CultureInfo.InvariantCulture) + "\n"
+                    + "        ? csky_sun_fill_rgb : csky_sun_ambient_rgb;\n"
+                    + "    v_sun_lit = clamp(COLOR.rgb * (sun_ambient + csky_sun_diffuse_rgb\n"
+                    + "        * max(dot(normalize(MODEL_NORMAL_MATRIX * NORMAL), csky_sun_dir), 0.0)\n"
+                    + "        + csky_point_light((MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz + light_origin)), 0.0, 1.0);\n"
+            : "    v_sun_lit = COLOR.rgb;\n";
+        // The fullbright world keeps its collapsed sun, csky_world_light. It takes the point lights
+        // as the linear gain they make on the clamped product, per vertex as the original evaluates
+        // them. Zero where no light reaches, so an unlit frame is untouched.
+        string pointVertex = !(fullbright && lit) ? ""
+            : "    v_point_gain = vec3(0.0);\n"
+              + "    if (csky_light_count > 0) {\n"
+              + "        vec3 point = csky_point_light((MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz);\n"
+              + "        v_point_gain = csky_srgb_to_linear(clamp(COLOR.rgb * (csky_world_light + point), 0.0, 1.0))\n"
+              + "            - csky_srgb_to_linear(COLOR.rgb * csky_world_light);\n"
+              + "    }\n";
         sb.AppendLine($@"
 void vertex() {{
-{clutterVertex}    VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+{clutterVertex}{sunVertex}{pointVertex}    VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
     NORMAL = {normalSign}normalize(MODELVIEW_NORMAL_MATRIX * NORMAL);
     // Scale toward the eye (the view-space origin): identical projected position,
     // depth nudged nearer by bias × distance, a scale-invariant polygon offset.
@@ -1638,9 +1784,10 @@ void fragment() {{");
             sb.AppendLine("    if (!csky_clutter_dither_keep(FRAGCOORD.xy, v_clutter_alpha)) { discard; }");
         // Shaded (planes) keeps raw COLOR for the real-lighting path; fullbright (world) applies
         // the gamma-space vertex modulate (see SrgbToLinearFn above).
-        string vcol = shaded ? "COLOR" : "vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a)";
+        string vcol = sunLit ? "vec4(csky_srgb_to_linear(v_sun_lit), COLOR.a)"
+            : shaded ? "COLOR" : "vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a)";
         // The surface's own albedo is kept separately from the modulated result: a point light's
-        // spill is light falling ON the surface, so it must be modulated by the same albedo
+        // term is light falling ON the surface, so it must be modulated by the same albedo
         // rather than added to the final colour (an unlit black texture stays black under a lamp).
         if (textured && edgeClamp != UvClampAxes.None)
         {
@@ -1665,7 +1812,7 @@ void fragment() {{");
         // a scalar on ALBEDO would dim the surface a second time.
         if (fullbright && lit)
             sb.AppendLine("    ALBEDO *= csky_world_light;");
-        if (shaded)
+        if (shaded && !sunLit)
         {
             sb.AppendLine("    ROUGHNESS = 0.85;");
             sb.AppendLine("    METALLIC = 0.0;");
@@ -1687,21 +1834,12 @@ void fragment() {{");
             sb.AppendLine("    SPECULAR = 0.0;");
         }
         // Distance fog, cylindrical: VERTEX is the view-space position here under
-        // skip_vertex_transform, and INV_VIEW_MATRIX lifts it back to world. The fullbright path
-        // needs that world position for the light spill, so an unfogged world surface computes it.
-        if (fogged || fullbright)
+        // skip_vertex_transform, and INV_VIEW_MATRIX lifts it back to world.
+        if (fogged)
             sb.AppendLine("    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;");
-        // Point lights go in before the fog mix and are not scaled by csky_world_light: a lamp does
-        // not dim at night. ⚠ Keep the braces, unguarded this lands in the SHADED shader too,
-        // where light_n does not exist and every aircraft falls back to Godot's default material.
-        if (fullbright)
-        {
-            // The world's normals reach here flipped for the same reason the aircraft's do: its
-            // single-sided polygons render with cull_front, so every visible fragment is
-            // back-facing and Godot negates NORMAL. Same cancelling minus as the shaded path.
-            sb.AppendLine("    vec3 light_n = normalize(-(INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);");
-            sb.AppendLine("    ALBEDO += base_col.rgb * csky_light_spill(fog_world, light_n);");
-        }
+        // Point lights go in before the fog mix, on the same texel as the vertex colour they scale.
+        if (fullbright && lit)
+            sb.AppendLine("    ALBEDO += base_col.rgb * v_point_gain;");
         // A model authored `fog: false` is exempt from distance fog entirely; the instance-level
         // csky_fog_on stays the per-instance opt-out beside it (see the uniform block).
         if (fogged)
@@ -1719,7 +1857,9 @@ void fragment() {{");
         // fogged texture, which C5's night art would otherwise swallow whole.
         sb.AppendLine(DebugClutterFlag && !shaded ? ClutterFlagTintLine : TintLine);
         if (blend || scissor)
-            sb.AppendLine($"    ALPHA = col.a{OpacityTerm};");
+            sb.AppendLine(gammaBlend
+                ? $"    ALPHA = csky_srgb_to_linear(vec3(col.a)).r{OpacityTerm};"
+                : $"    ALPHA = col.a{OpacityTerm};");
         if (scissor)
             sb.AppendLine("    ALPHA_SCISSOR_THRESHOLD = 0.5;");
         if (scissor && textured && GraphicsMode.Enhanced)
@@ -1741,6 +1881,7 @@ void fragment() {{");
     {
         var mat = new ShaderMaterial { Shader = GetBillboardShader(blend, scissor, glow, lit, fogged, clampUv) };
         mat.SetShaderParameter("albedo_tex", tex);
+        NoteAlpha(mat, blend, scissor);
         return mat;
     }
 
@@ -1771,7 +1912,7 @@ void fragment() {{");
         // hairline artifact UvsWithinUnitSquare exists for.
         sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, "
             + (clampUv ? "repeat_disable;" : "repeat_enable;"));
-        // The same chapter mip bias the world mesh takes: the original's is one device render
+        // The same chapter mip bias the world mesh takes. The original's is one device render
         // state, so a billboard samples at the level the terrain under it does.
         sb.AppendLine(MipBiasInclude);
         // Same global distance-fog params as the world shader. Clouds always fog, so this shader
@@ -1784,13 +1925,15 @@ void fragment() {{");
         if (blend || scissor)
             sb.AppendLine(InstanceUniformsInclude);
         sb.AppendLine(SrgbInclude); // DX7 gamma-space vertex modulate (world/cloud pass)
+        sb.AppendLine(FacadeInclude);
         sb.AppendLine($@"
 void vertex() {{
-    // Camera-facing billboard keeping the instance scale (Godot's billboard_keep_scale, by
+    // The SphericalY facade pose, keeping the instance scale (Godot's billboard_keep_scale, by
     // hand, the bias shader can't billboard, like FogVolumeClutter). The mesh was recentered on its
     // quad centre and the instance placed there, so the quad pivots at its centre.
+    mat3 face = csky_facade_spherical(MODEL_MATRIX[3].xyz, CAMERA_POSITION_WORLD);
     MODELVIEW_MATRIX = VIEW_MATRIX * mat4(
-        INV_VIEW_MATRIX[0], INV_VIEW_MATRIX[1], INV_VIEW_MATRIX[2], MODEL_MATRIX[3]);
+        vec4(face[0], 0.0), vec4(face[1], 0.0), vec4(face[2], 0.0), MODEL_MATRIX[3]);
     MODELVIEW_MATRIX[0] *= length(MODEL_MATRIX[0].xyz);
     MODELVIEW_MATRIX[1] *= length(MODEL_MATRIX[1].xyz);
     MODELVIEW_MATRIX[2] *= length(MODEL_MATRIX[2].xyz);
@@ -1840,6 +1983,7 @@ void fragment() {{
     {
         var mat = new ShaderMaterial { Shader = GetCylindricalShader(axis, blend, scissor, glow, lit, fogged, clampUv) };
         mat.SetShaderParameter("albedo_tex", tex);
+        NoteAlpha(mat, blend, scissor);
         return mat;
     }
 
@@ -1865,8 +2009,8 @@ void fragment() {{
         // Clamp when the facade's UVs never leave the unit square, see GetBillboardShader.
         sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, "
             + (clampUv ? "repeat_disable;" : "repeat_enable;"));
-        // The chapter mip bias, as in GetBillboardShader: a facade stands in the same street as
-        // the walls beside it and must choose its level the same way.
+        // The chapter mip bias, as in GetBillboardShader. A facade stands in the same street as
+        // the walls beside it, and must choose its level the same way.
         sb.AppendLine(MipBiasInclude);
         // csky_world_light arrives with the atmosphere include and is READ only when !glow
         // (a light source does not dim with the mission's SUNLIGHT); declaring it either way

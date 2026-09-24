@@ -41,7 +41,7 @@ landing gate for any change under `CSVM/`.
   "also exercises" clause, that field says what a shot covers *today* and is REWRITTEN on a
   re-pin, never appended to, since the history is `git log -p` on the file),
   [`CheckCommentCaps.ps1`](CheckCommentCaps.ps1) over `CSVM/src` and `CSVM.Tests` (`-Summary` for
-  one line per file), and [`CheckDocEntries.ps1`](CheckDocEntries.ps1) (`docs/architecture/*.md`
+  one line per file; the sentence caps apply to the comment blocks the commit changes), and [`CheckDocEntries.ps1`](CheckDocEntries.ps1) (`docs/architecture/*.md`
   entry caps and coverage against `CSVM/src`, one-line `docs/architecture.md` index bullets, and
   `docs/cli.md`'s 600-character flag bullet cap). A comment block over cap has outgrown its
   subject, so reflowing it is the wrong fix: move the decode into `docs/` and leave the

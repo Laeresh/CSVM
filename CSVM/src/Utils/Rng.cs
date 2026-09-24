@@ -40,6 +40,9 @@ public static class Rng
     // shift every later placement, and the field's counts and positions are what the pinned
     // chapter totals and the golden shots stand on.
     public const string CloudBands = "cloudbands";
+    // The cloud field's remake-only X/Z jitter (--cloud-jitter). Its own stream for CloudBands'
+    // reason: every knob value then lays the same decoded field and moves only the offsets.
+    public const string CloudJitter = "cloudjitter";
     public const string Precip = "precip";
     // The enhanced wind-streak field's per-instance seeds (Effects.WindStreaks). Its own stream,
     // not Rng.Precip: the field is built only under the enhanced presentation, and sharing a
@@ -67,6 +70,9 @@ public static class Rng
     // through IntSeedFor rather than Stream, so a match's respawn picks take nothing out of
     // Rng.Spawn: a draw there would shift the launch spawn index every pinned golden stands on.
     public const string VersusSpawn = "versusspawn";
+    // The Danger Zone photograph's eye scatter (Flight.DangerZonePhotograph). Its own stream, so a
+    // zone crossed never shifts the static cameras' spots or anything else a run rolls.
+    public const string Photograph = "photograph";
 
     private static readonly Dictionary<string, RandomNumberGenerator> Streams = new(StringComparer.Ordinal);
 

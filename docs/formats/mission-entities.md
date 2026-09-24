@@ -54,6 +54,21 @@ second of two ways to win, behind destroying every engine ([instant-action.md](i
 survivors < num_healthy_required
 ```
 
+**The walk reads each entry's node flag, never a hit-point pool.** The record loader
+(`FUN_004bd8d0`) resolves a pair entry from the hull one name at a time, `gasbag1` and then
+`panels` inside it, and keeps that node; the survivor walk (`FUN_004bf0b0`, run by the per-tick
+update `FUN_004bf9d0` while the destroyed byte `+6` is clear) counts the entries whose node has the
+active bit (`node+0x24 & 4`), the bit `OBJECT_ACTIVE_STATE` writes. So a script that switches a
+gasbag's `panels` off kills the hull as surely as a torpedo does. Each gasbag's `finish_*` burn does
+exactly that, and CM01 (C3/M01) is built on it: its hydrogen tanks burn four gasbag halves of
+`cargozep1` without damaging them, the first `finish_cg1zepgasbag1` leaves 4 of the required 5,
+and the hull is dead a second before the tank's own delayed call starts `cargozep1_crash`. Once
+the destroyed byte is set the update levels the pitch and bleeds the speed off for the 3 s wreck
+timer (`FUN_004bf500`) and then stops flying the hull at all, which is what leaves the crash's
+`floatdown` as the only thing moving it. CSVM counts an entry dead when its pool is destroyed or
+its node is switched off (`ZeppelinRuntime`'s zone view); the 3 s coast is not modelled, the hull
+stops on the tick it dies.
+
 ⚠ **The design document expresses the same rule as a destroy-count, which is the inverse.** Reading
 it that way gives a zeppelin that will not die, a failure mode that looks like a damage bug rather
 than an off-by-one, so assert the direction in a test. The design's worked example (four critical

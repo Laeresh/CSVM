@@ -4,9 +4,10 @@ using CSVM.Mech3;
 namespace CSVM.Flight;
 
 /// <summary>Which hand-authored burst stands in for an impact when no authored asset renders it.
-/// <c>None</c> means an authored gamez model was instanced and nothing stands in; <c>Spark</c> is
-/// the single-sprite base case every surface falls back to.</summary>
-public enum ImpactStandIn { None, Spark, Explosion, Ricochet }
+/// <c>None</c> means nothing stands in: an authored gamez model was instanced, or the original's
+/// own row resolves to nothing; <c>Spark</c> is the single-sprite base case every surface falls
+/// back to.</summary>
+public enum ImpactStandIn { None, Spark, Explosion }
 
 /// <summary>The mask a weapon's impact hook returns to <c>FUN_005ac7a0</c>, each bit removing one
 /// piece of the row's own bindings. The direct damage and the splash run before and after the
@@ -92,11 +93,11 @@ public readonly record struct ImpactOutcome
     }
 
     // The stand-in ladder, ordered: model beats all; a hardpoint weapon with no scene gets the
-    // explosion; a gun on `buildings` gets ricochet sparks; everything else gets the single spark.
-    // Ground has no arm of its own (backlog.md `BL-289`) but must still return non-`None`
-    //, `ProjectilePool` gates the `EffectSink` call on that, and the `blacksmokepuffer` rides it.
-    // ⚠ The ricochet arm covers for the install-missing `bld_damage.flt`, so an `effectBound` name
-    // takes it away again: `wep_02`'s `large_fireball` is the one that renders, and plays alone.
+    // explosion; a gun on `buildings` whose name renders nowhere draws nothing; everything else
+    // gets the single spark. Ground has no arm of its own but must still return non-`None`:
+    // `ProjectilePool` gates the `EffectSink` call on that, and the `blacksmokepuffer` rides it.
+    // ⚠ Do not stand anything in for the guns' install-missing `bld_damage.flt`: the original
+    // leaves that slot null and draws nothing there (docs/org/weaponImpact.md).
     private static ImpactStandIn StandInFor(WeaponDef weapon, int surfaceId, bool modelResolved,
         bool hasEffectsRuntime, bool effectBound)
     {
@@ -105,7 +106,7 @@ public readonly record struct ImpactOutcome
         if (!weapon.IsGun && !hasEffectsRuntime)
             return ImpactStandIn.Explosion;
         if (surfaceId == SurfaceRegistry.Buildings && weapon.IsGun && !effectBound)
-            return ImpactStandIn.Ricochet;
+            return ImpactStandIn.None;
         return ImpactStandIn.Spark;
     }
 }

@@ -286,7 +286,7 @@ public sealed class AiPilot
     /// one node read is a turret or structure quarry's position, which lives on its node alone.</summary>
     public FlightInput Next(FlightModel model, float dt)
     {
-        var quarry = PursuitQuarry.Of(Gunner?.Target);
+        var quarry = PursuitQuarry.Of(Gunner?.Target, Gunner);
         SteeringPatrol = false;   // SteerPatrol sets it when it actually flies the net
         RailPose = null;          // set again below only while the rail writes the pose
 
@@ -297,7 +297,9 @@ public sealed class AiPilot
             var mode = machine.Update(model.Position, model.VelocityDir * model.Speed,
                 quarry?.Position, quarry?.Mode, dt,
                 quarry?.Velocity, quarry?.IsHumanPiloted ?? false,
-                nose: -model.Attitude.Z, targetNose: quarry?.Nose, attitude: model.Attitude);
+                nose: -model.Attitude.Z, targetNose: quarry?.Nose, attitude: model.Attitude,
+                quarryIsVehicle: quarry?.IsVehicle ?? true,
+                quarryIsPrimary: quarry?.IsPrimaryTarget ?? false);
             // The two states the escort law itself short-circuits on come first, then the escort,
             // which is the whole dispatch for a wingman, a maneuver included, since the original
             // never reaches its maneuver arm from the mode-4 fork.
@@ -307,6 +309,15 @@ public sealed class AiPilot
                 return FlyClimbOut(model, dt, machine);
             if (Escort is { Leader.InPlay: true } escorting)
                 return FlyEscort(model, dt, escorting, quarry);
+
+            // The dynamic entry into a danger-zone run, on the original's own gate: a combat
+            // state (its state 0) with the evade flag up. That is a hit pilot being chased, and
+            // a maneuver, state 1, never reaches it.
+            if (machine.Evading && mode is AiMode.Pursue or AiMode.LayOff or AiMode.Evade)
+            {
+                TryDaredevilDangerZone(model, machine);
+                mode = machine.Mode;
+            }
 
             switch (mode)
             {
@@ -528,12 +539,37 @@ public sealed class AiPilot
         {
             return;
         }
+        StartDangerZoneRun(ribbon, farEnd, model, machine, "tagged node");
+    }
+
+    // The proximity entry (FUN_0041d9f0's first statement, 0x0041da3e, into FUN_004210e0's
+    // unforced arm): a hit pilot rolls daredevil. A passed roll takes a zone end within 500 m
+    // that leads away. It is an evasion, which is why the evade flag is its gate. A look that
+    // finds nothing arms the 5 s retry hold.
+    private void TryDaredevilDangerZone(FlightModel model, AiModeMachine machine)
+    {
+        if (DangerZones is not { } zones || ZoneRun != null || !machine.RollDaredevil())
+            return;
+        if (zones.ProximityPick(model.Position, machine.NaturalTouch) is not { } pick)
+        {
+            machine.StampDangerZoneRetry();
+            return;
+        }
+        StartDangerZoneRun(pick.Ribbon, pick.FarEnd, model, machine, "dare devil test passed");
+    }
+
+    // What both entries do once a ribbon and an end are chosen: the run record, the leg the exit
+    // re-seats off, and state 2. The machine's own transition drops the standing target
+    // (FUN_00421500 nulls +0x948).
+    private void StartDangerZoneRun(DangerZoneRibbon ribbon, bool farEnd, FlightModel model,
+        AiModeMachine machine, string why)
+    {
         ZoneRun = new DangerZoneRun(ribbon, farEnd);
         _rail = null;
         _zoneEntryLegFrom = Patrol?.LegStartIndex ?? -1;
         _zoneEntryLegTo = Patrol?.CurrentIndex ?? -1;
         machine.Enter(AiMode.ApproachingDangerZone,
-            $"'{ribbon.Name}' from its {(farEnd ? "far" : "near")} end, {pos.DistanceTo(ZoneRun.Point):0} m out");
+            $"'{ribbon.Name}' from its {(farEnd ? "far" : "near")} end, {model.Position.DistanceTo(ZoneRun.Point):0} m out ({why})");
     }
 
     // The approach (FUN_004216e0): the run's current point on the emergency table, no aim

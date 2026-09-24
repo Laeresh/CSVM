@@ -103,23 +103,23 @@ internal static class MenuHostSuites
 
     // Resolution over the registry: an unknown request falls back with a reason rather than
     // crashing, the force flag beats a request, nothing asked for requests Original and lands on
-    // Built-in with a reason in a registry without it, and a saved Built-in resolves silently.
+    // Built-in with a reason in a registry without it, and a Built-in override resolves silently.
     private static void Selection(TestContext ctx, MenuHost host)
     {
-        string? reason = host.Select(forceBuiltIn: false, cliOverride: "no-such-presentation", savedRequest: null);
+        string? reason = host.Select(forceBuiltIn: false, cliOverride: "no-such-presentation");
         ctx.Check(host.Selected == PresentationId.BuiltIn && reason != null,
             $"an unknown requested presentation falls back to Built-in with a reason ({reason})");
         ctx.Check(host.Requested == new PresentationId("no-such-presentation"),
-            $"while the request itself is kept for Options to show back ({host.Requested})");
-        reason = host.Select(forceBuiltIn: true, cliOverride: "original", savedRequest: null);
+            $"while the request itself is kept for the startup log to report ({host.Requested})");
+        reason = host.Select(forceBuiltIn: true, cliOverride: "original");
         ctx.Check(host.Selected == PresentationId.BuiltIn && reason != null,
             $"the force flag resolves to Built-in over a CLI override ({reason})");
-        reason = host.Select(forceBuiltIn: false, cliOverride: null, savedRequest: null);
+        reason = host.Select(forceBuiltIn: false, cliOverride: null);
         ctx.Check(host.Selected == PresentationId.BuiltIn && reason != null && host.Requested == PresentationId.Original,
             $"with nothing asked for the request is Original, which this registry lacks, so Built-in stands in with a reason ({reason})");
-        reason = host.Select(forceBuiltIn: false, cliOverride: null, savedRequest: PresentationId.BuiltIn.Value);
+        reason = host.Select(forceBuiltIn: false, cliOverride: PresentationId.BuiltIn.Value);
         ctx.Check(host.Selected == PresentationId.BuiltIn && reason == null,
-            $"and a saved Built-in is the one request that resolves silently");
+            $"and a --presentation=built-in override is the one request that resolves silently");
     }
 
     private static LaunchMenu? ColdStart(TestContext ctx, MenuHost host, out BuiltInPresentation? built)

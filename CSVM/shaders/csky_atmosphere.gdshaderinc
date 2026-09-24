@@ -23,6 +23,22 @@ global uniform vec2 csky_fog_range;      // x = near (clear), y = far (full fog)
 global uniform vec2 csky_fog_alt;        // fragment altitude: full fog below x, fades to none at y
 global uniform float csky_world_light = 1.0; // per-mission SUNLIGHT dimming (M2-polish item 6)
 
+// The same SUNLIGHT uncollapsed, for the one surface the collapse cannot describe: a camera-facing
+// card, whose authored normals turn with the view instead of holding the world's mean N.L
+// (docs/org/vertexLighting.md). csky_sun_dir points FROM a surface TOWARD the light, the sense
+// max(N.L, 0) wants; the pair is the zone's authored SUNLIGHT_AMBIENT and SUNLIGHT_DIFFUSE.
+global uniform vec3 csky_sun_dir = vec3(0.0, 1.0, 0.0);
+global uniform vec2 csky_sun_light = vec2(1.0, 0.0);
+
+// The original's per-vertex directional term on one world-space normal. The caller multiplies it
+// onto the AUTHORED vertex colour and clamps the PRODUCT, which is where the original clamps and
+// the collapse does not.
+// ⚠ Colourless on purpose, not a simplification of the light: every chapter authoring a lit cloud
+// card writes white for both SUNLIGHT colours, so the triples the binary multiplies are identity.
+float csky_sun_vertex_light(vec3 world_normal) {
+    return csky_sun_light.x + csky_sun_light.y * max(dot(normalize(world_normal), csky_sun_dir), 0.0);
+}
+
 // How much fog covers a fragment. `fog_world` is the fragment in WORLD space (under
 // skip_vertex_transform, VERTEX is view-space — lift it with INV_VIEW_MATRIX first).
 //

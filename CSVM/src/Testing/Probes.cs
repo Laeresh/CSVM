@@ -68,7 +68,7 @@ public static class Probes
     private static readonly HashSet<string> AiChapterScopeDirs =
         new(StringComparer.OrdinalIgnoreCase) { "gamez", "texture", "cam_anim", "zrdr" };
 
-    // One mean texel per sheet: a chapter's destructible population repeats its materials, and a
+    // One mean texel per sheet: a chapter's destructible population repeats its materials. A
     // decode per row would read the same archive entry dozens of times.
     private static readonly Dictionary<string, Vector3?> MeanTexelCache = new(StringComparer.OrdinalIgnoreCase);
 
@@ -825,9 +825,9 @@ public static class Probes
             row.Destroyed = target.Status == DestructibleRegistry.State.Destroyed;
             row.StagesFired = fired.Count;
 
-            // Walk-up resolution check: resolving from a deep descendant of the DAMAGE NODE, the
-            // kind of node a raycast actually strikes, must land back on this destructible. A
-            // descendant of the anchor outside the damage node belongs to it no more than scenery.
+            // Walk-up resolution check: a raycast actually strikes a deep descendant of the DAMAGE
+            // NODE. Resolving from there must land back on this destructible. A descendant of the
+            // anchor outside the damage node belongs to it no more than scenery.
             Node3D deep = target.DamageNode;
             while (deep.GetChildCount() > 0 && deep.GetChild(0) is Node3D child)
             {
@@ -976,10 +976,10 @@ public static class Probes
 
     // ---- debris shading --------------------------------------------------------------------
 
-    /// <summary>What shades the pieces a destructible's death flings: every mesh-bearing node under
-    /// a matched destructible, with the model's <c>lighting</c> flag, each material's sheet and mean
-    /// texel, the area-weighted mean baked vertex colour, and the product the fullbright world
-    /// shader draws from those, marked with whether the node flew. A null
+    /// <summary>What shades the pieces a destructible's death flings. Every mesh-bearing node
+    /// under a matched destructible is reported with the model's <c>lighting</c> flag and whether
+    /// the node flew. Each material contributes its sheet, its mean texel, the area-weighted mean
+    /// baked vertex colour, and the product the fullbright world shader draws from those. A null
     /// <paramref name="textures"/> leaves the sheet unsampled and the material's own colour stands
     /// in. ⚠ An instrument, not an assertion: no number here is a target.</summary>
     public static DebrisShadingResult DebrisShading(AnimRuntime runtime, GameZ gamez,
@@ -1017,7 +1017,7 @@ public static class Probes
         }
 
         // Every mesh node under each anchor, read BEFORE the kill so the pre-kill visibility is the
-        // healthy world's own; the rows are re-marked with what flew once the deaths have run.
+        // healthy world's own. The rows are re-marked with what flew once the deaths have run.
         var rows = new List<DebrisShadingRow>();
         var byNode = new Dictionary<ulong, DebrisShadingRow>();
         foreach (var target in targets.Values)
@@ -1054,8 +1054,8 @@ public static class Probes
         foreach (var target in targets.Values)
             runtime.DamageAt(target.Anchor, target.MaxHealth + 1f);
 
-        // Stepped rather than jumped: a ballistic body is registered and retired inside the run, so
-        // one long advance would report an empty motion list for pieces that flew the whole way.
+        // Stepped rather than jumped: a ballistic body is registered and retired inside the run.
+        // One long advance would report an empty motion list for pieces that flew the whole way.
         for (int i = 0; i < 24; i++)
         {
             runtime.Advance(0.25f);
@@ -1533,8 +1533,8 @@ public static class Probes
         sb.AppendLine();
         sb.Append(SustainedClimb(zrdrPath, planeNodeName, watch).Text);
         // The same manoeuvre as the climb above, taken the original's own way instead of the
-        // footage's: it says what the executable settles at, which is the figure a disagreeing
-        // filmed number is judged against.
+        // footage's. It says what the original settles at. A disagreeing filmed number is judged
+        // against that figure.
         sb.AppendLine();
         sb.Append(TunerEnvelope(zrdrPath, planeNodeName).Text);
 
@@ -1746,11 +1746,10 @@ public static class Probes
     // ---- the shipped tuner's own envelope ------------------------------------------------------
 
     /// <summary>The climb and dive figures taken the way the original's own Dynamics tuner takes
-    /// them (<c>FUN_00491c60</c>), so this is the executable's answer to what a sustained climb
-    /// settles at, not a reading off footage. The rig pins attitude, altitude, rotation and
-    /// throttle and leaves speed the only free variable; the climb it reports is therefore an
-    /// equilibrium of the force sum and nothing else (docs/org/flightModel.md, "The sustained
-    /// climb").</summary>
+    /// them (<c>FUN_00491c60</c>). This is the original's answer to what a sustained climb settles
+    /// at, not a reading off footage. The rig pins attitude, altitude, rotation and throttle and
+    /// leaves speed the only free variable. The climb it reports is therefore an equilibrium of
+    /// the force sum and nothing else (docs/org/flightModel.md, "The sustained climb").</summary>
     public static TunerEnvelopeResult TunerEnvelope(string zrdrPath, string planeNodeName)
     {
         System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
@@ -1951,8 +1950,8 @@ public static class Probes
     }
 
     // One run of the tuner's climb/dive rig. The attitude, the altitude and the body rates are
-    // written back before every step, so the only state carried from one step to the next is the
-    // velocity, which is what makes the reported speed a force-sum equilibrium and not a path.
+    // written back before every step. The only state carried from one step to the next is the
+    // velocity. That is what makes the reported speed a force-sum equilibrium and not a path.
     private static TunerEnvelopeRow TunerHold(PlaneStats stats, float noseDeg)
     {
         var row = new TunerEnvelopeRow
@@ -2309,9 +2308,10 @@ public static class Probes
         return "{" + string.Join("/", parts) + "}";
     }
 
-    // One mesh node's shading inputs, read off the gamez the scene was built from: the model's
-    // lighting flag and, per material the mesh uses, the texture, its mean texel, and the
-    // area-weighted mean of the baked vertex colours the surface tool emits.
+    // One mesh node's shading inputs, read off the gamez the scene was built from. The model's
+    // lighting flag, and per material the mesh uses its texture and that texture's mean texel.
+    // Each material also carries the area-weighted mean of the baked vertex colours the surface
+    // tool emits.
     private static DebrisShadingRow ReadShadingRow(GameZ gamez, TextureArchive? textures,
         GameZNode gn, float worldLightLinear)
     {
@@ -2336,7 +2336,7 @@ public static class Probes
             {
                 continue;
             }
-            // White where the polygon carries none, which is what SurfaceTool is given there, so a
+            // White where the polygon carries none, which is what SurfaceTool is given there. A
             // mesh that authored no colours reads as the identity multiply rather than as black.
             var mean = Vector3.One;
             if (poly.VertexColors is { Count: > 0 } vcs)
@@ -2362,8 +2362,8 @@ public static class Probes
             var tex = mat?.TextureName != null ? MeanTexel(textures, mat.TextureName) : null;
             var basis = tex ?? new Vector3(mat?.Color.R ?? 1f, mat?.Color.G ?? 1f, mat?.Color.B ?? 1f);
             // The fullbright world shader's own product: linearised vertex colour times the
-            // linearised texel times the mission's dimming scalar, reported back in sRGB bytes,
-            // which is what a screenshot pixel holds.
+            // linearised texel times the mission's dimming scalar. It is reported back in sRGB
+            // bytes, which is what a screenshot pixel holds.
             var lin = new Vector3(
                 Lin(vc.X) * Lin(basis.X), Lin(vc.Y) * Lin(basis.Y), Lin(vc.Z) * Lin(basis.Z));
             if (mesh.Lighting)
@@ -2390,7 +2390,7 @@ public static class Probes
     }
 
     // What the BUILT material does with those inputs, read off the node's own mesh instance rather
-    // than off the data: whether every surface committed a vertex-colour array, and whether the
+    // than off the data. Whether every surface committed a vertex-colour array, and whether the
     // shader the surface carries reads the mission dimming scalar. The pair is what separates "the
     // data authors this dark" from "the build dropped a term on the way to the screen".
     private static void ReadBuiltMaterial(Node3D node, DebrisShadingRow row)
@@ -2423,7 +2423,7 @@ public static class Probes
         }
     }
 
-    // A polygon's triangulated area, fanned or stripped exactly as SceneBuilder emits it, so the
+    // A polygon's triangulated area, fanned or stripped exactly as SceneBuilder emits it. The
     // weight a material carries here is the screen area that material actually covers.
     private static float TriangulatedArea(GameZMesh mesh, GameZPolygon poly)
     {
@@ -2471,7 +2471,7 @@ public static class Probes
             var acc = Vector3.Zero;
             float weight = 0f;
             // A 32-tap grid per axis: the mean of a 128² sheet to within a byte, at a thousandth of
-            // the per-texel cost, and a probe reads dozens of sheets.
+            // the per-texel cost. A probe reads dozens of sheets.
             for (int y = 0; y < 32; y++)
             {
                 for (int x = 0; x < 32; x++)
@@ -2593,9 +2593,10 @@ public static class Probes
         public string Line = "";
     }
 
-    /// <summary>One material a debris mesh draws with: its sheet, the triangulated area that sheet
-    /// covers on the mesh, the area-weighted mean baked vertex colour, the sheet's mean texel, and
-    /// the sRGB the fullbright world shader lands on from those. All three colours are 0-1.</summary>
+    /// <summary>One material a debris mesh draws with: its sheet, and the triangulated area that
+    /// sheet covers on the mesh. The row carries the area-weighted mean baked vertex colour, the
+    /// sheet's mean texel, and the sRGB the fullbright world shader lands on from those. All three
+    /// colours are 0-1.</summary>
     public sealed class DebrisShadingMaterial
     {
         public string Texture = "";
@@ -2643,8 +2644,9 @@ public static class Probes
                 : string.Join("; ", Materials.Select(m => m.Text)));
     }
 
-    /// <summary>The <c>--dump-debris</c> report: every mesh node under the matched destructibles with
-    /// its shading inputs, and which of them the death launched.</summary>
+    /// <summary>The debris-shading report the <c>debris-shading</c> suite reads: every mesh node
+    /// under the matched destructibles with its shading inputs, and which of them the death
+    /// launched.</summary>
     public sealed class DebrisShadingResult
     {
         public readonly List<DebrisShadingRow> Rows = new();
@@ -2810,8 +2812,8 @@ public static class Probes
     }
 
     /// <summary>One angle of the tuner's rig: the speed it settles at with the nose held there.
-    /// <see cref="Converged"/> is false when the rig hit its iteration cap still gaining speed, in
-    /// which case the speed is a lower bound and not the equilibrium.</summary>
+    /// A false <see cref="Converged"/> means the rig hit its iteration cap still gaining speed.
+    /// The speed is then a lower bound and not the equilibrium.</summary>
     public sealed class TunerEnvelopeRow
     {
         public string Name = "";

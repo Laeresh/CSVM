@@ -14,9 +14,17 @@ namespace CSVM.Testing;
 internal static class AiSuites
 {
     // The margin the sound manager leaves over a definition's audible distance before it silences
-    // the voice (docs/formats/sounds.md). Held here as the decode's own figure rather than read off
-    // WeaponSoundCue, so a build that culls an aircraft's gun loop at the RANGE pair itself fails.
+    // the voice (docs/formats/sounds.md). Held here as the decode's own figure rather than read
+    // off WeaponSoundCue. A build that culls an aircraft's gun loop at the RANGE pair then fails.
     private const float VoiceCullMargin = 1.1f;
+
+    // Where the ai-voice suite moves its listener for the death cry: past 1.1 x every voice def's
+    // audible radius. The positional law would hold the line at its floor there.
+    private const float FarEarMetres = 5000f;
+
+    // The airframe the turret decode uses as its own worked example of a thirdp mount, so the
+    // WA-Turret leg has a gunner to build without a chapter world's emplacements.
+    private const string TurretCarrier = "player_fbrand";
 
     [Suite("flight-roster-transaction",
         "FlightRoster owns human and AI assembly as atomic transactions: a late second-human " +
@@ -680,9 +688,9 @@ internal static class AiSuites
                 world.Runtime.SetTargetActive(aagun.Site, true);
                 ctx.Check(aagun.Alive, $"…and alive once its site is switched on");
 
-                // ⚠ Sync the space before anything here casts. The site stood hidden when the
-                // world joined the tree, so its colliders were disabled, and re-enabling one only
-                // QUEUES the broadphase rebuild the next physics step would run.
+                // ⚠ Sync the space before anything here casts. The site is hidden when the world
+                // joins the tree, so its colliders are disabled. Re-enabling one only QUEUES the
+                // broadphase rebuild the next physics step would run.
                 ctx.SyncPhysics();
                 var mountSpace = ctx.Host.GetWorld3D().DirectSpaceState;
                 var mountShapes = aagun.Site.FindChildren("*", "StaticBody3D", true, false)
@@ -822,16 +830,16 @@ internal static class AiSuites
                     mp1[0].Visible = true;
                     ctx.SyncPhysics();
                     int ZepShots() => mp1Rings.Sum(t => t.ShotsFired);
-                    // ⚠ Park the bait OUTSIDE the hull's own envelope, which is 657 m long and 136 m
-                    // deep: a plane placed a couple of hundred metres off one ring is inside it, and
-                    // every ring then reads its own hull as cover and holds fire.
+                    // ⚠ Park the bait OUTSIDE the hull's own envelope, which is 657 m long and 136
+                    // m deep. A plane placed a couple of hundred metres off one ring is inside it.
+                    // Every ring then reads its own hull as cover and holds fire.
                     var envelope = new Aabb(mp1[0].GlobalPosition, Vector3.Zero);
                     foreach (var mesh in mp1[0].FindChildren("*", "MeshInstance3D", true, false).OfType<MeshInstance3D>())
                     {
                         envelope = envelope.Merge(mesh.GlobalTransform * mesh.GetAabb());
                     }
                     // Offset along the hull as well as under it: a rig looking straight up has no
-                    // heading, and the look basis refuses a target colinear with up.
+                    // heading. The look basis refuses a target colinear with up.
                     var baitAt = envelope.GetCenter()
                         + new Vector3(0f, -((envelope.Size.Y * 0.5f) + 100f), 150f);
                     zepBait = BuildRig(ctx.PlaneName, 0, baitAt, envelope.GetCenter());
@@ -853,9 +861,9 @@ internal static class AiSuites
                 // a 1.0-1.8 s fire rate can hold one shot before a 3-5 s bored window outlasts the leg.
                 aagun.Def.BoredMin = 0f;
                 aagun.Def.BoredMax = 0f;
-                // The leg below only exercises the own-rig exclusion while the mount is solid, so
-                // the UNEXCLUDED cast has to read blocked first: that is the gun's own rig in the
-                // way, the thing the exclusion removes and nothing else does.
+                // The leg below only exercises the own-rig exclusion while the mount is solid. The
+                // UNEXCLUDED cast has to read blocked first. That is the gun's own rig in the way,
+                // the thing the exclusion removes and nothing else does.
                 var sightSpace = ctx.Host.GetWorld3D().DirectSpaceState;
                 ctx.Check(TurretController.WorldBlocksEmplacementLine(
                         sightSpace, aagun.WorldPosition, targetPos + Vector3.Up * 0.2f),
@@ -2041,12 +2049,14 @@ internal static class AiSuites
         "hit sets the evade flag and enters an evasive maneuver, a pursuer pointed elsewhere " +
         "clears the flag and releases the reaction while a nose-on one holds it and chains a " +
         "second program, an ordered evade carries no flag and leaves the next hit its roll " +
-        "while a hit with nothing eligible sets and holds one, a failed " +
+        "while a hit with nothing eligible sets and holds one, a hit pilot whose dare devil test " +
+        "passes dives into a danger-zone ribbon 300 m off its nose rather than flying the " +
+        "engagement out, a failed " +
         "sixth-sense roll stuns (gunner silent) and recovers after stun_recovery_interval, " +
         "the avoid-crash override climbs out on a blocked probe and releases, and the D15 " +
         "rubber-band assist: a chasing human fallen behind puts the machine in lay off " +
         "(throttle eased, fire held) and --no-assist's switch never enters it under the " +
-        "same geometry, every transition in the engine's own mode vocabulary")]
+        "same geometry, every transition in the original's own mode vocabulary")]
     internal static void AiModes(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -2110,8 +2120,8 @@ internal static class AiSuites
                 ActivationRange = skills.MinAiActiveDist,
                 AttackRange = stats.AiAttackRange,
                 ReturnRange = stats.AiReturnRange,
-                // Scripted per phase at the power law's two limits: a zero exponent passes every
-                // roll whatever the bite, an infinite one fails every roll that bites at all.
+                // Scripted per phase at the power law's two limits. A zero exponent passes every
+                // roll whatever the bite, and an infinite one fails every roll that bites at all.
                 SteadyHandExponent = 0f,
                 SixthSenseChance = 1f,
                 StunRecoveryIntervalS = skills.At("stun_recovery_interval", 5),
@@ -2119,8 +2129,8 @@ internal static class AiSuites
                 Library = library,
                 ProbeBlocked = (_, _) => terrainBlocked ? "suite/terrain" : null,
                 // The injector cull is injected too, open: these phases are about the mode
-                // vocabulary, and culling the library's nitro entry would only change which
-                // maneuver the seeded draw flies. The cull itself is covered by nitro-ai-edges.
+                // vocabulary. Culling the library's nitro entry would only change which maneuver
+                // the seeded draw flies. The cull itself is covered by nitro-ai-edges.
                 NitroUsable = () => true,
             };
             var transitions = new List<string>();
@@ -2232,8 +2242,8 @@ internal static class AiSuites
             ctx.Check(!machine.Evading && machine.Executor == null,
                 $"the pursuer turning away ends the chain mode={AiModeMachine.NameOf(machine.Mode)}");
 
-            // --- an ORDERED evade, no damage: the flag belongs to the damage routine alone, so a
-            // scripted entry into the mode leaves it clear and the next hit still gets its roll.
+            // --- an ORDERED evade, no damage: the flag belongs to the damage routine alone. A
+            // scripted entry into the mode leaves it clear, and the next hit still gets its roll.
             machine.Enter(AiMode.Evade, "test: ordered, no damage");
             ctx.Check(machine.Mode == AiMode.Evade && !machine.Evading,
                 $"an ordered evade sets no flag evading={machine.Evading}");
@@ -2251,9 +2261,9 @@ internal static class AiSuites
             ctx.Check(!machine.Evading,
                 $"…which the turned-away pursuer then clears mode={AiModeMachine.NameOf(machine.Mode)}");
 
-            // --- the damage arm's own entry into the marked engagement: with nothing in the
-            // library eligible the hit sets flag and mode together, and a nose-on pursuer holds
-            // both while the pilot flies its engagement, taking no second roll.
+            // --- the damage arm's own entry into the marked engagement. With nothing in the
+            // library eligible, the hit sets flag and mode together. A nose-on pursuer holds both
+            // while the pilot flies its engagement, taking no second roll.
             var savedLibrary = machine.Library;
             machine.Library = null;
             target.PlaceHeld(targetPos, ai.WorldPosition);
@@ -2280,8 +2290,8 @@ internal static class AiSuites
                 $"the pursuer turning away releases it mode={AiModeMachine.NameOf(machine.Mode)}");
             machine.Library = savedLibrary;
 
-            // Fly the engagement out before the phases that read the aeroplane's own flight: a
-            // program ends in whatever attitude its last step left, and a descending entry is not
+            // Fly the engagement out before the phases that read the aeroplane's own flight. A
+            // program ends in whatever attitude its last step left. A descending entry is not
             // what the climb-out below means to measure.
             Step(180);
 
@@ -2370,6 +2380,33 @@ internal static class AiSuites
             ctx.Check(machine.Mode == AiMode.Pursue,
                 $"a non-pursuing target releases lay off after the hold mode={AiModeMachine.NameOf(machine.Mode)}");
 
+            // --- the proximity pick (FUN_004210e0's unforced arm), last, since the dive takes
+            // the aeroplane off its engagement. The roll is pinned to a certainty, so what is
+            // measured is the gate and the entry rather than the dice.
+            var lead = ai.NoseDirection.Normalized();
+            var zoneEntry = ai.WorldPosition + (lead * 300f);
+            pilot.DangerZones = DangerZoneRibbons.Of(new[]
+            {
+                DangerZoneRibbon.FromPolyline("dzpath1", 1, new[]
+                {
+                    zoneEntry, zoneEntry + (lead * 400f), zoneEntry + (lead * 800f),
+                }),
+            });
+            machine.DaredevilChance = 1f;
+            machine.Library = null;
+            target.PlaceHeld(targetPos, ai.WorldPosition);   // nose-on, so the fresh flag stands
+            machine.SteadyHandExponent = float.PositiveInfinity;
+            ai.TakeProjectileHit(gun, ai.WorldPosition + new Vector3(2f, 0f, 0f), "fuselage", 0);
+            machine.SteadyHandExponent = 0f;
+            ctx.Check(machine.Mode == AiMode.Evade && machine.Evading,
+                $"a hit pilot with nothing eligible flies its engagement marked mode={AiModeMachine.NameOf(machine.Mode)}");
+            Step(1);
+            ctx.Check(machine.Mode == AiMode.ApproachingDangerZone
+                && pilot.ZoneRun?.Ribbon.Name == "dzpath1",
+                $"…and a passed dare devil test dives into the zone off its nose instead mode={AiModeMachine.NameOf(machine.Mode)} run={pilot.ZoneRun?.Ribbon.Name ?? "none"}");
+            ctx.Check(transitions.Contains("evade>approaching danger zone"),
+                $"…logged in the engine's own vocabulary transitions=[{string.Join(" ", transitions)}]");
+
             ctx.Note($"transitions: {string.Join(" ", transitions)}");
         }
         finally
@@ -2383,16 +2420,14 @@ internal static class AiSuites
 
     // The voice runtime against the real soundsh archive, reproducing the session's own lifecycle in
     // order: resolve the chain, prewarm that one pilot's clips, retire the loader as WorldSession.Build
-    // does, then prove a resolved line still plays while a def never prewarmed returns null. The
-    // source-following one-shot is asserted by position only; audibility is the user's half
-    // (docs/verification.md). Closes with the measured cost of prewarming the entire voice bank, the
+    // does, then prove a resolved line still speaks on the radio while a def never prewarmed returns
+    // null. Audibility is the user's half (docs/verification.md). Closes with the measured cost of prewarming the entire voice bank, the
     // number that justifies the roster-subset choice.
     [Suite("voice-runtime",
         "the B8 combat-voice runtime: the accent→voice.zrd→pilot-clip chain resolves against " +
         "the real archive, a roster-subset prewarm makes the lines playable after the loader " +
-        "is retired (a never-prewarmed def stays null), a source-following one-shot tracks a " +
-        "moving node and survives its source's death, and the full-set prewarm cost is " +
-        "measured and reported")]
+        "is retired (a never-prewarmed def stays null) and a resolved line speaks on the mission " +
+        "radio channel from that cache, and the full-set prewarm cost is measured and reported")]
     internal static void VoiceRuntime(TestContext ctx)
     {
         ctx.RequireData(ctx.ZrdrPath, $"shared zrdr");
@@ -2404,7 +2439,7 @@ internal static class AiSuites
 
         using var archive = new SoundArchive(ctx.SoundsPath);
         WorldSounds? sounds = null;
-        Node3D? mover = null;
+        MissionRadio? radio = null;
         try
         {
             sounds = new WorldSounds(defs, groups)
@@ -2432,30 +2467,19 @@ internal static class AiSuites
             ctx.Check(bearing != null && sounds.HasStream(bearing),
                 $"the bearing clip's stream survived the loader retirement name={bearing}");
 
-            // A prewarmed line plays from a MOVING source and tracks it across ticks.
-            mover = new Node3D();
-            ctx.Host.AddChild(mover);
-            mover.GlobalPosition = new Vector3(100f, 200f, 300f);
-            string? resolved = sounds.PlayOneShot(playable!, mover, new System.Random(2));
+            // A prewarmed line speaks on the radio after the archive closed, reading the same cache.
+            radio = new MissionRadio(defs, groups, sounds.StreamFor);
+            ctx.Host.AddChild(radio);
+            string? resolved = radio.Speak(playable!, new System.Random(2));
             ctx.Check(resolved != null && resolved.StartsWith("snd_id2_DI-LowDmg"),
-                $"a prewarmed voice line plays after the archive closed resolved={resolved}");
-            var player = LastOneShotPlayer(sounds);
-            ctx.Check(player != null && player.GlobalPosition.DistanceTo(mover.GlobalPosition) < 0.01f,
-                $"the one-shot starts at its source pos={player?.GlobalPosition}");
-            mover.GlobalPosition = new Vector3(-450f, 60f, 1200f);
-            sounds.Tick();
-            ctx.Check(player!.GlobalPosition.DistanceTo(mover.GlobalPosition) < 0.01f,
-                $"the one-shot follows the moved source pos={player.GlobalPosition}");
-            var lastPos = mover.GlobalPosition;
-            mover.Free();
-            mover = null;
-            sounds.Tick();
-            ctx.Check(GodotObject.IsInstanceValid(player) && player.GlobalPosition.DistanceTo(lastPos) < 0.01f,
-                $"a freed source leaves the line finishing at its last position");
+                $"a prewarmed voice line queues after the archive closed resolved={resolved}");
+            radio.Tick(0.1f);
+            ctx.Check(radio.LinesStarted == 1 && radio.OnAir == resolved,
+                $"…and starts on the channel's next step on-air={radio.OnAir}");
 
-            // The positional overload is untouched, and a def never prewarmed is null once the
-            // loader is gone: the exact failure the prewarm exists to prevent.
-            ctx.Check(sounds.PlayOneShot("snd_id26_TA-SucShk-A", Vector3.Zero, new System.Random(3)) == null,
+            // A def never prewarmed is null once the loader is gone: the exact failure the
+            // prewarm exists to prevent.
+            ctx.Check(radio.Speak("snd_id26_TA-SucShk-A", new System.Random(3)) == null,
                 $"an unprewarmed pilot's line stays null after the archive closed");
 
             // The cost of prewarm-everything, measured on a fresh archive so nothing is cached:
@@ -2482,7 +2506,7 @@ internal static class AiSuites
         }
         finally
         {
-            mover?.Free();
+            radio?.Free();
             if (sounds != null)
             {
                 sounds.FlushOneShots();
@@ -2496,14 +2520,36 @@ internal static class AiSuites
     // The talker chance is pinned to 1 so the assertions are about the dispatch rules, not the
     // dice; audibility itself is the user's half (docs/verification.md, "What this project
     // cannot verify itself"), what IS assertable is the dispatch decision, the resolved clip
-    // name and the PlayOneShot call.
+    // name, and the flat radio player it speaks on.
     [Suite("ai-voice",
         "the E16 trigger dispatch on a live AI plane against the real archive: a projectile "
-        + "hit crossing a DI threshold plays exactly ONE source-following line the pilot's "
-        + "accent owns (the 15 s slot cooldown swallowing the follow-up hits) on the Voice bus, "
-        + "the same clip replayed through the default bus lands on Effects instead, and the kill "
-        + "plays the dead pilot's own death cry through the force flag while an unforced "
-        + "dispatch on the same dead speaker stays silent")]
+        + "hit crossing a DI threshold plays exactly ONE line the pilot's accent owns (the 15 s "
+        + "slot cooldown swallowing the follow-up hits) flat on the mission radio's Voice-bus "
+        + "AudioStreamPlayer with no positional player built, a second line from that same "
+        + "speaker while its own line is on air is refused as already talking though another "
+        + "speaker on the busy channel is not, and the kill plays the dead "
+        + "pilot's own death cry through the force flag at its authored level with the listener "
+        + "5 km away, while an unforced dispatch on the same dead speaker stays silent, and the "
+        + "three gloats run the decoded polarity off the same kill report: a friendly kill is "
+        + "silent, the killer speaks 22 over a victim on the player's team and 23 over one that "
+        + "is not, and the player's own kill addresses 24 to a player rig that resolves no voice "
+        + "set, silently, and broadcasts 16 to the player's flight, and an evade "
+        + "episode's end speaks 27 only once the flag has cleared: an end with the pursuer still "
+        + "on the tail, a flag clearing outside the evade modes and a step between the two evade "
+        + "modes all say nothing, while a shaken end taunts 27, and the ally distress (28) answers a round from the player "
+        + "alone and only on a teammate, spoken by the aircraft it struck; and a carried "
+        + "gunner raises WA-Turret once per acquisition episode, not at all while it holds the "
+        + "nearer AI, once when the player is the acquired target with a clear sight line, with "
+        + "the flight rather than the gun speaking id 0 on the player's team, nothing further "
+        + "while it keeps tracking, and again after it has lost and re-acquired the player; and the attack pair "
+        + "survives a mission start: a commit inside the 2 s mute window speaks nothing yet is "
+        + "not lost, the pursuer's 14 and the flight's bearing call-out arriving as the window "
+        + "lifts, a pursue re-entry from avoid crash in the same engagement stays silent, and a "
+        + "fresh engagement past the 15 s slot cooldown speaks the pair again; and the same raise "
+        + "addresses the taunt pair to the pursuer off its own nose against the human it holds: "
+        + "inside the nose cone taunts 26, on its own tail taunts 25, abeam taunts neither though "
+        + "the raise ran, and a pursuer in its own evade reaction taunts nothing nose-on; and a "
+        + "Danger Zone the player has flown broadcasts 15 to that player's own flight")]
     internal static void AiVoice(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -2528,8 +2574,12 @@ internal static class AiSuites
         var textures = new TextureArchive(texturesPath);
         using var archive = new SoundArchive(ctx.SoundsPath);
         WorldSounds? sounds = null;
+        MissionRadio? radio = null;
         Session.AiVoiceRuntime? runtime = null;
+        Session.AiVoiceRuntime? attack = null;
         FlightController? ai = null;
+        ProjectilePool? turretPool = null;
+        var gloatRigs = new List<FlightController>();
         try
         {
             // The session lifecycle: prewarm accent 12's pilot (VO id 2, the full clip set),
@@ -2542,7 +2592,9 @@ internal static class AiSuites
             sounds.Prewarm(voice.PrewarmNames(new[] { 12 }));
             sounds.Loader = null;
 
-            runtime = new Session.AiVoiceRuntime(voice, sounds, new System.Random(5));
+            radio = new MissionRadio(defs, groups, sounds.StreamFor);
+            ctx.Host.AddChild(radio);
+            runtime = new Session.AiVoiceRuntime(voice, sounds, radio, new System.Random(5));
             ctx.Host.AddChild(runtime);
 
             var aiModel = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
@@ -2581,9 +2633,15 @@ internal static class AiSuites
             ai.Inert = false;
             ctx.Check(speaker.Alive, $"…and activation puts it back");
 
-            var played = new List<(int Trigger, string Clip)>();
-            runtime.LinePlayed += (_, trigger, clip) => played.Add((trigger, clip));
+            var played = new List<(string Tag, int Trigger, string Clip)>();
+            runtime.LinePlayed += (tag, trigger, clip) => played.Add((tag, trigger, clip));
             runtime.Step(3f); // past the decoded 2 s mute window
+
+            // The listener starts beside the speaker and is later moved past every voice def's
+            // audible radius. A line that moved with distance would show it.
+            var ear = ai.WorldPosition + new Vector3(0f, 0f, 20f);
+            sounds.SetListeners(() => new[] { ear });
+            int oneShotsBefore = sounds.OneShotsStarted;
 
             // --- DI: hits through the pool's own entry point until the summary crosses 70 %.
             // The hits WALK the four zones (a single zone's exhausted pool floors the summary
@@ -2604,22 +2662,38 @@ internal static class AiSuites
                 $"the sweep stopped inside the DI band health={fraction * 100f:0}%");
             ctx.Check(played.Count == 1 && played[0].Clip.StartsWith("snd_id2_DI-"),
                 $"crossing the threshold played exactly one DI line of the pilot's own played=[{string.Join(", ", played)}]");
-            var oneShot = LastOneShotPlayer(sounds);
-            ctx.Check(oneShot != null && oneShot.GlobalPosition.DistanceTo(ai.WorldPosition) < 1f,
-                $"…as a source-following one-shot at the aircraft pos={oneShot?.GlobalPosition}");
-            ctx.Check(oneShot != null && oneShot.Bus.ToString() == AudioBuses.Voice,
-                $"…on the Voice bus, not with the destruction one-shots actual={oneShot?.Bus}");
+            radio.Tick(0.1f);
+            var radioPlayer = RadioPlayer(radio);
+            ctx.Check(radio.OnAir == played[0].Clip && radioPlayer is { Playing: true },
+                $"…speaking on the radio channel on-air={radio.OnAir} playing={radioPlayer?.Playing}");
+            ctx.Check(radioPlayer != null && radioPlayer.Bus.ToString() == AudioBuses.Voice,
+                $"…on the Voice bus actual={radioPlayer?.Bus}");
+            ctx.Check(sounds.OneShotsStarted == oneShotsBefore,
+                $"…and no line built a positional player: no AudioStreamPlayer3D one-shot started ({sounds.OneShotsStarted - oneShotsBefore})");
+            float nearDb = radioPlayer?.VolumeDb ?? float.NaN;
+            ctx.Check(Mathf.IsEqualApprox(nearDb, FlatDb(defs, played[0].Clip)),
+                $"…at its def's authored level beside the speaker db={nearDb:0.00} want={FlatDb(defs, played[0].Clip):0.00}");
 
-            // The Voice argument must not survive the call it was passed on: the SAME clip replayed
-            // with the default argument has to come back on Effects, or a destruction sound handed
-            // a player that once carried a callout would speak an explosion through the voice mix.
-            int startedBefore = sounds.OneShotsStarted;
-            string? replay = sounds.PlayOneShot(played[0].Clip, ai.WorldPosition, new System.Random(7));
-            var defaultPlayer = LastOneShotPlayer(sounds);
-            ctx.Check(replay != null && sounds.OneShotsStarted == startedBefore + 1,
-                $"the same clip replays through the default bus resolved={replay}");
-            ctx.Check(defaultPlayer != null && defaultPlayer.Bus.ToString() == AudioBuses.Effects,
-                $"…and lands on Effects, so the bus is decided per play actual={defaultPlayer?.Bus}");
+            // The gate's already-talking test, answered from the radio's own line: while this
+            // speaker's line is on air a second line from it is refused before the cooldown is
+            // even read, and a second pilot sharing the channel is not held by it.
+            int spokenTrigger = played[0].Trigger;
+            int otherSpeaker = ai.PlayerIndex + 1;
+            runtime.Dispatcher.Register(otherSpeaker, speaker.VoId, ai.Team,
+                isPlayer: false, talkerChance: 1f, constitutionChance: 1f);
+            float armedBefore = speaker.NextAllowedAt(spokenTrigger);
+            var over = runtime.Dispatcher.Dispatch(ai.PlayerIndex, spokenTrigger, runtime.Now);
+            ctx.Check(over.Clip == null && over.Outcome == "already talking",
+                $"a second line from the speaker whose own line is on air is refused outcome={over.Outcome}");
+            ctx.Check(Mathf.IsEqualApprox(speaker.NextAllowedAt(spokenTrigger), armedBefore),
+                $"…and the refusal re-arms nothing, the played line's own cooldown still stands");
+            var other = runtime.Dispatcher.Dispatch(otherSpeaker, spokenTrigger, runtime.Now);
+            ctx.Check(other.Clip != null,
+                $"…while another speaker on the same busy channel still speaks clip={other.Clip}");
+            PumpRadio(radio);
+            var freed = runtime.Dispatcher.Dispatch(ai.PlayerIndex, spokenTrigger, runtime.Now);
+            ctx.Check(freed.Outcome == "slot cooling",
+                $"…and once the line's length has elapsed the same speaker reaches the slot cooldown instead outcome={freed.Outcome}");
 
             // Follow-up hits in the same tier stay silent: the slot cooldown swallowed them
             // (armed by the PLAY here; the failed-roll arming is the unit suite's,
@@ -2634,14 +2708,28 @@ internal static class AiSuites
                     $"a follow-up hit in the same tier is silent under the 15 s cooldown");
             }
 
+            // The channel is drained first, or a still-speaking DI line would hold the cry past its
+            // 0.8 s QUEUE tolerance and drop it.
+            PumpRadio(radio);
+
             // --- the kill: the dying pilot's own cry, dispatched with force (the speaker is
-            // already dead when it plays).
+            // already dead when it plays), heard from 5 km, far past any voice def's audible radius.
+            ear = ai.WorldPosition + new Vector3(0f, 0f, FarEarMetres);
             ai.DebugForceCrash();
             ctx.Check(!speaker.Alive, $"the Downed report marked the speaker dead");
             ctx.Check(played.Count >= before + 1 && played[^1].Clip.StartsWith("snd_id2_DE-"),
                 $"…and the death cry played THROUGH the dead state (force) clip={(played.Count > 0 ? played[^1].Clip : "none")}");
             ctx.Check(played[^1].Trigger == AiVoiceDispatcher.DeEnemy,
                 $"…as id 21 (DE): no team model puts an AI on the player's team, documented");
+            radio.Tick(0.1f);
+            sounds.Tick();
+            string cry = played[^1].Clip;
+            float farDb = radioPlayer?.VolumeDb ?? float.NaN;
+            float lawDb = SoundFalloff.GainDb(FarEarMetres, defs[cry].RangeMin, defs[cry].RangeMax, defs[cry].Volume);
+            ctx.Check(radio.OnAir == cry && Mathf.IsEqualApprox(farDb, FlatDb(defs, cry)),
+                $"…and speaks at its authored level with the listener {FarEarMetres:0} m away on-air={radio.OnAir} db={farDb:0.00} want={FlatDb(defs, cry):0.00} (the distance law would give {lawDb:0.00})");
+            ctx.Check(sounds.OneShotsStarted == oneShotsBefore,
+                $"…still with no positional player built ({sounds.OneShotsStarted - oneShotsBefore})");
 
             // The force flag is the death cry's alone: an ordinary dispatch on the same dead
             // speaker is gated out before anything rolls.
@@ -2650,12 +2738,415 @@ internal static class AiSuites
             ctx.Check(unforced.Clip == null && unforced.Outcome == "speaker dead",
                 $"an unforced dispatch on the dead speaker is refused outcome={unforced.Outcome}");
 
-            ctx.Note($"lines: {string.Join(", ", played)}");
+            // --- the gloats (22-24), off the same kill report, with the decoded polarity. One
+            // victim per case, since a death is reported once, and every victim registers
+            // accentless, so the only line a kill can produce here is its killer's.
+            PumpRadio(radio);
+            FlightController Rig(int index, int team, bool human)
+            {
+                var rigModel = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+                var rig = new FlightController
+                {
+                    PlaneModel = rigModel,
+                    Collider = PlaneCollider.Build(rigModel),
+                    Damage = new PlaneDamage(stats.DestroyableParts),
+                    PlayerIndex = index,
+                    Team = team,
+                    IsHumanPiloted = human,
+                    Pilot = human ? null : new AiPilot(),
+                    UseKeyboard = false,
+                    PadDevices = System.Array.Empty<int>(),
+                    AllowPause = false,
+                };
+                rig.AddChild(rigModel);
+                var at = new Vector3(0f, 500f, 0f);
+                rig.Setup(new FlightModel(stats), null, new CamParams(), at, at + Vector3.Forward);
+                rig.Name = $"rig{index}";
+                ctx.Host.AddChild(rig);
+                gloatRigs.Add(rig);
+                return rig;
+            }
+
+            // Two mission teams hostile to each other and to the player's, so each case turns on
+            // the predicate alone: the killer flies for one of them and the player's flight for
+            // AimAssist.PlayerTeam.
+            const int enemyTeam = 2;
+            const int thirdTeam = 3;
+            var killer = Rig(FlightRoster.ShooterIdBase + 1, enemyTeam, human: false);
+            var wingman = Rig(FlightRoster.ShooterIdBase + 2, AimAssist.PlayerTeam, human: false);
+            var pilotRig = Rig(0, AimAssist.PlayerTeam, human: true);
+            runtime.RegisterAi(killer, accentId: 12, talkerChance: 1f, constitutionChance: 1f);
+            runtime.RegisterAi(wingman, accentId: 12, talkerChance: 1f, constitutionChance: 1f);
+            runtime.RegisterPlayer(pilotRig);
+
+            // The first predicate, over shooter and victim: a kill inside one team picks no gloat.
+            int gloatsBefore = played.Count;
+            var comrade = Rig(FlightRoster.ShooterIdBase + 3, enemyTeam, human: false);
+            runtime.RegisterAi(comrade, accentId: null, talkerChance: 0f, constitutionChance: 0f);
+            comrade.DebugForceCrash(killer.PlayerIndex);
+            ctx.Check(played.Count == gloatsBefore,
+                $"a friendly kill is silent: no gloat is chosen at all lines={played.Count - gloatsBefore}");
+            PumpRadio(radio);
+
+            // The second predicate, over victim and the player's team: hostile picks 23.
+            var stranger = Rig(FlightRoster.ShooterIdBase + 4, thirdTeam, human: false);
+            runtime.RegisterAi(stranger, accentId: null, talkerChance: 0f, constitutionChance: 0f);
+            stranger.DebugForceCrash(killer.PlayerIndex);
+            ctx.Check(played.Count == gloatsBefore + 1
+                && played[^1].Trigger == AiVoiceDispatcher.GlEnemyDwn
+                && played[^1].Tag == killer.Name && played[^1].Clip.StartsWith("snd_id2_GL-EnemyDwn"),
+                $"downing a plane on neither the killer's nor the player's team gloats as #23, spoken by the KILLER last={(played.Count > gloatsBefore ? played[^1].ToString() : "none")}");
+            PumpRadio(radio);
+
+            // …and friendly picks 22, the same killer, a different slot, so the 15 s cooldown the
+            // line above armed cannot be what decides this one.
+            var friendly = Rig(FlightRoster.ShooterIdBase + 5, AimAssist.PlayerTeam, human: false);
+            runtime.RegisterAi(friendly, accentId: null, talkerChance: 0f, constitutionChance: 0f);
+            friendly.DebugForceCrash(killer.PlayerIndex);
+            ctx.Check(played.Count == gloatsBefore + 2
+                && played[^1].Trigger == AiVoiceDispatcher.GlAllyDwn
+                && played[^1].Tag == killer.Name && played[^1].Clip.StartsWith("snd_id2_GL-AllyDwn"),
+                $"downing a plane on the player's team gloats as #22 instead last={played[^1]}");
+            PumpRadio(radio);
+
+            // The exception: the local player's own kill addresses 24 to the player's own rig,
+            // silent here because that rig resolved no voice set, and broadcasts 16 either way,
+            // elected onto the wingman rather than onto the killer's side or onto the player.
+            var quarry = Rig(FlightRoster.ShooterIdBase + 6, enemyTeam, human: false);
+            runtime.RegisterAi(quarry, accentId: null, talkerChance: 0f, constitutionChance: 0f);
+            quarry.DebugForceCrash(pilotRig.PlayerIndex);
+            ctx.Check(played.Count == gloatsBefore + 3
+                && played[^1].Trigger == AiVoiceDispatcher.PrEnemyDwn
+                && played[^1].Tag == wingman.Name && played[^1].Clip.StartsWith("snd_id2_PR-EnemyDwn"),
+                $"the player's own kill broadcasts #16 on the player's team, elected onto the wingman last={played[^1]}");
+            ctx.Check(!played.Exists(line => line.Trigger == AiVoiceDispatcher.GlPlyrDwn),
+                $"…and #24, addressed to a player rig that resolves no voice set, stays silent");
+
+            // --- the shake taunt (27): the evade episode's end speaks it only once the flag has
+            // cleared, which is where the original raises it. The machine is driven directly, the
+            // transitions being what the runtime watches.
+            PumpRadio(radio);
+            var evader = Rig(FlightRoster.ShooterIdBase + 7, enemyTeam, human: false);
+            var machine = new AiModeMachine(new System.Random(11));
+            evader.Pilot!.Machine = machine;
+            runtime.RegisterAi(evader, accentId: 12, talkerChance: 1f, constitutionChance: 1f);
+            var evaderPos = evader.WorldPosition;
+            var pursuerPos = evaderPos + new Vector3(0f, 0f, 300f);
+            var onTail = (evaderPos - pursuerPos).Normalized();  // the pursuer's nose on the evader
+            int tauntsBefore = played.Count;
+
+            // The episode: an ordered chase takes the anchor and the chase deadline, then a hit
+            // whose bite covers the whole pool fails the steady-hand roll outright, and with no
+            // maneuver library the reaction is the flag alone.
+            machine.Enter(AiMode.Pursue, "ordered");
+            machine.NotifyDamage(1e6f, 1e6f, 100f, 100f);
+            ctx.Check(machine.Mode == AiMode.Evade && machine.Evading,
+                $"the failed steady-hand roll opened an evade episode mode={AiModeMachine.NameOf(machine.Mode)} flag={machine.Evading}");
+
+            // A step inside the episode: an ordered program with nothing left to fly hands
+            // straight back to evade, and neither transition is an outcome.
+            machine.Enter(AiMode.EvasiveManeuver, "ordered");
+            machine.Update(evaderPos, Vector3.Forward, pursuerPos, AiMode.Pursue, dt: 0.1f,
+                targetNose: onTail);
+            ctx.Check(machine.Mode == AiMode.Evade && machine.Evading
+                && played.Count == tauntsBefore,
+                $"a step between the two evade modes is the same episode and taunts nothing lines={played.Count - tauntsBefore}");
+
+            // The end with the pursuer still inside the tail cone: the chase's own dwell reverts
+            // the task while the flag stands, and nothing is spoken. That geometry belongs to the
+            // pursuer's own taunt below, not to the aircraft leaving the episode.
+            machine.Update(evaderPos, Vector3.Forward, pursuerPos, AiMode.Pursue,
+                dt: machine.AttackDwellS + 1f, targetNose: onTail);
+            ctx.Check(machine.Evading && machine.Mode is not (AiMode.Evade or AiMode.EvasiveManeuver)
+                && played.Count == tauntsBefore,
+                $"an evade ending with the pursuer still on the tail taunts nothing mode={AiModeMachine.NameOf(machine.Mode)} lines={played.Count - tauntsBefore}");
+            PumpRadio(radio);
+
+            // The flag clearing with the aircraft already off the two evade modes: nothing is
+            // spoken, and the next hit opens a fresh episode.
+            machine.Update(evaderPos, Vector3.Forward, pursuerPos, AiMode.Pursue, dt: 0.1f,
+                targetNose: -onTail);
+            ctx.Check(!machine.Evading && played.Count == tauntsBefore,
+                $"the flag clearing outside an evade mode taunts nothing lines={played.Count - tauntsBefore}");
+
+            // …and the shaken end, the same aircraft: the pursuer's nose falls away while the
+            // evade stands, the reaction completes, and that is what 27 answers.
+            machine.NotifyDamage(1e6f, 1e6f, 100f, 100f);
+            machine.Update(evaderPos, Vector3.Forward, pursuerPos, AiMode.Pursue, dt: 0.1f,
+                targetNose: -onTail);
+            ctx.Check(played.Count == tauntsBefore + 1
+                && played[^1].Trigger == AiVoiceDispatcher.TaSucShk
+                && played[^1].Tag == evader.Name && played[^1].Clip.StartsWith("snd_id2_TA-SucShk"),
+                $"…while one ending with the pursuer shaken taunts #27 last={(played.Count > tauntsBefore ? played[^1].ToString() : "none")}");
+
+            // --- 28 (DS-Ally), the decoded friendly-fire arm: a round from the local player on a
+            // friendly, spoken by the aircraft it STRUCK. The two silent cases run first, so the
+            // 15 s cooldown the played line arms cannot be what silenced them.
+            PumpRadio(radio);
+            var mate = Rig(FlightRoster.ShooterIdBase + 8, AimAssist.PlayerTeam, human: false);
+            runtime.RegisterAi(mate, accentId: null, talkerChance: 0f, constitutionChance: 0f);
+            int allyBefore = played.Count;
+            var grazed = wingman.WorldPosition + new Vector3(0f, 0f, 2f);
+            wingman.TakeProjectileHit(gun, grazed, "fuselage", mate.PlayerIndex, damageScale: 0.02f);
+            ctx.Check(played.Count == allyBefore,
+                $"an AI round on a teammate draws nothing from this site lines={played.Count - allyBefore}");
+            killer.TakeProjectileHit(gun, killer.WorldPosition + new Vector3(0f, 0f, 2f), "fuselage",
+                pilotRig.PlayerIndex, damageScale: 0.02f);
+            ctx.Check(played.Count == allyBefore,
+                $"…and the player's round on an ENEMY draws nothing from it either lines={played.Count - allyBefore}");
+            wingman.TakeProjectileHit(gun, grazed, "fuselage", pilotRig.PlayerIndex, damageScale: 0.02f);
+            ctx.Check(played.Count == allyBefore + 1
+                && played[^1].Trigger == AiVoiceDispatcher.DsAlly
+                && played[^1].Tag == wingman.Name && played[^1].Clip.StartsWith("snd_id2_DS-Ally"),
+                $"…while the player's round on a TEAMMATE draws #28 from the struck aircraft last={(played.Count > allyBefore ? played[^1].ToString() : "none")}");
+
+            // --- WA-Turret (id 0): the gunner's own acquisition, warned once per episode and
+            // spoken by the flight rather than by the gun. A carried gunner and a live pool: an
+            // emplacement wants a world this suite has none of, and the pool is the vehicle list.
+            PumpRadio(radio);
+            var turretDefs = TurretDefs.Load(ctx.ZrdrPath);
+            var carrierStats = PlaneStats.Load(ctx.ZrdrPath, TurretCarrier);
+            var live = turretPool = new ProjectilePool(textures, null, null);
+            ctx.Host.AddChild(live);
+            runtime.WatchTurrets(live);
+
+            FlightController PoolRig(int index, int team, bool human, string plane,
+                PlaneStats rigStats, Vector3 at)
+            {
+                var poolModel = new PlaneBuilder(planesGamez, textures).Build(plane);
+                var rig = new FlightController
+                {
+                    PlaneModel = poolModel,
+                    Collider = PlaneCollider.Build(poolModel),
+                    Damage = new PlaneDamage(rigStats.DestroyableParts),
+                    PlayerIndex = index,
+                    Team = team,
+                    IsHumanPiloted = human,
+                    Pilot = human ? null : new AiPilot(),
+                    Projectiles = live,
+                    UseKeyboard = false,
+                    PadDevices = System.Array.Empty<int>(),
+                    AllowPause = false,
+                };
+                rig.AddChild(poolModel);
+                rig.Setup(new FlightModel(rigStats), null, new CamParams(), at, at + Vector3.Forward);
+                rig.Name = $"gunrig{index}";
+                ctx.Host.AddChild(rig);
+                rig.PlaceHeld(at, at + Vector3.Forward); // parked: no phantom spawn velocity
+                gloatRigs.Add(rig);
+                return rig;
+            }
+
+            // 20 km off the rigs above, so the gunner's detection field holds these three alone.
+            var gunAt = new Vector3(20000f, 500f, 0f);
+            var carrier = PoolRig(FlightRoster.ShooterIdBase + 10, enemyTeam, human: false,
+                TurretCarrier, carrierStats, gunAt);
+            var carried = TurretController.BuildCarried(turretDefs, carrierStats,
+                carrier.PlaneModel!, weapons, carrier, live);
+            ctx.Check(carried.Length > 0,
+                $"the {TurretCarrier}'s carried gunner builds count={carried.Length}");
+            if (carried.Length == 0)
+                return;
+            var gunner = carried[0];
+            float reach = gunner.Def.DetectionRange;
+            int acquisitions = 0;
+            FlightController? warnedAbout = null;
+            live.TurretAcquiredPlayer += (_, about) =>
+            {
+                acquisitions++;
+                warnedAbout = about;
+            };
+
+            // The AI decoy sits nearer than the player, so the gunner's own picker holds it: an
+            // acquisition against an AI raises nothing however close it is.
+            var decoy = PoolRig(FlightRoster.ShooterIdBase + 11, AimAssist.PlayerTeam, human: false,
+                ctx.PlaneName, stats, gunAt + new Vector3(reach * 0.3f, 0f, 0f));
+            var flown = PoolRig(FlightRoster.ShooterIdBase + 12, AimAssist.PlayerTeam, human: true,
+                ctx.PlaneName, stats, gunAt + new Vector3(reach * 0.6f, 0f, 0f));
+            var outOfReach = gunAt + new Vector3(reach * 4f, 0f, 0f);
+
+            // Only the gunner is stepped: an unstepped pool moves no round, so nothing this leg
+            // fires can damage a rig and add a line of its own.
+            void StepGun(int frames)
+            {
+                for (int i = 0; i < frames; i++)
+                {
+                    gunner.SimStep(1f / 60f);
+                }
+            }
+
+            int turretBefore = played.Count;
+            StepGun(60);
+            ctx.Check(ReferenceEquals(gunner.TargetSource, decoy) && acquisitions == 0
+                && played.Count == turretBefore,
+                $"a gunner holding the nearer AI raises nothing target={(gunner.TargetSource as FlightController)?.Name} events={acquisitions}");
+
+            decoy.PlaceHeld(outOfReach, gunAt);
+            StepGun(60);
+            ctx.Check(acquisitions == 1 && ReferenceEquals(warnedAbout, flown),
+                $"the player alone in the field raises the site once events={acquisitions} about={warnedAbout?.Name.ToString() ?? "none"}");
+            ctx.Check(played.Count == turretBefore + 1
+                && played[^1].Trigger == AiVoiceDispatcher.WaTurret
+                && played[^1].Tag == wingman.Name
+                && played[^1].Clip.StartsWith("snd_id2_WA-Turret"),
+                $"…and the flight, not the gun, broadcasts WA-Turret on the player's team last={(played.Count > turretBefore ? played[^1].ToString() : "none")}");
+
+            StepGun(300);
+            ctx.Check(acquisitions == 1,
+                $"holding the same player raises nothing further: one event per episode, not per tick events={acquisitions}");
+
+            // The re-arm, both halves: losing the target and acquiring it again. The line itself
+            // stays silent, the slot's own 15 s cooldown, which is why the EVENT is counted here.
+            flown.PlaceHeld(outOfReach, gunAt);
+            StepGun(60);
+            ctx.Check(gunner.TargetSource == null && acquisitions == 1,
+                $"the gunner loses the player with nothing new raised gate={gunner.Gate} events={acquisitions}");
+            flown.PlaceHeld(gunAt + new Vector3(reach * 0.6f, 0f, 0f), gunAt);
+            StepGun(60);
+            ctx.Check(acquisitions == 2,
+                $"…and re-acquiring it warns the flight again events={acquisitions}");
+
+
+            // --- the attack pair (14 and 1-12), raised off the quarry rather than off a mode
+            // edge, so a commit inside the 2 s mute window costs nothing. The second runtime
+            // carries its own clock, the only way to put a transition inside that window here.
+            PumpRadio(radio);
+            attack = new Session.AiVoiceRuntime(voice, sounds, radio, new System.Random(9));
+            ctx.Host.AddChild(attack);
+            var calls = new List<(string Tag, int Trigger, string Clip)>();
+            attack.LinePlayed += (tag, trigger, clip) => calls.Add((tag, trigger, clip));
+            var chased = Rig(FlightRoster.ShooterIdBase + 13, AimAssist.PlayerTeam, human: true);
+            var flightMate = Rig(FlightRoster.ShooterIdBase + 14, AimAssist.PlayerTeam, human: false);
+            var ace = Rig(FlightRoster.ShooterIdBase + 15, enemyTeam, human: false);
+            var aceModes = new AiModeMachine(new System.Random(12));
+            ace.Pilot!.Machine = aceModes;
+            ace.Pilot.Gunner = new AiGunner(new RandomNumberGenerator { Seed = 3 }) { Target = chased };
+            // Abeam the human, nose parallel: between the two taunt cones, so this leg measures
+            // the attack pair alone and the taunt geometry gets its own rigs below.
+            var abeamAt = chased.WorldPosition + new Vector3(300f, 0f, 0f);
+            ace.PlaceHeld(abeamAt, abeamAt + Vector3.Forward);
+            attack.RegisterPlayer(chased);
+            // ⚠ The flight mate is registered at 2: the bearing ids halve the talker chance, so a
+            // chance of 1 would make every assertion below a coin flip on the dice rather than on
+            // the raise. The halving itself is pinned by AiVoiceDispatcherTests.
+            attack.RegisterAi(flightMate, accentId: 12, talkerChance: 2f, constitutionChance: 1f);
+            attack.RegisterAi(ace, accentId: 12, talkerChance: 1f, constitutionChance: 1f);
+
+            // The mission start: the ace takes the human on the first frame, well inside the
+            // window, and nothing may speak yet.
+            attack.Step(0.1f);
+            aceModes.Enter(AiMode.Pursue, "ordered");
+            ctx.Check(calls.Count == 0,
+                $"a commit inside the 2 s mute window speaks nothing lines={calls.Count}");
+
+            // …and the pair is not lost with it: the first step past the window raises both, the
+            // pursuer's own #14 and one bearing call-out elected from the player's flight.
+            attack.Step(2f);
+            ctx.Check(calls.Count == 2 && calls[0].Trigger == AiVoiceDispatcher.WaAttack
+                && calls[0].Tag == ace.Name && calls[0].Clip.StartsWith("snd_id2_WA-Attack"),
+                $"…and the pursuer speaks #14 as the window lifts lines=[{string.Join(", ", calls)}]");
+            ctx.Check(calls.Count == 2 && calls[1].Trigger is >= 1 and <= 12
+                && calls[1].Tag == flightMate.Name && calls[1].Clip.StartsWith("snd_id2_WA-Enemy-"),
+                $"…with the bearing call-out broadcast onto the player's flight last={(calls.Count > 1 ? calls[^1].ToString() : "none")}");
+            PumpRadio(radio);
+
+            // A pursue re-entry from avoid crash is the same engagement, and near terrain it
+            // happens every few seconds: the raise interval must hold it silent.
+            aceModes.Enter(AiMode.AvoidCrash, "ordered");
+            aceModes.Enter(AiMode.Pursue, "ordered");
+            attack.Step(0.1f);
+            ctx.Check(calls.Count == 2,
+                $"a pursue re-entry from avoid crash in the same engagement speaks nothing lines={calls.Count - 2}");
+
+            // A fresh engagement speaks again: losing the human re-arms the raise, and the 15 s
+            // slot cooldown has run out by the time the ace takes it back.
+            ace.Pilot.Gunner.Target = null;
+            attack.Step(AiVoiceDispatcher.SlotCooldownS);
+            ctx.Check(calls.Count == 2, $"…and nothing is raised while it holds no human lines={calls.Count - 2}");
+            ace.Pilot.Gunner.Target = chased;
+            attack.Step(0.1f);
+            ctx.Check(calls.Count == 4 && calls[2].Trigger == AiVoiceDispatcher.WaAttack
+                && calls[2].Tag == ace.Name && calls[3].Trigger is >= 1 and <= 12,
+                $"…while a fresh engagement past the cooldown raises the pair again lines=[{string.Join(", ", calls)}]");
+
+            // --- the taunt pair (25/26), the decoded geometry: the same raise, addressed to the
+            // pursuer, off its own NOSE against the human it holds. One pursuer per case, so the
+            // lines are read by aircraft rather than by position in the list.
+            PumpRadio(radio);
+            var chasedAt = chased.WorldPosition;
+            var asternAt = chasedAt + new Vector3(0f, 0f, 300f);
+            FlightController Pursuer(int index, Vector3 at, Vector3 lookAt)
+            {
+                var rig = Rig(index, enemyTeam, human: false);
+                rig.Pilot!.Gunner = new AiGunner(new RandomNumberGenerator { Seed = 4 })
+                {
+                    Target = chased,
+                };
+                attack.RegisterAi(rig, accentId: 12, talkerChance: 1f, constitutionChance: 1f);
+                rig.PlaceHeld(at, lookAt);
+                return rig;
+            }
+
+            var noseOn = Pursuer(FlightRoster.ShooterIdBase + 16, asternAt, chasedAt);
+            var tailed = Pursuer(FlightRoster.ShooterIdBase + 17, asternAt,
+                asternAt + (asternAt - chasedAt));
+            var abeam = Pursuer(FlightRoster.ShooterIdBase + 18, abeamAt, abeamAt + Vector3.Forward);
+
+            // …and the decoded refusal: a pursuer in its own evade reaction taunts nothing however
+            // its nose sits. ⚠ The episode opens BEFORE registration, or the commit's own raise
+            // would speak the taunt on the way into the pursue this aircraft evades out of.
+            var busy = Rig(FlightRoster.ShooterIdBase + 19, enemyTeam, human: false);
+            var busyModes = new AiModeMachine(new System.Random(14));
+            busy.Pilot!.Machine = busyModes;
+            busy.Pilot.Gunner = new AiGunner(new RandomNumberGenerator { Seed = 5 }) { Target = chased };
+            busy.PlaceHeld(asternAt, chasedAt);
+            busyModes.Enter(AiMode.Pursue, "ordered");
+            busyModes.NotifyDamage(1e6f, 1e6f, 100f, 100f);
+            attack.RegisterAi(busy, accentId: 12, talkerChance: 1f, constitutionChance: 1f);
+
+            attack.Step(0.1f);
+            bool Taunted(FlightController who, int trigger) => calls.Exists(line =>
+                line.Tag == who.Name && line.Trigger == trigger);
+            ctx.Check(Taunted(noseOn, AiVoiceDispatcher.TaFailShk)
+                && calls.Exists(line => line.Tag == noseOn.Name
+                    && line.Clip.StartsWith("snd_id2_TA-FailShk")),
+                $"a pursuer holding the human inside its own nose cone taunts #26 lines=[{string.Join(", ", calls)}]");
+            ctx.Check(Taunted(tailed, AiVoiceDispatcher.TaFailTail)
+                && calls.Exists(line => line.Tag == tailed.Name
+                    && line.Clip.StartsWith("snd_id2_TA-FailTail")),
+                $"…while one with the human on its OWN tail taunts #25 instead");
+            ctx.Check(!Taunted(abeam, AiVoiceDispatcher.TaFailShk)
+                && !Taunted(abeam, AiVoiceDispatcher.TaFailTail)
+                && Taunted(abeam, AiVoiceDispatcher.WaAttack),
+                $"…and one holding it abeam, between the two cones, taunts neither though the raise ran");
+            ctx.Check(busyModes.Evading && !Taunted(busy, AiVoiceDispatcher.TaFailShk)
+                && !Taunted(busy, AiVoiceDispatcher.TaFailTail),
+                $"…and a pursuer in its own evade reaction taunts nothing nose-on flag={busyModes.Evading}");
+
+            // --- the Danger Zone praise (15): the player flying a zone out is the original's
+            // own site. The line is broadcast, so one of the player's flight speaks it.
+            PumpRadio(radio);
+            int zoneBefore = calls.Count;
+            attack.DangerZoneCompleted(chased);
+            ctx.Check(calls.Count == zoneBefore + 1
+                && calls[^1].Trigger == AiVoiceDispatcher.PrDngrZn
+                && calls[^1].Tag == flightMate.Name
+                && calls[^1].Clip.StartsWith("snd_id2_PR-D"),
+                $"a Danger Zone the player completed is praised by its flight, not by the player last={(calls.Count > zoneBefore ? calls[^1].ToString() : "none")}");
+
+            ctx.Note($"lines: {string.Join(", ", played)}; attack pair: {string.Join(", ", calls)}");
         }
         finally
         {
+            foreach (var rig in gloatRigs)
+            {
+                rig.Free();
+            }
             ai?.Free();
+            attack?.Free();
             runtime?.Free();
+            turretPool?.Free();
+            radio?.Free();
             if (sounds != null)
             {
                 sounds.FlushOneShots();
@@ -2828,12 +3319,15 @@ internal static class AiSuites
         "every firing AI aircraft carries its OWN positional weapon voice (D31): each of two "
         + "spawned planes builds one gun-loop emitter and one dry-cue emitter on 3D players, both "
         + "riding that aircraft's world position rather than the origin, the listener or each "
-        + "other, both taking the definition's own RANGE pair as their distance model rather than "
-        + "the reader default, neither rig carrying the own-ship FlightAudio, every emitter on the "
+        + "other, both levelled by the decoded RANGE law rather than by an engine attenuation "
+        + "model, so neither player carries one or a MaxDistance of its own, neither rig carrying "
+        + "the own-ship FlightAudio, every emitter on the "
         + "Effects bus at its source asset's own pitch with Doppler tracking off (CAP-09 measured "
-        + "none in the original), and the loop silencing past 1.1 times the cue's own authored "
+        + "none in the original), the loop silencing past 1.1 times the cue's own authored "
         + "audible distance, the margin the sound manager leaves over the RANGE pair, while a burst "
-        + "just outside that distance is still heard, with a `sound` log transition either way")]
+        + "just outside that distance is still heard, with a `sound` log transition either way, and "
+        + "at the distance its own pair calls audible the loop standing at the level SoundFalloff "
+        + "gives that pair, where the old inverse-distance mapping's MaxDistance fade was zero")]
     internal static void AiWeaponEmitters(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
@@ -2841,6 +3335,10 @@ internal static class AiSuites
         ctx.RequireData(ctx.SoundsPath, $"sound archive (soundsh)");
         string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
         ctx.RequireData(texturesPath, $"C1 textures");
+
+        // Every cull and level below is the cue's own authored one. This suite reads at 1, not at
+        // the reach the session ships.
+        using var authored = TestContext.AtAuthoredSoundRadii();
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var soundDefs = SoundDefs.Load(ctx.ZrdrPath);
@@ -2910,7 +3408,7 @@ internal static class AiSuites
                 Utils.Log.Configure("sound:debug");
                 using var sink = Utils.Log.PushConsoleSink(line =>
                 {
-                    if (line.Contains("ai weapons ") && (line.Contains(" culled ") || line.Contains(" audible ")))
+                    if (line.Contains("ai weapons ") && (line.Contains(" culled ") || line.Contains(" sounding ")))
                         culls.Add(line);
                 });
 
@@ -2939,10 +3437,10 @@ internal static class AiSuites
                     && here[0].Position.DistanceTo(ears[0]) > 20f
                     && there[0].Position.DistanceTo(ears[0]) > 20f,
                     $"…and neither sits on the listener, which is what a voice pinned to the ear would do");
-                ctx.Check(culls.Count(l => l.Contains(" audible ")) == 2,
-                    $"both voices logged the transition into earshot (got {culls.Count(l => l.Contains(" audible "))})");
+                ctx.Check(culls.Count(l => l.Contains(" sounding ")) == 2,
+                    $"both voices logged the transition into earshot (got {culls.Count(l => l.Contains(" sounding "))})");
 
-                // The cull, driven from the listener rather than by moving the aeroplane: the two
+                // The cull, driven from the listener rather than by moving the aeroplane. The two
                 // ears below straddle the 1.1x, which is what separates this cull from one taken at
                 // the RANGE pair itself. Each ratio is measured after its step, the aeroplane flies.
                 float audible = here.Count > 0 ? here[0].RangeMax : 0f;
@@ -2959,6 +3457,19 @@ internal static class AiSuites
                 float justOut = a.GlobalPosition.DistanceTo(ears[0]) / Mathf.Max(audible, 1f);
                 ctx.Check(weaponA.LoopSounding && justOut > 1f && justOut < VoiceCullMargin,
                     $"…and {justOut:0.00}x it is heard again, inside that cull");
+
+                // The level inside the band, which no cull verdict can see. At the distance this
+                // caliber calls audible the decoded law is thirty down, where a MaxDistance fade
+                // would be zero. The decibel of slack is the step the aeroplane flies.
+                ears[0] = a.GlobalPosition + new Vector3(audible, 0f, 0f);
+                a.SimStep(dt);
+                float atEdge = a.GlobalPosition.DistanceTo(ears[0]);
+                var loopDef = soundDefs[here[0].Name];
+                float wantEdge = SoundFalloff.GainDb(atEdge, loopDef.RangeMin, loopDef.RangeMax,
+                    loopDef.Volume);
+                ctx.Check(weaponA.LoopSounding && wantEdge > SoundFalloff.FloorDb
+                    && Mathf.Abs(weaponA.LoopGainDb - wantEdge) < 1f,
+                    $"and from {atEdge:0} m it plays at {weaponA.LoopGainDb:0.0} dB, the decoded law's own level for {here[0].Name}'s RANGE [{loopDef.RangeMin:0}, {loopDef.RangeMax:0}] ({wantEdge:0.0} dB), well above the {SoundFalloff.FloorDb:0} dB floor");
                 ctx.Check(culls.Count(l => l.Contains(" culled ")) >= 1,
                     $"the `sound` log carries the cull transition, the pairing INSTR-45 asks for (lines={culls.Count})");
                 // ⚠ Snapshot before noting: ctx.Note echoes each line to the console, which the sink
@@ -3149,18 +3660,31 @@ internal static class AiSuites
         }
     }
 
-    // The most recent one-shot player under a WorldSounds node.
-    internal static AudioStreamPlayer3D? LastOneShotPlayer(WorldSounds sounds)
+    // The radio's one player. Typed as the flat AudioStreamPlayer, so a channel rebuilt on a 3D
+    // player reads null here and fails the suites that use this.
+    internal static AudioStreamPlayer? RadioPlayer(MissionRadio radio)
     {
-        AudioStreamPlayer3D? last = null;
-        foreach (var child in sounds.GetChildren())
+        foreach (var child in radio.GetChildren())
         {
-            if (child is AudioStreamPlayer3D p)
+            if (child is AudioStreamPlayer p)
             {
-                last = p;
+                return p;
             }
         }
-        return last;
+        return null;
+    }
+
+    // The level MissionRadio plays a definition at: its authored VOLUME and nothing else.
+    internal static float FlatDb(IReadOnlyDictionary<string, SoundDef> defs, string name) =>
+        Mathf.LinearToDb(System.Math.Max(defs[name].Volume, 0.0001f));
+
+    // Steps the radio until its channel and queue are empty, at most a minute of clips.
+    internal static void PumpRadio(MissionRadio radio)
+    {
+        for (int i = 0; i < 600 && (radio.OnAir != null || radio.Pending > 0); i++)
+        {
+            radio.Tick(0.1f);
+        }
     }
 
     [Suite("ai-net-follow",
@@ -3492,6 +4016,9 @@ internal static class AiSuites
                 $"…and plays its source asset's own pitch, {player.PitchScale:0.000}");
             ctx.Check(player.Bus.ToString() == AudioBuses.Effects,
                 $"…on the {AudioBuses.Effects} bus, not Master (got {player.Bus})");
+            ctx.Check(player.AttenuationModel == AudioStreamPlayer3D.AttenuationModelEnum.Disabled
+                && !(player.MaxDistance > 0f),
+                $"…carrying no engine attenuation model ({player.AttenuationModel}) and no MaxDistance ({player.MaxDistance:0}), so the decoded law is the only curve on it");
         }
         ctx.Check(players == emitters.Count, $"{name}'s emitter roll-call matches the live players ({players})");
         ctx.Note($"{name}: {emitters.Count} emitter(s) at ({at.X:0},{at.Y:0},{at.Z:0}), {string.Join(", ", emitters.Select(e => $"{e.Name} audible {e.RangeMax:0} m"))}, loop cull {audio.LoopCull:0} m");

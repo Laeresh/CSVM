@@ -155,7 +155,8 @@ public sealed class WeatherState
                     SunlightScalar(z, "SUNLIGHT_DIFFUSE", DefaultDiffuse),
                     SunlightScalar(z, "SUNLIGHT_AMBIENT", DefaultAmbient),
                     ParseColor(z.List("SUNLIGHT_COLOR_DIFFUSE")) ?? Colors.White,
-                    ParseColor(z.List("SUNLIGHT_COLOR_AMBIENT")) ?? Colors.White);
+                    ParseColor(z.List("SUNLIGHT_COLOR_AMBIENT")) ?? Colors.White,
+                    SunlightScalar(z, "SUNLIGHT_BICOLORED", 0f) != 0f);
                 var zf = w._zones[zone];
                 // The fields, not the record: a composite ToString() would escape Log's invariant
                 // formatting. Sun bearing logged in DEGREES, as the file authors it.
@@ -284,6 +285,39 @@ public sealed class WeatherState
                 if (volume.Contains(cameraPosition))
                     return 3;
         return state;
+    }
+
+    /// <summary>The zone a drawn object earns from its own world-space vertical span, the original's
+    /// per-object half of the zone gate (<c>FUN_00489f60</c>). It is 1 wholly below the band's
+    /// midpoint, 2 wholly above it, -1 when it straddles the midpoint or the mission authors no
+    /// band. A -1 object is ungated, drawn at every camera state. The threshold is the MIDPOINT,
+    /// not the opaque core's edge the camera's own state flips at.
+    /// Decode: docs/formats/weather/atmosphere.md.</summary>
+    public int ObjectZone(float minY, float maxY)
+    {
+        if (!HasCloudBand)
+            return -1;
+        float centre = CloudBandCentre;
+        if (maxY < centre)
+            return 1;
+        return centre < minY ? 2 : -1;
+    }
+
+    /// <summary>The same verdict for an object whose world extent is <paramref name="span"/>, with
+    /// the original's own first arm ahead of the band. An object standing in an armed <c>fvol</c>
+    /// volume is zone 3 whatever its altitude, which keeps it drawn for a camera in that volume.
+    /// Precedence and inputs match <see cref="CameraWeatherState"/>.</summary>
+    public int ObjectZone(Aabb span, bool fogZoneArmed, IReadOnlyList<FogVolumeBox> volumes)
+    {
+        if (fogZoneArmed)
+        {
+            var centre = span.GetCenter();
+            foreach (var volume in volumes)
+                if (volume.Contains(centre))
+                    return 3;
+        }
+
+        return ObjectZone(span.Position.Y, span.Position.Y + span.Size.Y);
     }
 
     private static float WorldLightFactor(ZrdrDict zone)
@@ -424,11 +458,11 @@ public sealed class WeatherState
 
     /// <summary>One day/night zone's weather: distance fog, the world-brightness scalar with the
     /// uncollapsed SUNLIGHT pair and colours beside it, and the sun bearing, written together in
-    /// one call by the original's zone-apply (docs/formats/weather.md).
-    /// <see cref="SunOrientation"/> is Godot euler RADIANS, assignable straight to a
-    /// <see cref="DirectionalLight3D"/>'s <c>Rotation</c>. ⚠ It is the shading direction, not the
-    /// gamez <c>sun</c> billboard's position; the two disagree in C3 by 90 degrees.</summary>
-    public readonly record struct ZoneWeather(Color FogColor, float FogNear, float FogFar, float FogLow, float FogHigh, float ClipFar, float WorldLight, Vector3 SunOrientation, float SunDiffuse, float SunAmbient, Color SunColorDiffuse, Color SunColorAmbient);
+    /// one call by the original's zone-apply (docs/formats/weather.md). <see cref="SunOrientation"/>
+    /// is Godot euler RADIANS, a <see cref="DirectionalLight3D"/> <c>Rotation</c>. ⚠ It is the
+    /// shading direction, not the <c>sun</c> billboard's position (90 degrees apart in C3).
+    /// <see cref="SunBicolored"/> is <c>SUNLIGHT_BICOLORED</c> (docs/org/vertexLighting.md).</summary>
+    public readonly record struct ZoneWeather(Color FogColor, float FogNear, float FogFar, float FogLow, float FogHigh, float ClipFar, float WorldLight, Vector3 SunOrientation, float SunDiffuse, float SunAmbient, Color SunColorDiffuse, Color SunColorAmbient, bool SunBicolored = false);
 
     /// <summary>The mission's precipitation, from the bare-scalar block at the end of
     /// weather.json. Only some missions carry one; C1/C5 IA1 have none. Consumed by

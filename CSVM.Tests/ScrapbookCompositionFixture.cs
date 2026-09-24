@@ -10,13 +10,13 @@ public static class ScrapbookCompositionFixture
     /// <c>&lt;mission&gt;_1_1</c> (always visible, family <c>M</c>, title
     /// <c>IDS_TEST_TITLE</c>, body <c>IDS_TEST_BODY</c>) and family <c>M</c>'s three
     /// <c>LAYOUT.CSV</c> text boxes.</summary>
-    public static string WriteMinimalOpenableScrap(string root, int mission)
+    public static string WriteMinimalOpenableScrap(string root, int mission, string imageType = "PJ")
     {
         string dir = Path.Combine(root, "extracted", "rof", "ASSETS");
         Directory.CreateDirectory(dir);
         File.WriteAllText(Path.Combine(dir, "SCRAPBOOK.CSV"),
             "[SCRAPBOOK]\n" +
-            $"{mission}_1_1=0,0,SB_{mission:00}_01_test,PJ,10,20,1,0,0,5,\"0,0,0,0\",M,30,40,IDS_TEST_TITLE,IDS_TEST_BODY\n");
+            $"{mission}_1_1=0,0,SB_{mission:00}_01_test,{imageType},10,20,1,0,0,5,\"0,0,0,0\",M,30,40,IDS_TEST_TITLE,IDS_TEST_BODY\n");
         File.WriteAllText(Path.Combine(dir, "LAYOUT.CSV"),
             "SBZ_T_TITLEM    =T,!,60,25,0,525,85,0xff000000,0\n" +
             "SBZ_T_CAPTIONM  =T,!,0,0,0,700,550,0xff000000,0\n" +

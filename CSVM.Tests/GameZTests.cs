@@ -73,6 +73,16 @@ public class GameZTests
         Assert.True(gamez.FindByName("markers")!.IntersectSurface);
     }
 
+    [Fact]
+    public void CanModifyReadsTrueAndDefaultsFalseWhenFlagsAreAbsent()
+    {
+        // The crater carve's gate. No shipped node sets it, so an absent flags block must read as
+        // the shipped value, false, or every legacy-extracted node would accept a carve.
+        var gamez = Load();
+        Assert.True(gamez.FindByName("target")!.CanModify);
+        Assert.False(gamez.FindByName("markers")!.CanModify);
+    }
+
     private static GameZ Load() => GameZ.Load(TestData.Fixture("gamez-plane"));
 
     private static bool Approx(Basis a, Basis b) =>

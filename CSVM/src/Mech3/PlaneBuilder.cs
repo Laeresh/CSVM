@@ -70,17 +70,20 @@ public sealed class PlaneBuilder
         _painter = scheme != null ? painter : null;
         _patterns = patterns ?? PatternLibrary.Empty;
         _scene = new SceneBuilder(gamez, textures, blendTexture: IsPropBlurTexture, cullBackfaces: true,
-            textureSubstitute: (name, tex) => _painter?.Substitute(name, tex) ?? tex);
+            textureSubstitute: (name, tex) => _painter?.Substitute(name, tex) ?? tex, sunVertexLit: true);
         // ⚠ A builder of its own, never a field toggled on the airframe's: DepthBiasScale is baked
         // into cached meshes and materials, so one builder switching it mid-build would hand a
         // later caller a mesh biased for the wrong scale.
         if (cockpitInterior)
         {
-            _interiorScene = new SceneBuilder(gamez, textures, blendTexture: IsPropBlurTexture,
+            _interiorScene = new SceneBuilder(gamez, textures, blendTexture: IsInteriorBlendTexture,
                 cullBackfaces: true,
-                textureSubstitute: (name, tex) => _painter?.Substitute(name, tex) ?? tex)
+                textureSubstitute: (name, tex) => _painter?.Substitute(name, tex) ?? tex, sunVertexLit: true)
             {
                 DepthBiasScale = 1f / InteriorScale,
+                // The panel is a wall of soft-alpha decals over dark instruments, which is where
+                // the linear-space composite departs visibly from the original's (see the field).
+                GammaBlendAlpha = true,
             };
         }
         _spinningProps = spinningProps;
@@ -139,20 +142,29 @@ public sealed class PlaneBuilder
         _interiorScene?.TexturedMaterials ?? Array.Empty<(ShaderMaterial, string)>();
 
     /// <summary>A <c>cockpit1</c> node whose visibility is a STATE something else drives, so a
-    /// pristine cockpit must show none of it: <c>bulletN</c> (the <c>cockpit_bulletholes</c> defs)
-    /// and the two warning lamps, which <see cref="Flight.CockpitGauges"/> lights. Parking them
-    /// still holds: a build with no rig driving it must render pristine, and the labs are such
-    /// builds. ⚠ Everything else on the panel is always-drawn geometry that changes COLOUR, not
-    /// visibility.</summary>
+    /// pristine cockpit must show none of it: the <c>bulNx</c> hole quads the
+    /// <c>cockpit_bulletholes</c> defs light, and the two warning lamps, which
+    /// <see cref="Flight.CockpitGauges"/> lights. Parking them still holds: a build with no rig
+    /// driving it must render pristine, and the labs are such builds. ⚠ Everything else on the
+    /// panel is always-drawn geometry that changes COLOUR, not visibility.</summary>
     public static bool IsInteriorDrivenState(string name)
     {
         if (name.EndsWith("_on", StringComparison.OrdinalIgnoreCase))
             return true;
-        if (!name.StartsWith("bullet", StringComparison.OrdinalIgnoreCase)
-            || name.Length == "bullet".Length)
+        // ⚠ The QUADS, not the meshless bulletN groups above them: a parked group hides its own
+        // leaves for good, and reset_bulletholes switches exactly these off and nothing else.
+        if (!name.StartsWith("bul", StringComparison.OrdinalIgnoreCase))
             return false;
-        for (int i = "bullet".Length; i < name.Length; i++)
-            if (!char.IsDigit(name[i]))
+        int i = "bul".Length, digits = 0;
+        while (i < name.Length && char.IsDigit(name[i]))
+        {
+            i++;
+            digits++;
+        }
+        if (digits == 0 || i == name.Length)
+            return false;
+        for (; i < name.Length; i++)
+            if (!char.IsLetter(name[i]))
                 return false;
         return true;
     }
@@ -235,6 +247,15 @@ public sealed class PlaneBuilder
     // which a scissor cutout erases outright.
     private static bool IsPropBlurTexture(string tex) =>
         tex.Contains("blur", StringComparison.OrdinalIgnoreCase);
+
+    // ⚠ compasstxt and horizonindicator must alpha-blend in the interior, never scissor. The
+    // compass window fades the drum's ends under two quads sampling that atlas' black alpha ramp,
+    // and the artificial horizon's glass carries a golden haze inside its upper rim on a ramp that
+    // crosses the cutout threshold, so a scissor turns each into an opaque bar (docs/formats/hud.md).
+    private static bool IsInteriorBlendTexture(string tex) =>
+        IsPropBlurTexture(tex)
+        || tex.StartsWith("compasstxt", StringComparison.OrdinalIgnoreCase)
+        || tex.StartsWith("horizonindicator", StringComparison.OrdinalIgnoreCase);
 
     // ⚠ pdpN_h (the healthy twin, see IsHealthyPanel) must always render: skipping all of
     // player_damage_on amputates real airframe sections, not just the torn-skin state.

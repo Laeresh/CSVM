@@ -46,7 +46,7 @@ extracted menu artwork to be usable, and every other presentation is additive be
 ## Registration
 
 `PresentationRegistry` (`CSVM/src/UI/Menu/PresentationRegistry.cs`) holds one factory per
-`PresentationId`, a non-empty ordinal token that Options persist as written. `Launcher.BuildMenuHost`
+`PresentationId`, a non-empty ordinal token, the word `--presentation=` names. `Launcher.BuildMenuHost`
 (`CSVM/src/Session/Launcher.cs`) fills the registry once per process:
 
 ```
@@ -83,12 +83,14 @@ host with. `MenuHost.Shown` is what the owner reads for "the menu is up"; no pre
 consulted.
 
 A switch is three host calls in order: `Deactivate()` (ends the instance and calls
-`Features.DiscardTransient()`), `Select(...)` (re-resolves from the saved request), then
-`Show(TopLevel)`. `Launcher.ApplyOptions` performs them one frame after the
-`OptionsApplyExit` that asked for them, after saving every choice it carries.
+`Features.DiscardTransient()`), `Select(...)` (re-resolves from the two flags), then
+`Show(TopLevel)`. The shipped build never switches at run time, since the presentation is the command
+line's alone; the suites drive the three calls to hold the seam. `Launcher.ApplyOptions` makes the
+first and the last of them, one frame after the `OptionsApplyExit` that asked, after saving every
+choice it carries, so an apply restarts the same presentation at its top level.
 
-The frame in between belongs to no presentation: the host hides the outgoing one as it hands the
-exit to the sink, and the incoming one does not stand up until the apply runs. Nothing opaque is
+The frame in between belongs to no presentation: the host hides the outgoing instance as it hands the
+exit to the sink, and the fresh one does not stand up until the apply runs. Nothing opaque is
 over the persistent `WorldEnvironment` on that frame, so `Launcher.ShowMenu` blacks its background
 through `Utils/WorldBackdrop.cs` and a launch puts the sky back. A presentation still draws its own
 opaque backdrop: the black is what the switch's own frame, and the held frame after a quit, fall
@@ -147,14 +149,17 @@ The seats themselves are the `PlayerSetupFeature`'s. Once that feature is regist
 `MenuHost.Seats` is its live source list, `MenuHost.AddSeat` joins through it, and a join made
 anywhere shows up in every presentation's `Seats` read. The pad side (`MenuSeatDevices`,
 `CSVM/src/UI/MenuSeatDevices.cs`) is presentation-side and shared by both: seat 0's claimed pad,
-hotplug reconciliation, the Start-to-join scan (each presentation decides on which screens it is
-open), and `FlightPads`, the binding a launch carries per seat. Both presentations call
-`ClaimP1Pad` every frame while joining is closed (Built-in off its Plane screen, Original wherever
-`OriginalShell.JoiningOpen` is false), so the pad seat 0 steers with is seat 0's for good and can
-never join as a further seat. Original opens joining on the four screens that launch a flight
-(Free Flight, Dogfight, Instant Action and the campaign flight check) and, once a second seat has
-joined, draws a seat strip over every campaign board and over the Instant Action screen as an
-overlay; a solo campaign shows the authored board alone. That strip is Built-in's own chip row, the
+hotplug reconciliation, the gesture scans (each presentation decides on which screens they are
+open), and `FlightPads`, the binding a launch carries per seat. Built-in keeps the Start-to-join
+scan (`PrimeJoins`/`ScanJoins`) on the screens that launch a flight and calls `ClaimP1Pad` every
+frame off its Plane screen, so the pad seat 0 steers with is seat 0's for good and can never join
+as a further seat. Original signs pads on at one screen only, the join board (`OriginalJoinBoard`,
+behind the top level's JOIN BOARD door), through `PrimeBoard` and `ScanBoard`: A signs a pad onto
+the next open seat, B on a seated pad gives that seat back, and the captain's Start casts off.
+`OriginalShell.JoiningOpen` is true on the board alone, so the screens that launch a flight (Free
+Flight, Dogfight, Instant Action and the campaign flight check) only read the roster the board
+wrote. Once a second seat has signed on, Original draws a seat strip over every campaign board and
+over the Instant Action screen as an overlay; a solo campaign shows the authored board alone. That strip is Built-in's own chip row, the
 player tags alone in the top-right corner each in its seat's identity colour over a dark ground
 (`CSVM/src/UI/SeatStrip.cs` holds the shape the two share, and the Instant Action screen asks for
 the more opaque ground its light paper needs). The sortie screens keep their own strip lower down,
@@ -220,7 +225,8 @@ Controls page's key list and the scrapbook's contents page still draw a fixed ti
 `user://options.json`, independent of any profile: version-tolerant (an unknown version invalidates
 the file, an unknown value drops only that field, a field the file does not carry reads as never
 set), read as empty when missing or malformed, written atomically. Its word-valued fields are
-`menuPresentation` (`built-in`, `original`), `graphicsMode` (`original`, `enhanced`), `difficulty`
+`menuPresentation` (`built-in`, `original`; loaded and saved back so a file an older build wrote
+round-trips, and read by nothing), `graphicsMode` (`original`, `enhanced`), `difficulty`
 (`normal`, `hard`, `hardest`), `displayMode` (`windowed`, `borderless`, `fullscreen`) and `vsync`
 (`on`, `off`, `60`, `120`, `144`); a value outside a field's set reads as never set. Two fields are
 not words: `monitorIndex` is a screen index rendered decimal and `resolution` is a canonical
@@ -293,37 +299,41 @@ before any suite runs, so every driven Options screen opens on the shipped defau
 player last saved at the controls.
 
 `PresentationResolution` (`CSVM/src/Utils/PresentationResolution.cs`) fixes the precedence:
-`--force-builtin`, then `--presentation=<token>`, then the saved request, then Built-in. Availability
-is checked after the request is picked and never rewrites it, so what Options show back
-(`MenuHost.Requested`) is what the player asked for even when `MenuHost.Selected` is Built-in.
+`--force-builtin`, then `--presentation=<token>`, then Original. ⚠ No saved word takes part and no
+Options screen offers a presentation row: the two flags are the only doors to Built-in, and a
+`menuPresentation` an older build saved is left in the file unread. Availability is checked after
+the request is picked and never rewrites it, so the startup log's `requested=` (`MenuHost.Requested`)
+names what was asked for even when `MenuHost.Selected` fell back to Built-in.
 
-`MenuHost.Select(forceBuiltIn, cliOverride, savedRequest)` answers availability as registration plus
+`MenuHost.Select(forceBuiltIn, cliOverride)` answers availability as registration plus
 the owner's `Availability` delegate, a function from `PresentationId` to a reason or null. Built-in
 is never asked. `Launcher.OriginalAvailable` is the shipped delegate: it loads the decoded layout
 through `OriginalAvailability.Load`, which refuses a tree stamped behind
 `OriginalAssetManifest.StampSchema`, a missing or unreadable layout, a layout with no `[MainMenu]`,
 and any required file the manifest names as missing or unreadable, each with one reason the host
-appends to its fallback reason and logs. The delegate is asked on every process start and on every
-switch, so a tree repaired while the process is up is seen by the next switch; a return from flight
-never re-selects.
+appends to its fallback reason and logs. The delegate is asked on every `Select`, which the shipped
+build makes once per process start; an Options apply and a return from flight never re-select.
 
-Every presentation exposes Options, since a player must be able to leave a presentation from inside
-it. Built-in's is the Mode screen's Options row (`--menu=options`); Original's is the Game Options
+Every presentation exposes Options. Built-in's is the Mode screen's Options row (`--menu=options`); Original's is the Game Options
 page behind its Preferences page's first door (`--menu=game-options` under
 `--presentation=original`), with the graphics mode on the VIDEO page behind the third
 (`--menu=video`), the four volume levels on the AUDIO page behind the second
 (`--menu=audio`) and the keymap on the CONTROLS page behind the fourth (`--menu=controls`, and
 `--menu=keys` for the KEYS AND BUTTONS page behind its own door). Built-in's one screen carries
-every setting Original spreads over those pages bar the volume levels, its rows in its own stepper
-convention: the difficulty and the nearest-after-a-kill targeting switch, the presentation and the
-graphics mode, then the monitor, the window size, the display mode, the V-Sync choice and the render
-scale. The two presentations read those five through one rule
+every setting Original spreads over those pages, its rows in its own stepper
+convention: the difficulty, the opening view, the automatic head turn, the nearest-after-a-kill
+targeting switch and the rumble, the graphics mode, the monitor, the window size, the display mode,
+the V-Sync choice and the render scale, then the four volume levels. Built-in has no continuous
+control, so a level is a stepper moving by the AUDIO page slider's own keyboard step
+(`SliderControl.KeyStep`, five) and clamped at both ends; a step that moves nothing writes nothing,
+so a level never touched stays never set. Built-in has no live preview either: a level is heard
+once the apply writes it. Seventeen rows overflow the band, so the screen is a window of the
+Controls list's height with its position in the heading. The two presentations read the five
+display settings through one rule
 set (`CSVM/src/UI/Menu/DisplaySettingRows.cs`) over the same per-machine enumerations, so a saved
 value cannot read one way on the VIDEO page and another on Built-in's screen. Every option page reads the saved options from the store on entry and leaves
 through an `OptionsApplyExit` carrying every choice, whichever page it was sent from, so the store
-keeps its one writer. Both presentation choosers offer the
-two shipped tokens alone, so a third presentation extends them as well as the registry (checklist
-below); both graphics choosers cover `original` and `enhanced` and say in their description that
+keeps its one writer. Both graphics choosers cover `original` and `enhanced` and say in their description that
 the choice takes effect on the next start, since the mode is resolved once at launch and applying
 it rebuilds nothing; while the choice differs from the running mode the description names the
 running mode and says a restart is still owed, read off `GraphicsMode.Enhanced`. The
@@ -420,7 +430,7 @@ consumed by `Launcher.OnMenuExit`. The hierarchy is closed:
 | `LaunchExit` | chapter, one `MenuSeatChoice` per seat, `MenuMode`, an `InstantActionDef` for Instant Action, a `VersusRules` for Dogfight | derive the session spec from the CLI plus the payload, bind the seats' pads, build |
 | `CampaignMissionExit` | the profile name, the `cm_sequence` position, one `MenuSeatChoice` per joined human | the same, over the campaign's story position |
 | `QuitExit` | nothing | quit the process |
-| `OptionsApplyExit` | the requested `PresentationId`, the graphics-mode and difficulty words, the five display settings, the nearest-after-a-kill switch and the controller-rumble toggle | save every one of them, then the three-call switch one frame later |
+| `OptionsApplyExit` | the graphics-mode and difficulty words, the five display settings, the four volume levels, the nearest-after-a-kill switch, the controller-rumble toggle, the opening view and the automatic head turn | save every one of them, then one frame later end the presentation and show it again at its top level |
 
 `MenuSeatChoice` is the plane node, the pad devices the seat claimed, the fit and, for a saved
 custom plane, its resolved `CustomPlaneDef`; the consumer never reads a store. The features build
@@ -523,7 +533,10 @@ list open, `instant-action:weapon-loadout` on the pilot's loadout screen and
 `instant-action:lives[:<count>]` with the remake-only Lives box focused, at Unlimited without a
 count and at that count with one (the screen opens on one life, so neither reading is a state a
 plain shot of it can show), `instant-action-wrapup` and `instant-action-wrapup:failed` on the
-wrap-up page a flown mission's ending lands on, over a sample stunt run in each outcome (Built-in
+wrap-up page a flown mission's ending lands on, over a sample stunt run in each outcome, and
+`instant-action-wrapup:long` over a seventeen-zone run whose splits take three post-its,
+`instant-action-wrapup:photos` and `instant-action-wrapup:long-photos` over the same two runs with a
+stand-in photograph per zone (the long run's last one still on its way) (Built-in
 shows a board inside the flight instead and has no menu page to open), `options`,
 `game-options` and `game-options:open` with its Difficulty list standing open, `audio` and
 `audio:mixed` with its four sliders at four distinct levels, `video`,
@@ -532,7 +545,8 @@ standing open, the one leaf list whose sizes can outrun the window its row autho
 `controls`, `keys` and `keys:<category>` with the KEYS AND BUTTONS page standing on the tab of that
 name (spaces and case ignored), `keys:other` being the one category that outruns its list window and
 `keys:targeting` the eleven targeting actions, `credits` and
-`credits:about` with the About box standing over it, the
+`credits:about` with the About box standing over it, `join-board` on the crew manifest with nobody
+signed on and `join-board:<pads>` with that many entries posed as signed on, the
 `plane-*` hangar poses with `plane-construction:open` standing the airframe list open on a row the
 hub's figures preview, `plane-construction:overweight` on a build past its capacity,
 `plane-construction:defaults` with the airframe swap's three-button question standing over an
@@ -586,16 +600,15 @@ What it does inherit, and may rely on: the features and their operations, the se
 semantic commands, the audio service and its narration handoff, the store and the resolution rule,
 the four exits and the four destinations, the debug-join seating of device-less players, and the
 launcher's whole leg (spec derivation, pad binding, the build, the failed-build return, the
-frame-deferred switch).
+frame-deferred Options restart).
 
 ## The extension checklist
 
 In order. Each step names the file it touches and the test that proves it.
 
 1. **Mint the identity.** Add a `PresentationId` token beside `BuiltIn` and `Original`
-   (`CSVM/src/UI/Menu/PresentationId.cs`), and add the same string to `OptionsStore`'s accepted set
-   (`CSVM/src/Utils/OptionsStore.cs`), or the saved request will read as never set. Extend
-   `OptionsStoreTests` with the new token round-tripping.
+   (`CSVM/src/UI/Menu/PresentationId.cs`). `--presentation=<token>` reaches it with no further
+   wiring, and it is the only door: no Options screen offers a presentation.
 2. **Create the namespace.** `CSVM/src/UI/Menu/<Name>/`, namespace `CSVM.UI.Menu.<Name>`. Put every
    node, drawing type and screen graph there; put nothing in `CSVM.UI.Menu` that is not shared by
    every presentation. `MenuNamespaceDependencyTests` covers the new namespace with no edit.
@@ -615,10 +628,8 @@ In order. Each step names the file it touches and the test that proves it.
    it. Write a coverage test in `OriginalCoverageTests`' shape: every screen reached and left by
    every input family the presentation supports, every exit typed.
 6. **Expose Options.** A screen that reads the saved options from `OptionsStore`, offers every
-   registered token and every option the store carries, and leaves through `OptionsApplyExit`.
-   Generalise the two shipped presentation choosers from their two shipped tokens to the registered
-   set at the same time (Built-in's Options row and the table Original's Game Options page draws
-   from), so a switch into and out of the new presentation works from both of them.
+   option the store carries bar the unread `menuPresentation`, and leaves through
+   `OptionsApplyExit`.
 7. **Register it.** One `registry.Register(PresentationId.<Name>, () => new <Name>Presentation(...))`
    in `Launcher.BuildMenuHost`, reading `_menuAid` for the cold start's aid as the two shipped
    factories do.
@@ -637,14 +648,14 @@ In order. Each step names the file it touches and the test that proves it.
     add the presentation's cases to `menu-launch-return`, which drives every exit and every
     destination at the host's sink. Register each suite in `SuiteCatalog`.
 11. **Prove Built-in unchanged.** Shoot Built-in's aids before and after and compare decoded pixels;
-    the only Built-in change a new presentation may make is to the Options chooser.
+    a new presentation makes no Built-in change.
 12. **Document it.** Its `##` entries in `architecture/UI.md` with their index lines in
     `architecture.md`, its remake-only readings where they belong, `cli.md`'s aids, and this
     page's registration paragraph.
 13. **Run the landing gate.** The complete `.\RunTests.ps1`, then the at-the-controls pass: each
     mode to FLY and back through the pause board's Exit, a campaign mission to its end and back to
     the scrapbook, a real pad's join and walk, the sounds, the pointer, a cold start on an aid, a
-    switch into and out of the presentation from both Options screens.
+    cold start under `--presentation=<token>` and one without it.
 
 ## The verification layers
 
@@ -663,7 +674,7 @@ Five layers, each catching what the others cannot:
   fit; the manifest's recovery probes over a scratch copy of the data root, never the player's tree.
 - **Driven suites.** The `menu-*` suites and `campaign-layout-parity` through real hosts and real
   shells over the install's own layout, up to the host's sink. The harness runs a suite before any
-  session builds, so no suite flies a launch or performs the frame-deferred switch.
+  session builds, so no suite flies a launch or performs the frame-deferred Options restart.
 - **At the controls.** The launcher's leg and everything a suite cannot hear or hold: the flown
-  launch and its return in every mode and both presentations, the real switch both ways, a real
+  launch and its return in every mode and both presentations, a cold start under each flag, a real
   pad, the sounds, the pointer's rollover and pressed frames.

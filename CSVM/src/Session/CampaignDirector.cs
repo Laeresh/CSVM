@@ -106,7 +106,8 @@ public sealed class CampaignDirector
     private NetTrailerTargets? _netTrailers;
     private float _minAiActiveDist = 2000f;
     private CampaignDangerZones? _dangerZones;
-    private Func<Image?>? _playerPane;
+    private PaneRequest? _playerPane;
+    private Action? _dangerZoneSpoken;
     private DangerZoneRibbons? _ribbons;
     private Messages? _strings;
     private bool _cutsceneHold;
@@ -572,6 +573,7 @@ public sealed class CampaignDirector
         _beginSpectate = inputs.BeginSpectate;
         _projectiles = inputs.Projectiles;
         _playerPane = inputs.PlayerPane;
+        _dangerZoneSpoken = inputs.DangerZoneSpoken;
         _paths ??= inputs.Runtime is { } animRuntime
             ? new ScriptedPathVehicles(name => animRuntime.FindNodes(name))
             : null;
@@ -657,12 +659,14 @@ public sealed class CampaignDirector
     /// advance under the movie.</summary>
     internal void HoldForCutscene(bool held) => _cutsceneHold = held;
 
-    /// <summary>A danger zone the player completed: routed into the graph's awake objectives, then
-    /// into the scrapbook, where the zone's own objective number both records a mask bit and names
-    /// the photograph the pilot's pane is written to.</summary>
+    /// <summary>A danger zone the player completed, routed into the graph's awake objectives and
+    /// then into the scrapbook. The zone's own objective number both records a mask bit and names
+    /// the photograph the pilot's pane is written to. The flight's praise line rides the same
+    /// report, since the original raises it in the completion routine itself.</summary>
     internal void NotifyDangerZoneCompleted(string zone)
     {
         Graph?.NotifyDangerZoneCompleted(zone);
+        _dangerZoneSpoken?.Invoke();
         if (_dangerZones is not { } zones
             || !zones.TryZone(zone, out int objective, out bool snapshot)
             || objective < 0)
@@ -673,7 +677,7 @@ public sealed class CampaignDirector
         _zonesCompleted.Add(objective);
         if (snapshot && ProfileDirectory() is { } directory)
         {
-            CampaignSnapshot.Stage(directory, _mission.Ordinal, objective, _playerPane?.Invoke());
+            CampaignSnapshot.Stage(directory, _mission.Ordinal, objective, _playerPane);
         }
     }
 
@@ -977,7 +981,7 @@ public sealed class CampaignDirector
         if (_world.Player() is { } player && !ReferenceEquals(player, _damageWiredTo))
         {
             _damageWiredTo = player;
-            player.DamageApplied += _ => Music?.NoteCombat();
+            player.DamageApplied += (_, _) => Music?.NoteCombat();
         }
 
         if (Music.State == MusicState.Battle)
@@ -1367,10 +1371,10 @@ public sealed class CampaignDirector
         /// because the flight rigs are built after the world.</summary>
         public Func<FlightController?>? PlayerAircraft;
 
-        /// <summary>The scripted player's pane as an image, read fresh, for the Danger Zone
+        /// <summary>The scripted player's pane, requested on the crossing frame, for the Danger Zone
         /// photograph. Null leaves a completed zone scored but unphotographed, which is what every
         /// suite without a viewport gets.</summary>
-        public Func<Image?>? PlayerPane;
+        public PaneRequest? PlayerPane;
 
         /// <summary>The HUMAN FIELD: every joined player's aircraft, read fresh. Left unset by a
         /// solo sortie and by every suite that builds one rig, where the scripted player is the
@@ -1380,6 +1384,11 @@ public sealed class CampaignDirector
         /// <summary>Every aircraft in the session, read fresh: the music channel's proximity scan
         /// counts the ones near the player.</summary>
         public Func<IReadOnlyList<FlightController>>? Aircraft;
+
+        /// <summary>A Danger Zone the player has just completed, for the flight's praise line
+        /// (<c>AiVoiceRuntime.DangerZoneCompleted</c>, id 15). Unset in a session with no voice
+        /// runtime, which scores the zone and says nothing.</summary>
+        public Action? DangerZoneSpoken;
 
         /// <summary>Hand this human's pane to a spectator camera: it is out of the mission, but the
         /// mission is not over. The director decides WHEN and never builds the camera itself, which

@@ -6,18 +6,20 @@ using Godot;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// Packs the animated world's <c>LIGHT_STATE</c> point lights into a data texture the fullbright
-/// world shader reads as spill onto nearby geometry (the flare itself is separate gamez geometry
-/// <see cref="SceneBuilder"/> already draws). In original mode that spill is the only consumer:
-/// the world renders unshaded, so a real <see cref="OmniLight3D"/> would contribute nothing to it
+/// Packs the animated world's <c>LIGHT_STATE</c> point lights, and those of any runtime registered
+/// through <see cref="AddSource"/> (the world-effects bursts), into a data texture the world and
+/// aircraft shaders read as the original's per-vertex point-light term on `lighting: true` models
+/// (the flare itself is separate gamez geometry <see cref="SceneBuilder"/> already draws). In
+/// original mode that term is the only consumer: the world renders unshaded, so a real
+/// <see cref="OmniLight3D"/> would contribute nothing to it
 /// (docs/formats/gotchas.md's fullbright entry). Given a parent in enhanced mode, this also
 /// mirrors the same committed set onto a pool of real omnis, so the lit world and the aircraft
 /// pick up the light for real.
 /// </summary>
 public sealed class WorldLights : IDisposable
 {
-    /// <summary>Rows in the data texture, the most lights that can spill at once. The shader
-    /// loops over <c>csky_light_count</c> fragments-wide, so this is a real per-fragment cost
+    /// <summary>Rows in the data texture, the most lights that can reach a vertex at once. The
+    /// shader loops over <c>csky_light_count</c> per vertex, so this is a real per-vertex cost
     /// bound, not just an allocation. Measured peak in this install is well under it (logged
     /// at build as "world lights: … peak N"), so nearest-N never actually drops one.</summary>
     public const int MaxActive = 16;
@@ -38,9 +40,9 @@ public sealed class WorldLights : IDisposable
     private const int FloatsPerLight = 8;
 
     // TUNE: multiplies the committed colour's peak channel into OmniLight3D.LightEnergy. The
-    // shader spill has no calibrated energy scale to copy (it is an ad-hoc ALBEDO add, not a
-    // physical unit), so this is anchored at the controls against a beacon lighting the fuselage
-    // without blowing it out.
+    // shader's term is a factor on a vertex colour, not a physical unit with an energy scale to
+    // copy, so this is anchored at the controls against a beacon lighting the fuselage without
+    // blowing it out.
     private const float OmniEnergyScale = 4.0f;
 
     // TUNE: Godot's default omni falloff exponent, kept explicit rather than left implicit so a
@@ -88,10 +90,15 @@ public sealed class WorldLights : IDisposable
     private readonly List<Entry> _pending = new();
     private readonly byte[] _buffer = new byte[MaxActive * FloatsPerLight * sizeof(float)];
     private readonly List<Vector3> _committedPositions = new();
+    private readonly List<Color> _committedFactors = new();
     private readonly List<OmniLight3D> _omniPool = new();
     private readonly List<Burst> _bursts = new();
 
-    // Non-null only in enhanced mode with a parent given; null keeps original mode's spill path
+    // Runtimes that submit into this set without owning its frame: the world runtime owns
+    // Begin/Commit, and a second Begin/Commit pair on the same set would erase its lights.
+    private readonly List<Action<WorldLights>> _sources = new();
+
+    // Non-null only in enhanced mode with a parent given; null keeps original mode's point term
     // the only consumer and creates not one node, per the mode's zero-footprint contract.
     private readonly Node3D? _omniParent;
 
@@ -103,7 +110,7 @@ public sealed class WorldLights : IDisposable
     /// <summary>Enhanced mode only: mirrors the same committed set onto real
     /// <see cref="OmniLight3D"/> nodes under <paramref name="parent"/>, so the lit world and the
     /// aircraft are lit for real. Original mode ignores <paramref name="parent"/> and spawns
-    /// nothing, leaving the data-texture spill path exactly as it was.</summary>
+    /// nothing, leaving the data-texture point term exactly as it was.</summary>
     public WorldLights(Node3D? parent = null)
     {
         _omniParent = GraphicsMode.Enhanced ? parent : null;
@@ -121,6 +128,10 @@ public sealed class WorldLights : IDisposable
     /// not this); it exists so the nearest-viewer budget can be asserted directly
     /// instead of decoding the packed texture back out.</summary>
     public IReadOnlyList<Vector3> CommittedPositions => _committedPositions;
+
+    /// <summary>The factor colours packed beside <see cref="CommittedPositions"/>, index for
+    /// index, after the distance fade: diagnostics only, like the positions.</summary>
+    public IReadOnlyList<Color> CommittedFactors => _committedFactors;
 
     /// <summary>Registers the global shader parameters the world shader references. Called once
     /// per process, before any material using them is built, the defaults (no texture, count 0)
@@ -153,23 +164,33 @@ public sealed class WorldLights : IDisposable
     {
         if (!GraphicsMode.Enhanced)
             return;
-        // Linearised once here rather than per frame, and the envelope is applied to the linear
-        // value: scaling the sRGB value instead would bend both the decay and the flicker.
-        _bursts.Add(new Burst(pos, color.SrgbToLinear(), stillBurning,
+        // Linearised once here, and the envelope scales the linear value: scaling the sRGB value
+        // would bend both the decay and the flicker. The shader's term keeps the data's own value.
+        _bursts.Add(new Burst(pos, color, color.SrgbToLinear(), stillBurning,
             _burstsRegistered++ * BurstPhaseStride));
     }
 
-    /// <summary>Submits one active light. <paramref name="color"/> is the data's own sRGB
-    /// value; it is linearised here, since the world shader works in linear space (the same
-    /// conversion GameSession applies to FOG_COLOR).</summary>
-    public void Add(Vector3 pos, Color color, float rangeMin, float rangeMax)
+    /// <summary>Registers a submitter that <see cref="Commit"/> asks for its lights every frame,
+    /// before the fade and the budget, so its lights rank against the owner's in one set.
+    /// Registering the same delegate again is a no-op.</summary>
+    public void AddSource(Action<WorldLights> submit)
     {
-        // A degenerate or inverted range would make the shader's smoothstep undefined. The data
+        if (!_sources.Contains(submit))
+            _sources.Add(submit);
+    }
+
+    /// <summary>Submits one active light. <paramref name="color"/> is the data's own value and
+    /// <paramref name="scalar"/> the light's ambient + diffuse (1 for a light authoring neither).
+    /// The shader takes their product unconverted, as the factor the original adds to a vertex's
+    /// light (docs/org/vertexLighting.md); the enhanced omnis take the colour linearised.</summary>
+    public void Add(Vector3 pos, Color color, float rangeMin, float rangeMax, float scalar = 1f)
+    {
+        // A degenerate or inverted range would divide by zero in the shader's weight. The data
         // is well-formed (min < max everywhere surveyed), but LIGHT_ANIMATION tweens ranges by
         // signed deltas and can cross over mid-pulse.
         if (rangeMax <= rangeMin)
             rangeMax = rangeMin + 0.01f;
-        _pending.Add(new Entry(pos, color.SrgbToLinear(), rangeMin, rangeMax));
+        _pending.Add(new Entry(pos, color * scalar, color.SrgbToLinear(), rangeMin, rangeMax));
     }
 
     /// <summary>Packs the frame's lights and uploads them. When more than
@@ -177,6 +198,8 @@ public sealed class WorldLights : IDisposable
     /// the farthest, whose pools are the smallest on screen in every pane.</summary>
     public void Commit(IReadOnlyList<Vector3> viewerPositions)
     {
+        foreach (var submit in _sources)
+            submit(this);
         LiveCount = _pending.Count;
         // Fade before sort, so the budget only ever drops lights already contributing nothing.
         // Distance is to the nearest viewer, never a single camera.
@@ -200,8 +223,12 @@ public sealed class WorldLights : IDisposable
         }
 
         _committedPositions.Clear();
+        _committedFactors.Clear();
         for (int i = 0; i < n; i++)
+        {
             _committedPositions.Add(_pending[i].Pos);
+            _committedFactors.Add(_pending[i].Factor);
+        }
 
         if (_omniParent != null)
             UpdateOmnis(n);
@@ -222,7 +249,7 @@ public sealed class WorldLights : IDisposable
             var e = _pending[i];
             int o = i * FloatsPerLight * sizeof(float);
             Write(o, e.Pos.X); Write(o + 4, e.Pos.Y); Write(o + 8, e.Pos.Z); Write(o + 12, e.Max);
-            Write(o + 16, e.Color.R); Write(o + 20, e.Color.G); Write(o + 24, e.Color.B); Write(o + 28, e.Min);
+            Write(o + 16, e.Factor.R); Write(o + 20, e.Factor.G); Write(o + 24, e.Factor.B); Write(o + 28, e.Min);
         }
 
         // Packed by hand rather than via Image.SetPixel: positions are world metres (thousands,
@@ -257,14 +284,16 @@ public sealed class WorldLights : IDisposable
     }
 
     /// <summary>Drops the world's lights, called when a session is torn down, so the next
-    /// world does not inherit the previous one's spill for a frame. Also frees every spawned
+    /// world does not inherit the previous one's lights for a frame. Also frees every spawned
     /// omni: the harness shares one host across suites, so a leaked named node would break the
     /// next suite's spawn.</summary>
     public void Dispose()
     {
         _pending.Clear();
         _bursts.Clear();
+        _sources.Clear();
         _committedPositions.Clear();
+        _committedFactors.Clear();
         RenderingServer.GlobalShaderParameterSet(CountParam, 0);
         _lastCount = 0;
         _texture = null;
@@ -322,7 +351,8 @@ public sealed class WorldLights : IDisposable
             }
             // Straight into _pending rather than through Add: the colour is already linear and the
             // ranges are constants, so neither of Add's two conversions applies.
-            _pending.Add(new Entry(burst.Pos, burst.Color * gain, BurstRangeMin, BurstRangeMax));
+            _pending.Add(new Entry(burst.Pos, burst.Factor * gain, burst.Color * gain,
+                BurstRangeMin, BurstRangeMax));
         }
     }
 
@@ -369,28 +399,31 @@ public sealed class WorldLights : IDisposable
     private readonly struct Entry
     {
         public readonly Vector3 Pos;
-        public readonly Color Color;
+        public readonly Color Factor; // the shader's term: authored colour x ambient + diffuse
+        public readonly Color Color;  // linear, the enhanced omni's
         public readonly float Min, Max;
-        public Entry(Vector3 pos, Color color, float min, float max)
+        public Entry(Vector3 pos, Color factor, Color color, float min, float max)
         {
-            Pos = pos; Color = color; Min = min; Max = max;
+            Pos = pos; Factor = factor; Color = color; Min = min; Max = max;
         }
 
         /// <summary>The same light dimmed by the distance fade, the colour is the intensity,
         /// so scaling it is how a light leaves the set without popping.</summary>
-        public Entry Faded(float f) => new(Pos, Color * f, Min, Max);
+        public Entry Faded(float f) => new(Pos, Factor * f, Color * f, Min, Max);
     }
 
     // One live burst light. A class rather than a struct because Age is written every frame, and
-    // the colour is held already linearised (see AddBurst).
+    // the omni's colour is held already linearised (see AddBurst).
     private sealed class Burst
     {
-        public Burst(Vector3 pos, Color color, Func<bool> stillBurning, float phase)
+        public Burst(Vector3 pos, Color factor, Color color, Func<bool> stillBurning, float phase)
         {
-            Pos = pos; Color = color; StillBurning = stillBurning; Phase = phase;
+            Pos = pos; Factor = factor; Color = color; StillBurning = stillBurning; Phase = phase;
         }
 
         public Vector3 Pos { get; }
+
+        public Color Factor { get; }
 
         public Color Color { get; }
 

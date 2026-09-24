@@ -388,6 +388,12 @@ three of the four deck chapters and records where it does not (C2B's `fvol*` are
 and C2B ships no `cloudparent` nodes at all, a real per-chapter divergence, not a re-derivation
 of this disproof).
 
+⚠ **The authored `zone_id` is only half the gate.** A flown object is not authored into a zone at
+all, it earns one every frame from its own altitude against the cloud band's midpoint
+(`FUN_00489f60`), which is what keeps an aeroplane or an airship on the far side of the band out of
+the picture. That half is decoded in
+[atmosphere.md](weather/atmosphere.md#an-object-on-the-far-side-of-the-band-is-not-drawn-at-all).
+
 **The skirt/`FOG_COLOR` pair agrees, but it cannot discriminate here.** Each dome's untextured
 skirt is authored in its zone's own `FOG_COLOR` (above), and every render of these four is
 consistent with that: C1/C1C/C2B show a 176 skirt against 176 fog, C4 a 192 skirt against 192. It

@@ -37,6 +37,12 @@ public readonly record struct ScrapbookScrap(
     /// is (<c>ImageType</c>'s second letter), meaningful only while <see cref="Opens"/>.</summary>
     public string ZoomExtension { get; init; }
 
+    /// <summary>Whether the zoom view draws an inset image at all. <c>ImageType</c>'s second letter
+    /// <c>0</c> names none, which is every text scrap: the view is then the family's background and
+    /// the words alone, with nothing for EXPORT TO DESKTOP to copy
+    /// (<c>docs/formats/campaign-screens.md#resolving-a-row-to-a-file</c>).</summary>
+    public bool HasZoomInset { get; init; } = true;
+
     /// <summary>The inset image's file name for the zoom view.</summary>
     public string ZoomFileName => $"{ImageName}.{ZoomExtension}";
 
@@ -48,14 +54,14 @@ public readonly record struct ScrapbookScrap(
 
 /// <summary>One zoom family's three text boxes (title, caption, body), <c>LAYOUT.CSV</c>'s
 /// <c>SBZ_T_TITLE&lt;letter&gt;</c>/<c>CAPTION&lt;letter&gt;</c>/<c>TEXT&lt;letter&gt;</c> rows: each
-/// box's authored top-left and wrap width. Colour and font-index columns are not carried: a
-/// <see cref="BoardLine"/> has no colour of its own (ink is a role, not a literal), and two of the
-/// 26 families' colour fields are typo'd and would not parse anyway
+/// box's authored top-left, wrap width and height. The height is what a block too tall for its box
+/// is fitted to. The font-index column is not carried. The colour column is read by the page
+/// rather than here, two of the 26 families' colour fields being typo'd
 /// (<c>docs/formats/campaign-screens.md#resolving-a-row-to-a-file</c>).</summary>
 public readonly record struct ScrapbookZoomFamily(
-    float TitleX, float TitleY, float TitleWidth,
-    float CaptionX, float CaptionY, float CaptionWidth,
-    float TextX, float TextY, float TextWidth);
+    float TitleX, float TitleY, float TitleWidth, float TitleHeight,
+    float CaptionX, float CaptionY, float CaptionWidth, float CaptionHeight,
+    float TextX, float TextY, float TextWidth, float TextHeight);
 
 /// <summary>
 /// The scrapbook's per-spread scrap layout, read from the shipped <c>SCRAPBOOK.CSV</c> rather than
@@ -73,6 +79,12 @@ public static class ScrapbookComposition
     // over it, and the ten-frame smudge strip itself.
     private const float CaptureNudgeX = 3f;
     private const float CaptureNudgeY = 4f;
+
+    // The region a capture is forced into on the page, which is the grime strip's own frame size.
+    // ⚠ Do not draw the print at its file's own size; the smudge is cut for this rectangle and
+    // lands beside the print otherwise (docs/formats/campaign-screens.md, "The danger-zone slot").
+    private const float CaptureWidth = 164f;
+    private const float CaptureHeight = 123f;
 
     // What the pointer does to the scrap it is over, SCRAPBOOK.SCRIPT's own 10002 handler: two
     // percent onto the scrap's authored scale, and z + 1000 so it stands over its neighbours. 10001
@@ -151,7 +163,8 @@ public static class ScrapbookComposition
                 float x = scrap.X + CaptureNudgeX;
                 float y = scrap.Y + CaptureNudgeY;
                 pictures.Add(new BoardPicture(
-                    new BoardArt(BoardArtLibrary.Loose, capturePath(scrap) ?? string.Empty), x, y));
+                    new BoardArt(BoardArtLibrary.Loose, capturePath(scrap) ?? string.Empty), x, y,
+                    Width: CaptureWidth, Height: CaptureHeight));
                 pictures.Add(new BoardPicture(GrimeArt, x, y, grime.Next(pictures.Count)));
             }
 
@@ -311,6 +324,7 @@ public static class ScrapbookComposition
             zoom, zoomX, zoomY, caption, title, text)
         {
             ZoomExtension = ExtensionOf(imageType, 1),
+            HasZoomInset = !(imageType.Length > 1 && imageType[1] == '0'),
             Region = ParseRegion(fields[10]),
         };
     }
@@ -427,9 +441,9 @@ public static class ScrapbookComposition
     }
 
     // LAYOUT.CSV's SBZ_T_TITLE<letter>/CAPTION<letter>/TEXT<letter> rows, `Name=T,!,X,Y,?,Width,
-    // Height,Colour,FontIndex`; only X, Y and Width are read (docs/formats/campaign-screens.md,
-    // "Resolving a row to a file": two families' colour fields are typo'd and would not parse, and
-    // a BoardLine has no colour column of its own to hand one to regardless).
+    // Height,Colour,FontIndex`. X, Y, Width and Height are read. Two families' colour fields are
+    // typo'd and would not parse. The colour is therefore read per row by the page that draws it
+    // rather than here (docs/formats/campaign-screens.md, "Resolving a row to a file").
     private static Dictionary<char, ScrapbookZoomFamily>? LoadZoomFamilies(string path)
     {
         lock (Gate)
@@ -442,9 +456,9 @@ public static class ScrapbookComposition
             Dictionary<char, ScrapbookZoomFamily>? families = null;
             if (File.Exists(path))
             {
-                var titles = new Dictionary<char, (float X, float Y, float W)>();
-                var captions = new Dictionary<char, (float X, float Y, float W)>();
-                var texts = new Dictionary<char, (float X, float Y, float W)>();
+                var titles = new Dictionary<char, (float X, float Y, float W, float H)>();
+                var captions = new Dictionary<char, (float X, float Y, float W, float H)>();
+                var texts = new Dictionary<char, (float X, float Y, float W, float H)>();
                 foreach (var line in File.ReadAllLines(path))
                 {
                     string trimmed = line.Trim();
@@ -455,7 +469,7 @@ public static class ScrapbookComposition
                     }
 
                     string key = trimmed[..eq].TrimEnd();
-                    Dictionary<char, (float X, float Y, float W)>? target = key switch
+                    Dictionary<char, (float X, float Y, float W, float H)>? target = key switch
                     {
                         _ when key.StartsWith("SBZ_T_TITLE", StringComparison.Ordinal) => titles,
                         _ when key.StartsWith("SBZ_T_CAPTION", StringComparison.Ordinal) => captions,
@@ -476,7 +490,8 @@ public static class ScrapbookComposition
                     target[key[^1]] = (
                         float.Parse(fields[2].Trim(), CultureInfo.InvariantCulture),
                         float.Parse(fields[3].Trim(), CultureInfo.InvariantCulture),
-                        float.Parse(fields[5].Trim(), CultureInfo.InvariantCulture));
+                        float.Parse(fields[5].Trim(), CultureInfo.InvariantCulture),
+                        float.Parse(fields[6].Trim(), CultureInfo.InvariantCulture));
                 }
 
                 families = new Dictionary<char, ScrapbookZoomFamily>();
@@ -489,7 +504,8 @@ public static class ScrapbookComposition
 
                     var title = titles[letter];
                     families[letter] = new ScrapbookZoomFamily(
-                        title.X, title.Y, title.W, caption.X, caption.Y, caption.W, text.X, text.Y, text.W);
+                        title.X, title.Y, title.W, title.H, caption.X, caption.Y, caption.W, caption.H,
+                        text.X, text.Y, text.W, text.H);
                 }
             }
 
