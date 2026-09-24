@@ -469,11 +469,10 @@ determinism repo-wide; read `docs/verification.md` first.
 
 ### `src/Testing/`, the in-engine assertion harness
 
-`--run-tests` and the `--dump-*` probes. The units that need no running engine live in `CSVM.Tests/`
-instead.
+`--run-tests`'s suites and their fixtures. The units that need no running engine live in
+`CSVM.Tests/` instead; the probes and capture tooling the suites share with the game live in
+`src/Tooling/`.
 
-- `src/Testing/Probes.cs`, the assertion cores behind the `--dump-*` reports: one pass yields the report text and the verdict a suite asserts on.
-- `src/Testing/EnvelopeMargins.cs`, one flight scenario's distance from every term that could bound it, plus the decoded branches it drove.
 - `src/Testing/TestHarness.cs`, `--run-tests`: the suite registry, `TestContext`, the PASS/FAIL/SKIP table, `test-report.json` and the process exit code.
 - `src/Testing/SuiteShards.cs`, the `shard:<index>/<count>` term and the deterministic weighted division behind it, over `analysis/engine-suite-weights.json`.
 - `src/Testing/PhaseAttribution.cs`, buckets a build's `StartupProfile` phases into archive/decode, sound preparation and world construction for the report.
@@ -483,10 +482,18 @@ instead.
 - `src/Testing/*Suites.cs`, the domain scenario modules holding the marked suite bodies: puffer, combat, ordnance, Instant Action, AI, campaign, zeppelins.
 - `src/Testing/SuiteConstants.cs` / `BurstTimeline.cs` / `SuiteViewers.cs` / `EffectStageSuiteHelper.cs`, shared golden inputs, timeline values and fixtures.
 - `src/Testing/MenuSuiteHost.cs`, the launchscreen fixture a menu suite builds on: a `MenuHost` with the launcher's features, one seat and silent audio.
-- `src/Testing/GoldenShot.cs`, the engine half of the golden-image tripwire: raw-pixel md5 + GPU adapter, printed on every `--screenshot`.
-- `src/Testing/ProbeRunner.cs`, the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and the session node quit into.
-- `src/Testing/CaptureDirector.cs`, the `--screenshot=`/`--shots=`/`--frames=` capture state machine + F11/F12, ticked from `_Process`.
-- `src/Testing/GltfExporter.cs`, exports the viewer plane subtree to glTF (mesh + livery + baked damage) for `--export-gltf=`/F10, on a throwaway duplicate.
+
+### `src/Tooling/`, runtime tooling the game and the harness share
+
+The `--dump-*` probes, the capture loop, the golden-image hash and the glTF export. The game and
+`src/Testing/` both depend on it; it reaches into the harness only to dispatch `--run-tests`.
+
+- `src/Tooling/Probes.cs`, the assertion cores behind the `--dump-*` reports: one pass yields the report text and the verdict a suite asserts on.
+- `src/Tooling/EnvelopeMargins.cs`, one flight scenario's distance from every term that could bound it, plus the decoded branches it drove.
+- `src/Tooling/GoldenShot.cs`, the engine half of the golden-image tripwire: raw-pixel md5 + GPU adapter, printed on every `--screenshot`.
+- `src/Tooling/ProbeRunner.cs`, the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and the session node quit into.
+- `src/Tooling/CaptureDirector.cs`, the `--screenshot=`/`--shots=`/`--frames=` capture state machine + F11/F12, ticked from `_Process`.
+- `src/Tooling/GltfExporter.cs`, exports the viewer plane subtree to glTF (mesh + livery + baked damage) for `--export-gltf=`/F10, on a throwaway duplicate.
 
 ### `src/Session/`, the launch/session layer
 

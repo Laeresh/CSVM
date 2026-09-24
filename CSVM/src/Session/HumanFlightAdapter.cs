@@ -247,7 +247,7 @@ internal sealed class HumanFlightAdapter
                 // prove the mounted model varies by rocket type.
                 if (_policy.RocketOverride != null)
                 {
-                    Testing.ProbeRunner.ApplyRocketOverride(controller.Loadout, _aircraft.WeaponDefs, _policy.RocketOverride, verbose);
+                    Tooling.ProbeRunner.ApplyRocketOverride(controller.Loadout, _aircraft.WeaponDefs, _policy.RocketOverride, verbose);
                 }
                 // Hang the FLYOUT-model ordnance under the pylons, one body per pylon,
                 // hidden as its ammo depletes. Uses the same gamez prototype the round flies.

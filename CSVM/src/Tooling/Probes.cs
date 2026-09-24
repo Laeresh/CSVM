@@ -9,7 +9,7 @@ using CSVM.Mech3;
 using CSVM.Utils;
 using Godot;
 
-namespace CSVM.Testing;
+namespace CSVM.Tooling;
 
 /// <summary>
 /// The assertion cores behind the <c>--dump-*</c> / <c>--damage-test</c> inspection reports.

@@ -88,7 +88,7 @@ worktree session here; use a local commit or a file copy.
   for both modes. `CockpitOverlay.cs:133`, `SpyglassView.cs:45` and `SplitScreen.cs:259` copy that
   project setting onto their own `SubViewport`s, so any viewport-level pass has four places to
   reach. No code reads `use_taa`, `screen_space_aa` or `scaling_3d_*`.
-- **The capture trap.** `Testing/CaptureDirector.cs:109`: a `--shots` image is the previous
+- **The capture trap.** `Tooling/CaptureDirector.cs:109`: a `--shots` image is the previous
   frame's render; `_00` is un-jittered and `_01+` carries the burst camera's dither. A dither
   verdict comes from the controls or an undithered capture, never from a burst frame.
 - **World lights under Enhanced.** `Mech3/WorldLights.cs`: `Begin`/`Add`/`Commit` per frame, and

@@ -6,7 +6,7 @@ using CSVM.UI;
 using CSVM.Utils;
 using Godot;
 
-namespace CSVM.Testing;
+namespace CSVM.Tooling;
 
 /// <summary>The `--screenshot=`/`--shots=`/`--frames=` capture state machine, plus F11/F12's
 /// placement print and ad-hoc save: constructed once in `_Ready` from the launch spec (a

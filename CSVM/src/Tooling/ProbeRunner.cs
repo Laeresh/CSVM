@@ -8,7 +8,7 @@ using CSVM.UI;
 using CSVM.Utils;
 using Godot;
 
-namespace CSVM.Testing;
+namespace CSVM.Tooling;
 
 /// <summary>The `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and
 /// GameSession quit into: each reads a <see cref="SessionSpec"/> (passed per call, since a
@@ -266,7 +266,7 @@ public sealed class ProbeRunner
 
     /// <summary>--run-tests[=filter]: boot the engine, run the registered assertion suites, print
     /// the PASS/FAIL/SKIP table plus <c>./.scratch/test-report.json</c>, and quit with a nonzero
-    /// exit code if any suite failed (see <see cref="TestHarness"/>). <paramref name="parent"/>
+    /// exit code if any suite failed (see <see cref="Testing.TestHarness"/>). <paramref name="parent"/>
     /// hosts the throwaway world node a suite may build; the caller adopts the fixed-step clock
     /// this creates via <paramref name="clock"/> and quits the tree with the returned code.</summary>
     public int RunTestSuites(SessionSpec spec, Node parent, Camera3D camera, out GameClock clock)
@@ -278,7 +278,9 @@ public sealed class ProbeRunner
         GameClock.Current = clock;
         var host = new Node3D { Name = "TestHost" };
         parent.AddChild(host);
-        var ctx = new TestContext
+        // ⚠ The one reference into CSVM.Testing from outside it: --run-tests has to reach the
+        // harness from its dispatch. Anything else a suite shares with the game belongs here in Tooling.
+        var ctx = new Testing.TestContext
         {
             RepoRoot = _repoRoot,
             DataRoot = _dataRoot,
@@ -302,7 +304,7 @@ public sealed class ProbeRunner
             // as proof.
             Log.Warn("test", $"headless display, no shaders compiled, so the error screen cannot see a shader error");
         }
-        int code = TestHarness.Run(ctx, spec.RunTestsFilter);
+        int code = Testing.TestHarness.Run(ctx, spec.RunTestsFilter);
         host.Free();
         GameClock.Current = null;
         return code;

@@ -171,7 +171,8 @@ GODOT --path CSVM res://scenes/Main.tscn -- --plane=player_bhawk
 - `src/UI/`, launchscreen, splitscreen rig, and the inspection labs (each with a scripted `--debug-*` twin).
 - `src/Video/`, the managed MPEG-1 decoder for the install's `.mpg` cinemas: system-stream demux, video decode, frames as pixel buffers. Holds no engine type.
 - `src/Utils/`, session-wide services: clock, log, seed, shader time, config, startup profile, options, graphics mode. Determinism lives here.
-- `src/Testing/`, the in-engine assertion harness behind `--run-tests` and the `--dump-*` probes.
+- `src/Testing/`, the in-engine assertion harness behind `--run-tests`: the suites, their registry and fixtures. Nothing outside it depends on it except the `--run-tests` dispatch.
+- `src/Tooling/`, runtime tooling the game and the harness share: the `--dump-*` probes and their wrappers, the `--screenshot`/`--shots` capture, the golden-image hash, the glTF export.
 - `src/Bindings/`, the input binding model and the named-action seam: device identity, the tagged control, the binding list an action resolves through, the registry that resolves a device identity to a live pad, the seat device state a polling site reads its pad set through, a player's action map resolved once per tick, and the shipped default keymap with its versioned per-player file.
 - `src/Session/`, `Launcher.cs` (Main.tscn root: bootstrap, launchscreen, persistent camera/lighting) and `GameSession.cs` (the per-launch session node it instantiates), plus livery/spawn/plane-roster resolution, the roster aggregate with grouped inputs and its two internal assemblers, the effect/crash stage factory, and the weather rig.
 - `src/` root, `SessionSpec.cs`, `SessionPaths.cs`, `Pads.cs`.

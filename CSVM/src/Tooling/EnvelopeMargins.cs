@@ -5,7 +5,7 @@ using System.Linq;
 using CSVM.Flight;
 using Godot;
 
-namespace CSVM.Testing;
+namespace CSVM.Tooling;
 
 /// <summary>
 /// How far an envelope scenario sits from every term that could bound it, and which of the plant's

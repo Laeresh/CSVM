@@ -6,6 +6,7 @@ using CSVM.Effects;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Session;
+using CSVM.Tooling;
 using CSVM.Utils;
 using Godot;
 

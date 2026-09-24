@@ -990,11 +990,11 @@ public sealed partial class LaunchMenu : CanvasLayer
         {
             if (ScreenshotPane is { } pane)
             {
-                Testing.CaptureDirector.SaveScreenshot(pane);
+                Tooling.CaptureDirector.SaveScreenshot(pane);
             }
             else
             {
-                Testing.CaptureDirector.SaveScreenshot(GetViewport());
+                Tooling.CaptureDirector.SaveScreenshot(GetViewport());
             }
 
             GetViewport().SetInputAsHandled();

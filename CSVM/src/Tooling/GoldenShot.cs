@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Godot;
 
-namespace CSVM.Testing;
+namespace CSVM.Tooling;
 
 /// <summary>
 /// The engine half of the golden-image tripwire: reduces a captured frame to one md5 and names the

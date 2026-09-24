@@ -178,13 +178,13 @@ public partial class Launcher : Node3D
     // --debug-preset=, same one-shot hold. −1 rather than 0 because preset 0 is a real request.
     private int _pendingPreset = -1;
     // The --screenshot=/--shots=/--frames= state machine and F11/F12's placement print and
-    // ad-hoc save, see src/Testing/CaptureDirector.cs's entry. Process-scoped: constructed once
+    // ad-hoc save, see src/Tooling/CaptureDirector.cs's entry. Process-scoped: constructed once
     // from the launch spec, never re-armed by a menu relaunch.
-    private Testing.CaptureDirector _captureDirector = null!;
+    private Tooling.CaptureDirector _captureDirector = null!;
 
-    // The --export-gltf= one-shot and F10's ad-hoc glTF save, see src\Testing\GltfExporter.cs's
+    // The --export-gltf= one-shot and F10's ad-hoc glTF save, see src\Tooling\GltfExporter.cs's
     // entry. Constructed once from the launch spec alongside the capture director.
-    private Testing.GltfExporter _gltfExporter = null!;
+    private Tooling.GltfExporter _gltfExporter = null!;
     // The master seed every subsystem generator derives from (see Utils.Rng). Pinned runs take the
     // spec's value; everything else draws from the clock, which is why it is resolved here and not
     // in the spec.
@@ -330,8 +330,8 @@ public partial class Launcher : Node3D
     private string _messagesPath = "";
     private string _rofPath = "";          // the extracted UI archive (paint patterns)
     // Constructed once the base paths above are settled; every --dump-*/--run-tests/--*-test/
-    // --destroy= probe wrapper delegates to it (see src/Testing/ProbeRunner.cs).
-    private Testing.ProbeRunner _probeRunner = null!;
+    // --destroy= probe wrapper delegates to it (see src/Tooling/ProbeRunner.cs).
+    private Tooling.ProbeRunner _probeRunner = null!;
 
     // Alt-tabbing away silences the game; alt-tabbing back restores it, via an AudioServer
     // master-bus mute rather than a factor threaded through the audio code. See this file's
@@ -463,8 +463,8 @@ public partial class Launcher : Node3D
         // Read by both AI pickers, for the same reason the two statics above are statics. It
         // settles once per launch, and no pilot or gunner chooses it for itself.
         Flight.AiTargetRanking.AircraftFirst = _spec.AircraftFirstTargeting;
-        _captureDirector = new Testing.CaptureDirector(_spec);
-        _gltfExporter = new Testing.GltfExporter(_spec);
+        _captureDirector = new Tooling.CaptureDirector(_spec);
+        _gltfExporter = new Tooling.GltfExporter(_spec);
         _pendingJoin = _spec.DebugJoin;
         _pendingWaves = _spec.DebugWaves;
         _pendingWingmen = _spec.DebugWingmen;
@@ -497,7 +497,7 @@ public partial class Launcher : Node3D
         // ⚠ The driver and method IN USE, never the project setting: a machine that fell back off
         // Forward+/Vulkan gets none of the export's baked pipelines, and nothing else in the log
         // would say so. Ahead of the vsync line, whose meaning rests on the refresh rate here.
-        Log.Info("perf", $"gpu={Testing.GoldenShot.Adapter()} driver={RenderingServer.GetCurrentRenderingDriverName()} method={RenderingServer.GetCurrentRenderingMethod()} refresh_hz={DisplayServer.ScreenGetRefreshRate():0.#}");
+        Log.Info("perf", $"gpu={Tooling.GoldenShot.Adapter()} driver={RenderingServer.GetCurrentRenderingDriverName()} method={RenderingServer.GetCurrentRenderingMethod()} refresh_hz={DisplayServer.ScreenGetRefreshRate():0.#}");
 
         // --run-tests must never read or write the player's options file, and this must be set
         // before the first UserOptions() call, the vsync read below. One scratch directory per
@@ -639,7 +639,7 @@ public partial class Launcher : Node3D
         _planesGamezPath = SessionPaths.PreferUnzipped(planesGamezPath);
         if (_spec.Zrdr == null) { _zrdrPath = SessionPaths.PreferUnzipped(_zrdrPath); }
         if (_spec.Sounds == null) { _soundsPath = SessionPaths.PreferUnzipped(_soundsPath); }
-        _probeRunner = new Testing.ProbeRunner(_repoRoot, _dataRoot, _zrdrPath, _soundsPath,
+        _probeRunner = new Tooling.ProbeRunner(_repoRoot, _dataRoot, _zrdrPath, _soundsPath,
             _interpPath, _messagesPath, _planesGamezPath);
 
         // Registers the distance-fog params SceneBuilder's shaders reference; defaults are a
@@ -938,7 +938,7 @@ public partial class Launcher : Node3D
         // F12 anywhere (orbit view or free flight): grab the current frame to a file.
         if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F12 })
         {
-            Testing.CaptureDirector.SaveScreenshot(GetViewport());
+            Tooling.CaptureDirector.SaveScreenshot(GetViewport());
             return;
         }
         // F11 anywhere: print the mode's subject placement as ready-to-paste --pos=/--direction=
@@ -953,7 +953,7 @@ public partial class Launcher : Node3D
         // in, to a timestamped .glb under the repo's git-ignored Exports/ folder.
         if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F10 })
         {
-            Testing.GltfExporter.ExportToExports(_session?.Plane, _spec.PlaneName);
+            Tooling.GltfExporter.ExportToExports(_session?.Plane, _spec.PlaneName);
             return;
         }
     }
@@ -2393,8 +2393,8 @@ public sealed class LauncherContext
     public required string InterpPath { get; init; }
     public required string MessagesPath { get; init; }
     public required string RofPath { get; init; }
-    public required Testing.ProbeRunner ProbeRunner { get; init; }
-    public required Testing.CaptureDirector CaptureDirector { get; init; }
+    public required Tooling.ProbeRunner ProbeRunner { get; init; }
+    public required Tooling.CaptureDirector CaptureDirector { get; init; }
     public required ulong MasterSeed { get; init; }
     public required Camera3D Camera { get; init; }
     public required OrbitCamera Orbit { get; init; }

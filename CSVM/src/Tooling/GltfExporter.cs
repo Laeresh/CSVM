@@ -4,7 +4,7 @@ using System.IO;
 using CSVM.Utils;
 using Godot;
 
-namespace CSVM.Testing;
+namespace CSVM.Tooling;
 
 /// <summary>Exports a <c>Node3D</c> subtree to a glTF file. Static geometry only: no animation,
 /// and live particle emitters (smoke/fire/trails) are not part of the tree it reads.

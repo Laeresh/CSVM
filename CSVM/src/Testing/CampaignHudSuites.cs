@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Text;
 using CSVM.Mech3;
 using CSVM.Session;
+using CSVM.Tooling;
 using CSVM.UI;
 using Godot;
 

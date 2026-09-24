@@ -5,6 +5,7 @@ using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.Mech3.Anim;
 using CSVM.Session;
+using CSVM.Tooling;
 using CSVM.UI;
 using Godot;
 

@@ -5,7 +5,7 @@ using System.IO;
 using System.Linq;
 using CSVM.Flight;
 using CSVM.Mech3;
-using CSVM.Testing;
+using CSVM.Tooling;
 using CSVM.UI;
 using CSVM.Utils;
 using Godot;
@@ -72,9 +72,9 @@ public partial class GameSession : Node3D
     // back. Freed with this node otherwise.
     private readonly List<SpectatorCamera> _spectatorCameras = new();
     // The --screenshot=/--shots=/--frames= state machine, see
-    // src/Testing/CaptureDirector.cs's entry. Process-scoped and owned by the Launcher (which
+    // src/Tooling/CaptureDirector.cs's entry. Process-scoped and owned by the Launcher (which
     // Ticks it); held here for the Pending reads that gate display choices during the build.
-    private readonly Testing.CaptureDirector _captureDirector;
+    private readonly Tooling.CaptureDirector _captureDirector;
     // The master seed every subsystem generator derives from (see Utils.Rng), resolved by the
     // Launcher once per process (pinned runs take the spec's value; everything else draws from
     // the clock) and re-applied here at each session build.
@@ -155,8 +155,8 @@ public partial class GameSession : Node3D
     // the extracted UI archive (paint patterns)
     private readonly string _rofPath;
     // Process-scoped, owned by the Launcher; the --damage-test/--effects-test/--weapon-test/
-    // --destroy= probe wrappers below delegate to it (see src/Testing/ProbeRunner.cs).
-    private readonly Testing.ProbeRunner _probeRunner;
+    // --destroy= probe wrappers below delegate to it (see src/Tooling/ProbeRunner.cs).
+    private readonly Tooling.ProbeRunner _probeRunner;
     // Tap-vs-hold timing for the "." step key: a tap steps once (handled directly in
     // _UnhandledInput), and holding past the grace period steps every rendered frame, polled
     // here rather than through key-repeat events, since the grace period is measured on wall
@@ -3401,7 +3401,7 @@ public partial class GameSession : Node3D
             return;
         }
 
-        bool armed = Testing.ProbeRunner.ForceObjective(state.WorldRuntime, campaign, number);
+        bool armed = Tooling.ProbeRunner.ForceObjective(state.WorldRuntime, campaign, number);
         state.What += armed ? $" + forced OBJECTIVE{number}" : $" + OBJECTIVE{number} (not armed here)";
     }
 
@@ -3417,7 +3417,7 @@ public partial class GameSession : Node3D
             {
                 _worldEffectsFactory.EnsureWorldEffects(state.Gamez, state.WorldScene, state.Textures, state.CrashProgram!, state.WorldRuntime);
             }
-            int killed = Testing.ProbeRunner.TriggerDestroy(state.WorldRuntime, _spec.DestroyName, out var destroyBounds);
+            int killed = Tooling.ProbeRunner.TriggerDestroy(state.WorldRuntime, _spec.DestroyName, out var destroyBounds);
             state.What += killed > 0 ? $" + destroyed {killed}× '{_spec.DestroyName}'"
                                : $" + destroy '{_spec.DestroyName}' (no match)";
             // Auto-frame the plane-less freecam on what it killed, unless the tester placed the
@@ -4008,7 +4008,7 @@ public partial class GameSession : Node3D
             {
                 float ahead = Mathf.Max((aabb.GetCenter() - eye).Dot(dir), MinOrbitRadius);
                 pivot = eye + dir * ahead;
-                Log.Info("core", $"orbit pivot from --direction: --lookat={Testing.CaptureDirector.Vec3Arg(pivot.Value)} radius={ahead:0.###}");
+                Log.Info("core", $"orbit pivot from --direction: --lookat={Tooling.CaptureDirector.Vec3Arg(pivot.Value)} radius={ahead:0.###}");
             }
             else
             {
